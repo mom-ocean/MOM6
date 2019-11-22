@@ -2982,13 +2982,15 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
   ! This subroutine initializes the diag_mediator and the diag_manager.
   ! The grid type should have its dimensions set by this point, but it
   ! is not necessary that the metrics and axis labels be set up yet.
+
+  ! Local variables
   integer :: ios, i, new_unit
   logical :: opened, new_file
   character(len=8)   :: this_pe
   character(len=240) :: doc_file, doc_file_dflt, doc_path
   character(len=240), allocatable :: diag_coords(:)
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40) :: mdl = "MOM_diag_mediator" ! This module's name.
   character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs
 
@@ -3164,7 +3166,7 @@ end subroutine diag_mediator_init
 
 !> Set pointers to the default state fields used to remap diagnostics.
 subroutine diag_set_state_ptrs(h, T, S, eqn_of_state, diag_cs)
-  real, dimension(:,:,:), target, intent(in   ) :: h !< the model thickness array
+  real, dimension(:,:,:), target, intent(in   ) :: h !< the model thickness array [H ~> m or kg m-2]
   real, dimension(:,:,:), target, intent(in   ) :: T !< the model temperature array
   real, dimension(:,:,:), target, intent(in   ) :: S !< the model salinity array
   type(EOS_type),         target, intent(in   ) :: eqn_of_state !< Equation of state structure
@@ -3184,7 +3186,7 @@ end subroutine
 subroutine diag_update_remap_grids(diag_cs, alt_h, alt_T, alt_S)
   type(diag_ctrl),        intent(inout) :: diag_cs      !< Diagnostics control structure
   real, target, optional, intent(in   ) :: alt_h(:,:,:) !< Used if remapped grids should be something other than
-                                                        !! the current thicknesses
+                                                        !! the current thicknesses [H ~> m or kg m-2]
   real, target, optional, intent(in   ) :: alt_T(:,:,:) !< Used if remapped grids should be something other than
                                                         !! the current temperatures
   real, target, optional, intent(in   ) :: alt_S(:,:,:) !< Used if remapped grids should be something other than
@@ -3862,9 +3864,15 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
   integer :: i,j,ii,jj,i0,j0,f1,f2,f_in1,f_in2
   integer :: k,ks,ke
   real :: ave,total_weight,weight
-  real :: epsilon = 1.0e-20
+  real :: eps_vol   ! A negligibly small volume or mass [H L2 ~> m3 or kg]
+  real :: eps_area  ! A negligibly small area [L2 ~> m2]
+  real :: eps_face  ! A negligibly small face area [H L ~> m2 or kg m-1]
 
-  ks=1 ; ke =size(field_in,3)
+  ks = 1 ; ke = size(field_in,3)
+  eps_face = 1.0e-20 * diag_cs%G%US%m_to_L * diag_cs%GV%m_to_H
+  eps_area = 1.0e-20 * diag_cs%G%US%m_to_L**2
+  eps_vol = 1.0e-20 * diag_cs%G%US%m_to_L**2 * diag_cs%GV%m_to_H
+
   ! Allocate the down sampled field on the down sampled data domain
 !  allocate(field_out(diag_cs%dsamp(dl)%isd:diag_cs%dsamp(dl)%ied,diag_cs%dsamp(dl)%jsd:diag_cs%dsamp(dl)%jed,ks:ke))
 !  allocate(field_out(1:size(field_in,1)/dl,1:size(field_in,2)/dl,ks:ke))
@@ -3880,7 +3888,7 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
   allocate(field_out(1:f1,1:f2,ks:ke))
 
   ! Fill the down sampled field on the down sampled diagnostics (almost always compuate) domain
-  if(method .eq. MMM) then
+  if (method == MMM) then
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -3888,24 +3896,24 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
         total_weight = 0.0
         do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
 !        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 !This seems to be faster!!!!
-           weight = mask(ii,jj,k)*diag_cs%G%US%L_to_m**2*diag_cs%G%areaT(ii,jj)*diag_cs%h(ii,jj,k)
+           weight = mask(ii,jj,k) * diag_cs%G%areaT(ii,jj) * diag_cs%h(ii,jj,k)
            total_weight = total_weight + weight
-           ave=ave+field_in(ii,jj,k)*weight
+           ave = ave+field_in(ii,jj,k) * weight
         enddo; enddo
-        field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+        field_out(i,j,k)  = ave/(total_weight + eps_vol)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
-  elseif(method .eq. SSS) then    !e.g., volcello
+  elseif (method == SSS) then    !e.g., volcello
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
         ave = 0.0
         do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
            weight = mask(ii,jj,k)
-           ave=ave+field_in(ii,jj,k)*weight
+           ave = ave+field_in(ii,jj,k)*weight
         enddo; enddo
         field_out(i,j,k)  = ave !Masked Sum (total_weight=1)
      enddo; enddo; enddo
-  elseif(method .eq. MMP .or. method .eq. MMS) then    !e.g., T_advection_xy
+  elseif(method == MMP .or. method == MMS) then    !e.g., T_advection_xy
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -3913,13 +3921,13 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
         total_weight = 0.0
         do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
 !        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
-           weight = mask(ii,jj,k)*diag_cs%G%US%L_to_m**2*diag_cs%G%areaT(ii,jj)
+           weight = mask(ii,jj,k) * diag_cs%G%areaT(ii,jj)
            total_weight = total_weight + weight
-           ave=ave+field_in(ii,jj,k)*weight
+           ave = ave+field_in(ii,jj,k)*weight
         enddo; enddo
-        field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+        field_out(i,j,k)  = ave / (total_weight+eps_area)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
-  elseif(method .eq. PMM) then
+  elseif(method == PMM) then
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -3927,13 +3935,13 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
         total_weight = 0.0
         ii=i0
         do jj=j0,j0+dl-1
-           weight =mask(ii,jj,k)*diag_cs%G%US%L_to_m*diag_cs%G%dyCu(ii,jj) * diag_cs%h(ii,jj,k)
+           weight =mask(ii,jj,k) * diag_cs%G%dyCu(ii,jj) * diag_cs%h(ii,jj,k)
            total_weight = total_weight +weight
            ave=ave+field_in(ii,jj,k)*weight
         enddo
-        field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+        field_out(i,j,k)  = ave/(total_weight+eps_face)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
-  elseif(method .eq. PSS) then    !e.g. umo
+  elseif(method == PSS) then    !e.g. umo
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -3945,7 +3953,7 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
         enddo
         field_out(i,j,k)  = ave  !Masked Sum (total_weight=1)
      enddo; enddo; enddo
-  elseif(method .eq. SPS) then    !e.g. vmo
+  elseif(method == SPS) then    !e.g. vmo
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -3957,7 +3965,7 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
         enddo
         field_out(i,j,k)  = ave  !Masked Sum (total_weight=1)
      enddo; enddo; enddo
-  elseif(method .eq. MPM) then
+  elseif(method == MPM) then
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -3965,13 +3973,13 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
         total_weight = 0.0
         jj=j0
         do ii=i0,i0+dl-1
-           weight = mask(ii,jj,k)*diag_cs%G%US%L_to_m*diag_cs%G%dxCv(ii,jj)*diag_cs%h(ii,jj,k)
+           weight = mask(ii,jj,k) * diag_cs%G%dxCv(ii,jj) * diag_cs%h(ii,jj,k)
            total_weight = total_weight + weight
            ave=ave+field_in(ii,jj,k)*weight
         enddo
-        field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+        field_out(i,j,k)  = ave/(total_weight+eps_face)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
-  elseif(method .eq. MSK) then !The input field is a mask, subsample
+  elseif(method == MSK) then !The input field is a mask, subsample
      field_out(:,:,:) = 0.0
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
@@ -4010,8 +4018,13 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs, d
   ! Locals
   character(len=240) :: mesg
   integer :: i,j,ii,jj,i0,j0,f1,f2,f_in1,f_in2
-  real :: ave,total_weight,weight
-  real :: epsilon = 1.0e-20
+  real :: ave, total_weight, weight
+  real :: epsilon = 1.0e-20  ! A negligibly small count of weights [nondim]
+  real :: eps_area  ! A negligibly small area [L2 ~> m2]
+  real :: eps_len   ! A negligibly small horizontal length [L ~> m]
+
+  eps_len = 1.0e-20 * diag_cs%G%US%m_to_L
+  eps_area = 1.0e-20 * diag_cs%G%US%m_to_L**2
 
   ! Allocate the down sampled field on the down sampled data domain
 !  allocate(field_out(diag_cs%dsamp(dl)%isd:diag_cs%dsamp(dl)%ied,diag_cs%dsamp(dl)%jsd:diag_cs%dsamp(dl)%jed))
@@ -4028,7 +4041,7 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs, d
   endif
   allocate(field_out(1:f1,1:f2))
 
-  if(method .eq. MMP) then
+  if (method == MMP) then
      do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -4036,13 +4049,13 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs, d
         total_weight = 0.0
         do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
 !        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
-           weight = mask(ii,jj)*diag_cs%G%US%L_to_m**2*diag_cs%G%areaT(ii,jj)
+           weight = mask(ii,jj)*diag_cs%G%areaT(ii,jj)
            total_weight = total_weight + weight
-           ave=ave+field_in(ii,jj)*weight
+           ave = ave+field_in(ii,jj)*weight
         enddo; enddo
-        field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+        field_out(i,j)  = ave/(total_weight + eps_area)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo
-  elseif(method .eq. SSP) then    ! e.g., T_dfxy_cont_tendency_2d
+  elseif(method == SSP) then    ! e.g., T_dfxy_cont_tendency_2d
      do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -4056,7 +4069,7 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs, d
         enddo; enddo
         field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo
-  elseif(method .eq. PSP) then    ! e.g., umo_2d
+  elseif(method == PSP) then    ! e.g., umo_2d
      do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -4064,13 +4077,13 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs, d
         total_weight = 0.0
         ii=i0
         do jj=j0,j0+dl-1
-           weight =mask(ii,jj)
+           weight = mask(ii,jj)
            total_weight = total_weight +weight
            ave=ave+field_in(ii,jj)*weight
         enddo
         field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo
-  elseif(method .eq. SPP) then    ! e.g., vmo_2d
+  elseif(method == SPP) then    ! e.g., vmo_2d
      do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -4078,13 +4091,13 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs, d
         total_weight = 0.0
         jj=j0
         do ii=i0,i0+dl-1
-           weight =mask(ii,jj)
+           weight = mask(ii,jj)
            total_weight = total_weight +weight
            ave=ave+field_in(ii,jj)*weight
         enddo
         field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo
-  elseif(method .eq. PMP) then
+  elseif(method == PMP) then
      do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -4092,13 +4105,13 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs, d
         total_weight = 0.0
         ii=i0
         do jj=j0,j0+dl-1
-           weight = mask(ii,jj)*diag_cs%G%US%L_to_m*diag_cs%G%dyCu(ii,jj)!*diag_cs%h(ii,jj,1) !Niki?
+           weight = mask(ii,jj) * diag_cs%G%dyCu(ii,jj)!*diag_cs%h(ii,jj,1) !Niki?
            total_weight = total_weight +weight
            ave=ave+field_in(ii,jj)*weight
         enddo
-        field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+        field_out(i,j)  = ave/(total_weight+eps_len)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo
-  elseif(method .eq. MPP) then
+  elseif(method == MPP) then
      do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -4106,13 +4119,13 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs, d
         total_weight = 0.0
         jj=j0
         do ii=i0,i0+dl-1
-           weight = mask(ii,jj)*diag_cs%G%US%L_to_m*diag_cs%G%dxCv(ii,jj)!*diag_cs%h(ii,jj,1) !Niki?
+           weight = mask(ii,jj)* diag_cs%G%dxCv(ii,jj)!*diag_cs%h(ii,jj,1) !Niki?
            total_weight = total_weight +weight
            ave=ave+field_in(ii,jj)*weight
         enddo
-        field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+        field_out(i,j)  = ave/(total_weight+eps_len)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo
-  elseif(method .eq. MSK) then !The input field is a mask, subsample
+  elseif(method == MSK) then !The input field is a mask, subsample
      field_out(:,:) = 0.0
      do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
