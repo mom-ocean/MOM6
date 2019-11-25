@@ -562,7 +562,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   endif
 
   ! Reads OBC parameters not pertaining to the location of the boundaries
-  call open_boundary_init(G, PF, OBC)
+  call open_boundary_init(G, GV, US, PF, OBC, restart_CS)
 
   ! This controls user code for setting open boundary data
   if (associated(OBC)) then
@@ -616,7 +616,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     call qchksum(G%mask2dBu, 'MOM_initialize_state: mask2dBu ', G%HI)
   endif
 
-  if (debug_OBC) call open_boundary_test_extern_h(G, OBC, h)
+  if (debug_OBC) call open_boundary_test_extern_h(G, GV, OBC, h)
   call callTree_leave('MOM_initialize_state()')
 
 end subroutine MOM_initialize_state
