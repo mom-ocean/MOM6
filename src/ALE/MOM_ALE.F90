@@ -68,7 +68,7 @@ type, public :: ALE_CS ; private
                                                  !! remaps between grids described by h.
 
   real :: regrid_time_scale !< The time-scale used in blending between the current (old) grid
-                            !! and the target (new) grid. (s)
+                            !! and the target (new) grid [T ~> s]
 
   type(regridding_CS) :: regridCS !< Regridding parameters and work arrays
   type(remapping_CS)  :: remapCS  !< Remapping parameters and work arrays
@@ -209,7 +209,7 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
                  "and the target (new) grid. A short time-scale favors the target "//&
                  "grid (0. or anything less than DT_THERM) has no memory of the old "//&
                  "grid. A very long time-scale makes the model more Lagrangian.", &
-                 units="s", default=0.)
+                 units="s", default=0., scale=US%s_to_T)
   call get_param(param_file, mdl, "REGRID_FILTER_SHALLOW_DEPTH", filter_shallow_depth, &
                  "The depth above which no time-filtering is applied. Above this depth "//&
                  "final grid exactly matches the target (new) grid.", &
@@ -269,7 +269,7 @@ subroutine ALE_register_diags(Time, G, GV, US, diag, CS)
       conversion=GV%H_to_m, v_extensive=.true.)
   cs%id_vert_remap_h_tendency = register_diag_field('ocean_model','vert_remap_h_tendency',diag%axestl,time, &
       'Layer thicknesses tendency due to ALE regridding and remapping', 'm', &
-      conversion=GV%H_to_m, v_extensive = .true.)
+      conversion=GV%H_to_m*US%s_to_T, v_extensive = .true.)
 
 end subroutine ALE_register_diags
 
@@ -319,7 +319,7 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, OBC, dt, frac_shelf_h)
   type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
   type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
   type(ocean_OBC_type),                       pointer       :: OBC !< Open boundary structure
-  real,                             optional, intent(in)    :: dt  !< Time step between calls to ALE_main()
+  real,                             optional, intent(in)    :: dt  !< Time step between calls to ALE_main [T ~> s]
   real, dimension(:,:),             optional, pointer       :: frac_shelf_h !< Fractional ice shelf coverage
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
@@ -403,7 +403,7 @@ subroutine ALE_main_offline( G, GV, h, tv, Reg, CS, OBC, dt)
   type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
   type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
   type(ocean_OBC_type),                       pointer       :: OBC !< Open boundary structure
-  real,                             optional, intent(in)    :: dt  !< Time step between calls to ALE_main()
+  real,                             optional, intent(in)    :: dt  !< Time step between calls to ALE_main [T ~> s]
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_new ! New 3D grid obtained after last time step [H ~> m or kg-2]
@@ -660,7 +660,7 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h, tv, n, u, v, OBC, Reg, dt, dzReg
   type(ocean_OBC_type),    pointer       :: OBC    !< Open boundary structure
   type(tracer_registry_type), &
                  optional, pointer       :: Reg    !< Tracer registry to remap onto new grid
-  real,          optional, intent(in)    :: dt     !< Model timestep to provide a timescale for regridding [s]
+  real,          optional, intent(in)    :: dt     !< Model timestep to provide a timescale for regridding [T ~> s]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                  optional, intent(inout) :: dzRegrid !< Final change in interface positions
   logical,       optional, intent(in)    :: initial !< Whether we're being called from an initialization
@@ -698,7 +698,7 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h, tv, n, u, v, OBC, Reg, dt, dzReg
 
   ! Apply timescale to regridding (for e.g. filtered_grid_motion)
   if (present(dt)) &
-       call ALE_update_regrid_weights(dt, CS)
+    call ALE_update_regrid_weights(dt, CS)
 
   do k = 1, n
     call do_group_pass(pass_T_S_h, G%domain)
@@ -718,7 +718,7 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h, tv, n, u, v, OBC, Reg, dt, dzReg
   enddo
 
   ! remap all state variables (including those that weren't needed for regridding)
-  call remap_all_state_vars(CS%remapCS, CS, G, GV, h_orig, h, Reg, OBC, dzIntTotal, u, v, dt=dt)
+  call remap_all_state_vars(CS%remapCS, CS, G, GV, h_orig, h, Reg, OBC, dzIntTotal, u, v)
 
   ! save total dzregrid for diags if needed?
   if (present(dzRegrid)) dzRegrid(:,:,:) = dzIntTotal(:,:,:)
@@ -750,7 +750,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                                    optional, intent(inout) :: v      !< Meridional velocity [L T-1 ~> m s-1]
   logical,                         optional, intent(in)    :: debug  !< If true, show the call tree
-  real,                            optional, intent(in)    :: dt     !< time step for diagnostics
+  real,                            optional, intent(in)    :: dt     !< time step for diagnostics [T ~> s]
   ! Local variables
   integer                                     :: i, j, k, m
   integer                                     :: nz, ntr
@@ -759,7 +759,8 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: work_conc
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: work_cont
   real, dimension(SZI_(G), SZJ_(G))           :: work_2d
-  real                                        :: Idt, ppt2mks
+  real                                        :: Idt ! The inverse of the timestep [T-1 ~> s-1]
+  real                                        :: ppt2mks
   real, dimension(GV%ke)                      :: h2
   real :: h_neglect, h_neglect_edge
   logical                                     :: show_call_tree
@@ -1197,7 +1198,7 @@ end function ALE_remap_init_conds
 
 !> Updates the weights for time filtering the new grid generated in regridding
 subroutine ALE_update_regrid_weights( dt, CS )
-  real,         intent(in) :: dt !< Time-step used between ALE calls
+  real,         intent(in) :: dt !< Time-step used between ALE calls [T ~> s]
   type(ALE_CS), pointer    :: CS !< ALE control structure
   ! Local variables
   real :: w  ! An implicit weighting estimate.

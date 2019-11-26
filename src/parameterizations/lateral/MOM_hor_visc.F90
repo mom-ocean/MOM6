@@ -85,9 +85,9 @@ type, public :: hor_visc_CS ; private
                              !! answers from the end of 2018.  Otherwise, use updated and more robust
                              !! forms of the same expressions.
   real    :: GME_h0          !< The strength of GME tapers quadratically to zero when the bathymetric
-                             !! depth is shallower than GME_H0 [m]
+                             !! depth is shallower than GME_H0 [Z ~> m]
   real    :: GME_efficiency  !< The nondimensional prefactor multiplying the GME coefficient [nondim]
-  real    :: GME_limiter     !< The absolute maximum value the GME coefficient is allowed to take [m2 s-1].
+  real    :: GME_limiter     !< The absolute maximum value the GME coefficient is allowed to take [L2 T-1 ~> m2 s-1].
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Kh_bg_xx
                       !< The background Laplacian viscosity at h points [L2 T-1 ~> m2 s-1].
@@ -101,9 +101,9 @@ type, public :: hor_visc_CS ; private
                       !< The background biharmonic viscosity at h points [L4 T-1 ~> m4 s-1].
                       !! The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Biharm5_const2_xx
+!  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Biharm5_const2_xx
                       !< A constant relating the biharmonic viscosity to the
-                      !! square of the velocity shear [m4 s].  This value is
+                      !! square of the velocity shear [L4 T ~> m4 s].  This value is
                       !! set to be the magnitude of the Coriolis terms once the
                       !! velocity differences reach a value of order 1/2 MAXVEL.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: reduction_xx
@@ -123,9 +123,9 @@ type, public :: hor_visc_CS ; private
                       !< The background biharmonic viscosity at q points [L4 T-1 ~> m4 s-1].
                       !! The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Biharm5_const2_xy
+!  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Biharm5_const2_xy
                       !< A constant relating the biharmonic viscosity to the
-                      !! square of the velocity shear [m4 s].  This value is
+                      !! square of the velocity shear [L4 T ~> m4 s].  This value is
                       !! set to be the magnitude of the Coriolis terms once the
                       !! velocity differences reach a value of order 1/2 MAXVEL.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: reduction_xy
@@ -1234,7 +1234,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
     ! Make a similar calculation as for FrictWork above but accumulating into
     ! the vertically integrated MEKE source term, and adjusting for any
-    ! energy loss seen as a reduction in the [biharmonic] frictional source term.
+    ! energy loss seen as a reduction in the (biharmonic) frictional source term.
     if (find_FrictWork .and. associated(MEKE)) then ; if (associated(MEKE%mom_src)) then
       if (k==1) then
         do j=js,je ; do i=is,ie
@@ -2239,9 +2239,9 @@ subroutine hor_visc_end(CS)
     endif
     if (CS%Smagorinsky_Ah) then
       DEALLOC_(CS%Biharm5_const_xx) ; DEALLOC_(CS%Biharm5_const_xy)
-      if (CS%bound_Coriolis) then
-        DEALLOC_(CS%Biharm5_const2_xx) ; DEALLOC_(CS%Biharm5_const2_xy)
-      endif
+      ! if (CS%bound_Coriolis) then
+      !   DEALLOC_(CS%Biharm5_const2_xx) ; DEALLOC_(CS%Biharm5_const2_xy)
+      ! endif
     endif
     if (CS%Leith_Ah) then
       DEALLOC_(CS%Biharm_const_xx) ; DEALLOC_(CS%Biharm_const_xy)

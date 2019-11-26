@@ -554,7 +554,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
                                                    !! forcing that has been applied to each layer
                                                    !! [R Z3 T-2 ~> J m-2].
   real,                    intent(in)    :: B_flux !< The surface buoyancy flux [Z2 T-3 ~> m2 s-3]
-  real,                    intent(in)    :: absf   !< The absolute value of the Coriolis parameter [T-1].
+  real,                    intent(in)    :: absf   !< The absolute value of the Coriolis parameter [T-1 ~> s-1].
   real,                    intent(in)    :: u_star !< The surface friction velocity [Z T-1 ~> m s-1].
   real,                    intent(in)    :: u_star_mean !< The surface friction velocity without any
                                                    !! contribution from unresolved gustiness  [Z T-1 ~> m s-1].
