@@ -768,10 +768,8 @@ subroutine initialize_segment_data(G, OBC, PF)
         segment%field(m)%name = trim(fields(m))
         if (segment%field(m)%name == 'U') then
           segment%u_values_needed = .false.
-          !### segment%field(m)%value = US%m_s_to_L_T*segment%field(m)%value
         elseif (segment%field(m)%name == 'V') then
           segment%v_values_needed = .false.
-          !### segment%field(m)%value = US%m_s_to_L_T*segment%field(m)%value
         elseif (segment%field(m)%name == 'SSH') then
           segment%z_values_needed = .false.
         elseif (segment%field(m)%name == 'TEMP') then
@@ -780,7 +778,6 @@ subroutine initialize_segment_data(G, OBC, PF)
           segment%s_values_needed = .false.
         elseif (segment%field(m)%name == 'DVDX' .or. segment%field(m)%name == 'DUDY') then
           segment%g_values_needed = .false.
-          !### segment%field(m)%value = US%T_to_s*segment%field(m)%value
         endif
       endif
     enddo
@@ -2995,9 +2992,9 @@ subroutine gradient_at_q_points(G, segment, uvel, vvel)
         do k=1,G%ke
           do J=max(segment%HI%jsd, G%HI%jsd+1),min(segment%HI%jed, G%HI%jed-1)
             segment%grad_gradient(j,1,k) = (((vvel(i-1,J,k) - vvel(i-2,J,k))*G%IdxBu(I-2,J)) - &
-                 (vvel(i-1,J-1,k) - vvel(i-2,J-1,k))*G%IdxBu(I-2,J-1)) * G%mask2dCu(I-1,j)
+                 (vvel(i-1,J-1,k) - vvel(i-2,J-1,k))*G%IdxBu(I-2,J-1)) * G%mask2dCu(I-2,j)
             segment%grad_gradient(j,2,k) = (((vvel(i,J,k) - vvel(i-1,J,k))*G%IdxBu(I-1,J)) - &
-                 (vvel(i,J-1,k) - vvel(i-1,J-1,k))*G%IdxBu(I-1,J-1)) * G%mask2dCu(I,j)
+                 (vvel(i,J-1,k) - vvel(i-1,J-1,k))*G%IdxBu(I-1,J-1)) * G%mask2dCu(I-1,j)
           enddo
         enddo
       endif
@@ -3048,11 +3045,10 @@ subroutine gradient_at_q_points(G, segment, uvel, vvel)
       if (segment%oblique_grad) then
         do k=1,G%ke
           do I=max(segment%HI%isd, G%HI%isd+1),min(segment%HI%ied, G%HI%ied-1)
-            !### The combination of differences in j and Idx here do not make sense to me.  All should be Idy?
-            segment%grad_gradient(i,1,k) = (((uvel(I,j-1,k) - uvel(I,j-2,k))*G%IdxBu(I,J-2)) - &
-                 (uvel(I-1,j-1,k) - uvel(I-1,j-2,k))*G%IdxBu(I-1,J-2)) * G%mask2dCv(I,j-1)
+            segment%grad_gradient(i,1,k) = (((uvel(I,j-1,k) - uvel(I,j-2,k))*G%IdyBu(I,J-2)) - &
+                 (uvel(I-1,j-1,k) - uvel(I-1,j-2,k))*G%IdyBu(I-1,J-2)) * G%mask2dCv(i,J-2)
             segment%grad_gradient(i,2,k) = (((uvel(I,j,k) - uvel(I,j-1,k))*G%IdyBu(I,J-1)) - &
-                 (uvel(I-1,j,k) - uvel(I-1,j-1,k))*G%IdyBu(I-1,J-1)) * G%mask2dCv(i,J)
+                 (uvel(I-1,j,k) - uvel(I-1,j-1,k))*G%IdyBu(I-1,J-1)) * G%mask2dCv(i,J-1)
           enddo
         enddo
       endif
@@ -3075,10 +3071,9 @@ subroutine gradient_at_q_points(G, segment, uvel, vvel)
       if (segment%oblique_grad) then
         do k=1,G%ke
           do I=max(segment%HI%isd, G%HI%isd+1),min(segment%HI%ied, G%HI%ied-1)
-            !### The combination of differences in j and Idx here do not make sense to me.  All should be Idy?
-            segment%grad_gradient(i,1,k) = (((uvel(I,j+3,k) - uvel(I,j+2,k))*G%IdxBu(I,J+2)) - &
+            segment%grad_gradient(i,1,k) = (((uvel(I,j+3,k) - uvel(I,j+2,k))*G%IdyBu(I,J+2)) - &
                  (uvel(I-1,j+3,k) - uvel(I-1,j+2,k))*G%IdyBu(I-1,J+2)) * G%mask2dCv(i,J+2)
-            segment%grad_gradient(i,2,k) = (((uvel(I,j+2,k) - uvel(I,j+1,k))*G%IdxBu(I,J+1)) - &
+            segment%grad_gradient(i,2,k) = (((uvel(I,j+2,k) - uvel(I,j+1,k))*G%IdyBu(I,J+1)) - &
                  (uvel(I-1,j+2,k) - uvel(I-1,j+1,k))*G%IdyBu(I-1,J+1)) * G%mask2dCv(i,J+1)
           enddo
         enddo
@@ -4553,10 +4548,9 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
         do m=1,ntr ; if (associated(segment%tr_Reg%Tr(m)%tres)) then ; do k=1,nz
           u_L_out = max(0.0, (idir*uhr(I,j,k))*segment%Tr_InvLscale_out / (h(i+ishift,j,k)*G%dyCu(I,j)))
           u_L_in  = min(0.0, (idir*uhr(I,j,k))*segment%Tr_InvLscale_in  / (h(i+ishift,j,k)*G%dyCu(I,j)))
-          !### fac1 is dimensionally inconsistent in time, as is the tracer update expression.
-          fac1 = 1.0 + G%US%T_to_s*dt*(u_L_out-u_L_in)
+          fac1 = 1.0 + (u_L_out-u_L_in)
           segment%tr_Reg%Tr(m)%tres(I,j,k) = (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(I,j,k) + &
-               G%US%T_to_s*dt*(u_L_out*Reg%Tr(m)%t(I+ishift,j,k) - &
+                            (u_L_out*Reg%Tr(m)%t(I+ishift,j,k) - &
                              u_L_in*segment%tr_Reg%Tr(m)%t(I,j,k)))
           if (associated(OBC%tres_x)) OBC%tres_x(I,j,k,m) = segment%tr_Reg%Tr(m)%tres(I,j,k)
         enddo ; endif ; enddo
@@ -4575,10 +4569,9 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
         do m=1,ntr ; if (associated(segment%tr_Reg%Tr(m)%tres)) then ; do k=1,nz
           v_L_out = max(0.0, (jdir*vhr(i,J,k))*segment%Tr_InvLscale_out / (h(i,j+jshift,k)*G%dxCv(i,J)))
           v_L_in  = min(0.0, (jdir*vhr(i,J,k))*segment%Tr_InvLscale_in  / (h(i,j+jshift,k)*G%dxCv(i,J)))
-          !### fac1 is dimensionally inconsistent in time, as is the tracer update expression.
-          fac1 = 1.0 + G%US%T_to_s*dt*(v_L_out-v_L_in)
+          fac1 = 1.0 + (v_L_out-v_L_in)
           segment%tr_Reg%Tr(m)%tres(i,J,k) = (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(i,J,k) + &
-               G%US%T_to_s*dt*(v_L_out*Reg%Tr(m)%t(i,J+jshift,k) - &
+                            (v_L_out*Reg%Tr(m)%t(i,J+jshift,k) - &
                              v_L_in*segment%tr_Reg%Tr(m)%t(i,J,k)))
           if (associated(OBC%tres_y)) OBC%tres_y(i,J,k,m) = segment%tr_Reg%Tr(m)%tres(i,J,k)
         enddo ; endif ; enddo
