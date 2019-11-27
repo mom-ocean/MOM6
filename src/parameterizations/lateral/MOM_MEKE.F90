@@ -380,8 +380,6 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       do j=js-1,je+1 ; do i=is-1,ie+1
         del2MEKE(i,j) = G%IareaT(i,j) * &
             ((MEKE_uflux(I,j) - MEKE_uflux(I-1,j)) + (MEKE_vflux(i,J) - MEKE_vflux(i,J-1)))
-      ! del2MEKE(i,j) = (G%IareaT(i,j)*I_mass(i,j)) * &
-      !     ((MEKE_uflux(I,j) - MEKE_uflux(I-1,j)) + (MEKE_vflux(i,J) - MEKE_vflux(i,J-1)))
       enddo ; enddo
 
       ! Bi-harmonic diffusion of MEKE
