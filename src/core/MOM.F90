@@ -1092,7 +1092,7 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
                       CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
   if (showCallTree) call callTree_waypoint("finished tracer advection/diffusion (step_MOM)")
   call update_segment_tracer_reservoirs(G, GV, CS%uhtr, CS%vhtr, h, CS%OBC, &
-                     US%T_to_s*CS%t_dyn_rel_adv, CS%tracer_Reg)
+                     CS%t_dyn_rel_adv, CS%tracer_Reg)
   call cpu_clock_end(id_clock_tracer) ; call cpu_clock_end(id_clock_thermo)
 
   call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
@@ -1277,7 +1277,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   else   ! complement of "if (.not.CS%adiabatic)"
 
     call cpu_clock_begin(id_clock_adiabatic)
-    call adiabatic(h, tv, fluxes, US%T_to_s*dtdia, G, GV, US, CS%diabatic_CSp)
+    call adiabatic(h, tv, fluxes, dtdia, G, GV, US, CS%diabatic_CSp)
     fluxes%fluxes_used = .true.
     call cpu_clock_end(id_clock_adiabatic)
 
