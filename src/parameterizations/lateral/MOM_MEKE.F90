@@ -265,7 +265,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       enddo ; enddo
       do i=is-1,ie+1
         I_mass(i,j) = 0.0
-        if (mass(i,j) > 0.0) I_mass(i,j) = 1.0 / mass(i,j)
+        if (mass(i,j) > 0.0) I_mass(i,j) = 1.0 / mass(i,j) ! [m2 kg-1]
       enddo
     enddo
 
@@ -354,7 +354,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     endif
 
     if (CS%MEKE_K4 >= 0.0) then
-      ! Calculate Laplacian of MEKE
+      ! Calculate Laplacian of MEKE using MEKE_uflux and MEKE_vflux as temporary work space.
       !$OMP parallel do default(shared)
       do j=js-1,je+1 ; do I=is-2,ie+1
         ! MEKE_uflux is used here as workspace with units of [L2 T-2 ~> m2 s-2].
@@ -377,7 +377,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       enddo ; enddo
 
       !$OMP parallel do default(shared)
-      do j=js-1,je+1 ; do i=is-1,ie+1
+      do j=js-1,je+1 ; do i=is-1,ie+1 ! del2MEKE has units [T-2 ~> s-2].
         del2MEKE(i,j) = G%IareaT(i,j) * &
             ((MEKE_uflux(I,j) - MEKE_uflux(I-1,j)) + (MEKE_vflux(i,J) - MEKE_vflux(i,J-1)))
       enddo ; enddo
@@ -385,7 +385,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       ! Bi-harmonic diffusion of MEKE
       !$OMP parallel do default(shared) private(K4_here,Inv_K4_max)
       do j=js,je ; do I=is-1,ie
-        K4_here = CS%MEKE_K4
+        K4_here = CS%MEKE_K4 ! [L4 T-1 ~> m4 s-1]
         ! Limit Kh to avoid CFL violations.
         Inv_K4_max = 64.0 * sdt * ((G%dy_Cu(I,j)*G%IdxCu(I,j)) * &
                      max(G%IareaT(i,j), G%IareaT(i+1,j)))**2
@@ -398,15 +398,16 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       enddo ; enddo
       !$OMP parallel do default(shared) private(K4_here,Inv_K4_max)
       do J=js-1,je ; do i=is,ie
-        K4_here = CS%MEKE_K4
+        K4_here = CS%MEKE_K4 ! [L4 T-1 ~> m4 s-1]
         Inv_K4_max = 64.0 * sdt * ((G%dx_Cv(i,J)*G%IdyCv(i,J)) * max(G%IareaT(i,j), G%IareaT(i,j+1)))**2
         if (K4_here*Inv_K4_max > 0.3) K4_here = 0.3 / Inv_K4_max
 
+        ! Here the units of MEKE_vflux are [kg m-2 L4 T-3].
         MEKE_vflux(i,J) = ((K4_here * (G%dx_Cv(i,J)*G%IdyCv(i,J))) * &
             ((2.0*mass(i,j)*mass(i,j+1)) / ((mass(i,j)+mass(i,j+1)) + mass_neglect)) ) * &
             (del2MEKE(i,j+1) - del2MEKE(i,j))
       enddo ; enddo
-      ! Store tendency arising from the bi-harmonic in del4MEKE
+      ! Store change in MEKE arising from the bi-harmonic in del4MEKE [L2 T-2].
       !$OMP parallel do default(shared)
       do j=js,je ; do i=is,ie
         del4MEKE(i,j) = (sdt*(G%IareaT(i,j)*I_mass(i,j))) * &
@@ -414,7 +415,6 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
              (MEKE_vflux(i,J-1) - MEKE_vflux(i,J)))
       enddo ; enddo
     endif !
-
 
     if (CS%kh_flux_enabled) then
       ! Lateral diffusion of MEKE
@@ -570,10 +570,8 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     endif
 
     ! Offer fields for averaging.
-
     if (any([CS%id_Ue, CS%id_Ub, CS%id_Ut] > 0)) &
       tmp(:,:) = 0.
-
     if (CS%id_MEKE>0) call post_data(CS%id_MEKE, MEKE%MEKE, CS%diag)
     if (CS%id_Ue>0) then
       do j=js,je ; do i=is,ie
