@@ -251,6 +251,7 @@ results/%/ocean.stats.$(1): ../build/$(2)/MOM6
 	if [ $(3) ]; then find ../build/$(2) -name *.gcda -exec rm -f '{}' \; ; fi
 	mkdir -p work/$$*/$(1)
 	cp -rL $$*/* work/$$*/$(1)
+	cd work/$$*/$(1) && if [ -f Makefile ]; then make; fi
 	mkdir -p work/$$*/$(1)/RESTART
 	echo $(4) > work/$$*/$(1)/MOM_override
 	cd work/$$*/$(1) && $$(call MPIRUN_CMD,$(5)) -n $(6) ../../../$$< 2> debug.out > std.out \
@@ -285,6 +286,7 @@ results/%/ocean.stats.restart: ../build/symmetric/MOM6
 	rm -rf work/$*/restart
 	mkdir -p work/$*/restart
 	cp -rL $*/* work/$*/restart
+	cd work/$*/restart && if [ -f Makefile ]; then make; fi
 	mkdir -p work/$*/restart/RESTART
 	# Generate the half-period input namelist
 	# TODO: Assumes runtime set by DAYMAX, will fail if set by input.nml
@@ -294,20 +296,19 @@ results/%/ocean.stats.restart: ../build/symmetric/MOM6
 		&& if [ -z "$${timeunit}" ]; then timeunit="8.64e4"; fi \
 		&& printf -v timeunit_int "%.f" "$${timeunit}" \
 		&& halfperiod=$$(printf "%.f" $$(bc <<< "scale=10; 0.5 * $${daymax} * $${timeunit_int}")) \
-		&& printf "\n&ocean_solo_nml\n    seconds = $${halfperiod}\n/\n" >> input.nml \
-		&& echo $${daymax} $${timeunit}
+		&& printf "\n&ocean_solo_nml\n    seconds = $${halfperiod}\n/\n" >> input.nml
 	# Run the first half-period
-	cd work/$*/restart && $(MPIRUN) -n 1 ../../../$< 2> debug.out > std.out \
-		|| ! sed 's/^/$*.restart1: /' std.out debug.out \
-		&& sed 's/^/$*.restart1: /' std.out
+	cd work/$*/restart && $(MPIRUN) -n 1 ../../../$< 2> debug1.out > std1.out \
+		|| ! sed 's/^/$*.restart1: /' std1.out debug1.out \
+		&& sed 's/^/$*.restart1: /' std1.out
 	# Setup the next inputs
 	cd work/$*/restart && rm -rf INPUT && mv RESTART INPUT
 	mkdir work/$*/restart/RESTART
 	cd work/$*/restart && sed -i -e "s/input_filename *= *'n'/input_filename = 'r'/g" input.nml
 	# Run the second half-period
-	cd work/$*/restart && $(MPIRUN) -n 1 ../../../$< 2> debug.out > std.out \
-		|| ! sed 's/^/$*.restart2: /' std.out debug.out \
-		&& sed 's/^/$*.restart2: /' std.out
+	cd work/$*/restart && $(MPIRUN) -n 1 ../../../$< 2> debug2.out > std2.out \
+		|| ! sed 's/^/$*.restart2: /' std2.out debug2.out \
+		&& sed 's/^/$*.restart2: /' std2.out
 	# Archive the results and cleanup
 	mkdir -p $(@D)
 	cp work/$*/restart/ocean.stats $@

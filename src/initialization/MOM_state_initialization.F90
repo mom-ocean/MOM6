@@ -158,7 +158,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                       ! a restart file to the internal representation in this run.
   real :: vel_rescale ! A rescaling factor for velocities from the representation in
                       ! a restart file to the internal representation in this run.
-  real :: dt          ! The baroclinic dynamics timestep for this run [s].
+  real :: dt          ! The baroclinic dynamics timestep for this run [T ~> s].
   logical :: from_Z_file, useALE
   logical :: new_sim
   integer :: write_geom
@@ -475,7 +475,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
            "an initial grid that is consistent with the initial conditions.", &
            default=1, do_not_log=just_read)
 
-      call get_param(PF, mdl, "DT", dt, "Timestep", fail_if_missing=.true.)
+      call get_param(PF, mdl, "DT", dt, "Timestep", fail_if_missing=.true., scale=US%s_to_T)
 
       if (new_sim .and. debug) &
         call hchksum(h, "Pre-ALE_regrid: h ", G%HI, haloshift=1, scale=GV%H_to_m)
@@ -562,7 +562,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   endif
 
   ! Reads OBC parameters not pertaining to the location of the boundaries
-  call open_boundary_init(G, PF, OBC)
+  call open_boundary_init(G, GV, US, PF, OBC, restart_CS)
 
   ! This controls user code for setting open boundary data
   if (associated(OBC)) then
@@ -616,7 +616,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     call qchksum(G%mask2dBu, 'MOM_initialize_state: mask2dBu ', G%HI)
   endif
 
-  if (debug_OBC) call open_boundary_test_extern_h(G, OBC, h)
+  if (debug_OBC) call open_boundary_test_extern_h(G, GV, OBC, h)
   call callTree_leave('MOM_initialize_state()')
 
 end subroutine MOM_initialize_state
@@ -1872,8 +1872,8 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
     call MOM_read_data(filename, salin_var, tmp(:,:,:), G%Domain)
     call set_up_sponge_field(tmp, tv%S, G, nz, CSp)
   elseif (use_temperature) then
-    call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, tv%T, ALE_CSp)
-    call set_up_ALE_sponge_field(filename, salin_var, Time, G, GV, tv%S, ALE_CSp)
+    call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, US, tv%T, ALE_CSp)
+    call set_up_ALE_sponge_field(filename, salin_var, Time, G, GV, US, tv%S, ALE_CSp)
   endif
 
 end subroutine initialize_sponges_file

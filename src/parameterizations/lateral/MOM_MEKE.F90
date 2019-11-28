@@ -358,20 +358,20 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       ! Calculate Laplacian of MEKE
       !$OMP parallel do default(shared)
       do j=js-1,je+1 ; do I=is-2,ie+1
-        ! Here the units of MEKE_uflux are [L2 T-2].
+        ! Here the units of MEKE_uflux are [L2 T-2 ~> m2 s-2].
         MEKE_uflux(I,j) = ((G%dy_Cu(I,j)*G%IdxCu(I,j)) * G%mask2dCu(I,j)) * &
             (MEKE%MEKE(i+1,j) - MEKE%MEKE(i,j))
-      ! This would have units of [R Z L2 T-2]
+      ! This would have units of [R Z L2 T-2 ~> kg s-2]
       ! MEKE_uflux(I,j) = ((G%dy_Cu(I,j)*G%IdxCu(I,j)) * &
       !     ((2.0*mass(i,j)*mass(i+1,j)) / ((mass(i,j)+mass(i+1,j)) + mass_neglect)) ) * &
       !     (MEKE%MEKE(i+1,j) - MEKE%MEKE(i,j))
       enddo ; enddo
       !$OMP parallel do default(shared)
       do J=js-2,je+1 ; do i=is-1,ie+1
-        ! Here the units of MEKE_vflux are [L2 T-2].
+        ! Here the units of MEKE_vflux are [L2 T-2 ~> m2 s-2].
         MEKE_vflux(i,J) = ((G%dx_Cv(i,J)*G%IdyCv(i,J)) * G%mask2dCv(i,J)) * &
             (MEKE%MEKE(i,j+1) - MEKE%MEKE(i,j))
-      ! This would have units of [R Z L2 T-2]
+      ! This would have units of [R Z L2 T-2 ~> kg s-2]
       ! MEKE_vflux(i,J) = ((G%dx_Cv(i,J)*G%IdyCv(i,J)) * &
       !     ((2.0*mass(i,j)*mass(i,j+1)) / ((mass(i,j)+mass(i,j+1)) + mass_neglect)) ) * &
       !     (MEKE%MEKE(i,j+1) - MEKE%MEKE(i,j))
@@ -436,7 +436,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         if (Kh_here*Inv_Kh_max > 0.25) Kh_here = 0.25 / Inv_Kh_max
         Kh_u(I,j) = Kh_here
 
-        ! Here the units of MEKE_uflux and MEKE_vflux are [R Z L4 T-3].
+        ! Here the units of MEKE_uflux and MEKE_vflux are [R Z L4 T-3 ~> kg m2 s-3].
         MEKE_uflux(I,j) = ((Kh_here * (G%dy_Cu(I,j)*G%IdxCu(I,j))) * &
             ((2.0*mass(i,j)*mass(i+1,j)) / ((mass(i,j)+mass(i+1,j)) + mass_neglect)) ) * &
             (MEKE%MEKE(i,j) - MEKE%MEKE(i+1,j))
@@ -451,7 +451,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         if (Kh_here*Inv_Kh_max > 0.25) Kh_here = 0.25 / Inv_Kh_max
         Kh_v(i,J) = Kh_here
 
-        ! Here the units of MEKE_uflux and MEKE_vflux are [R Z L4 T-3].
+        ! Here the units of MEKE_uflux and MEKE_vflux are [R Z L4 T-3 ~> kg m2 s-3].
         MEKE_vflux(i,J) = ((Kh_here * (G%dx_Cv(i,J)*G%IdyCv(i,J))) * &
             ((2.0*mass(i,j)*mass(i,j+1)) / ((mass(i,j)+mass(i,j+1)) + mass_neglect)) ) * &
             (MEKE%MEKE(i,j) - MEKE%MEKE(i,j+1))
