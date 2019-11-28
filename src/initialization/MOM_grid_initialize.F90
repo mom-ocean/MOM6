@@ -14,11 +14,8 @@ use MOM_dyn_horgrid, only : dyn_horgrid_type, set_derived_dyn_horgrid
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_io, only : read_data, slasher, file_exists
-use MOM_io, only : FmsNetcdfDomainFile_t, FmsNetcdfFile_t
-use MOM_io, only : open_file, close_file, register_axis, get_dimension_names
-use MOM_io, only : get_variable_size, get_variable_num_dimensions, get_dimension_size, get_num_dimensions
-use MOM_io, only : CORNER, NORTH_FACE, EAST_FACE, CENTER
+use MOM_io, only : MOM_read_data, read_data, slasher, file_exists
+use MOM_io, only : CORNER, NORTH_FACE, EAST_FACE
 use MOM_unit_scaling, only : unit_scale_type
 use mpp_domains_mod, only : mpp_get_domain_extents, mpp_deallocate_domain
 use mpp_mod, only : mpp_broadcast
@@ -196,17 +193,9 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   logical :: lon_bug  ! If true use an older buggy answer in the tripolar longitude.
   integer :: i, j, i2, j2
   integer :: npei,npej
-  integer :: ndims ! number of dimensions of coordinate variable
-  integer :: globalDimSize
   integer, dimension(:), allocatable :: exni,exnj
   integer :: xidx, yidx1, yidx2
-  integer, dimension(:), allocatable :: dimSizes
   logical, dimension(:), allocatable :: yuseT, yuseB ! Masks for geoLatT and geoLatB
-  type(FmsNetcdfDomainFile_t) :: fileObjRead ! FMS file object for domain-decomposed read returned by call to
-                                             ! open_file
-  type(FmsNetcdfFile_t) :: fileObjReadNoDD ! FMS file object for non-domain-decomposed read returned by call to
-                                           ! open_file
-  logical :: fileOpenSuccess ! If true, the filename passed to open_file was opened sucessfully
 
   call callTree_enter("set_grid_metrics_from_mosaic(), MOM_grid_initialize.F90")
 
@@ -285,33 +274,26 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   deallocate(exni)
   deallocate(exnj)
 
-  ! open the file for domain-decomposed read
-  fileOpenSuccess = open_file(fileObjRead, filename, "read", SGdom%mpp_domain, is_restart=.false.)
   ! tmpZ is defined on the data domain
   tmpZ(:,:) = 999.0
 
-  ndims = get_num_dimensions(fileObjRead)
-  allocate(dimNames(ndims))
-  call get_dimension_names(fileObjRead, dimNames)
   ! register the global axes
-  do i=1,ndims
+  !do i=1,ndims
 
-    call get_dimension_size(fileObjRead, dimNames(i), globalDimSize)
+  !  call get_dimension_size(fileObjRead, dimNames(i), globalDimSize)
 
-    if (globalDimSize .eq. size(tmpz,1)) then
-      call register_axis(fileObjRead, trim(dimNames(i)),'x', domain_position=CENTER)
-    elseif (globalDimSize .eq. size(tmpz,2)) then
-      call register_axis(fileObjRead, trim(dimNames(i)),'y', domain_position=CENTER)
-    elseif (globalDimSize .eq. size(tmpV,1)) then
-      call register_axis(fileObjRead, trim(dimNames(i)),'x', domain_position=EAST_FACE)
-    elseif (globalDimSize .eq. size(tmpU,2)) then
-      call register_axis(fileObjRead, trim(dimNames(i)),'y', domain_position=NORTH_FACE)
-    endif
-  enddo
+  !  if (globalDimSize .eq. size(tmpT,1)) then
+  !    call register_axis(fileObjRead, trim(dimNames(i)),'x', domain_position=CENTER)
+  !  elseif (globalDimSize .eq. size(tmpT,2)) then
+  !    call register_axis(fileObjRead, trim(dimNames(i)),'y', domain_position=CENTER)
+   ! elseif (globalDimSize .eq. size(tmpV,1)) then
+  !    call register_axis(fileObjRead, trim(dimNames(i)),'x', domain_position=EAST_FACE)
+   ! elseif (globalDimSize .eq. size(tmpU,2)) then
+  !    call register_axis(fileObjRead, trim(dimNames(i)),'y', domain_position=NORTH_FACE)
+   ! endif
+ ! enddo
 
-  deallocate(dimNames)
-
-  call read_data(fileObjRead, 'x', tmpZ)
+  call MOM_read_data(filename, 'x', tmpZ, SGdom, x_position=EAST_FACE, y_position=NORTH_FACE)
 
   if (lon_bug) then
     call pass_var(tmpZ, SGdom, position=CORNER)
@@ -337,7 +319,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   ! Read Y from the supergrid
   tmpZ(:,:) = 999.0
 
-  call read_data(fileObjRead, 'y', tmpZ)
+  call MOM_read_data(filename, 'y', tmpZ, SGdom, x_position=EAST_FACE, y_position=NORTH_FACE)
 
   call pass_var(tmpZ, SGdom, position=CORNER)
   call extrapolate_metric(tmpZ, 2*(G%jsc-G%jsd)+2, missing=999.0)
@@ -357,8 +339,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   ! Read DX,DY from the supergrid
 
   tmpU(:,:) = 0.0 ; tmpV(:,:) = 0.0
-  call read_data(fileObjRead, 'dx', tmpV)
-  call read_data(fileObjRead, 'dy', tmpU)
+  call MOM_read_data(filename,'dx', tmpV, SGdom, y_position=NORTH_FACE)
+  call MOM_read_data(filename,'dy', tmpU, SGdom, x_position=EAST_FACE)
   call pass_vector(tmpU, tmpV, SGdom, To_All+Scalar_Pair, CGRID_NE)
   call extrapolate_metric(tmpV, 2*(G%jsc-G%jsd)+2, missing=0.0)
   call extrapolate_metric(tmpU, 2*(G%jsc-G%jsd)+2, missing=0.0)
@@ -385,11 +367,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
 
   ! Read AREA from the supergrid
   tmpT(:,:) = 0.0
-  call read_data(fileObjRead, 'area', tmpT)
-
-  ! Done with domain-decomposed read; close the file
-  call close_file(fileObjRead)
-
+  call MOM_read_data(filename, 'area', tmpT, SGdom)
   call pass_var(tmpT, SGdom)
   call extrapolate_metric(tmpT, 2*(G%jsc-G%jsd)+2, missing=0.0)
 
@@ -440,7 +418,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   allocate(tmpGlbl(dimSizes(1),2))
  
   ! read x into the tmpGlbl buffer
-  call read_data(fileObjReadNoDD, "x", tmpGlbl)
+  call MOM_read_data(fileName, "x", tmpGlbl, define_diagnostic_axes=.true.)
   ! I don't know why the second axis is 1 or 2 here. -RWH
   do i=G%isg,G%ieg
     G%gridLonT(i) = tmpGlbl(2*(i-G%isg)+2,2)
@@ -461,7 +439,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   allocate(tmpGlbl(dimSizes(1),dimSizes(2)))
 
   ! read y into the tmpGlbl buffer
-  call read_data(fileObjReadNoDD, "y", tmpGlbl)
+  call MOM_read_data(fileObjReadNoDD, "y", tmpGlbl, define_diagnostic_axes=.true.)
 
   ! create a mask for the geoLatT values in the tmpGlbl array
   allocate(yuseT(dimSizes(2)))

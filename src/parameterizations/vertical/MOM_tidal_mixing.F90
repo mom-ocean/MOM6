@@ -11,9 +11,7 @@ use MOM_error_handler,      only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser,        only : openParameterBlock, closeParameterBlock
 use MOM_file_parser,        only : get_param, log_param, log_version, param_file_type
 use MOM_grid,               only : ocean_grid_type
-use MOM_io,                 only : slasher
-use MOM_io,                 only : open_file, close_file, read_data, MOM_read_data, get_variable_size, scale_data
-use MOM_io,                 only : check_if_open, FmsNetcdfDomainFile_t, MOM_register_variable_axes
+use MOM_io,                 only : slasher, MOM_read_data, field_size
 use MOM_remapping,          only : remapping_CS, initialize_remapping, remapping_core_h
 use MOM_string_functions,   only : uppercase, lowercase
 use MOM_unit_scaling,       only : unit_scale_type
@@ -220,22 +218,17 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
   ! Local variables
   logical :: read_tideamp
   logical :: default_2018_answers
-  logical :: fileOpenSuccess ! indicates whether open_file is successful
   character(len=20)  :: tmpstr, int_tide_profile_str
   character(len=20)  :: CVMix_tidal_scheme_str, tidal_energy_type
   character(len=200) :: filename, h2_file, Niku_TKE_input_file
   character(len=200) :: tidal_energy_file, tideamp_file
-  character(len=40), allocatable, dimension(:) :: dimNames ! dimension names of netcdf variables
   real :: utide, hamp, prandtl_tidal, max_frac_rough
   real :: Niku_scale ! local variable for scaling the Nikurashin TKE flux data
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
-  integer :: ndims, dimUnlimIndex
-  integer, allocatable, dimension(:) :: corner, edgeLengths
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_tidal_mixing"     !< This module's name.
-  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to open_file
 
   if (associated(CS)) then
     call MOM_error(WARNING, "tidal_mixing_init called when control structure "// &
@@ -464,7 +457,6 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
                  fail_if_missing=(.not.CS%use_CVMix_tidal))
     filename = trim(CS%inputdir) // trim(h2_file)
     call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
-
     call MOM_read_data(filename, 'h2', CS%h2, G%domain, timelevel=1, scale=US%m_to_Z**2)
 
     call get_param(param_file, mdl, "FRACTIONAL_ROUGHNESS_MAX", max_frac_rough, &
@@ -509,7 +501,6 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
     call log_param(param_file, mdl, "INPUTDIR/NIKURASHIN_TKE_INPUT_FILE", &
                    filename)
     call safe_alloc_ptr(CS%TKE_Niku,is,ie,js,je) ; CS%TKE_Niku(:,:) = 0.0
-
     call MOM_read_data(filename, 'TKE_input', CS%TKE_Niku, G%domain, timelevel=1, &  ! ??? timelevel -aja
                        scale=US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**3)
     CS%TKE_Niku(:,:) = Niku_scale * CS%TKE_Niku(:,:)
@@ -1555,9 +1546,7 @@ subroutine read_tidal_energy(G, US, tidal_energy_type, tidal_energy_file, CS)
   case ('JAYN') ! Jayne 2009
     if (.not. allocated(CS%tidal_qe_2d)) allocate(CS%tidal_qe_2d(isd:ied,jsd:jed))
     allocate(tidal_energy_flux_2d(isd:ied,jsd:jed))
-
     call MOM_read_data(tidal_energy_file,'wave_dissipation',tidal_energy_flux_2d, G%domain)
-
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       CS%tidal_qe_2d(i,j) = CS%Gamma_itides * tidal_energy_flux_2d(i,j)
     enddo ; enddo
@@ -1592,20 +1581,12 @@ subroutine read_tidal_constituents(G, US, tidal_energy_file, CS)
     tc_o1         ! input lunar diurnal tidal energy flux [W/m^2]
   integer, dimension(4) :: nz_in
   integer               :: k, is, ie, js, je, isd, ied, jsd, jed, i, j
-  logical :: fileOpenSuccess ! indicates whether open_file is successful 
-  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to open_file
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  ! open the tidal energy file
-  ! note: data are read in with calls to individual netcdf routines instead of MOM_read_data because
-  ! the file is already opened to get the size of z_t.
-  if (.not. check_if_open(fileObjRead)) &
-    fileOpenSuccess = open_file(fileObjRead, tidal_energy_file, "read", G%domain%mpp_domain, is_restart=.false.)
-  ! get number of input levels
-  call get_variable_size(fileObjRead, "z_t", nz_in)
-  !call field_size(tidal_energy_file, 'z_t', nz_in)
+  ! get number of input levels:
+  call field_size(tidal_energy_file, 'z_t', nz_in)
 
   ! allocate local variables
   allocate(z_t(nz_in(1)), z_w(nz_in(1)) )
@@ -1618,24 +1599,14 @@ subroutine read_tidal_constituents(G, US, tidal_energy_file, CS)
   if (.not. allocated(CS%tidal_qe_3d_in)) allocate(CS%tidal_qe_3d_in(isd:ied,jsd:jed,nz_in(1)))
   if (.not. allocated(CS%h_src))          allocate(CS%h_src(nz_in(1)))
 
-  ! register the variable axes for M2, S2, K1,O1
-  call MOM_register_variable_axes(fileObjRead, "M2", xUnits="degrees_east", yUnits="degrees_north")
   ! read in tidal constituents
-  call read_data(fileObjRead, 'M2', tc_m2)
-  call read_data(fileObjRead, 'S2', tc_s2)
-  call read_data(fileObjRead, 'K1', tc_k1)
-  call read_data(fileObjRead, 'O1', tc_o1)
+  call MOM_read_data(tidal_energy_file, 'M2', tc_m2, G%domain)
+  call MOM_read_data(tidal_energy_file, 'S2', tc_s2, G%domain)
+  call MOM_read_data(tidal_energy_file, 'K1', tc_k1, G%domain)
+  call MOM_read_data(tidal_energy_file, 'O1', tc_o1, G%domain)
   ! Note the hard-coded assumption that z_t and z_w in the file are in centimeters.
-  ! register the variable axes for z_t and z_w
-  call MOM_register_variable_axes(fileObjRead, "z_t")
-  ! read in z_t and z_w
-  call read_data(fileObjRead, 'z_t', z_t)
-  call read_data(fileObjRead, 'z_w', z_w)
-  ! close the file
-   if (check_if_open(fileObjRead)) call close_file(fileObjRead)
-  ! scale the data
-  call scale_data(z_t,100.0*US%m_to_Z)
-  call scale_data(z_w,100.0*US%m_to_Z)
+  call MOM_read_data(tidal_energy_file, 'z_t', z_t, scale=100.0*US%m_to_Z)
+  call MOM_read_data(tidal_energy_file, 'z_w', z_w, scale=100.0*US%m_to_Z)
 
   do j=js,je ; do i=is,ie
     if (abs(G%geoLatT(i,j)) < 30.0) then

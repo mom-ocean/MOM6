@@ -6,8 +6,8 @@ module MOM_regridding
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : param_file_type, get_param, log_param
 use MOM_io, only : slasher
-use MOM_io, only : open_file, close_file, read_data, MOM_read_data, get_variable_size
-use MOM_io, only : FmsNetcdfFile_t, file_exists, variable_exists, check_if_open
+use MOM_io,            only : file_exists, field_exists, field_size, MOM_read_data
+use MOM_io,            only : slasher
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
@@ -195,7 +195,6 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   character(len=12) :: expected_units ! Temporary strings
   logical :: tmpLogical, fix_haloclines, set_max, do_sum, main_parameters
   logical :: coord_is_state_dependent, ierr
-  logical :: fileOpenSuccess ! .true. if open_file call is successful
   real :: filt_len, strat_tol, index_scale, tmpReal
   real :: maximum_depth ! The maximum depth of the ocean [m] (not in Z).
   real :: dz_fixed_sfc, Rho_avg_depth, nlay_sfc_int
@@ -215,8 +214,6 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
                                      100., 100., 100., 100., 100., 100., 100., 175., &
                                      250., 375., 500., 500., 500., 500., 500., 500., &
                                      500., 500., 500., 500., 500., 500., 500., 500. /)
-  type(FmsNetcdfFile_t) :: fileObjRead ! netcdf file object returned by call to open_file
-
   call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
 
@@ -336,18 +333,15 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     endif
     if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
             "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
-    if (.not. check_if_open(fileObjRead)) &
-      fileOpenSuccess = open_file(fileObjRead, fileName, "read", is_restart=.false.)
     varName = trim( extractWord(trim(string(6:)), 2) )
     if (len_trim(varName)==0) then
-      if (variable_exists(fileObjRead,'dz')) then; varName = 'dz'
-      elseif (variable_exists(fileObjRead,'dsigma')) then; varName = 'dsigma'
-      elseif (variable_exists(fileObjRead,'ztest')) then; varName = 'ztest'
+      if (field_exists(fileName,'dz')) then; varName = 'dz'
+      elseif (field_exists(fileName,'dsigma')) then; varName = 'dsigma'
+      elseif (field_exists(fileName,'ztest')) then; varName = 'ztest'
       else ;  call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
                     "Coordinate variable not specified and none could be guessed.")
       endif
     endif
-    if (check_if_open(fileObjRead)) call close_file(fileObjRead)
     ! This check fails when the variable is a dimension variable! -AJA
    !if (.not. field_exists(fileName,trim(varName))) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
    !             "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
@@ -363,15 +357,13 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       call check_grid_def(filename, varName, expected_units, message, ierr)
       if (ierr) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "//&
                   "Unsupported format in grid definition '"//trim(filename)//"'. Error message "//trim(message))
-      if (.not. check_if_open(fileObjRead)) &
-        fileOpenSuccess = open_file(fileObjRead, fileName, "read", is_restart=.false.)
       ! get variable dimension sizes
-      call get_variable_size(fileObjRead, trim(varName), nzf, broadcast=.true.)
+      call field_size(trim(fileName), trim(varName), nzf)
 
       ke = nzf(1)-1
       if (CS%regridding_scheme == REGRIDDING_RHO) then
         allocate(rho_target(ke+1))
-        call read_data(fileObjRead, trim(varName), rho_target)
+        call MOM_read_data(trim(fileName), trim(varName), rho_target)
       else
         allocate(dz(ke))
         allocate(z_max(ke+1))
@@ -381,10 +373,10 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       endif
     else
       ! Assume reading resolution
-      call get_variable_size(fileObjRead, trim(varName), nzf, broadcast=.true.)
+      call field_size(trim(fileName), trim(varName), nzf)
       ke = nzf(1)
       allocate(dz(ke))
-      call read_data(fileObjRead, trim(varName), dz)
+      call MOM_read_data(trim(fileName), trim(varName), dz)
     endif
     if (main_parameters .and. ke/=GV%ke) then
       call MOM_error(FATAL,trim(mdl)//', initialize_regridding: '// &
@@ -408,26 +400,20 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     if (fileName(1:1)/='.' .and. filename(1:1)/='/') fileName = trim(inputdir) // trim( fileName )
     if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
       "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
-    ! open the file
-    ! note: using individual fms-io calls instead of MOM_read_data to avoid unnecessary opening/closing after querying
-    ! the file for the variable.
-    if (.not. check_if_open(fileObjRead)) &
-      fileOpenSuccess = open_file(fileObjRead, fileName, "read", is_restart=.false.)
     varName = trim( extractWord(trim(string(8:)), 2) )
-    if (.not. variable_exists(fileObjRead,varName)) &
+    if (.not. field_exists(fileName,varName)) &
       call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
       "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
-    ! read the data
-    call read_data(fileObjRead, trim(varName), rho_target)
+    call MOM_read_data(trim(fileName), trim(varName), rho_target)
 
     varName = trim( extractWord(trim(string(8:)), 3) )
     if (varName(1:5) == 'FNC1:') then ! Use FNC1 to calculate dz
       call dz_function1( trim(string((index(trim(string),'FNC1:')+5):)), dz )
     else ! Read dz from file
-      if (.not. variable_exists(fileObjRead,varName)) &
+      if (.not. field_exists(fileName,varName)) &
         call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
         "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
-      call read_data(fileObjRead, trim(varName), dz)
+      call MOM_read_data(trim(fileName), trim(varName), dz)
     endif
     if (main_parameters) then
       call log_param(param_file, mdl, "!"//coord_res_param, dz, &
@@ -435,8 +421,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       call log_param(param_file, mdl, "!TARGET_DENSITIES", rho_target, &
                'HYBRID target densities for interfaces', units=coordinateUnits(coord_mode))
     endif
-    ! close the file
-    if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+
   elseif (index(trim(string),'WOA09')==1) then
     if (len_trim(string)==5) then
       tmpReal = 0. ; ke = 0
@@ -632,29 +617,23 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       endif
       if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
         "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
-      ! open the file
-      if (.not. check_if_open(fileObjRead)) &
-        fileOpenSuccess = open_file(fileObjRead, fileName, "read", is_restart=.false.)
-
       do_sum = .false.
       varName = trim( extractWord(trim(string(6:)), 2) )
-      if (.not. variable_exists(fileObjRead,varName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
+      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
         "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
       if (len_trim(varName)==0) then
-        if (variable_exists(fileObjRead,'z_max')) then; varName = 'z_max'
-        elseif (variable_exists(fileObjRead,'dz')) then; varName = 'dz' ; do_sum = .true.
-        elseif (variable_exists(fileObjRead,'dz_max')) then; varName = 'dz_max' ; do_sum = .true.
+        if (field_exists(fileName,'z_max')) then; varName = 'z_max'
+        elseif (field_exists(fileName,'dz')) then; varName = 'dz' ; do_sum = .true.
+        elseif (field_exists(fileName,'dz_max')) then; varName = 'dz_max' ; do_sum = .true.
         else ; call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
           "MAXIMUM_INT_DEPTHS variable not specified and none could be guessed.")
         endif
       endif
       if (do_sum) then
-        ! read the data
-        call read_data(fileObjRead, trim(varName), dz_max)
+        call MOM_read_data(trim(fileName), trim(varName), dz_max)
         z_max(1) = 0.0 ; do K=1,ke ; z_max(K+1) = z_max(K) + dz_max(k) ; enddo
       else
-        ! read the data
-        call read_data(fileObjRead, trim(varName), z_max)
+        call MOM_read_data(trim(fileName), trim(varName), z_max)
       endif
       call log_param(param_file, mdl, "!MAXIMUM_INT_DEPTHS", z_max, &
                  trim(message), units=coordinateUnits(coord_mode))
@@ -673,8 +652,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
         "Unrecognized MAXIMUM_INT_DEPTH_CONFIG "//trim(string))
     endif
-    ! close the file
-    if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+
     deallocate(z_max)
     deallocate(dz_max)
 
@@ -708,25 +686,19 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       endif
       if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
         "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
-      ! open the file
-      if (.not. check_if_open(fileObjRead)) &
-        fileOpenSuccess = open_file(fileObjRead, fileName, "read", is_restart=.false.)
 
       varName = trim( extractWord(trim(string(6:)), 2) )
-      if (.not. variable_exists(fileObjRead,varName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
+      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
         "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
       if (len_trim(varName)==0) then
-        if (variable_exists(fileObjRead,'h_max')) then; varName = 'h_max'
-        elseif (variable_exists(fileObjRead,'dz_max')) then; varName = 'dz_max'
+        if (field_exists(fileName,'h_max')) then; varName = 'h_max'
+        elseif (field_exists(fileName,'dz_max')) then; varName = 'dz_max'
         else ; call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
           "MAXIMUM_INT_DEPTHS variable not specified and none could be guessed.")
         endif
       endif
-      ! read the data
-      call read_data(fileObjRead, trim(varName), h_max)
-      ! close the file
-      if (check_if_open(fileObjRead)) call close_file(fileObjRead)
 
+      call MOM_read_data(trim(fileName), trim(varName), h_max)
       call log_param(param_file, mdl, "!MAX_LAYER_THICKNESS", h_max, &
                  trim(message), units=coordinateUnits(coord_mode))
       call set_regrid_max_thickness(CS, h_max, GV%m_to_H)
