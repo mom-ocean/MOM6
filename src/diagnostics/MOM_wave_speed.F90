@@ -54,7 +54,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                     intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),            intent(in)  :: tv !< Thermodynamic variables
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: cg1 !< First mode internal wave speed [m s-1]
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: cg1 !< First mode internal wave speed [L T-1 ~> m s-1]
   type(wave_speed_CS),              pointer     :: CS !< Control structure for MOM_wave_speed
   logical, optional,                intent(in)  :: full_halos !< If true, do the calculation
                                           !! over the entire computational domain.
@@ -65,7 +65,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
                                           !! for the purposes of calculating vertical modal structure.
   real, optional,                   intent(in)  :: mono_N2_depth !< A depth below which N2 is limited as
                                           !! monotonic for the purposes of calculating vertical
-                                          !! modal structure [m].
+                                          !! modal structure [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
         optional,                   intent(out) :: modal_structure !< Normalized model structure [nondim]
 
@@ -76,11 +76,11 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
     pres, &       ! Interface pressure [Pa]
     T_int, &      ! Temperature interpolated to interfaces [degC]
     S_int, &      ! Salinity interpolated to interfaces [ppt]
-    gprime        ! The reduced gravity across each interface [m2 Z-1 s-2 ~> m s-2].
+    gprime        ! The reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
   real, dimension(SZK_(G)) :: &
     Igl, Igu, Igd ! The inverse of the reduced gravity across an interface times
                   ! the thickness of the layer below (Igl) or above (Igu) it.
-                  ! Their sum, Igd, is provided for the tridiagonal solver.  [s2 m-2]
+                  ! Their sum, Igd, is provided for the tridiagonal solver.  [T2 L-2 ~> s2 m-2]
   real, dimension(SZK_(G),SZI_(G)) :: &
     Hf, &         ! Layer thicknesses after very thin layers are combined [Z ~> m]
     Tf, &         ! Layer temperatures after very thin layers are combined [degC]
@@ -92,9 +92,11 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
     Sc, &         ! A column of layer salinites after convective istabilities are removed [ppt]
     Rc, &         ! A column of layer densities after convective istabilities are removed [R ~> kg m-3]
     Hc_H          ! Hc(:) rescaled from Z to thickness units [H ~> m or kg m-2]
-  real det, ddet, detKm1, detKm2, ddetKm1, ddetKm2
-  real :: lam, dlam, lam0
-  real :: min_h_frac
+  real :: det, ddet, detKm1, detKm2, ddetKm1, ddetKm2
+  real :: lam     ! The eigenvalue [T2 L-2 ~> s m-1]
+  real :: dlam    ! The change in estimates of the eigenvalue [T2 L-2 ~> s m-1]
+  real :: lam0    ! The first guess of the eigenvalue [T2 L-2 ~> s m-1]
+  real :: min_h_frac ! [nondim]
   real :: Z_to_Pa  ! A conversion factor from thicknesses (in Z) to pressure (in Pa)
   real, dimension(SZI_(G)) :: &
     htot, hmin, &  ! Thicknesses [Z ~> m]
@@ -102,13 +104,16 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
     HxT_here, &    ! A layer integrated temperature [degC Z ~> degC m]
     HxS_here, &    ! A layer integrated salinity [ppt Z ~> ppt m]
     HxR_here       ! A layer integrated density [R Z ~> kg m-2]
-  real :: speed2_tot ! overestimate of the mode-1 speed squared [m2 s-2]
+  real :: speed2_tot ! overestimate of the mode-1 speed squared [L2 T-2 ~> m2 s-2]
   real :: I_Hnew   ! The inverse of a new layer thickness [Z-1 ~> m-1]
   real :: drxh_sum ! The sum of density diffrences across interfaces times thicknesses [R Z ~> kg m-2]
-  real :: L2_to_Z2 ! A scaling factor squared from units of lateral distances to depths [Z2 m-2 ~> 1].
+  real :: L2_to_Z2 ! A scaling factor squared from units of lateral distances to depths [Z2 L-2 ~> 1].
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
   real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
-  real :: g_Rho0  ! G_Earth/Rho0 [m2 s-2 Z-1 R-1 ~> m4 s-2 kg-1].
+  real :: g_Rho0  ! G_Earth/Rho0 [L2 T-2 Z-1 R-1 ~> m4 s-2 kg-1].
+  real :: c2_scale ! A scaling factor for wave speeds to help control the growth of the determinant
+                   ! and its derivative with lam between rows of the Thomas algorithm solver.  The
+                   ! exact value should not matter for the final result if it is an even power of 2.
   real :: rescale, I_rescale
   integer :: kf(SZI_(G))
   integer, parameter :: max_itt = 10
@@ -117,7 +122,9 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
                         ! equation of state.
   integer :: kc
   integer :: i, j, k, k2, itt, is, ie, js, je, nz
-  real :: hw, gp, sum_hc, N2min
+  real :: hw, sum_hc
+  real :: gp      ! A limited local copy of gprime [L2 Z-1 T-2 ~> m s-2]
+  real :: N2min   ! A minimum buoyancy frequency [T-2 ~> s-2]
   logical :: l_use_ebt_mode, calc_modal_structure
   real :: l_mono_N2_column_fraction, l_mono_N2_depth
   real :: mode_struct(SZK_(G)), ms_min, ms_max, ms_sq
@@ -130,14 +137,14 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
   endif ; endif
 
-  L2_to_Z2 = US%m_to_Z**2
+  L2_to_Z2 = US%L_to_Z**2
 
   l_use_ebt_mode = CS%use_ebt_mode
   if (present(use_ebt_mode)) l_use_ebt_mode = use_ebt_mode
   l_mono_N2_column_fraction = CS%mono_N2_column_fraction
   if (present(mono_N2_column_fraction)) l_mono_N2_column_fraction = mono_N2_column_fraction
-  l_mono_N2_depth = US%m_to_Z*CS%mono_N2_depth
-  if (present(mono_N2_depth)) l_mono_N2_depth = US%m_to_Z*mono_N2_depth
+  l_mono_N2_depth = CS%mono_N2_depth
+  if (present(mono_N2_depth)) l_mono_N2_depth = mono_N2_depth
   calc_modal_structure = l_use_ebt_mode
   if (present(modal_structure)) calc_modal_structure = .true.
   if (calc_modal_structure) then
@@ -147,17 +154,20 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
   endif
 
   S => tv%S ; T => tv%T
-  g_Rho0 = US%L_T_to_m_s**2 * GV%g_Earth / GV%Rho0
+  g_Rho0 = GV%g_Earth / GV%Rho0
   Z_to_Pa = GV%Z_to_H * GV%H_to_Pa
   use_EOS = associated(tv%eqn_of_state)
 
   rescale = 1024.0**4 ; I_rescale = 1.0/rescale
+  ! The following two lines give identical results:
+  ! c2_scale = 16.0 * US%m_s_to_L_T**2
+  c2_scale = US%m_s_to_L_T**2
 
   min_h_frac = tol1 / real(nz)
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,G,GV,US,min_h_frac,use_EOS,T,S,tv,&
 !$OMP                                  calc_modal_structure,l_use_ebt_mode,modal_structure, &
 !$OMP                                  l_mono_N2_column_fraction,l_mono_N2_depth,CS,   &
-!$OMP                                  Z_to_Pa,cg1,g_Rho0,rescale,I_rescale,L2_to_Z2)  &
+!$OMP                                  Z_to_Pa,cg1,g_Rho0,rescale,I_rescale,L2_to_Z2,c2_scale)  &
 !$OMP                          private(htot,hmin,kf,H_here,HxT_here,HxS_here,HxR_here, &
 !$OMP                                  Hf,Tf,Sf,Rf,pres,T_int,S_int,drho_dT,           &
 !$OMP                                  drho_dS,drxh_sum,kc,Hc,Hc_H,Tc,Sc,I_Hnew,gprime,&
@@ -345,7 +355,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
                      (L2_to_Z2*gp > N2min*hw) ) then
                   ! Filters out regions where N2 increases with depth but only in a lower fraction
                   ! of the water column or below a certain depth.
-                  gp = US%Z_to_m**2 * (N2min*hw)
+                  gp = US%Z_to_L**2 * (N2min*hw)
                 else
                   N2min = L2_to_Z2 * gp/hw
                 endif
@@ -384,13 +394,14 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
               !    |  igu(2)    b(2)-lam   igl(2)     0     0  ...  |
               !    |    0        igu(3)   b(3)-lam  igl(3)  0  ...  |
               ! which is consistent if the eigenvalue problem is for horizontal velocity or pressure modes.
-             !detKm1 = (       Igl(1)-lam) ; ddetKm1 = -1.0
+             !detKm1 = c2_scale*(Igl(1)-lam) ; ddetKm1 = -1.0*c2_scale
              !det = (Igu(2)+Igl(2)-lam)*detKm1 - (Igu(2)*Igl(1)) ; ddet = (Igu(2)+Igl(2)-lam)*ddetKm1 - detKm1
               detKm1 = 1.0 ; ddetKm1 = 0.0
-              det = (       Igl(1)-lam) ; ddet = -1.0
+              det = (Igl(1)-lam) ; ddet = -1.0
               if (kc>1) then
-                detKm2 = detKm1; ddetKm2 = ddetKm1
-                detKm1 = det; ddetKm1 = ddet
+                ! Shift variables and rescale rows to avoid over- or underflow.
+                detKm2 = c2_scale*detKm1 ; ddetKm2 = c2_scale*ddetKm1
+                detKm1 = c2_scale*det    ; ddetKm1 = c2_scale*ddet
                 det = (Igu(2)+Igl(2)-lam)*detKm1 - (Igu(2)*Igl(1))*detKm2
                 ddet = (Igu(2)+Igl(2)-lam)*ddetKm1 - (Igu(2)*Igl(1))*ddetKm2 - detKm1
               endif
@@ -405,23 +416,27 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
               !    |    0       igu43)  b(4)-lam  igl(4)  0  ...  |
               ! which is consistent if the eigenvalue problem is for vertical velocity modes.
               detKm1 = 1.0 ; ddetKm1 = 0.0
-              det = (Igu(2)+Igl(2)-lam) ; ddet = -1.0
+              det = (Igu(2) + Igl(2) - lam) ; ddet = -1.0
               ! The last three rows of the w equation matrix are
               !    |    ...   0  igu(kc-1)  b(kc-1)-lam  igl(kc-1)     0       |
               !    |    ...   0     0        igu(kc-1)  b(kc-1)-lam  igl(kc-1) |
               !    \    ...   0     0           0        igu(kc)    b(kc)-lam  /
             endif
             do k=3,kc
-              detKm2 = detKm1; ddetKm2 = ddetKm1
-              detKm1 = det; ddetKm1 = ddet
+              ! Shift variables and rescale rows to avoid over- or underflow.
+              detKm2 = c2_scale*detKm1 ; ddetKm2 = c2_scale*ddetKm1
+              detKm1 = c2_scale*det    ; ddetKm1 = c2_scale*ddet
 
               det = (Igu(k)+Igl(k)-lam)*detKm1 - (Igu(k)*Igl(k-1))*detKm2
               ddet = (Igu(k)+Igl(k)-lam)*ddetKm1 - (Igu(k)*Igl(k-1))*ddetKm2 - detKm1
 
-              ! Rescale det & ddet if det is getting too large.
+              ! Rescale det & ddet if det is getting too large or too small.
               if (abs(det) > rescale) then
                 det = I_rescale*det ; detKm1 = I_rescale*detKm1
                 ddet = I_rescale*ddet ; ddetKm1 = I_rescale*ddetKm1
+              elseif (abs(det) < I_rescale) then
+                det = rescale*det ; detKm1 = rescale*detKm1
+                ddet = rescale*ddet ; ddetKm1 = rescale*ddetKm1
               endif
             enddo
             ! Use Newton's method iteration to find a new estimate of lam.
@@ -498,14 +513,17 @@ end subroutine wave_speed
 !! This uses the Thomas algorithm rather than the Hallberg algorithm since the matrix is not symmetric.
 subroutine tdma6(n, a, b, c, lam, y)
   integer,            intent(in)    :: n !< Number of rows of matrix
-  real, dimension(n), intent(in)    :: a !< Lower diagonal
-  real, dimension(n), intent(in)    :: b !< Leading diagonal
-  real, dimension(n), intent(in)    :: c !< Upper diagonal
-  real,               intent(in)    :: lam !< Scalar subtracted from leading diagonal
+  real, dimension(n), intent(in)    :: a !< Lower diagonal   [T2 L-2 ~> s2 m-2]
+  real, dimension(n), intent(in)    :: b !< Leading diagonal [T2 L-2 ~> s2 m-2]
+  real, dimension(n), intent(in)    :: c !< Upper diagonal   [T2 L-2 ~> s2 m-2]
+  real,               intent(in)    :: lam !< Scalar subtracted from leading diagonal [T2 L-2 ~> s2 m-2]
   real, dimension(n), intent(inout) :: y !< RHS on entry, result on exit
   ! Local variables
   integer :: k, l
-  real :: beta(n), yy(n), lambda
+  real :: beta(n), lambda  ! Temporary variables in [T2 L-2 ~> s2 m-2]
+  real :: I_beta(n)        ! Temporary variables in [L2 T-2 ~> m2 s-2]
+  real :: yy(n)            ! A temporary variable with the same units as y on entry.
+
   lambda = lam
   beta(1) = b(1) - lambda
   if (beta(1)==0.) then ! lam was chosen too perfectly
@@ -513,26 +531,28 @@ subroutine tdma6(n, a, b, c, lam, y)
     lambda = (1. + 1.e-5) * lambda
     beta(1) = b(1) - lambda
   endif
-  beta(1) = 1. / beta(1)
+  I_beta(1) = 1. / beta(1)
   yy(1) = y(1)
   do k = 2, n
-    beta(k) = ( b(k) - lambda ) - a(k) * c(k-1) * beta(k-1)
+    beta(k) = ( b(k) - lambda ) - a(k) * c(k-1) * I_beta(k-1)
+    ! Perhaps the following 0 needs to become a tolerance to handle underflow?
     if (beta(k)==0.) then ! lam was chosen too perfectly
       ! Change lambda and redo everything up to row k
       lambda = (1. + 1.e-5) * lambda
-      beta(1) = 1. / ( b(1) - lambda )
+      I_beta(1) = 1. / ( b(1) - lambda )
       do l = 2, k
-        beta(l) = 1. / ( ( b(l) - lambda ) - a(l) * c(l-1) * beta(l-1) )
-        yy(l) = y(l) - a(l) * yy(l-1) * beta(l-1)
+        I_beta(l) = 1. / ( ( b(l) - lambda ) - a(l) * c(l-1) * I_beta(l-1) )
+        yy(l) = y(l) - a(l) * yy(l-1) * I_beta(l-1)
       enddo
     else
-      beta(k) = 1. / beta(k)
+      I_beta(k) = 1. / beta(k)
     endif
-    yy(k) = y(k) - a(k) * yy(k-1) * beta(k-1)
+    yy(k) = y(k) - a(k) * yy(k-1) * I_beta(k-1)
   enddo
-  y(n) = yy(n) * beta(n)
+  ! The units of y change by a factor of [L2 T-2] in the following lines.
+  y(n) = yy(n) * I_beta(n)
   do k = n-1, 1, -1
-    y(k) = ( yy(k) - c(k) * y(k+1) ) * beta(k)
+    y(k) = ( yy(k) - c(k) * y(k+1) ) * I_beta(k)
   enddo
 end subroutine tdma6
 
@@ -555,14 +575,14 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
     pres, &       ! Interface pressure [Pa]
     T_int, &      ! Temperature interpolated to interfaces [degC]
     S_int, &      ! Salinity interpolated to interfaces [ppt]
-    gprime        ! The reduced gravity across each interface [m2 Z-1 s-2 ~> m s-2].
+    gprime        ! The reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
   real, dimension(SZK_(G)) :: &
     Igl, Igu      ! The inverse of the reduced gravity across an interface times
-                  ! the thickness of the layer below (Igl) or above (Igu) it [s2 m-2].
+                  ! the thickness of the layer below (Igl) or above (Igu) it, in [T2 L-2 ~> s2 m-2].
   real, dimension(SZK_(G)-1) :: &
     a_diag, b_diag, c_diag
                   ! diagonals of tridiagonal matrix; one value for each
-                  ! interface (excluding surface and bottom)
+                  ! interface (excluding surface and bottom) [T2 L-2 ~> s2 m-2]
   real, dimension(SZK_(G),SZI_(G)) :: &
     Hf, &         ! Layer thicknesses after very thin layers are combined [Z ~> m]
     Tf, &         ! Layer temperatures after very thin layers are combined [degC]
@@ -573,23 +593,22 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
     Tc, &         ! A column of layer temperatures after convective istabilities are removed [degC]
     Sc, &         ! A column of layer salinites after convective istabilities are removed [ppt]
     Rc            ! A column of layer densities after convective istabilities are removed [R ~> kg m-3]
-  real, parameter :: c1_thresh = 0.01
-                          ! if c1 is below this value, don't bother calculating
-                          ! cn values for higher modes
+  real :: c1_thresh  ! if c1 is below this value, don't bother calculating
+                     ! cn values for higher modes [L T-1 ~> m s-1]
   real :: det, ddet       ! determinant & its derivative of eigen system
-  real :: lam_1           ! approximate mode-1 eigen value
-  real :: lam_n           ! approximate mode-n eigen value
-  real :: dlam            ! increment in lam for Newton's method
-  real :: lamMin          ! minimum lam value for root searching range
-  real :: lamMax          ! maximum lam value for root searching range
-  real :: lamInc          ! width of moving window for root searching
+  real :: lam_1           ! approximate mode-1 eigenvalue [T2 L-2 ~> s2 m-2]
+  real :: lam_n           ! approximate mode-n eigenvalue [T2 L-2 ~> s2 m-2]
+  real :: dlam            ! increment in lam for Newton's method [T2 L-2 ~> s2 m-2]
+  real :: lamMin          ! minimum lam value for root searching range [T2 L-2 ~> s2 m-2]
+  real :: lamMax          ! maximum lam value for root searching range [T2 L-2 ~> s2 m-2]
+  real :: lamInc          ! width of moving window for root searching [T2 L-2 ~> s2 m-2]
   real :: det_l,det_r     ! determinant value at left and right of window
   real :: ddet_l,ddet_r   ! derivative of determinant at left and right of window
   real :: det_sub,ddet_sub! derivative of determinant at subinterval endpoint
-  real :: xl,xr           ! lam guesses at left and right of window
-  real :: xl_sub          ! lam guess at left of subinterval window
+  real :: xl,xr           ! lam guesses at left and right of window [T2 L-2 ~> s2 m-2]
+  real :: xl_sub          ! lam guess at left of subinterval window [T2 L-2 ~> s2 m-2]
   real,dimension(nmodes) :: &
-          xbl,xbr         ! lam guesses bracketing a zero-crossing (root)
+          xbl,xbr         ! lam guesses bracketing a zero-crossing (root) [T2 L-2 ~> s2 m-2]
   integer :: numint       ! number of widows (intervals) in root searching range
   integer :: nrootsfound  ! number of extra roots found (not including 1st root)
   real :: min_h_frac
@@ -600,20 +619,20 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
     HxT_here, &    ! A layer integrated temperature [degC Z ~> degC m]
     HxS_here, &    ! A layer integrated salinity [ppt Z ~> ppt m]
     HxR_here       ! A layer integrated density [R Z ~> kg m-2]
-  real :: speed2_tot ! overestimate of the mode-1 speed squared [m2 s-2]
-  real :: speed2_min ! minimum mode speed (squared) to consider in root searching
+  real :: speed2_tot ! overestimate of the mode-1 speed squared [L2 T-2 ~> m2 s-2]
+  real :: speed2_min ! minimum mode speed (squared) to consider in root searching [L2 T-2 ~> m2 s-2]
   real, parameter :: reduct_factor = 0.5
-                     ! factor used in setting speed2_min
+                     ! factor used in setting speed2_min [nondim]
   real :: I_Hnew   ! The inverse of a new layer thickness [Z-1 ~> m-1]
   real :: drxh_sum ! The sum of density diffrences across interfaces times thicknesses [R Z ~> kg m-2]
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
   real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
-  real :: g_Rho0  ! G_Earth/Rho0 [m2 s-2 Z-1 R-1 ~> m4 s-2 kg-1].
+  real :: g_Rho0  ! G_Earth/Rho0 [L2 T-2 Z-1 R-1 ~> m4 s-2 kg-1].
   integer :: kf(SZI_(G))
   integer, parameter :: max_itt = 10
   logical :: use_EOS    ! If true, density is calculated from T & S using the equation of state.
   real, dimension(SZK_(G)+1) :: z_int
-  ! real, dimension(SZK_(G)+1) :: N2
+  ! real, dimension(SZK_(G)+1) :: N2  ! The local squared buoyancy frequency [T-2 ~> s-2]
   integer :: nsub       ! number of subintervals used for root finding
   integer, parameter :: sub_it_max = 4
                         ! maximum number of times to subdivide interval
@@ -635,9 +654,10 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   endif ; endif
 
   S => tv%S ; T => tv%T
-  g_Rho0 = US%L_T_to_m_s**2 * GV%g_Earth / GV%Rho0
+  g_Rho0 = GV%g_Earth / GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
   Z_to_Pa = GV%Z_to_H * GV%H_to_Pa
+  c1_thresh = 0.01*US%m_s_to_L_T
 
   min_h_frac = tol1 / real(nz)
   !$OMP parallel do default(private) shared(is,ie,js,je,nz,h,G,GV,US,min_h_frac,use_EOS,T,S, &
@@ -814,7 +834,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
             do K=2,kc
               Igl(K) = 1.0/(gprime(K)*Hc(k)) ; Igu(K) = 1.0/(gprime(K)*Hc(k-1))
               z_int(K) = z_int(K-1) + Hc(k-1)
-              ! N2(K) = US%m_to_Z**2*gprime(K)/(0.5*(Hc(k)+Hc(k-1)))
+              ! N2(K) = US%L_to_Z**2*gprime(K)/(0.5*(Hc(k)+Hc(k-1)))
               speed2_tot = speed2_tot + gprime(K)*(Hc(k-1)+Hc(k))
             enddo
             ! Set stratification for surface and bottom (setting equal to nearest interface for now)
@@ -830,31 +850,31 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
             ! First, populate interior rows
             do K=3,kc-1
               row = K-1 ! indexing for TD matrix rows
-              a_diag(row) = (-Igu(K))
-              b_diag(row) = (Igu(K)+Igl(K))
-              c_diag(row) = (-Igl(K))
+              a_diag(row) = -Igu(K)
+              b_diag(row) = Igu(K)+Igl(K)
+              c_diag(row) = -Igl(K)
             enddo
             ! Populate top row of tridiagonal matrix
             K=2 ; row = K-1
             a_diag(row) = 0.0
-            b_diag(row) = (Igu(K)+Igl(K))
-            c_diag(row) = (-Igl(K))
+            b_diag(row) = Igu(K)+Igl(K)
+            c_diag(row) = -Igl(K)
             ! Populate bottom row of tridiagonal matrix
             K=kc ; row = K-1
-            a_diag(row) = (-Igu(K))
-            b_diag(row) = (Igu(K)+Igl(K))
+            a_diag(row) = -Igu(K)
+            b_diag(row) = Igu(K)+Igl(K)
             c_diag(row) = 0.0
             ! Total number of rows in the matrix = number of interior interfaces
             nrows = kc-1
 
-            ! Under estimate the first eigen value to start with.
+            ! Under estimate the first eigenvalue to start with.
             lam_1 = 1.0 / speed2_tot
 
             ! Find the first eigen value
             do itt=1,max_itt
               ! calculate the determinant of (A-lam_1*I)
               call tridiag_det(a_diag(1:nrows),b_diag(1:nrows),c_diag(1:nrows), &
-                                      nrows,lam_1,det,ddet)
+                                      nrows,lam_1,det,ddet, row_scale=US%m_s_to_L_T**2)
               ! Use Newton's method iteration to find a new estimate of lam_1
               !det = det_it(itt) ; ddet = ddet_it(itt)
               if ((ddet >= 0.0) .or. (-det > -0.5*lam_1*ddet)) then
@@ -892,13 +912,13 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
 
               ! find det_l of first interval (det at left endpoint)
               call tridiag_det(a_diag(1:nrows),b_diag(1:nrows),c_diag(1:nrows), &
-                               nrows,lamMin,det_l,ddet_l)
+                               nrows,lamMin,det_l,ddet_l, row_scale=US%m_s_to_L_T**2)
               ! move interval window looking for zero-crossings************************
               do iint=1,numint
                 xr = lamMin + lamInc * iint
                 xl = xr - lamInc
                 call tridiag_det(a_diag(1:nrows),b_diag(1:nrows),c_diag(1:nrows), &
-                                 nrows,xr,det_r,ddet_r)
+                                 nrows,xr,det_r,ddet_r, row_scale=US%m_s_to_L_T**2)
                 if (det_l*det_r < 0.0) then  ! if function changes sign
                   if (det_l*ddet_l < 0.0) then ! if function at left is headed to zero
                     nrootsfound = nrootsfound + 1
@@ -919,7 +939,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
                       do sub=1,nsub-1,2 ! only check odds; sub = 1; 1,3; 1,3,5,7;...
                         xl_sub = xl + lamInc/(nsub)*sub
                         call tridiag_det(a_diag(1:nrows),b_diag(1:nrows),c_diag(1:nrows), &
-                                 nrows,xl_sub,det_sub,ddet_sub)
+                                 nrows,xl_sub,det_sub,ddet_sub, row_scale=US%m_s_to_L_T**2)
                         if (det_sub*det_r < 0.0) then  ! if function changes sign
                           if (det_sub*ddet_sub < 0.0) then ! if function at left is headed to zero
                             sub_rootfound = .true.
@@ -962,7 +982,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
                 do itt=1,max_itt
                   ! calculate the determinant of (A-lam_n*I)
                   call tridiag_det(a_diag(1:nrows),b_diag(1:nrows),c_diag(1:nrows), &
-                                   nrows,lam_n,det,ddet)
+                                   nrows,lam_n,det,ddet, row_scale=US%m_s_to_L_T**2)
                   ! Use Newton's method to find a new estimate of lam_n
                   dlam = - det / ddet
                   lam_n = lam_n + dlam
@@ -976,7 +996,6 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
             else
               cn(i,j,2:nmodes) = 0.0 ! else too small to worry about
             endif ! if nmodes>1 .and. kc>nmodes .and. c1>c1_thresh
-            do m=1,nmodes ; cn(i,j,m) = US%m_s_to_L_T*cn(i,j,m) ; enddo
           else
             cn(i,j,:) = 0.0
           endif ! if more than 2 layers
@@ -989,8 +1008,11 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
 
 end subroutine wave_speeds
 
-!> Calculate the determinant of a tridiagonal matrix with diagonals a,b-lam,c where lam is constant across rows.
-subroutine tridiag_det(a,b,c,nrows,lam,det_out,ddet_out)
+!> Calculate the determinant of a tridiagonal matrix with diagonals a,b-lam,c and its derivative
+!! with lam, where lam is constant across rows.  Only the ratio of det to its derivative and their
+!! signs are typically used, so internal rescaling by consistent factors are used to avoid
+!! over- or underflow.
+subroutine tridiag_det(a, b, c, nrows, lam, det_out, ddet_out, row_scale)
   real, dimension(:), intent(in) :: a !< Lower diagonal of matrix (first entry = 0)
   real, dimension(:), intent(in) :: b !< Leading diagonal of matrix (excluding lam)
   real, dimension(:), intent(in) :: c !< Upper diagonal of matrix (last entry = 0)
@@ -998,10 +1020,13 @@ subroutine tridiag_det(a,b,c,nrows,lam,det_out,ddet_out)
   real,               intent(in) :: lam !< Value subtracted from b
   real,               intent(out):: det_out !< Determinant
   real,               intent(out):: ddet_out !< Derivative of determinant w.r.t. lam
+  real,     optional, intent(in) :: row_scale !< A scaling factor of the rows of the
+                                      !! matrix to limit the growth of the determinant
   ! Local variables
   real, dimension(nrows) :: det ! value of recursion function
   real, dimension(nrows) :: ddet ! value of recursion function for derivative
   real, parameter:: rescale = 1024.0**4 ! max value of determinant allowed before rescaling
+  real :: rscl
   real :: I_rescale ! inverse of rescale
   integer :: n      ! row (layer interface) index
 
@@ -1010,20 +1035,24 @@ subroutine tridiag_det(a,b,c,nrows,lam,det_out,ddet_out)
   if (size(c) /= nrows) call MOM_error(WARNING, "Diagonal c must be same length as nrows.")
 
   I_rescale = 1.0/rescale
+  rscl = 1.0 ; if (present(row_scale)) rscl = row_scale
 
   det(1) = 1.0      ; ddet(1) = 0.0
   det(2) = b(2)-lam ; ddet(2) = -1.0
   do n=3,nrows
-    det(n)  = (b(n)-lam)*det(n-1)  - (a(n)*c(n-1))*det(n-2)
-    ddet(n) = (b(n)-lam)*ddet(n-1) - (a(n)*c(n-1))*ddet(n-2) - det(n-1)
-    ! Rescale det & ddet if det is getting too large.
+    det(n)  = rscl*(b(n)-lam)*det(n-1)  - rscl*(a(n)*c(n-1))*det(n-2)
+    ddet(n) = rscl*(b(n)-lam)*ddet(n-1) - rscl*(a(n)*c(n-1))*ddet(n-2) - det(n-1)
+    ! Rescale det & ddet if det is getting too large or too small to avoid overflow or underflow.
     if (abs(det(n)) > rescale) then
       det(n)  = I_rescale*det(n)  ; det(n-1)  = I_rescale*det(n-1)
       ddet(n) = I_rescale*ddet(n) ; ddet(n-1) = I_rescale*ddet(n-1)
+    elseif (abs(det(n)) < I_rescale) then
+      det(n)  = rescale*det(n)  ; det(n-1)  = rescale*det(n-1)
+      ddet(n) = rescale*ddet(n) ; ddet(n-1) = rescale*ddet(n-1)
     endif
   enddo
   det_out = det(nrows)
-  ddet_out = ddet(nrows)
+  ddet_out = ddet(nrows) / rscl
 
 end subroutine tridiag_det
 
@@ -1037,7 +1066,7 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
                                      !! calculating the vertical modal structure.
   real,    optional, intent(in) :: mono_N2_depth !< The depth below which N2 is limited
                                      !! as monotonic for the purposes of calculating the
-                                     !! vertical modal structure.
+                                     !! vertical modal structure [Z ~> m].
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_wave_speed"  ! This module's name.
@@ -1067,7 +1096,7 @@ subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_
                                       !! calculating the vertical modal structure.
   real,    optional, intent(in) :: mono_N2_depth !< The depth below which N2 is limited
                                       !! as monotonic for the purposes of calculating the
-                                      !! vertical modal structure.
+                                      !! vertical modal structure [Z ~> m].
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
      "wave_speed_set_param called with an associated control structure.")

@@ -281,7 +281,7 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, US, h, diag, OBC, CS
 end subroutine initialize_ideal_age_tracer
 
 !> Applies diapycnal diffusion, aging and regeneration at the surface to the ideal age tracers
-subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, &
+subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, CS, &
               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
@@ -299,13 +299,14 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
                                               !! added [H ~> m or kg m-2].
   type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
                                               !! and tracer forcing fields.  Unused fields have NULL ptrs.
-  real,                    intent(in) :: dt   !< The amount of time covered by this call [s]
+  real,                    intent(in) :: dt   !< The amount of time covered by this call [T ~> s]
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
   type(ideal_age_tracer_CS), pointer  :: CS   !< The control structure returned by a previous
                                               !! call to register_ideal_age_tracer.
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
                                               !! be fluxed out of the top layer in a timestep [nondim]
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
-                                              !! fluxes can be applied [m]
+                                              !! fluxes can be applied [H ~> m or kg m-2]
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
 ! This is a simple example of a set of advected passive tracers.
@@ -315,7 +316,7 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
   real :: sfc_val  ! The surface value for the tracers.
-  real :: Isecs_per_year  ! The number of seconds in a year.
+  real :: Isecs_per_year  ! The inverse of the amount of time in a year [T-1 ~> s-1]
   real :: year            ! The time in years.
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -328,8 +329,8 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
       do k=1,nz ;do j=js,je ; do i=is,ie
         h_work(i,j,k) = h_old(i,j,k)
       enddo ; enddo ; enddo
-      call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m) , dt, fluxes, h_work, &
-          evap_CFL_limit, minimum_forcing_depth)
+      call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m), dt, fluxes, h_work, &
+                                          evap_CFL_limit, minimum_forcing_depth)
       call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
     enddo
   else
@@ -338,10 +339,10 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
     enddo
   endif
 
-  Isecs_per_year = 1.0 / (365.0*86400.0)
+  Isecs_per_year = 1.0 / (365.0*86400.0*US%s_to_T)
   !   Set the surface value of tracer 1 to increase exponentially
   ! with a 30 year time scale.
-  year = time_type_to_real(CS%Time) * Isecs_per_year
+  year = US%s_to_T*time_type_to_real(CS%Time) * Isecs_per_year
 
   do m=1,CS%ntr
     if (CS%sfc_growth_rate(m) == 0.0) then

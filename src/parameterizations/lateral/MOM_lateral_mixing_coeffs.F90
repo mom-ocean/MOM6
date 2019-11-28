@@ -188,10 +188,6 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
       call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp)
     endif
 
-    do j=js,je ; do i=is,ie
-      CS%cg1(i,j) = US%m_s_to_L_T*CS%cg1(i,j)
-    enddo ; enddo
-
     call create_group_pass(CS%pass_cg1, CS%cg1, G%Domain)
     call do_group_pass(CS%pass_cg1, G%Domain)
   endif
@@ -712,8 +708,8 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
   type(ocean_grid_type),                     intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),                     intent(in)  :: US   !< A dimensional unit scaling type
-! real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u  !< Zonal flow [m s-1]
-! real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v  !< Meridional flow [m s-1]
+! real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u  !< Zonal flow [L T-1 ~> m s-1]
+! real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v  !< Meridional flow [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h !< Layer thickness [H ~> m or kg m-2]
   integer,                                   intent(in)  :: k  !< Layer for which to calculate vorticity magnitude
   real, dimension(SZIB_(G),SZJ_(G)),         intent(in)  :: div_xx_dx  !< x-derivative of horizontal divergence
@@ -725,21 +721,16 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
   real, dimension(SZIB_(G),SZJ_(G)),         intent(inout) :: vort_xy_dy !< y-derivative of vertical vorticity
                                                                  !! (d/dy(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
 !  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Kh_h !< Leith Laplacian viscosity
-                                                                 !! at h-points [m2 s-1]
+                                                                 !! at h-points [L2 T-1 ~> m2 s-1]
 !  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: Leith_Kh_q !< Leith Laplacian viscosity
-                                                                 !! at q-points [m2 s-1]
+                                                                 !! at q-points [L2 T-1 ~> m2 s-1]
 !  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Ah_h !< Leith bi-harmonic viscosity
-                                                                 !! at h-points [m4 s-1]
+                                                                 !! at h-points [L4 T-1 ~> m4 s-1]
 !  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: Leith_Ah_q !< Leith bi-harmonic viscosity
-                                                                 !! at q-points [m4 s-1]
+                                                                 !! at q-points [L4 T-1 ~> m4 s-1]
 
   ! Local variables
-!  real, dimension(SZIB_(G),SZJB_(G)) :: vort_xy, & ! Vertical vorticity (dv/dx - du/dy) [s-1]
-!                                        dudy, & ! Meridional shear of zonal velocity [s-1]
-!                                        dvdx    ! Zonal shear of meridional velocity [s-1]
   real, dimension(SZI_(G),SZJB_(G)) :: &
-!    vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
-!    div_xx_dy, &  ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) [L-1 T-1 ~> m-1 s-1]
     dslopey_dz, & ! z-derivative of y-slope at v-points [Z-1 ~> m-1]
     h_at_v,     & ! Thickness at v-points [H ~> m or kg m-2]
     beta_v,     & ! Beta at v-points [T-1 L-1 ~> s-1 m-1]
@@ -747,16 +738,14 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
     grad_div_mag_v     ! Magnitude of divergence gradient at v-points [T-1 L-1 ~> s-1 m-1]
 
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-!    vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
-!    div_xx_dx, &  ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) [L-1 T-1 ~> m-1 s-1]
     dslopex_dz, & ! z-derivative of x-slope at u-points [Z-1 ~> m-1]
     h_at_u,     & ! Thickness at u-points [H ~> m or kg m-2]
     beta_u,     & ! Beta at u-points [T-1 L-1 ~> s-1 m-1]
     grad_vort_mag_u, & ! Magnitude of vorticity gradient at u-points [T-1 L-1 ~> s-1 m-1]
     grad_div_mag_u     ! Magnitude of divergence gradient at u-points [T-1 L-1 ~> s-1 m-1]
-!  real, dimension(SZI_(G),SZJ_(G)) :: div_xx ! Estimate of horizontal divergence at h-points [s-1]
-!  real :: mod_Leith, DY_dxBu, DX_dyBu, vert_vort_mag
-  real :: h_at_slope_above, h_at_slope_below, Ih
+  real :: h_at_slope_above ! The thickness above [H ~> m or kg m-2]
+  real :: h_at_slope_below ! The thickness below [H ~> m or kg m-2]
+  real :: Ih ! The inverse of a combination of thicknesses [H-1 ~> m-1 or m2 kg-1]
   real :: f  ! A copy of the Coriolis parameter [T-1 ~> s-1]
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq,nz
   real :: inv_PI3
@@ -881,7 +870,9 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(VarMix_CS),               pointer :: CS   !< Variable mixing coefficients
   ! Local variables
-  real :: KhTr_Slope_Cff, KhTh_Slope_Cff, oneOrTwo, N2_filter_depth
+  real :: KhTr_Slope_Cff, KhTh_Slope_Cff, oneOrTwo
+  real :: N2_filter_depth  ! A depth below which stratification is treated as monotonic when
+                           ! calculating the first-mode wave speed [Z ~> m]
   real :: KhTr_passivity_coeff
   real :: absurdly_small_freq  ! A miniscule frequency that is used to avoid division by 0 [T-1 ~> s-1].  The
              ! default value is roughly (pi / (the age of the universe)).
@@ -983,7 +974,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     call get_param(param_file, mdl, "RESOLN_N2_FILTER_DEPTH", N2_filter_depth, &
                  "The depth below which N2 is monotonized to avoid stratification "//&
                  "artifacts from altering the equivalent barotropic mode structure.",&
-                 units="m", default=2000.)
+                 units="m", default=2000., scale=US%m_to_Z)
     allocate(CS%ebt_struct(isd:ied,jsd:jed,G%ke)) ; CS%ebt_struct(:,:,:) = 0.0
   endif
 
@@ -1054,6 +1045,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
          'Square of Brunt-Vaisala frequency, N^2, at u-points, as used in Visbeck et al.', 's-2')
     CS%id_N2_v = register_diag_field('ocean_model', 'N2_v', diag%axesCvi, Time, &
          'Square of Brunt-Vaisala frequency, N^2, at v-points, as used in Visbeck et al.', 's-2')
+    !### The units of the next two diagnostics should be 'nondim'.
     CS%id_S2_u = register_diag_field('ocean_model', 'S2_u', diag%axesCu1, Time, &
          'Depth average square of slope magnitude, S^2, at u-points, as used in Visbeck et al.', 's-2')
     CS%id_S2_v = register_diag_field('ocean_model', 'S2_v', diag%axesCv1, Time, &

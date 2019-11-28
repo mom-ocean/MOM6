@@ -7,10 +7,15 @@
 USE_REGRIDDING = True           !   [Boolean] default = False
                                 ! If True, use the ALE algorithm (regridding/remapping). If False, use the
                                 ! layered isopycnal algorithm.
-DT = 300.0                      !   [s]
+DT = 1200.0                      !   [s]
                                 ! The (baroclinic) dynamics time step.  The time-step that is actually used will
                                 ! be an integer fraction of the forcing time-step (DT_FORCING in ocean-only mode
                                 ! or the coupling timestep in coupled mode.)
+DT_THERM = 3600.0                !   [s] default = 300.0
+                                ! The thermodynamic and tracer advection time step. Ideally DT_THERM should be
+                                ! an integer multiple of DT and less than the forcing or coupling time-step,
+                                ! unless THERMO_SPANS_COUPLING is true, in which case DT_THERM can be an integer
+                                ! multiple of the coupling timestep.  By default DT_THERM is set to DT.				
 C_P = 3925.0                    !   [J kg-1 K-1] default = 3991.86795711963
                                 ! The heat capacity of sea water, approximated as a constant. This is only used
                                 ! if ENABLE_THERMODYNAMICS is true. The default value is from the TEOS-10
@@ -377,10 +382,15 @@ WIND_CONFIG = "zero"            !
 ! === module MOM_restart ===
 
 ! === module MOM_main (MOM_driver) ===
-DAYMAX = 1.0                    !   [days]
+DAYMAX = 0.25                    !   [days]
                                 ! The final time of the whole simulation, in units of TIMEUNIT seconds.  This
                                 ! also sets the potential end time of the present run segment if the end time is
                                 ! not set via ocean_solo_nml in input.nml.
+				
+ENERGYSAVEDAYS = 0.125          !   [days] default = 1.44E+04
+                                ! The interval in units of TIMEUNIT between saves of the
+                                ! energies of the run and other globally summed diagnostics.
+				
 RESTART_CONTROL = 3             ! default = 1
                                 ! An integer whose bits encode which restart files are written. Add 2 (bit 1)
                                 ! for a time-stamped file, and odd (bit 0) for a non-time-stamped file. A
@@ -397,3 +407,6 @@ MAXCPU = 2.88E+04               !   [wall-clock seconds] default = -1.0
                                 ! processors used.
 
 ! === module MOM_file_parser ===
+
+DIAG_AS_CHKSUM = True
+DEBUG = True

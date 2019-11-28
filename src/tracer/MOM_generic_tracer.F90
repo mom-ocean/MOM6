@@ -410,7 +410,8 @@ contains
     real,          optional, intent(in) :: evap_CFL_limit !< Limits how much water can be fluxed out of
                                                 !! the top layer Stored previously in diabatic CS.
     real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which fluxes
-                                                !!  can be applied Stored previously in diabatic CS.
+                                                !!  can be applied [H ~> m or kg m-2]
+                                                !   Stored previously in diabatic CS.
     ! The arguments to this subroutine are redundant in that
     !     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
 
@@ -507,8 +508,8 @@ contains
           do k=1,nk ;do j=jsc,jec ; do i=isc,iec
             h_work(i,j,k) = h_old(i,j,k)
           enddo ; enddo ; enddo
-          call applyTracerBoundaryFluxesInOut(G, GV, g_tracer%field(:,:,:,1), dt, fluxes, h_work, &
-              evap_CFL_limit, minimum_forcing_depth)
+          call applyTracerBoundaryFluxesInOut(G, GV, g_tracer%field(:,:,:,1), G%US%s_to_T*dt, &
+                            fluxes, h_work, evap_CFL_limit, minimum_forcing_depth)
         endif
 
          !traverse the linked list till hit NULL
@@ -541,7 +542,6 @@ contains
 #ifdef _USE_MOM6_DIAG
     call g_tracer_set_csdiag(CS%diag)
 #endif
-
 
   end subroutine MOM_generic_tracer_column_physics
 
