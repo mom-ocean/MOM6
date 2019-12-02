@@ -391,7 +391,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
                      max(G%IareaT(i,j), G%IareaT(i+1,j)))**2
         if (K4_here*Inv_K4_max > 0.3) K4_here = 0.3 / Inv_K4_max
 
-        ! Here the units of MEKE_uflux are [R Z L4 T-3].
+        ! Here the units of MEKE_uflux are [R Z L4 T-3 ~> kg m2 s-3].
         MEKE_uflux(I,j) = ((K4_here * (G%dy_Cu(I,j)*G%IdxCu(I,j))) * &
             ((2.0*mass(i,j)*mass(i+1,j)) / ((mass(i,j)+mass(i+1,j)) + mass_neglect)) ) * &
             (del2MEKE(i+1,j) - del2MEKE(i,j))
@@ -402,7 +402,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         Inv_K4_max = 64.0 * sdt * ((G%dx_Cv(i,J)*G%IdyCv(i,J)) * max(G%IareaT(i,j), G%IareaT(i,j+1)))**2
         if (K4_here*Inv_K4_max > 0.3) K4_here = 0.3 / Inv_K4_max
 
-        ! Here the units of MEKE_vflux are [R Z L4 T-3].
+        ! Here the units of MEKE_vflux are [R Z L4 T-3 ~> kg m2 s-3].
         MEKE_vflux(i,J) = ((K4_here * (G%dx_Cv(i,J)*G%IdyCv(i,J))) * &
             ((2.0*mass(i,j)*mass(i,j+1)) / ((mass(i,j)+mass(i,j+1)) + mass_neglect)) ) * &
             (del2MEKE(i,j+1) - del2MEKE(i,j))
