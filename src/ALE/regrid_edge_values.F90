@@ -661,7 +661,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
   real, dimension(:),   intent(in)    :: u !< cell average properties (size N) in arbitrary units [A]
-  real, dimension(:,:), intent(inout) :: edge_val !!< Returned edge values [A]; the second index size is 2.
+  real, dimension(:,:), intent(inout) :: edge_val  !< Returned edge values [A]; the second index size is 2.
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
   logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
 
