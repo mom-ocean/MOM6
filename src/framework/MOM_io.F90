@@ -179,6 +179,7 @@ interface MOM_read_data
   module procedure MOM_read_data_3d_noDD
   module procedure MOM_read_data_2d_noDD
   module procedure MOM_read_data_1d_noDD
+  module procedure MOM_read_data_2d_noDD_diag_axes
 end interface
 
 !> Read a pair of data fields representing the two components of a vector from a netcdf file
@@ -1576,31 +1577,55 @@ end subroutine MOM_read_data_4d_noDD
 !! lath, latq, lonh, and lonq in MOM_grid_intialize. This routine allocates a buffer of the same size as the field to
 !! read. If reading in 'y' (latitude), it searches the first dimension for the point that contains the full range
 !! of values used to define "lath" and "latq".
-subroutine MOM_read_data_2d_noDD_diag_axes(filename, fieldname, data, corner, edgeLengths, timeLevel, scale)
+subroutine MOM_read_data_2d_noDD_diag_axes(filename, fieldname, data, corner, edgeLengths, timeLevel, scale, &
+                                           define_diagnostic_axes, G)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:),   intent(inout) :: data !< The 2-dimensional data array to pass to read_data
+  logical, intent(in) :: define_diagnostic_axes !< if .true., read in the full data array, search for the
+                                                   !! full ranges of x/lon and y/lat values needed to define
+                                                   !! the diagnostic axes
   integer, dimension(2),  optional, intent(in) :: corner !< starting indices of data buffer. Default is 1
   integer, dimension(2),  optional, intent(in) :: edgeLengths !< number of data values to read in.
-                                                              !! Default values are the variable dimension sizes
+  !! Default values are the variable dimension sizes
+  type(dyn_horgrid_type), intent(in) :: G !< The dynamic horizontal grid type; required if
+                                                    !! define_diagnostic_axes=.true.
   integer, optional, intent(in) :: timeLevel !< time level to read
   real, optional, intent(in):: scale !< A scaling factor that the field is multiplied by
-
+  character(len=:), optional, intent(in) :: grid_type !
   ! local
   type(FmsNetcdfFile_t) :: fileobj !netCDF file object returned by call to open_file
   logical :: file_open_success !.true. if call to open_file is successful
-  integer :: i, dimUnlimIndex
-  integer, dimension(2) :: start, nread ! indices for first data value and number of values to read
+  logical, dimension(2) :: yuse! Mask for geoLatT and geoLatB values
+  integer :: i, j, dimUnlimIndex, xidx, yidx, yidx2
+  integer, dimension(2) :: start, nread, dimSizes ! indices for first data value and number of values to read,
+                                                  ! variable dimension sizes
   character(len=40), dimension(2) :: dimNames ! variable dimension names
+  character(len=40) :: units ! variable units
+  character(len=1) :: gtype ! grid type
+  real, allocatable, dimension(:,:) :: tmpGlbl ! temporary array to hold data
+
+  ! register the global axes
+  !do i=1,ndims
+
+  !  call get_dimension_size(fileObjRead, dimNames(i), globalDimSize)
+
+  !  if (globalDimSize .eq. size(tmpT,1)) then
+  !    call register_axis(fileObjRead, trim(dimNames(i)),'x', domain_position=CENTER)
+  !  elseif (globalDimSize .eq. size(tmpT,2)) then
+  !    call register_axis(fileObjRead, trim(dimNames(i)),'y', domain_position=CENTER)
+   ! elseif (globalDimSize .eq. size(tmpV,1)) then
+  !    call register_axis(fileObjRead, trim(dimNames(i)),'x', domain_position=EAST_FACE)
+   ! elseif (globalDimSize .eq. size(tmpU,2)) then
+  !    call register_axis(fileObjRead, trim(dimNames(i)),'y', domain_position=NORTH_FACE)
+   ! endif
+ ! enddo
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, filename, "read", is_restart=.false.)
-  ! set the start and nread values that will be passed as the read_data corner and edge_lengths arguments
-  if (present(corner) .or. present(edgeLengths) .or. present(timeLevel)) then
-    call get_variable_dimension_names(fileobj, trim(fieldname), dimNames)
-  endif
-
+  
+  call get_variable_dimension_names(fileobj, trim(fieldname), dimNames)
   start(:) = 1
   if (present(corner)) start = corner
 
@@ -1622,12 +1647,81 @@ subroutine MOM_read_data_2d_noDD_diag_axes(filename, fieldname, data, corner, ed
       endif
     enddo
     if (dimUnlimIndex .LE. 0) &
-      call MOM_error(FATAL, "MOM_io::MOM_read_data_2d_noDD: time level specified, but variable "//&
+      call MOM_error(FATAL, "MOM_io::MOM_read_data_2d_noDD_diag_axes: time level specified, but variable "//&
                      trim(fieldName)// " does not have an unlimited dimension.")
+ endif
+
+ !> @note: the following indexing procedure searches for global x-dimension indices that correspond to the full ranges 
+ !! of y (geoLatT and geoLatB) values needed for the diagnostic indices (lath and latq).
+ !! Defining the gridLatT and gridLatB values using the previous values in tmpGlbl(1,:) did not result in the correct
+ !! diagnostic index values due to different indexing conventions for non-domain-decomposed IO in the new and previous
+ !! procedures.
+
+ if (define_diagnostic_axes) then
+   allocate(tmpGlbl(nread))
+   tmpGlbl(:,:) = 999.0
+
+   call get_variable_units(fileobj, fieldname, units)
+   if (lowercase(trim(units)) .eq. "degrees_north") then
+     if (.not.(present(grid_type)) &
+      call MOM_error(FATAL, "MOM_io::MOM_read_data_2d_noDD_diag_axes: grid_type argument required if "// &
+      "define_diag_axes=.true. and reading in y/latitude values")
+      ! create a mask for the T-grid latitude values in the tmpGlbl array
+      allocate(yuse(nread(2)))
+      yuse(:) = .FALSE.
+      gtype = lowercase(trim(grid_type))
+      select case(gtype)
+        case ('t')
+          do j=G%jsg,G%jeg
+            yuse(2*(j-G%jsg)+2) = .TRUE.
+          enddo
+        case ('b')
+          do j=G%jsg-1,G%jeg
+            yuse(2*(j-G%jsg)+3) = .TRUE.
+          enddo 
+        case default
+          call MOM_error(FATAL, "MOM_io::MOM_read_data_2d_noDD_diag_axes: grid_type must be either t or b")
+      end select
+
+      ! get the index for the x-dimension with the maximum T-grid latitude (geoLatT) value in the tmpGlbl array
+      xidx = 0
+      yidx1 = 0
+      ymax1 = 999.0
+      yidx2 = 0
+      ymax2 = 999.0
+
+      do i=1,nread(1)
+        ! find index of the maximum T-grid latitude value for the ith x (longitude) dimension
+        yidx1 = MAXLOC(tmpGlbl(i,:), 1, MASK=yuse)
+        ymax1 = tmpGLbl(i,yidx1)
+        ! if the new max is greater than the current max, set the current max to the new max value
+        if ( MAX(ymax1,ymax2) .EQ. ymax1) then
+          yidx2 = yidx1
+          ymax2 = ymax1
+          xidx = i
+        endif
+      enddo
+
+      if (xidx .LT. 1) call MOM_error(FATAL, "MOM_io::MOM_read_data_2d_nodDD_diag_axes: xidx is less than 1")
+      if (ymax2 .GT. 90.0) &
+      call MOM_error(FATAL, "MOM_io::MOM_read_data_2d_nodDD_diag_axes: ymax2 is greater than 90.0")
+      ! read the data
+      call read_data(fileobj, trim(fieldname), tmpGlbl, corner=start, edge_Lengths=nread)
+      data(1,1:nread(2)) = tmpGlbl(xidx,:)
+
+      deallocate(yuse)
+
+    elseif (lowercase(trim(units)) .eq. "degrees_north") then
+        ! read the data
+        call read_data(fileobj, trim(fieldname), tmpGlbl, corner=start, edge_Lengths=nread)
+        ! all latitude indices contain the full range of x/longitude values required for the diagnostic axes
+        data(1:nread(1),:) = tmpGlbl(:,1:size(data,2))
+    endif
+    deallocate(tmpGlbl)
+  else ! just read the data into the user-specified data buffer
+     call read_data(fileobj, trim(fieldname), data, corner=start, edge_Lengths=nread)  
   endif
 
-  ! read the data
-  call read_data(fileobj, trim(fieldname), data, corner=start, edge_Lengths=nread)
   ! close the file
   if (check_if_open(fileobj)) call close_file(fileobj)
   ! scale the data
@@ -1635,7 +1729,7 @@ subroutine MOM_read_data_2d_noDD_diag_axes(filename, fieldname, data, corner, ed
     call scale_data(data, scale)
   endif ; endif
 
-end subroutine MOM_read_data_2d_noDD
+end subroutine MOM_read_data_2d_noDD_diag_axes
 
 
 !> This function uses the fms_io function write_data to write a 1-D domain-decomposed data field named "fieldname"
