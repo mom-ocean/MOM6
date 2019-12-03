@@ -29,7 +29,7 @@
 --! searched in directories -- and in the sequence -- specified here.
 --!
 
-FRAME_DIR_LIST = {"doxyrest_b/doxyrest/frame/cfamily", "doxyrest_b/doxyrest/frame/common"}
+FRAME_DIR_LIST = {"doxyrest_b/doxyrest/frame/fortran", "doxyrest_b/doxyrest/frame/common"}
 
 --!
 --! The output master (index) reStructuredText file. Usually, the index frame
@@ -39,7 +39,7 @@ FRAME_DIR_LIST = {"doxyrest_b/doxyrest/frame/cfamily", "doxyrest_b/doxyrest/fram
 --! used as the default frame file.
 --!
 
---!FRAME_FILE = 
+--!FRAME_FILE =
 
 --!
 --! The input master (index) XML file. Specifying it here allows calling
@@ -139,7 +139,7 @@ GLOBAL_AUX_COMPOUND_ID = "group_global"
 --! of module item declarations.
 --!
 
-LANGUAGE = cpp
+LANGUAGE = fortran
 
 --!
 --! Convert ``\verbatim`` sections in doxy-comments to ``.. code-block::``

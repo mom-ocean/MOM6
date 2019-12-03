@@ -14,47 +14,70 @@
 
 import sys
 import os
-import subprocess
+import subprocess as sp
 import shutil
 
 cmd_exists = lambda x: shutil.which(x) is not None
+
+
+def exit_code(return_code):
+    if return_code != 0:
+        sys.exit(return_code)
+    return None
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #sys.path.insert(0, os.path.abspath('.'))
 
+
 # Create API documentation
 doxygenize = 'doxygen Doxyfile_rtd'
-if os.path.exists('./doxygen/bin/doxygen'): doxygenize = './doxygen/bin/'+doxygenize
-return_code = subprocess.call(doxygenize, shell=True)
-if return_code != 0: sys.exit(return_code)
+# if we have installed doxygen, use this version instead
+if os.path.exists('./doxygen/bin/doxygen'):
+    doxygenize = './doxygen/bin/' + doxygenize
+
+return_code = sp.call(doxygenize, shell=True)
+exit_code(return_code)
 
 # Build doxyrest if needed:
-get_doxyrest = '(git clone https://github.com/vovkos/doxyrest_b ; cd doxyrest_b ; git submodule update --init)'
-#build_doxyrest = '(mkdir doxyrest_b/build ; cd doxyrest_b/build ; cmake .. ; cmake --build .)'
-#
-#if not cmd_exists('doxyrest'):
-#    if os.path.exists('doxyrest_b'):
-subprocess.call('rm -rf doxyrest_b', shell=True)
-return_code = subprocess.call(get_doxyrest, shell=True)
-if return_code != 0: sys.exit(return_code)
-#    return_code = subprocess.call(build_doxyrest, shell=True)
-#    if return_code != 0: sys.exit(return_code)
-#    os.environ['PATH'] = os.environ['PATH'] + ':./doxyrest_b/build/doxyrest/bin/Release'
+# production:
+# gitrepo = 'https://github.com/vovkos/doxyrest_b'
+# get_doxyrest = f'(git clone {gitrepo} ; cd doxyrest_b ; git submodule update --init)'
 
-here = subprocess.check_output('pwd', shell=True).decode('utf-8').replace('\n','')
+# dev
+gitrepo = 'https://github.com/raphaeldussin/doxyrest_b'
+get_doxyrest = f'(git clone {gitrepo} ; cd doxyrest_b ; git checkout fortran ; git submodule update --init)'
+
+update_doxyrest = '(cd doxyrest_b ; git submodule update)'
+build_doxyrest = '(rm -rf doxyrest_b/build ; mkdir doxyrest_b/build ; cd doxyrest_b/build ; cmake .. ; cmake --build .)'
+#
+if not cmd_exists('doxyrest'):
+    if os.path.exists('doxyrest_b'):
+        return_code = sp.call(update_doxyrest, shell=True)
+        exit_code(return_code)
+    else:
+        return_code = sp.call(get_doxyrest, shell=True)
+        exit_code(return_code)
+    # build code
+    return_code = sp.call(build_doxyrest, shell=True)
+    exit_code(return_code)
+
+# add doxyrest to PATH
+os.environ['PATH'] += ':./doxyrest_b/build/doxyrest/bin/Release'
+
+here = sp.check_output('pwd', shell=True).decode('utf-8').replace('\n', '')
 sys.path.insert(1, os.path.abspath(here + '/doxyrest_b/doxyrest/sphinx'))
 
-# add doxyrest
+# run doxyrest
 xml2rst = 'doxyrest -c mom6-config.lua'
-return_code = subprocess.call(xml2rst, shell=True)
-if return_code != 0: sys.exit(return_code)
+return_code = sp.call(xml2rst, shell=True)
+exit_code(return_code)
 
 # link images
 linkimages = '(cd api ; ln -s ../images/*png .)'
-return_code = subprocess.call(linkimages, shell=True)
-#if return_code != 0: sys.exit(return_code)
+return_code = sp.call(linkimages, shell=True)
+exit_code(return_code)
 
 # -- General configuration ------------------------------------------------
 
@@ -66,8 +89,6 @@ return_code = subprocess.call(linkimages, shell=True)
 # ones.
 extensions = [
     'sphinx.ext.mathjax',
-    'doxyrest',
-    'cpplexer',
 ]
 
 doxygen_xml = 'xml'
@@ -109,7 +130,7 @@ release = '0.1'
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
-exclude_patterns = ['_build','src']
+exclude_patterns = ['_build', 'src', 'doxyrest_b']
 
 # The reST default role (used for this markup: `text`) to use for all
 # documents.
