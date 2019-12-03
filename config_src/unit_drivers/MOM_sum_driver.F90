@@ -27,7 +27,7 @@ program MOM_main
   use MOM_file_parser, only : open_param_file, close_param_file
   use MOM_grid, only : MOM_grid_init, ocean_grid_type
   use MOM_grid_initialize, only : set_grid_metrics
-  use MOM_io, only : MOM_io_init, file_exists, open_file, close_file
+  use MOM_io, only : MOM_io_init
   use MOM_io, only : check_nml_error, io_infra_init
   use MOM_io, only : APPEND_FILE, ASCII_FILE, READONLY_FILE
 

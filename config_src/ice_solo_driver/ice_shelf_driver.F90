@@ -31,7 +31,7 @@ program SHELF_main
   use MOM_file_parser, only : close_param_file
 !   use MOM_grid, only : ocean_grid_type
   use MOM_get_input, only : Get_MOM_Input, directories
-  use MOM_io, only : file_exists, open_file, close_file
+  use MOM_io, only : file_exists, mpp_open_file, mpp_close_file
   use MOM_io, only : check_nml_error, io_infra_init
   use MOM_io, only : APPEND_FILE, ASCII_FILE, READONLY_FILE, SINGLE_FILE
   use MOM_restart, only : save_restart
@@ -164,9 +164,9 @@ program SHELF_main
 
   if (file_exists('input.nml')) then
     ! Provide for namelist specification of the run length and calendar data.
-    call open_file(unit, 'input.nml', form=ASCII_FILE, action=READONLY_FILE)
+    call mpp_open_file(unit, 'input.nml', form=ASCII_FILE, action=READONLY_FILE)
     read(unit, ice_solo_nml, iostat=io_status)
-    call close_file(unit)
+    call mpp_close_file(unit)
     if (years+months+days+hours+minutes+seconds > 0) then
       ierr = check_nml_error(io_status,'ice_solo_nml')
       if (is_root_pe()) write(*,ice_solo_nml)
@@ -175,12 +175,12 @@ program SHELF_main
 
   ! Read ocean_solo restart, which can override settings from the namelist.
   if (file_exists(trim(dirs%restart_input_dir)//'ice_solo.res')) then
-    call open_file(unit,trim(dirs%restart_input_dir)//'ice_solo.res', &
+    call mpp_open_file(unit,trim(dirs%restart_input_dir)//'ice_solo.res', &
                    form=ASCII_FILE,action=READONLY_FILE)
     read(unit,*) calendar_type
     read(unit,*) date_init
     read(unit,*) date
-    call close_file(unit)
+    call mpp_close_file(unit)
   else
     calendar = uppercase(calendar)
     if (calendar(1:6) == 'JULIAN') then ;         calendar_type = JULIAN
@@ -294,7 +294,7 @@ program SHELF_main
 !  call diag_mediator_close_registration(diag)
 
   ! Write out a time stamp file.
-  call open_file(unit, 'time_stamp.out', form=ASCII_FILE, action=APPEND_FILE, &
+  call mpp_open_file(unit, 'time_stamp.out', form=ASCII_FILE, action=APPEND_FILE, &
                  threading=SINGLE_FILE)
   call get_date(Time, date(1), date(2), date(3), date(4), date(5), date(6))
   month = month_name(date(2))
@@ -302,7 +302,7 @@ program SHELF_main
   call get_date(Time_end, date(1), date(2), date(3), date(4), date(5), date(6))
   month = month_name(date(2))
   if (is_root_pe()) write(unit,'(6i4,2x,a3)') date, month(1:3)
-  call close_file(unit)
+  call mpp_close_file(unit)
 
   call write_cputime(Time, 0, nmax, write_CPU_CSp)
 
@@ -373,7 +373,7 @@ program SHELF_main
     call ice_shelf_save_restart(ice_shelf_CSp, Time, &
                                 dirs%restart_output_dir)
     ! Write ocean solo restart file.
-    call open_file(unit, trim(dirs%restart_output_dir)//'shelf.res', nohdrs=.true.)
+    call mpp_open_file(unit, trim(dirs%restart_output_dir)//'shelf.res', nohdrs=.true.)
     if (is_root_pe())then
         write(unit, '(i6,8x,a)') calendar_type, &
              '(Calendar: no_calendar=0, thirty_day_months=1, julian=2, gregorian=3, noleap=4)'
@@ -385,7 +385,7 @@ program SHELF_main
         write(unit, '(6i6,8x,a)') yr, mon, day, hr, min, sec, &
              'Current model time: year, month, day, hour, minute, second'
     end if
-    call close_file(unit)
+    call mpp_close_file(unit)
   endif
 
   if (is_root_pe()) then

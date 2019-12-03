@@ -12,7 +12,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
-use MOM_io, only : create_file, fieldtype, flush_file, mpp_open_file
+use MOM_io, only : fieldtype, flush_file, mpp_open_file
 use MOM_io, only : file_exists, slasher, vardesc, var_desc, write_field
 use MOM_io, only : APPEND_FILE, ASCII_FILE, SINGLE_FILE, WRITEONLY_FILE
 use MOM_open_boundary, only : ocean_OBC_type, OBC_segment_type
@@ -620,11 +620,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     endif
 
     energypath_nc = trim(CS%energyfile) // ".nc"
-    if (day > CS%Start_time) then
-      !call reopen_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
-      !                 num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, &
-      !                 G=G, GV=GV)
-    else
+    if (day .eq. CS%Start_time) then
       call create_file(trim(energypath_nc), vars, &
                        num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, &
                        G=G, GV=GV)

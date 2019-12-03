@@ -190,15 +190,15 @@ end interface
 
 ! interface to write data to a netcdf file
 interface write_field
-!  module procedure write_field_4d_DD
-!  module procedure write_field_3d_DD
-!  module procedure write_field_2d_DD
+  module procedure write_field_4d_DD
+  module procedure write_field_3d_DD
+  module procedure write_field_2d_DD
   module procedure write_field_1d_DD
-!  module procedure write_field_scalar
-!  module procedure write_field_noDD
-!  module procedure write_field_noDD
-!  module procedure write_field_noDD
-!  module procedure write_field_noDD
+  module procedure write_field_scalar
+  module procedure write_field_noDD
+  module procedure write_field_noDD
+  module procedure write_field_noDD
+  module procedure write_field_noDD
 end interface
 
 !> interface to scale data after reading in a field
@@ -1038,7 +1038,7 @@ end subroutine write_field_4d_noDD
 !> This function uses the fms_io function read_data to read 1-D domain-decomposed data field named "fieldname" 
 !! from file "filename".
 subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, corner, edgeLengths, timeLevel, scale, &
-                               x_position, y_position)
+                               x_position, y_position, x_units, y_units)
   character(len=*),       intent(in) :: filename !< The name of the file to read
   character(len=*),       intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:),     intent(inout) :: data !< The 1-dimensional data array to pass to read_data
@@ -1049,11 +1049,14 @@ subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, corner, edgeLe
   real,         optional, intent(in) :: scale !< A scaling factor that the field is multiplied by
   integer, intent(in), optional :: x_position !< domain position of x-dimension; CENTER (default) or EAST_FACE
   integer, intent(in), optional :: y_position !< domain position of y-dimension; CENTER (default) or NORTH_FACE
+  character(len=:), intent(in), optional :: x_units !< x-dimension units; default is "degrees_east"
+  character(len=:), intent(in), optional :: y_units !< y-dimension units; default is "degrees_north"
   ! local
   type(FmsNetcdfDomainFile_t) :: fileobj ! netCDF file object returned by call to open_file
   logical :: file_open_success !.true. if call to open_file is successful
   integer :: i
   integer, dimension(1) :: start, nread ! indices for first data value and number of values to read
+  character(len=64) :: xunits, yunits ! x- and y-dimension units
   character(len=40), dimension(1) :: dimNames ! variable dimension names
   integer :: xpos, ypos ! x and y domain positions
   ! open the file
@@ -1067,7 +1070,20 @@ subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, corner, edgeLe
   if (present(x_position)) xpos = x_position
   if (present(y_position)) ypos = y_position
 
-  call MOM_register_variable_axes(fileobj, trim(fieldname), xUnits="degrees_east", yUnits="degrees_north", &
+  xunits=""
+  yunits=""
+  if (present(x_units)) then
+    xunits(1:len_trim(x_units)) = x_units
+  else
+    xunits = "degrees_east"
+  endif
+  if (present(y_units)) then
+    yunits(1:len_trim(y_units)) = y_units
+  else
+    yunits = "degrees_north"
+  endif
+
+  call MOM_register_variable_axes(fileobj, trim(fieldname), xUnits=trim(xunits), yUnits=trim(yunits), &
                                    xPosition=xpos, yPosition=ypos)
   ! set the start and nread values that will be passed as the read_data corner and edge_lengths arguments
   if (present(corner) .or. present(edgeLengths) .or. present(timeLevel)) then
@@ -1095,7 +1111,7 @@ end subroutine MOM_read_data_1d_DD
 !> This function uses the fms_io function read_data to read 2-D domain-decomposed data field named "fieldname" 
 !! from file "filename".
 subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain, corner, edgeLengths, timeLevel, scale, &
-                               x_position, y_position)
+                               x_position, y_position, x_units, y_units,)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:),   intent(inout) :: data !< The 2-dimensional data array to pass to read_data
@@ -1107,11 +1123,14 @@ subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain, corner, edgeLe
   real,         optional, intent(in):: scale !< A scaling factor that the field is multiplied by
   integer, intent(in), optional :: x_position !< domain position of x-dimension; CENTER (default) or EAST_FACE
   integer, intent(in), optional :: y_position !< domain position of y-dimension; CENTER (default) or NORTH_FACE
+  character(len=:), intent(in), optional :: x_units !< x-dimension units; default is "degrees_east"
+  character(len=:), intent(in), optional :: y_units !< y-dimension units; default is "degrees_north"
   ! local
   type(FmsNetcdfDomainFile_t) :: fileobj !netCDF file object returned by call to open_file
   logical :: file_open_success !.true. if call to open_file is successful
   integer :: i, dimUnlimIndex
   integer, dimension(2) :: start, nread ! indices for first data value and number of values to read
+  character(len=64) :: xunits, yunits ! x- and y-dimension units
   character(len=40), dimension(2) :: dimNames ! variable dimension names
   integer :: xpos, ypos ! x and y domain positions
 
@@ -1125,10 +1144,20 @@ subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain, corner, edgeLe
   ypos = CENTER
   if (present(x_position)) xpos = x_position
   if (present(y_position)) ypos = y_position
-  call MOM_register_variable_axes(fileobj, trim(fieldname), xUnits="degrees_east", yUnits="degrees_north", &
+  xunits=""
+  yunits=""
+  if (present(x_units)) then
+    xunits(1:len_trim(x_units)) = x_units
+  else
+    xunits = "degrees_east"
+  endif
+  if (present(y_units)) then
+    yunits(1:len_trim(y_units)) = y_units
+  else
+    yunits = "degrees_north"
+  endif
+  call MOM_register_variable_axes(fileobj, trim(fieldname), xUnits=trim(xunits), yUnits=trim(yunits), &
                                   xPosition=xpos, yPosition=ypos)
-
-  call MOM_register_variable_axes(fileobj, trim(fieldname), xUnits="degrees_east", yUnits="degrees_north")
 
   ! set the start and nread values that will be passed as the read_data corner and edge_lengths arguments
   if (present(corner) .or. present(edgeLengths) .or. present(timeLevel)) then
@@ -1173,7 +1202,7 @@ end subroutine MOM_read_data_2d_DD
 !> This function uses the fms_io function read_data to read 3-D domain-decomposed data field named "fieldname"
 !! from file "filename".
 subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, corner, edgeLengths, timeLevel, scale, &
-                               x_position, y_position)
+                               x_position, y_position, x_units, y_units,)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:),   intent(inout) :: data !< The 3-dimensional data array to pass to read_data
@@ -1185,11 +1214,14 @@ subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, corner, edgeLe
   real,         optional, intent(in):: scale !< A scaling factor that the field is multiplied by
   integer, intent(in), optional :: x_position !< domain position of x-dimension; CENTER (default) or EAST_FACE
   integer, intent(in), optional :: y_position !< domain position of y-dimension; CENTER (default) or NORTH_FACE
+  character(len=:), intent(in), optional :: x_units !< x-dimension units; default is "degrees_east"
+  character(len=:), intent(in), optional :: y_units !< y-dimension units; default is "degrees_north"
   ! local
   type(FmsNetcdfDomainFile_t) :: fileobj !netCDF file object returned by call to open_file
   logical :: file_open_success !.true. if call to open_file is successful
   integer :: i, dimUnlimIndex
   integer, dimension(3) :: start, nread ! indices for first data value and number of values to read
+  character(len=64) :: xunits, yunits ! x- and y-dimension units
   character(len=40), dimension(3) :: dimNames ! variable dimension names
   integer :: xpos, ypos ! x and y domain positions
 
@@ -1203,9 +1235,21 @@ subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, corner, edgeLe
   ypos = CENTER
   if (present(x_position)) xpos = x_position
   if (present(y_position)) ypos = y_position
-  call MOM_register_variable_axes(fileobj, trim(fieldname), xUnits="degrees_east", yUnits="degrees_north", &
-                                  xPosition=xpos, yPosition=ypos)
+  xunits=""
+  yunits=""
+  if (present(x_units)) then
+    xunits(1:len_trim(x_units)) = x_units
+  else
+    xunits = "degrees_east"
+  endif
+  if (present(y_units)) then
+    yunits(1:len_trim(y_units)) = y_units
+  else
+    yunits = "degrees_north"
+  endif
   
+  call MOM_register_variable_axes(fileobj, trim(fieldname), xUnits=trim(xunits), yUnits=trim(yunits), &
+                                  xPosition=xpos, yPosition=ypos)
   ! set the start and nread values that will be passed as the read_data corner and edge_lengths arguments
   if (present(corner) .or. present(edgeLengths) .or. present(timeLevel)) then
     call get_variable_dimension_names(fileobj, trim(fieldname), dimNames)
@@ -1249,7 +1293,7 @@ end subroutine MOM_read_data_3d_DD
 !> This function uses the fms_io function read_data to read 4-D domain-decomposed data field named "fieldname" 
 !! from file "filename".
 subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, corner, edgeLengths, timeLevel, scale, &
-                               x_position, y_position)
+                               x_position, y_position, x_units, y_units)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:,:),   intent(inout) :: data !< The 4-dimensional data array to pass to read_data
@@ -1261,12 +1305,16 @@ subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, corner, edgeLe
   real,         optional, intent(in):: scale !< A scaling factor that the field is multiplied by
   integer, intent(in), optional :: x_position !< domain position of x-dimension; CENTER (default) or EAST_FACE
   integer, intent(in), optional :: y_position !< domain position of y-dimension; CENTER (default) or NORTH_FACE
+  character(len=:), intent(in), optional :: x_units !< x-dimension units; default is "degrees_east"
+  character(len=:), intent(in), optional :: y_units !< y-dimension units; default is "degrees_north"
+  
   ! local
   type(FmsNetcdfDomainFile_t) :: fileobj !netCDF file object returned by call to open_file
   logical :: file_open_success !.true. if call to open_file is successful
   integer :: i, dimUnlimIndex
   integer, dimension(4) :: start, nread ! indices for first data value and number of values to read
   character(len=40), dimension(4) :: dimNames ! variable dimension names
+  character(len=64) :: xunits, yunits ! x- and y-dimension units
   integer :: xpos, ypos ! x and y domain positions
 
   ! open the file
@@ -1279,7 +1327,20 @@ subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, corner, edgeLe
   ypos = CENTER
   if (present(x_position)) xpos = x_position
   if (present(y_position)) ypos = y_position
-  call MOM_register_variable_axes(fileobj, trim(fieldname), xUnits="degrees_east", yUnits="degrees_north", &
+  xunits=""
+  yunits=""
+  if (present(x_units)) then
+    xunits(1:len_trim(x_units)) = x_units
+  else
+    xunits = "degrees_east"
+  endif
+  if (present(y_units)) then
+    yunits(1:len_trim(y_units)) = y_units
+  else
+    yunits = "degrees_north"
+  endif
+  
+  call MOM_register_variable_axes(fileobj, trim(fieldname), xUnits=trim(xunits), yUnits=trim(yunits), &
                                   xPosition=xpos, yPosition=ypos)
   ! set the start and nread values that will be passed as the read_data corner and edge_lengths arguments
   if (present(corner) .or. present(edgeLengths) .or. present(timeLevel)) then
