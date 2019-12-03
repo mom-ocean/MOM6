@@ -1384,7 +1384,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
     basin_file = trim(CS%inputdir) // trim(basin_file)
     call safe_alloc_ptr(CS%basin_mask,isd,ied,jsd,jed) ; CS%basin_mask(:,:) = 1.0
     if (CS%mask_srestore_marginal_seas) then
-      call MOM_read_data(basin_file,'basin',CS%basin_mask,G%domain, timelevel=1)
+      call MOM_read_data(basin_file,'basin',CS%basin_mask,G%domain, time_level=1)
       do j=jsd,jed ; do i=isd,ied
         if (CS%basin_mask(i,j) >= 6.0) then ; CS%basin_mask(i,j) = 0.0
         else ; CS%basin_mask(i,j) = 1.0 ; endif
@@ -1447,7 +1447,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
 
   if (CS%read_TIDEAMP) then
     TideAmp_file = trim(CS%inputdir) // trim(TideAmp_file)
-    call MOM_read_data(TideAmp_file,'tideamp',CS%TKE_tidal,G%domain,timelevel=1, scale=US%m_to_Z*US%T_to_s)
+    call MOM_read_data(TideAmp_file,'tideamp',CS%TKE_tidal,G%domain,time_level=1, scale=US%m_to_Z*US%T_to_s)
     do j=jsd, jed; do i=isd, ied
       utide = CS%TKE_tidal(i,j)
       CS%TKE_tidal(i,j) = G%mask2dT(i,j)*CS%Rho0*CS%cd_tides*(utide*utide*utide)
@@ -1477,7 +1477,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
 
     call safe_alloc_ptr(CS%gust,isd,ied,jsd,jed)
     gust_file = trim(CS%inputdir) // trim(gust_file)
-    call MOM_read_data(gust_file, 'gustiness', CS%gust, G%domain, timelevel=1, &
+    call MOM_read_data(gust_file, 'gustiness', CS%gust, G%domain, time_level=1, &
                scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z) ! units in file should be Pa
   endif
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
@@ -1533,7 +1533,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
     call safe_alloc_ptr(CS%srestore_mask,isd,ied,jsd,jed); CS%srestore_mask(:,:) = 1.0
     if (CS%mask_srestore) then ! read a 2-d file containing a mask for restoring fluxes
       flnam = trim(CS%inputdir) // 'salt_restore_mask.nc'
-      call MOM_read_data(flnam,'mask', CS%srestore_mask, G%domain, timelevel=1)
+      call MOM_read_data(flnam,'mask', CS%srestore_mask, G%domain, time_level=1)
     endif
   endif
 
@@ -1543,7 +1543,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
     call safe_alloc_ptr(CS%trestore_mask,isd,ied,jsd,jed); CS%trestore_mask(:,:) = 1.0
     if (CS%mask_trestore) then  ! read a 2-d file containing a mask for restoring fluxes
       flnam = trim(CS%inputdir) // 'temp_restore_mask.nc'
-      call MOM_read_data(flnam, 'mask', CS%trestore_mask, G%domain, timelevel=1)
+      call MOM_read_data(flnam, 'mask', CS%trestore_mask, G%domain, time_level=1)
     endif
   endif
 

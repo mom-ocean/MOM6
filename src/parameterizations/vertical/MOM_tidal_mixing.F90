@@ -448,7 +448,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
                  "tidal amplitudes with INT_TIDE_DISSIPATION.", default="tideamp.nc")
       filename = trim(CS%inputdir) // trim(tideamp_file)
       call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
-      call MOM_read_data(filename, 'tideamp', CS%tideamp, G%domain, timelevel=1, scale=US%m_to_Z*US%T_to_s)
+      call MOM_read_data(filename, 'tideamp', CS%tideamp, G%domain, time_level=1, scale=US%m_to_Z*US%T_to_s)
     endif
 
     call get_param(param_file, mdl, "H2_FILE", h2_file, &
@@ -457,7 +457,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
                  fail_if_missing=(.not.CS%use_CVMix_tidal))
     filename = trim(CS%inputdir) // trim(h2_file)
     call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
-    call MOM_read_data(filename, 'h2', CS%h2, G%domain, timelevel=1, scale=US%m_to_Z**2)
+    call MOM_read_data(filename, 'h2', CS%h2, G%domain, time_level=1, scale=US%m_to_Z**2)
 
     call get_param(param_file, mdl, "FRACTIONAL_ROUGHNESS_MAX", max_frac_rough, &
                  "The maximum topographic roughness amplitude as a fraction of the mean depth, "//&
@@ -501,7 +501,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
     call log_param(param_file, mdl, "INPUTDIR/NIKURASHIN_TKE_INPUT_FILE", &
                    filename)
     call safe_alloc_ptr(CS%TKE_Niku,is,ie,js,je) ; CS%TKE_Niku(:,:) = 0.0
-    call MOM_read_data(filename, 'TKE_input', CS%TKE_Niku, G%domain, timelevel=1, &  ! ??? timelevel -aja
+    call MOM_read_data(filename, 'TKE_input', CS%TKE_Niku, G%domain, time_level=1, &  ! ??? timelevel -aja
                        scale=US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**3)
     CS%TKE_Niku(:,:) = Niku_scale * CS%TKE_Niku(:,:)
 
@@ -1546,7 +1546,7 @@ subroutine read_tidal_energy(G, US, tidal_energy_type, tidal_energy_file, CS)
   case ('JAYN') ! Jayne 2009
     if (.not. allocated(CS%tidal_qe_2d)) allocate(CS%tidal_qe_2d(isd:ied,jsd:jed))
     allocate(tidal_energy_flux_2d(isd:ied,jsd:jed))
-    call MOM_read_data(tidal_energy_file,'wave_dissipation',tidal_energy_flux_2d, G%domain)
+    call MOM_read_data(tidal_energy_file, 'wave_dissipation', tidal_energy_flux_2d, G%domain)
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       CS%tidal_qe_2d(i,j) = CS%Gamma_itides * tidal_energy_flux_2d(i,j)
     enddo ; enddo

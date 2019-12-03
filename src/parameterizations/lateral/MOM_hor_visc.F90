@@ -1759,7 +1759,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     inputdir = slasher(inputdir)
 
     call MOM_read_data(trim(inputdir)//trim(filename), 'Kh', CS%Kh_bg_2d, &
-                       G%domain, timelevel=1, scale=US%m_to_L**2*US%T_to_s)
+                       G%domain, time_level=1, scale=US%m_to_L**2*US%T_to_s)
 
     call pass_var(CS%Kh_bg_2d, G%domain)
   endif

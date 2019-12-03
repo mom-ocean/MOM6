@@ -9,8 +9,8 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_file_parser, only : log_version
-use MOM_io, only : create_file, fieldtype, file_exists
-use MOM_io, only : MOM_read_data, read_axis_data, SINGLE_FILE, MULTIPLE
+use MOM_io, only : create_file, fieldtype, file_exists, read_axis_data
+use MOM_io, only : MOM_read_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field, var_desc
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
@@ -415,6 +415,7 @@ subroutine set_coord_from_file(Rlay, g_prime, GV, US, param_file)
   if (.not.file_exists(filename)) call MOM_error(FATAL, &
       " set_coord_from_file: Unable to open "//trim(filename))
 
+  !<@TODO: this function is redundant; replace it with call MOM_read_data(filename, coord_var, Rlay)
   call read_axis_data(filename, coord_var, Rlay)
   do k=1,nz ; Rlay(k) = US%kg_m3_to_R*Rlay(k) ; enddo
   g_prime(1) = g_fs
@@ -525,8 +526,8 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
 
   call create_file(trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
 
-  call write_field(trim(filepath), fields(1), US%R_to_kg_m3*GV%Rlay(:), "append")
-  call write_field(trim(filepath), fields(2), US%L_T_to_m_s**2*US%m_to_Z*GV%g_prime(:),"append")
+  call write_field(trim(filepath), vars(1)%name, US%R_to_kg_m3*GV%Rlay(:), "append")
+  call write_field(trim(filepath), vars(2)%name, US%L_T_to_m_s**2*US%m_to_Z*GV%g_prime(:), "append")
 
 end subroutine write_vertgrid_file
 

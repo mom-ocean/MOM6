@@ -528,7 +528,7 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
       temp_x(:,:) = 0.0 ; temp_y(:,:) = 0.0
       call MOM_read_vector(filename, CS%stress_x_var, CS%stress_y_var, &
                            temp_x(:,:), temp_y(:,:), G%Domain, stagger=AGRID, &
-                           timelevel=time_lev, scale=Pa_conversion)
+                           time_level=time_lev, scale=Pa_conversion)
 
       call pass_vector(temp_x, temp_y, G%Domain, To_All, AGRID)
       do j=js,je ; do I=Isq,Ieq
@@ -552,7 +552,7 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
     case ("C")
       call MOM_read_vector(filename,CS%stress_x_var, CS%stress_y_var, &
                      forces%taux(:,:), forces%tauy(:,:), &
-                     G%Domain, timelevel=time_lev, &
+                     G%Domain, time_level=time_lev, &
                      scale=Pa_conversion)
       if (CS%wind_scale /= 1.0) then
         do j=js,je ; do I=Isq,Ieq
@@ -666,13 +666,13 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
 !          time_lev,CS%buoy_last_lev_read
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%longwavedown_file), "lwdn_sfc", &
-             fluxes%LW(:,:), G%Domain, timelevel=time_lev)
+             fluxes%LW(:,:), G%Domain, time_level=time_lev)
     call MOM_read_data(trim(CS%inputdir)//trim(CS%longwaveup_file), "lwup_sfc", &
-             temp(:,:), G%Domain, timelevel=time_lev)
+             temp(:,:), G%Domain, time_level=time_lev)
     do j=js,je ; do i=is,ie ; fluxes%LW(i,j) = fluxes%LW(i,j) - temp(i,j) ; enddo ; enddo
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%evaporation_file), "evap", &
-             temp(:,:), G%Domain, timelevel=time_lev)
+             temp(:,:), G%Domain, time_level=time_lev)
     do j=js,je ; do i=is,ie
       fluxes%latent(i,j)           = -hlv*temp(i,j)
       fluxes%evap(i,j)             = -US%kg_m3_to_R*US%m_to_Z*US%T_to_s * temp(i,j)
@@ -681,32 +681,32 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
     enddo ; enddo
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%sensibleheat_file), "shflx", &
-             temp(:,:), G%Domain, timelevel=time_lev)
+             temp(:,:), G%Domain, time_level=time_lev)
     do j=js,je ; do i=is,ie ; fluxes%sens(i,j) = -temp(i,j) ; enddo ; enddo
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%shortwavedown_file), "swdn_sfc", &
-             fluxes%sw(:,:), G%Domain, timelevel=time_lev)
+             fluxes%sw(:,:), G%Domain, time_level=time_lev)
     call MOM_read_data(trim(CS%inputdir)//trim(CS%shortwaveup_file), "swup_sfc", &
-             temp(:,:), G%Domain, timelevel=time_lev)
+             temp(:,:), G%Domain, time_level=time_lev)
     do j=js,je ; do i=is,ie
       fluxes%sw(i,j) = fluxes%sw(i,j) - temp(i,j)
     enddo ; enddo
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%snow_file), "snow", &
-             fluxes%fprec(:,:), G%Domain, timelevel=time_lev, scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s)
+             fluxes%fprec(:,:), G%Domain, time_level=time_lev, scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s)
     call MOM_read_data(trim(CS%inputdir)//trim(CS%precip_file), "precip", &
-             fluxes%lprec(:,:), G%Domain, timelevel=time_lev, scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s)
+             fluxes%lprec(:,:), G%Domain, time_level=time_lev, scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s)
     do j=js,je ; do i=is,ie
       fluxes%lprec(i,j) = fluxes%lprec(i,j) - fluxes%fprec(i,j)
     enddo ; enddo
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%freshdischarge_file), "disch_w", &
-             temp(:,:), G%Domain, timelevel=time_lev_monthly, scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s)
+             temp(:,:), G%Domain, time_level=time_lev_monthly, scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s)
     do j=js,je ; do i=is,ie
       fluxes%lrunoff(i,j) = temp(i,j)*US%m_to_L**2*G%IareaT(i,j)
     enddo ; enddo
     call MOM_read_data(trim(CS%inputdir)//trim(CS%freshdischarge_file), "disch_s", &
-              temp(:,:), G%Domain, timelevel=time_lev_monthly, scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s)
+              temp(:,:), G%Domain, time_level=time_lev_monthly, scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s)
     do j=js,je ; do i=is,ie
       fluxes%frunoff(i,j) = temp(i,j)*US%m_to_L**2*G%IareaT(i,j)
     enddo ; enddo
@@ -714,9 +714,9 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
 !     Read the SST and SSS fields for damping.
     if (CS%restorebuoy) then
       call MOM_read_data(trim(CS%inputdir)//trim(CS%SSTrestore_file), "TEMP", &
-               CS%T_Restore(:,:), G%Domain, timelevel=time_lev_monthly)
+               CS%T_Restore(:,:), G%Domain, time_level=time_lev_monthly)
       call MOM_read_data(trim(CS%inputdir)//trim(CS%salinityrestore_file), "SALT", &
-               CS%S_Restore(:,:), G%Domain, timelevel=time_lev_monthly)
+               CS%S_Restore(:,:), G%Domain, time_level=time_lev_monthly)
     endif
     CS%buoy_last_lev_read = time_lev
 
@@ -1134,7 +1134,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
                  "variable gustiness.", fail_if_missing=.true.)
     call safe_alloc_ptr(CS%gust,G%isd,G%ied,G%jsd,G%jed) ; CS%gust(:,:) = 0.0
     filename = trim(CS%inputdir) // trim(gust_file)
-    call MOM_read_data(filename,'gustiness',CS%gust,G%domain, timelevel=1, &
+    call MOM_read_data(filename,'gustiness',CS%gust,G%domain, time_level=1, &
                  scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z) ! units in file should be Pa
   endif
   call get_param(param_file, mdl, "AXIS_UNITS", axis_units, default="degrees")

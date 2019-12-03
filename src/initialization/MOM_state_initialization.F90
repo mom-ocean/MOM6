@@ -660,7 +660,7 @@ subroutine initialize_thickness_from_file(h, G, GV, US, param_file, file_has_thi
   filename = trim(inputdir)//trim(thickness_file)
   if (.not.just_read) call log_param(param_file, mdl, "INPUTDIR/THICKNESS_FILE", filename)
 
-  if ((.not.just_read) .and. (.not.file_exists(filename, G%Domain))) call MOM_error(FATAL, &
+  if ((.not.just_read) .and. (.not.file_exists(filename))) call MOM_error(FATAL, &
          " initialize_thickness_from_file: Unable to open "//trim(filename))
 
   if (file_has_thickness) then
@@ -1279,7 +1279,7 @@ subroutine initialize_velocity_from_file(u, v, G, US, param_file, just_read_para
   filename = trim(inputdir)//trim(velocity_file)
   call log_param(param_file, mdl, "INPUTDIR/VELOCITY_FILE", filename)
 
-  if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
+  if (.not.file_exists(filename)) call MOM_error(FATAL, &
          " initialize_velocity_from_file: Unable to open "//trim(filename))
 
   !  Read the velocities from a netcdf file.
@@ -1466,14 +1466,14 @@ subroutine initialize_temp_salt_from_file(T, S, G, param_file, just_read_params)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
-  if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
+  if (.not.file_exists(filename)) call MOM_error(FATAL, &
      " initialize_temp_salt_from_file: Unable to open "//trim(filename))
 
   ! Read the temperatures and salinities from netcdf files.
   call MOM_read_data(filename, temp_var, T(:,:,:), G%Domain)
 
   salt_filename = trim(inputdir)//trim(salt_file)
-  if (.not.file_exists(salt_filename, G%Domain)) call MOM_error(FATAL, &
+  if (.not.file_exists(salt_filename)) call MOM_error(FATAL, &
      " initialize_temp_salt_from_file: Unable to open "//trim(salt_filename))
 
   call MOM_read_data(salt_filename, salt_var, S(:,:,:), G%Domain)
@@ -1767,7 +1767,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
 
   filename = trim(inputdir)//trim(damping_file)
   call log_param(param_file, mdl, "INPUTDIR/SPONGE_DAMPING_FILE", filename)
-  if (.not.file_exists(filename, G%Domain)) &
+  if (.not.file_exists(filename)) &
     call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
 
   if (new_sponges .and. .not. use_ALE) &
@@ -1781,7 +1781,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
 
   filename = trim(inputdir)//trim(state_file)
   call log_param(param_file, mdl, "INPUTDIR/SPONGE_STATE_FILE", filename)
-  if (.not.file_exists(filename, G%Domain)) &
+  if (.not.file_exists(filename)) &
     call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
 
   ! The first call to set_up_sponge_field is for the interface heights if in layered mode.!
@@ -2164,7 +2164,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
   ! This is needed for building an ALE grid under ice shelves
   if (use_ice_shelf) then
-    if (.not.file_exists(shelf_file, G%Domain)) call MOM_error(FATAL, &
+    if (.not.file_exists(shelf_file)) call MOM_error(FATAL, &
       "MOM_temp_salt_initialize_from_Z: Unable to open shelf file "//trim(shelf_file))
 
     call MOM_read_data(shelf_file, trim(area_varname), area_shelf_h, G%Domain)

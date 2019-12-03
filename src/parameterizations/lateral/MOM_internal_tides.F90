@@ -2308,7 +2308,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   filename = trim(CS%inputdir) // trim(h2_file)
   call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
 
-  call MOM_read_data(filename, 'h2', h2, G%domain, timelevel=1, scale=US%m_to_Z)
+  call MOM_read_data(filename, 'h2', h2, G%domain, time_level=1, scale=US%m_to_Z)
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     ! Restrict rms topo to 10 percent of column depth.
@@ -2330,7 +2330,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   allocate(CS%refl_angle(isd:ied,jsd:jed)) ; CS%refl_angle(:,:) = CS%nullangle
 
   call MOM_read_data(filename, 'refl_angle', CS%refl_angle, &
-                    G%domain, timelevel=1)
+                    G%domain, time_level=1)
   ! replace NANs with null value
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     if (is_NaN(CS%refl_angle(i,j))) CS%refl_angle(i,j) = CS%nullangle
@@ -2345,7 +2345,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   call log_param(param_file, mdl, "INPUTDIR/REFL_PREF_FILE", filename)
   allocate(CS%refl_pref(isd:ied,jsd:jed)) ; CS%refl_pref(:,:) = 1.0
 
-  call MOM_read_data(filename, 'refl_pref', CS%refl_pref, G%domain, timelevel=1)
+  call MOM_read_data(filename, 'refl_pref', CS%refl_pref, G%domain, time_level=1)
   !CS%refl_pref = CS%refl_pref*1 ! adjust partial reflection if desired
   call pass_var(CS%refl_pref,G%domain)
 
@@ -2370,7 +2370,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   call log_param(param_file, mdl, "INPUTDIR/REFL_DBL_FILE", filename)
   allocate(ridge_temp(isd:ied,jsd:jed)) ; ridge_temp(:,:) = 0.0
 
-  call MOM_read_data(filename, 'refl_dbl', ridge_temp, G%domain, timelevel=1)
+  call MOM_read_data(filename, 'refl_dbl', ridge_temp, G%domain, time_level=1)
   call pass_var(ridge_temp,G%domain)
   allocate(CS%refl_dbl(isd:ied,jsd:jed)) ; CS%refl_dbl(:,:) = .false.
   do i=isd,ied; do j=jsd,jed
@@ -2387,9 +2387,9 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   !filename = trim(CS%inputdir) // trim(land_mask_file)
   !call log_param(param_file, mdl, "INPUTDIR/LAND_MASK_FILE", filename)
   !G%mask2dCu(:,:) = 1 ; G%mask2dCv(:,:) = 1 ; G%mask2dT(:,:)  = 1
-  !call MOM_read_data(filename, 'land_mask', G%mask2dCu, G%domain, timelevel=1)
-  !call MOM_read_data(filename, 'land_mask', G%mask2dCv, G%domain, timelevel=1)
-  !call MOM_read_data(filename, 'land_mask', G%mask2dT, G%domain, timelevel=1)
+  !call MOM_read_data(filename, 'land_mask', G%mask2dCu, G%domain, time_level=1)
+  !call MOM_read_data(filename, 'land_mask', G%mask2dCv, G%domain, time_level=1)
+  !call MOM_read_data(filename, 'land_mask', G%mask2dT, G%domain, time_level=1)
   !call pass_vector(G%mask2dCu, G%mask2dCv, G%domain, To_All+Scalar_Pair, CGRID_NE)
   !call pass_var(G%mask2dT,G%domain)
 
@@ -2409,7 +2409,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   !filename = trim(CS%inputdir) // trim(dx_Cv_file)
   !call log_param(param_file, mdl, "INPUTDIR/dx_Cv_FILE", filename)
   !G%dx_Cv(:,:) = 0.0
-  !call MOM_read_data(filename, 'dx_Cv', G%dx_Cv, G%domain, timelevel=1, scale=US%m_to_L)
+  !call MOM_read_data(filename, 'dx_Cv', G%dx_Cv, G%domain, time_level=1, scale=US%m_to_L)
   !call pass_vector(G%dy_Cu, G%dx_Cv, G%domain, To_All+Scalar_Pair, CGRID_NE)
 
   ! Register maps of reflection parameters

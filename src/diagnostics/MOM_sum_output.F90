@@ -12,7 +12,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
-use MOM_io, only : fieldtype, flush_file, mpp_open_file
+use MOM_io, only : fieldtype, flush_file, mpp_open_file, create_file
 use MOM_io, only : file_exists, slasher, vardesc, var_desc, write_field
 use MOM_io, only : APPEND_FILE, ASCII_FILE, SINGLE_FILE, WRITEONLY_FILE
 use MOM_open_boundary, only : ocean_OBC_type, OBC_segment_type
@@ -205,12 +205,16 @@ subroutine MOM_sum_output_init(G, US, param_file, directory, ntrnc, &
   call get_param(param_file, mdl, "ENERGYFILE", energyfile, &
                  "The file to use to write the energies and globally "//&
                  "summed diagnostics.", default="ocean.stats")
-
+  !>@note this function call is not supported by new io.
+  !! The current implementation of get_filename_appendix only returns and empty string,
+  !! so it has been commented out with a note to add this feature to MOM_io if needed 
+  !>@TODO add function(s) to the MOM_string_functions module to query for the filename appendix for ensemble runs
+  !! in ensemble simulations
   !query fms_io if there is a filename_appendix (for ensemble runs)
-  call get_filename_appendix(filename_appendix)
-  if (len_trim(filename_appendix) > 0) then
-     energyfile = trim(energyfile) //'.'//trim(filename_appendix)
-  endif
+  !call get_filename_appendix(filename_appendix)
+  !if (len_trim(filename_appendix) > 0) then
+  !   energyfile = trim(energyfile) //'.'//trim(filename_appendix)
+  !endif
 
   CS%energyfile = trim(slasher(directory))//trim(energyfile)
   call log_param(param_file, mdl, "output_path/ENERGYFILE", CS%energyfile)
@@ -620,10 +624,10 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     endif
 
     energypath_nc = trim(CS%energyfile) // ".nc"
-    if (day .eq. CS%Start_time) then
-      call create_file(trim(energypath_nc), vars, &
-                       num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, &
-                       G=G, GV=GV)
+    if (day > CS%Start_time) then
+      continue
+    else
+      call create_file(trim(energypath_nc), vars, num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, G=G, GV=GV)
     endif
   endif
 
@@ -874,31 +878,31 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   endif
 
   var = real(CS%ntrunc)
-  call write_field(trim(energypath_nc), CS%fields(1), var, "append", time=reday)
-  call write_field(trim(energypath_nc), CS%fields(2), toten,"append", time=reday)
-  call write_field(trim(energypath_nc), CS%fields(3), PE, "append", time=reday)
-  call write_field(trim(energypath_nc), CS%fields(4), KE, "append", time=reday)
-  call write_field(trim(energypath_nc), CS%fields(5), H_0APE, "append", time=reday)
-  call write_field(trim(energypath_nc), CS%fields(6), mass_lay, "append", time=reday)
+  call write_field(trim(energypath_nc), vars(1)%name, var, "append", time=reday)
+  call write_field(trim(energypath_nc), vars(2)%name, toten,"append", time=reday)
+  call write_field(trim(energypath_nc), vars(3)%name, PE, "append", time=reday)
+  call write_field(trim(energypath_nc), vars(4)%name, KE, "append", time=reday)
+  call write_field(trim(energypath_nc), vars(5)%name, H_0APE, "append", time=reday)
+  call write_field(trim(energypath_nc), vars(6)%name, mass_lay, "append", time=reday)
 
-  call write_field(trim(energypath_nc), CS%fields(7), mass_tot, "append", time=reday)
-  call write_field(trim(energypath_nc), CS%fields(8), mass_chg, "append", time=reday)
-  call write_field(trim(energypath_nc), CS%fields(9), mass_anom, "append", time=reday)
-  call write_field(trim(energypath_nc), CS%fields(10), max_CFL(1), "append", time=reday)
-  call write_field(trim(energypath_nc), CS%fields(11), max_CFL(1), "append", time=reday)
+  call write_field(trim(energypath_nc), vars(7)%name, mass_tot, "append", time=reday)
+  call write_field(trim(energypath_nc), vars(8)%name, mass_chg, "append", time=reday)
+  call write_field(trim(energypath_nc), vars(9)%name, mass_anom, "append", time=reday)
+  call write_field(trim(energypath_nc), vars(10)%name, max_CFL(1), "append", time=reday)
+  call write_field(trim(energypath_nc), vars(11)%name, max_CFL(1), "append", time=reday)
   if (CS%use_temperature) then
-    call write_field(trim(energypath_nc), CS%fields(12), 0.001*Salt, "append", time=reday)
-    call write_field(trim(energypath_nc), CS%fields(13), 0.001*salt_chg, "append", time=reday)
-    call write_field(trim(energypath_nc), CS%fields(14), 0.001*salt_anom, "append", time=reday)
-    call write_field(trim(energypath_nc), CS%fields(15), Heat, "append", time=reday)
-    call write_field(trim(energypath_nc), CS%fields(16), heat_chg,"append", time=reday)
-    call write_field(trim(energypath_nc), CS%fields(17), heat_anom, "append", time=reday)
+    call write_field(trim(energypath_nc), vars(12)%name, 0.001*Salt, "append", time=reday)
+    call write_field(trim(energypath_nc), vars(13)%name, 0.001*salt_chg, "append", time=reday)
+    call write_field(trim(energypath_nc), vars(14)%name, 0.001*salt_anom, "append", time=reday)
+    call write_field(trim(energypath_nc), vars(15)%name, Heat, "append", time=reday)
+    call write_field(trim(energypath_nc), vars(16)%name, heat_chg,"append", time=reday)
+    call write_field(trim(energypath_nc), vars(17)%name, heat_anom, "append", time=reday)
     do m=1,nTr_stocks
-      call write_field(trim(energypath_nc), CS%fields(17+m), Tr_stocks(m), "append", time=reday)
+      call write_field(trim(energypath_nc), vars(17+m)%name, Tr_stocks(m), "append", time=reday)
     enddo
   else
     do m=1,nTr_stocks
-      call write_field(trim(energypath_nc), CS%fields(11+m), Tr_stocks(m), "append", time=reday)
+      call write_field(trim(energypath_nc), vars(11+m)%name, Tr_stocks(m), "append", time=reday)
     enddo
   endif
 

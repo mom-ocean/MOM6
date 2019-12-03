@@ -389,10 +389,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   start(:) = 1 ; nread(:) = 1
   start(2) = 2 ; nread(1) = ni+1 ; nread(2) = 2
   allocate( tmpGlbl(ni+1,2) )
-  allocate(tmpGlbl(dimSizes(1),2))
- 
   ! read x into the tmpGlbl buffer
-  call MOM_read_data(fileName, "x", tmpGlbl, define_diagnostic_axes=.true., G)
+  call MOM_read_data(fileName, "x", tmpGlbl, define_diagnostic_axes=.true., G=G)
  ! I don't know why the second axis is 1 or 2 here. -RWH
   do i=G%isg,G%ieg
     G%gridLonT(i) = tmpGlbl(2*(i-G%isg)+2,2)
@@ -409,15 +407,17 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   start(1) = int(ni/4)+1 ; nread(2) = nj+1
 
   ! read y into the tmpGlbl buffer
-  call MOM_read_data(fileObjReadNoDD, "y", tmpGlbl, corner=start(1:2), define_diagnostic_axes=.true., G, grid_type="t")
+  call MOM_read_data(fileName, "y", tmpGlbl, define_diagnostic_axes=.true., G=G, &
+                     corner=start(1:2), grid_type="t")
 
   do j=G%jsg,G%jeg
     G%gridLatT(j) = tmpGlbl(1,2*(j-G%jsg)+2)
   enddo
 
  ! read y into the tmpGlbl buffer
-  call MOM_read_data(fileObjReadNoDD, "y", tmpGlbl, corner=start(1:2), define_diagnostic_axes=.true., G, grid_type="b")
-  
+  call MOM_read_data(fileName, "y", tmpGlbl, define_diagnostic_axes=.true., G=G, &
+                     corner=start(1:2), grid_type="b")
+
   do J=G%jsg-1,G%jeg
     G%gridLatB(J) = tmpGlbl(1,2*(j-G%jsg)+3)
   enddo
