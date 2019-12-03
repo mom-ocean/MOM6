@@ -195,10 +195,10 @@ interface write_field
   module procedure write_field_2d_DD
   module procedure write_field_1d_DD
   module procedure write_field_scalar
-  module procedure write_field_noDD
-  module procedure write_field_noDD
-  module procedure write_field_noDD
-  module procedure write_field_noDD
+  module procedure write_field_4d_noDD
+  module procedure write_field_3d_noDD
+  module procedure write_field_2d_noDD
+  module procedure write_field_1d_noDD
 end interface
 
 !> interface to scale data after reading in a field
@@ -211,8 +211,8 @@ end interface
 
 !> interface to read the most recent time from a netCDF file
 interface read_most_recent_time
-  read_most_recent_time_DD
-  read_most_recent_time_noDD
+  module procedure read_most_recent_time_DD
+  module procedure read_most_recent_time_noDD
 end interface
 
 contains
@@ -477,7 +477,7 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, corner, ed
 
   start(:) = 1
   nwrite(:) = 1
-  if (present(corner))
+  if (present(corner)) then
     do i=1,ndims
       if (i .ne. dimUnlimIndex) start(i) = corner
     enddo
@@ -495,7 +495,7 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, corner, ed
   dimUnlimName=""
   ! write the data
   if (lowercase(trim(mode)) .eq. "append") then
-    if present(time) then
+    if (present(time)) then
       ! write the time value if it is not already written to the file
       fileTime = get_most_recent_file_time(fileobj)
       if (time .gt. fileTime+EPSILON(time)) then
@@ -553,7 +553,7 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, corner, ed
 
   start(:) = 1
   nwrite(:) = 1
-  if (present(corner))
+  if (present(corner)) then
     do i=1,ndims
       if (i .ne. dimUnlimIndex) start(i) = corner(i)
     enddo
@@ -571,7 +571,7 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, corner, ed
   dimUnlimName=""
   ! write the data
   if (lowercase(trim(mode)) .eq. "append") then
-    if present(time) then
+    if (present(time)) then
       ! write the time value if it is not already written to the file
       fileTime = get_most_recent_file_time(fileobj)
       if (time .gt. fileTime+EPSILON(time)) then
@@ -628,7 +628,7 @@ subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, corner, ed
 
   start(:) = 1
   nwrite(:) = 1
-  if (present(corner))
+  if (present(corner)) then
     do i=1,ndims
       if (i .ne. dimUnlimIndex) start(i) = corner(i)
     enddo
@@ -646,7 +646,7 @@ subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, corner, ed
   dimUnlimName=""
   ! write the data
   if (lowercase(trim(mode)) .eq. "append") then
-    if present(time) then
+    if (present(time)) then
       ! write the time value if it is not already written to the file
       fileTime = get_most_recent_file_time(fileobj)
       if (time .gt. fileTime+EPSILON(time)) then
@@ -659,6 +659,7 @@ subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, corner, ed
       if (dimUnlimIndex .gt. 0) &
           call write_data(fileobj, trim(fieldname), data, corner=start, edge_Lengths=nwrite, &
                           unlim_dim_level=timeIndex)
+    endif
   else
     call write_data(fileobj, trim(fieldname), data, corner=start, edge_Lengths=nwrite)
   endif
@@ -701,7 +702,7 @@ subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, corner, ed
 
   start(:) = 1
   nwrite(:) = 1
-  if (present(corner))
+  if (present(corner)) then
     do i=1,ndims
       if (i .ne. dimUnlimIndex) start(i) = corner(i)
     enddo
@@ -719,7 +720,7 @@ subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, corner, ed
   dimUnlimName=""
   ! write the data
   if (lowercase(trim(mode)) .eq. "append") then
-    if present(time) then
+    if (present(time)) then
       ! write the time value if it is not already written to the file
       fileTime = get_most_recent_file_time(fileobj)
       if (time .gt. fileTime+EPSILON(time)) then
@@ -732,6 +733,7 @@ subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, corner, ed
       if (dimUnlimIndex .gt. 0) &
           call write_data(fileobj, trim(fieldname), data, corner=start, edge_Lengths=nwrite, &
                           unlim_dim_level=timeIndex)
+    endif
   else
     call write_data(fileobj, trim(fieldname), data, corner=start, edge_Lengths=nwrite)
   endif
@@ -773,7 +775,7 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, corner, edgeLeng
 
   start(:) = 1
   nwrite(:) = 1
-  if (present(corner))
+  if (present(corner)) then
     do i=1,ndims
       if (i .ne. dimUnlimIndex) start(i) = corner
     enddo
@@ -791,7 +793,7 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, corner, edgeLeng
   dimUnlimName=""
   ! write the data
   if (lowercase(trim(mode)) .eq. "append") then
-    if present(time) then
+    if (present(time)) then
       ! write the time value if it is not already written to the file
       fileTime = get_most_recent_file_time(fileobj)
       if (time .gt. fileTime+EPSILON(time)) then
@@ -848,7 +850,7 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, corner, edgeLeng
 
   start(:) = 1
   nwrite(:) = 1
-  if (present(corner))
+  if (present(corner)) then
     do i=1,ndims
       if (i .ne. dimUnlimIndex) start(i) = corner(i)
     enddo
@@ -866,7 +868,7 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, corner, edgeLeng
   dimUnlimName=""
   ! write the data
   if (lowercase(trim(mode)) .eq. "append") then
-    if present(time) then
+    if (present(time)) then
       ! write the time value if it is not already written to the file
       fileTime = get_most_recent_file_time(fileobj)
       if (time .gt. fileTime+EPSILON(time)) then
@@ -922,7 +924,7 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, corner, edgeLeng
 
   start(:) = 1
   nwrite(:) = 1
-  if (present(corner))
+  if (present(corner)) then
     do i=1,ndims
       if (i .ne. dimUnlimIndex) start(i) = corner(i)
     enddo
@@ -940,7 +942,7 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, corner, edgeLeng
   dimUnlimName=""
   ! write the data
   if (lowercase(trim(mode)) .eq. "append") then
-    if present(time) then
+    if (present(time)) then
       ! write the time value if it is not already written to the file
       fileTime = get_most_recent_file_time(fileobj)
       if (time .gt. fileTime+EPSILON(time)) then
@@ -953,6 +955,7 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, corner, edgeLeng
       if (dimUnlimIndex .gt. 0) &
           call write_data(fileobj, trim(fieldname), data, corner=start, edge_Lengths=nwrite, &
                           unlim_dim_level=timeIndex)
+    endif
   else
     call write_data(fileobj, trim(fieldname), data, corner=start, edge_Lengths=nwrite)
   endif
@@ -994,7 +997,7 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, corner, edgeLeng
 
   start(:) = 1
   nwrite(:) = 1
-  if (present(corner))
+  if (present(corner)) then
     do i=1,ndims
       if (i .ne. dimUnlimIndex) start(i) = corner(i)
     enddo
@@ -1012,7 +1015,7 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, corner, edgeLeng
   dimUnlimName=""
   ! write the data
   if (lowercase(trim(mode)) .eq. "append") then
-    if present(time) then
+    if (present(time)) then
       ! write the time value if it is not already written to the file
       fileTime = get_most_recent_file_time(fileobj)
       if (time .gt. fileTime+EPSILON(time)) then
@@ -1025,6 +1028,7 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, corner, edgeLeng
       if (dimUnlimIndex .gt. 0) &
           call write_data(fileobj, trim(fieldname), data, corner=start, edge_Lengths=nwrite, &
                           unlim_dim_level=timeIndex)
+    endif
   else
     call write_data(fileobj, trim(fieldname), data, corner=start, edge_Lengths=nwrite)
   endif
@@ -1111,7 +1115,7 @@ end subroutine MOM_read_data_1d_DD
 !> This function uses the fms_io function read_data to read 2-D domain-decomposed data field named "fieldname" 
 !! from file "filename".
 subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain, corner, edgeLengths, timeLevel, scale, &
-                               x_position, y_position, x_units, y_units,)
+                               x_position, y_position, x_units, y_units)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:),   intent(inout) :: data !< The 2-dimensional data array to pass to read_data
@@ -1202,7 +1206,7 @@ end subroutine MOM_read_data_2d_DD
 !> This function uses the fms_io function read_data to read 3-D domain-decomposed data field named "fieldname"
 !! from file "filename".
 subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, corner, edgeLengths, timeLevel, scale, &
-                               x_position, y_position, x_units, y_units,)
+                               x_position, y_position, x_units, y_units)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:),   intent(inout) :: data !< The 3-dimensional data array to pass to read_data
@@ -1726,7 +1730,7 @@ subroutine MOM_read_data_2d_noDD_diag_axes(filename, fieldname, data, corner, ed
    if (lowercase(trim(units)) .eq. "degrees_north") then
      if (.not.(present(grid_type)) &
       call MOM_error(FATAL, "MOM_io::MOM_read_data_2d_noDD_diag_axes: grid_type argument required if "// &
-      "define_diag_axes=.true. and reading in y/latitude values")
+      "define_diag_axes=.true. and reading in y-axis values")
       ! create a mask for the T-grid latitude values in the tmpGlbl array
       allocate(yuse(nread(2)))
       yuse(:) = .FALSE.
@@ -2008,7 +2012,7 @@ subroutine MOM_get_nc_corner_edgelengths_noDD(fileObj, variableName, corner, edg
        call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edgelengths_noDD: You passed the myCorner argument, but did "// &
                             "not pass myCornerIndices that defines the indices corresponding to the myCorner values")
      endif
-     do i=1,size(myCorner)
+     do i=1,size(myCorner
        idx = myCornerIndices(i)
        corner(idx)=myCorner(i)
      enddo
