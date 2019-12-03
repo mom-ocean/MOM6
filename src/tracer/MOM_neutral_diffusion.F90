@@ -43,6 +43,7 @@ type, public :: neutral_diffusion_CS ; private
   integer :: deg = 2  !< Degree of polynomial used for reconstructions
   logical :: continuous_reconstruction = .true. !< True if using continuous PPM reconstruction at interfaces
   logical :: debug = .false. !< If true, write verbose debugging messages
+  logical :: hard_fail_heff !< Bring down the model if a problem with heff is detected
   integer :: max_iter !< Maximum number of iterations if refine_position is defined
   real :: drho_tol    !< Convergence criterion representing difference from true neutrality
   real :: x_tol       !< Convergence criterion for how small an update of the position can be
@@ -209,6 +210,9 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, diabatic
                    "Turns on verbose output for discontinuous neutral "//&
                    "diffusion routines.", &
                    default = .false.)
+    call get_param(param_file, mdl, "HARD_FAIL_HEFF", CS%hard_fail_heff, &
+                  "Bring down the model if a problem with heff is detected",
+                   default = .true.)
   endif
 
   if (CS%interior_only) then
@@ -426,8 +430,9 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS)
             CS%P_i(i,j,:,:), h(i,j,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:), CS%ppoly_coeffs_T(i,j,:,:),           &
             CS%ppoly_coeffs_S(i,j,:,:),CS%stable_cell(i,j,:),                                                  &
             CS%P_i(i+1,j,:,:), h(i+1,j,:), CS%T_i(i+1,j,:,:), CS%S_i(i+1,j,:,:), CS%ppoly_coeffs_T(i+1,j,:,:), &
-            CS%ppoly_coeffs_S(i+1,j,:,:), CS%stable_cell(i+1,j,:),                                              &
-            CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:))
+            CS%ppoly_coeffs_S(i+1,j,:,:), CS%stable_cell(i+1,j,:),                                             &
+            CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:),                   & 
+            hard_fail_heff = CS%hard_fail_heff)
       endif
     endif
   enddo ; enddo
@@ -446,7 +451,8 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS)
             CS%ppoly_coeffs_S(i,j,:,:),CS%stable_cell(i,j,:),                                                  &
             CS%P_i(i,j+1,:,:), h(i,j+1,:), CS%T_i(i,j+1,:,:), CS%S_i(i,j+1,:,:), CS%ppoly_coeffs_T(i,j+1,:,:), &
             CS%ppoly_coeffs_S(i,j+1,:,:), CS%stable_cell(i,j+1,:),                                             &
-            CS%vPoL(I,j,:), CS%vPoR(I,j,:), CS%vKoL(I,j,:), CS%vKoR(I,j,:), CS%vhEff(I,j,:))
+            CS%vPoL(I,j,:), CS%vPoR(I,j,:), CS%vKoL(I,j,:), CS%vKoR(I,j,:), CS%vhEff(I,j,:),
+            hard_fail_heff = CS%hard_fail_heff)
       endif
     endif
   enddo ; enddo
@@ -1109,7 +1115,7 @@ end function interpolate_for_nondim_position
 subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, Tl, Sl, ppoly_T_l, ppoly_S_l, stable_l,&
                                                                 Pres_r, hcol_r, Tr, Sr, ppoly_T_r, ppoly_S_r, stable_r,&
                                                                 PoL, PoR, KoL, KoR, hEff, zeta_bot_L, zeta_bot_R,      &
-                                                                k_bot_L, k_bot_R)
+                                                                k_bot_L, k_bot_R, hard_fail_heff)
 
   type(neutral_diffusion_CS),     intent(inout) :: CS        !< Neutral diffusion control structure
   integer,                        intent(in)    :: nk        !< Number of levels
@@ -1141,6 +1147,8 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, 
 
   integer, optional,              intent(in)    :: k_bot_L   !< k-index for the boundary layer (left) [nondim]
   integer, optional,              intent(in)    :: k_bot_R   !< k-index for the boundary layer (right) [nondim]
+  logical, optional,              intent(in)    :: fail_heff_in !< If true (default) bring down the model if the 
+                                                                !! neutral surfaces ever cross [logical]
   ! Local variables
   integer :: ns                     ! Number of neutral surfaces
   integer :: k_surface              ! Index of neutral surface
@@ -1150,6 +1158,7 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, 
   logical :: searching_right_column ! True if searching for the position of a left interface in the right column
   logical :: reached_bottom         ! True if one of the bottom-most interfaces has been used as the target
   logical :: search_layer
+  logical :: fail_heff              ! By default, 
   real    :: dRho, dRhoTop, dRhoBot, hL, hR
   real    :: z0, pos
   real    :: dRdT_from_top, dRdS_from_top   ! Density derivatives at the searched from interface
@@ -1171,6 +1180,9 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, 
   reached_bottom = .false.
   searching_left_column = .false.
   searching_right_column = .false.
+  
+  fail_heff = .true.
+  if (PRESENT(fail_heff_in)) fail_heff = fail_heff_in
 
   if (PRESENT(k_bot_L) .and. PRESENT(k_bot_R) .and. PRESENT(zeta_bot_L) .and. PRESENT(zeta_bot_R)) then
     k_init_L = k_bot_L; k_init_R = k_bot_R
@@ -1305,7 +1317,17 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, 
         hL = (PoL(k_surface) - PoL(k_surface-1))*hcol_l(KoL(k_surface))
         hR = (PoR(k_surface) - PoR(k_surface-1))*hcol_r(KoR(k_surface))
         if (hL < 0. .or. hR < 0.) then
-          call MOM_error(FATAL,"Negative thicknesses in neutral diffusion")
+          if (fail_heff) then
+            call MOM_error(FATAL,"Negative thicknesses in neutral diffusion")
+          else
+            if (searching_left_column) then
+              PoL(k_surface) = PoL(k_surface-1)
+              KoL(k_surface) = KoL(k_surface-1)
+            elseif (searcing_right_column) then
+              PoR(k_surface) = PoR(k_surface-1)
+              KoR(k_surface) = KoR(k_surface-1)
+            endif
+          endif
         elseif ( hL + hR == 0. ) then
            hEff(k_surface-1) = 0.
         else
