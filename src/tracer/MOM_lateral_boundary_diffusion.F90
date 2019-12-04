@@ -370,7 +370,7 @@ end subroutine boundary_k_range
 
 
 !> Calculate the lateral boundary diffusive fluxes using the layer by layer method.
-!! See \ref LBD_method2
+!! See \ref section_method2
 subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, ppoly0_coefs_L, &
                                    ppoly0_coefs_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
 
@@ -475,7 +475,7 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L,
 end subroutine fluxes_layer_method
 
 !> Apply the lateral boundary diffusive fluxes calculated from a 'bulk model'
-!! See \ref LBD_method1
+!! See \ref section_method1
 subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L, area_R, phi_L, phi_R, ppoly0_coefs_L, &
                                    ppoly0_coefs_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer, F_limit)
 
