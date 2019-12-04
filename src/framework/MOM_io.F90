@@ -30,8 +30,7 @@ use mpp_io_mod,           only : OVERWRITE_FILE=>MPP_OVERWR, READONLY_FILE=>MPP_
 use mpp_io_mod,           only : SINGLE_FILE=>MPP_SINGLE, WRITEONLY_FILE=>MPP_WRONLY
 use mpp_io_mod,           only : MPP_APPEND, MPP_MULTI, MPP_OVERWR, MPP_NETCDF, MPP_RDONLY
 use mpp_io_mod,           only : io_infra_init=>mpp_io_init
-
-use fms2_io_mod,          only: check_if_open, &
+use fms2_io_mod,          only : check_if_open, &
                                 get_dimension_names, &
                                 get_dimension_size, &
                                 get_compute_domain_dimension_indices, &
@@ -469,7 +468,7 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, corner, ed
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, filename, lowercase(trim(mode)), domain%mpp_domain, is_restart=.false.)
 
-  call get_variable_num_dimensions(fileobj, fieldname, ndims)
+  ndims = get_variable_num_dimensions(fileobj, trim(fieldname))
   allocate(start(ndims))
   allocate(nwrite(ndims))
 
@@ -545,7 +544,7 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, corner, ed
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, filename, lowercase(trim(mode)), domain%mpp_domain, is_restart=.false.)
 
-  call get_variable_num_dimensions(fileobj, fieldname, ndims)
+  ndims = get_variable_num_dimensions(fileobj, trim(fieldname))
   allocate(start(ndims))
   allocate(nwrite(ndims))
 
@@ -620,7 +619,7 @@ subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, corner, ed
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, filename, lowercase(trim(mode)), domain%mpp_domain, is_restart=.false.)
 
-  call get_variable_num_dimensions(fileobj, fieldname, ndims)
+  ndims = get_variable_num_dimensions(fileobj, trim(fieldname))
   allocate(start(ndims))
   allocate(nwrite(ndims))
 
@@ -694,7 +693,7 @@ subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, corner, ed
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, filename, lowercase(trim(mode)), domain%mpp_domain, is_restart=.false.)
 
-  call get_variable_num_dimensions(fileobj, fieldname, ndims)
+  ndims = get_variable_num_dimensions(fileobj, trim(fieldname))
   allocate(start(ndims))
   allocate(nwrite(ndims))
 
@@ -767,7 +766,7 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, corner, edgeLeng
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, filename, lowercase(trim(mode)), is_restart=.false.)
 
-  call get_variable_num_dimensions(fileobj, fieldname, ndims)
+  ndims = get_variable_num_dimensions(fileobj, trim(fieldname))
   allocate(start(ndims))
   allocate(nwrite(ndims))
 
@@ -842,7 +841,7 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, corner, edgeLeng
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, filename, lowercase(trim(mode)), is_restart=.false.)
 
-  call get_variable_num_dimensions(fileobj, fieldname, ndims)
+  ndims = get_variable_num_dimensions(fileobj, trim(fieldname))
   allocate(start(ndims))
   allocate(nwrite(ndims))
 
@@ -910,13 +909,13 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, corner, edgeLeng
   real :: fileTime ! most recent time currently written to file
   integer :: i, ndims, timeIndex
   integer :: dimUnlimSize ! size of the unlimited dimension
-  integer, dimension(3) :: start, nwrite ! indices for first data value and number of values to write
+  integer, allocatable, dimension(:) :: start, nwrite ! indices for first data value and number of values to write
   character(len=40) :: dimUnlimName ! name of the unlimited dimension in the file
   ! open the file
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, filename, lowercase(trim(mode)), is_restart=.false.)
 
-  call get_variable_num_dimensions(fileobj, fieldname, ndims)
+  ndims = get_variable_num_dimensions(fileobj, trim(fieldname))
   allocate(start(ndims))
   allocate(nwrite(ndims))
 
@@ -983,16 +982,16 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, corner, edgeLeng
   real :: fileTime ! most recent time currently written to file
   integer :: i, ndims, timeIndex
   integer :: dimUnlimSize ! size of the unlimited dimension
-  integer, dimension(4) :: start, nwrite ! indices for first data value and number of values to write
+  integer, allocatable, dimension(:) :: start, nwrite ! indices for first data value and number of values to write
   character(len=40) :: dimUnlimName ! name of the unlimited dimension in the file
   ! open the file
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, filename, lowercase(trim(mode)), is_restart=.false.)
 
-  call get_variable_num_dimensions(fileobj, fieldname, ndims)
+  ndims = get_variable_num_dimensions(fileobj, fieldname)
+ 
   allocate(start(ndims))
   allocate(nwrite(ndims))
-
   dimUnlimIndex = get_variable_unlimited_dimension_index(fileobj, trim(fieldname))
 
   start(:) = 1
@@ -1034,7 +1033,6 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, corner, edgeLeng
   endif
   ! close the file
   if (check_if_open(fileobj)) call close_file(fileobj)
-
   deallocate(start)
   deallocate(nwrite)
 end subroutine write_field_4d_noDD
@@ -1728,9 +1726,8 @@ subroutine MOM_read_data_2d_noDD_diag_axes(filename, fieldname, data, corner, ed
 
    call get_variable_units(fileobj, fieldname, units)
    if (lowercase(trim(units)) .eq. "degrees_north") then
-     if (.not.(present(grid_type)) &
-      call MOM_error(FATAL, "MOM_io::MOM_read_data_2d_noDD_diag_axes: grid_type argument required if "// &
-      "define_diag_axes=.true. and reading in y-axis values")
+     if (.not.(present(grid_type))) call MOM_error(FATAL, "MOM_io::MOM_read_data_2d_noDD_diag_axes: grid_type"// &
+      " argument required if define_diag_axes=.true. and reading in y-axis values")
       ! create a mask for the T-grid latitude values in the tmpGlbl array
       allocate(yuse(nread(2)))
       yuse(:) = .FALSE.
@@ -1795,65 +1792,6 @@ subroutine MOM_read_data_2d_noDD_diag_axes(filename, fieldname, data, corner, ed
   endif ; endif
 
 end subroutine MOM_read_data_2d_noDD_diag_axes
-
-
-!> This function uses the fms_io function write_data to write a 1-D domain-decomposed data field named "fieldname"
-!! from file "filename".
-subroutine write_field_1d_DD(filename, fieldname, data, time, corner, edgeLengths, is_diagnostic_file)
-  character(len=*),       intent(in) :: filename !< The name of the file to write
-  character(len=*),       intent(in) :: fieldname !< The variable name of the data in the file
-  real, dimension(:),     intent(in) :: data !< The 1-dimensional data array to pass to write_data
-  real,                   intent(in) :: time !< Output time
-  integer,      optional, intent(in) :: corner !< starting index of data buffer. Default is 1
-  integer,      optional, intent(in) :: edgeLengths !< number of data values to read in; default is the variable size
-  real,         optional, intent(in) :: scale !< A scaling factor that the field is multiplied by
-  ! local
-  type(FmsNetcdfDomainFile_t) :: fileobj ! netCDF file object returned by call to open_file
-  logical :: file_open_success !.true. if call to open_file is successful
-  integer :: i
-  integer, dimension(1) :: start, nread ! indices for first data value and number of values to read
-  character(len=40), dimension(1) :: dimNames ! variable dimension names
-
-  ! open the file in write mode if it does not already exist.
-  ! If the file does exist, open it append mode
-  if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, filename, "write", domain%mpp_domain, is_restart=.false.)
-  if (.not.(file_open_success)) then
-    file_open_success = open_file(fileobj, filename, "append", domain%mpp_domain, is_restart=.false.)
-  else
-    if (.not.(variable_exists(fileobj, trim(vars(i)%name)))) then
-      call register_field(fileobj, vars(i)%name, "double", &
-                          dimensions=dim_names(i,1:num_dims))
-      call register_variable_attribute(fileobj, vars(i)%name, 'units', vars(i)%units)
-      call register_variable_attribute(fileobj, vars(i)%name, 'long_name', vars(i)%longname)
-    endif
-
-  ! register the variable axes
-  !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
-  !! x/longitude and/or y/latitude axes units
-  call MOM_register_variable_axes(fileobj, trim(fieldname), xUnits="degrees_east", yUnits="degrees_north")
-
-  if (present(corner) .or. present(edgeLengths) .or. present(timeLevel)) then
-    call get_variable_dimension_names(fileobj, trim(fieldname), dimNames)
-  endif
-
-  start(1) = 1
-  if (present(corner)) start(1) = corner
-  if (present(edgeLengths)) then
-    nread(1) = edgeLengths
-  else
-    call get_dimension_size(fileobj, trim(dimNames(1)), nread(1))
-  endif
-  ! write the data
-  call write_data(fileobj, trim(fieldname), data, corner=start, edge_Lengths=nread)
-  ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
-
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call scale_data(data, scale)
-  endif ; endif
-
-end subroutine write_field_1d_DD
 
 !> register a MOM diagnostic axis to a domain-decomposed file 
 subroutine MOM_register_diagnostic_axis(fileObj, axisName, axisLength)
@@ -2012,7 +1950,7 @@ subroutine MOM_get_nc_corner_edgelengths_noDD(fileObj, variableName, corner, edg
        call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edgelengths_noDD: You passed the myCorner argument, but did "// &
                             "not pass myCornerIndices that defines the indices corresponding to the myCorner values")
      endif
-     do i=1,size(myCorner
+     do i=1,size(myCorner)
        idx = myCornerIndices(i)
        corner(idx)=myCorner(i)
      enddo
@@ -2261,27 +2199,27 @@ subroutine MOM_get_diagnostic_axis_data(axis_data_CS, axis_name, axis_number, G,
 end subroutine MOM_get_diagnostic_axis_data
 
 !> check a netcdf file to see whether it contains the specified field
-function field_exists(file_name, variable_name) result variable_exists
+function field_exists(file_name, variable_name) result (var_exists)
   character(len=*),  intent(in) :: file_name   !< name of the file to check
   character(len=*),  intent(in) :: variable_name  !< name of the variable to check for
 
   ! local
-  logical :: variable_exists ! .true. if variable is found in file
+  logical :: var_exists ! .true. if variable is found in file
   logical :: file_open_success ! .true. if call to open_file is successful
   type(fmsNetcdfFile_t) :: fileobj ! netcdf file object returned by open_file
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, file_name, "read", is_restart=.false.)
-  variable_exists = variable_exists(fileobj, trim(variable_name))
+  var_exists = variable_exists(fileobj, trim(variable_name))
   if (check_if_open(fileobj)) call close_file(fileobj)
 end function field_exists
 
 !> get the dimesion sizes of a variable
-function field_size(file_name, variable_name, dim_sizes)
+subroutine field_size(file_name, variable_name, dim_sizes)
   character(len=*),  intent(in) :: file_name   !< name of the file to check
   character(len=*),  intent(in) :: variable_name  !< name of the variable to check for
-  integer, dimesion(:), intent(inout) dim_sizes
+  integer, dimension(:), intent(inout) :: dim_sizes !< variable dimension sizes
   ! local
   logical :: variable_exists ! .true. if variable is found in file
   logical :: file_open_success ! .true. if call to open_file is successful
@@ -2291,12 +2229,13 @@ function field_size(file_name, variable_name, dim_sizes)
   ! open the file
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, file_name, "read", is_restart=.false.)
-  if not (variable_exists(fileobj, trim(variable_name)) &
-    call MOM_error(FATAL: "MOM_io::field_size: variable "//trim(variable_name)// " not found in file "//trim(file_name)
+  if (.not. (variable_exists(fileobj, trim(variable_name)))) &
+    call MOM_error(FATAL, "MOM_io::field_size: variable "//trim(variable_name)// &
+                   " not found in file "//trim(file_name))
 
   ndims = get_variable_num_dimensions(fileObj, trim(variable_name))
   if (size(dim_sizes) .ne. ndims) &
-    call MOM_error(FATAL: "MOM_io::field_size: The number of dimensions of variable "//trim(variable_name)//&
+    call MOM_error(FATAL, "MOM_io::field_size: The number of dimensions of variable "//trim(variable_name)// &
     " does not match the size of the dim_sizes argument passed to the routine")
   call get_variable_size(fileObj, trim(variable_name), dim_sizes)
 
@@ -2923,11 +2862,11 @@ end function convert_checksum_to_string
 function convert_checksum_string_to_int(checksum_char) result(checksum_file)
   character(len=*), intent(in) :: checksum_char !< checksum character array
   ! local
-  integer(LONG_KIND),dimension(3) :: checksum_file !< checksum string corresponds to
+  integer(kind=8),dimension(3) :: checksum_file !< checksum string corresponds to
                                                    !< values from up to 3 times
   integer :: last
   integer :: start
-  integer(LONG_KIND) :: checksumh
+  integer(kind=8) :: checksumh
   integer :: num_checksumh
   integer :: k
 
