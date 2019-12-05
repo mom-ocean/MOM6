@@ -165,7 +165,7 @@ subroutine initialize_topography_from_file(D, G, param_file, US)
   filename = trim(inputdir)//trim(topo_file)
   call log_param(param_file, mdl, "INPUTDIR/TOPO_FILE", filename)
 
-  if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
+  if (.not.file_exists(filename)) call MOM_error(FATAL, &
        " initialize_topography_from_file: Unable to open "//trim(filename))
 
   D(:,:) = -9.e30*m_to_Z ! Initializing to a very large negative depth (tall mountains) everywhere
@@ -210,7 +210,7 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
   if (len_trim(topo_edits_file)==0) return
 
   topo_edits_file = trim(inputdir)//trim(topo_edits_file)
-  if (.not.file_exists(topo_edits_file, G%Domain)) call MOM_error(FATAL, &
+  if (.not.file_exists(topo_edits_file)) call MOM_error(FATAL, &
      'initialize_topography_from_file: Unable to open '//trim(topo_edits_file))
 
   ncstatus = nf90_open(trim(topo_edits_file), NF90_NOWRITE, ncid)
@@ -1265,63 +1265,63 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   if (multiple_files) file_threading = MULTIPLE
 
   call create_file(trim(filepath), vars, nFlds_used, fields, &
-                   file_threading, dG=G)ls c
+                   file_threading, dG=G)
 
   do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLatBu(I,J); enddo ; enddo
-  call write_field(trim(filepath), fields(1), out_q, "append", G%Domain)
+  call write_field(trim(filepath), vars(1)%name, out_q, "append", G%Domain)
   do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLonBu(I,J); enddo ; enddo
-  call write_field(trim(filepath), fields(2), out_q, "append", G%Domain)
-  call write_field(trim(filepath), fields(3), G%geoLatT, "append", G%Domain)
-  call write_field(trim(filepath), fields(4), G%geoLonT, "append", G%Domain)
+  call write_field(trim(filepath), vars(2)%name, out_q, "append", G%Domain)
+  call write_field(trim(filepath), vars(3)%name, G%geoLatT, "append", G%Domain)
+  call write_field(trim(filepath), vars(4)%name, G%geoLonT, "append", G%Domain)
 
   do j=js,je ; do i=is,ie ; out_h(i,j) = Z_to_m_scale*G%bathyT(i,j) ; enddo ; enddo
-  call write_field(trim(filepath), fields(5), out_h, "append", G%Domain)
+  call write_field(trim(filepath), vars(5)%name, out_h, "append", G%Domain)
   do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(i,J) = s_to_T_scale*G%CoriolisBu(I,J) ; enddo ; enddo
-  call write_field(trim(filepath), fields(6), out_q, "append", G%Domain)
+  call write_field(trim(filepath), vars(6)%name, out_q, "append", G%Domain)
 
   !   I think that all of these copies are holdovers from a much earlier
   ! ancestor code in which many of the metrics were macros that could have
   ! had reduced dimensions, and that they are no longer needed in MOM6. -RWH
   do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dxCv(i,J) ; enddo ; enddo
-  call write_field(trim(filepath), fields(7), out_v, "append", G%Domain)
+  call write_field(trim(filepath), vars(7)%name, out_v, "append", G%Domain)
   do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dyCu(I,j) ; enddo ; enddo
-  call write_field(trim(filepath), fields(8), out_u,"append", G%Domain)
+  call write_field(trim(filepath), vars(8)%name, out_u,"append", G%Domain)
 
   do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dxCu(I,j) ; enddo ; enddo
-  call write_field(trim(filepath), fields(9), out_u, "append", G%Domain)
+  call write_field(trim(filepath), vars(9)%name, out_u, "append", G%Domain)
   do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dyCv(i,J) ; enddo ; enddo
-  call write_field(trim(filepath), fields(10), out_v, "append", G%Domain)
+  call write_field(trim(filepath), vars(10)%name, out_v, "append", G%Domain)
 
   do j=js,je ; do i=is,ie ; out_h(i,j) = L_to_m_scale*G%dxT(i,j); enddo ; enddo
-  call write_field(trim(filepath), fields(11), out_h, "append", G%Domain)
+  call write_field(trim(filepath), vars(11)%name, out_h, "append", G%Domain)
   do j=js,je ; do i=is,ie ; out_h(i,j) = L_to_m_scale*G%dyT(i,j) ; enddo ; enddo
-  call write_field(trim(filepath), fields(12), out_h, "append", G%Domain
+  call write_field(trim(filepath), vars(12)%name, out_h, "append", G%Domain)
 
   do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(i,J) = L_to_m_scale*G%dxBu(I,J) ; enddo ; enddo
-  call write_field(trim(filepath), fields(13), out_q, "append", G%Domain)
+  call write_field(trim(filepath), vars(13)%name, out_q, "append", G%Domain)
   do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = L_to_m_scale*G%dyBu(I,J) ; enddo ; enddo
-  call write_field(trim(filepath), fields(14), out_q,"append", G%Domain)
+  call write_field(trim(filepath), vars(14)%name, out_q,"append", G%Domain)
 
   do j=js,je ; do i=is,ie ; out_h(i,j) = G%areaT(i,j) ; enddo ; enddo
-  call write_field(trim(filepath), fields(15), out_h, "append", G%Domain)
+  call write_field(trim(filepath), vars(15)%name, out_h, "append", G%Domain)
   do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = G%areaBu(I,J) ; enddo ; enddo
-  call write_field(trim(filepath), fields(16), out_q, "append", G%Domain)
+  call write_field(trim(filepath), vars(16)%name, out_q, "append", G%Domain)
 
   do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dx_Cv(i,J) ; enddo ; enddo
-  call write_field(trim(filepath), fields(17), out_v, "append", G%Domain)
+  call write_field(trim(filepath), vars(17)%name, out_v, "append", G%Domain)
   do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dy_Cu(I,j) ; enddo ; enddo
-  call write_field(trim(filepath), fields(18), out_u, "append", G%Domain)
-  call write_field(trim(filepath), fields(19), G%mask2dT, "append", G%Domain)
+  call write_field(trim(filepath), vars(18)%name, out_u, "append", G%Domain)
+  call write_field(trim(filepath), vars(19)%name, G%mask2dT, "append", G%Domain)
 
   if (G%bathymetry_at_vel) then
     do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = Z_to_m_scale*G%Dblock_u(I,j) ; enddo ; enddo
-    call write_field(trim(filepath), fields(20),out_u, "append", G%Domain)
+    call write_field(trim(filepath), vars(20)%name, out_u, "append", G%Domain)
     do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = Z_to_m_scale*G%Dopen_u(I,j) ; enddo ; enddo
-    call write_field(trim(filepath), fields(21), out_u, "append", G%Domain)
+    call write_field(trim(filepath), vars(21)%name, out_u, "append", G%Domain)
     do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = Z_to_m_scale*G%Dblock_v(i,J) ; enddo ; enddo
-    call write_field(trim(filepath), fields(22), out_v, "append", G%Domain)
+    call write_field(trim(filepath), vars(22)%name, out_v, "append", G%Domain)
     do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = Z_to_m_scale*G%Dopen_v(i,J) ; enddo ; enddo
-    call write_field(trim(filepath), fields(23), out_v, "append", G%Domain)
+    call write_field(trim(filepath), vars(23)%name, out_v, "append", G%Domain)
   endif
 
 end subroutine write_ocean_geometry_file

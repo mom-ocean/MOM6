@@ -1258,8 +1258,8 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
                     'Layer Center Coordinate Separation','1','i','1')
 
   call create_file(trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
-  call write_field(trim(filepath), fields(1), ds, "append")
-  call write_field(trim(filepath), fields(2), dsi, "append")
+  call write_field(trim(filepath), vars(1)%name, ds, "append")
+  call write_field(trim(filepath), vars(2)%name, dsi, "append")
 
 end subroutine ALE_writeCoordinateFile
 

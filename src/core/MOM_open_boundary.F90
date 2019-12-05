@@ -740,7 +740,7 @@ subroutine initialize_segment_data(G, OBC, PF)
                trim(fieldname),ignore_axis_atts=.true.,threading=SINGLE_FILE)
           if (siz(3) > 1) then
             fieldname = 'dz_'//trim(fieldname)
-            call field_size(filename,fieldname,siz,no_domain=.true.)
+            call field_size(filename,fieldname, siz)
             if (segment%is_E_or_W) then
               if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') then
                 allocate(segment%field(m)%dz_src(IsdB:IedB,JsdB:JedB,siz(3)))
