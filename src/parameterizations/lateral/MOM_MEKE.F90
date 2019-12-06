@@ -188,7 +188,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         call hchksum(MEKE%GM_src, 'MEKE GM_src', G%HI, scale=US%R_to_kg_m3*US%Z_to_m*US%L_to_m**2*US%s_to_T**3)
       if (associated(MEKE%MEKE)) call hchksum(MEKE%MEKE, 'MEKE MEKE', G%HI, scale=US%L_T_to_m_s**2)
       call uvchksum("MEKE SN_[uv]", SN_u, SN_v, G%HI, scale=US%s_to_T)
-      call uvchksum("MEKE h[uv]", hu, hv, G%HI, haloshift=1, scale=GV%H_to_m)
+      call uvchksum("MEKE h[uv]", hu, hv, G%HI, haloshift=1, scale=GV%H_to_m*US%L_to_m**2)
     endif
 
     sdt = dt*CS%MEKE_dtScale ! Scaled dt to use for time-stepping
