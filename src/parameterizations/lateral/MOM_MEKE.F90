@@ -1003,6 +1003,7 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   real    :: L_rescale     ! A rescaling factor for length from the internal representation in this
                            ! run to the representation in a restart file.
   real    :: MEKE_restoring_timescale ! The timescale used to nudge MEKE toward its equilibrium value.
+  real :: cdrag            ! The default bottom drag coefficient [nondim].
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   logical :: laplacian, biharmonic, useVarMix, coldStart
   ! This include declares and sets the variable "version".
@@ -1197,10 +1198,14 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
                  units="nondim", default=0.0)
 
   ! Nonlocal module parameters
-  call get_param(param_file, mdl, "CDRAG", CS%cdrag, &
+  call get_param(param_file, mdl, "CDRAG", cdrag, &
                  "CDRAG is the drag coefficient relating the magnitude of "//&
                  "the velocity field to the bottom stress.", units="nondim", &
                  default=0.003)
+  call get_param(param_file, mdl, "CDRAG_MEKE", CS%cdrag, &
+                 "CDRAG is the drag coefficient relating the magnitude of "//&
+                 "the velocity field to the bottom stress.", units="nondim", &
+                 default=cdrag)
   call get_param(param_file, mdl, "LAPLACIAN", laplacian, default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "BIHARMONIC", biharmonic, default=.false., do_not_log=.true.)
 
