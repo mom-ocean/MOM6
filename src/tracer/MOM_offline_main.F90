@@ -17,7 +17,7 @@ use MOM_diag_mediator,        only : diag_ctrl, post_data, register_diag_field
 use MOM_domains,              only : sum_across_PEs, pass_var, pass_vector
 use MOM_error_handler,        only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_error_handler,        only : callTree_enter, callTree_leave
-use MOM_file_parser,           only : read_param, get_param, log_version, param_file_type
+use MOM_file_parser,          only : read_param, get_param, log_version, param_file_type
 use MOM_forcing_type,         only : forcing
 use MOM_grid,                 only : ocean_grid_type
 use MOM_io,                   only : MOM_read_data, MOM_read_vector

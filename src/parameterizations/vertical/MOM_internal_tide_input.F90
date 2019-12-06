@@ -370,7 +370,6 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
                fail_if_missing=.true.)
   filename = trim(CS%inputdir) // trim(h2_file)
   call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
-
   call MOM_read_data(filename, 'h2', itide%h2, G%domain, time_level=1, scale=US%m_to_Z**2)
 
   call get_param(param_file, mdl, "FRACTIONAL_ROUGHNESS_MAX", max_frac_rough, &

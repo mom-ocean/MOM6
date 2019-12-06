@@ -394,7 +394,6 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS)
   real :: scale  ! A constant heat flux or dimensionally rescaled scaling factor
                  ! [J m-2 T-1 ~> W m-2] or [s T-1 ~> 1]
   integer :: i, j, isd, ied, jsd, jed, id
-
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   if (associated(CS)) then
@@ -440,9 +439,7 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS)
     call get_param(param_file, mdl, "GEOTHERMAL_VARNAME", geotherm_var, &
                  "The name of the geothermal heating variable in "//&
                  "GEOTHERMAL_FILE.", default="geo_heat")
-
     call MOM_read_data(filename, trim(geotherm_var), CS%geo_heat, G%Domain)
-
     do j=jsd,jed ; do i=isd,ied
       CS%geo_heat(i,j) = (G%mask2dT(i,j) * scale) * CS%geo_heat(i,j)
     enddo ; enddo
