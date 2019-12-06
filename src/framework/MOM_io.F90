@@ -461,7 +461,7 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, corner, ed
   type(MOM_domain_type),intent(in) :: domain !< MOM domain attribute with the mpp_domain decomposition
   integer, dimension(1), optional, intent(in) :: corner !< starting index of data buffer. Default is 1
   integer, dimension(1), optional, intent(in) :: edge_lengths !< number of data values to read in; default is the 
-                                                             !! variable size
+                                                          !! variable size
   real, optional, intent(in) :: time !< time value to write
   real, optional, intent(in) :: scale !< A scaling factor that the fields are multiplied by before they are written.
   ! local
@@ -513,7 +513,6 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, corner, ed
         call get_unlimited_dimension_name(fileobj,dim_unlim_name)
         call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
         if (dim_unlim_size .lt. unlimited) time_index=dim_unlim_size+1
-
         call write_data(fileobj, trim(dim_unlim_name), (/time/), corner=(/time_index/),edge_lengths=(/1/))
       endif
       if (dim_unlim_index .gt. 0) &
@@ -619,7 +618,7 @@ subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, corner, ed
   character(len=*), intent(in) :: mode !< "write", "overwrite", or "append"
   type(MOM_domain_type),  intent(in) :: domain !< MOM domain attribute with the mpp_domain decomposition
   integer, dimension(3), optional, intent(in) :: corner !< starting index of data buffer. Default is 1
-  integer, dimension(3), optional, intent(in) :: edge_lengths !< number of data values to read in; default is the 
+  integer, dimension(3), optional, intent(in) :: edge_lengths !< number of data values to read in; default is the
                                                              !! variable size
   real, optional, intent(in) :: time !< time value to write
   real, optional, intent(in) :: scale  !< A scaling factor that the fields are multiplied by before they are written.
@@ -674,9 +673,9 @@ subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, corner, ed
         call get_unlimited_dimension_name(fileobj,dim_unlim_name)
         call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
         if (dim_unlim_size .lt. unlimited) time_index=dim_unlim_size+1
-
         call write_data(fileobj, trim(dim_unlim_name), (/time/), corner=(/time_index/),edge_lengths=(/1/))
       endif
+
       if (dim_unlim_index .gt. 0) &
           call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
                           unlim_dim_level=time_index)
@@ -754,7 +753,6 @@ subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, corner, ed
         call get_unlimited_dimension_name(fileobj,dim_unlim_name)
         call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
         if (dim_unlim_size .lt. unlimited) time_index=dim_unlim_size+1
-
         call write_data(fileobj, trim(dim_unlim_name), (/time/), corner=(/time_index/),edge_lengths=(/1/))
       endif
       if (dim_unlim_index .gt. 0) &
@@ -768,6 +766,51 @@ subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, corner, ed
   if (check_if_open(fileobj)) call close_file(fileobj)
   deallocate(data_tmp)
 end subroutine write_field_4d_DD
+
+!> This routine uses the fms_io function write_data to write a scalar variable named "fieldname"
+!! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
+!! file write procedure.
+subroutine write_scalar(filename, fieldname, data, mode, time)
+  character(len=*), intent(in) :: filename !< The name of the file to read
+  character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
+  real, intent(in) :: data !< The 1-dimensional data array to pass to read_data
+  character(len=*), intent(in) :: mode !< "write", "overwrite", or "append"
+  real, optional, intent(in) :: time !< time value to write
+  ! local
+  type(FmsNetcdfFile_t) :: fileobj ! netCDF file object returned by call to open_file
+  logical :: file_open_success !.true. if call to open_file is successful
+  integer :: time_index
+  integer :: dim_unlim_size, dim_unlim_index ! size and dimension index of the unlimited dimension
+  real :: file_time ! most recent time currently written to file
+  character(len=40) :: dim_unlim_name ! name of the unlimited dimension in the file
+  ! open the file
+  if (.not.(check_if_open(fileobj))) &
+    file_open_success = open_file(fileobj, filename, lowercase(trim(mode)), is_restart=.false.)
+
+  time_index=1
+  dim_unlim_size=0
+  dim_unlim_name=""
+  ! write the data
+  if (lowercase(trim(mode)) .eq. "append") then
+    if (present(time)) then
+      ! write the time value if it is not already written to the file
+      file_time = read_most_recent_time(fileobj)
+      if (time .gt. file_time+EPSILON(time)) then
+        call get_unlimited_dimension_name(fileobj,dim_unlim_name)
+        call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
+        if (dim_unlim_size .lt. unlimited) time_index=dim_unlim_size+1
+
+        call write_data(fileobj, trim(dim_unlim_name), (/time/), corner=(/time_index/),edge_lengths=(/1/))
+      endif
+      if (dim_unlim_index .gt. 0) &
+          call write_data(fileobj, trim(fieldname), data, unlim_dim_level=time_index)
+    endif
+  else
+    call write_data(fileobj, trim(fieldname), data)
+  endif
+  ! close the file
+  if (check_if_open(fileobj)) call close_file(fileobj)
+end subroutine write_scalar
 
 !> This function uses the fms_io function write_data to write a 1-D non-domain-decomposed data field named "fieldname"
 !! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
@@ -849,51 +892,6 @@ end subroutine write_field_1d_noDD
 !> This function uses the fms_io function write_data to write a scalar variable named "fieldname"
 !! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
 !! file write procedure.
-subroutine write_scalar(filename, fieldname, data, mode, time)
-  character(len=*), intent(in) :: filename !< The name of the file to read
-  character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
-  real, intent(in) :: data !< The 1-dimensional data array to pass to read_data
-  character(len=*), intent(in) :: mode !< "write", "overwrite", or "append"
-  real, optional, intent(in) :: time !< time value to write
-  ! local
-  type(FmsNetcdfFile_t) :: fileobj ! netCDF file object returned by call to open_file
-  logical :: file_open_success !.true. if call to open_file is successful
-  integer :: time_index
-  integer :: dim_unlim_size, dim_unlim_index ! size and dimension index of the unlimited dimension
-  real :: file_time ! most recent time currently written to file
-  character(len=40) :: dim_unlim_name ! name of the unlimited dimension in the file
-  ! open the file
-  if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, filename, lowercase(trim(mode)), is_restart=.false.)
-
-  time_index=1
-  dim_unlim_size=0
-  dim_unlim_name=""
-  ! write the data
-  if (lowercase(trim(mode)) .eq. "append") then
-    if (present(time)) then
-      ! write the time value if it is not already written to the file
-      file_time = read_most_recent_time(fileobj)
-      if (time .gt. file_time+EPSILON(time)) then
-        call get_unlimited_dimension_name(fileobj,dim_unlim_name)
-        call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
-        if (dim_unlim_size .lt. unlimited) time_index=dim_unlim_size+1
-
-        call write_data(fileobj, trim(dim_unlim_name), (/time/), corner=(/time_index/),edge_lengths=(/1/))
-      endif
-      if (dim_unlim_index .gt. 0) &
-          call write_data(fileobj, trim(fieldname), data, unlim_dim_level=time_index)
-    endif
-  else
-    call write_data(fileobj, trim(fieldname), data)
-  endif
-  ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
-end subroutine write_scalar
-
-!> This function uses the fms_io function write_data to write a 2-D non-domain-decomposed data field named "fieldname"
-!! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
-!! file write procedure.
 subroutine write_field_2d_noDD(filename, fieldname, data, mode, corner, edge_lengths, time, scale)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
@@ -956,7 +954,6 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, corner, edge_len
         call get_unlimited_dimension_name(fileobj,dim_unlim_name)
         call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
         if (dim_unlim_size .lt. unlimited) time_index=dim_unlim_size+1
-
         call write_data(fileobj, trim(dim_unlim_name), (/time/), corner=(/time_index/),edge_lengths=(/1/))
       endif
       if (dim_unlim_index .gt. 0) &
@@ -999,7 +996,6 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, corner, edge_len
 
   ndims = get_variable_num_dimensions(fileobj, trim(fieldname))
   dim_unlim_index = get_variable_unlimited_dimension_index(fileobj, trim(fieldname))
-
   start(:) = 1
   nwrite(:) = 1
   if (present(corner)) then
@@ -1103,6 +1099,7 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, corner, edge_len
   time_index=1
   dim_unlim_size=0
   dim_unlim_name=""
+
   ! write the data
   if (lowercase(trim(mode)) .eq. "append") then
     if (present(time)) then
@@ -1115,6 +1112,7 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, corner, edge_len
 
         call write_data(fileobj, trim(dim_unlim_name), (/time/), corner=(/time_index/),edge_lengths=(/1/))
       endif
+
       if (dim_unlim_index .gt. 0) &
           call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
                           unlim_dim_level=time_index)
@@ -1743,7 +1741,6 @@ subroutine MOM_read_data_2d_noDD_diag_axes(filename, fieldname, data, define_dia
   integer, dimension(2),  optional, intent(in) :: corner !< starting indices of data buffer. Default is 1
   integer, dimension(2),  optional, intent(in) :: edge_lengths !< number of data values to read in.
   !! Default values are the variable dimension sizes
-
   integer, optional, intent(in) :: time_level !< time level to read
   real, optional, intent(in):: scale !< A scaling factor that the field is multiplied by
   character(len=*), optional, intent(in) :: grid_type !< grid type; either 'b' or 't'
