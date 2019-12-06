@@ -538,9 +538,10 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
 
       call find_eta(h, tv, G, GV, US, eta)
       do k=1,nz ; do j=js,je ; do i=is,ie
-        tmp1(i,j,k) = (eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
+        tmp1(i,j,k) = US%Z_to_m*(eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
       enddo ; enddo ; enddo
-      vol_tot = US%Z_to_m*reproducing_sum(tmp1, sums=vol_lay)
+      vol_tot = reproducing_sum(tmp1, sums=vol_lay)
+      do k=1,nz ; vol_lay(k) = US%m_to_Z * vol_lay(k) ; enddo
     else
       do k=1,nz ; do j=js,je ; do i=is,ie
         tmp1(i,j,k) = H_to_kg_m2 * h(i,j,k) * areaTm(i,j)

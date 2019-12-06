@@ -159,7 +159,7 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
   call initialize_grid_rotation_angle(G, PF)
 
 ! Compute global integrals of grid values for later use in scalar diagnostics !
-  call compute_global_grid_integrals(G)
+  call compute_global_grid_integrals(G, US=US)
 
 ! Write out all of the grid data used by this run.
   if (write_geom) call write_ocean_geometry_file(G, PF, output_dir, US=US)

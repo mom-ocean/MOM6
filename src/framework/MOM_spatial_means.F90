@@ -43,7 +43,7 @@ function global_area_mean(var, G, scale)
   do j=js,je ; do i=is,ie
     tmpForSumming(i,j) = var(i,j) * (scalefac * G%areaT(i,j) * G%mask2dT(i,j))
   enddo ; enddo
-  global_area_mean = reproducing_sum(tmpForSumming) * (G%US%m_to_L**2 * G%IareaT_global)
+  global_area_mean = reproducing_sum(tmpForSumming) * G%IareaT_global
 
 end function global_area_mean
 
@@ -182,17 +182,20 @@ end function global_mass_integral
 
 !> Determine the global mean of a field along rows of constant i, returning it
 !! in a 1-d array using the local indexing. This uses reproducing sums.
-subroutine global_i_mean(array, i_mean, G, mask, scale)
+subroutine global_i_mean(array, i_mean, G, mask, scale, tmp_scale)
   type(ocean_grid_type),            intent(inout) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: array  !< The variable being averaged
   real, dimension(SZJ_(G)),         intent(out)   :: i_mean !< Global mean of array along its i-axis
   real, dimension(SZI_(G),SZJ_(G)), &
-                          optional, intent(in)    :: mask !< An array used for weighting the i-mean
-  real,                   optional, intent(in)    :: scale !< A rescaling factor for the variable
+                          optional, intent(in)    :: mask  !< An array used for weighting the i-mean
+  real,                   optional, intent(in)    :: scale !< A rescaling factor for the output variable
+  real,                   optional, intent(in)    :: tmp_scale !< A rescaling factor for the internal
+                                                           !! calculations that is removed from the output
 
   ! Local variables
   type(EFP_type), allocatable, dimension(:) :: asum, mask_sum
   real :: scalefac  ! A scaling factor for the variable.
+  real :: unscale   ! A factor for undoing any internal rescaling before output.
   real :: mask_sum_r
   integer :: is, ie, js, je, idg_off, jdg_off
   integer :: i, j
@@ -201,6 +204,10 @@ subroutine global_i_mean(array, i_mean, G, mask, scale)
   idg_off = G%idg_offset ; jdg_off = G%jdg_offset
 
   scalefac = 1.0 ; if (present(scale)) scalefac = scale
+  unscale = 1.0
+  if (present(tmp_scale)) then ; if (tmp_scale /= 0.0) then
+    scalefac = scalefac * tmp_scale ; unscale = 1.0 / tmp_scale
+  endif ; endif
   call reset_EFP_overflow_error()
 
   allocate(asum(G%jsg:G%jeg))
@@ -253,24 +260,29 @@ subroutine global_i_mean(array, i_mean, G, mask, scale)
     enddo
   endif
 
+  if (unscale /= 1.0) then ; do j=js,je ; i_mean(j) = unscale*i_mean(j) ; enddo ; endif
+
   deallocate(asum)
 
 end subroutine global_i_mean
 
 !> Determine the global mean of a field along rows of constant j, returning it
 !! in a 1-d array using the local indexing. This uses reproducing sums.
-subroutine global_j_mean(array, j_mean, G, mask, scale)
+subroutine global_j_mean(array, j_mean, G, mask, scale, tmp_scale)
   type(ocean_grid_type),            intent(inout) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: array  !< The variable being averaged
   real, dimension(SZI_(G)),         intent(out)   :: j_mean !<  Global mean of array along its j-axis
   real, dimension(SZI_(G),SZJ_(G)), &
-                          optional, intent(in)    :: mask !< An array used for weighting the j-mean
-  real,                   optional, intent(in)    :: scale !< A rescaling factor for the variable
+                          optional, intent(in)    :: mask  !< An array used for weighting the j-mean
+  real,                   optional, intent(in)    :: scale !< A rescaling factor for the output variable
+  real,                   optional, intent(in)    :: tmp_scale !< A rescaling factor for the internal
+                                                           !! calculations that is removed from the output
 
   ! Local variables
   type(EFP_type), allocatable, dimension(:) :: asum, mask_sum
   real :: mask_sum_r
   real :: scalefac  ! A scaling factor for the variable.
+  real :: unscale   ! A factor for undoing any internal rescaling before output.
   integer :: is, ie, js, je, idg_off, jdg_off
   integer :: i, j
 
@@ -278,6 +290,10 @@ subroutine global_j_mean(array, j_mean, G, mask, scale)
   idg_off = G%idg_offset ; jdg_off = G%jdg_offset
 
   scalefac = 1.0 ; if (present(scale)) scalefac = scale
+  unscale = 1.0
+  if (present(tmp_scale)) then ; if (tmp_scale /= 0.0) then
+    scalefac = scalefac * tmp_scale ; unscale = 1.0 / tmp_scale
+  endif ; endif
   call reset_EFP_overflow_error()
 
   allocate(asum(G%isg:G%ieg))
@@ -329,6 +345,8 @@ subroutine global_j_mean(array, j_mean, G, mask, scale)
       j_mean(i) = EFP_to_real(asum(i+idg_off)) / real(G%jeg-G%jsg+1)
     enddo
   endif
+
+  if (unscale /= 1.0) then ; do i=is,ie ; j_mean(i) = unscale*j_mean(i) ; enddo ; endif
 
   deallocate(asum)
 
