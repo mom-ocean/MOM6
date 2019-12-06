@@ -424,7 +424,8 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS)
         call find_neutral_surface_positions_continuous(G%ke,                                    &
                 CS%Pint(i,j,:), CS%Tint(i,j,:), CS%Sint(i,j,:), CS%dRdT(i,j,:), CS%dRdS(i,j,:),            &
                 CS%Pint(i+1,j,:), CS%Tint(i+1,j,:), CS%Sint(i+1,j,:), CS%dRdT(i+1,j,:), CS%dRdS(i+1,j,:),  &
-                CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:) )
+                CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:),           &
+                k_bot(I,j), k_bot(I+1,j), zeta_bot(I,j), zeta_bot(I+1,j))
       else
         call find_neutral_surface_positions_discontinuous(CS, G%ke,                                            &
             CS%P_i(i,j,:,:), h(i,j,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:), CS%ppoly_coeffs_T(i,j,:,:),           &
@@ -441,10 +442,11 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS)
   do J = G%jsc-1, G%jec ; do i = G%isc, G%iec
     if (G%mask2dCv(i,J) > 0.) then
       if (CS%continuous_reconstruction) then
-        call find_neutral_surface_positions_continuous(G%ke,                                  &
+        call find_neutral_surface_positions_continuous(G%ke,                                              &
                 CS%Pint(i,j,:), CS%Tint(i,j,:), CS%Sint(i,j,:), CS%dRdT(i,j,:), CS%dRdS(i,j,:),           &
                 CS%Pint(i,j+1,:), CS%Tint(i,j+1,:), CS%Sint(i,j+1,:), CS%dRdT(i,j+1,:), CS%dRdS(i,j+1,:), &
-                CS%vPoL(i,J,:), CS%vPoR(i,J,:), CS%vKoL(i,J,:), CS%vKoR(i,J,:), CS%vhEff(i,J,:) )
+                CS%vPoL(i,J,:), CS%vPoR(i,J,:), CS%vKoL(i,J,:), CS%vKoR(i,J,:), CS%vhEff(i,J,:),          &
+                k_bot(i,J), k_bot(i,J+1), zeta_bot(i,J), zeta_bot(i,J+1))
       else
         call find_neutral_surface_positions_discontinuous(CS, G%ke,                                            &
             CS%P_i(i,j,:,:), h(i,j,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:), CS%ppoly_coeffs_T(i,j,:,:),           &
@@ -894,7 +896,7 @@ end function fvlsq_slope
 
 !> Returns positions within left/right columns of combined interfaces using continuous reconstructions of T/S
 subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, Sr, &
-                                                     dRdTr, dRdSr, PoL, PoR, KoL, KoR, hEff)
+                                                     dRdTr, dRdSr, PoL, PoR, KoL, KoR, hEff, bl_kl, bl_kr, bl_zl, bl_zr)
   integer,                    intent(in)    :: nk    !< Number of levels
   real, dimension(nk+1),      intent(in)    :: Pl    !< Left-column interface pressure [Pa]
   real, dimension(nk+1),      intent(in)    :: Tl    !< Left-column interface potential temperature [degC]
@@ -913,6 +915,10 @@ subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdS
   integer, dimension(2*nk+2), intent(inout) :: KoL   !< Index of first left interface above neutral surface
   integer, dimension(2*nk+2), intent(inout) :: KoR   !< Index of first right interface above neutral surface
   real, dimension(2*nk+1),    intent(inout) :: hEff  !< Effective thickness between two neutral surfaces [Pa]
+  integer, optional,          intent(in)    :: bl_kl !< Layer index of the boundary layer (left)
+  integer, optional,          intent(in)    :: bl_kr !< Layer index of the boundary layer (right)
+  integer, optional,          intent(in)    :: bl_zl !< Nondimensional position of the boundary layer (left)
+  integer, optional,          intent(in)    :: bl_zr !< Nondimensional position of the boundary layer (right)
 
   ! Local variables
   integer :: ns                     ! Number of neutral surfaces
@@ -929,9 +935,19 @@ subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdS
   real    :: lastP_left, lastP_right
 
   ns = 2*nk+2
+  kr = 1 ; 
+  kl = 1 ;
+  lastP_right = 0.
+  lastP_left = 0.
+
+  if (PRESENT(bl_kl)) kl = bl_kl
+  if (PRESENT(bl_kr)) kr = bl_kr
+  if (PRESENT(bl_zl)) lastP_left  = bl_zl
+  if (PRESENT(bl_zr)) lastP_right  = bl_zr
+
   ! Initialize variables for the search
-  kr = 1 ; lastK_right = 1 ; lastP_right = 0.
-  kl = 1 ; lastK_left = 1 ; lastP_left = 0.
+  lastK_right = kr 
+  lastK_left  = kl
   reached_bottom = .false.
 
   ! Loop over each neutral surface, working from top to bottom
