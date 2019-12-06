@@ -485,8 +485,8 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         else
           uhh(I) = uhr(I,j,k)
         endif
-       !ts2(I) = 0.5*(1.0 + uhh(I)/(hprev(i+1,j,k)+h_neglect))
-        CFL(I) = - uhh(I)/(hprev(i+1,j,k)+h_neglect) ! CFL is positive
+       !ts2(I) = 0.5*(1.0 + uhh(I) / (hprev(i+1,j,k) + h_neglect*G%areaT(i+1,j)))
+        CFL(I) = - uhh(I) / (hprev(i+1,j,k) + h_neglect*G%areaT(i+1,j)) ! CFL is positive
       else
         hup = hprev(i,j,k) - G%areaT(i,j)*min_h
         hlos = MAX(0.0,-uhr(I-1,j,k))
@@ -497,8 +497,8 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         else
           uhh(I) = uhr(I,j,k)
         endif
-       !ts2(I) = 0.5*(1.0 - uhh(I)/(hprev(i,j,k)+h_neglect))
-        CFL(I) = uhh(I)/(hprev(i,j,k)+h_neglect) ! CFL is positive
+       !ts2(I) = 0.5*(1.0 - uhh(I) / (hprev(i,j,k) + h_neglect*G%areaT(i,j)))
+        CFL(I) = uhh(I) / (hprev(i,j,k) + h_neglect*G%areaT(i,j)) ! CFL is positive
       endif
     enddo
 
@@ -573,7 +573,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
           ! Original implementation of PLM
          !flux_x(I,m) = uhh(I)*(Tr(m)%t(i+1,j,k) - slope_x(i+1,m)*ts2(I))
         endif
-       !ts2(I) = 0.5*(1.0 - uhh(I)/(hprev(i,j,k)+h_neglect))
+       !ts2(I) = 0.5*(1.0 - uhh(I)/(hprev(i,j,k)+h_neglect*G%areaT(i,j)))
       enddo ; enddo
     endif ! usePPM
 
@@ -856,8 +856,8 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         else
           vhh(i,J) = vhr(i,J,k)
         endif
-       !ts2(i) = 0.5*(1.0 + vhh(i,J) / (hprev(i,j+1,k)+h_neglect))
-        CFL(i) = - vhh(i,J) / (hprev(i,j+1,k)+h_neglect) ! CFL is positive
+       !ts2(i) = 0.5*(1.0 + vhh(i,J) / (hprev(i,j+1,k) + h_neglect*G%areaT(i,j+1))
+        CFL(i) = - vhh(i,J) / (hprev(i,j+1,k) + h_neglect*G%areaT(i,j+1)) ! CFL is positive
       else
         hup = hprev(i,j,k) - G%areaT(i,j)*min_h
         hlos = MAX(0.0,-vhr(i,J-1,k))
@@ -868,8 +868,8 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         else
           vhh(i,J) = vhr(i,J,k)
         endif
-       !ts2(i) = 0.5*(1.0 - vhh(i,J) / (hprev(i,j,k)+h_neglect))
-        CFL(i) = vhh(i,J) / (hprev(i,j,k)+h_neglect) ! CFL is positive
+       !ts2(i) = 0.5*(1.0 - vhh(i,J) / (hprev(i,j,k) + h_neglect*G%areaT(i,j)))
+        CFL(i) = vhh(i,J) / (hprev(i,j,k) + h_neglect*G%areaT(i,j)) ! CFL is positive
       endif
     enddo
 
