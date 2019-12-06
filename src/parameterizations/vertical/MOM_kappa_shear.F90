@@ -34,10 +34,10 @@ public kappa_shear_is_used, kappa_shear_at_vertex
 !> This control structure holds the parameters that regulate shear mixing
 type, public :: Kappa_shear_CS ; private
   real    :: RiNo_crit       !< The critical shear Richardson number for
-                             !! shear-entrainment. The theoretical value is 0.25.
+                             !! shear-entrainment [nondim]. The theoretical value is 0.25.
                              !! The values found by Jackson et al. are 0.25-0.35.
   real    :: Shearmix_rate   !< A nondimensional rate scale for shear-driven
-                             !! entrainment.  The value given by Jackson et al.
+                             !! entrainment [nondim].  The value given by Jackson et al.
                              !! is 0.085-0.089.
   real    :: FRi_curvature   !<   A constant giving the curvature of the function
                              !! of the Richardson number that relates shear to
@@ -50,15 +50,16 @@ type, public :: Kappa_shear_CS ; private
                              !! shear (i.e. proportional to |S|*tke) [nondim].
                              !! The values found by Jackson et al. are 0.14-0.12.
   real    :: lambda          !<   The coefficient for the buoyancy length scale
-                             !! in the kappa equation.  Nondimensional.
+                             !! in the kappa equation [nondim].
                              !! The values found by Jackson et al. are 0.82-0.81.
   real    :: lambda2_N_S     !<   The square of the ratio of the coefficients of
                              !! the buoyancy and shear scales in the diffusivity
-                             !! equation, 0 to eliminate the shear scale. Nondim.
+                             !! equation, 0 to eliminate the shear scale [nondim].
   real    :: TKE_bg          !<   The background level of TKE [Z2 T-2 ~> m2 s-2].
   real    :: kappa_0         !<   The background diapycnal diffusivity [Z2 T-1 ~> m2 s-1].
-  real    :: kappa_tol_err   !<   The fractional error in kappa that is tolerated.
-  real    :: Prandtl_turb    !< Prandtl number used to convert Kd_shear into viscosity.
+  real    :: kappa_trunc     !< Diffusivities smaller than this are rounded to 0 [Z2 T-1 ~> m2 s-1].
+  real    :: kappa_tol_err   !<   The fractional error in kappa that is tolerated [nondim].
+  real    :: Prandtl_turb    !< Prandtl number used to convert Kd_shear into viscosity [nondim].
   integer :: nkml            !<   The number of layers in the mixed layer, as
                              !! treated in this routine.  If the pieces of the
                              !! mixed layer are not to be treated collectively,
@@ -67,6 +68,9 @@ type, public :: Kappa_shear_CS ; private
                              !! to estimate the instantaneous shear-driven mixing.
   integer :: max_KS_it       !< The maximum number of iterations that may be used
                              !! to estimate the time-averaged diffusivity.
+  logical :: dKdQ_iteration_bug !< If true. use an older, dimensionally inconsistent estimate of
+                             !! the derivative of diffusivity with energy in the Newton's method
+                             !! iteration.  The bug causes undercorrections when dz > 1m.
   logical :: KS_at_vertex    !< If true, do the calculations of the shear-driven mixing
                              !! at the cell vertices (i.e., the vorticity points).
   logical :: eliminate_massless !< If true, massless layers are merged with neighboring
@@ -734,7 +738,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
     local_src_avg, & ! The time-integral of the local source [nondim].
     tol_min, & ! Minimum tolerated ksrc for the corrector step [T-1 ~> s-1].
     tol_max, & ! Maximum tolerated ksrc for the corrector step [T-1 ~> s-1].
-    tol_chg, & ! The tolerated change integrated in time [nondim].
+    tol_chg, & ! The tolerated kappa change integrated over a timestep [nondim].
     dist_from_top, &  ! The distance from the top surface [Z ~> m].
     local_src     ! The sum of all sources of kappa, including kappa_src and
                   ! sources from the elliptic term [T-1 ~> s-1].
@@ -747,11 +751,14 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                         ! [Pa Z-1 = kg m-1 s-2 Z-1 ~> kg m-2 s-2].
   real :: g_R0          ! g_R0 is a rescaled version of g/Rho [Z R-1 T-2 ~> m4 kg-1 s-2].
   real :: Norm          ! A factor that normalizes two weights to 1 [Z-2 ~> m-2].
-  real :: tol_dksrc, tol2  ! ### Tolerances that need to be set better later.
+  real :: tol_dksrc     ! Tolerance for the change in the kappa source within an iteration
+                        ! relative to the local source [nondim].
+  real :: tol2          ! The tolerance for the change in the kappa source within an iteration
+                        ! relative to the average local source over previous iterations [nondim].
   real :: tol_dksrc_low ! The tolerance for the fractional decrease in ksrc
-                        ! within an iteration.  0 < tol_dksrc_low < 1.
+                        ! within an iteration [nondim].  0 < tol_dksrc_low < 1.
   real :: Ri_crit       !   The critical shear Richardson number for shear-
-                        ! driven mixing. The theoretical value is 0.25.
+                        ! driven mixing [nondim]. The theoretical value is 0.25.
   real :: dt_rem        !   The remaining time to advance the solution [T ~> s].
   real :: dt_now        !   The time step used in the current iteration [T ~> s].
   real :: dt_wt         !   The fractional weight of the current iteration [nondim].
@@ -794,7 +801,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   gR0 = GV%z_to_H*GV%H_to_Pa
   g_R0 = (US%L_to_Z**2 * GV%g_Earth) / (GV%Rho0)
   k0dt = dt*CS%kappa_0
-  ! These are hard-coded for now.  Perhaps these could be made dynamic later?
+  !### These 3 tolerances are hard-coded and fixed for now.  Perhaps these could be made dynamic later?
   ! tol_dksrc = 0.5*tol_ksrc_chg ; tol_dksrc_low = 1.0 - 1.0/tol_ksrc_chg ?
   tol_dksrc = 10.0 ; tol_dksrc_low = 0.95 ; tol2 = 2.0*CS%kappa_tol_err
   dt_refinements = 5 ! Selected so that 1/2^dt_refinements < 1-tol_dksrc_low
@@ -1464,7 +1471,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   TKE_min = max(CS%TKE_bg, 1.0E-20*US%m_to_Z**2*US%T_to_s**2)
   Ri_crit = CS%Rino_crit
   Ilambda2 = 1.0 / CS%lambda**2
-  kappa_trunc = 0.01*kappa0  ! ### CHANGE THIS HARD-WIRING LATER?
+  kappa_trunc = CS%kappa_trunc
   do_Newton = .false. ; abort_Newton = .false.
   tol_err = CS%kappa_tol_err
   Newton_err = 0.2     ! This initial value may be automatically reduced later.
@@ -1691,11 +1698,13 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
 
         cK(K+1) = bK * Idz(k)
         cKcomp = bK * (Idz(k-1)*cKcomp + decay_term_k) ! = 1-cK(K+1)
-        !### The following expression appears to be dimensionally inconsistent in length. -RWH
-        dKdQ(K) = bK * (Idz(k-1)*dKdQ(K-1)*cQ(K) + &
+        if (CS%dKdQ_iteration_bug) then
+          dKdQ(K) = bK * (Idz(k-1)*dKdQ(K-1)*cQ(K) + &
                       US%m_to_Z*(N2(K)*Ilambda2 + f2) * I_Q**2 * kappa(K) )
-        !  I think that the second term needs to be multiplied by dz_Int(K):
-        !             dz_Int(K)*(N2(K)*Ilambda2 + f2) * I_Q**2 * kappa(K) )
+        else
+          dKdQ(K) = bK * (Idz(k-1)*dKdQ(K-1)*cQ(K) + &
+                      dz_Int(K)*(N2(K)*Ilambda2 + f2) * I_Q**2 * kappa(K) )
+        endif
         dK(K) = bK * (kap_src + Idz(k-1)*dK(K-1) + Idz(k-1)*dKdQ(K-1)*dQ(K-1))
 
         ! Truncate away negligibly small values of kappa.
@@ -1822,11 +1831,9 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
         kap_src = dz_Int(K) * (K_src(K) - I_Ld2(K)*kappa_prev(K)) + &
                             (Idz(k-1)*(kappa_prev(k-1)-kappa_prev(k)) - &
                              Idz(k)*(kappa_prev(k)-kappa_prev(k+1)))
-        !### The last line of the following appears to be dimensionally inconsistent with the first two.
-        !  I think that the term on the last line needs to be multiplied by dz_Int(K).
         K_err_lin = -Idz(k-1)*(dK(K-1)-dK(K)) + Idz(k)*(dK(K)-dK(K+1)) + &
                      dz_Int(K)*I_Ld2_debug(K)*dK(K) - kap_src - &
-                     US%m_to_Z*(N2(K)*Ilambda2 + f2)*I_Q**2*kappa_prev(K) * dQ(K)
+                     dz_Int(K)*(N2(K)*Ilambda2 + f2)*I_Q**2*kappa_prev(K) * dQ(K)
 
         tke_src = dz_Int(K) * ((kappa_prev(K) + kappa0)*S2(K) - &
                      kappa_prev(K)*N2(K) - (TKE_prev(K) - q0)*TKE_decay(K)) - &
@@ -1950,8 +1957,9 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_kappa_shear"  ! This module's name.
+  real :: kappa_0_unscaled  ! The value of kappa_0 in MKS units [m2 s-1]
   real :: KD_normal ! The KD of the main model, read here only as a parameter
-                    ! for setting the default of KD_SMOOTH
+                    ! for setting the default of KD_SMOOTH in MKS units [m2 s-1]
 
   if (associated(CS)) then
     call MOM_error(WARNING, "kappa_shear_init called with an associated "// &
@@ -1995,7 +2003,11 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
                  "The background diffusivity that is used to smooth the "//&
                  "density and shear profiles before solving for the "//&
                  "diffusivities. Defaults to value of KD.", &
-                 units="m2 s-1", default=KD_normal, scale=US%m2_s_to_Z2_T)
+                 units="m2 s-1", default=KD_normal, scale=US%m2_s_to_Z2_T, unscaled=kappa_0_unscaled)
+  call get_param(param_file, mdl, "KD_TRUNC_KAPPA_SHEAR", CS%kappa_trunc, &
+                 "The value of shear-driven diffusivity that is considered negligible "//&
+                 "and is rounded down to 0. The default is 1% of KD_KAPPA_SHEAR_0.", &
+                 units="m2 s-1", default=0.01*kappa_0_unscaled, scale=US%m2_s_to_Z2_T)
   call get_param(param_file, mdl, "FRI_CURVATURE", CS%FRi_curvature, &
                  "The nondimensional curvature of the function of the "//&
                  "Richardson number in the kappa source term in the "//&
@@ -2050,12 +2062,16 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
                  "components are set to 0.  A reasonable value might be "//&
                  "1e-30 m/s, which is less than an Angstrom divided by "//&
                  "the age of the universe.", units="m s-1", default=0.0, scale=US%m_s_to_L_T)
+
   call get_param(param_file, mdl, "DEBUG_KAPPA_SHEAR", CS%debug, &
                  "If true, write debugging data for the kappa-shear code. \n"//&
                  "Caution: this option is _very_ verbose and should only "//&
                  "be used in single-column mode!", &
                  default=.false., debuggingParam=.true.)
-
+  call get_param(param_file, mdl, "KAPPA_SHEAR_ITER_BUG", CS%dKdQ_iteration_bug, &
+                 "If true. use an older, dimensionally inconsistent estimate of the "//&
+                 "derivative of diffusivity with energy in the Newton's method iteration.  "//&
+                 "The bug causes undercorrections when dz > 1m.", default=.true.)
 !    id_clock_KQ = cpu_clock_id('Ocean KS kappa_shear', grain=CLOCK_ROUTINE)
 !    id_clock_avg = cpu_clock_id('Ocean KS avg', grain=CLOCK_ROUTINE)
 !    id_clock_project = cpu_clock_id('Ocean KS project', grain=CLOCK_ROUTINE)
