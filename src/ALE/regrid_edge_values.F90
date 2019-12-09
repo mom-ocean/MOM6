@@ -46,23 +46,20 @@ contains
 !! Therefore, boundary cells are treated as if they were local extrama.
 subroutine bound_edge_values( N, h, u, edge_val, h_neglect )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
-  real, dimension(:,:), intent(inout) :: edge_val !< Potentially modified edge values,
-                                           !! with the same units as u.
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
-                                           !! in the same units as h.
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N) in arbitrary units [A]
+  real, dimension(:,:), intent(inout) :: edge_val !< Potentially modified edge values [A]
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
   ! Local variables
   integer       :: k            ! loop index
   integer       :: k0, k1, k2
-  real          :: h_l, h_c, h_r
-  real          :: u_l, u_c, u_r
-  real          :: u0_l, u0_r
+  real          :: h_l, h_c, h_r ! Layer thicknesses [H]
+  real          :: u_l, u_c, u_r ! Cell average properties [A]
+  real          :: u0_l, u0_r    ! Edge values of properties [A]
   real          :: sigma_l, sigma_c, sigma_r    ! left, center and right
-                                                ! van Leer slopes
-  real          :: slope                ! retained PLM slope
-
-  real      :: hNeglect ! A negligible thicness in the same units as h.
+                                                ! van Leer slopes [A H-1]
+  real          :: slope         ! retained PLM slope [A H-1]
+  real          :: hNeglect      ! A negligible thickness [H].
 
   hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
@@ -175,15 +172,15 @@ end subroutine average_discontinuous_edge_values
 !! If so and if they are not monotonic, replace each edge value by their average.
 subroutine check_discontinuous_edge_values( N, u, edge_val )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: u !< cell averages (size N)
-  real, dimension(:,:), intent(inout) :: edge_val !< Cell edge values with the same units as u.
+  real, dimension(:),   intent(in)    :: u !< cell averages (size N) in arbitrary units [A]
+  real, dimension(:,:), intent(inout) :: edge_val !< Cell edge values [A].
   ! Local variables
   integer       :: k            ! loop index
-  real          :: u0_minus     ! left value at given edge
-  real          :: u0_plus      ! right value at given edge
-  real          :: um_minus     ! left cell average
-  real          :: um_plus      ! right cell average
-  real          :: u0_avg       ! avg value at given edge
+  real          :: u0_minus     ! left value at given edge [A]
+  real          :: u0_plus      ! right value at given edge [A]
+  real          :: um_minus     ! left cell average [A]
+  real          :: um_plus      ! right cell average [A]
+  real          :: u0_avg       ! avg value at given edge [A]
 
   ! Loop on interior cells
   do k = 1,N-1
@@ -227,16 +224,15 @@ end subroutine check_discontinuous_edge_values
 !! Boundary edge values are set to be equal to the boundary cell averages.
 subroutine edge_values_explicit_h2( N, h, u, edge_val, h_neglect )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
-  real, dimension(:,:), intent(inout) :: edge_val !< Returned edge values, with the
-                                           !! same units as u; the second index size is 2.
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N) in arbitrary units [A]
+  real, dimension(:,:), intent(inout) :: edge_val !< Returned edge values [A]; the second index size is 2.
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
   ! Local variables
   integer   :: k        ! loop index
-  real      :: h0, h1   ! cell widths
-  real      :: u0, u1   ! cell averages
-  real      :: hNeglect ! A negligible thicness in the same units as h.
+  real      :: h0, h1   ! cell widths [H]
+  real      :: u0, u1   ! cell averages [A]
+  real      :: hNeglect ! A negligible thickness [H]
 
   hNeglect = hNeglect_edge_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
@@ -289,24 +285,29 @@ end subroutine edge_values_explicit_h2
 !! available interpolant.
 !!
 !! For this fourth-order scheme, at least four cells must exist.
-subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect )
+subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
-  real, dimension(:,:), intent(inout) :: edge_val !< Returned edge values, with the
-                                           !! same units as u; the second index size is 2.
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N) in arbitrary units [A]
+  real, dimension(:,:), intent(inout) :: edge_val !< Returned edge values [A]; the second index size is 2.
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
+  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+
   ! Local variables
   integer               :: i, j
-  real                  :: u0, u1, u2, u3
-  real                  :: h0, h1, h2, h3
-  real                  :: f1, f2, f3       ! auxiliary variables
+  real                  :: u0, u1, u2, u3   ! temporary properties [A]
+  real                  :: h0, h1, h2, h3   ! temporary thicknesses [H]
+  real                  :: f1, f2, f3       ! auxiliary variables with various units
   real                  :: e                ! edge value
-  real, dimension(5)    :: x                ! used to compute edge
+  real, dimension(5)    :: x          ! Coordinate system with 0 at edges [H]
+  real, parameter       :: C1_12 = 1.0 / 12.0
+  real                  :: dx, xavg   ! Differences and averages of successive values of x [same units as h]
   real, dimension(4,4)  :: A                ! values near the boundaries
   real, dimension(4)    :: B, C
-  real      :: hNeglect ! A negligible thicness in the same units as h.
+  real      :: hNeglect ! A negligible thickness in the same units as h.
+  logical   :: use_2018_answers  ! If true use older, less acccurate expressions.
 
+  use_2018_answers = .true. ; if (present(answers_2018)) use_2018_answers = answers_2018
   hNeglect = hNeglect_edge_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   ! Loop on interior cells
@@ -372,12 +373,18 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect )
   enddo
 
   do i = 1,4
+    dx = max(f1, h(i) )
+    if (use_2018_answers) then
+      do j = 1,4 ; A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / real(j) ; enddo
+    else  ! Use expressions with less sensitivity to roundoff
+      xavg = 0.5 * (x(i+1) + x(i))
+      A(i,1) = dx
+      A(i,2) = dx * xavg
+      A(i,3) = dx * (xavg**2 + C1_12*dx**2)
+      A(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
+    endif
 
-    do j = 1,4
-      A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / real(j)
-    enddo
-
-    B(i) = u(i) * max(f1, h(i) )
+    B(i) = u(i) * dx
 
   enddo
 
@@ -410,12 +417,18 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect )
   enddo
 
   do i = 1,4
+    dx = max(f1, h(N-4+i) )
+    if (use_2018_answers) then
+      do j = 1,4 ; A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / real(j) ; enddo
+    else  ! Use expressions with less sensitivity to roundoff
+      xavg = 0.5 * (x(i+1) + x(i))
+      A(i,1) = dx
+      A(i,2) = dx * xavg
+      A(i,3) = dx * (xavg**2 + C1_12*dx**2)
+      A(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
+    endif
 
-    do j = 1,4
-      A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / real(j)
-    enddo
-
-    B(i) = u(N-4+i) * max(f1,  h(N-4+i) )
+    B(i) = u(N-4+i) * dx
 
   enddo
 
@@ -475,21 +488,24 @@ end subroutine edge_values_explicit_h4
 !!
 !! There are N+1 unknowns and we are able to write N-1 equations. The
 !! boundary conditions close the system.
-subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect )
+subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
-  real, dimension(:,:), intent(inout) :: edge_val !< Returned edge values, with the
-                                           !! same units as u; the second index size is 2.
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N) in arbitrary units [A]
+  real, dimension(:,:), intent(inout) :: edge_val !< Returned edge values [A]; the second index size is 2.
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
+  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+
   ! Local variables
   integer               :: i, j                 ! loop indexes
-  real                  :: h0, h1               ! cell widths
+  real                  :: h0, h1               ! cell widths [H]
   real                  :: h0_2, h1_2, h0h1
   real                  :: d2, d4
   real                  :: alpha, beta          ! stencil coefficients
   real                  :: a, b
-  real, dimension(5)    :: x                    ! system used to enforce
+  real, dimension(5)    :: x                    ! Coordinate system with 0 at edges [H]
+  real, parameter       :: C1_12 = 1.0 / 12.0
+  real                  :: dx, xavg             ! Differences and averages of successive values of x [H]
   real, dimension(4,4)  :: Asys                 ! boundary conditions
   real, dimension(4)    :: Bsys, Csys
   real, dimension(N+1)  :: tri_l, &             ! trid. system (lower diagonal)
@@ -497,8 +513,10 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect )
                            tri_u, &             ! trid. system (upper diagonal)
                            tri_b, &             ! trid. system (unknowns vector)
                            tri_x                ! trid. system (rhs)
-  real      :: hNeglect ! A negligible thicness in the same units as h.
+  real      :: hNeglect          ! A negligible thickness [H]
+  logical   :: use_2018_answers  ! If true use older, less acccurate expressions.
 
+  use_2018_answers = .true. ; if (present(answers_2018)) use_2018_answers = answers_2018
   hNeglect = hNeglect_edge_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   ! Loop on cells (except last one)
@@ -543,12 +561,18 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect )
   enddo
 
   do i = 1,4
+    dx = max(h0, h(i) )
+    if (use_2018_answers) then
+      do j = 1,4 ; Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j ; enddo
+    else  ! Use expressions with less sensitivity to roundoff
+      xavg = 0.5 * (x(i+1) + x(i))
+      Asys(i,1) = dx
+      Asys(i,2) = dx * xavg
+      Asys(i,3) = dx * (xavg**2 + C1_12*dx**2)
+      Asys(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
+    endif
 
-    do j = 1,4
-      Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
-    enddo
-
-    Bsys(i) = u(i) * max( h0, h(i) )
+    Bsys(i) = u(i) * dx
 
   enddo
 
@@ -566,12 +590,17 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect )
   enddo
 
   do i = 1,4
-
-    do j = 1,4
-      Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
-    enddo
-
-    Bsys(i) = u(N-4+i) * max( h0, h(N-4+i) )
+    dx = max(h0, h(N-4+i) )
+    if (use_2018_answers) then
+      do j = 1,4 ; Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j ; enddo
+    else  ! Use expressions with less sensitivity to roundoff
+      xavg = 0.5 * (x(i+1) + x(i))
+      Asys(i,1) = dx
+      Asys(i,2) = dx * xavg
+      Asys(i,3) = dx * (xavg**2 + C1_12*dx**2)
+      Asys(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
+    endif
+    Bsys(i) = u(N-4+i) * dx
 
   enddo
 
@@ -628,16 +657,17 @@ end subroutine edge_values_implicit_h4
 !!          become computationally expensive if regridding is carried out
 !!          often. Figuring out closed-form expressions for these coefficients
 !!          on nonuniform meshes turned out to be intractable.
-subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect )
+subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
-  real, dimension(:,:), intent(inout) :: edge_val !< Returned edge values, with the
-                                           !! same units as u; the second index size is 2.
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N) in arbitrary units [A]
+  real, dimension(:,:), intent(inout) :: edge_val  !< Returned edge values [A]; the second index size is 2.
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
+  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+
   ! Local variables
   integer               :: i, j, k              ! loop indexes
-  real                  :: h0, h1, h2, h3       ! cell widths
+  real                  :: h0, h1, h2, h3       ! cell widths [H]
   real                  :: g, g_2, g_3          ! the following are
   real                  :: g_4, g_5, g_6        ! auxiliary variables
   real                  :: d2, d3, d4, d5, d6   ! to set up the systems
@@ -654,7 +684,10 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect )
   real                  :: h0ph1_5, h2ph3_5     ! ...
   real                  :: alpha, beta          ! stencil coefficients
   real                  :: a, b, c, d           ! "
-  real, dimension(7)    :: x                    ! system used to enforce
+  real, dimension(7)    :: x          ! Coordinate system with 0 at edges [same units as h]
+  real, parameter       :: C1_12 = 1.0 / 12.0
+  real, parameter       :: C5_6 = 5.0 / 6.0
+  real                  :: dx, xavg   ! Differences and averages of successive values of x [same units as h]
   real, dimension(6,6)  :: Asys                 ! boundary conditions
   real, dimension(6)    :: Bsys, Csys           ! ...
   real, dimension(N+1)  :: tri_l, &             ! trid. system (lower diagonal)
@@ -662,8 +695,10 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect )
                            tri_u, &             ! trid. system (upper diagonal)
                            tri_b, &             ! trid. system (unknowns vector)
                            tri_x                ! trid. system (rhs)
-  real      :: hNeglect ! A negligible thicness in the same units as h.
+  real      :: hNeglect          ! A negligible thickness [H].
+  logical   :: use_2018_answers  ! If true use older, less acccurate expressions.
 
+  use_2018_answers = .true. ; if (present(answers_2018)) use_2018_answers = answers_2018
   hNeglect = hNeglect_edge_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   ! Loop on cells (except last one)
@@ -913,12 +948,19 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect )
   enddo
 
   do i = 1,6
-
-    do j = 1,6
-      Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
-    enddo
-
-    Bsys(i) = u(i) * max( g, h(i) )
+    dx = max( g, h(i) )
+    if (use_2018_answers) then
+      do j = 1,6 ; Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j ; enddo
+    else  ! Use expressions with less sensitivity to roundoff
+      xavg = 0.5 * (x(i+1) + x(i))
+      Asys(i,1) = dx
+      Asys(i,2) = dx * xavg
+      Asys(i,3) = dx * (xavg**2 + C1_12*dx**2)
+      Asys(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
+      Asys(i,5) = dx * (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
+      Asys(i,6) = dx * xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
+    endif
+    Bsys(i) = u(i) * dx
 
   enddo
 
@@ -1058,12 +1100,19 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect )
   enddo
 
   do i = 1,6
-
-    do j = 1,6
-      Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
-    enddo
-
-    Bsys(i) = u(N-6+i) * max( g, h(N-6+i) )
+    dx = max( g, h(N-6+i) )
+    if (use_2018_answers) then
+      do j = 1,6 ; Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j ; enddo
+    else  ! Use expressions with less sensitivity to roundoff
+      xavg = 0.5 * (x(i+1) + x(i))
+      Asys(i,1) = dx
+      Asys(i,2) = dx * xavg
+      Asys(i,3) = dx * (xavg**2 + C1_12*dx**2)
+      Asys(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
+      Asys(i,5) = dx * (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
+      Asys(i,6) = dx * xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
+    endif
+    Bsys(i) = u(N-6+i) * dx
 
   enddo
 

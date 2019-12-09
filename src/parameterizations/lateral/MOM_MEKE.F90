@@ -131,17 +131,17 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     tmp             ! Temporary variable for diagnostic computation
 
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    MEKE_uflux, &   ! The zonal advective and diffusive flux of MEKE with different units in different
-                    ! places of [L2 T-2 ~> m2 s-2] or [m L4 T-3 ~> m5 s-3] or [kg m-2 L4 T-3 ~> kg m-2 s-3].
+    MEKE_uflux, &   ! The zonal advective and diffusive flux of MEKE with units of [R Z L4 T-3 ~> kg m-2 s-3].
+                    ! In one place, MEKE_uflux is used as temporary work space with units of [L2 T-2 ~> m2 s-2].
     Kh_u, &         ! The zonal diffusivity that is actually used [L2 T-1 ~> m2 s-1].
-    baroHu, &       ! Depth integrated accumulated zonal mass flux [H L2 ~> m3 or kg].
+    baroHu, &       ! Depth integrated accumulated zonal mass flux [R Z L2 ~> kg].
     drag_vel_u      ! A (vertical) viscosity associated with bottom drag at
                     ! u-points [Z T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    MEKE_vflux, &   ! The meridional advective and diffusive flux of MEKE with different units in different
-                    ! places of [L2 T-2 ~> m2 s-2] or [m L4 T-3 ~> m5 s-3] or [kg m-2 L4 T-3 ~> kg m-2 s-3].
+    MEKE_vflux, &   ! The meridional advective and diffusive flux of MEKE with units of [R Z L4 T-3 ~> kg m-2 s-3].
+                    ! In one place, MEKE_vflux is used as temporary work space with units of [L2 T-2 ~> m2 s-2].
     Kh_v, &         ! The meridional diffusivity that is actually used [L2 T-1 ~> m2 s-1].
-    baroHv, &       ! Depth integrated accumulated meridional mass flux [H L2 ~> m3 or kg].
+    baroHv, &       ! Depth integrated accumulated meridional mass flux [R Z L2 ~> kg].
     drag_vel_v      ! A (vertical) viscosity associated with bottom drag at
                     ! v-points [Z T-1 ~> m s-1].
   real :: Kh_here   ! The local horizontal viscosity [L2 T-1 ~> m2 s-1]
@@ -149,8 +149,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   real :: K4_here   ! The local horizontal biharmonic viscosity [L4 T-1 ~> m4 s-1]
   real :: Inv_K4_max ! The inverse of the local horizontal biharmonic viscosity [T L-4 ~> s m-4]
   real :: cdrag2
-  real :: advFac    ! The product of the advection scaling factor and some unit conversion
-                    ! factors divided by the timestep [m H-1 T-1 ~> s-1 or m3 kg-1 s-1]
+  real :: advFac    ! The product of the advection scaling factor and 1/dt [T-1 ~> s-1]
   real :: mass_neglect ! A negligible mass [R Z ~> kg m-2].
   real :: ldamping  ! The MEKE damping rate [T-1 ~> s-1].
   real :: Rho0      ! A density used to convert mass to distance [R ~> kg m-3].
@@ -189,7 +188,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         call hchksum(MEKE%GM_src, 'MEKE GM_src', G%HI, scale=US%R_to_kg_m3*US%Z_to_m*US%L_to_m**2*US%s_to_T**3)
       if (associated(MEKE%MEKE)) call hchksum(MEKE%MEKE, 'MEKE MEKE', G%HI, scale=US%L_T_to_m_s**2)
       call uvchksum("MEKE SN_[uv]", SN_u, SN_v, G%HI, scale=US%s_to_T)
-      call uvchksum("MEKE h[uv]", hu, hv, G%HI, haloshift=1, scale=GV%H_to_m)
+      call uvchksum("MEKE h[uv]", hu, hv, G%HI, haloshift=1, scale=GV%H_to_m*US%L_to_m**2)
     endif
 
     sdt = dt*CS%MEKE_dtScale ! Scaled dt to use for time-stepping
@@ -201,14 +200,14 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     ! advisable to use Strang splitting between the damping and diffusion.
     sdt_damp = sdt ; if (CS%MEKE_KH >= 0.0 .or. CS%MEKE_K4 >= 0.) sdt_damp = 0.5*sdt
 
-    ! Calculate depth integrated mass flux if doing advection
+    ! Calculate depth integrated mass exchange if doing advection [R Z L2 ~> kg]
     if (CS%MEKE_advection_factor>0.) then
       do j=js,je ; do I=is-1,ie
         baroHu(I,j) = 0.
       enddo ; enddo
       do k=1,nz
         do j=js,je ; do I=is-1,ie
-          baroHu(I,j) = hu(I,j,k)
+          baroHu(I,j) = hu(I,j,k) * GV%H_to_RZ
         enddo ; enddo
       enddo
       do J=js-1,je ; do i=is,ie
@@ -216,7 +215,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       enddo ; enddo
       do k=1,nz
         do J=js-1,je ; do i=is,ie
-          baroHv(i,J) = hv(i,J,k)
+          baroHv(i,J) = hv(i,J,k) * GV%H_to_RZ
         enddo ; enddo
       enddo
     endif
@@ -262,11 +261,11 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     do j=js-1,je+1
       do i=is-1,ie+1 ; mass(i,j) = 0.0 ; enddo
       do k=1,nz ; do i=is-1,ie+1
-        mass(i,j) = mass(i,j) + G%mask2dT(i,j) * (GV%H_to_RZ * h(i,j,k))
+        mass(i,j) = mass(i,j) + G%mask2dT(i,j) * (GV%H_to_RZ * h(i,j,k)) ! [R Z ~> kg m-2]
       enddo ; enddo
       do i=is-1,ie+1
         I_mass(i,j) = 0.0
-        if (mass(i,j) > 0.0) I_mass(i,j) = 1.0 / mass(i,j)
+        if (mass(i,j) > 0.0) I_mass(i,j) = 1.0 / mass(i,j) ! [R-1 Z-1 ~> m2 kg-1]
       enddo
     enddo
 
@@ -355,10 +354,10 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     endif
 
     if (CS%MEKE_K4 >= 0.0) then
-      ! Calculate Laplacian of MEKE
+      ! Calculate Laplacian of MEKE using MEKE_uflux and MEKE_vflux as temporary work space.
       !$OMP parallel do default(shared)
       do j=js-1,je+1 ; do I=is-2,ie+1
-        ! Here the units of MEKE_uflux are [L2 T-2 ~> m2 s-2].
+        ! MEKE_uflux is used here as workspace with units of [L2 T-2 ~> m2 s-2].
         MEKE_uflux(I,j) = ((G%dy_Cu(I,j)*G%IdxCu(I,j)) * G%mask2dCu(I,j)) * &
             (MEKE%MEKE(i+1,j) - MEKE%MEKE(i,j))
       ! This would have units of [R Z L2 T-2 ~> kg s-2]
@@ -368,7 +367,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       enddo ; enddo
       !$OMP parallel do default(shared)
       do J=js-2,je+1 ; do i=is-1,ie+1
-        ! Here the units of MEKE_vflux are [L2 T-2 ~> m2 s-2].
+        ! MEKE_vflux is used here as workspace with units of [L2 T-2 ~> m2 s-2].
         MEKE_vflux(i,J) = ((G%dx_Cv(i,J)*G%IdyCv(i,J)) * G%mask2dCv(i,J)) * &
             (MEKE%MEKE(i,j+1) - MEKE%MEKE(i,j))
       ! This would have units of [R Z L2 T-2 ~> kg s-2]
@@ -378,38 +377,37 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       enddo ; enddo
 
       !$OMP parallel do default(shared)
-      do j=js-1,je+1 ; do i=is-1,ie+1
+      do j=js-1,je+1 ; do i=is-1,ie+1 ! del2MEKE has units [T-2 ~> s-2].
         del2MEKE(i,j) = G%IareaT(i,j) * &
             ((MEKE_uflux(I,j) - MEKE_uflux(I-1,j)) + (MEKE_vflux(i,J) - MEKE_vflux(i,J-1)))
-      ! del2MEKE(i,j) = (G%IareaT(i,j)*I_mass(i,j)) * &
-      !     ((MEKE_uflux(I,j) - MEKE_uflux(I-1,j)) + (MEKE_vflux(i,J) - MEKE_vflux(i,J-1)))
       enddo ; enddo
 
       ! Bi-harmonic diffusion of MEKE
       !$OMP parallel do default(shared) private(K4_here,Inv_K4_max)
       do j=js,je ; do I=is-1,ie
-        K4_here = CS%MEKE_K4
+        K4_here = CS%MEKE_K4 ! [L4 T-1 ~> m4 s-1]
         ! Limit Kh to avoid CFL violations.
         Inv_K4_max = 64.0 * sdt * ((G%dy_Cu(I,j)*G%IdxCu(I,j)) * &
                      max(G%IareaT(i,j), G%IareaT(i+1,j)))**2
         if (K4_here*Inv_K4_max > 0.3) K4_here = 0.3 / Inv_K4_max
 
-        ! Here the units of MEKE_uflux are [R Z L4 T-3].
+        ! Here the units of MEKE_uflux are [R Z L4 T-3 ~> kg m2 s-3].
         MEKE_uflux(I,j) = ((K4_here * (G%dy_Cu(I,j)*G%IdxCu(I,j))) * &
             ((2.0*mass(i,j)*mass(i+1,j)) / ((mass(i,j)+mass(i+1,j)) + mass_neglect)) ) * &
             (del2MEKE(i+1,j) - del2MEKE(i,j))
       enddo ; enddo
       !$OMP parallel do default(shared) private(K4_here,Inv_K4_max)
       do J=js-1,je ; do i=is,ie
-        K4_here = CS%MEKE_K4
+        K4_here = CS%MEKE_K4 ! [L4 T-1 ~> m4 s-1]
         Inv_K4_max = 64.0 * sdt * ((G%dx_Cv(i,J)*G%IdyCv(i,J)) * max(G%IareaT(i,j), G%IareaT(i,j+1)))**2
         if (K4_here*Inv_K4_max > 0.3) K4_here = 0.3 / Inv_K4_max
 
+        ! Here the units of MEKE_vflux are [R Z L4 T-3 ~> kg m2 s-3].
         MEKE_vflux(i,J) = ((K4_here * (G%dx_Cv(i,J)*G%IdyCv(i,J))) * &
             ((2.0*mass(i,j)*mass(i,j+1)) / ((mass(i,j)+mass(i,j+1)) + mass_neglect)) ) * &
             (del2MEKE(i,j+1) - del2MEKE(i,j))
       enddo ; enddo
-      ! Store tendency arising from the bi-harmonic in del4MEKE
+      ! Store change in MEKE arising from the bi-harmonic in del4MEKE [L2 T-2 ~> m2 s-2].
       !$OMP parallel do default(shared)
       do j=js,je ; do i=is,ie
         del4MEKE(i,j) = (sdt*(G%IareaT(i,j)*I_mass(i,j))) * &
@@ -417,7 +415,6 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
              (MEKE_vflux(i,J-1) - MEKE_vflux(i,J)))
       enddo ; enddo
     endif !
-
 
     if (CS%kh_flux_enabled) then
       ! Lateral diffusion of MEKE
@@ -457,12 +454,10 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
             (MEKE%MEKE(i,j) - MEKE%MEKE(i,j+1))
       enddo ; enddo
       if (CS%MEKE_advection_factor>0.) then
-        !### I think that for dimensional consistency, this should be:
-        ! advFac = GV%H_to_RZ * CS%MEKE_advection_factor / sdt
-        advFac = US%kg_m3_to_R*GV%H_to_Z * CS%MEKE_advection_factor / dt
+        advFac = CS%MEKE_advection_factor / sdt ! [T-1 ~> s-1]
         !$OMP parallel do default(shared)
         do j=js,je ; do I=is-1,ie
-          ! Here the units of the quantities added to MEKE_uflux and MEKE_vflux are [m L4 T-3].
+          ! Here the units of the quantities added to MEKE_uflux are [R Z L4 T-3 ~> kg m2 s-3].
           if (baroHu(I,j)>0.) then
             MEKE_uflux(I,j) = MEKE_uflux(I,j) + baroHu(I,j)*MEKE%MEKE(i,j)*advFac
           elseif (baroHu(I,j)<0.) then
@@ -471,7 +466,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         enddo ; enddo
         !$OMP parallel do default(shared)
         do J=js-1,je ; do i=is,ie
-          ! Here the units of the quantities added to MEKE_uflux and MEKE_vflux are [m L4 T-3].
+          ! Here the units of the quantities added to MEKE_vflux are [R Z L4 T-3 ~> kg m2 s-3].
           if (baroHv(i,J)>0.) then
             MEKE_vflux(i,J) = MEKE_vflux(i,J) + baroHv(i,J)*MEKE%MEKE(i,j)*advFac
           elseif (baroHv(i,J)<0.) then
@@ -480,10 +475,8 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         enddo ; enddo
       endif
 
-
       !$OMP parallel do default(shared)
       do j=js,je ; do i=is,ie
-        ! This expression is correct if the units of MEKE_uflux and MEKE_vflux are [kg m-2 L4 T-3].
         MEKE%MEKE(i,j) = MEKE%MEKE(i,j) + (sdt*(G%IareaT(i,j)*I_mass(i,j))) * &
             ((MEKE_uflux(I-1,j) - MEKE_uflux(I,j)) + &
              (MEKE_vflux(i,J-1) - MEKE_vflux(i,J)))
@@ -577,10 +570,8 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     endif
 
     ! Offer fields for averaging.
-
     if (any([CS%id_Ue, CS%id_Ub, CS%id_Ut] > 0)) &
       tmp(:,:) = 0.
-
     if (CS%id_MEKE>0) call post_data(CS%id_MEKE, MEKE%MEKE, CS%diag)
     if (CS%id_Ue>0) then
       do j=js,je ; do i=is,ie

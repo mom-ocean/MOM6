@@ -1284,20 +1284,22 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   ! surface mass flux maps
 
   handles%id_prcme = register_diag_field('ocean_model', 'PRCmE', diag%axesT1, Time,                  &
-        'Net surface water flux (precip+melt+lrunoff+ice calving-evap)', 'kg m-2 s-1',&
+        'Net surface water flux (precip+melt+lrunoff+ice calving-evap)', 'kg m-2 s-1', &
         standard_name='water_flux_into_sea_water', cmor_field_name='wfo',                            &
         cmor_standard_name='water_flux_into_sea_water',cmor_long_name='Water Flux Into Sea Water')
+        ! This diagnostic is rescaled to MKS units when combined.
 
-  handles%id_evap = register_diag_field('ocean_model', 'evap', diag%axesT1, Time,                         &
-       'Evaporation/condensation at ocean surface (evaporation is negative)', 'kg m-2 s-1',&
-       standard_name='water_evaporation_flux', cmor_field_name='evs',                                     &
-       cmor_standard_name='water_evaporation_flux',                                                       &
+  handles%id_evap = register_diag_field('ocean_model', 'evap', diag%axesT1, Time, &
+       'Evaporation/condensation at ocean surface (evaporation is negative)', &
+       'kg m-2 s-1', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T, &
+       standard_name='water_evaporation_flux', cmor_field_name='evs', &
+       cmor_standard_name='water_evaporation_flux', &
        cmor_long_name='Water Evaporation Flux Where Ice Free Ocean over Sea')
 
   ! smg: seaice_melt field requires updates to the sea ice model
   handles%id_seaice_melt = register_diag_field('ocean_model', 'seaice_melt',       &
      diag%axesT1, Time, 'water flux to ocean from snow/sea ice melting(> 0) or formation(< 0)', &
-     'kg m-2 s-1',                                                                 &
+     'kg m-2 s-1', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T, &
       standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',     &
       cmor_field_name='fsitherm',                                                  &
       cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',&
@@ -1305,6 +1307,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
   handles%id_precip = register_diag_field('ocean_model', 'precip', diag%axesT1, Time, &
         'Liquid + frozen precipitation into ocean', 'kg m-2 s-1')
+        ! This diagnostic is rescaled to MKS units when combined.
 
   handles%id_fprec = register_diag_field('ocean_model', 'fprec', diag%axesT1, Time,     &
         'Frozen precipitation into ocean', &
@@ -1324,32 +1327,39 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
         units='kg m-2 s-1', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T)
 
   handles%id_frunoff = register_diag_field('ocean_model', 'frunoff', diag%axesT1, Time,    &
-        'Frozen runoff (calving) and iceberg melt into ocean', 'kg m-2 s-1',               &
+        'Frozen runoff (calving) and iceberg melt into ocean', &
+        units='kg m-2 s-1', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T, &
         standard_name='water_flux_into_sea_water_from_icebergs',                           &
         cmor_field_name='ficeberg',                                                        &
         cmor_standard_name='water_flux_into_sea_water_from_icebergs',                      &
         cmor_long_name='Water Flux into Seawater from Icebergs')
 
   handles%id_lrunoff = register_diag_field('ocean_model', 'lrunoff', diag%axesT1, Time, &
-        'Liquid runoff (rivers) into ocean', 'kg m-2 s-1',                                    &
+        'Liquid runoff (rivers) into ocean', &
+        units='kg m-2 s-1', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T, &
         standard_name='water_flux_into_sea_water_from_rivers', cmor_field_name='friver',      &
         cmor_standard_name='water_flux_into_sea_water_from_rivers',                           &
         cmor_long_name='Water Flux into Sea Water From Rivers')
 
   handles%id_net_massout = register_diag_field('ocean_model', 'net_massout', diag%axesT1, Time, &
         'Net mass leaving the ocean due to evaporation, seaice formation', 'kg m-2 s-1')
+        ! This diagnostic is rescaled to MKS units when combined.
 
   handles%id_net_massin  = register_diag_field('ocean_model', 'net_massin', diag%axesT1, Time, &
         'Net mass entering ocean due to precip, runoff, ice melt', 'kg m-2 s-1')
+        ! This diagnostic is rescaled to MKS units when combined.
 
   handles%id_massout_flux = register_diag_field('ocean_model', 'massout_flux', diag%axesT1, Time, &
         'Net mass flux of freshwater out of the ocean (used in the boundary flux calculation)', &
          'kg m-2', conversion=diag%GV%H_to_kg_m2)
+        ! This diagnostic is calculated in MKS units.
 
   handles%id_massin_flux  = register_diag_field('ocean_model', 'massin_flux', diag%axesT1, Time, &
         'Net mass flux of freshwater into the ocean (used in boundary flux calculation)', 'kg m-2')
+        ! This diagnostic is calculated in MKS units.
+
   !=========================================================================
-  ! area integrated surface mass transport
+  ! area integrated surface mass transport, all are rescaled to MKS units before area integration.
 
   handles%id_total_prcme = register_scalar_field('ocean_model', 'total_PRCmE', Time, diag,         &
       long_name='Area integrated net surface water flux (precip+melt+liq runoff+ice calving-evap)',&
