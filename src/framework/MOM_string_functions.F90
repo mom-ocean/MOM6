@@ -430,7 +430,7 @@ function append_substring(string_in, substring) result(string_out)
 
    substring_length = len_trim(substring)
 
-   if ((string_in_length > 0) .and. (substring_length > 0)) then 
+   if ((string_in_length > 0) .and. (substring_length > 0)) then
        string_joined = trim(string_in)//trim(substring)
 
        string_out(1:len_trim(string_joined)) = trim(string_joined)
@@ -456,13 +456,13 @@ function remove_substring(string_in, substring) result(string_out)
    string_in_length = 0
    substring_length = 0
    string_split_index = 0
-   
+
    ! find the position of the first substring character in string_in
    string_in_length = len_trim(string_in)
    string_split_index = INDEX(string_in, trim(substring))
    substring_length = len_trim(substring)
 
-   if (string_split_index > 0) then  
+   if (string_split_index > 0) then
        string_holder = trim(string_in(1:string_split_index-1)// &
                             string_in(substring_length+1:string_in_length))
 

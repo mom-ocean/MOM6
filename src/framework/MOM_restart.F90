@@ -41,7 +41,7 @@ use MOM_io, only: fms2_register_restart_field => register_restart_field, &
                   FmsNetcdfDomainFile_t, &
                   unlimited
 #include <fms_platform.h>
-                       
+
 implicit none ; private
 
 public restart_init, restart_end, restore_state, register_restart_field
@@ -330,7 +330,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, &
   ! local
   type(vardesc) :: vd
   character(len=200) :: mesg
- 
+
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: "//&
       "register_restart_field_4d: Module must be initialized before "//&
       "it is used to register "//trim(name))
@@ -343,7 +343,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, &
 end subroutine register_restart_field_4d
 
 !> Register a 3-d field for restarts, providing the metadata as individual arguments
-subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, & 
+subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, &
                                      longname, units, hor_grid, z_grid, t_grid)
   real, dimension(:,:,:), &
                       target, intent(in) :: f_ptr     !< A pointer to the field to be read or written
@@ -395,7 +395,7 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, &
       "register_restart_field_2d: Module must be initialized before "// &
       "it is used to register "//trim(name))
 
-  if (present(z_grid)) then 
+  if (present(z_grid)) then
      Zgrid = z_grid
   else
      Zgrid = '1'
@@ -970,8 +970,8 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
     ! get variable sizes in bytes
     size_in_file = 8*(2*G%Domain%niglobal+2*G%Domain%njglobal+2*nz+1000)
     ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
-    !>@NOTE the user should increase the allocated array sizes to accommodate
-    !! more axes. As of 11/2019, only 7 axes are registered to the MOM restart files.
+    !>\note: the user should increase the allocated array sizes to accommodate
+    !! more axes. As of 12/2019, only 7 axes are registered to the MOM restart files.
     allocate(axis_data_CS%axis(7))
     allocate(axis_data_CS%data(7))
 
@@ -985,7 +985,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
       if ((m==start_var) .OR. (size_in_file < max_file_size-var_sz)) then
         size_in_file = size_in_file + var_sz
       endif
-      ! get the axis (dimension) names and lengths for variable 'm'                           
+      ! get the axis (dimension) names and lengths for variable 'm'               
       ! note: 4d variables are lon x lat x vertical level x time
       num_dims=0
       call get_var_dimension_features(hor_grid, z_grid, t_grid, &
@@ -1112,7 +1112,7 @@ subroutine write_initial_conditions(directory, filename, CS, G, time, GV)
                                                     !! call to restart_init.
   type(ocean_grid_type),    intent(in) :: G         !< The ocean's grid structure
   type(time_type),          intent(in) :: time      !< model time
-  type(verticalGrid_type), optional,  intent(in) :: GV !< ocean vertical grid structure               
+  type(verticalGrid_type), optional,  intent(in) :: GV !< ocean vertical grid structure
 
   ! local
   type(vardesc) :: vd ! structure for variable metadata
@@ -1136,7 +1136,7 @@ subroutine write_initial_conditions(directory, filename, CS, G, time, GV)
   real, dimension(:), allocatable :: data_temp
 
   ! append '.nc' to the restart file name if it is missing
-  ! @TODO: require users to specify full file path including the file name appendix
+  ! \todo: require users to specify full file path including the file name appendix
   ! in calls to open_file
   substring_index = index('.nc', trim(filename))
   if (substring_index <= 0) then
@@ -1157,8 +1157,8 @@ subroutine write_initial_conditions(directory, filename, CS, G, time, GV)
     fileOpenSuccess = open_file(fileObjWrite, trim(base_file_name), "append", &
                                    G%Domain%mpp_domain, is_restart=.false.)
   ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
-  !>@NOTE the user may need to increase the allocated array sizes to accommodate 
-  !! more  axes. As of 11/2019, only 7 axes are registered to the MOM_IC.nc file.
+  !>\note: the user may need to increase the allocated array sizes to accommodate
+  !! more axes. As of 12/2019, only 7 axes are registered to the MOM_IC.nc file.
   allocate(axis_data_CS%axis(7))
   allocate(axis_data_CS%data(7))
 
@@ -1172,7 +1172,7 @@ subroutine write_initial_conditions(directory, filename, CS, G, time, GV)
     call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
                        z_grid=z_grid, t_grid=t_grid, caller="MOM_restart:write_initial_conditions")
 
-    ! get the dimension names and lengths for variable 'm'                                
+    ! get the dimension names and lengths for variable 'm'
     ! note: 4d variables are lon x lat x vertical level x time
     num_dims=0
     call get_var_dimension_features(hor_grid, z_grid, t_grid, &
@@ -1239,7 +1239,7 @@ subroutine write_initial_conditions(directory, filename, CS, G, time, GV)
                               dimensions=dim_names(1:num_dims))
 
       call write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr3d(m)%p)
- 
+
     elseif (associated(CS%var_ptr2d(m)%p)) then
       call register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", &
                               dimensions=dim_names(1:num_dims))
@@ -1265,7 +1265,7 @@ subroutine write_initial_conditions(directory, filename, CS, G, time, GV)
     endif
     ! register the variable attributes
     call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, "units", units)
-    call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, "long_name", longname) 
+    call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, "long_name", longname)
   enddo
   ! close the IC file and deallocate the allocatable arrays
   call close_file(fileObjWrite)
@@ -1337,7 +1337,7 @@ subroutine restore_state(filename, directory, day, G, CS)
 
   str_index = INDEX(temp_file_name,'.nc')
   if (str_index <=0) then
-     base_file_name = trim(append_substring(temp_file_name, '.nc'))             
+     base_file_name = trim(append_substring(temp_file_name, '.nc'))
   else
      base_file_name = trim(temp_file_name)
   endif
@@ -1504,7 +1504,7 @@ function is_new_run(CS)
 end function is_new_run
 
 !> get_num_restart_files determines the number of existing restart files.
-!> @note This function replaces open_restart_units
+!> \note This function replaces open_restart_units
 function get_num_restart_files(filename, directory, G, CS) result(num_files)
   character(len=*),      intent(in)  :: filename  !< The list of restart file names or a single
                                                   !! character 'r' to read automatically named files.
@@ -1594,7 +1594,7 @@ function get_num_restart_files(filename, directory, G, CS) result(num_files)
         endif
 
         call close_file(fileObjRead)
- 
+
      enddo ! while (err == 0) loop
   enddo ! while (start_char < strlen(filename)) loop
 

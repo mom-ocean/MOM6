@@ -236,7 +236,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   !  .  c  .  c  .
   !  |     |     |
   !  *--.--*--.--*
-                   
+
   npei = G%domain%layout(1) ; npej = G%domain%layout(2)
   allocate(exni(npei)) ; allocate(exnj(npej))
   call mpp_get_domain_extents(G%domain%mpp_domain, exni, exnj)

@@ -205,11 +205,11 @@ subroutine MOM_sum_output_init(G, US, param_file, directory, ntrnc, &
   call get_param(param_file, mdl, "ENERGYFILE", energyfile, &
                  "The file to use to write the energies and globally "//&
                  "summed diagnostics.", default="ocean.stats")
-  !>@note this function call is not supported by new io.
+  !>\note this function call is not supported by new io.
   !! The current implementation of get_filename_appendix only returns and empty string,
-  !! so it has been commented out with a note to add this feature to MOM_io if needed 
-  !>@TODO add function(s) to the MOM_string_functions module to query for the filename appendix for ensemble runs
-  !! in ensemble simulations
+  !! so it has been commented out with a note to add this feature to MOM_io if needed
+  !>\todo add function(s) to the MOM_string_functions module to query for the filename
+  !! appendix for ensemble runs in ensemble simulations
   !query fms_io if there is a filename_appendix (for ensemble runs)
   !call get_filename_appendix(filename_appendix)
   !if (len_trim(filename_appendix) > 0) then
