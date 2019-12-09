@@ -248,8 +248,9 @@ subroutine create_file(filename, vars, numVariables, fields, threading, timeUnit
   logical :: one_file, domain_set ! indicates whether the file will be domain-decomposed or not
   character(len=10) :: timeUnits
   character(len=64) :: checksum_char ! checksum character array created from checksum argument
+  character(len=1024) :: filename_temp
   character(len=48), allocatable, dimension(:,:) :: dim_names !< variable dimension names
-  integer :: i, j, total_axes
+  integer :: i, j, total_axes, substring_index
   integer :: num_dims !< number of dimensions
   integer :: thread ! indicates whether threading is used
   integer, dimension(4) :: dim_lengths !< variable dimension lengths
@@ -269,10 +270,28 @@ subroutine create_file(filename, vars, numVariables, fields, threading, timeUnit
   one_file = .true.
   if (domain_set) one_file = (thread == SINGLE_FILE)
 
-  if (domain_set) then
-    file_open_successDD=open_file(fileObjDD, filename, "write", Domain%mpp_domain, is_restart=.false.)
+  ! append '.nc' to the file name if it is missing
+  filename_temp = ""
+  substring_index = 0
+  substring_index = index(".nc", trim(filename))
+  if (substring_index <= 0) then
+    filename_temp = append_substring(filename,".nc")
   else
-    file_open_successNoDD=open_file(fileObjNoDD, filename, "write", is_restart=.false.)
+    filename_temp = filename
+  endif
+
+  if (domain_set) then
+    if (Domain%io_layout(1)*Domain%io_layout(2) > 1) then 
+      if (Domain%layout(1)*Domain%layout(2) > 1) then
+        file_open_successDD=open_file(fileObjDD, filename_temp, "write", Domain%mpp_domain, is_restart=.false.)      
+      else
+        file_open_successNoDD=open_file(fileObjNoDD, filename_temp, "write", is_restart=.false.)
+      endif
+    else
+      file_open_successNoDD=open_file(fileObjNoDD, filename_temp, "write", is_restart=.false.)
+    endif
+  else
+    file_open_successNoDD=open_file(fileObjNoDD, filename_temp, "write", is_restart=.false.)
   endif
 ! set the time units
   timeUnits=""
@@ -447,6 +466,7 @@ subroutine create_file(filename, vars, numVariables, fields, threading, timeUnit
   deallocate(dim_names)
   deallocate(axis_data_CS%axis)
   deallocate(axis_data_CS%data)
+  nullify(Domain)
 
 end subroutine create_file
 
