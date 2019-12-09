@@ -158,10 +158,6 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, diabatic
                  "That is, the algorithm will exclude the surface and bottom"//&
                  "boundary layers.",default = .false.)
 
-  if (CS%continuous_reconstruction .and. CS%interior_only) then
-    call MOM_error(FATAL,"NDIFF_INTERIOR_ONLY=True only works with discontinuous" //&
-                 "reconstruction.")
-  endif
   ! Initialize and configure remapping
   if (CS%continuous_reconstruction .eqv. .false.) then
     call get_param(param_file, mdl, "NDIFF_BOUNDARY_EXTRAP", boundary_extrap, &
@@ -291,6 +287,9 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS)
   real :: pa_to_H
 
   pa_to_H = 1. / GV%H_to_pa
+
+  k_top(:,:) = 1     ; k_bot(:,:) = 1
+  zeta_top(:,:) = 0. ; zeta_bot(:,:) = 1.
 
   ! check if hbl needs to be extracted
   if (CS%interior_only) then
@@ -425,7 +424,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS)
                 CS%Pint(i,j,:), CS%Tint(i,j,:), CS%Sint(i,j,:), CS%dRdT(i,j,:), CS%dRdS(i,j,:),            &
                 CS%Pint(i+1,j,:), CS%Tint(i+1,j,:), CS%Sint(i+1,j,:), CS%dRdT(i+1,j,:), CS%dRdS(i+1,j,:),  &
                 CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:),           &
-                k_bot(I,j), k_bot(I+1,j), zeta_bot(I,j), zeta_bot(I+1,j))
+                k_bot(I,j), k_bot(I+1,j), 1.-zeta_bot(I,j), 1.-zeta_bot(I+1,j))
       else
         call find_neutral_surface_positions_discontinuous(CS, G%ke,                                            &
             CS%P_i(i,j,:,:), h(i,j,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:), CS%ppoly_coeffs_T(i,j,:,:),           &
@@ -446,7 +445,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS)
                 CS%Pint(i,j,:), CS%Tint(i,j,:), CS%Sint(i,j,:), CS%dRdT(i,j,:), CS%dRdS(i,j,:),           &
                 CS%Pint(i,j+1,:), CS%Tint(i,j+1,:), CS%Sint(i,j+1,:), CS%dRdT(i,j+1,:), CS%dRdS(i,j+1,:), &
                 CS%vPoL(i,J,:), CS%vPoR(i,J,:), CS%vKoL(i,J,:), CS%vKoR(i,J,:), CS%vhEff(i,J,:),          &
-                k_bot(i,J), k_bot(i,J+1), zeta_bot(i,J), zeta_bot(i,J+1))
+                k_bot(i,J), k_bot(i,J+1), 1.-zeta_bot(i,J), 1.-zeta_bot(i,J+1))
       else
         call find_neutral_surface_positions_discontinuous(CS, G%ke,                                            &
             CS%P_i(i,j,:,:), h(i,j,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:), CS%ppoly_coeffs_T(i,j,:,:),           &
@@ -917,8 +916,8 @@ subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdS
   real, dimension(2*nk+1),    intent(inout) :: hEff  !< Effective thickness between two neutral surfaces [Pa]
   integer, optional,          intent(in)    :: bl_kl !< Layer index of the boundary layer (left)
   integer, optional,          intent(in)    :: bl_kr !< Layer index of the boundary layer (right)
-  integer, optional,          intent(in)    :: bl_zl !< Nondimensional position of the boundary layer (left)
-  integer, optional,          intent(in)    :: bl_zr !< Nondimensional position of the boundary layer (right)
+  real, optional,             intent(in)    :: bl_zl !< Nondimensional position of the boundary layer (left)
+  real, optional,             intent(in)    :: bl_zr !< Nondimensional position of the boundary layer (right)
 
   ! Local variables
   integer :: ns                     ! Number of neutral surfaces
@@ -933,22 +932,21 @@ subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdS
   real    :: dRho, dRhoTop, dRhoBot, hL, hR
   integer :: lastK_left, lastK_right
   real    :: lastP_left, lastP_right
+  logical :: interior_limit
 
   ns = 2*nk+2
-  kr = 1 ; 
+
+  ! Initialize variables for the search
+  kr = 1 ;
   kl = 1 ;
   lastP_right = 0.
   lastP_left = 0.
-
-  if (PRESENT(bl_kl)) kl = bl_kl
-  if (PRESENT(bl_kr)) kr = bl_kr
-  if (PRESENT(bl_zl)) lastP_left  = bl_zl
-  if (PRESENT(bl_zr)) lastP_right  = bl_zr
-
-  ! Initialize variables for the search
-  lastK_right = kr 
-  lastK_left  = kl
+  lastK_right = 1
+  lastK_left  = 1
   reached_bottom = .false.
+
+  ! Check to see if we should limit the diffusion to the interior
+  interior_limit = PRESENT(bl_kl) .and. PRESENT(bl_kr) .and. PRESENT(bl_zr) .and. PRESENT(bl_zl)
 
   ! Loop over each neutral surface, working from top to bottom
   neutral_surfaces: do k_surface = 1, ns
@@ -1068,10 +1066,23 @@ subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdS
     else
       stop 'Else what?'
     endif
+    if (interior_limit) then
+      if (KoL(k_surface)<=bl_kl) then
+        KoL(k_surface) = bl_kl
+        if (PoL(k_surface)<bl_zl) then
+          PoL(k_surface) = bl_zl
+        endif
+      endif
+      if (KoR(k_surface)<=bl_kr) then
+        KoR(k_surface) = bl_kr
+        if (PoR(k_surface)<bl_zr) then
+          PoR(k_surface) = bl_zr
+        endif
+      endif
+    endif
 
     lastK_left = KoL(k_surface) ; lastP_left = PoL(k_surface)
     lastK_right = KoR(k_surface) ; lastP_right = PoR(k_surface)
-
     ! Effective thickness
     ! NOTE: This would be better expressed in terms of the layers thicknesses rather
     ! than as differences of position - AJA
