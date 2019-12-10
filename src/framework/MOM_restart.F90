@@ -985,7 +985,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
       if ((m==start_var) .OR. (size_in_file < max_file_size-var_sz)) then
         size_in_file = size_in_file + var_sz
       endif
-      ! get the axis (dimension) names and lengths for variable 'm'               
+      ! get the axis (dimension) names and lengths for variable 'm'
       ! note: 4d variables are lon x lat x vertical level x time
       num_dims=0
       call get_var_dimension_features(hor_grid, z_grid, t_grid, &
