@@ -2774,7 +2774,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            enddo ; enddo
          endif
          if (segment%nudged_grad) then
-           do k=1,nz ; do J=segment%HI%JsdB,segment%HI%JedB
+           do k=1,nz ; do I=segment%HI%IsdB,segment%HI%IedB
              ! dhdt gets set to 0 on inflow in oblique case
              if (ry_tang_rad(I,J,k) <= 0.0) then
                tau = segment%Velocity_nudging_timescale_in
