@@ -75,7 +75,7 @@ type, public :: hor_visc_CS ; private
                              !! Default is False to maintain answers with legacy experiments
                              !! but should be changed to True for new experiments.
   logical :: anisotropic     !< If true, allow anisotropic component to the viscosity.
-  logical :: add_LES_viscosity !< "If true, adds the viscosity from Smagorinsky and Leith to
+  logical :: add_LES_viscosity!< If true, adds the viscosity from Smagorinsky and Leith to
                              !! the background viscosity instead of taking the maximum.
   real    :: Kh_aniso        !< The anisotropic viscosity [L2 T-1 ~> m2 s-1].
   logical :: dynamic_aniso   !< If true, the anisotropic viscosity is recomputed as a function
