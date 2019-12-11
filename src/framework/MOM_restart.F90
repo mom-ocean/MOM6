@@ -928,9 +928,9 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   endif
 
   ! append '.nc' to the restart file name if it is missing
-  substring_index = index('.nc', trim(restartname_temp))
+  substring_index = index(trim(restartname_temp), ".nc")
   if (substring_index <= 0) then
-    restartname = append_substring(restartname_temp,'.nc')
+    restartname = append_substring(restartname_temp, ".nc")
   else
     restartname = restartname_temp
   endif
@@ -1138,9 +1138,9 @@ subroutine write_initial_conditions(directory, filename, CS, G, time, GV)
   ! append '.nc' to the restart file name if it is missing
   ! \todo: require users to specify full file path including the file name appendix
   ! in calls to open_file
-  substring_index = index('.nc', trim(filename))
+  substring_index = index(trim(filename), ".nc")
   if (substring_index <= 0) then
-      base_file_name = append_substring(trim(directory)//trim(filename),'.nc')
+      base_file_name = append_substring(trim(directory)//trim(filename),".nc")
   else
       name_length = len(trim(directory)//trim(filename))
       base_file_name(1:name_length) = trim(directory)//trim(filename)
@@ -1151,11 +1151,11 @@ subroutine write_initial_conditions(directory, filename, CS, G, time, GV)
 
   ! open the netCDF file, and check if file already exists and can be appended
   fileOpenSuccess = open_file(fileOBjWrite, trim(base_file_name), "write", &
-                                   G%Domain%mpp_domain, is_restart=.false.)
+                              G%Domain%mpp_domain, is_restart=.false.)
   if (.not.(fileOpenSuccess)) &
   ! create and open new file(s) for domain-decomposed write
     fileOpenSuccess = open_file(fileObjWrite, trim(base_file_name), "append", &
-                                   G%Domain%mpp_domain, is_restart=.false.)
+                                G%Domain%mpp_domain, is_restart=.false.)
   ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
   !>\note: the user may need to increase the allocated array sizes to accommodate
   !! more axes. As of 12/2019, only 7 axes are registered to the MOM_IC.nc file.
@@ -1335,9 +1335,9 @@ subroutine restore_state(filename, directory, day, G, CS)
   ! append '.nc.' to the file name if it is missing
   base_file_name = ''
 
-  str_index = INDEX(temp_file_name,'.nc')
+  str_index = INDEX(temp_file_name, ".nc")
   if (str_index <=0) then
-     base_file_name = trim(append_substring(temp_file_name, '.nc'))
+     base_file_name = trim(append_substring(temp_file_name, ".nc"))
   else
      base_file_name = trim(temp_file_name)
   endif
@@ -1567,9 +1567,9 @@ function get_num_restart_files(filename, directory, G, CS) result(num_files)
      if (num_restart > 0) err = 1 ! Avoid going through the file list twice.
      do while (err == 0)
         ! append '.nc' to the restart file name if it is missing
-        substring_index = index('.nc', trim(restartname_temp))
+        substring_index = index(trim(restartname_temp), ".nc")
         if (substring_index <= 0) then
-           restartname = append_substring(restartname_temp,'.nc')
+           restartname = append_substring(restartname_temp,".nc")
         else
            restartname = restartname_temp
         endif

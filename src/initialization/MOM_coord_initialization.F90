@@ -524,10 +524,10 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
   vars(1) = var_desc("R","kilogram meter-3","Target Potential Density",'1','L','1')
   vars(2) = var_desc("g","meter second-2","Reduced gravity",'1','L','1')
 
-  call create_file(trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
+  call create_file(trim(filepath), vars, 2, fields, threading=SINGLE_FILE, GV=GV)
 
-  call write_field(trim(filepath), vars(1)%name, US%R_to_kg_m3*GV%Rlay(:), "append")
-  call write_field(trim(filepath), vars(2)%name, US%L_T_to_m_s**2*US%m_to_Z*GV%g_prime(:), "append")
+  call write_field(trim(filepath), vars(1)%name, US%R_to_kg_m3*GV%Rlay(:), "overwrite")
+  call write_field(trim(filepath), vars(2)%name, US%L_T_to_m_s**2*US%m_to_Z*GV%g_prime(:), "overwrite")
 
 end subroutine write_vertgrid_file
 

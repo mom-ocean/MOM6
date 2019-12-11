@@ -1269,7 +1269,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   if (multiple_files) file_threading = MULTIPLE
 
   call create_file(trim(filepath), vars, nFlds_used, fields, &
-                   file_threading, dG=G)
+                   threading=file_threading, dG=G)
 
   do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLatBu(I,J); enddo ; enddo
   call write_field(trim(filepath), vars(1)%name, out_q, "append", G%Domain)
