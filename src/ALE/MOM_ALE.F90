@@ -1272,9 +1272,9 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
   vars(2) = var_desc('ds_interface', getCoordinateUnits( CS%regridCS ), &
                     'Layer Center Coordinate Separation','1','i','1')
 
-  call create_file(trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
-  call write_field(trim(filepath), vars(1)%name, ds, "append")
-  call write_field(trim(filepath), vars(2)%name, dsi, "append")
+  call create_file(trim(filepath), vars, 2, SINGLE_FILE, GV=GV)
+  call write_field(trim(filepath), vars(1)%name, ds, "append", var_desc=vars(1), GV=GV)
+  call write_field(trim(filepath), vars(2)%name, dsi, "append", var_desc=vars(2), GV=GV)
 
 end subroutine ALE_writeCoordinateFile
 

@@ -218,13 +218,12 @@ end interface
 
 contains
 
-!> This routine opens a netcdf file in "write" mode, registers the axes and variables, and writes
-!! variable attributes included in the "vars" structure
-subroutine create_file(filename, vars, numVariables, fields, threading, timeUnit, G, DG, GV, checksums)
+!> This routine opens a netcdf file in "write" or "overwrite" mode, registers the global diagnostic axes, and writes
+!! the axis data and metadata to the file
+subroutine create_file(filename, vars, numVariables, threading, timeUnit, G, DG, GV, checksums)
   character(len=*),      intent(in)               :: filename !< full path to the netcdf file
   type(vardesc), dimension(:), intent(in)         :: vars !< structures describing the output
   integer,               intent(in)               :: numVariables !< number of variables to write to the file
-  type(fieldtype), dimension(:), intent(inout)    :: fields !< array of fieldtypes for each variable
   integer, optional,     intent(in)               :: threading !< SINGLE_FILE or MULTIPLE
   real, optional,        intent(in)               :: timeUnit !< length of the units for time [s]. The
                                                              !! default value is 86400.0, for 1 day.
@@ -289,14 +288,9 @@ subroutine create_file(filename, vars, numVariables, fields, threading, timeUnit
 
   ! open the a doomain-decomposed file if the domain is associated with more than one pe
   if (domain_set) then
-    if (Domain%layout(1)*Domain%layout(2) .gt. 1) then
-      if (mpp_get_domain_npes(Domain%mpp_domain) .gt. 1 ) then
-        file_open_successDD=open_file(fileObjDD, filename_temp, trim(nc_mode), Domain%mpp_domain, is_restart=.false.)
-        file_open_successNoDD=.false.  
-      else
-        file_open_successNoDD=open_file(fileObjNoDD, filename_temp, trim(nc_mode), is_restart=.false.)
-        file_open_successDD=.false.
-      endif
+    if (mpp_get_domain_npes(Domain%mpp_domain) .gt. 1 ) then
+      file_open_successDD=open_file(fileObjDD, filename_temp, trim(nc_mode), Domain%mpp_domain, is_restart=.false.)
+      file_open_successNoDD=.false.  
     else
       file_open_successNoDD=open_file(fileObjNoDD, filename_temp, trim(nc_mode), is_restart=.false.)
       file_open_successDD=.false.
@@ -305,7 +299,7 @@ subroutine create_file(filename, vars, numVariables, fields, threading, timeUnit
     file_open_successNoDD=open_file(fileObjNoDD, filename_temp, trim(nc_mode), is_restart=.false.)
     file_open_successDD=.false.
   endif
-! set the time units
+  ! set the time units
   timeUnits=""
   if (present(timeUnit)) then
     timeUnits = get_time_units(timeUnit)
@@ -321,7 +315,7 @@ subroutine create_file(filename, vars, numVariables, fields, threading, timeUnit
   allocate(axis_data_CS%axis(7))
   allocate(axis_data_CS%data(7))
 
-  ! procedure for the domain-decomposed case
+  ! axis registration procedure for the domain-decomposed case
   if (file_open_successDD) then
     !total_axes=0
     do i=1,numVariables
@@ -353,7 +347,6 @@ subroutine create_file(filename, vars, numVariables, fields, threading, timeUnit
       do j=1,num_dims
         if (dim_lengths(j) .gt. 0) then
           if (.not.(dimension_exists(fileObjDD, dim_names(i,j)))) then
-            !total_axes=total_axes+1
             if (present(G)) then
               if (present(timeUnit)) then
                 call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i,j), j, G=G, &
@@ -407,25 +400,11 @@ subroutine create_file(filename, vars, numVariables, fields, threading, timeUnit
           endif
         endif
       enddo
-      ! register variable "i" and write the attributes
-      if (.not.(variable_exists(fileObjDD, trim(vars(i)%name)))) then
-        call register_field(fileObjDD, vars(i)%name, "double", dimensions=dim_names(i,1:num_dims))
-        call register_variable_attribute(fileObjDD, vars(i)%name, 'units', vars(i)%units)
-        call register_variable_attribute(fileObjDD, vars(i)%name, 'long_name', vars(i)%longname)
-        ! write the checksum attribute for variable "i"
-        if (present(checksums)) then
-          ! convert the checksum to a string
-          checksum_char = ''
-          checksum_char = convert_checksum_to_string(checksums(i,1))
-          call register_variable_attribute(fileObjDD, vars(i)%name, "checksum", checksum_char)
-        endif
-      endif
     enddo
 
     if (check_if_open(fileObjDD)) call close_file(fileObjDD)
-  ! procedure for the non-domain-decomposed case
+  ! axis registration procedure for the non-domain-decomposed case
   elseif (file_open_successNoDD) then
-    !total_axes=0
     do i=1,numVariables
       num_dims=0
 
@@ -509,19 +488,6 @@ subroutine create_file(filename, vars, numVariables, fields, threading, timeUnit
           endif
         endif
       enddo
-      ! register variable "i" and write the attributes
-      if (.not.(variable_exists(fileObjNoDD, trim(vars(i)%name)))) then
-        call register_field(fileObjNoDD, vars(i)%name, "double", dimensions=dim_names(i,1:num_dims))
-        call register_variable_attribute(fileObjNoDD, vars(i)%name, 'units', vars(i)%units)
-        call register_variable_attribute(fileObjNoDD, vars(i)%name, 'long_name', vars(i)%longname)
-        ! write the checksum attribute for variable "i"
-        if (present(checksums)) then
-          ! convert the checksum to a string
-          checksum_char = ''
-          checksum_char = convert_checksum_to_string(checksums(i,1))
-          call register_variable_attribute(fileObjNoDD, vars(i)%name, "checksum", checksum_char)
-        endif
-      endif
     enddo
 
     if (check_if_open(fileObjNoDD)) call close_file(fileObjNoDD)
@@ -537,29 +503,44 @@ end subroutine create_file
 !> This function uses the fms_io function write_data to write a 1-D domain-decomposed data field named "fieldname"
 !! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
 !! file write procedure.
-subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, corner, edge_lengths, time, scale)
+subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, var_desc
+                             corner, edge_lengths, time, scale, checksums, G, dG, GV)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:), intent(in) :: data !< The 1-dimensional data array to pass to read_data
   character(len=*), intent(in) :: mode !< "write", "overwrite", or "append"
   type(MOM_domain_type),intent(in) :: domain !< MOM domain attribute with the mpp_domain decomposition
+  type(vardesc), optional, intent(in) :: var_desc !< structure describing variable output
   integer, dimension(1), optional, intent(in) :: corner !< starting index of data buffer. Default is 1
   integer, dimension(1), optional, intent(in) :: edge_lengths !< number of data values to read in; default is the
                                                           !! variable size
   real, optional, intent(in) :: time !< time value to write
   real, optional, intent(in) :: scale !< A scaling factor that the fields are multiplied by before they are written.
+  integer(kind=8), dimension(:,:), optional, intent(in) :: checksums  !< variable checksum
+  type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
+                                                     !! is required if the new file uses any
+                                                     !! horizontal grid axes.
+  type(dyn_horgrid_type),  optional, intent(in) :: dG !< dynamic horizontal grid structure; G or dG
+                                                     !! is required if the new file uses any
+                                                     !! horizontal grid axes.
+  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
+                                                     !! required if the new file uses any
+                                                     !! vertical grid axes.
   ! local
   type(FmsNetcdfDomainFile_t) :: fileobj ! netCDF domain-decomposed file object returned by call to open_file
 
   logical :: file_open_success !.true. if call to open_file is successful
   real :: file_time ! most recent time currently written to file
   real, allocatable, dimension(:) :: data_tmp
-  integer :: i, ndims, time_index, substring_index
+  integer :: num_dims, time_index, substring_index
   integer :: dim_unlim_size, dim_unlim_index ! size of the unlimited dimension
   integer, dimension(1) :: start, nwrite ! indices for first data value and number of values to write
   character(len=40) :: dim_unlim_name ! name of the unlimited dimension in the file
+  character(len=64) :: checksum_char ! checksum character array created from checksum argument
   character(len=1024) :: filename_temp
-
+  character(len=48), dimension(1) :: dim_names !< variable dimension names (or name, in the 1-D case)
+  integer, dimension(1) :: dim_lengths !< variable dimension lengths (or length, in the 1-D case)
+  
   ! append '.nc' to the file name if it is missing
   filename_temp = ""
   substring_index = 0
@@ -570,67 +551,106 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, corner, ed
     filename_temp = filename
   endif
 
-  ! if the job is running on more than 1 pe, and the io_layout is defined, use the domain-decomposed IO interfaces
-  if (domain%layout(1)*domain%layout(2) .ge. 2) then
-    if (mpp_get_domain_npes(Domain%mpp_domain) .gt. 1) then
-      ! open the file for a domain-decomposed write
-      if (.not.(check_if_open(fileobj))) &
-        file_open_success = open_file(fileobj, filename_temp, lowercase(trim(mode)), domain%mpp_domain, &
+  ! if the job is running on more than 1 pe, use the domain-decomposed IO interfaces
+  ! otherwise, MOM does not define the io_domain, so the non-domain-decomposed write_field interface should be called 
+  if (mpp_get_domain_npes(domain%mpp_domain) .gt. 1) then
+    ! open the file for a domain-decomposed write
+    if (.not.(check_if_open(fileobj))) &
+      file_open_success = open_file(fileobj, filename_temp, lowercase(trim(mode)), domain%mpp_domain, &
                                       is_restart=.false.)
 
-        ndims = get_variable_num_dimensions(fileobj, trim(fieldname))
-
-        dim_unlim_index = get_variable_unlimited_dimension_index(fileobj, trim(fieldname))
-
-        start(:) = 1
-        nwrite(:) = size(data)
-        if (present(corner)) then
-          do i=1,ndims
-            if (i .ne. dim_unlim_index) start(i) = corner(i)
-          enddo
-        endif
-        if (present(edge_lengths)) then
-          do i=1,ndims
-            if (i .ne. dim_unlim_index) nwrite(i) = edge_lengths(i)
-          enddo
-        endif
-
-        allocate(data_tmp(size(data,1)))
-        data_tmp = data
-        ! scale the data
-        if (present(scale)) then ; if (scale /= 1.0) then
-          call scale_data(data_tmp,scale)
-        endif ; endif
-
-        time_index=1
-        dim_unlim_size=0
-        dim_unlim_name=""
-        ! write the data
-        if (lowercase(trim(mode)) .eq. "append") then
-          if (present(time)) then
-            ! write the time value if it is not already written to the file
-            file_time = read_most_recent_time(fileobj)
-            if (time .gt. file_time+EPSILON(time)) then
-              call get_unlimited_dimension_name(fileobj,dim_unlim_name)
-              call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
-              if (dim_unlim_size .lt. unlimited) time_index=dim_unlim_size+1
-              call write_data(fileobj, trim(dim_unlim_name), (/time/), corner=(/time_index/),edge_lengths=(/1/))
-            endif
-            if (dim_unlim_index .gt. 0) &
-              call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
-                              unlim_dim_level=time_index)
-          endif
+    ! register the field if it is not in the file
+    dim_unlim_index=0
+    dim_names(:) = ""
+    dim_lengths(:) = 0
+    num_dims=0
+    if (variable_exists(fileobj, trim(fieldname))) then
+      dim_unlim_index = get_variable_unlimited_dimension_index(fileobj, trim(fieldname))
+    else
+      ! get the dimension names and lengths
+      if (present(G)) then
+        if (present(GV)) then
+          call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, G=G, GV=GV)
         else
-          call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
+          call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, G=G)
         endif
-        ! close the file
-        if (check_if_open(fileobj)) call close_file(fileobj)
-        deallocate(data_tmp)
-    else ! call non-domain-decomposed interface routine
-      call write_field(filename, fieldname, data, mode, corner, edge_lengths, time, scale)
+      elseif(present(dG)) then
+        if (present(GV)) then
+          call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, dG=dG, GV=GV)
+        else
+          call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, dG=dG)
+        endif
+      endif
+
+      call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
+      call register_variable_attribute(fileObj, trim(fieldname) 'units', trim(var_desc%units))
+      call register_variable_attribute(fileObj, trim(fieldname), 'long_name', trim(var_desc%longname))
+      ! write the checksum attribute for variable "i"
+      if (present(checksums)) then
+        ! convert the checksum to a string
+        checksum_char = ''
+        checksum_char = convert_checksum_to_string(checksums(1))
+        call register_variable_attribute(fileObj, trim(fieldname), "checksum", checksum_char)
+      endif
     endif
-  else
-    call write_field(filename, fieldname, data, mode, corner, edge_lengths, time, scale)
+
+    start(:) = 1
+    nwrite(:) = size(data)
+    if (present(corner)) then
+      if (corner(1) .le. nwrite(1)) then
+        if (corner(1) .gt. 0) then
+          start(1) = corner(1)
+        endif
+      endif
+    endif
+
+    if (present(edge_lengths)) then
+      if (edge_lengths(1) .le. nwrite(1)) then
+        if (edge_lengths(1) .gt. 0) then
+          nwrite(1) = edge_lengths(1)
+        endif
+      endif
+    endif
+
+    allocate(data_tmp(size(data,1)))
+    data_tmp = data
+    ! scale the data
+    if (present(scale)) then ; if (scale /= 1.0) then
+      call scale_data(data_tmp,scale)
+    endif ; endif
+
+    time_index=1
+    dim_unlim_size=0
+    dim_unlim_name=""
+    ! write the data
+    if (lowercase(trim(mode)) .eq. "append") then
+      if (present(time)) then
+        ! write the time value if it is not already written to the file
+        file_time = read_most_recent_time(fileobj)
+        if (time .gt. file_time+EPSILON(time)) then
+          call get_unlimited_dimension_name(fileobj,dim_unlim_name)
+          call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
+          if (dim_unlim_size .lt. unlimited) time_index=dim_unlim_size+1
+          call write_data(fileobj, trim(dim_unlim_name), (/time/), corner=(/time_index/),edge_lengths=(/1/))
+        endif
+        if (dim_unlim_index .gt. 0) &
+          call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
+                            unlim_dim_level=time_index)
+      endif
+    else
+      call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
+    endif
+    ! close the file
+    if (check_if_open(fileobj)) call close_file(fileobj)
+    deallocate(data_tmp)
+
+  else ! call non-domain-decomposed interface routine
+    call write_field(filename, fieldname, data, mode, var_desc, &
+                     corner, edge_lengths, time, scale, checksums, G, dG, GV)
   endif
 
 end subroutine write_field_1d_DD
@@ -638,27 +658,42 @@ end subroutine write_field_1d_DD
 !> This function uses the fms_io function write_data to write a 2-D domain-decomposed data field named "fieldname"
 !! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
 !! file write procedure.
-subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, corner, edge_lengths, time, scale)
+subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, &
+                             corner, edge_lengths, time, scale, checksums, G, dG, GV)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:,:), intent(in) :: data !< The 2-dimensional data array to pass to read_data
   character(len=*), intent(in) :: mode !< "write", "overwrite", or "append"
   type(MOM_domain_type), intent(in) :: domain !< MOM domain attribute with the mpp_domain decomposition
-  integer, dimension(2), optional, intent(in) :: corner !< starting indices of data buffer. Default is 1
-  integer, dimension(2), optional, intent(in) :: edge_lengths !< number of data values to read in;
-                                                            !! default values are the variable dimension sizes
+  type(vardesc), optional, intent(in) :: var_desc !< structure describing variable output
+  integer, dimension(2), optional, intent(in) :: corner !< starting index of data buffer. Default is 1
+  integer, dimension(2), optional, intent(in) :: edge_lengths !< number of data values to read in; default is the
+                                                          !! variable size
   real, optional, intent(in) :: time !< time value to write
   real, optional, intent(in) :: scale !< A scaling factor that the fields are multiplied by before they are written.
+  integer(kind=8), dimension(:,:), optional, intent(in) :: checksums  !< variable checksum
+  type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
+                                                     !! is required if the new file uses any
+                                                     !! horizontal grid axes.
+  type(dyn_horgrid_type),  optional, intent(in) :: dG !< dynamic horizontal grid structure; G or dG
+                                                     !! is required if the new file uses any
+                                                     !! horizontal grid axes.
+  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
+                                                     !! required if the new file uses any
+                                                     !! vertical grid axes.
   ! local
   type(FmsNetcdfDomainFile_t) :: fileobj ! netCDF file object returned by call to open_file
   logical :: file_open_success !.true. if call to open_file is successful
   real :: file_time ! most recent time currently written to file
   real, allocatable, dimension(:,:) :: data_tmp
-  integer :: i, ndims, time_index, substring_index
+  integer :: i, ndims, num_dims, time_index, substring_index
   integer :: dim_unlim_size, dim_unlim_index ! size and dimension index of the unlimited dimension
   integer, dimension(2) :: start, nwrite ! indices for starting points and number of values to write
   character(len=40) :: dim_unlim_name ! name of the unlimited dimension in the file
   character(len=1024) :: filename_temp
+  character(len=64) :: checksum_char ! checksum character array created from checksum argument
+  character(len=48), dimension(2) :: dim_names !< variable dimension names
+  integer, dimension(2) :: dim_lengths !< variable dimension lengths
 
   ! append '.nc' to the file name if it is missing
   filename_temp = ""
@@ -670,96 +705,151 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, corner, ed
     filename_temp = filename
   endif
   ! if the job is running on more than 1 pe, and the io_layout is defined, use the domain-decomposed IO interfaces
-  if (domain%layout(1)*domain%layout(2) .gt. 1) then
-    if (mpp_get_domain_npes(Domain%mpp_domain) .gt. 1) then
-      ! open the file for a domain-decomposed write
-      if (.not.(check_if_open(fileobj))) &
-        file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
-                                      is_restart=.false.)
+  dim_names(:) = ""
+  dim_lengths(:) = 0
+  num_dims=0
+  if (mpp_get_domain_npes(Domain%mpp_domain) .gt. 1) then
+    ! open the file for a domain-decomposed write
+    if (.not.(check_if_open(fileobj))) &
+      file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
+                                    is_restart=.false.)
 
-      ndims = get_variable_num_dimensions(fileobj, trim(fieldname))
-
+    dim_unlim_index=0
+    if (variable_exists(fileobj, trim(fieldname))) then
       dim_unlim_index = get_variable_unlimited_dimension_index(fileobj, trim(fieldname))
-
-      start(:) = 1
-      nwrite(:) = 1
-      if (present(corner)) then
-        do i=1,ndims
-          if (i .ne. dim_unlim_index) start(i) = corner(i)
-        enddo
-      endif
-      if (present(edge_lengths)) then
-        do i=1,ndims
-          if (i .ne. dim_unlim_index) nwrite(i) = edge_lengths(i)
-        enddo
-      else
-        call get_variable_size(fileobj, trim(fieldname), nwrite)
-      endif
-
-      allocate(data_tmp(size(data,1), size(data,2)))
-      data_tmp = data
-      ! scale the data
-      if (present(scale)) then ; if (scale /= 1.0) then
-        call scale_data(data_tmp,scale)
-      endif ; endif
-
-      time_index=1
-      dim_unlim_size=0
-      dim_unlim_name=""
-      ! write the data
-      if (lowercase(trim(mode)) .eq. "append") then
-        if (present(time)) then
-          ! write the time value if it is not already written to the file
-          file_time = read_most_recent_time(fileobj)
-          if (time .gt. file_time+EPSILON(time)) then
-            call get_unlimited_dimension_name(fileobj,dim_unlim_name)
-            call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
-            if (dim_unlim_size .lt. unlimited) time_index=dim_unlim_size+1
-
-            call write_data(fileobj, trim(dim_unlim_name), (/time/), corner=(/time_index/),edge_lengths=(/1/))
-          endif
-          if (dim_unlim_index .gt. 0) &
-              call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
-                              unlim_dim_level=time_index)
+    else
+      ! get the dimension names and lengths
+      if (present(G)) then
+        if (present(GV)) then
+          call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, G=G, GV=GV)
+        else
+          call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, G=G)
         endif
-      else
-        call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
+      elseif(present(dG)) then
+        if (present(GV)) then
+          call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, dG=dG, GV=GV)
+        else
+          call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, dG=dG)
+        endif
       endif
-      ! close the file
-      if (check_if_open(fileobj)) call close_file(fileobj)
-      deallocate(data_tmp)
-    else ! call non-domain-decomposed interface routine
-      call write_field(filename, fieldname, data, mode, corner, edge_lengths, time, scale)
+
+      call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
+      call register_variable_attribute(fileObj, trim(fieldname) 'units', trim(var_desc%units))
+      call register_variable_attribute(fileObj, trim(fieldname), 'long_name', trim(var_desc%longname))
+      ! write the checksum attribute for variable "i"
+      if (present(checksums)) then
+        ! convert the checksum to a string
+        checksum_char = ''
+        checksum_char = convert_checksum_to_string(checksums(1,1))
+        call register_variable_attribute(fileObj, trim(fieldname), "checksum", checksum_char)
+      endif
     endif
-  else
-    call write_field(filename, fieldname, data, mode, corner, edge_lengths, time, scale)
+
+    ndims=2
+    start(:) = 1
+    nwrite(:) = (/size(data,1), size(data,2)/)
+    if (present(corner)) then
+      do i=1,ndims
+        if (corner(i) .le. nwrite(i)) then
+          if (corner(i) .gt. 0) then
+            if (i .ne. dim_unlim_index) start(i) = corner(i)
+          endif
+        endif
+      enddo
+    endif
+
+    if (present(edge_lengths)) then
+      do i=1,ndims
+        if (edge_lengths(i) .le. nwrite(i)) then
+          if (edge_lengths(i) .gt. 0) then
+            if (i .ne. dim_unlim_index) nwrite(i) = edge_lengths(i)
+          endif
+        endif
+      enddo
+    endif
+
+    allocate(data_tmp(size(data,1), size(data,2)))
+    data_tmp = data
+    ! scale the data
+    if (present(scale)) then ; if (scale /= 1.0) then
+      call scale_data(data_tmp,scale)
+    endif ; endif
+
+    time_index=1
+    dim_unlim_size=0
+    dim_unlim_name=""
+    ! write the data
+    if (lowercase(trim(mode)) .eq. "append") then
+      if (present(time)) then
+        ! write the time value if it is not already written to the file
+        file_time = read_most_recent_time(fileobj)
+        if (time .gt. file_time+EPSILON(time)) then
+          call get_unlimited_dimension_name(fileobj,dim_unlim_name)
+          call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
+          if (dim_unlim_size .lt. unlimited) time_index=dim_unlim_size+1
+
+          call write_data(fileobj, trim(dim_unlim_name), (/time/), corner=(/time_index/),edge_lengths=(/1/))
+        endif
+        if (dim_unlim_index .gt. 0) &
+          call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
+                          unlim_dim_level=time_index)
+      endif
+    else
+      call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
+    endif
+    ! close the file
+    if (check_if_open(fileobj)) call close_file(fileobj)
+    deallocate(data_tmp)
+
+  else ! call non-domain-decomposed interface routine
+     call write_field(filename, fieldname, data, mode, var_desc, &
+                      corner, edge_lengths, time, scale, checksums, G, dG, GV)
   endif
 end subroutine write_field_2d_DD
 
 !> This function uses the fms_io function write_data to write a 3-D domain-decomposed data field named "fieldname"
 !! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
 !! file write procedure.
-subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, corner, edge_lengths, time, scale)
+subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, var_desc, &
+                             corner, edge_lengths, time, scale, checksums, G, dG, GV)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:), intent(in) :: data !< The 3-dimensional data array to pass to read_data
   character(len=*), intent(in) :: mode !< "write", "overwrite", or "append"
   type(MOM_domain_type),  intent(in) :: domain !< MOM domain attribute with the mpp_domain decomposition
+  type(vardesc), optional, intent(in) :: var_desc !< structure describing variable output
   integer, dimension(3), optional, intent(in) :: corner !< starting index of data buffer. Default is 1
   integer, dimension(3), optional, intent(in) :: edge_lengths !< number of data values to read in; default is the
-                                                             !! variable size
+                                                          !! variable size
   real, optional, intent(in) :: time !< time value to write
-  real, optional, intent(in) :: scale  !< A scaling factor that the fields are multiplied by before they are written.
+  real, optional, intent(in) :: scale !< A scaling factor that the fields are multiplied by before they are written.
+  integer(kind=8), dimension(:,:), optional, intent(in) :: checksums  !< variable checksum
+  type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
+                                                     !! is required if the new file uses any
+                                                     !! horizontal grid axes.
+  type(dyn_horgrid_type),  optional, intent(in) :: dG !< dynamic horizontal grid structure; G or dG
+                                                     !! is required if the new file uses any
+                                                     !! horizontal grid axes.
+  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
+                                                     !! required if the new file uses any
+                                                     !! vertical grid axes.
   ! local
   type(FmsNetcdfDomainFile_t) :: fileobj ! netCDF file object returned by call to open_file
   logical :: file_open_success !.true. if call to open_file is successful
   real :: file_time ! most recent time currently written to file
   real, allocatable, dimension(:,:,:) :: data_tmp
-  integer :: i, ndims, time_index, substring_index
+  integer :: i, ndims, num_dims, time_index, substring_index
   integer :: dim_unlim_size, dim_unlim_index ! size and dimension index of the unlimited dimension
   integer, dimension(3) :: start, nwrite ! indices for first data value and number of values to write
   character(len=40) :: dim_unlim_name ! name of the unlimited dimension in the file
   character(len=1024) :: filename_temp
+  character(len=64) :: checksum_char ! checksum character array created from checksum argument
+  character(len=48), dimension(3) :: dim_names !< variable dimension names
+  integer, dimension(3) :: dim_lengths !< variable dimension lengths
 
   ! append '.nc' to the file name if it is missing
   filename_temp = ""
@@ -770,97 +860,158 @@ subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, corner, ed
   else
     filename_temp = filename
   endif
-  ! if the job is running on more than 1 pe, and the io_layout is defined, use the domain-decomposed IO interfaces
-  if (domain%layout(1)*domain%layout(2) .gt. 1) then
-    if (mpp_get_domain_npes(Domain%mpp_domain) .gt. 1) then
-      ! open the file for a domain-decomposed write
-      if (.not.(check_if_open(fileobj))) &
-        file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
-                                      is_restart=.false.)
+  ! if the job is running on more than 1 pe, use the domain-decomposed IO interfaces
+  if (mpp_get_domain_npes(domain%mpp_domain) .gt. 1) then
+    ! open the file for a domain-decomposed write
+    if (.not.(check_if_open(fileobj))) &
+      file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
+                                    is_restart=.false.)
 
-      ndims = get_variable_num_dimensions(fileobj, trim(fieldname))
+  if (mpp_get_domain_npes(Domain%mpp_domain) .gt. 1) then
+    ! open the file for a domain-decomposed write
+    if (.not.(check_if_open(fileobj))) &
+      file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
+                                    is_restart=.false.)
 
+    dim_names(:) = ""
+    dim_lengths(:) = 0
+    num_dims=0
+    dim_unlim_index=0
+    if (variable_exists(fileobj, trim(fieldname))) then
       dim_unlim_index = get_variable_unlimited_dimension_index(fileobj, trim(fieldname))
-
-      start(:) = 1
-      nwrite(:) = 1
-      if (present(corner)) then
-        do i=1,ndims
-          if (i .ne. dim_unlim_index) start(i) = corner(i)
-        enddo
-      endif
-      if (present(edge_lengths)) then
-        do i=1,ndims
-          if (i .ne. dim_unlim_index) nwrite(i) = edge_lengths(i)
-        enddo
-      else
-        call get_variable_size(fileobj, trim(fieldname), nwrite)
-      endif
-
-      allocate(data_tmp(size(data,1), size(data,2), size(data,3)))
-      data_tmp = data
-      ! scale the data
-      if (present(scale)) then ; if (scale /= 1.0) then
-        call scale_data(data_tmp,scale)
-      endif ; endif
-
-      time_index=1
-      dim_unlim_size=0
-      dim_unlim_name=""
-      ! write the data
-      if (lowercase(trim(mode)) .eq. "append") then
-        if (present(time)) then
-          ! write the time value if it is not already written to the file
-          file_time = read_most_recent_time(fileobj)
-          if (time .gt. file_time+EPSILON(time)) then
-            call get_unlimited_dimension_name(fileobj,dim_unlim_name)
-            call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
-            if (dim_unlim_size .lt. unlimited) time_index=dim_unlim_size+1
-            call write_data(fileobj, trim(dim_unlim_name), (/time/), corner=(/time_index/),edge_lengths=(/1/))
-          endif
-
-          if (dim_unlim_index .gt. 0) &
-             call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
-                             unlim_dim_level=time_index)
+    else
+      ! get the dimension names and lengths
+      if (present(G)) then
+        if (present(GV)) then
+          call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, G=G, GV=GV)
+        else
+          call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, G=G)
         endif
-      else
-        call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
+      elseif(present(dG)) then
+        if (present(GV)) then
+          call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, dG=dG, GV=GV)
+        else
+          call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, dG=dG)
+        endif
       endif
-      ! close the file
-      if (check_if_open(fileobj)) call close_file(fileobj)
-      deallocate(data_tmp)
-    else ! call non-domain-decomposed interface routine
-      call write_field(filename, fieldname, data, mode, corner, edge_lengths, time, scale)
+
+      call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
+      call register_variable_attribute(fileObj, trim(fieldname) 'units', trim(var_desc%units))
+      call register_variable_attribute(fileObj, trim(fieldname), 'long_name', trim(var_desc%longname))
+      ! write the checksum attribute
+      if (present(checksums)) then
+        ! convert the checksum to a string
+        checksum_char = ''
+        checksum_char = convert_checksum_to_string(checksums(1,1))
+        call register_variable_attribute(fileObj, trim(fieldname), "checksum", checksum_char)
+      endif
     endif
-  else
-    call write_field(filename, fieldname, data, mode, corner, edge_lengths, time, scale)
+
+    ndims = 3
+    start(:) = 1
+    nwrite(:) = (/size(data,1), size(data,2), size(data,3)/)
+    if (present(corner)) then
+      do i=1,ndims
+        if (corner(i) .le. nwrite(i)) then
+          if (corner(i) .gt. 0) then
+            if (i .ne. dim_unlim_index) start(i) = corner(i)
+          endif
+        endif
+      enddo
+    endif
+
+    if (present(edge_lengths)) then
+      do i=1,ndims
+        if (edge_lengths(i) .le. nwrite(i)) then
+          if (edge_lengths(i) .gt. 0) then
+            if (i .ne. dim_unlim_index) nwrite(i) = edge_lengths(i)
+          endif
+        endif
+      enddo
+    endif
+
+    allocate(data_tmp(size(data,1), size(data,2), size(data,3)))
+    data_tmp = data
+    ! scale the data
+    if (present(scale)) then ; if (scale /= 1.0) then
+      call scale_data(data_tmp,scale)
+    endif ; endif
+
+    time_index=1
+    dim_unlim_size=0
+    dim_unlim_name=""
+    ! write the data
+    if (lowercase(trim(mode)) .eq. "append") then
+      if (present(time)) then
+        ! write the time value if it is not already written to the file
+        file_time = read_most_recent_time(fileobj)
+        if (time .gt. file_time+EPSILON(time)) then
+          call get_unlimited_dimension_name(fileobj,dim_unlim_name)
+          call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
+          if (dim_unlim_size .lt. unlimited) time_index=dim_unlim_size+1
+          call write_data(fileobj, trim(dim_unlim_name), (/time/), corner=(/time_index/),edge_lengths=(/1/))
+        endif
+
+        if (dim_unlim_index .gt. 0) &
+           call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
+                           unlim_dim_level=time_index)
+      endif
+    else
+      call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
+    endif
+    ! close the file
+    if (check_if_open(fileobj)) call close_file(fileobj)
+    deallocate(data_tmp)
+  else ! call non-domain-decomposed interface routine
+    call write_field(filename, fieldname, data, mode, var_desc, &
+                      corner, edge_lengths, time, scale, checksums, G, dG, GV)
   endif
+
 end subroutine write_field_3d_DD
 
 !> This function uses the fms_io function write_data to write a 4-D domain-decomposed data field named "fieldname"
 !! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
 !! file write procedure.
-subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, corner, edge_lengths, time, scale)
+subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, var_desc, &
+                             corner, edge_lengths, time, scale, checksums)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:,:), intent(in) :: data !< The 4-dimensional data array to pass to read_data
   character(len=*), intent(in) :: mode !< "write", "overwrite", or "append"
   type(MOM_domain_type), intent(in) :: domain !< MOM domain attribute with the mpp_domain decomposition
-  integer, dimension(4), optional, intent(in) :: corner !< starting index of data buffer. Default is 1
-  integer, dimension(4), optional, intent(in) :: edge_lengths !< number of data values to read in; default is the
-                                                             !! variable size
+  type(vardesc), optional, intent(in) :: var_desc !< structure describing variable output
+  integer, dimension(1), optional, intent(in) :: corner !< starting index of data buffer. Default is 1
+  integer, dimension(1), optional, intent(in) :: edge_lengths !< number of data values to read in; default is the
+                                                          !! variable size
   real, optional, intent(in) :: time !< time value to write
-  real, optional, intent(in) :: scale !< A scaling factor that the fields are multiplied by before they are written
+  real, optional, intent(in) :: scale !< A scaling factor that the fields are multiplied by before they are written.
+  integer(kind=8), dimension(:,:), optional, intent(in) :: checksums  !< variable checksum
+  type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
+                                                     !! is required if the new file uses any
+                                                     !! horizontal grid axes.
+  type(dyn_horgrid_type),  optional, intent(in) :: dG !< dynamic horizontal grid structure; G or dG
+                                                     !! is required if the new file uses any
+                                                     !! horizontal grid axes.
+  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
+                                                     !! required if the new file uses any
+                                                     !! vertical grid axes.
   ! local
   type(FmsNetcdfDomainFile_t) :: fileobj ! netCDF file object returned by call to open_file
   logical :: file_open_success !.true. if call to open_file is successful
   real, allocatable, dimension(:,:,:,:) :: data_tmp
   real :: file_time ! most recent time currently written to file
-  integer :: i, ndims, time_index, substring_index
+  integer :: i, ndims, num_dims, time_index, substring_index
   integer :: dim_unlim_size, dim_unlim_index ! size and dimension index of the unlimited dimension
   integer, dimension(4) :: start, nwrite ! indices for first data value and number of values to write
   character(len=40) :: dim_unlim_name ! name of the unlimited dimension in the file
   character(len=1024) :: filename_temp
+  character(len=64) :: checksum_char ! checksum character array created from checksum argument
+  character(len=48), dimension(4) :: dim_names !< variable dimension names
+  integer, dimension(4) :: dim_lengths !< variable dimension lengths
 
   ! append '.nc' to the file name if it is missing
   filename_temp = ""
@@ -872,88 +1023,132 @@ subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, corner, ed
     filename_temp = filename
   endif
   ! if the job is running on more than 1 pe, and the io_layout is defined, use the domain-decomposed IO interfaces
-  if (domain%layout(1)*domain%layout(2) .gt. 1) then
-    if (mpp_get_domain_npes(Domain%mpp_domain) .gt. 1) then
-      ! open the file for a domain-decomposed write
-      if (.not.(check_if_open(fileobj))) &
-        file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
+  if (mpp_get_domain_npes(domain%mpp_domain) .gt. 1) then
+    ! open the file for a domain-decomposed write
+    if (.not.(check_if_open(fileobj))) &
+      file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
                                       is_restart=.false.)
-
-      ndims = get_variable_num_dimensions(fileobj, trim(fieldname))
-
+    dim_names(:) = ""
+    dim_lengths(:) = 0
+    num_dims=0
+    dim_unlim_index=0
+    if (variable_exists(fileobj, trim(fieldname))) then
       dim_unlim_index = get_variable_unlimited_dimension_index(fileobj, trim(fieldname))
-
-      start(:) = 1
-      nwrite(:) = 1
-      if (present(corner)) then
-        do i=1,ndims
-          if (i .ne. dim_unlim_index) start(i) = corner(i)
-        enddo
-      endif
-      if (present(edge_lengths)) then
-        do i=1,ndims
-          if (i .ne. dim_unlim_index) nwrite(i) = edge_lengths(i)
-        enddo
-      else
-        call get_variable_size(fileobj, trim(fieldname), nwrite)
-      endif
-
-      allocate(data_tmp(size(data,1), size(data,2), size(data,3), size(data,4)))
-      data_tmp = data
-      ! scale the data
-      if (present(scale)) then ; if (scale /= 1.0) then
-        call scale_data(data_tmp,scale)
-      endif ; endif
-
-      time_index=1
-      dim_unlim_size=0
-      dim_unlim_name=""
-      ! write the data
-      if (lowercase(trim(mode)) .eq. "append") then
-        if (present(time)) then
-          ! write the time value if it is not already written to the file
-          file_time = read_most_recent_time(fileobj)
-          if (time .gt. file_time+EPSILON(time)) then
-            call get_unlimited_dimension_name(fileobj,dim_unlim_name)
-            call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
-            if (dim_unlim_size .lt. unlimited) time_index=dim_unlim_size+1
-            call write_data(fileobj, trim(dim_unlim_name), (/time/), corner=(/time_index/),edge_lengths=(/1/))
-          endif
-          if (dim_unlim_index .gt. 0) &
-            call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_Lengths=nwrite, &
-                            unlim_dim_level=time_index)
+    else
+      ! get the dimension names and lengths
+      if (present(G)) then
+        if (present(GV)) then
+          call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, G=G, GV=GV)
+        else
+          call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, G=G)
         endif
-      else
-        call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_Lengths=nwrite)
+      elseif(present(dG)) then
+        if (present(GV)) then
+          call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, dG=dG, GV=GV)
+        else
+          call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, dG=dG)
+        endif
       endif
-      ! close the file
-      if (check_if_open(fileobj)) call close_file(fileobj)
-      deallocate(data_tmp)
-    else ! call non-domain-decomposed interface routine
-      call write_field(filename, fieldname, data, mode, corner, edge_lengths, time, scale)
+     
+      ! register the field to the file
+      call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
+
+      call register_variable_attribute(fileObj, trim(fieldname) 'units', trim(var_desc%units))
+      call register_variable_attribute(fileObj, trim(fieldname), 'long_name', trim(var_desc%longname))
+      ! write the checksum attribute
+      if (present(checksums)) then
+        ! convert the checksum to a string
+        checksum_char = ''
+        checksum_char = convert_checksum_to_string(checksums(1,1))
+        call register_variable_attribute(fileObj, trim(fieldname), "checksum", checksum_char)
+      endif
     endif
-  else
-    call write_field(filename, fieldname, data, mode, corner, edge_lengths, time, scale)
+
+    ndims = 4
+    start(:) = 1
+    nwrite(:) = (/size(data,1), size(data,2), size(data,3), size(data,4)/)
+    if (present(corner)) then
+      do i=1,ndims
+        if (corner(i) .le. nwrite(i)) then
+          if (corner(i) .gt. 0) then
+            if (i .ne. dim_unlim_index) start(i) = corner(i)
+          endif
+        endif
+      enddo
+    endif
+
+    if (present(edge_lengths)) then
+      do i=1,ndims
+        if (edge_lengths(i) .le. nwrite(i)) then
+          if (edge_lengths(i) .gt. 0) then
+            if (i .ne. dim_unlim_index) nwrite(i) = edge_lengths(i)
+          endif
+        endif
+      enddo
+    endif
+
+    allocate(data_tmp(size(data,1), size(data,2), size(data,3), size(data,4)))
+    data_tmp = data
+    ! scale the data
+    if (present(scale)) then ; if (scale /= 1.0) then
+      call scale_data(data_tmp,scale)
+    endif ; endif
+
+    time_index=1
+    dim_unlim_size=0
+    dim_unlim_name=""
+    ! write the data
+    if (lowercase(trim(mode)) .eq. "append") then
+       if (present(time)) then
+         ! write the time value if it is not already written to the file
+         file_time = read_most_recent_time(fileobj)
+         if (time .gt. file_time+EPSILON(time)) then
+           call get_unlimited_dimension_name(fileobj,dim_unlim_name)
+           call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
+           if (dim_unlim_size .lt. unlimited) time_index=dim_unlim_size+1
+           call write_data(fileobj, trim(dim_unlim_name), (/time/), corner=(/time_index/),edge_lengths=(/1/))
+         endif
+         if (dim_unlim_index .gt. 0) &
+           call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_Lengths=nwrite, &
+                            unlim_dim_level=time_index)
+      endif
+    else
+      call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_Lengths=nwrite)
+    endif
+    ! close the file
+    if (check_if_open(fileobj)) call close_file(fileobj)
+    deallocate(data_tmp)
+  else ! call non-domain-decomposed interface routine
+     call write_field(filename, fieldname, data, mode, var_desc, &
+                      corner, edge_lengths, time, scale, checksums, G, dG, GV)
   endif
+
 end subroutine write_field_4d_DD
 
 !> This routine uses the fms_io function write_data to write a scalar variable named "fieldname"
 !! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
 !! file write procedure.
-subroutine write_scalar(filename, fieldname, data, mode, time)
+subroutine write_scalar(filename, fieldname, data, mode, time, var_desc)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
   real, intent(in) :: data !< The 1-dimensional data array to pass to read_data
   character(len=*), intent(in) :: mode !< "write", "overwrite", or "append"
   real, optional, intent(in) :: time !< time value to write
+  type(vardesc), optional, intent(in) :: var_desc !< structure describing variable output
+
   ! local
   type(FmsNetcdfFile_t) :: fileobj ! netCDF file object returned by call to open_file
   logical :: file_open_success !.true. if call to open_file is successful
-  integer :: time_index, substring_index
+  integer :: num_dims, time_index, substring_index
   integer :: dim_unlim_size, dim_unlim_index ! size and dimension index of the unlimited dimension
   real :: file_time ! most recent time currently written to file
   character(len=40) :: dim_unlim_name ! name of the unlimited dimension in the file
   character(len=1024) :: filename_temp
+  
 
   ! append '.nc' to the file name if it is missing
   filename_temp = ""
@@ -968,10 +1163,16 @@ subroutine write_scalar(filename, fieldname, data, mode, time)
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
 
-  if (.not. variable_exists(fileobj, trim(fieldname))) &
-    call MOM_error(FATAL, "MOM_io::write_scalar: Variable "//trim(fieldname)//" not registered to "//&
-                   trim(filename_temp))
-
+  dim_unlim_index=0
+  if (variable_exists(fileobj, trim(fieldname))) then
+    dim_unlim_index = get_variable_unlimited_dimension_index(fileobj, trim(fieldname))
+  else
+    call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, t_grid, dim_names, &
+                                    dim_lengths, num_dims)
+    call register_field(fileObj, trim(fieldname))
+    call register_variable_attribute(fileObj, trim(fieldname) 'units', trim(var_desc%units))
+    call register_variable_attribute(fileObj, trim(fieldname), 'long_name', trim(var_desc%longname))
+  endif
   time_index=1
   dim_unlim_size=0
   dim_unlim_name=""
@@ -1000,26 +1201,41 @@ end subroutine write_scalar
 !> This function uses the fms_io function write_data to write a 1-D non-domain-decomposed data field named "fieldname"
 !! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
 !! file write procedure.
-subroutine write_field_1d_noDD(filename, fieldname, data, mode, corner, edge_lengths, time, scale)
+subroutine write_field_1d_noDD(filename, fieldname, data, mode, var_desc, &
+                               corner, edge_lengths, time_level, scale, checksums, G, dG, GV)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:), intent(in) :: data !< The 1-dimensional data array to pass to read_data
   character(len=*), intent(in) :: mode !< "write", "overwrite", or "append"
+  type(vardesc), optional, intent(in) :: var_desc !< structure describing variable output
   integer, dimension(1), optional, intent(in) :: corner !< starting index of data buffer. Default is 1
   integer, dimension(1), optional, intent(in) :: edge_lengths !< number of data values to read in; default is the
-                                                              !! variable size
+                                                          !! variable size
   real, optional, intent(in) :: time !< time value to write
-  real, optional, intent(in) :: scale !< A scaling factor that the fields are multiplied by before they are written
+  real, optional, intent(in) :: scale !< A scaling factor that the fields are multiplied by before they are written.
+  integer(kind=8), dimension(:,:), optional, intent(in) :: checksums  !< variable checksum
+  type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
+                                                     !! is required if the new file uses any
+                                                     !! horizontal grid axes.
+  type(dyn_horgrid_type),  optional, intent(in) :: dG !< dynamic horizontal grid structure; G or dG
+                                                     !! is required if the new file uses any
+                                                     !! horizontal grid axes.
+  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
+                                                     !! required if the new file uses any
+                                                     !! vertical grid axes.
   ! local
   type(FmsNetcdfFile_t) :: fileobj ! netCDF file object returned by call to open_file
   logical :: file_open_success !.true. if call to open_file is successful
   real :: file_time ! most recent time currently written to file
   real, allocatable, dimension(:) :: data_tmp
-  integer :: i, ndims, time_index, substring_index
+  integer :: i, ndims, num_dims, time_index, substring_index
   integer :: dim_unlim_size, dim_unlim_index ! size of the unlimited dimension
   integer, dimension(1) :: start, nwrite ! indices for first data value and number of values to write
   character(len=40) :: dim_unlim_name ! name of the unlimited dimension in the file
   character(len=1024) :: filename_temp
+  character(len=64) :: checksum_char ! checksum character array created from checksum argument
+  character(len=48), dimension(1) :: dim_names !< variable dimension names
+  integer, dimension(1) :: dim_lengths !< variable dimension lengths
 
   ! append '.nc' to the file name if it is missing
   filename_temp = ""
@@ -1034,25 +1250,60 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, corner, edge_len
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
 
-  if (.not. variable_exists(fileobj, trim(fieldname))) &
-    call MOM_error(FATAL, "MOM_io::write_data_1d_nodd: Variable "//trim(fieldname)//" not registered to "//&
-                   trim(filename_temp))
+  dim_names(:) = ""
+  dim_lengths(:) = 0
+  num_dims=0
+  dim_unlim_index=0
+  if (variable_exists(fileobj, trim(fieldname))) then
+    dim_unlim_index = get_variable_unlimited_dimension_index(fileobj, trim(fieldname))
+  else
+    ! get the dimension names and lengths
+    if (present(G)) then
+      if (present(GV)) then
+        call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, G=G, GV=GV)
+      else
+        call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, G=G)
+      endif
+    elseif(present(dG)) then
+      if (present(GV)) then
+        call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, dG=dG, GV=GV)
+      else
+        call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, dG=dG)
+      endif
+    endif
 
-  ndims = get_variable_num_dimensions(fileobj, trim(fieldname))
-
-  dim_unlim_index = get_variable_unlimited_dimension_index(fileobj, trim(fieldname))
+    call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
+    call register_variable_attribute(fileObj, trim(fieldname) 'units', trim(var_desc%units))
+    call register_variable_attribute(fileObj, trim(fieldname), 'long_name', trim(var_desc%longname))
+    ! write the checksum attribute
+    if (present(checksums)) then
+      ! convert the checksum to a string
+      checksum_char = ''
+      checksum_char = convert_checksum_to_string(checksums(1,1))
+      call register_variable_attribute(fileObj, trim(fieldname), "checksum", checksum_char)
+    endif
+  endif
 
   start(:) = 1
   nwrite(:) = size(data)
   if (present(corner)) then
-    do i=1,ndims
-      if (i .ne. dim_unlim_index) start(i) = corner(i)
-    enddo
+    if (corner(1) .le. nwrite(1)) then
+      if (corner(1) .gt. 0) then
+        start(1) = corner(1)
+      endif
+    endif
   endif
+
   if (present(edge_lengths)) then
-    do i=1,ndims
-      if (i .ne. dim_unlim_index) nwrite(i) = edge_lengths(i)
-    enddo
+    if (edge_lengths(1) .le. nwrite(1)) then
+      if (edge_lengths(1) .gt. 0) then
+        nwrite(1) = edge_lengths(1)
+      endif
+    endif
   endif
 
   allocate(data_tmp(size(data,1)))
@@ -1092,26 +1343,41 @@ end subroutine write_field_1d_noDD
 !> This function uses the fms_io function write_data to write a scalar variable named "fieldname"
 !! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
 !! file write procedure.
-subroutine write_field_2d_noDD(filename, fieldname, data, mode, corner, edge_lengths, time, scale)
+subroutine write_field_2d_noDD(filename, fieldname, data, mode, var_desc, &
+                               corner, edge_lengths, time_level, scale, checksums, G, dG, GV)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:,:), intent(in) :: data !< The 2-dimensional data array to pass to read_data
   character(len=*), intent(in) :: mode !< "write", "overwrite", or "append"
-  integer, dimension(2), optional, intent(in) :: corner !< starting indices of data buffer. Default is 1
-  integer, dimension(2), optional, intent(in) :: edge_lengths !< number of data values to read in;
-                                                            !! default values are the variable dimension sizes
+  type(vardesc), optional, intent(in) :: var_desc !< structure describing variable output
+  integer, dimension(2), optional, intent(in) :: corner !< starting index of data buffer. Default is 1
+  integer, dimension(2), optional, intent(in) :: edge_lengths !< number of data values to read in; default is the
+                                                          !! variable size
   real, optional, intent(in) :: time !< time value to write
-  real, optional, intent(in) :: scale !< A scaling factor that the fields are multiplied by before they are written
+  real, optional, intent(in) :: scale !< A scaling factor that the fields are multiplied by before they are written.
+  integer(kind=8), dimension(:,:), optional, intent(in) :: checksums  !< variable checksum
+  type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
+                                                     !! is required if the new file uses any
+                                                     !! horizontal grid axes.
+  type(dyn_horgrid_type),  optional, intent(in) :: dG !< dynamic horizontal grid structure; G or dG
+                                                     !! is required if the new file uses any
+                                                     !! horizontal grid axes.
+  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
+                                                     !! required if the new file uses any
+                                                     !! vertical grid axes.
   ! local
   type(FmsNetcdfFile_t) :: fileobj ! netCDF file object returned by call to open_file
   logical :: file_open_success !.true. if call to open_file is successful
   real :: file_time ! most recent time currently written to file
   real, allocatable, dimension (:,:) :: data_tmp
-  integer :: i, ndims, time_index, substring_index
+  integer :: i, ndims, num_dims, time_index, substring_index
   integer :: dim_unlim_size, dim_unlim_index ! size and dimension index of the unlimited dimension
   integer, dimension(2) :: start, nwrite ! indices for starting points and number of values to write
   character(len=40) :: dim_unlim_name ! name of the unlimited dimension in the file
   character(len=1024) :: filename_temp
+  character(len=64) :: checksum_char ! checksum character array created from checksum argument
+  character(len=48), dimension(2) :: dim_names !< variable dimension names
+  integer, dimension(2) :: dim_lengths !< variable dimension lengths
 
   ! append '.nc' to the file name if it is missing
   filename_temp = ""
@@ -1126,27 +1392,65 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, corner, edge_len
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
 
-  if (.not. variable_exists(fileobj, trim(fieldname))) &
-    call MOM_error(FATAL, "MOM_io::write_data_2d_nodd: Variable "//trim(fieldname)//" not registered to "//&
-                   trim(filename_temp))
+  dim_names(:) = ""
+  dim_lengths(:) = 0
+  num_dims=0
+  dim_unlim_index=0
+  if (variable_exists(fileobj, trim(fieldname))) then
+    dim_unlim_index = get_variable_unlimited_dimension_index(fileobj, trim(fieldname))
+  else
+    ! get the dimension names and lengths
+    if (present(G)) then
+      if (present(GV)) then
+        call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                        dim_lengths, num_dims, G=G, GV=GV)
+      else
+        call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                        dim_lengths, num_dims, G=G)
+      endif
+    elseif(present(dG)) then
+      if (present(GV)) then
+        call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                        dim_lengths, num_dims, dG=dG, GV=GV)
+      else
+        call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                        dim_lengths, num_dims, dG=dG)
+      endif
+    endif
 
-  ndims = get_variable_num_dimensions(fileobj, trim(fieldname))
+    call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
+    call register_variable_attribute(fileObj, trim(fieldname) 'units', trim(var_desc%units))
+    call register_variable_attribute(fileObj, trim(fieldname), 'long_name', trim(var_desc%longname))
+    ! write the checksum attribute
+    if (present(checksums)) then
+      ! convert the checksum to a string
+      checksum_char = ''
+      checksum_char = convert_checksum_to_string(checksums(1,1))
+      call register_variable_attribute(fileObj, trim(fieldname), "checksum", checksum_char)
+    endif
+  endif
 
-  dim_unlim_index = get_variable_unlimited_dimension_index(fileobj, trim(fieldname))
-
+  ndims=2
   start(:) = 1
-  nwrite(:) = 1
+  nwrite(:) = (/size(data,1), size(data,2)/)
   if (present(corner)) then
     do i=1,ndims
-      if (i .ne. dim_unlim_index) start(i) = corner(i)
+      if (corner(i) .le. nwrite(i)) then
+        if (corner(i) .gt. 0) then
+          if (i .ne. dim_unlim_index) start(i) = corner(i)
+        endif
+      endif
     enddo
   endif
+
   if (present(edge_lengths)) then
     do i=1,ndims
-      if (i .ne. dim_unlim_index) nwrite(i) = edge_lengths(i)
+      if (edge_lengths(i) .le. nwrite(i)) then
+        if (edge_lengths(i) .gt. 0) then
+          if (i .ne. dim_unlim_index) nwrite(i) = edge_lengths(i)
+        endif
+      endif
     enddo
-  else
-    call get_variable_size(fileobj, trim(fieldname), nwrite)
   endif
 
   allocate(data_tmp(size(data,1), size(data,2)))
@@ -1186,26 +1490,41 @@ end subroutine write_field_2d_noDD
 !> This function uses the fms_io function write_data to write a 3-D non-domain-decomposed data field named "fieldname"
 !! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
 !! file write procedure.
-subroutine write_field_3d_noDD(filename, fieldname, data, mode, corner, edge_lengths, time, scale)
+subroutine write_field_3d_noDD(filename, fieldname, data, mode, var_desc, &
+                               corner, edge_lengths, time_level, scale, checksums, G, dG, GV)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:), intent(in) :: data !< The 3-dimensional data array to pass to read_data
   character(len=*), intent(in) :: mode !< "write", "overwrite", or "append"
+  type(vardesc), optional, intent(in) :: var_desc !< structure describing variable output
   integer, dimension(3), optional, intent(in) :: corner !< starting index of data buffer. Default is 1
   integer, dimension(3), optional, intent(in) :: edge_lengths !< number of data values to read in; default is the
-                                                             !! variable size
+                                                          !! variable size
   real, optional, intent(in) :: time !< time value to write
-  real, optional, intent(in) :: scale !< A scaling factor that the fields are multiplied by before they are written
+  real, optional, intent(in) :: scale !< A scaling factor that the fields are multiplied by before they are written.
+  integer(kind=8), dimension(:,:), optional, intent(in) :: checksums  !< variable checksum
+  type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
+                                                     !! is required if the new file uses any
+                                                     !! horizontal grid axes.
+  type(dyn_horgrid_type),  optional, intent(in) :: dG !< dynamic horizontal grid structure; G or dG
+                                                     !! is required if the new file uses any
+                                                     !! horizontal grid axes.
+  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
+                                                     !! required if the new file uses any
+                                                     !! vertical grid axes.
   ! local
   type(FmsNetcdfFile_t) :: fileobj ! netCDF file object returned by call to open_file
   logical :: file_open_success !.true. if call to open_file is successful
   real :: file_time ! most recent time currently written to file
   real, allocatable, dimension(:,:,:) :: data_tmp
-  integer :: i, ndims, time_index, substring_index
+  integer :: i, ndims, num_dims, time_index, substring_index
   integer :: dim_unlim_size, dim_unlim_index ! size and dimension index of the unlimited dimension
   integer, dimension(3) :: start, nwrite ! indices for first data value and number of values to write
   character(len=40) :: dim_unlim_name ! name of the unlimited dimension in the file
   character(len=1024) :: filename_temp
+  character(len=64) :: checksum_char ! checksum character array created from checksum argument
+  character(len=48), dimension(3) :: dim_names !< variable dimension names
+  integer, dimension(3) :: dim_lengths !< variable dimension lengths
 
   ! append '.nc' to the file name if it is missing
   filename_temp = ""
@@ -1220,25 +1539,65 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, corner, edge_len
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
 
-  if (.not. variable_exists(fileobj, trim(fieldname))) &
-    call MOM_error(FATAL, "MOM_io::write_data_3d_nodd: Variable "//trim(fieldname)//" not registered to "//&
-                   trim(filename_temp))
+  dim_names(:) = ""
+  dim_lengths(:) = 0
+  num_dims=0
+  dim_unlim_index=0
+  if (variable_exists(fileobj, trim(fieldname))) then
+    dim_unlim_index = get_variable_unlimited_dimension_index(fileobj, trim(fieldname))
+  else
+    ! get the dimension names and lengths
+    if (present(G)) then
+      if (present(GV)) then
+        call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, G=G, GV=GV)
+      else
+        call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, G=G)
+      endif
+    elseif(present(dG)) then
+      if (present(GV)) then
+        call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                        dim_lengths, num_dims, dG=dG, GV=GV)
+      else
+        call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                        dim_lengths, num_dims, dG=dG)
+      endif
+    endif
 
-  ndims = get_variable_num_dimensions(fileobj, trim(fieldname))
-  dim_unlim_index = get_variable_unlimited_dimension_index(fileobj, trim(fieldname))
+    call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
+    call register_variable_attribute(fileObj, trim(fieldname) 'units', trim(var_desc%units))
+    call register_variable_attribute(fileObj, trim(fieldname), 'long_name', trim(var_desc%long_name))
+    ! write the checksum attribute
+    if (present(checksums)) then
+      ! convert the checksum to a string
+      checksum_char = ''
+      checksum_char = convert_checksum_to_string(checksums(1,1))
+      call register_variable_attribute(fileObj, trim(fieldname), "checksum", checksum_char)
+    endif
+  endif
+
+  ndims = 3
   start(:) = 1
-  nwrite(:) = 1
+  nwrite(:) = (/size(data,1), size(data,2), size(data,3)/)
   if (present(corner)) then
     do i=1,ndims
-      if (i .ne. dim_unlim_index) start(i) = corner(i)
+      if (corner(i) .le. nwrite(i)) then
+        if (corner(i) .gt. 0) then
+          if (i .ne. dim_unlim_index) start(i) = corner(i)
+        endif
+      endif
     enddo
   endif
+
   if (present(edge_lengths)) then
     do i=1,ndims
-      if (i .ne. dim_unlim_index) nwrite(i) = edge_lengths(i)
+      if (edge_lengths(i) .le. nwrite(i)) then
+        if (edge_lengths(i) .gt. 0) then
+          if (i .ne. dim_unlim_index) nwrite(i) = edge_lengths(i)
+        endif
+      endif
     enddo
-  else
-    call get_variable_size(fileobj, trim(fieldname), nwrite)
   endif
 
   allocate(data_tmp(size(data,1), size(data,2), size(data,3)))
@@ -1278,26 +1637,41 @@ end subroutine write_field_3d_noDD
 !> This function uses the fms_io function write_data to write a 4-D non-domain-decomposed data field named "fieldname"
 !! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
 !! file write procedure.
-subroutine write_field_4d_noDD(filename, fieldname, data, mode, corner, edge_lengths, time, scale)
+subroutine write_field_4d_noDD(filename, fieldname, data, mode, var_desc, &
+                               corner, edge_lengths, time, scale, checksums, G, dG, GV)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:,:), intent(in) :: data !< The 4-dimensional data array to pass to read_data
   character(len=*), intent(in) :: mode !< "write", "overwrite", or "append"
+  type(vardesc), optional, intent(in) :: var_desc !< structure describing variable output
   integer, dimension(4), optional, intent(in) :: corner !< starting index of data buffer. Default is 1
-  integer, dimension(4), optional, intent(in) :: edge_lengths !< number of data values to read in; default is
-                                                             !! the variable size
+  integer, dimension(4), optional, intent(in) :: edge_lengths !< number of data values to read in; default is the
+                                                          !! variable size
   real, optional, intent(in) :: time !< time value to write
-  real, optional, intent(in) :: scale !< A scaling factor that the fields are multiplied by before they are written
+  real, optional, intent(in) :: scale !< A scaling factor that the fields are multiplied by before they are written.
+  integer(kind=8), dimension(:,:), optional, intent(in) :: checksums  !< variable checksum
+  type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
+                                                     !! is required if the new file uses any
+                                                     !! horizontal grid axes.
+  type(dyn_horgrid_type),  optional, intent(in) :: dG !< dynamic horizontal grid structure; G or dG
+                                                     !! is required if the new file uses any
+                                                     !! horizontal grid axes.
+  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
+                                                     !! required if the new file uses any
+                                                     !! vertical grid axes.
   ! local
   type(FmsNetcdfFile_t) :: fileobj ! netCDF file object returned by call to open_file
   logical :: file_open_success !.true. if call to open_file is successful
   real :: file_time ! most recent time currently written to file
   real, allocatable, dimension(:,:,:,:) :: data_tmp
-  integer :: i, ndims, time_index, substring_index
+  integer :: i, ndims, num_dims, time_index, substring_index
   integer :: dim_unlim_size, dim_unlim_index ! size and dimension index of the unlimited dimension
   integer, dimension(4) :: start, nwrite ! indices for first data value and number of values to write
   character(len=40) :: dim_unlim_name ! name of the unlimited dimension in the file
   character(len=1024) :: filename_temp
+  character(len=64) :: checksum_char ! checksum character array created from checksum argument
+  character(len=48), dimension(4) :: dim_names !< variable dimension names
+  integer, dimension(4) :: dim_lengths !< variable dimension lengths
 
   ! append '.nc' to the file name if it is missing
   filename_temp = ""
@@ -1312,26 +1686,65 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, corner, edge_len
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
   
-  if (.not. variable_exists(fileobj, trim(fieldname))) &
-    call MOM_error(FATAL, "MOM_io::write_data_4d_nodd: Variable "//trim(fieldname)//" not registered to "//&
-                   trim(filename_temp))
+  dim_names(:) = ""
+  dim_lengths(:) = 0
+  num_dims=0
+  dim_unlim_index=0
+  if (variable_exists(fileobj, trim(fieldname))) then
+    dim_unlim_index = get_variable_unlimited_dimension_index(fileobj, trim(fieldname))
+  else
+    ! get the dimension names and lengths
+    if (present(G)) then
+      if (present(GV)) then
+        call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, G=G, GV=GV)
+      else
+        call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                          dim_lengths, num_dims, G=G)
+      endif
+    elseif(present(dG)) then
+      if (present(GV)) then
+        call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                        dim_lengths, num_dims, dG=dG, GV=GV)
+      else
+        call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                        dim_lengths, num_dims, dG=dG)
+      endif
+    endif
 
-  ndims = get_variable_num_dimensions(fileobj, fieldname)
-  dim_unlim_index = get_variable_unlimited_dimension_index(fileobj, trim(fieldname))
+    call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
+    call register_variable_attribute(fileObj, trim(fieldname) 'units', trim(var_desc%units))
+    call register_variable_attribute(fileObj, trim(fieldname), 'long_name', trim(var_desc%long_name))
+    ! write the checksum attribute
+    if (present(checksums)) then
+      ! convert the checksum to a string
+      checksum_char = ''
+      checksum_char = convert_checksum_to_string(checksums(1,1))
+      call register_variable_attribute(fileObj, trim(fieldname), "checksum", checksum_char)
+    endif
+  endif
 
+  ndims = 4
   start(:) = 1
-  nwrite(:) = 1
+  nwrite(:) = (/size(data,1), size(data,2), size(data,3), size(data,4)/)
   if (present(corner)) then
     do i=1,ndims
-      if (i .ne. dim_unlim_index) start(i) = corner(i)
+      if (corner(i) .le. nwrite(i)) then
+        if (corner(i) .gt. 0) then
+          if (i .ne. dim_unlim_index) start(i) = corner(i)
+        endif
+      endif
     enddo
   endif
+
   if (present(edge_lengths)) then
     do i=1,ndims
-      if (i .ne. dim_unlim_index) nwrite(i) = edge_lengths(i)
+      if (edge_lengths(i) .le. nwrite(i)) then
+        if (edge_lengths(i) .gt. 0) then
+          if (i .ne. dim_unlim_index) nwrite(i) = edge_lengths(i)
+        endif
+      endif
     enddo
-  else
-    call get_variable_size(fileobj, trim(fieldname), nwrite)
   endif
 
   allocate(data_tmp(size(data,1), size(data,2), size(data,3), size(data,4)))
@@ -2309,7 +2722,7 @@ end subroutine MOM_get_nc_corner_edge_lengths_noDD
 !> Get the horizontal grid, vertical grid, and/or time dimension names and lengths
 !! for a single variable from the grid ids returned by a prior call to query_vardesc
 subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, &
-                                  dim_names, dim_lengths, num_dims, G, dG, GV)
+                                      dim_names, dim_lengths, num_dims, G, dG, GV)
 
   character(len=*), intent(in) :: hor_grid !< horizontal grid
   character(len=*), intent(in) :: z_grid !< vertical grid
@@ -2331,21 +2744,31 @@ subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, &
   character(len=8) :: t_grid
   character(len=8) :: t_grid_read
   integer :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
+  integer :: npes
   real, pointer, dimension(:) :: gridLatT => NULL(), & ! The latitude or longitude of T or B points for
      gridLatB => NULL(), & ! the purpose of labeling the output axes.
      gridLonT => NULL(), &
      gridLonB => NULL()
+  type(MOM_domain_type), pointer :: domain => NULL() ! Domain used to get the pe count 
   ! set the ocean grid coordinates
+
+  npes=0
   if (present(G)) then
-     gridLatT => G%gridLatT ; gridLatB => G%gridLatB
-     gridLonT => G%gridLonT ; gridLonB => G%gridLonB
-     isg = G%isg ; ieg = G%ieg ; jsg = G%jsg ; jeg = G%jeg
-     IsgB = G%IsgB ; IegB = G%IegB ; JsgB = G%JsgB ; JegB = G%JegB
+    gridLatT => G%gridLatT ; gridLatB => G%gridLatB
+    gridLonT => G%gridLonT ; gridLonB => G%gridLonB
+    isg = G%isg ; ieg = G%ieg ; jsg = G%jsg ; jeg = G%jeg
+    IsgB = G%IsgB ; IegB = G%IegB ; JsgB = G%JsgB ; JegB = G%JegB
+    domain => G%domain
+
+    npes = mpp_get_domain_npes(domain%mpp_domain)
   elseif (present(dG)) then
-     gridLatT => dG%gridLatT ; gridLatB => dG%gridLatB
-     gridLonT => dG%gridLonT ; gridLonB => dG%gridLonB
-     isg = dG%isg ; ieg = dG%ieg ; jsg = dG%jsg ; jeg = dG%jeg
-     IsgB = dG%IsgB ; IegB = dG%IegB ; JsgB = dG%JsgB ; JegB = dG%JegB
+    gridLatT => dG%gridLatT ; gridLatB => dG%gridLatB
+    gridLonT => dG%gridLonT ; gridLonB => dG%gridLonB
+    isg = dG%isg ; ieg = dG%ieg ; jsg = dG%jsg ; jeg = dG%jeg
+    IsgB = dG%IsgB ; IegB = dG%IegB ; JsgB = dG%JsgB ; JegB = dG%JegB
+    domain => dG%domain
+
+    npes = mpp_get_domain_npes(domain%mpp_domain)
   endif
 
   use_lath = .false.
@@ -2356,66 +2779,84 @@ subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, &
   call get_horizontal_grid_logic(hor_grid, use_lath, use_lonh, use_latq, use_lonq)
   ! add longitude name to dimension name array
   if (use_lonh) then
-     num_dims = num_dims+1
-     dim_names(num_dims) = ''
-     dim_names(num_dims)(1:len_trim('lonh')) = 'lonh'
-     dim_lengths(num_dims) = size(gridLonT)
+    num_dims = num_dims+1
+    dim_names(num_dims) = ''
+    dim_names(num_dims)(1:len_trim('lonh')) = 'lonh'
+    if (npes .gt. 1) then
+      dim_lengths(num_dims) = size(gridLonT(isg:ieg))
+    else
+      dim_lengths(num_dims) = size(gridLonT)
+    endif     
   elseif (use_lonq) then
-     num_dims = num_dims+1
-     dim_names(num_dims) = ''
-     dim_names(num_dims)(1:len_trim('lonq')) = 'lonq'
-     dim_lengths(num_dims) = size(gridLonB)
+    num_dims = num_dims+1
+    dim_names(num_dims) = ''
+    dim_names(num_dims)(1:len_trim('lonq')) = 'lonq'
+    if (npes .gt. 1) then
+      dim_lengths(num_dims) = size(gridLonB(IsgB:IegB))
+    else
+      dim_lengths(num_dims) = size(gridLonB)
+    endif
   endif
   ! add latitude name to dimension name array
   if (use_lath) then
-     num_dims = num_dims+1
-     dim_names(num_dims) = ''
-     dim_names(num_dims)(1:len_trim('lath')) = 'lath'
-     dim_lengths(num_dims) = size(gridLatT)
+    num_dims = num_dims+1
+    dim_names(num_dims) = ''
+    dim_names(num_dims)(1:len_trim('lath')) = 'lath'
+    if (npes .gt. 1) then
+      dim_lengths(num_dims) = size(gridLatT(jsg:jeg))
+    else
+      dim_lengths(num_dims) = size(gridLatT)
+    endif
   elseif (use_latq) then
-     num_dims = num_dims+1
-     dim_names(num_dims) = ''
-     dim_names(num_dims)(1:len_trim('latq')) = 'latq'
-     dim_lengths(num_dims) = size(gridLatB)
+    num_dims = num_dims+1
+    dim_names(num_dims) = ''
+    dim_names(num_dims)(1:len_trim('latq')) = 'latq'
+    if (npes .gt. 1) then
+      dim_lengths(num_dims) = size(gridLatB(JsgB:JegB))
+    else
+      dim_lengths(num_dims) = size(gridLatB)
+    endif
   endif
+
+  if (associated(domain)) nullify(domain)
   ! vertical grid
   select case (trim(z_grid))
-     case ('L')
-        num_dims = num_dims+1
-        dim_names(num_dims) = ''
-        dim_names(num_dims)(1:len_trim('Layer')) = 'Layer'
-        dim_lengths(num_dims) = size(GV%sLayer(1:GV%ke))
-     case ('i')
-        num_dims = num_dims+1
-        dim_names(num_dims) = ''
-        dim_names(num_dims)(1:len_trim('Interface')) = 'Interface'
-        dim_lengths(num_dims) = size(GV%sInterface(1:GV%ke+1))
-     case ('1') ! Do nothing.
-     case default
-        call MOM_error(FATAL, "MOM_io: get_var_dimension_features: "//&
-                      " has an unrecognized z_grid argument"//trim(z_grid))
+    case ('L')
+      num_dims = num_dims+1
+      dim_names(num_dims) = ''
+      dim_names(num_dims)(1:len_trim('Layer')) = 'Layer'
+      dim_lengths(num_dims) = size(GV%sLayer(1:GV%ke))
+    case ('i')
+      num_dims = num_dims+1
+      dim_names(num_dims) = ''
+      dim_names(num_dims)(1:len_trim('Interface')) = 'Interface'
+      dim_lengths(num_dims) = size(GV%sInterface(1:GV%ke+1))
+    case ('1') ! Do nothing.
+    case default
+      call MOM_error(FATAL, "MOM_io: get_var_dimension_features: "//&
+                     " has an unrecognized z_grid argument"//trim(z_grid))
   end select
   ! time
   t_grid = adjustl(t_grid_in)
   select case (t_grid(1:1))
-     case ('s', 'a', 'm')
-        num_dims = num_dims+1
-        dim_names(num_dims) = ''
-        dim_names(num_dims)(1:len_trim('Time')) = 'Time'
-        dim_lengths(num_dims) = unlimited
-     case ('p')
-        if (len_trim(t_grid(2:8)) <= 0) then
-            call MOM_error(FATAL,"MOM_io:get_var_dimension_features: "//&
+    case ('s', 'a', 'm')
+      num_dims = num_dims+1
+      dim_names(num_dims) = ''
+      dim_names(num_dims)(1:len_trim('Time')) = 'Time'
+      dim_lengths(num_dims) = unlimited
+    case ('p')
+      if (len_trim(t_grid(2:8)) <= 0) then
+          call MOM_error(FATAL,"MOM_io:get_var_dimension_features: "//&
                            "No periodic axis length was specified in "//trim(t_grid))
-        endif
-        num_dims = num_dims+1
-        dim_names(num_dims) = ''
-        dim_names(num_dims)(1:len_trim('Period')) = 'Period'
-        dim_lengths(num_dims) = unlimited
-     case ('1') ! Do nothing.
-     case default
-           call MOM_error(WARNING, "MOM_io: get_var_dimension_features: "//&
-                       "Unrecognized t_grid "//trim(t_grid))
+      endif
+      num_dims = num_dims+1
+      dim_names(num_dims) = ''
+      dim_names(num_dims)(1:len_trim('Period')) = 'Period'
+      dim_lengths(num_dims) = unlimited
+    case ('1') ! Do nothing.
+    case default
+      call MOM_error(WARNING, "MOM_io: get_var_dimension_features: "//&
+                     "Unrecognized t_grid "//trim(t_grid))
   end select
 end subroutine get_var_dimension_features
 
@@ -2435,25 +2876,36 @@ subroutine MOM_get_diagnostic_axis_data(axis_data_CS, axis_name, axis_number, G,
   ! local
   character(len=40) :: x_axis_units='', y_axis_units=''
   integer :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
+  integer :: npes
   real, pointer, dimension(:) :: gridLatT => NULL(), & ! The latitude or longitude of T or B points for
      gridLatB => NULL(), & ! the purpose of labeling the output axes.
      gridLonT => NULL(), &
      gridLonB => NULL()
 
+  type(MOM_domain_type), pointer :: domain => NULL() ! Domain used to get the pe count 
   ! set the ocean grid coordinates
+
+  npes=0
   if (present(G)) then
     gridLatT => G%gridLatT ; gridLatB => G%gridLatB
     gridLonT => G%gridLonT ; gridLonB => G%gridLonB
     x_axis_units = G%x_axis_units ; y_axis_units = G%y_axis_units
     isg = G%isg ; ieg = G%ieg ; jsg = G%jsg ; jeg = G%jeg
     IsgB = G%IsgB ; IegB = G%IegB ; JsgB = G%JsgB ; JegB = G%JegB
+    domain => G%domain
+
+    npes = mpp_get_domain_npes(domain%mpp_domain)
   elseif (present(dG)) then
     gridLatT => dG%gridLatT ; gridLatB => dG%gridLatB
     gridLonT => dG%gridLonT ; gridLonB => dG%gridLonB
     x_axis_units = dG%x_axis_units ; y_axis_units = dG%y_axis_units
     isg = dG%isg ; ieg = dG%ieg ; jsg = dG%jsg ; jeg = dG%jeg
     IsgB = dG%IsgB ; IegB = dG%IegB ; JsgB = dG%JsgB ; JegB = dG%JegB
+    domain => dG%domain
+
+    npes = mpp_get_domain_npes(domain%mpp_domain)
   endif
+
   ! initialize axis_data_CS elements
   axis_data_CS%axis(axis_number)%name = ''
   axis_data_CS%axis(axis_number)%longname = ''
@@ -2465,8 +2917,11 @@ subroutine MOM_get_diagnostic_axis_data(axis_data_CS, axis_name, axis_number, G,
 
   select case(trim(axis_name))
     case('lath')
-      if (associated(gridLatT)) &
+      if (npes .gt. 1) then
         axis_data_CS%data(axis_number)%p=>gridLatT(jsg:jeg)
+      else
+        axis_data_CS%data(axis_number)%p=>gridLatT
+      endif
 
       axis_data_CS%axis(axis_number)%name = trim(axis_name)
       axis_data_CS%axis(axis_number)%longname = 'Latitude'
@@ -2474,8 +2929,11 @@ subroutine MOM_get_diagnostic_axis_data(axis_data_CS, axis_name, axis_number, G,
       axis_data_CS%axis(axis_number)%horgrid_position = CENTER
       axis_data_CS%axis(axis_number)%is_domain_decomposed = .true.
     case('lonh')
-      if (associated(gridLonT)) &
+      if (npes .gt. 1) then
         axis_data_CS%data(axis_number)%p=>gridLonT(isg:ieg)
+      else
+        axis_data_CS%data(axis_number)%p=>gridLonT
+      endif
 
       axis_data_CS%axis(axis_number)%name = trim(axis_name)
       axis_data_CS%axis(axis_number)%horgrid_position  = CENTER
@@ -2483,9 +2941,11 @@ subroutine MOM_get_diagnostic_axis_data(axis_data_CS, axis_name, axis_number, G,
       axis_data_CS%axis(axis_number)%units = x_axis_units
       axis_data_CS%axis(axis_number)%is_domain_decomposed  = .true.
     case('latq')
-      if (associated(gridLatB)) &
+      if (npes .gt. 1) then
         axis_data_CS%data(axis_number)%p=>gridLatB(JsgB:JegB)
-
+      else
+        axis_data_CS%data(axis_number)%p=>gridLatB
+      endif
       axis_data_CS%axis(axis_number)%name = trim(axis_name)
       axis_data_CS%axis(axis_number)%longname = 'Latitude'
       axis_data_CS%axis(axis_number)%units = y_axis_units
@@ -2493,8 +2953,11 @@ subroutine MOM_get_diagnostic_axis_data(axis_data_CS, axis_name, axis_number, G,
       axis_data_CS%axis(axis_number)%is_domain_decomposed = .true.
     case('lonq')
       axis_data_CS%axis(axis_number)%name = trim(axis_name)
-      if (associated(gridLonB)) &
+      if (npes .gt. 1) then
         axis_data_CS%data(axis_number)%p=>gridLonB(IsgB:IegB)
+      else
+        axis_data_CS%data(axis_number)%p=>gridLonB
+      endif
 
       axis_data_CS%axis(axis_number)%longname = 'Longitude'
       axis_data_CS%axis(axis_number)%units = x_axis_units
@@ -2536,6 +2999,8 @@ subroutine MOM_get_diagnostic_axis_data(axis_data_CS, axis_name, axis_number, G,
     case default
       call MOM_error(WARNING, "MOM_io::get_diagnostic_axis_data:"//trim(axis_name)//"is an unrecognized axis")
   end select
+  
+  if (associated(domain)) nullify(domain)
 
 end subroutine MOM_get_diagnostic_axis_data
 
