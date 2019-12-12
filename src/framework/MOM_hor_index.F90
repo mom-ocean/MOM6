@@ -113,7 +113,7 @@ end subroutine HIT_assign
 
 !> \namespace mom_hor_index
 !!
-!! The hor_index_type provides the decalarations and loop ranges for almost all data with horizontal extent.
+!! The hor_index_type provides the declarations and loop ranges for almost all data with horizontal extent.
 !!
 !! Declarations and loop ranges should always be coded with the symmetric memory model in mind.
 !! The non-symmetric memory mode will then also work, albeit with a different (less efficient) communication pattern.
