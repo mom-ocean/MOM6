@@ -123,6 +123,7 @@ integer              :: import_slice = 1
 integer              :: export_slice = 1
 character(len=256)   :: tmpstr
 logical              :: write_diagnostics = .false.
+logical              :: overwrite_timeslice = .false.
 character(len=32)    :: runtype  !< run type
 integer              :: logunit  !< stdout logging unit number
 logical              :: profile_memory = .true.
@@ -273,6 +274,21 @@ subroutine InitializeP0(gcomp, importState, exportState, clock, rc)
 
   write(logmsg,*) write_diagnostics
   call ESMF_LogWrite('MOM_cap:DumpFields = '//trim(logmsg), ESMF_LOGMSG_INFO, rc=rc)
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+       line=__LINE__, &
+       file=__FILE__)) &
+       return
+
+  overwrite_timeslice = .false.
+  call NUOPC_CompAttributeGet(gcomp, name="OverwriteSlice", value=value, &
+       isPresent=isPresent, isSet=isSet, rc=rc)
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+       line=__LINE__, &
+       file=__FILE__)) &
+       return
+  if (isPresent .and. isSet) overwrite_timeslice=(trim(value)=="true")
+  write(logmsg,*) overwrite_timeslice
+  call ESMF_LogWrite('MOM_cap:OverwriteSlice = '//trim(logmsg), ESMF_LOGMSG_INFO, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
        line=__LINE__, &
        file=__FILE__)) &
@@ -741,7 +757,13 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
     file=__FILE__)) &
     return  ! bail out
 
+  if (len_trim(scalar_field_name) > 0) then
+   call fld_list_add(fldsToOcn_num, fldsToOcn, trim(scalar_field_name), "will_provide")
+   call fld_list_add(fldsFrOcn_num, fldsFrOcn, trim(scalar_field_name), "will_provide")
+  end if
+
   if (cesm_coupled) then
+  !TODO: check if still needed
      if (len_trim(scalar_field_name) > 0) then
         call fld_list_add(fldsToOcn_num, fldsToOcn, trim(scalar_field_name), "will_provide")
         call fld_list_add(fldsFrOcn_num, fldsFrOcn, trim(scalar_field_name), "will_provide")
@@ -1488,13 +1510,11 @@ subroutine DataInitialize(gcomp, rc)
   ocean_state        => ocean_internalstate%ptr%ocean_state_type_ptr
   call get_ocean_grid(ocean_state, ocean_grid)
 
-  if (cesm_coupled) then
-     call mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock, rc=rc)
-     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, &
-          file=__FILE__)) &
-          return  ! bail out
-  endif
+  call mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock, rc=rc)
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+    line=__LINE__, &
+    file=__FILE__)) &
+    return  ! bail out
 
   call ESMF_StateGet(exportState, itemCount=fieldCount, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -1537,7 +1557,7 @@ subroutine DataInitialize(gcomp, rc)
 
   if(write_diagnostics) then
     call NUOPC_Write(exportState, fileNamePrefix='field_init_ocn_export_', &
-      timeslice=import_slice, relaxedFlag=.true., rc=rc)
+      overwrite=overwrite_timeslice,timeslice=import_slice, relaxedFlag=.true., rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -1691,7 +1711,7 @@ subroutine ModelAdvance(gcomp, rc)
 
      if (write_diagnostics) then
         call NUOPC_Write(importState, fileNamePrefix='field_ocn_import_', &
-             timeslice=import_slice, relaxedFlag=.true., rc=rc)
+             overwrite=overwrite_timeslice,timeslice=import_slice, relaxedFlag=.true., rc=rc)
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
              line=__LINE__, &
              file=__FILE__)) &
@@ -1847,7 +1867,7 @@ subroutine ModelAdvance(gcomp, rc)
 
   if (write_diagnostics) then
      call NUOPC_Write(exportState, fileNamePrefix='field_ocn_export_', &
-          timeslice=export_slice, relaxedFlag=.true., rc=rc)
+          overwrite=overwrite_timeslice,timeslice=export_slice, relaxedFlag=.true., rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
