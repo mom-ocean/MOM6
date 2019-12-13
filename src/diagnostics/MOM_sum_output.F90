@@ -628,7 +628,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     if (day > CS%Start_time) then
       continue
     else
-      call create_file(trim(energypath_nc), vars, num_nc_fields, SINGLE_FILE, CS%timeunit, G=G, GV=GV)
+      call create_file(trim(energypath_nc), vars, num_nc_fields, &
+                       threading=SINGLE_FILE, timeUnit=CS%timeunit, G=G, GV=GV)
     endif
   endif
 
@@ -880,48 +881,48 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
 
   var = real(CS%ntrunc)
   call write_field(trim(energypath_nc), vars(1)%name, var, "append", &
-                   var_desc=vars(1), time=reday, G=G, GV=GV)
+                   var_desc=vars(1), time_level=reday, G=G, GV=GV)
   call write_field(trim(energypath_nc), vars(2)%name, toten,"append", &
-                   var_desc=vars(2), time=reday, G=G, GV=GV)
+                   var_desc=vars(2), time_level=reday, G=G, GV=GV)
   call write_field(trim(energypath_nc), vars(3)%name, PE, "append", &
-                   var_desc=vars(3), time=reday, G=G, GV=GV)
+                   var_desc=vars(3), time_level=reday, G=G, GV=GV)
   call write_field(trim(energypath_nc), vars(4)%name, KE, "append", &
-                   var_desc=vars(4), time=reday, G=G, GV=GV)
+                   var_desc=vars(4), time_level=reday, G=G, GV=GV)
   call write_field(trim(energypath_nc), vars(5)%name, H_0APE, "append", &
-                   var_desc=vars(5), time=reday, G=G, GV=GV)
+                   var_desc=vars(5), time_level=reday, G=G, GV=GV)
   call write_field(trim(energypath_nc), vars(6)%name, mass_lay, "append", &
-                   var_desc=vars(6), time=reday, G=G, GV=GV)
+                   var_desc=vars(6), time_level=reday, G=G, GV=GV)
   call write_field(trim(energypath_nc), vars(7)%name, mass_tot, "append", &
-                   var_desc=vars(7), time=reday, G=G, GV=GV)
+                   var_desc=vars(7), time_level=reday, G=G, GV=GV)
   call write_field(trim(energypath_nc), vars(8)%name, mass_chg, "append", &
-                   var_desc=vars(8), time=reday, G=G, GV=GV)
+                   var_desc=vars(8), time_level=reday, G=G, GV=GV)
   call write_field(trim(energypath_nc), vars(9)%name, mass_anom, "append", &
-                   var_desc=vars(9), time=reday, G=G, GV=GV)
+                   var_desc=vars(9), time_level=reday, G=G, GV=GV)
   call write_field(trim(energypath_nc), vars(10)%name, max_CFL(1), "append", &
-                   var_desc=vars(10), time=reday, G=G, GV=GV)
+                   var_desc=vars(10), time_level=reday, G=G, GV=GV)
   call write_field(trim(energypath_nc), vars(11)%name, max_CFL(1), "append", &
-                   var_desc=vars(11), time=reday, G=G, GV=GV)
+                   var_desc=vars(11), time_level=reday, G=G, GV=GV)
   if (CS%use_temperature) then
     call write_field(trim(energypath_nc), vars(12)%name, 0.001*Salt, "append", &
-                     var_desc=vars(12), time=reday, G=G, GV=GV)
+                     var_desc=vars(12), time_level=reday, G=G, GV=GV)
     call write_field(trim(energypath_nc), vars(13)%name, 0.001*salt_chg, "append", &
-                     var_desc=vars(13), time=reday, G=G, GV=GV)
+                     var_desc=vars(13), time_level=reday, G=G, GV=GV)
     call write_field(trim(energypath_nc), vars(14)%name, 0.001*salt_anom, "append", &
-                   var_desc=vars(14), time=reday, G=G, GV=GV)
+                   var_desc=vars(14), time_level=reday, G=G, GV=GV)
     call write_field(trim(energypath_nc), vars(15)%name, Heat, "append", &
-                   var_desc=vars(15), time=reday, G=G, GV=GV)
+                   var_desc=vars(15), time_level=reday, G=G, GV=GV)
     call write_field(trim(energypath_nc), vars(16)%name, heat_chg,"append", &
-                   var_desc=vars(16), time=reday, G=G, GV=GV)
+                   var_desc=vars(16), time_level=reday, G=G, GV=GV)
     call write_field(trim(energypath_nc), vars(17)%name, heat_anom, "append", &
-                   var_desc=vars(17), time=reday, G=G, GV=GV)
+                   var_desc=vars(17), time_level=reday, G=G, GV=GV)
     do m=1,nTr_stocks
       call write_field(trim(energypath_nc), vars(17+m)%name, Tr_stocks(m), "append", &
-                   var_desc=vars(17+m), time=reday, G=G, GV=GV)
+                   var_desc=vars(17+m), time_level=reday, G=G, GV=GV)
     enddo
   else
     do m=1,nTr_stocks
       call write_field(trim(energypath_nc), vars(11+m)%name, Tr_stocks(m), "append", &
-                   var_desc=vars(11+m), time=reday, G=G, GV=GV)
+                   var_desc=vars(11+m), time_level=reday, G=G, GV=GV)
     enddo
   endif
 
