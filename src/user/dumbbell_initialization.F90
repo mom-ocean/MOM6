@@ -269,15 +269,16 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, 
   type(sponge_CS),         pointer    :: CSp !< Layered sponge control structure pointer
   type(ALE_sponge_CS),     pointer    :: ACSp !< ALE sponge control structure pointer
 
-  real :: sponge_time_scale
+  real :: sponge_time_scale  ! The damping time scale [T ~> s]
 
-  real, dimension(SZI_(G),SZJ_(G)) :: Idamp ! inverse damping timescale
+  real, dimension(SZI_(G),SZJ_(G)) :: Idamp ! inverse damping timescale [T-1 ~> s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h, T, S ! sponge thicknesses, temp and salt
   real, dimension(SZK_(GV)+1) :: e0, eta1D ! interface positions for ALE sponge
 
   integer :: i, j, k, nz
   real :: x, zi, zmid, dist, min_thickness, dblen
   real :: mld, S_ref, S_range, S_dense, T_ref, sill_height
+
   call get_param(param_file, mdl,"DUMBBELL_LEN",dblen, &
                 'Lateral Length scale for dumbbell ',&
                  units='k', default=600., do_not_log=.true.)
@@ -290,7 +291,7 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, 
 
   call get_param(param_file, mdl, "DUMBBELL_SPONGE_TIME_SCALE", sponge_time_scale, &
        "The time scale in the reservoir for restoring. If zero, the sponge is disabled.", &
-       units="s", default=0.)
+       units="s", default=0., scale=US%s_to_T)
   call get_param(param_file, mdl, "DUMBBELL_SREF", S_ref, do_not_log=.true.)
   call get_param(param_file, mdl, "DUMBBELL_S_RANGE", S_range, do_not_log=.true.)
   call get_param(param_file, mdl,"MIN_THICKNESS", min_thickness, &
