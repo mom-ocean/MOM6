@@ -1084,7 +1084,7 @@ subroutine setup_v_point_obc(OBC, G, US, segment_str, l_seg, PF, reentrant_x)
       OBC%segment%v_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE_TAN') then
       OBC%segment(l_seg)%specified_tan = .true.
-      OBC%segment%v_values_needed = .true.
+      OBC%segment%u_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE_GRAD') then
       OBC%segment(l_seg)%specified_grad = .true.
       OBC%segment%g_values_needed = .true.
