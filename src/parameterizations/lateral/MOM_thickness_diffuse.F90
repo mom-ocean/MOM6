@@ -587,8 +587,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   real :: drdjA, drdjB  ! gradients in the layers above (A) and below(B) the
                         ! interface times the grid spacing [R ~> kg m-3].
   real :: drdkL, drdkR  ! Vertical density differences across an interface [R ~> kg m-3].
-  real :: drdi_u(SZIB_(G), SZK_(G)+1) ! Copy of drdi at u-points [R ~> kg m-3].
-  real :: drdj_v(SZI_(G), SZK_(G)+1)  ! Copy of drdj at v-points [R ~> kg m-3].
+  real :: drdi_u(SZIB_(G), SZK_(G)) ! Copy of drdi at u-points [R ~> kg m-3].
+  real :: drdj_v(SZI_(G), SZK_(G))  ! Copy of drdj at v-points [R ~> kg m-3].
   real :: drdkDe_u(SZIB_(G),SZK_(G)+1) ! Lateral difference of product of drdk and e at u-points
                                        ! [Z R ~> kg m-2].
   real :: drdkDe_v(SZI_(G),SZK_(G)+1)  ! Lateral difference of product of drdk and e at v-points
@@ -764,7 +764,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           drdkDe_u(I,K) = drdkR * e(i+1,j,K) - drdkL * e(i,j,K)
         endif
 
-        if (find_work) drdi_u(I,K) = drdiB
+        if (find_work) drdi_u(I,k) = drdiB
 
         if (k > nk_linear) then
           if (use_EOS) then
@@ -955,7 +955,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 
           Work_u(I,j) = Work_u(I,j) + G_scale * &
             ( uhtot(I,j) * drdkDe_u(I,K) - &
-              (uhD(I,j,K) * drdi_u(I,K)) * 0.25 * &
+              (uhD(I,j,k) * drdi_u(I,k)) * 0.25 * &
               ((e(i,j,K) + e(i,j,K+1)) + (e(i+1,j,K) + e(i+1,j,K+1))) )
         endif
 
@@ -1014,7 +1014,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           drdkDe_v(i,K) =  drdkR * e(i,j+1,K) - drdkL * e(i,j,K)
         endif
 
-        if (find_work) drdj_v(i,K) = drdjB
+        if (find_work) drdj_v(i,k) = drdjB
 
         if (k > nk_linear) then
           if (use_EOS) then
@@ -1204,7 +1204,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 
           Work_v(i,J) = Work_v(i,J) + G_scale * &
             ( vhtot(i,J) * drdkDe_v(i,K) - &
-             (vhD(i,J,K) * drdj_v(i,K)) * 0.25 * &
+             (vhD(i,J,k) * drdj_v(i,k)) * 0.25 * &
              ((e(i,j,K) + e(i,j,K+1)) + (e(i,j+1,K) + e(i,j+1,K+1))) )
         endif
 
