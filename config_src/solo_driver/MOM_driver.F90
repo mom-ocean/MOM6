@@ -133,12 +133,15 @@ program MOM_main
                                   ! if Time_step_ocean is not an exact
                                   ! representation of dt_forcing.
   real :: dt_forcing              ! The coupling time step [s].
-  real :: dt                      ! The baroclinic dynamics time step [s].
+  real :: dt                      ! The nominal baroclinic dynamics time step [s].
   real :: dt_off                  ! Offline time step [s].
   integer :: ntstep               ! The number of baroclinic dynamics time steps
                                   ! within dt_forcing.
-  real :: dt_therm
-  real :: dt_dyn, dtdia, t_elapsed_seg
+  real :: dt_therm                ! The thermodynamic timestep [s]
+  real :: dt_dyn                  ! The actual dynamic timestep used [s].  The value of dt_dyn is
+                                  ! chosen so that dt_forcing is an integer multiple of dt_dyn.
+  real :: dtdia                   ! The diabatic timestep [s]
+  real :: t_elapsed_seg           ! The elapsed time in this run segment [s]
   integer :: n, n_max, nts, n_last_thermo
   logical :: diabatic_first, single_step_call
   type(time_type) :: Time2, time_chg
@@ -491,7 +494,7 @@ program MOM_main
       call add_shelf_forces(grid, US, Ice_shelf_CSp, forces)
     endif
     fluxes%fluxes_used = .false.
-    fluxes%dt_buoy_accum = dt_forcing
+    fluxes%dt_buoy_accum = US%s_to_T*dt_forcing
 
     if (use_waves) then
       call Update_Surface_Waves(grid, GV, US, time, time_step_ocean, waves_csp)
@@ -573,16 +576,12 @@ program MOM_main
       call write_cputime(Time, ns+ntstep-1, nmax, write_CPU_CSp)
     endif ; endif
 
-    call enable_averaging(dt_forcing, Time, diag)
-    call mech_forcing_diags(forces, dt_forcing, grid, diag, surface_forcing_CSp%handles)
-    call disable_averaging(diag)
+    call mech_forcing_diags(forces, dt_forcing, grid, Time, diag, surface_forcing_CSp%handles)
 
     if (.not. offline_tracer_mode) then
       if (fluxes%fluxes_used) then
-        call enable_averaging(fluxes%dt_buoy_accum, Time, diag)
-        call forcing_diagnostics(fluxes, sfc_state, fluxes%dt_buoy_accum, grid, US, &
+        call forcing_diagnostics(fluxes, sfc_state, grid, US, Time, &
                                  diag, surface_forcing_CSp%handles)
-        call disable_averaging(diag)
       else
         call MOM_error(FATAL, "The solo MOM_driver is not yet set up to handle "//&
                "thermodynamic time steps that are longer than the coupling timestep.")
