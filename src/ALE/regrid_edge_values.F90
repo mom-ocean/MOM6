@@ -3,7 +3,7 @@ module regrid_edge_values
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use regrid_solvers, only : solve_linear_system, solve_tridiagonal_system
+use regrid_solvers, only : solve_linear_system, solve_tridiagonal_system, solve_diag_dominant_tridiag
 use polynomial_functions, only : evaluation_polynomial
 
 implicit none ; private
@@ -18,8 +18,6 @@ public edge_values_explicit_h2
 public edge_values_explicit_h4
 public edge_values_implicit_h4
 public edge_values_implicit_h6
-
-#undef __DO_SAFETY_CHECKS__
 
 ! The following parameters are used to avoid singular matrices for boundary
 ! extrapolation. The are needed only in the case where thicknesses vanish
@@ -44,90 +42,68 @@ contains
 !! Both boundary edge values are set equal to the boundary cell averages.
 !! Any extrapolation scheme is applied after this routine has been called.
 !! Therefore, boundary cells are treated as if they were local extrama.
-subroutine bound_edge_values( N, h, u, edge_val, h_neglect )
+subroutine bound_edge_values( N, h, u, edge_val, h_neglect, answers_2018 )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N) in arbitrary units [A]
-  real, dimension(:,:), intent(inout) :: edge_val !< Potentially modified edge values [A]
+  real, dimension(N),   intent(in)    :: h !< cell widths [H]
+  real, dimension(N),   intent(in)    :: u !< cell average properties in arbitrary units [A]
+  real, dimension(N,2), intent(inout) :: edge_val !< Potentially modified edge values [A]; the
+                                           !! second index is for the two edges of each cell.
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
+  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
   ! Local variables
-  integer       :: k            ! loop index
-  integer       :: k0, k1, k2
-  real          :: h_l, h_c, h_r ! Layer thicknesses [H]
-  real          :: u_l, u_c, u_r ! Cell average properties [A]
-  real          :: u0_l, u0_r    ! Edge values of properties [A]
-  real          :: sigma_l, sigma_c, sigma_r    ! left, center and right
-                                                ! van Leer slopes [A H-1]
-  real          :: slope         ! retained PLM slope [A H-1]
-  real          :: hNeglect      ! A negligible thickness [H].
+  real    :: sigma_l, sigma_c, sigma_r    ! left, center and right van Leer slopes [A H-1] or [A]
+  real    :: slope_x_h     ! retained PLM slope times  half grid step [A]
+  real    :: hNeglect      ! A negligible thickness [H].
+  logical :: use_2018_answers  ! If true use older, less acccurate expressions.
+  integer :: k, km1, kp1   ! Loop index and the values to either side.
 
-  hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
+  use_2018_answers = .true. ; if (present(answers_2018)) use_2018_answers = answers_2018
+  if (use_2018_answers) then
+    hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
+  endif
 
   ! Loop on cells to bound edge value
   do k = 1,N
 
-    ! For the sake of bounding boundary edge values, the left neighbor
-    ! of the left boundary cell is assumed to be the same as the left
-    ! boundary cell and the right neighbor of the right boundary cell
-    ! is assumed to be the same as the right boundary cell. This
-    ! effectively makes boundary cells look like extrema.
-    if ( k == 1 ) then
-      k0 = 1
-      k1 = 1
-      k2 = 2
-    elseif ( k == N ) then
-      k0 = N-1
-      k1 = N
-      k2 = N
-    else
-      k0 = k-1
-      k1 = k
-      k2 = k+1
+    ! For the sake of bounding boundary edge values, the left neighbor of the left boundary cell
+    ! is assumed to be the same as the left boundary cell and the right neighbor of the right
+    ! boundary cell is assumed to be the same as the right boundary cell. This effectively makes
+    ! boundary cells look like extrema.
+    km1 = max(1,k-1) ; kp1 = min(k+1,N)
+
+    slope_x_h = 0.0
+    if (use_2018_answers) then
+      sigma_l = 2.0 * ( u(k) - u(km1) ) / ( h(k) + hNeglect )
+      sigma_c = 2.0 * ( u(kp1) - u(km1) ) / ( h(km1) + 2.0*h(k) + h(kp1) + hNeglect )
+      sigma_r = 2.0 * ( u(kp1) - u(k) ) / ( h(k) + hNeglect )
+
+      ! The limiter is used in the local coordinate system to each cell, so for convenience store
+      ! the slope times a half grid spacing.  (See White and Adcroft JCP 2008 Eqs 19 and 20)
+      if ( (sigma_l * sigma_r) > 0.0 ) &
+        slope_x_h = 0.5 * h(k) * sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
+    elseif ( ((h(km1) + h(kp1)) + 2.0*h(k)) > 0.0 ) then
+      sigma_l = ( u(k) - u(km1) )
+      sigma_c = ( u(kp1) - u(km1) ) * ( h(k) / ((h(km1) + h(kp1)) + 2.0*h(k)) )
+      sigma_r = ( u(kp1) - u(k) )
+
+      ! The limiter is used in the local coordinate system to each cell, so for convenience store
+      ! the slope times a half grid spacing.  (See White and Adcroft JCP 2008 Eqs 19 and 20)
+      if ( (sigma_l * sigma_r) > 0.0 ) &
+        slope_x_h = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
     endif
 
-    ! All cells can now be treated equally
-    h_l = h(k0)
-    h_c = h(k1)
-    h_r = h(k2)
-
-    u_l = u(k0)
-    u_c = u(k1)
-    u_r = u(k2)
-
-    u0_l = edge_val(k,1)
-    u0_r = edge_val(k,2)
-
-    sigma_l = 2.0 * ( u_c - u_l ) / ( h_c + hNeglect )
-    sigma_c = 2.0 * ( u_r - u_l ) / ( h_l + 2.0*h_c + h_r + hNeglect )
-    sigma_r = 2.0 * ( u_r - u_c ) / ( h_c + hNeglect )
-
-    if ( (sigma_l * sigma_r) > 0.0 ) then
-      slope = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
-    else
-      slope = 0.0
+    ! Limit the edge values
+    if ( (u(km1)-edge_val(k,1)) * (edge_val(k,1)-u(k)) < 0.0 ) then
+      edge_val(k,1) = u(k) - sign( min( abs(slope_x_h), abs(edge_val(k,1)-u(k)) ), slope_x_h )
     endif
 
-    ! The limiter must be used in the local coordinate system to each cell.
-    ! Hence, we must multiply the slope by h1. The multiplication by 0.5 is
-    ! simply a way to make it useable in the limiter (cfr White and Adcroft
-    ! JCP 2008 Eqs 19 and 20)
-    slope = slope * h_c * 0.5
-
-    if ( (u_l-u0_l)*(u0_l-u_c) < 0.0 ) then
-      u0_l = u_c - sign( min( abs(slope), abs(u0_l-u_c) ), slope )
+    if ( (u(kp1)-edge_val(k,2)) * (edge_val(k,2)-u(k)) < 0.0 ) then
+      edge_val(k,2) = u(k) + sign( min( abs(slope_x_h), abs(edge_val(k,2)-u(k)) ), slope_x_h )
     endif
 
-    if ( (u_r-u0_r)*(u0_r-u_c) < 0.0 ) then
-      u0_r = u_c + sign( min( abs(slope), abs(u0_r-u_c) ), slope )
-    endif
-
-    ! Finally bound by neighboring cell means in case of round off
-    u0_l = max( min( u0_l, max(u_l, u_c) ), min(u_l, u_c) )
-    u0_r = max( min( u0_r, max(u_r, u_c) ), min(u_r, u_c) )
-
-    ! Store edge values
-    edge_val(k,1) = u0_l
-    edge_val(k,2) = u0_r
+    ! Finally bound by neighboring cell means in case of roundoff
+    edge_val(k,1) = max( min( edge_val(k,1), max(u(km1), u(k)) ), min(u(km1), u(k)) )
+    edge_val(k,2) = max( min( edge_val(k,2), max(u(kp1), u(k)) ), min(u(kp1), u(k)) )
 
   enddo ! loop on interior edges
 
@@ -139,25 +115,17 @@ end subroutine bound_edge_values
 !! If so, compute the average and replace the edge values by the average.
 subroutine average_discontinuous_edge_values( N, edge_val )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:,:), intent(inout) :: edge_val !< Edge values that may be modified
-                                           !! the second index size is 2.
+  real, dimension(N,2), intent(inout) :: edge_val !< Edge values that may be modified [A]; the
+                                           !! second index is for the two edges of each cell.
   ! Local variables
   integer       :: k            ! loop index
-  real          :: u0_minus     ! left value at given edge
-  real          :: u0_plus      ! right value at given edge
   real          :: u0_avg       ! avg value at given edge
 
   ! Loop on interior edges
   do k = 1,N-1
-
-    ! Edge value on the left of the edge
-    u0_minus = edge_val(k,2)
-
-    ! Edge value on the right of the edge
-    u0_plus  = edge_val(k+1,1)
-
-    if ( u0_minus /= u0_plus ) then
-      u0_avg = 0.5 * ( u0_minus + u0_plus )
+    ! Compare edge values on the right and left sides of the edge
+    if ( edge_val(k,2) /= edge_val(k+1,1) ) then
+      u0_avg = 0.5 * ( edge_val(k,2) + edge_val(k+1,1) )
       edge_val(k,2) = u0_avg
       edge_val(k+1,1) = u0_avg
     endif
@@ -172,38 +140,20 @@ end subroutine average_discontinuous_edge_values
 !! If so and if they are not monotonic, replace each edge value by their average.
 subroutine check_discontinuous_edge_values( N, u, edge_val )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: u !< cell averages (size N) in arbitrary units [A]
-  real, dimension(:,:), intent(inout) :: edge_val !< Cell edge values [A].
+  real, dimension(N),   intent(in)    :: u !< cell averages in arbitrary units [A]
+  real, dimension(N,2), intent(inout) :: edge_val !< Cell edge values [A]; the
+                                           !! second index is for the two edges of each cell.
   ! Local variables
   integer       :: k            ! loop index
-  real          :: u0_minus     ! left value at given edge [A]
-  real          :: u0_plus      ! right value at given edge [A]
-  real          :: um_minus     ! left cell average [A]
-  real          :: um_plus      ! right cell average [A]
   real          :: u0_avg       ! avg value at given edge [A]
 
-  ! Loop on interior cells
   do k = 1,N-1
-
-    ! Edge value on the left of the edge
-    u0_minus = edge_val(k,2)
-
-    ! Edge value on the right of the edge
-    u0_plus  = edge_val(k+1,1)
-
-    ! Left cell average
-    um_minus = u(k)
-
-    ! Right cell average
-    um_plus = u(k+1)
-
-    if ( (u0_plus - u0_minus)*(um_plus - um_minus) < 0.0 ) then
-      u0_avg = 0.5 * ( u0_minus + u0_plus )
-      u0_avg = max( min( u0_avg, max(um_minus, um_plus) ), min(um_minus, um_plus) )
+    if ( (edge_val(k+1,1) - edge_val(k,2)) * (u(k+1) - u(k)) < 0.0 ) then
+      u0_avg = 0.5 * ( edge_val(k,2) + edge_val(k+1,1) )
+      u0_avg = max( min( u0_avg, max(u(k), u(k+1)) ), min(u(k), u(k+1)) )
       edge_val(k,2) = u0_avg
       edge_val(k+1,1) = u0_avg
     endif
-
   enddo ! end loop on interior edges
 
 end subroutine check_discontinuous_edge_values
@@ -222,47 +172,31 @@ end subroutine check_discontinuous_edge_values
 !!          k-1/2
 !!
 !! Boundary edge values are set to be equal to the boundary cell averages.
-subroutine edge_values_explicit_h2( N, h, u, edge_val, h_neglect )
+subroutine edge_values_explicit_h2( N, h, u, edge_val )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N) in arbitrary units [A]
-  real, dimension(:,:), intent(inout) :: edge_val !< Returned edge values [A]; the second index size is 2.
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
+  real, dimension(N),   intent(in)    :: h !< cell widths [H]
+  real, dimension(N),   intent(in)    :: u !< cell average properties in arbitrary units [A]
+  real, dimension(N,2), intent(inout) :: edge_val !< Returned edge values [A]; the
+                                           !! second index is for the two edges of each cell.
+
   ! Local variables
   integer   :: k        ! loop index
-  real      :: h0, h1   ! cell widths [H]
-  real      :: u0, u1   ! cell averages [A]
-  real      :: hNeglect ! A negligible thickness [H]
-
-  hNeglect = hNeglect_edge_dflt ; if (present(h_neglect)) hNeglect = h_neglect
-
-  ! Loop on interior cells
-  do k = 2,N
-
-    h0 = h(k-1)
-    h1 = h(k)
-
-    ! Avoid singularities when h0+h1=0
-    if (h0+h1==0.) then
-      h0 = hNeglect
-      h1 = hNeglect
-    endif
-
-    u0 = u(k-1)
-    u1 = u(k)
-
-    ! Compute left edge value
-    edge_val(k,1) = ( u0*h1 + u1*h0 ) / ( h0 + h1 )
-
-    ! Left edge value of the current cell is equal to right edge
-    ! value of left cell
-    edge_val(k-1,2) = edge_val(k,1)
-
-  enddo ! end loop on interior cells
 
   ! Boundary edge values are simply equal to the boundary cell averages
   edge_val(1,1) = u(1)
   edge_val(N,2) = u(N)
+
+  do k = 2,N
+    ! Compute left edge value
+    if (h(k-1) + h(k) == 0.0) then    ! Avoid singularities when h0+h1=0
+      edge_val(k,1) = 0.5 * (u(k-1) + u(k))
+    else
+      edge_val(k,1) = ( u(k-1)*h(k) + u(k)*h(k-1) ) / ( h(k-1) + h(k) )
+    endif
+
+    ! Left edge value of the current cell is equal to right edge value of left cell
+    edge_val(k-1,2) = edge_val(k,1)
+  enddo
 
 end subroutine edge_values_explicit_h2
 
@@ -287,18 +221,20 @@ end subroutine edge_values_explicit_h2
 !! For this fourth-order scheme, at least four cells must exist.
 subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N) in arbitrary units [A]
-  real, dimension(:,:), intent(inout) :: edge_val !< Returned edge values [A]; the second index size is 2.
+  real, dimension(N),   intent(in)    :: h !< cell widths [H]
+  real, dimension(N),   intent(in)    :: u !< cell average properties in arbitrary units [A]
+  real, dimension(N,2), intent(inout) :: edge_val !< Returned edge values [A]; the second index
+                                           !! is for the two edges of each cell.
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
   logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
 
   ! Local variables
   integer               :: i, j
-  real                  :: u0, u1, u2, u3   ! temporary properties [A]
   real                  :: h0, h1, h2, h3   ! temporary thicknesses [H]
+  real                  :: h_sum            ! A sum of adjacent thicknesses [H]
+  real                  :: h_min            ! A minimal cell width [H]
   real                  :: f1, f2, f3       ! auxiliary variables with various units
-  real                  :: e                ! edge value
+  real                  :: et1, et2, et3    ! terms the expresson for edge values [A H]
   real, dimension(5)    :: x          ! Coordinate system with 0 at edges [H]
   real, parameter       :: C1_12 = 1.0 / 12.0
   real                  :: dx, xavg   ! Differences and averages of successive values of x [same units as h]
@@ -319,146 +255,128 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
     h3 = h(i+1)
 
     ! Avoid singularities when consecutive pairs of h vanish
-    if (h0+h1==0. .or. h1+h2==0. .or. h2+h3==0.) then
-      f1 = max( hNeglect, h0+h1+h2+h3 )
-      h0 = max( hMinFrac*f1, h(i-2) )
-      h1 = max( hMinFrac*f1, h(i-1) )
-      h2 = max( hMinFrac*f1, h(i) )
-      h3 = max( hMinFrac*f1, h(i+1) )
+    if (h0+h1==0.0 .or. h1+h2==0.0 .or. h2+h3==0.0) then
+      if (use_2018_answers) then
+        h_min = hMinFrac*max( hNeglect, h0+h1+h2+h3 )
+      else
+        h_min = hMinFrac*max( hNeglect, (h0+h1)+(h2+h3) )
+      endif
+      h0 = max( h_min, h(i-2) )
+      h1 = max( h_min, h(i-1) )
+      h2 = max( h_min, h(i) )
+      h3 = max( h_min, h(i+1) )
     endif
 
-    u0 = u(i-2)
-    u1 = u(i-1)
-    u2 = u(i)
-    u3 = u(i+1)
-
-    f1 = (h0+h1) * (h2+h3) / (h1+h2)
-    f2 = u1 * h2 + u2 * h1
-    f3 = 1.0 / (h0+h1+h2) + 1.0 / (h1+h2+h3)
-
-    e = f1 * f2 * f3
-
-    f1 = h2 * (h2+h3) / ( (h0+h1+h2)*(h0+h1) )
-    f2 = u1*(h0+2.0*h1) - u0*h1
-
-    e = e + f1*f2
-
-    f1 = h1 * (h0+h1) / ( (h1+h2+h3)*(h2+h3) )
-    f2 = u2*(2.0*h2+h3) - u3*h2
-
-    e = e + f1*f2
-
-    e = e / ( h0 + h1 + h2 + h3)
-
-    edge_val(i,1) = e
-    edge_val(i-1,2) = e
-
-#ifdef __DO_SAFETY_CHECKS__
-    if (e /= e) then
-      write(0,*) 'NaN in explicit_edge_h4 at k=',i
-      write(0,*) 'u0-u3=',u0,u1,u2,u3
-      write(0,*) 'h0-h3=',h0,h1,h2,h3
-      write(0,*) 'f1-f3=',f1,f2,f3
-      stop 'Nan during edge_values_explicit_h4'
+    if (use_2018_answers) then
+      f1 = (h0+h1) * (h2+h3) / (h1+h2)
+      f2 = h2 * u(i-1) + h1 * u(i)
+      f3 = 1.0 / (h0+h1+h2) + 1.0 / (h1+h2+h3)
+      et1 = f1 * f2 * f3
+    else
+      et1 = ( (h0+h1) * (h2+h3) * ((h1+h2+h3) + (h0+h1+h2)) / &
+              (((h1+h2) * ((h0+h1+h2) * (h1+h2+h3)))) ) * &
+            (h2 * u(i-1) + h1 * u(i))
     endif
-#endif
+
+    et2 = ( h2 * (h2+h3) / ( (h0+h1+h2)*(h0+h1) ) ) * &
+          ((h0+2.0*h1) * u(i-1) - h1 * u(i-2))
+
+    et3 = ( h1 * (h0+h1) / ( (h1+h2+h3)*(h2+h3) ) ) * &
+          ((2.0*h2+h3) * u(i) - h2 * u(i+1))
+
+    if (use_2018_answers) then
+      edge_val(i,1) = (et1 + et2 + et3) / ( h0 + h1 + h2 + h3)
+    else
+      edge_val(i,1) = (et1 + (et2 + et3)) / ((h0 + h1) + (h2 + h3))
+    endif
+    edge_val(i-1,2) = edge_val(i,1)
 
   enddo ! end loop on interior cells
 
   ! Determine first two edge values
-  f1 = max( hNeglect, hMinFrac*sum(h(1:4)) )
-  x(1) = 0.0
-  do i = 2,5
-    x(i) = x(i-1) + max(f1, h(i-1))
-  enddo
-
-  do i = 1,4
-    dx = max(f1, h(i) )
-    if (use_2018_answers) then
+  if (use_2018_answers) then
+    h_min = max( hNeglect, hMinFrac*sum(h(1:4)) )
+    x(1) = 0.0
+    do i = 1,4
+      dx = max(h_min, h(i) )
+      x(i+1) = x(i) + dx
       do j = 1,4 ; A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / real(j) ; enddo
-    else  ! Use expressions with less sensitivity to roundoff
+      B(i) = u(i) * dx
+    enddo
+
+    call solve_linear_system( A, B, C, 4 )
+
+    ! Set the edge values of the first cell
+    edge_val(1,1) = evaluation_polynomial( C, 4, x(1) )
+    edge_val(1,2) = evaluation_polynomial( C, 4, x(2) )
+  else  ! Use expressions with less sensitivity to roundoff
+    h_min = hMinFrac*((h(1) + h(2)) + (h(3) + h(4)))
+    if (h_min == 0.0) h_min = 1.0  ! Handle the case of all massless layers.
+    x(1) = 0.0
+    do i = 1,4
+      dx = max(h_min, h(i) )
+      x(i+1) = x(i) + dx
       xavg = 0.5 * (x(i+1) + x(i))
       A(i,1) = dx
       A(i,2) = dx * xavg
       A(i,3) = dx * (xavg**2 + C1_12*dx**2)
       A(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
-    endif
+      B(i) = u(i) * dx
+    enddo
 
-    B(i) = u(i) * dx
+    call solve_linear_system( A, B, C, 4 )
 
-  enddo
-
-  call solve_linear_system( A, B, C, 4 )
-
-  ! First edge value
-  edge_val(1,1) = evaluation_polynomial( C, 4, x(1) )
-
-  ! Second edge value
-  edge_val(1,2) = evaluation_polynomial( C, 4, x(2) )
+    ! Set the edge values of the first cell
+    edge_val(1,1) = C(1) ! x(1) = 0 so ignore + x(1)*(C(2) + x(1)*(C(3) + x(1)*C(4)))
+    edge_val(1,2) = C(1) + x(2)*(C(2) + x(2)*(C(3) + x(2)*C(4)))
+  endif
   edge_val(2,1) = edge_val(1,2)
 
-#ifdef __DO_SAFETY_CHECKS__
-  if (edge_val(1,1) /= edge_val(1,1) .or. edge_val(1,2) /= edge_val(1,2)) then
-    write(0,*) 'NaN in explicit_edge_h4 at k=',1
-    write(0,*) 'A=',A
-    write(0,*) 'B=',B
-    write(0,*) 'C=',C
-    write(0,*) 'h(1:4)=',h(1:4)
-    write(0,*) 'x=',x
-    stop 'Nan during edge_values_explicit_h4'
-  endif
-#endif
+  ! Determine two edge values of the last cell
+  if (use_2018_answers) then
+    h_min = max( hNeglect, hMinFrac*sum(h(N-3:N)) )
 
-  ! Determine last two edge values
-  f1 = max( hNeglect, hMinFrac*sum(h(N-3:N)) )
-  x(1) = 0.0
-  do i = 2,5
-    x(i) = x(i-1) + max(f1, h(N-5+i))
-  enddo
-
-  do i = 1,4
-    dx = max(f1, h(N-4+i) )
-    if (use_2018_answers) then
+    x(1) = 0.0
+    do i = 1,4
+      dx = max(h_min, h(N-4+i) )
+      x(i+1) = x(i) + dx
       do j = 1,4 ; A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / real(j) ; enddo
-    else  ! Use expressions with less sensitivity to roundoff
-      xavg = 0.5 * (x(i+1) + x(i))
+      B(i) = u(N-4+i) * dx
+    enddo
+
+    call solve_linear_system( A, B, C, 4 )
+
+    ! Set the last and second to last edge values
+    edge_val(N,2) = evaluation_polynomial( C, 4, x(5) )
+    edge_val(N,1) = evaluation_polynomial( C, 4, x(4) )
+  else
+    ! Use expressions with less sensitivity to roundoff, including using a coordinate
+    ! system that sets the origin at the last interface in the domain.
+    h_min = hMinFrac * ((h(N-3) + h(N-2)) + (h(N-1) + h(N)))
+    if (h_min == 0.0) h_min = 1.0  ! Handle the case of all massless layers.
+
+    x(1) = 0.0
+
+    do i=1,4
+      dx = max(h_min, h(N+1-i) )
+      x(i+1) = x(i) + dx
+      xavg = x(i) + 0.5*dx
+
       A(i,1) = dx
       A(i,2) = dx * xavg
       A(i,3) = dx * (xavg**2 + C1_12*dx**2)
       A(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
-    endif
 
-    B(i) = u(N-4+i) * dx
-
-  enddo
-
-  call solve_linear_system( A, B, C, 4 )
-
-  ! Last edge value
-  edge_val(N,2) = evaluation_polynomial( C, 4, x(5) )
-
-  ! Second to last edge value
-  edge_val(N,1) = evaluation_polynomial( C, 4, x(4) )
-  edge_val(N-1,2) = edge_val(N,1)
-
-#ifdef __DO_SAFETY_CHECKS__
-  if (edge_val(N,1) /= edge_val(N,1) .or. edge_val(N,2) /= edge_val(N,2)) then
-    write(0,*) 'NaN in explicit_edge_h4 at k=',N
-    write(0,*) 'A='
-    do i = 1,4
-      do j = 1,4
-        A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / real(j)
-      enddo
-      write(0,*) A(i,:)
-      B(i) = u(N-4+i) * ( h(N-4+i) )
+      B(i) = u(N+1-i) * dx
     enddo
-    write(0,*) 'B=',B
-    write(0,*) 'C=',C
-    write(0,*) 'h(:N)=',h(N-3:N)
-    write(0,*) 'x=',x
-    stop 'Nan during edge_values_explicit_h4'
+
+    call solve_linear_system( A, B, C, 4 )
+
+    ! Set the last and second to last edge values
+    edge_val(N,2) = C(1)
+    edge_val(N,1) = C(1) + x(2)*(C(2) + x(2)*(C(3) + x(2)*C(4)))
   endif
-#endif
+  edge_val(N-1,2) = edge_val(N,1)
 
 end subroutine edge_values_explicit_h4
 
@@ -490,29 +408,34 @@ end subroutine edge_values_explicit_h4
 !! boundary conditions close the system.
 subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N) in arbitrary units [A]
-  real, dimension(:,:), intent(inout) :: edge_val !< Returned edge values [A]; the second index size is 2.
+  real, dimension(N),   intent(in)    :: h !< cell widths [H]
+  real, dimension(N),   intent(in)    :: u !< cell average properties in arbitrary units [A]
+  real, dimension(N,2), intent(inout) :: edge_val !< Returned edge values [A]; the second index
+                                           !! is for the two edges of each cell.
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
   logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
 
   ! Local variables
   integer               :: i, j                 ! loop indexes
   real                  :: h0, h1               ! cell widths [H]
+  real                  :: h_min                ! A minimal cell width [H]
+  real                  :: h_sum                ! A sum of adjacent thicknesses [H]
   real                  :: h0_2, h1_2, h0h1
   real                  :: d2, d4
-  real                  :: alpha, beta          ! stencil coefficients
+  real                  :: alpha, beta          ! stencil coefficients [nondim]
+  real                  :: I_h2, abmix          ! stencil coefficients [nondim]
   real                  :: a, b
   real, dimension(5)    :: x                    ! Coordinate system with 0 at edges [H]
   real, parameter       :: C1_12 = 1.0 / 12.0
   real                  :: dx, xavg             ! Differences and averages of successive values of x [H]
   real, dimension(4,4)  :: Asys                 ! boundary conditions
   real, dimension(4)    :: Bsys, Csys
-  real, dimension(N+1)  :: tri_l, &             ! trid. system (lower diagonal)
-                           tri_d, &             ! trid. system (middle diagonal)
-                           tri_u, &             ! trid. system (upper diagonal)
-                           tri_b, &             ! trid. system (unknowns vector)
-                           tri_x                ! trid. system (rhs)
+  real, dimension(N+1)  :: tri_l, &     ! tridiagonal system (lower diagonal) [nondim]
+                           tri_d, &     ! tridiagonal system (middle diagonal) [nondim]
+                           tri_c, &     ! tridiagonal system central value, with tri_d = tri_c+tri_l+tri_u
+                           tri_u, &     ! tridiagonal system (upper diagonal) [nondim]
+                           tri_b, &     ! tridiagonal system (right hand side) [A]
+                           tri_x        ! tridiagonal system (solution vector) [A]
   real      :: hNeglect          ! A negligible thickness [H]
   logical   :: use_2018_answers  ! If true use older, less acccurate expressions.
 
@@ -526,98 +449,144 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
     h0 = h(i)
     h1 = h(i+1)
 
-    ! Avoid singularities when h0+h1=0
-    if (h0+h1==0.) then
-      h0 = hNeglect
-      h1 = hNeglect
+    if (use_2018_answers) then
+      ! Avoid singularities when h0+h1=0
+      if (h0+h1==0.) then
+        h0 = hNeglect
+        h1 = hNeglect
+      endif
+
+      ! Auxiliary calculations
+      d2 = (h0 + h1) ** 2
+      d4 = d2 ** 2
+      h0h1 = h0 * h1
+      h0_2 = h0 * h0
+      h1_2 = h1 * h1
+
+      ! Coefficients
+      alpha = h1_2 / d2
+      beta = h0_2 / d2
+      a = 2.0 * h1_2 * ( h1_2 + 2.0 * h0_2 + 3.0 * h0h1 ) / d4
+      b = 2.0 * h0_2 * ( h0_2 + 2.0 * h1_2 + 3.0 * h0h1 ) / d4
+
+      tri_d(i+1) = 1.0
+    else  ! Use expressions with less sensitivity to roundoff
+      if (h0+h1==0.) then  ! Avoid singularities when h0+h1=0
+        alpha = 0.25 ; beta = 0.25 ; abmix = 0.25
+      else
+        ! The 1e-12 here attempts to balance truncation errors from the differences of
+        ! large numbers against errors from approximating thin layers as non-vanishing.
+        if (abs(h0) < 1.0e-12*abs(h1)) h0 = 1.0e-12*h1
+        if (abs(h1) < 1.0e-12*abs(h0)) h1 = 1.0e-12*h0
+        I_h2 = 1.0 / ((h0 + h1)**2)
+        alpha = (h1 * h1) * I_h2
+        beta = (h0 * h0) * I_h2
+        abmix = (h0 * h1) * I_h2
+      endif
+      a = 2.0 * alpha * ( alpha + 2.0 * beta + 3.0 * abmix )
+      b = 2.0 * beta * ( beta + 2.0 * alpha + 3.0 * abmix )
+
+      tri_c(i+1) = 2.0*abmix  ! = 1.0 - alpha - beta
     endif
 
-    ! Auxiliary calculations
-    d2 = (h0 + h1) ** 2
-    d4 = d2 ** 2
-    h0h1 = h0 * h1
-    h0_2 = h0 * h0
-    h1_2 = h1 * h1
-
-    ! Coefficients
-    alpha = h1_2 / d2
-    beta = h0_2 / d2
-    a = 2.0 * h1_2 * ( h1_2 + 2.0 * h0_2 + 3.0 * h0h1 ) / d4
-    b = 2.0 * h0_2 * ( h0_2 + 2.0 * h1_2 + 3.0 * h0h1 ) / d4
-
     tri_l(i+1) = alpha
-    tri_d(i+1) = 1.0
     tri_u(i+1) = beta
 
     tri_b(i+1) = a * u(i) + b * u(i+1)
 
   enddo ! end loop on cells
 
-  ! Boundary conditions: left boundary
-  h0 = max( hNeglect, hMinFrac*sum(h(1:4)) )
-  x(1) = 0.0
-  do i = 2,5
-    x(i) = x(i-1) + max( h0, h(i-1) )
-  enddo
-
-  do i = 1,4
-    dx = max(h0, h(i) )
-    if (use_2018_answers) then
+  ! Boundary conditions: set the first boundary value
+  if (use_2018_answers) then
+    h_min = max( hNeglect, hMinFrac*sum(h(1:4)) )
+    x(1) = 0.0
+    do i = 1,4
+      dx = max(h_min, h(i) )
+      x(i+1) = x(i) + dx
       do j = 1,4 ; Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j ; enddo
-    else  ! Use expressions with less sensitivity to roundoff
-      xavg = 0.5 * (x(i+1) + x(i))
+      Bsys(i) = u(i) * dx
+    enddo
+
+    call solve_linear_system( Asys, Bsys, Csys, 4 )
+
+    tri_b(1) = evaluation_polynomial( Csys, 4, x(1) )  ! Set the first edge value
+    tri_d(1) = 1.0
+  else ! Use expressions with less sensitivity to roundoff
+    h_min = max( hNeglect, hMinFrac * ((h(1) + h(2)) + (h(3) + h(4))) )
+    x(1) = 0.0
+    do i = 1,4
+      dx = max(h_min, h(i) )
+      x(i+1) = x(i) + dx
+      xavg = x(i) + 0.5*dx
       Asys(i,1) = dx
       Asys(i,2) = dx * xavg
       Asys(i,3) = dx * (xavg**2 + C1_12*dx**2)
       Asys(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
-    endif
+      Bsys(i) = u(i) * dx
+    enddo
 
-    Bsys(i) = u(i) * dx
+    call solve_linear_system( Asys, Bsys, Csys, 4 )
 
-  enddo
+    tri_b(1) = Csys(1)  ! Set the first edge value, using the fact that x(1) = 0.
+    tri_c(1) = 1.0
+  endif
+  tri_u(1) = 0.0 ! tri_l(1) = 0.0
 
-  call solve_linear_system( Asys, Bsys, Csys, 4 )
-
-  tri_d(1) = 1.0
-  tri_u(1) = 0.0
-  tri_b(1) = evaluation_polynomial( Csys, 4, x(1) )        ! first edge value
-
-  ! Boundary conditions: right boundary
-  h0 = max( hNeglect, hMinFrac*sum(h(N-3:N)) )
-  x(1) = 0.0
-  do i = 2,5
-    x(i) = x(i-1) + max( h0, h(N-5+i) )
-  enddo
-
-  do i = 1,4
-    dx = max(h0, h(N-4+i) )
-    if (use_2018_answers) then
+  ! Boundary conditions: set the last boundary value
+  if (use_2018_answers) then
+    h_min = max( hNeglect, hMinFrac*sum(h(N-3:N)) )
+    x(1) = 0.0
+    do i=1,4
+      dx = max(h_min, h(N-4+i) )
+      x(i+1) = x(i) + dx
       do j = 1,4 ; Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j ; enddo
-    else  ! Use expressions with less sensitivity to roundoff
-      xavg = 0.5 * (x(i+1) + x(i))
+      Bsys(i) = u(N-4+i) * dx
+    enddo
+
+    call solve_linear_system( Asys, Bsys, Csys, 4 )
+
+    ! Set the last edge value
+    tri_b(N+1) = evaluation_polynomial( Csys, 4, x(5) )
+    tri_d(N+1) = 1.0
+
+  else
+    ! Use expressions with less sensitivity to roundoff, including using a coordinate
+    ! system that sets the origin at the last interface in the domain.
+    h_min = max( hNeglect, hMinFrac * ((h(N-3) + h(N-2)) + (h(N-1) + h(N))) )
+    x(1) = 0.0
+    do i=1,4
+      dx = max(h_min, h(N+1-i) )
+      x(i+1) = x(i) + dx
+      xavg = x(i) + 0.5*dx
+
       Asys(i,1) = dx
       Asys(i,2) = dx * xavg
       Asys(i,3) = dx * (xavg**2 + C1_12*dx**2)
       Asys(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
-    endif
-    Bsys(i) = u(N-4+i) * dx
 
-  enddo
+      Bsys(i) = u(N+1-i) * dx
+    enddo
 
-  call solve_linear_system( Asys, Bsys, Csys, 4 )
+    call solve_linear_system( Asys, Bsys, Csys, 4 )
 
-  tri_l(N+1) = 0.0
-  tri_d(N+1) = 1.0
-  tri_b(N+1) = evaluation_polynomial( Csys, 4, x(5) )      ! last edge value
+    ! Set the last edge value
+    tri_b(N+1) = Csys(1)
+    tri_c(N+1) = 1.0
+  endif
+  tri_l(N+1) = 0.0 ! tri_u(N+1) = 0.0
 
   ! Solve tridiagonal system and assign edge values
-  call solve_tridiagonal_system( tri_l, tri_d, tri_u, tri_b, tri_x, N+1 )
+  if (use_2018_answers) then
+    call solve_tridiagonal_system( tri_l, tri_d, tri_u, tri_b, tri_x, N+1 )
+  else
+    call solve_diag_dominant_tridiag( tri_l, tri_c, tri_u, tri_b, tri_x, N+1 )
+  endif
 
-  do i = 2,N
+  edge_val(1,1) = tri_x(1)
+  do i=2,N
     edge_val(i,1)   = tri_x(i)
     edge_val(i-1,2) = tri_x(i)
   enddo
-  edge_val(1,1) = tri_x(1)
   edge_val(N,2) = tri_x(N+1)
 
 end subroutine edge_values_implicit_h4
@@ -659,9 +628,10 @@ end subroutine edge_values_implicit_h4
 !!          on nonuniform meshes turned out to be intractable.
 subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N) in arbitrary units [A]
-  real, dimension(:,:), intent(inout) :: edge_val  !< Returned edge values [A]; the second index size is 2.
+  real, dimension(N),   intent(in)    :: h !< cell widths [H]
+  real, dimension(N),   intent(in)    :: u !< cell average properties (size N) in arbitrary units [A]
+  real, dimension(N,2), intent(inout) :: edge_val  !< Returned edge values [A]; the second index
+                                           !! is for the two edges of each cell.
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
   logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
 
@@ -941,6 +911,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
   tri_b(2) = a * u(1) + b * u(2) + c * u(3) + d * u(4)
 
   ! Boundary conditions: left boundary
+!  h_sum = (h(1) + h(2)) + (h(5) + h(6)) + (h(3) + h(4))
   g = max( hNeglect, hMinFrac*sum(h(1:6)) )
   x(1) = 0.0
   do i = 2,7
@@ -1093,6 +1064,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
   tri_b(N) = a * u(N-3) + b * u(N-2) + c * u(N-1) + d * u(N)
 
   ! Boundary conditions: right boundary
+!  h_sum = (h(N-3) + h(N-2)) + ((h(N-1) + h(N)) + (h(N-5) + h(N-4)))
   g = max( hNeglect, hMinFrac*sum(h(N-5:N)) )
   x(1) = 0.0
   do i = 2,7

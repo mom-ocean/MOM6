@@ -4,7 +4,7 @@ module regrid_edge_slopes
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use regrid_solvers, only : solve_linear_system, solve_tridiagonal_system
+use regrid_solvers, only : solve_linear_system, solve_tridiagonal_system, solve_diag_dominant_tridiag
 use polynomial_functions, only : evaluation_polynomial
 
 implicit none ; private
@@ -14,11 +14,12 @@ public edge_slopes_implicit_h5
 
 ! Specifying a dimensional parameter value, as is done here, is a terrible idea.
 real, parameter :: hNeglect_dflt = 1.E-30 !< Default negligible cell thickness
+real, parameter :: hMinFrac      = 1.e-5  !< A minimum fraction for min(h)/sum(h)
 
 contains
 
 !------------------------------------------------------------------------------
-!> Compute ih4 edge slopes (implicit third order accurate)
+!> Compute ih3 edge slopes (implicit third order accurate)
 !! in the same units as h.
 !!
 !! Compute edge slopes based on third-order implicit estimates. Note that
@@ -48,17 +49,21 @@ contains
 !! boundary conditions close the system.
 subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_2018 )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N) in arbitrary units [A]
-  real, dimension(:,:), intent(inout) :: edge_slopes !< Returned edge slopes [A H-1]
-  real, optional,       intent(in)    :: h_neglect !< A negligibly small width
+  real, dimension(N),   intent(in)    :: h !< cell widths [H]
+  real, dimension(N),   intent(in)    :: u !< cell average properties in arbitrary units [A]
+  real, dimension(N,2), intent(inout) :: edge_slopes !< Returned edge slopes [A H-1]; the
+                                           !! second index is for the two edges of each cell.
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
   logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
   ! Local variables
   integer               :: i, j                 ! loop indexes
-  real                  :: h0, h1               ! cell widths [H]
-  real                  :: h0_2, h1_2, h0h1     ! products of cell widths [H2]
-  real                  :: h0_3, h1_3           ! products of three cell widths [H3]
-  real                  :: d                    ! A demporary variable [H3]
+  real                  :: h0, h1               ! cell widths [H or nondim]
+  real                  :: h0_2, h1_2, h0h1     ! products of cell widths [H2 or nondim]
+  real                  :: h0_3, h1_3           ! products of three cell widths [H3 or nondim]
+  real                  :: h_min                ! A minimal cell width [H]
+  real                  :: d                    ! A temporary variable [H3]
+  real                  :: I_d                  ! A temporary variable [nondim]
+  real                  :: I_h, I_hshear        ! Inverses of thicknesses [H-1]
   real                  :: alpha, beta          ! stencil coefficients [nondim]
   real                  :: a, b                 ! weights of cells [H-1]
   real, parameter       :: C1_12 = 1.0 / 12.0
@@ -67,11 +72,12 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_201
   real, dimension(4,4)  :: Asys       ! matrix used to find boundary conditions
   real, dimension(4)    :: Bsys, Csys
   real, dimension(3)    :: Dsys
-  real, dimension(N+1)  :: tri_l, &             ! trid. system (lower diagonal)  [nondim]
-                           tri_d, &             ! trid. system (middle diagonal) [nondim]
-                           tri_u, &             ! trid. system (upper diagonal)  [nondim]
-                           tri_b, &             ! trid. system (unknowns vector) [A H-1]
-                           tri_x                ! trid. system (rhs) [A H-1]
+  real, dimension(N+1)  :: tri_l, &     ! tridiagonal system (lower diagonal) [nondim]
+                           tri_d, &     ! tridiagonal system (middle diagonal) [nondim]
+                           tri_c, &     ! tridiagonal system central value, with tri_d = tri_c+tri_l+tri_u
+                           tri_u, &     ! tridiagonal system (upper diagonal) [nondim]
+                           tri_b, &     ! tridiagonal system (right hand side) [A H-1]
+                           tri_x        ! tridiagonal system (solution vector) [A H-1]
   real      :: hNeglect  ! A negligible thickness [H].
   real      :: hNeglect3 ! hNeglect^3 [H3].
   logical   :: use_2018_answers  ! If true use older, less acccurate expressions.
@@ -83,98 +89,150 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_201
   ! Loop on cells (except last one)
   do i = 1,N-1
 
-    ! Get cell widths
-    h0 = h(i)
-    h1 = h(i+1)
+    if (use_2018_answers) then
+      ! Get cell widths
+      h0 = h(i)
+      h1 = h(i+1)
 
-    ! Auxiliary calculations
-    h0h1 = h0 * h1
-    h0_2 = h0 * h0
-    h1_2 = h1 * h1
-    h0_3 = h0_2 * h0
-    h1_3 = h1_2 * h1
+      ! Auxiliary calculations
+      h0h1 = h0 * h1
+      h0_2 = h0 * h0
+      h1_2 = h1 * h1
+      h0_3 = h0_2 * h0
+      h1_3 = h1_2 * h1
 
-    d = 4.0 * h0h1 * ( h0 + h1 ) + h1_3 + h0_3
+      d = 4.0 * h0h1 * ( h0 + h1 ) + h1_3 + h0_3
 
-    ! Coefficients
-    alpha = h1 * (h0_2 + h0h1 - h1_2) / ( d + hNeglect3 )
-    beta  = h0 * (h1_2 + h0h1 - h0_2) / ( d + hNeglect3 )
-    a = -12.0 * h0h1 / ( d + hNeglect3 )
-    b = -a
+      ! Coefficients
+      alpha = h1 * (h0_2 + h0h1 - h1_2) / ( d + hNeglect3 )
+      beta  = h0 * (h1_2 + h0h1 - h0_2) / ( d + hNeglect3 )
+      a = -12.0 * h0h1 / ( d + hNeglect3 )
+      b = -a
 
-    tri_l(i+1) = alpha
-    tri_d(i+1) = 1.0
-    tri_u(i+1) = beta
+      tri_l(i+1) = alpha
+      tri_d(i+1) = 1.0
+      tri_u(i+1) = beta
 
-    tri_b(i+1) = a * u(i) + b * u(i+1)
+      tri_b(i+1) = a * u(i) + b * u(i+1)
+    else
+      ! Get cell widths
+      h0 = h(i)
+      h1 = h(i+1)
+
+      if (h0+h1 == 0.) then
+        ! Avoid singularities when h0+h1=0 by using values for equally spaced layers and no source term.
+        tri_l(i+1) = 0.1
+        ! tri_d(i+1) = 1.0
+        tri_c(i+1) = 0.8
+        tri_u(i+1) = 0.1
+        tri_b(i+1) = 0.0
+      else
+        ! Auxiliary calculations
+        I_hshear = 1.0 / (h0 + h1 + hNeglect)
+        I_h = 1.0 / (h0 + h1)
+        h0 = h0 * I_h ; h1 = h1 * I_h
+
+        h0h1 = h0 * h1 ; h0_2 = h0 * h0 ; h1_2 = h1 * h1
+        h0_3 = h0_2 * h0 ; h1_3 = h1_2 * h1
+
+        I_d = 1.0 / (4.0 * h0h1 * ( h0 + h1 ) + h1_3 + h0_3) ! = 1 / ((h0 + h1)**3 + (h0 + h1))
+
+        ! Set the tridiagonal coefficients
+        tri_l(i+1) = (h1 * ((h0_2 + h0h1) - h1_2)) * I_d
+        ! tri_d(i+1) = 1.0
+        tri_c(i+1) = 2.0 * ((h0_2 + h1_2) * (h0 + h1)) * I_d
+        tri_u(i+1) = (h0 * ((h1_2 + h0h1) - h0_2)) * I_d
+
+        tri_b(i+1) = 12.0 * (h0h1 * I_d) * ((u(i+1) - u(i)) * I_hshear)
+      endif
+    endif
 
   enddo ! end loop on cells
 
-  ! Boundary conditions: left boundary
-  x(1) = 0.0
-  do i = 2,5
-    x(i) = x(i-1) + h(i-1)
-  enddo
-
-  do i = 1,4
-    dx = h(i)
-    if (use_2018_answers) then
+  ! Boundary conditions: set the first edge slope
+  if (use_2018_answers) then
+    x(1) = 0.0
+    do i = 1,4
+      dx = h(i)
+      x(i+1) = x(i) + dx
       do j = 1,4 ; Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j ; enddo
-    else  ! Use expressions with less sensitivity to roundoff
-      xavg = 0.5 * (x(i+1) + x(i))
+      Bsys(i) = u(i) * dx
+    enddo
+
+    call solve_linear_system( Asys, Bsys, Csys, 4 )
+
+    Dsys(1) = Csys(2) ; Dsys(2) = 2.0 * Csys(3) ; Dsys(3) = 3.0 * Csys(4)
+    tri_b(1) = evaluation_polynomial( Dsys, 3, x(1) )  ! Set the first edge slope
+    tri_d(1) = 1.0
+  else ! Use expressions with less sensitivity to roundoff
+    h_min = max( hNeglect, hMinFrac * ((h(1) + h(2)) + (h(3) + h(4))) )
+    x(1) = 0.0
+    do i = 1,4
+      dx = max(h_min, h(i) )
+      x(i+1) = x(i) + dx
+      xavg = x(i) + 0.5*dx
       Asys(i,1) = dx
       Asys(i,2) = dx * xavg
       Asys(i,3) = dx * (xavg**2 + C1_12*dx**2)
       Asys(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
-    endif
+      Bsys(i) = u(i) * dx
+    enddo
 
-    Bsys(i) = u(i) * dx
+    call solve_linear_system( Asys, Bsys, Csys, 4 )
 
-  enddo
+    ! Set the first edge slope
+    tri_b(1) = Csys(2) ! + x(1)*(2.0*Csys(3) + x(1)*(3.0*Csys(4)))
+    tri_c(1) = 1.0
+  endif
+  tri_u(1) = 0.0 ! tri_l(1) = 0.0
 
-  call solve_linear_system( Asys, Bsys, Csys, 4 )
-
-  Dsys(1) = Csys(2)
-  Dsys(2) = 2.0 * Csys(3)
-  Dsys(3) = 3.0 * Csys(4)
-
-  tri_d(1) = 1.0
-  tri_u(1) = 0.0
-  tri_b(1) = evaluation_polynomial( Dsys, 3, x(1) )        ! first edge slope
-
-  ! Boundary conditions: right boundary
-  x(1) = 0.0
-  do i = 2,5
-    x(i) = x(i-1) + h(N-5+i)
-  enddo
-
-  do i = 1,4
-    dx = h(N-4+i)
-    if (use_2018_answers) then
+  ! Boundary conditions: set the last edge slope
+  if (use_2018_answers) then
+    x(1) = 0.0
+    do i = 1,4
+      dx = h(N-4+i)
+      x(i+1) = x(i) + dx
       do j = 1,4 ; Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j ; enddo
-    else  ! Use expressions with less sensitivity to roundoff
-      xavg = 0.5 * (x(i+1) + x(i))
+      Bsys(i) = u(N-4+i) * dx
+    enddo
+
+    call solve_linear_system( Asys, Bsys, Csys, 4 )
+
+    Dsys(1) = Csys(2) ; Dsys(2) = 2.0 * Csys(3) ; Dsys(3) = 3.0 * Csys(4)
+    ! Set the last edge slope
+    tri_b(N+1) = evaluation_polynomial( Dsys, 3, x(5) )
+    tri_d(N+1) = 1.0
+  else
+    ! Use expressions with less sensitivity to roundoff, including using a coordinate
+    ! system that sets the origin at the last interface in the domain.
+    h_min = max( hNeglect, hMinFrac * ((h(N-3) + h(N-2)) + (h(N-1) + h(N))) )
+    x(1) = 0.0
+    do i = 1,4
+      dx = max(h_min, h(N+1-i) )
+      x(i+1) = x(i) + dx
+      xavg = x(i) + 0.5*dx
       Asys(i,1) = dx
       Asys(i,2) = dx * xavg
       Asys(i,3) = dx * (xavg**2 + C1_12*dx**2)
       Asys(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
-    endif
-    Bsys(i) = u(N-4+i) * dx
 
-  enddo
+      Bsys(i) = u(N+1-i) * dx
+    enddo
 
-  call solve_linear_system( Asys, Bsys, Csys, 4 )
+    call solve_linear_system( Asys, Bsys, Csys, 4 )
 
-  Dsys(1) = Csys(2)
-  Dsys(2) = 2.0 * Csys(3)
-  Dsys(3) = 3.0 * Csys(4)
+    ! Set the last edge slope
+    tri_b(N+1) = Csys(2)
+    tri_c(N+1) = 1.0
+  endif
+  tri_l(N+1) = 0.0 ! tri_u(N+1) = 0.0
 
-  tri_l(N+1) = 0.0
-  tri_d(N+1) = 1.0
-  tri_b(N+1) = evaluation_polynomial( Dsys, 3, x(5) )      ! last edge slope
-
-  ! Solve tridiagonal system and assign edge values
-  call solve_tridiagonal_system( tri_l, tri_d, tri_u, tri_b, tri_x, N+1 )
+  ! Solve tridiagonal system and assign edge slopes
+  if (use_2018_answers) then
+    call solve_tridiagonal_system( tri_l, tri_d, tri_u, tri_b, tri_x, N+1 )
+  else
+    call solve_diag_dominant_tridiag( tri_l, tri_c, tri_u, tri_b, tri_x, N+1 )
+  endif
 
   do i = 2,N
     edge_slopes(i,1)   = tri_x(i)
@@ -190,9 +248,10 @@ end subroutine edge_slopes_implicit_h3
 !> Compute ih5 edge values (implicit fifth order accurate)
 subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_2018 )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N) in arbitrary units [A]
-  real, dimension(:,:), intent(inout) :: edge_slopes !< Returned edge slopes [A H-1]
+  real, dimension(N),   intent(in)    :: h !< cell widths [H]
+  real, dimension(N),   intent(in)    :: u !< cell average properties in arbitrary units [A]
+  real, dimension(N,2), intent(inout) :: edge_slopes !< Returned edge slopes [A H-1]; the
+                                           !! second index is for the two edges of each cell.
   real, optional,       intent(in)    :: h_neglect !< A negligibly small width [H]
   logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
 ! -----------------------------------------------------------------------------
@@ -264,7 +323,7 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
   hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
   use_2018_answers = .true. ; if (present(answers_2018)) use_2018_answers = answers_2018
 
-  ! Loop on cells (except last one)
+  ! Loop on cells (except the first and last ones)
   do k = 2,N-2
 
     ! Cell widths
