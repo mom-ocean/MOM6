@@ -564,26 +564,29 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, var_desc, 
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, filename_temp, lowercase(trim(mode)), domain%mpp_domain, &
                                       is_restart=.false.)
-  ! register the field if it is not in the file
   dim_unlim_index=0
   dim_names(:) = ""
   dim_lengths(:) = 0
   num_dims=0
+
+  ! get the dimension names and lengths
+  if (present(G)) then
+      call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                      dim_lengths, num_dims, G=G)
+  elseif(present(dG)) then  
+      call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                      dim_lengths, num_dims, dG=dG)
+  endif
+
+  if (present(GV)) &
+  call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
+                                   dim_lengths, num_dims, GV=GV)
+  call get_global_io_domain_indices(fileObj, trim(dim_names(1)), is, ie)
+
+  ! register the field if it is not in the file
   if (variable_exists(fileobj, trim(fieldname))) then
       dim_unlim_index = get_variable_unlimited_dimension_index(fileobj, trim(fieldname))
   else
-    ! get the dimension names and lengths
-    if (present(G)) then
-      call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
-                                      dim_lengths, num_dims, G=G)
-    elseif(present(dG)) then  
-      call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
-                                      dim_lengths, num_dims, dG=dG)
-    endif
-
-    if present(GV)) &
-    call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
-                                     dim_lengths, num_dims, GV=GV)
 
     call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
     call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(var_desc%units))
@@ -626,7 +629,6 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, var_desc, 
   dim_unlim_size=0
   dim_unlim_name=""
   ! write the data
-  call get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), is, ie)
   if (lowercase(trim(mode)) .eq. "append") then
     if (present(time_level)) then
       ! write the time value if it is not already written to the file
@@ -725,8 +727,8 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
   else
     call MOM_error(FATAL, "MOM_io:write_field_2d_dd: unable to open file "//trim(filename_temp))
   endif
-  if (.not.(var_exists)) then
-    ! get the dimension names and lengths
+
+  ! get the dimension names and lengths
     if (present(G)) then
       call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
                                       dim_lengths, num_dims, G=G)
@@ -738,6 +740,11 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
       call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
                                       dim_lengths, num_dims, GV=GV)
     endif
+
+  call get_global_io_domain_indices(fileObj, trim(dim_names(1)), is, ie)
+  call get_global_io_domain_indices(fileObj, trim(dim_names(2)), js, je)
+
+  if (.not.(var_exists)) then
     ! register the variable and its attributes
     call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
     call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(var_desc%units))
@@ -792,7 +799,6 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
   dim_unlim_size=0
   dim_unlim_name=""
   ! write the data
-  call get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), is, ie, js, je)
   if (lowercase(trim(mode)) .eq. "append") then
     if (present(time_level)) then
       ! write the time value if it is not already written to the file
