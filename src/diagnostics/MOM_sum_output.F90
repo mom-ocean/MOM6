@@ -963,7 +963,7 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
                                               !! describe the surface state of the ocean.
   type(thermo_var_ptrs), intent(in) :: tv     !< A structure pointing to various
                                               !! thermodynamic variables.
-  real,                  intent(in) :: dt     !< The amount of time over which to average [s].
+  real,                  intent(in) :: dt     !< The amount of time over which to average [T ~> s].
   type(ocean_grid_type), intent(in) :: G      !< The ocean's grid structure.
   type(unit_scale_type), intent(in) :: US     !< A dimensional unit scaling type
   type(Sum_output_CS),   pointer    :: CS     !< The control structure returned by a previous call
@@ -982,7 +982,6 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
   real :: heat_input ! The total heat added by boundary fluxes, integrated
                      ! over a time step and summed over space [J].
   real :: C_p        ! The heat capacity of seawater [J degC-1 kg-1].
-  real :: dt_in_T    ! Time increment [T ~> s]
   real :: RZL2_to_kg ! A combination of scaling factors for mass [kg R-1 Z-1 L-2 ~> 1]
 
   type(EFP_type) :: &
@@ -996,13 +995,12 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   C_p = fluxes%C_p
   RZL2_to_kg = US%L_to_m**2*US%R_to_kg_m3*US%Z_to_m
-  dt_in_T = US%s_to_T*dt
 
   FW_in(:,:) = 0.0 ; FW_input = 0.0
   if (associated(fluxes%evap)) then
     if (associated(fluxes%lprec) .and. associated(fluxes%fprec)) then
       do j=js,je ; do i=is,ie
-        FW_in(i,j) = RZL2_to_kg * dt_in_T*G%areaT(i,j)*(fluxes%evap(i,j) + &
+        FW_in(i,j) = RZL2_to_kg * dt*G%areaT(i,j)*(fluxes%evap(i,j) + &
             (((fluxes%lprec(i,j) + fluxes%vprec(i,j)) + fluxes%lrunoff(i,j)) + &
               (fluxes%fprec(i,j) + fluxes%frunoff(i,j))))
       enddo ; enddo
@@ -1013,7 +1011,7 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
   endif
 
   if (associated(fluxes%seaice_melt)) then ; do j=js,je ; do i=is,ie
-    FW_in(i,j) = FW_in(i,j) + RZL2_to_kg*dt_in_T * &
+    FW_in(i,j) = FW_in(i,j) + RZL2_to_kg*dt * &
                  G%areaT(i,j) * fluxes%seaice_melt(i,j)
   enddo ; enddo ; endif
 
@@ -1021,18 +1019,18 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
   if (CS%use_temperature) then
 
     if (associated(fluxes%sw)) then ; do j=js,je ; do i=is,ie
-      heat_in(i,j) = heat_in(i,j) + dt*US%L_to_m**2*G%areaT(i,j) * (fluxes%sw(i,j) + &
+      heat_in(i,j) = heat_in(i,j) + dt*US%T_to_s*US%L_to_m**2*G%areaT(i,j) * (fluxes%sw(i,j) + &
              (fluxes%lw(i,j) + (fluxes%latent(i,j) + fluxes%sens(i,j))))
     enddo ; enddo ; endif
 
     if (associated(fluxes%seaice_melt_heat)) then ; do j=js,je ; do i=is,ie
-       heat_in(i,j) = heat_in(i,j) + dt*US%L_to_m**2*G%areaT(i,j) * fluxes%seaice_melt_heat(i,j)
+       heat_in(i,j) = heat_in(i,j) + dt*US%T_to_s*US%L_to_m**2*G%areaT(i,j) * fluxes%seaice_melt_heat(i,j)
     enddo ; enddo ; endif
 
     ! smg: new code
     ! include heat content from water transport across ocean surface
 !    if (associated(fluxes%heat_content_lprec)) then ; do j=js,je ; do i=is,ie
-!      heat_in(i,j) = heat_in(i,j) + dt_in_T*RZL2_to_kg*G%areaT(i,j) * &
+!      heat_in(i,j) = heat_in(i,j) + dt*RZL2_to_kg*G%areaT(i,j) * &
 !         (fluxes%heat_content_lprec(i,j)   + (fluxes%heat_content_fprec(i,j)   &
 !       + (fluxes%heat_content_lrunoff(i,j) + (fluxes%heat_content_frunoff(i,j) &
 !       + (fluxes%heat_content_cond(i,j)    + (fluxes%heat_content_vprec(i,j)   &
@@ -1062,7 +1060,7 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
       heat_in(i,j) = heat_in(i,j) + US%L_to_m**2*G%areaT(i,j) * tv%frazil(i,j)
     enddo ; enddo ; endif
     if (associated(fluxes%heat_added)) then ; do j=js,je ; do i=is,ie
-      heat_in(i,j) = heat_in(i,j) + dt*US%L_to_m**2*G%areaT(i,j)*fluxes%heat_added(i,j)
+      heat_in(i,j) = heat_in(i,j) + dt*US%T_to_s*US%L_to_m**2*G%areaT(i,j)*fluxes%heat_added(i,j)
     enddo ; enddo ; endif
 !    if (associated(sfc_state%sw_lost)) then ; do j=js,je ; do i=is,ie
 !      heat_in(i,j) = heat_in(i,j) - US%L_to_m**2*G%areaT(i,j) * sfc_state%sw_lost(i,j)
@@ -1070,7 +1068,7 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
 
     if (associated(fluxes%salt_flux)) then ; do j=js,je ; do i=is,ie
       ! convert salt_flux from kg (salt)/(m^2 s) to ppt * [m s-1].
-      salt_in(i,j) = RZL2_to_kg * dt_in_T * &
+      salt_in(i,j) = RZL2_to_kg * dt * &
                      G%areaT(i,j)*(1000.0*fluxes%salt_flux(i,j))
     enddo ; enddo ; endif
   endif

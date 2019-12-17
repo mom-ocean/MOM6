@@ -627,7 +627,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_int_in, CS, &
       elseif (thermo_does_span_coupling) then
         dtdia = dt_therm
         if ((fluxes%dt_buoy_accum > 0.0) .and. (dtdia > time_interval) .and. &
-            (abs(US%s_to_T*fluxes%dt_buoy_accum - dtdia) > 1e-6*dtdia)) then
+            (abs(fluxes%dt_buoy_accum - dtdia) > 1e-6*dtdia)) then
           call MOM_error(FATAL, "step_MOM: Mismatch between long thermodynamic "//&
             "timestep and time over which buoyancy fluxes have been accumulated.")
         endif
