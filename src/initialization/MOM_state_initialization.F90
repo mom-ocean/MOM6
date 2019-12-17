@@ -2011,6 +2011,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
   logical :: homogenize, useALEremapping, remap_full_column, remap_general, remap_old_alg
+  logical :: answers_2018, default_2018_answers
   logical :: use_ice_shelf
   character(len=10) :: remappingScheme
   real :: tempAvg, saltAvg
@@ -2088,6 +2089,15 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
                  "If false, uses the preferred remapping algorithm for initialization. "//&
                  "If true, use an older, less robust algorithm for remapping.", &
                  default=.true., do_not_log=just_read)
+  if (useALEremapping) then
+    call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
+    call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=default_2018_answers)
+  endif
   call get_param(PF, mdl, "ICE_SHELF", use_ice_shelf, default=.false.)
   if (use_ice_shelf) then
     call get_param(PF, mdl, "ICE_THICKNESS_FILE", ice_shelf_file, &
@@ -2256,8 +2266,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
       deallocate( hTarget )
     endif
 
-    ! Now remap from source grid to target grid
-    call initialize_remapping( remapCS, remappingScheme, boundary_extrapolation=.false. ) ! Reconstruction parameters
+    ! Now remap from source grid to target grid, first setting reconstruction parameters
+    call initialize_remapping( remapCS, remappingScheme, boundary_extrapolation=.false., answers_2018=answers_2018 )
     if (remap_general) then
       call set_regrid_params( regridCS, min_thickness=0. )
       tv_loc = tv

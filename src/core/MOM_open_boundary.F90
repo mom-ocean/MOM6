@@ -555,6 +555,7 @@ subroutine initialize_segment_data(G, OBC, PF)
   character(len=32)  :: remappingScheme
   character(len=256) :: mesg    ! Message for error messages.
   logical :: check_reconstruction, check_remapping, force_bounds_in_subcell
+  logical :: answers_2018, default_2018_answers
   integer, dimension(4) :: siz,siz2
   integer :: is, ie, js, je
   integer :: isd, ied, jsd, jed
@@ -591,14 +592,21 @@ subroutine initialize_segment_data(G, OBC, PF)
           "If true, the values on the intermediate grid used for remapping "//&
           "are forced to be bounded, which might not be the case due to "//&
           "round off.", default=.false.,do_not_log=.true.)
-    call get_param(PF, mdl, "BRUSHCUTTER_MODE", OBC%brushcutter_mode, &
+  call get_param(PF, mdl, "BRUSHCUTTER_MODE", OBC%brushcutter_mode, &
          "If true, read external OBC data on the supergrid.", &
          default=.false.)
+  call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
+  call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=default_2018_answers)
 
   allocate(OBC%remap_CS)
   call initialize_remapping(OBC%remap_CS, remappingScheme, boundary_extrapolation = .false., &
-       check_reconstruction=check_reconstruction, &
-       check_remapping=check_remapping, force_bounds_in_subcell=force_bounds_in_subcell)
+               check_reconstruction=check_reconstruction, check_remapping=check_remapping, &
+               force_bounds_in_subcell=force_bounds_in_subcell, answers_2018=answers_2018)
 
   if (OBC%user_BCs_set_globally) return
 

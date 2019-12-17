@@ -115,15 +115,21 @@ type :: diag_remap_ctrl
   real, dimension(:), allocatable :: dz !< Nominal layer thicknesses
   integer :: interface_axes_id = 0 !< Vertical axes id for remapping at interfaces
   integer :: layer_axes_id = 0 !< Vertical axes id for remapping on layers
+  logical :: answers_2018      !< If true, use the order of arithmetic and expressions for remapping
+                               !! that recover the answers from the end of 2018. Otherwise, use
+                               !! updated more robust forms of the same expressions.
 end type diag_remap_ctrl
 
 contains
 
 !> Initialize a diagnostic remapping type with the given vertical coordinate.
-subroutine diag_remap_init(remap_cs, coord_tuple)
+subroutine diag_remap_init(remap_cs, coord_tuple, answers_2018)
   type(diag_remap_ctrl), intent(inout) :: remap_cs !< Diag remapping control structure
   character(len=*),      intent(in)    :: coord_tuple !< A string in form of
                                                       !! MODULE_SUFFIX PARAMETER_SUFFIX COORDINATE_NAME
+  logical,               intent(in)    :: answers_2018 !< If true, use the order of arithmetic and expressions
+                                                      !! for remapping that recover the answers from the end of 2018.
+                                                      !! Otherwise, use more robust forms of the same expressions.
 
   remap_cs%diag_module_suffix = trim(extractWord(coord_tuple, 1))
   remap_cs%diag_coord_name = trim(extractWord(coord_tuple, 2))
@@ -132,6 +138,7 @@ subroutine diag_remap_init(remap_cs, coord_tuple)
   remap_cs%configured = .false.
   remap_cs%initialized = .false.
   remap_cs%used = .false.
+  remap_cs%answers_2018 = answers_2018
   remap_cs%nz = 0
 
 end subroutine diag_remap_init
@@ -295,7 +302,8 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state)
 
   if (.not. remap_cs%initialized) then
     ! Initialize remapping and regridding on the first call
-    call initialize_remapping(remap_cs%remap_cs, 'PPM_IH4', boundary_extrapolation=.false.)
+    call initialize_remapping(remap_cs%remap_cs, 'PPM_IH4', boundary_extrapolation=.false., &
+                              answers_2018=remap_cs%answers_2018)
     allocate(remap_cs%h(G%isd:G%ied,G%jsd:G%jed, nz))
     remap_cs%initialized = .true.
   endif
@@ -362,6 +370,9 @@ subroutine diag_remap_do_remap(remap_cs, G, GV, h, staggered_in_x, staggered_in_
               'diag_remap_do_remap: Remap field and thickness z-axes do not match.')
 
   !### Try replacing both of these with GV%H_subroundoff
+  ! if (remap_cs%answers_2018) then
+  !   h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+  ! elseif (GV%Boussinesq) then
   if (GV%Boussinesq) then
     h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
   else

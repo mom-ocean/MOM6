@@ -108,6 +108,7 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, CS)
   ! Local variables
   character(len=256) :: mesg    ! Message for error messages.
   character(len=80)  :: string  ! Temporary strings
+  logical :: answers_2018, default_2018_answers
   logical :: boundary_extrap
 
   if (associated(CS)) then
@@ -144,7 +145,7 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, CS)
                  "pressure is used.", &
                  default = -1.)
   ! Initialize and configure remapping
-  if (CS%continuous_reconstruction .eqv. .false.) then
+  if ( .not.CS%continuous_reconstruction ) then
     call get_param(param_file, mdl, "NDIFF_BOUNDARY_EXTRAP", boundary_extrap, &
                    "Extrapolate at the top and bottommost cells, otherwise   \n"//  &
                    "assume boundaries are piecewise constant",                      &
@@ -154,7 +155,15 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, CS)
                    "for vertical remapping for all variables. "//&
                    "It can be one of the following schemes: "//&
                    trim(remappingSchemesDoc), default=remappingDefaultScheme)
-    call initialize_remapping( CS%remap_CS, string, boundary_extrapolation = boundary_extrap )
+    call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
+    call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=default_2018_answers)
+    call initialize_remapping( CS%remap_CS, string, boundary_extrapolation=boundary_extrap, &
+                               answers_2018=answers_2018 )
     call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
     call get_param(param_file, mdl, "NEUTRAL_POS_METHOD", CS%neutral_pos_method,   &
                    "Method used to find the neutral position                 \n"// &

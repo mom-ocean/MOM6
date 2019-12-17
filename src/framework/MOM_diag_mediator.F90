@@ -2986,6 +2986,7 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
   ! Local variables
   integer :: ios, i, new_unit
   logical :: opened, new_file
+  logical :: answers_2018, default_2018_answers
   character(len=8)   :: this_pe
   character(len=240) :: doc_file, doc_file_dflt, doc_path
   character(len=240), allocatable :: diag_coords(:)
@@ -3012,6 +3013,13 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
                  'The number of diagnostic vertical coordinates to use. '//&
                  'For each coordinate, an entry in DIAG_COORDS must be provided.', &
                  default=1)
+  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
+  call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=default_2018_answers)
   if (diag_cs%num_diag_coords>0) then
     allocate(diag_coords(diag_cs%num_diag_coords))
     if (diag_cs%num_diag_coords==1) then ! The default is to provide just one instance of Z*
@@ -3030,7 +3038,7 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
     allocate(diag_cs%diag_remap_cs(diag_cs%num_diag_coords))
     ! Initialize each diagnostic vertical coordinate
     do i=1, diag_cs%num_diag_coords
-      call diag_remap_init(diag_cs%diag_remap_cs(i), diag_coords(i))
+      call diag_remap_init(diag_cs%diag_remap_cs(i), diag_coords(i), answers_2018=answers_2018)
     enddo
     deallocate(diag_coords)
   endif
