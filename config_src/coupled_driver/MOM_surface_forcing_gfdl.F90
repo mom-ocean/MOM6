@@ -205,7 +205,7 @@ contains
 !> This subroutine translates the Ice_ocean_boundary_type into a MOM
 !! thermodynamic forcing type, including changes of units, sign conventions,
 !! and putting the fields into arrays with MOM-standard halos.
-subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc_state)
+subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G, US, CS, sfc_state)
   type(ice_ocean_boundary_type), &
                    target, intent(in)    :: IOB    !< An ice-ocean boundary type with fluxes to drive
                                                    !! the ocean in a coupled model
@@ -215,6 +215,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc
   integer, dimension(4),   intent(in)    :: index_bounds !< The i- and j- size of the arrays in IOB.
   type(time_type),         intent(in)    :: Time   !< The time of the fluxes, used for interpolating the
                                                    !! salinity to the right time, when it is being restored.
+  real,                    intent(in)    :: valid_time !< The amount of time over which these fluxes
+                                                   !! should be applied [s].
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   type(surface_forcing_CS),pointer       :: CS     !< A pointer to the control structure returned by a
@@ -307,7 +309,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc
 
     if (CS%restore_temp) call safe_alloc_ptr(fluxes%heat_added,isd,ied,jsd,jed)
 
-    fluxes%dt_buoy_accum = 0.0
   endif   ! endif for allocation and initialization
 
 
@@ -324,11 +325,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc
   ! ocean model, rather than using haloless arrays, in which case the last line
   ! would be: (             (/isd,is,ie,ied/), (/jsd,js,je,jed/))
 
-  if (CS%allow_flux_adjustments) then
-    fluxes%heat_added(:,:)=0.0
-    fluxes%salt_flux_added(:,:)=0.0
-  endif
-
   ! allocation and initialization on first call to this routine
   if (CS%area_surf < 0.0) then
     do j=js,je ; do i=is,ie
@@ -336,6 +332,16 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc
     enddo ; enddo
     CS%area_surf = reproducing_sum(work_sum, isr, ier, jsr, jer)
   endif    ! endif for allocation and initialization
+
+
+  ! Indicate that there are new unused fluxes.
+  fluxes%fluxes_used = .false.
+  fluxes%dt_buoy_accum = US%s_to_T*valid_time
+
+  if (CS%allow_flux_adjustments) then
+    fluxes%heat_added(:,:)=0.0
+    fluxes%salt_flux_added(:,:)=0.0
+  endif
 
   do j=js,je ; do i=is,ie
     fluxes%salt_flux(i,j) = 0.0

@@ -7,6 +7,7 @@ use MOM_debugging,     only : hchksum, uvchksum
 use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, register_scalar_field
 use MOM_diag_mediator, only : time_type, diag_ctrl, safe_alloc_alloc, query_averaging_enabled
+use MOM_diag_mediator, only : enable_averages, enable_averaging, disable_averaging
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_EOS,           only : calculate_density_derivs
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
@@ -161,7 +162,7 @@ type, public :: forcing
   logical :: fluxes_used = .true. !< If true, all of the heat, salt, and mass
                                   !! fluxes have been applied to the ocean.
   real :: dt_buoy_accum = -1.0    !< The amount of time over which the buoyancy fluxes
-                                  !! should be applied [s].  If negative, this forcing
+                                  !! should be applied [T ~> s].  If negative, this forcing
                                   !! type variable has not yet been inialized.
 
   real :: C_p                !< heat capacity of seawater [J kg-1 degC-1].
@@ -410,7 +411,8 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
   real :: Pen_sw_tot(SZI_(G)) ! sum across all bands of Pen_SW [degC H ~> degC m or degC kg m-2].
   real :: pen_sw_tot_rate(SZI_(G)) ! Summed rate of shortwave heating across bands
                               ! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
-  real :: Ih_limit            ! inverse depth at which surface fluxes start to be limited [H-1 ~> m-1 or m2 kg-1]
+  real :: Ih_limit            ! inverse depth at which surface fluxes start to be limited
+                              ! or 0 for no limiting [H-1 ~> m-1 or m2 kg-1]
   real :: scale               ! scale scales away fluxes if depth < FluxRescaleDepth
   real :: W_m2_to_H_T         ! converts W/m^2 to H degC T-1 [degC H T-1 W-2 m2 ~> degC m3 J-1 or degC kg J-1]
   real :: RZ_T_to_W_m2_degC   ! Converts mass fluxes to heat fluxes per degree temperature
@@ -438,7 +440,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
   if (present(pen_sw_bnd_rate)) do_PSWBR = .true.
   !}BGR
 
-  Ih_limit  = 1.0 / FluxRescaleDepth
+  Ih_limit  = 0.0 ; if (FluxRescaleDepth > 0.0) Ih_limit  = 1.0 / FluxRescaleDepth
   RZ_T_to_W_m2_degC = fluxes%C_p*US%R_to_kg_m3*US%Z_to_m*US%s_to_T
   I_Cp      = 1.0 / fluxes%C_p
   W_m2_to_H_T = 1.0 / (US%s_to_T * GV%H_to_kg_m2 * fluxes%C_p)
@@ -488,8 +490,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
 
   do i=is,ie
 
-    scale = 1.0
-    if (htot(i)*Ih_limit < 1.0) scale = htot(i)*Ih_limit
+    scale = 1.0 ; if ((Ih_limit > 0.0) .and. (htot(i)*Ih_limit < 1.0)) scale = htot(i)*Ih_limit
 
     ! Convert the penetrating shortwave forcing to (K * H) and reduce fluxes for shallow depths.
     ! (H=m for Bouss, H=kg/m2 for non-Bouss)
@@ -1877,40 +1878,38 @@ end subroutine register_forcing_type_diags
 
 !> Accumulate the forcing over time steps, taking input from a mechanical forcing type
 !! and a temporary forcing-flux type.
-subroutine forcing_accumulate(flux_tmp, forces, fluxes, dt, G, wt2)
+subroutine forcing_accumulate(flux_tmp, forces, fluxes, G, wt2)
   type(forcing),         intent(in)    :: flux_tmp !< A temporary structure with current
                                                  !!thermodynamic forcing fields
   type(mech_forcing),    intent(in)    :: forces !< A structure with the driving mechanical forces
   type(forcing),         intent(inout) :: fluxes !< A structure containing time-averaged
                                                  !! thermodynamic forcing fields
-  real,                  intent(in)    :: dt   !< The elapsed time since the last call to this subroutine [s]
-  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
-  real,                  intent(out)   :: wt2  !< The relative weight of the new fluxes
+  type(ocean_grid_type), intent(inout) :: G      !< The ocean's grid structure
+  real,                  intent(out)   :: wt2    !< The relative weight of the new fluxes
 
   ! This subroutine copies mechancal forcing from flux_tmp to fluxes and
   ! stores the time-weighted averages of the various buoyancy fluxes in fluxes,
   ! and increments the amount of time over which the buoyancy forcing should be
   ! applied, all via a call to fluxes accumulate.
 
-  call fluxes_accumulate(flux_tmp, fluxes, dt, G, wt2, forces)
+  call fluxes_accumulate(flux_tmp, fluxes, G, wt2, forces)
 
 end subroutine forcing_accumulate
 
 !> Accumulate the thermodynamic fluxes over time steps
-subroutine fluxes_accumulate(flux_tmp, fluxes, dt, G, wt2, forces)
+subroutine fluxes_accumulate(flux_tmp, fluxes, G, wt2, forces)
   type(forcing),             intent(in)    :: flux_tmp !< A temporary structure with current
-                                                   !! thermodynamic forcing fields
+                                                     !! thermodynamic forcing fields
   type(forcing),             intent(inout) :: fluxes !< A structure containing time-averaged
-                                                   !! thermodynamic forcing fields
-  real,                      intent(in)    :: dt   !< The elapsed time since the last call to this subroutine [s]
-  type(ocean_grid_type),     intent(inout) :: G    !< The ocean's grid structure
-  real,                      intent(out)   :: wt2  !< The relative weight of the new fluxes
+                                                     !! thermodynamic forcing fields
+  type(ocean_grid_type),     intent(inout) :: G      !< The ocean's grid structure
+  real,                      intent(out)   :: wt2    !< The relative weight of the new fluxes
   type(mech_forcing), optional, intent(in) :: forces !< A structure with the driving mechanical forces
 
   ! This subroutine copies mechancal forcing from flux_tmp to fluxes and
   ! stores the time-weighted averages of the various buoyancy fluxes in fluxes,
-  ! and increments the amount of time over which the buoyancy forcing should be
-  ! applied.
+  ! and increments the amount of time over which the buoyancy forcing in fluxes should be
+  ! applied based on the time interval stored in flux_tmp.
 
   real :: wt1
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
@@ -1921,13 +1920,13 @@ subroutine fluxes_accumulate(flux_tmp, fluxes, dt, G, wt2, forces)
   IsdB = G%IsdB  ; IedB = G%IedB   ; JsdB = G%JsdB  ; JedB = G%JedB
 
 
-  if (fluxes%dt_buoy_accum < 0) call MOM_error(FATAL, "forcing_accumulate: "//&
+  if (fluxes%dt_buoy_accum < 0) call MOM_error(FATAL, "fluxes_accumulate: "//&
      "fluxes must be initialzed before it can be augmented.")
 
   ! wt1 is the relative weight of the previous fluxes.
-  wt1 = fluxes%dt_buoy_accum / (fluxes%dt_buoy_accum + dt)
-  wt2 = 1.0 - wt1 ! = dt / (fluxes%dt_buoy_accum + dt)
-  fluxes%dt_buoy_accum = fluxes%dt_buoy_accum + dt
+  wt1 = fluxes%dt_buoy_accum / (fluxes%dt_buoy_accum + flux_tmp%dt_buoy_accum)
+  wt2 = 1.0 - wt1 ! = flux_tmp%dt_buoy_accum / (fluxes%dt_buoy_accum + flux_tmp%dt_buoy_accum)
+  fluxes%dt_buoy_accum = fluxes%dt_buoy_accum + flux_tmp%dt_buoy_accum
 
   ! Copy over the pressure fields and accumulate averages of ustar, either from the forcing
   ! type or from the temporary fluxes type.
@@ -2198,11 +2197,12 @@ end subroutine copy_back_forcing_fields
 
 !> Offer mechanical forcing fields for diagnostics for those
 !! fields registered as part of register_forcing_type_diags.
-subroutine mech_forcing_diags(forces, dt, G, diag, handles)
+subroutine mech_forcing_diags(forces, dt, G, time_end, diag, handles)
   type(mech_forcing),    intent(in)    :: forces   !< A structure with the driving mechanical forces
-  real,                  intent(in)    :: dt       !< time step
+  real,                  intent(in)    :: dt       !< time step for the forcing [s]
   type(ocean_grid_type), intent(in)    :: G        !< grid type
-  type(diag_ctrl),       intent(in)    :: diag     !< diagnostic type
+  type(time_type),       intent(in)    :: time_end !< The end time of the diagnostic interval.
+  type(diag_ctrl),       intent(inout) :: diag     !< diagnostic type
   type(forcing_diags),   intent(inout) :: handles  !< diagnostic id for diag_manager
 
   integer :: i,j,is,ie,js,je
@@ -2210,7 +2210,8 @@ subroutine mech_forcing_diags(forces, dt, G, diag, handles)
   call cpu_clock_begin(handles%id_clock_forcing)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  if (query_averaging_enabled(diag)) then
+  call enable_averaging(dt, time_end, diag)
+  ! if (query_averaging_enabled(diag)) then
 
     if ((handles%id_taux > 0) .and. associated(forces%taux)) &
       call post_data(handles%id_taux, forces%taux, diag)
@@ -2224,22 +2225,23 @@ subroutine mech_forcing_diags(forces, dt, G, diag, handles)
     if ((handles%id_area_berg > 0) .and. associated(forces%area_berg)) &
       call post_data(handles%id_area_berg, forces%area_berg, diag)
 
-  endif
+  ! endif
 
+  call disable_averaging(diag)
   call cpu_clock_end(handles%id_clock_forcing)
 end subroutine mech_forcing_diags
 
 
 !> Offer buoyancy forcing fields for diagnostics for those
 !! fields registered as part of register_forcing_type_diags.
-subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, US, diag, handles)
+subroutine forcing_diagnostics(fluxes, sfc_state, G, US, time_end, diag, handles)
   type(forcing),         intent(in)    :: fluxes    !< A structure containing thermodynamic forcing fields
   type(surface),         intent(in)    :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
-  real,                  intent(in)    :: dt        !< time step
   type(ocean_grid_type), intent(in)    :: G         !< grid type
-  type(unit_scale_type), intent(in)  :: US     !< A dimensional unit scaling type
-  type(diag_ctrl),       intent(in)    :: diag      !< diagnostic regulator
+  type(unit_scale_type), intent(in)    :: US        !< A dimensional unit scaling type
+  type(time_type),       intent(in)    :: time_end  !< The end time of the diagnostic interval.
+  type(diag_ctrl),       intent(inout) :: diag      !< diagnostic regulator
   type(forcing_diags),   intent(inout) :: handles   !< diagnostic ids
 
   ! local
@@ -2248,7 +2250,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, US, diag, handles)
   real :: ave_flux        ! for diagnosing averaged   boundary flux
   real :: C_p             ! seawater heat capacity (J/(deg K * kg))
   real :: RZ_T_conversion ! A combination of scaling factors for mass fluxes [kg T m-2 s-1 R-1 Z-1 ~> 1]
-  real :: I_dt            ! inverse time step
+  real :: I_dt            ! inverse time step [s-1]
   real :: ppt2mks         ! conversion between ppt and mks
   integer :: i,j,is,ie,js,je
 
@@ -2256,11 +2258,12 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, US, diag, handles)
 
   C_p     = fluxes%C_p
   RZ_T_conversion = US%R_to_kg_m3*US%Z_to_m*US%s_to_T
-  I_dt    = 1.0/dt
+  I_dt    = 1.0 / (US%T_to_s*fluxes%dt_buoy_accum)
   ppt2mks = 1e-3
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-  if (query_averaging_enabled(diag)) then
+  call enable_averages(fluxes%dt_buoy_accum, time_end, diag)
+  ! if (query_averaging_enabled(diag)) then
 
     ! post the diagnostics for surface mass fluxes ==================================
 
@@ -2796,7 +2799,8 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, US, diag, handles)
     if ((handles%id_ustar_ice_cover > 0) .and. associated(fluxes%ustar_shelf)) &
       call post_data(handles%id_ustar_ice_cover, fluxes%ustar_shelf, diag)
 
-  endif  ! query_averaging_enabled
+  ! endif  ! query_averaging_enabled
+  call disable_averaging(diag)
 
   call cpu_clock_end(handles%id_clock_forcing)
 end subroutine forcing_diagnostics

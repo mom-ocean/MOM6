@@ -513,7 +513,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
 
   if (do_thermo) then
     if (OS%fluxes%fluxes_used) then
-      call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
+      call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, dt_coupling, &
                                  OS%grid, OS%US, OS%forcing_CSp, OS%sfc_state)
 
       ! Add ice shelf fluxes
@@ -528,14 +528,11 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
       call MOM_generic_tracer_fluxes_accumulate(OS%fluxes, 1.0) ! Here weight=1, so just store the current fluxes
       call disable_averaging(OS%diag)
 #endif
-      ! Indicate that there are new unused fluxes.
-      OS%fluxes%fluxes_used = .false.
-      OS%fluxes%dt_buoy_accum = dt_coupling
     else
       ! The previous fluxes have not been used yet, so translate the input fluxes
       ! into a temporary type and then accumulate them in about 20 lines.
       OS%flux_tmp%C_p = OS%fluxes%C_p
-      call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, &
+      call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, dt_coupling, &
                                  OS%grid, OS%US, OS%forcing_CSp, OS%sfc_state)
 
       if (OS%use_ice_shelf) &
@@ -544,7 +541,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
         call iceberg_fluxes(OS%grid, OS%US, OS%flux_tmp, OS%use_ice_shelf, &
                             OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
 
-      call fluxes_accumulate(OS%flux_tmp, OS%fluxes, dt_coupling, OS%grid, weight)
+      call fluxes_accumulate(OS%flux_tmp, OS%fluxes, OS%grid, weight)
 #ifdef _USE_GENERIC_TRACER
        ! Incorporate the current tracer fluxes into the running averages
       call MOM_generic_tracer_fluxes_accumulate(OS%flux_tmp, weight)
@@ -646,16 +643,11 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
   if (do_thermo) OS%nstep_thermo = OS%nstep_thermo + 1
 
   if (do_dyn) then
-    call enable_averaging(dt_coupling, OS%Time_dyn, OS%diag)
-    call mech_forcing_diags(OS%forces, dt_coupling, OS%grid, OS%diag, OS%forcing_CSp%handles)
-    call disable_averaging(OS%diag)
+    call mech_forcing_diags(OS%forces, dt_coupling, OS%grid, OS%Time_dyn, OS%diag, OS%forcing_CSp%handles)
   endif
 
   if (OS%fluxes%fluxes_used .and. do_thermo) then
-    call enable_averaging(OS%fluxes%dt_buoy_accum, OS%Time, OS%diag)
-    call forcing_diagnostics(OS%fluxes, OS%sfc_state, OS%fluxes%dt_buoy_accum, &
-                             OS%grid, OS%US, OS%diag, OS%forcing_CSp%handles)
-    call disable_averaging(OS%diag)
+    call forcing_diagnostics(OS%fluxes, OS%sfc_state, OS%grid, OS%US, OS%Time, OS%diag, OS%forcing_CSp%handles)
   endif
 
 ! Translate state into Ocean.
