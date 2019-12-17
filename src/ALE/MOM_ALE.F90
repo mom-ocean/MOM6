@@ -53,9 +53,6 @@ use regrid_consts,        only : coordinateUnits, coordinateMode, state_dependen
 use regrid_edge_values,   only : edge_values_implicit_h4
 use PLM_functions,        only : PLM_reconstruction, PLM_boundary_extrapolation
 use PPM_functions,        only : PPM_reconstruction, PPM_boundary_extrapolation
-use P1M_functions,        only : P1M_interpolation,  P1M_boundary_extrapolation
-use P3M_functions,        only : P3M_interpolation,  P3M_boundary_extrapolation
-
 
 implicit none ; private
 #include <MOM_memory.h>
@@ -1131,7 +1128,8 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_ext
     !### Try to replace the following value of h_neglect with GV%H_subroundoff.
     call edge_values_implicit_h4( GV%ke, hTmp, tmp, ppol_E, h_neglect=h_neglect_edge, &
                                   answers_2018=CS%answers_2018 )
-    call PPM_reconstruction( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect )
+    call PPM_reconstruction( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect, &
+                                  answers_2018=CS%answers_2018 )
     if (bdry_extrap) &
       call PPM_boundary_extrapolation( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect )
 
@@ -1147,7 +1145,8 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_ext
     !### Try to replace the following value of h_neglect with GV%H_subroundoff.
     call edge_values_implicit_h4( GV%ke, hTmp, tmp, ppol_E, h_neglect=1.0e-10*GV%m_to_H, &
                                   answers_2018=CS%answers_2018 )
-    call PPM_reconstruction( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect )
+    call PPM_reconstruction( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect, &
+                                  answers_2018=CS%answers_2018 )
     if (bdry_extrap) &
       call PPM_boundary_extrapolation(GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect )
 
