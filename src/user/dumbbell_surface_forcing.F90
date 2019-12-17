@@ -189,6 +189,7 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
   real :: S_surf, S_range
   real :: x, y
   integer :: i, j
+  logical :: dbrotate    ! If true, rotate the domain.
 #include "version_variable.h"
   character(len=40)  :: mdl = "dumbbell_surface_forcing" ! This module's name.
 
@@ -224,6 +225,9 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
   call get_param(param_file, mdl, "DUMBBELL_SLP_PERIOD", CS%slp_period, &
                  "Periodicity of SLP forcing in reservoirs.", &
                  units="days", default = 1.0)
+  call get_param(param_file, mdl, "DUMBBELL_ROTATION", dbrotate, &
+                'Logical for rotation of dumbbell domain.',&
+                 units='nondim', default=.false., do_not_log=.true.)
   call get_param(param_file, mdl,"INITIAL_SSS", S_surf, &
                  "Initial surface salinity", units="1e-3", default=34.0, do_not_log=.true.)
   call get_param(param_file, mdl,"INITIAL_S_RANGE", S_range, &
@@ -250,8 +254,14 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
     do j=G%jsc,G%jec
       do i=G%isc,G%iec
         ! Compute normalized zonal coordinates (x,y=0 at center of domain)
-        x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon - 0.5
-        y = ( G%geoLatT(i,j) - G%south_lat ) / G%len_lat - 0.5
+!       x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon - 0.5
+!       y = ( G%geoLatT(i,j) - G%south_lat ) / G%len_lat - 0.5
+        if (dbrotate) then
+          ! This is really y in the rotated case
+          x = ( G%geoLatT(i,j) - G%south_lat ) / G%len_lat - 0.5
+        else
+          x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon - 0.5
+        endif
         CS%forcing_mask(i,j)=0
         CS%S_restore(i,j) = S_surf
         if ((x>0.25)) then
