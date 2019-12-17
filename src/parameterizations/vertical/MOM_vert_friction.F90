@@ -100,6 +100,10 @@ type, public :: vertvisc_CS ; private
                             !! calculation, perhaps based on a bulk Richardson
                             !! number criterion, to determine the mixed layer
                             !! thickness for viscosity.
+  logical :: answers_2018   !< If true, use the order of arithmetic and expressions that recover the
+                            !! answers from the end of 2018.  Otherwise, use expressions that do not
+                            !! use an arbitary and hard-coded maximum viscous coupling coefficient
+                            !! between layers.
   logical :: debug          !< If true, write verbose checksums for debugging purposes.
   integer :: nkml           !< The number of layers in the mixed layer.
   integer, pointer :: ntrunc !< The number of times the velocity has been
@@ -363,7 +367,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
         zDS = 0.0
         stress = dt_Rho0 * forces%tauy(i,J)
         do k=1,nz
-          h_a = 0.5 * (h(i,J,k) + h(i,J+1,k))
+          h_a = 0.5 * (h(i,J,k) + h(i,J+1,k)) + h_neglect
           hfr = 1.0 ; if ((zDS+h_a) > Hmix) hfr = (Hmix - zDS) / h_a
           v(i,J,k) = v(i,J,k) + I_Hmix * hfr * stress
           zDS = zDS + h_a ; if (zDS >= Hmix) exit
@@ -678,8 +682,8 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
 
     if (CS%bottomdraglaw) then ; do I=Isq,Ieq
       kv_bbl(I) = visc%Kv_bbl_u(I,j)
-      bbl_thick(I) = visc%bbl_thick_u(I,j) * GV%Z_to_H
-      if (do_i(I)) I_Hbbl(I) = 1.0 / (bbl_thick(I) + h_neglect)
+      bbl_thick(I) = visc%bbl_thick_u(I,j) * GV%Z_to_H + h_neglect
+      if (do_i(I)) I_Hbbl(I) = 1.0 / bbl_thick(I)
     enddo ; endif
 
     do k=1,nz ; do I=Isq,Ieq ; if (do_i(I)) then
@@ -845,7 +849,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
 
     if (CS%bottomdraglaw) then ; do i=is,ie
       kv_bbl(i) = visc%Kv_bbl_v(i,J)
-      bbl_thick(i) = visc%bbl_thick_v(i,J) * GV%Z_to_H
+      bbl_thick(i) = visc%bbl_thick_v(i,J) * GV%Z_to_H + h_neglect
       if (do_i(i)) I_Hbbl(i) = 1.0 / bbl_thick(i)
     enddo ; endif
 
@@ -1081,13 +1085,13 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   real :: I_Hmix  ! The inverse of the mixed layer thickness [H-1 ~> m-1 or m2 kg-1].
   real :: a_ml    ! The layer coupling coefficient across an interface in
                   ! the mixed layer [Z T-1 ~> m s-1].
-  real :: I_amax  ! The inverse of the maximum coupling coefficient [T s-1 Z-1 ~> m-1].???
+  real :: I_amax  ! The inverse of the maximum coupling coefficient [T Z-1 ~> s m-1].
   real :: temp1   ! A temporary variable [H Z ~> m2 or kg m-1]
   real :: h_neglect   ! A thickness that is so small it is usually lost
                       ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: z2      ! A copy of z_i [nondim]
   real :: topfn   ! A function that is 1 at the top and small far from it [nondim]
-  real :: a_top   ! A viscosity associated with the top boundary layer [Z2 T-1 ~> m2 s-1]
+  real :: kv_top  ! A viscosity associated with the top boundary layer [Z2 T-1 ~> m2 s-1]
   logical :: do_shelf, do_OBCs
   integer :: i, k, is, ie, max_nk
   integer :: nz
@@ -1104,7 +1108,11 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   !   The maximum coupling coefficent was originally introduced to avoid
   ! truncation error problems in the tridiagonal solver. Effectively, the 1e-10
   ! sets the maximum coupling coefficient increment to 1e10 m per timestep.
-  I_amax = (1.0e-10*US%Z_to_m) * dt
+  if (CS%answers_2018) then
+    I_amax = (1.0e-10*US%Z_to_m) * dt
+  else
+    I_amax = 0.0
+  endif
 
   do_shelf = .false. ; if (present(shelf)) do_shelf = shelf
   do_OBCs = .false.
@@ -1130,12 +1138,12 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     if (CS%bottomdraglaw) then
       r = hvel(i,nz)*0.5
       if (r < bbl_thick(i)) then
-        a_cpl(i,nz+1) = kv_bbl(i) / (I_amax*kv_bbl(i) + r*GV%H_to_Z)
+        a_cpl(i,nz+1) = kv_bbl(i) / (I_amax*kv_bbl(i) + (r+h_neglect)*GV%H_to_Z)
       else
-        a_cpl(i,nz+1) = kv_bbl(i) / (I_amax*kv_bbl(i) + bbl_thick(i)*GV%H_to_Z)
+        a_cpl(i,nz+1) = kv_bbl(i) / (I_amax*kv_bbl(i) + (bbl_thick(i)+h_neglect)*GV%H_to_Z)
       endif
     else
-      a_cpl(i,nz+1) = CS%Kvbbl / (0.5*hvel(i,nz)*GV%H_to_Z + I_amax*CS%Kvbbl)
+      a_cpl(i,nz+1) = CS%Kvbbl / ((0.5*hvel(i,nz)+h_neglect)*GV%H_to_Z + I_amax*CS%Kvbbl)
     endif
   endif ; enddo
 
@@ -1198,9 +1206,9 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
       Kv_tot(i,K) = Kv_tot(i,K) + (kv_bbl(i) - CS%Kv)*botfn
       r = 0.5*(hvel(i,k) + hvel(i,k-1))
       if (r > bbl_thick(i)) then
-        h_shear = ((1.0 - botfn) * r + botfn*bbl_thick(i))
+        h_shear = ((1.0 - botfn) * r + botfn*bbl_thick(i)) + h_neglect
       else
-        h_shear = r
+        h_shear = r + h_neglect
       endif
     else
       Kv_tot(i,K) = Kv_tot(i,K) + (CS%Kvbbl-CS%Kv)*botfn
@@ -1216,10 +1224,10 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     do i=is,ie ; if (do_i(i)) then
       if (work_on_u) then
         kv_TBL(i) = visc%Kv_tbl_shelf_u(I,j)
-        tbl_thick(i) = visc%tbl_thick_shelf_u(I,j) * GV%Z_to_H
+        tbl_thick(i) = visc%tbl_thick_shelf_u(I,j) * GV%Z_to_H + h_neglect
       else
         kv_TBL(i) = visc%Kv_tbl_shelf_v(i,J)
-        tbl_thick(i) = visc%tbl_thick_shelf_v(i,J) * GV%Z_to_H
+        tbl_thick(i) = visc%tbl_thick_shelf_v(i,J) * GV%Z_to_H + h_neglect
       endif
       z_t(i) = 0.0
 
@@ -1227,7 +1235,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
       if (0.5*hvel(i,1) > tbl_thick(i)) then
         a_cpl(i,1) = kv_TBL(i) / (tbl_thick(i)*GV%H_to_Z + I_amax*kv_TBL(i))
       else
-        a_cpl(i,1) = kv_TBL(i) / (0.5*hvel(i,1)*GV%H_to_Z + I_amax*kv_TBL(i))
+        a_cpl(i,1) = kv_TBL(i) / ((0.5*hvel(i,1)+h_neglect)*GV%H_to_Z + I_amax*kv_TBL(i))
       endif
     endif ; enddo
 
@@ -1237,13 +1245,13 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
 
       r = 0.5*(hvel(i,k)+hvel(i,k-1))
       if (r > tbl_thick(i)) then
-        h_shear = ((1.0 - topfn) * r + topfn*tbl_thick(i))
+        h_shear = ((1.0 - topfn) * r + topfn*tbl_thick(i)) + h_neglect
       else
-        h_shear = r
+        h_shear = r + h_neglect
       endif
 
-      a_top = topfn * kv_TBL(i)
-      a_cpl(i,K) = a_cpl(i,K) + a_top / (h_shear*GV%H_to_Z + I_amax*a_top)
+      kv_top = topfn * kv_TBL(i)
+      a_cpl(i,K) = a_cpl(i,K) + kv_top / (h_shear*GV%H_to_Z + I_amax*kv_top)
     endif ; enddo ; enddo
   elseif (CS%dynamic_viscous_ML .or. (GV%nkml>0)) then
     max_nk = 0
@@ -1292,7 +1300,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
       temp1 = (z_t(i)*h_ml(i) - z_t(i)*z_t(i))*GV%H_to_Z
       !   This viscosity is set to go to 0 at the mixed layer top and bottom (in a log-layer)
       ! and be further limited by rotation to give the natural Ekman length.
-      visc_ml = u_star(i) * 0.41 * (temp1*u_star(i)) / (absf(i)*temp1 + h_ml(i)*u_star(i))
+      visc_ml = u_star(i) * 0.41 * (temp1*u_star(i)) / (absf(i)*temp1 + (h_ml(i)+h_neglect)*u_star(i))
       a_ml = visc_ml / (0.25*(hvel(i,k)+hvel(i,k-1) + h_neglect) * GV%H_to_Z + 0.5*I_amax*visc_ml)
       ! Choose the largest estimate of a.
       if (a_ml > a_cpl(i,K)) a_cpl(i,K) = a_ml
@@ -1339,7 +1347,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
   maxvel = CS%maxvel
   truncvel = 0.9*maxvel
   H_report = 6.0 * GV%Angstrom_H
-  dt_Rho0 = (US%L_T_to_m_s*US%Z_to_m) * dt / (GV%Rho0)
+  dt_Rho0 = (US%L_T_to_m_s*US%Z_to_m) * dt / GV%Rho0
 
   if (len_trim(CS%u_trunc_file) > 0) then
     !$OMP parallel do default(shared) private(trunc_any,CFL)
@@ -1536,6 +1544,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   real :: hmix_str_dflt
   real :: Kv_dflt ! A default viscosity [m2 s-1].
   real :: Hmix_m  ! A boundary layer thickness [m].
+  logical :: default_2018_answers
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -1559,6 +1568,14 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
 
 ! Default, read and log parameters
   call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
+  call get_param(param_file, mdl, "VERT_FRICTION_2018_ANSWERS", CS%answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the answers "//&
+                 "from the end of 2018.  Otherwise, use expressions that do not use an arbitary "//&
+                 "and hard-coded maximum viscous coupling coefficient between layers.", &
+                 default=default_2018_answers)
   call get_param(param_file, mdl, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
                  "If true, the bottom stress is calculated with a drag "//&
                  "law of the form c_drag*|u|*u. The velocity magnitude "//&
