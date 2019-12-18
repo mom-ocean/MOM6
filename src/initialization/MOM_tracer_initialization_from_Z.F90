@@ -176,7 +176,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
       hSrc(i,j,:) = GV%Z_to_H * h1(:)
     enddo ; enddo
 
-    call ALE_remap_scalar(remapCS, G, GV, kd, hSrc, tr_z, h, tr, all_cells=.false. )
+    call ALE_remap_scalar(remapCS, G, GV, kd, hSrc, tr_z, h, tr, all_cells=.false., answers_2018=answers_2018 )
 
     deallocate( hSrc )
     deallocate( h1 )

@@ -40,6 +40,9 @@ type, public :: wave_speed_CS ; private
                                        !! can be overridden by optional arguments.
   type(remapping_CS) :: remapping_CS   !< Used for vertical remapping when calculating equivalent barotropic
                                        !! mode structure.
+  logical :: remap_answers_2018 = .true.  !> If true, use the order of arithmetic and expressions that
+                                       !! recover the remapping answers from 2018.  If false, use more
+                                       !! robust forms of the same remapping expressions.
   type(diag_ctrl), pointer :: diag     !< Diagnostics control structure
 end type wave_speed_CS
 
@@ -492,9 +495,15 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
             do k = 1,kc
               Hc_H(k) = GV%Z_to_H * Hc(k)
             enddo
-            call remapping_core_h(CS%remapping_CS, kc, Hc_H(:), mode_struct, &
-                                  nz, h(i,j,:), modal_structure(i,j,:), &
-                                  1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
+            if (CS%remap_answers_2018) then
+              call remapping_core_h(CS%remapping_CS, kc, Hc_H(:), mode_struct, &
+                                    nz, h(i,j,:), modal_structure(i,j,:), &
+                                    1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
+            else
+              call remapping_core_h(CS%remapping_CS, kc, Hc_H(:), mode_struct, &
+                                    nz, h(i,j,:), modal_structure(i,j,:), &
+                                    GV%H_subroundoff, GV%H_subroundoff)
+            endif
           endif
         else
           cg1(i,j) = 0.0
@@ -1057,7 +1066,7 @@ subroutine tridiag_det(a, b, c, nrows, lam, det_out, ddet_out, row_scale)
 end subroutine tridiag_det
 
 !> Initialize control structure for MOM_wave_speed
-subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_depth)
+subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_depth, remap_answers_2018)
   type(wave_speed_CS), pointer :: CS !< Control structure for MOM_wave_speed
   logical, optional, intent(in) :: use_ebt_mode  !< If true, use the equivalent
                                      !! barotropic mode instead of the first baroclinic mode.
@@ -1067,8 +1076,13 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
   real,    optional, intent(in) :: mono_N2_depth !< The depth below which N2 is limited
                                      !! as monotonic for the purposes of calculating the
                                      !! vertical modal structure [Z ~> m].
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  logical, optional, intent(in) :: remap_answers_2018 !< If true, use the order of arithmetic and expressions
+                                      !! that recover the remapping answers from 2018.  Otherwise
+                                      !! use more robust but mathematically equivalent expressions.
+
+
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_wave_speed"  ! This module's name.
 
   if (associated(CS)) then
@@ -1082,12 +1096,13 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
 
   call wave_speed_set_param(CS, use_ebt_mode=use_ebt_mode, mono_N2_column_fraction=mono_N2_column_fraction)
 
-  call initialize_remapping(CS%remapping_CS, 'PLM', boundary_extrapolation=.false.)
+  call initialize_remapping(CS%remapping_CS, 'PLM', boundary_extrapolation=.false., &
+                            answers_2018=CS%remap_answers_2018)
 
 end subroutine wave_speed_init
 
 !> Sets internal parameters for MOM_wave_speed
-subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_depth)
+subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_depth, remap_answers_2018)
   type(wave_speed_CS), pointer  :: CS !< Control structure for MOM_wave_speed
   logical, optional, intent(in) :: use_ebt_mode  !< If true, use the equivalent
                                       !! barotropic mode instead of the first baroclinic mode.
@@ -1097,6 +1112,9 @@ subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_
   real,    optional, intent(in) :: mono_N2_depth !< The depth below which N2 is limited
                                       !! as monotonic for the purposes of calculating the
                                       !! vertical modal structure [Z ~> m].
+  logical, optional, intent(in) :: remap_answers_2018 !< If true, use the order of arithmetic and expressions
+                                      !! that recover the remapping answers from 2018.  Otherwise
+                                      !! use more robust but mathematically equivalent expressions.
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
      "wave_speed_set_param called with an associated control structure.")
@@ -1104,10 +1122,12 @@ subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_
   if (present(use_ebt_mode)) CS%use_ebt_mode = use_ebt_mode
   if (present(mono_N2_column_fraction)) CS%mono_N2_column_fraction = mono_N2_column_fraction
   if (present(mono_N2_depth)) CS%mono_N2_depth = mono_N2_depth
+  if (present(remap_answers_2018)) CS%remap_answers_2018 = remap_answers_2018
 
 end subroutine wave_speed_set_param
 
 !> \namespace mom_wave_speed
+
 !!
 !! Subroutine wave_speed() solves for the first baroclinic mode wave speed.  (It could
 !! solve for all the wave speeds, but the iterative approach taken here means

@@ -86,8 +86,11 @@ type, public :: neutral_diffusion_CS ; private
   integer :: id_vhEff_2d = -1 !< Diagnostic IDs
 
   real    :: C_p !< heat capacity of seawater (J kg-1 K-1)
-  type(EOS_type), pointer :: EOS !< Equation of state parameters
-  type(remapping_CS)       :: remap_CS      !< Remapping control structure used to create sublayers
+  type(EOS_type), pointer :: EOS   !< Equation of state parameters
+  type(remapping_CS) :: remap_CS   !< Remapping control structure used to create sublayers
+  logical :: remap_answers_2018    !< If true, use the order of arithmetic and expressions that
+                                   !! recover the answers for remapping from the end of 2018.
+                                   !! Otherwise, use more robust forms of the same expressions.
 end type neutral_diffusion_CS
 
 ! This include declares and sets the variable "version".
@@ -108,7 +111,7 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, CS)
   ! Local variables
   character(len=256) :: mesg    ! Message for error messages.
   character(len=80)  :: string  ! Temporary strings
-  logical :: answers_2018, default_2018_answers
+  logical :: default_2018_answers
   logical :: boundary_extrap
 
   if (associated(CS)) then
@@ -158,12 +161,12 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, CS)
     call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
                  default=.true.)
-    call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
+    call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", CS%remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
     call initialize_remapping( CS%remap_CS, string, boundary_extrapolation=boundary_extrap, &
-                               answers_2018=answers_2018 )
+                               answers_2018=CS%remap_answers_2018 )
     call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
     call get_param(param_file, mdl, "NEUTRAL_POS_METHOD", CS%neutral_pos_method,   &
                    "Method used to find the neutral position                 \n"// &
@@ -254,18 +257,18 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
   ! Local variables
   integer :: i, j, k
   ! Variables used for reconstructions
-  real, dimension(SZK_(G),2) :: ppoly_r_S            ! Reconstruction slopes
-  real, dimension(SZI_(G), SZJ_(G)) :: hEff_sum
+  real, dimension(SZK_(G),2) :: ppoly_r_S       ! Reconstruction slopes
+  real, dimension(SZI_(G), SZJ_(G)) :: hEff_sum ! Summed effective face thicknesses [H ~> m or kg m-2]
   integer :: iMethod
   real, dimension(SZI_(G)) :: ref_pres ! Reference pressure used to calculate alpha/beta
-  real, dimension(SZI_(G)) :: rho_tmp  ! Routiine to calculate drho_dp, returns density which is not used
-  real :: h_neglect, h_neglect_edge
-  real :: pa_to_H
+  real :: h_neglect, h_neglect_edge    ! Negligible thicknesses [H ~> m or kg m-2]
+  real :: pa_to_H                      ! A conversion factor from Pa to H [H Pa-1 ~> m Pa-1 or s2 m-2]
 
   pa_to_H = 1. / GV%H_to_pa
 
-  !### Try replacing both of these with GV%H_subroundoff
-  if (GV%Boussinesq) then
+  if (.not.CS%remap_answers_2018) then
+    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+  elseif (GV%Boussinesq) then
     h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
   else
     h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
@@ -466,9 +469,11 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
   real :: Idt  ! The inverse of the time step [T-1 ~> s-1]
   real :: h_neglect, h_neglect_edge
 
-  !### Try replacing both of these with GV%H_subroundoff
-  h_neglect_edge = GV%m_to_H*1.0e-10
-  h_neglect = GV%m_to_H*1.0e-30
+  if (.not.CS%remap_answers_2018) then
+    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+  else
+    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  endif
 
   nk = GV%ke
 
@@ -1710,8 +1715,8 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
   integer,                      intent(in)    :: nk    !< Number of levels
   integer,                      intent(in)    :: nsurf !< Number of neutral surfaces
   integer,                      intent(in)    :: deg   !< Degree of polynomial reconstructions
-  real, dimension(nk),          intent(in)    :: hl    !< Left-column layer thickness [Pa]
-  real, dimension(nk),          intent(in)    :: hr    !< Right-column layer thickness [Pa]
+  real, dimension(nk),          intent(in)    :: hl    !< Left-column layer thickness [H or Pa]
+  real, dimension(nk),          intent(in)    :: hr    !< Right-column layer thickness [H or Pa]
   real, dimension(nk),          intent(in)    :: Tl    !< Left-column layer tracer (conc, e.g. degC)
   real, dimension(nk),          intent(in)    :: Tr    !< Right-column layer tracer (conc, e.g. degC)
   real, dimension(nsurf),       intent(in)    :: PiL   !< Fractional position of neutral surface
@@ -1728,9 +1733,8 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
                                              !! in the same units as h0.
   type(remapping_CS), optional, intent(in)    :: remap_CS !< Remapping control structure used
                                              !! to create sublayers
-  real,               optional, intent(in)    :: h_neglect_edge !< A negligibly small width
-                                             !! for the purpose of edge value calculations
-                                             !! in the same units as h0.
+  real,               optional, intent(in)    :: h_neglect_edge !< A negligibly small width used for
+                                             !! edge value calculations if continuous is false.
   ! Local variables
   integer :: k_sublayer, klb, klt, krb, krt, k
   real :: T_right_top, T_right_bottom, T_right_layer, T_right_sub, T_right_top_int, T_right_bot_int
@@ -1934,9 +1938,9 @@ logical function ndiff_unit_tests_continuous(verbose)
   real, dimension(2*nk+1)    :: Flx                        ! Test flux
   integer :: k
   logical :: v
-  real :: h_neglect, h_neglect_edge
+  real :: h_neglect
 
-  h_neglect_edge = 1.0e-10 ; h_neglect = 1.0e-30
+  h_neglect = 1.0e-30
 
   v = verbose
 
@@ -2031,14 +2035,12 @@ logical function ndiff_unit_tests_continuous(verbose)
                                    (/0.,0.,10.,10.,20.,20.,30.,30./), '... right positions')
   call neutral_surface_flux(3, 2*3+2, 2, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
                                (/20.,16.,12./), (/20.,16.,12./), & ! Tl, Tr
-                               PiLRo, PiRLo, KoL, KoR, hEff, Flx, .true., &
-                               h_neglect, h_neglect_edge=h_neglect_edge)
+                               PiLRo, PiRLo, KoL, KoR, hEff, Flx, .true., h_neglect)
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_data1d(v, 7, Flx, &
               (/0.,0.,0.,0.,0.,0.,0./), 'Identical columns, rho flux (=0)')
   call neutral_surface_flux(3, 2*3+2, 2, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
                                (/-1.,-1.,-1./), (/1.,1.,1./), & ! Sl, Sr
-                               PiLRo, PiRLo, KoL, KoR, hEff, Flx, .true., &
-                               h_neglect, h_neglect_edge=h_neglect_edge)
+                               PiLRo, PiRLo, KoL, KoR, hEff, Flx, .true., h_neglect)
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_data1d(v, 7, Flx, &
               (/0.,20.,0.,20.,0.,20.,0./), 'Identical columns, S flux')
 
@@ -2207,15 +2209,12 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   logical, dimension(nk)      :: stable_l, stable_r
   integer                     :: iMethod
   integer                     :: ns_l, ns_r
-  real                        :: h_neglect, h_neglect_edge
   integer :: k
   logical :: v
 
   v = verbose
   ndiff_unit_tests_discontinuous = .false. ! Normally return false
   write(*,*) '==== MOM_neutral_diffusion: ndiff_unit_tests_discontinuous ='
-!
-  h_neglect = 1.0e-30 ; h_neglect_edge = 1.0e-10
 
   ! Unit tests for find_neutral_surface_positions_discontinuous
   ! Salinity is 0 for all these tests
@@ -2432,7 +2431,7 @@ logical function ndiff_unit_tests_discontinuous(verbose)
              find_neutral_pos_linear(CS, 0., 10., 35., 0., -0.2, 0., &
                                      0.,  -0.4, 0., 10., -0.6, 0.,  &
                                      (/12.,-4./), (/34.,0./)), "Temp stratified Linearized Alpha/Beta"))
-!  ! EOS linear in S, insensitive to T
+  ! EOS linear in S, insensitive to T
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5, &
              find_neutral_pos_linear(CS, 0., 10., 35., 0.,  0., 0.8,  &
                                      0., 0., 1.0,  10., 0., 0.5,  &

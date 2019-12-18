@@ -127,6 +127,9 @@ type, public :: ALE_sponge_CS ; private
                                    !! timing of diagnostic output.
 
   type(remapping_cs) :: remap_cs   !< Remapping parameters and work arrays
+  logical :: remap_answers_2018    !< If true, use the order of arithmetic and expressions that
+                                   !! recover the answers for remapping from the end of 2018.
+                                   !! Otherwise, use more robust forms of the same expressions.
 
   logical :: time_varying_sponges  !< True if using newer sponge code
   logical :: spongeDataOngrid !< True if the sponge data are on the model horizontal grid
@@ -159,7 +162,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
   real, allocatable, dimension(:,:) :: Iresttime_u !< inverse of the restoring time at u points [s-1]
   real, allocatable, dimension(:,:) :: Iresttime_v !< inverse of the restoring time at v points [s-1]
   logical :: bndExtrapolation = .true. ! If true, extrapolate boundaries
-  logical :: answers_2018, default_2018_answers
+  logical :: default_2018_answers
   integer :: i, j, k, col, total_sponge_cols, total_sponge_cols_u, total_sponge_cols_v
   character(len=10)  :: remapScheme
   if (associated(CS)) then
@@ -197,7 +200,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
                  default=.true.)
-  call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
+  call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", CS%remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
@@ -241,7 +244,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
 
 ! Call the constructor for remapping control structure
   call initialize_remapping(CS%remap_cs, remapScheme, boundary_extrapolation=bndExtrapolation, &
-                            answers_2018=answers_2018)
+                            answers_2018=CS%remap_answers_2018)
 
   call log_param(param_file, mdl, "!Total sponge columns at h points", total_sponge_cols, &
                  "The total number of columns where sponges are applied at h points.")
@@ -397,7 +400,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
     real, allocatable, dimension(:,:) :: Iresttime_u !< inverse of the restoring time at u points [s-1]
   real, allocatable, dimension(:,:) :: Iresttime_v !< inverse of the restoring time at v points [s-1]
   logical :: bndExtrapolation = .true. ! If true, extrapolate boundaries
-  logical :: answers_2018, default_2018_answers
+  logical :: default_2018_answers
   logical :: spongeDataOngrid = .false.
   integer :: i, j, k, col, total_sponge_cols, total_sponge_cols_u, total_sponge_cols_v
   character(len=10)  :: remapScheme
@@ -431,7 +434,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
                  default=.true.)
-  call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
+  call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", CS%remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
@@ -470,7 +473,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
 
 ! Call the constructor for remapping control structure
   call initialize_remapping(CS%remap_cs, remapScheme, boundary_extrapolation=bndExtrapolation, &
-                            answers_2018=answers_2018)
+                            answers_2018=CS%remap_answers_2018)
   call log_param(param_file, mdl, "!Total sponge columns at h points", total_sponge_cols, &
                  "The total number of columns where sponges are applied at h points.")
   if (CS%sponge_uv) then
@@ -804,7 +807,9 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   if (.not.associated(CS)) return
 
-  if (GV%Boussinesq) then
+  if (.not.CS%remap_answers_2018) then
+    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+  elseif (GV%Boussinesq) then
     h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
   else
     h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10

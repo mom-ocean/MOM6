@@ -212,8 +212,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, &
   real    :: hNeglect, hNeglect_edge ! Negligibly small thickness [H]
 
   hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
-  hNeglect_edge = hNeglect_edge_dflt
-  if (present(h_neglect_edge)) hNeglect_edge = h_neglect_edge
+  hNeglect_edge = hNeglect_edge_dflt ; if (present(h_neglect_edge)) hNeglect_edge = h_neglect_edge
 
   ! ----- Left boundary -----
   i0 = 1

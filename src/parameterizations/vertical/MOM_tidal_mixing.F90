@@ -142,6 +142,9 @@ type, public :: tidal_mixing_cs
   real                            :: tidal_diss_lim_tc  !< CVMix-specific dissipation limit depth for
                                                         !! tidal-energy-constituent data [Z ~> m].
   type(remapping_CS)              :: remap_CS           !< The control structure for remapping
+  logical :: remap_answers_2018 = .true.  !> If true, use the order of arithmetic and expressions that
+                                       !! recover the remapping answers from 2018.  If false, use more
+                                       !! robust forms of the same remapping expressions.
 
   ! Data containers
   real, pointer, dimension(:,:) :: TKE_Niku    => NULL() !< Lee wave driven Turbulent Kinetic Energy input
@@ -267,6 +270,10 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
                  default=.true.)
   call get_param(param_file, mdl, "TIDAL_MIXING_2018_ANSWERS", CS%answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=default_2018_answers)
+  call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", CS%remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
@@ -1652,7 +1659,8 @@ subroutine read_tidal_constituents(G, US, tidal_energy_file, CS)
 
   ! initialize input remapping:
   call initialize_remapping(CS%remap_cs, remapping_scheme="PLM", &
-                            boundary_extrapolation=.false., check_remapping=CS%debug)
+                            boundary_extrapolation=.false., check_remapping=CS%debug, &
+                            answers_2018=CS%remap_answers_2018)
 
   deallocate(tc_m2)
   deallocate(tc_s2)

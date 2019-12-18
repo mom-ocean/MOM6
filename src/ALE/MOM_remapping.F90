@@ -184,7 +184,7 @@ function isPosSumErrSignificant(n1, sum1, n2, sum2)
 end function isPosSumErrSignificant
 
 !> Remaps column of values u0 on grid h0 to grid h1 assuming the top edge is aligned.
-subroutine remapping_core_h(CS,  n0, h0, u0, n1, h1, u1, h_neglect, h_neglect_edge)
+subroutine remapping_core_h(CS, n0, h0, u0, n1, h1, u1, h_neglect, h_neglect_edge)
   type(remapping_CS),  intent(in)  :: CS !< Remapping control structure
   integer,             intent(in)  :: n0 !< Number of cells on source grid
   real, dimension(n0), intent(in)  :: h0 !< Cell widths on source grid
@@ -1630,9 +1630,9 @@ logical function remapping_unit_tests(verbose)
   logical :: thisTest, v
 
   v = verbose
-  h_neglect = hNeglect_dflt
-  h_neglect_edge = 1.0e-10
   answers_2018 = .false. ! .true.
+  h_neglect = hNeglect_dflt
+  h_neglect_edge = hNeglect_dflt ; if (answers_2018) h_neglect_edge = 1.0e-10
 
   write(*,*) '==== MOM_remapping: remapping_unit_tests ================='
   remapping_unit_tests = .false. ! Normally return false
