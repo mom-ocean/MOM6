@@ -244,7 +244,11 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
   logical   :: use_2018_answers  ! If true use older, less acccurate expressions.
 
   use_2018_answers = .true. ; if (present(answers_2018)) use_2018_answers = answers_2018
-  hNeglect = hNeglect_edge_dflt ; if (present(h_neglect)) hNeglect = h_neglect
+  if (use_2018_answers) then
+    hNeglect = hNeglect_edge_dflt ; if (present(h_neglect)) hNeglect = h_neglect
+  else
+    hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
+  endif
 
   ! Loop on interior cells
   do i = 3,N-1
@@ -440,16 +444,18 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
   logical   :: use_2018_answers  ! If true use older, less acccurate expressions.
 
   use_2018_answers = .true. ; if (present(answers_2018)) use_2018_answers = answers_2018
-  hNeglect = hNeglect_edge_dflt ; if (present(h_neglect)) hNeglect = h_neglect
+  if (use_2018_answers) then
+    hNeglect = hNeglect_edge_dflt ; if (present(h_neglect)) hNeglect = h_neglect
+  else
+    hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
+  endif
 
   ! Loop on cells (except last one)
   do i = 1,N-1
-
-    ! Get cell widths
-    h0 = h(i)
-    h1 = h(i+1)
-
     if (use_2018_answers) then
+      ! Get cell widths
+      h0 = h(i)
+      h1 = h(i+1)
       ! Avoid singularities when h0+h1=0
       if (h0+h1==0.) then
         h0 = hNeglect
@@ -471,18 +477,17 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
 
       tri_d(i+1) = 1.0
     else  ! Use expressions with less sensitivity to roundoff
-      if (h0+h1==0.) then  ! Avoid singularities when h0+h1=0
-        alpha = 0.25 ; beta = 0.25 ; abmix = 0.25
-      else
-        ! The 1e-12 here attempts to balance truncation errors from the differences of
-        ! large numbers against errors from approximating thin layers as non-vanishing.
-        if (abs(h0) < 1.0e-12*abs(h1)) h0 = 1.0e-12*h1
-        if (abs(h1) < 1.0e-12*abs(h0)) h1 = 1.0e-12*h0
-        I_h2 = 1.0 / ((h0 + h1)**2)
-        alpha = (h1 * h1) * I_h2
-        beta = (h0 * h0) * I_h2
-        abmix = (h0 * h1) * I_h2
-      endif
+      ! Get cell widths
+      h0 = max(h(i), hNeglect)
+      h1 = max(h(i+1), hNeglect)
+      ! The 1e-12 here attempts to balance truncation errors from the differences of
+      ! large numbers against errors from approximating thin layers as non-vanishing.
+      if (abs(h0) < 1.0e-12*abs(h1)) h0 = 1.0e-12*h1
+      if (abs(h1) < 1.0e-12*abs(h0)) h1 = 1.0e-12*h0
+      I_h2 = 1.0 / ((h0 + h1)**2)
+      alpha = (h1 * h1) * I_h2
+      beta = (h0 * h0) * I_h2
+      abmix = (h0 * h1) * I_h2
       a = 2.0 * alpha * ( alpha + 2.0 * beta + 3.0 * abmix )
       b = 2.0 * beta * ( beta + 2.0 * alpha + 3.0 * abmix )
 

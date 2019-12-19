@@ -63,7 +63,7 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_201
   real                  :: h_min                ! A minimal cell width [H]
   real                  :: d                    ! A temporary variable [H3]
   real                  :: I_d                  ! A temporary variable [nondim]
-  real                  :: I_h, I_hshear        ! Inverses of thicknesses [H-1]
+  real                  :: I_h                  ! Inverses of thicknesses [H-1]
   real                  :: alpha, beta          ! stencil coefficients [nondim]
   real                  :: a, b                 ! weights of cells [H-1]
   real, parameter       :: C1_12 = 1.0 / 12.0
@@ -116,35 +116,29 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_201
       tri_b(i+1) = a * u(i) + b * u(i+1)
     else
       ! Get cell widths
-      h0 = h(i)
-      h1 = h(i+1)
+      h0 = max(h(i), hNeglect)
+      h1 = max(h(i+1), hNeglect)
 
-      if (h0+h1 == 0.) then
-        ! Avoid singularities when h0+h1=0 by using values for equally spaced layers and no source term.
-        tri_l(i+1) = 0.1
-        ! tri_d(i+1) = 1.0
-        tri_c(i+1) = 0.8
-        tri_u(i+1) = 0.1
-        tri_b(i+1) = 0.0
-      else
-        ! Auxiliary calculations
-        I_hshear = 1.0 / (h0 + h1 + hNeglect)
-        I_h = 1.0 / (h0 + h1)
-        h0 = h0 * I_h ; h1 = h1 * I_h
+      I_h = 1.0 / (h0 + h1)
+      h0 = h0 * I_h ; h1 = h1 * I_h
 
-        h0h1 = h0 * h1 ; h0_2 = h0 * h0 ; h1_2 = h1 * h1
-        h0_3 = h0_2 * h0 ; h1_3 = h1_2 * h1
+      h0h1 = h0 * h1 ; h0_2 = h0 * h0 ; h1_2 = h1 * h1
+      h0_3 = h0_2 * h0 ; h1_3 = h1_2 * h1
 
-        I_d = 1.0 / (4.0 * h0h1 * ( h0 + h1 ) + h1_3 + h0_3) ! = 1 / ((h0 + h1)**3 + (h0 + h1))
+      I_d = 1.0 / (4.0 * h0h1 * ( h0 + h1 ) + h1_3 + h0_3) ! = 1 / ((h0 + h1)**3 + h0*h1*(h0 + h1))
 
-        ! Set the tridiagonal coefficients
-        tri_l(i+1) = (h1 * ((h0_2 + h0h1) - h1_2)) * I_d
-        ! tri_d(i+1) = 1.0
-        tri_c(i+1) = 2.0 * ((h0_2 + h1_2) * (h0 + h1)) * I_d
-        tri_u(i+1) = (h0 * ((h1_2 + h0h1) - h0_2)) * I_d
+      ! Set the tridiagonal coefficients
+      tri_l(i+1) = (h1 * ((h0_2 + h0h1) - h1_2)) * I_d
+      ! tri_d(i+1) = 1.0
+      tri_c(i+1) = 2.0 * ((h0_2 + h1_2) * (h0 + h1)) * I_d
+      tri_u(i+1) = (h0 * ((h1_2 + h0h1) - h0_2)) * I_d
+      ! The following expressions have been simplified using the nondimensionalization above:
+      ! I_d = 1.0 / (1.0 + h0h1)
+      ! tri_l(i+1) = (h0h1 - h1_3) * I_d
+      ! tri_c(i+1) = 2.0 * (h0_2 + h1_2) * I_d
+      ! tri_u(i+1) = (h0h1 - h0_3) * I_d
 
-        tri_b(i+1) = 12.0 * (h0h1 * I_d) * ((u(i+1) - u(i)) * I_hshear)
-      endif
+      tri_b(i+1) = 12.0 * (h0h1 * I_d) * ((u(i+1) - u(i)) * I_h)
     endif
 
   enddo ! end loop on cells
