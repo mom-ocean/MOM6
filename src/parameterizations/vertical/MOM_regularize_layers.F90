@@ -308,7 +308,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   ! Now restructure the layers.
   !$OMP parallel do default(private) shared(is,ie,js,je,nz,do_j,def_rat_h,CS,nkmb,G,GV,US, &
   !$OMP                                     e,I_dtol,h,tv,debug,h_neglect,p_ref_cv,ea, &
-  !$OMP                                     eb,id_clock_EOS,nkml)                      &
+  !$OMP                                     eb,id_clock_EOS,nkml)
   do j=js,je ; if (do_j(j)) then
 
 !  call cpu_clock_begin(id_clock_EOS)

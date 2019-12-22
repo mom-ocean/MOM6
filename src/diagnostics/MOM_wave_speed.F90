@@ -40,7 +40,7 @@ type, public :: wave_speed_CS ; private
                                        !! can be overridden by optional arguments.
   type(remapping_CS) :: remapping_CS   !< Used for vertical remapping when calculating equivalent barotropic
                                        !! mode structure.
-  logical :: remap_answers_2018 = .true.  !> If true, use the order of arithmetic and expressions that
+  logical :: remap_answers_2018 = .true.  !< If true, use the order of arithmetic and expressions that
                                        !! recover the remapping answers from 2018.  If false, use more
                                        !! robust forms of the same remapping expressions.
   type(diag_ctrl), pointer :: diag     !< Diagnostics control structure

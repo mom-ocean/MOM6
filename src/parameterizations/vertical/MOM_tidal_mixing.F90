@@ -142,7 +142,7 @@ type, public :: tidal_mixing_cs
   real                            :: tidal_diss_lim_tc  !< CVMix-specific dissipation limit depth for
                                                         !! tidal-energy-constituent data [Z ~> m].
   type(remapping_CS)              :: remap_CS           !< The control structure for remapping
-  logical :: remap_answers_2018 = .true.  !> If true, use the order of arithmetic and expressions that
+  logical :: remap_answers_2018 = .true.  !< If true, use the order of arithmetic and expressions that
                                        !! recover the remapping answers from 2018.  If false, use more
                                        !! robust forms of the same remapping expressions.
 
