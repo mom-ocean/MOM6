@@ -107,6 +107,7 @@ type, public :: surface_forcing_CS ; private
                                 !! sea-ice viscosity becomes effective, in kg m-2,
                                 !! typically of order 1000 [kg m-2].
   logical :: allow_flux_adjustments !< If true, use data_override to obtain flux adjustments
+  logical :: liquid_runoff_from_data !< If true, use data_override to obtain liquid runoff
 
   real    :: Flux_const                     !< piston velocity for surface restoring [m/s]
   logical :: salt_restore_as_sflux          !< If true, SSS restore as salt flux instead of water flux
@@ -152,8 +153,8 @@ end type surface_forcing_CS
 !> Structure corresponding to forcing, but with the elements, units, and conventions
 !! that exactly conform to the use for MOM-based coupled models.
 type, public :: ice_ocean_boundary_type
-  real, pointer, dimension(:,:) :: rofl_flux         =>NULL() !< liquid runoff [W/m2]
-  real, pointer, dimension(:,:) :: rofi_flux         =>NULL() !< ice runoff [W/m2]
+  real, pointer, dimension(:,:) :: lrunoff           =>NULL() !< liquid runoff [kg/m2/s]
+  real, pointer, dimension(:,:) :: frunoff           =>NULL() !< ice runoff [kg/m2/s]
   real, pointer, dimension(:,:) :: u_flux            =>NULL() !< i-direction wind stress [Pa]
   real, pointer, dimension(:,:) :: v_flux            =>NULL() !< j-direction wind stress [Pa]
   real, pointer, dimension(:,:) :: t_flux            =>NULL() !< sensible heat flux [W/m2]
@@ -168,13 +169,11 @@ type, public :: ice_ocean_boundary_type
   real, pointer, dimension(:,:) :: sw_flux_nir_dif   =>NULL() !< diffuse Near InfraRed sw radiation [W/m2]
   real, pointer, dimension(:,:) :: lprec             =>NULL() !< mass flux of liquid precip [kg/m2/s]
   real, pointer, dimension(:,:) :: fprec             =>NULL() !< mass flux of frozen precip [kg/m2/s]
-  real, pointer, dimension(:,:) :: runoff            =>NULL() !< mass flux of liquid runoff [kg/m2/s]
-  real, pointer, dimension(:,:) :: calving           =>NULL() !< mass flux of frozen runoff [kg/m2/s]
   real, pointer, dimension(:,:) :: ustar_berg        =>NULL() !< frictional velocity beneath icebergs [m/s]
   real, pointer, dimension(:,:) :: area_berg         =>NULL() !< area covered by icebergs[m2/m2]
   real, pointer, dimension(:,:) :: mass_berg         =>NULL() !< mass of icebergs(kg/m2)
-  real, pointer, dimension(:,:) :: runoff_hflx       =>NULL() !< heat content of liquid runoff [W/m2]
-  real, pointer, dimension(:,:) :: calving_hflx      =>NULL() !< heat content of frozen runoff [W/m2]
+  real, pointer, dimension(:,:) :: lrunoff_hflx      =>NULL() !< heat content of liquid runoff [W/m2]
+  real, pointer, dimension(:,:) :: frunoff_hflx      =>NULL() !< heat content of frozen runoff [W/m2]
   real, pointer, dimension(:,:) :: p                 =>NULL() !< pressure of overlying ice and atmosphere
                                                               !< on ocean surface [Pa]
   real, pointer, dimension(:,:) :: mi                =>NULL() !< mass of ice [kg/m2]
@@ -411,6 +410,13 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, &
     enddo ; enddo
   endif
 
+  ! Check that liquid runoff has a place to go
+  if (CS%liquid_runoff_from_data .and. .not. associated(IOB%lrunoff)) then
+    call MOM_error(FATAL, "liquid runoff is being added via data_override but "// &
+                          "there is no associated runoff in the IOB")
+    return
+  end if
+
   ! obtain fluxes from IOB; note the staggering of indices
   i0 = is - isc_bnd ; j0 = js - jsc_bnd
   do j=js,je ; do i=is,ie
@@ -425,17 +431,14 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, &
       fluxes%evap(i,j) = IOB%q_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
     ! liquid runoff flux
-    if (associated(IOB%rofl_flux)) then
-      fluxes%lrunoff(i,j) = IOB%rofl_flux(i-i0,j-j0) * G%mask2dT(i,j)
-    else if (associated(IOB%runoff)) then
-      fluxes%lrunoff(i,j) = IOB%runoff(i-i0,j-j0) * G%mask2dT(i,j)
+    if (associated(IOB%lrunoff)) then
+      if(CS%liquid_runoff_from_data)call data_override('OCN', 'runoff', IOB%lrunoff, Time)
+      fluxes%lrunoff(i,j) = IOB%lrunoff(i-i0,j-j0) * G%mask2dT(i,j)
     endif
 
     ! ice runoff flux
-    if (associated(IOB%rofi_flux)) then
-      fluxes%frunoff(i,j) = IOB%rofi_flux(i-i0,j-j0) * G%mask2dT(i,j)
-    elseif (associated(IOB%calving)) then
-      fluxes%frunoff(i,j) = IOB%calving(i-i0,j-j0) * G%mask2dT(i,j)
+    if (associated(IOB%frunoff)) then
+      fluxes%frunoff(i,j) = IOB%frunoff(i-i0,j-j0) * G%mask2dT(i,j)
     endif
 
     if (associated(IOB%ustar_berg)) &
@@ -447,11 +450,11 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, &
     if (associated(IOB%mass_berg)) &
       fluxes%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
 
-    if (associated(IOB%runoff_hflx)) &
-      fluxes%heat_content_lrunoff(i,j) = IOB%runoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
+    if (associated(IOB%lrunoff_hflx)) &
+      fluxes%heat_content_lrunoff(i,j) = IOB%lrunoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
 
-    if (associated(IOB%calving_hflx)) &
-       fluxes%heat_content_frunoff(i,j) = IOB%calving_hflx(i-i0,j-j0) * G%mask2dT(i,j)
+    if (associated(IOB%frunoff_hflx)) &
+      fluxes%heat_content_frunoff(i,j) = IOB%frunoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (associated(IOB%lw_flux)) &
          fluxes%LW(i,j) = IOB%lw_flux(i-i0,j-j0) * G%mask2dT(i,j)
@@ -472,9 +475,9 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, &
        fluxes%latent(i,j)            = fluxes%latent(i,j) + IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
        fluxes%latent_fprec_diag(i,j) = G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
     endif
-    if (associated(IOB%calving)) then
-       fluxes%latent(i,j)              = fluxes%latent(i,j) + IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
-       fluxes%latent_frunoff_diag(i,j) = G%mask2dT(i,j) * IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
+    if (associated(IOB%frunoff)) then
+       fluxes%latent(i,j)              = fluxes%latent(i,j) + IOB%frunoff(i-i0,j-j0)*CS%latent_heat_fusion
+       fluxes%latent_frunoff_diag(i,j) = G%mask2dT(i,j) * IOB%frunoff(i-i0,j-j0)*CS%latent_heat_fusion
     endif
     if (associated(IOB%q_flux)) then
        fluxes%latent(i,j)           = fluxes%latent(i,j) + IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
@@ -1262,7 +1265,12 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
   call get_param(param_file, mdl, "ALLOW_FLUX_ADJUSTMENTS", CS%allow_flux_adjustments, &
                  "If true, allows flux adjustments to specified via the "//&
                  "data_table using the component name 'OCN'.", default=.false.)
-  if (CS%allow_flux_adjustments) then
+
+  call get_param(param_file, mdl, "LIQUID_RUNOFF_FROM_DATA", CS%liquid_runoff_from_data, &
+                 "If true, allows liquid river runoff to be specified via the "//&
+                 "data_table using the component name 'OCN'.", default=.false.)
+
+  if (CS%allow_flux_adjustments .or. CS%liquid_runoff_from_data) then
     call data_override_init(Ocean_domain_in=G%Domain%mpp_domain)
   endif
 
@@ -1352,8 +1360,8 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
   write(outunit,100) 'iobt%sw_flux_nir_dif'   , mpp_chksum( iobt%sw_flux_nir_dif)
   write(outunit,100) 'iobt%lprec          '   , mpp_chksum( iobt%lprec          )
   write(outunit,100) 'iobt%fprec          '   , mpp_chksum( iobt%fprec          )
-  write(outunit,100) 'iobt%runoff         '   , mpp_chksum( iobt%runoff         )
-  write(outunit,100) 'iobt%calving        '   , mpp_chksum( iobt%calving        )
+  write(outunit,100) 'iobt%lrunoff        '   , mpp_chksum( iobt%lrunoff        )
+  write(outunit,100) 'iobt%frunoff        '   , mpp_chksum( iobt%frunoff        )
   write(outunit,100) 'iobt%p              '   , mpp_chksum( iobt%p              )
   if (associated(iobt%ustar_berg)) &
     write(outunit,100) 'iobt%ustar_berg     ' , mpp_chksum( iobt%ustar_berg )
