@@ -172,7 +172,7 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_201
       Bsys(i) = u(i) * dx
     enddo
 
-    call solve_linear_system( Asys, Bsys, Csys, 4 )
+    call solve_linear_system( Asys, Bsys, Csys, 4, .false. )
 
     ! Set the first edge slope
     tri_b(1) = Csys(2) ! + x(1)*(2.0*Csys(3) + x(1)*(3.0*Csys(4)))
@@ -213,7 +213,7 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_201
       Bsys(i) = u(N+1-i) * dx
     enddo
 
-    call solve_linear_system( Asys, Bsys, Csys, 4 )
+    call solve_linear_system( Asys, Bsys, Csys, 4, .false. )
 
     ! Set the last edge slope
     tri_b(N+1) = Csys(2)
@@ -410,7 +410,7 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
 
     Bsys(:) = (/ 0.0, -1.0, 0.0, 0.0, 0.0, 0.0 /)
 
-    call solve_linear_system( Asys, Bsys, Csys, 6 )
+    call solve_linear_system( Asys, Bsys, Csys, 6, use_2018_answers )
 
     alpha = Csys(1)
     beta  = Csys(2)
@@ -523,7 +523,7 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
 
   Bsys(:) = (/ 0.0, -1.0, -h1, h1_2/2.0, -h1_3/6.0, h1_4/24.0 /)
 
-  call solve_linear_system( Asys, Bsys, Csys, 6 )
+  call solve_linear_system( Asys, Bsys, Csys, 6, use_2018_answers )
 
   alpha = Csys(1)
   beta  = Csys(2)
@@ -562,7 +562,7 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
 
   enddo
 
-  call solve_linear_system( Asys, Bsys, Csys, 6 )
+  call solve_linear_system( Asys, Bsys, Csys, 6, use_2018_answers )
 
   Dsys(1) = Csys(2)
   Dsys(2) = 2.0 * Csys(3)
@@ -672,7 +672,7 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
 
   Bsys(:) = (/ 0.0, -1.0, h2, h2_2/2.0, h2_3/6.0, h2_4/24.0 /)
 
-  call solve_linear_system( Asys, Bsys, Csys, 6 )
+  call solve_linear_system( Asys, Bsys, Csys, 6, use_2018_answers )
 
   alpha = Csys(1)
   beta  = Csys(2)
@@ -708,7 +708,7 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
     Bsys(i) = u(N-6+i) * dx
   enddo
 
-  call solve_linear_system( Asys, Bsys, Csys, 6 )
+  call solve_linear_system( Asys, Bsys, Csys, 6, use_2018_answers )
 
   Dsys(1) = Csys(2)
   Dsys(2) = 2.0 * Csys(3)

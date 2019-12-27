@@ -328,7 +328,7 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
       B(i) = u(i) * dx
     enddo
 
-    call solve_linear_system( A, B, C, 4 )
+    call solve_linear_system( A, B, C, 4, .false. )
 
     ! Set the edge values of the first cell
     edge_val(1,1) = C(1) ! x(1) = 0 so ignore + x(1)*(C(2) + x(1)*(C(3) + x(1)*C(4)))
@@ -374,7 +374,7 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
       B(i) = u(N+1-i) * dx
     enddo
 
-    call solve_linear_system( A, B, C, 4 )
+    call solve_linear_system( A, B, C, 4, .false. )
 
     ! Set the last and second to last edge values
     edge_val(N,2) = C(1)
@@ -425,7 +425,7 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
   real                  :: h_min                ! A minimal cell width [H]
   real                  :: h_sum                ! A sum of adjacent thicknesses [H]
   real                  :: h0_2, h1_2, h0h1
-  real                  :: d2, d4
+  real                  :: h0ph1_2, h0ph1_4
   real                  :: alpha, beta          ! stencil coefficients [nondim]
   real                  :: I_h2, abmix          ! stencil coefficients [nondim]
   real                  :: a, b
@@ -463,17 +463,17 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
       endif
 
       ! Auxiliary calculations
-      d2 = (h0 + h1) ** 2
-      d4 = d2 ** 2
+      h0ph1_2 = (h0 + h1)**2
+      h0ph1_4 = h0ph1_2**2
       h0h1 = h0 * h1
       h0_2 = h0 * h0
       h1_2 = h1 * h1
 
       ! Coefficients
-      alpha = h1_2 / d2
-      beta = h0_2 / d2
-      a = 2.0 * h1_2 * ( h1_2 + 2.0 * h0_2 + 3.0 * h0h1 ) / d4
-      b = 2.0 * h0_2 * ( h0_2 + 2.0 * h1_2 + 3.0 * h0h1 ) / d4
+      alpha = h1_2 / h0ph1_2
+      beta = h0_2 / h0ph1_2
+      a = 2.0 * h1_2 * ( h1_2 + 2.0 * h0_2 + 3.0 * h0h1 ) / h0ph1_4
+      b = 2.0 * h0_2 * ( h0_2 + 2.0 * h1_2 + 3.0 * h0h1 ) / h0ph1_4
 
       tri_d(i+1) = 1.0
     else  ! Use expressions with less sensitivity to roundoff
@@ -530,7 +530,7 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
       Bsys(i) = u(i) * dx
     enddo
 
-    call solve_linear_system( Asys, Bsys, Csys, 4 )
+    call solve_linear_system( Asys, Bsys, Csys, 4, .false. )
 
     tri_b(1) = Csys(1)  ! Set the first edge value, using the fact that x(1) = 0.
     tri_c(1) = 1.0
@@ -572,7 +572,7 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
       Bsys(i) = u(N+1-i) * dx
     enddo
 
-    call solve_linear_system( Asys, Bsys, Csys, 4 )
+    call solve_linear_system( Asys, Bsys, Csys, 4, .false. )
 
     ! Set the last edge value
     tri_b(N+1) = Csys(1)
@@ -778,7 +778,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
 
     Bsys(:) = (/ -1.0, 0.0, 0.0, 0.0, 0.0, 0.0 /)
 
-    call solve_linear_system( Asys, Bsys, Csys, 6 )
+    call solve_linear_system( Asys, Bsys, Csys, 6, use_2018_answers )
 
     alpha = Csys(1)
     beta  = Csys(2)
@@ -901,7 +901,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
 
   Bsys(:) = (/ -1.0, h1, -0.5*h1_2, h1_3/6.0, -h1_4/24.0, h1_5/120.0 /)
 
-  call solve_linear_system( Asys, Bsys, Csys, 6 )
+  call solve_linear_system( Asys, Bsys, Csys, 6, use_2018_answers )
 
   alpha = Csys(1)
   beta  = Csys(2)
@@ -940,7 +940,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
 
   enddo
 
-  call solve_linear_system( Asys, Bsys, Csys, 6 )
+  call solve_linear_system( Asys, Bsys, Csys, 6, use_2018_answers )
 
   tri_l(1) = 0.0
   tri_d(1) = 1.0
@@ -1054,7 +1054,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
 
   Bsys(:) = (/ -1.0, -h2, -0.5*h2_2, -h2_3/6.0, -h2_4/24.0, -h2_5/120.0 /)
 
-  call solve_linear_system( Asys, Bsys, Csys, 6 )
+  call solve_linear_system( Asys, Bsys, Csys, 6, use_2018_answers )
 
   alpha = Csys(1)
   beta  = Csys(2)
@@ -1093,7 +1093,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
 
   enddo
 
-  call solve_linear_system( Asys, Bsys, Csys, 6 )
+  call solve_linear_system( Asys, Bsys, Csys, 6, use_2018_answers )
 
   tri_l(N+1) = 0.0
   tri_d(N+1) = 1.0
