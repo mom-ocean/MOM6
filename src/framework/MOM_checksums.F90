@@ -1822,8 +1822,11 @@ subroutine chk_sum_msg3(fmsg, aMean, aMin, aMax, mesg, iounit)
   real,             intent(in) :: aMax !< The maximum value of the array
   integer,          intent(in) :: iounit !< Checksum logger IO unit
 
+  ! NOTE: We add zero to aMin and aMax to remove any negative zeros.
+  ! This is due to inconsistencies of signed zero in local vs MPI calculations.
+
   if (is_root_pe()) write(iounit, '(A,3(A,ES25.16,1X),A)') &
-    fmsg, " mean=", aMean, "min=", aMin, "max=", aMax, trim(mesg)
+    fmsg, " mean=", aMean, "min=", (0. + aMin), "max=", (0. + aMax), trim(mesg)
 end subroutine chk_sum_msg3
 
 !> MOM_checksums_init initializes the MOM_checksums module. As it happens, the
@@ -1849,20 +1852,12 @@ end subroutine chksum_error
 !> Does a bitcount of a number by first casting to an integer and then using BTEST
 !! to check bit by bit
 integer function bitcount(x)
-  real :: x !< Number to be bitcount
+  real, intent(in) :: x !< Number to be bitcount
 
-  ! Local variables
-  integer(kind(x)) :: y !< Store the integer representation of the memory used by x
-  integer :: bit
+  integer, parameter :: xk = kind(x)  !< Kind type of x
 
-  bitcount = 0
-  y = transfer(x,y)
-
-  ! Fortran standard says that bit indexing start at 0
-  do bit = 0, bit_size(y)-1
-    if (BTEST(y,bit)) bitcount = bitcount+1
-  enddo
-
+  ! NOTE: Assumes that reals and integers of kind=xk are the same size
+  bitcount = popcnt(transfer(x, 1_xk))
 end function bitcount
 
 end module MOM_checksums

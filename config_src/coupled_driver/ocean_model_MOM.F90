@@ -505,14 +505,14 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
 
   if (do_thermo) then
     if (OS%fluxes%fluxes_used) then
-      call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
+      call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, dt_coupling, &
                                  OS%grid, OS%US, OS%forcing_CSp, OS%sfc_state)
 
       ! Add ice shelf fluxes
       if (OS%use_ice_shelf) &
         call shelf_calc_flux(OS%sfc_state, OS%fluxes, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
       if (OS%icebergs_alter_ocean) &
-        call iceberg_fluxes(OS%grid, OS%fluxes, OS%use_ice_shelf, &
+        call iceberg_fluxes(OS%grid, OS%US, OS%fluxes, OS%use_ice_shelf, &
                             OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
 
 #ifdef _USE_GENERIC_TRACER
@@ -520,23 +520,20 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
       call MOM_generic_tracer_fluxes_accumulate(OS%fluxes, 1.0) ! Here weight=1, so just store the current fluxes
       call disable_averaging(OS%diag)
 #endif
-      ! Indicate that there are new unused fluxes.
-      OS%fluxes%fluxes_used = .false.
-      OS%fluxes%dt_buoy_accum = dt_coupling
     else
       ! The previous fluxes have not been used yet, so translate the input fluxes
       ! into a temporary type and then accumulate them in about 20 lines.
       OS%flux_tmp%C_p = OS%fluxes%C_p
-      call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, &
+      call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, dt_coupling, &
                                  OS%grid, OS%US, OS%forcing_CSp, OS%sfc_state)
 
       if (OS%use_ice_shelf) &
         call shelf_calc_flux(OS%sfc_state, OS%flux_tmp, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
       if (OS%icebergs_alter_ocean) &
-        call iceberg_fluxes(OS%grid, OS%flux_tmp, OS%use_ice_shelf, &
+        call iceberg_fluxes(OS%grid, OS%US, OS%flux_tmp, OS%use_ice_shelf, &
                             OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
 
-      call fluxes_accumulate(OS%flux_tmp, OS%fluxes, dt_coupling, OS%grid, weight)
+      call fluxes_accumulate(OS%flux_tmp, OS%fluxes, OS%grid, weight)
 #ifdef _USE_GENERIC_TRACER
        ! Incorporate the current tracer fluxes into the running averages
       call MOM_generic_tracer_fluxes_accumulate(OS%flux_tmp, weight)
@@ -546,7 +543,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
 
   ! The net mass forcing is not currently used in the MOM6 dynamics solvers, so this is may be unnecessary.
   if (do_dyn .and. associated(OS%forces%net_mass_src) .and. .not.OS%forces%net_mass_src_set) &
-    call get_net_mass_forcing(OS%fluxes, OS%grid, OS%forces%net_mass_src)
+    call get_net_mass_forcing(OS%fluxes, OS%grid, OS%US, OS%forces%net_mass_src)
 
   if (OS%use_waves .and. do_thermo) then
     ! For now, the waves are only updated on the thermodynamics steps, because that is where
@@ -638,16 +635,11 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
   if (do_thermo) OS%nstep_thermo = OS%nstep_thermo + 1
 
   if (do_dyn) then
-    call enable_averaging(dt_coupling, OS%Time_dyn, OS%diag)
-    call mech_forcing_diags(OS%forces, dt_coupling, OS%grid, OS%diag, OS%forcing_CSp%handles)
-    call disable_averaging(OS%diag)
+    call mech_forcing_diags(OS%forces, dt_coupling, OS%grid, OS%Time_dyn, OS%diag, OS%forcing_CSp%handles)
   endif
 
   if (OS%fluxes%fluxes_used .and. do_thermo) then
-    call enable_averaging(OS%fluxes%dt_buoy_accum, OS%Time, OS%diag)
-    call forcing_diagnostics(OS%fluxes, OS%sfc_state, OS%fluxes%dt_buoy_accum, &
-                             OS%grid, OS%diag, OS%forcing_CSp%handles)
-    call disable_averaging(OS%diag)
+    call forcing_diagnostics(OS%fluxes, OS%sfc_state, OS%grid, OS%US, OS%Time, OS%diag, OS%forcing_CSp%handles)
   endif
 
 ! Translate state into Ocean.
