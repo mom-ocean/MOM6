@@ -1072,11 +1072,12 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, UStokes_SL, LA)
     if(UStokes_sl .ne. 0.0)then
       LA = sqrt(US%Z_to_m*US%s_to_T*ustar / UStokes_sl)
     else
-      LA=1.e8
+     UStokes_sl = 0.0
+     LA=1.e8
     endif
-  !else
-  !  UStokes_sl = 0.0
-  !  LA=1.e8
+  else
+    UStokes_sl = 0.0
+    LA=1.e8
   endif
 
 end subroutine Get_StokesSL_LiFoxKemper
