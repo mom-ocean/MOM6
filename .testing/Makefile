@@ -37,7 +37,7 @@ MKMF_TEMPLATE ?= $(DEPS)/mkmf/templates/ncrc-gnu.mk
 
 # Executables
 BUILDS = symmetric asymmetric repro
-CONFIGS := $(foreach n,$(shell seq 0 3),tc$(n))
+CONFIGS := $(wildcard tc*)
 TESTS = grids layouts restarts repros nans dims
 
 # The following variables are configured by Travis:
