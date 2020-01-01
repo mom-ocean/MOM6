@@ -1022,6 +1022,8 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, UStokes_SL, LA)
   real :: z0, z0i, r1, r2, r3, r4, tmp, lasl_sqr_i
   real :: u10
 
+  UStokes_sl = 0.0
+  LA=1.e8
   if (ustar > 0.0) then
     ! Computing u10 based on u_star and COARE 3.5 relationships
     call ust_2_u10_coare3p5(US%Z_to_m*US%s_to_T*ustar*sqrt(GV%Rho0/1.225), u10, GV, US)
@@ -1069,15 +1071,7 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, UStokes_SL, LA)
          sqrt( 2.0 * PI *kstar * z0) * &
          erfc( sqrt( 2.0 * kstar * z0 ) )
     UStokes_sl = UStokes * (0.715 + r1 + r2 + r3 + r4)
-    if(UStokes_sl .ne. 0.0)then
-      LA = sqrt(US%Z_to_m*US%s_to_T*ustar / UStokes_sl)
-    else
-     UStokes_sl = 0.0
-     LA=1.e8
-    endif
-  else
-    UStokes_sl = 0.0
-    LA=1.e8
+    if(UStokes_sl .ne. 0.0)LA = sqrt(US%Z_to_m*US%s_to_T*ustar / UStokes_sl)
   endif
 
 end subroutine Get_StokesSL_LiFoxKemper
