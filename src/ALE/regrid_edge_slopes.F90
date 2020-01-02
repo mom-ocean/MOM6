@@ -4,7 +4,8 @@ module regrid_edge_slopes
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use regrid_solvers, only : solve_linear_system, solve_tridiagonal_system, solve_diag_dominant_tridiag
+use regrid_solvers, only : solve_linear_system, solve_tridiagonal_system
+use regrid_solvers, only : solve_diag_dominant_tridiag, linear_solver
 use polynomial_functions, only : evaluation_polynomial
 
 implicit none ; private
@@ -165,14 +166,14 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_201
       dx = max(h_min, h(i) )
       x(i+1) = x(i) + dx
       xavg = x(i) + 0.5*dx
-      Asys(i,1) = dx
-      Asys(i,2) = dx * xavg
-      Asys(i,3) = dx * (xavg**2 + C1_12*dx**2)
-      Asys(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
+      Asys(1,i) = dx
+      Asys(2,i) = dx * xavg
+      Asys(3,i) = dx * (xavg**2 + C1_12*dx**2)
+      Asys(4,i) = dx * xavg * (xavg**2 + 0.25*dx**2)
       Bsys(i) = u(i) * dx
     enddo
 
-    call solve_linear_system( Asys, Bsys, Csys, 4, .false. )
+    call linear_solver( 4, Asys, Bsys, Csys )
 
     ! Set the first edge slope
     tri_b(1) = Csys(2) ! + x(1)*(2.0*Csys(3) + x(1)*(3.0*Csys(4)))
@@ -205,15 +206,15 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_201
       dx = max(h_min, h(N+1-i) )
       x(i+1) = x(i) + dx
       xavg = x(i) + 0.5*dx
-      Asys(i,1) = dx
-      Asys(i,2) = dx * xavg
-      Asys(i,3) = dx * (xavg**2 + C1_12*dx**2)
-      Asys(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
+      Asys(1,i) = dx
+      Asys(2,i) = dx * xavg
+      Asys(3,i) = dx * (xavg**2 + C1_12*dx**2)
+      Asys(4,i) = dx * xavg * (xavg**2 + 0.25*dx**2)
 
       Bsys(i) = u(N+1-i) * dx
     enddo
 
-    call solve_linear_system( Asys, Bsys, Csys, 4, .false. )
+    call linear_solver( 4, Asys, Bsys, Csys )
 
     ! Set the last edge slope
     tri_b(N+1) = Csys(2)
