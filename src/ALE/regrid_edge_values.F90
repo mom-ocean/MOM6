@@ -3,7 +3,8 @@ module regrid_edge_values
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use regrid_solvers, only : solve_linear_system, solve_tridiagonal_system, solve_diag_dominant_tridiag
+use regrid_solvers, only : solve_linear_system, solve_tridiagonal_system
+use regrid_solvers, only : solve_diag_dominant_tridiag, linear_solver
 use polynomial_functions, only : evaluation_polynomial
 
 implicit none ; private
@@ -321,14 +322,14 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
       dx = max(h_min, h(i) )
       x(i+1) = x(i) + dx
       xavg = 0.5 * (x(i+1) + x(i))
-      A(i,1) = dx
-      A(i,2) = dx * xavg
-      A(i,3) = dx * (xavg**2 + C1_12*dx**2)
-      A(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
+      A(1,i) = dx
+      A(2,i) = dx * xavg
+      A(3,i) = dx * (xavg**2 + C1_12*dx**2)
+      A(4,i) = dx * xavg * (xavg**2 + 0.25*dx**2)
       B(i) = u(i) * dx
     enddo
 
-    call solve_linear_system( A, B, C, 4, .false. )
+    call linear_solver( 4, A, B, C )
 
     ! Set the edge values of the first cell
     edge_val(1,1) = C(1) ! x(1) = 0 so ignore + x(1)*(C(2) + x(1)*(C(3) + x(1)*C(4)))
@@ -366,15 +367,15 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
       x(i+1) = x(i) + dx
       xavg = x(i) + 0.5*dx
 
-      A(i,1) = dx
-      A(i,2) = dx * xavg
-      A(i,3) = dx * (xavg**2 + C1_12*dx**2)
-      A(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
+      A(1,i) = dx
+      A(2,i) = dx * xavg
+      A(3,i) = dx * (xavg**2 + C1_12*dx**2)
+      A(4,i) = dx * xavg * (xavg**2 + 0.25*dx**2)
 
       B(i) = u(N+1-i) * dx
     enddo
 
-    call solve_linear_system( A, B, C, 4, .false. )
+    call linear_solver( 4, A, B, C )
 
     ! Set the last and second to last edge values
     edge_val(N,2) = C(1)
@@ -523,14 +524,14 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
       dx = max(h_min, h(i) )
       x(i+1) = x(i) + dx
       xavg = x(i) + 0.5*dx
-      Asys(i,1) = dx
-      Asys(i,2) = dx * xavg
-      Asys(i,3) = dx * (xavg**2 + C1_12*dx**2)
-      Asys(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
+      Asys(1,i) = dx
+      Asys(2,i) = dx * xavg
+      Asys(3,i) = dx * (xavg**2 + C1_12*dx**2)
+      Asys(4,i) = dx * xavg * (xavg**2 + 0.25*dx**2)
       Bsys(i) = u(i) * dx
     enddo
 
-    call solve_linear_system( Asys, Bsys, Csys, 4, .false. )
+    call linear_solver( 4, Asys, Bsys, Csys )
 
     tri_b(1) = Csys(1)  ! Set the first edge value, using the fact that x(1) = 0.
     tri_c(1) = 1.0
@@ -564,15 +565,15 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
       x(i+1) = x(i) + dx
       xavg = x(i) + 0.5*dx
 
-      Asys(i,1) = dx
-      Asys(i,2) = dx * xavg
-      Asys(i,3) = dx * (xavg**2 + C1_12*dx**2)
-      Asys(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
+      Asys(1,i) = dx
+      Asys(2,i) = dx * xavg
+      Asys(3,i) = dx * (xavg**2 + C1_12*dx**2)
+      Asys(4,i) = dx * xavg * (xavg**2 + 0.25*dx**2)
 
       Bsys(i) = u(N+1-i) * dx
     enddo
 
-    call solve_linear_system( Asys, Bsys, Csys, 4, .false. )
+    call linear_solver( 4, Asys, Bsys, Csys )
 
     ! Set the last edge value
     tri_b(N+1) = Csys(1)
