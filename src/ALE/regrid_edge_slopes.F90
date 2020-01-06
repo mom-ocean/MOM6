@@ -166,11 +166,11 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_201
       dx = max(h_min, h(i) )
       x(i+1) = x(i) + dx
       xavg = x(i) + 0.5*dx
-      Asys(1,i) = dx
-      Asys(2,i) = dx * xavg
-      Asys(3,i) = dx * (xavg**2 + C1_12*dx**2)
-      Asys(4,i) = dx * xavg * (xavg**2 + 0.25*dx**2)
-      Bsys(i) = u(i) * dx
+      Asys(1,i) = 1.0
+      Asys(2,i) = xavg
+      Asys(3,i) = (xavg**2 + C1_12*dx**2)
+      Asys(4,i) = xavg * (xavg**2 + 0.25*dx**2)
+      Bsys(i) = u(i)
     enddo
 
     call linear_solver( 4, Asys, Bsys, Csys )
@@ -206,12 +206,11 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_201
       dx = max(h_min, h(N+1-i) )
       x(i+1) = x(i) + dx
       xavg = x(i) + 0.5*dx
-      Asys(1,i) = dx
-      Asys(2,i) = dx * xavg
-      Asys(3,i) = dx * (xavg**2 + C1_12*dx**2)
-      Asys(4,i) = dx * xavg * (xavg**2 + 0.25*dx**2)
-
-      Bsys(i) = u(N+1-i) * dx
+      Asys(1,i) = 1.0
+      Asys(2,i) = xavg
+      Asys(3,i) = (xavg**2 + C1_12*dx**2)
+      Asys(4,i) = xavg * (xavg**2 + 0.25*dx**2)
+      Bsys(i) = u(N+1-i)
     enddo
 
     call linear_solver( 4, Asys, Bsys, Csys )
@@ -540,26 +539,23 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
 
   ! Boundary conditions: left boundary
   x(1) = 0.0
-  do i = 2,7
-    x(i) = x(i-1) + h(i-1)
-  enddo
-
   do i = 1,6
-
     dx = h(i)
+    x(i+1) = x(i) + dx
     if (use_2018_answers) then
       do j = 1,6 ; Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j ; enddo
+      Bsys(i) = u(i) * dx
     else  ! Use expressions with less sensitivity to roundoff
       xavg = 0.5 * (x(i+1) + x(i))
-      Asys(i,1) = dx
-      Asys(i,2) = dx * xavg
-      Asys(i,3) = dx * (xavg**2 + C1_12*dx**2)
-      Asys(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
-      Asys(i,5) = dx * (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
-      Asys(i,6) = dx * xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
+      Asys(i,1) = 1.0
+      Asys(i,2) = xavg
+      Asys(i,3) = (xavg**2 + C1_12*dx**2)
+      Asys(i,4) = xavg * (xavg**2 + 0.25*dx**2)
+      Asys(i,5) = (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
+      Asys(i,6) = xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
+      Bsys(i) = u(i)
     endif
 
-    Bsys(i) = u(i) * dx
 
   enddo
 
@@ -689,24 +685,22 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
 
   ! Boundary conditions: right boundary
   x(1) = 0.0
-  do i = 2,7
-    x(i) = x(i-1) + h(N-7+i)
-  enddo
-
   do i = 1,6
     dx = h(N-6+i)
+    x(i+1) = x(i) + dx
     if (use_2018_answers) then
       do j = 1,6 ; Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j ; enddo
+      Bsys(i) = u(N-6+i) * dx
     else  ! Use expressions with less sensitivity to roundoff
       xavg = 0.5 * (x(i+1) + x(i))
-      Asys(i,1) = dx
-      Asys(i,2) = dx * xavg
-      Asys(i,3) = dx * (xavg**2 + C1_12*dx**2)
-      Asys(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
-      Asys(i,5) = dx * (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
-      Asys(i,6) = dx * xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
+      Asys(i,1) = 1.0
+      Asys(i,2) = xavg
+      Asys(i,3) = (xavg**2 + C1_12*dx**2)
+      Asys(i,4) = xavg * (xavg**2 + 0.25*dx**2)
+      Asys(i,5) = (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
+      Asys(i,6) = xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
+      Bsys(i) = u(N-6+i)
     endif
-    Bsys(i) = u(N-6+i) * dx
   enddo
 
   call solve_linear_system( Asys, Bsys, Csys, 6, use_2018_answers )
