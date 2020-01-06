@@ -322,11 +322,11 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
       dx = max(h_min, h(i) )
       x(i+1) = x(i) + dx
       xavg = 0.5 * (x(i+1) + x(i))
-      A(1,i) = dx
-      A(2,i) = dx * xavg
-      A(3,i) = dx * (xavg**2 + C1_12*dx**2)
-      A(4,i) = dx * xavg * (xavg**2 + 0.25*dx**2)
-      B(i) = u(i) * dx
+      A(1,i) = 1.0
+      A(2,i) = xavg
+      A(3,i) = (xavg**2 + C1_12*dx**2)
+      A(4,i) = xavg * (xavg**2 + 0.25*dx**2)
+      B(i) = u(i)
     enddo
 
     call linear_solver( 4, A, B, C )
@@ -359,20 +359,16 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
     ! system that sets the origin at the last interface in the domain.
     h_min = hMinFrac * ((h(N-3) + h(N-2)) + (h(N-1) + h(N)))
     if (h_min == 0.0) h_min = 1.0  ! Handle the case of all massless layers.
-
     x(1) = 0.0
-
     do i=1,4
       dx = max(h_min, h(N+1-i) )
       x(i+1) = x(i) + dx
       xavg = x(i) + 0.5*dx
-
-      A(1,i) = dx
-      A(2,i) = dx * xavg
-      A(3,i) = dx * (xavg**2 + C1_12*dx**2)
-      A(4,i) = dx * xavg * (xavg**2 + 0.25*dx**2)
-
-      B(i) = u(N+1-i) * dx
+      A(1,i) = 1.0
+      A(2,i) = xavg
+      A(3,i) = (xavg**2 + C1_12*dx**2)
+      A(4,i) = xavg * (xavg**2 + 0.25*dx**2)
+      B(i) = u(N+1-i)
     enddo
 
     call linear_solver( 4, A, B, C )
@@ -524,11 +520,11 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
       dx = max(h_min, h(i) )
       x(i+1) = x(i) + dx
       xavg = x(i) + 0.5*dx
-      Asys(1,i) = dx
-      Asys(2,i) = dx * xavg
-      Asys(3,i) = dx * (xavg**2 + C1_12*dx**2)
-      Asys(4,i) = dx * xavg * (xavg**2 + 0.25*dx**2)
-      Bsys(i) = u(i) * dx
+      Asys(1,i) = 1.0
+      Asys(2,i) = xavg
+      Asys(3,i) = (xavg**2 + C1_12*dx**2)
+      Asys(4,i) = xavg * (xavg**2 + 0.25*dx**2)
+      Bsys(i) = u(i)
     enddo
 
     call linear_solver( 4, Asys, Bsys, Csys )
@@ -564,13 +560,11 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
       dx = max(h_min, h(N+1-i) )
       x(i+1) = x(i) + dx
       xavg = x(i) + 0.5*dx
-
-      Asys(1,i) = dx
-      Asys(2,i) = dx * xavg
-      Asys(3,i) = dx * (xavg**2 + C1_12*dx**2)
-      Asys(4,i) = dx * xavg * (xavg**2 + 0.25*dx**2)
-
-      Bsys(i) = u(N+1-i) * dx
+      Asys(1,i) = 1.0
+      Asys(2,i) = xavg
+      Asys(3,i) = (xavg**2 + C1_12*dx**2)
+      Asys(4,i) = xavg * (xavg**2 + 0.25*dx**2)
+      Bsys(i) = u(N+1-i)
     enddo
 
     call linear_solver( 4, Asys, Bsys, Csys )
@@ -644,8 +638,9 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
   ! Local variables
   integer               :: i, j, k              ! loop indexes
   real                  :: h0, h1, h2, h3       ! cell widths [H]
-  real                  :: g, g_2, g_3          ! the following are
-  real                  :: g_4, g_5, g_6        ! auxiliary variables
+  real                  :: hMin  ! The minimum thickness used in these calculations [H]
+  real :: h01, h01_2, h01_3, h01_4, h01_5, h01_6  ! Summed thicknesses to various powers [H^n ~> m^n or kg^n m-2n]
+  real :: h23, h23_2, h23_3, h23_4, h23_5, h23_6  ! Summed thicknesses to various powers [H^n ~> m^n or kg^n m-2n]
   real                  :: d2, d3, d4, d5, d6   ! to set up the systems
   real                  :: n2, n3, n4, n5, n6   ! used to compute the
   real                  :: h1_2, h2_2           ! the coefficients of the
@@ -658,6 +653,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
   real                  :: h2ph3, h2ph3_2       ! ...
   real                  :: h2ph3_3, h2ph3_4     ! ...
   real                  :: h0ph1_5, h2ph3_5     ! ...
+  real :: I_h1ph2 ! The inverse of the sum of two layers' thicknesses [H]
   real                  :: alpha, beta          ! stencil coefficients
   real                  :: a, b, c, d           ! "
   real, dimension(7)    :: x          ! Coordinate system with 0 at edges [same units as h]
@@ -678,6 +674,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
   hNeglect = hNeglect_edge_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   ! Loop on cells (except last one)
+  ! Loop on interior cells
   do k = 2,N-2
 
     ! Cell widths
@@ -688,11 +685,11 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
 
     ! Avoid singularities when h0=0 or h3=0
     if (h0*h3==0.) then
-      g = max( hNeglect, h0+h1+h2+h3 )
-      h0 = max( hMinFrac*g, h0 )
-      h1 = max( hMinFrac*g, h1 )
-      h2 = max( hMinFrac*g, h2 )
-      h3 = max( hMinFrac*g, h3 )
+      hMin = hMinFrac * max( hNeglect, h0+h1+h2+h3 )
+      h0 = max( hMin, h0 )
+      h1 = max( hMin, h1 )
+      h2 = max( hMin, h2 )
+      h3 = max( hMin, h3 )
     endif
 
     ! Auxiliary calculations
@@ -708,31 +705,31 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
     h2_5 = h2_3 * h2_2
     h2_6 = h2_3 * h2_3
 
-    g   = h0 + h1
-    g_2 = g * g
-    g_3 = g * g_2
-    g_4 = g_2 * g_2
-    g_5 = g_4 * g
-    g_6 = g_3 * g_3
+    h01   = h0 + h1
+    h01_2 = h01 * h01
+    h01_3 = h01 * h01_2
+    h01_4 = h01_2 * h01_2
+    h01_5 = h01_4 * h01
+    h01_6 = h01_3 * h01_3
 
-    d2 = ( h1_2 - g_2 ) / h0
-    d3 = ( h1_3 - g_3 ) / h0
-    d4 = ( h1_4 - g_4 ) / h0
-    d5 = ( h1_5 - g_5 ) / h0
-    d6 = ( h1_6 - g_6 ) / h0
+    d2 = ( h01_2 - h1_2 ) / h0 ! = (2.0*h1 + h0)
+    d3 = ( h01_3 - h1_3 ) / h0 ! = (3.0*h1_2 + h0*(3.0*h1 + h0))
+    d4 = ( h01_4 - h1_4 ) / h0 ! = (4.0*h1_3 + h0*(6.0*h1_2 + h0*(4.0*h1 + h0)))
+    d5 = ( h01_5 - h1_5 ) / h0 ! = (5.0*h1_4 + h0*(10.0*h1_3 + h0*(10.0*h1_2 + h0*(5.0*h1 + h0))))
+    d6 = ( h01_6 - h1_6 ) / h0 ! = (6.0*h1_5 + h0*(15.0*h1_4 + h0*(20.0*h1_3 + h0*(15.0*h1_2 + h0*(6.0*h1 + h0)))))
 
-    g   = h2 + h3
-    g_2 = g * g
-    g_3 = g * g_2
-    g_4 = g_2 * g_2
-    g_5 = g_4 * g
-    g_6 = g_3 * g_3
+    h23   = h2 + h3
+    h23_2 = h23 * h23
+    h23_3 = h23 * h23_2
+    h23_4 = h23_2 * h23_2
+    h23_5 = h23_4 * h23
+    h23_6 = h23_3 * h23_3
 
-    n2 = ( g_2 - h2_2 ) / h3
-    n3 = ( g_3 - h2_3 ) / h3
-    n4 = ( g_4 - h2_4 ) / h3
-    n5 = ( g_5 - h2_5 ) / h3
-    n6 = ( g_6 - h2_6 ) / h3
+    n2 = ( h23_2 - h2_2 ) / h3  !  = 2.0*h2   + h3
+    n3 = ( h23_3 - h2_3 ) / h3  !  = 3.0*h2_2 + h3*(3.0*h2   + h3)
+    n4 = ( h23_4 - h2_4 ) / h3  !  = 4.0*h2_3 + h3*(6.0*h2_2 + h3*(4.0*h2 + h3))
+    n5 = ( h23_5 - h2_5 ) / h3  !  = 5.0*h2_4 + h3*(10.0*h2_3 + h3*(10.0*h2_2 + h3*(5.0*h2 + h3)))
+    n6 = ( h23_6 - h2_6 ) / h3  !  = 6.0*h2_5 + h3*(15.0*h2_4 + h3*(20.0*h2_3 + h3*(15.0*h2_2 + h3*(6.0*h2 + h3))))
 
     ! Compute matrix entries
     Asys(1,1) = 1.0
@@ -744,35 +741,35 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
 
     Asys(2,1) = - h1
     Asys(2,2) = h2
-    Asys(2,3) = -0.5 * d2
+    Asys(2,3) = 0.5 * d2
     Asys(2,4) = 0.5 * h1
     Asys(2,5) = -0.5 * h2
     Asys(2,6) = -0.5 * n2
 
     Asys(3,1) = 0.5 * h1_2
     Asys(3,2) = 0.5 * h2_2
-    Asys(3,3) = d3 / 6.0
+    Asys(3,3) = -d3 / 6.0
     Asys(3,4) = - h1_2 / 6.0
     Asys(3,5) = - h2_2 / 6.0
     Asys(3,6) = - n3 / 6.0
 
     Asys(4,1) = - h1_3 / 6.0
     Asys(4,2) = h2_3 / 6.0
-    Asys(4,3) = - d4 / 24.0
+    Asys(4,3) = d4 / 24.0
     Asys(4,4) = h1_3 / 24.0
     Asys(4,5) = - h2_3 / 24.0
     Asys(4,6) = - n4 / 24.0
 
     Asys(5,1) = h1_4 / 24.0
     Asys(5,2) = h2_4 / 24.0
-    Asys(5,3) = d5 / 120.0
+    Asys(5,3) = -d5 / 120.0
     Asys(5,4) = - h1_4 / 120.0
     Asys(5,5) = - h2_4 / 120.0
     Asys(5,6) = - n5 / 120.0
 
     Asys(6,1) = - h1_5 / 120.0
     Asys(6,2) = h2_5 / 120.0
-    Asys(6,3) = - d6 / 720.0
+    Asys(6,3) = d6 / 720.0
     Asys(6,4) = h1_5 / 720.0
     Asys(6,5) = - h2_5 / 720.0
     Asys(6,6) = - n6 / 720.0
@@ -805,11 +802,11 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
 
   ! Avoid singularities when h0=0 or h3=0
   if (h0*h3==0.) then
-    g = max( hNeglect, h0+h1+h2+h3 )
-    h0 = max( hMinFrac*g, h0 )
-    h1 = max( hMinFrac*g, h1 )
-    h2 = max( hMinFrac*g, h2 )
-    h3 = max( hMinFrac*g, h3 )
+    hMin = hMinFrac * max( hNeglect, h0+h1+h2+h3 )
+    h0 = max( hMin, h0 )
+    h1 = max( hMin, h1 )
+    h2 = max( hMin, h2 )
+    h3 = max( hMin, h3 )
   endif
 
   ! Auxiliary calculations
@@ -825,37 +822,33 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
   h2_5 = h2_3 * h2_2
   h2_6 = h2_3 * h2_3
 
-  g   = h0 + h1
-  g_2 = g * g
-  g_3 = g * g_2
-  g_4 = g_2 * g_2
-  g_5 = g_4 * g
-  g_6 = g_3 * g_3
+  h01   = h0 + h1 ;  h01_2 = h01 * h01 ;  h01_3 = h01 * h01_2
+  h01_4 = h01_2 * h01_2 ; h01_5 = h01_4 * h01 ; h01_6 = h01_3 * h01_3
+
+  d2 = ( h01_2 - h1_2 ) / h0 ! = (2.0*h1 + h0)
+  d3 = ( h01_3 - h1_3 ) / h0 ! = (3.0*h1_2 + h0*(3.0*h1 + h0))
+  d4 = ( h01_4 - h1_4 ) / h0 ! = (4.0*h1_3 + h0*(6.0*h1_2 + h0*(4.0*h1 + h0)))
+  d5 = ( h01_5 - h1_5 ) / h0 ! = (5.0*h1_4 + h0*(10.0*h1_3 + h0*(10.0*h1_2 + h0*(5.0*h1 + h0))))
+  d6 = ( h01_6 - h1_6 ) / h0 ! = (6.0*h1_5 + h0*(15.0*h1_4 + h0*(20.0*h1_3 + h0*(15.0*h1_2 + h0*(6.0*h1 + h0)))))
+
+  h23   = h2 + h3
+  h23_2 = h23 * h23
+  h23_3 = h23 * h23_2
+  h23_4 = h23_2 * h23_2
+  h23_5 = h23_4 * h23
+  h23_6 = h23_3 * h23_3
+
+  n2 = ( h23_2 - h2_2 ) / h3  !  = 2.0*h2   + h3
+  n3 = ( h23_3 - h2_3 ) / h3  !  = 3.0*h2_2 + h3*(3.0*h2   + h3)
+  n4 = ( h23_4 - h2_4 ) / h3  !  = 4.0*h2_3 + h3*(6.0*h2_2 + h3*(4.0*h2 + h3))
+  n5 = ( h23_5 - h2_5 ) / h3  !  = 5.0*h2_4 + h3*(10.0*h2_3 + h3*(10.0*h2_2 + h3*(5.0*h2 + h3)))
+  n6 = ( h23_6 - h2_6 ) / h3  !  = 6.0*h2_5 + h3*(15.0*h2_4 + h3*(20.0*h2_3 + h3*(15.0*h2_2 + h3*(6.0*h2 + h3))))
 
   h0ph1   = h0 + h1
   h0ph1_2 = h0ph1 * h0ph1
   h0ph1_3 = h0ph1_2 * h0ph1
   h0ph1_4 = h0ph1_2 * h0ph1_2
   h0ph1_5 = h0ph1_3 * h0ph1_2
-
-  d2 = ( h1_2 - g_2 ) / h0
-  d3 = ( h1_3 - g_3 ) / h0
-  d4 = ( h1_4 - g_4 ) / h0
-  d5 = ( h1_5 - g_5 ) / h0
-  d6 = ( h1_6 - g_6 ) / h0
-
-  g   = h2 + h3
-  g_2 = g * g
-  g_3 = g * g_2
-  g_4 = g_2 * g_2
-  g_5 = g_4 * g
-  g_6 = g_3 * g_3
-
-  n2 = ( g_2 - h2_2 ) / h3
-  n3 = ( g_3 - h2_3 ) / h3
-  n4 = ( g_4 - h2_4 ) / h3
-  n5 = ( g_5 - h2_5 ) / h3
-  n6 = ( g_6 - h2_6 ) / h3
 
   ! Compute matrix entries
   Asys(1,1) = 1.0
@@ -867,35 +860,35 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
 
   Asys(2,1) = - h0ph1
   Asys(2,2) = 0.0
-  Asys(2,3) = -0.5 * d2
+  Asys(2,3) = 0.5 * d2
   Asys(2,4) = 0.5 * h1
   Asys(2,5) = -0.5 * h2
   Asys(2,6) = -0.5 * n2
 
   Asys(3,1) = 0.5 * h0ph1_2
   Asys(3,2) = 0.0
-  Asys(3,3) = d3 / 6.0
+  Asys(3,3) = -d3 / 6.0
   Asys(3,4) = - h1_2 / 6.0
   Asys(3,5) = - h2_2 / 6.0
   Asys(3,6) = - n3 / 6.0
 
   Asys(4,1) = - h0ph1_3 / 6.0
   Asys(4,2) = 0.0
-  Asys(4,3) = - d4 / 24.0
+  Asys(4,3) = d4 / 24.0
   Asys(4,4) = h1_3 / 24.0
   Asys(4,5) = - h2_3 / 24.0
   Asys(4,6) = - n4 / 24.0
 
   Asys(5,1) = h0ph1_4 / 24.0
   Asys(5,2) = 0.0
-  Asys(5,3) = d5 / 120.0
+  Asys(5,3) = -d5 / 120.0
   Asys(5,4) = - h1_4 / 120.0
   Asys(5,5) = - h2_4 / 120.0
   Asys(5,6) = - n5 / 120.0
 
   Asys(6,1) = - h0ph1_5 / 120.0
   Asys(6,2) = 0.0
-  Asys(6,3) = - d6 / 720.0
+  Asys(6,3) = d6 / 720.0
   Asys(6,4) = h1_5 / 720.0
   Asys(6,5) = - h2_5 / 720.0
   Asys(6,6) = - n6 / 720.0
@@ -906,38 +899,32 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
 
   alpha = Csys(1)
   beta  = Csys(2)
-  a = Csys(3)
-  b = Csys(4)
-  c = Csys(5)
-  d = Csys(6)
 
   tri_l(2) = alpha
   tri_d(2) = 1.0
   tri_u(2) = beta
-  tri_b(2) = a * u(1) + b * u(2) + c * u(3) + d * u(4)
+  tri_b(2) = Csys(3) * u(1) + Csys(4) * u(2) + Csys(5) * u(3) + Csys(6) * u(4)
 
   ! Boundary conditions: left boundary
-!  h_sum = (h(1) + h(2)) + (h(5) + h(6)) + (h(3) + h(4))
-  g = max( hNeglect, hMinFrac*sum(h(1:6)) )
+!  h_min = hMinFrac * ((h(1) + h(2)) + (h(5) + h(6)) + (h(3) + h(4)))
+  hMin = max( hNeglect, hMinFrac*sum(h(1:6)) )
   x(1) = 0.0
-  do i = 2,7
-    x(i) = x(i-1) + max( g, h(i-1) )
-  enddo
-
   do i = 1,6
-    dx = max( g, h(i) )
+    dx = max( hMin, h(i) )
+    x(i+1) = x(i) + dx
     if (use_2018_answers) then
       do j = 1,6 ; Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j ; enddo
+      Bsys(i) = u(i) * dx
     else  ! Use expressions with less sensitivity to roundoff
       xavg = 0.5 * (x(i+1) + x(i))
-      Asys(i,1) = dx
-      Asys(i,2) = dx * xavg
-      Asys(i,3) = dx * (xavg**2 + C1_12*dx**2)
-      Asys(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
-      Asys(i,5) = dx * (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
-      Asys(i,6) = dx * xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
+      Asys(i,1) = 1.0
+      Asys(i,2) = xavg
+      Asys(i,3) = (xavg**2 + C1_12*dx**2)
+      Asys(i,4) = xavg * (xavg**2 + 0.25*dx**2)
+      Asys(i,5) = (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
+      Asys(i,6) = xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
+      Bsys(i) = u(i)
     endif
-    Bsys(i) = u(i) * dx
 
   enddo
 
@@ -958,11 +945,11 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
 
   ! Avoid singularities when h0=0 or h3=0
   if (h0*h3==0.) then
-    g = max( hNeglect, h0+h1+h2+h3 )
-    h0 = max( hMinFrac*g, h0 )
-    h1 = max( hMinFrac*g, h1 )
-    h2 = max( hMinFrac*g, h2 )
-    h3 = max( hMinFrac*g, h3 )
+    hMin = hMinFrac * max( hNeglect, h0+h1+h2+h3 )
+    h0 = max( hMin, h0 )
+    h1 = max( hMin, h1 )
+    h2 = max( hMin, h2 )
+    h3 = max( hMin, h3 )
   endif
 
   ! Auxiliary calculations
@@ -978,37 +965,37 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
   h2_5 = h2_3 * h2_2
   h2_6 = h2_3 * h2_3
 
-  g   = h0 + h1
-  g_2 = g * g
-  g_3 = g * g_2
-  g_4 = g_2 * g_2
-  g_5 = g_4 * g
-  g_6 = g_3 * g_3
+  h01   = h0 + h1
+  h01_2 = h01 * h01
+  h01_3 = h01 * h01_2
+  h01_4 = h01_2 * h01_2
+  h01_5 = h01_4 * h01
+  h01_6 = h01_3 * h01_3
+
+  d2 = ( h01_2 - h1_2 ) / h0 ! = (2.0*h1 + h0)
+  d3 = ( h01_3 - h1_3 ) / h0 ! = (3.0*h1_2 + h0*(3.0*h1 + h0))
+  d4 = ( h01_4 - h1_4 ) / h0 ! = (4.0*h1_3 + h0*(6.0*h1_2 + h0*(4.0*h1 + h0)))
+  d5 = ( h01_5 - h1_5 ) / h0 ! = (5.0*h1_4 + h0*(10.0*h1_3 + h0*(10.0*h1_2 + h0*(5.0*h1 + h0))))
+  d6 = ( h01_6 - h1_6 ) / h0 ! = (6.0*h1_5 + h0*(15.0*h1_4 + h0*(20.0*h1_3 + h0*(15.0*h1_2 + h0*(6.0*h1 + h0)))))
+
+  h23   = h2 + h3
+  h23_2 = h23 * h23
+  h23_3 = h23 * h23_2
+  h23_4 = h23_2 * h23_2
+  h23_5 = h23_4 * h23
+  h23_6 = h23_3 * h23_3
+
+  n2 = ( h23_2 - h2_2 ) / h3  !  = 2.0*h2   + h3
+  n3 = ( h23_3 - h2_3 ) / h3  !  = 3.0*h2_2 + h3*(3.0*h2   + h3)
+  n4 = ( h23_4 - h2_4 ) / h3  !  = 4.0*h2_3 + h3*(6.0*h2_2 + h3*(4.0*h2 + h3))
+  n5 = ( h23_5 - h2_5 ) / h3  !  = 5.0*h2_4 + h3*(10.0*h2_3 + h3*(10.0*h2_2 + h3*(5.0*h2 + h3)))
+  n6 = ( h23_6 - h2_6 ) / h3  !  = 6.0*h2_5 + h3*(15.0*h2_4 + h3*(20.0*h2_3 + h3*(15.0*h2_2 + h3*(6.0*h2 + h3))))
 
   h2ph3   = h2 + h3
   h2ph3_2 = h2ph3 * h2ph3
   h2ph3_3 = h2ph3_2 * h2ph3
   h2ph3_4 = h2ph3_2 * h2ph3_2
   h2ph3_5 = h2ph3_3 * h2ph3_2
-
-  d2 = ( h1_2 - g_2 ) / h0
-  d3 = ( h1_3 - g_3 ) / h0
-  d4 = ( h1_4 - g_4 ) / h0
-  d5 = ( h1_5 - g_5 ) / h0
-  d6 = ( h1_6 - g_6 ) / h0
-
-  g   = h2 + h3
-  g_2 = g * g
-  g_3 = g * g_2
-  g_4 = g_2 * g_2
-  g_5 = g_4 * g
-  g_6 = g_3 * g_3
-
-  n2 = ( g_2 - h2_2 ) / h3
-  n3 = ( g_3 - h2_3 ) / h3
-  n4 = ( g_4 - h2_4 ) / h3
-  n5 = ( g_5 - h2_5 ) / h3
-  n6 = ( g_6 - h2_6 ) / h3
 
   ! Compute matrix entries
   Asys(1,1) = 1.0
@@ -1020,35 +1007,35 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
 
   Asys(2,1) =   0.0
   Asys(2,2) = h2ph3
-  Asys(2,3) =   -0.5 * d2
+  Asys(2,3) =   0.5 * d2
   Asys(2,4) =   0.5 * h1
   Asys(2,5) =   -0.5 * h2
   Asys(2,6) =   -0.5 * n2
 
   Asys(3,1) =   0.0
   Asys(3,2) = 0.5 * h2ph3_2
-  Asys(3,3) =   d3 / 6.0
+  Asys(3,3) =   -d3 / 6.0
   Asys(3,4) =   - h1_2 / 6.0
   Asys(3,5) =   - h2_2 / 6.0
   Asys(3,6) =   - n3 / 6.0
 
   Asys(4,1) =   0.0
   Asys(4,2) = h2ph3_3 / 6.0
-  Asys(4,3) =   - d4 / 24.0
+  Asys(4,3) =   d4 / 24.0
   Asys(4,4) =   h1_3 / 24.0
   Asys(4,5) =   - h2_3 / 24.0
   Asys(4,6) =   - n4 / 24.0
 
   Asys(5,1) =   0.0
   Asys(5,2) = h2ph3_4 / 24.0
-  Asys(5,3) =   d5 / 120.0
+  Asys(5,3) =   - d5 / 120.0
   Asys(5,4) =   - h1_4 / 120.0
   Asys(5,5) =   - h2_4 / 120.0
   Asys(5,6) =   - n5 / 120.0
 
   Asys(6,1) =   0.0
   Asys(6,2) = h2ph3_5 / 120.0
-  Asys(6,3) =   - d6 / 720.0
+  Asys(6,3) =   d6 / 720.0
   Asys(6,4) =   h1_5 / 720.0
   Asys(6,5) =   - h2_5 / 720.0
   Asys(6,6) =   - n6 / 720.0
@@ -1071,26 +1058,24 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
 
   ! Boundary conditions: right boundary
 !  h_sum = (h(N-3) + h(N-2)) + ((h(N-1) + h(N)) + (h(N-5) + h(N-4)))
-  g = max( hNeglect, hMinFrac*sum(h(N-5:N)) )
+  hMin = max( hNeglect, hMinFrac*sum(h(N-5:N)) )
   x(1) = 0.0
-  do i = 2,7
-    x(i) = x(i-1) + max( g, h(N-7+i) )
-  enddo
-
   do i = 1,6
-    dx = max( g, h(N-6+i) )
+    dx = max( hMin, h(N-6+i) )
+    x(i+1) = x(i) + dx
     if (use_2018_answers) then
       do j = 1,6 ; Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j ; enddo
+      Bsys(i) = u(N-6+i) * dx
     else  ! Use expressions with less sensitivity to roundoff
       xavg = 0.5 * (x(i+1) + x(i))
-      Asys(i,1) = dx
-      Asys(i,2) = dx * xavg
-      Asys(i,3) = dx * (xavg**2 + C1_12*dx**2)
-      Asys(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
-      Asys(i,5) = dx * (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
-      Asys(i,6) = dx * xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
+      Asys(i,1) = 1.0
+      Asys(i,2) = xavg
+      Asys(i,3) = (xavg**2 + C1_12*dx**2)
+      Asys(i,4) = xavg * (xavg**2 + 0.25*dx**2)
+      Asys(i,5) = (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
+      Asys(i,6) = xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
+      Bsys(i) = u(N-6+i)
     endif
-    Bsys(i) = u(N-6+i) * dx
 
   enddo
 
