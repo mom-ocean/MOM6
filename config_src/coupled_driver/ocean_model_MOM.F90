@@ -76,6 +76,14 @@ public ocean_model_init_sfc, ocean_model_flux_init
 public ocean_model_restart
 public ice_ocn_bnd_type_chksum
 public ocean_public_type_chksum
+public ocean_model_data_get
+
+!> This interface extracts a named scalar field or array from the ocean surface or public type
+interface ocean_model_data_get
+  module procedure ocean_model_data1D_get
+  module procedure ocean_model_data2D_get
+end interface
+
 
 !> This type is used for communication with other components via the FMS coupler.
 !! The element names and types can be changed only with great deliberation, hence
@@ -999,6 +1007,79 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
   !  if (.not.is_root_pe()) value = 0.0
 
 end subroutine Ocean_stock_pe
+
+!> This subroutine extracts a named 2-D field from the ocean surface or public type
+subroutine ocean_model_data2D_get(OS, Ocean, name, array2D, isc, jsc)
+  use MOM_constants, only : CELSIUS_KELVIN_OFFSET
+  type(ocean_state_type),     pointer    :: OS    !< A pointer to the structure containing the
+                                                  !! internal ocean state (intent in).
+  type(ocean_public_type),    intent(in) :: Ocean !< A structure containing various publicly
+                                                  !! visible ocean surface fields.
+  character(len=*)          , intent(in) :: name  !< The name of the field to extract
+  real, dimension(isc:,jsc:), intent(out):: array2D !< The values of the named field, it must
+                                                  !! cover only the computational domain
+  integer                   , intent(in) :: isc   !< The starting i-index of array2D
+  integer                   , intent(in) :: jsc   !< The starting j-index of array2D
+
+  integer :: g_isc, g_iec, g_jsc, g_jec,g_isd, g_ied, g_jsd, g_jed, i, j
+
+  if (.not.associated(OS)) return
+  if (.not.OS%is_ocean_pe) return
+
+! The problem is %areaT is on MOM domain but Ice_Ocean_Boundary%... is on mpp domain.
+! We want to return the MOM data on the mpp (compute) domain
+! Get MOM domain extents
+  call mpp_get_compute_domain(OS%grid%Domain%mpp_domain, g_isc, g_iec, g_jsc, g_jec)
+  call mpp_get_data_domain   (OS%grid%Domain%mpp_domain, g_isd, g_ied, g_jsd, g_jed)
+
+  g_isc = g_isc-g_isd+1 ; g_iec = g_iec-g_isd+1 ; g_jsc = g_jsc-g_jsd+1 ; g_jec = g_jec-g_jsd+1
+
+
+  select case(name)
+  case('area')
+     array2D(isc:,jsc:) = OS%US%L_to_m**2*OS%grid%areaT(g_isc:g_iec,g_jsc:g_jec)
+  case('mask')
+     array2D(isc:,jsc:) = OS%grid%mask2dT(g_isc:g_iec,g_jsc:g_jec)
+!OR same result
+!     do j=g_jsc,g_jec ; do i=g_isc,g_iec
+!        array2D(isc+i-g_isc,jsc+j-g_jsc) = OS%grid%mask2dT(i,j)
+!     enddo ; enddo
+  case('t_surf')
+     array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
+  case('t_pme')
+     array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
+  case('t_runoff')
+     array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
+  case('t_calving')
+     array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
+  case('btfHeat')
+     array2D(isc:,jsc:) = 0
+  case default
+     call MOM_error(FATAL,'get_ocean_grid_data2D: unknown argument name='//name)
+  end select
+
+end subroutine ocean_model_data2D_get
+
+!> This subroutine extracts a named scalar field from the ocean surface or public type
+subroutine ocean_model_data1D_get(OS, Ocean, name, value)
+  type(ocean_state_type),     pointer    :: OS    !< A pointer to the structure containing the
+                                                  !! internal ocean state (intent in).
+  type(ocean_public_type),    intent(in) :: Ocean !< A structure containing various publicly
+                                                  !! visible ocean surface fields.
+  character(len=*)          , intent(in) :: name  !< The name of the field to extract
+  real                      , intent(out):: value !< The value of the named field
+
+  if (.not.associated(OS)) return
+  if (.not.OS%is_ocean_pe) return
+
+  select case(name)
+  case('c_p')
+     value = OS%C_p
+  case default
+     call MOM_error(FATAL,'get_ocean_grid_data1D: unknown argument name='//name)
+  end select
+
+end subroutine ocean_model_data1D_get
 
 !> Write out FMS-format checsums on fields from the ocean surface state
 subroutine ocean_public_type_chksum(id, timestep, ocn)
