@@ -881,13 +881,13 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
 
   var = real(CS%ntrunc)
   call write_field(trim(energypath_nc), vars(1)%name, var, "append", &
-                   var_desc=vars(1), time_level=reday, G=G, GV=GV)
+                   var_desc=vars(1), time_level=reday, G=G)
   call write_field(trim(energypath_nc), vars(2)%name, toten,"append", &
-                   var_desc=vars(2), time_level=reday, G=G, GV=GV)
+                   var_desc=vars(2), time_level=reday, G=G)
   call write_field(trim(energypath_nc), vars(3)%name, PE, "append", &
-                   var_desc=vars(3), time_level=reday, G=G, GV=GV)
+                   var_desc=vars(3), time_level=reday, GV=GV)
   call write_field(trim(energypath_nc), vars(4)%name, KE, "append", &
-                   var_desc=vars(4), time_level=reday, G=G, GV=GV)
+                   var_desc=vars(4), time_level=reday, GV=GV)
   call write_field(trim(energypath_nc), vars(5)%name, H_0APE, "append", &
                    var_desc=vars(5), time_level=reday, G=G, GV=GV)
   call write_field(trim(energypath_nc), vars(6)%name, mass_lay, "append", &
