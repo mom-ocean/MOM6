@@ -118,6 +118,7 @@ type, public :: OBC_segment_type
   logical :: nudged_grad    !< Optional supplement to nudge normal gradient of tangential velocity.
   logical :: specified      !< Boundary normal velocity fixed to external value.
   logical :: specified_tan  !< Boundary tangential velocity fixed to external value.
+  logical :: specified_grad !< Boundary gradient of tangential velocity fixed to external value.
   logical :: open           !< Boundary is open for continuity solver.
   logical :: gradient       !< Zero gradient at boundary.
   logical :: values_needed  !< Whether or not any external OBC fields are needed.
@@ -436,6 +437,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
       OBC%segment(l)%nudged_grad = .false.
       OBC%segment(l)%specified = .false.
       OBC%segment(l)%specified_tan = .false.
+      OBC%segment(l)%specified_grad = .false.
       OBC%segment(l)%open = .false.
       OBC%segment(l)%gradient = .false.
       OBC%segment(l)%values_needed = .false.
@@ -941,6 +943,10 @@ subroutine setup_u_point_obc(OBC, G, US, segment_str, l_seg, PF, reentrant_y)
       OBC%segment%u_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE_TAN') then
       OBC%segment(l_seg)%specified_tan = .true.
+      OBC%segment%v_values_needed = .true.
+    elseif (trim(action_str(a_loop)) == 'SIMPLE_GRAD') then
+      OBC%segment(l_seg)%specified_grad = .true.
+      OBC%segment%g_values_needed = .true.
     else
       call MOM_error(FATAL, "MOM_open_boundary.F90, setup_u_point_obc: "//&
                      "String '"//trim(action_str(a_loop))//"' not understood.")
@@ -1078,6 +1084,10 @@ subroutine setup_v_point_obc(OBC, G, US, segment_str, l_seg, PF, reentrant_x)
       OBC%segment%v_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE_TAN') then
       OBC%segment(l_seg)%specified_tan = .true.
+      OBC%segment%u_values_needed = .true.
+    elseif (trim(action_str(a_loop)) == 'SIMPLE_GRAD') then
+      OBC%segment(l_seg)%specified_grad = .true.
+      OBC%segment%g_values_needed = .true.
     else
       call MOM_error(FATAL, "MOM_open_boundary.F90, setup_v_point_obc: "//&
                      "String '"//trim(action_str(a_loop))//"' not understood.")
@@ -2774,7 +2784,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            enddo ; enddo
          endif
          if (segment%nudged_grad) then
-           do k=1,nz ; do J=segment%HI%JsdB,segment%HI%JedB
+           do k=1,nz ; do I=segment%HI%IsdB,segment%HI%IedB
              ! dhdt gets set to 0 on inflow in oblique case
              if (ry_tang_rad(I,J,k) <= 0.0) then
                tau = segment%Velocity_nudging_timescale_in
@@ -3211,7 +3221,7 @@ subroutine allocate_OBC_segment_data(OBC, segment)
       allocate(segment%nudged_tangential_grad(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%nudged_tangential_grad(:,:,:)=0.0
     endif
     if (OBC%specified_vorticity .or. OBC%specified_strain .or. segment%radiation_grad .or. &
-              segment%oblique_grad) then
+              segment%oblique_grad .or. segment%specified_grad) then
       allocate(segment%tangential_grad(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%tangential_grad(:,:,:)=0.0
     endif
     if (segment%oblique) then
@@ -3254,7 +3264,7 @@ subroutine allocate_OBC_segment_data(OBC, segment)
       allocate(segment%nudged_tangential_grad(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%nudged_tangential_grad(:,:,:)=0.0
     endif
     if (OBC%specified_vorticity .or. OBC%specified_strain .or. segment%radiation_grad .or. &
-              segment%oblique_grad) then
+              segment%oblique_grad .or. segment%specified_grad) then
       allocate(segment%tangential_grad(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%tangential_grad(:,:,:)=0.0
     endif
     if (segment%oblique) then
@@ -3761,8 +3771,9 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
         endif
       endif
 
-      if (trim(segment%field(m)%name) == 'U' .or. trim(segment%field(m)%name) == 'V') then
-        if (segment%field(m)%fid>0) then ! calculate external BT velocity and transport if needed
+      if (segment%field(m)%fid>0) then
+        ! calculate external BT velocity and transport if needed
+        if (trim(segment%field(m)%name) == 'U' .or. trim(segment%field(m)%name) == 'V') then
           if (trim(segment%field(m)%name) == 'U' .and. segment%is_E_or_W) then
             I=is_obc
             do j=js_obc+1,je_obc
@@ -3809,23 +3820,27 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
               if (associated(segment%nudged_tangential_vel)) &
                 segment%nudged_tangential_vel(I,J,:) = segment%tangential_vel(I,J,:)
             enddo
-          elseif (trim(segment%field(m)%name) == 'DVDX' .and. segment%is_E_or_W .and. &
-                  associated(segment%tangential_grad)) then
-            I=is_obc
-            do J=js_obc,je_obc
-              do k=1,G%ke
-                segment%tangential_grad(I,J,k) = US%T_to_s*segment%field(m)%buffer_dst(I,J,k)
-              enddo
-            enddo
-          elseif (trim(segment%field(m)%name) == 'DUDY' .and. segment%is_N_or_S .and. &
-                  associated(segment%tangential_grad)) then
-            J=js_obc
-            do I=is_obc,ie_obc
-              do k=1,G%ke
-                segment%tangential_grad(I,J,k) = US%T_to_s*segment%field(m)%buffer_dst(I,J,k)
-              enddo
-            enddo
           endif
+        elseif (trim(segment%field(m)%name) == 'DVDX' .and. segment%is_E_or_W .and. &
+                associated(segment%tangential_grad)) then
+          I=is_obc
+          do J=js_obc,je_obc
+            do k=1,G%ke
+              segment%tangential_grad(I,J,k) = US%T_to_s*segment%field(m)%buffer_dst(I,J,k)
+              if (associated(segment%nudged_tangential_grad)) &
+                segment%nudged_tangential_grad(I,J,:) = segment%tangential_grad(I,J,:)
+            enddo
+          enddo
+        elseif (trim(segment%field(m)%name) == 'DUDY' .and. segment%is_N_or_S .and. &
+                associated(segment%tangential_grad)) then
+          J=js_obc
+          do I=is_obc,ie_obc
+            do k=1,G%ke
+              segment%tangential_grad(I,J,k) = US%T_to_s*segment%field(m)%buffer_dst(I,J,k)
+              if (associated(segment%nudged_tangential_grad)) &
+                segment%nudged_tangential_grad(I,J,:) = segment%tangential_grad(I,J,:)
+            enddo
+          enddo
         endif
       endif
 

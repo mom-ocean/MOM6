@@ -49,6 +49,7 @@ subroutine dumbbell_initialize_topography( D, G, param_file, max_depth )
   ! Local variables
   integer   :: i, j
   real      :: x, y, delta, dblen, dbfrac
+  logical   :: dbrotate
 
   call get_param(param_file, mdl,"DUMBBELL_LEN",dblen, &
                 'Lateral Length scale for dumbbell.',&
@@ -56,20 +57,35 @@ subroutine dumbbell_initialize_topography( D, G, param_file, max_depth )
   call get_param(param_file, mdl,"DUMBBELL_FRACTION",dbfrac, &
                 'Meridional fraction for narrow part of dumbbell.',&
                  units='nondim', default=0.5, do_not_log=.false.)
+  call get_param(param_file, mdl, "DUMBBELL_ROTATION", dbrotate, &
+                'Logical for rotation of dumbbell domain.',&
+                 units='nondim', default=.false., do_not_log=.false.)
 
   if (G%x_axis_units == 'm') then
     dblen=dblen*1.e3
   endif
 
-  do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    ! Compute normalized zonal coordinates (x,y=0 at center of domain)
-    x = ( G%geoLonT(i,j) ) / dblen
-    y = ( G%geoLatT(i,j)  ) / G%len_lat
-    D(i,j) = G%max_depth
-    if ((x>=-0.25 .and. x<=0.25) .and. (y <= -0.5*dbfrac .or. y >= 0.5*dbfrac)) then
-      D(i,j) = 0.0
-    endif
-  enddo ; enddo
+  if (dbrotate) then
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      ! Compute normalized zonal coordinates (x,y=0 at center of domain)
+      x = ( G%geoLonT(i,j) ) / G%len_lon
+      y = ( G%geoLatT(i,j)  ) / dblen
+      D(i,j) = G%max_depth
+      if ((y>=-0.25 .and. y<=0.25) .and. (x <= -0.5*dbfrac .or. x >= 0.5*dbfrac)) then
+        D(i,j) = 0.0
+      endif
+    enddo ; enddo
+  else
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      ! Compute normalized zonal coordinates (x,y=0 at center of domain)
+      x = ( G%geoLonT(i,j) ) / dblen
+      y = ( G%geoLatT(i,j)  ) / G%len_lat
+      D(i,j) = G%max_depth
+      if ((x>=-0.25 .and. x<=0.25) .and. (y <= -0.5*dbfrac .or. y >= 0.5*dbfrac)) then
+        D(i,j) = 0.0
+      endif
+    enddo ; enddo
+  endif
 
 end subroutine dumbbell_initialize_topography
 
@@ -209,6 +225,7 @@ subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, param_file
   real    :: x, y, dblen
   real    :: T_ref, T_Light, T_Dense, S_ref, S_Light, S_Dense, a1, frac_dense, k_frac, res_rat
   logical :: just_read    ! If true, just read parameters but set nothing.
+  logical :: dbrotate     ! If true, rotate the domain.
   character(len=20) :: verticalCoordinate, density_profile
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -230,6 +247,9 @@ subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, param_file
   call get_param(param_file, mdl,"DUMBBELL_LEN",dblen, &
                 'Lateral Length scale for dumbbell ',&
                  units='k', default=600., do_not_log=just_read)
+  call get_param(param_file, mdl, "DUMBBELL_ROTATION", dbrotate, &
+                'Logical for rotation of dumbbell domain.',&
+                 units='nondim', default=.false., do_not_log=just_read)
 
   if (G%x_axis_units == 'm') then
     dblen=dblen*1.e3
@@ -238,7 +258,12 @@ subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, param_file
   do j=G%jsc,G%jec
     do i=G%isc,G%iec
     ! Compute normalized zonal coordinates (x,y=0 at center of domain)
-      x = ( G%geoLonT(i,j) ) / dblen
+      if (dbrotate) then
+        ! This is really y in the rotated case
+        x = ( G%geoLatT(i,j) ) / dblen
+      else
+        x = ( G%geoLonT(i,j) ) / dblen
+      endif
       do k=1,nz
         T(i,j,k)=T_surf
       enddo
@@ -278,9 +303,13 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, 
   integer :: i, j, k, nz
   real :: x, zi, zmid, dist, min_thickness, dblen
   real :: mld, S_ref, S_range, S_dense, T_ref, sill_height
+  logical :: dbrotate    ! If true, rotate the domain.
   call get_param(param_file, mdl,"DUMBBELL_LEN",dblen, &
                 'Lateral Length scale for dumbbell ',&
                  units='k', default=600., do_not_log=.true.)
+  call get_param(param_file, mdl, "DUMBBELL_ROTATION", dbrotate, &
+                'Logical for rotation of dumbbell domain.',&
+                 units='nondim', default=.false., do_not_log=.true.)
 
   if (G%x_axis_units == 'm') then
     dblen=dblen*1.e3
@@ -307,7 +336,12 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, 
     do i = G%isc,G%iec
       if (G%mask2dT(i,j) > 0.) then
         ! nondimensional x position
-        x = (G%geoLonT(i,j) ) / dblen
+        if (dbrotate) then
+          ! This is really y in the rotated case
+          x = ( G%geoLatT(i,j) ) / dblen
+        else
+          x = ( G%geoLonT(i,j) ) / dblen
+        endif
         if (x > 0.25 .or. x < -0.25) then
           ! scale restoring by depth into sponge
           Idamp(i,j) = 1. / sponge_time_scale
@@ -339,18 +373,23 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, 
 
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       ! Compute normalized zonal coordinates (x,y=0 at center of domain)
-       x = ( G%geoLonT(i,j) ) / dblen
-       if (x>=0.25 ) then
-         do k=1,nz
-           S(i,j,k)=S_ref + 0.5*S_range
-         enddo
-       endif
-       if (x<=-0.25 ) then
-         do k=1,nz
-           S(i,j,k)=S_ref - 0.5*S_range
-         enddo
-       endif
-     enddo ; enddo
+      if (dbrotate) then
+        ! This is really y in the rotated case
+        x = ( G%geoLatT(i,j) ) / dblen
+      else
+        x = ( G%geoLonT(i,j) ) / dblen
+      endif
+      if (x>=0.25 ) then
+        do k=1,nz
+          S(i,j,k)=S_ref + 0.5*S_range
+        enddo
+      endif
+      if (x<=-0.25 ) then
+        do k=1,nz
+          S(i,j,k)=S_ref - 0.5*S_range
+        enddo
+      endif
+    enddo ; enddo
   endif
 
   if (associated(tv%S)) call set_up_ALE_sponge_field(S, G, tv%S, ACSp)
