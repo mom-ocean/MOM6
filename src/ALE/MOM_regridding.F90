@@ -115,6 +115,10 @@ type, public :: regridding_CS ; private
   !! If false, integrate from the bottom upward, as does the rest of the model.
   logical :: integrate_downward_for_e = .true.
 
+  !> If true, use the order of arithmetic and expressions that recover the remapping answers from 2018.
+  !! If false, use more robust forms of the same remapping expressions.
+  logical :: remap_answers_2018 = .true.
+
   type(zlike_CS),  pointer :: zlike_CS  => null() !< Control structure for z-like coordinate generator
   type(sigma_CS),  pointer :: sigma_CS  => null() !< Control structure for sigma coordinate generator
   type(rho_CS),    pointer :: rho_CS    => null() !< Control structure for rho coordinate generator
@@ -194,6 +198,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   character(len=12) :: expected_units ! Temporary strings
   logical :: tmpLogical, fix_haloclines, set_max, do_sum, main_parameters
   logical :: coord_is_state_dependent, ierr
+  logical :: default_2018_answers, remap_answers_2018
   real :: filt_len, strat_tol, index_scale, tmpReal
   real :: maximum_depth ! The maximum depth of the ocean [m] (not in Z).
   real :: dz_fixed_sfc, Rho_avg_depth, nlay_sfc_int
@@ -251,6 +256,15 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
                  "used. It can be one of the following schemes: "//&
                  trim(regriddingInterpSchemeDoc), default=trim(string2))
     call set_regrid_params(CS, interp_scheme=string)
+
+    call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
+    call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=default_2018_answers)
+    call set_regrid_params(CS, remap_answers_2018=remap_answers_2018)
   endif
 
   if (main_parameters .and. coord_is_state_dependent) then
@@ -1343,8 +1357,9 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
   real    :: dh
 #endif
 
-  !### Try replacing both of these with GV%H_subroundoff
-  if (GV%Boussinesq) then
+  if (.not.CS%remap_answers_2018) then
+    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+  elseif (GV%Boussinesq) then
     h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
   else
     h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
@@ -1455,8 +1470,9 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, h_new, dzInterface, CS )
   real :: depth
   real :: h_neglect, h_neglect_edge
 
-  !### Try replacing both of these with GV%H_subroundoff
-  if (GV%Boussinesq) then
+  if (.not.CS%remap_answers_2018) then
+    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+  elseif (GV%Boussinesq) then
     h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
   else
     h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
@@ -1588,8 +1604,9 @@ subroutine build_grid_SLight(G, GV, h, tv, dzInterface, CS)
   integer :: i, j, k, nz
   real :: h_neglect, h_neglect_edge
 
-  !### Try replacing both of these with GV%H_subroundoff
-  if (GV%Boussinesq) then
+  if (.not.CS%remap_answers_2018) then
+    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+  elseif (GV%Boussinesq) then
     h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
   else
     h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
@@ -2213,7 +2230,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
              interp_scheme, depth_of_time_filter_shallow, depth_of_time_filter_deep, &
              compress_fraction, dz_min_surface, nz_fixed_surface, Rho_ML_avg_depth, &
              nlay_ML_to_interior, fix_haloclines, halocline_filt_len, &
-             halocline_strat_tol, integrate_downward_for_e, &
+             halocline_strat_tol, integrate_downward_for_e, remap_answers_2018, &
              adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, adaptAlpha, adaptDoMin)
   type(regridding_CS), intent(inout) :: CS !< Regridding control structure
   logical, optional, intent(in) :: boundary_extrapolation !< Extrapolate in boundary cells
@@ -2238,6 +2255,9 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
                                                     !! halocline region.
   logical, optional, intent(in) :: integrate_downward_for_e !< If true, integrate for interface positions downward
                                                     !! from the top.
+  logical, optional, intent(in) :: remap_answers_2018 !< If true, use the order of arithmetic and expressions
+                                                    !! that recover the remapping answers from 2018.  Otherwise
+                                                    !! use more robust but mathematically equivalent expressions.
   real,    optional, intent(in) :: adaptTimeRatio   !< Ratio of the ALE timestep to the grid timescale [nondim].
   real,    optional, intent(in) :: adaptZoom        !< Depth of near-surface zooming region [H ~> m or kg m-2].
   real,    optional, intent(in) :: adaptZoomCoeff   !< Coefficient of near-surface zooming diffusivity [nondim].
@@ -2265,6 +2285,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   if (present(min_thickness)) CS%min_thickness = min_thickness
   if (present(compress_fraction)) CS%compressibility_fraction = compress_fraction
   if (present(integrate_downward_for_e)) CS%integrate_downward_for_e = integrate_downward_for_e
+  if (present(remap_answers_2018)) CS%remap_answers_2018 = remap_answers_2018
 
   select case (CS%regridding_scheme)
   case (REGRIDDING_ZSTAR)
