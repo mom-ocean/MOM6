@@ -537,7 +537,6 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, var_desc, 
   real, allocatable, dimension(:) :: data_tmp
   integer :: num_dims, time_index, substring_index
   integer :: dim_unlim_size, dim_unlim_index ! size of the unlimited dimension
-  integer :: is, ie
   integer, dimension(1) :: start, nwrite ! indices for first data value and number of values to write
   character(len=40) :: dim_unlim_name ! name of the unlimited dimension in the file
   character(len=64) :: checksum_char ! checksum character array created from checksum argument
@@ -581,8 +580,6 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, var_desc, 
   if (present(GV)) &
   call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
                                    dim_lengths, num_dims, GV=GV)
-  call get_global_io_domain_indices(fileObj, trim(dim_names(1)), is, ie)
-
   ! register the field if it is not in the file
   if (.not.(variable_exists(fileobj, trim(fieldname)))) then
     call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
@@ -691,12 +688,12 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
   type(FmsNetcdfDomainFile_t) :: fileobj ! netCDF file object returned by call to open_file
   type(FmsNetcdfFile_t) :: fileobj_nodd ! netCDF file object returned by call to open_file
   logical :: file_open_success !.true. if call to open_file is successful
-  logical :: var_exists ! .true. if variable exists in file
   real :: file_time ! most recent time currently written to file
   real, pointer :: data_tmp(:,:) => null()
   integer :: i, j, is, ie, js, je, ndims, num_dims, time_index, substring_index
   integer :: dim_unlim_size, dim_unlim_index ! size and dimension index of the unlimited dimension
   integer, dimension(2) :: start, nwrite ! indices for starting points and number of values to write
+  integer, allocatable ::  compI(:), compJ(:)
   character(len=40) :: dim_unlim_name ! name of the unlimited dimension in the file
   character(len=1024) :: filename_temp
   character(len=64) :: checksum_char ! checksum character array created from checksum argument
@@ -718,7 +715,6 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
   num_dims = 0
   dim_unlim_index = 0
   file_open_success = .false.
-  var_exists = .false.
   
   ! define the io domain for 1-pe jobs because it is required to write domain-decomposed files
   if (mpp_get_domain_npes(domain%mpp_domain) .eq. 1 ) then
@@ -728,14 +724,8 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
                                   is_restart=.false.)
-  if (file_open_success) then
-    if (variable_exists(fileobj, trim(fieldname))) then
-      dim_unlim_index = get_variable_unlimited_dimension_index(fileobj, trim(fieldname))
-      var_exists = .true.
-    endif
-  else
-    call MOM_error(FATAL, "MOM_io:write_field_2d_dd: unable to open file "//trim(filename_temp))
-  endif
+  if (.not.(file_open_success)) &
+      call MOM_error(FATAL, "MOM_io:write_field_2d_dd: unable to open file "//trim(filename_temp))
 
   ! get the dimension names and lengths
   if (present(G)) then
@@ -749,7 +739,7 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
     call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, var_desc%t_grid, dim_names, &
                                     dim_lengths, num_dims, GV=GV)
 
-  if (.not.(var_exists)) then
+  if (.not. (variable_exists(fileobj, trim(fieldname)))) then
     ! register the variable and its attributes
     call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
     call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(var_desc%units))
@@ -762,15 +752,15 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
       call register_variable_attribute(fileObj_nodd, trim(fieldname), "checksum", checksum_char)
     endif
   endif
-
-  write(*, "(A,A,A,A)") "dim 1 is ", trim(dim_names(1)), " dim 2 is  ", trim(dim_names(2))
-
-  call get_global_io_domain_indices(fileObj, trim(dim_names(1)), is, ie)
-  call get_global_io_domain_indices(fileObj, trim(dim_names(2)), js, je)
+  
+  call get_compute_domain_dimension_indices(fileObj, trim(dim_names(1)), compI)
+  call get_compute_domain_dimension_indices(fileObj, trim(dim_names(2)), compJ)
+  write(*, "(A,I1,A,I1)") "is is ", compI(1), " ie is  ", compJ(2)
+  write(*, "(A,I1,A,I1)") "js is ", compJ(1), " je is  ", compJ(2)
 
   ndims=2
-  start(:) = (/is, ie/)
-  nwrite(:) = (/ie, je/)
+  start(:) = 1
+  nwrite(:) = (/compJ(1), compJ(2)/)
   if (present(corner)) then
     do i=1,ndims
       if (corner(i) .le. nwrite(i)) then
@@ -832,10 +822,10 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
         call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/), edge_lengths=(/1/))
       endif
     endif
-    call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
+    call write_data(fileobj, trim(fieldname), data_tmp(compI(1):compI(2),compJ(1):compJ(2)), corner=start, edge_lengths=nwrite, &
                     unlim_dim_level=time_index)
   else
-    call write_data(fileobj, trim(fieldname), data_tmp(is:ie,js:je), corner=start, edge_lengths=nwrite)
+    call write_data(fileobj, trim(fieldname), data_tmp(compI(1):compI(2),compJ(1):compJ(2)), corner=start, edge_lengths=nwrite)
   endif
 
   ! close the file
