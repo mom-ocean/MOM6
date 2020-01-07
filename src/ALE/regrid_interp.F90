@@ -77,20 +77,20 @@ contains
 !! continuous linear scheme (P1M h2).
 subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
      ppoly0_coefs, degree, h_neglect, h_neglect_edge)
-  type(interp_CS_type),intent(in)    :: CS !< Interpolation control structure
-  real, dimension(:),  intent(in)    :: densities !< Actual cell densities
-  integer,             intent(in)    :: n0 !< Number of cells on source grid
-  real, dimension(:),  intent(in)    :: h0 !< cell widths on source grid
-  real, dimension(:,:),intent(inout) :: ppoly0_E  !< Edge value of polynomial
-  real, dimension(:,:),intent(inout) :: ppoly0_S  !< Edge slope of polynomial
-  real, dimension(:,:),intent(inout) :: ppoly0_coefs !< Coefficients of polynomial
-  integer,             intent(inout) :: degree    !< The degree of the polynomials
-  real,      optional, intent(in)    :: h_neglect !< A negligibly small width for the
-                                           !! purpose of cell reconstructions
-                                           !! in the same units as h0.
-  real,      optional, intent(in)    :: h_neglect_edge !< A negligibly small width
-                                           !! for the purpose of edge value calculations
-                                           !! in the same units as h0.
+  type(interp_CS_type),  intent(in)    :: CS !< Interpolation control structure
+  integer,               intent(in)    :: n0 !< Number of cells on source grid
+  real, dimension(n0),   intent(in)    :: densities !< Actual cell densities
+  real, dimension(n0),   intent(in)    :: h0 !< cell widths on source grid
+  real, dimension(n0,2), intent(inout) :: ppoly0_E  !< Edge value of polynomial
+  real, dimension(n0,2), intent(inout) :: ppoly0_S  !< Edge slope of polynomial
+  real, dimension(n0,DEGREE_MAX+1), intent(inout) :: ppoly0_coefs !< Coefficients of polynomial
+  integer,               intent(inout) :: degree    !< The degree of the polynomials
+  real,        optional, intent(in)    :: h_neglect !< A negligibly small width for the
+                                             !! purpose of cell reconstructions
+                                             !! in the same units as h0.
+  real,        optional, intent(in)    :: h_neglect_edge !< A negligibly small width
+                                             !! for the purpose of edge value calculations
+                                             !! in the same units as h0.
   ! Local variables
   logical :: extrapolate
 
@@ -106,8 +106,8 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
 
     case ( INTERPOLATION_P1M_H2 )
       degree = DEGREE_1
-      call edge_values_explicit_h2( n0, h0, densities, ppoly0_E, h_neglect_edge )
-      call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect )
+      call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
+      call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect, answers_2018=CS%answers_2018 )
       if (extrapolate) then
         call P1M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefs )
       endif
@@ -117,9 +117,9 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
       if ( n0 >= 4 ) then
         call edge_values_explicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge, answers_2018=CS%answers_2018 )
       else
-        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E, h_neglect_edge )
+        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
       endif
-      call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect )
+      call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect, answers_2018=CS%answers_2018 )
       if (extrapolate) then
         call P1M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefs )
       endif
@@ -129,9 +129,9 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
       if ( n0 >= 4 ) then
         call edge_values_implicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge, answers_2018=CS%answers_2018 )
       else
-        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E, h_neglect_edge )
+        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
       endif
-      call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect )
+      call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect, answers_2018=CS%answers_2018 )
       if (extrapolate) then
         call P1M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefs )
       endif
@@ -147,15 +147,15 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
       if ( n0 >= 4 ) then
         degree = DEGREE_2
         call edge_values_explicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge, answers_2018=CS%answers_2018 )
-        call PPM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect )
+        call PPM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect, answers_2018=CS%answers_2018 )
         if (extrapolate) then
           call PPM_boundary_extrapolation( n0, h0, densities, ppoly0_E, &
                                            ppoly0_coefs, h_neglect )
         endif
       else
         degree = DEGREE_1
-        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E, h_neglect_edge )
-        call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect )
+        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
+        call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect, answers_2018=CS%answers_2018 )
         if (extrapolate) then
           call P1M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefs )
         endif
@@ -165,15 +165,15 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
       if ( n0 >= 4 ) then
         degree = DEGREE_2
         call edge_values_implicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge, answers_2018=CS%answers_2018 )
-        call PPM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect )
+        call PPM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect, answers_2018=CS%answers_2018 )
         if (extrapolate) then
           call PPM_boundary_extrapolation( n0, h0, densities, ppoly0_E, &
                                            ppoly0_coefs, h_neglect )
         endif
       else
         degree = DEGREE_1
-        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E, h_neglect_edge )
-        call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect )
+        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
+        call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect, answers_2018=CS%answers_2018 )
         if (extrapolate) then
           call P1M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefs )
         endif
@@ -185,15 +185,15 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
         call edge_values_implicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge, answers_2018=CS%answers_2018 )
         call edge_slopes_implicit_h3( n0, h0, densities, ppoly0_S, h_neglect, answers_2018=CS%answers_2018 )
         call P3M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_S, &
-                                ppoly0_coefs, h_neglect )
+                                ppoly0_coefs, h_neglect, answers_2018=CS%answers_2018 )
         if (extrapolate) then
           call P3M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_S, &
                                            ppoly0_coefs, h_neglect, h_neglect_edge )
         endif
       else
         degree = DEGREE_1
-        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E, h_neglect_edge )
-        call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect )
+        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
+        call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect, answers_2018=CS%answers_2018 )
         if (extrapolate) then
           call P1M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefs )
         endif
@@ -205,15 +205,15 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
         call edge_values_implicit_h6( n0, h0, densities, ppoly0_E, h_neglect_edge, answers_2018=CS%answers_2018 )
         call edge_slopes_implicit_h5( n0, h0, densities, ppoly0_S, h_neglect, answers_2018=CS%answers_2018 )
         call P3M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_S, &
-                                ppoly0_coefs, h_neglect )
+                                ppoly0_coefs, h_neglect, answers_2018=CS%answers_2018 )
         if (extrapolate) then
           call P3M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_S, &
                    ppoly0_coefs, h_neglect, h_neglect_edge )
         endif
       else
         degree = DEGREE_1
-        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E, h_neglect_edge )
-        call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect )
+        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
+        call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect, answers_2018=CS%answers_2018 )
         if (extrapolate) then
           call P1M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefs )
         endif
@@ -225,15 +225,15 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
         call edge_values_implicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge, answers_2018=CS%answers_2018 )
         call edge_slopes_implicit_h3( n0, h0, densities, ppoly0_S, h_neglect, answers_2018=CS%answers_2018 )
         call PQM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_S, &
-                                 ppoly0_coefs, h_neglect )
+                                 ppoly0_coefs, h_neglect, answers_2018=CS%answers_2018 )
         if (extrapolate) then
           call PQM_boundary_extrapolation_v1( n0, h0, densities, ppoly0_E, ppoly0_S, &
                                  ppoly0_coefs, h_neglect )
         endif
       else
         degree = DEGREE_1
-        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E, h_neglect_edge )
-        call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect )
+        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
+        call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect, answers_2018=CS%answers_2018 )
         if (extrapolate) then
           call P1M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefs )
         endif
@@ -245,20 +245,21 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
         call edge_values_implicit_h6( n0, h0, densities, ppoly0_E, h_neglect_edge, answers_2018=CS%answers_2018 )
         call edge_slopes_implicit_h5( n0, h0, densities, ppoly0_S, h_neglect, answers_2018=CS%answers_2018 )
         call PQM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_S, &
-                                 ppoly0_coefs, h_neglect )
+                                 ppoly0_coefs, h_neglect, answers_2018=CS%answers_2018 )
         if (extrapolate) then
           call PQM_boundary_extrapolation_v1( n0, h0, densities, ppoly0_E, ppoly0_S, &
                                  ppoly0_coefs, h_neglect )
         endif
       else
         degree = DEGREE_1
-        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E, h_neglect_edge )
-        call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect )
+        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
+        call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect, answers_2018=CS%answers_2018 )
         if (extrapolate) then
           call P1M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefs )
         endif
       endif
   end select
+
 end subroutine regridding_set_ppolys
 
 !> Given target values (e.g., density), build new grid based on polynomial
@@ -268,17 +269,18 @@ end subroutine regridding_set_ppolys
 !! are determined by finding the corresponding target interface densities.
 subroutine interpolate_grid( n0, h0, x0, ppoly0_E, ppoly0_coefs, &
                              target_values, degree, n1, h1, x1, answers_2018 )
-  integer,            intent(in)    :: n0            !< Number of points on source grid
-  real, dimension(:), intent(in)    :: h0            !< Thicknesses of source grid cells
-  real, dimension(:), intent(in)    :: x0            !< Source interface positions
-  real, dimension(:,:), intent(in)  :: ppoly0_E      !< Edge values of interpolating polynomials
-  real, dimension(:,:), intent(in)  :: ppoly0_coefs  !< Coefficients of interpolating polynomials
-  real, dimension(:), intent(in)    :: target_values !< Target values of interfaces
-  integer,            intent(in)    :: degree        !< Degree of interpolating polynomials
-  integer,            intent(in)    :: n1            !< Number of points on target grid
-  real, dimension(:), intent(inout) :: h1            !< Thicknesses of target grid cells
-  real, dimension(:), intent(inout) :: x1            !< Target interface positions
-  logical,  optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+  integer,               intent(in)     :: n0            !< Number of points on source grid
+  integer,               intent(in)     :: n1            !< Number of points on target grid
+  real, dimension(n0),   intent(in)     :: h0            !< Thicknesses of source grid cells
+  real, dimension(n0+1), intent(in)     :: x0            !< Source interface positions
+  real, dimension(n0,2), intent(in)     :: ppoly0_E      !< Edge values of interpolating polynomials
+  real, dimension(n0,DEGREE_MAX+1), &
+                          intent(in)    :: ppoly0_coefs  !< Coefficients of interpolating polynomials
+  real, dimension(n1+1),  intent(in)    :: target_values !< Target values of interfaces
+  integer,                intent(in)    :: degree        !< Degree of interpolating polynomials
+  real, dimension(n1),    intent(inout) :: h1            !< Thicknesses of target grid cells
+  real, dimension(n1+1),  intent(inout) :: x1            !< Target interface positions
+  logical,      optional, intent(in)    :: answers_2018  !< If true use older, less acccurate expressions.
 
   ! Local variables
   logical   :: use_2018_answers  ! If true use older, less acccurate expressions.
@@ -304,19 +306,19 @@ end subroutine interpolate_grid
 !> Build a grid by interpolating for target values
 subroutine build_and_interpolate_grid(CS, densities, n0, h0, x0, target_values, &
                                       n1, h1, x1, h_neglect, h_neglect_edge)
-  type(interp_CS_type), intent(in)  :: CS  !< A control structure for regrid_interp
-  real, dimension(:), intent(in)    :: densities !< Input cell densities [kg m-3]
-  real, dimension(:), intent(in)    :: target_values !< Target values of interfaces
-  integer,            intent(in)    :: n0  !< The number of points on the input grid
-  real, dimension(:), intent(in)    :: h0  !< Initial cell widths
-  real, dimension(:), intent(in)    :: x0  !< Source interface positions
-  integer,            intent(in)    :: n1  !< The number of points on the output grid
-  real, dimension(:), intent(inout) :: h1  !< Output cell widths
-  real, dimension(:), intent(inout) :: x1  !< Target interface positions
-  real,     optional, intent(in)    :: h_neglect !< A negligibly small width for the
+  type(interp_CS_type),  intent(in)    :: CS  !< A control structure for regrid_interp
+  integer,               intent(in)    :: n0  !< The number of points on the input grid
+  integer,               intent(in)    :: n1  !< The number of points on the output grid
+  real, dimension(n0),   intent(in)    :: densities !< Input cell densities [kg m-3]
+  real, dimension(n1+1), intent(in)    :: target_values !< Target values of interfaces
+  real, dimension(n0),   intent(in)    :: h0  !< Initial cell widths
+  real, dimension(n0+1), intent(in)    :: x0  !< Source interface positions
+  real, dimension(n1),   intent(inout) :: h1  !< Output cell widths
+  real, dimension(n1+1), intent(inout) :: x1  !< Target interface positions
+  real,        optional, intent(in)    :: h_neglect !< A negligibly small width for the
                                            !! purpose of cell reconstructions
                                            !! in the same units as h0.
-  real,     optional, intent(in)    :: h_neglect_edge !< A negligibly small width
+  real,        optional, intent(in)    :: h_neglect_edge !< A negligibly small width
                                            !! for the purpose of edge value calculations
                                            !! in the same units as h0.
 
@@ -350,10 +352,10 @@ function get_polynomial_coordinate( N, h, x_g, ppoly_E, ppoly_coefs, &
                                     target_value, degree, answers_2018 ) result ( x_tgt )
   ! Arguments
   integer,              intent(in) :: N            !< Number of grid cells
-  real, dimension(:),   intent(in) :: h            !< Grid cell thicknesses
-  real, dimension(:),   intent(in) :: x_g          !< Grid interface locations
-  real, dimension(:,:), intent(in) :: ppoly_E      !< Edge values of interpolating polynomials
-  real, dimension(:,:), intent(in) :: ppoly_coefs  !< Coefficients of interpolating polynomials
+  real, dimension(N),   intent(in) :: h            !< Grid cell thicknesses
+  real, dimension(N+1), intent(in) :: x_g          !< Grid interface locations
+  real, dimension(N,2), intent(in) :: ppoly_E      !< Edge values of interpolating polynomials
+  real, dimension(N,DEGREE_MAX+1), intent(in) :: ppoly_coefs  !< Coefficients of interpolating polynomials
   real,                 intent(in) :: target_value !< Target value to find position for
   integer,              intent(in) :: degree       !< Degree of the interpolating polynomials
   logical,    optional, intent(in) :: answers_2018 !< If true use older, less acccurate expressions.
