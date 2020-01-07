@@ -430,13 +430,15 @@ function append_substring(string_in, substring) result(string_out)
 
    substring_length = len_trim(substring)
 
-   if ((string_in_length > 0) .and. (substring_length > 0)) then
-       string_joined = trim(string_in)//trim(substring)
+   if (string_in_length > 0) then
+     if (substring_length > 0) then
+         string_joined = trim(string_in)//trim(substring)
 
-       string_out(1:len_trim(string_joined)) = trim(string_joined)
-   else
-      call MOM_error(WARNING, "MOM_string_functions::append_substring: "//&
-                     "the input string or substring has zero length")
+         string_out(1:len_trim(string_joined)) = trim(string_joined)
+     else
+        call MOM_error(WARNING, "MOM_string_functions::append_substring: "//&
+                       "the input string or substring has zero length")
+     endif
    endif
 
 end function append_substring
