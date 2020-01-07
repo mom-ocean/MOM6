@@ -72,6 +72,8 @@ type, public :: thickness_diffuse_CS ; private
   logical :: Use_KH_in_MEKE      !< If true, uses the thickness diffusivity calculated here to diffuse MEKE.
   logical :: GM_src_alt          !< If true, use the GM energy conversion form S^2*N^2*kappa rather
                                  !! than the streamfunction for the GM source term.
+  logical :: use_GM_work_bug     !< If true, use the incorrect sign for the
+                                 !! top-level work tendency on the top layer.
   type(diag_ctrl), pointer :: diag => NULL() !< structure used to regulate timing of diagnostics
   real, pointer :: GMwork(:,:)       => NULL()  !< Work by thickness diffusivity [R Z L2 T-3 ~> W m-2]
   real, pointer :: diagSlopeX(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope [nondim]
@@ -1235,10 +1237,15 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           drdiB = drho_dT_u(I) * (T(i+1,j,1)-T(i,j,1)) + &
                   drho_dS_u(I) * (S(i+1,j,1)-S(i,j,1))
         endif
-        Work_u(I,j) = Work_u(I,j) - G_scale * &
-            ( (uhD(I,j,1) * drdiB) * 0.25 * &
-              ((e(i,j,1) + e(i,j,2)) + (e(i+1,j,1) + e(i+1,j,2))) )
-
+        if (CS%use_GM_work_bug) then
+          Work_u(I,j) = Work_u(I,j) + G_scale * &
+              ( (uhD(I,j,1) * drdiB) * 0.25 * &
+                ((e(i,j,1) + e(i,j,2)) + (e(i+1,j,1) + e(i+1,j,2))) )
+        else
+          Work_u(I,j) = Work_u(I,j) - G_scale * &
+              ( (uhD(I,j,1) * drdiB) * 0.25 * &
+                ((e(i,j,1) + e(i,j,2)) + (e(i+1,j,1) + e(i+1,j,2))) )
+        endif
       enddo
     enddo
 
@@ -1868,6 +1875,11 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
   call get_param(param_file, mdl, "USE_GME", CS%use_GME_thickness_diffuse, &
                  "If true, use the GM+E backscatter scheme in association \n"//&
                  "with the Gent and McWilliams parameterization.", default=.false.)
+
+  call get_param(param_file, mdl, "USE_GM_WORK_BUG", CS%use_GM_work_bug, &
+                 "If true, compute the top-layer work tendency on the u-grid " // &
+                 "with the incorrect sign, for legacy reproducibility.", &
+                 default=.true.)
 
   if (CS%use_GME_thickness_diffuse) then
     call safe_alloc_ptr(CS%KH_u_GME,G%IsdB,G%IedB,G%jsd,G%jed,G%ke+1)
