@@ -637,11 +637,12 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
 end subroutine vertically_interpolate_diag_field
 
 !> Horizontally average field
-subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y, &
+subroutine horizontally_average_diag_field(G, GV, h, staggered_in_x, staggered_in_y, &
                                            is_layer, is_extensive, &
                                            missing_value, field, averaged_field, &
                                            averaged_mask)
   type(ocean_grid_type),  intent(in) :: G !< Ocean grid structure
+  type(verticalGrid_type), intent(in) :: GV !< The ocean vertical grid structure
   real, dimension(:,:,:), intent(in) :: h !< The current thicknesses
   logical,                intent(in) :: staggered_in_x !< True if the x-axis location is at u or q points
   logical,                intent(in) :: staggered_in_y !< True if the y-axis location is at v or q points
@@ -663,6 +664,7 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
 
   ! TODO: These averages could potentially be modified to use the function in
   !       the MOM_spatial_means module.
+  ! NOTE: Reproducible sums must be computed in the original MKS units
 
   if (staggered_in_x .and. .not. staggered_in_y) then
     if (is_layer) then
@@ -673,14 +675,15 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
         if (is_extensive) then
           do j=G%jsc, G%jec ; do I=G%isc, G%iec
             I1 = I - G%isdB + 1
-            volume(I,j,k) = G%US%L_to_m**2*G%areaCu(I,j) * G%mask2dCu(I,j)
+            volume(I,j,k) = (G%US%L_to_m**2 * G%areaCu(I,j)) * G%mask2dCu(I,j)
             stuff(I,j,k) = volume(I,j,k) * field(I1,j,k)
           enddo ; enddo
         else ! Intensive
           do j=G%jsc, G%jec ; do I=G%isc, G%iec
             I1 = i - G%isdB + 1
             height = 0.5 * (h(i,j,k) + h(i+1,j,k))
-            volume(I,j,k) = G%US%L_to_m**2*G%areaCu(I,j) * height * G%mask2dCu(I,j)
+            volume(I,j,k) = (G%US%L_to_m**2 * G%areaCu(I,j)) &
+                * (GV%H_to_m * height) * G%mask2dCu(I,j)
             stuff(I,j,k) = volume(I,j,k) * field(I1,j,k)
           enddo ; enddo
         endif
@@ -689,7 +692,7 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
       do k=1,nz
         do j=G%jsc, G%jec ; do I=G%isc, G%iec
           I1 = I - G%isdB + 1
-          volume(I,j,k) = G%US%L_to_m**2*G%areaCu(I,j) * G%mask2dCu(I,j)
+          volume(I,j,k) = (G%US%L_to_m**2 * G%areaCu(I,j)) * G%mask2dCu(I,j)
           stuff(I,j,k) = volume(I,j,k) * field(I1,j,k)
         enddo ; enddo
       enddo
@@ -701,14 +704,15 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
         if (is_extensive) then
           do J=G%jsc, G%jec ; do i=G%isc, G%iec
             J1 = J - G%jsdB + 1
-            volume(i,J,k) = G%US%L_to_m**2*G%areaCv(i,J) * G%mask2dCv(i,J)
+            volume(i,J,k) = (G%US%L_to_m**2 * G%areaCv(i,J)) * G%mask2dCv(i,J)
             stuff(i,J,k) = volume(i,J,k) * field(i,J1,k)
           enddo ; enddo
         else ! Intensive
           do J=G%jsc, G%jec ; do i=G%isc, G%iec
             J1 = J - G%jsdB + 1
             height = 0.5 * (h(i,j,k) + h(i,j+1,k))
-            volume(i,J,k) = G%US%L_to_m**2*G%areaCv(i,J) * height * G%mask2dCv(i,J)
+            volume(i,J,k) = (G%US%L_to_m**2 * G%areaCv(i,J)) &
+                * (GV%H_to_m * height) * G%mask2dCv(i,J)
             stuff(i,J,k) = volume(i,J,k) * field(i,J1,k)
           enddo ; enddo
         endif
@@ -717,7 +721,7 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
       do k=1,nz
         do J=G%jsc, G%jec ; do i=G%isc, G%iec
           J1 = J - G%jsdB + 1
-          volume(i,J,k) = G%US%L_to_m**2*G%areaCv(i,J) * G%mask2dCv(i,J)
+          volume(i,J,k) = (G%US%L_to_m**2 * G%areaCv(i,J)) * G%mask2dCv(i,J)
           stuff(i,J,k) = volume(i,J,k) * field(i,J1,k)
         enddo ; enddo
       enddo
@@ -729,7 +733,7 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
         if (is_extensive) then
           do j=G%jsc, G%jec ; do i=G%isc, G%iec
             if (h(i,j,k) > 0.) then
-              volume(i,j,k) = G%US%L_to_m**2*G%areaT(i,j) * G%mask2dT(i,j)
+              volume(i,j,k) = (G%US%L_to_m**2 * G%areaT(i,j)) * G%mask2dT(i,j)
               stuff(i,j,k) = volume(i,j,k) * field(i,j,k)
             else
               volume(i,j,k) = 0.
@@ -738,7 +742,8 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
           enddo ; enddo
         else ! Intensive
           do j=G%jsc, G%jec ; do i=G%isc, G%iec
-            volume(i,j,k) = G%US%L_to_m**2*G%areaT(i,j) * h(i,j,k) * G%mask2dT(i,j)
+            volume(i,j,k) = (G%US%L_to_m**2 * G%areaT(i,j)) &
+                * (GV%H_to_m * h(i,j,k)) * G%mask2dT(i,j)
             stuff(i,j,k) = volume(i,j,k) * field(i,j,k)
           enddo ; enddo
         endif
@@ -746,7 +751,7 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
     else ! Interface
       do k=1,nz
         do j=G%jsc, G%jec ; do i=G%isc, G%iec
-          volume(i,j,k) = G%US%L_to_m**2*G%areaT(i,j) * G%mask2dT(i,j)
+          volume(i,j,k) = (G%US%L_to_m**2 * G%areaT(i,j)) * G%mask2dT(i,j)
           stuff(i,j,k) = volume(i,j,k) * field(i,j,k)
         enddo ; enddo
       enddo

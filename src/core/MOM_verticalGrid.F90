@@ -49,7 +49,7 @@ type, public :: verticalGrid_type
                         !! If Angstrom is 0 or exceedingly small, this is negligible compared to 1e-17 m.
   real, allocatable, dimension(:) :: &
     g_prime, &          !< The reduced gravity at each interface [L2 Z-1 T-2 ~> m s-2].
-    Rlay                !< The target coordinate value (potential density) in each layer [kg m-3].
+    Rlay                !< The target coordinate value (potential density) in each layer [R ~> kg m-3].
   integer :: nkml = 0   !< The number of layers at the top that should be treated
                         !! as parts of a homogeneous region.
   integer :: nk_rho_varies = 0 !< The number of layers at the top where the
@@ -61,6 +61,10 @@ type, public :: verticalGrid_type
   real :: H_to_Pa       !< A constant that translates the units of thickness to pressure [Pa].
   real :: H_to_Z        !< A constant that translates thickness units to the units of depth.
   real :: Z_to_H        !< A constant that translates depth units to thickness units.
+  real :: H_to_RZ       !< A constant that translates thickness units to the units of mass per unit area.
+  real :: RZ_to_H       !< A constant that translates mass per unit area units to thickness units.
+  real :: H_to_MKS      !< A constant that translates thickness units to its
+                        !! MKS unit (m or kg m-2) based on GV%Boussinesq
 
   real :: m_to_H_restart = 0.0 !< A copy of the m_to_H that is used in restart files.
 end type verticalGrid_type
@@ -97,7 +101,7 @@ subroutine verticalGridInit( param_file, GV, US )
                  "calculate accelerations and the mass for conservation "//&
                  "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
-                 units="kg m-3", default=1035.0)
+                 units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "BOUSSINESQ", GV%Boussinesq, &
                  "If true, make the Boussinesq approximation.", default=.true.)
   call get_param(param_file, mdl, "ANGSTROM", GV%Angstrom_m, &
@@ -139,15 +143,17 @@ subroutine verticalGridInit( param_file, GV, US )
   GV%ke = nk
 
   if (GV%Boussinesq) then
-    GV%H_to_kg_m2 = GV%Rho0 * GV%H_to_m
+    GV%H_to_kg_m2 = US%R_to_kg_m3*GV%Rho0 * GV%H_to_m
     GV%kg_m2_to_H = 1.0 / GV%H_to_kg_m2
     GV%m_to_H = 1.0 / GV%H_to_m
     GV%Angstrom_H = GV%m_to_H * GV%Angstrom_m
+    GV%H_to_MKS = GV%H_to_m
   else
     GV%kg_m2_to_H = 1.0 / GV%H_to_kg_m2
-    GV%m_to_H = GV%Rho0 * GV%kg_m2_to_H
-    GV%H_to_m = GV%H_to_kg_m2 / GV%Rho0
+    GV%m_to_H = US%R_to_kg_m3*GV%Rho0 * GV%kg_m2_to_H
+    GV%H_to_m = GV%H_to_kg_m2 / (US%R_to_kg_m3*GV%Rho0)
     GV%Angstrom_H = GV%Angstrom_m*1000.0*GV%kg_m2_to_H
+    GV%H_to_MKS = GV%H_to_kg_m2
   endif
   GV%H_subroundoff = 1e-20 * max(GV%Angstrom_H,GV%m_to_H*1e-17)
   GV%H_to_Pa = GV%mks_g_Earth * GV%H_to_kg_m2
@@ -155,6 +161,9 @@ subroutine verticalGridInit( param_file, GV, US )
   GV%H_to_Z = GV%H_to_m * US%m_to_Z
   GV%Z_to_H = US%Z_to_m * GV%m_to_H
   GV%Angstrom_Z = US%m_to_Z * GV%Angstrom_m
+
+  GV%H_to_RZ = GV%H_to_kg_m2 * US%kg_m3_to_R * US%m_to_Z
+  GV%RZ_to_H = GV%kg_m2_to_H * US%R_to_kg_m3 * US%Z_to_m
 
 ! Log derivative values.
   call log_param(param_file, mdl, "M to THICKNESS", GV%m_to_H*H_rescale_factor)
@@ -263,9 +272,10 @@ function get_tr_flux_units(GV, tr_units, tr_vol_conc_units, tr_mass_conc_units)
 end function get_tr_flux_units
 
 !> This sets the coordinate data for the "layer mode" of the isopycnal model.
-subroutine setVerticalGridAxes( Rlay, GV )
+subroutine setVerticalGridAxes( Rlay, GV, scale )
   type(verticalGrid_type), intent(inout) :: GV   !< The container for vertical grid data
-  real, dimension(GV%ke),  intent(in)    :: Rlay !< The layer target density
+  real, dimension(GV%ke),  intent(in)    :: Rlay !< The layer target density [R ~> kg m-3]
+  real,                    intent(in)    :: scale !< A unit scaling factor for Rlay
   ! Local variables
   integer :: k, nk
 
@@ -273,13 +283,13 @@ subroutine setVerticalGridAxes( Rlay, GV )
 
   GV%zAxisLongName = 'Target Potential Density'
   GV%zAxisUnits = 'kg m-3'
-  do k=1,nk ; GV%sLayer(k) = Rlay(k) ; enddo
+  do k=1,nk ; GV%sLayer(k) = scale*Rlay(k) ; enddo
   if (nk > 1) then
-    GV%sInterface(1) = 1.5*Rlay(1) - 0.5*Rlay(2)
-    do K=2,nk ; GV%sInterface(K) = 0.5*( Rlay(k-1) + Rlay(k) ) ; enddo
-    GV%sInterface(nk+1) = 1.5*Rlay(nk) - 0.5*Rlay(nk-1)
+    GV%sInterface(1) = scale * (1.5*Rlay(1) - 0.5*Rlay(2))
+    do K=2,nk ; GV%sInterface(K) = scale * 0.5*( Rlay(k-1) + Rlay(k) ) ; enddo
+    GV%sInterface(nk+1) = scale * (1.5*Rlay(nk) - 0.5*Rlay(nk-1))
   else
-    GV%sInterface(1) = 0.0 ; GV%sInterface(nk+1) = 2.0*Rlay(nk)
+    GV%sInterface(1) = 0.0 ; GV%sInterface(nk+1) = 2.0*scale*Rlay(nk)
   endif
 
 end subroutine setVerticalGridAxes
