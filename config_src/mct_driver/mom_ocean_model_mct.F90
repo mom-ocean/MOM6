@@ -528,7 +528,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     endif
     if (OS%icebergs_alter_ocean)  then
       if (do_dyn) &
-        call iceberg_forces(OS%grid, OS%US, OS%forces, OS%use_ice_shelf, &
+        call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
                             OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
       if (do_thermo) &
         call iceberg_fluxes(OS%grid, OS%US, OS%fluxes, OS%use_ice_shelf, &
@@ -562,7 +562,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
         call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
                             OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
       if (do_thermo) &
-        call iceberg_fluxes(OS%grid, OS%flux_tmp, OS%use_ice_shelf, &
+        call iceberg_fluxes(OS%grid, OS%US, OS%flux_tmp, OS%use_ice_shelf, &
                           OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
     endif
 
