@@ -319,18 +319,6 @@ SMAG_BI_CONST = 0.06            !   [nondim] default = 0.0
 ENERGETICS_SFC_PBL = True
 DO_GEOTHERMAL = True
 GEOTHERMAL_SCALE = 0.05
-TIDES = True
-TIDE_M2 = True
-TIDE_S2 = True
-TIDE_N2 = True
-TIDE_K2 = True
-TIDE_K1 = True
-TIDE_O1 = True
-TIDE_P1 = True
-TIDE_Q1 = True
-TIDE_MF = True
-TIDE_MM = True
-TIDE_SAL_SCALAR_VALUE = 1.
 USE_NEUTRAL_DIFFUSION = True
 DYNAMIC_VISCOUS_ML = True       !   [Boolean] default = False
                                 ! If true, use a bulk Richardson number criterion to

@@ -294,7 +294,7 @@ subroutine distribute_residual_uh_barotropic(G, GV, hvol, uh)
       endif
       ! Calculate and check that column integrated transports match the original to
       ! within the tolerance limit
-      uh_neglect = GV%Angstrom_H*min(G%US%L_to_m**2*G%areaT(i,j),G%US%L_to_m**2*G%areaT(i+1,j))
+      uh_neglect = GV%Angstrom_H*G%US%L_to_m**2 * min(G%areaT(i,j), G%areaT(i+1,j))
       if ( abs(sum(uh2d(I,:))-uh2d_sum(I)) > uh_neglect) &
         call MOM_error(WARNING,"Column integral of uh does not match after "//&
         "barotropic redistribution")
@@ -364,7 +364,7 @@ subroutine distribute_residual_vh_barotropic(G, GV, hvol, vh)
       endif
       ! Calculate and check that column integrated transports match the original to
       ! within the tolerance limit
-      vh_neglect = GV%Angstrom_H*min(G%US%L_to_m**2*G%areaT(i,j),G%US%L_to_m**2*G%areaT(i,j+1))
+      vh_neglect = GV%Angstrom_H*G%US%L_to_m**2 * min(G%areaT(i,j), G%areaT(i,j+1))
       if ( abs(sum(vh2d(J,:))-vh2d_sum(J)) > vh_neglect) then
           call MOM_error(WARNING,"Column integral of vh does not match after "//&
           "barotropic redistribution")
@@ -460,7 +460,7 @@ subroutine distribute_residual_uh_upwards(G, GV, hvol, uh)
 
       ! Calculate and check that column integrated transports match the original to
       ! within the tolerance limit
-      uh_neglect = GV%Angstrom_H*min(G%US%L_to_m**2*G%areaT(i,j),G%US%L_to_m**2*G%areaT(i+1,j))
+      uh_neglect = GV%Angstrom_H*G%US%L_to_m**2 * min(G%areaT(i,j), G%areaT(i+1,j))
       if (abs(uh_col - sum(uh2d(I,:)))>uh_neglect) then
         call MOM_error(WARNING,"Column integral of uh does not match after "//&
         "upwards redistribution")
@@ -558,7 +558,7 @@ subroutine distribute_residual_vh_upwards(G, GV, hvol, vh)
 
       ! Calculate and check that column integrated transports match the original to
       ! within the tolerance limit
-      vh_neglect = GV%Angstrom_H*min(G%US%L_to_m**2*G%areaT(i,j),G%US%L_to_m**2*G%areaT(i,j+1))
+      vh_neglect = GV%Angstrom_H*G%US%L_to_m**2 * min(G%areaT(i,j), G%areaT(i,j+1))
       if ( ABS(vh_col-SUM(vh2d(J,:))) > vh_neglect) then
         call MOM_error(WARNING,"Column integral of vh does not match after "//&
                                "upwards redistribution")

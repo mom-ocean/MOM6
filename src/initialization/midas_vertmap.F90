@@ -559,12 +559,12 @@ function find_limited_slope(val, e, k) result(slope)
 end function find_limited_slope
 
 !> Find interface positions corresponding to density profile
-function find_interfaces(rho, zin, Rb, depth, nlevs, nkml, nkbl, hml, debug, eps_z) result(zi)
+function find_interfaces(rho, zin, Rb, depth, nlevs, nkml, nkbl, hml, debug, eps_z, eps_rho) result(zi)
   real, dimension(:,:,:), &
-                      intent(in) :: rho   !< potential density in z-space [kg m-3]
+                      intent(in) :: rho   !< potential density in z-space [kg m-3 or R ~> kg m-3]
   real, dimension(size(rho,3)), &
-                      intent(in) :: zin   !< Input data levels [Z ~> m or m].
-  real, dimension(:), intent(in) :: Rb    !< target interface densities [kg m-3]
+                      intent(in) :: zin   !< Input data levels [m or Z ~> m].
+  real, dimension(:), intent(in) :: Rb    !< target interface densities [kg m-3 or R ~> kg m-3]
   real, dimension(size(rho,1),size(rho,2)), &
                       intent(in) :: depth !< ocean depth [Z ~> m].
   real, dimension(size(rho,1),size(rho,2)), &
@@ -573,11 +573,12 @@ function find_interfaces(rho, zin, Rb, depth, nlevs, nkml, nkbl, hml, debug, eps
   integer,  optional, intent(in) :: nkml  !< number of mixed layer pieces
   integer,  optional, intent(in) :: nkbl  !< number of buffer layer pieces
   real,     optional, intent(in) :: hml   !< mixed layer depth [Z ~> m].
-  real,     optional, intent(in) :: eps_z !< A negligibly small layer thickness [Z ~> m or m].
+  real,     optional, intent(in) :: eps_z !< A negligibly small layer thickness [m or Z ~> m].
+  real,     optional, intent(in) :: eps_rho !< A negligibly small density difference [kg m-3 or R ~> kg m-3].
   real, dimension(size(rho,1),size(rho,2),size(Rb,1)) :: zi !< The returned interface, in the same units az zin.
 
   ! Local variables
-  real, dimension(size(rho,1),size(rho,3)) :: rho_
+  real, dimension(size(rho,1),size(rho,3)) :: rho_ ! A slice of densities [R ~> kg m-3]
   real, dimension(size(rho,1)) :: depth_
   logical :: unstable
   integer :: dir
@@ -589,8 +590,8 @@ function find_interfaces(rho, zin, Rb, depth, nlevs, nkml, nkbl, hml, debug, eps
   integer :: n,i,j,k,l,nx,ny,nz,nt
   integer :: nlay,kk,nkml_,nkbl_
   logical :: debug_ = .false.
-  real    :: epsln_Z    ! A negligibly thin layer thickness [Z ~> m].
-  real    :: epsln_rho  ! A negligibly small density change [kg m-3].
+  real    :: epsln_Z    ! A negligibly thin layer thickness [m or Z ~> m].
+  real    :: epsln_rho  ! A negligibly small density change [kg m-3 or R ~> kg m-3].
   real, parameter :: zoff=0.999
 
   nlay=size(Rb)-1
@@ -606,7 +607,7 @@ function find_interfaces(rho, zin, Rb, depth, nlevs, nkml, nkbl, hml, debug, eps
   nkbl_ = 0 ;  if (PRESENT(nkbl)) nkbl_ = max(0, nkbl)
   hml_ = 0.0 ; if (PRESENT(hml)) hml_ = hml
   epsln_Z = 1.0e-10 ; if (PRESENT(eps_z)) epsln_Z = eps_z
-  epsln_rho = 1.0e-10
+  epsln_rho = 1.0e-10 ; if (PRESENT(eps_rho)) epsln_rho = eps_rho
 
   if (PRESENT(nlevs)) then
     nlevs_data(:,:) = nlevs(:,:)

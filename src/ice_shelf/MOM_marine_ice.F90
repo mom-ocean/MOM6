@@ -15,6 +15,7 @@ use MOM_forcing_type,  only : allocate_forcing_type
 use MOM_forcing_type,  only : forcing, mech_forcing
 use MOM_grid,          only : ocean_grid_type
 use MOM_time_manager,  only : time_type
+use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : surface
 
 implicit none ; private
@@ -102,9 +103,10 @@ end subroutine iceberg_forces
 
 !> iceberg_fluxes adds ice-area-coverage and modifies various
 !! thermodynamic fluxes due to the presence of icebergs.
-subroutine iceberg_fluxes(G, fluxes, use_ice_shelf, sfc_state, &
+subroutine iceberg_fluxes(G, US, fluxes, use_ice_shelf, sfc_state, &
                           time_step, CS)
   type(ocean_grid_type), intent(inout) :: G       !< The ocean's grid structure
+  type(unit_scale_type), intent(in)    :: US      !< A dimensional unit scaling type
   type(forcing),         intent(inout) :: fluxes  !< A structure with pointers to themodynamic,
                                                   !! tracer and mass exchange forcing fields
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
@@ -113,8 +115,8 @@ subroutine iceberg_fluxes(G, fluxes, use_ice_shelf, sfc_state, &
   real,                  intent(in)    :: time_step   !< The coupling time step [s].
   type(marine_ice_CS),   pointer       :: CS !< Pointer to the control structure for MOM_marine_ice
 
-  real :: fraz      ! refreezing rate [kg m-2 s-1]
-  real :: I_dt_LHF  ! The inverse of the timestep times the latent heat of fusion [kg J-1 s-1].
+  real :: fraz      ! refreezing rate [R Z T-1 ~> kg m-2 s-1]
+  real :: I_dt_LHF  ! The inverse of the timestep times the latent heat of fusion [kg J-1 T-1 ~> kg J-1 s-1].
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
@@ -142,7 +144,7 @@ subroutine iceberg_fluxes(G, fluxes, use_ice_shelf, sfc_state, &
 
   !Zero'ing out other fluxes under the tabular icebergs
   if (CS%berg_area_threshold >= 0.) then
-    I_dt_LHF = 1.0 / (time_step * CS%latent_heat_fusion)
+    I_dt_LHF = 1.0 / (US%s_to_T*time_step * CS%latent_heat_fusion)
     do j=jsd,jed ; do i=isd,ied
       if (fluxes%frac_shelf_h(i,j) > CS%berg_area_threshold) then
         ! Only applying for ice shelf covering most of cell.
@@ -153,13 +155,14 @@ subroutine iceberg_fluxes(G, fluxes, use_ice_shelf, sfc_state, &
         if (associated(fluxes%evap)) fluxes%evap(i,j) = 0.0
 
         ! Add frazil formation diagnosed by the ocean model [J m-2] in the
-        ! form of surface layer evaporation [kg m-2 s-1]. Update lprec in the
+        ! form of surface layer evaporation [R Z T-1 ~> kg m-2 s-1]. Update lprec in the
         ! control structure for diagnostic purposes.
 
         if (associated(sfc_state%frazil)) then
-          fraz = sfc_state%frazil(i,j) * I_dt_LHF
-          if (associated(fluxes%evap)) fluxes%evap(i,j) = fluxes%evap(i,j) - fraz
-          !CS%lprec(i,j)=CS%lprec(i,j) - fraz
+          fraz = US%kg_m3_to_R*US%m_to_Z*sfc_state%frazil(i,j) * I_dt_LHF
+          if (associated(fluxes%evap)) &
+            fluxes%evap(i,j) = fluxes%evap(i,j) - fraz
+          ! fluxes%lprec(i,j) = fluxes%lprec(i,j) - fraz
           sfc_state%frazil(i,j) = 0.0
         endif
 

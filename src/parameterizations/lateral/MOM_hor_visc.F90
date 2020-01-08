@@ -87,9 +87,9 @@ type, public :: hor_visc_CS ; private
                              !! answers from the end of 2018.  Otherwise, use updated and more robust
                              !! forms of the same expressions.
   real    :: GME_h0          !< The strength of GME tapers quadratically to zero when the bathymetric
-                             !! depth is shallower than GME_H0 [m]
+                             !! depth is shallower than GME_H0 [Z ~> m]
   real    :: GME_efficiency  !< The nondimensional prefactor multiplying the GME coefficient [nondim]
-  real    :: GME_limiter     !< The absolute maximum value the GME coefficient is allowed to take [m2 s-1].
+  real    :: GME_limiter     !< The absolute maximum value the GME coefficient is allowed to take [L2 T-1 ~> m2 s-1].
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Kh_bg_xx
                       !< The background Laplacian viscosity at h points [L2 T-1 ~> m2 s-1].
@@ -103,9 +103,9 @@ type, public :: hor_visc_CS ; private
                       !< The background biharmonic viscosity at h points [L4 T-1 ~> m4 s-1].
                       !! The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Biharm5_const2_xx
+!  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Biharm5_const2_xx
                       !< A constant relating the biharmonic viscosity to the
-                      !! square of the velocity shear [m4 s].  This value is
+                      !! square of the velocity shear [L4 T ~> m4 s].  This value is
                       !! set to be the magnitude of the Coriolis terms once the
                       !! velocity differences reach a value of order 1/2 MAXVEL.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: reduction_xx
@@ -125,9 +125,9 @@ type, public :: hor_visc_CS ; private
                       !< The background biharmonic viscosity at q points [L4 T-1 ~> m4 s-1].
                       !! The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Biharm5_const2_xy
+!  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Biharm5_const2_xy
                       !< A constant relating the biharmonic viscosity to the
-                      !! square of the velocity shear [m4 s].  This value is
+                      !! square of the velocity shear [L4 T ~> m4 s].  This value is
                       !! set to be the magnitude of the Coriolis terms once the
                       !! velocity differences reach a value of order 1/2 MAXVEL.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: reduction_xy
@@ -249,10 +249,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     sh_xx_bt, &   ! barotropic horizontal tension (du/dx - dv/dy) including metric terms [T-1 ~> s-1]
     str_xx,&      ! str_xx is the diagonal term in the stress tensor [H L2 T-2 ~> m3 s-2 or kg s-2]
     str_xx_GME,&  ! smoothed diagonal term in the stress tensor from GME [H L2 T-2 ~> m3 s-2 or kg s-2]
-    bhstr_xx,&    ! A copy of str_xx that only contains the biharmonic contribution [H L2 T-2 ~> m3 s-2 or kg s-2]
-    FrictWorkIntz, & ! depth integrated energy dissipated by lateral friction [kg m-2 L2 T-3 ~> W m-2]
-    Leith_Kh_h, & ! Leith Laplacian viscosity at h-points [L2 T-1 ~> m2 s-1]
-    Leith_Ah_h, & ! Leith bi-harmonic viscosity at h-points [L4 T-1 ~> m4 s-1]
+    bhstr_xx, &   ! A copy of str_xx that only contains the biharmonic contribution [H L2 T-2 ~> m3 s-2 or kg s-2]
+    FrictWorkIntz, & ! depth integrated energy dissipated by lateral friction [R L2 T-3 ~> W m-2]
+    ! Leith_Kh_h, & ! Leith Laplacian viscosity at h-points [L2 T-1 ~> m2 s-1]
+    ! Leith_Ah_h, & ! Leith bi-harmonic viscosity at h-points [L4 T-1 ~> m4 s-1]
     grad_vort_mag_h, & ! Magnitude of vorticity gradient at h-points [L-1 T-1 ~> m-1 s-1]
     grad_vort_mag_h_2d, & ! Magnitude of 2d vorticity gradient at h-points [L-1 T-1 ~> m-1 s-1]
     grad_div_mag_h, &     ! Magnitude of divergence gradient at h-points [L-1 T-1 ~> m-1 s-1]
@@ -297,12 +297,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     Ah_h, &          ! biharmonic viscosity at thickness points [L4 T-1 ~> m4 s-1]
     Kh_h, &          ! Laplacian viscosity at thickness points [L2 T-1 ~> m2 s-1]
-    diss_rate, & ! MKE dissipated by parameterized shear production [L2 T-3 ~> m2 s-3]
     max_diss_rate_h, & ! maximum possible energy dissipated by lateral friction [L2 T-3 ~> m2 s-3]
-    target_diss_rate_GME, & ! the maximum theoretical dissipation plus the amount spuriously dissipated
-                     ! by friction [L2 T-3 ~> m2 s-3]
-    FrictWork, &     ! work done by MKE dissipation mechanisms [W m-2]
-    FrictWork_GME, &  ! work done by GME [W m-2]
+    FrictWork, &     ! work done by MKE dissipation mechanisms [R L2 T-3 ~> W m-2]
+    FrictWork_GME, &  ! work done by GME [R L2 T-3 ~> W m-2]
     div_xx_h         ! horizontal divergence [T-1 ~> s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     GME_coeff_h      !< GME coeff. at h-points [L2 T-1 ~> m2 s-1]
@@ -461,20 +458,33 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
   endif ! use_GME
 
-  !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,GV,US,u,v,is,js,ie,je, &
-  !$OMP                                  h,rescale_Kh,VarMix,h_neglect,h_neglect3,      &
-  !$OMP                                  Kh_h,Ah_h,Kh_q,Ah_q,diffu,diffv,apply_OBC,OBC, &
-  !$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,          &
-  !$OMP                                  use_MEKE_Au, MEKE, hq,                         &
-  !$OMP                                  mod_Leith, legacy_bound, div_xx_h, vort_xy_q)  &
-  !$OMP                          private(Del2u, Del2v, sh_xx, str_xx, visc_bound_rem,   &
-  !$OMP                                  sh_xy,str_xy,Ah,Kh,AhSm,dvdx,dudy,dDel2udy,    &
-  !$OMP                                  dDel2vdx,sh_xx_bt, sh_xy_bt, dvdx_bt, dudy_bt, &
-  !$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv,h_u,h_v, &
-  !$OMP                                  vort_xy,vort_xy_dx,vort_xy_dy,Vort_mag,AhLth,  &
-  !$OMP                                  div_xx, div_xx_dx, div_xx_dy, local_strain,    &
-  !$OMP                                  meke_res_fn,Sh_F_pow,                          &
-  !$OMP                                  Shear_mag, h2uq, h2vq, hq, Kh_scale, hrat_min)
+  !$OMP parallel do default(none) &
+  !$OMP shared( &
+  !$OMP   CS, G, GV, US, OBC, VarMix, MEKE, u, v, h, &
+  !$OMP   is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, &
+  !$OMP   apply_OBC, rescale_Kh, legacy_bound, find_FrictWork, &
+  !$OMP   use_MEKE_Ku, use_MEKE_Au, boundary_mask_h, boundary_mask_q, &
+  !$OMP   backscat_subround, GME_coeff_limiter, &
+  !$OMP   h_neglect, h_neglect3, FWfrac, inv_PI3, inv_PI5, H0_GME, &
+  !$OMP   diffu, diffv, max_diss_rate_h, max_diss_rate_q, &
+  !$OMP   Kh_h, Kh_q, Ah_h, Ah_q, FrictWork, FrictWork_GME, &
+  !$OMP   div_xx_h, vort_xy_q, GME_coeff_h, GME_coeff_q &
+  !$OMP ) &
+  !$OMP private( &
+  !$OMP   i, j, k, n, &
+  !$OMP   dudx, dudy, dvdx, dvdy, sh_xx, sh_xy, h_u, h_v, &
+  !$OMP   Del2u, Del2v, DY_dxBu, DX_dyBu, sh_xx_bt, sh_xy_bt, &
+  !$OMP   str_xx, str_xy, bhstr_xx, bhstr_xy, str_xx_GME, str_xy_GME, &
+  !$OMP   vort_xy, vort_xy_dx, vort_xy_dy, div_xx, div_xx_dx, div_xx_dy, &
+  !$OMP   grad_div_mag_h, grad_div_mag_q, grad_vort_mag_h, grad_vort_mag_q, &
+  !$OMP   grad_vort_mag_h_2d, grad_vort_mag_q_2d, &
+  !$OMP   grad_vel_mag_h, grad_vel_mag_q, &
+  !$OMP   grad_vel_mag_bt_h, grad_vel_mag_bt_q, grad_d2vel_mag_h, &
+  !$OMP   meke_res_fn, Shear_mag, vert_vort_mag, hrat_min, visc_bound_rem, &
+  !$OMP   Kh, Ah, AhSm, AhLth, local_strain, Sh_F_pow, &
+  !$OMP   dDel2vdx, dDel2udy, &
+  !$OMP   h2uq, h2vq, hu, hv, hq, FatH, RoScl, GME_coeff &
+  !$OMP )
   do k=1,nz
 
     ! The following are the forms of the horizontal tension and horizontal
@@ -1053,23 +1063,41 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     enddo ; enddo
 
     if (CS%use_GME) then
+      if (CS%answers_2018) then
+        do j=js,je ; do i=is,ie
+          grad_vel_mag_h(i,j) = boundary_mask_h(i,j) * (dudx(i,j)**2 + dvdy(i,j)**2 + &
+            (0.25*((dvdx(I,J) + dvdx(I-1,J-1)) + (dvdx(I,J-1) + dvdx(I-1,J))) )**2 + &
+            (0.25*((dudy(I,J) + dudy(I-1,J-1)) + (dudy(I,J-1) + dudy(I-1,J))) )**2)
+          max_diss_rate_h(i,j,k) = 2.0 * MEKE%MEKE(i,j) * sqrt(grad_vel_mag_h(i,j))
+        enddo ; enddo
+      else  ! This form is invariant to 90-degree rotations.
+        do j=js,je ; do i=is,ie
+          grad_vel_mag_h(i,j) = boundary_mask_h(i,j) * ((dudx(i,j)**2 + dvdy(i,j)**2) + &
+              ((0.25*((dvdx(I,J) + dvdx(I-1,J-1)) + (dvdx(I,J-1) + dvdx(I-1,J))) )**2 + &
+               (0.25*((dudy(I,J) + dudy(I-1,J-1)) + (dudy(I,J-1) + dudy(I-1,J))) )**2))
+          max_diss_rate_h(i,j,k) = 2.0 * MEKE%MEKE(i,j) * sqrt(grad_vel_mag_h(i,j))
+        enddo ; enddo
+      endif
 
-      do j = js, je ; do i = is, ie
-        grad_vel_mag_h(i,j) = boundary_mask_h(i,j) * (dudx(i,j)**2 + dvdy(i,j)**2 + &
-          (0.25*((dvdx(I,J)+dvdx(I-1,J-1))+(dvdx(I,J-1)+dvdx(I-1,J))))**2 + &
-          (0.25*((dudy(I,J)+dudy(I-1,J-1))+(dudy(I,J-1)+dudy(I-1,J))))**2)
-        max_diss_rate_h(i,j,k) = 2.0 * MEKE%MEKE(i,j) * sqrt(grad_vel_mag_h(i,j))
-      enddo ; enddo
+      if (CS%answers_2018) then
+        do J = G%JscB, G%JecB ; do I = G%IscB, G%IecB
+          grad_vel_mag_q(I,J) = boundary_mask_q(I,J) * (dudx(i,j)**2 + dvdy(i,j)**2 + &
+            (0.25*((dvdx(I,J)+dvdx(I-1,J-1)) + (dvdx(I,J-1)+dvdx(I-1,J))) )**2 + &
+            (0.25*((dudy(I,J)+dudy(I-1,J-1)) + (dudy(I,J-1)+dudy(I-1,J))) )**2)
 
+          max_diss_rate_q(I,J,k) = 0.5*(MEKE%MEKE(i,j)+MEKE%MEKE(i+1,j)+ &
+            MEKE%MEKE(i,j+1)+MEKE%MEKE(i+1,j+1)) * sqrt(grad_vel_mag_q(I,J))
+        enddo ; enddo
+      else ! This form is rotationally invariant
+        do J = G%JscB, G%JecB ; do I = G%IscB, G%IecB
+          grad_vel_mag_q(I,J) = boundary_mask_q(I,J) * ((dudx(i,j)**2 + dvdy(i,j)**2) + &
+            ((0.25*((dvdx(I,J)+dvdx(I-1,J-1)) + (dvdx(I,J-1)+dvdx(I-1,J))) )**2 + &
+             (0.25*((dudy(I,J)+dudy(I-1,J-1)) + (dudy(I,J-1)+dudy(I-1,J))) )**2))
 
-      do J = G%JscB, G%JecB ; do I = G%IscB, G%IecB
-        grad_vel_mag_q(I,J) = boundary_mask_q(I,J) * (dudx(i,j)**2 + dvdy(i,j)**2 + &
-          (0.25*((dvdx(I,J)+dvdx(I-1,J-1))+(dvdx(I,J-1)+dvdx(I-1,J))))**2 + &
-          (0.25*((dudy(I,J)+dudy(I-1,J-1))+(dudy(I,J-1)+dudy(I-1,J))))**2)
-
-        max_diss_rate_q(I,J,k) = 0.5*(MEKE%MEKE(i,j)+MEKE%MEKE(i+1,j)+ &
-          MEKE%MEKE(i,j+1)+MEKE%MEKE(i+1,j+1)) * sqrt(grad_vel_mag_q(I,J))
-      enddo ; enddo
+          max_diss_rate_q(I,J,k) = 0.5*((MEKE%MEKE(i,j) + MEKE%MEKE(i+1,j+1)) + &
+                                        (MEKE%MEKE(i+1,j) + MEKE%MEKE(i,j+1))) * sqrt(grad_vel_mag_q(I,J))
+        enddo ; enddo
+      endif
 
       do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         if ((grad_vel_mag_bt_h(i,j)>0) .and. (max_diss_rate_h(i,j,k)>0)) then
@@ -1125,7 +1153,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
       if (associated(MEKE%GME_snk)) then
         do j=js,je ; do i=is,ie
-          FrictWork_GME(i,j,k) = GME_coeff_h(i,j,k) * h(i,j,k) * GV%H_to_kg_m2 * grad_vel_mag_bt_h(i,j)
+          FrictWork_GME(i,j,k) = GME_coeff_h(i,j,k) * h(i,j,k) * GV%H_to_RZ * grad_vel_mag_bt_h(i,j)
         enddo ; enddo
       endif
 
@@ -1190,7 +1218,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     if (find_FrictWork) then ; do j=js,je ; do i=is,ie
       ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
       ! This is the old formulation that includes energy diffusion
-      FrictWork(i,j,k) = GV%H_to_kg_m2 * ( &
+      FrictWork(i,j,k) = GV%H_to_RZ * ( &
               (str_xx(i,j)*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)     &
               -str_xx(i,j)*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j))    &
        +0.25*((str_xy(I,J)*(                                     &
@@ -1209,7 +1237,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
     ! Make a similar calculation as for FrictWork above but accumulating into
     ! the vertically integrated MEKE source term, and adjusting for any
-    ! energy loss seen as a reduction in the [biharmonic] frictional source term.
+    ! energy loss seen as a reduction in the (biharmonic) frictional source term.
     if (find_FrictWork .and. associated(MEKE)) then ; if (associated(MEKE%mom_src)) then
       if (k==1) then
         do j=js,je ; do i=is,ie
@@ -1245,7 +1273,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
               RoScl = Sh_F_pow / (1.0 + Sh_F_pow) ! = 1 - f^n/(f^n+c*D^n)
             endif
           endif
-          MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + GV%H_to_kg_m2 * ( &
+
+
+          MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + GV%H_to_RZ * ( &
                 ((str_xx(i,j)-RoScl*bhstr_xx(i,j))*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)  &
                 -(str_xx(i,j)-RoScl*bhstr_xx(i,j))*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j)) &
          +0.25*(((str_xy(I,J)-RoScl*bhstr_xy(I,J))*(                                  &
@@ -1254,26 +1284,24 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                 +(str_xy(I-1,J-1)-RoScl*bhstr_xy(I-1,J-1))*(                          &
                      (u(I-1,j,k)-u(I-1,j-1,k))*G%IdyBu(I-1,J-1)                       &
                     +(v(i,J-1,k)-v(i-1,J-1,k))*G%IdxBu(I-1,J-1) ))                    &
-               +((str_xy(I-1,J)-RoScl*bhstr_xy(I-1,J))*(                              &
+                +((str_xy(I-1,J)-RoScl*bhstr_xy(I-1,J))*(                             &
                      (u(I-1,j+1,k)-u(I-1,j,k))*G%IdyBu(I-1,J)                         &
                     +(v(i,J,k)-v(i-1,J,k))*G%IdxBu(I-1,J) )                           &
                 +(str_xy(I,J-1)-RoScl*bhstr_xy(I,J-1))*(                              &
                      (u(I,j,k)-u(I,j-1,k))*G%IdyBu(I,J-1)                             &
                     +(v(i+1,J-1,k)-v(i,J-1,k))*G%IdxBu(I,J-1) )) ) )
         enddo ; enddo
-      endif ! MEKE%backscatter
+      endif ! MEKE%backscatter_Ro_c
 
       do j=js,je ; do i=is,ie
         MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + FrictWork(i,j,k)
       enddo ; enddo
 
-      if (CS%use_GME .and. associated(MEKE)) then
-        if (associated(MEKE%GME_snk)) then
-          do j=js,je ; do i=is,ie
-            MEKE%GME_snk(i,j) = MEKE%GME_snk(i,j) + FrictWork_GME(i,j,k)
-          enddo ; enddo
-        endif
-      endif
+      if (CS%use_GME .and. associated(MEKE)) then ; if (associated(MEKE%GME_snk)) then
+        do j=js,je ; do i=is,ie
+          MEKE%GME_snk(i,j) = MEKE%GME_snk(i,j) + FrictWork_GME(i,j,k)
+        enddo ; enddo
+      endif ; endif
 
     endif ; endif ! find_FrictWork and associated(mom_src)
 
@@ -1343,8 +1371,8 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
                            ! [T2 L-2 ~> s2 m-2]
   real :: Ah_Limit         ! coefficient [T-1 ~> s-1] used, along with the
                            ! grid spacing, to limit biharmonic viscosity
-  real :: Kh               ! Lapacian horizontal viscosity [L2 s-1]
-  real :: Ah               ! biharmonic horizontal viscosity [L4 s-1]
+  real :: Kh               ! Lapacian horizontal viscosity [L2 T-1 ~> m2 s-1]
+  real :: Ah               ! biharmonic horizontal viscosity [L4 T-1 ~> m4 s-1]
   real :: Kh_vel_scale     ! this speed [L T-1 ~> m s-1] times grid spacing gives Lap visc
   real :: Ah_vel_scale     ! this speed [L T-1 ~> m s-1] times grid spacing cubed gives bih visc
   real :: Ah_time_scale    ! damping time-scale for biharmonic visc [T ~> s]
@@ -1694,7 +1722,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     ALLOC_(CS%Kh_bg_xx(isd:ied,jsd:jed))     ; CS%Kh_bg_xx(:,:) = 0.0
     ALLOC_(CS%Kh_bg_xy(IsdB:IedB,JsdB:JedB)) ; CS%Kh_bg_xy(:,:) = 0.0
     if (CS%bound_Kh .or. CS%better_bound_Kh) then
-      ALLOC_(CS%Kh_Max_xx(IsdB:IedB,JsdB:JedB)) ; CS%Kh_Max_xx(:,:) = 0.0
+      ALLOC_(CS%Kh_Max_xx(Isd:Ied,Jsd:Jed)) ; CS%Kh_Max_xx(:,:) = 0.0
       ALLOC_(CS%Kh_Max_xy(IsdB:IedB,JsdB:JedB)) ; CS%Kh_Max_xy(:,:) = 0.0
     endif
     if (CS%Smagorinsky_Kh) then
@@ -1956,7 +1984,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     enddo ; enddo
     if (CS%debug) then
       call hchksum(CS%Kh_Max_xx, "Kh_Max_xx", G%HI, haloshift=0, scale=US%L_to_m**2*US%s_to_T)
-      call Bchksum(CS%Kh_Max_xx, "Kh_Max_xy", G%HI, haloshift=0, scale=US%L_to_m**2*US%s_to_T)
+      call Bchksum(CS%Kh_Max_xy, "Kh_Max_xy", G%HI, haloshift=0, scale=US%L_to_m**2*US%s_to_T)
     endif
   endif
 
@@ -2018,7 +2046,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     enddo ; enddo
     if (CS%debug) then
       call hchksum(CS%Ah_Max_xx, "Ah_Max_xx", G%HI, haloshift=0, scale=US%L_to_m**4*US%s_to_T)
-      call Bchksum(CS%Ah_Max_xx, "Ah_Max_xy", G%HI, haloshift=0, scale=US%L_to_m**4*US%s_to_T)
+      call Bchksum(CS%Ah_Max_xy, "Ah_Max_xy", G%HI, haloshift=0, scale=US%L_to_m**4*US%s_to_T)
     endif
   endif
 
@@ -2070,14 +2098,16 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
 
       CS%id_FrictWork_GME = register_diag_field('ocean_model','FrictWork_GME',diag%axesTL,Time,&
       'Integral work done by lateral friction terms in GME (excluding diffusion of energy)', &
-      'W m-2', conversion=US%s_to_T**3*US%L_to_m**2)
+      'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T**3*US%L_to_m**2)
   endif
 
   CS%id_FrictWork = register_diag_field('ocean_model','FrictWork',diag%axesTL,Time,&
-      'Integral work done by lateral friction terms', 'W m-2', conversion=US%s_to_T**3*US%L_to_m**2)
+      'Integral work done by lateral friction terms', &
+      'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T**3*US%L_to_m**2)
 
   CS%id_FrictWorkIntz = register_diag_field('ocean_model','FrictWorkIntz',diag%axesT1,Time,      &
-      'Depth integrated work done by lateral friction', 'W m-2', conversion=US%s_to_T**3*US%L_to_m**2, &
+      'Depth integrated work done by lateral friction', &
+      'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T**3*US%L_to_m**2, &
       cmor_field_name='dispkexyfo',                                                              &
       cmor_long_name='Depth integrated ocean kinetic energy dissipation due to lateral friction',&
       cmor_standard_name='ocean_kinetic_energy_dissipation_per_unit_area_due_to_xy_friction')
@@ -2213,9 +2243,9 @@ subroutine hor_visc_end(CS)
     endif
     if (CS%Smagorinsky_Ah) then
       DEALLOC_(CS%Biharm5_const_xx) ; DEALLOC_(CS%Biharm5_const_xy)
-      if (CS%bound_Coriolis) then
-        DEALLOC_(CS%Biharm5_const2_xx) ; DEALLOC_(CS%Biharm5_const2_xy)
-      endif
+      ! if (CS%bound_Coriolis) then
+      !   DEALLOC_(CS%Biharm5_const2_xx) ; DEALLOC_(CS%Biharm5_const2_xy)
+      ! endif
     endif
     if (CS%Leith_Ah) then
       DEALLOC_(CS%Biharm_const_xx) ; DEALLOC_(CS%Biharm_const_xy)
