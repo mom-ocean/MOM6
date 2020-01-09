@@ -1145,17 +1145,21 @@ end subroutine set_velocity_depth_min
 ! -----------------------------------------------------------------------------
 !> Pre-compute global integrals of grid quantities (like masked ocean area) for
 !! later use in reporting diagnostics
-subroutine compute_global_grid_integrals(G)
-  type(dyn_horgrid_type), intent(inout) :: G  !< The dynamic horizontal grid
+subroutine compute_global_grid_integrals(G, US)
+  type(dyn_horgrid_type),          intent(inout) :: G  !< The dynamic horizontal grid
+  type(unit_scale_type), optional, intent(in)    :: US !< A dimensional unit scaling type
 
   ! Local variables
   real, dimension(G%isc:G%iec, G%jsc:G%jec) :: tmpForSumming
+  real :: area_scale  ! A scaling factor for area into MKS units
   integer :: i,j
+
+  area_scale = 1.0 ; if (present(US)) area_scale = US%L_to_m**2
 
   tmpForSumming(:,:) = 0.
   G%areaT_global = 0.0 ; G%IareaT_global = 0.0
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    tmpForSumming(i,j) = G%areaT(i,j) * G%mask2dT(i,j)
+    tmpForSumming(i,j) = area_scale*G%areaT(i,j) * G%mask2dT(i,j)
   enddo ; enddo
   G%areaT_global = reproducing_sum(tmpForSumming)
 
