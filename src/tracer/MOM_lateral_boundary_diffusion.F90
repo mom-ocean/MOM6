@@ -338,6 +338,11 @@ subroutine boundary_k_range(boundary, nk, h, hbl, k_top, zeta_top, k_bot, zeta_b
     k_bot = 1
     zeta_bot = 0.
     if (hbl == 0.) return
+    if ( hbl >= htot ); then
+      k_bot = nk
+      zeta_bot = 0.
+      return
+    endif
     do k=1,nk
       htot = htot + h(k)
       if ( htot >= hbl) then
@@ -354,10 +359,15 @@ subroutine boundary_k_range(boundary, nk, h, hbl, k_top, zeta_top, k_bot, zeta_b
     zeta_bot = 1.
     htot = 0.
     if (hbl == 0.) return
+    if (hbl >= htot) then
+      k_top = 1
+      zeta_top = 0.
+      return
+    endif
     do k=nk,1,-1
       htot = htot + h(k)
       if (htot >= hbl) then
-        k_top = k
+      k_top = k
         zeta_top = 1 - (htot - hbl)/h(k)
         return
       endif
