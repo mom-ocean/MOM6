@@ -155,7 +155,6 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US)
 
   call pass_var(hbl,G%Domain)
-
   do m = 1,Reg%ntr
     tracer => Reg%tr(m)
 
@@ -378,7 +377,7 @@ subroutine boundary_k_range(boundary, nk, h, hbl, k_top, zeta_top, k_bot, zeta_b
     k_bot = 1
     zeta_bot = 0.
     if (hbl == 0.) return
-    if ( hbl >= htot ); then
+    if (hbl >= SUM(h(:))) then
       k_bot = nk
       zeta_bot = 0.
       return
@@ -399,7 +398,7 @@ subroutine boundary_k_range(boundary, nk, h, hbl, k_top, zeta_top, k_bot, zeta_b
     zeta_bot = 1.
     htot = 0.
     if (hbl == 0.) return
-    if (hbl >= htot) then
+    if (hbl >= SUM(h(:))) then
       k_top = 1
       zeta_top = 0.
       return
