@@ -142,6 +142,8 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   real, dimension(SZI_(G),SZJB_(G))         :: vFlx_bulk   !< Total calculated bulk-layer v-flux for the tracer
   real, dimension(SZIB_(G),SZJ_(G))         :: uwork_2d    !< Layer summed u-flux transport
   real, dimension(SZI_(G),SZJB_(G))         :: vwork_2d    !< Layer summed v-flux transport
+  real, dimension(SZI_(G),SZJ_(G),G%ke)     :: tendency    ! tendency array for diagn
+  real, dimension(SZI_(G),SZJ_(G))          :: tendency_2d ! depth integrated content tendency for diagn
   type(tracer_type), pointer                :: Tracer => NULL() !< Pointer to the current tracer
   integer :: remap_method !< Reconstruction method
   integer :: i,j,k,m      !< indices to loop over
@@ -156,6 +158,12 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
 
   do m = 1,Reg%ntr
     tracer => Reg%tr(m)
+
+    ! for diagnostics
+    if (tracer%id_lbdxy_conc > 0 .or. tracer%id_lbdxy_cont > 0 .or. tracer%id_lbdxy_cont_2d > 0) then
+      tendency(:,:,:)  = 0.0
+    endif
+
     do j = G%jsc-1, G%jec+1
       ! Interpolate state to interface
       do i = G%isc-1, G%iec+1
@@ -224,6 +232,11 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       if (G%mask2dT(i,j)>0.) then
         tracer%t(i,j,k) = tracer%t(i,j,k) + (( (uFlx(I-1,j,k)-uFlx(I,j,k)) ) + ( (vFlx(i,J-1,k)-vFlx(i,J,k) ) ))* &
                           (G%IareaT(i,j)/( h(i,j,k) + GV%H_subroundoff))
+
+        if (tracer%id_lbdxy_conc > 0  .or. tracer%id_lbdxy_cont > 0 .or. tracer%id_lbdxy_cont_2d > 0 ) then
+          tendency(i,j,k) = (( (uFlx(I-1,j,k)-uFlx(I,j,k)) ) + ( (vFlx(i,J-1,k)-vFlx(i,J,k) ) )) * G%IareaT(i,j) * Idt
+        endif
+
       endif
     enddo ; enddo ; enddo
 
@@ -245,6 +258,33 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       enddo; enddo; enddo
       call post_data(tracer%id_lbd_dfy_2d, vwork_2d, CS%diag)
     endif
+
+    ! post tendency of tracer content
+    if (tracer%id_lbdxy_cont > 0) then
+      call post_data(tracer%id_lbdxy_cont, tendency(:,:,:), CS%diag)
+    endif
+
+    ! post depth summed tendency for tracer content
+    if (tracer%id_lbdxy_cont_2d > 0) then
+      tendency_2d(:,:) = 0.
+      do j = G%jsc,G%jec ; do i = G%isc,G%iec
+        do k = 1, GV%ke
+          tendency_2d(i,j) = tendency_2d(i,j) + tendency(i,j,k)
+        enddo
+      enddo ; enddo
+      call post_data(tracer%id_lbdxy_cont_2d, tendency_2d(:,:), CS%diag)
+    endif
+
+    ! post tendency of tracer concentration; this step must be
+    ! done after posting tracer content tendency, since we alter
+    ! the tendency array.
+    if (tracer%id_lbdxy_conc > 0) then
+      do k = 1, GV%ke ; do j = G%jsc,G%jec ; do i = G%isc,G%iec
+        tendency(i,j,k) =  tendency(i,j,k) / ( h(i,j,k) + GV%H_subroundoff )
+      enddo ; enddo ; enddo
+      call post_data(tracer%id_lbdxy_conc, tendency, CS%diag)
+    endif
+
   enddo
 
 end subroutine lateral_boundary_diffusion
