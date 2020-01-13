@@ -53,9 +53,6 @@ use regrid_consts,        only : coordinateUnits, coordinateMode, state_dependen
 use regrid_edge_values,   only : edge_values_implicit_h4
 use PLM_functions,        only : PLM_reconstruction, PLM_boundary_extrapolation
 use PPM_functions,        only : PPM_reconstruction, PPM_boundary_extrapolation
-use P1M_functions,        only : P1M_interpolation,  P1M_boundary_extrapolation
-use P3M_functions,        only : P3M_interpolation,  P3M_boundary_extrapolation
-
 
 implicit none ; private
 #include <MOM_memory.h>
@@ -525,8 +522,8 @@ subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug, OBC)
     endif
   enddo ; enddo
 
-  call ALE_remap_scalar(CS%remapCS, G, GV, nk, h, tv%T, h_new, tv%T)
-  call ALE_remap_scalar(CS%remapCS, G, GV, nk, h, tv%S, h_new, tv%S)
+  call ALE_remap_scalar(CS%remapCS, G, GV, nk, h, tv%T, h_new, tv%T, answers_2018=CS%answers_2018)
+  call ALE_remap_scalar(CS%remapCS, G, GV, nk, h, tv%S, h_new, tv%S, answers_2018=CS%answers_2018)
 
   if (debug) call MOM_tracer_chkinv("After ALE_offline_inputs", G, h_new, Reg%Tr, Reg%ntr)
 
@@ -790,8 +787,9 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
                           "and u/v are to be remapped")
   endif
 
-  !### Try replacing both of these with GV%H_subroundoff
-  if (GV%Boussinesq) then
+  if (.not.CS_ALE%answers_2018) then
+    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+  elseif (GV%Boussinesq) then
     h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
   else
     h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
@@ -942,7 +940,7 @@ end subroutine remap_all_state_vars
 !> Remaps a single scalar between grids described by thicknesses h_src and h_dst.
 !! h_dst must be dimensioned as a model array with GV%ke layers while h_src can
 !! have an arbitrary number of layers specified by nk_src.
-subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_cells, old_remap )
+subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_cells, old_remap, answers_2018 )
   type(remapping_CS),                      intent(in)    :: CS        !< Remapping control structure
   type(ocean_grid_type),                   intent(in)    :: G         !< Ocean grid structure
   type(verticalGrid_type),                 intent(in)    :: GV        !< Ocean vertical grid structure
@@ -958,20 +956,26 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
                                                                       !! layers otherwise (default).
   logical, optional,                       intent(in)    :: old_remap !< If true, use the old "remapping_core_w"
                                                                       !! method, otherwise use "remapping_core_h".
+  logical,                       optional, intent(in)    :: answers_2018 !< If true, use the order of arithmetic
+                                                                      !! and expressions that recover the answers for
+                                                                      !! remapping from the end of 2018. Otherwise,
+                                                                      !! use more robust forms of the same expressions.
   ! Local variables
   integer :: i, j, k, n_points
   real :: dx(GV%ke+1)
   real :: h_neglect, h_neglect_edge
-  logical :: ignore_vanished_layers, use_remapping_core_w
+  logical :: ignore_vanished_layers, use_remapping_core_w, use_2018_remap
 
   ignore_vanished_layers = .false.
   if (present(all_cells)) ignore_vanished_layers = .not. all_cells
   use_remapping_core_w = .false.
   if (present(old_remap)) use_remapping_core_w = old_remap
   n_points = nk_src
+  use_2018_remap = .true. ; if (present(answers_2018)) use_2018_remap = answers_2018
 
-  !### Try replacing both of these with GV%H_subroundoff
-  if (GV%Boussinesq) then
+  if (.not.use_2018_remap) then
+    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+  elseif (GV%Boussinesq) then
     h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
   else
     h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
@@ -1034,8 +1038,9 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_ext
   real, dimension(CS%nk,2) :: ppol_coefs !Coefficients of polynomial
   real :: h_neglect
 
-  !### Replace this with GV%H_subroundoff
-  if (GV%Boussinesq) then
+  if (.not.CS%answers_2018) then
+    h_neglect = GV%H_subroundoff
+  elseif (GV%Boussinesq) then
     h_neglect = GV%m_to_H*1.0e-30
   else
     h_neglect = GV%kg_m2_to_H*1.0e-30
@@ -1110,8 +1115,9 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_ext
       ppol_coefs        ! Coefficients of polynomial, all in [degC] or [ppt]
   real :: h_neglect, h_neglect_edge ! Tiny thicknesses [H ~> m or kg m-2]
 
-  !### Try replacing both of these with GV%H_subroundoff
-  if (GV%Boussinesq) then
+  if (.not.CS%answers_2018) then
+    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+  elseif (GV%Boussinesq) then
     h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
   else
     h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
@@ -1128,10 +1134,10 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_ext
     ! Reconstruct salinity profile
     ppol_E(:,:) = 0.0
     ppol_coefs(:,:) = 0.0
-    !### Try to replace the following value of h_neglect with GV%H_subroundoff.
     call edge_values_implicit_h4( GV%ke, hTmp, tmp, ppol_E, h_neglect=h_neglect_edge, &
                                   answers_2018=CS%answers_2018 )
-    call PPM_reconstruction( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect )
+    call PPM_reconstruction( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect, &
+                                  answers_2018=CS%answers_2018 )
     if (bdry_extrap) &
       call PPM_boundary_extrapolation( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect )
 
@@ -1144,10 +1150,15 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_ext
     ppol_E(:,:) = 0.0
     ppol_coefs(:,:) = 0.0
     tmp(:) = tv%T(i,j,:)
-    !### Try to replace the following value of h_neglect with GV%H_subroundoff.
-    call edge_values_implicit_h4( GV%ke, hTmp, tmp, ppol_E, h_neglect=1.0e-10*GV%m_to_H, &
+    if (CS%answers_2018) then
+      call edge_values_implicit_h4( GV%ke, hTmp, tmp, ppol_E, h_neglect=1.0e-10*GV%m_to_H, &
                                   answers_2018=CS%answers_2018 )
-    call PPM_reconstruction( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect )
+    else
+      call edge_values_implicit_h4( GV%ke, hTmp, tmp, ppol_E, h_neglect=GV%H_subroundoff, &
+                                  answers_2018=CS%answers_2018 )
+    endif
+    call PPM_reconstruction( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect, &
+                                  answers_2018=CS%answers_2018 )
     if (bdry_extrap) &
       call PPM_boundary_extrapolation(GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect )
 

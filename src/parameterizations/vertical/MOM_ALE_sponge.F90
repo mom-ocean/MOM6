@@ -127,6 +127,9 @@ type, public :: ALE_sponge_CS ; private
                                    !! timing of diagnostic output.
 
   type(remapping_cs) :: remap_cs   !< Remapping parameters and work arrays
+  logical :: remap_answers_2018    !< If true, use the order of arithmetic and expressions that
+                                   !! recover the answers for remapping from the end of 2018.
+                                   !! Otherwise, use more robust forms of the same expressions.
 
   logical :: time_varying_sponges  !< True if using newer sponge code
   logical :: spongeDataOngrid !< True if the sponge data are on the model horizontal grid
@@ -141,7 +144,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
 
   type(ocean_grid_type),            intent(in) :: G !< The ocean's grid structure.
   integer,                          intent(in) :: nz_data !< The total number of sponge input layers.
-  real, dimension(SZI_(G),SZJ_(G)), intent(in) :: Iresttime !< The inverse of the restoring time [s-1].
+  real, dimension(SZI_(G),SZJ_(G)), intent(in) :: Iresttime !< The inverse of the restoring time [T-1 ~> s-1].
   type(param_file_type),            intent(in) :: param_file !< A structure indicating the open file
                                                              !! to parse for model parameter values.
   type(ALE_sponge_CS),              pointer    :: CS !< A pointer that is set to point to the control
@@ -156,9 +159,10 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
   logical :: use_sponge
   real, allocatable, dimension(:,:,:) :: data_hu !< thickness at u points [H ~> m or kg m-2]
   real, allocatable, dimension(:,:,:) :: data_hv !< thickness at v points [H ~> m or kg m-2]
-  real, allocatable, dimension(:,:) :: Iresttime_u !< inverse of the restoring time at u points [s-1]
-  real, allocatable, dimension(:,:) :: Iresttime_v !< inverse of the restoring time at v points [s-1]
+  real, allocatable, dimension(:,:) :: Iresttime_u !< inverse of the restoring time at u points [T-1 ~> s-1]
+  real, allocatable, dimension(:,:) :: Iresttime_v !< inverse of the restoring time at v points [T-1 ~> s-1]
   logical :: bndExtrapolation = .true. ! If true, extrapolate boundaries
+  logical :: default_2018_answers
   integer :: i, j, k, col, total_sponge_cols, total_sponge_cols_u, total_sponge_cols_v
   character(len=10)  :: remapScheme
   if (associated(CS)) then
@@ -193,6 +197,13 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
                  "than PCM. E.g., if PPM is used for remapping, a "//&
                  "PPM reconstruction will also be used within boundary cells.", &
                  default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
+  call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", CS%remap_answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=default_2018_answers)
 
   CS%time_varying_sponges = .false.
   CS%nz = G%ke
@@ -216,7 +227,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       if ((Iresttime(i,j)>0.0) .and. (G%mask2dT(i,j)>0)) then
         CS%col_i(col) = i ; CS%col_j(col) = j
-        CS%Iresttime_col(col) = G%US%T_to_s*Iresttime(i,j)
+        CS%Iresttime_col(col) = Iresttime(i,j)
         col = col +1
       endif
     enddo ; enddo
@@ -232,7 +243,8 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
   call sum_across_PEs(total_sponge_cols)
 
 ! Call the constructor for remapping control structure
-  call initialize_remapping(CS%remap_cs, remapScheme, boundary_extrapolation=bndExtrapolation)
+  call initialize_remapping(CS%remap_cs, remapScheme, boundary_extrapolation=bndExtrapolation, &
+                            answers_2018=CS%remap_answers_2018)
 
   call log_param(param_file, mdl, "!Total sponge columns at h points", total_sponge_cols, &
                  "The total number of columns where sponges are applied at h points.")
@@ -264,7 +276,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
        do j=CS%jsc,CS%jec ; do I=CS%iscB,CS%iecB
          if ((Iresttime_u(I,j)>0.0) .and. (G%mask2dCu(I,j)>0)) then
            CS%col_i_u(col) = i ; CS%col_j_u(col) = j
-           CS%Iresttime_col_u(col) = G%US%T_to_s*Iresttime_u(i,j)
+           CS%Iresttime_col_u(col) = Iresttime_u(i,j)
            col = col +1
          endif
        enddo ; enddo
@@ -301,7 +313,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
       do J=CS%jscB,CS%jecB ; do i=CS%isc,CS%iec
         if ((Iresttime_v(i,J)>0.0) .and. (G%mask2dCv(i,J)>0)) then
           CS%col_i_v(col) = i ; CS%col_j_v(col) = j
-          CS%Iresttime_col_v(col) = G%US%T_to_s*Iresttime_v(i,j)
+          CS%Iresttime_col_v(col) = Iresttime_v(i,j)
           col = col +1
         endif
       enddo ; enddo
@@ -375,7 +387,7 @@ end subroutine get_ALE_sponge_thicknesses
 subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
 
   type(ocean_grid_type),            intent(in) :: G !< The ocean's grid structure.
-  real, dimension(SZI_(G),SZJ_(G)), intent(in) :: Iresttime !< The inverse of the restoring time [s-1].
+  real, dimension(SZI_(G),SZJ_(G)), intent(in) :: Iresttime !< The inverse of the restoring time [T-1 ~> s-1].
   type(param_file_type),            intent(in) :: param_file !< A structure indicating the open file to parse
                                                              !! for model parameter values.
   type(ALE_sponge_CS),              pointer    :: CS !< A pointer that is set to point to the control
@@ -385,9 +397,10 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_sponge"  ! This module's name.
   logical :: use_sponge
-    real, allocatable, dimension(:,:) :: Iresttime_u !< inverse of the restoring time at u points [s-1]
-  real, allocatable, dimension(:,:) :: Iresttime_v !< inverse of the restoring time at v points [s-1]
+    real, allocatable, dimension(:,:) :: Iresttime_u !< inverse of the restoring time at u points [T-1 ~> s-1]
+  real, allocatable, dimension(:,:) :: Iresttime_v !< inverse of the restoring time at v points [T-1 ~> s-1]
   logical :: bndExtrapolation = .true. ! If true, extrapolate boundaries
+  logical :: default_2018_answers
   logical :: spongeDataOngrid = .false.
   integer :: i, j, k, col, total_sponge_cols, total_sponge_cols_u, total_sponge_cols_v
   character(len=10)  :: remapScheme
@@ -418,6 +431,13 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
                  "than PCM. E.g., if PPM is used for remapping, a "//&
                  "PPM reconstruction will also be used within boundary cells.", &
                  default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
+  call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", CS%remap_answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=default_2018_answers)
   call get_param(param_file, mdl, "SPONGE_DATA_ONGRID", CS%spongeDataOngrid, &
                  "When defined, the incoming sponge data are "//&
                  "assumed to be on the model grid " , &
@@ -443,7 +463,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       if ((Iresttime(i,j)>0.0) .and. (G%mask2dT(i,j)>0)) then
         CS%col_i(col) = i ; CS%col_j(col) = j
-        CS%Iresttime_col(col) = G%US%T_to_s*Iresttime(i,j)
+        CS%Iresttime_col(col) = Iresttime(i,j)
         col = col +1
       endif
     enddo ; enddo
@@ -452,7 +472,8 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
   call sum_across_PEs(total_sponge_cols)
 
 ! Call the constructor for remapping control structure
-  call initialize_remapping(CS%remap_cs, remapScheme, boundary_extrapolation=bndExtrapolation)
+  call initialize_remapping(CS%remap_cs, remapScheme, boundary_extrapolation=bndExtrapolation, &
+                            answers_2018=CS%remap_answers_2018)
   call log_param(param_file, mdl, "!Total sponge columns at h points", total_sponge_cols, &
                  "The total number of columns where sponges are applied at h points.")
   if (CS%sponge_uv) then
@@ -474,7 +495,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
       do j=CS%jsc,CS%jec ; do I=CS%iscB,CS%iecB
         if ((Iresttime_u(I,j)>0.0) .and. (G%mask2dCu(I,j)>0)) then
           CS%col_i_u(col) = i ; CS%col_j_u(col) = j
-          CS%Iresttime_col_u(col) = G%US%T_to_s*Iresttime_u(i,j)
+          CS%Iresttime_col_u(col) = Iresttime_u(i,j)
           col = col +1
         endif
       enddo ; enddo
@@ -500,7 +521,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
       do J=CS%jscB,CS%jecB ; do i=CS%isc,CS%iec
         if ((Iresttime_v(i,J)>0.0) .and. (G%mask2dCv(i,J)>0)) then
           CS%col_i_v(col) = i ; CS%col_j_v(col) = j
-          CS%Iresttime_col_v(col) = G%US%T_to_s*Iresttime_v(i,j)
+          CS%Iresttime_col_v(col) = Iresttime_v(i,j)
           col = col +1
         endif
       enddo ; enddo
@@ -786,7 +807,9 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   if (.not.associated(CS)) return
 
-  if (GV%Boussinesq) then
+  if (.not.CS%remap_answers_2018) then
+    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+  elseif (GV%Boussinesq) then
     h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
   else
     h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10

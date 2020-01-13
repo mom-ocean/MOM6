@@ -437,12 +437,12 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
   type(sponge_CS),   pointer    :: CSp      !< Layer-mode sponge structure
   type(ALE_sponge_CS),   pointer    :: ACSp !< ALE-mode sponge structure
   ! Local variables
-  real :: T(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for temp
-  real :: S(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for salt
-  real :: RHO(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for RHO
-  real :: h(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for thickness
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [s-1].
-  real :: TNUDG                     ! Nudging time scale, days
+  real :: T(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for temp [degC]
+  real :: S(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for salt [ppt]
+  ! real :: RHO(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for RHO [R ~> kg m-3]
+  real :: h(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for thickness [H ~> m or kg m-2]
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
+  real :: TNUDG                     ! Nudging time scale [T ~> s]
   real :: S_sur, T_sur              ! Surface salinity and temerature in sponge
   real :: S_bot, T_bot              ! Bottom salinity and temerature in sponge
   real :: t_ref, s_ref              ! reference T and S
@@ -455,7 +455,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
   real :: eta1D(SZK_(G)+1)          ! Interface height relative to the sea surface, positive upward [Z ~> m].
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta [Z ~> m].
   real :: min_depth, dummy1, z
-  real :: damp, rho_dummy, min_thickness, rho_tmp, xi0
+  real :: rho_dummy, min_thickness, rho_tmp, xi0
   character(len=40) :: verticalCoordinate, filename, state_file
   character(len=40) :: temp_var, salt_var, eta_var, inputdir
 
@@ -471,12 +471,13 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
   call get_param(PF, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
             default=DEFAULT_COORDINATE_MODE)
 
-  call get_param(PF, mdl, "ISOMIP_TNUDG", TNUDG, "Nudging time scale for sponge layers (days)", default=0.0)
+  call get_param(PF, mdl, "ISOMIP_TNUDG", TNUDG, "Nudging time scale for sponge layers (days)", &
+                 default=0.0, scale=86400.0*US%s_to_T)
 
-  call get_param(PF, mdl, "T_REF", t_ref, "Reference temperature", default=10.0,&
+  call get_param(PF, mdl, "T_REF", t_ref, "Reference temperature", default=10.0, &
                  do_not_log=.true.)
 
-  call get_param(PF, mdl, "S_REF", s_ref, "Reference salinity", default=35.0,&
+  call get_param(PF, mdl, "S_REF", s_ref, "Reference salinity", default=35.0, &
                  do_not_log=.true.)
 
   call get_param(PF, mdl, "ISOMIP_S_SUR_SPONGE", s_sur, &
@@ -491,7 +492,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
   call get_param(PF, mdl, "ISOMIP_T_BOT_SPONGE", t_bot, &
                  'Bottom temperature in sponge layer.', default=t_ref) ! units="degC")
 
-  T(:,:,:) = 0.0 ; S(:,:,:) = 0.0 ; Idamp(:,:) = 0.0; RHO(:,:,:) = 0.0
+  T(:,:,:) = 0.0 ; S(:,:,:) = 0.0 ; Idamp(:,:) = 0.0 !; RHO(:,:,:) = 0.0
 
 !   Set up sponges for ISOMIP configuration
   call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, &
@@ -502,25 +503,20 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
   if (associated(ACSp)) call MOM_error(FATAL, &
         "ISOMIP_initialize_sponges called with an associated ALE-sponge control structure.")
 
-  !  Here the inverse damping time [s-1], is set. Set Idamp to 0     !
-  !  wherever there is no sponge, and the subroutines that are called  !
-  !  will automatically set up the sponges only where Idamp is positive!
+  !  Here the inverse damping time [T-1 ~> s-1], is set. Set Idamp to 0
+  !  wherever there is no sponge, and the subroutines that are called
+  !  will automatically set up the sponges only where Idamp is positive
   !  and mask2dT is 1.
 
   do i=is,ie; do j=js,je
-    if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
-
-  ! 1 / day
-      dummy1=(G%geoLonT(i,j)-790.0)/(800.0-790.0)
-      damp = 1.0/TNUDG * max(0.0,dummy1)
-
-    else ; damp=0.0
+    if (G%bathyT(i,j) <= min_depth) then
+      Idamp(i,j) = 0.0
+    elseif (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
+      dummy1 = (G%geoLonT(i,j)-790.0)/(800.0-790.0)
+      Idamp(i,j) = (1.0/TNUDG) * max(0.0,dummy1)
+    else
+      Idamp(i,j) = 0.0
     endif
-
-  ! convert to 1 / seconds
-    if (G%bathyT(i,j) > min_depth) then
-      Idamp(i,j) = damp/86400.0
-    else ; Idamp(i,j) = 0.0 ; endif
 
   enddo ; enddo
 
