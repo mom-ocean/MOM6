@@ -1294,10 +1294,17 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
     do k=nz-1,2,-1 ; do i=is,ie
       if (max_TKE(i,k) <= 0.0) cycle
       z_from_bot(i) = z_from_bot(i) + GV%H_to_Z*h(i,j,k)
-      if (N2_meanz(i) > 1.0e-14*US%T_to_s**2 ) then
-        z_from_bot_WKB(i) = z_from_bot_WKB(i) &
-            + GV%H_to_Z * h(i,j,k) * N2_lay(i,k) / N2_meanz(i)
-      else ; z_from_bot_WKB(i) = 0 ; endif
+      if (CS%answers_2018) then
+        if (N2_meanz(i) > 1.0e-14*US%T_to_s**2 ) then
+          z_from_bot_WKB(i) = z_from_bot_WKB(i) &
+              + GV%H_to_Z * h(i,j,k) * N2_lay(i,k) / N2_meanz(i)
+        else ; z_from_bot_WKB(i) = 0 ; endif
+      else
+        if (GV%H_to_Z*h(i,j,k) * N2_lay(i,k) < (1.0e14 * htot_WKB(i)) * N2_meanz(i)) then
+          z_from_bot_WKB(i) = z_from_bot_WKB(i) + &
+             GV%H_to_Z*h(i,j,k) * N2_lay(i,k) / N2_meanz(i)
+        endif
+      endif
 
       ! Fraction of bottom flux predicted to reach top of this layer
       TKE_frac_top(i)     = ( Inv_int(i) * z0_polzin_scaled(i) ) / &
