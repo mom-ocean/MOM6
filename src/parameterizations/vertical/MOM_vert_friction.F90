@@ -821,13 +821,13 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
       do k=1,nz ; do I=Isq,Ieq ; if (do_i_shelf(I)) then
         ! Should we instead take the inverse of the average of the inverses?
         CS%h_u(I,j,k) = forces%frac_shelf_u(I,j)  * hvel_shelf(I,k) + &
-                   (1.0-forces%frac_shelf_u(I,j)) * hvel(I,k)
+                   (1.0-forces%frac_shelf_u(I,j)) * hvel(I,k) + h_neglect
       elseif (do_i(I)) then
-        CS%h_u(I,j,k) = hvel(I,k)
+        CS%h_u(I,j,k) = hvel(I,k) + h_neglect
       endif ; enddo ; enddo
     else
       do K=1,nz+1 ; do I=Isq,Ieq ; if (do_i(I)) CS%a_u(I,j,K) = a_cpl(I,K) ; enddo ; enddo
-      do k=1,nz ; do I=Isq,Ieq ; if (do_i(I)) CS%h_u(I,j,k) = hvel(I,k) ; enddo ; enddo
+      do k=1,nz ; do I=Isq,Ieq ; if (do_i(I)) CS%h_u(I,j,k) = hvel(I,k) + h_neglect ; enddo ; enddo
     endif
 
     ! Diagnose total Kv at u-points
@@ -989,13 +989,13 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
       do k=1,nz ; do i=is,ie ; if (do_i_shelf(i)) then
         ! Should we instead take the inverse of the average of the inverses?
         CS%h_v(i,J,k) = forces%frac_shelf_v(i,J)  * hvel_shelf(i,k) + &
-                   (1.0-forces%frac_shelf_v(i,J)) * hvel(i,k)
+                   (1.0-forces%frac_shelf_v(i,J)) * hvel(i,k) + h_neglect
       elseif (do_i(i)) then
-        CS%h_v(i,J,k) = hvel(i,k)
+        CS%h_v(i,J,k) = hvel(i,k) + h_neglect
       endif ; enddo ; enddo
     else
       do K=1,nz+1 ; do i=is,ie ; if (do_i(i)) CS%a_v(i,J,K) = a_cpl(i,K) ; enddo ; enddo
-      do k=1,nz ; do i=is,ie ; if (do_i(i)) CS%h_v(i,J,k) = hvel(i,k) ; enddo ; enddo
+      do k=1,nz ; do i=is,ie ; if (do_i(i)) CS%h_v(i,J,k) = hvel(i,k) + h_neglect ; enddo ; enddo
     endif
 
     ! Diagnose total Kv at v-points

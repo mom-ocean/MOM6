@@ -157,13 +157,14 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
   type(sponge_CS),       pointer    :: CSp  !< A pointer that is set to point to the control
                                             !! structure for this module.
 
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta.
+  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta [Z ~> m].
   real :: temp(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for other variables. !
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [s-1].
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
 
   real :: H0(SZK_(G))  ! Interface heights [Z ~> m].
-  real :: min_depth
-  real :: damp, e_dense, damp_new
+  real :: min_depth    ! The minimum depth at which to apply damping [Z ~> m]
+  real :: damp, damp_new ! Damping rates in the sponge [days]
+  real :: e_dense      ! The depth of the densest interfaces [Z ~> m]
   character(len=40)  :: mdl = "DOME_initialize_sponges" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
@@ -186,17 +187,18 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
   do i=is,ie; do j=js,je
     if (G%geoLonT(i,j) < 100.0) then ; damp = 10.0
     elseif (G%geoLonT(i,j) < 200.0) then
-      damp = 10.0*(200.0-G%geoLonT(i,j))/100.0
+      damp = 10.0 * (200.0-G%geoLonT(i,j))/100.0
     else ; damp=0.0
     endif
 
     if (G%geoLonT(i,j) > 1400.0) then ; damp_new = 10.0
     elseif (G%geoLonT(i,j) > 1300.0) then
-       damp_new = 10.0*(G%geoLonT(i,j)-1300.0)/100.0
+       damp_new = 10.0 * (G%geoLonT(i,j)-1300.0)/100.0
     else ; damp_new = 0.0
     endif
 
-    if (damp <= damp_new) damp=damp_new
+    if (damp <= damp_new) damp = damp_new
+    damp = US%T_to_s*damp
 
     ! These will be stretched inside of apply_sponge, so they can be in
     ! depth space for Boussinesq or non-Boussinesq models.
@@ -212,7 +214,7 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
     eta(i,j,nz+1) = -G%bathyT(i,j)
 
     if (G%bathyT(i,j) > min_depth) then
-      Idamp(i,j) = damp/86400.0
+      Idamp(i,j) = damp / 86400.0
     else ; Idamp(i,j) = 0.0 ; endif
   enddo ; enddo
 

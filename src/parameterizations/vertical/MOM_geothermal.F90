@@ -28,7 +28,7 @@ type, public :: geothermal_CS ; private
                              !! of moving upward between layers [R degC-1 ~> kg m-3 degC-1].
   real, pointer :: geo_heat(:,:) => NULL() !< The geothermal heat flux [J m-2 T-1 ~> W m-2].
   real    :: geothermal_thick !< The thickness over which geothermal heating is
-                             !! applied [m] (not [H]).
+                             !! applied [H ~> m or kg m-2].
   logical :: apply_geothermal !< If true, geothermal heating will be applied
                              !! otherwise GEOTHERMAL_SCALE has been set to 0 and
                              !! there is no heat to apply.
@@ -46,7 +46,7 @@ contains
 
 !> Applies geothermal heating, including the movement of water
 !! between isopycnal layers to match the target densities.  The heating is
-!! applied to the bottommost layers that occur within ### of the bottom. If
+!! applied to the bottommost layers that occur within GEOTHERMAL_THICKNESS of the bottom. If
 !! the partial derivative of the coordinate density with temperature is positive
 !! or very small, the layers are simply heated in place.  Any heat that can not
 !! be applied to the ocean is returned (WHERE)?
@@ -188,7 +188,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
       heat_rem(i) = G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp))
       do_i(i) = .true. ; if (heat_rem(i) <= 0.0) do_i(i) = .false.
       if (do_i(i)) num_start = num_start + 1
-      h_geo_rem(i) = CS%Geothermal_thick * GV%m_to_H
+      h_geo_rem(i) = CS%Geothermal_thick
     enddo
     if (num_start == 0) cycle
     num_left = num_start
@@ -422,7 +422,7 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS)
                  "read, or blank to use a constant heating rate.", default=" ")
   call get_param(param_file, mdl, "GEOTHERMAL_THICKNESS", CS%geothermal_thick, &
                  "The thickness over which to apply geothermal heating.", &
-                 units="m", default=0.1)
+                 units="m", default=0.1, scale=GV%m_to_H)
   call get_param(param_file, mdl, "GEOTHERMAL_DRHO_DT_INPLACE", CS%dRcv_dT_inplace, &
                  "The value of drho_dT above which geothermal heating "//&
                  "simply heats water in place instead of moving it between "//&

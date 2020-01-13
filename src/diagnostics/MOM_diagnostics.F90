@@ -1446,6 +1446,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   character(len=40)  :: mdl = "MOM_diagnostics" ! This module's name.
   character(len=48) :: thickness_units, flux_units
   logical :: use_temperature, adiabatic
+  logical :: default_2018_answers, remap_answers_2018
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, nkml, nkbl
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j
 
@@ -1476,6 +1477,13 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
                  "The depth below which N2 is limited as monotonic for the "// &
                  "purposes of calculating the equivalent barotropic wave speed.", &
                  units='m', scale=US%m_to_Z, default=-1.)
+  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
+  call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=default_2018_answers)
 
   if (GV%Boussinesq) then
     thickness_units = "m" ; flux_units = "m3 s-1" ; convert_H = GV%H_to_m
@@ -1686,7 +1694,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   if ((CS%id_cg1>0) .or. (CS%id_Rd1>0) .or. (CS%id_cfl_cg1>0) .or. &
       (CS%id_cfl_cg1_x>0) .or. (CS%id_cfl_cg1_y>0) .or. &
       (CS%id_cg_ebt>0) .or. (CS%id_Rd_ebt>0) .or. (CS%id_p_ebt>0)) then
-    call wave_speed_init(CS%wave_speed_CSp)
+    call wave_speed_init(CS%wave_speed_CSp, remap_answers_2018=remap_answers_2018)
     call safe_alloc_ptr(CS%cg1,isd,ied,jsd,jed)
     if (CS%id_Rd1>0)       call safe_alloc_ptr(CS%Rd1,isd,ied,jsd,jed)
     if (CS%id_Rd_ebt>0)    call safe_alloc_ptr(CS%Rd1,isd,ied,jsd,jed)

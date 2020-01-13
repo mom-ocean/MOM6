@@ -25,22 +25,21 @@ real, parameter :: hNeglect_dflt = 1.E-30
 contains
 
 !> Builds quadratic polynomials coefficients from cell mean and edge values.
-subroutine PPM_reconstruction( N, h, u, ppoly_E, ppoly_coef, h_neglect)
+subroutine PPM_reconstruction( N, h, u, ppoly_E, ppoly_coef, h_neglect, answers_2018)
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(N),   intent(in)    :: h !< Cell widths
-  real, dimension(N),   intent(in)    :: u !< Cell averages
-  real, dimension(N,2), intent(inout) :: ppoly_E !< Edge values,
-                                           !! with the same units as u.
-  real, dimension(N,3), intent(inout) :: ppoly_coef !< Polynomial coefficients, mainly
-                                           !! with the same units as u.
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
-                                           !! in the same units as h.
+  real, dimension(N),   intent(in)    :: h !< Cell widths [H]
+  real, dimension(N),   intent(in)    :: u !< Cell averages [A]
+  real, dimension(N,2), intent(inout) :: ppoly_E !< Edge values [A]
+  real, dimension(N,3), intent(inout) :: ppoly_coef !< Polynomial coefficients, mainly [A]
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
+  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+
   ! Local variables
   integer   :: k              ! Loop index
   real      :: edge_l, edge_r ! Edge values (left and right)
 
   ! PPM limiter
-  call PPM_limiter_standard( N, h, u, ppoly_E, h_neglect )
+  call PPM_limiter_standard( N, h, u, ppoly_E, h_neglect, answers_2018 )
 
   ! Loop over all cells
   do k = 1,N
@@ -60,14 +59,14 @@ end subroutine PPM_reconstruction
 !> Adjusts edge values using the standard PPM limiter (Colella & Woodward, JCP 1984)
 !! after first checking that the edge values are bounded by neighbors cell averages
 !! and that the edge values are monotonic between cell averages.
-subroutine PPM_limiter_standard( N, h, u, ppoly_E, h_neglect )
+subroutine PPM_limiter_standard( N, h, u, ppoly_E, h_neglect, answers_2018 )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
-  real, dimension(:,:), intent(inout) :: ppoly_E !< Potentially modified edge values,
-                                           !! with the same units as u.
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
-                                           !! in the same units as h.
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N) [A]
+  real, dimension(:,:), intent(inout) :: ppoly_E !< Potentially modified edge values [A]
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
+  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+
   ! Local variables
   integer   :: k              ! Loop index
   real      :: u_l, u_c, u_r  ! Cell averages (left, center and right)
@@ -75,7 +74,7 @@ subroutine PPM_limiter_standard( N, h, u, ppoly_E, h_neglect )
   real      :: expr1, expr2
 
   ! Bound edge values
-  call bound_edge_values( N, h, u, ppoly_E, h_neglect )
+  call bound_edge_values( N, h, u, ppoly_E, h_neglect, answers_2018 )
 
   ! Make discontinuous edge values monotonic
   call check_discontinuous_edge_values( N, u, ppoly_E )
@@ -111,6 +110,7 @@ subroutine PPM_limiter_standard( N, h, u, ppoly_E, h_neglect )
     endif
     ! This checks that the difference in edge values is representable
     ! and avoids overshoot problems due to round off.
+    !### The 1.e-60 needs to have units of [A], so this dimensionally inconsisent.
     if ( abs( edge_r - edge_l )<max(1.e-60,epsilon(u_c)*abs(u_c)) ) then
       edge_l = u_c
       edge_r = u_c
@@ -157,15 +157,12 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef, h_neglect)
 
   ! Arguments
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
-  real, dimension(:),   intent(in)    :: u !< cell averages (size N)
-  real, dimension(:,:), intent(inout) :: ppoly_E    !< edge values of piecewise polynomials,
-                                           !! with the same units as u.
-  real, dimension(:,:), intent(inout) :: ppoly_coef !< coefficients of piecewise polynomials, mainly
-                                           !! with the same units as u.
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
+  real, dimension(:),   intent(in)    :: u !< cell averages (size N) [A]
+  real, dimension(:,:), intent(inout) :: ppoly_E    !< edge values of piecewise polynomials [A]
+  real, dimension(:,:), intent(inout) :: ppoly_coef !< coefficients of piecewise polynomials, mainly [A]
   real,       optional, intent(in)    :: h_neglect  !< A negligibly small width for
-                                           !! the purpose of cell reconstructions
-                                           !! in the same units as h.
+                                           !! the purpose of cell reconstructions [H]
 
   ! Local variables
   integer :: i0, i1

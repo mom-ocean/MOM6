@@ -540,7 +540,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                  " \t USER - call a user modified routine.", default="file")
     select case (trim(config))
       case ("DOME"); call DOME_initialize_sponges(G, GV, US, tv, PF, sponge_CSp)
-      case ("DOME2D"); call DOME2d_initialize_sponges(G, GV, tv, PF, useALE, &
+      case ("DOME2D"); call DOME2d_initialize_sponges(G, GV, US, tv, PF, useALE, &
                                                       sponge_CSp, ALE_sponge_CSp)
       case ("ISOMIP"); call ISOMIP_initialize_sponges(G, GV, US, tv, PF, useALE, &
                                                       sponge_CSp, ALE_sponge_CSp)
@@ -552,7 +552,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
       case ("DUMBBELL"); call dumbbell_initialize_sponges(G, GV, US, tv, PF, useALE, &
                                                           sponge_CSp, ALE_sponge_CSp)
       case ("phillips"); call Phillips_initialize_sponges(G, GV, US, tv, PF, sponge_CSp, h)
-      case ("dense"); call dense_water_initialize_sponges(G, GV, tv, PF, useALE, &
+      case ("dense"); call dense_water_initialize_sponges(G, GV, US, tv, PF, useALE, &
                                                           sponge_CSp, ALE_sponge_CSp)
       case ("file"); call initialize_sponges_file(G, GV, US, use_temperature, tv, PF, &
                                                   sponge_CSp, ALE_sponge_CSp, Time)
@@ -1105,6 +1105,7 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
   real :: scale_factor   ! A file-dependent scaling vactor for the input pressurs.
   real :: min_thickness  ! The minimum layer thickness, recast into Z units.
   integer :: i, j, k
+  logical :: default_2018_answers, remap_answers_2018
   logical :: just_read    ! If true, just read parameters but set nothing.
   logical :: use_remapping ! If true, remap the initial conditions.
   type(remapping_CS), pointer :: remap_CS => NULL()
@@ -1130,6 +1131,16 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
   call get_param(PF, mdl, "TRIMMING_USES_REMAPPING", use_remapping, &
                  'When trimming the column, also remap T and S.', &
                  default=.false., do_not_log=just_read)
+  remap_answers_2018 = .true.
+  if (use_remapping) then
+    call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
+    call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=default_2018_answers)
+  endif
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -1155,7 +1166,7 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
     call cut_off_column_top(GV%ke, tv, GV, US, GV%mks_g_Earth*US%Z_to_m, G%bathyT(i,j), &
                min_thickness, tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), &
                tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), p_surf(i,j), h(i,j,:), remap_CS, &
-               z_tol=1.0e-5*US%m_to_Z)
+               z_tol=1.0e-5*US%m_to_Z, remap_answers_2018=remap_answers_2018)
   enddo ; enddo
 
 end subroutine trim_for_ice
@@ -1163,8 +1174,8 @@ end subroutine trim_for_ice
 
 !> Adjust the layer thicknesses by removing the top of the water column above the
 !! depth where the hydrostatic pressure matches p_surf
-subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, &
-                              T, T_t, T_b, S, S_t, S_b, p_surf, h, remap_CS, z_tol)
+subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, T, T_t, T_b, &
+                              S, S_t, S_b, p_surf, h, remap_CS, z_tol, remap_answers_2018)
   integer,               intent(in)    :: nk  !< Number of layers
   type(thermo_var_ptrs), intent(in)    :: tv  !< Thermodynamics structure
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
@@ -1184,12 +1195,19 @@ subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, &
                                                    !! if associated
   real,        optional, intent(in)    :: z_tol !< The tolerance with which to find the depth
                                                 !! matching the specified pressure [Z ~> m].
+  logical,     optional, intent(in)    :: remap_answers_2018 !< If true, use the order of arithmetic
+                                                !! and expressions that recover the answers for remapping
+                                                !! from the end of 2018. Otherwise, use more robust
+                                                !! forms of the same expressions.
 
   ! Local variables
   real, dimension(nk+1) :: e ! Top and bottom edge values for reconstructions
   real, dimension(nk) :: h0, S0, T0, h1, S1, T1
   real :: P_t, P_b, z_out, e_top
+  logical :: answers_2018
   integer :: k
+
+  answers_2018 = .true. ; if (present(remap_answers_2018)) answers_2018 = remap_answers_2018
 
   ! Calculate original interface positions
   e(nk+1) = -depth
@@ -1239,8 +1257,13 @@ subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, &
       T0(k) = T(nk+1-k)
       h1(k) = h(nk+1-k)
     enddo
-    call remapping_core_h(remap_CS, nk, h0, T0, nk, h1, T1, 1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
-    call remapping_core_h(remap_CS, nk, h0, S0, nk, h1, S1, 1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
+    if (answers_2018) then
+      call remapping_core_h(remap_CS, nk, h0, T0, nk, h1, T1, 1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
+      call remapping_core_h(remap_CS, nk, h0, S0, nk, h1, S1, 1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
+    else
+      call remapping_core_h(remap_CS, nk, h0, T0, nk, h1, T1, GV%H_subroundoff, GV%H_subroundoff)
+      call remapping_core_h(remap_CS, nk, h0, S0, nk, h1, S1, GV%H_subroundoff, GV%H_subroundoff)
+    endif
     do k=1,nk
       S(k) = S1(nk+1-k)
       T(k) = T1(nk+1-k)
@@ -1713,7 +1736,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   real, dimension (SZI_(G),SZJ_(G)) :: &
     tmp_2d ! A temporary array for tracers.
 
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [s-1].
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
   real :: pres(SZI_(G))     ! An array of the reference pressure [Pa].
 
   integer :: i, j, k, is, ie, js, je, nz
@@ -1775,7 +1798,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   if (new_sponges .and. .not. use_ALE) &
     call MOM_error(FATAL, " initialize_sponges: Newer sponges are currently unavailable in layered mode ")
 
-  call MOM_read_data(filename, "Idamp", Idamp(:,:), G%Domain)
+  call MOM_read_data(filename, "Idamp", Idamp(:,:), G%Domain, scale=US%T_to_s)
 
   ! Now register all of the fields which are damped in the sponge.
   ! By default, momentum is advected vertically within the sponge, but
@@ -2011,6 +2034,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
   logical :: homogenize, useALEremapping, remap_full_column, remap_general, remap_old_alg
+  logical :: answers_2018, default_2018_answers
   logical :: use_ice_shelf
   character(len=10) :: remappingScheme
   real :: tempAvg, saltAvg
@@ -2088,6 +2112,15 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
                  "If false, uses the preferred remapping algorithm for initialization. "//&
                  "If true, use an older, less robust algorithm for remapping.", &
                  default=.true., do_not_log=just_read)
+  if (useALEremapping) then
+    call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
+    call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=default_2018_answers)
+  endif
   call get_param(PF, mdl, "ICE_SHELF", use_ice_shelf, default=.false.)
   if (use_ice_shelf) then
     call get_param(PF, mdl, "ICE_THICKNESS_FILE", ice_shelf_file, &
@@ -2256,8 +2289,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
       deallocate( hTarget )
     endif
 
-    ! Now remap from source grid to target grid
-    call initialize_remapping( remapCS, remappingScheme, boundary_extrapolation=.false. ) ! Reconstruction parameters
+    ! Now remap from source grid to target grid, first setting reconstruction parameters
+    call initialize_remapping( remapCS, remappingScheme, boundary_extrapolation=.false., answers_2018=answers_2018 )
     if (remap_general) then
       call set_regrid_params( regridCS, min_thickness=0. )
       tv_loc = tv
@@ -2274,9 +2307,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
       deallocate( dz_interface )
     endif
     call ALE_remap_scalar(remapCS, G, GV, nkd, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column, &
-                          old_remap=remap_old_alg )
+                          old_remap=remap_old_alg, answers_2018=answers_2018 )
     call ALE_remap_scalar(remapCS, G, GV, nkd, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column, &
-                          old_remap=remap_old_alg )
+                          old_remap=remap_old_alg, answers_2018=answers_2018 )
     deallocate( h1 )
     deallocate( tmpT1dIn )
     deallocate( tmpS1dIn )
