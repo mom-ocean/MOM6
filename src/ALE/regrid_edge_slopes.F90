@@ -282,8 +282,8 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
 ! -----------------------------------------------------------------------------
 
   ! Local variables
-  integer               :: i, j, k              ! loop indexes
-  real                  :: h0, h1, h2, h3       ! cell widths
+  real :: h0, h1, h2, h3       ! cell widths [H]
+  real :: hMin                 ! The minimum thickness used in these calculations [H]
   real                  :: g, g_2, g_3          ! the following are
   real                  :: g_4, g_5, g_6        ! auxiliary variables
   real                  :: d2, d3, d4, d5, d6   ! to set up the systems
@@ -311,20 +311,18 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
                            tri_u, &             ! trid. system (upper diagonal)
                            tri_b, &             ! trid. system (unknowns vector)
                            tri_x                ! trid. system (rhs)
-  real      :: hNeglect ! A negligible thickness in the same units as h.
-  logical   :: use_2018_answers ! If true use older, less acccurate expressions.
+  real :: h_Min_Frac = 1.0e-4
+  real :: hNeglect ! A negligible thickness in the same units as h.
+  integer :: i, j, k              ! loop indexes
 
   hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
-  use_2018_answers = .true. ; if (present(answers_2018)) use_2018_answers = answers_2018
 
   ! Loop on cells (except the first and last ones)
   do k = 2,N-2
-
-    ! Cell widths
-    h0 = h(k-1)
-    h1 = h(k+0)
-    h2 = h(k+1)
-    h3 = h(k+2)
+    ! Store temporary cell widths, avoiding singularities from zero thicknesses or extreme changes.
+    hMin = max(hNeglect, h_Min_Frac*((h(k-1) + h(k)) + (h(k+1) + h(k+2))))
+    h0 = max(h(k-1), hMin) ; h1 = max(h(k), hMin)
+    h2 = max(h(k+1), hMin) ; h3 = max(h(k+2), hMin)
 
     ! Auxiliary calculations
     h1_2 = h1 * h1
@@ -346,11 +344,11 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
     g_5 = g_4 * g
     g_6 = g_3 * g_3
 
-    d2 = ( h1_2 - g_2 ) / ( h0 + hNeglect )
-    d3 = ( h1_3 - g_3 ) / ( h0 + hNeglect )
-    d4 = ( h1_4 - g_4 ) / ( h0 + hNeglect )
-    d5 = ( h1_5 - g_5 ) / ( h0 + hNeglect )
-    d6 = ( h1_6 - g_6 ) / ( h0 + hNeglect )
+    d2 = ( h1_2 - g_2 ) / ( h0 )
+    d3 = ( h1_3 - g_3 ) / ( h0 )
+    d4 = ( h1_4 - g_4 ) / ( h0 )
+    d5 = ( h1_5 - g_5 ) / ( h0 )
+    d6 = ( h1_6 - g_6 ) / ( h0 )
 
     g   = h2 + h3
     g_2 = g * g
@@ -359,11 +357,11 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
     g_5 = g_4 * g
     g_6 = g_3 * g_3
 
-    n2 = ( g_2 - h2_2 ) / ( h3 + hNeglect )
-    n3 = ( g_3 - h2_3 ) / ( h3 + hNeglect )
-    n4 = ( g_4 - h2_4 ) / ( h3 + hNeglect )
-    n5 = ( g_5 - h2_5 ) / ( h3 + hNeglect )
-    n6 = ( g_6 - h2_6 ) / ( h3 + hNeglect )
+    n2 = ( g_2 - h2_2 ) / ( h3 )
+    n3 = ( g_3 - h2_3 ) / ( h3 )
+    n4 = ( g_4 - h2_4 ) / ( h3 )
+    n5 = ( g_5 - h2_5 ) / ( h3 )
+    n6 = ( g_6 - h2_6 ) / ( h3 )
 
     ! Compute matrix entries
     Asys(1,1) = 0.0
@@ -410,7 +408,7 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
 
     Bsys(:) = (/ 0.0, -1.0, 0.0, 0.0, 0.0, 0.0 /)
 
-    call solve_linear_system( Asys, Bsys, Csys, 6, use_2018_answers )
+    call solve_linear_system( Asys, Bsys, Csys, 6, .false. )
 
     alpha = Csys(1)
     beta  = Csys(2)
@@ -428,11 +426,10 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
 
   ! Use a right-biased stencil for the second row
 
-  ! Cell widths
-  h0 = h(1)
-  h1 = h(2)
-  h2 = h(3)
-  h3 = h(4)
+  ! Store temporary cell widths, avoiding singularities from zero thic2nesses or extreme changes.
+  hMin = max(hNeglect, h_Min_Frac*((h(1) + h(2)) + (h(3) + h(4))))
+  h0 = max(h(1), hMin) ; h1 = max(h(2), hMin)
+  h2 = max(h(3), hMin) ; h3 = max(h(4), hMin)
 
   ! Auxiliary calculations
   h1_2 = h1 * h1
@@ -459,11 +456,11 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
   h0ph1_3 = h0ph1_2 * h0ph1
   h0ph1_4 = h0ph1_2 * h0ph1_2
 
-  d2 = ( h1_2 - g_2 ) / ( h0 + hNeglect )
-  d3 = ( h1_3 - g_3 ) / ( h0 + hNeglect )
-  d4 = ( h1_4 - g_4 ) / ( h0 + hNeglect )
-  d5 = ( h1_5 - g_5 ) / ( h0 + hNeglect )
-  d6 = ( h1_6 - g_6 ) / ( h0 + hNeglect )
+  d2 = ( h1_2 - g_2 ) / ( h0 )
+  d3 = ( h1_3 - g_3 ) / ( h0 )
+  d4 = ( h1_4 - g_4 ) / ( h0 )
+  d5 = ( h1_5 - g_5 ) / ( h0 )
+  d6 = ( h1_6 - g_6 ) / ( h0 )
 
   g   = h2 + h3
   g_2 = g * g
@@ -472,11 +469,11 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
   g_5 = g_4 * g
   g_6 = g_3 * g_3
 
-  n2 = ( g_2 - h2_2 ) / ( h3 + hNeglect )
-  n3 = ( g_3 - h2_3 ) / ( h3 + hNeglect )
-  n4 = ( g_4 - h2_4 ) / ( h3 + hNeglect )
-  n5 = ( g_5 - h2_5 ) / ( h3 + hNeglect )
-  n6 = ( g_6 - h2_6 ) / ( h3 + hNeglect )
+  n2 = ( g_2 - h2_2 ) / ( h3 )
+  n3 = ( g_3 - h2_3 ) / ( h3 )
+  n4 = ( g_4 - h2_4 ) / ( h3 )
+  n5 = ( g_5 - h2_5 ) / ( h3 )
+  n6 = ( g_6 - h2_6 ) / ( h3 )
 
   ! Compute matrix entries
   Asys(1,1) = 0.0
@@ -523,7 +520,7 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
 
   Bsys(:) = (/ 0.0, -1.0, -h1, h1_2/2.0, -h1_3/6.0, h1_4/24.0 /)
 
-  call solve_linear_system( Asys, Bsys, Csys, 6, use_2018_answers )
+  call solve_linear_system( Asys, Bsys, Csys, 6, .false. )
 
   alpha = Csys(1)
   beta  = Csys(2)
@@ -541,25 +538,18 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
   x(1) = 0.0
   do i = 1,6
     dx = h(i)
+    xavg = x(i) + 0.5 * dx
+    Asys(i,1) = 1.0
+    Asys(i,2) = xavg
+    Asys(i,3) = (xavg**2 + C1_12*dx**2)
+    Asys(i,4) = xavg * (xavg**2 + 0.25*dx**2)
+    Asys(i,5) = (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
+    Asys(i,6) = xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
+    Bsys(i) = u(i)
     x(i+1) = x(i) + dx
-    if (use_2018_answers) then
-      do j = 1,6 ; Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j ; enddo
-      Bsys(i) = u(i) * dx
-    else  ! Use expressions with less sensitivity to roundoff
-      xavg = 0.5 * (x(i+1) + x(i))
-      Asys(i,1) = 1.0
-      Asys(i,2) = xavg
-      Asys(i,3) = (xavg**2 + C1_12*dx**2)
-      Asys(i,4) = xavg * (xavg**2 + 0.25*dx**2)
-      Asys(i,5) = (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
-      Asys(i,6) = xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
-      Bsys(i) = u(i)
-    endif
-
-
   enddo
 
-  call solve_linear_system( Asys, Bsys, Csys, 6, use_2018_answers )
+  call solve_linear_system( Asys, Bsys, Csys, 6, .false. )
 
   Dsys(1) = Csys(2)
   Dsys(2) = 2.0 * Csys(3)
@@ -573,12 +563,10 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
   tri_b(1) = evaluation_polynomial( Dsys, 5, x(1) )        ! first edge value
 
   ! Use a left-biased stencil for the second to last row
-
-  ! Cell widths
-  h0 = h(N-3)
-  h1 = h(N-2)
-  h2 = h(N-1)
-  h3 = h(N)
+  ! Store temporary cell widths, avoiding singularities from zero thicknesses or extreme changes.
+  hMin = max(hNeglect, h_Min_Frac*((h(N-3) + h(N-2)) + (h(N-1) + h(N))))
+  h0 = max(h(N-3), hMin) ; h1 = max(h(N-2), hMin)
+  h2 = max(h(N-1), hMin) ; h3 = max(h(N), hMin)
 
   ! Auxiliary calculations
   h1_2 = h1 * h1
@@ -605,11 +593,11 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
   h2ph3_3 = h2ph3_2 * h2ph3
   h2ph3_4 = h2ph3_2 * h2ph3_2
 
-  d2 = ( h1_2 - g_2 ) / ( h0 + hNeglect )
-  d3 = ( h1_3 - g_3 ) / ( h0 + hNeglect )
-  d4 = ( h1_4 - g_4 ) / ( h0 + hNeglect )
-  d5 = ( h1_5 - g_5 ) / ( h0 + hNeglect )
-  d6 = ( h1_6 - g_6 ) / ( h0 + hNeglect )
+  d2 = ( h1_2 - g_2 ) / ( h0 )
+  d3 = ( h1_3 - g_3 ) / ( h0 )
+  d4 = ( h1_4 - g_4 ) / ( h0 )
+  d5 = ( h1_5 - g_5 ) / ( h0 )
+  d6 = ( h1_6 - g_6 ) / ( h0 )
 
   g   = h2 + h3
   g_2 = g * g
@@ -618,11 +606,11 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
   g_5 = g_4 * g
   g_6 = g_3 * g_3
 
-  n2 = ( g_2 - h2_2 ) / ( h3 + hNeglect )
-  n3 = ( g_3 - h2_3 ) / ( h3 + hNeglect )
-  n4 = ( g_4 - h2_4 ) / ( h3 + hNeglect )
-  n5 = ( g_5 - h2_5 ) / ( h3 + hNeglect )
-  n6 = ( g_6 - h2_6 ) / ( h3 + hNeglect )
+  n2 = ( g_2 - h2_2 ) / ( h3 )
+  n3 = ( g_3 - h2_3 ) / ( h3 )
+  n4 = ( g_4 - h2_4 ) / ( h3 )
+  n5 = ( g_5 - h2_5 ) / ( h3 )
+  n6 = ( g_6 - h2_6 ) / ( h3 )
 
   ! Compute matrix entries
   Asys(1,1) = 0.0
@@ -669,7 +657,7 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
 
   Bsys(:) = (/ 0.0, -1.0, h2, h2_2/2.0, h2_3/6.0, h2_4/24.0 /)
 
-  call solve_linear_system( Asys, Bsys, Csys, 6, use_2018_answers )
+  call solve_linear_system( Asys, Bsys, Csys, 6, .false. )
 
   alpha = Csys(1)
   beta  = Csys(2)
@@ -687,23 +675,18 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
   x(1) = 0.0
   do i = 1,6
     dx = h(N-6+i)
+    xavg = x(i) + 0.5*dx
+    Asys(i,1) = 1.0
+    Asys(i,2) = xavg
+    Asys(i,3) = (xavg**2 + C1_12*dx**2)
+    Asys(i,4) = xavg * (xavg**2 + 0.25*dx**2)
+    Asys(i,5) = (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
+    Asys(i,6) = xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
+    Bsys(i) = u(N-6+i)
     x(i+1) = x(i) + dx
-    if (use_2018_answers) then
-      do j = 1,6 ; Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j ; enddo
-      Bsys(i) = u(N-6+i) * dx
-    else  ! Use expressions with less sensitivity to roundoff
-      xavg = 0.5 * (x(i+1) + x(i))
-      Asys(i,1) = 1.0
-      Asys(i,2) = xavg
-      Asys(i,3) = (xavg**2 + C1_12*dx**2)
-      Asys(i,4) = xavg * (xavg**2 + 0.25*dx**2)
-      Asys(i,5) = (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
-      Asys(i,6) = xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
-      Bsys(i) = u(N-6+i)
-    endif
   enddo
 
-  call solve_linear_system( Asys, Bsys, Csys, 6, use_2018_answers )
+  call solve_linear_system( Asys, Bsys, Csys, 6, .false. )
 
   Dsys(1) = Csys(2)
   Dsys(2) = 2.0 * Csys(3)

@@ -703,8 +703,9 @@ end subroutine end_value_h4
 !!            i-1/2  i+1/2  i+3/2
 !!
 !! In this routine, the coefficients \f$\alpha\f$, \f$\beta\f$, a, b, c and d are
-!! computed, the tridiagonal system is built, boundary conditions are
-!! prescribed and the system is solved to yield edge-value estimates.
+!! computed, the tridiagonal system is built, boundary conditions are prescribed and
+!! the system is solved to yield edge-value estimates.  This scheme is described in detail
+!! by White and Adcroft, 2009, J. Comp. Phys, https://doi.org/10.1016/j.jcp.2008.04.026
 !!
 !! Note that the centered stencil only applies to edges 3 to N-1 (edges are
 !! numbered 1 to n+1), which yields N-3 equations for N+1 unknowns. Two other
@@ -727,11 +728,11 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
   logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
 
   ! Local variables
-  integer               :: i, j, k              ! loop indexes
-  real                  :: h0, h1, h2, h3       ! cell widths [H]
-  real                  :: hMin  ! The minimum thickness used in these calculations [H]
+  real :: h0, h1, h2, h3       ! cell widths [H]
+  real :: hMin                 ! The minimum thickness used in these calculations [H]
   real :: h01, h01_2, h01_3, h01_4, h01_5, h01_6  ! Summed thicknesses to various powers [H^n ~> m^n or kg^n m-2n]
   real :: h23, h23_2, h23_3, h23_4, h23_5, h23_6  ! Summed thicknesses to various powers [H^n ~> m^n or kg^n m-2n]
+  real :: hNeglect             ! A negligible thickness [H].
   real                  :: d2, d3, d4, d5, d6   ! to set up the systems
   real                  :: n2, n3, n4, n5, n6   ! used to compute the
   real                  :: h1_2, h2_2           ! the coefficients of the
@@ -757,30 +758,16 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
                            tri_u, &             ! trid. system (upper diagonal)
                            tri_b, &             ! trid. system (unknowns vector)
                            tri_x                ! trid. system (rhs)
-  real      :: hNeglect          ! A negligible thickness [H].
-  logical   :: use_2018_answers  ! If true use older, less acccurate expressions.
+  integer :: i, j, k              ! loop indexes
 
-  use_2018_answers = .true. ; if (present(answers_2018)) use_2018_answers = answers_2018
   hNeglect = hNeglect_edge_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
-  ! Loop on cells (except last one)
   ! Loop on interior cells
   do k = 2,N-2
-
-    ! Cell widths
-    h0 = h(k-1)
-    h1 = h(k+0)
-    h2 = h(k+1)
-    h3 = h(k+2)
-
-    ! Avoid singularities when h0=0 or h3=0
-    if (h0*h3==0.) then
-      hMin = hMinFrac * max( hNeglect, h0+h1+h2+h3 )
-      h0 = max( hMin, h0 )
-      h1 = max( hMin, h1 )
-      h2 = max( hMin, h2 )
-      h3 = max( hMin, h3 )
-    endif
+    ! Store temporary cell widths, avoiding singularities from zero thicknesses or extreme changes.
+    hMin = max(hNeglect, hMinFrac*((h(k-1) + h(k)) + (h(k+1) + h(k+2))))
+    h0 = max(h(k-1), hMin) ; h1 = max(h(k), hMin)
+    h2 = max(h(k+1), hMin) ; h3 = max(h(k+2), hMin)
 
     ! Auxiliary calculations
     h1_2 = h1 * h1
@@ -821,7 +808,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
     n5 = ( h23_5 - h2_5 ) / h3  !  = 5.0*h2_4 + h3*(10.0*h2_3 + h3*(10.0*h2_2 + h3*(5.0*h2 + h3)))
     n6 = ( h23_6 - h2_6 ) / h3  !  = 6.0*h2_5 + h3*(15.0*h2_4 + h3*(20.0*h2_3 + h3*(15.0*h2_2 + h3*(6.0*h2 + h3))))
 
-    ! Compute matrix entries
+    ! Compute matrix entries as described in Eq. (48) of White and Adcroft (2009)
     Asys(1,1) = 1.0
     Asys(1,2) = 1.0
     Asys(1,3) = -1.0
@@ -866,7 +853,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
 
     Bsys(:) = (/ -1.0, 0.0, 0.0, 0.0, 0.0, 0.0 /)
 
-    call solve_linear_system( Asys, Bsys, Csys, 6, use_2018_answers )
+    call solve_linear_system( Asys, Bsys, Csys, 6, .false. )
 
     alpha = Csys(1)
     beta  = Csys(2)
@@ -882,22 +869,12 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
 
   enddo ! end loop on cells
 
-  ! Use a right-biased stencil for the second row
+  ! Use a right-biased stencil for the second row, as described in Eq. (49) of White and Adcroft (2009).
 
-  ! Cell widths
-  h0 = h(1)
-  h1 = h(2)
-  h2 = h(3)
-  h3 = h(4)
-
-  ! Avoid singularities when h0=0 or h3=0
-  if (h0*h3==0.) then
-    hMin = hMinFrac * max( hNeglect, h0+h1+h2+h3 )
-    h0 = max( hMin, h0 )
-    h1 = max( hMin, h1 )
-    h2 = max( hMin, h2 )
-    h3 = max( hMin, h3 )
-  endif
+  ! Store temporary cell widths, avoiding singularities from zero thicknesses or extreme changes.
+  hMin = max(hNeglect, hMinFrac*((h(1) + h(2)) + (h(3) + h(4))))
+  h0 = max(h(1), hMin) ; h1 = max(h(2), hMin)
+  h2 = max(h(3), hMin) ; h3 = max(h(4), hMin)
 
   ! Auxiliary calculations
   h1_2 = h1 * h1
@@ -985,7 +962,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
 
   Bsys(:) = (/ -1.0, h1, -0.5*h1_2, h1_3/6.0, -h1_4/24.0, h1_5/120.0 /)
 
-  call solve_linear_system( Asys, Bsys, Csys, 6, use_2018_answers )
+  call solve_linear_system( Asys, Bsys, Csys, 6, .false. )
 
   alpha = Csys(1)
   beta  = Csys(2)
@@ -996,29 +973,22 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
   tri_b(2) = Csys(3) * u(1) + Csys(4) * u(2) + Csys(5) * u(3) + Csys(6) * u(4)
 
   ! Boundary conditions: left boundary
-!  h_min = hMinFrac * ((h(1) + h(2)) + (h(5) + h(6)) + (h(3) + h(4)))
-  hMin = max( hNeglect, hMinFrac*sum(h(1:6)) )
+  hMin = max( hNeglect, hMinFrac*((h(1)+h(2)) + (h(5)+h(6)) + (h(3)+h(4))) )
   x(1) = 0.0
   do i = 1,6
     dx = max( hMin, h(i) )
+    xavg = x(i) + 0.5*dx
+    Asys(i,1) = 1.0
+    Asys(i,2) = xavg
+    Asys(i,3) = (xavg**2 + C1_12*dx**2)
+    Asys(i,4) = xavg * (xavg**2 + 0.25*dx**2)
+    Asys(i,5) = (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
+    Asys(i,6) = xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
+    Bsys(i) = u(i)
     x(i+1) = x(i) + dx
-    if (use_2018_answers) then
-      do j = 1,6 ; Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j ; enddo
-      Bsys(i) = u(i) * dx
-    else  ! Use expressions with less sensitivity to roundoff
-      xavg = 0.5 * (x(i+1) + x(i))
-      Asys(i,1) = 1.0
-      Asys(i,2) = xavg
-      Asys(i,3) = (xavg**2 + C1_12*dx**2)
-      Asys(i,4) = xavg * (xavg**2 + 0.25*dx**2)
-      Asys(i,5) = (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
-      Asys(i,6) = xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
-      Bsys(i) = u(i)
-    endif
-
   enddo
 
-  call solve_linear_system( Asys, Bsys, Csys, 6, use_2018_answers )
+  call solve_linear_system( Asys, Bsys, Csys, 6, .false. )
 
   tri_l(1) = 0.0
   tri_d(1) = 1.0
@@ -1027,20 +997,10 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
 
   ! Use a left-biased stencil for the second to last row
 
-  ! Cell widths
-  h0 = h(N-3)
-  h1 = h(N-2)
-  h2 = h(N-1)
-  h3 = h(N)
-
-  ! Avoid singularities when h0=0 or h3=0
-  if (h0*h3==0.) then
-    hMin = hMinFrac * max( hNeglect, h0+h1+h2+h3 )
-    h0 = max( hMin, h0 )
-    h1 = max( hMin, h1 )
-    h2 = max( hMin, h2 )
-    h3 = max( hMin, h3 )
-  endif
+  ! Store temporary cell widths, avoiding singularities from zero thicknesses or extreme changes.
+  hMin = max(hNeglect, hMinFrac*((h(N-3) + h(N-2)) + (h(N-1) + h(N))))
+  h0 = max(h(N-3), hMin) ; h1 = max(h(N-2), hMin)
+  h2 = max(h(N-1), hMin) ; h3 = max(h(N), hMin)
 
   ! Auxiliary calculations
   h1_2 = h1 * h1
@@ -1132,7 +1092,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
 
   Bsys(:) = (/ -1.0, -h2, -0.5*h2_2, -h2_3/6.0, -h2_4/24.0, -h2_5/120.0 /)
 
-  call solve_linear_system( Asys, Bsys, Csys, 6, use_2018_answers )
+  call solve_linear_system( Asys, Bsys, Csys, 6, .false. )
 
   alpha = Csys(1)
   beta  = Csys(2)
@@ -1147,29 +1107,22 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
   tri_b(N) = a * u(N-3) + b * u(N-2) + c * u(N-1) + d * u(N)
 
   ! Boundary conditions: right boundary
-!  h_sum = (h(N-3) + h(N-2)) + ((h(N-1) + h(N)) + (h(N-5) + h(N-4)))
-  hMin = max( hNeglect, hMinFrac*sum(h(N-5:N)) )
+  hMin = max( hNeglect, hMinFrac*(h(N-3) + h(N-2)) + ((h(N-1) + h(N)) + (h(N-5) + h(N-4))) )
   x(1) = 0.0
   do i = 1,6
     dx = max( hMin, h(N-6+i) )
+    xavg = x(i) + 0.5 * dx
+    Asys(i,1) = 1.0
+    Asys(i,2) = xavg
+    Asys(i,3) = (xavg**2 + C1_12*dx**2)
+    Asys(i,4) = xavg * (xavg**2 + 0.25*dx**2)
+    Asys(i,5) = (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
+    Asys(i,6) = xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
+    Bsys(i) = u(N-6+i)
     x(i+1) = x(i) + dx
-    if (use_2018_answers) then
-      do j = 1,6 ; Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j ; enddo
-      Bsys(i) = u(N-6+i) * dx
-    else  ! Use expressions with less sensitivity to roundoff
-      xavg = 0.5 * (x(i+1) + x(i))
-      Asys(i,1) = 1.0
-      Asys(i,2) = xavg
-      Asys(i,3) = (xavg**2 + C1_12*dx**2)
-      Asys(i,4) = xavg * (xavg**2 + 0.25*dx**2)
-      Asys(i,5) = (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
-      Asys(i,6) = xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
-      Bsys(i) = u(N-6+i)
-    endif
-
   enddo
 
-  call solve_linear_system( Asys, Bsys, Csys, 6, use_2018_answers )
+  call solve_linear_system( Asys, Bsys, Csys, 6, .false. )
 
   tri_l(N+1) = 0.0
   tri_d(N+1) = 1.0
