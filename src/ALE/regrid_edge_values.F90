@@ -3,6 +3,7 @@ module regrid_edge_values
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_error_handler, only : MOM_error, FATAL
 use regrid_solvers, only : solve_linear_system, solve_tridiagonal_system
 use regrid_solvers, only : solve_diag_dominant_tridiag, linear_solver
 use polynomial_functions, only : evaluation_polynomial
@@ -237,6 +238,8 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
   real                  :: f1, f2, f3       ! auxiliary variables with various units
   real                  :: et1, et2, et3    ! terms the expresson for edge values [A H]
   real, dimension(5)    :: x          ! Coordinate system with 0 at edges [H]
+  real, dimension(4)    :: dz               ! A temporary array of limited layer thicknesses [H]
+  real, dimension(4)    :: u_tmp            ! A temporary array of cell average properties [A]
   real, parameter       :: C1_12 = 1.0 / 12.0
   real                  :: dx, xavg   ! Differences and averages of successive values of x [same units as h]
   real, dimension(4,4)  :: A                ! values near the boundaries
@@ -317,23 +320,16 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
   else  ! Use expressions with less sensitivity to roundoff
     h_min = hMinFrac*((h(1) + h(2)) + (h(3) + h(4)))
     if (h_min == 0.0) h_min = 1.0  ! Handle the case of all massless layers.
-    x(1) = 0.0
-    do i = 1,4
-      dx = max(h_min, h(i) )
-      x(i+1) = x(i) + dx
-      xavg = 0.5 * (x(i+1) + x(i))
-      A(1,i) = 1.0
-      A(2,i) = xavg
-      A(3,i) = (xavg**2 + C1_12*dx**2)
-      A(4,i) = xavg * (xavg**2 + 0.25*dx**2)
-      B(i) = u(i)
-    enddo
 
-    call linear_solver( 4, A, B, C )
+    do i=1,4
+      dz(i) = max(h_min, h(i) )
+      u_tmp(i) = u(i)
+    enddo
+    call end_value_h4(dz, u_tmp, C)
 
     ! Set the edge values of the first cell
-    edge_val(1,1) = C(1) ! x(1) = 0 so ignore + x(1)*(C(2) + x(1)*(C(3) + x(1)*C(4)))
-    edge_val(1,2) = C(1) + x(2)*(C(2) + x(2)*(C(3) + x(2)*C(4)))
+    edge_val(1,1) = C(1)
+    edge_val(1,2) = C(1) + dz(1)*(C(2) + dz(1)*(C(3) + dz(1)*C(4)))
   endif
   edge_val(2,1) = edge_val(1,2)
 
@@ -359,23 +355,15 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
     ! system that sets the origin at the last interface in the domain.
     h_min = hMinFrac * ((h(N-3) + h(N-2)) + (h(N-1) + h(N)))
     if (h_min == 0.0) h_min = 1.0  ! Handle the case of all massless layers.
-    x(1) = 0.0
     do i=1,4
-      dx = max(h_min, h(N+1-i) )
-      x(i+1) = x(i) + dx
-      xavg = x(i) + 0.5*dx
-      A(1,i) = 1.0
-      A(2,i) = xavg
-      A(3,i) = (xavg**2 + C1_12*dx**2)
-      A(4,i) = xavg * (xavg**2 + 0.25*dx**2)
-      B(i) = u(N+1-i)
+      dz(i) = max(h_min, h(N+1-i) )
+      u_tmp(i) = u(N+1-i)
     enddo
-
-    call linear_solver( 4, A, B, C )
+    call end_value_h4(dz, u_tmp, C)
 
     ! Set the last and second to last edge values
     edge_val(N,2) = C(1)
-    edge_val(N,1) = C(1) + x(2)*(C(2) + x(2)*(C(3) + x(2)*C(4)))
+    edge_val(N,1) = C(1) + dz(1)*(C(2) + dz(1)*(C(3) + dz(1)*C(4)))
   endif
   edge_val(N-1,2) = edge_val(N,1)
 
@@ -418,7 +406,7 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
 
   ! Local variables
   integer               :: i, j                 ! loop indexes
-  real                  :: h0, h1               ! cell widths [H]
+  real                  :: h0, h1, h2           ! cell widths [H]
   real                  :: h_min                ! A minimal cell width [H]
   real                  :: h_sum                ! A sum of adjacent thicknesses [H]
   real                  :: h0_2, h1_2, h0h1
@@ -428,9 +416,14 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
   real                  :: a, b
   real, dimension(5)    :: x                    ! Coordinate system with 0 at edges [H]
   real, parameter       :: C1_12 = 1.0 / 12.0
+  real, parameter       :: C1_3 = 1.0 / 3.0
+  real, dimension(4)    :: dz                   ! A temporary array of limited layer thicknesses [H]
+  real, dimension(4)    :: u_tmp                ! A temporary array of cell average properties [A]
   real                  :: dx, xavg             ! Differences and averages of successive values of x [H]
   real, dimension(4,4)  :: Asys                 ! boundary conditions
   real, dimension(4)    :: Bsys, Csys
+  real, dimension(4,4)  :: Asys_orig            ! boundary conditions
+  real, dimension(4)    :: Bsys_orig
   real, dimension(N+1)  :: tri_l, &     ! tridiagonal system (lower diagonal) [nondim]
                            tri_d, &     ! tridiagonal system (middle diagonal) [nondim]
                            tri_c, &     ! tridiagonal system central value, with tri_d = tri_c+tri_l+tri_u
@@ -515,21 +508,14 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
     tri_d(1) = 1.0
   else ! Use expressions with less sensitivity to roundoff
     h_min = max( hNeglect, hMinFrac * ((h(1) + h(2)) + (h(3) + h(4))) )
-    x(1) = 0.0
-    do i = 1,4
-      dx = max(h_min, h(i) )
-      x(i+1) = x(i) + dx
-      xavg = x(i) + 0.5*dx
-      Asys(1,i) = 1.0
-      Asys(2,i) = xavg
-      Asys(3,i) = (xavg**2 + C1_12*dx**2)
-      Asys(4,i) = xavg * (xavg**2 + 0.25*dx**2)
-      Bsys(i) = u(i)
+    do i=1,4
+      dz(i) = max(h_min, h(i) )
+      u_tmp(i) = u(i)
     enddo
+    call end_value_h4(dz, u_tmp, Csys)
 
-    call linear_solver( 4, Asys, Bsys, Csys )
+    tri_b(1) = Csys(1)  ! Set the first edge value.
 
-    tri_b(1) = Csys(1)  ! Set the first edge value, using the fact that x(1) = 0.
     tri_c(1) = 1.0
   endif
   tri_u(1) = 0.0 ! tri_l(1) = 0.0
@@ -555,19 +541,12 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
     ! Use expressions with less sensitivity to roundoff, including using a coordinate
     ! system that sets the origin at the last interface in the domain.
     h_min = max( hNeglect, hMinFrac * ((h(N-3) + h(N-2)) + (h(N-1) + h(N))) )
-    x(1) = 0.0
     do i=1,4
-      dx = max(h_min, h(N+1-i) )
-      x(i+1) = x(i) + dx
-      xavg = x(i) + 0.5*dx
-      Asys(1,i) = 1.0
-      Asys(2,i) = xavg
-      Asys(3,i) = (xavg**2 + C1_12*dx**2)
-      Asys(4,i) = xavg * (xavg**2 + 0.25*dx**2)
-      Bsys(i) = u(N+1-i)
+      dz(i) = max(h_min, h(N+1-i) )
+      u_tmp(i) = u(N+1-i)
     enddo
 
-    call linear_solver( 4, Asys, Bsys, Csys )
+    call end_value_h4(dz, u_tmp, Csys)
 
     ! Set the last edge value
     tri_b(N+1) = Csys(1)
@@ -590,6 +569,118 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
   edge_val(N,2) = tri_x(N+1)
 
 end subroutine edge_values_implicit_h4
+
+!> Determine a one-sided 4th order polynomial fit of u to the data points for the purposes of specifying
+!! edge values, as described in the appendix of White and Adcroft JCP 2008.
+subroutine end_value_h4(dz, u, Csys)
+  real, dimension(4), intent(in)  :: dz    !< The thicknesses of 4 layers, starting at the edge [H].
+                                           !! The values of dz must be positive.
+  real, dimension(4), intent(in)  :: u     !< The average properties of 4 layers, starting at the edge [A]
+  real, dimension(4), intent(out) :: Csys  !< The four coefficients of a 4th order polynomial fit
+                                           !! of u as a function of z [A H-(n-1)]
+
+  ! Local variables
+  real :: Wt(3,4)         ! The weights of successive u differences in the 4 closed form expressions.
+                          ! The units of Wt vary with the second index as [H-(n-1)].
+  real :: h1, h2, h3, h4  ! Copies of the layer thicknesses [H]
+  real :: h12, h23, h34   ! Sums of two successive thicknesses [H]
+  real :: h123, h234      ! Sums of three successive thicknesses [H]
+  real :: h1234           ! Sums of all four thicknesses [H]
+  ! real :: I_h1          ! The inverse of the a thickness [H-1]
+  real :: I_h12, I_h23, I_h34 ! The inverses of sums of two thicknesses [H-1]
+  real :: I_h123, I_h234  ! The inverse of the sum of three thicknesses [H-1]
+  real :: I_h1234         ! The inverse of the sum of all four thicknesses [H-1]
+  real :: I_denom         ! The inverse of the denominator some expressions [H-3]
+  real :: I_denB3         ! The inverse of the product of three sums of thicknesses [H-3]
+  real, parameter :: C1_3 = 1.0 / 3.0
+  integer :: i, j, k
+
+  ! These are only used for code verification
+  real, dimension(4) :: Atest  ! The  coefficients of an expression that is being tested.
+  real :: zavg, u_mag, c_mag
+  character(len=128) :: mesg
+  real, parameter :: C1_12 = 1.0 / 12.0
+
+ ! if ((dz(1) == dz(2)) .and. (dz(1) == dz(3)) .and. (dz(1) == dz(4))) then
+ !   ! There are simple closed-form expressions in this case
+ !   I_h1 = 0.0 ; if (dz(1) > 0.0) I_h1 = 1.0 / dz(1)
+ !   Csys(1) = u(1) + (-13.0 * (u(2)-u(1)) + 10.0 * (u(3)-u(2)) - 3.0 * (u(4)-u(3))) * (0.25*C1_3)
+ !   Csys(2) = (35.0 * (u(2)-u(1)) - 34.0 * (u(3)-u(2)) + 11.0 * (u(4)-u(3))) * (0.25*C1_3 * I_h1)
+ !   Csys(3) = (-5.0 * (u(2)-u(1)) + 8.0 * (u(3)-u(2)) - 3.0 * (u(4)-u(3))) * (0.25 * I_h1**2)
+ !   Csys(4) = ((u(2)-u(1)) - 2.0 * (u(3)-u(2)) + (u(4)-u(3))) * (0.5*C1_3)
+ ! else
+
+  ! Express the coefficients as sums of the differences between properties of succesive layers.
+
+  h1 = dz(1) ; h2 = dz(2) ; h3 = dz(3) ; h4 = dz(4)
+  h12 = h1+h2 ; h23 = h2+h3 ; h34 = h3+h4
+  h123 = h12 + h3 ; h234 = h2 + h34 ; h1234 = h12 + h34
+  ! Find 3 reciprocals with a single division for efficiency.
+  I_denB3 = 1.0 / (h123 * h12 * h23)
+  I_h12 = (h123 * h23) * I_denB3
+  I_h23 = (h12 * h123) * I_denB3
+  I_h123 = (h12 * h23) * I_denB3
+  I_denom = 1.0 / ( h1234 * (h234 * h34) )
+  I_h34 = (h1234 * h234) * I_denom
+  I_h234 = (h1234 * h34) * I_denom
+  I_h1234 = (h234 * h34) * I_denom
+
+  ! Calculation coefficients in the four equations
+
+  ! The expressions for Csys(3) and Csys(4) come from reducing the 4x4 matrix problem into the following 2x2
+  ! matrix problem, then manipulating the analytic solution to avoid any subtraction and simplifying.
+  !  (C1_3 * h123 * h23) * Csys(3) + (0.25 * h123 * h23 * (h3 + 2.0*h2 + 3.0*h1)) * Csys(4) =
+  !            (u(3)-u(1)) - (u(2)-u(1)) * (h12 + h23) * I_h12
+  !  (C1_3 * ((h23 + h34) * h1234 + h23 * h3)) * Csys(3) +
+  !  (0.25 * ((h1234 + h123 + h12 + h1) * h23 * h3 + (h1234 + h12 + h1) * (h23 + h34) * h1234)) * Csys(4) =
+  !            (u(4)-u(1)) - (u(2)-u(1)) * (h123 + h234) * I_h12
+  ! The final expressions for Csys(1) and Csys(2) were derived by algebraically manipulating the following expressions:
+  !  Csys(1) = (C1_3 * h1 * h12 * Csys(3) + 0.25 * h1 * h12 * (2.0*h1+h2) * Csys(4)) - &
+  !            (h1*I_h12)*(u(2)-u(1)) + u(1)
+  !  Csys(2) = (-2.0*C1_3 * (2.0*h1+h2) * Csys(3) - 0.5 * (h1**2 + h12 * (2.0*h1+h2)) * Csys(4)) + &
+  !            2.0*I_h12 * (u(2)-u(1))
+  ! These expressions are typically evaluated at x=0 and x=h1, so it is important that these are well behaved
+  ! for these values, suggesting that h1/h23 and h1/h34 should not be allowed to be too large.
+
+  Wt(1,1) = -h1 * (I_h1234 + I_h123 + I_h12)                              ! > -3
+  Wt(2,1) =  h1 * h12 * ( I_h234 * I_h1234 + I_h23 * (I_h234 + I_h123) )  ! < (h1/h234) + (h1/h23)*(2+(h1/h234))
+  Wt(3,1) = -h1 * h12 * h123 * I_denom                                    ! > -(h1/h34)*(1+(h1/h234))
+
+  Wt(1,2) =  2.0 * (I_h12*(1.0 + (h1+h12) * (I_h1234 + I_h123)) + h1 * I_h1234*I_h123) ! < 10/h12
+  Wt(2,2) = -2.0 * ((h1 * h12 * I_h1234) *       (I_h23 * (I_h234 + I_h123)) + &       ! > -(10+6*(h1/h234))/h23
+                    (h1+h12) * ( I_h1234*I_h234 + I_h23 * (I_h234 + I_h123) ) )
+  Wt(3,2) =  2.0 * ((h1+h12) * h123 + h1*h12 ) * I_denom                               ! < (2+(6*h1/h234)) / h34
+
+  Wt(1,3) = -3.0 * I_h12 * I_h123* ( 1.0 + I_h1234 * ((h1+h12)+h123) )                 ! > -12 / (h12*h123)
+  Wt(2,3) =  3.0 * I_h23 * ( I_h123 + I_h1234 * ((h1+h12)+h123) * (I_h123 + I_h234) )  ! < 12 / (h23^2)
+  Wt(3,3) = -3.0 * ((h1+h12)+h123) * I_denom                                           ! > -9 / (h234*h23)
+
+  Wt(1,4) =  4.0 * I_h1234 * I_h123 * I_h12                          ! Wt*h1^3 < 4
+  Wt(2,4) = -4.0 * I_h1234 * (I_h23 * (I_h123 + I_h234))             ! Wt*h1^3 > -4* (h1/h23)*(1+h1/h234)
+  Wt(3,4) =  4.0 * I_denom  ! = 4.0*I_h1234 * I_h234 * I_h34         ! Wt*h1^3 < 4 * (h1/h234)*(h1/h34)
+
+  Csys(1) = ((u(1) + Wt(1,1) * (u(2)-u(1))) + Wt(2,1) * (u(3)-u(2))) + Wt(3,1) * (u(4)-u(3))
+  Csys(2) = (Wt(1,2) * (u(2)-u(1)) + Wt(2,2) * (u(3)-u(2))) + Wt(3,2) * (u(4)-u(3))
+  Csys(3) = (Wt(1,3) * (u(2)-u(1)) + Wt(2,3) * (u(3)-u(2))) + Wt(3,3) * (u(4)-u(3))
+  Csys(4) = (Wt(1,4) * (u(2)-u(1)) + Wt(2,4) * (u(3)-u(2))) + Wt(3,4) * (u(4)-u(3))
+
+  ! endif ! End of non-uniform layer thickness branch.
+
+  ! To verify that these answers are correct, uncomment the following:
+!  u_mag = 0.0 ; do i=1,4 ; u_mag = max(u_mag, abs(u(i))) ; enddo
+!  do i = 1,4
+!    if (i==1) then ; zavg = 0.5*dz(i) ; else ; zavg = zavg + 0.5*(dz(i-1)+dz(i)) ; endif
+!    Atest(1) = 1.0
+!    Atest(2) = zavg                             ! = ( (z(i+1)**2) - (z(i)**2) ) / (2*dz(i))
+!    Atest(3) = (zavg**2 + 0.25*C1_3*dz(i)**2)   ! = ( (z(i+1)**3) - (z(i)**3) ) / (3*dz(i))
+!    Atest(4) = zavg * (zavg**2 + 0.25*dz(i)**2) ! = ( (z(i+1)**4) - (z(i)**4) ) / (4*dz(i))
+!    c_mag = 1.0 ; do k=0,3 ; do j=1,3 ; c_mag = c_mag + abs(Wt(j,k+1) * zavg**k) ; enddo ; enddo
+!    write(mesg, '("end_value_h4 line ", i2, " c_mag = ", es10.2, " u_mag = ", es10.2)') i, c_mag, u_mag
+!    call test_line(mesg, 4, Atest, Csys, u(i), u_mag*c_mag, tolerance=1.0e-15)
+!  enddo
+
+end subroutine end_value_h4
+
 
 !> Compute ih6 edge values (implicit sixth order accurate)
                                            !! in the same units as h.
@@ -653,7 +744,6 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
   real                  :: h2ph3, h2ph3_2       ! ...
   real                  :: h2ph3_3, h2ph3_4     ! ...
   real                  :: h0ph1_5, h2ph3_5     ! ...
-  real :: I_h1ph2 ! The inverse of the sum of two layers' thicknesses [H]
   real                  :: alpha, beta          ! stencil coefficients
   real                  :: a, b, c, d           ! "
   real, dimension(7)    :: x          ! Coordinate system with 0 at edges [same units as h]
@@ -1097,5 +1187,38 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
   edge_val(N,2) = tri_x(N+1)
 
 end subroutine edge_values_implicit_h6
+
+
+! Verify that A*C = R to within roundoff.
+subroutine test_line(msg, N, A, C, R, mag, tolerance)
+  integer,            intent(in) :: N
+  real, dimension(4), intent(in) :: A
+  real, dimension(4), intent(in) :: C
+  real,               intent(in) :: R
+  real,               intent(in) :: mag  !< The magnitude of leading order terms in this line
+  real, optional,     intent(in) :: tolerance
+  character(len=*) :: msg
+
+  real :: sum, sum_mag
+  real :: tol
+  character(len=128) :: mesg2
+  integer :: i
+
+  tol = 1.0e-12 ; if (present(tolerance)) tol = tolerance
+
+  sum = 0.0 ; sum_mag = max(0.0,mag)
+
+  do i=1,N
+    sum = sum + A(i) * C(i)
+    sum_mag = sum_mag + abs(A(i) * C(i))
+  enddo
+
+  if (abs(sum - R) > tol * (sum_mag + abs(R))) then
+    write(mesg2, '(", Fractional error = ", es12.4,", sum = ", es12.4)') (sum - R) / (sum_mag + abs(R)), sum
+    call MOM_error(FATAL, "Failed line test: "//trim(msg)//trim(mesg2))
+  endif
+
+end subroutine test_line
+
 
 end module regrid_edge_values
