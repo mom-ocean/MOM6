@@ -867,7 +867,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   integer :: isL, ieL, jsL, jeL
   integer :: is, ie
   integer :: substring_index
-  integer :: horgrid_position = 1
+  integer :: horgrid_position
   integer :: num_dims, total_axes
   integer :: var_periods
   logical :: fileOpenSuccess ! true if netcdf file is opened
@@ -888,13 +888,14 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   ! The maximum file size is 4294967292, according to the NetCDF documentation.
   if (CS%large_file_support) max_file_size = 4294967292_8
 
+  horgrid_position = 1
   name_length = 0
   num_files = 0
-  restartname = ''
-  base_file_name = ''
-  restartname_temp = ''
-  date_appendix = ''
-  restart_time_units = ''
+  restartname = ""
+  base_file_name = ""
+  restartname_temp = ""
+  date_appendix = ""
+  restart_time_units = ""
 
   ! get the number of vertical levels
   nz = 1 ; if (present(GV)) nz = GV%ke
@@ -942,9 +943,9 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   next_var = 1
   do while (next_var <= CS%novars )
     start_var = next_var
-    restartpath = ''
-    restartpath_temp = ''
-    suffix = ''
+    restartpath = ""
+    restartpath_temp = ""
+    suffix = ""
     name_length = len_trim(trim(directory)//trim(restartname))
     restartpath_temp(1:name_length) = trim(directory)//trim(restartname)
     if (num_files < 10) then
@@ -953,7 +954,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
       write(suffix,'("_",I2)') num_files
     endif
 
-    if (num_files > 0) then
+    if (num_files .gt. 0) then
       name_length = len_trim(trim(restartpath_temp) // trim(suffix))
       restartpath(1:name_length) = trim(restartpath_temp) // trim(suffix)
     else
@@ -963,6 +964,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
     ! create and open new file for domain-decomposed write
     fileOpenSuccess = open_file(fileObjWrite, restartpath, "write", &
                                 G%Domain%mpp_domain, is_restart=.true.)
+
     if (.not.(fileOpenSuccess)) &
     ! append to restart file if it exists
     fileOpenSuccess = open_file(fileObjWrite, restartpath, "append", &
@@ -971,12 +973,18 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
     size_in_file = 8*(2*G%Domain%niglobal+2*G%Domain%njglobal+2*nz+1000)
     ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
     !>\note: the user should increase the allocated array sizes to accommodate
-    !! more axes. As of 12/2019, only 7 axes are registered to the MOM restart files.
+    !! more axes.
     allocate(axis_data_CS%axis(7))
     allocate(axis_data_CS%data(7))
 
     total_axes=0 ! total number of axes registered and written to restart file
     do m=start_var,CS%novars
+      dim_names(:) = ""
+      num_dims = 0
+      hor_grid = ""
+      t_grid = ""
+      z_grid = ""
+
       call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
                          z_grid=z_grid, t_grid=t_grid, caller="save_restart")
 
@@ -985,20 +993,30 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
       if ((m==start_var) .OR. (size_in_file < max_file_size-var_sz)) then
         size_in_file = size_in_file + var_sz
       endif
+
       ! get the axis (dimension) names and lengths for variable 'm'
       ! note: 4d variables are lon x lat x vertical level x time
-      num_dims=0
-      call get_var_dimension_features(hor_grid, z_grid, t_grid, &
-                                      dim_names, dim_lengths, num_dims,G=G,GV=GV)
+      if (present(GV)) then
+        call get_var_dimension_features(hor_grid, z_grid, t_grid, &
+                                        dim_names, dim_lengths, num_dims, G=G, GV=GV)
+      else
+        call get_var_dimension_features(hor_grid, z_grid, t_grid, &
+                                        dim_names, dim_lengths, num_dims, G=G)
+      endif
       ! register all of the restart variable axes to the file if they do not exist
-      if (num_dims <= 0) &
-      call MOM_error(FATAL,"MOM_restart::save_restart: num_dims is an invalid value.")
+      if (num_dims .le. 0) cycle ! scalars will have num_dimes = 0
+
       do i=1,num_dims
         if (.not.(dimension_exists(fileObjWrite, dim_names(i)))) then
           total_axes=total_axes+1
           call MOM_register_diagnostic_axis(fileObjWrite, dim_names(i), dim_lengths(i))
-          call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
-                                            time_val=(/restart_time/), time_units=restart_time_units)
+          if (present(GV)) then
+            call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
+                                              time_val=(/restart_time/), time_units=restart_time_units)
+          else
+            call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, &
+                                              time_val=(/restart_time/), time_units=restart_time_units)
+          endif
         endif
       enddo
     enddo
@@ -1027,13 +1045,9 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
           call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                            'units',axis_data_CS%axis(i)%units)
 
-          if (len_trim(axis_data_CS%axis(i)%positive)>1) then
+          if (len_trim(axis_data_CS%axis(i)%positive)>1) &
             call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                              'positive',trim(axis_data_CS%axis(i)%positive))
-          else
-            call MOM_error(FATAL,"MOM_restart::save_restart: Pointer to the axis variable "// &
-                           trim(axis_data_CS%axis(i)%name)// " is not associated.")
-          endif
         endif
       endif
     enddo
@@ -1042,8 +1056,9 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
     do m=start_var,next_var-1
       if (.not.(variable_exists(fileObjWrite, CS%restart_field(m)%var_name))) then
-        units=''
-        longname=''
+        units = ""
+        longname = ""
+
         call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
                            z_grid=z_grid, t_grid=t_grid, longname=longname, &
                            units=units, caller="save_restart")
@@ -1166,9 +1181,11 @@ subroutine write_initial_conditions(directory, filename, CS, G, time, GV)
   total_axes=0
 
   do m=1,CS%novars
-    t_grid=''
-    z_grid=''
-    hor_grid=''
+    t_grid = ""
+    z_grid = ""
+    hor_grid = ""
+    dim_names(:) = ""
+
     call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
                        z_grid=z_grid, t_grid=t_grid, caller="MOM_restart:write_initial_conditions")
 
@@ -1176,10 +1193,8 @@ subroutine write_initial_conditions(directory, filename, CS, G, time, GV)
     ! note: 4d variables are lon x lat x vertical level x time
     num_dims=0
     call get_var_dimension_features(hor_grid, z_grid, t_grid, &
-                                     dim_names, dim_lengths, num_dims,G=G,GV=GV)
-    if (num_dims <= 0) &
-      call MOM_error(FATAL,"MOM_restart:write_initial_conditions: num_dims is an invalid value.")
-
+                                    dim_names, dim_lengths, num_dims, G=G, GV=GV)
+    if (num_dims <= 0) cycle ! scalar will have num_dims=0
     ! register the variable dimensions to the file if the corresponding global axes are not registered
     do i=1,num_dims
       if (.not.(dimension_exists(fileObjWrite, dim_names(i)))) then
@@ -1192,6 +1207,7 @@ subroutine write_initial_conditions(directory, filename, CS, G, time, GV)
           call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, &
                                              time_val=(/ic_time/), time_units=time_units)
         endif
+
         call MOM_register_diagnostic_axis(fileObjWrite, trim(dim_names(i)), dim_lengths(i))
       endif
     enddo
@@ -1218,21 +1234,26 @@ subroutine write_initial_conditions(directory, filename, CS, G, time, GV)
 
         call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                          "units",trim(axis_data_CS%axis(i)%units))
+
+        if (len_trim(axis_data_CS%axis(i)%positive)>1) &
+            call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                             'positive',trim(axis_data_CS%axis(i)%positive))
       endif
     endif
   enddo
 
   ! register and write the field variables to the initial conditions file
   do m=1,CS%novars
-    units=''
-    longname=''
+    longname = ""
+    num_dims = 0
+    units = ""
+
     call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
                        z_grid=z_grid, t_grid=t_grid, longname=longname, &
                        units=units, caller="save_restart")
-    num_dims = 0
 
     call get_var_dimension_features(hor_grid, z_grid, t_grid, &
-                                     dim_names, dim_lengths, num_dims, G=G, GV=GV)
+                                    dim_names, dim_lengths, num_dims, G=G, GV=GV)
 
     if (associated(CS%var_ptr3d(m)%p)) then
       call register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", &
