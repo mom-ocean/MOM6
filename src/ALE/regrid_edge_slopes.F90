@@ -170,6 +170,7 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_201
       Asys(2,i) = xavg
       Asys(3,i) = (xavg**2 + C1_12*dx**2)
       Asys(4,i) = xavg * (xavg**2 + 0.25*dx**2)
+      ! Asys(1:4,i) = (/ 1.0, xavg, (xavg**2 + C1_12*dx**2), xavg * (xavg**2 + 0.25*dx**2) /)
       Bsys(i) = u(i)
     enddo
 
@@ -210,6 +211,7 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_201
       Asys(2,i) = xavg
       Asys(3,i) = (xavg**2 + C1_12*dx**2)
       Asys(4,i) = xavg * (xavg**2 + 0.25*dx**2)
+      ! Asys(1:4,i) = (/ 1.0, xavg, (xavg**2 + C1_12*dx**2), xavg * (xavg**2 + 0.25*dx**2) /)
       Bsys(i) = u(N+1-i)
     enddo
 
@@ -321,51 +323,54 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
     h2_2 = h2 * h2 ; h2_3 = h2_2 * h2 ; h2_4 = h2_2 * h2_2 ; h2_5 = h2_3 * h2_2
 
     ! Compute matrix entries as described in Eq. (52) of White and Adcroft (2009)
+    ! Asys(1:6,n) = (/ -n*(n-1)*(-h1)**(n-2),  -n*(n-1)*h1**(n-2), (-1)**(n-1) * ((h0+h1)**n - h0**n) / h0, &
+    !                  (-h1)**(n-1), h2**(n-1), ((h2+h3)**n - h2**n) / h3  /)
+
     Asys(1,1) = 0.0
-    Asys(1,2) = 0.0
-    Asys(1,3) = 1.0
-    Asys(1,4) = 1.0
-    Asys(1,5) = 1.0
-    Asys(1,6) = 1.0
+    Asys(2,1) = 0.0
+    Asys(3,1) = 1.0
+    Asys(4,1) = 1.0
+    Asys(5,1) = 1.0
+    Asys(6,1) = 1.0
 
-    Asys(2,1) = 2.0
+    Asys(1,2) = 2.0
     Asys(2,2) = 2.0
-    Asys(2,3) = (2.0*h1 + h0)
-    Asys(2,4) =  h1
-    Asys(2,5) = -h2
-    Asys(2,6) = -(2.0*h2   + h3)
+    Asys(3,2) = (2.0*h1 + h0)
+    Asys(4,2) =  h1
+    Asys(5,2) = -h2
+    Asys(6,2) = -(2.0*h2   + h3)
 
-    Asys(3,1) = 6.0*h1
-    Asys(3,2) = -6.0* h2
+    Asys(1,3) = 6.0*h1
+    Asys(2,3) = -6.0* h2
     Asys(3,3) = (3.0*h1_2 + h0*(3.0*h1 + h0)) ! = ((h0+h1)**3 - h1**3) / h0
-    Asys(3,4) = h1_2
-    Asys(3,5) = h2_2
-    Asys(3,6) = (3.0*h2_2 + h3*(3.0*h2 + h3)) ! = ((h2+h3)**3 - h2**3) / h3
+    Asys(4,3) = h1_2
+    Asys(5,3) = h2_2
+    Asys(6,3) = (3.0*h2_2 + h3*(3.0*h2 + h3)) ! = ((h2+h3)**3 - h2**3) / h3
 
-    Asys(4,1) = -12.0* h1_2
-    Asys(4,2) = -12.0* h2_2
-    Asys(4,3) = -(4.0*h1_3 + h0*(6.0*h1_2 + h0*(4.0*h1 + h0))) ! = -((h0+h1)**4 - h1**4) / h0
+    Asys(1,4) = -12.0* h1_2
+    Asys(2,4) = -12.0* h2_2
+    Asys(3,4) = -(4.0*h1_3 + h0*(6.0*h1_2 + h0*(4.0*h1 + h0))) ! = -((h0+h1)**4 - h1**4) / h0
     Asys(4,4) = - h1_3
-    Asys(4,5) = h2_3
-    Asys(4,6) = (4.0*h2_3 + h3*(6.0*h2_2 + h3*(4.0*h2 + h3))) ! = ((h2+h3)**4 - h2**4)/ h3
+    Asys(5,4) = h2_3
+    Asys(6,4) = (4.0*h2_3 + h3*(6.0*h2_2 + h3*(4.0*h2 + h3))) ! = ((h2+h3)**4 - h2**4)/ h3
 
-    Asys(5,1) = 20.0*h1_3
-    Asys(5,2) = -20.0* h2_3
-    Asys(5,3) = (5.0*h1_4 + h0*(10.0*h1_3 + h0*(10.0*h1_2 + h0*(5.0*h1 + h0))))
-    Asys(5,4) = h1_4
+    Asys(1,5) = 20.0*h1_3
+    Asys(2,5) = -20.0* h2_3
+    Asys(3,5) = (5.0*h1_4 + h0*(10.0*h1_3 + h0*(10.0*h1_2 + h0*(5.0*h1 + h0))))
+    Asys(4,5) = h1_4
     Asys(5,5) = h2_4
-    Asys(5,6) = (5.0*h2_4 + h3*(10.0*h2_3 + h3*(10.0*h2_2 + h3*(5.0*h2 + h3))))
+    Asys(6,5) = (5.0*h2_4 + h3*(10.0*h2_3 + h3*(10.0*h2_2 + h3*(5.0*h2 + h3))))
 
-    Asys(6,1) = -30.0*h1_4
-    Asys(6,2) = -30.0*h2_4
-    Asys(6,3) = -(6.0*h1_5 + h0*(15.0*h1_4 + h0*(20.0*h1_3 + h0*(15.0*h1_2 + h0*(6.0*h1 + h0)))))
-    Asys(6,4) = -h1_5
-    Asys(6,5) = h2_5
+    Asys(1,6) = -30.0*h1_4
+    Asys(2,6) = -30.0*h2_4
+    Asys(3,6) = -(6.0*h1_5 + h0*(15.0*h1_4 + h0*(20.0*h1_3 + h0*(15.0*h1_2 + h0*(6.0*h1 + h0)))))
+    Asys(4,6) = -h1_5
+    Asys(5,6) = h2_5
     Asys(6,6) = (6.0*h2_5 + h3*(15.0*h2_4 + h3*(20.0*h2_3 + h3*(15.0*h2_2 + h3*(6.0*h2 + h3)))))
 
     Bsys(:) = (/ 0.0, -2.0, 0.0, 0.0, 0.0, 0.0 /)
 
-    call solve_linear_system( Asys, Bsys, Csys, 6, .false. )
+    call linear_solver( 6, Asys, Bsys, Csys )
 
     alpha = Csys(1)
     beta  = Csys(2)
@@ -391,50 +396,54 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
 
   ! Compute matrix entries
   Asys(1,1) = 0.0
-  Asys(1,2) = 0.0
-  Asys(1,3) = 1.0
-  Asys(1,4) = 1.0
-  Asys(1,5) = 1.0
-  Asys(1,6) = 1.0
+  Asys(2,1) = 0.0
+  Asys(3,1) = 1.0
+  Asys(4,1) = 1.0
+  Asys(5,1) = 1.0
+  Asys(6,1) = 1.0
 
-  Asys(2,1) = 2.0
+  Asys(1,2) = 2.0
   Asys(2,2) = 2.0
-  Asys(2,3) = (2.0*h1 + h0)
-  Asys(2,4) = h1
-  Asys(2,5) = -h2
-  Asys(2,6) = -(2.0*h2 + h3)
+  Asys(3,2) = (2.0*h1 + h0)
+  Asys(4,2) = h1
+  Asys(5,2) = -h2
+  Asys(6,2) = -(2.0*h2 + h3)
 
-  Asys(3,1) = 6.0*h01
-  Asys(3,2) = 0.0
+  Asys(1,3) = 6.0*h01
+  Asys(2,3) = 0.0
   Asys(3,3) = (3.0*h1_2 + h0*(3.0*h1 + h0))
-  Asys(3,4) = h1_2
-  Asys(3,5) = h2_2
-  Asys(3,6) = 3.0*h2_2 + h3*(3.0*h2 + h3)
+  Asys(4,3) = h1_2
+  Asys(5,3) = h2_2
+  Asys(6,3) = 3.0*h2_2 + h3*(3.0*h2 + h3)
 
-  Asys(4,1) = -12.0*h01_2
-  Asys(4,2) = 0.0
-  Asys(4,3) = -(4.0*h1_3 + h0*(6.0*h1_2 + h0*(4.0*h1 + h0)))
+!  Asys(1:6,1) = (/ 0.0,     0.0, 1.0,                         1.0,  1.0,  1.0 /)
+!  Asys(1:6,2) = (/ 2.0,     2.0, 2.0*h1 + h0,                 h1,   -h2,  -(2.0*h2 + h3) /)
+!  Asys(1:6,3) = (/ 6.0*h01, 0.0, 3.0*h1_2 + h0*(3.0*h1 + h0), h1_2, h2_2, 3.0*h2_2 + h3*(3.0*h2 + h3) /)
+
+  Asys(1,4) = -12.0*h01_2
+  Asys(2,4) = 0.0
+  Asys(3,4) = -(4.0*h1_3 + h0*(6.0*h1_2 + h0*(4.0*h1 + h0)))
   Asys(4,4) = -h1_3
-  Asys(4,5) = h2_3
-  Asys(4,6) = 4.0*h2_3 + h3*(6.0*h2_2 + h3*(4.0*h2 + h3))
+  Asys(5,4) = h2_3
+  Asys(6,4) = 4.0*h2_3 + h3*(6.0*h2_2 + h3*(4.0*h2 + h3))
 
-  Asys(5,1) = 20.0*(h01*h01_2)
-  Asys(5,2) = 0.0
-  Asys(5,3) = (5.0*h1_4 + h0*(10.0*h1_3 + h0*(10.0*h1_2 + h0*(5.0*h1 + h0))))
-  Asys(5,4) = h1_4
+  Asys(1,5) = 20.0*(h01*h01_2)
+  Asys(2,5) = 0.0
+  Asys(3,5) = (5.0*h1_4 + h0*(10.0*h1_3 + h0*(10.0*h1_2 + h0*(5.0*h1 + h0))))
+  Asys(4,5) = h1_4
   Asys(5,5) = h2_4
-  Asys(5,6) = 5.0*h2_4 + h3*(10.0*h2_3 + h3*(10.0*h2_2 + h3*(5.0*h2 + h3)))
+  Asys(6,5) = 5.0*h2_4 + h3*(10.0*h2_3 + h3*(10.0*h2_2 + h3*(5.0*h2 + h3)))
 
-  Asys(6,1) = -30.0*(h01_2*h01_2)
-  Asys(6,2) = 0.0
-  Asys(6,3) = -(6.0*h1_5 + h0*(15.0*h1_4 + h0*(20.0*h1_3 + h0*(15.0*h1_2 + h0*(6.0*h1 + h0)))))
-  Asys(6,4) = -h1_5
-  Asys(6,5) = h2_5
+  Asys(1,6) = -30.0*(h01_2*h01_2)
+  Asys(2,6) = 0.0
+  Asys(3,6) = -(6.0*h1_5 + h0*(15.0*h1_4 + h0*(20.0*h1_3 + h0*(15.0*h1_2 + h0*(6.0*h1 + h0)))))
+  Asys(4,6) = -h1_5
+  Asys(5,6) = h2_5
   Asys(6,6) = 6.0*h2_5 + h3*(15.0*h2_4 + h3*(20.0*h2_3 + h3*(15.0*h2_2 + h3*(6.0*h2 + h3))))
 
   Bsys(:) = (/ 0.0, -2.0, -6.0*h1, 12.0*h1_2, -20.0*h1_3, 30.0*h1_4 /)
 
-  call solve_linear_system( Asys, Bsys, Csys, 6, .false. )
+  call linear_solver( 6, Asys, Bsys, Csys )
 
   alpha = Csys(1)
   beta  = Csys(2)
@@ -449,17 +458,17 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
   do i = 1,6
     dx = h(i)
     xavg = x(i) + 0.5 * dx
-    Asys(i,1) = 1.0
-    Asys(i,2) = xavg
-    Asys(i,3) = (xavg**2 + C1_12*dx**2)
-    Asys(i,4) = xavg * (xavg**2 + 0.25*dx**2)
-    Asys(i,5) = (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
-    Asys(i,6) = xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
+    Asys(1,i) = 1.0
+    Asys(2,i) = xavg
+    Asys(3,i) = (xavg**2 + C1_12*dx**2)
+    Asys(4,i) = xavg * (xavg**2 + 0.25*dx**2)
+    Asys(5,i) = (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
+    Asys(6,i) = xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
     Bsys(i) = u(i)
     x(i+1) = x(i) + dx
   enddo
 
-  call solve_linear_system( Asys, Bsys, Csys, 6, .false. )
+  call linear_solver( 6, Asys, Bsys, Csys )
 
   Dsys(1) = Csys(2)
   Dsys(2) = 2.0 * Csys(3)
@@ -487,50 +496,50 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
 
   ! Compute matrix entries
   Asys(1,1) = 0.0
-  Asys(1,2) = 0.0
-  Asys(1,3) = 1.0
-  Asys(1,4) = 1.0
-  Asys(1,5) = 1.0
-  Asys(1,6) = 1.0
+  Asys(2,1) = 0.0
+  Asys(3,1) = 1.0
+  Asys(4,1) = 1.0
+  Asys(5,1) = 1.0
+  Asys(6,1) = 1.0
 
-  Asys(2,1) = 2.0
+  Asys(1,2) = 2.0
   Asys(2,2) = 2.0
-  Asys(2,3) = (2.0*h1 + h0)
-  Asys(2,4) = h1
-  Asys(2,5) = -h2
-  Asys(2,6) = -(2.0*h2 + h3)
+  Asys(3,2) = (2.0*h1 + h0)
+  Asys(4,2) = h1
+  Asys(5,2) = -h2
+  Asys(6,2) = -(2.0*h2 + h3)
 
-  Asys(3,1) = 0.0
-  Asys(3,2) = -6.0*h23
+  Asys(1,3) = 0.0
+  Asys(2,3) = -6.0*h23
   Asys(3,3) = (3.0*h1_2 + h0*(3.0*h1 + h0))
-  Asys(3,4) = h1_2
-  Asys(3,5) = h2_2
-  Asys(3,6) = 3.0*h2_2 + h3*(3.0*h2 + h3)
+  Asys(4,3) = h1_2
+  Asys(5,3) = h2_2
+  Asys(6,3) = 3.0*h2_2 + h3*(3.0*h2 + h3)
 
-  Asys(4,1) = 0.0
-  Asys(4,2) = -12.0*h23_2
-  Asys(4,3) = -(4.0*h1_3 + h0*(6.0*h1_2 + h0*(4.0*h1 + h0)))
+  Asys(1,4) = 0.0
+  Asys(2,4) = -12.0*h23_2
+  Asys(3,4) = -(4.0*h1_3 + h0*(6.0*h1_2 + h0*(4.0*h1 + h0)))
   Asys(4,4) = -h1_3
-  Asys(4,5) = h2_3
-  Asys(4,6) = 4.0*h2_3 + h3*(6.0*h2_2 + h3*(4.0*h2 + h3))
+  Asys(5,4) = h2_3
+  Asys(6,4) = 4.0*h2_3 + h3*(6.0*h2_2 + h3*(4.0*h2 + h3))
 
-  Asys(5,1) = 0.0
-  Asys(5,2) = -20.0*(h23*h23_2)
-  Asys(5,3) = (5.0*h1_4 + h0*(10.0*h1_3 + h0*(10.0*h1_2 + h0*(5.0*h1 + h0))))
-  Asys(5,4) = h1_4
+  Asys(1,5) = 0.0
+  Asys(2,5) = -20.0*(h23*h23_2)
+  Asys(3,5) = (5.0*h1_4 + h0*(10.0*h1_3 + h0*(10.0*h1_2 + h0*(5.0*h1 + h0))))
+  Asys(4,5) = h1_4
   Asys(5,5) = h2_4
-  Asys(5,6) = 5.0*h2_4 + h3*(10.0*h2_3 + h3*(10.0*h2_2 + h3*(5.0*h2 + h3)))
+  Asys(6,5) = 5.0*h2_4 + h3*(10.0*h2_3 + h3*(10.0*h2_2 + h3*(5.0*h2 + h3)))
 
-  Asys(6,1) = 0.0
-  Asys(6,2) = -30.0*(h23_2*h23_2)
-  Asys(6,3) = -(6.0*h1_5 + h0*(15.0*h1_4 + h0*(20.0*h1_3 + h0*(15.0*h1_2 + h0*(6.0*h1 + h0)))))
-  Asys(6,4) = -h1_5
-  Asys(6,5) = h2_5
+  Asys(1,6) = 0.0
+  Asys(2,6) = -30.0*(h23_2*h23_2)
+  Asys(3,6) = -(6.0*h1_5 + h0*(15.0*h1_4 + h0*(20.0*h1_3 + h0*(15.0*h1_2 + h0*(6.0*h1 + h0)))))
+  Asys(4,6) = -h1_5
+  Asys(5,6) = h2_5
   Asys(6,6) = 6.0*h2_5 + h3*(15.0*h2_4 + h3*(20.0*h2_3 + h3*(15.0*h2_2 + h3*(6.0*h2 + h3))))
 
   Bsys(:) = (/ 0.0, -2.0, 6.0*h2, 12.0*h2_2, 20.0*h2_3, 30.0*h2_4 /)
 
-  call solve_linear_system( Asys, Bsys, Csys, 6, .false. )
+  call linear_solver( 6, Asys, Bsys, Csys )
 
   alpha = Csys(1)
   beta  = Csys(2)
@@ -545,17 +554,17 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
   do i = 1,6
     dx = h(N-6+i)
     xavg = x(i) + 0.5*dx
-    Asys(i,1) = 1.0
-    Asys(i,2) = xavg
-    Asys(i,3) = (xavg**2 + C1_12*dx**2)
-    Asys(i,4) = xavg * (xavg**2 + 0.25*dx**2)
-    Asys(i,5) = (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
-    Asys(i,6) = xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
+    Asys(1,i) = 1.0
+    Asys(2,i) = xavg
+    Asys(3,i) = (xavg**2 + C1_12*dx**2)
+    Asys(4,i) = xavg * (xavg**2 + 0.25*dx**2)
+    Asys(5,i) = (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
+    Asys(6,i) = xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
     Bsys(i) = u(N-6+i)
     x(i+1) = x(i) + dx
   enddo
 
-  call solve_linear_system( Asys, Bsys, Csys, 6, .false. )
+  call linear_solver( 6,  Asys, Bsys, Csys )
 
   Dsys(1) = Csys(2)
   Dsys(2) = 2.0 * Csys(3)
