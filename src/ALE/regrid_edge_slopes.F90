@@ -284,21 +284,14 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
   ! Local variables
   real :: h0, h1, h2, h3       ! cell widths [H]
   real :: hMin                 ! The minimum thickness used in these calculations [H]
-  real                  :: g, g_2, g_3          ! the following are
-  real                  :: g_4, g_5, g_6        ! auxiliary variables
-  real                  :: d2, d3, d4, d5, d6   ! to set up the systems
-  real                  :: n2, n3, n4, n5, n6   ! used to compute the
+  real :: h01, h01_2           ! Summed thicknesses to various powers [H^n ~> m^n or kg^n m-2n]
+  real :: h23, h23_2           ! Summed thicknesses to various powers [H^n ~> m^n or kg^n m-2n]
+  real :: hNeglect             ! A negligible thickness [H].
   real                  :: h1_2, h2_2           ! the coefficients of the
   real                  :: h1_3, h2_3           ! tridiagonal system
   real                  :: h1_4, h2_4           ! ...
   real                  :: h1_5, h2_5           ! ...
-  real                  :: h1_6, h2_6           ! ...
-  real                  :: h0ph1, h0ph1_2       ! ...
-  real                  :: h0ph1_3, h0ph1_4     ! ...
-  real                  :: h2ph3, h2ph3_2       ! ...
-  real                  :: h2ph3_3, h2ph3_4     ! ...
   real                  :: alpha, beta          ! stencil coefficients
-  real                  :: a, b, c, d           ! "
   real, dimension(7)    :: x                    ! Coordinate system with 0 at edges [same units as h]
   real, parameter       :: C1_12 = 1.0 / 12.0
   real, parameter       :: C5_6 = 5.0 / 6.0
@@ -312,7 +305,6 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
                            tri_b, &             ! trid. system (unknowns vector)
                            tri_x                ! trid. system (rhs)
   real :: h_Min_Frac = 1.0e-4
-  real :: hNeglect ! A negligible thickness in the same units as h.
   integer :: i, j, k              ! loop indexes
 
   hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
@@ -325,45 +317,10 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
     h2 = max(h(k+1), hMin) ; h3 = max(h(k+2), hMin)
 
     ! Auxiliary calculations
-    h1_2 = h1 * h1
-    h1_3 = h1_2 * h1
-    h1_4 = h1_2 * h1_2
-    h1_5 = h1_3 * h1_2
-    h1_6 = h1_3 * h1_3
+    h1_2 = h1 * h1 ; h1_3 = h1_2 * h1 ; h1_4 = h1_2 * h1_2 ; h1_5 = h1_3 * h1_2
+    h2_2 = h2 * h2 ; h2_3 = h2_2 * h2 ; h2_4 = h2_2 * h2_2 ; h2_5 = h2_3 * h2_2
 
-    h2_2 = h2 * h2
-    h2_3 = h2_2 * h2
-    h2_4 = h2_2 * h2_2
-    h2_5 = h2_3 * h2_2
-    h2_6 = h2_3 * h2_3
-
-    g   = h0 + h1
-    g_2 = g * g
-    g_3 = g * g_2
-    g_4 = g_2 * g_2
-    g_5 = g_4 * g
-    g_6 = g_3 * g_3
-
-    d2 = ( h1_2 - g_2 ) / ( h0 )
-    d3 = ( h1_3 - g_3 ) / ( h0 )
-    d4 = ( h1_4 - g_4 ) / ( h0 )
-    d5 = ( h1_5 - g_5 ) / ( h0 )
-    d6 = ( h1_6 - g_6 ) / ( h0 )
-
-    g   = h2 + h3
-    g_2 = g * g
-    g_3 = g * g_2
-    g_4 = g_2 * g_2
-    g_5 = g_4 * g
-    g_6 = g_3 * g_3
-
-    n2 = ( g_2 - h2_2 ) / ( h3 )
-    n3 = ( g_3 - h2_3 ) / ( h3 )
-    n4 = ( g_4 - h2_4 ) / ( h3 )
-    n5 = ( g_5 - h2_5 ) / ( h3 )
-    n6 = ( g_6 - h2_6 ) / ( h3 )
-
-    ! Compute matrix entries
+    ! Compute matrix entries as described in Eq. (52) of White and Adcroft (2009)
     Asys(1,1) = 0.0
     Asys(1,2) = 0.0
     Asys(1,3) = 1.0
@@ -371,109 +328,66 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
     Asys(1,5) = 1.0
     Asys(1,6) = 1.0
 
-    Asys(2,1) = 1.0
-    Asys(2,2) = 1.0
-    Asys(2,3) = -0.5 * d2
-    Asys(2,4) = 0.5 * h1
-    Asys(2,5) = -0.5 * h2
-    Asys(2,6) = -0.5 * n2
+    Asys(2,1) = 2.0
+    Asys(2,2) = 2.0
+    Asys(2,3) = (2.0*h1 + h0)
+    Asys(2,4) =  h1
+    Asys(2,5) = -h2
+    Asys(2,6) = -(2.0*h2   + h3)
 
-    Asys(3,1) = h1
-    Asys(3,2) = - h2
-    Asys(3,3) = - d3 / 6.0
-    Asys(3,4) = h1_2 / 6.0
-    Asys(3,5) = h2_2 / 6.0
-    Asys(3,6) = n3 / 6.0
+    Asys(3,1) = 6.0*h1
+    Asys(3,2) = -6.0* h2
+    Asys(3,3) = (3.0*h1_2 + h0*(3.0*h1 + h0)) ! = ((h0+h1)**3 - h1**3) / h0
+    Asys(3,4) = h1_2
+    Asys(3,5) = h2_2
+    Asys(3,6) = (3.0*h2_2 + h3*(3.0*h2 + h3)) ! = ((h2+h3)**3 - h2**3) / h3
 
-    Asys(4,1) = - h1_2 / 2.0
-    Asys(4,2) = - h2_2 / 2.0
-    Asys(4,3) = d4 / 24.0
-    Asys(4,4) = - h1_3 / 24.0
-    Asys(4,5) = h2_3 / 24.0
-    Asys(4,6) = n4 / 24.0
+    Asys(4,1) = -12.0* h1_2
+    Asys(4,2) = -12.0* h2_2
+    Asys(4,3) = -(4.0*h1_3 + h0*(6.0*h1_2 + h0*(4.0*h1 + h0))) ! = -((h0+h1)**4 - h1**4) / h0
+    Asys(4,4) = - h1_3
+    Asys(4,5) = h2_3
+    Asys(4,6) = (4.0*h2_3 + h3*(6.0*h2_2 + h3*(4.0*h2 + h3))) ! = ((h2+h3)**4 - h2**4)/ h3
 
-    Asys(5,1) = h1_3 / 6.0
-    Asys(5,2) = - h2_3 / 6.0
-    Asys(5,3) = - d5 / 120.0
-    Asys(5,4) = h1_4 / 120.0
-    Asys(5,5) = h2_4 / 120.0
-    Asys(5,6) = n5 / 120.0
+    Asys(5,1) = 20.0*h1_3
+    Asys(5,2) = -20.0* h2_3
+    Asys(5,3) = (5.0*h1_4 + h0*(10.0*h1_3 + h0*(10.0*h1_2 + h0*(5.0*h1 + h0))))
+    Asys(5,4) = h1_4
+    Asys(5,5) = h2_4
+    Asys(5,6) = (5.0*h2_4 + h3*(10.0*h2_3 + h3*(10.0*h2_2 + h3*(5.0*h2 + h3))))
 
-    Asys(6,1) = - h1_4 / 24.0
-    Asys(6,2) = - h2_4 / 24.0
-    Asys(6,3) = d6 / 720.0
-    Asys(6,4) = - h1_5 / 720.0
-    Asys(6,5) = h2_5 / 720.0
-    Asys(6,6) = n6 / 720.0
+    Asys(6,1) = -30.0*h1_4
+    Asys(6,2) = -30.0*h2_4
+    Asys(6,3) = -(6.0*h1_5 + h0*(15.0*h1_4 + h0*(20.0*h1_3 + h0*(15.0*h1_2 + h0*(6.0*h1 + h0)))))
+    Asys(6,4) = -h1_5
+    Asys(6,5) = h2_5
+    Asys(6,6) = (6.0*h2_5 + h3*(15.0*h2_4 + h3*(20.0*h2_3 + h3*(15.0*h2_2 + h3*(6.0*h2 + h3)))))
 
-    Bsys(:) = (/ 0.0, -1.0, 0.0, 0.0, 0.0, 0.0 /)
+    Bsys(:) = (/ 0.0, -2.0, 0.0, 0.0, 0.0, 0.0 /)
 
     call solve_linear_system( Asys, Bsys, Csys, 6, .false. )
 
     alpha = Csys(1)
     beta  = Csys(2)
-    a = Csys(3)
-    b = Csys(4)
-    c = Csys(5)
-    d = Csys(6)
 
     tri_l(k+1) = alpha
     tri_d(k+1) = 1.0
     tri_u(k+1) = beta
-    tri_b(k+1) = a * u(k-1) + b * u(k) + c * u(k+1) + d * u(k+2)
+    tri_b(k+1) = Csys(3) * u(k-1) + Csys(4) * u(k) + Csys(5) * u(k+1) + Csys(6) * u(k+2)
 
   enddo ! end loop on cells
 
-  ! Use a right-biased stencil for the second row
+  ! Use a right-biased stencil for the second row, as described in Eq. (53) of White and Adcroft (2009).
 
-  ! Store temporary cell widths, avoiding singularities from zero thic2nesses or extreme changes.
+  ! Store temporary cell widths, avoiding singularities from zero thicknesses or extreme changes.
   hMin = max(hNeglect, h_Min_Frac*((h(1) + h(2)) + (h(3) + h(4))))
   h0 = max(h(1), hMin) ; h1 = max(h(2), hMin)
   h2 = max(h(3), hMin) ; h3 = max(h(4), hMin)
 
   ! Auxiliary calculations
-  h1_2 = h1 * h1
-  h1_3 = h1_2 * h1
-  h1_4 = h1_2 * h1_2
-  h1_5 = h1_3 * h1_2
-  h1_6 = h1_3 * h1_3
-
-  h2_2 = h2 * h2
-  h2_3 = h2_2 * h2
-  h2_4 = h2_2 * h2_2
-  h2_5 = h2_3 * h2_2
-  h2_6 = h2_3 * h2_3
-
-  g   = h0 + h1
-  g_2 = g * g
-  g_3 = g * g_2
-  g_4 = g_2 * g_2
-  g_5 = g_4 * g
-  g_6 = g_3 * g_3
-
-  h0ph1   = h0 + h1
-  h0ph1_2 = h0ph1 * h0ph1
-  h0ph1_3 = h0ph1_2 * h0ph1
-  h0ph1_4 = h0ph1_2 * h0ph1_2
-
-  d2 = ( h1_2 - g_2 ) / ( h0 )
-  d3 = ( h1_3 - g_3 ) / ( h0 )
-  d4 = ( h1_4 - g_4 ) / ( h0 )
-  d5 = ( h1_5 - g_5 ) / ( h0 )
-  d6 = ( h1_6 - g_6 ) / ( h0 )
-
-  g   = h2 + h3
-  g_2 = g * g
-  g_3 = g * g_2
-  g_4 = g_2 * g_2
-  g_5 = g_4 * g
-  g_6 = g_3 * g_3
-
-  n2 = ( g_2 - h2_2 ) / ( h3 )
-  n3 = ( g_3 - h2_3 ) / ( h3 )
-  n4 = ( g_4 - h2_4 ) / ( h3 )
-  n5 = ( g_5 - h2_5 ) / ( h3 )
-  n6 = ( g_6 - h2_6 ) / ( h3 )
+  h1_2 = h1 * h1 ; h1_3 = h1_2 * h1 ; h1_4 = h1_2 * h1_2 ; h1_5 = h1_3 * h1_2
+  h2_2 = h2 * h2 ; h2_3 = h2_2 * h2 ; h2_4 = h2_2 * h2_2 ; h2_5 = h2_3 * h2_2
+  h01 = h0 + h1 ; h01_2 = h01 * h01
 
   ! Compute matrix entries
   Asys(1,1) = 0.0
@@ -483,56 +397,52 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
   Asys(1,5) = 1.0
   Asys(1,6) = 1.0
 
-  Asys(2,1) = 1.0
-  Asys(2,2) = 1.0
-  Asys(2,3) = -0.5 * d2
-  Asys(2,4) = 0.5 * h1
-  Asys(2,5) = -0.5 * h2
-  Asys(2,6) = -0.5 * n2
+  Asys(2,1) = 2.0
+  Asys(2,2) = 2.0
+  Asys(2,3) = (2.0*h1 + h0)
+  Asys(2,4) = h1
+  Asys(2,5) = -h2
+  Asys(2,6) = -(2.0*h2 + h3)
 
-  Asys(3,1) = h0ph1
+  Asys(3,1) = 6.0*h01
   Asys(3,2) = 0.0
-  Asys(3,3) = - d3 / 6.0
-  Asys(3,4) = h1_2 / 6.0
-  Asys(3,5) = h2_2 / 6.0
-  Asys(3,6) = n3 / 6.0
+  Asys(3,3) = (3.0*h1_2 + h0*(3.0*h1 + h0))
+  Asys(3,4) = h1_2
+  Asys(3,5) = h2_2
+  Asys(3,6) = 3.0*h2_2 + h3*(3.0*h2 + h3)
 
-  Asys(4,1) = - h0ph1_2 / 2.0
+  Asys(4,1) = -12.0*h01_2
   Asys(4,2) = 0.0
-  Asys(4,3) = d4 / 24.0
-  Asys(4,4) = - h1_3 / 24.0
-  Asys(4,5) = h2_3 / 24.0
-  Asys(4,6) = n4 / 24.0
+  Asys(4,3) = -(4.0*h1_3 + h0*(6.0*h1_2 + h0*(4.0*h1 + h0)))
+  Asys(4,4) = -h1_3
+  Asys(4,5) = h2_3
+  Asys(4,6) = 4.0*h2_3 + h3*(6.0*h2_2 + h3*(4.0*h2 + h3))
 
-  Asys(5,1) = h0ph1_3 / 6.0
+  Asys(5,1) = 20.0*(h01*h01_2)
   Asys(5,2) = 0.0
-  Asys(5,3) = - d5 / 120.0
-  Asys(5,4) = h1_4 / 120.0
-  Asys(5,5) = h2_4 / 120.0
-  Asys(5,6) = n5 / 120.0
+  Asys(5,3) = (5.0*h1_4 + h0*(10.0*h1_3 + h0*(10.0*h1_2 + h0*(5.0*h1 + h0))))
+  Asys(5,4) = h1_4
+  Asys(5,5) = h2_4
+  Asys(5,6) = 5.0*h2_4 + h3*(10.0*h2_3 + h3*(10.0*h2_2 + h3*(5.0*h2 + h3)))
 
-  Asys(6,1) = - h0ph1_4 / 24.0
+  Asys(6,1) = -30.0*(h01_2*h01_2)
   Asys(6,2) = 0.0
-  Asys(6,3) = d6 / 720.0
-  Asys(6,4) = - h1_5 / 720.0
-  Asys(6,5) = h2_5 / 720.0
-  Asys(6,6) = n6 / 720.0
+  Asys(6,3) = -(6.0*h1_5 + h0*(15.0*h1_4 + h0*(20.0*h1_3 + h0*(15.0*h1_2 + h0*(6.0*h1 + h0)))))
+  Asys(6,4) = -h1_5
+  Asys(6,5) = h2_5
+  Asys(6,6) = 6.0*h2_5 + h3*(15.0*h2_4 + h3*(20.0*h2_3 + h3*(15.0*h2_2 + h3*(6.0*h2 + h3))))
 
-  Bsys(:) = (/ 0.0, -1.0, -h1, h1_2/2.0, -h1_3/6.0, h1_4/24.0 /)
+  Bsys(:) = (/ 0.0, -2.0, -6.0*h1, 12.0*h1_2, -20.0*h1_3, 30.0*h1_4 /)
 
   call solve_linear_system( Asys, Bsys, Csys, 6, .false. )
 
   alpha = Csys(1)
   beta  = Csys(2)
-  a = Csys(3)
-  b = Csys(4)
-  c = Csys(5)
-  d = Csys(6)
 
   tri_l(2) = alpha
   tri_d(2) = 1.0
   tri_u(2) = beta
-  tri_b(2) = a * u(1) + b * u(2) + c * u(3) + d * u(4)
+  tri_b(2) = Csys(3) * u(1) + Csys(4) * u(2) + Csys(5) * u(3) + Csys(6) * u(4)
 
   ! Boundary conditions: left boundary
   x(1) = 0.0
@@ -562,55 +472,18 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
   tri_u(1) = 0.0
   tri_b(1) = evaluation_polynomial( Dsys, 5, x(1) )        ! first edge value
 
-  ! Use a left-biased stencil for the second to last row
+  ! Use a left-biased stencil for the second to last row, as described in Eq. (54) of White and Adcroft (2009).
+
   ! Store temporary cell widths, avoiding singularities from zero thicknesses or extreme changes.
   hMin = max(hNeglect, h_Min_Frac*((h(N-3) + h(N-2)) + (h(N-1) + h(N))))
   h0 = max(h(N-3), hMin) ; h1 = max(h(N-2), hMin)
   h2 = max(h(N-1), hMin) ; h3 = max(h(N), hMin)
 
   ! Auxiliary calculations
-  h1_2 = h1 * h1
-  h1_3 = h1_2 * h1
-  h1_4 = h1_2 * h1_2
-  h1_5 = h1_3 * h1_2
-  h1_6 = h1_3 * h1_3
+  h1_2 = h1 * h1 ; h1_3 = h1_2 * h1 ; h1_4 = h1_2 * h1_2 ; h1_5 = h1_3 * h1_2
+  h2_2 = h2 * h2 ; h2_3 = h2_2 * h2 ; h2_4 = h2_2 * h2_2 ; h2_5 = h2_3 * h2_2
 
-  h2_2 = h2 * h2
-  h2_3 = h2_2 * h2
-  h2_4 = h2_2 * h2_2
-  h2_5 = h2_3 * h2_2
-  h2_6 = h2_3 * h2_3
-
-  g   = h0 + h1
-  g_2 = g * g
-  g_3 = g * g_2
-  g_4 = g_2 * g_2
-  g_5 = g_4 * g
-  g_6 = g_3 * g_3
-
-  h2ph3   = h2 + h3
-  h2ph3_2 = h2ph3 * h2ph3
-  h2ph3_3 = h2ph3_2 * h2ph3
-  h2ph3_4 = h2ph3_2 * h2ph3_2
-
-  d2 = ( h1_2 - g_2 ) / ( h0 )
-  d3 = ( h1_3 - g_3 ) / ( h0 )
-  d4 = ( h1_4 - g_4 ) / ( h0 )
-  d5 = ( h1_5 - g_5 ) / ( h0 )
-  d6 = ( h1_6 - g_6 ) / ( h0 )
-
-  g   = h2 + h3
-  g_2 = g * g
-  g_3 = g * g_2
-  g_4 = g_2 * g_2
-  g_5 = g_4 * g
-  g_6 = g_3 * g_3
-
-  n2 = ( g_2 - h2_2 ) / ( h3 )
-  n3 = ( g_3 - h2_3 ) / ( h3 )
-  n4 = ( g_4 - h2_4 ) / ( h3 )
-  n5 = ( g_5 - h2_5 ) / ( h3 )
-  n6 = ( g_6 - h2_6 ) / ( h3 )
+  h23 = h2 + h3 ; h23_2 = h23 * h23
 
   ! Compute matrix entries
   Asys(1,1) = 0.0
@@ -620,56 +493,52 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
   Asys(1,5) = 1.0
   Asys(1,6) = 1.0
 
-  Asys(2,1) = 1.0
-  Asys(2,2) = 1.0
-  Asys(2,3) = -0.5 * d2
-  Asys(2,4) = 0.5 * h1
-  Asys(2,5) = -0.5 * h2
-  Asys(2,6) = -0.5 * n2
+  Asys(2,1) = 2.0
+  Asys(2,2) = 2.0
+  Asys(2,3) = (2.0*h1 + h0)
+  Asys(2,4) = h1
+  Asys(2,5) = -h2
+  Asys(2,6) = -(2.0*h2 + h3)
 
   Asys(3,1) = 0.0
-  Asys(3,2) = - h2ph3
-  Asys(3,3) = - d3 / 6.0
-  Asys(3,4) = h1_2 / 6.0
-  Asys(3,5) = h2_2 / 6.0
-  Asys(3,6) = n3 / 6.0
+  Asys(3,2) = -6.0*h23
+  Asys(3,3) = (3.0*h1_2 + h0*(3.0*h1 + h0))
+  Asys(3,4) = h1_2
+  Asys(3,5) = h2_2
+  Asys(3,6) = 3.0*h2_2 + h3*(3.0*h2 + h3)
 
   Asys(4,1) = 0.0
-  Asys(4,2) = - h2ph3_2 / 2.0
-  Asys(4,3) = d4 / 24.0
-  Asys(4,4) = - h1_3 / 24.0
-  Asys(4,5) = h2_3 / 24.0
-  Asys(4,6) = n4 / 24.0
+  Asys(4,2) = -12.0*h23_2
+  Asys(4,3) = -(4.0*h1_3 + h0*(6.0*h1_2 + h0*(4.0*h1 + h0)))
+  Asys(4,4) = -h1_3
+  Asys(4,5) = h2_3
+  Asys(4,6) = 4.0*h2_3 + h3*(6.0*h2_2 + h3*(4.0*h2 + h3))
 
   Asys(5,1) = 0.0
-  Asys(5,2) = - h2ph3_3 / 6.0
-  Asys(5,3) = - d5 / 120.0
-  Asys(5,4) = h1_4 / 120.0
-  Asys(5,5) = h2_4 / 120.0
-  Asys(5,6) = n5 / 120.0
+  Asys(5,2) = -20.0*(h23*h23_2)
+  Asys(5,3) = (5.0*h1_4 + h0*(10.0*h1_3 + h0*(10.0*h1_2 + h0*(5.0*h1 + h0))))
+  Asys(5,4) = h1_4
+  Asys(5,5) = h2_4
+  Asys(5,6) = 5.0*h2_4 + h3*(10.0*h2_3 + h3*(10.0*h2_2 + h3*(5.0*h2 + h3)))
 
   Asys(6,1) = 0.0
-  Asys(6,2) = - h2ph3_4 / 24.0
-  Asys(6,3) = d6 / 720.0
-  Asys(6,4) = - h1_5 / 720.0
-  Asys(6,5) = h2_5 / 720.0
-  Asys(6,6) = n6 / 720.0
+  Asys(6,2) = -30.0*(h23_2*h23_2)
+  Asys(6,3) = -(6.0*h1_5 + h0*(15.0*h1_4 + h0*(20.0*h1_3 + h0*(15.0*h1_2 + h0*(6.0*h1 + h0)))))
+  Asys(6,4) = -h1_5
+  Asys(6,5) = h2_5
+  Asys(6,6) = 6.0*h2_5 + h3*(15.0*h2_4 + h3*(20.0*h2_3 + h3*(15.0*h2_2 + h3*(6.0*h2 + h3))))
 
-  Bsys(:) = (/ 0.0, -1.0, h2, h2_2/2.0, h2_3/6.0, h2_4/24.0 /)
+  Bsys(:) = (/ 0.0, -2.0, 6.0*h2, 12.0*h2_2, 20.0*h2_3, 30.0*h2_4 /)
 
   call solve_linear_system( Asys, Bsys, Csys, 6, .false. )
 
   alpha = Csys(1)
   beta  = Csys(2)
-  a = Csys(3)
-  b = Csys(4)
-  c = Csys(5)
-  d = Csys(6)
 
   tri_l(N) = alpha
   tri_d(N) = 1.0
   tri_u(N) = beta
-  tri_b(N) = a * u(N-3) + b * u(N-2) + c * u(N-1) + d * u(N)
+  tri_b(N) = Csys(3) * u(N-3) + Csys(4) * u(N-2) + Csys(5) * u(N-1) + Csys(6) * u(N)
 
   ! Boundary conditions: right boundary
   x(1) = 0.0
