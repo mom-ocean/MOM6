@@ -8,7 +8,7 @@ use MOM_error_handler, only : MOM_error, FATAL
 use MOM_string_functions, only : uppercase
 use regrid_edge_values, only : edge_values_explicit_h4, edge_values_implicit_h4
 use regrid_edge_values, only : edge_values_implicit_h4, edge_values_implicit_h6
-use regrid_edge_slopes, only : edge_slopes_implicit_h3, edge_slopes_implicit_h5
+use regrid_edge_values, only : edge_slopes_implicit_h3, edge_slopes_implicit_h5
 use PCM_functions, only : PCM_reconstruction
 use PLM_functions, only : PLM_reconstruction, PLM_boundary_extrapolation
 use PPM_functions, only : PPM_reconstruction, PPM_boundary_extrapolation
