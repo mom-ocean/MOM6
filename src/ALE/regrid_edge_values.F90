@@ -833,7 +833,7 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_201
     call linear_solver( 4, Asys, Bsys, Csys )
 
     ! Set the first edge slope
-    tri_b(1) = Csys(2) ! + x(1)*(2.0*Csys(3) + x(1)*(3.0*Csys(4)))
+    tri_b(1) = Csys(2)
     tri_c(1) = 1.0
   endif
   tri_u(1) = 0.0 ! tri_l(1) = 0.0
@@ -870,7 +870,8 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_201
     call linear_solver( 4, Asys, Bsys, Csys )
 
     ! Set the last edge slope
-    tri_b(N+1) = Csys(2)
+    
+    tri_b(N+1) = -Csys(2)
     tri_c(N+1) = 1.0
   endif
   tri_l(N+1) = 0.0 ! tri_u(N+1) = 0.0
@@ -1055,16 +1056,10 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
 
   call linear_solver( 6, Asys, Bsys, Csys )
 
-  Dsys(1) = Csys(2)
-  Dsys(2) = 2.0 * Csys(3)
-  Dsys(3) = 3.0 * Csys(4)
-  Dsys(4) = 4.0 * Csys(5)
-  Dsys(5) = 5.0 * Csys(6)
-
   tri_d(1) = 0.0
   tri_d(1) = 1.0
   tri_u(1) = 0.0
-  tri_b(1) = Csys(2) ! evaluation_polynomial( Dsys, 5, x(1) )        ! first edge value
+  tri_b(1) = Csys(2) ! first edge value
 
   ! Use a left-biased stencil for the second to last row, as described in Eq. (54) of White and Adcroft (2009).
 
@@ -1107,27 +1102,21 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
   ! Boundary conditions: right boundary
   x(1) = 0.0
   do i = 1,6
-    dx = h(N-6+i)
+    dx = h(N+1-i)
     xavg = x(i) + 0.5*dx
     Asys(1:6,i) =  (/ 1.0, xavg, (xavg**2 + C1_12*dx**2), xavg * (xavg**2 + 0.25*dx**2), &
                       (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4), &
                        xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4) /)
-    Bsys(i) = u(N-6+i)
+    Bsys(i) = u(N+1-i)
     x(i+1) = x(i) + dx
   enddo
 
   call linear_solver( 6,  Asys, Bsys, Csys )
 
-  Dsys(1) = Csys(2)
-  Dsys(2) = 2.0 * Csys(3)
-  Dsys(3) = 3.0 * Csys(4)
-  Dsys(4) = 4.0 * Csys(5)
-  Dsys(5) = 5.0 * Csys(6)
-
   tri_l(N+1) = 0.0
   tri_d(N+1) = 1.0
   tri_u(N+1) = 0.0
-  tri_b(N+1) = evaluation_polynomial( Dsys, 5, x(7) )      ! last edge value
+  tri_b(N+1) = -Csys(2)
 
   ! Solve tridiagonal system and assign edge values
   call solve_tridiagonal_system( tri_l, tri_d, tri_u, tri_b, tri_x, N+1 )
@@ -1346,12 +1335,12 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
   hMin = max( hNeglect, hMinFrac*(h(N-3) + h(N-2)) + ((h(N-1) + h(N)) + (h(N-5) + h(N-4))) )
   x(1) = 0.0
   do i = 1,6
-    dx = max( hMin, h(N-6+i) )
+    dx = max( hMin, h(N+1-i) )
     xavg = x(i) + 0.5 * dx
     Asys(1:6,i) =  (/ 1.0, xavg, (xavg**2 + C1_12*dx**2), xavg * (xavg**2 + 0.25*dx**2), &
                       (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4), &
                        xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4) /)
-    Bsys(i) = u(N-6+i)
+    Bsys(i) = u(N+1-i)
     x(i+1) = x(i) + dx
   enddo
 
@@ -1360,7 +1349,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
   tri_l(N+1) = 0.0
   tri_d(N+1) = 1.0
   tri_u(N+1) = 0.0
-  tri_b(N+1) = evaluation_polynomial( Csys, 6, x(7) )      ! last edge value
+  tri_b(N+1) = Csys(1)
 
   ! Solve tridiagonal system and assign edge values
   call solve_tridiagonal_system( tri_l, tri_d, tri_u, tri_b, tri_x, N+1 )
