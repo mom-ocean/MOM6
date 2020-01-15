@@ -209,9 +209,9 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       do j=G%jsc,G%jec
         do i=G%isc-1,G%iec
           if (G%mask2dCu(I,j)>0.) then
-            call fluxes_layer_method(SURFACE, GV%ke, CS%deg, h(i,j,:), h(i+1,j,:), hbl(i,j), hbl(i+1,j), &
-              tracer%t(i,j,:), tracer%t(i+1,j,:), ppoly0_coefs(i,j,:,:), ppoly0_coefs(i+1,j,:,:), ppoly0_E(i,j,:,:), &
-              ppoly0_E(i+1,j,:,:), remap_method, Coef_x(I,j), uFlx(I,j,:))
+            call fluxes_layer_method(SURFACE, GV%ke, CS%deg, h(I,j,:), h(I+1,j,:), hbl(I,j), hbl(I+1,j), &
+              tracer%t(I,j,:), tracer%t(I+1,j,:), ppoly0_coefs(I,j,:,:), ppoly0_coefs(I+1,j,:,:), ppoly0_E(I,j,:,:), &
+              ppoly0_E(I+1,j,:,:), remap_method, Coef_x(I,j), uFlx(I,j,:))
           endif
         enddo
       enddo
@@ -356,7 +356,7 @@ end function harmonic_mean
 subroutine boundary_k_range(boundary, nk, h, hbl, k_top, zeta_top, k_bot, zeta_bot)
   integer,             intent(in   ) :: boundary !< SURFACE or BOTTOM                       [nondim]
   integer,             intent(in   ) :: nk       !< Number of layers                        [nondim]
-  real, dimension(nk), intent(in   ) :: h        !< Layer thicknesses of the coluymn        [m]
+  real, dimension(nk), intent(in   ) :: h        !< Layer thicknesses of the column         [m]
   real,                intent(in   ) :: hbl      !< Thickness of the boundary layer         [m]
                                                  !! If surface, with respect to zbl_ref = 0.
                                                  !! If bottom, with respect to zbl_ref = SUM(h)
@@ -431,7 +431,7 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L,
   real,                      intent(in   )       :: hbl_L    !< Thickness of the boundary boundary
                                                                        !! layer (left)                  [m]
   real,                      intent(in   )       :: hbl_R    !< Thickness of the boundary boundary
-                                                             !! layer (left)                            [m]
+                                                             !! layer (right)                           [m]
   real, dimension(nk),       intent(in   )       :: phi_L    !< Tracer values (left)                    [ nondim m^-3 ]
   real, dimension(nk),       intent(in   )       :: phi_R    !< Tracer values (right)                   [ nondim m^-3 ]
   real, dimension(nk,deg+1), intent(in   )       :: ppoly0_coefs_L !< Tracer reconstruction (left)      [ nondim m^-3 ]
@@ -487,10 +487,10 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L,
     phi_R_avg = average_value_ppoly( nk, phi_R, ppoly0_E_R, ppoly0_coefs_R, method, k_bot_R, 0., zeta_bot_R)
     heff = harmonic_mean(h_work_L, h_work_R)
     ! tracer flux where the minimum BLD intersets layer
-    F_layer(k_bot_min) = -heff * (phi_R_avg - phi_L_avg)
+    F_layer(k_bot_min) = -(heff * khtr_u) * (phi_R_avg - phi_L_avg)
     do k = k_bot_min-1,1,-1
       heff = harmonic_mean(h_L(k), h_R(k))
-      F_layer(k) = -heff * (phi_R(k) - phi_L(k))
+      F_layer(k) = -(heff * khtr_u) * (phi_R(k) - phi_L(k))
     enddo
   endif
 
