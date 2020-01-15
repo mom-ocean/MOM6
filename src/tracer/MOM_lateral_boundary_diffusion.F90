@@ -446,6 +446,8 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L,
   real, dimension(nk) :: h_u                  ! Thickness at the u-point                          [m]
   real                :: hbl_u                ! Boundary layer Thickness at the u-point           [m]
   real                :: khtr_avg             ! Thickness-weighted diffusivity at the u-point     [m^2 s^-1]
+                                              ! This is just to remind developers that khtr_avg should be
+                                              ! computed once khtr is 3D.
   real                :: heff                 ! Harmonic mean of layer thicknesses                [m]
   real                :: inv_heff             ! Inverse of the harmonic mean of layer thicknesses [m^[-1]
   real                :: phi_L_avg, phi_R_avg ! Bulk, thickness-weighted tracer averages (left and right column)
@@ -487,6 +489,7 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L,
     phi_R_avg = average_value_ppoly( nk, phi_R, ppoly0_E_R, ppoly0_coefs_R, method, k_bot_R, 0., zeta_bot_R)
     heff = harmonic_mean(h_work_L, h_work_R)
     ! tracer flux where the minimum BLD intersets layer
+    ! GMM, khtr_avg should be computed once khtr is 3D
     F_layer(k_bot_min) = -(heff * khtr_u) * (phi_R_avg - phi_L_avg)
     do k = k_bot_min-1,1,-1
       heff = harmonic_mean(h_L(k), h_R(k))
@@ -556,6 +559,8 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
   real, dimension(nk) :: h_u                  ! Thickness at the u-point                          [m]
   real                :: hbl_u                ! Boundary layer Thickness at the u-point           [m]
   real                :: khtr_avg             ! Thickness-weighted diffusivity at the u-point     [m^2 s^-1]
+                                              ! This is just to remind developers that khtr_avg should be
+                                              ! computed once khtr is 3D.
   real                :: heff                 ! Harmonic mean of layer thicknesses                [m]
   real                :: inv_heff             ! Inverse of the harmonic mean of layer thicknesses [m^[-1]
   real                :: phi_L_avg, phi_R_avg ! Bulk, thickness-weighted tracer averages (left and right column)
@@ -593,6 +598,7 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
   call boundary_k_range(boundary, nk, h_u, hbl_u, k_top_u, zeta_top_u, k_bot_u, zeta_bot_u)
 
   ! Calculate the 'bulk' diffusive flux from the bulk averaged quantities
+  ! GMM, khtr_avg should be computed once khtr is 3D
   heff = harmonic_mean(hbl_L, hbl_R)
   F_bulk = -(khtr_u * heff) * (phi_R_avg - phi_L_avg)
   F_bulk_remain = F_bulk
