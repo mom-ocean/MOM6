@@ -728,6 +728,8 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_201
   real                  :: alpha, beta          ! stencil coefficients [nondim]
   real                  :: a, b                 ! weights of cells [H-1]
   real, parameter       :: C1_12 = 1.0 / 12.0
+  real, dimension(4)    :: dz                   ! A temporary array of limited layer thicknesses [H]
+  real, dimension(4)    :: u_tmp                ! A temporary array of cell average properties [A]
   real, dimension(5)    :: x          ! Coordinate system with 0 at edges [H]
   real                  :: dx, xavg   ! Differences and averages of successive values of x [H]
   real, dimension(4,4)  :: Asys       ! matrix used to find boundary conditions
@@ -821,16 +823,11 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_201
     tri_d(1) = 1.0
   else ! Use expressions with less sensitivity to roundoff
     h_min = max( hNeglect, hMinFrac * ((h(1) + h(2)) + (h(3) + h(4))) )
-    x(1) = 0.0
-    do i = 1,4
-      dx = max(h_min, h(i) )
-      x(i+1) = x(i) + dx
-      xavg = x(i) + 0.5*dx
-      Asys(1:4,i) = (/ 1.0, xavg, (xavg**2 + C1_12*dx**2), xavg * (xavg**2 + 0.25*dx**2) /)
-      Bsys(i) = u(i)
+    do i=1,4
+      dz(i) = max(h_min, h(i) )
+      u_tmp(i) = u(i)
     enddo
-
-    call linear_solver( 4, Asys, Bsys, Csys )
+    call end_value_h4(dz, u_tmp, Csys)
 
     ! Set the first edge slope
     tri_b(1) = Csys(2)
@@ -858,19 +855,14 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_201
     ! Use expressions with less sensitivity to roundoff, including using a coordinate
     ! system that sets the origin at the last interface in the domain.
     h_min = max( hNeglect, hMinFrac * ((h(N-3) + h(N-2)) + (h(N-1) + h(N))) )
-    x(1) = 0.0
-    do i = 1,4
-      dx = max(h_min, h(N+1-i) )
-      x(i+1) = x(i) + dx
-      xavg = x(i) + 0.5*dx
-      Asys(1:4,i) = (/ 1.0, xavg, (xavg**2 + C1_12*dx**2), xavg * (xavg**2 + 0.25*dx**2) /)
-      Bsys(i) = u(N+1-i)
+    do i=1,4
+      dz(i) = max(h_min, h(N+1-i) )
+      u_tmp(i) = u(N+1-i)
     enddo
 
-    call linear_solver( 4, Asys, Bsys, Csys )
+    call end_value_h4(dz, u_tmp, Csys)
 
     ! Set the last edge slope
-    
     tri_b(N+1) = -Csys(2)
     tri_c(N+1) = 1.0
   endif
