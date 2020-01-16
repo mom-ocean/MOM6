@@ -352,12 +352,13 @@ subroutine create_file(filename, vars, numVariables, threading, register_time, G
               call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i,j), j, GV=GV)
             endif
 
-            call MOM_register_diagnostic_axis(fileObjDD, trim(dim_names(i,j)), dim_lengths(j))
+            if (fileObjDD%is_root) &
+              call MOM_register_diagnostic_axis(fileObjDD, trim(dim_names(i,j)), dim_lengths(j))
           endif
           ! register the axis attributes and write the axis data to the file
           if (.not.(variable_exists(fileObjDD, trim(axis_data_CS%axis(j)%name)))) then
-            if (fileObjDD%is_root) then
-              if (associated(axis_data_CS%data(j)%p)) then
+            if (associated(axis_data_CS%data(j)%p)) then
+              if (fileObjDD%is_root) then
          
                 call register_field(fileObjDD, trim(axis_data_CS%axis(j)%name), &
                                   "double", dimensions=(/trim(axis_data_CS%axis(j)%name)/))
@@ -372,14 +373,11 @@ subroutine create_file(filename, vars, numVariables, threading, register_time, G
                   call register_variable_attribute(fileObjDD, trim(axis_data_CS%axis(j)%name), &
                                                    'positive', trim(axis_data_CS%axis(j)%positive))
 
-                if (lowercase(trim(axis_data_CS%axis(j)%name)) .ne. 'time') then
-                  if (axis_data_CS%axis(j)%is_domain_decomposed) then
-
-                    call get_global_io_domain_indices(fileObjDD, trim(axis_data_CS%axis(j)%name), is, ie)
-                    call write_data(fileObjDD, trim(axis_data_CS%axis(j)%name), axis_data_CS%data(j)%p(is:ie))
-                  else
-                    call write_data(fileObjDD, trim(axis_data_CS%axis(j)%name), axis_data_CS%data(j)%p)
-                  endif
+                if (axis_data_CS%axis(j)%is_domain_decomposed) then
+                  call get_global_io_domain_indices(fileObjDD, trim(axis_data_CS%axis(j)%name), is, ie)
+                  call write_data(fileObjDD, trim(axis_data_CS%axis(j)%name), axis_data_CS%data(j)%p(is:ie))
+                else
+                  call write_data(fileObjDD, trim(axis_data_CS%axis(j)%name), axis_data_CS%data(j)%p)
                 endif
               endif
             endif
@@ -430,13 +428,14 @@ subroutine create_file(filename, vars, numVariables, threading, register_time, G
             if (present(GV)) &
                 call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i,j), j, GV=GV)
 
-            call register_axis(fileObjNoDD, trim(dim_names(i,j)), dim_lengths(j))
+            if (fileObjNoDD%is_root) &
+              call register_axis(fileObjNoDD, trim(dim_names(i,j)), dim_lengths(j))
 
           endif
           ! register the axis attributes and write the axis data to the file
           if (.not.(variable_exists(fileObjNoDD, trim(axis_data_CS%axis(j)%name)))) then
-            if (fileObjNoDD%is_root) then
-              if (associated(axis_data_CS%data(j)%p)) then
+            if (associated(axis_data_CS%data(j)%p)) then
+              if (fileObjNoDD%is_root) then
                 call register_field(fileObjNoDD, trim(axis_data_CS%axis(j)%name), &
                                   "double", dimensions=(/trim(axis_data_CS%axis(j)%name)/))
 
@@ -687,7 +686,8 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
   logical :: file_open_success !.true. if call to open_file is successful
   real :: file_time ! most recent time currently written to file
   real, pointer :: data_tmp(:,:) => null()
-  integer :: i, j, ndims, num_dims, time_index, substring_index
+  integer :: i, is, ie, js, je, j, ndims, num_dims, time_index, substring_index
+  integer, allocatable, dimension(:) :: x_inds, y_inds
   integer :: dim_unlim_size ! size of the unlimited dimension
   integer, dimension(2) :: start, nwrite ! indices for starting points and number of values to write
   character(len=20) :: t_units ! time units
@@ -734,15 +734,16 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
     call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, '1', dim_names, &
                                     dim_lengths, num_dims, GV=GV)
 
-  ! read in the most recent time level in the file
-  if (present(time_level)) then
-    ! open the file in read mode to get the time
+  ! open the file in read mode to get the time
     if (.not.(check_if_open(fileobj))) &
       file_open_success = open_file(fileobj, trim(filename_temp), "read", domain%mpp_domain, &
                                     is_restart=.false.)
     if (.not.(file_open_success)) &
       call MOM_error(FATAL, "MOM_io:write_field_2d_dd: unable to open file "//trim(filename_temp))
 
+
+  ! read in the most recent time level in the file
+  if (present(time_level)) then
     call get_unlimited_dimension_name(fileobj,dim_unlim_name)
     num_dims = num_dims+1
     dim_names(num_dims)=trim(dim_unlim_name)
@@ -752,16 +753,27 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
 
     if (variable_exists(fileobj, trim(dim_unlim_name))) &
       file_time = read_most_recent_time(fileobj)
-
-    ! close the file, 
-    if (check_if_open(fileobj)) call close_file(fileobj)
-
   endif
+
+  !register the horizontal diagnostic axis associated with the field
+  do i=1,2
+    call MOM_register_diagnostic_axis(fileobj, trim(dim_names(i)), dim_lengths(i))
+  enddo
+  call get_global_io_domain_indices(fileobj, dim_names(1), is, ie)
+  call get_global_io_domain_indices(fileobj, dim_names(2), js, je)
+  call get_compute_domain_dimension_indices(fileobj, dim_names(1), x_inds)
+  call get_compute_domain_dimension_indices(fileobj, dim_names(2), y_inds) 
+
+  ! close the file 
+  if (check_if_open(fileobj)) call close_file(fileobj)
  
   ! set the start (corner) and nwrite (edge_lengths) values
   ndims = 2
   start(:) = 1
-  nwrite(:) = (/dim_lengths(1), dim_lengths(2)/)
+  nwrite(:) = shape(data(x_inds(1):x_inds(2),y_inds(1):y_inds(2)))
+  !start(:) = 1
+  !nwrite(:) = shape(data(is:ie,js:je))
+
   if (present(corner)) then
     do i=1,ndims
       start(i) = max(1,corner(i))
@@ -786,16 +798,15 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
      file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
                                    is_restart=.false.)
 
-  !  ! register the variable and its attributes if it is not already in the file
-  if (.not. (variable_exists(fileobj, trim(fieldname)))) then
-
-    call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
-    call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(var_desc%units))
-    call register_variable_attribute(fileObj, trim(fieldname), 'long_name', trim(var_desc%longname))
+  ! register the variable and its attributes if it is not already in the file
+  if (.not. (variable_exists(fileobj, trim(fieldname)))) then   
+      call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
+      call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(var_desc%units))
+      call register_variable_attribute(fileObj, trim(fieldname), 'long_name', trim(var_desc%longname))
     ! write the checksum attribute
     if (present(checksums)) then
       ! convert the checksum to a string
-      checksum_char = ''
+      checksum_char = ""
       checksum_char = convert_checksum_to_string(checksums(1,1))
       call register_variable_attribute(fileobj, trim(fieldname), "checksum", checksum_char)
     endif
@@ -826,16 +837,18 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
    endif
 
    call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
-   call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
-                   unlim_dim_level=dim_unlim_size)
+     call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
+                     unlim_dim_level=dim_unlim_size)
   else
-    call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
+     call write_data(fileobj, trim(fieldname), data_tmp(x_inds(1):x_inds(2),y_inds(1):y_inds(2)), corner=start, edge_lengths=nwrite)
   endif
 
   ! close the file
   if (check_if_open(fileobj)) call close_file(fileobj)
 
   nullify(data_tmp)
+  deallocate(x_inds)
+  deallocate(y_inds)
 end subroutine write_field_2d_DD
 
 !> This function uses the fms_io function write_data to write a 3-D domain-decomposed data field named "fieldname"

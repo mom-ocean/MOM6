@@ -18,7 +18,8 @@ use MOM_io, only : MOM_get_diagnostic_axis_data
 use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
 use MOM_time_manager, only : days_in_month, get_date, set_date
 use MOM_verticalGrid, only : verticalGrid_type
-use mpp_mod,         only:  mpp_chksum, mpp_pe, mpp_max
+use mpp_mod,         only: mpp_chksum, mpp_pe, mpp_max
+use mpp_domains_mod, only: mpp_define_io_domain, mpp_get_domain_npes, mpp_get_io_domain
 ! New FMS-IO interfaces
 use MOM_io, only: fms2_register_restart_field => register_restart_field, &
                   register_field, &
@@ -897,6 +898,12 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   date_appendix = ""
   restart_time_units = ""
 
+  ! define the io domain for 1-pe jobs because it is required to write domain-decomposed files
+  if (mpp_get_domain_npes(G%domain%mpp_domain) .eq. 1 ) then
+    if (.not. associated(mpp_get_io_domain(G%domain%mpp_domain))) &
+      call mpp_define_io_domain(G%domain%mpp_domain, (/1,1/))
+  endif
+
   ! get the number of vertical levels
   nz = 1 ; if (present(GV)) nz = GV%ke
 
@@ -1150,6 +1157,12 @@ subroutine write_initial_conditions(directory, filename, CS, G, time, GV)
   real :: ic_time
   real, dimension(:), allocatable :: data_temp
 
+  ! define the io domain for 1-pe jobs because it is required to write domain-decomposed files
+  if (mpp_get_domain_npes(G%domain%mpp_domain) .eq. 1 ) then
+    if (.not. associated(mpp_get_io_domain(G%domain%mpp_domain))) &
+      call mpp_define_io_domain(G%domain%mpp_domain, (/1,1/))
+  endif
+
   ! append '.nc' to the restart file name if it is missing
   ! \todo: require users to specify full file path including the file name appendix
   ! in calls to open_file
@@ -1367,7 +1380,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   fileOpenSuccess=open_file(fileObjRead, trim(directory)//trim(base_file_name), "read", &
                             G%domain%mpp_domain, is_restart=.true.)
 
-  if (is_root_pe() .and. fileOpenSuccess) then
+  if (fileObjRead%is_root .and. fileOpenSuccess) then
      call MOM_error(NOTE, "MOM_restart: MOM run restarted using : "//trim(directory)//trim(base_file_name))
   endif
 
