@@ -524,8 +524,8 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, var_desc, 
   dim_unlim_name=""
   dim_names(:) = ""
   dim_lengths(:) = 0
-  num_dims=0
-  time_index=1
+  num_dims = 0
+  time_index = 1
 
   ! append '.nc' to the file name if it is missing
   filename_temp = ""
@@ -634,16 +634,17 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, var_desc, 
 
        call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
+      ! write the time value if it larger than the most recent file time
       if (time_level .gt. file_time+EPSILON(time_level)) then
 
         if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
-
         call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/), edge_lengths=(/1/))
       endif
     endif
 
+    call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
     call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
-                    unlim_dim_level=time_index)
+                    unlim_dim_level=dim_unlim_size)
   else
     call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
   endif
@@ -703,7 +704,6 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
   dim_unlim_name = ""
   num_dims = 0
   time_index = 1
-  file_open_success = .false.
 
   ! append '.nc' to the file name if it is missing
   filename_temp = ""
@@ -817,6 +817,7 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
 
        call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
+      ! write the time values if it larger than the most recent file time
       if (time_level .gt. file_time+EPSILON(time_level)) then
         if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
 
@@ -824,8 +825,9 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
       endif
    endif
 
+   call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
    call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
-                   unlim_dim_level=time_index)
+                   unlim_dim_level=dim_unlim_size)
   else
     call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
   endif
@@ -993,16 +995,17 @@ subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, var_desc, 
        call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(t_units))
        call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
+      ! write the time value if it is larger than the most recent file time
       if (time_level .gt. file_time+EPSILON(time_level)) then
 
         if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
-
         call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/), edge_lengths=(/1/))
       endif
    endif
 
+   call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
    call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
-                   unlim_dim_level=time_index)
+                   unlim_dim_level=dim_unlim_size)
   else
     call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
   endif
@@ -1165,6 +1168,7 @@ subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, var_desc, 
        call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(t_units))
        call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
+      ! write the time value if it is larger than the most recent file time
       if (time_level .gt. file_time+EPSILON(time_level)) then
 
         if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
@@ -1172,8 +1176,10 @@ subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, var_desc, 
         call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/), edge_lengths=(/1/))
       endif
    endif
+
+   call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
    call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
-                   unlim_dim_level=time_index)
+                   unlim_dim_level=dim_unlim_size)
   else
     call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
   endif
@@ -1260,8 +1266,8 @@ subroutine write_scalar(filename, fieldname, data, mode, time_level, time_units,
     call register_variable_attribute(fileObj, trim(fieldname), 'long_name', trim(var_desc%longname))
   endif
 
-  ! write the time value if it is not already written to the file
   if (present(time_level)) then
+    ! write the time value if it is not already written to the file
     if (.not. (variable_exists(fileobj, trim(dim_unlim_name)))) then
        ! set the time units
        t_units = ""
@@ -1275,14 +1281,15 @@ subroutine write_scalar(filename, fieldname, data, mode, time_level, time_units,
        call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(t_units))
        call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
+      ! write the next time value if it is larger than the most recent file time
       if (time_level .gt. file_time+EPSILON(time_level)) then
         if (time_index .le. dim_unlim_size) time_index = dim_unlim_size+1
-
         call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
       endif
     endif
 
-    call write_data(fileobj, trim(fieldname), data, unlim_dim_level=time_index)
+    call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
+    call write_data(fileobj, trim(fieldname), data, unlim_dim_level=dim_unlim_size)
 
   else
     call write_data(fileobj, trim(fieldname), data)
@@ -1437,7 +1444,7 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, var_desc, &
        call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(t_units))
       call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
-
+      ! write the time value if it is larger than the most recent file time
       if (time_level .gt. file_time+EPSILON(time_level)) then
 
         if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
@@ -1446,8 +1453,9 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, var_desc, &
       endif
     endif
 
+    call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
     call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
-                    unlim_dim_level=time_index)
+                    unlim_dim_level=dim_unlim_size)
   else
     call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
   endif
@@ -1603,15 +1611,17 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, var_desc, &
        call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(t_units))
       call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
-
+      ! write the time value if it is larger than the most recent file time
       if (time_level .gt. file_time+EPSILON(time_level)) then
         if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
 
         call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/), edge_lengths=(/1/))
       endif
     endif
+
+    call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
     call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
-                    unlim_dim_level=time_index)
+                    unlim_dim_level=dim_unlim_size)
   else
     call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
   endif
@@ -1667,7 +1677,7 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, var_desc, &
   dim_unlim_name = ""
   dim_names(:) = ""
   dim_lengths(:) = 0
-  num_dims=0
+  num_dims = 0
   time_index = 1
 
   ! append '.nc' to the file name if it is missing
@@ -1769,6 +1779,7 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, var_desc, &
        call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(t_units))
        call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
+      ! write the time value if it is larger than the most recent file time
       if (time_level .gt. file_time+EPSILON(time_level)) then
         if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
 
@@ -1776,8 +1787,9 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, var_desc, &
       endif
     endif
 
+    call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
     call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
-                    unlim_dim_level=time_index)
+                    unlim_dim_level=dim_unlim_size)
   else
     call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
   endif
@@ -1935,9 +1947,10 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, var_desc, &
         call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/), edge_lengths=(/1/))
       endif
     endif
-
+    ! write the time value if it is larger than the most recent file time
+    call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
     call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
-                    unlim_dim_level=time_index)
+                    unlim_dim_level=dim_unlim_size)
   else
     call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
   endif
