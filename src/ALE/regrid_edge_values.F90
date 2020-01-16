@@ -658,7 +658,7 @@ subroutine end_value_h4(dz, u, Csys)
 !    Atest(4) = zavg * (zavg**2 + 0.25*dz(i)**2) ! = ( (z(i+1)**4) - (z(i)**4) ) / (4*dz(i))
 !    c_mag = 1.0 ; do k=0,3 ; do j=1,3 ; c_mag = c_mag + abs(Wt(j,k+1) * zavg**k) ; enddo ; enddo
 !    write(mesg, '("end_value_h4 line ", i2, " c_mag = ", es10.2, " u_mag = ", es10.2)') i, c_mag, u_mag
-!    call test_line(mesg, 4, Atest, Csys, u(i), u_mag*c_mag, tolerance=1.0e-15)
+!    call test_line(mesg, 4, Atest, Csys, u(i), u_mag*c_mag, tol=1.0e-15)
 !  enddo
 
 end subroutine end_value_h4
@@ -1440,36 +1440,34 @@ end subroutine linear_solver
 
 
 
-! Verify that A*C = R to within roundoff.
-subroutine test_line(msg, N, A, C, R, mag, tolerance)
-  integer,            intent(in) :: N
-  real, dimension(4), intent(in) :: A
-  real, dimension(4), intent(in) :: C
-  real,               intent(in) :: R
+!> Test that A*C = R to within a tolerance, issuing a fatal error with an explanatory message if they do not.
+subroutine test_line(msg, N, A, C, R, mag, tol)
   real,               intent(in) :: mag  !< The magnitude of leading order terms in this line
-  real, optional,     intent(in) :: tolerance
-  character(len=*) :: msg
+  integer,            intent(in) :: N    !< The number of points in the system
+  real, dimension(4), intent(in) :: A    !< One of the two vectors being multiplied
+  real, dimension(4), intent(in) :: C    !< One of the two vectors being multiplied
+  real,               intent(in) :: R    !< The expected solution of the equation
+  character(len=*),   intent(in) :: msg  !< An identifying message for this test
+  real, optional,     intent(in) :: tol  !< The fractional tolerance for the two solutions
 
   real :: sum, sum_mag
-  real :: tol
+  real :: tolerance
   character(len=128) :: mesg2
   integer :: i
 
-  tol = 1.0e-12 ; if (present(tolerance)) tol = tolerance
+  tolerance = 1.0e-12 ; if (present(tol)) tolerance = tol
 
   sum = 0.0 ; sum_mag = max(0.0,mag)
-
   do i=1,N
     sum = sum + A(i) * C(i)
     sum_mag = sum_mag + abs(A(i) * C(i))
   enddo
 
-  if (abs(sum - R) > tol * (sum_mag + abs(R))) then
+  if (abs(sum - R) > tolerance * (sum_mag + abs(R))) then
     write(mesg2, '(", Fractional error = ", es12.4,", sum = ", es12.4)') (sum - R) / (sum_mag + abs(R)), sum
     call MOM_error(FATAL, "Failed line test: "//trim(msg)//trim(mesg2))
   endif
 
 end subroutine test_line
-
 
 end module regrid_edge_values
