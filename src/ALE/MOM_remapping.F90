@@ -1810,9 +1810,11 @@ logical function remapping_unit_tests(verbose)
 
   call edge_values_explicit_h4( 5, (/1.,1.,1.,1.,1./), (/1.,3.,5.,7.,9./), ppoly0_E, &
                                 h_neglect=1e-10, answers_2018=answers_2018 )
-  ! The next two tests currently fail due to roundoff.
-  thisTest = test_answer(v, 5, ppoly0_E(:,1), (/0.,2.,4.,6.,8./), 'Line H4: left edges')
-  thisTest = test_answer(v, 5, ppoly0_E(:,2), (/2.,4.,6.,8.,10./), 'Line H4: right edges')
+  ! The next two tests currently fail due to roundoff, but pass when given a reasonable tolerance.
+  thisTest = test_answer(v, 5, ppoly0_E(:,1), (/0.,2.,4.,6.,8./), 'Line H4: left edges', tol=8.0e-15)
+  remapping_unit_tests = remapping_unit_tests .or. thisTest
+  thisTest = test_answer(v, 5, ppoly0_E(:,2), (/2.,4.,6.,8.,10./), 'Line H4: right edges', tol=1.0e-14)
+  remapping_unit_tests = remapping_unit_tests .or. thisTest
   ppoly0_E(:,1) = (/0.,2.,4.,6.,8./)
   ppoly0_E(:,2) = (/2.,4.,6.,8.,10./)
   call PPM_reconstruction(5, (/1.,1.,1.,1.,1./), (/1.,3.,5.,7.,9./), ppoly0_E(1:5,:), &
@@ -1826,9 +1828,11 @@ logical function remapping_unit_tests(verbose)
 
   call edge_values_explicit_h4( 5, (/1.,1.,1.,1.,1./), (/1.,1.,7.,19.,37./), ppoly0_E, &
                                 h_neglect=1e-10, answers_2018=answers_2018 )
-  ! The next two tests currently fail due to roundoff.
-  thisTest = test_answer(v, 5, ppoly0_E(:,1), (/3.,0.,3.,12.,27./), 'Parabola H4: left edges')
-  thisTest = test_answer(v, 5, ppoly0_E(:,2), (/0.,3.,12.,27.,48./), 'Parabola H4: right edges')
+  ! The next two tests are now passing when answers_2018 = .false., but otherwise only work to roundoff.
+  thisTest = test_answer(v, 5, ppoly0_E(:,1), (/3.,0.,3.,12.,27./), 'Parabola H4: left edges', tol=2.7e-14)
+  remapping_unit_tests = remapping_unit_tests .or. thisTest
+  thisTest = test_answer(v, 5, ppoly0_E(:,2), (/0.,3.,12.,27.,48./), 'Parabola H4: right edges', tol=4.8e-14)
+  remapping_unit_tests = remapping_unit_tests .or. thisTest
   ppoly0_E(:,1) = (/0.,0.,3.,12.,27./)
   ppoly0_E(:,2) = (/0.,3.,12.,27.,48./)
   call PPM_reconstruction(5, (/1.,1.,1.,1.,1./), (/0.,1.,7.,19.,37./), ppoly0_E(1:5,:), &
@@ -1878,23 +1882,26 @@ logical function remapping_unit_tests(verbose)
 end function remapping_unit_tests
 
 !> Returns true if any cell of u and u_true are not identical. Returns false otherwise.
-logical function test_answer(verbose, n, u, u_true, label)
+logical function test_answer(verbose, n, u, u_true, label, tol)
   logical,            intent(in) :: verbose !< If true, write results to stdout
-  integer,            intent(in) :: n !< Number of cells in u
-  real, dimension(n), intent(in) :: u !< Values to test
+  integer,            intent(in) :: n      !< Number of cells in u
+  real, dimension(n), intent(in) :: u      !< Values to test
   real, dimension(n), intent(in) :: u_true !< Values to test against (correct answer)
-  character(len=*),   intent(in) :: label !< Message
+  character(len=*),   intent(in) :: label  !< Message
+  real,     optional, intent(in) :: tol    !< The tolerance for differences between u and u_true
   ! Local variables
+  real :: tolerance ! The tolerance for differences between u and u_true
   integer :: k
 
+  tolerance = 0.0 ; if (present(tol)) tolerance = tol
   test_answer = .false.
   do k = 1, n
-    if (u(k) /= u_true(k)) test_answer = .true.
+    if (abs(u(k) - u_true(k)) > tolerance) test_answer = .true.
   enddo
   if (test_answer .or. verbose) then
     write(*,'(a4,2a24,x,a)') 'k','Calculated value','Correct value',label
     do k = 1, n
-      if (u(k) /= u_true(k)) then
+      if (abs(u(k) - u_true(k)) > tolerance) then
         write(*,'(i4,1p2e24.16,a,1pe24.16,a)') k,u(k),u_true(k),' err=',u(k)-u_true(k),' < wrong'
       else
         write(*,'(i4,1p2e24.16)') k,u(k),u_true(k)
