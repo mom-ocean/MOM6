@@ -315,13 +315,7 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
     edge_val(1,1) = evaluation_polynomial( C, 4, x(1) )
     edge_val(1,2) = evaluation_polynomial( C, 4, x(2) )
   else  ! Use expressions with less sensitivity to roundoff
-    h_min = hMinFrac*((h(1) + h(2)) + (h(3) + h(4)))
-    if (h_min == 0.0) h_min = 1.0  ! Handle the case of all massless layers.
-
-    do i=1,4
-      dz(i) = max(h_min, h(i) )
-      u_tmp(i) = u(i)
-    enddo
+    do i=1,4 ; dz(i) = max(hNeglect, h(i) ) ; u_tmp(i) = u(i) ; enddo
     call end_value_h4(dz, u_tmp, C)
 
     ! Set the edge values of the first cell
@@ -350,12 +344,7 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
   else
     ! Use expressions with less sensitivity to roundoff, including using a coordinate
     ! system that sets the origin at the last interface in the domain.
-    h_min = hMinFrac * ((h(N-3) + h(N-2)) + (h(N-1) + h(N)))
-    if (h_min == 0.0) h_min = 1.0  ! Handle the case of all massless layers.
-    do i=1,4
-      dz(i) = max(h_min, h(N+1-i) )
-      u_tmp(i) = u(N+1-i)
-    enddo
+    do i=1,4 ; dz(i) = max(hNeglect, h(N+1-i) ) ; u_tmp(i) = u(N+1-i) ; enddo
     call end_value_h4(dz, u_tmp, C)
 
     ! Set the last and second to last edge values
@@ -419,8 +408,6 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
   real                  :: dx, xavg             ! Differences and averages of successive values of x [H]
   real, dimension(4,4)  :: Asys                 ! boundary conditions
   real, dimension(4)    :: Bsys, Csys
-  real, dimension(4,4)  :: Asys_orig            ! boundary conditions
-  real, dimension(4)    :: Bsys_orig
   real, dimension(N+1)  :: tri_l, &     ! tridiagonal system (lower diagonal) [nondim]
                            tri_d, &     ! tridiagonal system (middle diagonal) [nondim]
                            tri_c, &     ! tridiagonal system central value, with tri_d = tri_c+tri_l+tri_u
@@ -504,15 +491,10 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
     tri_b(1) = evaluation_polynomial( Csys, 4, x(1) )  ! Set the first edge value
     tri_d(1) = 1.0
   else ! Use expressions with less sensitivity to roundoff
-    h_min = max( hNeglect, hMinFrac * ((h(1) + h(2)) + (h(3) + h(4))) )
-    do i=1,4
-      dz(i) = max(h_min, h(i) )
-      u_tmp(i) = u(i)
-    enddo
+    do i=1,4 ; dz(i) = max(hNeglect, h(i) ) ; u_tmp(i) = u(i) ; enddo
     call end_value_h4(dz, u_tmp, Csys)
 
     tri_b(1) = Csys(1)  ! Set the first edge value.
-
     tri_c(1) = 1.0
   endif
   tri_u(1) = 0.0 ! tri_l(1) = 0.0
@@ -537,16 +519,10 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
   else
     ! Use expressions with less sensitivity to roundoff, including using a coordinate
     ! system that sets the origin at the last interface in the domain.
-    h_min = max( hNeglect, hMinFrac * ((h(N-3) + h(N-2)) + (h(N-1) + h(N))) )
-    do i=1,4
-      dz(i) = max(h_min, h(N+1-i) )
-      u_tmp(i) = u(N+1-i)
-    enddo
-
+    do i=1,4 ; dz(i) = max(hNeglect, h(N+1-i) ) ; u_tmp(i) = u(N+1-i) ; enddo
     call end_value_h4(dz, u_tmp, Csys)
 
-    ! Set the last edge value
-    tri_b(N+1) = Csys(1)
+    tri_b(N+1) = Csys(1) ! Set the last edge value
     tri_c(N+1) = 1.0
   endif
   tri_l(N+1) = 0.0 ! tri_u(N+1) = 0.0
@@ -589,14 +565,15 @@ subroutine end_value_h4(dz, u, Csys)
   real :: I_h1234         ! The inverse of the sum of all four thicknesses [H-1]
   real :: I_denom         ! The inverse of the denominator some expressions [H-3]
   real :: I_denB3         ! The inverse of the product of three sums of thicknesses [H-3]
+  real :: min_frac = 1.0e-6  ! The square of min_frac should be much larger than roundoff [nondim]
   real, parameter :: C1_3 = 1.0 / 3.0
   integer :: i, j, k
 
   ! These are only used for code verification
-  real, dimension(4) :: Atest  ! The  coefficients of an expression that is being tested.
-  real :: zavg, u_mag, c_mag
-  character(len=128) :: mesg
-  real, parameter :: C1_12 = 1.0 / 12.0
+  ! real, dimension(4) :: Atest  ! The  coefficients of an expression that is being tested.
+  ! real :: zavg, u_mag, c_mag
+  ! character(len=128) :: mesg
+  ! real, parameter :: C1_12 = 1.0 / 12.0
 
  ! if ((dz(1) == dz(2)) .and. (dz(1) == dz(3)) .and. (dz(1) == dz(4))) then
  !   ! There are simple closed-form expressions in this case
@@ -610,6 +587,12 @@ subroutine end_value_h4(dz, u, Csys)
   ! Express the coefficients as sums of the differences between properties of succesive layers.
 
   h1 = dz(1) ; h2 = dz(2) ; h3 = dz(3) ; h4 = dz(4)
+  ! Some of the weights used below are proportional to (h1/(h2+h3))**2 or (h1/(h2+h3))*(h2/(h3+h4))
+  ! so h2 and h3 should be adjusted to ensure that these ratios are not so large that property
+  ! differences at the level of roundoff are amplified to be of order 1.
+  if ((h2+h3) < min_frac*h1) h3 = min_frac*h1 - h2
+  if ((h3+h4) < min_frac*h1) h4 = min_frac*h1 - h3
+
   h12 = h1+h2 ; h23 = h2+h3 ; h34 = h3+h4
   h123 = h12 + h3 ; h234 = h2 + h34 ; h1234 = h12 + h34
   ! Find 3 reciprocals with a single division for efficiency.
@@ -788,9 +771,8 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_201
       h0h1 = h0 * h1 ; h0_2 = h0 * h0 ; h1_2 = h1 * h1
       h0_3 = h0_2 * h0 ; h1_3 = h1_2 * h1
 
-      I_d = 1.0 / (4.0 * h0h1 * ( h0 + h1 ) + h1_3 + h0_3) ! = 1 / ((h0 + h1)**3 + h0*h1*(h0 + h1))
-
       ! Set the tridiagonal coefficients
+      I_d = 1.0 / (4.0 * h0h1 * ( h0 + h1 ) + h1_3 + h0_3) ! = 1 / ((h0 + h1)**3 + h0*h1*(h0 + h1))
       tri_l(i+1) = (h1 * ((h0_2 + h0h1) - h1_2)) * I_d
       ! tri_d(i+1) = 1.0
       tri_c(i+1) = 2.0 * ((h0_2 + h1_2) * (h0 + h1)) * I_d
@@ -822,11 +804,7 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_201
     tri_b(1) = evaluation_polynomial( Dsys, 3, x(1) )  ! Set the first edge slope
     tri_d(1) = 1.0
   else ! Use expressions with less sensitivity to roundoff
-    h_min = max( hNeglect, hMinFrac * ((h(1) + h(2)) + (h(3) + h(4))) )
-    do i=1,4
-      dz(i) = max(h_min, h(i) )
-      u_tmp(i) = u(i)
-    enddo
+    do i=1,4 ; dz(i) = max(hNeglect, h(i) ) ; u_tmp(i) = u(i) ; enddo
     call end_value_h4(dz, u_tmp, Csys)
 
     ! Set the first edge slope
@@ -854,11 +832,7 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_201
   else
     ! Use expressions with less sensitivity to roundoff, including using a coordinate
     ! system that sets the origin at the last interface in the domain.
-    h_min = max( hNeglect, hMinFrac * ((h(N-3) + h(N-2)) + (h(N-1) + h(N))) )
-    do i=1,4
-      dz(i) = max(h_min, h(N+1-i) )
-      u_tmp(i) = u(N+1-i)
-    enddo
+    do i=1,4 ; dz(i) = max(hNeglect, h(N+1-i) ) ; u_tmp(i) = u(N+1-i) ; enddo
 
     call end_value_h4(dz, u_tmp, Csys)
 
@@ -945,7 +919,6 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_201
   real                  :: dx, xavg             ! Differences and averages of successive values of x [same units as h]
   real, dimension(6,6)  :: Asys                 ! matrix used to find  boundary conditions
   real, dimension(6)    :: Bsys, Csys           ! ...
-  real, dimension(5)    :: Dsys                 ! derivative
   real, dimension(N+1)  :: tri_l, &             ! trid. system (lower diagonal)
                            tri_d, &             ! trid. system (middle diagonal)
                            tri_u, &             ! trid. system (upper diagonal)
