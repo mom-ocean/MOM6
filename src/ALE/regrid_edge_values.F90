@@ -228,12 +228,14 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
   logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
 
   ! Local variables
-  integer               :: i, j
-  real                  :: h0, h1, h2, h3   ! temporary thicknesses [H]
-  real                  :: h_sum            ! A sum of adjacent thicknesses [H]
-  real                  :: h_min            ! A minimal cell width [H]
-  real                  :: f1, f2, f3       ! auxiliary variables with various units
-  real                  :: et1, et2, et3    ! terms the expresson for edge values [A H]
+  real :: h0, h1, h2, h3        ! temporary thicknesses [H]
+  real :: h_sum                 ! A sum of adjacent thicknesses [H]
+  real :: h_min                 ! A minimal cell width [H]
+  real :: f1, f2, f3            ! auxiliary variables with various units
+  real :: et1, et2, et3         ! terms the expresson for edge values [A H]
+  real :: I_h12                 ! The inverse of the sum of the two central thicknesses [H-1]
+  real :: I_h012, I_h123        ! Inverses of sums of three succesive thicknesses [H-1]
+  real :: I_den_et2, I_den_et3  ! Inverses of denominators in edge value terms [H-2]
   real, dimension(5)    :: x          ! Coordinate system with 0 at edges [H]
   real, dimension(4)    :: dz               ! A temporary array of limited layer thicknesses [H]
   real, dimension(4)    :: u_tmp            ! A temporary array of cell average properties [A]
@@ -242,6 +244,7 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
   real, dimension(4,4)  :: A                ! values near the boundaries
   real, dimension(4)    :: B, C
   real      :: hNeglect ! A negligible thickness in the same units as h.
+  integer               :: i, j
   logical   :: use_2018_answers  ! If true use older, less acccurate expressions.
 
   use_2018_answers = .true. ; if (present(answers_2018)) use_2018_answers = answers_2018
@@ -277,21 +280,20 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
       f2 = h2 * u(i-1) + h1 * u(i)
       f3 = 1.0 / (h0+h1+h2) + 1.0 / (h1+h2+h3)
       et1 = f1 * f2 * f3
-    else
-      et1 = ( (h0+h1) * (h2+h3) * ((h1+h2+h3) + (h0+h1+h2)) / &
-              (((h1+h2) * ((h0+h1+h2) * (h1+h2+h3)))) ) * &
-            (h2 * u(i-1) + h1 * u(i))
-    endif
-
-    et2 = ( h2 * (h2+h3) / ( (h0+h1+h2)*(h0+h1) ) ) * &
-          ((h0+2.0*h1) * u(i-1) - h1 * u(i-2))
-
-    et3 = ( h1 * (h0+h1) / ( (h1+h2+h3)*(h2+h3) ) ) * &
-          ((2.0*h2+h3) * u(i) - h2 * u(i+1))
-
-    if (use_2018_answers) then
+      et2 = ( h2 * (h2+h3) / ( (h0+h1+h2)*(h0+h1) ) ) * &
+            ((h0+2.0*h1) * u(i-1) - h1 * u(i-2))
+      et3 = ( h1 * (h0+h1) / ( (h1+h2+h3)*(h2+h3) ) ) * &
+            ((2.0*h2+h3) * u(i) - h2 * u(i+1))
       edge_val(i,1) = (et1 + et2 + et3) / ( h0 + h1 + h2 + h3)
     else
+      I_h12 = 1.0 / (h1+h2)
+      I_den_et2 = 1.0 / ( ((h0+h1)+h2)*(h0+h1) ) ; I_h012 = (h0+h1) * I_den_et2
+      I_den_et3 = 1.0 / ( (h1+(h2+h3))*(h2+h3) ) ; I_h123 = (h2+h3) * I_den_et3
+
+      et1 = ( 1.0 + (h1 * I_h012 + (h0+h1) * I_h123) ) * I_h12 * (h2*(h2+h3)) * u(i-1) + &
+            ( 1.0 + (h2 * I_h123 + (h2+h3) * I_h012) ) * I_h12 * (h1*(h0+h1)) * u(i)
+      et2 = ( h1 * (h2*(h2+h3)) * I_den_et2 ) * (u(i-1)-u(i-2))
+      et3 = ( h2 * (h1*(h0+h1)) * I_den_et3 ) * (u(i) - u(i+1))
       edge_val(i,1) = (et1 + (et2 + et3)) / ((h0 + h1) + (h2 + h3))
     endif
     edge_val(i-1,2) = edge_val(i,1)
