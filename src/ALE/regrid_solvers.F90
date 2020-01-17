@@ -7,7 +7,7 @@ use MOM_error_handler, only : MOM_error, FATAL
 
 implicit none ; private
 
-public :: solve_linear_system, solve_tridiagonal_system, solve_diag_dominant_tridiag
+public :: solve_linear_system, linear_solver, solve_tridiagonal_system, solve_diag_dominant_tridiag
 
 contains
 
@@ -15,16 +15,16 @@ contains
 !!
 !! This routine uses Gauss's algorithm to transform the system's original
 !! matrix into an upper triangular matrix. Back substitution yields the answer.
-!! The matrix A must be square and its size must be that of the vectors R and X.
+!! The matrix A must be square, with the first index varing down the column.
 subroutine solve_linear_system( A, R, X, N, answers_2018 )
   integer,              intent(in)    :: N  !< The size of the system
   real, dimension(N,N), intent(inout) :: A  !< The matrix being inverted [nondim]
   real, dimension(N),   intent(inout) :: R  !< system right-hand side [A]
   real, dimension(N),   intent(inout) :: X  !< solution vector [A]
-  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+  logical,    optional, intent(in)    :: answers_2018 !< If true or absent use older, less efficient expressions.
   ! Local variables
   real, parameter       :: eps = 0.0        ! Minimum pivot magnitude allowed
-  real    :: factor       ! The factor that eliminates the leading nonzero element in a  row.
+  real    :: factor       ! The factor that eliminates the leading nonzero element in a row.
   real    :: pivot, I_pivot ! The pivot value and its reciprocal [nondim]
   real    :: swap_a, swap_b
   logical :: found_pivot  ! If true, a pivot has been found
@@ -102,6 +102,68 @@ subroutine solve_linear_system( A, R, X, N, answers_2018 )
   enddo
 
 end subroutine solve_linear_system
+
+!> Solve the linear system AX = R by Gaussian elimination
+!!
+!! This routine uses Gauss's algorithm to transform the system's original
+!! matrix into an upper triangular matrix. Back substitution then yields the answer.
+!! The matrix A must be square, with the first index varing along the row.
+subroutine linear_solver( N, A, R, X )
+  integer,              intent(in)    :: N  !< The size of the system
+  real, dimension(N,N), intent(inout) :: A  !< The matrix being inverted [nondim]
+  real, dimension(N),   intent(inout) :: R  !< system right-hand side [A]
+  real, dimension(N),   intent(inout) :: X  !< solution vector [A]
+
+  ! Local variables
+  real, parameter :: eps = 0.0   ! Minimum pivot magnitude allowed
+  real    :: factor       ! The factor that eliminates the leading nonzero element in a row.
+  real    :: I_pivot      ! The reciprocal of the pivot value [inverse of the input units of a row of A]
+  real    :: swap
+  logical :: found_pivot  ! If true, a pivot has been found
+  integer :: i, j, k
+
+  ! Loop on rows to transform the problem into multiplication by an upper-right matrix.
+  do i=1,N-1
+    ! Seek a pivot for column i starting in row i, and continuing into the remaining rows.  If the
+    ! pivot is in a row other than i, swap them.  If no valid pivot is found, i = N+1 after this loop.
+    do k=i,N ; if ( abs( A(i,k) ) > eps ) exit ; enddo ! end loop to find pivot
+    if ( k > N ) then  ! No pivot could be found and the system is singular.
+      write(0,*) ' A=',A
+      call MOM_error( FATAL, 'The linear system is singular !' )
+    endif
+
+    ! If the pivot is in a row that is different than row i, swap those two rows, noting that both
+    ! rows start with i-1 zero values.
+    if ( k /= i ) then
+      do j=i,N ; swap = A(j,i) ; A(j,i) = A(j,k) ; A(j,k) = swap ; enddo
+      swap = R(i) ; R(i) = R(k) ; R(k) = swap
+    endif
+
+    ! Transform the pivot to 1 by dividing the entire row (right-hand side included) by the pivot
+    I_pivot = 1.0 / A(i,i)
+    A(i,i) = 1.0
+    do j=i+1,N ; A(j,i) = A(j,i) * I_pivot ; enddo
+    R(i) = R(i) * I_pivot
+
+    ! Put zeros in column for all rows below that contain the pivot (which is row i)
+    do k=i+1,N    ! k is the row index
+      factor = A(i,k)
+      ! A(i,k) = 0.0  ! These elements are not used again, so this line can be skipped for speed.
+      do j=i+1,N ; A(j,k) = A(j,k) - factor * A(j,i) ; enddo
+      R(k) = R(k) - factor * R(i)
+    enddo
+
+  enddo ! end loop on i
+
+  ! Solve the system by back substituting into what is now an upper-right matrix.
+  X(N) = R(N) / A(N,N)  ! The last row is now trivially solved.
+  do i=N-1,1,-1 ! loop on rows, starting from second to last row
+    X(i) = R(i)
+    do j=i+1,N ; X(i) = X(i) - A(j,i) * X(j) ; enddo
+  enddo
+
+end subroutine linear_solver
+
 
 !> Solve the tridiagonal system AX = R
 !!
