@@ -1,0 +1,412 @@
+! This file was written by the model and records the non-default parameters used at run-time.
+
+! === module MOM ===
+
+! === module MOM_unit_scaling ===
+! Parameters for doing unit scaling of variables.
+USE_REGRIDDING = True           !   [Boolean] default = False
+                                ! If True, use the ALE algorithm (regridding/remapping). If False, use the
+                                ! layered isopycnal algorithm.
+DT = 1200.0                      !   [s]
+                                ! The (baroclinic) dynamics time step.  The time-step that is actually used will
+                                ! be an integer fraction of the forcing time-step (DT_FORCING in ocean-only mode
+                                ! or the coupling timestep in coupled mode.)
+DT_THERM = 3600.0                !   [s] default = 300.0
+                                ! The thermodynamic and tracer advection time step. Ideally DT_THERM should be
+                                ! an integer multiple of DT and less than the forcing or coupling time-step,
+                                ! unless THERMO_SPANS_COUPLING is true, in which case DT_THERM can be an integer
+                                ! multiple of the coupling timestep.  By default DT_THERM is set to DT.				
+C_P = 3925.0                    !   [J kg-1 K-1] default = 3991.86795711963
+                                ! The heat capacity of sea water, approximated as a constant. This is only used
+                                ! if ENABLE_THERMODYNAMICS is true. The default value is from the TEOS-10
+                                ! definition of conservative temperature.
+SAVE_INITIAL_CONDS = False      !   [Boolean] default = False
+                                ! If true, write the initial conditions to a file given by IC_OUTPUT_FILE.
+
+! === module MOM_domains ===
+REENTRANT_X = False             !   [Boolean] default = True
+                                ! If true, the domain is zonally reentrant.
+NIGLOBAL = 14                   !
+                                ! The total number of thickness grid points in the x-direction in the physical
+                                ! domain. With STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
+NJGLOBAL = 10                   !
+                                ! The total number of thickness grid points in the y-direction in the physical
+                                ! domain. With STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
+
+! === module MOM_hor_index ===
+! Sets the horizontal array index types.
+
+! === module MOM_verticalGrid ===
+! Parameters providing information about the vertical grid.
+NK = 2                          !   [nondim]
+                                ! The number of model layers.
+
+! === module MOM_fixed_initialization ===
+
+! === module MOM_grid_init ===
+GRID_CONFIG = "mosaic"          !
+                                ! A character string that determines the method for defining the horizontal
+                                ! grid.  Current options are:
+                                !     mosaic - read the grid from a mosaic (supergrid)
+                                !              file set by GRID_FILE.
+                                !     cartesian - use a (flat) Cartesian grid.
+                                !     spherical - use a simple spherical grid.
+                                !     mercator - use a Mercator spherical grid.
+GRID_FILE = "ocean_hgrid.nc"    !
+                                ! Name of the file from which to read horizontal grid data.
+TOPO_CONFIG = "file"            !
+                                ! This specifies how bathymetry is specified:
+                                !     file - read bathymetric information from the file
+                                !       specified by (TOPO_FILE).
+                                !     flat - flat bottom set to MAXIMUM_DEPTH.
+                                !     bowl - an analytically specified bowl-shaped basin
+                                !       ranging between MAXIMUM_DEPTH and MINIMUM_DEPTH.
+                                !     spoon - a similar shape to 'bowl', but with an vertical
+                                !       wall at the southern face.
+                                !     halfpipe - a zonally uniform channel with a half-sine
+                                !       profile in the meridional direction.
+                                !     benchmark - use the benchmark test case topography.
+                                !     Neverland - use the Neverland test case topography.
+                                !     DOME - use a slope and channel configuration for the
+                                !       DOME sill-overflow test case.
+                                !     ISOMIP - use a slope and channel configuration for the
+                                !       ISOMIP test case.
+                                !     DOME2D - use a shelf and slope configuration for the
+                                !       DOME2D gravity current/overflow test case.
+                                !     Kelvin - flat but with rotated land mask.
+                                !     seamount - Gaussian bump for spontaneous motion test case.
+                                !     dumbbell - Sloshing channel with reservoirs on both ends.
+                                !     shelfwave - exponential slope for shelfwave test case.
+                                !     Phillips - ACC-like idealized topography used in the Phillips config.
+                                !     dense - Denmark Strait-like dense water formation and overflow.
+                                !     USER - call a user modified routine.
+!MAXIMUM_DEPTH = 100.0          !   [m]
+                                ! The (diagnosed) maximum depth of the ocean.
+
+! === module MOM_open_boundary ===
+! Controls where open boundaries are located, what kind of boundary condition to impose, and what data to apply,
+! if any.
+ROTATION = "betaplane"          ! default = "2omegasinlat"
+                                ! This specifies how the Coriolis parameter is specified:
+                                !     2omegasinlat - Use twice the planetary rotation rate
+                                !       times the sine of latitude.
+                                !     betaplane - Use a beta-plane or f-plane.
+                                !     USER - call a user modified routine.
+F_0 = 1.0E-04                   !   [s-1] default = 0.0
+                                ! The reference value of the Coriolis parameter with the betaplane option.
+
+! === module MOM_tracer_registry ===
+
+! === module MOM_EOS ===
+EQN_OF_STATE = "LINEAR"         ! default = "WRIGHT"
+                                ! EQN_OF_STATE determines which ocean equation of state should be used.
+                                ! Currently, the valid choices are "LINEAR", "UNESCO", "WRIGHT", "NEMO" and
+                                ! "TEOS10". This is only used if USE_EOS is true.
+DRHO_DS = 0.0                   !   [kg m-3 PSU-1] default = 0.8
+                                ! When EQN_OF_STATE=LINEAR, this is the partial derivative of density with
+                                ! salinity.
+
+! === module MOM_restart ===
+
+! === module MOM_tracer_flow_control ===
+
+! === module MOM_coord_initialization ===
+COORD_CONFIG = "linear"         !
+                                ! This specifies how layers are to be defined:
+                                !     ALE or none - used to avoid defining layers in ALE mode
+                                !     file - read coordinate information from the file
+                                !       specified by (COORD_FILE).
+                                !     BFB - Custom coords for buoyancy-forced basin case
+                                !       based on SST_S, T_BOT and DRHO_DT.
+                                !     linear - linear based on interfaces not layers
+                                !     layer_ref - linear based on layer densities
+                                !     ts_ref - use reference temperature and salinity
+                                !     ts_range - use range of temperature and salinity
+                                !       (T_REF and S_REF) to determine surface density
+                                !       and GINT calculate internal densities.
+                                !     gprime - use reference density (RHO_0) for surface
+                                !       density and GINT calculate internal densities.
+                                !     ts_profile - use temperature and salinity profiles
+                                !       (read from COORD_FILE) to set layer densities.
+                                !     USER - call a user modified routine.
+REGRIDDING_COORDINATE_MODE = "Z*" ! default = "LAYER"
+                                ! Coordinate mode for vertical regridding. Choose among the following
+                                ! possibilities:  LAYER - Isopycnal or stacked shallow water layers
+                                !  ZSTAR, Z* - stretched geopotential z*
+                                !  SIGMA_SHELF_ZSTAR - stretched geopotential z* ignoring shelf
+                                !  SIGMA - terrain following coordinates
+                                !  RHO   - continuous isopycnal
+                                !  HYCOM1 - HyCOM-like hybrid coordinate
+                                !  SLIGHT - stretched coordinates above continuous isopycnal
+                                !  ADAPTIVE - optimize for smooth neutral density surfaces
+!ALE_RESOLUTION = 2*50.0        !   [m]
+                                ! The distribution of vertical resolution for the target
+                                ! grid used for Eulerian-like coordinates. For example,
+                                ! in z-coordinate mode, the parameter is a list of level
+                                ! thicknesses (in m). In sigma-coordinate mode, the list
+                                ! is of non-dimensional fractions of the water column.
+REMAPPING_SCHEME = "PPM_IH4"    ! default = "PLM"
+                                ! This sets the reconstruction scheme used for vertical remapping for all
+                                ! variables. It can be one of the following schemes: PCM         (1st-order
+                                ! accurate)
+                                ! PLM         (2nd-order accurate)
+                                ! PPM_H4      (3rd-order accurate)
+                                ! PPM_IH4     (3rd-order accurate)
+                                ! PQM_IH4IH3  (4th-order accurate)
+                                ! PQM_IH6IH5  (5th-order accurate)
+
+! === module MOM_grid ===
+! Parameters providing information about the lateral grid.
+
+! === module MOM_state_initialization ===
+INIT_LAYERS_FROM_Z_FILE = True  !   [Boolean] default = False
+                                ! If true, initialize the layer thicknesses, temperatures, and salinities from a
+                                ! Z-space file on a latitude-longitude grid.
+
+! === module MOM_initialize_layers_from_Z ===
+TEMP_SALT_Z_INIT_FILE = "temp_salt_ic.nc" ! default = "temp_salt_z.nc"
+                                ! The name of the z-space input file used to initialize temperatures (T) and
+                                ! salinities (S). If T and S are not in the same file, TEMP_Z_INIT_FILE and
+                                ! SALT_Z_INIT_FILE must be set.
+Z_INIT_ALE_REMAPPING = True     !   [Boolean] default = False
+                                ! If True, then remap straight to model coordinate from file.
+SPONGE = True                   !   [Boolean] default = False
+                                ! If true, sponges may be applied anywhere in the domain. The exact location and
+                                ! properties of those sponges are specified via SPONGE_CONFIG.
+SPONGE_DAMPING_FILE = "sponge.nc" !
+                                ! The name of the file with the sponge damping rates.
+SPONGE_STATE_FILE = "temp_salt_ic.nc" ! default = "sponge.nc"
+                                ! The name of the file with the state to damp toward.
+SPONGE_PTEMP_VAR = "ptemp"      ! default = "PTEMP"
+                                ! The name of the potential temperature variable in SPONGE_STATE_FILE.
+SPONGE_SALT_VAR = "salt"        ! default = "SALT"
+                                ! The name of the salinity variable in SPONGE_STATE_FILE.
+NEW_SPONGES = True              !   [of sponge restoring data.] default = False
+                                ! Set True if using the newer sponging code which performs on-the-fly regridding
+                                ! in lat-lon-time.
+
+! === module MOM_sponge ===
+SPONGE_DATA_ONGRID = True       !   [Boolean] default = False
+                                ! When defined, the incoming sponge data are assumed to be on the model grid
+!Total sponge columns at h points = 100 !
+                                ! The total number of columns where sponges are applied at h points.
+
+! === module MOM_diag_mediator ===
+
+! === module MOM_MEKE ===
+
+! === module MOM_lateral_mixing_coeffs ===
+
+! === module MOM_set_visc ===
+LINEAR_DRAG = True              !   [Boolean] default = False
+                                ! If LINEAR_DRAG and BOTTOMDRAGLAW are defined the drag law is
+                                ! cdrag*DRAG_BG_VEL*u.
+HBBL = 10.0                     !   [m]
+                                ! The thickness of a bottom boundary layer with a viscosity of KVBBL if
+                                ! BOTTOMDRAGLAW is not defined, or the thickness over which near-bottom
+                                ! velocities are averaged for the drag law if BOTTOMDRAGLAW is defined but
+                                ! LINEAR_DRAG is not.
+CDRAG = 0.002                   !   [nondim] default = 0.003
+                                ! CDRAG is the drag coefficient relating the magnitude of the velocity field to
+                                ! the bottom stress. CDRAG is only used if BOTTOMDRAGLAW is defined.
+DRAG_BG_VEL = 0.05              !   [m s-1] default = 0.0
+                                ! DRAG_BG_VEL is either the assumed bottom velocity (with LINEAR_DRAG) or an
+                                ! unresolved  velocity that is combined with the resolved velocity to estimate
+                                ! the velocity magnitude.  DRAG_BG_VEL is only used when BOTTOMDRAGLAW is
+                                ! defined.
+BBL_USE_EOS = True              !   [Boolean] default = False
+                                ! If true, use the equation of state in determining the properties of the bottom
+                                ! boundary layer.  Otherwise use the layer target potential densities.
+BBL_THICK_MIN = 0.1             !   [m] default = 0.0
+                                ! The minimum bottom boundary layer thickness that can be used with
+                                ! BOTTOMDRAGLAW. This might be Kv/(cdrag*drag_bg_vel) to give Kv as the minimum
+                                ! near-bottom viscosity.
+KV = 1.0E-04                    !   [m2 s-1]
+                                ! The background kinematic viscosity in the interior. The molecular value, ~1e-6
+                                ! m2 s-1, may be used.
+
+! === module MOM_thickness_diffuse ===
+KHTH = 500.0                    !   [m2 s-1] default = 0.0
+                                ! The background horizontal thickness diffusivity.
+BE = 0.7                        !   [nondim] default = 0.6
+                                ! If SPLIT is true, BE determines the relative weighting of a  2nd-order
+                                ! Runga-Kutta baroclinic time stepping scheme (0.5) and a backward Euler scheme
+                                ! (1) that is used for the Coriolis and inertial terms.  BE may be from 0.5 to
+                                ! 1, but instability may occur near 0.5. BE is also applicable if SPLIT is false
+                                ! and USE_RK2 is true.
+
+! === module MOM_continuity ===
+
+! === module MOM_continuity_PPM ===
+ETA_TOLERANCE = 1.0E-12         !   [m] default = 1.0E-10
+                                ! The tolerance for the differences between the barotropic and baroclinic
+                                ! estimates of the sea surface height due to the fluxes through each face.  The
+                                ! total tolerance for SSH is 4 times this value.  The default is
+                                ! 0.5*NK*ANGSTROM, and this should not be set less than about
+                                ! 10^-15*MAXIMUM_DEPTH.
+
+! === module MOM_CoriolisAdv ===
+CORIOLIS_EN_DIS = True          !   [Boolean] default = False
+                                ! If true, two estimates of the thickness fluxes are used to estimate the
+                                ! Coriolis term, and the one that dissipates energy relative to the other one is
+                                ! used.
+BOUND_CORIOLIS = True           !   [Boolean] default = False
+                                ! If true, the Coriolis terms at u-points are bounded by the four estimates of
+                                ! (f+rv)v from the four neighboring v-points, and similarly at v-points.  This
+                                ! option is always effectively false with CORIOLIS_EN_DIS defined and
+                                ! CORIOLIS_SCHEME set to SADOURNY75_ENERGY.
+
+! === module MOM_PressureForce ===
+
+! === module MOM_PressureForce_AFV ===
+RECONSTRUCT_FOR_PRESSURE = False !   [Boolean] default = True
+                                ! If True, use vertical reconstruction of T & S within the integrals of the FV
+                                ! pressure gradient calculation. If False, use the constant-by-layer algorithm.
+                                ! The default is set by USE_REGRIDDING.
+
+! === module MOM_hor_visc ===
+SMAGORINSKY_AH = True           !   [Boolean] default = False
+                                ! If true, use a biharmonic Smagorinsky nonlinear eddy viscosity.
+SMAG_BI_CONST = 0.03            !   [nondim] default = 0.0
+                                ! The nondimensional biharmonic Smagorinsky constant, typically 0.015 - 0.06.
+
+! === module MOM_vert_friction ===
+DIRECT_STRESS = True            !   [Boolean] default = False
+                                ! If true, the wind stress is distributed over the topmost HMIX_STRESS of fluid
+                                ! (like in HYCOM), and KVML may be set to a very small value.
+HMIX_FIXED = 20.0               !   [m]
+                                ! The prescribed depth over which the near-surface viscosity and diffusivity are
+                                ! elevated when the bulk mixed layer is not used.
+KVML = 0.01                     !   [m2 s-1] default = 1.0E-04
+                                ! The kinematic viscosity in the mixed layer.  A typical value is ~1e-2 m2 s-1.
+                                ! KVML is not used if BULKMIXEDLAYER is true.  The default is set by KV.
+MAXVEL = 10.0                   !   [m s-1] default = 3.0E+08
+                                ! The maximum velocity allowed before the velocity components are truncated.
+
+! === module MOM_barotropic ===
+BOUND_BT_CORRECTION = True      !   [Boolean] default = False
+                                ! If true, the corrective pseudo mass-fluxes into the barotropic solver are
+                                ! limited to values that require less than maxCFL_BT_cont to be accommodated.
+SSH_EXTRA = 10.0                !   [m] default = 5.0
+                                ! An estimate of how much higher SSH might get, for use in calculating the safe
+                                ! external wave speed. The default is the minimum of 10 m or 5% of
+                                ! MAXIMUM_DEPTH.
+BEBT = 0.2                      !   [nondim] default = 0.1
+                                ! BEBT determines whether the barotropic time stepping uses the forward-backward
+                                ! time-stepping scheme or a backward Euler scheme. BEBT is valid in the range
+                                ! from 0 (for a forward-backward treatment of nonrotating gravity waves) to 1
+                                ! (for a backward Euler treatment). In practice, BEBT must be greater than about
+                                ! 0.05.
+DTBT = 10.0                     !   [s or nondim] default = -0.98
+                                ! The barotropic time step, in s. DTBT is only used with the split explicit time
+                                ! stepping. To set the time step automatically based the maximum stable value
+                                ! use 0, or a negative value gives the fraction of the stable value. Setting
+                                ! DTBT to 0 is the same as setting it to -0.98. The value of DTBT that will
+                                ! actually be used is an integer fraction of DT, rounding down.
+
+! === module MOM_mixed_layer_restrat ===
+
+! === module MOM_diabatic_driver ===
+! The following parameters are used for diabatic processes.
+
+! === module MOM_CVMix_KPP ===
+! This is the MOM wrapper to CVMix:KPP
+! See http://cvmix.github.io/
+
+! === module MOM_tidal_mixing ===
+! Vertical Tidal Mixing Parameterization
+
+! === module MOM_CVMix_conv ===
+! Parameterization of enhanced mixing due to convection via CVMix
+
+! === module MOM_entrain_diffusive ===
+CORRECT_DENSITY = False         !   [Boolean] default = True
+                                ! If true, and USE_EOS is true, the layer densities are restored toward their
+                                ! target values by the diapycnal mixing, as described in Hallberg (MWR, 2000).
+
+! === module MOM_set_diffusivity ===
+BBL_EFFIC = 0.0                 !   [nondim] default = 0.2
+                                ! The efficiency with which the energy extracted by bottom drag drives BBL
+                                ! diffusion.  This is only used if BOTTOMDRAGLAW is true.
+
+! === module MOM_bkgnd_mixing ===
+! Adding static vertical background mixing coefficients
+KD = 0.0                        !   [m2 s-1]
+                                ! The background diapycnal diffusivity of density in the interior. Zero or the
+                                ! molecular value, ~1e-7 m2 s-1, may be used.
+
+! === module MOM_kappa_shear ===
+! Parameterization of shear-driven turbulence following Jackson, Hallberg and Legg, JPO 2008
+
+! === module MOM_CVMix_shear ===
+! Parameterization of shear-driven turbulence via CVMix (various options)
+
+! === module MOM_CVMix_ddiff ===
+! Parameterization of mixing due to double diffusion processes via CVMix
+
+! === module MOM_diabatic_aux ===
+! The following parameters are used for auxiliary diabatic processes.
+
+! === module MOM_regularize_layers ===
+
+! === module MOM_opacity ===
+
+! === module MOM_tracer_advect ===
+
+! === module MOM_tracer_hor_diff ===
+
+! === module MOM_neutral_diffusion ===
+! This module implements neutral diffusion of tracers
+
+! === module MOM_sum_output ===
+MAXTRUNC = 5000                 !   [truncations save_interval-1] default = 0
+                                ! The run will be stopped, and the day set to a very large value if the velocity
+                                ! is truncated more than MAXTRUNC times between energy saves.  Set MAXTRUNC to 0
+                                ! to stop if there is any truncation of velocities.
+DATE_STAMPED_STDOUT = False     !   [Boolean] default = True
+                                ! If true, use dates (not times) in messages to stdout
+
+! === module MOM_surface_forcing ===
+VARIABLE_WINDS = False          !   [Boolean] default = True
+                                ! If true, the winds vary in time after the initialization.
+VARIABLE_BUOYFORCE = False      !   [Boolean] default = True
+                                ! If true, the buoyancy forcing varies in time after the initialization of the
+                                ! model.
+BUOY_CONFIG = "zero"            !
+                                ! The character string that indicates how buoyancy forcing is specified. Valid
+                                ! options include (file), (zero), (linear), (USER), (BFB) and (NONE).
+WIND_CONFIG = "zero"            !
+                                ! The character string that indicates how wind forcing is specified. Valid
+                                ! options include (file), (2gyre), (1gyre), (gyres), (zero), and (USER).
+
+! === module MOM_restart ===
+
+! === module MOM_main (MOM_driver) ===
+DAYMAX = 0.25                    !   [days]
+                                ! The final time of the whole simulation, in units of TIMEUNIT seconds.  This
+                                ! also sets the potential end time of the present run segment if the end time is
+                                ! not set via ocean_solo_nml in input.nml.
+				
+ENERGYSAVEDAYS = 0.125          !   [days] default = 1.44E+04
+                                ! The interval in units of TIMEUNIT between saves of the
+                                ! energies of the run and other globally summed diagnostics.
+				
+RESTART_CONTROL = 3             ! default = 1
+                                ! An integer whose bits encode which restart files are written. Add 2 (bit 1)
+                                ! for a time-stamped file, and odd (bit 0) for a non-time-stamped file. A
+                                ! non-time-stamped restart file is saved at the end of the run segment for any
+                                ! non-negative value.
+
+! === module MOM_write_cputime ===
+MAXCPU = 2.88E+04               !   [wall-clock seconds] default = -1.0
+                                ! The maximum amount of cpu time per processor for which MOM should run before
+                                ! saving a restart file and quitting with a return value that indicates that a
+                                ! further run is required to complete the simulation. If automatic restarts are
+                                ! not desired, use a negative value for MAXCPU.  MAXCPU has units of wall-clock
+                                ! seconds, so the actual CPU time used is larger by a factor of the number of
+                                ! processors used.
+
+! === module MOM_file_parser ===
+
+DIAG_AS_CHKSUM = True
+DEBUG = True

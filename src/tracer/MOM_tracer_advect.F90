@@ -28,7 +28,7 @@ public tracer_advect_end
 
 !> Control structure for this module
 type, public :: tracer_advect_CS ; private
-  real    :: dt                    !< The baroclinic dynamics time step [s].
+  real    :: dt                    !< The baroclinic dynamics time step [T ~> s].
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !< timing of diagnostic output.
   logical :: debug                 !< If true, write verbose checksums for debugging purposes.
@@ -58,7 +58,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                            intent(in)    :: vhtr  !< accumulated volume/mass flux through merid face [H L2 ~> m3 or kg]
   type(ocean_OBC_type),    pointer       :: OBC   !< specifies whether, where, and what OBCs are used
-  real,                    intent(in)    :: dt    !< time increment [s]
+  real,                    intent(in)    :: dt    !< time increment [T ~> s]
   type(unit_scale_type),   intent(in)    :: US    !< A dimensional unit scaling type
   type(tracer_advect_CS),  pointer       :: CS    !< control structure for module
   type(tracer_registry_type), pointer    :: Reg   !< pointer to tracer registry
@@ -88,7 +88,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
                                        ! can be simply discarded [H L2 ~> m3 or kg].
 
   real :: landvolfill                   ! An arbitrary? nonzero cell volume [H L2 ~> m3 or kg].
-  real :: Idt                           ! 1/dt [s-1].
+  real :: Idt                           ! 1/dt [T-1 ~> s-1].
   logical :: domore_u(SZJ_(G),SZK_(G))  ! domore__ indicate whether there is more
   logical :: domore_v(SZJB_(G),SZK_(G)) ! advection to be done in the corresponding
                                         ! row or column.
@@ -122,7 +122,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
 
   ntr = Reg%ntr
   do m=1,ntr ; Tr(m) = Reg%Tr(m) ; enddo
-  Idt = 1.0/dt
+  Idt = 1.0 / dt
 
   max_iter = 2*INT(CEILING(dt/CS%dt)) + 1
 
@@ -252,7 +252,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
 
 !$OMP parallel do default(none) shared(nz,domore_k,x_first,Tr,hprev,uhr,uh_neglect,  &
 !$OMP                                  OBC,domore_u,ntr,Idt,isv,iev,jsv,jev,stencil, &
-!$OMP                                  G,GV,CS,vhr,vh_neglect,domore_v)
+!$OMP                                  G,GV,CS,vhr,vh_neglect,domore_v,US)
 
     !  To ensure positive definiteness of the thickness at each iteration, the
     !  mass fluxes out of each layer are checked each step, and limited to keep
@@ -339,7 +339,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   type(ocean_OBC_type),                      pointer       :: OBC !< specifies whether, where, and what OBCs are used
   logical, dimension(SZJ_(G),SZK_(G)),       intent(inout) :: domore_u !< If true, there is more advection to be
                                                                   !! done in this u-row
-  real,                                      intent(in)    :: Idt !< The inverse of dt [s-1]
+  real,                                      intent(in)    :: Idt !< The inverse of dt [T-1 ~> s-1]
   integer,                                   intent(in)    :: ntr !< The number of tracers
   integer,                                   intent(in)    :: is  !< The starting tracer i-index to work on
   integer,                                   intent(in)    :: ie  !< The ending tracer i-index to work on
@@ -380,7 +380,6 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
   real :: fac1,u_L_in,u_L_out  ! terms used for time-stepping OBC reservoirs
   type(OBC_segment_type), pointer :: segment=>NULL()
-  real    :: dt ! the inverse of Idt, needed for time-stepping of tracer reservoirs
   logical :: usePLMslope
 
   usePLMslope = .not. (usePPM .and. useHuynh)
@@ -390,7 +389,6 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
 
   min_h = 0.1*GV%Angstrom_H
   h_neglect = GV%H_subroundoff
-  dt=1.0/Idt
 
 ! do I=is-1,ie ; ts2(I) = 0.0 ; enddo
   do I=is-1,ie ; CFL(I) = 0.0 ; enddo
@@ -487,8 +485,8 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         else
           uhh(I) = uhr(I,j,k)
         endif
-       !ts2(I) = 0.5*(1.0 + uhh(I)/(hprev(i+1,j,k)+h_neglect))
-        CFL(I) = - uhh(I)/(hprev(i+1,j,k)+h_neglect) ! CFL is positive
+       !ts2(I) = 0.5*(1.0 + uhh(I) / (hprev(i+1,j,k) + h_neglect*G%areaT(i+1,j)))
+        CFL(I) = - uhh(I) / (hprev(i+1,j,k) + h_neglect*G%areaT(i+1,j)) ! CFL is positive
       else
         hup = hprev(i,j,k) - G%areaT(i,j)*min_h
         hlos = MAX(0.0,-uhr(I-1,j,k))
@@ -499,8 +497,8 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         else
           uhh(I) = uhr(I,j,k)
         endif
-       !ts2(I) = 0.5*(1.0 - uhh(I)/(hprev(i,j,k)+h_neglect))
-        CFL(I) = uhh(I)/(hprev(i,j,k)+h_neglect) ! CFL is positive
+       !ts2(I) = 0.5*(1.0 - uhh(I) / (hprev(i,j,k) + h_neglect*G%areaT(i,j)))
+        CFL(I) = uhh(I) / (hprev(i,j,k) + h_neglect*G%areaT(i,j)) ! CFL is positive
       endif
     enddo
 
@@ -575,7 +573,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
           ! Original implementation of PLM
          !flux_x(I,m) = uhh(I)*(Tr(m)%t(i+1,j,k) - slope_x(i+1,m)*ts2(I))
         endif
-       !ts2(I) = 0.5*(1.0 - uhh(I)/(hprev(i,j,k)+h_neglect))
+       !ts2(I) = 0.5*(1.0 - uhh(I)/(hprev(i,j,k)+h_neglect*G%areaT(i,j)))
       enddo ; enddo
     endif ! usePPM
 
@@ -652,17 +650,21 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
     do m=1,ntr
 
       ! update tracer
-      do i=is,ie ; if ((do_i(i)) .and. (Ihnew(i) > 0.0)) then
-        Tr(m)%t(i,j,k) = (Tr(m)%t(i,j,k) * hlst(i) - &
-                          (flux_x(I,m) - flux_x(I-1,m))) * Ihnew(i)
-      endif ; enddo
+      do i=is,ie
+        if (do_i(i)) then
+          if (Ihnew(i) > 0.0) then
+            Tr(m)%t(i,j,k) = (Tr(m)%t(i,j,k) * hlst(i) - &
+                              (flux_x(I,m) - flux_x(I-1,m))) * Ihnew(i)
+          endif
+        endif
+      enddo
 
       ! diagnostics
       if (associated(Tr(m)%ad_x)) then ; do i=is,ie ; if (do_i(i)) then
-        Tr(m)%ad_x(I,j,k) = Tr(m)%ad_x(I,j,k) + US%L_to_m**2*flux_x(I,m)*Idt
+        Tr(m)%ad_x(I,j,k) = Tr(m)%ad_x(I,j,k) + flux_x(I,m)*Idt
       endif ; enddo ; endif
       if (associated(Tr(m)%ad2d_x)) then ; do i=is,ie ; if (do_i(i)) then
-        Tr(m)%ad2d_x(I,j) = Tr(m)%ad2d_x(I,j) + US%L_to_m**2*flux_x(I,m)*Idt
+        Tr(m)%ad2d_x(I,j) = Tr(m)%ad2d_x(I,j) + flux_x(I,m)*Idt
       endif ; enddo ; endif
 
       ! diagnose convergence of flux_x (do not use the Ihnew(i) part of the logic).
@@ -696,7 +698,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   type(ocean_OBC_type),                      pointer       :: OBC !< specifies whether, where, and what OBCs are used
   logical, dimension(SZJB_(G),SZK_(G)),      intent(inout) :: domore_v !< If true, there is more advection to be
                                                                   !! done in this v-row
-  real,                                      intent(in)    :: Idt !< The inverse of dt [s-1]
+  real,                                      intent(in)    :: Idt !< The inverse of dt [T-1 ~> s-1]
   integer,                                   intent(in)    :: ntr !< The number of tracers
   integer,                                   intent(in)    :: is  !< The starting tracer i-index to work on
   integer,                                   intent(in)    :: ie  !< The ending tracer i-index to work on
@@ -736,7 +738,6 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   integer :: i, j, j2, m, n, j_up, stencil
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
   real :: fac1,v_L_in,v_L_out  ! terms used for time-stepping OBC reservoirs
-  real  :: dt ! The inverse of Idt, needed for segment reservoir time-stepping
   type(OBC_segment_type), pointer :: segment=>NULL()
   logical :: usePLMslope
 
@@ -747,7 +748,6 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 
   min_h = 0.1*GV%Angstrom_H
   h_neglect = GV%H_subroundoff
-  dt=1.0/Idt
   !do i=is,ie ; ts2(i) = 0.0 ; enddo
 
   ! We conditionally perform work on tracer points: calculating the PLM slope,
@@ -856,8 +856,8 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         else
           vhh(i,J) = vhr(i,J,k)
         endif
-       !ts2(i) = 0.5*(1.0 + vhh(i,J) / (hprev(i,j+1,k)+h_neglect))
-        CFL(i) = - vhh(i,J) / (hprev(i,j+1,k)+h_neglect) ! CFL is positive
+       !ts2(i) = 0.5*(1.0 + vhh(i,J) / (hprev(i,j+1,k) + h_neglect*G%areaT(i,j+1))
+        CFL(i) = - vhh(i,J) / (hprev(i,j+1,k) + h_neglect*G%areaT(i,j+1)) ! CFL is positive
       else
         hup = hprev(i,j,k) - G%areaT(i,j)*min_h
         hlos = MAX(0.0,-vhr(i,J-1,k))
@@ -868,8 +868,8 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         else
           vhh(i,J) = vhr(i,J,k)
         endif
-       !ts2(i) = 0.5*(1.0 - vhh(i,J) / (hprev(i,j,k)+h_neglect))
-        CFL(i) = vhh(i,J) / (hprev(i,j,k)+h_neglect) ! CFL is positive
+       !ts2(i) = 0.5*(1.0 - vhh(i,J) / (hprev(i,j,k) + h_neglect*G%areaT(i,j)))
+        CFL(i) = vhh(i,J) / (hprev(i,j,k) + h_neglect*G%areaT(i,j)) ! CFL is positive
       endif
     enddo
 
@@ -1030,10 +1030,10 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 
       ! diagnostics
       if (associated(Tr(m)%ad_y)) then ; do i=is,ie ; if (do_i(i)) then
-        Tr(m)%ad_y(i,J,k) = Tr(m)%ad_y(i,J,k) + US%L_to_m**2*flux_y(i,m,J)*Idt
+        Tr(m)%ad_y(i,J,k) = Tr(m)%ad_y(i,J,k) + flux_y(i,m,J)*Idt
       endif ; enddo ; endif
       if (associated(Tr(m)%ad2d_y)) then ; do i=is,ie ; if (do_i(i)) then
-        Tr(m)%ad2d_y(i,J) = Tr(m)%ad2d_y(i,J) + US%L_to_m**2*flux_y(i,m,J)*Idt
+        Tr(m)%ad2d_y(i,J) = Tr(m)%ad2d_y(i,J) + flux_y(i,m,J)*Idt
       endif ; enddo ; endif
 
       ! diagnose convergence of flux_y and add to convergence of flux_x.
@@ -1051,9 +1051,10 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 end subroutine advect_y
 
 !> Initialize lateral tracer advection module
-subroutine tracer_advect_init(Time, G, param_file, diag, CS)
+subroutine tracer_advect_init(Time, G, US, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time        !< current model time
   type(ocean_grid_type),   intent(in)    :: G           !< ocean grid structure
+  type(unit_scale_type),   intent(in)    :: US          !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file  !< open file to parse for model parameters
   type(diag_ctrl), target, intent(inout) :: diag        !< regulates diagnostic output
   type(tracer_advect_CS),  pointer       :: CS          !< module control structure
@@ -1076,7 +1077,7 @@ subroutine tracer_advect_init(Time, G, param_file, diag, CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "DT", CS%dt, fail_if_missing=.true., &
-          desc="The (baroclinic) dynamics time step.", units="s")
+          desc="The (baroclinic) dynamics time step.", units="s", scale=US%s_to_T)
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
   call get_param(param_file, mdl, "TRACER_ADVECTION_SCHEME", mesg, &
           desc="The horizontal transport scheme for tracers:\n"//&

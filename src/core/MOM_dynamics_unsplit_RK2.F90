@@ -55,7 +55,7 @@ use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
 use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_mediator, only : diag_mediator_init, enable_averaging
+use MOM_diag_mediator, only : diag_mediator_init, enable_averages
 use MOM_diag_mediator, only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator, only : register_diag_field, register_static_field
 use MOM_diag_mediator, only : set_diag_mediator_grid, diag_ctrl
@@ -92,8 +92,7 @@ use MOM_set_visc, only : set_viscous_ML, set_visc_CS
 use MOM_thickness_diffuse, only : thickness_diffuse_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
 use MOM_unit_scaling, only : unit_scale_type
-use MOM_vert_friction, only : vertvisc, vertvisc_coef
-use MOM_vert_friction, only : vertvisc_limit_vel, vertvisc_init, vertvisc_CS
+use MOM_vert_friction, only : vertvisc, vertvisc_coef, vertvisc_init, vertvisc_CS
 use MOM_verticalGrid, only : verticalGrid_type, get_thickness_units
 use MOM_verticalGrid, only : get_flux_units, get_tr_flux_units
 
@@ -114,9 +113,9 @@ type, public :: MOM_dyn_unsplit_RK2_CS ; private
     diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor [L T-2 ~> m s-2].
 
   real, pointer, dimension(:,:) :: taux_bot => NULL() !< frictional x-bottom stress from the ocean
-                                                      !! to the seafloor [kg L Z T-2 m-3 ~> Pa]
+                                                      !! to the seafloor [R L Z T-2 ~> Pa]
   real, pointer, dimension(:,:) :: tauy_bot => NULL() !< frictional y-bottom stress from the ocean
-                                                      !! to the seafloor [kg L Z T-2 m-3 ~> Pa]
+                                                      !! to the seafloor [R L Z T-2 ~> Pa]
 
   real    :: be      !< A nondimensional number from 0.5 to 1 that controls
                      !! the backward weighting of the time stepping scheme.
@@ -206,7 +205,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
                                                               !! viscosities, and related fields.
   type(time_type),                   intent(in)    :: Time_local   !< The model time at the end of
                                                               !! the time step.
-  real,                              intent(in)    :: dt      !< The baroclinic dynamics time step [s].
+  real,                              intent(in)    :: dt      !< The baroclinic dynamics time step [T ~> s].
   type(mech_forcing),                intent(in)    :: forces  !< A structure with the driving mechanical forces
   real, dimension(:,:),              pointer       :: p_surf_begin !< A pointer (perhaps NULL) to
                                                               !! the surface pressure at the beginning
@@ -239,15 +238,13 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up ! Predicted zonal velocities [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vp ! Predicted meridional velocities [L T-1 ~> m s-1]
   real, dimension(:,:), pointer :: p_surf => NULL()
-  real :: dt_in_T   ! The dynamics time step [T ~> s]
   real :: dt_pred   ! The time step for the predictor part of the baroclinic
                     ! time stepping [T ~> s].
   logical :: dyn_p_surf
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  dt_in_T = US%s_to_T*dt
-  dt_pred = dt_in_T * CS%BE
+  dt_pred = dt * CS%BE
 
   h_av(:,:,:) = 0; hp(:,:,:) = 0
   up(:,:,:) = 0
@@ -268,7 +265,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   endif
 
 ! diffu = horizontal viscosity terms (u,h)
-  call enable_averaging(dt,Time_local, CS%diag)
+  call enable_averages(dt,Time_local, CS%diag)
   call cpu_clock_begin(id_clock_horvisc)
   call horizontal_viscosity(u_in, v_in, h_in, CS%diffu, CS%diffv, MEKE, VarMix, &
                             G, GV, US, CS%hor_visc_CSp)
@@ -341,13 +338,13 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 
  ! up[n-1/2] <- up*[n-1/2] + dt/2 d/dz visc d/dz up[n-1/2]
   call cpu_clock_begin(id_clock_vertvisc)
-  call enable_averaging(dt, Time_local, CS%diag)
-  call set_viscous_ML(up, vp, h_av, tv, forces, visc, US%T_to_s*dt_pred, G, GV, US, &
+  call enable_averages(dt, Time_local, CS%diag)
+  call set_viscous_ML(up, vp, h_av, tv, forces, visc, dt_pred, G, GV, US, &
                       CS%set_visc_CSp)
   call disable_averaging(CS%diag)
-  call vertvisc_coef(up, vp, h_av, forces, visc, US%T_to_s*dt_pred, G, GV, US, &
+  call vertvisc_coef(up, vp, h_av, forces, visc, dt_pred, G, GV, US, &
                      CS%vertvisc_CSp, CS%OBC)
-  call vertvisc(up, vp, h_av, forces, visc, US%T_to_s*dt_pred, CS%OBC, CS%ADp, CS%CDp, &
+  call vertvisc(up, vp, h_av, forces, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, US, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
   call pass_vector(up, vp, G%Domain, clock=id_clock_pass)
@@ -355,7 +352,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! uh = up[n-1/2] * h[n-1/2]
 ! h_av = h + dt div . uh
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(up, vp, h_in, hp, uh, vh, dt_in_T, G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
+  call continuity(up, vp, h_in, hp, uh, vh, dt, G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call pass_var(hp, G%Domain, clock=id_clock_pass)
   call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
@@ -377,20 +374,20 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
     call open_boundary_zero_normal_flow(CS%OBC, G, CS%CAu, CS%CAv)
   endif
 
-! call enable_averaging(dt,Time_local, CS%diag)  ?????????????????????/
+! call enable_averages(dt, Time_local, CS%diag)  ?????????????????????/
 
 ! up* = u[n] + (1+gamma) * dt * ( PFu + CAu )  Extrapolated for damping
 ! u*[n+1] = u[n] + dt * ( PFu + CAu )
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    up(I,j,k) = G%mask2dCu(I,j) * (u_in(I,j,k) + dt_in_T * (1.+CS%begw) * &
+    up(I,j,k) = G%mask2dCu(I,j) * (u_in(I,j,k) + dt * (1.+CS%begw) * &
             ((CS%PFu(I,j,k) + CS%CAu(I,j,k)) + CS%diffu(I,j,k)))
-    u_in(I,j,k) = G%mask2dCu(I,j) * (u_in(I,j,k) +  dt_in_T * &
+    u_in(I,j,k) = G%mask2dCu(I,j) * (u_in(I,j,k) +  dt * &
             ((CS%PFu(I,j,k) + CS%CAu(I,j,k)) + CS%diffu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    vp(i,J,k) = G%mask2dCv(i,J) * (v_in(i,J,k) + dt_in_T * (1.+CS%begw) * &
+    vp(i,J,k) = G%mask2dCv(i,J) * (v_in(i,J,k) + dt * (1.+CS%begw) * &
             ((CS%PFv(i,J,k) + CS%CAv(i,J,k)) + CS%diffv(i,J,k)))
-    v_in(i,J,k) = G%mask2dCv(i,J) * (v_in(i,J,k) + dt_in_T * &
+    v_in(i,J,k) = G%mask2dCv(i,J) * (v_in(i,J,k) + dt * &
             ((CS%PFv(i,J,k) + CS%CAv(i,J,k)) + CS%diffv(i,J,k)))
   enddo ; enddo ; enddo
 
@@ -412,7 +409,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! uh = up[n] * h[n]  (up[n] might be extrapolated to damp GWs)
 ! h[n+1] = h[n] + dt div . uh
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(up, vp, h_in, h_in, uh, vh, dt_in_T, G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
+  call continuity(up, vp, h_in, h_in, uh, vh, dt, G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call pass_var(h_in, G%Domain, clock=id_clock_pass)
   call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
@@ -420,10 +417,10 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! Accumulate mass flux for tracer transport
   do k=1,nz
     do j=js-2,je+2 ; do I=Isq-2,Ieq+2
-      uhtr(I,j,k) = uhtr(I,j,k) + dt_in_T*uh(I,j,k)
+      uhtr(I,j,k) = uhtr(I,j,k) + dt*uh(I,j,k)
     enddo ; enddo
     do J=Jsq-2,Jeq+2 ; do i=is-2,ie+2
-      vhtr(i,J,k) = vhtr(i,J,k) + dt_in_T*vh(i,J,k)
+      vhtr(i,J,k) = vhtr(i,J,k) + dt*vh(i,J,k)
     enddo ; enddo
   enddo
 

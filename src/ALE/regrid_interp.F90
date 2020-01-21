@@ -30,6 +30,9 @@ type, public :: interp_CS_type ; private
   !> Indicate whether high-order boundary extrapolation should be used within
   !! boundary cells
   logical :: boundary_extrapolation
+
+   !> If true use older, less acccurate expressions.
+  logical :: answers_2018 = .true.
 end type interp_CS_type
 
 public regridding_set_ppolys, interpolate_grid
@@ -112,7 +115,7 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
     case ( INTERPOLATION_P1M_H4 )
       degree = DEGREE_1
       if ( n0 >= 4 ) then
-        call edge_values_explicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge )
+        call edge_values_explicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge, answers_2018=CS%answers_2018 )
       else
         call edge_values_explicit_h2( n0, h0, densities, ppoly0_E, h_neglect_edge )
       endif
@@ -124,7 +127,7 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
     case ( INTERPOLATION_P1M_IH4 )
       degree = DEGREE_1
       if ( n0 >= 4 ) then
-        call edge_values_implicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge )
+        call edge_values_implicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge, answers_2018=CS%answers_2018 )
       else
         call edge_values_explicit_h2( n0, h0, densities, ppoly0_E, h_neglect_edge )
       endif
@@ -143,7 +146,7 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
     case ( INTERPOLATION_PPM_H4 )
       if ( n0 >= 4 ) then
         degree = DEGREE_2
-        call edge_values_explicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge )
+        call edge_values_explicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge, answers_2018=CS%answers_2018 )
         call PPM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect )
         if (extrapolate) then
           call PPM_boundary_extrapolation( n0, h0, densities, ppoly0_E, &
@@ -161,7 +164,7 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
     case ( INTERPOLATION_PPM_IH4 )
       if ( n0 >= 4 ) then
         degree = DEGREE_2
-        call edge_values_implicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge )
+        call edge_values_implicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge, answers_2018=CS%answers_2018 )
         call PPM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect )
         if (extrapolate) then
           call PPM_boundary_extrapolation( n0, h0, densities, ppoly0_E, &
@@ -179,8 +182,8 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
     case ( INTERPOLATION_P3M_IH4IH3 )
       if ( n0 >= 4 ) then
         degree = DEGREE_3
-        call edge_values_implicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge )
-        call edge_slopes_implicit_h3( n0, h0, densities, ppoly0_S, h_neglect )
+        call edge_values_implicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge, answers_2018=CS%answers_2018 )
+        call edge_slopes_implicit_h3( n0, h0, densities, ppoly0_S, h_neglect, answers_2018=CS%answers_2018 )
         call P3M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_S, &
                                 ppoly0_coefs, h_neglect )
         if (extrapolate) then
@@ -199,8 +202,8 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
     case ( INTERPOLATION_P3M_IH6IH5 )
       if ( n0 >= 6 ) then
         degree = DEGREE_3
-        call edge_values_implicit_h6( n0, h0, densities, ppoly0_E, h_neglect_edge )
-        call edge_slopes_implicit_h5( n0, h0, densities, ppoly0_S, h_neglect )
+        call edge_values_implicit_h6( n0, h0, densities, ppoly0_E, h_neglect_edge, answers_2018=CS%answers_2018 )
+        call edge_slopes_implicit_h5( n0, h0, densities, ppoly0_S, h_neglect, answers_2018=CS%answers_2018 )
         call P3M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_S, &
                                 ppoly0_coefs, h_neglect )
         if (extrapolate) then
@@ -219,8 +222,8 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
     case ( INTERPOLATION_PQM_IH4IH3 )
       if ( n0 >= 4 ) then
         degree = DEGREE_4
-        call edge_values_implicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge )
-        call edge_slopes_implicit_h3( n0, h0, densities, ppoly0_S, h_neglect )
+        call edge_values_implicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge, answers_2018=CS%answers_2018 )
+        call edge_slopes_implicit_h3( n0, h0, densities, ppoly0_S, h_neglect, answers_2018=CS%answers_2018 )
         call PQM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_S, &
                                  ppoly0_coefs, h_neglect )
         if (extrapolate) then
@@ -239,8 +242,8 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
     case ( INTERPOLATION_PQM_IH6IH5 )
       if ( n0 >= 6 ) then
         degree = DEGREE_4
-        call edge_values_implicit_h6( n0, h0, densities, ppoly0_E, h_neglect_edge )
-        call edge_slopes_implicit_h5( n0, h0, densities, ppoly0_S, h_neglect )
+        call edge_values_implicit_h6( n0, h0, densities, ppoly0_E, h_neglect_edge, answers_2018=CS%answers_2018 )
+        call edge_slopes_implicit_h5( n0, h0, densities, ppoly0_S, h_neglect, answers_2018=CS%answers_2018 )
         call PQM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_S, &
                                  ppoly0_coefs, h_neglect )
         if (extrapolate) then
@@ -264,7 +267,7 @@ end subroutine regridding_set_ppolys
 !! 'ppoly0' (possibly discontinuous), the coordinates of the new grid 'grid1'
 !! are determined by finding the corresponding target interface densities.
 subroutine interpolate_grid( n0, h0, x0, ppoly0_E, ppoly0_coefs, &
-                             target_values, degree, n1, h1, x1 )
+                             target_values, degree, n1, h1, x1, answers_2018 )
   integer,            intent(in)    :: n0            !< Number of points on source grid
   real, dimension(:), intent(in)    :: h0            !< Thicknesses of source grid cells
   real, dimension(:), intent(in)    :: x0            !< Source interface positions
@@ -275,7 +278,10 @@ subroutine interpolate_grid( n0, h0, x0, ppoly0_E, ppoly0_coefs, &
   integer,            intent(in)    :: n1            !< Number of points on target grid
   real, dimension(:), intent(inout) :: h1            !< Thicknesses of target grid cells
   real, dimension(:), intent(inout) :: x1            !< Target interface positions
+  logical,  optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+
   ! Local variables
+  logical   :: use_2018_answers  ! If true use older, less acccurate expressions.
   integer        :: k ! loop index
   real           :: t ! current interface target density
 
@@ -287,7 +293,8 @@ subroutine interpolate_grid( n0, h0, x0, ppoly0_E, ppoly0_coefs, &
   ! Find coordinates for interior target values
   do k = 2,n1
     t = target_values(k)
-    x1(k) = get_polynomial_coordinate ( n0, h0, x0, ppoly0_E, ppoly0_coefs, t, degree )
+    x1(k) = get_polynomial_coordinate ( n0, h0, x0, ppoly0_E, ppoly0_coefs, t, degree, &
+                                        answers_2018=answers_2018 )
     h1(k-1) = x1(k) - x1(k-1)
   enddo
   h1(n1) = x1(n1+1) - x1(n1)
@@ -320,7 +327,7 @@ subroutine build_and_interpolate_grid(CS, densities, n0, h0, x0, target_values, 
   call regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, ppoly0_C, &
        degree, h_neglect, h_neglect_edge)
   call interpolate_grid(n0, h0, x0, ppoly0_E, ppoly0_C, target_values, degree, &
-       n1, h1, x1)
+       n1, h1, x1, answers_2018=CS%answers_2018)
 end subroutine build_and_interpolate_grid
 
 !> Given a target value, find corresponding coordinate for given polynomial
@@ -340,7 +347,7 @@ end subroutine build_and_interpolate_grid
 !! It is assumed that the number of cells defining 'grid' and 'ppoly' are the
 !! same.
 function get_polynomial_coordinate( N, h, x_g, ppoly_E, ppoly_coefs, &
-                                    target_value, degree ) result ( x_tgt )
+                                    target_value, degree, answers_2018 ) result ( x_tgt )
   ! Arguments
   integer,              intent(in) :: N            !< Number of grid cells
   real, dimension(:),   intent(in) :: h            !< Grid cell thicknesses
@@ -349,6 +356,7 @@ function get_polynomial_coordinate( N, h, x_g, ppoly_E, ppoly_coefs, &
   real, dimension(:,:), intent(in) :: ppoly_coefs  !< Coefficients of interpolating polynomials
   real,                 intent(in) :: target_value !< Target value to find position for
   integer,              intent(in) :: degree       !< Degree of the interpolating polynomials
+  logical,    optional, intent(in) :: answers_2018 !< If true use older, less acccurate expressions.
   real :: x_tgt !< The position of x_g at which target_value is found.
   ! Local variables
   integer                     :: i, k        ! loop indices
@@ -363,9 +371,11 @@ function get_polynomial_coordinate( N, h, x_g, ppoly_E, ppoly_coefs, &
   real                        :: eps         ! offset used to get away from
                                              ! boundaries
   real                        :: grad        ! gradient during N-R iterations
+  logical   :: use_2018_answers  ! If true use older, less acccurate expressions.
 
   eps = NR_OFFSET
   k_found = -1
+  use_2018_answers = .true. ; if (present(answers_2018)) use_2018_answers = answers_2018
 
   ! If the target value is outside the range of all values, we
   ! force the target coordinate to be equal to the lowest or
@@ -441,10 +451,14 @@ function get_polynomial_coordinate( N, h, x_g, ppoly_E, ppoly_coefs, &
       exit
     endif
 
-    numerator = a(1) + a(2)*xi0 + a(3)*xi0*xi0 + a(4)*xi0*xi0*xi0 + &
-                a(5)*xi0*xi0*xi0*xi0 - target_value
-
-    denominator = a(2) + 2*a(3)*xi0 + 3*a(4)*xi0*xi0 + 4*a(5)*xi0*xi0*xi0
+    if (use_2018_answers) then
+      numerator = a(1) + a(2)*xi0 + a(3)*xi0*xi0 + a(4)*xi0*xi0*xi0 + &
+                  a(5)*xi0*xi0*xi0*xi0 - target_value
+      denominator = a(2) + 2*a(3)*xi0 + 3*a(4)*xi0*xi0 + 4*a(5)*xi0*xi0*xi0
+    else  ! These expressions are mathematicaly equivalent but more accurate.
+      numerator = (a(1) - target_value) + xi0*(a(2) + xi0*(a(3) + xi0*(a(4) + a(5)*xi0)))
+      denominator = a(2) + xi0*(2.*a(3) + xi0*(3.*a(4) + 4.*a(5)*xi0))
+    endif
 
     delta = -numerator / denominator
 
@@ -463,7 +477,11 @@ function get_polynomial_coordinate( N, h, x_g, ppoly_E, ppoly_coefs, &
 
     if ( xi0 > 1.0 ) then
       xi0 = 1.0
-      grad = a(2) + 2*a(3) + 3*a(4) + 4*a(5)
+      if (use_2018_answers) then
+        grad = a(2) + 2*a(3) + 3*a(4) + 4*a(5)
+      else  ! These expressions are mathematicaly equivalent but more accurate.
+        grad = a(2) + (2.*a(3) + (3.*a(4) + 4.*a(5)))
+      endif
       if ( grad == 0.0 ) xi0 = xi0 - eps
     endif
 
