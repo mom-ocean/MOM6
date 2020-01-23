@@ -426,6 +426,10 @@ KHTH = 1.0                      !   [m2 s-1] default = 0.0
                                 ! The background horizontal thickness diffusivity.
 KHTH_MAX = 900.0                !   [m2 s-1] default = 0.0
                                 ! The maximum horizontal thickness diffusivity.
+STANLEY_DET_COEFF = 0.5         !   [nondim] default = -1.0
+                                ! The coefficient correlating SGS temperature variance with the mean temperature
+                                ! gradient in the deterministic part of the Stanley parameterization. Negative
+                                ! values disable the scheme.
 
 ! === module MOM_mixed_layer_restrat ===
 FOX_KEMPER_ML_RESTRAT_COEF = 5.0 !   [nondim] default = 0.0
