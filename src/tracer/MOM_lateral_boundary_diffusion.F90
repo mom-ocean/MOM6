@@ -202,16 +202,14 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       if (tracer%id_lbd_bulk_dfx>0) call post_data(tracer%id_lbd_bulk_dfx, uFlx_bulk*Idt, CS%diag)
       if (tracer%id_lbd_bulk_dfy>0) call post_data(tracer%id_lbd_bulk_dfy, vFlx_bulk*Idt, CS%diag)
 
-      ! TODO: this is where we would filter vFlx and uFlux to get rid of checkerboard noise
-
     ! Method #2
     elseif (CS%method == 2) then
       do j=G%jsc,G%jec
         do i=G%isc-1,G%iec
           if (G%mask2dCu(I,j)>0.) then
             call fluxes_layer_method(SURFACE, GV%ke, CS%deg, h(I,j,:), h(I+1,j,:), hbl(I,j), hbl(I+1,j), &
-              tracer%t(I,j,:), tracer%t(I+1,j,:), ppoly0_coefs(I,j,:,:), ppoly0_coefs(I+1,j,:,:), ppoly0_E(I,j,:,:), &
-              ppoly0_E(I+1,j,:,:), remap_method, Coef_x(I,j), uFlx(I,j,:))
+              G%areaT(I,j), G%areaT(I+1,j), tracer%t(I,j,:), tracer%t(I+1,j,:), ppoly0_coefs(I,j,:,:), &
+              ppoly0_coefs(I+1,j,:,:), ppoly0_E(I,j,:,:), ppoly0_E(I+1,j,:,:), remap_method, Coef_x(I,j), uFlx(I,j,:))
           endif
         enddo
       enddo
@@ -219,8 +217,8 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
         do i=G%isc,G%iec
           if (G%mask2dCv(i,J)>0.) then
             call fluxes_layer_method(SURFACE, GV%ke, CS%deg, h(i,J,:), h(i,J+1,:), hbl(i,J), hbl(i,J+1), &
-              tracer%t(i,J,:), tracer%t(i,J+1,:), ppoly0_coefs(i,J,:,:), ppoly0_coefs(i,J+1,:,:), ppoly0_E(i,J,:,:), &
-              ppoly0_E(i,J+1,:,:), remap_method, Coef_y(i,J), vFlx(i,J,:))
+              G%areaT(i,J), G%areaT(i,J+1), tracer%t(i,J,:), tracer%t(i,J+1,:), ppoly0_coefs(i,J,:,:), &
+              ppoly0_coefs(i,J+1,:,:), ppoly0_E(i,J,:,:), ppoly0_E(i,J+1,:,:), remap_method, Coef_y(i,J), vFlx(i,J,:))
           endif
         enddo
       enddo
@@ -420,8 +418,8 @@ end subroutine boundary_k_range
 
 !> Calculate the lateral boundary diffusive fluxes using the layer by layer method.
 !! See \ref section_method2
-subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, ppoly0_coefs_L, &
-                                   ppoly0_coefs_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
+subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L, area_R, phi_L, phi_R, &
+                              ppoly0_coefs_L, ppoly0_coefs_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
 
   integer,                   intent(in   )       :: boundary !< Which boundary layer SURFACE or BOTTOM  [nondim]
   integer,                   intent(in   )       :: nk       !< Number of layers                        [nondim]
@@ -432,6 +430,8 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L,
                                                                        !! layer (left)                  [m]
   real,                      intent(in   )       :: hbl_R    !< Thickness of the boundary boundary
                                                              !! layer (right)                           [m]
+  real,                      intent(in   )       :: area_L   !< Area of the horizontal grid (left)      [m^2]
+  real,                      intent(in   )       :: area_R   !< Area of the horizontal grid (right)     [m^2]
   real, dimension(nk),       intent(in   )       :: phi_L    !< Tracer values (left)                    [conc]
   real, dimension(nk),       intent(in   )       :: phi_R    !< Tracer values (right)                   [conc]
   real, dimension(nk,deg+1), intent(in   )       :: ppoly0_coefs_L !< Tracer reconstruction (left)      [conc]
@@ -452,7 +452,8 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L,
   real                :: inv_heff             ! Inverse of the harmonic mean of layer thicknesses [m^[-1]
   real                :: phi_L_avg, phi_R_avg ! Bulk, thickness-weighted tracer averages (left and right column)
                                               !                                                   [conc m^-3 ]
-  real    :: htot                 ! Total column thickness [m]
+  real    :: htot    ! Total column thickness [m]
+  real    :: F_max   ! The maximum amount of flux that can leave a cell
   integer :: k, k_bot_min, k_top_max
   integer :: k_top_L, k_bot_L, k_top_u
   integer :: k_top_R, k_bot_R, k_bot_u
@@ -491,9 +492,32 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L,
     ! tracer flux where the minimum BLD intersets layer
     ! GMM, khtr_avg should be computed once khtr is 3D
     F_layer(k_bot_min) = -(heff * khtr_u) * (phi_R_avg - phi_L_avg)
+
+    ! limit the flux to 0.2 of the tracer *gradient*
+    ! Why 0.2?
+    !  t=0         t=inf
+    !   0           .2
+    ! 0 1 0       .2.2.2
+    !   0           .2
+
+    F_max = -0.2 * ((area_R*(phi_R_avg*h_work_R))-(area_L*(phi_L_avg*h_work_L)))
+    ! Apply flux limiter calculated above
+    if (F_max >= 0.) then
+      F_layer(k_bot_min) = MIN(F_layer(k_bot_min),F_max)
+    else
+      F_layer(k_bot_min) = MAX(F_layer(k_bot_min),F_max)
+    endif
+
     do k = k_bot_min-1,1,-1
       heff = harmonic_mean(h_L(k), h_R(k))
       F_layer(k) = -(heff * khtr_u) * (phi_R(k) - phi_L(k))
+      F_max = -0.2 * ((area_R*(phi_R(k)*h_R(k)))-(area_L*(phi_L(k)*h_R(k))))
+      ! Apply flux limiter calculated above
+      if (F_max >= 0.) then
+        F_layer(k) = MIN(F_layer(k),F_max)
+      else
+        F_layer(k) = MAX(F_layer(k),F_max)
+      endif
     enddo
   endif
 
@@ -518,9 +542,25 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L,
 
     ! tracer flux where the minimum BLD intersets layer
     F_layer(k_top_max) = (-heff * khtr_u) * (phi_R_avg - phi_L_avg)
+
+    F_max = -0.2 * ((area_R*(phi_R_avg*h_work_R))-(area_L*(phi_L_avg*h_work_L)))
+    ! Apply flux limiter calculated above
+    if (F_max >= 0.) then
+      F_layer(k_top_max) = MIN(F_layer(k_top_max),F_max)
+    else
+      F_layer(k_top_max) = MAX(F_layer(k_top_max),F_max)
+    endif
+
     do k = k_top_max+1,nk
       heff = harmonic_mean(h_L(k), h_R(k))
       F_layer(k) = -(heff * khtr_u) * (phi_R(k) - phi_L(k))
+      F_max = -0.2 * ((area_R*(phi_R(k)*h_R(k)))-(area_L*(phi_L(k)*h_R(k))))
+      ! Apply flux limiter calculated above
+      if (F_max >= 0.) then
+        F_layer(k) = MIN(F_layer(k),F_max)
+      else
+        F_layer(k) = MAX(F_layer(k),F_max)
+      endif
     enddo
   endif
 
@@ -654,42 +694,41 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
 
   if ( SUM(h_means) == 0. ) then
     return
+ ! Decompose the bulk flux onto the individual layers
   else
     ! Initialize remaining thickness
     inv_heff = 1./SUM(h_means)
-    ! Decompose the bulk flux onto the individual layers
     do k=1,nk
       if (h_means(k) > 0.) then
-        ! Limit the tracer flux so that the donor cell with positive concentration can't go negative
-        ! If a tracer can go negative, it is unclear what the limiter should be. BOB ALISTAIR?!
         hfrac = h_means(k)*inv_heff
         F_layer(k) = F_bulk * hfrac
-        if ( SIGN(1.,F_bulk) == SIGN(1., F_layer(k))) then
-          ! limit the flux to 0.25 of the total tracer in the cell
-          if (F_bulk < 0. .and. phi_R(k) >= 0.) then
-            F_max = 0.25 * (area_R*(phi_R(k)*h_R(k)))
-          elseif (F_bulk > 0. .and. phi_L(k) >= 0.) then
-            F_max = 0.25 * (area_L*(phi_L(k)*h_L(k)))
-          else ! The above quantities are always positive, so we can use F_max < -1 to see if we don't need to limit
-            F_max = -1.
-          endif
+        ! limit the flux to 0.2 of the tracer *gradient*
+        ! Why 0.2?
+        !  t=0         t=inf
+        !   0           .2
+        ! 0 1 0       .2.2.2
+        !   0           .2
+        !
+        F_max = -0.2 * ((area_R*(phi_R(k)*h_R(k)))-(area_L*(phi_L(k)*h_R(k))))
+
+        ! check if bulk flux (or F_layer) and F_max have same direction
+        if ( SIGN(1.,F_bulk) == SIGN(1., F_max)) then
           ! Distribute bulk flux onto layers
           if ( ((boundary == SURFACE) .and. (k == k_min)) .or. ((boundary == BOTTOM) .and. (k == nk)) ) then
-            F_layer(k) = F_bulk_remain
+            F_layer(k) = F_bulk_remain ! GMM, are not using F_bulk_remain for now. Should we keep it?
           endif
           F_bulk_remain = F_bulk_remain - F_layer(k)
 
           ! Apply flux limiter calculated above
           if (F_max >= 0.) then
-            if (F_layer(k) > 0.) then
-              limited = F_layer(k) > F_max
-              F_layer(k) = MIN(F_layer(k),F_max)
-            elseif (F_layer(k) < 0.) then
-              limited = F_layer(k) < -F_max
-              F_layer(k) = MAX(F_layer(k),-F_max) ! Note negative to make the sign of flux consistent
-            endif
+            limited = F_layer(k) > F_max
+            F_layer(k) = MIN(F_layer(k),F_max)
+          else
+            limited = F_layer(k) < F_max
+            F_layer(k) = MAX(F_layer(k),F_max)
           endif
 
+          ! GMM, again we are not using F_limit. Should we delete it?
           if (PRESENT(F_limit)) then
             if (limited) then
               F_limit(k) = F_layer(k) - F_max
@@ -698,6 +737,7 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
             endif
           endif
         else
+          ! do not apply a flux on this layer
           F_bulk_remain = F_bulk_remain - F_layer(k)
           F_layer(k) = 0.
         endif
@@ -931,8 +971,8 @@ logical function near_boundary_unit_tests( verbose )
   ppoly0_E_L(2,1) = 0.; ppoly0_E_L(2,2) = 0.
   ppoly0_E_R(1,1) = 0.; ppoly0_E_R(1,2) = 1.
   ppoly0_E_R(2,1) = 1.; ppoly0_E_R(2,2) = 3.
-  call fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L, area_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
-                                    ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer)
+  call fluxes_layer_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L, area_R, phi_L, phi_R, phi_pp_L, &
+                                    phi_pp_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
   near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-2.,-2./) )
 
   ! unit tests for layer by layer method
@@ -949,8 +989,8 @@ logical function near_boundary_unit_tests( verbose )
   ppoly0_E_R(1,1) = 1.; ppoly0_E_R(1,2) = 1.
   ppoly0_E_R(2,1) = 1.; ppoly0_E_R(2,2) = 1.
   khtr_u = 1.
-  call fluxes_layer_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
-                                    ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
+  call fluxes_layer_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L, area_R, phi_L, phi_R, phi_pp_L, &
+                                    phi_pp_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
   near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-7.5,0.0/) )
 
   test_name = 'Different hbl and different column thicknesses (linear profile right)'
@@ -967,8 +1007,8 @@ logical function near_boundary_unit_tests( verbose )
   ppoly0_E_R(1,1) = 0.; ppoly0_E_R(1,2) = 2.
   ppoly0_E_R(2,1) = 2.; ppoly0_E_R(2,2) = 4.
   khtr_u = 1.
-  call fluxes_layer_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
-                                    ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
+  call fluxes_layer_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L, area_R, phi_L, phi_R, phi_pp_L, &
+                                    phi_pp_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
   near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-3.75,0.0/) )
 end function near_boundary_unit_tests
 
