@@ -2069,6 +2069,13 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     if (CS%id_bbl_v>0) then
       allocate(CS%bbl_v(isd:ied,JsdB:JedB)) ; CS%bbl_v(:,:) = 0.0
     endif
+    if (CS%BBL_use_tidal_bg) then
+      allocate(CS%tideamp(isd:ied,jsd:jed)) ; CS%tideamp(:,:) = 0.0
+      filename = trim(CS%inputdir) // trim(tideamp_file)
+      call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
+      call MOM_read_data(filename, 'tideamp', CS%tideamp, G%domain, timelevel=1, scale=US%m_to_Z*US%T_to_s)
+      call pass_var(CS%tideamp,G%domain)
+    endif
   endif
   if (CS%Channel_drag) then
     allocate(visc%Ray_u(IsdB:IedB,jsd:jed,nz)) ; visc%Ray_u(:,:,:) = 0.0
@@ -2091,14 +2098,6 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
        diag%axesCu1, Time, 'Number of layers in viscous mixed layer at u points', 'm')
     CS%id_nkml_visc_v = register_diag_field('ocean_model', 'nkml_visc_v', &
        diag%axesCv1, Time, 'Number of layers in viscous mixed layer at v points', 'm')
-  endif
-
-  if (CS%BBL_use_tidal_bg) then
-    allocate(CS%tideamp(isd:ied,jsd:jed)) ; CS%tideamp(:,:) = 0.0
-    filename = trim(CS%inputdir) // trim(tideamp_file)
-    call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
-    call MOM_read_data(filename, 'tideamp', CS%tideamp, G%domain, timelevel=1, scale=US%m_to_Z*US%T_to_s)
-    call pass_var(CS%tideamp,G%domain)
   endif
 
   call register_restart_field_as_obsolete('Kd_turb','Kd_shear', restart_CS)
