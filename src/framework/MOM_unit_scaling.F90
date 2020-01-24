@@ -16,8 +16,10 @@ type, public :: unit_scale_type
   real :: Z_to_m !< A constant that translates distances in the units of depth to meters.
   real :: m_to_L !< A constant that translates lengths in meters to the units of horizontal lengths.
   real :: L_to_m !< A constant that translates lengths in the units of horizontal lengths to meters.
-  real :: s_to_T !< A constant that time intervals in seconds to the units of time.
-  real :: T_to_s !< A constant that the units of time to seconds.
+  real :: s_to_T !< A constant that translates time intervals in seconds to the units of time.
+  real :: T_to_s !< A constant that translates the units of time to seconds.
+  real :: R_to_kg_m3 !< A constant that translates the units of density to kilograms per meter cubed.
+  real :: kg_m3_to_R !< A constant that translates kilograms per meter cubed to the units of density.
 
   ! These are useful combinations of the fundamental scale conversion factors above.
   real :: Z_to_L !< Convert vertical distances to lateral lengths
@@ -32,6 +34,7 @@ type, public :: unit_scale_type
   real :: m_to_Z_restart = 0.0 !< A copy of the m_to_Z that is used in restart files.
   real :: m_to_L_restart = 0.0 !< A copy of the m_to_L that is used in restart files.
   real :: s_to_T_restart = 0.0 !< A copy of the s_to_T that is used in restart files.
+  real :: kg_m3_to_R_restart = 0.0 !< A copy of the kg_m3_to_R that is used in restart files.
 end type unit_scale_type
 
 contains
@@ -44,8 +47,8 @@ subroutine unit_scaling_init( param_file, US )
   ! This routine initializes a unit_scale_type structure (US).
 
   ! Local variables
-  integer :: Z_power, L_power, T_power
-  real    :: Z_rescale_factor, L_rescale_factor, T_rescale_factor
+  integer :: Z_power, L_power, T_power, R_power
+  real    :: Z_rescale_factor, L_rescale_factor, T_rescale_factor, R_rescale_factor
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=16) :: mdl = "MOM_unit_scaling"
@@ -69,12 +72,18 @@ subroutine unit_scaling_init( param_file, US )
                  "An integer power of 2 that is used to rescale the model's "//&
                  "intenal units of time.  Valid values range from -300 to 300.", &
                  units="nondim", default=0, debuggingParam=.true.)
+  call get_param(param_file, mdl, "R_RESCALE_POWER", R_power, &
+                 "An integer power of 2 that is used to rescale the model's "//&
+                 "intenal units of density.  Valid values range from -300 to 300.", &
+                 units="nondim", default=0, debuggingParam=.true.)
   if (abs(Z_power) > 300) call MOM_error(FATAL, "unit_scaling_init: "//&
                  "Z_RESCALE_POWER is outside of the valid range of -300 to 300.")
   if (abs(L_power) > 300) call MOM_error(FATAL, "unit_scaling_init: "//&
                  "L_RESCALE_POWER is outside of the valid range of -300 to 300.")
   if (abs(T_power) > 300) call MOM_error(FATAL, "unit_scaling_init: "//&
                  "T_RESCALE_POWER is outside of the valid range of -300 to 300.")
+  if (abs(R_power) > 300) call MOM_error(FATAL, "unit_scaling_init: "//&
+                 "R_RESCALE_POWER is outside of the valid range of -300 to 300.")
 
   Z_rescale_factor = 1.0
   if (Z_power /= 0) Z_rescale_factor = 2.0**Z_power
@@ -90,6 +99,11 @@ subroutine unit_scaling_init( param_file, US )
   if (T_power /= 0) T_rescale_factor = 2.0**T_power
   US%T_to_s = 1.0 * T_rescale_factor
   US%s_to_T = 1.0 / T_rescale_factor
+
+  R_rescale_factor = 1.0
+  if (R_power /= 0) R_rescale_factor = 2.0**R_power
+  US%R_to_kg_m3 = 1.0 * R_rescale_factor
+  US%kg_m3_to_R = 1.0 / R_rescale_factor
 
   ! These are useful combinations of the fundamental scale conversion factors set above.
   US%Z_to_L = US%Z_to_m * US%m_to_L
@@ -111,6 +125,7 @@ subroutine fix_restart_unit_scaling(US)
   US%m_to_Z_restart = US%m_to_Z
   US%m_to_L_restart = US%m_to_L
   US%s_to_T_restart = US%s_to_T
+  US%kg_m3_to_R_restart = US%kg_m3_to_R
 
 end subroutine fix_restart_unit_scaling
 

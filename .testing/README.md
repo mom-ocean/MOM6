@@ -56,7 +56,7 @@ Model state is currently defined by the `ocean.stats` output file, which
 reports the total energy (per unit mass) at machine precision alongside similar
 global metrics, such as mass or mean sea level, at lower precision.
 
-Clhecksums for every available diagnostic are also compared and the Makefile
+Checksums for every available diagnostic are also compared and the Makefile
 will report any differences, but such differences are not yet considered a fail
 condition.
 
@@ -138,7 +138,7 @@ This will run through the following tests:
 - `test.restarts`: Resubmission by restarts
 - `test.repros`: Optimized (REPRO) and unoptimized (DEBUG) compilation
 - `test.nans`: NaN initialization of allocated arrays
-- `test.dims`: Dimensional scaling (length, time, thichkness, depth)
+- `test.dims`: Dimensional scaling (length, time, thickness, depth)
 
 To enable the regression tests, use `DO_REGRESSION_TEST=true`.
 ```
@@ -159,10 +159,13 @@ fail if the answers differ from this build.
 
 The following test configurations (TCs) are supported:
 
-- TC0: Unit testing of various model components, based on `unit_tests`
-- TC1: A low-resolution version of the `benchmark` configuration
-- TC2: An ALE configuration based on TC1
-- TC3: An open-boundary condition (OBC) test based on `circle_obcs`
+- tc0: Unit testing of various model components, based on `unit_tests`
+- tc1: A low-resolution version of the `benchmark` configuration
+  - tc1.a: Use the un-split mode with Runge-Kutta 3 time integration
+  - tc1.b: Use the un-split mode with Runge-Kutta 2 time integration
+- tc2: An ALE configuration based on tc1 with tides
+  - tc2.a: Use sigma, PPM_H4 and no tides
+- tc3: An open-boundary condition (OBC) test based on `circle_obcs`
 
 
 ## Code coverage
@@ -170,7 +173,7 @@ The following test configurations (TCs) are supported:
 Code coverage reports the lines of code which have been tested, and can
 explicitly demonstrate when a particular operation is untested.
 
-Coverage is measued using `gcov` and is reported for TCs using the `symmetric`
+Coverage is measured using `gcov` and is reported for TCs using the `symmetric`
 executable.
 
 Coverage reporting is optionally sent to the `codecov.io` site.

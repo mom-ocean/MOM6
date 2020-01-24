@@ -410,7 +410,8 @@ contains
     real,          optional, intent(in) :: evap_CFL_limit !< Limits how much water can be fluxed out of
                                                 !! the top layer Stored previously in diabatic CS.
     real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which fluxes
-                                                !!  can be applied Stored previously in diabatic CS.
+                                                !!  can be applied [H ~> m or kg m-2]
+                                                !   Stored previously in diabatic CS.
     ! The arguments to this subroutine are redundant in that
     !     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
 
@@ -457,7 +458,8 @@ contains
           call g_tracer_get_pointer(g_tracer,g_tracer_name,'trunoff',trunoff_array)
           call g_tracer_get_pointer(g_tracer,g_tracer_name,'runoff_tracer_flux',runoff_tracer_flux_array)
           !nnz: Why is fluxes%river = 0?
-          runoff_tracer_flux_array = trunoff_array * fluxes%lrunoff
+          runoff_tracer_flux_array(:,:) = trunoff_array(:,:) * &
+                   G%US%R_to_kg_m3*G%US%Z_to_m*G%US%s_to_T*fluxes%lrunoff(:,:)
           stf_array = stf_array + runoff_tracer_flux_array
        endif
 
@@ -492,9 +494,10 @@ contains
     !
 
     call generic_tracer_source(tv%T,tv%S,rho_dzt,dzt,Hml,G%isd,G%jsd,1,dt,&
-         G%US%L_to_m**2*G%areaT, get_diag_time_end(CS%diag), &
+         G%US%L_to_m**2*G%areaT(:,:), get_diag_time_end(CS%diag), &
          optics%nbands, optics%max_wavelength_band, optics%sw_pen_band, optics%opacity_band, &
-         internal_heat=tv%internal_heat, frunoff=fluxes%frunoff, sosga=sosga)
+         internal_heat=tv%internal_heat, &
+         frunoff=G%US%R_to_kg_m3*G%US%Z_to_m*G%US%s_to_T*fluxes%frunoff(:,:), sosga=sosga)
 
     ! This uses applyTracerBoundaryFluxesInOut to handle the change in tracer due to freshwater fluxes
     ! usually in ALE mode
@@ -505,8 +508,8 @@ contains
           do k=1,nk ;do j=jsc,jec ; do i=isc,iec
             h_work(i,j,k) = h_old(i,j,k)
           enddo ; enddo ; enddo
-          call applyTracerBoundaryFluxesInOut(G, GV, g_tracer%field(:,:,:,1), dt, fluxes, h_work, &
-              evap_CFL_limit, minimum_forcing_depth)
+          call applyTracerBoundaryFluxesInOut(G, GV, g_tracer%field(:,:,:,1), G%US%s_to_T*dt, &
+                            fluxes, h_work, evap_CFL_limit, minimum_forcing_depth)
         endif
 
          !traverse the linked list till hit NULL
@@ -539,7 +542,6 @@ contains
 #ifdef _USE_MOM6_DIAG
     call g_tracer_set_csdiag(CS%diag)
 #endif
-
 
   end subroutine MOM_generic_tracer_column_physics
 
