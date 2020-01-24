@@ -17,7 +17,7 @@ use MOM_verticalGrid,     only : verticalGrid_type
 use ensemble_manager_mod, only : get_ensemble_id
 use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
 use MOM_string_functions, only : extract_word
-use mpp_mod,              only : mpp_max
+use mpp_mod,              only : mpp_max, mpp_pe, mpp_npes
 use mpp_domains_mod,      only : domain1d, domain2d, domainug, mpp_get_domain_components
 use mpp_domains_mod,      only : mpp_get_domain_npes, mpp_define_io_domain, mpp_get_io_domain, mpp_get_io_domain_layout
 use mpp_domains_mod,      only : CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
@@ -140,7 +140,7 @@ type, public :: vardesc
                                            !! convert from intensive to extensive
 end type vardesc
 
-!> A type for making arrays of pointers to 1-d arrays
+!> A type for making arrays of pointers to real 1-d arrays
 type p1d
   real, dimension(:), pointer :: p => NULL() !< A pointer to a 1d array
 end type p1d
@@ -254,6 +254,8 @@ subroutine create_file(filename, vars, numVariables, threading, register_time, G
   integer :: num_dims ! number of dimensions
   integer :: thread ! indicates whether threading is used
   integer, dimension(4) :: dim_lengths ! variable dimension lengths
+  integer, allocatable :: pelist(:) ! list of pes associated with the file
+  integer :: current_pe
   real :: time
 
   ! determine whether the file will be domain-decomposed or not
@@ -301,9 +303,22 @@ subroutine create_file(filename, vars, numVariables, threading, register_time, G
         call mpp_define_io_domain(domain%mpp_domain, (/1,1/))
     endif
 
-    file_open_successDD=open_file(fileObjDD, filename_temp, trim(nc_mode), Domain%mpp_domain, is_restart=.false.)
+    if (.not. check_if_open(fileObjDD)) & 
+      file_open_successDD=open_file(fileObjDD, filename_temp, trim(nc_mode), Domain%mpp_domain, is_restart=.false.)
   else
-    file_open_successNoDD=open_file(fileObjNoDD, filename_temp, trim(nc_mode), is_restart=.false.)
+    ! get the pes associated with the file.
+    !>\note this is required so that only pe(1) is identified as the root pe to create the file
+    !! Otherwise, multiple pes may try to open the file in write (NC_NOCLOBBER) mode, leading to failure
+    allocate(pelist(mpp_npes()))
+    pelist(:) = 0
+    current_pe = -1
+    do i=1,size(pelist)
+      pelist(i) = i-1
+    enddo
+
+    if (.not. check_if_open(fileObjNoDD)) &
+      file_open_successNoDD=open_file(fileObjNoDD, filename_temp, trim(nc_mode), is_restart=.false., pelist=pelist)
+
   endif
 
   ! allocate the output data variable dimension attributes
@@ -352,13 +367,13 @@ subroutine create_file(filename, vars, numVariables, threading, register_time, G
               call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i,j), j, GV=GV)
             endif
 
-            if (fileObjDD%is_root) &
+            !if (fileObjDD%is_root) &
               call MOM_register_diagnostic_axis(fileObjDD, trim(dim_names(i,j)), dim_lengths(j))
           endif
           ! register the axis attributes and write the axis data to the file
           if (.not.(variable_exists(fileObjDD, trim(axis_data_CS%axis(j)%name)))) then
             if (associated(axis_data_CS%data(j)%p)) then
-              if (fileObjDD%is_root) then
+              !if (fileObjDD%is_root) then
          
                 call register_field(fileObjDD, trim(axis_data_CS%axis(j)%name), &
                                   "double", dimensions=(/trim(axis_data_CS%axis(j)%name)/))
@@ -380,7 +395,7 @@ subroutine create_file(filename, vars, numVariables, threading, register_time, G
                 else
                   call write_data(fileObjDD, trim(axis_data_CS%axis(j)%name), axis_data_CS%data(j)%p)
                 endif
-              endif
+              !endif
             endif
           endif
         endif
@@ -429,14 +444,14 @@ subroutine create_file(filename, vars, numVariables, threading, register_time, G
             if (present(GV)) &
                 call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i,j), j, GV=GV)
 
-            if (fileObjNoDD%is_root) &
+            !if (fileObjNoDD%is_root) &
               call register_axis(fileObjNoDD, trim(dim_names(i,j)), dim_lengths(j))
 
           endif
           ! register the axis attributes and write the axis data to the file
           if (.not.(variable_exists(fileObjNoDD, trim(axis_data_CS%axis(j)%name)))) then
             if (associated(axis_data_CS%data(j)%p)) then
-              if (fileObjNoDD%is_root) then
+              !if (fileObjNoDD%is_root) then
                 call register_field(fileObjNoDD, trim(axis_data_CS%axis(j)%name), &
                                   "double", dimensions=(/trim(axis_data_CS%axis(j)%name)/))
 
@@ -453,7 +468,7 @@ subroutine create_file(filename, vars, numVariables, threading, register_time, G
                 if (lowercase(trim(axis_data_CS%axis(j)%name)) .ne. 'time') then
                   call write_data(fileObjNoDD, trim(axis_data_CS%axis(j)%name), axis_data_CS%data(j)%p)
                 endif
-              endif
+              !endif
             endif
           endif
         endif
@@ -471,6 +486,7 @@ subroutine create_file(filename, vars, numVariables, threading, register_time, G
   deallocate(dim_names)
   deallocate(axis_data_CS%axis)
   deallocate(axis_data_CS%data)
+  if (allocated(pelist)) deallocate(pelist)
   nullify(Domain)
 
 end subroutine create_file
@@ -635,7 +651,7 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, var_desc, 
        call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
       ! write the time value if it larger than the most recent file time
-      if (time_level .gt. file_time+EPSILON(time_level)) then
+      if (time_level-file_time .gt. TINY(time_level)) then
 
         if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
         call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/), edge_lengths=(/1/))
@@ -757,26 +773,27 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
   endif
  
   !register the horizontal diagnostic axis associated with the field
-  !if (fileobj%is_root) then
-    do i=1,ndims
-      call MOM_register_diagnostic_axis(fileobj, trim(dim_names(i)), dim_lengths(i))
-    enddo
-    call get_compute_domain_dimension_indices(fileobj, dim_names(1), x_inds)
-    call get_compute_domain_dimension_indices(fileobj, dim_names(2), y_inds)
-    start(:) = (/x_inds(1),y_inds(1)/)
-    nwrite(1) = x_inds(size(x_inds))-x_inds(1)+1
-    nwrite(2) = y_inds(size(y_inds))-y_inds(1)+1
-  !endif
+  do i=1,ndims
+    call MOM_register_diagnostic_axis(fileobj, trim(dim_names(i)), dim_lengths(i))
+  enddo
+  call get_compute_domain_dimension_indices(fileobj, dim_names(1), x_inds)
+  call get_compute_domain_dimension_indices(fileobj, dim_names(2), y_inds)
+  start(:) = (/x_inds(1),y_inds(1)/)
+  nwrite(1) = x_inds(size(x_inds))-x_inds(1)+1
+  nwrite(2) = y_inds(size(y_inds))-y_inds(1)+1
+
+  !call get_global_io_domain_indices(fileobj, dim_names(1), is, ie)
+  !call get_global_io_domain_indices(fileobj, dim_names(2), js, je)
+  !start(:) = (/is,js/)
+  !nwrite(1) = ie-is+1
+  !nwrite(2) = je-js+1
 
   ! close the file 
   if (check_if_open(fileobj)) call close_file(fileobj)
  
   ! set the start (corner) and nwrite (edge_lengths) values
   !start(:) = 1
- 
-  !start(:) = (/is,js/)
-  !nwrite(:) = shape(data(is:ie,js:je))
-  !nwrite(:) = dim_lengths(1:2)
+ ! nwrite(:) = dim_lengths(1:2)
 
   if (present(corner)) then
     do i=1,ndims
@@ -819,7 +836,7 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
        call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
       ! write the time values if it larger than the most recent file time
-      if (time_level .gt. file_time+EPSILON(time_level)) then
+      if (time_level-file_time .gt. TINY(time_level)) then
         if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
 
         call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/), edge_lengths=(/1/))
@@ -1015,7 +1032,7 @@ subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, var_desc, 
        call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
       ! write the time value if it is larger than the most recent file time
-      if (time_level .gt. file_time+EPSILON(time_level)) then
+      if (time_level-file_time .gt. TINY(time_level)) then
 
         if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
         call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/), edge_lengths=(/1/))
@@ -1188,7 +1205,7 @@ subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, var_desc, 
        call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
       ! write the time value if it is larger than the most recent file time
-      if (time_level .gt. file_time+EPSILON(time_level)) then
+      if (time_level-file_time .gt. TINY(time_level)) then
 
         if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
 
@@ -1301,7 +1318,7 @@ subroutine write_scalar(filename, fieldname, data, mode, time_level, time_units,
        call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
       ! write the next time value if it is larger than the most recent file time
-      if (time_level .gt. file_time+EPSILON(time_level)) then
+      if (time_level-file_time .gt. TINY(time_level)) then
         if (time_index .le. dim_unlim_size) time_index = dim_unlim_size+1
         call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
       endif
@@ -1464,7 +1481,7 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, var_desc, &
       call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
       ! write the time value if it is larger than the most recent file time
-      if (time_level .gt. file_time+EPSILON(time_level)) then
+      if (time_level-file_time .gt. TINY(time_level)) then
 
         if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
 
@@ -1631,7 +1648,7 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, var_desc, &
       call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
       ! write the time value if it is larger than the most recent file time
-      if (time_level .gt. file_time+EPSILON(time_level)) then
+      if (time_level-file_time .gt. TINY(time_level)) then
         if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
 
         call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/), edge_lengths=(/1/))
@@ -1799,7 +1816,7 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, var_desc, &
        call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
       ! write the time value if it is larger than the most recent file time
-      if (time_level .gt. file_time+EPSILON(time_level)) then
+      if (time_level-file_time .gt. TINY(time_level)) then
         if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
 
         call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/), edge_lengths=(/1/))
@@ -1960,7 +1977,7 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, var_desc, &
        call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(t_units))
        call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
-      if (time_level .gt. file_time+EPSILON(time_level)) then
+      if (time_level-file_time .gt. TINY(time_level)) then
         if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
 
         call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/), edge_lengths=(/1/))
