@@ -18,7 +18,7 @@ use ensemble_manager_mod, only : get_ensemble_id
 use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
 use MOM_string_functions, only : extract_word
 use mpp_mod,              only : mpp_max, mpp_pe, mpp_npes
-use mpp_domains_mod,      only : domain1d, domain2d, domainug, mpp_get_domain_components
+use mpp_domains_mod,      only : domain1d, domain2d, domainug, mpp_get_domain_components, mpp_get_data_domain
 use mpp_domains_mod,      only : mpp_get_domain_npes, mpp_define_io_domain, mpp_get_io_domain, mpp_get_io_domain_layout
 use mpp_domains_mod,      only : CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
 use mpp_io_mod,           only : mpp_open_file => mpp_open, mpp_close_file => mpp_close
@@ -255,7 +255,6 @@ subroutine create_file(filename, vars, numVariables, threading, register_time, G
   integer :: thread ! indicates whether threading is used
   integer, dimension(4) :: dim_lengths ! variable dimension lengths
   integer, allocatable :: pelist(:) ! list of pes associated with the file
-  integer :: current_pe
   real :: time
 
   ! determine whether the file will be domain-decomposed or not
@@ -311,7 +310,6 @@ subroutine create_file(filename, vars, numVariables, threading, register_time, G
     !! Otherwise, multiple pes may try to open the file in write (NC_NOCLOBBER) mode, leading to failure
     allocate(pelist(mpp_npes()))
     pelist(:) = 0
-    current_pe = -1
     do i=1,size(pelist)
       pelist(i) = i-1
     enddo
@@ -540,6 +538,7 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, var_desc, 
   dim_unlim_name=""
   dim_names(:) = ""
   dim_lengths(:) = 0
+  file_time = -1.0
   num_dims = 0
   time_index = 1
 
@@ -651,7 +650,7 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, var_desc, 
        call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
       ! write the time value if it larger than the most recent file time
-      if (time_level-file_time .gt. TINY(time_level)) then
+      if (time_level-file_time .gt. EPSILON(time_level)) then
 
         if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
         call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/), edge_lengths=(/1/))
@@ -711,14 +710,15 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
   character(len=nf90_max_name) :: dim_unlim_name ! name of the unlimited dimension in the file
   character(len=1024) :: filename_temp
   character(len=64) :: checksum_char ! checksum character array created from checksum argument
-  character(len=48), dimension(3) :: dim_names !< variable dimension names; 1 extra dimension in case appending
-                                               !! along the time axis
-  integer, dimension(3) :: dim_lengths !< variable dimension lengths
+  character(len=48), dimension(3) :: dim_names ! variable dimension names; 1 extra dimension in case appending
+                                               ! along the time axis
+  integer, dimension(3) :: dim_lengths ! variable dimension lengths
 
   dim_lengths(:) = 0
   dim_names(:) = ""
   dim_unlim_size = 0
   dim_unlim_name = ""
+  file_time = -1.0
   ndims = 2
   num_dims = 0
   time_index = 1
@@ -735,12 +735,13 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
 
   ! define the io domain for 1-pe jobs because it is required to write domain-decomposed files
   if (mpp_get_domain_npes(domain%mpp_domain) .eq. 1 ) then
-    if (.not. associated(mpp_get_io_domain(domain%mpp_domain))) call mpp_define_io_domain(domain%mpp_domain, (/1,1/))
+    if (.not. associated(mpp_get_io_domain(domain%mpp_domain))) &
+      call mpp_define_io_domain(domain%mpp_domain, (/1,1/))
   endif
 
   ! get the dimension names and lengths
-  ! NOTE: the t_grid argument is set to '1' (do nothing) because the presence of a time dimension is user-specified
-  ! and not assumed from the var_desc%t_grid value
+  ! NOTE: the t_grid argument is set to '1' (do nothing) because the presence of a time dimension
+  ! is user-specified rather than derived from the var_desc%t_grid value
   if (present(G)) then
     call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, '1', dim_names, &
                                     dim_lengths, num_dims, G=G)
@@ -753,11 +754,11 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
                                     dim_lengths, num_dims, GV=GV)
 
   ! open the file in read mode to get the time
-    if (.not.(check_if_open(fileobj))) &
-      file_open_success = open_file(fileobj, trim(filename_temp), "read", domain%mpp_domain, &
+  if (.not.(check_if_open(fileobj))) &
+    file_open_success = open_file(fileobj, trim(filename_temp), "read", domain%mpp_domain, &
                                     is_restart=.false.)
-    if (.not.(file_open_success)) &
-      call MOM_error(FATAL, "MOM_io:write_field_2d_dd: unable to open file "//trim(filename_temp))
+  if (.not.(file_open_success)) &
+    call MOM_error(FATAL, "MOM_io:write_field_2d_dd: unable to open file "//trim(filename_temp))
 
   ! read in the most recent time level in the file
   if (present(time_level)) then
@@ -776,11 +777,11 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
   do i=1,ndims
     call MOM_register_diagnostic_axis(fileobj, trim(dim_names(i)), dim_lengths(i))
   enddo
-  call get_compute_domain_dimension_indices(fileobj, dim_names(1), x_inds)
-  call get_compute_domain_dimension_indices(fileobj, dim_names(2), y_inds)
-  start(:) = (/x_inds(1),y_inds(1)/)
-  nwrite(1) = x_inds(size(x_inds))-x_inds(1)+1
-  nwrite(2) = y_inds(size(y_inds))-y_inds(1)+1
+  !call get_compute_domain_dimension_indices(fileobj, dim_names(1), x_inds)
+  !call get_compute_domain_dimension_indices(fileobj, dim_names(2), y_inds)
+  !start(:) = (/x_inds(1),y_inds(1)/)
+  !nwrite(1) = x_inds(size(x_inds))-x_inds(1)+1
+  !nwrite(2) = y_inds(size(y_inds))-y_inds(1)+1
 
   !call get_global_io_domain_indices(fileobj, dim_names(1), is, ie)
   !call get_global_io_domain_indices(fileobj, dim_names(2), js, je)
@@ -792,8 +793,8 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
   if (check_if_open(fileobj)) call close_file(fileobj)
  
   ! set the start (corner) and nwrite (edge_lengths) values
-  !start(:) = 1
- ! nwrite(:) = dim_lengths(1:2)
+  start(:) = 1
+  nwrite(:) = dim_lengths(1:2)
 
   if (present(corner)) then
     do i=1,ndims
@@ -819,7 +820,29 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
      file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
                                    is_restart=.false.)
 
-  ! write the data, and the time if it is not already written to the file
+  ! register the variable and its attributes
+  if (.not. (variable_exists(fileobj, trim(fieldname)))) then
+    if (present(time_level)) then
+      num_dims=3
+    else
+      num_dims=2
+    endif
+
+    call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
+
+    call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(var_desc%units))
+    call register_variable_attribute(fileObj, trim(fieldname), 'long_name', trim(var_desc%longname))
+    ! write the checksum attribute
+    if (present(checksums)) then
+      ! convert the checksum to a string
+      checksum_char = ''
+      checksum_char = convert_checksum_to_string(checksums(1,1))
+      call register_variable_attribute(fileobj, trim(fieldname), "checksum", checksum_char)
+    endif
+  endif
+
+  ! register the variable and its attributes if it is not already in the file
+  ! write the data, and the time if necessary
   if (present(time_level)) then
     if (.not. (variable_exists(fileobj, trim(dim_unlim_name)))) then
        ! set the time units
@@ -832,39 +855,22 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
 
        call register_field(fileObj, trim(dim_unlim_name), "double", dimensions=(/trim(dim_unlim_name)/))
        call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(t_units))
-
        call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
-      ! write the time values if it larger than the most recent file time
-      if (time_level-file_time .gt. TINY(time_level)) then
-        if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
+      ! write the time value if it is larger than the most recent file time
+      if (time_level-file_time .gt. EPSILON(time_level)) then
 
+        if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
         call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/), edge_lengths=(/1/))
       endif
    endif
-  endif
 
-  ! register the variable and its attributes if it is not already in the file
-  if (.not. (variable_exists(fileobj, trim(fieldname)))) then   
-      call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
-      call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(var_desc%units))
-      call register_variable_attribute(fileObj, trim(fieldname), 'long_name', trim(var_desc%longname))
-    ! write the checksum attribute
-    if (present(checksums)) then
-      ! convert the checksum to a string
-      checksum_char = ""
-      checksum_char = convert_checksum_to_string(checksums(1,1))
-      call register_variable_attribute(fileobj, trim(fieldname), "checksum", checksum_char)
-    endif
+   call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
+   call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
+                   unlim_dim_level=dim_unlim_size)
+  else
+    call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
   endif
-
-   if (present(time_level)) then
-      call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
-      call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
-                     unlim_dim_level=dim_unlim_size)
-    else
-      call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
-    endif
 
   ! close the file
   if (check_if_open(fileobj)) call close_file(fileobj)
@@ -922,7 +928,9 @@ subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, var_desc, 
   dim_unlim_name = ""
   dim_names(:) = ""
   dim_lengths(:) = 0
+  file_time = -1.0
   num_dims = 0
+  ndims = 3
   time_index = 1
 
   ! append '.nc' to the file name if it is missing
@@ -941,8 +949,8 @@ subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, var_desc, 
   endif
 
   ! get the dimension names and lengths
-  ! NOTE: the t_grid argument is set to '1' (do nothing) because the presence of a time dimension is user-specified
-  ! and not assumed from the var_desc%t_grid value
+  ! NOTE: the t_grid argument is set to '1' (do nothing) because the presence of a time dimension
+  !  is user-specified rather than derived from the var_desc%t_grid value
   if (present(G)) then
     call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, '1', dim_names, &
                                     dim_lengths, num_dims, G=G)
@@ -978,7 +986,6 @@ subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, var_desc, 
   endif
 
   ! set the start (corner) and nwrite (edge_lengths) values
-  ndims = 3
   start(:) = 1
   nwrite(:) = dim_lengths(1:3)
   if (present(corner)) then
@@ -1032,7 +1039,7 @@ subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, var_desc, 
        call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
       ! write the time value if it is larger than the most recent file time
-      if (time_level-file_time .gt. TINY(time_level)) then
+      if (time_level-file_time .gt. EPSILON(time_level)) then
 
         if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
         call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/), edge_lengths=(/1/))
@@ -1100,6 +1107,7 @@ subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, var_desc, 
   dim_unlim_name = ""
   dim_names(:) = ""
   dim_lengths(:) = 0
+  file_time = -1.0
   time_index = 1
 
   ! append '.nc' to the file name if it is missing
@@ -1205,7 +1213,7 @@ subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, var_desc, 
        call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
       ! write the time value if it is larger than the most recent file time
-      if (time_level-file_time .gt. TINY(time_level)) then
+      if (time_level-file_time .gt. EPSILON(time_level)) then
 
         if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
 
@@ -1255,6 +1263,7 @@ subroutine write_scalar(filename, fieldname, data, mode, time_level, time_units,
   dim_lengths(:) = 0
   dim_unlim_size = 0
   dim_unlim_name = ""
+  file_time = -1.0
   num_dims = 0
   time_index = 1
 
@@ -1318,7 +1327,7 @@ subroutine write_scalar(filename, fieldname, data, mode, time_level, time_units,
        call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
       ! write the next time value if it is larger than the most recent file time
-      if (time_level-file_time .gt. TINY(time_level)) then
+      if (time_level-file_time .gt. EPSILON(file_time)) then
         if (time_index .le. dim_unlim_size) time_index = dim_unlim_size+1
         call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
       endif
@@ -1380,6 +1389,7 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, var_desc, &
   dim_unlim_name= ""
   dim_names(:) = ""
   dim_lengths(:) = 0
+  file_time = -1.0
   num_dims = 0
   time_index = 1
 
@@ -1481,7 +1491,7 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, var_desc, &
       call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
       ! write the time value if it is larger than the most recent file time
-      if (time_level-file_time .gt. TINY(time_level)) then
+      if (time_level-file_time .gt. EPSILON(time_level)) then
 
         if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
 
@@ -1547,6 +1557,7 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, var_desc, &
   dim_unlim_name = ""
   dim_names(:) = ""
   dim_lengths(:) = 0
+  file_time = -1.0
   num_dims = 0
   time_index = 1
 
@@ -1648,7 +1659,7 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, var_desc, &
       call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
       ! write the time value if it is larger than the most recent file time
-      if (time_level-file_time .gt. TINY(time_level)) then
+      if (time_level-file_time .gt. EPSILON(time_level)) then
         if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
 
         call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/), edge_lengths=(/1/))
@@ -1713,6 +1724,7 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, var_desc, &
   dim_unlim_name = ""
   dim_names(:) = ""
   dim_lengths(:) = 0
+  file_time = -1.0
   num_dims = 0
   time_index = 1
 
@@ -1816,7 +1828,7 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, var_desc, &
        call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
       ! write the time value if it is larger than the most recent file time
-      if (time_level-file_time .gt. TINY(time_level)) then
+      if (time_level-file_time .gt. EPSILON(time_level)) then
         if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
 
         call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/), edge_lengths=(/1/))
@@ -1881,6 +1893,7 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, var_desc, &
   dim_unlim_name = ""
   dim_names(:) = ""
   dim_lengths(:) = 0
+  file_time = -1.0
   num_dims = 0
   time_index = 1
 
@@ -1977,7 +1990,7 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, var_desc, &
        call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(t_units))
        call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/))
     else
-      if (time_level-file_time .gt. TINY(time_level)) then
+      if (time_level-file_time .gt. EPSILON(time_level)) then
         if (time_index .le. dim_unlim_size) time_index=dim_unlim_size+1
 
         call write_data(fileobj, trim(dim_unlim_name), (/time_level/), corner=(/time_index/), edge_lengths=(/1/))
