@@ -622,7 +622,7 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, var_desc, 
   ! register the field if it is not in the file
   if (.not.(variable_exists(fileobj, trim(fieldname)))) then
 
-    call register_field(fileObj, trim(fieldname), "double", dim_names(1:num_dims))
+    call register_field(fileObj, trim(fieldname), "double", (/trim(dim_names(1))/))
     call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(var_desc%units))
     call register_variable_attribute(fileObj, trim(fieldname), 'long_name', trim(var_desc%longname))
     ! write the checksum attribute
@@ -772,22 +772,6 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
     if (variable_exists(fileobj, trim(dim_unlim_name))) &
       file_time = read_most_recent_time(fileobj)
   endif
- 
-  !register the horizontal diagnostic axis associated with the field
-  do i=1,ndims
-    call MOM_register_diagnostic_axis(fileobj, trim(dim_names(i)), dim_lengths(i))
-  enddo
-  !call get_compute_domain_dimension_indices(fileobj, dim_names(1), x_inds)
-  !call get_compute_domain_dimension_indices(fileobj, dim_names(2), y_inds)
-  !start(:) = (/x_inds(1),y_inds(1)/)
-  !nwrite(1) = x_inds(size(x_inds))-x_inds(1)+1
-  !nwrite(2) = y_inds(size(y_inds))-y_inds(1)+1
-
-  !call get_global_io_domain_indices(fileobj, dim_names(1), is, ie)
-  !call get_global_io_domain_indices(fileobj, dim_names(2), js, je)
-  !start(:) = (/is,js/)
-  !nwrite(1) = ie-is+1
-  !nwrite(2) = je-js+1
 
   ! close the file 
   if (check_if_open(fileobj)) call close_file(fileobj)
@@ -820,22 +804,21 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
      file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
                                    is_restart=.false.)
 
+  !register the horizontal diagnostic axis associated with the field
+  do i=1,ndims
+    call MOM_register_diagnostic_axis(fileobj, trim(dim_names(i)), dim_lengths(i))
+  enddo
+
   ! register the variable and its attributes
   if (.not. (variable_exists(fileobj, trim(fieldname)))) then
-    if (present(time_level)) then
-      num_dims=3
-    else
-      num_dims=2
-    endif
-
-    call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
+    call register_field(fileObj, trim(fieldname), "double", dimensions=(/trim(dim_names(1)), trim(dim_names(2))/))
 
     call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(var_desc%units))
     call register_variable_attribute(fileObj, trim(fieldname), 'long_name', trim(var_desc%longname))
     ! write the checksum attribute
     if (present(checksums)) then
       ! convert the checksum to a string
-      checksum_char = ''
+      checksum_char = ""
       checksum_char = convert_checksum_to_string(checksums(1,1))
       call register_variable_attribute(fileobj, trim(fieldname), "checksum", checksum_char)
     endif
@@ -1632,7 +1615,7 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, var_desc, &
 
   ! write the data
   if (.not.(variable_exists(fileobj, trim(fieldname)))) then
-    call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
+    call register_field(fileObj, trim(fieldname), "double", dimensions=(/trim(dim_names(1)), trim(dim_names(2))/))
     call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(var_desc%units))
     call register_variable_attribute(fileObj, trim(fieldname), 'long_name', trim(var_desc%longname))
     ! write the checksum attribute
