@@ -631,8 +631,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     if (day > CS%Start_time) then
       continue
     else
-      call create_file(trim(energypath_nc), vars, num_nc_fields, threading=SINGLE_FILE, &
-                       register_time = .true., G=G, GV=GV)
+      call create_file(trim(energypath_nc), vars, num_nc_fields, register_time = .true., G=G, GV=GV)
     endif
   endif
 

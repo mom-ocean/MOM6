@@ -221,11 +221,10 @@ contains
 
 !> This routine opens a netcdf file in "write" or "overwrite" mode, registers the global diagnostic axes, and writes
 !! the axis data and metadata to the file
-subroutine create_file(filename, vars, numVariables, threading, register_time, G, DG, GV, checksums)
+subroutine create_file(filename, vars, numVariables, register_time, G, DG, GV, checksums)
   character(len=*),      intent(in)               :: filename !< full path to the netcdf file
   type(vardesc), dimension(:), intent(in)         :: vars !< structures describing the output
   integer,               intent(in)               :: numVariables !< number of variables to write to the file
-  integer, optional,     intent(in)               :: threading !< SINGLE_FILE or MULTIPLE
   logical, optional, intent(in) :: register_time !< if .true., register a time dimension to the file
   type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
                                                      !! is required if the new file uses any
@@ -258,18 +257,12 @@ subroutine create_file(filename, vars, numVariables, threading, register_time, G
   real :: time
 
   ! determine whether the file will be domain-decomposed or not
-  thread = SINGLE_FILE
-  if (PRESENT(threading)) thread = threading
-
   domain_set=.false.
   if (present(G)) then
     domain_set = .true. ; Domain => G%Domain
   elseif (present(dG)) then
     domain_set = .true. ; Domain => dG%Domain
   endif
-
-  one_file = .true.
-  if (domain_set) one_file = (thread == SINGLE_FILE)
 
   ! append '.nc' to the file name if it is missing
   filename_temp = ""
@@ -316,7 +309,6 @@ subroutine create_file(filename, vars, numVariables, threading, register_time, G
 
     if (.not. check_if_open(fileObjNoDD)) &
       file_open_successNoDD=open_file(fileObjNoDD, filename_temp, trim(nc_mode), is_restart=.false., pelist=pelist)
-
   endif
 
   ! allocate the output data variable dimension attributes
@@ -575,7 +567,7 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, var_desc, 
 
   ! read in the most recent time level in the file
   if (present(time_level)) then
-    ! open the file in read mode to get the time
+
     if (.not.(check_if_open(fileobj))) &
       file_open_success = open_file(fileobj, trim(filename_temp), "read", domain%mpp_domain, &
                                     is_restart=.false.)
@@ -594,11 +586,6 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, var_desc, 
    
     if (check_if_open(fileobj)) call close_file(fileobj)
   endif
-
-  ! register the horizontal diagnostic axis associated with the field
-  !call MOM_register_diagnostic_axis(fileobj, trim(dim_names(1)), dim_lengths(1))
-
-  !call get_global_io_domain_indices(fileobj, dim_names(1), is, ie)
 
   start(:) = 1
   nwrite(:) = dim_lengths(1)
@@ -619,6 +606,10 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, var_desc, 
   ! open the file in write/append mode
   file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
                                 is_restart=.false.)
+
+  ! register the horizontal diagnostic axis associated with the field
+  call MOM_register_diagnostic_axis(fileobj, trim(dim_names(1)), dim_lengths(1))
+
   ! register the field if it is not in the file
   if (.not.(variable_exists(fileobj, trim(fieldname)))) then
 
@@ -753,15 +744,15 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
     call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, '1', dim_names, &
                                     dim_lengths, num_dims, GV=GV)
 
-  ! open the file in read mode to get the time
-  if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, trim(filename_temp), "read", domain%mpp_domain, &
-                                    is_restart=.false.)
-  if (.not.(file_open_success)) &
-    call MOM_error(FATAL, "MOM_io:write_field_2d_dd: unable to open file "//trim(filename_temp))
-
   ! read in the most recent time level in the file
   if (present(time_level)) then
+    ! open the file in read mode
+    if (.not.(check_if_open(fileobj))) &
+      file_open_success = open_file(fileobj, trim(filename_temp), "read", domain%mpp_domain, &
+                                    is_restart=.false.)
+    if (.not.(file_open_success)) &
+      call MOM_error(FATAL, "MOM_io:write_field_2d_dd: unable to open file "//trim(filename_temp))
+
     call get_unlimited_dimension_name(fileobj,dim_unlim_name)
     num_dims = num_dims+1
     dim_names(num_dims)=trim(dim_unlim_name)
@@ -770,15 +761,15 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
     if (dim_unlim_size .eq. unlimited) dim_unlim_size = 0
 
     if (variable_exists(fileobj, trim(dim_unlim_name))) &
-      file_time = read_most_recent_time(fileobj)
+      file_time = read_most_recent_time(fileobj)  
+    ! close the file 
+    if (check_if_open(fileobj)) call close_file(fileobj)
+
   endif
 
-  ! close the file 
-  if (check_if_open(fileobj)) call close_file(fileobj)
- 
   ! set the start (corner) and nwrite (edge_lengths) values
   start(:) = 1
-  nwrite(:) = dim_lengths(1:2)
+  nwrite(:) = dim_lengths(1:ndims)
 
   if (present(corner)) then
     do i=1,ndims
@@ -804,14 +795,14 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
      file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
                                    is_restart=.false.)
 
-  !register the horizontal diagnostic axis associated with the field
+  ! register the diagnostic axes associated with the field
   do i=1,ndims
     call MOM_register_diagnostic_axis(fileobj, trim(dim_names(i)), dim_lengths(i))
   enddo
 
   ! register the variable and its attributes
   if (.not. (variable_exists(fileobj, trim(fieldname)))) then
-    call register_field(fileObj, trim(fieldname), "double", dimensions=(/trim(dim_names(1)), trim(dim_names(2))/))
+    call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
 
     call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(var_desc%units))
     call register_variable_attribute(fileObj, trim(fieldname), 'long_name', trim(var_desc%longname))
@@ -988,10 +979,16 @@ subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, var_desc, 
   if (present(scale)) then ; if (scale /= 1.0) then
     call scale_data(data_tmp,scale)
   endif ; endif
+
  ! open the file in write/append mode
  if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
                                   is_restart=.false.)
+  ! register the diagnostic axes associated with the field
+  do i=1,ndims
+    call MOM_register_diagnostic_axis(fileobj, trim(dim_names(i)), dim_lengths(i))
+  enddo
+
  ! register the variable and its attributes
  if (.not. (variable_exists(fileobj, trim(fieldname)))) then
     call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
@@ -1165,6 +1162,11 @@ subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, var_desc, 
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
                                   is_restart=.false.)
+   ! register the diagnostic axes associated with the field
+  do i=1,ndims
+    call MOM_register_diagnostic_axis(fileobj, trim(dim_names(i)), dim_lengths(i))
+  enddo
+
   ! register the variable and its attributes
   if (.not. (variable_exists(fileobj, trim(fieldname)))) then
     call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
@@ -1239,7 +1241,7 @@ subroutine write_scalar(filename, fieldname, data, mode, time_level, time_units,
   character(len=20) :: t_units ! time units
   character(len=nf90_max_name) :: dim_unlim_name ! name of the unlimited dimension in the file
   character(len=1024) :: filename_temp
-  character(len=48), dimension(1) :: dim_names !variable dimension names
+  character(len=48), dimension(1) :: dim_names ! variable dimension names
   integer, dimension(1) :: dim_lengths ! variable dimension lengths
 
   dim_names = ""
@@ -1274,10 +1276,9 @@ subroutine write_scalar(filename, fieldname, data, mode, time_level, time_units,
     if (variable_exists(fileobj, trim(dim_unlim_name))) then
       file_time = read_most_recent_time(fileobj)
     endif
+    ! close the file
+    if (check_if_open(fileobj)) call close_file(fileobj)
   endif
-
-  ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
 
   ! open the file in write/append mode
   if (.not.(check_if_open(fileobj))) &
@@ -1367,6 +1368,7 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, var_desc, &
   character(len=64) :: checksum_char ! checksum character array created from checksum argument
   character(len=48), dimension(2) :: dim_names ! variable dimension names (up to 2 if appended at time level)
   integer, dimension(2) :: dim_lengths ! variable dimension lengths
+  integer, allocatable, dimension(:) :: pelist ! list of pes associated with the netCDF file
 
   dim_unlim_size = 0
   dim_unlim_name= ""
@@ -1385,6 +1387,7 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, var_desc, &
   else
     filename_temp = filename
   endif
+
   ! open the file
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
@@ -1439,9 +1442,19 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, var_desc, &
     call scale_data(data_tmp,scale)
   endif ; endif
 
+  ! get the pes associated with the file.
+  !>\note this is required so that only pe(1) is identified as the root pe to create the file
+  !! Otherwise, multiple pes may try to open the file in write (NC_NOCLOBBER) mode, leading to failure
+  allocate(pelist(mpp_npes()))
+  pelist(:) = 0
+  do i=1,size(pelist)
+    pelist(i) = i-1
+  enddo
+
   ! open the file in write/append mode
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
+    file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false., &
+                                  pelist=pelist)
 
   ! register the field if it is not already in the file
   if (.not.(variable_exists(fileobj, trim(fieldname)))) then
@@ -1492,6 +1505,8 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, var_desc, &
   ! close the file
   if (check_if_open(fileobj)) call close_file(fileobj)
   nullify(data_tmp)
+  deallocate(pelist)
+
 end subroutine write_field_1d_noDD
 
 !> This function uses the fms_io function write_data to write a scalar variable named "fieldname"
@@ -1535,6 +1550,7 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, var_desc, &
   character(len=64) :: checksum_char ! checksum character array created from checksum argument
   character(len=48), dimension(3) :: dim_names ! variable dimension names
   integer, dimension(3) :: dim_lengths ! variable dimension lengths
+  integer, allocatable, dimension(:) :: pelist ! list of pes associated with the netCDF file
 
   dim_unlim_size = 0
   dim_unlim_name = ""
@@ -1553,6 +1569,10 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, var_desc, &
   else
     filename_temp = filename
   endif
+
+  ! open the file
+  if (.not.(check_if_open(fileobj))) &
+    file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
 
   ! get the dimension names and lengths
   ! NOTE: the t_grid argument is set to '1' (do nothing) because the presence of a time dimension is user-specified
@@ -1609,13 +1629,23 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, var_desc, &
     call scale_data(data_tmp,scale)
   endif ; endif
 
+  ! get the pes associated with the file.
+  !>\note this is required so that only pe(1) is identified as the root pe to create the file
+  !! Otherwise, multiple pes may try to open the file in write (NC_NOCLOBBER) mode, leading to failure
+  allocate(pelist(mpp_npes()))
+  pelist(:) = 0
+  do i=1,size(pelist)
+    pelist(i) = i-1
+  enddo
+
   ! open the file in write/append mode
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
+    file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false., &
+                                  pelist=pelist)
 
   ! write the data
   if (.not.(variable_exists(fileobj, trim(fieldname)))) then
-    call register_field(fileObj, trim(fieldname), "double", dimensions=(/trim(dim_names(1)), trim(dim_names(2))/))
+    call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
     call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(var_desc%units))
     call register_variable_attribute(fileObj, trim(fieldname), 'long_name', trim(var_desc%longname))
     ! write the checksum attribute
@@ -1659,6 +1689,8 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, var_desc, &
   ! close the file
   if (check_if_open(fileobj)) call close_file(fileobj)
   nullify(data_tmp)
+  deallocate(pelist)
+
 end subroutine write_field_2d_noDD
 
 !> This function uses the fms_io function write_data to write a 3-D non-domain-decomposed data field named "fieldname"
@@ -1700,8 +1732,9 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, var_desc, &
   character(len=nf90_max_name) :: dim_unlim_name ! name of the unlimited dimension in the file
   character(len=1024) :: filename_temp
   character(len=64) :: checksum_char ! checksum character array created from checksum argument
-  character(len=48), dimension(4) :: dim_names !< variable dimension names
-  integer, dimension(4) :: dim_lengths !< variable dimension lengths
+  character(len=48), dimension(4) :: dim_names ! variable dimension names
+  integer, dimension(4) :: dim_lengths ! variable dimension lengths
+  integer, allocatable, dimension(:) :: pelist ! list of pes associated with the netCDF file
 
   dim_unlim_size = 0
   dim_unlim_name = ""
@@ -1720,6 +1753,10 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, var_desc, &
   else
     filename_temp = filename
   endif
+
+  ! open the file
+  if (.not.(check_if_open(fileobj))) &
+    file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
 
   ! get the dimension names and lengths
   ! NOTE: the t_grid argument is set to '1' (do nothing) because the presence of a time dimension is user-specified
@@ -1776,9 +1813,19 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, var_desc, &
     call scale_data(data_tmp,scale)
   endif ; endif
 
+  ! get the pes associated with the file.
+  !>\note this is required so that only pe(1) is identified as the root pe to create the file
+  !! Otherwise, multiple pes may try to open the file in write (NC_NOCLOBBER) mode, leading to failure
+  allocate(pelist(mpp_npes()))
+  pelist(:) = 0
+  do i=1,size(pelist)
+    pelist(i) = i-1
+  enddo
+
   ! open the file
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
+    file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false., &
+                                  pelist=pelist)
 
   ! register the field if it is not already in the file
   if (.not.(variable_exists(fileobj, trim(fieldname)))) then
@@ -1828,6 +1875,8 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, var_desc, &
   ! close the file
   if (check_if_open(fileobj)) call close_file(fileobj)
   nullify(data_tmp)
+  deallocate(pelist)
+
 end subroutine write_field_3d_noDD
 
 !> This function uses the fms_io function write_data to write a 4-D non-domain-decomposed data field named "fieldname"
@@ -1869,14 +1918,16 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, var_desc, &
   character(len=nf90_max_name) :: dim_unlim_name ! name of the unlimited dimension in the file
   character(len=1024) :: filename_temp
   character(len=64) :: checksum_char ! checksum character array created from checksum argument
-  character(len=48), dimension(4) :: dim_names !< variable dimension names
-  integer, dimension(4) :: dim_lengths !< variable dimension lengths
+  character(len=48), dimension(4) :: dim_names ! variable dimension names
+  integer, dimension(4) :: dim_lengths ! variable dimension lengths
+  integer, allocatable, dimension(:) :: pelist ! list of pes associated with the netCDF file
 
   dim_unlim_size = 0
   dim_unlim_name = ""
   dim_names(:) = ""
   dim_lengths(:) = 0
   file_time = -1.0
+  ndims = 4
   num_dims = 0
   time_index = 1
 
@@ -1919,7 +1970,6 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, var_desc, &
   endif
 
   ! set the start (corner) and nwrite (edge_lengths) values
-  ndims = 4
   start(:) = 1
   nwrite(:) = dim_lengths(:)
   if (present(corner)) then
@@ -1940,9 +1990,18 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, var_desc, &
     call scale_data(data_tmp,scale)
   endif ; endif
 
+  ! get the pes associated with the file.
+  !>\note this is required so that only pe(1) is identified as the root pe to create the file
+  !! Otherwise, multiple pes may try to open the file in write (NC_NOCLOBBER) mode, leading to failure
+  allocate(pelist(mpp_npes()))
+  pelist(:) = 0
+  do i=1,size(pelist)
+    pelist(i) = i-1
+  enddo
   ! open the file in write/append mode
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
+    file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false., &
+                                  pelist=pelist)
 
   if (.not.(variable_exists(fileobj, trim(fieldname)))) then
      call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
@@ -1986,9 +2045,12 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, var_desc, &
   else
     call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
   endif
+
   ! close the file
   if (check_if_open(fileobj)) call close_file(fileobj)
   nullify(data_tmp)
+  deallocate(pelist)
+
 end subroutine write_field_4d_noDD
 
 !> This function uses the fms_io function read_data to read 1-D domain-decomposed data field named "fieldname"
