@@ -295,7 +295,7 @@ subroutine create_file(filename, vars, numVariables, register_time, G, DG, GV, c
         call mpp_define_io_domain(domain%mpp_domain, (/1,1/))
     endif
 
-    if (.not. check_if_open(fileObjDD)) & 
+    if (.not. check_if_open(fileObjDD)) &
       file_open_successDD=open_file(fileObjDD, filename_temp, trim(nc_mode), Domain%mpp_domain, is_restart=.false.)
   else
     ! get the pes associated with the file.
@@ -339,9 +339,9 @@ subroutine create_file(filename, vars, numVariables, register_time, G, DG, GV, c
       if(present(GV)) &
         call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, '1', dim_names(i,:), &
                                         dim_lengths, num_dims, GV=GV)
-      !> \note num_dims will be 0 for scalar values 
+      !> \note num_dims will be 0 for scalar values
       if (num_dims .le. 0) cycle
-      
+
       do j=1,num_dims
         ! register the variable axes to the file if they are not already registered
         if (dim_lengths(j) .gt. 0) then
@@ -357,13 +357,11 @@ subroutine create_file(filename, vars, numVariables, register_time, G, DG, GV, c
               call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i,j), j, GV=GV)
             endif
 
-            !if (fileObjDD%is_root) &
               call MOM_register_diagnostic_axis(fileObjDD, trim(dim_names(i,j)), dim_lengths(j))
           endif
           ! register the axis attributes and write the axis data to the file
           if (.not.(variable_exists(fileObjDD, trim(axis_data_CS%axis(j)%name)))) then
             if (associated(axis_data_CS%data(j)%p)) then
-              !if (fileObjDD%is_root) then
          
                 call register_field(fileObjDD, trim(axis_data_CS%axis(j)%name), &
                                   "double", dimensions=(/trim(axis_data_CS%axis(j)%name)/))
@@ -381,11 +379,10 @@ subroutine create_file(filename, vars, numVariables, register_time, G, DG, GV, c
                 if (axis_data_CS%axis(j)%is_domain_decomposed) then
                   call get_global_io_domain_indices(fileObjDD, trim(axis_data_CS%axis(j)%name), is, ie)
                   call write_data(fileObjDD, trim(axis_data_CS%axis(j)%name), axis_data_CS%data(j)%p(is:ie))
-                  !call write_data(fileObjDD, trim(axis_data_CS%axis(j)%name), axis_data_CS%data(j)%p)
+
                 else
                   call write_data(fileObjDD, trim(axis_data_CS%axis(j)%name), axis_data_CS%data(j)%p)
                 endif
-              !endif
             endif
           endif
         endif
@@ -419,7 +416,7 @@ subroutine create_file(filename, vars, numVariables, register_time, G, DG, GV, c
                                         dim_lengths, num_dims, GV=GV)
       !> \note num_dims will be 0 for scalar variables
       if (num_dims .le. 0) cycle
-       
+
       do j=1,num_dims
         ! register the variable axes to the file if they are not already registered
         if (dim_lengths(j) .gt. 0) then
@@ -441,7 +438,6 @@ subroutine create_file(filename, vars, numVariables, register_time, G, DG, GV, c
           ! register the axis attributes and write the axis data to the file
           if (.not.(variable_exists(fileObjNoDD, trim(axis_data_CS%axis(j)%name)))) then
             if (associated(axis_data_CS%data(j)%p)) then
-              !if (fileObjNoDD%is_root) then
                 call register_field(fileObjNoDD, trim(axis_data_CS%axis(j)%name), &
                                   "double", dimensions=(/trim(axis_data_CS%axis(j)%name)/))
 
@@ -458,7 +454,6 @@ subroutine create_file(filename, vars, numVariables, register_time, G, DG, GV, c
                 if (lowercase(trim(axis_data_CS%axis(j)%name)) .ne. 'time') then
                   call write_data(fileObjNoDD, trim(axis_data_CS%axis(j)%name), axis_data_CS%data(j)%p)
                 endif
-              !endif
             endif
           endif
         endif
@@ -556,7 +551,7 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, var_desc, 
   if (present(G)) then
       call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, '1', dim_names, &
                                       dim_lengths, num_dims, G=G)
-  elseif(present(dG)) then  
+  elseif(present(dG)) then
       call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, '1', dim_names, &
                                       dim_lengths, num_dims, dG=dG)
   endif
@@ -583,7 +578,7 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, var_desc, 
 
     if (variable_exists(fileobj, trim(dim_unlim_name))) &
       file_time = read_most_recent_time(fileobj)
-   
+
     if (check_if_open(fileobj)) call close_file(fileobj)
   endif
 
@@ -762,7 +757,7 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
 
     if (variable_exists(fileobj, trim(dim_unlim_name))) &
       file_time = read_most_recent_time(fileobj)  
-    ! close the file 
+    ! close the file
     if (check_if_open(fileobj)) call close_file(fileobj)
 
   endif
@@ -1402,7 +1397,7 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, var_desc, &
     call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, '1', dim_names, &
                                     dim_lengths, num_dims, dG=dG)
   endif
-  
+
   if (present(GV)) &
     call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, '1', dim_names, &
                                     dim_lengths, num_dims, GV=GV)
@@ -1768,7 +1763,7 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, var_desc, &
     call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, '1', dim_names, &
                                     dim_lengths, num_dims, dG=dG)
   endif
-    
+
   if (present(GV)) &
     call get_var_dimension_features(var_desc%hor_grid, var_desc%z_grid, '1', dim_names, &
                                     dim_lengths, num_dims, GV=GV)
@@ -1829,7 +1824,7 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, var_desc, &
 
   ! register the field if it is not already in the file
   if (.not.(variable_exists(fileobj, trim(fieldname)))) then
-    
+ 
     call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
     call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(var_desc%units))
     call register_variable_attribute(fileObj, trim(fieldname), 'long_name', trim(var_desc%longname))
@@ -2684,22 +2679,6 @@ subroutine MOM_read_data_2d_noDD_diag_axes(filename, fieldname, data, define_dia
   character(len=1) :: gtype ! grid type
   real :: ymax1, ymax2 ! max values from latitude array
   real, allocatable, dimension(:,:) :: tmpGlbl ! temporary array to hold data
-
-  ! register the global axes
-  !do i=1,ndims
-
-  !  call get_dimension_size(fileObjRead, dim_names(i), globalDimSize)
-
-  !  if (globalDimSize .eq. size(tmpT,1)) then
-  !    call register_axis(fileObjRead, trim(dim_names(i)),'x', domain_position=CENTER)
-  !  elseif (globalDimSize .eq. size(tmpT,2)) then
-  !    call register_axis(fileObjRead, trim(dim_names(i)),'y', domain_position=CENTER)
-   ! elseif (globalDimSize .eq. size(tmpV,1)) then
-  !    call register_axis(fileObjRead, trim(dim_names(i)),'x', domain_position=EAST_FACE)
-   ! elseif (globalDimSize .eq. size(tmpU,2)) then
-  !    call register_axis(fileObjRead, trim(dim_names(i)),'y', domain_position=NORTH_FACE)
-   ! endif
- ! enddo
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
@@ -3986,7 +3965,6 @@ end function read_most_recent_time_DD
 function read_most_recent_time_noDD(fileobj) result (file_time)
   type(fmsNetcdfFile_t), intent(in) :: fileObj ! netCDF file object returned by open_file
   ! local
-  
   real :: file_time ! most recent time read from netcdf file. If there is no time value, file_time = 0
   integer :: dim_unlim_size
   character(len=nf90_max_name) :: dim_unlim_name

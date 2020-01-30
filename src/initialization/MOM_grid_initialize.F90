@@ -274,7 +274,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
 
   ! tmpZ is defined on the data domain
   tmpZ(:,:) = 999.
-  call MOM_read_data(filename, 'x', tmpZ, SGdom, x_position=EAST_FACE, y_position=NORTH_FACE)
+  call MOM_read_data(filename, 'x', tmpZ, SGdom, x_units="degrees_east", y_units="degrees_north", &
+                     x_position=EAST_FACE, y_position=NORTH_FACE)
 
   if (lon_bug) then
     call pass_var(tmpZ, SGdom, position=CORNER)
@@ -299,7 +300,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
 
   ! Read Y from the supergrid
   tmpZ(:,:) = 999.
-  call MOM_read_data(filename, 'y', tmpZ, SGdom, x_position=EAST_FACE, y_position=NORTH_FACE)
+  call MOM_read_data(filename, 'y', tmpZ, SGdom, x_units="degrees_east", y_units="degrees_north", &
+                     x_position=EAST_FACE, y_position=NORTH_FACE)
 
   call pass_var(tmpZ, SGdom, position=CORNER)
   call extrapolate_metric(tmpZ, 2*(G%jsc-G%jsd)+2, missing=999.0)
