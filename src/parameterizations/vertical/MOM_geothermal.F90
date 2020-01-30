@@ -303,10 +303,10 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
             endif
             heat_rem(i) = heat_rem(i) - heating
 
-            I_h = 1.0 / (h(i,j,k_tgt) + h_transfer + H_neglect)
-            tv%T(i,j,k_tgt) = (h(i,j,k_tgt) * tv%T(i,j,k_tgt) + &
+            I_h = 1.0 / ((h(i,j,k_tgt) + H_neglect) + h_transfer)
+            tv%T(i,j,k_tgt) = ((h(i,j,k_tgt) + H_neglect) * tv%T(i,j,k_tgt) + &
                                (h_transfer * tv%T(i,j,k) + heating)) * I_h
-            tv%S(i,j,k_tgt) = (h(i,j,k_tgt) * tv%S(i,j,k_tgt) + &
+            tv%S(i,j,k_tgt) = ((h(i,j,k_tgt) + H_neglect) * tv%S(i,j,k_tgt) + &
                                h_transfer * tv%S(i,j,k)) * I_h
 
             h(i,j,k) = h(i,j,k) - h_transfer

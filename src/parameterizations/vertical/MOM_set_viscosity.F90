@@ -14,6 +14,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
+use MOM_io, only : slasher, MOM_read_data
 use MOM_kappa_shear, only : kappa_shear_is_used, kappa_shear_at_vertex
 use MOM_cvmix_shear, only : cvmix_shear_is_used
 use MOM_cvmix_conv,  only : cvmix_conv_is_used
@@ -85,12 +86,20 @@ type, public :: set_visc_CS ; private
                             !! answers from the end of 2018.  Otherwise, use updated and more robust
                             !! forms of the same expressions.
   logical :: debug          !< If true, write verbose checksums for debugging purposes.
+  logical :: BBL_use_tidal_bg !< If true, use a tidal background amplitude for the bottom velocity
+                            !! when computing the bottom stress
+  character(len=200) :: inputdir !< The directory for input files.
   type(ocean_OBC_type), pointer :: OBC => NULL() !< Open boundaries control structure
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                             !! regulate the timing of diagnostic output.
+  ! Allocatable data arrays
+  real, allocatable, dimension(:,:) :: tideamp !< RMS tidal amplitude at h points [Z T-1 ~> m s-1]
+  ! Diagnostic arrays
+  real, allocatable, dimension(:,:) :: bbl_u !< BBL mean U current [L T-1 ~> m s-1]
+  real, allocatable, dimension(:,:) :: bbl_v !< BBL mean V current [L T-1 ~> m s-1]
   !>@{ Diagnostics handles
-  integer :: id_bbl_thick_u = -1, id_kv_bbl_u = -1
-  integer :: id_bbl_thick_v = -1, id_kv_bbl_v = -1
+  integer :: id_bbl_thick_u = -1, id_kv_bbl_u = -1, id_bbl_u = -1
+  integer :: id_bbl_thick_v = -1, id_kv_bbl_v = -1, id_bbl_v = -1
   integer :: id_Ray_u = -1, id_Ray_v = -1
   integer :: id_nkml_visc_u = -1, id_nkml_visc_v = -1
   !!@}
@@ -122,7 +131,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   type(vertvisc_type),      intent(inout) :: visc !< A structure containing vertical viscosities and
                                                   !! related fields.
   type(set_visc_CS),        pointer       :: CS   !< The control structure returned by a previous
-                                                  !! call to vertvisc_init.
+                                                  !! call to set_visc_init.
   logical,        optional, intent(in)    :: symmetrize !< If present and true, do extra calculations
                                                   !! of those values in visc that would be
                                                   !! calculated with symmetric memory.
@@ -509,10 +518,18 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
 
           if ((.not.CS%linear_drag) .and. (hweight >= 0.0)) then ; if (m==1) then
             v_at_u = set_v_at_u(v, h, G, i, j, k, mask_v, OBC)
+            if (CS%BBL_use_tidal_bg) then
+              U_bg_sq = 0.5*( G%mask2dT(i,j)*(CS%tideamp(i,j)*CS%tideamp(i,j))+ &
+                              G%mask2dT(i+1,j)*(CS%tideamp(i+1,j)*CS%tideamp(i+1,j)) )
+            endif
             hutot = hutot + hweight * sqrt(u(I,j,k)*u(I,j,k) + &
                                            v_at_u*v_at_u + U_bg_sq)
           else
             u_at_v = set_u_at_v(u, h, G, i, j, k, mask_u, OBC)
+            if (CS%BBL_use_tidal_bg) then
+              U_bg_sq = 0.5*( G%mask2dT(i,j)*(CS%tideamp(i,j)*CS%tideamp(i,j))+ &
+                              G%mask2dT(i,j+1)*(CS%tideamp(i,j+1)*CS%tideamp(i,j+1)) )
+            endif
             hutot = hutot + hweight * sqrt(v(i,J,k)*v(i,J,k) + &
                                            u_at_v*u_at_v + U_bg_sq)
           endif ; endif
@@ -534,6 +551,13 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
         else
           T_EOS(i) = 0.0 ; S_EOS(i) = 0.0
         endif ; endif
+
+        if (CS%id_bbl_u>0 .and. m==1) then
+          if (hwtot > 0.0) CS%bbl_u(I,j) = hutot/hwtot
+        elseif (CS%id_bbl_v>0 .and. m==2) then
+          if (hwtot > 0.0) CS%bbl_v(i,J) = hutot/hwtot
+        endif
+
       endif ; enddo
     else
       do i=is,ie ; ustar(i) = cdrag_sqrt_Z*CS%drag_bg_vel ; enddo
@@ -901,10 +925,14 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
     call post_data(CS%id_bbl_thick_u, visc%bbl_thick_u, CS%diag)
   if (CS%id_kv_bbl_u > 0) &
     call post_data(CS%id_kv_bbl_u, visc%kv_bbl_u, CS%diag)
+  if (CS%id_bbl_u > 0) &
+    call post_data(CS%id_bbl_u, CS%bbl_u, CS%diag)
   if (CS%id_bbl_thick_v > 0) &
     call post_data(CS%id_bbl_thick_v, visc%bbl_thick_v, CS%diag)
   if (CS%id_kv_bbl_v > 0) &
     call post_data(CS%id_kv_bbl_v, visc%kv_bbl_v, CS%diag)
+  if (CS%id_bbl_v > 0) &
+    call post_data(CS%id_bbl_v, CS%bbl_v, CS%diag)
   if (CS%id_Ray_u > 0) &
     call post_data(CS%id_Ray_u, visc%Ray_u, CS%diag)
   if (CS%id_Ray_v > 0) &
@@ -1033,7 +1061,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
                                                  !! related fields.
   real,                    intent(in)    :: dt   !< Time increment [T ~> s].
   type(set_visc_CS),       pointer       :: CS   !< The control structure returned by a previous
-                                                 !! call to vertvisc_init.
+                                                 !! call to set_visc_init.
   logical,        optional, intent(in)    :: symmetrize !< If present and true, do extra calculations
                                                  !! of those values in visc that would be
                                                  !! calculated with symmetric memory.
@@ -1809,6 +1837,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   logical :: default_2018_answers
   logical :: use_kappa_shear, adiabatic, use_omega
   logical :: use_CVMix_ddiff, differential_diffusion, use_KPP
+  character(len=200) :: filename, tideamp_file
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to OBC segment type
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -1833,6 +1862,8 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   call log_version(param_file, mdl, version, "")
   CS%RiNo_mix = .false. ; use_CVMix_ddiff = .false.
   differential_diffusion = .false.
+  call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, default=".")
+  CS%inputdir = slasher(CS%inputdir)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
                  default=.true.)
@@ -1934,12 +1965,23 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                  "the velocity field to the bottom stress. CDRAG is only "//&
                  "used if BOTTOMDRAGLAW is defined.", units="nondim", &
                  default=0.003)
-    call get_param(param_file, mdl, "DRAG_BG_VEL", CS%drag_bg_vel, &
-                 "DRAG_BG_VEL is either the assumed bottom velocity (with "//&
-                 "LINEAR_DRAG) or an unresolved  velocity that is "//&
-                 "combined with the resolved velocity to estimate the "//&
-                 "velocity magnitude.  DRAG_BG_VEL is only used when "//&
-                 "BOTTOMDRAGLAW is defined.", units="m s-1", default=0.0, scale=US%m_s_to_L_T)
+    call get_param(param_file, mdl, "BBL_USE_TIDAL_BG", CS%BBL_use_tidal_bg, &
+                 "Flag to use the tidal RMS amplitude in place of constant "//&
+                 "background velocity for computing u* in the BBL. "//&
+                 "This flag is only used when BOTTOMDRAGLAW is true and "//&
+                 "LINEAR_DRAG is false.", default=.false.)
+    if (CS%BBL_use_tidal_bg) then
+      call get_param(param_file, mdl, "TIDEAMP_FILE", tideamp_file, &
+                   "The path to the file containing the spatially varying "//&
+                   "tidal amplitudes with INT_TIDE_DISSIPATION.", default="tideamp.nc")
+    else
+      call get_param(param_file, mdl, "DRAG_BG_VEL", CS%drag_bg_vel, &
+                   "DRAG_BG_VEL is either the assumed bottom velocity (with "//&
+                   "LINEAR_DRAG) or an unresolved  velocity that is "//&
+                   "combined with the resolved velocity to estimate the "//&
+                   "velocity magnitude.  DRAG_BG_VEL is only used when "//&
+                   "BOTTOMDRAGLAW is defined.", units="m s-1", default=0.0, scale=US%m_s_to_L_T)
+    endif
     call get_param(param_file, mdl, "BBL_USE_EOS", CS%BBL_use_EOS, &
                  "If true, use the equation of state in determining the "//&
                  "properties of the bottom boundary layer.  Otherwise use "//&
@@ -2002,25 +2044,42 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   endif
 
   if (CS%bottomdraglaw) then
-    allocate(visc%bbl_thick_u(IsdB:IedB,jsd:jed)) ; visc%bbl_thick_u = 0.0
-    allocate(visc%kv_bbl_u(IsdB:IedB,jsd:jed)) ; visc%kv_bbl_u = 0.0
-    allocate(visc%bbl_thick_v(isd:ied,JsdB:JedB)) ; visc%bbl_thick_v = 0.0
-    allocate(visc%kv_bbl_v(isd:ied,JsdB:JedB)) ; visc%kv_bbl_v = 0.0
-    allocate(visc%ustar_bbl(isd:ied,jsd:jed)) ; visc%ustar_bbl = 0.0
-    allocate(visc%TKE_bbl(isd:ied,jsd:jed)) ; visc%TKE_bbl = 0.0
+    allocate(visc%bbl_thick_u(IsdB:IedB,jsd:jed)) ; visc%bbl_thick_u(:,:) = 0.0
+    allocate(visc%kv_bbl_u(IsdB:IedB,jsd:jed)) ; visc%kv_bbl_u(:,:) = 0.0
+    allocate(visc%bbl_thick_v(isd:ied,JsdB:JedB)) ; visc%bbl_thick_v(:,:) = 0.0
+    allocate(visc%kv_bbl_v(isd:ied,JsdB:JedB)) ; visc%kv_bbl_v(:,:) = 0.0
+    allocate(visc%ustar_bbl(isd:ied,jsd:jed)) ; visc%ustar_bbl(:,:) = 0.0
+    allocate(visc%TKE_bbl(isd:ied,jsd:jed)) ; visc%TKE_bbl(:,:) = 0.0
 
     CS%id_bbl_thick_u = register_diag_field('ocean_model', 'bbl_thick_u', &
        diag%axesCu1, Time, 'BBL thickness at u points', 'm', conversion=US%Z_to_m)
     CS%id_kv_bbl_u = register_diag_field('ocean_model', 'kv_bbl_u', diag%axesCu1, &
        Time, 'BBL viscosity at u points', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
+    CS%id_bbl_u = register_diag_field('ocean_model', 'bbl_u', diag%axesCu1, &
+       Time, 'BBL mean u current', 'm s-1', conversion=US%L_T_to_m_s)
+    if (CS%id_bbl_u>0) then
+      allocate(CS%bbl_u(IsdB:IedB,jsd:jed)) ; CS%bbl_u(:,:) = 0.0
+    endif
     CS%id_bbl_thick_v = register_diag_field('ocean_model', 'bbl_thick_v', &
        diag%axesCv1, Time, 'BBL thickness at v points', 'm', conversion=US%Z_to_m)
     CS%id_kv_bbl_v = register_diag_field('ocean_model', 'kv_bbl_v', diag%axesCv1, &
        Time, 'BBL viscosity at v points', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
+    CS%id_bbl_v = register_diag_field('ocean_model', 'bbl_v', diag%axesCv1, &
+       Time, 'BBL mean v current', 'm s-1', conversion=US%L_T_to_m_s)
+    if (CS%id_bbl_v>0) then
+      allocate(CS%bbl_v(isd:ied,JsdB:JedB)) ; CS%bbl_v(:,:) = 0.0
+    endif
+    if (CS%BBL_use_tidal_bg) then
+      allocate(CS%tideamp(isd:ied,jsd:jed)) ; CS%tideamp(:,:) = 0.0
+      filename = trim(CS%inputdir) // trim(tideamp_file)
+      call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
+      call MOM_read_data(filename, 'tideamp', CS%tideamp, G%domain, timelevel=1, scale=US%m_to_Z*US%T_to_s)
+      call pass_var(CS%tideamp,G%domain)
+    endif
   endif
   if (CS%Channel_drag) then
-    allocate(visc%Ray_u(IsdB:IedB,jsd:jed,nz)) ; visc%Ray_u = 0.0
-    allocate(visc%Ray_v(isd:ied,JsdB:JedB,nz)) ; visc%Ray_v = 0.0
+    allocate(visc%Ray_u(IsdB:IedB,jsd:jed,nz)) ; visc%Ray_u(:,:,:) = 0.0
+    allocate(visc%Ray_v(isd:ied,JsdB:JedB,nz)) ; visc%Ray_v(:,:,:) = 0.0
     CS%id_Ray_u = register_diag_field('ocean_model', 'Rayleigh_u', diag%axesCuL, &
        Time, 'Rayleigh drag velocity at u points', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
     CS%id_Ray_v = register_diag_field('ocean_model', 'Rayleigh_v', diag%axesCvL, &
@@ -2028,13 +2087,13 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   endif
 
   if (use_CVMix_ddiff .or. differential_diffusion) then
-    allocate(visc%Kd_extra_T(isd:ied,jsd:jed,nz+1)) ; visc%Kd_extra_T = 0.0
-    allocate(visc%Kd_extra_S(isd:ied,jsd:jed,nz+1)) ; visc%Kd_extra_S = 0.0
+    allocate(visc%Kd_extra_T(isd:ied,jsd:jed,nz+1)) ; visc%Kd_extra_T(:,:,:) = 0.0
+    allocate(visc%Kd_extra_S(isd:ied,jsd:jed,nz+1)) ; visc%Kd_extra_S(:,:,:) = 0.0
   endif
 
   if (CS%dynamic_viscous_ML) then
-    allocate(visc%nkml_visc_u(IsdB:IedB,jsd:jed)) ; visc%nkml_visc_u = 0.0
-    allocate(visc%nkml_visc_v(isd:ied,JsdB:JedB)) ; visc%nkml_visc_v = 0.0
+    allocate(visc%nkml_visc_u(IsdB:IedB,jsd:jed)) ; visc%nkml_visc_u(:,:) = 0.0
+    allocate(visc%nkml_visc_v(isd:ied,JsdB:JedB)) ; visc%nkml_visc_v(:,:) = 0.0
     CS%id_nkml_visc_u = register_diag_field('ocean_model', 'nkml_visc_u', &
        diag%axesCu1, Time, 'Number of layers in viscous mixed layer at u points', 'm')
     CS%id_nkml_visc_v = register_diag_field('ocean_model', 'nkml_visc_v', &
@@ -2082,10 +2141,12 @@ subroutine set_visc_end(visc, CS)
   type(vertvisc_type), intent(inout) :: visc !< A structure containing vertical viscosities and
                                              !! related fields.  Elements are deallocated here.
   type(set_visc_CS),   pointer       :: CS   !< The control structure returned by a previous
-                                             !! call to vertvisc_init.
+                                             !! call to set_visc_init.
   if (CS%bottomdraglaw) then
     deallocate(visc%bbl_thick_u) ; deallocate(visc%bbl_thick_v)
     deallocate(visc%kv_bbl_u) ; deallocate(visc%kv_bbl_v)
+    if (allocated(CS%bbl_u)) deallocate(CS%bbl_u)
+    if (allocated(CS%bbl_v)) deallocate(CS%bbl_v)
   endif
   if (CS%Channel_drag) then
     deallocate(visc%Ray_u) ; deallocate(visc%Ray_v)
