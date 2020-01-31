@@ -46,8 +46,8 @@ dyv.units = 'm'
 areav.units = 'm2'
 f_sg.createVariable('angle_dx', 'f8', ('nyp', 'nxp'))
 f_sg.createVariable('tile', 'S1', ('string'))
-f_sg.variables['y'].units = 'degrees'
-f_sg.variables['x'].units = 'degrees'
+f_sg.variables['y'].units = 'degrees_north'
+f_sg.variables['x'].units = 'degrees_east'
 f_sg.variables['dy'].units = 'meters'
 f_sg.variables['dx'].units = 'meters'
 f_sg.variables['area'].units = 'm2'

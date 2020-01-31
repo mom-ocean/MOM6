@@ -362,7 +362,7 @@ subroutine create_file(filename, vars, numVariables, register_time, G, DG, GV, c
           ! register the axis attributes and write the axis data to the file
           if (.not.(variable_exists(fileObjDD, trim(axis_data_CS%axis(j)%name)))) then
             if (associated(axis_data_CS%data(j)%p)) then
-         
+
                 call register_field(fileObjDD, trim(axis_data_CS%axis(j)%name), &
                                   "double", dimensions=(/trim(axis_data_CS%axis(j)%name)/))
 
@@ -756,7 +756,7 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
     if (dim_unlim_size .eq. unlimited) dim_unlim_size = 0
 
     if (variable_exists(fileobj, trim(dim_unlim_name))) &
-      file_time = read_most_recent_time(fileobj)  
+      file_time = read_most_recent_time(fileobj)
     ! close the file
     if (check_if_open(fileobj)) call close_file(fileobj)
 
@@ -1824,7 +1824,7 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, var_desc, &
 
   ! register the field if it is not already in the file
   if (.not.(variable_exists(fileobj, trim(fieldname)))) then
- 
+
     call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))
     call register_variable_attribute(fileObj, trim(fieldname), 'units', trim(var_desc%units))
     call register_variable_attribute(fileObj, trim(fieldname), 'long_name', trim(var_desc%longname))
@@ -2051,7 +2051,7 @@ end subroutine write_field_4d_noDD
 !> This function uses the fms_io function read_data to read 1-D domain-decomposed data field named "fieldname"
 !! from file "filename".
 subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, corner, edge_lengths, time_level, scale, &
-                               x_position, y_position, x_units, y_units)
+                               x_position, y_position)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:), intent(inout) :: data !< The 1-dimensional data array to pass to read_data
@@ -2063,43 +2063,33 @@ subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, corner, edge_l
   real, optional, intent(in) :: scale !< A scaling factor that the field is multiplied by
   integer, intent(in), optional :: x_position !< domain position of x-dimension; CENTER (default) or EAST_FACE
   integer, intent(in), optional :: y_position !< domain position of y-dimension; CENTER (default) or NORTH_FACE
-  character(len=*), intent(in), optional :: x_units !< x-dimension units; default is "degrees_east"
-  character(len=*), intent(in), optional :: y_units !< y-dimension units; default is "degrees_north"
+
   ! local
   type(FmsNetcdfDomainFile_t) :: fileobj ! netCDF file object returned by call to open_file
   logical :: file_open_success !.true. if call to open_file is successful
   integer :: i
   integer, dimension(1) :: start, nread ! indices for first data value and number of values to read
-  character(len=64) :: xunits, yunits ! x- and y-dimension units
   character(len=40), dimension(1) :: dim_names ! variable dimension names
   integer :: xpos, ypos ! x and y domain positions
-  ! open the file
-  if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, filename, "read", domain%mpp_domain, is_restart=.false.)
-  ! register the variable axes
-  !> \note: the user will need to change the xUnits and yUnits if they expect different values for the
-  !! x/longitude and/or y/latitude axes units
+
   xpos = CENTER
   ypos = CENTER
   if (present(x_position)) xpos = x_position
   if (present(y_position)) ypos = y_position
 
-  xunits=""
-  yunits=""
-  if (present(x_units)) then
-    xunits(1:len_trim(x_units)) = x_units
-  else
-    xunits = "degrees_east"
-  endif
-  if (present(y_units)) then
-    yunits(1:len_trim(y_units)) = y_units
-  else
-    yunits = "degrees_north"
+  ! define the io domain for 1-pe jobs because it is required to read domain-decomposed files
+  if (mpp_get_domain_npes(domain%mpp_domain) .eq. 1 ) then
+    if (.not. associated(mpp_get_io_domain(domain%mpp_domain))) &
+      call mpp_define_io_domain(domain%mpp_domain, (/1,1/))
   endif
 
-  call MOM_register_variable_axes(fileobj, trim(fieldname), xUnits=trim(xunits), yUnits=trim(yunits), &
-                                   xPosition=xpos, yPosition=ypos)
+  ! open the file
+  if (.not.(check_if_open(fileobj))) &
+    file_open_success = open_file(fileobj, filename, "read", domain%mpp_domain, is_restart=.false.)
+  ! register the variable axes
+  call MOM_register_variable_axes(fileobj, trim(fieldname), xPosition=xpos, yPosition=ypos)
   ! set the start and nread values that will be passed as the read_data corner and edge_lengths arguments
+  dim_names(:) = ""
   call get_variable_dimension_names(fileobj, trim(fieldname), dim_names)
 
   start(1) = 1
@@ -2123,7 +2113,7 @@ end subroutine MOM_read_data_1d_DD
 !> This function uses the fms_io function read_data to read 2-D domain-decomposed data field named "fieldname"
 !! from file "filename".
 subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain, corner, edge_lengths, time_level, scale, &
-                               x_position, y_position, x_units, y_units)
+                               x_position, y_position)
   character(len=*), intent(in) :: filename  !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:,:), intent(inout) :: data !< The 2-dimensional data array to pass to read_data
@@ -2135,46 +2125,35 @@ subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain, corner, edge_l
   real, optional, intent(in):: scale !< A scaling factor that the field is multiplied by
   integer, intent(in), optional :: x_position !< domain position of x-dimension; CENTER (default) or EAST_FACE
   integer, intent(in), optional :: y_position !< domain position of y-dimension; CENTER (default) or NORTH_FACE
-  character(len=*), intent(in), optional :: x_units !< x-dimension units; default is "degrees_east"
-  character(len=*), intent(in), optional :: y_units !< y-dimension units; default is "degrees_north"
+
   ! local
   type(FmsNetcdfDomainFile_t) :: fileobj !netCDF file object returned by call to open_file
   logical :: file_open_success !.true. if call to open_file is successful
   integer :: i, dim_unlim_index
   integer, dimension(2) :: start, nread ! indices for first data value and number of values to read
-  character(len=64) :: xunits, yunits ! x- and y-dimension units
   character(len=40), dimension(2) :: dim_names ! variable dimension names
   integer :: xpos, ypos ! x and y domain positions
+
+  xpos = CENTER
+  ypos = CENTER
+  if (present(x_position)) xpos = x_position
+  if (present(y_position)) ypos = y_position
+
+  ! define the io domain for 1-pe jobs because it is required to read domain-decomposed files
+  if (mpp_get_domain_npes(domain%mpp_domain) .eq. 1 ) then
+    if (.not. associated(mpp_get_io_domain(domain%mpp_domain))) &
+      call mpp_define_io_domain(domain%mpp_domain, (/1,1/))
+  endif
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, filename, "read", domain%mpp_domain, is_restart=.false.)
   ! register the variable axes
-  !> \note: the user will need to change the xUnits and yUnits if they expect different values for the
-  !! x/longitude and/or y/latitude axes units
-  xpos = CENTER
-  ypos = CENTER
-  if (present(x_position)) xpos = x_position
-  if (present(y_position)) ypos = y_position
-  xunits=""
-  yunits=""
-  if (present(x_units)) then
-    xunits(1:len_trim(x_units)) = x_units
-  else
-    xunits = "degrees_east"
-  endif
-  if (present(y_units)) then
-    yunits(1:len_trim(y_units)) = y_units
-  else
-    yunits = "degrees_north"
-  endif
-  call MOM_register_variable_axes(fileobj, trim(fieldname), xUnits=trim(xunits), yUnits=trim(yunits), &
-                                  xPosition=xpos, yPosition=ypos)
+  call MOM_register_variable_axes(fileobj, trim(fieldname), xPosition=xpos, yPosition=ypos)
 
-  ! set the start and nread values that will be passed as the read_data corner and edge_lengths arguments
-  if (present(corner) .or. present(edge_lengths) .or. present(time_level)) then
-    call get_variable_dimension_names(fileobj, trim(fieldname), dim_names)
-  endif
+  ! set the start and nread values that will be passed as the read_data corner and edge_lengths argument
+  dim_names(:) = ""
+  call get_variable_dimension_names(fileobj, trim(fieldname), dim_names)
 
   start(:) = 1
   if (present(corner)) start = corner
@@ -2201,7 +2180,7 @@ subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain, corner, edge_l
                      trim(fieldName)// " does not have an unlimited dimension.")
   endif
   ! read the data
-  call read_data(fileobj, trim(fieldname), data, corner=start, edge_Lengths=nread)
+  call read_data(fileobj, trim(fieldname), data, corner=start, edge_lengths=nread)
   ! close the file
   if (check_if_open(fileobj)) call close_file(fileobj)
   ! scale the data
@@ -2214,7 +2193,7 @@ end subroutine MOM_read_data_2d_DD
 !> This function uses the fms_io function read_data to read 3-D domain-decomposed data field named "fieldname"
 !! from file "filename".
 subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, corner, edge_lengths, time_level, scale, &
-                               x_position, y_position, x_units, y_units)
+                               x_position, y_position)
   character(len=*), intent(in) :: filename  !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:), intent(inout) :: data !< The 3-dimensional data array to pass to read_data
@@ -2226,46 +2205,34 @@ subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, corner, edge_l
   real,         optional, intent(in):: scale !< A scaling factor that the field is multiplied by
   integer, intent(in), optional :: x_position !< domain position of x-dimension; CENTER (default) or EAST_FACE
   integer, intent(in), optional :: y_position !< domain position of y-dimension; CENTER (default) or NORTH_FACE
-  character(len=*), intent(in), optional :: x_units !< x-dimension units; default is "degrees_east"
-  character(len=*), intent(in), optional :: y_units !< y-dimension units; default is "degrees_north"
+
   ! local
   type(FmsNetcdfDomainFile_t) :: fileobj !netCDF file object returned by call to open_file
   logical :: file_open_success !.true. if call to open_file is successful
   integer :: i, dim_unlim_index
   integer, dimension(3) :: start, nread ! indices for first data value and number of values to read
-  character(len=64) :: xunits, yunits ! x- and y-dimension units
   character(len=40), dimension(3) :: dim_names ! variable dimension names
   integer :: xpos, ypos ! x and y domain positions
+
+  xpos = CENTER
+  ypos = CENTER
+  if (present(x_position)) xpos = x_position
+  if (present(y_position)) ypos = y_position
+
+  ! define the io domain for 1-pe jobs because it is required to read domain-decomposed files
+  if (mpp_get_domain_npes(domain%mpp_domain) .eq. 1 ) then
+    if (.not. associated(mpp_get_io_domain(domain%mpp_domain))) &
+      call mpp_define_io_domain(domain%mpp_domain, (/1,1/))
+  endif
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, filename, "read", domain%mpp_domain, is_restart=.false.)
   ! register the variable axes
-  !> \note: the user will need to change the xUnits and yUnits if they expect different values for the
-  !! x/longitude and/or y/latitude axes units
-  xpos = CENTER
-  ypos = CENTER
-  if (present(x_position)) xpos = x_position
-  if (present(y_position)) ypos = y_position
-  xunits=""
-  yunits=""
-  if (present(x_units)) then
-    xunits(1:len_trim(x_units)) = x_units
-  else
-    xunits = "degrees_east"
-  endif
-  if (present(y_units)) then
-    yunits(1:len_trim(y_units)) = y_units
-  else
-    yunits = "degrees_north"
-  endif
-
-  call MOM_register_variable_axes(fileobj, trim(fieldname), xUnits=trim(xunits), yUnits=trim(yunits), &
-                                  xPosition=xpos, yPosition=ypos)
+  call MOM_register_variable_axes(fileobj, trim(fieldname), xPosition=xpos, yPosition=ypos)
   ! set the start and nread values that will be passed as the read_data corner and edge_lengths arguments
-  if (present(corner) .or. present(edge_lengths) .or. present(time_level)) then
-    call get_variable_dimension_names(fileobj, trim(fieldname), dim_names)
-  endif
+  dim_names(:) = ""
+  call get_variable_dimension_names(fileobj, trim(fieldname), dim_names)
 
   start(:) = 1
   if (present(corner)) start = corner
@@ -2305,7 +2272,7 @@ end subroutine MOM_read_data_3d_DD
 !> This function uses the fms_io function read_data to read 4-D domain-decomposed data field named "fieldname"
 !! from file "filename".
 subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, corner, edge_lengths, time_level, scale, &
-                               x_position, y_position, x_units, y_units)
+                               x_position, y_position)
   character(len=*),       intent(in) :: filename  !< The name of the file to read
   character(len=*),       intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:,:), intent(inout) :: data !< The 4-dimensional data array to pass to read_data
@@ -2317,8 +2284,6 @@ subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, corner, edge_l
   real,         optional, intent(in):: scale !< A scaling factor that the field is multiplied by
   integer, intent(in), optional :: x_position !< domain position of x-dimension; CENTER (default) or EAST_FACE
   integer, intent(in), optional :: y_position !< domain position of y-dimension; CENTER (default) or NORTH_FACE
-  character(len=*), intent(in), optional :: x_units !< x-dimension units; default is "degrees_east"
-  character(len=*), intent(in), optional :: y_units !< y-dimension units; default is "degrees_north"
 
   ! local
   type(FmsNetcdfDomainFile_t) :: fileobj !netCDF file object returned by call to open_file
@@ -2326,38 +2291,28 @@ subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, corner, edge_l
   integer :: i, dim_unlim_index
   integer, dimension(4) :: start, nread ! indices for first data value and number of values to read
   character(len=40), dimension(4) :: dim_names ! variable dimension names
-  character(len=64) :: xunits, yunits ! x- and y-dimension units
   integer :: xpos, ypos ! x and y domain positions
+
+  xpos = CENTER
+  ypos = CENTER
+  if (present(x_position)) xpos = x_position
+  if (present(y_position)) ypos = y_position
+
+  ! define the io domain for 1-pe jobs because it is required to read domain-decomposed files
+  if (mpp_get_domain_npes(domain%mpp_domain) .eq. 1 ) then
+    if (.not. associated(mpp_get_io_domain(domain%mpp_domain))) &
+      call mpp_define_io_domain(domain%mpp_domain, (/1,1/))
+  endif
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, filename, "read", domain%mpp_domain, is_restart=.false.)
   ! register the variable axes
-  !> \note: the user will need to change the xUnits and yUnits if they expect different values for the
-  !! x/longitude and/or y/latitude axes units
-  xpos = CENTER
-  ypos = CENTER
-  if (present(x_position)) xpos = x_position
-  if (present(y_position)) ypos = y_position
-  xunits=""
-  yunits=""
-  if (present(x_units)) then
-    xunits(1:len_trim(x_units)) = x_units
-  else
-    xunits = "degrees_east"
-  endif
-  if (present(y_units)) then
-    yunits(1:len_trim(y_units)) = y_units
-  else
-    yunits = "degrees_north"
-  endif
 
-  call MOM_register_variable_axes(fileobj, trim(fieldname), xUnits=trim(xunits), yUnits=trim(yunits), &
-                                  xPosition=xpos, yPosition=ypos)
+  call MOM_register_variable_axes(fileobj, trim(fieldname), xPosition=xpos, yPosition=ypos)
   ! set the start and nread values that will be passed as the read_data corner and edge_lengths arguments
-  if (present(corner) .or. present(edge_lengths) .or. present(time_level)) then
-    call get_variable_dimension_names(fileobj, trim(fieldname), dim_names)
-  endif
+  dim_names(:) = ""
+  call get_variable_dimension_names(fileobj, trim(fieldname), dim_names)
 
   start(:) = 1
   if (present(corner)) start = corner
@@ -2440,12 +2395,13 @@ subroutine MOM_read_data_1d_noDD(filename, fieldname, data, corner, edge_lengths
   allocate(start(ndims))
   allocate(nread(ndims))
   allocate(dim_names(ndims))
+  dim_names(:) = ""
+  call get_variable_dimension_names(fileobj, trim(fieldname), dim_names)
 
   if (present(corner)) start(1) = corner(1)
   if (present(edge_lengths)) then
     nread(1) = edge_lengths(1)
   else
-    call get_variable_dimension_names(fileobj, trim(fieldname), dim_names)
     call get_dimension_size(fileobj, dim_names(1), nread(1))
   endif
   ! read the data
@@ -2485,9 +2441,8 @@ subroutine MOM_read_data_2d_noDD(filename, fieldname, data, corner, edge_lengths
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, filename, "read", is_restart=.false.)
   ! set the start and nread values that will be passed as the read_data corner and edge_lengths arguments
-  if (present(corner) .or. present(edge_lengths) .or. present(time_level)) then
-    call get_variable_dimension_names(fileobj, trim(fieldname), dim_names)
-  endif
+  dim_names(:) = ""
+  call get_variable_dimension_names(fileobj, trim(fieldname), dim_names)
 
   start(:) = 1
   if (present(corner)) start = corner
@@ -2547,9 +2502,8 @@ subroutine MOM_read_data_3d_noDD(filename, fieldname, data, corner, edge_lengths
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, filename, "read", is_restart=.false.)
   ! set the start and nread values that will be passed as the read_data corner and edge_lengths arguments
-  if (present(corner) .or. present(edge_lengths) .or. present(time_level)) then
-    call get_variable_dimension_names(fileobj, trim(fieldname), dim_names)
-  endif
+  dim_names(:) = ""
+  call get_variable_dimension_names(fileobj, trim(fieldname), dim_names)
 
   start(:) = 1
   if (present(corner)) start = corner
@@ -2608,9 +2562,8 @@ subroutine MOM_read_data_4d_noDD(filename, fieldname, data, corner, edge_lengths
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, filename, "read", is_restart=.false.)
   ! set the start and nread values that will be passed as the read_data corner and edge_lengths arguments
-  if (present(corner) .or. present(edge_lengths) .or. present(time_level)) then
-    call get_variable_dimension_names(fileobj, trim(fieldname), dim_names)
-  endif
+  dim_names(:) = ""
+  call get_variable_dimension_names(fileobj, trim(fieldname), dim_names)
 
   start(:) = 1
   if (present(corner)) start = corner
@@ -2684,17 +2637,17 @@ subroutine MOM_read_data_2d_noDD_diag_axes(filename, fieldname, data, define_dia
   if (.not.(check_if_open(fileobj))) &
     file_open_success = open_file(fileobj, filename, "read", is_restart=.false.)
 
+  dim_names(:) = ""
   call get_variable_dimension_names(fileobj, trim(fieldname), dim_names)
+
+  do i=1,2
+    call get_dimension_size(fileobj, trim(dim_names(i)), nread(i))
+  enddo
+
   start(:) = 1
   if (present(corner)) start = corner
 
-  if (present(edge_lengths)) then
-    nread = edge_lengths
-  else
-    do i=1,2
-      call get_dimension_size(fileobj, trim(dim_names(i)), nread(i))
-    enddo
-  endif
+  if (present(edge_lengths)) nread = edge_lengths
 
   if (present(time_level)) then
     dim_unlim_index=0
@@ -2708,26 +2661,30 @@ subroutine MOM_read_data_2d_noDD_diag_axes(filename, fieldname, data, define_dia
     if (dim_unlim_index .LE. 0) &
       call MOM_error(FATAL, "MOM_io::MOM_read_data_2d_noDD_diag_axes: time level specified, but variable "//&
                      trim(fieldName)// " does not have an unlimited dimension.")
- endif
+  endif
 
- !> \note: the following indexing procedure searches for global x-dimension indices that correspond to the full ranges
- !! of y (geoLatT and geoLatB) values needed for the diagnostic indices (lath and latq).
- !! Defining the gridLatT and gridLatB values using the previous values in tmpGlbl(1,:) did not result in the correct
- !! diagnostic index values due to different indexing conventions for non-domain-decomposed IO in the new and previous
- !! procedures.
+  !> \note: the following indexing procedure searches for global x-dimension indices that correspond to the full ranges
+  !! of y (geoLatT and geoLatB) values needed for the diagnostic indices (lath and latq).
+  !! Defining the gridLatT and gridLatB values using the previous values in tmpGlbl(1,:) did not result in the correct
+  !! diagnostic index values due to different indexing conventions for non-domain-decomposed IO in the new and previous
+  !! procedures.
 
- if (define_diagnostic_axes) then
-   if (.not.(present(grid_type))) call MOM_error(FATAL, "MOM_io::MOM_read_data_2d_noDD_diag_axes: grid_type"// &
-      " argument required if define_diag_axes=.true.")
-   gtype=""
-   allocate(tmpGlbl(nread(1),nread(2)))
-   tmpGlbl(:,:) = 999.0
+  if (define_diagnostic_axes) then
+    gtype=""
+    allocate(tmpGlbl(nread(1),nread(2)))
+    tmpGlbl(:,:) = -999.0
+    ! read the data into the temporary array
+    call read_data(fileobj, trim(fieldname), tmpGlbl, corner=start, edge_lengths=nread)
 
-   call get_variable_units(fileobj, fieldname, units)
-   if (lowercase(trim(units)) .eq. "degrees_north") then
+    call get_variable_units(fileobj, fieldname, units)
+
+    if (lowercase(trim(units)) .eq. "degrees_north") then
+      if (.not.(present(grid_type))) call MOM_error(FATAL, "MOM_io::MOM_read_data_2d_noDD_diag_axes: grid_type"// &
+         " argument required if define_diag_axes=.true. and reading in a y-axis/latitude variable")
       ! create a mask for the T-grid latitude values in the tmpGlbl array
       allocate(yuse(nread(2)))
       yuse(:) = .FALSE.
+
       gtype = lowercase(trim(grid_type))
       select case(gtype)
         case ('t')
@@ -2741,13 +2698,12 @@ subroutine MOM_read_data_2d_noDD_diag_axes(filename, fieldname, data, define_dia
         case default
           call MOM_error(FATAL, "MOM_io::MOM_read_data_2d_noDD_diag_axes: grid_type must be either t or b")
       end select
-
       ! get the index for the x-dimension with the maximum T-grid latitude (geoLatT) value in the tmpGlbl array
       xidx = 0
       yidx1 = 0
-      ymax1 = 999.0
+      ymax1 = -999.0
       yidx2 = 0
-      ymax2 = 999.0
+      ymax2 = -999.0
 
       do i=1,nread(1)
         ! find index of the maximum T-grid latitude value for the ith x (longitude) dimension
@@ -2762,23 +2718,23 @@ subroutine MOM_read_data_2d_noDD_diag_axes(filename, fieldname, data, define_dia
       enddo
 
       if (xidx .LT. 1) call MOM_error(FATAL, "MOM_io::MOM_read_data_2d_nodDD_diag_axes: xidx is less than 1")
-      if (ymax2 .GT. 90.0) &
-      call MOM_error(FATAL, "MOM_io::MOM_read_data_2d_nodDD_diag_axes: ymax2 is greater than 90.0")
-      ! read the data
-      call read_data(fileobj, trim(fieldname), tmpGlbl, corner=start, edge_lengths=nread)
+      if ((ymax2 .LT. -90.0) .or. (ymax2 .GT. 90.0)) &
+      call MOM_error(FATAL, "MOM_io::MOM_read_data_2d_nodDD_diag_axes: ymax2 is not between -90.0 and 90.0")
+
       data(1,1:nread(2)) = tmpGlbl(xidx,:)
 
       deallocate(yuse)
 
-    elseif (lowercase(trim(units)) .eq. "degrees_north") then
-        ! read the data
-        call read_data(fileobj, trim(fieldname), tmpGlbl, corner=start, edge_Lengths=nread)
-        ! all latitude indices contain the full range of x/longitude values required for the diagnostic axes
-        data(1:nread(1),:) = tmpGlbl(:,1:size(data,2))
+    elseif (lowercase(trim(units)) .eq. "degrees_east") then
+
+      ! all latitude indices contain the full range of x/longitude values required for the diagnostic axes
+      data(1:nread(1),:) = tmpGlbl(:,1:size(data,2))
+
     endif
+
     deallocate(tmpGlbl)
   else ! just read the data into the user-specified data buffer
-     call read_data(fileobj, trim(fieldname), data, corner=start, edge_Lengths=nread)
+    call read_data(fileobj, trim(fieldname), data, corner=start, edge_Lengths=nread)
   endif
 
   ! close the file
@@ -2811,11 +2767,9 @@ end subroutine MOM_register_diagnostic_axis
 !> register axes associated with a variable from a domain-decomposed netCDF file
 !> \note The user must specify units for variables with longitude/x-axis and/or latitude/y-axis axes to obtain
 !! the correct domain decomposition for the data buffer.
-subroutine MOM_register_variable_axes(fileObj, variableName, xUnits, yUnits, xPosition, yPosition)
+subroutine MOM_register_variable_axes(fileObj, variableName, xPosition, yPosition)
   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object returned by call to open_file
   character(len=*), intent(in) :: variableName !< name of the variable
-  character(len=*), intent(in), optional :: xUnits !< x-axis (longitude) units to search for
-  character(len=*), intent(in), optional :: yUnits !< y-axis (latitude) units to search for
   integer, intent(in), optional :: xPosition !< domain position of the x-axis
   integer, intent(in), optional :: yPosition !< domain position of the y-axis
   ! local
@@ -2840,21 +2794,39 @@ subroutine MOM_register_variable_axes(fileObj, variableName, xUnits, yUnits, xPo
   call get_variable_size(fileObj, trim(variableName), dimSizes, broadcast=.true.)
   call get_variable_dimension_names(fileObj, trim(variableName), dim_names)
   ! register the axes
+  !>\note: This is not a comprehensive check for all possible supported horizontal axes associated with variables
+  !! read from netCDF files. Developers should add/remove cases as needed.
   do i=1,ndims
-    units=""
-    if (present(xUnits)) then
-      call get_variable_units(fileObj, dim_names(i), units)
-      if (trim(lowercase(units)) .eq. trim(lowercase(xUnits))) then
-        call register_axis(fileObj, dim_names(i),"x", domain_position=xPos)
-      endif
-    elseif (present(yUnits)) then
-      call get_variable_units(fileObj, dim_names(i), units)
-      if (trim(lowercase(units)) .eq. trim(lowercase(yUnits))) then
-        call register_axis(fileObj, dim_names(i),"y", domain_position=yPos)
-      endif
-    else
-      call register_axis(fileObj, dim_names(i), dimSizes(i))
-    endif
+    select case(trim(lowercase(dim_names(i))))
+      case ("nx")
+        call register_axis(fileObj, trim(dim_names(i)),"x", domain_position=xPos)
+      case("nxp")
+        call register_axis(fileObj, trim(dim_names(i)),"x", domain_position=xPos)
+      case("longitude")
+        call register_axis(fileObj, trim(dim_names(i)),"x", domain_position=xPos)
+      case("long")
+        call register_axis(fileObj, trim(dim_names(i)),"x", domain_position=xPos)
+      case("lon")
+        call register_axis(fileObj, trim(dim_names(i)),"x", domain_position=xPos)
+      case("lonh")
+        call register_axis(fileObj, trim(dim_names(i)),"x", domain_position=xPos)
+      case("lonq")
+        call register_axis(fileObj, trim(dim_names(i)),"x", domain_position=xPos)
+      case ("ny")
+        call register_axis(fileObj, trim(dim_names(i)),"y", domain_position=yPos)
+      case("nyp")
+        call register_axis(fileObj, trim(dim_names(i)),"y", domain_position=yPos)
+      case("latitude")
+        call register_axis(fileObj, trim(dim_names(i)),"y", domain_position=yPos)
+      case("lat")
+        call register_axis(fileObj, trim(dim_names(i)),"y", domain_position=yPos)
+      case("lath")
+        call register_axis(fileObj, trim(dim_names(i)),"y", domain_position=yPos)
+      case("latq")
+        call register_axis(fileObj, trim(dim_names(i)),"y", domain_position=yPos)
+      case default ! assumes that the axis is not domain-decomposed 
+        call register_axis(fileObj, trim(dim_names(i)), dimSizes(i))
+    end select
   enddo
 
   deallocate(dimSizes)
@@ -3699,6 +3671,7 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
 
   do i=1,2
     ! register the u axes
+    call MOM_register_variable_axes(fileobj, trim(fieldname), xPosition=xpos, yPosition=ypos)
     call get_variable_units(fileobj, dim_names_u(i), units_u(i))
     if (trim(lowercase(units_u(i))) .eq. "degrees_east") then
       call register_axis(fileobj, dim_names_u(i), "x", domain_position=u_pos)
