@@ -2824,7 +2824,7 @@ subroutine MOM_register_variable_axes(fileObj, variableName, xPosition, yPositio
         call register_axis(fileObj, trim(dim_names(i)),"y", domain_position=yPos)
       case("latq")
         call register_axis(fileObj, trim(dim_names(i)),"y", domain_position=yPos)
-      case default ! assumes that the axis is not domain-decomposed 
+      case default ! assumes that the axis is not domain-decomposed
         call register_axis(fileObj, trim(dim_names(i)), dimSizes(i))
     end select
   enddo
