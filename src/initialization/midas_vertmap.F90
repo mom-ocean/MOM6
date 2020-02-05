@@ -24,9 +24,6 @@ interface fill_boundaries
    module procedure fill_boundaries_int
 end interface
 
-! real, parameter :: epsln=1.e-10 !< A hard-wired constant!
-                                  !! \todo Get rid of this constant
-
 contains
 
 #ifdef PY_SOLO
@@ -378,14 +375,22 @@ subroutine determine_temperature(temp, salt, R, p_ref, niter, land_fill, h, k_st
   real(kind=8), dimension(size(temp,1),size(temp,3)) :: drho_dT, drho_dS
   real(kind=8), dimension(size(temp,1)) :: press
   integer :: nx, ny, nz, nt, i, j, k, n, itt
-  real    :: dT_dS
+  real    :: dT_dS_gauge  ! The relative penalizing of temperature to salinity changes when
+                          ! minimizing property changes while correcting density [degC ppt-1].
+  real    :: I_denom      ! The inverse of the magnitude squared of the density gradient in
+                          ! T-S space streched with dT_dS_gauge [m6 kg-2 ppt-1]
   logical :: adjust_salt, old_fit
   real, parameter :: S_min = 0.5, S_max=65.0
-  real, parameter :: tol=1.e-4, max_t_adj=1.0, max_s_adj = 0.5
+  real, parameter :: tol_T=1.e-4, tol_S=1.e-4, tol_rho=1.e-4
+  real, parameter :: max_t_adj=1.0, max_s_adj = 0.5
 
   old_fit = .true.   ! reproduces siena behavior
-  ! will switch to the newer method which simultaneously adjusts
-  ! temp and salt based on the ratio of the thermal and haline coefficients.
+
+  ! ### The whole determine_temperature subroutine needs to be reexamined, both the algorithms
+  !     and the extensive use of hard-coded dimensional parameters.
+
+  ! We will switch to the newer method which simultaneously adjusts
+  ! temp and salt based on the ratio of the thermal and haline coefficients, once it is tested.
 
   nx=size(temp,1) ; ny=size(temp,2) ; nz=size(temp,3)
 
@@ -411,23 +416,22 @@ subroutine determine_temperature(temp, salt, R, p_ref, niter, land_fill, h, k_st
       do k=k_start,nz ; do i=1,nx
 
 !       if (abs(rho(i,k)-R(k))>tol .and. hin(i,k)>epsln .and. abs(T(i,k)-land_fill) < epsln) then
-        if (abs(rho(i,k)-R(k))>tol) then
+        if (abs(rho(i,k)-R(k))>tol_rho) then
           if (old_fit) then
-             dT(i,k) = max(min((R(k)-rho(i,k)) / drho_dT(i,k), max_t_adj), -max_t_adj)
-             T(i,k) = max(min(T(i,k)+dT(i,k), T_max), T_min)
+            dT(i,k) = max(min((R(k)-rho(i,k)) / drho_dT(i,k), max_t_adj), -max_t_adj)
+            T(i,k) = max(min(T(i,k)+dT(i,k), T_max), T_min)
           else
-             dT_dS = 10.0 - min(-drho_dT(i,k)/drho_dS(i,k),10.)
-             !### RWH: Based on the dimensions alone, the expression above should be:
-             ! dT_dS = 10.0 - min(-drho_dS(i,k)/drho_dT(i,k),10.)
-             dS(i,k) = (R(k)-rho(i,k)) / (drho_dS(i,k) - drho_dT(i,k)*dT_dS )
-             dT(i,k) = -dT_dS*dS(i,k)
-           ! dT(i,k) = max(min(dT(i,k), max_t_adj), -max_t_adj)
-             T(i,k) = max(min(T(i,k)+dT(i,k), T_max), T_min)
-             S(i,k) = max(min(S(i,k)+dS(i,k), S_max), S_min)
+            dT_dS_gauge = 10.0  ! 10 degC is weighted equivalently to 1 ppt.
+            I_denom = 1.0 / (drho_dS(i,k)**2 + dT_dS_gauge**2*drho_dT(i,k)**2)
+            dS(i,k) = (R(k)-rho(i,k)) * drho_dS(i,k) * I_denom
+            dT(i,k) = (R(k)-rho(i,k)) * dT_dS_gauge**2*drho_dT(i,k) * I_denom
+
+            T(i,k) = max(min(T(i,k)+dT(i,k), T_max), T_min)
+            S(i,k) = max(min(S(i,k)+dS(i,k), S_max), S_min)
           endif
         endif
       enddo ; enddo
-      if (maxval(abs(dT)) < tol) then
+      if (maxval(abs(dT)) < tol_T) then
          adjust_salt = .false.
          exit iter_loop
       endif
@@ -445,12 +449,12 @@ subroutine determine_temperature(temp, salt, R, p_ref, niter, land_fill, h, k_st
 #endif
       do k=k_start,nz ; do i=1,nx
 !       if (abs(rho(i,k)-R(k))>tol .and. hin(i,k)>epsln .and. abs(T(i,k)-land_fill) < epsln ) then
-        if (abs(rho(i,k)-R(k)) > tol) then
+        if (abs(rho(i,k)-R(k)) > tol_rho) then
           dS(i,k) = max(min((R(k)-rho(i,k)) / drho_dS(i,k), max_s_adj), -max_s_adj)
           S(i,k) = max(min(S(i,k)+dS(i,k), S_max), S_min)
         endif
       enddo ; enddo
-      if (maxval(abs(dS)) < tol) exit
+      if (maxval(abs(dS)) < tol_S) exit
     enddo ; endif
 
     temp(:,j,:)=T(:,:)
