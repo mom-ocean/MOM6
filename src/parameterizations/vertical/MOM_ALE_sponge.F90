@@ -130,6 +130,9 @@ type, public :: ALE_sponge_CS ; private
   logical :: remap_answers_2018    !< If true, use the order of arithmetic and expressions that
                                    !! recover the answers for remapping from the end of 2018.
                                    !! Otherwise, use more robust forms of the same expressions.
+  logical :: hor_regrid_answers_2018 !< If true, use the order of arithmetic for horizonal regridding
+                                   !! that recovers the answers from the end of 2018.  Otherwise, use
+                                   !! rotationally symmetric forms of the same expressions.
 
   logical :: time_varying_sponges  !< True if using newer sponge code
   logical :: spongeDataOngrid !< True if the sponge data are on the model horizontal grid
@@ -203,6 +206,10 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
   call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", CS%remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=default_2018_answers)
+  call get_param(param_file, mdl, "HOR_REGRID_2018_ANSWERS", CS%hor_regrid_answers_2018, &
+                 "If true, use the order of arithmetic for horizonal regridding that recovers "//&
+                 "the answers from the end of 2018.  Otherwise, use rotationally symmetric "//&
                  "forms of the same expressions.", default=default_2018_answers)
 
   CS%time_varying_sponges = .false.
@@ -742,15 +749,17 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u, fieldname_u, filename
   ! I am hard-wiring this call to assume that the input grid is zonally re-entrant
   ! In the future, this should be generalized using an interface to return the
   ! modulo attribute of the zonal axis (mjh).
-  call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id,Time, 1.0,G,u_val,mask_u,z_in,z_edges_in,&
-                                     missing_value,.true.,.false.,.false., m_to_Z=US%m_to_Z)
+  call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id, Time, 1.0, G, u_val, mask_u, z_in, z_edges_in, &
+                                      missing_value, .true., .false., .false., m_to_Z=US%m_to_Z, &
+                                      answers_2018=CS%hor_regrid_answers_2018)
   !!! TODO: add a velocity interface! (mjh)
   ! Interpolate external file data to the model grid
   ! I am hard-wiring this call to assume that the input grid is zonally re-entrant
   ! In the future, this should be generalized using an interface to return the
   ! modulo attribute of the zonal axis (mjh).
-  call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id,Time, 1.0,G,v_val,mask_v,z_in,z_edges_in, &
-                                     missing_value,.true.,.false.,.false., m_to_Z=US%m_to_Z)
+  call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id, Time, 1.0, G, v_val, mask_v, z_in, z_edges_in, &
+                                      missing_value, .true., .false., .false., m_to_Z=US%m_to_Z, &
+                                      answers_2018=CS%hor_regrid_answers_2018)
   ! stores the reference profile
   allocate(CS%Ref_val_u%p(fld_sz(3),CS%num_col_u))
   CS%Ref_val_u%p(:,:) = 0.0
@@ -824,8 +833,10 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
        allocate(mask_z(G%isd:G%ied,G%jsd:G%jed,1:nz_data))
        sp_val(:,:,:)=0.0
        mask_z(:,:,:)=0.0
-       call horiz_interp_and_extrap_tracer(CS%Ref_val(m)%id,Time, 1.0,G,sp_val,mask_z,z_in,z_edges_in, &
-                      missing_value,.true., .false.,.false.,spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z)
+       call horiz_interp_and_extrap_tracer(CS%Ref_val(m)%id, Time, 1.0, G, sp_val, mask_z, z_in, &
+                      z_edges_in,  missing_value, .true., .false., .false., &
+                      spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z, &
+                      answers_2018=CS%hor_regrid_answers_2018)
        allocate( hsrc(nz_data) )
        allocate( tmpT1d(nz_data) )
        do c=1,CS%num_col
@@ -906,8 +917,9 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       allocate(sp_val(G%isdB:G%iedB,G%jsd:G%jed,1:nz_data))
       allocate(mask_z(G%isdB:G%iedB,G%jsd:G%jed,1:nz_data))
       ! Interpolate from the external horizontal grid and in time
-      call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id,Time, 1.0,G,sp_val,mask_z,z_in,z_edges_in, &
-                                          missing_value, .true., .false., .false., m_to_Z=US%m_to_Z)
+      call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id, Time, 1.0, G, sp_val, mask_z, z_in, &
+                                          z_edges_in, missing_value, .true., .false., .false., &
+                                          m_to_Z=US%m_to_Z, answers_2018=CS%hor_regrid_answers_2018)
 !     call pass_var(sp_val,G%Domain)
 !     call pass_var(mask_z,G%Domain)
       do c=1,CS%num_col
@@ -923,8 +935,9 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       allocate(sp_val(G%isd:G%ied,G%jsdB:G%jedB,1:nz_data))
       allocate(mask_z(G%isd:G%ied,G%jsdB:G%jedB,1:nz_data))
       ! Interpolate from the external horizontal grid and in time
-      call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id,Time, 1.0,G,sp_val,mask_z,z_in,z_edges_in, &
-                                          missing_value, .true., .false., .false., m_to_Z=US%m_to_Z)
+      call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id, Time, 1.0, G, sp_val, mask_z, z_in, &
+                                          z_edges_in, missing_value, .true., .false., .false., &
+                                          m_to_Z=US%m_to_Z, answers_2018=CS%hor_regrid_answers_2018)
 
 !     call pass_var(sp_val,G%Domain)
 !     call pass_var(mask_z,G%Domain)
