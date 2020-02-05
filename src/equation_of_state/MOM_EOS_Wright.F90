@@ -108,13 +108,13 @@ end subroutine calculate_density_scalar_wright
 !! (T [degC]), and pressure [Pa].  It uses the expression from
 !! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
 subroutine calculate_density_array_wright(T, S, pressure, rho, start, npts, rho_ref)
-  real, dimension(:), intent(in)  :: T        !< potential temperature relative to the surface [degC].
-  real, dimension(:), intent(in)  :: S        !< salinity [PSU].
-  real, dimension(:), intent(in)  :: pressure !< pressure [Pa].
-  real, dimension(:), intent(out) :: rho      !< in situ density [kg m-3].
-  integer,            intent(in)  :: start    !< the starting point in the arrays.
-  integer,            intent(in)  :: npts     !< the number of values to calculate.
-  real,     optional, intent(in)  :: rho_ref  !< A reference density [kg m-3].
+  real, dimension(:), intent(in)    :: T        !< potential temperature relative to the surface [degC].
+  real, dimension(:), intent(in)    :: S        !< salinity [PSU].
+  real, dimension(:), intent(in)    :: pressure !< pressure [Pa].
+  real, dimension(:), intent(inout) :: rho      !< in situ density [kg m-3].
+  integer,            intent(in)    :: start    !< the starting point in the arrays.
+  integer,            intent(in)    :: npts     !< the number of values to calculate.
+  real,     optional, intent(in)    :: rho_ref  !< A reference density [kg m-3].
 
   ! Original coded by R. Hallberg, 7/00, anomaly coded in 3/18.
   ! Local variables
@@ -169,14 +169,14 @@ end subroutine calculate_spec_vol_scalar_wright
 !! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
 !! If spv_ref is present, specvol is an anomaly from spv_ref.
 subroutine calculate_spec_vol_array_wright(T, S, pressure, specvol, start, npts, spv_ref)
-  real, dimension(:), intent(in)  :: T        !< potential temperature relative to the
+  real, dimension(:), intent(in)    :: T        !< potential temperature relative to the
                                               !! surface [degC].
-  real, dimension(:), intent(in)  :: S        !< salinity [PSU].
-  real, dimension(:), intent(in)  :: pressure !< pressure [Pa].
-  real, dimension(:), intent(out) :: specvol  !< in situ specific volume [m3 kg-1].
-  integer,            intent(in)  :: start    !< the starting point in the arrays.
-  integer,            intent(in)  :: npts     !< the number of values to calculate.
-  real,     optional, intent(in)  :: spv_ref  !< A reference specific volume [m3 kg-1].
+  real, dimension(:), intent(in)    :: S        !< salinity [PSU].
+  real, dimension(:), intent(in)    :: pressure !< pressure [Pa].
+  real, dimension(:), intent(inout) :: specvol  !< in situ specific volume [m3 kg-1].
+  integer,            intent(in)    :: start    !< the starting point in the arrays.
+  integer,            intent(in)    :: npts     !< the number of values to calculate.
+  real,     optional, intent(in)    :: spv_ref  !< A reference specific volume [m3 kg-1].
 
   ! Local variables
   real :: al0, p0, lambda
@@ -197,16 +197,16 @@ end subroutine calculate_spec_vol_array_wright
 
 !> For a given thermodynamic state, return the thermal/haline expansion coefficients
 subroutine calculate_density_derivs_array_wright(T, S, pressure, drho_dT, drho_dS, start, npts)
-  real,    intent(in),  dimension(:) :: T        !< Potential temperature relative to the
-                                                 !! surface [degC].
-  real,    intent(in),  dimension(:) :: S        !< Salinity [PSU].
-  real,    intent(in),  dimension(:) :: pressure !< pressure [Pa].
-  real,    intent(out), dimension(:) :: drho_dT  !< The partial derivative of density with potential
-                                                 !! temperature [kg m-3 degC-1].
-  real,    intent(out), dimension(:) :: drho_dS  !< The partial derivative of density with salinity,
-                                                 !! in [kg m-3 PSU-1].
-  integer, intent(in)                :: start    !< The starting point in the arrays.
-  integer, intent(in)                :: npts     !< The number of values to calculate.
+  real,    intent(in),    dimension(:) :: T        !< Potential temperature relative to the
+                                                   !! surface [degC].
+  real,    intent(in),    dimension(:) :: S        !< Salinity [PSU].
+  real,    intent(in),    dimension(:) :: pressure !< pressure [Pa].
+  real,    intent(inout), dimension(:) :: drho_dT  !< The partial derivative of density with potential
+                                                   !! temperature [kg m-3 degC-1].
+  real,    intent(inout), dimension(:) :: drho_dS  !< The partial derivative of density with salinity,
+                                                   !! in [kg m-3 PSU-1].
+  integer, intent(in)                  :: start    !< The starting point in the arrays.
+  integer, intent(in)                  :: npts     !< The number of values to calculate.
 
   ! Local variables
   real :: al0, p0, lambda, I_denom2
@@ -259,15 +259,15 @@ subroutine calculate_density_second_derivs_array_wright(T, S, P, drho_ds_ds, drh
   real, dimension(:), intent(in   ) :: T !< Potential temperature referenced to 0 dbar [degC]
   real, dimension(:), intent(in   ) :: S !< Salinity [PSU]
   real, dimension(:), intent(in   ) :: P !< Pressure [Pa]
-  real, dimension(:), intent(  out) :: drho_ds_ds !< Partial derivative of beta with respect
+  real, dimension(:), intent(inout) :: drho_ds_ds !< Partial derivative of beta with respect
                                                   !! to S [kg m-3 PSU-2]
-  real, dimension(:), intent(  out) :: drho_ds_dt !< Partial derivative of beta with respcct
+  real, dimension(:), intent(inout) :: drho_ds_dt !< Partial derivative of beta with respcct
                                                   !! to T [kg m-3 PSU-1 degC-1]
-  real, dimension(:), intent(  out) :: drho_dt_dt !< Partial derivative of alpha with respect
+  real, dimension(:), intent(inout) :: drho_dt_dt !< Partial derivative of alpha with respect
                                                   !! to T [kg m-3 degC-2]
-  real, dimension(:), intent(  out) :: drho_ds_dp !< Partial derivative of beta with respect
+  real, dimension(:), intent(inout) :: drho_ds_dp !< Partial derivative of beta with respect
                                                   !! to pressure [kg m-3 PSU-1 Pa-1]
-  real, dimension(:), intent(  out) :: drho_dt_dp !< Partial derivative of alpha with respect
+  real, dimension(:), intent(inout) :: drho_dt_dp !< Partial derivative of alpha with respect
                                                   !! to pressure [kg m-3 degC-1 Pa-1]
   integer,            intent(in   ) :: start !< Starting index in T,S,P
   integer,            intent(in   ) :: npts  !< Number of points to loop over
@@ -340,15 +340,15 @@ end subroutine calculate_density_second_derivs_scalar_wright
 !> For a given thermodynamic state, return the partial derivatives of specific volume
 !! with temperature and salinity
 subroutine calculate_specvol_derivs_wright(T, S, pressure, dSV_dT, dSV_dS, start, npts)
-  real,    intent(in),  dimension(:) :: T        !< Potential temperature relative to the surface [degC].
-  real,    intent(in),  dimension(:) :: S        !< Salinity [PSU].
-  real,    intent(in),  dimension(:) :: pressure !< pressure [Pa].
-  real,    intent(out), dimension(:) :: dSV_dT   !< The partial derivative of specific volume with
-                                                 !! potential temperature [m3 kg-1 degC-1].
-  real,    intent(out), dimension(:) :: dSV_dS   !< The partial derivative of specific volume with
-                                                 !! salinity [m3 kg-1 / Pa].
-  integer, intent(in)                :: start    !< The starting point in the arrays.
-  integer, intent(in)                :: npts     !< The number of values to calculate.
+  real,    intent(in),    dimension(:) :: T        !< Potential temperature relative to the surface [degC].
+  real,    intent(in),    dimension(:) :: S        !< Salinity [PSU].
+  real,    intent(in),    dimension(:) :: pressure !< pressure [Pa].
+  real,    intent(inout), dimension(:) :: dSV_dT   !< The partial derivative of specific volume with
+                                                   !! potential temperature [m3 kg-1 degC-1].
+  real,    intent(inout), dimension(:) :: dSV_dS   !< The partial derivative of specific volume with
+                                                   !! salinity [m3 kg-1 / Pa].
+  integer, intent(in)                  :: start    !< The starting point in the arrays.
+  integer, intent(in)                  :: npts     !< The number of values to calculate.
 
   ! Local variables
   real :: al0, p0, lambda, I_denom
@@ -377,15 +377,15 @@ end subroutine calculate_specvol_derivs_wright
 !! from Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
 !! Coded by R. Hallberg, 1/01
 subroutine calculate_compress_wright(T, S, pressure, rho, drho_dp, start, npts)
-  real,    intent(in),  dimension(:) :: T        !< Potential temperature relative to the surface [degC].
-  real,    intent(in),  dimension(:) :: S        !< Salinity [PSU].
-  real,    intent(in),  dimension(:) :: pressure !< pressure [Pa].
-  real,    intent(out), dimension(:) :: rho      !< In situ density [kg m-3].
-  real,    intent(out), dimension(:) :: drho_dp  !< The partial derivative of density with pressure
-                                                 !! (also the inverse of the square of sound speed)
-                                                 !! [s2 m-2].
-  integer, intent(in)                :: start    !< The starting point in the arrays.
-  integer, intent(in)                :: npts     !< The number of values to calculate.
+  real,    intent(in),    dimension(:) :: T        !< Potential temperature relative to the surface [degC].
+  real,    intent(in),    dimension(:) :: S        !< Salinity [PSU].
+  real,    intent(in),    dimension(:) :: pressure !< pressure [Pa].
+  real,    intent(inout), dimension(:) :: rho      !< In situ density [kg m-3].
+  real,    intent(inout), dimension(:) :: drho_dp  !< The partial derivative of density with pressure
+                                                   !! (also the inverse of the square of sound speed)
+                                                   !! [s2 m-2].
+  integer, intent(in)                  :: start    !< The starting point in the arrays.
+  integer, intent(in)                  :: npts     !< The number of values to calculate.
 
   ! Coded by R. Hallberg, 1/01
   ! Local variables
@@ -428,18 +428,18 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
                                                 !! equation of state.
   real,                 intent(in)  :: G_e      !< The Earth's gravitational acceleration [m2 Z-1 s-2 ~> m s-2].
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
-                        intent(out) :: dpa      !< The change in the pressure anomaly across the
+                        intent(inout) :: dpa    !< The change in the pressure anomaly across the
                                                 !! layer [Pa].
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
-              optional, intent(out) :: intz_dpa !< The integral through the thickness of the layer
+              optional, intent(inout) :: intz_dpa !< The integral through the thickness of the layer
                                                 !! of the pressure anomaly relative to the anomaly
                                                 !! at the top of the layer [Pa Z ~> Pa m].
   real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed), &
-              optional, intent(out) :: intx_dpa !< The integral in x of the difference between the
+              optional, intent(inout) :: intx_dpa !< The integral in x of the difference between the
                                                 !! pressure anomaly at the top and bottom of the
                                                 !! layer divided by the x grid spacing [Pa].
   real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB), &
-              optional, intent(out) :: inty_dpa !< The integral in y of the difference between the
+              optional, intent(inout) :: inty_dpa !< The integral in y of the difference between the
                                                 !! pressure anomaly at the top and bottom of the
                                                 !! layer divided by the y grid spacing [Pa].
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
@@ -629,18 +629,18 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
            !! mathematically identical with different values of spv_ref, but this reduces the
            !! effects of roundoff.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(out) :: dza       !< The change in the geopotential anomaly across
+                        intent(inout) :: dza     !< The change in the geopotential anomaly across
                                                  !! the layer [m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(out) :: intp_dza  !< The integral in pressure through the layer of
+              optional, intent(inout) :: intp_dza !< The integral in pressure through the layer of
                                                  !! the geopotential anomaly relative to the anomaly
                                                  !! at the bottom of the layer [Pa m2 s-2].
   real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
-              optional, intent(out) :: intx_dza  !< The integral in x of the difference between the
+              optional, intent(inout) :: intx_dza !< The integral in x of the difference between the
                                                  !! geopotential anomaly at the top and bottom of
                                                  !! the layer divided by the x grid spacing [m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
-              optional, intent(out) :: inty_dza  !< The integral in y of the difference between the
+              optional, intent(inout) :: inty_dza !< The integral in y of the difference between the
                                                  !! geopotential anomaly at the top and bottom of
                                                  !! the layer divided by the y grid spacing [m2 s-2].
   integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate
