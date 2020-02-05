@@ -225,6 +225,7 @@ type, public :: MOM_control_struct ; private
   logical :: debug                   !< If true, write verbose checksums for debugging purposes.
   integer :: ntrunc                  !< number u,v truncations since last call to write_energy
 
+  integer :: cont_stencil            !< The stencil for thickness from the continuity solver.
   ! These elements are used to control the dynamics updates.
   logical :: do_dynamics             !< If false, does not call step_MOM_dyn_*. This is an
                                      !! undocumented run-time flag that is fragile.
@@ -930,7 +931,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt_thermo, G, GV, US, &
                            CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
     call cpu_clock_end(id_clock_thick_diff)
-    call pass_var(h, G%Domain, clock=id_clock_pass) !###, halo=max(2,cont_stensil))
+    call pass_var(h, G%Domain, clock=id_clock_pass, halo=max(2,CS%cont_stencil))
     call disable_averaging(CS%diag)
     if (showCallTree) call callTree_waypoint("finished thickness_diffuse_first (step_MOM)")
 
@@ -1005,7 +1006,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
 
     if (CS%debug) call hchksum(h,"Post-thickness_diffuse h", G%HI, haloshift=1, scale=GV%H_to_m)
     call cpu_clock_end(id_clock_thick_diff)
-    call pass_var(h, G%Domain, clock=id_clock_pass) !###, halo=max(2,cont_stensil))
+    call pass_var(h, G%Domain, clock=id_clock_pass, halo=max(2,CS%cont_stencil))
     if (showCallTree) call callTree_waypoint("finished thickness_diffuse (step_MOM)")
   endif
 
@@ -1020,7 +1021,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     call mixedlayer_restrat(h, CS%uhtr, CS%vhtr, CS%tv, forces, dt, CS%visc%MLD, &
                             CS%VarMix, G, GV, US, CS%mixedlayer_restrat_CSp)
     call cpu_clock_end(id_clock_ml_restrat)
-    call pass_var(h, G%Domain, clock=id_clock_pass) !###, halo=max(2,cont_stensil))
+    call pass_var(h, G%Domain, clock=id_clock_pass, halo=max(2,CS%cont_stencil))
     if (CS%debug) then
       call hchksum(h,"Post-mixedlayer_restrat h", G%HI, haloshift=1, scale=GV%H_to_m)
       call uvchksum("Post-mixedlayer_restrat [uv]htr", &
@@ -2327,7 +2328,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
               CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE, &
               CS%thickness_diffuse_CSp,                                      &
               CS%OBC, CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp,        &
-              CS%visc, dirs, CS%ntrunc, calc_dtbt=calc_dtbt)
+              CS%visc, dirs, CS%ntrunc, calc_dtbt=calc_dtbt, cont_stencil=CS%cont_stencil)
     if (CS%dtbt_reset_period > 0.0) then
       CS%dtbt_reset_interval = real_to_time(CS%dtbt_reset_period)
       ! Set dtbt_reset_time to be the next even multiple of dtbt_reset_interval.
@@ -2345,13 +2346,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
             param_file, diag, CS%dyn_unsplit_RK2_CSp, restart_CSp,         &
             CS%ADp, CS%CDp, MOM_internal_state, CS%MEKE, CS%OBC,           &
             CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, &
-            CS%ntrunc)
+            CS%ntrunc, cont_stencil=CS%cont_stencil)
   else
     call initialize_dyn_unsplit(CS%u, CS%v, CS%h, Time, G, GV, US,         &
             param_file, diag, CS%dyn_unsplit_CSp, restart_CSp,             &
             CS%ADp, CS%CDp, MOM_internal_state, CS%MEKE, CS%OBC,           &
             CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, &
-            CS%ntrunc)
+            CS%ntrunc, cont_stencil=CS%cont_stencil)
   endif
 
   call callTree_waypoint("dynamics initialized (initialize_MOM)")
