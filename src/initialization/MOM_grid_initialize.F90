@@ -253,7 +253,6 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   global_indices(3) = 1+SGdom%njhalo
   global_indices(4) = SGdom%njglobal+SGdom%njhalo
   exni(:) = 2*exni(:) ; exnj(:) = 2*exnj(:)
-
   if (associated(G%domain%maskmap)) then
      call MOM_define_domain(global_indices, SGdom%layout, SGdom%mpp_domain, &
             xflags=G%domain%X_FLAGS, yflags=G%domain%Y_FLAGS, &
@@ -272,7 +271,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   deallocate(exni)
   deallocate(exnj)
 
-  ! tmpZ is defined on the data domain
+  ! Read X from the supergrid. \note: tmpZ is defined on the data domain
   tmpZ(:,:) = 999.
   call MOM_read_data(filename, 'x', tmpZ, SGdom, x_position=EAST_FACE, y_position=NORTH_FACE)
 
@@ -281,7 +280,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   else
     call pass_var(tmpZ, SGdom, position=CORNER, inner_halo=0)
   endif
-  call extrapolate_metric(tmpZ, 2*(G%jsc-G%jsd)+2, missing=999.0)
+  call extrapolate_metric(tmpZ, 2*(G%jsc-G%jsd)+2, missing=999.)
   do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
     G%geoLonT(i,j) = tmpZ(i2-1,j2-1)
   enddo ; enddo
@@ -302,7 +301,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   call MOM_read_data(filename, 'y', tmpZ, SGdom, x_position=EAST_FACE, y_position=NORTH_FACE)
 
   call pass_var(tmpZ, SGdom, position=CORNER)
-  call extrapolate_metric(tmpZ, 2*(G%jsc-G%jsd)+2, missing=999.0)
+  call extrapolate_metric(tmpZ, 2*(G%jsc-G%jsd)+2, missing=999.)
   do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
     G%geoLatT(i,j) = tmpZ(i2-1,j2-1)
   enddo ; enddo
@@ -319,11 +318,11 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   ! Read DX,DY from the supergrid
 
   tmpU(:,:) = 0. ; tmpV(:,:) = 0.
-  call MOM_read_data(filename,'dx', tmpV, SGdom, y_position=NORTH_FACE)
-  call MOM_read_data(filename,'dy', tmpU, SGdom, x_position=EAST_FACE)
+  call MOM_read_data(filename,'dx',tmpV SGdom,y_position=NORTH_FACE)
+  call MOM_read_data(filename,'dy',tmpU,SGdom,x_position=EAST_FACE)
   call pass_vector(tmpU, tmpV, SGdom, To_All+Scalar_Pair, CGRID_NE)
-  call extrapolate_metric(tmpV, 2*(G%jsc-G%jsd)+2, missing=0.0)
-  call extrapolate_metric(tmpU, 2*(G%jsc-G%jsd)+2, missing=0.0)
+  call extrapolate_metric(tmpV, 2*(G%jsc-G%jsd)+2, missing=0.)
+  call extrapolate_metric(tmpU, 2*(G%jsc-G%jsd)+2, missing=0.)
 
   do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
     dxT(i,j) = tmpV(i2-1,j2-1) + tmpV(i2,j2-1)
@@ -349,7 +348,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   tmpT(:,:) = 0.
   call MOM_read_data(filename, 'area', tmpT, SGdom)
   call pass_var(tmpT, SGdom)
-  call extrapolate_metric(tmpT, 2*(G%jsc-G%jsd)+2, missing=0.0)
+  call extrapolate_metric(tmpT, 2*(G%jsc-G%jsd)+2, missing=0.)
 
   do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
     areaT(i,j) = (tmpT(i2-1,j2-1) + tmpT(i2,j2)) + &
@@ -407,23 +406,20 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   start(1) = int(ni/4)+1 ; nread(2) = nj+1
 
   ! read y into the tmpGlbl buffer
-  call MOM_read_data(fileName, "y", tmpGlbl, define_diagnostic_axes=.true., G=G, &
-                     grid_type="t")
+  call MOM_read_data(fileName, "y", tmpGlbl, define_diagnostic_axes=.true., G=G, grid_type="t")
 
   do j=G%jsg,G%jeg
     G%gridLatT(j) = tmpGlbl(1,2*(j-G%jsg)+2)
   enddo
 
  ! read y into the tmpGlbl buffer
-  call MOM_read_data(fileName, "y", tmpGlbl, define_diagnostic_axes=.true., G=G, &
-                     grid_type="b")
+  call MOM_read_data(fileName, "y", tmpGlbl, define_diagnostic_axes=.true., G=G, grid_type="b")
 
   do J=G%jsg-1,G%jeg
     G%gridLatB(J) = tmpGlbl(1,2*(j-G%jsg)+3)
   enddo
 
   call callTree_leave("set_grid_metrics_from_mosaic()")
-
 end subroutine set_grid_metrics_from_mosaic
 
 

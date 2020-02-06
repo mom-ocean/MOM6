@@ -5,7 +5,6 @@ module MOM_regridding
 
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : param_file_type, get_param, log_param
-use MOM_io, only : slasher
 use MOM_io,            only : file_exists, field_exists, field_size, MOM_read_data
 use MOM_io,            only : slasher
 use MOM_unit_scaling,  only : unit_scale_type
@@ -219,6 +218,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
                                      100., 100., 100., 100., 100., 100., 100., 175., &
                                      250., 375., 500., 500., 500., 500., 500., 500., &
                                      500., 500., 500., 500., 500., 500., 500., 500. /)
+
   call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
 
@@ -347,6 +347,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     endif
     if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
             "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
+
     varName = trim( extractWord(trim(string(6:)), 2) )
     if (len_trim(varName)==0) then
       if (field_exists(fileName,'dz')) then; varName = 'dz'
@@ -415,17 +416,14 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
       "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
     varName = trim( extractWord(trim(string(8:)), 2) )
-    if (.not. field_exists(fileName,varName)) &
-      call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
+    if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
       "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
     call MOM_read_data(trim(fileName), trim(varName), rho_target)
-
     varName = trim( extractWord(trim(string(8:)), 3) )
     if (varName(1:5) == 'FNC1:') then ! Use FNC1 to calculate dz
       call dz_function1( trim(string((index(trim(string),'FNC1:')+5):)), dz )
     else ! Read dz from file
-      if (.not. field_exists(fileName,varName)) &
-        call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
+      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
         "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
       call MOM_read_data(trim(fileName), trim(varName), dz)
     endif
@@ -631,6 +629,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       endif
       if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
         "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
+
       do_sum = .false.
       varName = trim( extractWord(trim(string(6:)), 2) )
       if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
@@ -666,7 +665,6 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
         "Unrecognized MAXIMUM_INT_DEPTH_CONFIG "//trim(string))
     endif
-
     deallocate(z_max)
     deallocate(dz_max)
 
@@ -711,7 +709,6 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
           "MAXIMUM_INT_DEPTHS variable not specified and none could be guessed.")
         endif
       endif
-
       call MOM_read_data(trim(fileName), trim(varName), h_max)
       call log_param(param_file, mdl, "!MAX_LAYER_THICKNESS", h_max, &
                  trim(message), units=coordinateUnits(coord_mode))

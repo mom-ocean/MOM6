@@ -29,8 +29,8 @@ use MOM_io, only: fms2_register_restart_field => register_restart_field, &
                   read_restart, &
                   write_restart,&
                   write_data, &
-                  close_file, &
-                  open_file, &
+                  fms2_close_file, &
+                  fms2_open_file, &
                   MOM_register_diagnostic_axis, &
                   global_att_exists, &
                   get_global_attribute, &
@@ -969,12 +969,12 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
       restartpath(1:name_length) = trim(restartpath_temp)
     endif
     ! create and open new file for domain-decomposed write
-    fileOpenSuccess = open_file(fileObjWrite, restartpath, "write", &
+    fileOpenSuccess = fms2_open_file(fileObjWrite, restartpath, "write", &
                                 G%Domain%mpp_domain, is_restart=.true.)
 
     if (.not.(fileOpenSuccess)) &
     ! append to restart file if it exists
-    fileOpenSuccess = open_file(fileObjWrite, restartpath, "append", &
+    fileOpenSuccess = fms2_open_file(fileObjWrite, restartpath, "append", &
                                 G%Domain%mpp_domain, is_restart=.false.)
     ! get variable sizes in bytes
     size_in_file = 8*(2*G%Domain%niglobal+2*G%Domain%njglobal+2*nz+1000)
@@ -1116,7 +1116,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
     enddo
    ! write the restart file
    call write_restart(fileObjWrite)
-   call close_file(fileObjWrite)
+   call fms2_close_file(fileObjWrite)
 
    if (associated(axis_data_CS%axis)) deallocate(axis_data_CS%axis)
    if (associated(axis_data_CS%data)) deallocate(axis_data_CS%data)
@@ -1178,11 +1178,11 @@ subroutine write_initial_conditions(directory, filename, CS, G, time, GV)
   time_units = get_time_units(ic_time*86400.0)
 
   ! open the netCDF file, and check if file already exists and can be appended
-  fileOpenSuccess = open_file(fileOBjWrite, trim(base_file_name), "write", &
+  fileOpenSuccess = fms2_open_file(fileOBjWrite, trim(base_file_name), "write", &
                               G%Domain%mpp_domain, is_restart=.false.)
   if (.not.(fileOpenSuccess)) &
   ! create and open new file(s) for domain-decomposed write
-    fileOpenSuccess = open_file(fileObjWrite, trim(base_file_name), "append", &
+    fileOpenSuccess = fms2_open_file(fileObjWrite, trim(base_file_name), "append", &
                                 G%Domain%mpp_domain, is_restart=.false.)
   ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
   !>\note: the user may need to increase the allocated array sizes to accommodate
@@ -1302,7 +1302,7 @@ subroutine write_initial_conditions(directory, filename, CS, G, time, GV)
     call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, "long_name", longname)
   enddo
   ! close the IC file and deallocate the allocatable arrays
-  call close_file(fileObjWrite)
+  call fms2_close_file(fileObjWrite)
 
   if (associated(axis_data_CS%axis)) deallocate(axis_data_CS%axis)
   if (associated(axis_data_CS%data)) deallocate(axis_data_CS%data)
@@ -1377,7 +1377,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   endif
 
   !Open the restart file.
-  fileOpenSuccess=open_file(fileObjRead, trim(directory)//trim(base_file_name), "read", &
+  fileOpenSuccess=fms2_open_file(fileObjRead, trim(directory)//trim(base_file_name), "read", &
                             G%domain%mpp_domain, is_restart=.true.)
 
   if (fileObjRead%is_root .and. fileOpenSuccess) then
@@ -1459,7 +1459,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   ! Read in restart data and then close the file.
   call read_restart(fileObjRead)
 
-  call close_file(fileObjRead)
+  call fms2_close_file(fileObjRead)
 
 end subroutine restore_state
 
@@ -1610,7 +1610,7 @@ function get_num_restart_files(filename, directory, G, CS) result(num_files)
         filepath = trim(directory) // trim(restartname)
 
         ! check if file already exists and can be appended
-        fexists = open_file(fileObjRead, trim(filepath), "read", G%Domain%mpp_domain, is_restart = .true.)
+        fexists = fms2_open_file(fileObjRead, trim(filepath), "read", G%Domain%mpp_domain, is_restart = .true.)
         if (fexists) then
            if (global_att_exists(fileObjRead,'NumFilesInSet')) then
               call get_global_attribute(fileObjRead, 'NumFilesInSet', num_restart)
@@ -1627,7 +1627,7 @@ function get_num_restart_files(filename, directory, G, CS) result(num_files)
             call MOM_error(WARNING,"MOM_restart: Unable to find restart file(s) with base name : "//trim(filepath))
         endif
 
-        call close_file(fileObjRead)
+        call fms2_close_file(fileObjRead)
 
      enddo ! while (err == 0) loop
   enddo ! while (start_char < strlen(filename)) loop

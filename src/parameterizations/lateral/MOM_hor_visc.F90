@@ -1397,6 +1397,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
   logical :: use_MEKE      ! If true, use the MEKE module for calculating eddy kinetic energy.
                            ! If false and USE_GME = True, issue a FATAL error.
   logical :: default_2018_answers
+
   character(len=64) :: inputdir, filename
   real    :: deg2rad       ! Converts degrees to radians
   real    :: slat_fn       ! sin(lat)**Kh_pwr_of_sine
@@ -1757,10 +1758,8 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
                  default='KH_background_2d.nc')
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
-
     call MOM_read_data(trim(inputdir)//trim(filename), 'Kh', CS%Kh_bg_2d, &
-                       G%domain, time_level=1, scale=US%m_to_L**2*US%T_to_s)
-
+                       G%domain, timelevel=1, scale=US%m_to_L**2*US%T_to_s)
     call pass_var(CS%Kh_bg_2d, G%domain)
   endif
 

@@ -10,6 +10,9 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_time_manager, only : time_type, set_time, time_type_to_real
 use MOM_unit_scaling, only : unit_scale_type
+use MOM_io, only : close_file, fieldtype, file_exists !>\note: this module doesn't use ANY of the MOM_io routines
+use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
+use MOM_io, only : write_field, slasher
 implicit none ; private
 
 #include <MOM_memory.h>

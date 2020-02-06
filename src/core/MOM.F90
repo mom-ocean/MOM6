@@ -34,8 +34,8 @@ use MOM_file_parser,          only : read_param, get_param, log_version, param_f
 use MOM_forcing_type,         only : forcing, mech_forcing
 use MOM_forcing_type,         only : MOM_forcing_chksum, MOM_mech_forcing_chksum
 use MOM_get_input,            only : Get_MOM_Input, directories
-use MOM_io,                   only : MOM_io_init, vardesc, var_desc, slasher
-use MOM_io,                   only : file_exists, MOM_read_data
+use MOM_io,                   only : MOM_io_init, vardesc, var_desc
+use MOM_io,                   only : slasher, file_exists, MOM_read_data
 use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, query_initialized, save_restart
 use MOM_restart,              only : restart_init, is_new_run, MOM_restart_CS
@@ -2105,7 +2105,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! Set the fields that are needed for bitwise identical restarting
   ! the time stepping scheme.
   call restart_init(param_file, restart_CSp)
-  call set_restart_fields(GV, G, US, param_file, CS, restart_CSp)
+  call set_restart_fields(GV, US, param_file, CS, restart_CSp)
   if (CS%split) then
     call register_restarts_dyn_split_RK2(dG%HI, GV, param_file, &
              CS%dyn_split_RK2_CSp, restart_CSp, CS%uh, CS%vh)
@@ -2223,7 +2223,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
       allocate(area_shelf_h(isd:ied,jsd:jed))
       allocate(frac_shelf_h(isd:ied,jsd:jed))
-      ! read the data
       call MOM_read_data(filename, trim(area_varname), area_shelf_h, G%domain)
       ! initialize frac_shelf_h with zeros (open water everywhere)
       frac_shelf_h(:,:) = 0.0
@@ -2495,6 +2494,7 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   type(MOM_restart_CS),    pointer :: restart_CSp_tmp => NULL()
   real, allocatable :: z_interface(:,:,:) ! Interface heights [m]
   type(vardesc) :: vd
+
   call cpu_clock_begin(id_clock_init)
   call callTree_enter("finish_MOM_initialization()")
 
@@ -2512,12 +2512,10 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
     ! register eta to the temporary control structure for the IC data
     allocate(z_interface(SZI_(G),SZJ_(G),SZK_(G)+1))
     call find_eta(CS%h, CS%tv, G, GV, US, z_interface, eta_to_m=1.0)
-
     call register_restart_field(z_interface, "eta", .true., restart_CSp_tmp, &
                               z_grid='i', longname="Interface heights", units="meter")
 
     call write_initial_conditions(dirs%output_directory, CS%IC_file, restart_CSp_tmp, G, Time, GV=GV)
-
     deallocate(z_interface)
     deallocate(restart_CSp_tmp)
   endif
@@ -2603,9 +2601,8 @@ end subroutine MOM_timing_init
 !! This routine should be altered if there are any changes to the
 !! time stepping scheme.  The CHECK_RESTART facility may be used to
 !! confirm that all needed restart fields have been included.
-subroutine set_restart_fields(GV, G, US, param_file, CS, restart_CSp)
+subroutine set_restart_fields(GV, US, param_file, CS, restart_CSp)
   type(verticalGrid_type),  intent(inout) :: GV         !< ocean vertical grid structure
-  type(ocean_grid_type),    intent(in)    :: G          !< The ocean's grid structure
   type(unit_scale_type),    intent(inout) :: US         !< A dimensional unit scaling type
   type(param_file_type),    intent(in) :: param_file    !< opened file for parsing to get parameters
   type(MOM_control_struct), intent(in) :: CS            !< control structure set up by inialize_MOM

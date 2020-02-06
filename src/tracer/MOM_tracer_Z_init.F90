@@ -75,7 +75,6 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
   character(len=80) :: loc_msg
   integer :: k_top, k_bot, k_bot_prev
   integer :: i, j, k, kz, is, ie, js, je, nz, nz_in
-
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   landval = 0.0 ; if (present(land_val)) landval = land_val
@@ -98,8 +97,8 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
 
   allocate(tr_in(G%isd:G%ied,G%jsd:G%jed,nz_in)) ; tr_in(:,:,:) = 0.0
   allocate(tr_1d(nz_in)) ; tr_1d(:) = 0.0
-
   call MOM_read_data(filename, tr_name, tr_in(:,:,:), G%Domain)
+
   ! Fill missing values from above?  Use a "close" test to avoid problems
   ! from type-conversion rounoff.
   if (present(missing_val)) then

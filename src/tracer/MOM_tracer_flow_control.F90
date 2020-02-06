@@ -255,7 +255,7 @@ subroutine call_tracer_register(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
                         tr_Reg, restart_CS)
 #ifdef _USE_GENERIC_TRACER
   if (CS%use_MOM_generic_tracer) CS%use_MOM_generic_tracer = &
-    register_MOM_generic_tracer(HI, GV,  param_file,  CS%MOM_generic_tracer_CSp, &
+    register_MOM_generic_tracer(HI, GV, param_file,  CS%MOM_generic_tracer_CSp, &
                                 tr_Reg, restart_CS)
 #endif
   if (CS%use_pseudo_salt_tracer) CS%use_pseudo_salt_tracer = &

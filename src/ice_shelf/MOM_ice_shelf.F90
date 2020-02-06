@@ -48,7 +48,6 @@ use MOM_checksums, only : hchksum, qchksum, chksum, uchksum, vchksum, uvchksum
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
 use time_manager_mod, only : print_time
-
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -1113,7 +1112,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS,  diag, forces, f
   logical :: read_TideAmp, shelf_mass_is_dynamic, debug
   character(len=240) :: Tideamp_file
   real    :: utide
-
   if (associated(CS)) then
     call MOM_error(FATAL, "MOM_ice_shelf.F90, initialize_ice_shelf: "// &
                           "called with an associated control structure.")
@@ -1330,7 +1328,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS,  diag, forces, f
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
     TideAmp_file = trim(inputdir) // trim(TideAmp_file)
-    call MOM_read_data(TideAmp_file,'tideamp',CS%utide,G%domain,time_level=1)
+    call MOM_read_data(TideAmp_file,'tideamp',CS%utide,G%domain,timelevel=1)
   else
     call get_param(param_file, mdl, "UTIDE", utide, &
                  "The constant tidal amplitude used with INT_TIDE_DISSIPATION.", &

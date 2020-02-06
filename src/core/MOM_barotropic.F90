@@ -16,7 +16,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
-use MOM_io, only : vardesc, var_desc, slasher, MOM_read_data
+use MOM_io, only : vardesc, var_desc, MOM_read_data, slasher
 use MOM_open_boundary, only : ocean_OBC_type, OBC_SIMPLE, OBC_NONE, open_boundary_query
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_open_boundary, only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_segment_type
@@ -4142,7 +4142,6 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
       allocate(lin_drag_h(isd:ied,jsd:jed)) ; lin_drag_h(:,:) = 0.0
 
       call MOM_read_data(wave_drag_file, wave_drag_var, lin_drag_h, G%Domain, scale=US%m_to_Z*US%T_to_s)
-
       call pass_var(lin_drag_h, G%Domain)
       do j=js,je ; do I=is-1,ie
         CS%lin_drag_u(I,j) = (GV%Z_to_H * wave_drag_scale) * &
@@ -4429,10 +4428,10 @@ end subroutine barotropic_end
 !! that should be written to or read from the restart file.
 subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
   type(hor_index_type),    intent(in) :: HI         !< A horizontal index type structure.
-  type(verticalGrid_type), intent(in) :: GV         !< The ocean's vertical grid structure.
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters.
   type(barotropic_CS),     pointer    :: CS         !< A pointer that is set to point to the control
                                                     !! structure for this module.
+  type(verticalGrid_type), intent(in) :: GV         !< The ocean's vertical grid structure.
   type(MOM_restart_CS),    pointer    :: restart_CS !< A pointer to the restart control structure.
 
   ! Local variables

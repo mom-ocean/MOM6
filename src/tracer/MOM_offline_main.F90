@@ -1458,7 +1458,7 @@ end subroutine offline_transport_init
 !> Coordinates the allocation and reading in all time levels of uh, vh, hend, temp, and salt from files. Used
 !! when read_all_ts_uvh
 subroutine read_all_input(CS)
-  type(offline_transport_CS), intent(inout) :: CS !< Control structure for offline module
+  type(offline_transport_CS), intent(inout)  :: CS !< Control structure for offline module
 
   integer :: is, ie, js, je, isd, ied, jsd, jed, nz, t, ntime
   integer :: IsdB, IedB, JsdB, JedB
@@ -1482,12 +1482,10 @@ subroutine read_all_input(CS)
     allocate(CS%salt_all(isd:ied,jsd:jed,nz,1:ntime))     ; CS%salt_all(:,:,:,:) = 0.0
 
     call MOM_mesg("Reading in uhtr, vhtr, h_start, h_end, temp, salt")
-    ! read the data at every time step
-    do t = 1,ntime
 
+    do t = 1,ntime
       call MOM_read_vector(CS%snap_file, 'uhtr_sum', 'vhtr_sum', CS%uhtr_all(:,:,1:CS%nk_input,t), &
                        CS%vhtr_all(:,:,1:CS%nk_input,t), CS%G%Domain, time_level=t)
-
       call MOM_read_data(CS%snap_file,'h_end', CS%hend_all(:,:,1:CS%nk_input,t), CS%G%Domain, &
         time_level=t)
       call MOM_read_data(CS%mean_file,'temp', CS%temp_all(:,:,1:CS%nk_input,t), CS%G%Domain, &
@@ -1495,7 +1493,6 @@ subroutine read_all_input(CS)
       call MOM_read_data(CS%mean_file,'salt', CS%salt_all(:,:,1:CS%nk_input,t), CS%G%Domain, &
         time_level=t)
     enddo
-
   endif
 
 end subroutine read_all_input

@@ -173,14 +173,11 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, PF, use_ALE, CSp, ACSp)
    if (.not.file_exists(filename)) &
        call MOM_error(FATAL, " RGC_initialize_sponges: Unable to open "//trim(filename))
 
-   !call read_data(filename,temp_var,T(:,:,:), domain=G%Domain%mpp_domain)
    call MOM_read_data(filename,temp_var,T(:,:,:), G%Domain)
-   !call read_data(filename,salt_var,S(:,:,:), domain=G%Domain%mpp_domain)
    call MOM_read_data(filename,salt_var,S(:,:,:), G%Domain)
 
   if (use_ALE) then
 
-    !call read_data(filename,h_var,h(:,:,:), domain=G%Domain%mpp_domain)
     call MOM_read_data(filename,h_var,h(:,:,:), G%Domain)
     call pass_var(h, G%domain)
 
@@ -204,7 +201,6 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, PF, use_ALE, CSp, ACSp)
   else ! layer mode
 
     !read eta
-    !call read_data(filename,eta_var,eta(:,:,:), domain=G%Domain%mpp_domain)
     call MOM_read_data(filename,eta_var,eta(:,:,:), G%Domain)
 
     ! Set the inverse damping rates so that the model will know where to

@@ -15,7 +15,7 @@ use MOM_error_handler, only : MOM_error, NOTE
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : mpp_open_file
+use MOM_io, only : open_file
 use MOM_io, only : APPEND_FILE, ASCII_FILE, MULTIPLE, SINGLE_FILE
 use MOM_time_manager, only : time_type, get_time, get_date, set_date, operator(-)
 use MOM_unit_scaling, only : unit_scale_type
@@ -120,7 +120,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
   ! Open up the file for output if this is the first call.
     if (CS%u_file < 0) then
       if (len_trim(CS%u_trunc_file) < 1) return
-      call mpp_open_file(CS%u_file, trim(CS%u_trunc_file), action=APPEND_FILE, &
+      call open_file(CS%u_file, trim(CS%u_trunc_file), action=APPEND_FILE, &
                      form=ASCII_FILE, threading=MULTIPLE, fileset=SINGLE_FILE)
       if (CS%u_file < 0) then
         call MOM_error(NOTE, 'Unable to open file '//trim(CS%u_trunc_file)//'.')
@@ -453,7 +453,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
   ! Open up the file for output if this is the first call.
     if (CS%v_file < 0) then
       if (len_trim(CS%v_trunc_file) < 1) return
-      call mpp_open_file(CS%v_file, trim(CS%v_trunc_file), action=APPEND_FILE, &
+      call open_file(CS%v_file, trim(CS%v_trunc_file), action=APPEND_FILE, &
                      form=ASCII_FILE, threading=MULTIPLE, fileset=SINGLE_FILE)
       if (CS%v_file < 0) then
         call MOM_error(NOTE, 'Unable to open file '//trim(CS%v_trunc_file)//'.')

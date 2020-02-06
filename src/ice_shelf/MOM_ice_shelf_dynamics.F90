@@ -485,7 +485,6 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
          " calving mask file: Unable to open "//trim(filename))
 
       call MOM_read_data(filename,trim(var_name),CS%calve_mask,G%Domain)
-
       do j=G%jsc,G%jec ; do i=G%isc,G%iec
         if (CS%calve_mask(i,j) > 0.0) CS%calve_mask(i,j) = 1.0
       enddo ; enddo

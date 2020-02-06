@@ -21,7 +21,7 @@ use mpp_mod,              only : mpp_max, mpp_pe, mpp_npes
 use mpp_domains_mod,      only : domain1d, domain2d, domainug, mpp_get_domain_components, mpp_get_data_domain
 use mpp_domains_mod,      only : mpp_get_domain_npes, mpp_define_io_domain, mpp_get_io_domain, mpp_get_io_domain_layout
 use mpp_domains_mod,      only : CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
-use mpp_io_mod,           only : mpp_open_file => mpp_open, mpp_close_file => mpp_close
+use mpp_io_mod,           only : open_file => mpp_open, close_file => mpp_close
 use mpp_io_mod,           only : mpp_write_meta
 use mpp_io_mod,           only : axistype
 use mpp_io_mod,           only : fieldtype, axistype, flush_file => mpp_flush
@@ -53,8 +53,8 @@ use fms2_io_mod,          only : check_if_open, &
                                 register_axis, &
                                 register_field, &
                                 register_variable_attribute, &
-                                open_file, &
-                                close_file, &
+                                fms2_open_file => open_file, &
+                                fms2_close_file => close_file, &
                                 write_data, &
                                 write_restart, &
                                 attribute_exists => variable_att_exists, &
@@ -70,7 +70,7 @@ use netcdf
 
 implicit none ; private
 
-public :: mpp_close_file, mpp_open_file, fieldtype, flush_file
+public :: close_file, open_file, fieldtype, flush_file
 public :: num_timelevels, MOM_read_vector, ensembler, create_file
 public :: slasher, MOM_io_init, field_exists, field_size, read_axis_data
 public :: open_namelist_file, check_nml_error, io_infra_init
@@ -82,9 +82,10 @@ public :: scale_data
 ! new FMS-IO routines and wrappers
 public :: attribute_exists
 public :: check_if_open
-public :: close_file
 public :: dimension_exists
 public :: file_exists
+public :: fms2_open_file
+public :: fms2_close_file
 public :: FmsNetcdfFile_t
 public :: FmsNetcdfDomainFile_t
 public :: FmsNetcdfUnstructuredDomainFile_t
@@ -112,7 +113,6 @@ public :: MOM_get_nc_corner_edge_lengths
 public :: MOM_read_data
 public :: MOM_register_diagnostic_axis
 public :: MOM_register_variable_axes
-public :: open_file
 public :: read_data
 public :: read_restart
 public :: register_axis
@@ -296,7 +296,7 @@ subroutine create_file(filename, vars, numVariables, register_time, G, DG, GV, c
     endif
 
     if (.not. check_if_open(fileObjDD)) &
-      file_open_successDD=open_file(fileObjDD, filename_temp, trim(nc_mode), Domain%mpp_domain, is_restart=.false.)
+      file_open_successDD=fms2_open_file(fileObjDD, filename_temp, trim(nc_mode), Domain%mpp_domain, is_restart=.false.)
   else
     ! get the pes associated with the file.
     !>\note this is required so that only pe(1) is identified as the root pe to create the file
@@ -308,7 +308,7 @@ subroutine create_file(filename, vars, numVariables, register_time, G, DG, GV, c
     enddo
 
     if (.not. check_if_open(fileObjNoDD)) &
-      file_open_successNoDD=open_file(fileObjNoDD, filename_temp, trim(nc_mode), is_restart=.false., pelist=pelist)
+      file_open_successNoDD=fms2_open_file(fileObjNoDD, filename_temp, trim(nc_mode), is_restart=.false., pelist=pelist)
   endif
 
   ! allocate the output data variable dimension attributes
@@ -394,7 +394,7 @@ subroutine create_file(filename, vars, numVariables, register_time, G, DG, GV, c
        call register_axis(fileObjDD, "Time", unlimited)
     endif
 
-    if (check_if_open(fileObjDD)) call close_file(fileObjDD)
+    if (check_if_open(fileObjDD)) call fms2_close_file(fileObjDD)
   ! axis registration and write procedure for the non-domain-decomposed case
   elseif (file_open_successNoDD) then
     do i=1,numVariables
@@ -465,7 +465,7 @@ subroutine create_file(filename, vars, numVariables, register_time, G, DG, GV, c
        call register_axis(fileObjNoDD, "Time" , unlimited)
     endif
 
-    if (check_if_open(fileObjNoDD)) call close_file(fileObjNoDD)
+    if (check_if_open(fileObjNoDD)) call fms2_close_file(fileObjNoDD)
   endif
 
   deallocate(dim_names)
@@ -564,7 +564,7 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, var_desc, 
   if (present(time_level)) then
 
     if (.not.(check_if_open(fileobj))) &
-      file_open_success = open_file(fileobj, trim(filename_temp), "read", domain%mpp_domain, &
+      file_open_success = fms2_open_file(fileobj, trim(filename_temp), "read", domain%mpp_domain, &
                                     is_restart=.false.)
     if (.not.(file_open_success)) &
       call MOM_error(FATAL, "MOM_io:write_field_1d_dd: unable to open file "//trim(filename_temp))
@@ -579,7 +579,7 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, var_desc, 
     if (variable_exists(fileobj, trim(dim_unlim_name))) &
       file_time = read_most_recent_time(fileobj)
 
-    if (check_if_open(fileobj)) call close_file(fileobj)
+    if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   endif
 
   start(:) = 1
@@ -599,7 +599,7 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, var_desc, 
   endif ; endif
 
   ! open the file in write/append mode
-  file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
+  file_open_success = fms2_open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
                                 is_restart=.false.)
 
   ! register the horizontal diagnostic axis associated with the field
@@ -650,7 +650,7 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, var_desc, 
     call write_data(fileobj, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
   endif
   ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   nullify(data_tmp)
 
 end subroutine write_field_1d_DD
@@ -743,7 +743,7 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
   if (present(time_level)) then
     ! open the file in read mode
     if (.not.(check_if_open(fileobj))) &
-      file_open_success = open_file(fileobj, trim(filename_temp), "read", domain%mpp_domain, &
+      file_open_success = fms2_open_file(fileobj, trim(filename_temp), "read", domain%mpp_domain, &
                                     is_restart=.false.)
     if (.not.(file_open_success)) &
       call MOM_error(FATAL, "MOM_io:write_field_2d_dd: unable to open file "//trim(filename_temp))
@@ -758,7 +758,7 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
     if (variable_exists(fileobj, trim(dim_unlim_name))) &
       file_time = read_most_recent_time(fileobj)
     ! close the file
-    if (check_if_open(fileobj)) call close_file(fileobj)
+    if (check_if_open(fileobj)) call fms2_close_file(fileobj)
 
   endif
 
@@ -787,7 +787,7 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
 
   ! open the file in write/append mode
   if (.not.(check_if_open(fileobj))) &
-     file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
+     file_open_success = fms2_open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
                                    is_restart=.false.)
 
   ! register the diagnostic axes associated with the field
@@ -842,7 +842,7 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, var_desc, 
   endif
 
   ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
 
   if (allocated(x_inds)) deallocate(x_inds)
   if (allocated(y_inds)) deallocate(y_inds)
@@ -936,7 +936,7 @@ subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, var_desc, 
   if (present(time_level)) then
     ! open the file in read mode to get the time
     if (.not.(check_if_open(fileobj))) &
-      file_open_success = open_file(fileobj, trim(filename_temp), "read", domain%mpp_domain, &
+      file_open_success = fms2_open_file(fileobj, trim(filename_temp), "read", domain%mpp_domain, &
                                     is_restart=.false.)
     if (.not.(file_open_success)) &
       call MOM_error(FATAL, "MOM_io:write_field_3d_dd: unable to open file "//trim(filename_temp))
@@ -951,7 +951,7 @@ subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, var_desc, 
     if (variable_exists(fileobj, trim(dim_unlim_name))) &
       file_time = read_most_recent_time(fileobj)
 
-    if (check_if_open(fileobj)) call close_file(fileobj)
+    if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   endif
 
   ! set the start (corner) and nwrite (edge_lengths) values
@@ -977,7 +977,7 @@ subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, var_desc, 
 
  ! open the file in write/append mode
  if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
+    file_open_success = fms2_open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
                                   is_restart=.false.)
   ! register the diagnostic axes associated with the field
   do i=1,ndims
@@ -1029,7 +1029,7 @@ subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, var_desc, 
   endif
 
   ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   nullify(data_tmp)
 
 end subroutine write_field_3d_DD
@@ -1117,7 +1117,7 @@ subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, var_desc, 
   if (present(time_level)) then
     ! open the file in read mode to get the time
     if (.not.(check_if_open(fileobj))) &
-      file_open_success = open_file(fileobj, trim(filename_temp), "read", domain%mpp_domain, &
+      file_open_success = fms2_open_file(fileobj, trim(filename_temp), "read", domain%mpp_domain, &
                                     is_restart=.false.)
     if (.not.(file_open_success)) &
       call MOM_error(FATAL, "MOM_io:write_field_4d_dd: unable to open file "//trim(filename_temp))
@@ -1129,7 +1129,7 @@ subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, var_desc, 
     if (variable_exists(fileobj, trim(dim_unlim_name))) &
       file_time = read_most_recent_time(fileobj)
 
-    if (check_if_open(fileobj)) call close_file(fileobj)
+    if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   endif
 
   ! set the start (corner) and nwrite (edge_lengths) values
@@ -1155,7 +1155,7 @@ subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, var_desc, 
   endif ; endif
   ! open file in write/append mode
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
+    file_open_success = fms2_open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), domain%mpp_domain, &
                                   is_restart=.false.)
    ! register the diagnostic axes associated with the field
   do i=1,ndims
@@ -1209,7 +1209,7 @@ subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, var_desc, 
   endif
 
   ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   nullify(data_tmp)
 
 end subroutine write_field_4d_DD
@@ -1260,7 +1260,7 @@ subroutine write_scalar(filename, fieldname, data, mode, time_level, time_units,
   if (present(time_level)) then
     ! open the file
     if (.not.(check_if_open(fileobj))) &
-      file_open_success = open_file(fileobj, trim(filename_temp), "read", is_restart=.false.)
+      file_open_success = fms2_open_file(fileobj, trim(filename_temp), "read", is_restart=.false.)
     if (.not.(file_open_success)) call MOM_error(FATAL, "MOM_IO write_scalar: "// &
         "unable to open file "//trim(filename_temp))
 
@@ -1272,12 +1272,12 @@ subroutine write_scalar(filename, fieldname, data, mode, time_level, time_units,
       file_time = read_most_recent_time(fileobj)
     endif
     ! close the file
-    if (check_if_open(fileobj)) call close_file(fileobj)
+    if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   endif
 
   ! open the file in write/append mode
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
+    file_open_success = fms2_open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
 
   ! write the data
    if (.not.(variable_exists(fileobj, trim(fieldname)))) then
@@ -1319,7 +1319,7 @@ subroutine write_scalar(filename, fieldname, data, mode, time_level, time_units,
     call write_data(fileobj, trim(fieldname), data)
   endif
   ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
 end subroutine write_scalar
 
 !> This function uses the fms_io function write_data to write a 1-D non-domain-decomposed data field named "fieldname"
@@ -1385,7 +1385,7 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, var_desc, &
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
+    file_open_success = fms2_open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
 
   ! get the dimension names and lengths
   ! NOTE: the t_grid argument is set to '1' (do nothing) because the presence of a time dimension is user-specified
@@ -1405,7 +1405,7 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, var_desc, &
   if (present(time_level)) then
     ! open the file
     if (.not.(check_if_open(fileobj))) &
-      file_open_success = open_file(fileobj, trim(filename_temp), "read", is_restart=.false.)
+      file_open_success = fms2_open_file(fileobj, trim(filename_temp), "read", is_restart=.false.)
 
     call get_unlimited_dimension_name(fileobj,dim_unlim_name)
     num_dims = num_dims+1
@@ -1417,7 +1417,7 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, var_desc, &
     if (variable_exists(fileobj, trim(dim_unlim_name))) &
       file_time = read_most_recent_time(fileobj)
     ! close the file
-    if (check_if_open(fileobj)) call close_file(fileobj)
+    if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   endif
 
   ! set the start (corner) and nwrite (edge_lengths) values
@@ -1448,7 +1448,7 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, var_desc, &
 
   ! open the file in write/append mode
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false., &
+    file_open_success = fms2_open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false., &
                                   pelist=pelist)
 
   ! register the field if it is not already in the file
@@ -1498,7 +1498,7 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, var_desc, &
   endif
 
   ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   nullify(data_tmp)
   deallocate(pelist)
 
@@ -1567,7 +1567,7 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, var_desc, &
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
+    file_open_success = fms2_open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
 
   ! get the dimension names and lengths
   ! NOTE: the t_grid argument is set to '1' (do nothing) because the presence of a time dimension is user-specified
@@ -1587,7 +1587,7 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, var_desc, &
   if (present(time_level)) then
     ! open the file
     if (.not.(check_if_open(fileobj))) &
-      file_open_success = open_file(fileobj, trim(filename_temp), "read", is_restart=.false.)
+      file_open_success = fms2_open_file(fileobj, trim(filename_temp), "read", is_restart=.false.)
 
     call get_unlimited_dimension_name(fileobj,dim_unlim_name)
     num_dims=num_dims+1
@@ -1599,7 +1599,7 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, var_desc, &
     if (variable_exists(fileobj, trim(dim_unlim_name))) &
       file_time = read_most_recent_time(fileobj)
     ! close the file
-    if (check_if_open(fileobj)) call close_file(fileobj)
+    if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   endif
 
   ! set the start (corner) and nwrite (edge_lengths) values
@@ -1635,7 +1635,7 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, var_desc, &
 
   ! open the file in write/append mode
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false., &
+    file_open_success = fms2_open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false., &
                                   pelist=pelist)
 
   ! write the data
@@ -1682,7 +1682,7 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, var_desc, &
   endif
 
   ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   nullify(data_tmp)
   deallocate(pelist)
 
@@ -1751,7 +1751,7 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, var_desc, &
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
+    file_open_success = fms2_open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
 
   ! get the dimension names and lengths
   ! NOTE: the t_grid argument is set to '1' (do nothing) because the presence of a time dimension is user-specified
@@ -1771,7 +1771,7 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, var_desc, &
   if (present(time_level)) then
     ! open the file
     if (.not.(check_if_open(fileobj))) &
-      file_open_success = open_file(fileobj, trim(filename_temp), "read", is_restart=.false.)
+      file_open_success = fms2_open_file(fileobj, trim(filename_temp), "read", is_restart=.false.)
 
     call get_unlimited_dimension_name(fileobj,dim_unlim_name)
     num_dims = num_dims+1
@@ -1783,7 +1783,7 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, var_desc, &
     if (variable_exists(fileobj, trim(dim_unlim_name))) &
       file_time = read_most_recent_time(fileobj)
     ! close the file
-    if (check_if_open(fileobj)) call close_file(fileobj)
+    if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   endif
 
   ! set the start (corner) and nwrite (edge_lengths) values
@@ -1819,7 +1819,7 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, var_desc, &
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false., &
+    file_open_success = fms2_open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false., &
                                   pelist=pelist)
 
   ! register the field if it is not already in the file
@@ -1868,7 +1868,7 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, var_desc, &
   endif
 
   ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   nullify(data_tmp)
   deallocate(pelist)
 
@@ -1951,7 +1951,7 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, var_desc, &
   if (present(time_level)) then
     ! open the file
     if (.not.(check_if_open(fileobj))) &
-      file_open_success = open_file(fileobj, trim(filename_temp), "read", is_restart=.false.)
+      file_open_success = fms2_open_file(fileobj, trim(filename_temp), "read", is_restart=.false.)
 
     call get_unlimited_dimension_name(fileobj,dim_unlim_name)
     call get_dimension_size(fileobj, trim(dim_unlim_name), dim_unlim_size)
@@ -1961,7 +1961,7 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, var_desc, &
     if (variable_exists(fileobj, trim(dim_unlim_name))) &
       file_time = read_most_recent_time(fileobj)
     ! close the file
-    if (check_if_open(fileobj)) call close_file(fileobj)
+    if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   endif
 
   ! set the start (corner) and nwrite (edge_lengths) values
@@ -1995,7 +1995,7 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, var_desc, &
   enddo
   ! open the file in write/append mode
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false., &
+    file_open_success = fms2_open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false., &
                                   pelist=pelist)
 
   if (.not.(variable_exists(fileobj, trim(fieldname)))) then
@@ -2042,7 +2042,7 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, var_desc, &
   endif
 
   ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   nullify(data_tmp)
   deallocate(pelist)
 
@@ -2050,7 +2050,7 @@ end subroutine write_field_4d_noDD
 
 !> This function uses the fms_io function read_data to read 1-D domain-decomposed data field named "fieldname"
 !! from file "filename".
-subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, corner, edge_lengths, time_level, scale, &
+subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, corner, edge_lengths, timelevel, scale, &
                                x_position, y_position)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
@@ -2059,7 +2059,7 @@ subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, corner, edge_l
   integer, dimension(1), optional, intent(in) :: corner !< starting index of data buffer. Default is 1
   integer, dimension(1), optional, intent(in) :: edge_lengths !< number of data values to read in; default is the
                                                              !! variable size
-  integer, optional, intent(in) :: time_level !< time level to read
+  integer, optional, intent(in) :: timelevel !< time level to read
   real, optional, intent(in) :: scale !< A scaling factor that the field is multiplied by
   integer, intent(in), optional :: x_position !< domain position of x-dimension; CENTER (default) or EAST_FACE
   integer, intent(in), optional :: y_position !< domain position of y-dimension; CENTER (default) or NORTH_FACE
@@ -2085,15 +2085,20 @@ subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, corner, edge_l
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, filename, "read", domain%mpp_domain, is_restart=.false.)
+    file_open_success = fms2_open_file(fileobj, filename, "read", domain%mpp_domain, is_restart=.false.)
   ! register the variable axes
   call MOM_register_variable_axes(fileobj, trim(fieldname), xPosition=xpos, yPosition=ypos)
   ! set the start and nread values that will be passed as the read_data corner and edge_lengths arguments
   dim_names(:) = ""
   call get_variable_dimension_names(fileobj, trim(fieldname), dim_names)
 
-  start(1) = 1
-  if (present(corner)) start(1) = corner(1)
+  start(1)=1
+  if (present(timelevel)) then
+    if (is_dimension_unlimited(fileobj, dim_names(1))) start(1) = timelevel(1)
+  elseif (present(corner)) then
+    start(1) = corner(1)
+  endif
+
   if (present(edge_lengths)) then
     nread(1) = edge_lengths(1)
   else
@@ -2102,7 +2107,7 @@ subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, corner, edge_l
   ! read the data
   call read_data(fileobj, trim(fieldname), data, corner=start, edge_Lengths=nread)
   ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
 
   if (present(scale)) then ; if (scale /= 1.0) then
     call scale_data(data, scale)
@@ -2112,7 +2117,7 @@ end subroutine MOM_read_data_1d_DD
 
 !> This function uses the fms_io function read_data to read 2-D domain-decomposed data field named "fieldname"
 !! from file "filename".
-subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain, corner, edge_lengths, time_level, scale, &
+subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain, corner, edge_lengths, timelevel, scale, &
                                x_position, y_position)
   character(len=*), intent(in) :: filename  !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
@@ -2121,7 +2126,7 @@ subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain, corner, edge_l
   integer, dimension(2), optional, intent(in) :: corner !< starting indices of data buffer. Default is 1
   integer, dimension(2), optional, intent(in) :: edge_lengths !< number of data values to read in.
                                                               !! Default values are the variable dimension sizes
-  integer, optional, intent(in) :: time_level !< time level to read
+  integer, optional, intent(in) :: timelevel !< time level to read
   real, optional, intent(in):: scale !< A scaling factor that the field is multiplied by
   integer, intent(in), optional :: x_position !< domain position of x-dimension; CENTER (default) or EAST_FACE
   integer, intent(in), optional :: y_position !< domain position of y-dimension; CENTER (default) or NORTH_FACE
@@ -2147,7 +2152,7 @@ subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain, corner, edge_l
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, filename, "read", domain%mpp_domain, is_restart=.false.)
+    file_open_success = fms2_open_file(fileobj, filename, "read", domain%mpp_domain, is_restart=.false.)
   ! register the variable axes
   call MOM_register_variable_axes(fileobj, trim(fieldname), xPosition=xpos, yPosition=ypos)
 
@@ -2166,12 +2171,12 @@ subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain, corner, edge_l
     enddo
   endif
 
-  if (present(time_level)) then
+  if (present(timelevel)) then
     dim_unlim_index=0
     do i=1,2
       if (is_dimension_unlimited(fileobj,dim_names(i))) then
         dim_unlim_index=i
-        start(i)=time_level
+        start(i)=timelevel
         nread(i)=1
       endif
     enddo
@@ -2182,7 +2187,7 @@ subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain, corner, edge_l
   ! read the data
   call read_data(fileobj, trim(fieldname), data, corner=start, edge_lengths=nread)
   ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   ! scale the data
   if (present(scale)) then ; if (scale /= 1.0) then
     call scale_data(data, scale, domain)
@@ -2192,7 +2197,7 @@ end subroutine MOM_read_data_2d_DD
 
 !> This function uses the fms_io function read_data to read 3-D domain-decomposed data field named "fieldname"
 !! from file "filename".
-subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, corner, edge_lengths, time_level, scale, &
+subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, corner, edge_lengths, timelevel, scale, &
                                x_position, y_position)
   character(len=*), intent(in) :: filename  !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
@@ -2201,7 +2206,7 @@ subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, corner, edge_l
   integer, dimension(3), optional, intent(in) :: corner !< starting indices of data buffer. Default is 1
   integer, dimension(3), optional, intent(in) :: edge_lengths !< number of data values to read in.
                                                              !! Default values are the variable dimension sizes
-  integer, optional, intent(in) :: time_level !< time level to read
+  integer, optional, intent(in) :: timelevel !< time level to read
   real,         optional, intent(in):: scale !< A scaling factor that the field is multiplied by
   integer, intent(in), optional :: x_position !< domain position of x-dimension; CENTER (default) or EAST_FACE
   integer, intent(in), optional :: y_position !< domain position of y-dimension; CENTER (default) or NORTH_FACE
@@ -2227,7 +2232,7 @@ subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, corner, edge_l
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, filename, "read", domain%mpp_domain, is_restart=.false.)
+    file_open_success = fms2_open_file(fileobj, filename, "read", domain%mpp_domain, is_restart=.false.)
   ! register the variable axes
   call MOM_register_variable_axes(fileobj, trim(fieldname), xPosition=xpos, yPosition=ypos)
   ! set the start and nread values that will be passed as the read_data corner and edge_lengths arguments
@@ -2245,12 +2250,12 @@ subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, corner, edge_l
     enddo
   endif
 
-  if (present(time_level)) then
+  if (present(timelevel)) then
     dim_unlim_index=0
     do i=1,3
       if (is_dimension_unlimited(fileobj,dim_names(i))) then
         dim_unlim_index=i
-        start(i)=time_level
+        start(i)=timelevel
         nread(i)=1
       endif
     enddo
@@ -2261,7 +2266,7 @@ subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, corner, edge_l
   ! read the data
   call read_data(fileobj, trim(fieldname), data, corner=start, edge_Lengths=nread)
   ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   ! scale the data
   if (present(scale)) then ; if (scale /= 1.0) then
     call scale_data(data, scale, domain)
@@ -2271,7 +2276,7 @@ end subroutine MOM_read_data_3d_DD
 
 !> This function uses the fms_io function read_data to read 4-D domain-decomposed data field named "fieldname"
 !! from file "filename".
-subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, corner, edge_lengths, time_level, scale, &
+subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, corner, edge_lengths, timelevel, scale, &
                                x_position, y_position)
   character(len=*),       intent(in) :: filename  !< The name of the file to read
   character(len=*),       intent(in) :: fieldname !< The variable name of the data in the file
@@ -2280,7 +2285,7 @@ subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, corner, edge_l
   integer, dimension(4),  optional, intent(in) :: corner !< starting indices of data buffer. Default is 1
   integer, dimension(4),  optional, intent(in) :: edge_lengths !< number of data values to read in.
                                                               !! Default values are the variable dimension sizes
-  integer, optional, intent(in) :: time_level !< time level to read
+  integer, optional, intent(in) :: timelevel !< time level to read
   real,         optional, intent(in):: scale !< A scaling factor that the field is multiplied by
   integer, intent(in), optional :: x_position !< domain position of x-dimension; CENTER (default) or EAST_FACE
   integer, intent(in), optional :: y_position !< domain position of y-dimension; CENTER (default) or NORTH_FACE
@@ -2306,7 +2311,7 @@ subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, corner, edge_l
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, filename, "read", domain%mpp_domain, is_restart=.false.)
+    file_open_success = fms2_open_file(fileobj, filename, "read", domain%mpp_domain, is_restart=.false.)
   ! register the variable axes
 
   call MOM_register_variable_axes(fileobj, trim(fieldname), xPosition=xpos, yPosition=ypos)
@@ -2325,12 +2330,12 @@ subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, corner, edge_l
     enddo
   endif
 
-  if (present(time_level)) then
+  if (present(timelevel)) then
     dim_unlim_index=0
     do i=1,4
       if (is_dimension_unlimited(fileobj,dim_names(i))) then
         dim_unlim_index=i
-        start(i)=time_level
+        start(i)=timelevel
         nread(i)=1
       endif
     enddo
@@ -2341,7 +2346,7 @@ subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, corner, edge_l
   ! read the data
   call read_data(fileobj, trim(fieldname), data, corner=start, edge_Lengths=nread)
   ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   ! scale the data
   if (present(scale)) then ; if (scale /= 1.0) then
     call scale_data(data, scale, domain)
@@ -2361,24 +2366,24 @@ subroutine MOM_read_data_scalar(filename, fieldname, data)
   logical :: file_open_success !.true. if call to open_file is successful
   ! open the file
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, filename, "read", is_restart=.false.)
+    file_open_success = fms2_open_file(fileobj, filename, "read", is_restart=.false.)
   ! read the data
   call read_data(fileobj, trim(fieldname), data)
   ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
 
 end subroutine MOM_read_data_scalar
 
 !> This function uses the fms_io function read_data to read 1-D data field named "fieldname"
 !! from file "filename".
-subroutine MOM_read_data_1d_noDD(filename, fieldname, data, corner, edge_lengths, time_level, scale)
+subroutine MOM_read_data_1d_noDD(filename, fieldname, data, corner, edge_lengths, timelevel, scale)
   character(len=*),       intent(in) :: filename !< The name of the file to read
   character(len=*),       intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:),     intent(inout) :: data !< The 1-dimensional data array to pass to read_data
   integer, dimension(1), optional, intent(in) :: corner !< starting index of data buffer. Default is 1
   integer, dimension(1), optional, intent(in) :: edge_lengths !< number of data values to read in; default is
                                                              !! the variable size
-  integer,      optional, intent(in) :: time_level !< time level to read
+  integer,      optional, intent(in) :: timelevel !< time level to read
   real,         optional, intent(in) :: scale !< A scaling factor that the field is multiplied by
   ! local
   type(FmsNetcdfFile_t) :: fileobj ! netCDF file object returned by call to open_file
@@ -2389,7 +2394,7 @@ subroutine MOM_read_data_1d_noDD(filename, fieldname, data, corner, edge_lengths
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, filename, "read", is_restart=.false.)
+    file_open_success = fms2_open_file(fileobj, filename, "read", is_restart=.false.)
 
   ndims = get_variable_num_dimensions(fileobj,trim(fieldname))
   allocate(start(ndims))
@@ -2398,7 +2403,13 @@ subroutine MOM_read_data_1d_noDD(filename, fieldname, data, corner, edge_lengths
   dim_names(:) = ""
   call get_variable_dimension_names(fileobj, trim(fieldname), dim_names)
 
-  if (present(corner)) start(1) = corner(1)
+  start(1) = 1
+  if (present(timelevel)) then
+    if(is_dimension_unlimited(fileobj, dim_names(1))) start(1) = timelevel(1)
+  elseif (present(corner)) then
+    start(1) = corner(1)
+  endif
+
   if (present(edge_lengths)) then
     nread(1) = edge_lengths(1)
   else
@@ -2407,7 +2418,7 @@ subroutine MOM_read_data_1d_noDD(filename, fieldname, data, corner, edge_lengths
   ! read the data
   call read_data(fileobj, trim(fieldname), data, corner=start, edge_Lengths=nread)
   ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   ! scale the data
   if (present(scale)) then ; if (scale /= 1.0) then
     call scale_data(data, scale)
@@ -2420,14 +2431,14 @@ end subroutine MOM_read_data_1d_noDD
 
 !> This function uses the fms_io function read_data to read 2-D data field named "fieldname"
 !! from file "filename".
-subroutine MOM_read_data_2d_noDD(filename, fieldname, data, corner, edge_lengths, time_level, scale)
+subroutine MOM_read_data_2d_noDD(filename, fieldname, data, corner, edge_lengths, timelevel, scale)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:),   intent(inout) :: data !< The 2-dimensional data array to pass to read_data
   integer, dimension(2),  optional, intent(in) :: corner !< starting indices of data buffer. Default is 1
   integer, dimension(2),  optional, intent(in) :: edge_lengths !< number of data values to read in.
                                                               !! Default values are the variable dimension sizes
-  integer, optional, intent(in) :: time_level !< time level to read
+  integer, optional, intent(in) :: timelevel !< time level to read
   real, optional, intent(in):: scale !< A scaling factor that the field is multiplied by
 
   ! local
@@ -2439,7 +2450,7 @@ subroutine MOM_read_data_2d_noDD(filename, fieldname, data, corner, edge_lengths
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, filename, "read", is_restart=.false.)
+    file_open_success = fms2_open_file(fileobj, filename, "read", is_restart=.false.)
   ! set the start and nread values that will be passed as the read_data corner and edge_lengths arguments
   dim_names(:) = ""
   call get_variable_dimension_names(fileobj, trim(fieldname), dim_names)
@@ -2455,12 +2466,12 @@ subroutine MOM_read_data_2d_noDD(filename, fieldname, data, corner, edge_lengths
     enddo
   endif
 
-  if (present(time_level)) then
+  if (present(timelevel)) then
     dim_unlim_index=0
     do i=1,2
       if (is_dimension_unlimited(fileobj,dim_names(i))) then
         dim_unlim_index=i
-        start(i)=time_level
+        start(i)=timelevel
         nread(i)=1
       endif
     enddo
@@ -2472,7 +2483,7 @@ subroutine MOM_read_data_2d_noDD(filename, fieldname, data, corner, edge_lengths
   ! read the data
   call read_data(fileobj, trim(fieldname), data, corner=start, edge_Lengths=nread)
   ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   ! scale the data
   if (present(scale)) then ; if (scale /= 1.0) then
     call scale_data(data, scale)
@@ -2482,14 +2493,14 @@ end subroutine MOM_read_data_2d_noDD
 
 !> This function uses the fms_io function read_data to read 3-D data field named "fieldname"
 !! from file "filename".
-subroutine MOM_read_data_3d_noDD(filename, fieldname, data, corner, edge_lengths, time_level, scale)
+subroutine MOM_read_data_3d_noDD(filename, fieldname, data, corner, edge_lengths, timelevel, scale)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:), intent(inout) :: data !< The 3-dimensional data array to pass to read_data
   integer, dimension(3),  optional, intent(in) :: corner !< starting indices of data buffer. Default is 1
   integer, dimension(3),  optional, intent(in) :: edge_lengths !< number of data values to read in.
                                                               !! Default values are the variable dimension sizes
-  integer, optional, intent(in) :: time_level !< time level to read
+  integer, optional, intent(in) :: timelevel !< time level to read
   real,         optional, intent(in):: scale !< A scaling factor that the field is multiplied by
   ! local
   type(FmsNetcdfFile_t) :: fileobj !netCDF file object returned by call to open_file
@@ -2500,7 +2511,7 @@ subroutine MOM_read_data_3d_noDD(filename, fieldname, data, corner, edge_lengths
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, filename, "read", is_restart=.false.)
+    file_open_success = fms2_open_file(fileobj, filename, "read", is_restart=.false.)
   ! set the start and nread values that will be passed as the read_data corner and edge_lengths arguments
   dim_names(:) = ""
   call get_variable_dimension_names(fileobj, trim(fieldname), dim_names)
@@ -2516,12 +2527,12 @@ subroutine MOM_read_data_3d_noDD(filename, fieldname, data, corner, edge_lengths
     enddo
   endif
 
-  if (present(time_level)) then
+  if (present(timelevel)) then
     dim_unlim_index=0
     do i=1,3
       if (is_dimension_unlimited(fileobj,dim_names(i))) then
         dim_unlim_index=i
-        start(i)=time_level
+        start(i)=timelevel
         nread(i)=1
       endif
     enddo
@@ -2532,7 +2543,7 @@ subroutine MOM_read_data_3d_noDD(filename, fieldname, data, corner, edge_lengths
   ! read the data
   call read_data(fileobj, trim(fieldname), data, corner=start, edge_Lengths=nread)
   ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   ! scale the data
   if (present(scale)) then ; if (scale /= 1.0) then
     call scale_data(data, scale)
@@ -2542,14 +2553,14 @@ end subroutine MOM_read_data_3d_noDD
 
 !> This function uses the fms_io function read_data to read 3-D data field named "fieldname"
 !! from file "filename".
-subroutine MOM_read_data_4d_noDD(filename, fieldname, data, corner, edge_lengths, time_level, scale)
+subroutine MOM_read_data_4d_noDD(filename, fieldname, data, corner, edge_lengths, timelevel, scale)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:,:),   intent(inout) :: data !< The 4-dimensional array to pass to read_data
   integer, dimension(4),  optional, intent(in) :: corner !< starting indices of data buffer. Default is 1
   integer, dimension(4),  optional, intent(in) :: edge_lengths !< number of data values to read in.
                                                               !! Default values are the variable dimension sizes
-  integer, optional, intent(in) :: time_level !< time level to read
+  integer, optional, intent(in) :: timelevel !< time level to read
   real,         optional, intent(in):: scale !< A scaling factor that the field is multiplied by
   ! local
   type(FmsNetcdfFile_t) :: fileobj !netCDF file object returned by call to open_file
@@ -2560,7 +2571,7 @@ subroutine MOM_read_data_4d_noDD(filename, fieldname, data, corner, edge_lengths
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, filename, "read", is_restart=.false.)
+    file_open_success = fms2_open_file(fileobj, filename, "read", is_restart=.false.)
   ! set the start and nread values that will be passed as the read_data corner and edge_lengths arguments
   dim_names(:) = ""
   call get_variable_dimension_names(fileobj, trim(fieldname), dim_names)
@@ -2576,12 +2587,12 @@ subroutine MOM_read_data_4d_noDD(filename, fieldname, data, corner, edge_lengths
     enddo
   endif
 
-  if (present(time_level)) then
+  if (present(timelevel)) then
     dim_unlim_index=0
     do i=1,4
       if (is_dimension_unlimited(fileobj,dim_names(i))) then
         dim_unlim_index=i
-        start(i)=time_level
+        start(i)=timelevel
         nread(i)=1
       endif
     enddo
@@ -2592,7 +2603,7 @@ subroutine MOM_read_data_4d_noDD(filename, fieldname, data, corner, edge_lengths
   ! read the data
   call read_data(fileobj, trim(fieldname), data, corner=start, edge_Lengths=nread)
   ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   ! scale the data
   if (present(scale)) then ; if (scale /= 1.0) then
     call scale_data(data, scale)
@@ -2605,7 +2616,7 @@ end subroutine MOM_read_data_4d_noDD
 !! read. If reading in 'y' (latitude), it searches the first dimension for the point that contains the full range
 !! of values used to define "lath" and "latq".
 subroutine MOM_read_data_2d_noDD_diag_axes(filename, fieldname, data, define_diagnostic_axes, G, corner, edge_lengths, &
-                                           time_level, scale, grid_type)
+                                           timelevel, scale, grid_type)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:),   intent(inout) :: data !< The 2-dimensional data array to pass to read_data
@@ -2617,7 +2628,7 @@ subroutine MOM_read_data_2d_noDD_diag_axes(filename, fieldname, data, define_dia
   integer, dimension(2),  optional, intent(in) :: corner !< starting indices of data buffer. Default is 1
   integer, dimension(2),  optional, intent(in) :: edge_lengths !< number of data values to read in.
   !! Default values are the variable dimension sizes
-  integer, optional, intent(in) :: time_level !< time level to read
+  integer, optional, intent(in) :: timelevel !< time level to read
   real, optional, intent(in):: scale !< A scaling factor that the field is multiplied by
   character(len=*), optional, intent(in) :: grid_type !< grid type; either 'b' or 't'
   ! local
@@ -2635,7 +2646,7 @@ subroutine MOM_read_data_2d_noDD_diag_axes(filename, fieldname, data, define_dia
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, filename, "read", is_restart=.false.)
+    file_open_success = fms2_open_file(fileobj, filename, "read", is_restart=.false.)
 
   dim_names(:) = ""
   call get_variable_dimension_names(fileobj, trim(fieldname), dim_names)
@@ -2649,12 +2660,12 @@ subroutine MOM_read_data_2d_noDD_diag_axes(filename, fieldname, data, define_dia
 
   if (present(edge_lengths)) nread = edge_lengths
 
-  if (present(time_level)) then
+  if (present(timelevel)) then
     dim_unlim_index=0
     do i=1,2
       if (is_dimension_unlimited(fileobj,dim_names(i))) then
         dim_unlim_index=i
-        start(i)=time_level
+        start(i)=timelevel
         nread(i)=1
       endif
     enddo
@@ -2738,7 +2749,7 @@ subroutine MOM_read_data_2d_noDD_diag_axes(filename, fieldname, data, define_dia
   endif
 
   ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   ! scale the data
   if (present(scale)) then ; if (scale /= 1.0) then
     call scale_data(data, scale)
@@ -2781,7 +2792,7 @@ subroutine MOM_register_variable_axes(fileObj, variableName, xPosition, yPositio
   integer, allocatable, dimension(:) :: dimSizes ! variable dimension sizes
 
   if (.not. check_if_open(fileObj)) call MOM_error(FATAL,"MOM_io:register_variable_axes: The fileObj has "// &
-                                                  "not been opened. Call open_file(fileObj,...) before "// &
+                                                  "not been opened. Call fms2_open_file(fileObj,...) before "// &
                                                   "passing the fileObj argument to this function.")
   xPos=CENTER
   yPos=CENTER
@@ -2848,7 +2859,7 @@ subroutine MOM_get_nc_corner_edge_lengths_DD(fileObj, variableName, corner, edge
   integer :: i, idx, ndims ! counter, index, number of dimensions
 
   if (.not. check_if_open(fileObj)) call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edge_lengths_DD: "// &
-                                                  "The fileObj has not been opened. Call open_file(fileObj,...)"// &
+                                                  "The fileObj has not been opened. Call fms2_open_file(fileObj,...)"// &
                                                   "before passing the fileObj argument to this function.")
 
  if (allocated(corner)) deallocate(corner)
@@ -2902,7 +2913,7 @@ subroutine MOM_get_nc_corner_edge_lengths_noDD(fileObj, variableName, corner, ed
 
   if (.not. check_if_open(fileObj)) call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edge_lengths_DD: "// &
                                                   "The fileObj has not been opened. Call "// &
-                                                  "open_file(fileObj,...) before passing the fileObj argument "// &
+                                                  "fms2_open_file(fileObj,...) before passing the fileObj argument "// &
                                                   "to this function.")
 
  if (allocated(corner)) deallocate(corner)
@@ -3200,9 +3211,9 @@ function field_exists(file_name, variable_name) result (var_exists)
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, file_name, "read", is_restart=.false.)
+    file_open_success = fms2_open_file(fileobj, file_name, "read", is_restart=.false.)
   var_exists = variable_exists(fileobj, trim(variable_name))
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
 end function field_exists
 
 !> get the dimesion sizes of a variable
@@ -3217,7 +3228,7 @@ subroutine field_size(file_name, variable_name, dim_sizes)
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, file_name, "read", is_restart=.false.)
+    file_open_success = fms2_open_file(fileobj, file_name, "read", is_restart=.false.)
   if (.not. (variable_exists(fileobj, trim(variable_name)))) &
     call MOM_error(FATAL, "MOM_io::field_size: variable "//trim(variable_name)// &
                    " not found in file "//trim(file_name))
@@ -3228,7 +3239,7 @@ subroutine field_size(file_name, variable_name, dim_sizes)
     " does not match the size of the dim_sizes argument passed to the routine")
   call get_variable_size(fileObj, trim(variable_name), dim_sizes)
 
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
 end subroutine field_size
 
 !> set the logical variables that determine which diagnositic axes to use
@@ -3309,7 +3320,7 @@ subroutine read_axis_data(filename, axis_name, var)
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, filename, "read", is_restart=.false.)
+    file_open_success = fms2_open_file(fileobj, filename, "read", is_restart=.false.)
   if (.not. (variable_exists(fileobj, trim(axis_name)))) &
     call MOM_error(FATAL, "MOM_io::read_axis_data: variable "//trim(axis_name)// &
                    " not found in file "//trim(filename))
@@ -3320,7 +3331,7 @@ subroutine read_axis_data(filename, axis_name, var)
     " does not match the size of the var argument passed to the routine")
   call read_data(fileObj, trim(axis_name), var)
 
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
 
 end subroutine read_axis_data
 
@@ -3373,7 +3384,7 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, filename, "read", is_restart=.false.)
+    file_open_success = fms2_open_file(fileobj, filename, "read", is_restart=.false.)
 
   ! check that variable is in the file
   if (.not.(variable_exists(fileobj, trim(varname)))) call MOM_error(FATAL, "num_time_levels: variable"//&
@@ -3631,7 +3642,7 @@ end function ensembler
 !! 2-D data fields with names given by "[uv]_fieldname" from file "filename".  Valid values for
 !! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
 subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
-                              time_level, stagger, scale)
+                              timelevel, stagger, scale)
   character(len=*),       intent(in)    :: filename !< name of the netcdf file to read
   character(len=*),       intent(in)    :: u_fieldname !< The variable name of the u data in the file
   character(len=*),       intent(in)    :: v_fieldname !< The variable name of the v data in the file
@@ -3640,7 +3651,7 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
   real, dimension(:,:),   intent(inout) :: v_data    !< The 2 dimensional array into which the
                                                      !! v-component of the data should be read
   type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
-  integer,      optional, intent(in)    :: time_level !< The time level in the file to read
+  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
   integer,      optional, intent(in)    :: stagger   !< A flag indicating where this vector is discretized
   real,         optional, intent(in)    :: scale     !< A scaling factor that the fields are multiplied
                                                      !! by before they are returned.
@@ -3654,7 +3665,7 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
 
   ! open the file
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, filename, "read", MOM_domain%mpp_domain, is_restart=.false.)
+    file_open_success = fms2_open_file(fileobj, filename, "read", MOM_domain%mpp_domain, is_restart=.false.)
   if (.not. file_open_success) call MOM_error(FATAL, "MOM_read_vector_2d: netcdf file "//trim(filename)//" not opened.")
 
   u_pos = EAST_FACE ; v_pos = NORTH_FACE
@@ -3679,8 +3690,8 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
       call register_axis(fileobj, dim_names_u(i), "y", domain_position=u_pos)
     else
       if (is_dimension_unlimited(fileobj, dim_names_u(i))) then
-        if (present(time_level)) then
-          start(i)=time_level
+        if (present(timelevel)) then
+          start(i)=timelevel
           dim_sizes_u(i) = 1
           dim_sizes_v(i) = 1
         endif
@@ -3701,7 +3712,7 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
   call read_data(fileobj,u_fieldname, u_data, corner=start, edge_lengths=dim_sizes_u)
   call read_data(fileobj,v_fieldname, v_data, corner=start, edge_lengths=dim_sizes_v)
   ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   ! scale the data
   if (present(scale)) then ; if (scale /= 1.0) then
     call get_simple_array_i_ind(MOM_Domain, size(u_data,1), is, ie)
@@ -3718,7 +3729,7 @@ end subroutine MOM_read_vector_2d
 !! 3-D data fields with names given by "[uv]_fieldname" from file "filename".  Valid values for
 !! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
 subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
-                              time_level, stagger, scale)
+                              timelevel, stagger, scale)
   character(len=*),       intent(in)    :: filename !< name of the netcdf file to read
   character(len=*),       intent(in)    :: u_fieldname !< The variable name of the u data in the file
   character(len=*),       intent(in)    :: v_fieldname !< The variable name of the v data in the file
@@ -3727,7 +3738,7 @@ subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data
   real, dimension(:,:,:), intent(inout) :: v_data    !< The 3 dimensional array into which the
                                                      !! v-component of the data should be read
   type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
-  integer,      optional, intent(in)    :: time_level !< The time level in the file to read
+  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
   integer,      optional, intent(in)    :: stagger   !< A flag indicating where this vector is discretized
   real,         optional, intent(in)    :: scale     !< A scaling factor that the fields are multiplied
                                                      !! by before they are returned.
@@ -3740,7 +3751,7 @@ subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data
   logical :: file_open_success ! .true. if open file is successful
   ! open the file
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = open_file(fileobj, filename, "read", MOM_domain%mpp_domain, is_restart=.false.)
+    file_open_success = fms2_open_file(fileobj, filename, "read", MOM_domain%mpp_domain, is_restart=.false.)
   if (.not. file_open_success) call MOM_error(FATAL, "MOM_read_vector_3d: netcdf file "//trim(filename)//" not opened.")
 
   u_pos = EAST_FACE ; v_pos = NORTH_FACE
@@ -3765,8 +3776,8 @@ subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data
       call register_axis(fileobj, dim_names_u(i), "y", domain_position=u_pos)
     else
       if (is_dimension_unlimited(fileobj, dim_names_u(i))) then
-        if (present(time_level)) then
-          start(i)=time_level
+        if (present(timelevel)) then
+          start(i)=timelevel
           dim_sizes_u(i) = 1
           dim_sizes_v(i) = 1
         endif
@@ -3787,7 +3798,7 @@ subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data
   call read_data(fileobj,u_fieldname, u_data, corner=start, edge_lengths=dim_sizes_u)
   call read_data(fileobj,v_fieldname, v_data, corner=start, edge_lengths=dim_sizes_v)
   ! close the file
-  if (check_if_open(fileobj)) call close_file(fileobj)
+  if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   ! scale the data
   if (present(scale)) then ; if (scale /= 1.0) then
     call get_simple_array_i_ind(MOM_Domain, size(u_data,1), is, ie)
