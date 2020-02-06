@@ -21,7 +21,7 @@ MKMF := $(abspath $(DEPS)/mkmf/bin/mkmf)
 
 # FMS framework
 FMS_URL ?= https://github.com/NOAA-GFDL/FMS.git
-FMS_COMMIT ?= fms-io-dev
+FMS_COMMIT ?= master
 FMS := $(DEPS)/fms
 
 #---
