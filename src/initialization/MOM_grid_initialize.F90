@@ -316,7 +316,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   ! Read DX,DY from the supergrid
 
   tmpU(:,:) = 0. ; tmpV(:,:) = 0.
-  call MOM_read_data(filename,'dx',tmpV SGdom,y_position=NORTH_FACE)
+  call MOM_read_data(filename,'dx',tmpV,SGdom,y_position=NORTH_FACE)
   call MOM_read_data(filename,'dy',tmpU,SGdom,x_position=EAST_FACE)
   call pass_vector(tmpU, tmpV, SGdom, To_All+Scalar_Pair, CGRID_NE)
   call extrapolate_metric(tmpV, 2*(G%jsc-G%jsd)+2, missing=0.)

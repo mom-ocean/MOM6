@@ -3134,8 +3134,8 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
 
     !>\note: all this function does is trim strings; it was intended to be used with fms_io filename appendix
     ! functions get_instance_filename, set_filename_appendix, setup_one_field, and write_data. Thus, it does not
-    ! return a filename appendix when called on its own. The devs need to find a use case for get_filename_appendix and 
-    ! move it to MOM_io since it is not in fms2_io.
+    ! return a filename appendix when called on its own. The devs need to find a use case for get_filename_appendix
+    ! and move it to MOM_io since it is not in fms2_io.
 
     !call get_filename_appendix(filename_appendix)
     !if (len_trim(filename_appendix) > 0) then
