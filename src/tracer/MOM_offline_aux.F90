@@ -674,7 +674,6 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     salt_mean(:,:,:) = 0.0
     uhtr(:,:,:) = 0.0
     vhtr(:,:,:) = 0.0
-
     ! Time-summed fields
     call MOM_read_vector(sum_file, 'uhtr_sum', 'vhtr_sum', uhtr(:,:,1:nk_input), &
                          vhtr(:,:,1:nk_input), G%Domain, time_level=ridx_sum)
@@ -695,7 +694,6 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
   enddo ; enddo
 
   ! Check if reading vertical diffusivities or entrainment fluxes
-
   call MOM_read_data(mean_file, 'Kd_interface', Kd(:,:,1:nk_input+1), G%Domain, &
                      time_level=ridx_sum)
   ! This block makes sure that the fluxes control structure, which may not be used in the solo_driver,
@@ -712,7 +710,6 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
 
     fluxes%netMassOut(:,:) = 0.0
     fluxes%netMassIn(:,:) = 0.0
-
     call MOM_read_data(surf_file,'massout_flux_sum',fluxes%netMassOut, G%Domain, &
         time_level=ridx_sum)
     call MOM_read_data(surf_file,'massin_flux_sum', fluxes%netMassIn,  G%Domain, &
@@ -740,7 +737,6 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
         time_level=ridx_sum)
     call MOM_read_data(mean_file,'sw_nir',fluxes%sw_nir_dir, G%Domain, &
        time_level=ridx_sum)
-
     fluxes%sw_vis_dir(:,:) = fluxes%sw_vis_dir(:,:)*0.5
     fluxes%sw_vis_dif(:,:) = fluxes%sw_vis_dir
     fluxes%sw_nir_dir(:,:) = fluxes%sw_nir_dir(:,:)*0.5

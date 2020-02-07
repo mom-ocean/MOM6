@@ -2094,7 +2094,7 @@ subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, corner, edge_l
 
   start(1)=1
   if (present(timelevel)) then
-    if (is_dimension_unlimited(fileobj, dim_names(1))) start(1) = timelevel(1)
+    if (is_dimension_unlimited(fileobj, dim_names(1))) start(1) = timelevel
   elseif (present(corner)) then
     start(1) = corner(1)
   endif
@@ -2405,7 +2405,7 @@ subroutine MOM_read_data_1d_noDD(filename, fieldname, data, corner, edge_lengths
 
   start(1) = 1
   if (present(timelevel)) then
-    if(is_dimension_unlimited(fileobj, dim_names(1))) start(1) = timelevel(1)
+    if(is_dimension_unlimited(fileobj, dim_names(1))) start(1) = timelevel
   elseif (present(corner)) then
     start(1) = corner(1)
   endif
@@ -2859,9 +2859,9 @@ subroutine MOM_get_nc_corner_edge_lengths_DD(fileObj, variableName, corner, edge
   integer :: i, idx, ndims ! counter, index, number of dimensions
 
   if (.not. check_if_open(fileObj)) call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edge_lengths_DD: "// &
-                                                  "The fileObj has not been opened. Call fms2_open_file(fileObj,...)"// &
-                                                  "before passing the fileObj argument to this function.")
-
+                                                  "The fileObj has not been opened. Call "// &
+                                                  "fms2_open_file(fileObj,...)before passing the fileObj argument "// &
+                                                  "to this function.")
  if (allocated(corner)) deallocate(corner)
  if (allocated(edge_lengths)) deallocate(edge_lengths)
  ! get variable dimension sizes and lengths
@@ -3682,7 +3682,6 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
 
   do i=1,2
     ! register the u axes
-    call MOM_register_variable_axes(fileobj, trim(fieldname), xPosition=xpos, yPosition=ypos)
     call get_variable_units(fileobj, dim_names_u(i), units_u(i))
     if (trim(lowercase(units_u(i))) .eq. "degrees_east") then
       call register_axis(fileobj, dim_names_u(i), "x", domain_position=u_pos)

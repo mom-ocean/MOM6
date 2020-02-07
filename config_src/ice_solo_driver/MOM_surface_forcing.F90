@@ -63,7 +63,7 @@ use MOM_forcing_type,        only : allocate_forcing_type, deallocate_forcing_ty
 use MOM_forcing_type,        only : allocate_mech_forcing, deallocate_mech_forcing
 use MOM_get_input,           only : Get_MOM_Input, directories
 use MOM_grid,                only : ocean_grid_type
-use MOM_io,                  only : MOM_read_data, MOM_read_vector, slasher
+use MOM_io,                  only : file_exists, MOM_read_data, MOM_read_vector, slasher
 use MOM_restart,             only : register_restart_field, restart_init, MOM_restart_CS
 use MOM_restart,             only : restart_init_end, save_restart, restore_state
 use MOM_time_manager,        only : time_type, operator(+), operator(/), get_time, set_time
@@ -619,7 +619,6 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
     SSS_mean      ! A (mean?) salinity about which to normalize local salinity
                   ! anomalies when calculating restorative precipitation
                   ! anomalies [ppt].
-  character(len=40), allocatable, dimension(:): dimNames ! dimension names of netcdf variables
 
   call callTree_enter("buoyancy_forcing_from_files, MOM_surface_forcing.F90")
 
@@ -659,6 +658,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
 !   if (is_root_pe()) &
 !     write(*,'("buoyancy_forcing : Reading time level ",I3,", last was ",I3,".")')&
 !          time_lev,CS%buoy_last_lev_read
+
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%longwavedown_file), "lwdn_sfc", &
              fluxes%LW(:,:), G%Domain, timelevel=time_lev)

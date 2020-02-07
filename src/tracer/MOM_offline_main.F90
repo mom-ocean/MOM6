@@ -1482,7 +1482,6 @@ subroutine read_all_input(CS)
     allocate(CS%salt_all(isd:ied,jsd:jed,nz,1:ntime))     ; CS%salt_all(:,:,:,:) = 0.0
 
     call MOM_mesg("Reading in uhtr, vhtr, h_start, h_end, temp, salt")
-
     do t = 1,ntime
       call MOM_read_vector(CS%snap_file, 'uhtr_sum', 'vhtr_sum', CS%uhtr_all(:,:,1:CS%nk_input,t), &
                        CS%vhtr_all(:,:,1:CS%nk_input,t), CS%G%Domain, time_level=t)

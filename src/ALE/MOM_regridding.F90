@@ -372,9 +372,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       call check_grid_def(filename, varName, expected_units, message, ierr)
       if (ierr) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "//&
                   "Unsupported format in grid definition '"//trim(filename)//"'. Error message "//trim(message))
-      ! get variable dimension sizes
       call field_size(trim(fileName), trim(varName), nzf)
-
       ke = nzf(1)-1
       if (CS%regridding_scheme == REGRIDDING_RHO) then
         allocate(rho_target(ke+1))
@@ -433,7 +431,6 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       call log_param(param_file, mdl, "!TARGET_DENSITIES", rho_target, &
                'HYBRID target densities for interfaces', units=coordinateUnits(coord_mode))
     endif
-
   elseif (index(trim(string),'WOA09')==1) then
     if (len_trim(string)==5) then
       tmpReal = 0. ; ke = 0

@@ -374,7 +374,6 @@ subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, US, CS)
 
   logical :: OK
   integer :: i, j, k, is, ie, js, je, nz
-
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (len_trim(CS%IC_file) > 0) then

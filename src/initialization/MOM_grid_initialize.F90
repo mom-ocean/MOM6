@@ -18,7 +18,6 @@ use MOM_io, only : MOM_read_data, slasher, file_exists
 use MOM_io, only : CORNER, NORTH_FACE, EAST_FACE
 use MOM_unit_scaling, only : unit_scale_type
 use mpp_domains_mod, only : mpp_get_domain_extents, mpp_deallocate_domain
-use mpp_mod, only : mpp_broadcast
 
 implicit none ; private
 
@@ -184,7 +183,6 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   real, dimension(2*G%isd-3:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpZ
   real, dimension(:,:), allocatable :: tmpGlbl
   real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
-  real :: ymax1, ymax2
   character(len=200) :: filename, grid_file, inputdir
   character(len=64)  :: mdl = "MOM_grid_init set_grid_metrics_from_mosaic"
   integer :: err=0, ni, nj, global_indices(4)
@@ -418,6 +416,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   do J=G%jsg-1,G%jeg
     G%gridLatB(J) = tmpGlbl(1,2*(j-G%jsg)+3)
   enddo
+  deallocate( tmpGlbl )
 
   call callTree_leave("set_grid_metrics_from_mosaic()")
 end subroutine set_grid_metrics_from_mosaic

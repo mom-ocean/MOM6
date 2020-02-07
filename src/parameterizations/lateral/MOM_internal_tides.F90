@@ -2326,7 +2326,6 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   filename = trim(CS%inputdir) // trim(refl_angle_file)
   call log_param(param_file, mdl, "INPUTDIR/REFL_ANGLE_FILE", filename)
   allocate(CS%refl_angle(isd:ied,jsd:jed)) ; CS%refl_angle(:,:) = CS%nullangle
-
   call MOM_read_data(filename, 'refl_angle', CS%refl_angle, &
                      G%domain, timelevel=1)
   ! replace NANs with null value
@@ -2342,7 +2341,6 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   filename = trim(CS%inputdir) // trim(refl_pref_file)
   call log_param(param_file, mdl, "INPUTDIR/REFL_PREF_FILE", filename)
   allocate(CS%refl_pref(isd:ied,jsd:jed)) ; CS%refl_pref(:,:) = 1.0
-
   call MOM_read_data(filename, 'refl_pref', CS%refl_pref, G%domain, timelevel=1)
   !CS%refl_pref = CS%refl_pref*1 ! adjust partial reflection if desired
   call pass_var(CS%refl_pref,G%domain)

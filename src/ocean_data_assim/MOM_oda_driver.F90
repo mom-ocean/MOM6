@@ -132,8 +132,8 @@ subroutine init_oda(Time, G, GV, CS)
   integer :: n, m, k, i, j, nk
   integer :: is,ie,js,je,isd,ied,jsd,jed
   integer :: stdout_unit
-  integer :: npes_pm, ens_info(6), ni, nj
   character(len=32) :: assim_method
+  integer :: npes_pm, ens_info(6), ni, nj
   character(len=128) :: mesg
   character(len=32) :: fldnam
   character(len=30) :: coord_mode
@@ -276,7 +276,6 @@ subroutine init_oda(Time, G, GV, CS)
   basin_file = trim(inputdir) // trim(basin_file)
   allocate(CS%oda_grid%basin_mask(isd:ied,jsd:jed))
   CS%oda_grid%basin_mask(:,:) = 0.0
-
   call MOM_read_data(basin_file,'basin',CS%oda_grid%basin_mask,CS%Grid%domain, time_level=1)
 
 !    get global grid information from ocean_model
