@@ -1484,13 +1484,13 @@ subroutine read_all_input(CS)
     call MOM_mesg("Reading in uhtr, vhtr, h_start, h_end, temp, salt")
     do t = 1,ntime
       call MOM_read_vector(CS%snap_file, 'uhtr_sum', 'vhtr_sum', CS%uhtr_all(:,:,1:CS%nk_input,t), &
-                       CS%vhtr_all(:,:,1:CS%nk_input,t), CS%G%Domain, time_level=t)
+                       CS%vhtr_all(:,:,1:CS%nk_input,t), CS%G%Domain, timelevel=t)
       call MOM_read_data(CS%snap_file,'h_end', CS%hend_all(:,:,1:CS%nk_input,t), CS%G%Domain, &
-        time_level=t)
+        timelevel=t)
       call MOM_read_data(CS%mean_file,'temp', CS%temp_all(:,:,1:CS%nk_input,t), CS%G%Domain, &
-        time_level=t)
+        timelevel=t)
       call MOM_read_data(CS%mean_file,'salt', CS%salt_all(:,:,1:CS%nk_input,t), CS%G%Domain, &
-        time_level=t)
+        timelevel=t)
     enddo
   endif
 

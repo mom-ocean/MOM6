@@ -415,7 +415,7 @@ subroutine set_coord_from_file(Rlay, g_prime, GV, US, param_file)
   if (.not.file_exists(filename)) call MOM_error(FATAL, &
       " set_coord_from_file: Unable to open "//trim(filename))
 
-  !>\TODO: this function is redundant; replace it with call MOM_read_data(filename, coord_var, Rlay)
+  !> TODO: this function is redundant; replace it with call MOM_read_data(filename, coord_var, Rlay)
   call read_axis_data(filename, coord_var, Rlay)
   do k=1,nz ; Rlay(k) = US%kg_m3_to_R*Rlay(k) ; enddo
   g_prime(1) = g_fs

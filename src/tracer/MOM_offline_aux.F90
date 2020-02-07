@@ -676,14 +676,14 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     vhtr(:,:,:) = 0.0
     ! Time-summed fields
     call MOM_read_vector(sum_file, 'uhtr_sum', 'vhtr_sum', uhtr(:,:,1:nk_input), &
-                         vhtr(:,:,1:nk_input), G%Domain, time_level=ridx_sum)
+                         vhtr(:,:,1:nk_input), G%Domain, timelevel=ridx_sum)
 
     call MOM_read_data(snap_file, 'h_end', h_end(:,:,1:nk_input), G%Domain, &
-                       time_level=ridx_snap)
+                       timelevel=ridx_snap)
     call MOM_read_data(mean_file, 'temp', temp_mean(:,:,1:nk_input), G%Domain, &
-                       time_level=ridx_sum)
+                       timelevel=ridx_sum)
     call MOM_read_data(mean_file, 'salt', salt_mean(:,:,1:nk_input), G%Domain, &
-                       time_level=ridx_sum)
+                       timelevel=ridx_sum)
   endif
 
   do j=js,je ; do i=is,ie
@@ -695,7 +695,7 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
 
   ! Check if reading vertical diffusivities or entrainment fluxes
   call MOM_read_data(mean_file, 'Kd_interface', Kd(:,:,1:nk_input+1), G%Domain, &
-                     time_level=ridx_sum)
+                     timelevel=ridx_sum)
   ! This block makes sure that the fluxes control structure, which may not be used in the solo_driver,
   ! contains netMassIn and netMassOut which is necessary for the applyTracerBoundaryFluxesInOut routine
   if (do_ale) then
@@ -711,9 +711,9 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     fluxes%netMassOut(:,:) = 0.0
     fluxes%netMassIn(:,:) = 0.0
     call MOM_read_data(surf_file,'massout_flux_sum',fluxes%netMassOut, G%Domain, &
-        time_level=ridx_sum)
+        timelevel=ridx_sum)
     call MOM_read_data(surf_file,'massin_flux_sum', fluxes%netMassIn,  G%Domain, &
-        time_level=ridx_sum)
+        timelevel=ridx_sum)
 
     do j=js,je ; do i=is,ie
       if (G%mask2dT(i,j)<1.0) then
@@ -725,7 +725,7 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
   endif
 
   if (read_mld) then
-    call MOM_read_data(surf_file, 'ePBL_h_ML', mld, G%Domain, time_level=ridx_sum)
+    call MOM_read_data(surf_file, 'ePBL_h_ML', mld, G%Domain, timelevel=ridx_sum)
   endif
 
   if (read_sw) then
@@ -734,9 +734,9 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     ! direct fluxes in the visible and near-infrared bands. For convenience, we store the
     ! sum of the direct and diffuse fluxes in the 'dir' field and set the 'dif' fields to zero
     call MOM_read_data(mean_file,'sw_vis',fluxes%sw_vis_dir, G%Domain, &
-        time_level=ridx_sum)
+        timelevel=ridx_sum)
     call MOM_read_data(mean_file,'sw_nir',fluxes%sw_nir_dir, G%Domain, &
-       time_level=ridx_sum)
+       timelevel=ridx_sum)
     fluxes%sw_vis_dir(:,:) = fluxes%sw_vis_dir(:,:)*0.5
     fluxes%sw_vis_dif(:,:) = fluxes%sw_vis_dir
     fluxes%sw_nir_dir(:,:) = fluxes%sw_nir_dir(:,:)*0.5
