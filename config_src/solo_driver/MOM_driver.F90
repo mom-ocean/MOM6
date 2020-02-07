@@ -209,7 +209,7 @@ program MOM_main
   integer :: ocean_nthreads = 1
   integer :: ncores_per_node = 36
   logical :: use_hyper_thread = .false.
-  integer :: omp_get_num_threads,omp_get_thread_num,get_cpu_affinity,adder,base_cpu
+  integer :: omp_get_num_threads,omp_get_thread_num, fms_affinity_get,adder,base_cpu
   namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds,&
                             ocean_nthreads, ncores_per_node, use_hyper_thread
 
@@ -253,7 +253,7 @@ program MOM_main
   endif
 
 !$  call omp_set_num_threads(ocean_nthreads)
-!$  base_cpu = get_cpu_affinity()
+!$  base_cpu = fms_affinity_get()
 !$OMP PARALLEL private(adder)
 !$  if (use_hyper_thread) then
 !$     if (mod(omp_get_thread_num(),2) == 0) then
@@ -264,8 +264,8 @@ program MOM_main
 !$  else
 !$     adder = omp_get_thread_num()
 !$  endif
-!$  call set_cpu_affinity (base_cpu + adder)
-!$  write(6,*) " ocean ", base_cpu, get_cpu_affinity(), adder, omp_get_thread_num(), omp_get_num_threads()
+!$  call fms_affinity_set(base_cpu + adder)
+!$  write(6,*) " ocean ", base_cpu, fms_affinity_get(), adder, omp_get_thread_num(), omp_get_num_threads()
 !$  call flush(6)
 !$OMP END PARALLEL
 
