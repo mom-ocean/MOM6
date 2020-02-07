@@ -9,6 +9,7 @@ use MOM_cpu_clock, only : cpu_clock_begin, cpu_clock_end
 use MOM_error_handler, only : MOM_error, MOM_mesg, NOTE, WARNING, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version
 use MOM_file_parser, only : param_file_type
+use MOM_io, only :: fms_affinity_get, fms_affinity_set
 use MOM_string_functions, only : slasher
 
 use mpp_domains_mod, only : mpp_define_layout, mpp_get_boundary

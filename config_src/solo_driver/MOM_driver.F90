@@ -42,7 +42,7 @@ program MOM_main
   use MOM_get_input,       only : directories
   use MOM_grid,            only : ocean_grid_type
   use MOM_io,              only : file_exists, open_file, close_file
-  use MOM_io,              only : check_nml_error, io_infra_init
+  use MOM_io,              only : check_nml_error, io_infra_init, fms_affinity_get, fms_affinity_set
   use MOM_io,              only : APPEND_FILE, ASCII_FILE, READONLY_FILE, SINGLE_FILE
   use MOM_restart,         only : MOM_restart_CS, save_restart
   use MOM_string_functions,only : uppercase
