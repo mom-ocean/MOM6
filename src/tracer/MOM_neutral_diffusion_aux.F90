@@ -161,7 +161,7 @@ real function calc_drho(T1, S1, dRdT1, dRdS1, T2, S2, dRdT2, dRdS2)
 end function calc_drho
 
 !> Calculate the difference in neutral density between a reference T, S, alpha, and beta
-!! at a point on the polynomial reconstructions of T, S
+!! and a poiet on the polynomial reconstructions of T, S
 subroutine drho_at_pos(CS, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, x0, &
                        delta_rho, P_out, T_out, S_out, alpha_avg_out, beta_avg_out, delta_T_out, delta_S_out)
   type(ndiff_aux_CS_type), intent(in) :: CS           !< Control structure with parameters for this module

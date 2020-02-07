@@ -40,7 +40,7 @@ use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, query_initialized, save_restart
 use MOM_restart,              only : restart_init, is_new_run, MOM_restart_CS
 use MOM_spatial_means,        only : global_mass_integral
-use MOM_time_manager,         only : time_type, real_to_time, time_type_to_real, operator(+)
+use MOM_time_manager,         only : time_type, real_to_time, set_time, time_type_to_real, operator(+)
 use MOM_time_manager,         only : operator(-), operator(>), operator(*), operator(/)
 use MOM_time_manager,         only : operator(>=), increment_date
 use MOM_unit_tests,           only : unit_tests
@@ -608,12 +608,13 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 
   rel_time = 0.0
   do n=1,n_max
-    rel_time = rel_time + dt ! The relative time at the end of the step.
-    ! Set the universally visible time to the middle of the time step.
-    CS%Time = Time_start + real_to_time(rel_time - 0.5*dt)
-    ! Set the local time to the end of the time step.
-    Time_local = Time_start + real_to_time(rel_time)
 
+    ! Set the universally visible time to the middle of the time step
+    CS%Time = Time_start + set_time(int(floor(rel_time+0.5*dt+0.5)))
+    rel_time = rel_time + dt
+
+    ! Set the local time to the end of the time step.
+    Time_local = Time_start + set_time(int(floor(rel_time+0.5)))
     if (showCallTree) call callTree_enter("DT cycles (step_MOM) n=",n)
 
     !===========================================================================
@@ -635,15 +636,9 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
         dtdia = dt*min(ntstep,n_max-(n-1))
       endif
 
-      end_time_thermo = Time_local
-      if (dtdia > dt) then
-        ! If necessary, temporarily reset CS%Time to the center of the period covered
-        ! by the call to step_MOM_thermo, noting that they begin at the same time.
-        CS%Time = CS%Time + real_to_time(0.5*(dtdia-dt))
-        ! The end-time of the diagnostic interval needs to be set ahead if there
-        ! are multiple dynamic time steps worth of thermodynamics applied here.
-        end_time_thermo = Time_local + real_to_time(dtdia-dt)
-      endif
+      ! The end-time of the diagnostic interval needs to be set ahead if there
+      ! are multiple dynamic time steps worth of thermodynamics applied here.
+      end_time_thermo = Time_local + set_time(int(floor(dtdia-dt+0.5)))
 
       ! Apply diabatic forcing, do mixing, and regrid.
       call step_MOM_thermo(CS, G, GV, US, u, v, h, CS%tv, fluxes, dtdia, &
@@ -654,8 +649,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       CS%t_dyn_rel_thermo = -dtdia
       if (showCallTree) call callTree_waypoint("finished diabatic_first (step_MOM)")
 
-      if (dtdia > dt) & ! Reset CS%Time to its previous value.
-        CS%Time = Time_start + real_to_time(rel_time - 0.5*dt)
     endif ! end of block "(CS%diabatic_first .and. (CS%t_dyn_rel_adv==0.0))"
 
     if (do_dyn) then
@@ -740,10 +733,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
                        "before call to diabatic.")
       endif
 
-      ! If necessary, temporarily reset CS%Time to the center of the period covered
-      ! by the call to step_MOM_thermo, noting that they end at the same time.
-      if (dtdia > dt) CS%Time = CS%Time - real_to_time(0.5*(dtdia-dt))
-
       ! Apply diabatic forcing, do mixing, and regrid.
       call step_MOM_thermo(CS, G, GV, US, u, v, h, CS%tv, fluxes, dtdia, &
                            Time_local, .false., Waves=Waves)
@@ -756,8 +745,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
         CS%t_dyn_rel_thermo = 0.0
       endif
 
-      if (dtdia > dt) & ! Reset CS%Time to its previous value.
-        CS%Time = Time_start + real_to_time(rel_time - 0.5*dt)
     endif
 
     if (do_dyn) then

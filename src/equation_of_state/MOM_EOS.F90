@@ -968,10 +968,11 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
       T5(n) = T(i,j) ; S5(n) = S(i,j)
       p5(n) = -GxRho*(z_t(i,j) - 0.25*real(n-1)*dz)
     enddo
-    call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref)
+    call calculate_density(T5, S5, p5, r5, 1, 5, EOS) !, rho_ref)
 
     ! Use Bode's rule to estimate the pressure anomaly change.
-    rho_anom = C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3))
+    rho_anom = C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3)) - &
+               rho_ref
     dpa(i-ioff,j-joff) = G_e*dz*rho_anom
     ! Use a Bode's-rule-like fifth-order accurate estimate of the double integral of
     ! the pressure anomaly.
@@ -1010,10 +1011,11 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
       do n=2,5
         T5(n) = T5(1) ; S5(n) = S5(1) ; p5(n) = p5(n-1) + GxRho*0.25*dz
       enddo
-      call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref)
+      call calculate_density(T5, S5, p5, r5, 1, 5, EOS) !, rho_ref)
 
     ! Use Bode's rule to estimate the pressure anomaly change.
-      intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3)))
+      intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + &
+                                12.0*r5(3)) - rho_ref)
     enddo
     ! Use Bode's rule to integrate the bottom pressure anomaly values in x.
     intx_dpa(i-ioff,j-joff) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
@@ -1052,10 +1054,11 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
         T5(n) = T5(1) ; S5(n) = S5(1)
         p5(n) = p5(n-1) + GxRho*0.25*dz
       enddo
-      call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref)
+      call calculate_density(T5, S5, p5, r5, 1, 5, EOS) !, rho_ref)
 
     ! Use Bode's rule to estimate the pressure anomaly change.
-      intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3)))
+      intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + &
+                                12.0*r5(3)) - rho_ref)
     enddo
     ! Use Bode's rule to integrate the values.
     inty_dpa(i-ioff,j-joff) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
@@ -1121,34 +1124,54 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
 ! It is assumed that the salinity and temperature profiles are linear in the
 ! vertical. The top and bottom values within each layer are provided and
 ! a linear interpolation is used to compute intermediate values.
+!
+! Arguments: T - potential temperature relative to the surface in C
+!                (the 't' and 'b' subscripts refer to the values at
+!                 the top and the bottom of each layer)
+!  (in)      S - salinity in PSU.
+!                (the 't' and 'b' subscripts refer to the values at
+!                 the top and the bottom of each layer)
+!  (in)      z_t - height at the top of the layer in m.
+!  (in)      z_b - height at the top of the layer in m.
+!  (in)      rho_ref - A mean density, in kg m-3, that is subtracted out to reduce
+!                    the magnitude of each of the integrals.
+!                    (The pressure is calucated as p~=-z*rho_0*G_e.)
+!  (in)      rho_0 - A density, in kg m-3, that is used to calculate the pressure
+!                    (as p~=-z*rho_0*G_e) used in the equation of state.
+!  (in)      G_e - The Earth's gravitational acceleration, in m s-2.
+!  (in)      G - The ocean's grid structure.
+!  (in)      form_of_eos - integer that selects the eqn of state.
+!  (out)     dpa - The change in the pressure anomaly across the layer,
+!                  in Pa.
+!  (out,opt) intz_dpa - The integral through the thickness of the layer of the
+!                       pressure anomaly relative to the anomaly at the top of
+!                       the layer, in Pa m.
+!  (out,opt) intx_dpa - The integral in x of the difference between the
+!                       pressure anomaly at the top and bottom of the layer
+!                       divided by the x grid spacing, in Pa.
+!  (out,opt) inty_dpa - The integral in y of the difference between the
+!                       pressure anomaly at the top and bottom of the layer
+!                       divided by the y grid spacing, in Pa.
+!  (in,opt) useMassWghtInterp - If true, uses mass weighting to interpolate
+!                       T/S for top and bottom integrals.
 
-  ! Local variables
-  real :: T5((5*HIO%iscB+1):(5*(HIO%iecB+2)))  ! Temperatures along a line of subgrid locations [degC].
-  real :: S5((5*HIO%iscB+1):(5*(HIO%iecB+2)))  ! Salinities along a line of subgrid locations [ppt].
-  real :: p5((5*HIO%iscB+1):(5*(HIO%iecB+2)))  ! Pressures along a line of subgrid locations [Pa].
-  real :: r5((5*HIO%iscB+1):(5*(HIO%iecB+2)))  ! Densities along a line of subgrid locations [kg m-3].
-  real :: T15((15*HIO%iscB+1):(15*(HIO%iecB+1))) ! Temperatures at an array of subgrid locations [degC].
-  real :: S15((15*HIO%iscB+1):(15*(HIO%iecB+1))) ! Salinities at an array of subgrid locations [ppt].
-  real :: p15((15*HIO%iscB+1):(15*(HIO%iecB+1))) ! Pressures at an array of subgrid locations [Pa].
-  real :: r15((15*HIO%iscB+1):(15*(HIO%iecB+1))) ! Densities at an array of subgrid locations [kg m-3].
-  real :: wt_t(5), wt_b(5)          ! Top and bottom weights [nondim].
-  real :: rho_anom                  ! A density anomaly [kg m-3].
-  real :: w_left, w_right           ! Left and right weights [nondim].
-  real :: intz(5)    ! The gravitational acceleration times the integrals of density
-                     ! with height at the 5 sub-column locations [Pa].
-  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim].
-  real :: GxRho                     ! Gravitational acceleration times density [kg m-1 Z-1 s-2 ~> kg m-2 s-2].
-  real :: I_Rho                     ! The inverse of the reference density [m3 kg-1].
-  real :: dz(HIO%iscB:HIO%iecB+1)   ! Layer thicknesses at tracer points [Z ~> m].
-  real :: dz_x(5,HIO%iscB:HIO%iecB) ! Layer thicknesses along an x-line of subrid locations [Z ~> m].
-  real :: dz_y(5,HIO%isc:HIO%iec)   ! Layer thicknesses along a y-line of subrid locations [Z ~> m].
-  real :: weight_t, weight_b        ! Nondimensional weights of the top and bottom.
-  real :: massWeightToggle          ! A nondimensional toggle factor (0 or 1).
-  real :: Ttl, Tbl, Ttr, Tbr        ! Temperatures at the velocity cell corners [degC].
-  real :: Stl, Sbl, Str, Sbr        ! Salinities at the velocity cell corners [ppt].
-  real :: hWght                     ! A topographically limited thicknes weight [Z ~> m].
-  real :: hL, hR                    ! Thicknesses to the left and right [Z ~> m].
-  real :: iDenom                    ! The denominator of the thickness weight expressions [Z-2 ~> m-2].
+  real :: T5((5*HIO%iscB+1):(5*(HIO%iecB+2)))
+  real :: S5((5*HIO%iscB+1):(5*(HIO%iecB+2)))
+  real :: p5((5*HIO%iscB+1):(5*(HIO%iecB+2)))
+  real :: r5((5*HIO%iscB+1):(5*(HIO%iecB+2)))
+  real :: u5((5*HIO%iscB+1):(5*(HIO%iecB+2)))
+  real :: T15((15*HIO%iscB+1):(15*(HIO%iecB+1)))
+  real :: S15((15*HIO%iscB+1):(15*(HIO%iecB+1)))
+  real :: p15((15*HIO%iscB+1):(15*(HIO%iecB+1)))
+  real :: r15((15*HIO%iscB+1):(15*(HIO%iecB+1)))
+  real :: wt_t(5), wt_b(5)
+  real :: rho_anom
+  real :: w_left, w_right, intz(5)
+  real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
+  real :: GxRho, I_Rho
+  real :: dz(HIO%iscB:HIO%iecB+1), dz_x(5,HIO%iscB:HIO%iecB), dz_y(5,HIO%isc:HIO%iec)
+  real :: weight_t, weight_b, hWght, massWeightToggle
+  real :: Ttl, Tbl, Ttr, Tbr, Stl, Sbl, Str, Sbr, hL, hR, iDenom
   integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n
   integer :: iin, jin, ioff, joff
   integer :: pos
@@ -1184,17 +1207,19 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
         T5(i*5+n) = wt_t(n) * T_t(iin,jin) + wt_b(n) * T_b(iin,jin)
       enddo
     enddo
-    call calculate_density_array(T5, S5, p5, r5, 1, (ieq-isq+2)*5, EOS, rho_ref )
+    call calculate_density_array(T5, S5, p5, r5, 1, (ieq-isq+2)*5, EOS) !, rho_ref )
+    u5 = r5 - rho_ref
 
     do i=isq,ieq+1 ; iin = i+ioff
     ! Use Bode's rule to estimate the pressure anomaly change.
-      rho_anom = C1_90*(7.0*(r5(i*5+1)+r5(i*5+5)) + 32.0*(r5(i*5+2)+r5(i*5+4)) + 12.0*r5(i*5+3))
+      rho_anom = C1_90*(7.0*(r5(i*5+1)+r5(i*5+5)) + 32.0*(r5(i*5+2)+r5(i*5+4)) + 12.0*r5(i*5+3)) - &
+           rho_ref
       dpa(i,j) = G_e*dz(i)*rho_anom
       if (present(intz_dpa)) then
       ! Use a Bode's-rule-like fifth-order accurate estimate of
       ! the double integral of the pressure anomaly.
         intz_dpa(i,j) = 0.5*G_e*dz(i)**2 * &
-                (rho_anom - C1_90*(16.0*(r5(i*5+4)-r5(i*5+2)) + 7.0*(r5(i*5+5)-r5(i*5+1))) )
+                (rho_anom - C1_90*(16.0*(u5(i*5+4)-u5(i*5+2)) + 7.0*(u5(i*5+5)-u5(i*5+1))) )
       endif
     enddo
   enddo ! end loops on j
@@ -1264,7 +1289,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
       enddo
     enddo
 
-    call calculate_density(T15, S15, p15, r15, 1, 15*(ieq-isq+1), EOS, rho_ref)
+    call calculate_density(T15, S15, p15, r15, 1, 15*(ieq-isq+1), EOS) !, rho_ref)
 
     do I=Isq,Ieq ; iin = i+ioff
       intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
@@ -1273,7 +1298,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
       do m = 2,4
         pos = i*15+(m-2)*5
         intz(m) = G_e*dz_x(m,i)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + 32.0*(r15(pos+2)+r15(pos+4)) + &
-                          12.0*r15(pos+3)))
+                          12.0*r15(pos+3)) - rho_ref)
       enddo
       ! Use Bode's rule to integrate the bottom pressure anomaly values in x.
       intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
@@ -1344,7 +1369,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
     enddo
 
     call calculate_density_array(T15(15*HIO%isc+1:), S15(15*HIO%isc+1:), p15(15*HIO%isc+1:), &
-                                 r15(15*HIO%isc+1:), 1, 15*(HIO%iec-HIO%isc+1), EOS, rho_ref)
+                                 r15(15*HIO%isc+1:), 1, 15*(HIO%iec-HIO%isc+1), EOS) !, rho_ref)
     do i=HIO%isc,HIO%iec ; iin = i+ioff
       intz(1) = dpa(i,j) ; intz(5) = dpa(i,j+1)
 
@@ -1353,7 +1378,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
         pos = i*15+(m-2)*5
         intz(m) = G_e*dz_y(m,i)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + &
                                          32.0*(r15(pos+2)+r15(pos+4)) + &
-                                         12.0*r15(pos+3)))
+                                         12.0*r15(pos+3)) - rho_ref)
       enddo
       ! Use Bode's rule to integrate the values.
       inty_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
