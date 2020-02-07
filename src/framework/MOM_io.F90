@@ -67,6 +67,7 @@ use fms2_io_mod,          only : check_if_open, &
                                 unlimited
 
 use netcdf
+use fms_affinity_mod
 
 implicit none ; private
 
@@ -79,6 +80,7 @@ public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
 public :: var_desc, modify_vardesc, query_vardesc, cmor_long_std
 public :: scale_data
+public :: fms_affinity_get, fms_affinity_set
 ! new FMS-IO routines and wrappers
 public :: attribute_exists
 public :: check_if_open

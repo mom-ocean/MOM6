@@ -9,6 +9,7 @@ use MOM_cpu_clock, only : cpu_clock_begin, cpu_clock_end
 use MOM_error_handler, only : MOM_error, MOM_mesg, NOTE, WARNING, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version
 use MOM_file_parser, only : param_file_type
+use MOM_io, only :: fms_affinity_get, fms_affinity_set
 use MOM_string_functions, only : slasher
 
 use mpp_domains_mod, only : mpp_define_layout, mpp_get_boundary
@@ -1189,7 +1190,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   integer, dimension(2) :: io_layout = (/ 0, 0 /)
   integer, dimension(4) :: global_indices
 !$ integer :: ocean_nthreads       ! Number of Openmp threads
-!$ integer :: get_cpu_affinity, omp_get_thread_num, omp_get_num_threads
+!$ integer :: fms_affinity_get, omp_get_thread_num, omp_get_num_threads
 !$ integer :: omp_cores_per_node, adder, base_cpu
 !$ logical :: ocean_omp_hyper_thread
   integer :: nihalo_dflt, njhalo_dflt
@@ -1289,7 +1290,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 !$              fail_if_missing=.true., layoutParam=.true.)
 !$   endif
 !$   call omp_set_num_threads(ocean_nthreads)
-!$   base_cpu = get_cpu_affinity()
+!$   base_cpu = fms_affinity_get()
 !$OMP PARALLEL private(adder)
 !$   if (ocean_omp_hyper_thread) then
 !$     if (mod(omp_get_thread_num(),2) == 0) then
@@ -1300,8 +1301,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 !$   else
 !$     adder = omp_get_thread_num()
 !$   endif
-!$   call set_cpu_affinity(base_cpu + adder)
-!!$     write(6,*) " ocean  ", base_cpu, get_cpu_affinity(), adder, omp_get_thread_num(), omp_get_num_threads()
+!$   call fms_affinity_set(base_cpu + adder)
+!!$     write(6,*) " ocean  ", base_cpu, fms_affinity_get(), adder, omp_get_thread_num(), omp_get_num_threads()
 !!$     call flush(6)
 !$OMP END PARALLEL
 !$ endif
