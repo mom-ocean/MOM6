@@ -276,7 +276,7 @@ subroutine init_oda(Time, G, GV, CS)
   basin_file = trim(inputdir) // trim(basin_file)
   allocate(CS%oda_grid%basin_mask(isd:ied,jsd:jed))
   CS%oda_grid%basin_mask(:,:) = 0.0
-  call MOM_read_data(basin_file,'basin',CS%oda_grid%basin_mask,CS%Grid%domain, time_level=1)
+  call MOM_read_data(basin_file,'basin',CS%oda_grid%basin_mask,CS%Grid%domain, timelevel=1)
 
 !    get global grid information from ocean_model
   allocate(T_grid)
