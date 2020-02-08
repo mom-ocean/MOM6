@@ -4037,10 +4037,10 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   call get_param(param_file, mdl, "BT_CORIOLIS_SCALE", CS%BT_Coriolis_scale, &
                  "A factor by which the barotropic Coriolis anomaly terms are scaled.", &
                  units="nondim", default=1.0)
-  call get_param(param_file, "MOM", "DEFAULT_2018_ANSWERS", default_2018_answers, &
+  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
                  default=.true.)
-  call get_param(param_file, "MOM", "BAROTROPIC_2018_ANSWERS", CS%answers_2018, &
+  call get_param(param_file, mdl, "BAROTROPIC_2018_ANSWERS", CS%answers_2018, &
                  "If true, use expressions for the barotropic solver that recover the answers "//&
                  "from the end of 2018.  Otherwise, use more efficient or general expressions.", &
                  default=default_2018_answers)
