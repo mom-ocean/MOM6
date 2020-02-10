@@ -67,7 +67,6 @@ use fms2_io_mod,          only : check_if_open, &
                                 unlimited
 
 use netcdf
-use fms_affinity_mod
 
 implicit none ; private
 
@@ -80,7 +79,6 @@ public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
 public :: var_desc, modify_vardesc, query_vardesc, cmor_long_std
 public :: scale_data
-public :: fms_affinity_get, fms_affinity_set
 ! new FMS-IO routines and wrappers
 public :: attribute_exists
 public :: check_if_open
@@ -1232,7 +1230,7 @@ subroutine write_scalar(filename, fieldname, data, mode, time_level, time_units,
   ! local
   type(FmsNetcdfFile_t) :: fileobj ! netCDF file object returned by call to open_file
   logical :: file_open_success !.true. if call to open_file is successful
-  integer :: num_dims, time_index, substring_index
+  integer :: i, num_dims, time_index, substring_index
   integer :: dim_unlim_size ! size of the unlimited dimension
   real :: file_time ! most recent time currently written to file
   character(len=20) :: t_units ! time units
@@ -1240,6 +1238,7 @@ subroutine write_scalar(filename, fieldname, data, mode, time_level, time_units,
   character(len=1024) :: filename_temp
   character(len=48), dimension(1) :: dim_names ! variable dimension names
   integer, dimension(1) :: dim_lengths ! variable dimension lengths
+  integer, allocatable, dimension(:) :: pelist ! list of pes associated with the netCDF file
 
   dim_names = ""
   dim_lengths(:) = 0
@@ -1277,9 +1276,18 @@ subroutine write_scalar(filename, fieldname, data, mode, time_level, time_units,
     if (check_if_open(fileobj)) call fms2_close_file(fileobj)
   endif
 
+  ! get the pes associated with the file.
+  !>\note this is required so that only pe(1) is identified as the root pe to create the file
+  !! Otherwise, multiple pes may try to open the file in write (NC_NOCLOBBER) mode, leading to failure
+  allocate(pelist(mpp_npes()))
+  pelist(:) = 0
+  do i=1,size(pelist)
+    pelist(i) = i-1
+  enddo
   ! open the file in write/append mode
   if (.not.(check_if_open(fileobj))) &
-    file_open_success = fms2_open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
+    file_open_success = fms2_open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false., &
+                                       pelist=pelist)
 
   ! write the data
    if (.not.(variable_exists(fileobj, trim(fieldname)))) then
@@ -1322,6 +1330,7 @@ subroutine write_scalar(filename, fieldname, data, mode, time_level, time_units,
   endif
   ! close the file
   if (check_if_open(fileobj)) call fms2_close_file(fileobj)
+  deallocate(pelist)
 end subroutine write_scalar
 
 !> This function uses the fms_io function write_data to write a 1-D non-domain-decomposed data field named "fieldname"
@@ -1385,10 +1394,6 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, var_desc, &
     filename_temp = filename
   endif
 
-  ! open the file
-  if (.not.(check_if_open(fileobj))) &
-    file_open_success = fms2_open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
-
   ! get the dimension names and lengths
   ! NOTE: the t_grid argument is set to '1' (do nothing) because the presence of a time dimension is user-specified
   ! and not assumed from the var_desc%t_grid value.
@@ -1447,11 +1452,10 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, var_desc, &
   do i=1,size(pelist)
     pelist(i) = i-1
   enddo
-
   ! open the file in write/append mode
   if (.not.(check_if_open(fileobj))) &
     file_open_success = fms2_open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false., &
-                                  pelist=pelist)
+                                       pelist=pelist)
 
   ! register the field if it is not already in the file
   if (.not.(variable_exists(fileobj, trim(fieldname)))) then
@@ -1567,10 +1571,6 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, var_desc, &
     filename_temp = filename
   endif
 
-  ! open the file
-  if (.not.(check_if_open(fileobj))) &
-    file_open_success = fms2_open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
-
   ! get the dimension names and lengths
   ! NOTE: the t_grid argument is set to '1' (do nothing) because the presence of a time dimension is user-specified
   ! and not assumed from the var_desc%t_grid value
@@ -1634,7 +1634,6 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, var_desc, &
   do i=1,size(pelist)
     pelist(i) = i-1
   enddo
-
   ! open the file in write/append mode
   if (.not.(check_if_open(fileobj))) &
     file_open_success = fms2_open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false., &
@@ -1751,10 +1750,6 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, var_desc, &
     filename_temp = filename
   endif
 
-  ! open the file
-  if (.not.(check_if_open(fileobj))) &
-    file_open_success = fms2_open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false.)
-
   ! get the dimension names and lengths
   ! NOTE: the t_grid argument is set to '1' (do nothing) because the presence of a time dimension is user-specified
   ! and not assumed from the var_desc%t_grid value
@@ -1818,11 +1813,10 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, var_desc, &
   do i=1,size(pelist)
     pelist(i) = i-1
   enddo
-
   ! open the file
   if (.not.(check_if_open(fileobj))) &
     file_open_success = fms2_open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false., &
-                                  pelist=pelist)
+                                       pelist=pelist)
 
   ! register the field if it is not already in the file
   if (.not.(variable_exists(fileobj, trim(fieldname)))) then
@@ -1998,7 +1992,7 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, var_desc, &
   ! open the file in write/append mode
   if (.not.(check_if_open(fileobj))) &
     file_open_success = fms2_open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false., &
-                                  pelist=pelist)
+                                       pelist=pelist)
 
   if (.not.(variable_exists(fileobj, trim(fieldname)))) then
      call register_field(fileObj, trim(fieldname), "double", dimensions=dim_names(1:num_dims))

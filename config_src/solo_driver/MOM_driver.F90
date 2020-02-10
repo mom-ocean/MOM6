@@ -42,7 +42,7 @@ program MOM_main
   use MOM_get_input,       only : directories
   use MOM_grid,            only : ocean_grid_type
   use MOM_io,              only : file_exists, open_file, close_file
-  use MOM_io,              only : check_nml_error, io_infra_init, fms_affinity_get, fms_affinity_set
+  use MOM_io,              only : check_nml_error, io_infra_init
   use MOM_io,              only : APPEND_FILE, ASCII_FILE, READONLY_FILE, SINGLE_FILE
   use MOM_restart,         only : MOM_restart_CS, save_restart
   use MOM_string_functions,only : uppercase
@@ -64,6 +64,7 @@ program MOM_main
 
   use ensemble_manager_mod, only : ensemble_manager_init, get_ensemble_size
   use ensemble_manager_mod, only : ensemble_pelist_setup
+  use fms_affinity_mod, only : get_affinity=>fms_affinity_get, set_affinity=>fms_affinity_set
   use mpp_mod, only : set_current_pelist => mpp_set_current_pelist
   use time_interp_external_mod, only : time_interp_external_init
 
@@ -209,7 +210,7 @@ program MOM_main
   integer :: ocean_nthreads = 1
   integer :: ncores_per_node = 36
   logical :: use_hyper_thread = .false.
-  integer :: omp_get_num_threads,omp_get_thread_num, fms_affinity_get,adder,base_cpu
+  integer :: omp_get_num_threads,omp_get_thread_num,adder,base_cpu
   namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds,&
                             ocean_nthreads, ncores_per_node, use_hyper_thread
 
@@ -253,7 +254,7 @@ program MOM_main
   endif
 
 !$  call omp_set_num_threads(ocean_nthreads)
-!$  base_cpu = fms_affinity_get()
+!$  base_cpu = get_affinity()
 !$OMP PARALLEL private(adder)
 !$  if (use_hyper_thread) then
 !$     if (mod(omp_get_thread_num(),2) == 0) then
@@ -264,8 +265,8 @@ program MOM_main
 !$  else
 !$     adder = omp_get_thread_num()
 !$  endif
-!$  call fms_affinity_set(base_cpu + adder)
-!$  write(6,*) " ocean ", base_cpu, fms_affinity_get(), adder, omp_get_thread_num(), omp_get_num_threads()
+!$  call set_affinity(component="MOM_driver", use_hyper_thread=use_hyper_thread, nthreads=base_cpu + adder)
+!$  write(6,*) " ocean ", base_cpu, get_affinity(), adder, omp_get_thread_num(), omp_get_num_threads()
 !$  call flush(6)
 !$OMP END PARALLEL
 
