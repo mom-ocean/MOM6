@@ -450,11 +450,15 @@ subroutine idealized_hurricane_wind_profile(CS, US, absf, YY, XX, UOCN, VOCN, Tx
   !  Use a simple drag coefficient as a function of U10 (from Sullivan et al., 2010)
   du10 = sqrt(du**2+dv**2)
   if (dU10 < 11.0*US%m_s_to_L_T) then
-     Cd = 1.2e-3
+    Cd = 1.2e-3
   elseif (dU10 < 20.0*US%m_s_to_L_T) then
-     Cd = (0.49 + 0.065*US%L_T_to_m_s*U10)*1.e-3
+    if (CS%answers_2018) then
+      Cd = (0.49 + 0.065*US%L_T_to_m_s*U10)*1.e-3
+    else
+      Cd = (0.49 + 0.065*US%L_T_to_m_s*dU10)*1.e-3
+    endif
   else
-     Cd = 1.8e-3
+    Cd = 1.8e-3
   endif
 
   ! Compute stress vector
@@ -618,7 +622,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
     elseif (dU10 < 20.0*US%m_s_to_L_T) then
       if (CS%answers_2018) then
         Cd = (0.49 + 0.065 * US%L_T_to_m_s*U10 )*0.001
-      else ! Brandon, please verify that this line should use du10 instead of U10 -RWH
+      else
         Cd = (0.49 + 0.065 * US%L_T_to_m_s*dU10 )*0.001
       endif
     else
@@ -640,7 +644,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
     elseif (dU10 < 20.0*US%m_s_to_L_T) then
       if (CS%answers_2018) then
         Cd = (0.49 + 0.065 * US%L_T_to_m_s*U10 )*0.001
-      else ! Brandon, please verify that this line should use du10 instead of U10 -RWH
+      else
         Cd = (0.49 + 0.065 * US%L_T_to_m_s*dU10 )*0.001
       endif
     else
