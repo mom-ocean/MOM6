@@ -9,6 +9,7 @@ use MOM_string_functions,  only : string_functions_unit_tests
 use MOM_remapping,         only : remapping_unit_tests
 use MOM_neutral_diffusion, only : neutral_diffusion_unit_tests
 use MOM_diag_vkernels,     only : diag_vkernels_unit_tests
+use MOM_random,            only : random_unit_tests
 
 implicit none ; private
 
@@ -35,6 +36,8 @@ subroutine unit_tests(verbosity)
        "MOM_unit_tests: neutralDiffusionUnitTests FAILED")
     if (diag_vkernels_unit_tests(verbose)) call MOM_error(FATAL, &
        "MOM_unit_tests: diag_vkernels_unit_tests FAILED")
+    if (random_unit_tests(verbose)) call MOM_error(FATAL, &
+       "MOM_unit_tests: random_unit_tests FAILED")
   endif
 
 end subroutine unit_tests

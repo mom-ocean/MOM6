@@ -904,8 +904,8 @@ subroutine setup_u_point_obc(OBC, G, US, segment_str, l_seg, PF, reentrant_y)
       OBC%segment(l_seg)%open = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
       OBC%open_u_BCs_exist_globally = .true.
-      OBC%segment%z_values_needed = .true.
-      OBC%segment%u_values_needed = .true.
+      OBC%segment(l_seg)%z_values_needed = .true.
+      OBC%segment(l_seg)%u_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
       OBC%segment(l_seg)%radiation = .true.
       OBC%segment(l_seg)%open = .true.
@@ -933,14 +933,14 @@ subroutine setup_u_point_obc(OBC, G, US, segment_str, l_seg, PF, reentrant_y)
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
       OBC%segment(l_seg)%nudged = .true.
       OBC%nudged_u_BCs_exist_globally = .true.
-      OBC%segment%u_values_needed = .true.
+      OBC%segment(l_seg)%u_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED_TAN') then
       OBC%segment(l_seg)%nudged_tan = .true.
       OBC%nudged_u_BCs_exist_globally = .true.
-      OBC%segment%v_values_needed = .true.
+      OBC%segment(l_seg)%v_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED_GRAD') then
       OBC%segment(l_seg)%nudged_grad = .true.
-      OBC%segment%g_values_needed = .true.
+      OBC%segment(l_seg)%g_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'GRADIENT') then
       OBC%segment(l_seg)%gradient = .true.
       OBC%segment(l_seg)%open = .true.
@@ -948,13 +948,13 @@ subroutine setup_u_point_obc(OBC, G, US, segment_str, l_seg, PF, reentrant_y)
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%segment(l_seg)%specified = .true.
       OBC%specified_u_BCs_exist_globally = .true. ! This avoids deallocation
-      OBC%segment%u_values_needed = .true.
+      OBC%segment(l_seg)%u_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE_TAN') then
       OBC%segment(l_seg)%specified_tan = .true.
-      OBC%segment%v_values_needed = .true.
+      OBC%segment(l_seg)%v_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE_GRAD') then
       OBC%segment(l_seg)%specified_grad = .true.
-      OBC%segment%g_values_needed = .true.
+      OBC%segment(l_seg)%g_values_needed = .true.
     else
       call MOM_error(FATAL, "MOM_open_boundary.F90, setup_u_point_obc: "//&
                      "String '"//trim(action_str(a_loop))//"' not understood.")
@@ -1045,8 +1045,8 @@ subroutine setup_v_point_obc(OBC, G, US, segment_str, l_seg, PF, reentrant_x)
       OBC%segment(l_seg)%open = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
       OBC%open_v_BCs_exist_globally = .true.
-      OBC%segment%z_values_needed = .true.
-      OBC%segment%v_values_needed = .true.
+      OBC%segment(l_seg)%z_values_needed = .true.
+      OBC%segment(l_seg)%v_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
       OBC%segment(l_seg)%radiation = .true.
       OBC%segment(l_seg)%open = .true.
@@ -1074,14 +1074,14 @@ subroutine setup_v_point_obc(OBC, G, US, segment_str, l_seg, PF, reentrant_x)
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
       OBC%segment(l_seg)%nudged = .true.
       OBC%nudged_v_BCs_exist_globally = .true.
-      OBC%segment%v_values_needed = .true.
+      OBC%segment(l_seg)%v_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED_TAN') then
       OBC%segment(l_seg)%nudged_tan = .true.
       OBC%nudged_v_BCs_exist_globally = .true.
-      OBC%segment%u_values_needed = .true.
+      OBC%segment(l_seg)%u_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED_GRAD') then
       OBC%segment(l_seg)%nudged_grad = .true.
-      OBC%segment%g_values_needed = .true.
+      OBC%segment(l_seg)%g_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'GRADIENT') then
       OBC%segment(l_seg)%gradient = .true.
       OBC%segment(l_seg)%open = .true.
@@ -1089,13 +1089,13 @@ subroutine setup_v_point_obc(OBC, G, US, segment_str, l_seg, PF, reentrant_x)
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%segment(l_seg)%specified = .true.
       OBC%specified_v_BCs_exist_globally = .true. ! This avoids deallocation
-      OBC%segment%v_values_needed = .true.
+      OBC%segment(l_seg)%v_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE_TAN') then
       OBC%segment(l_seg)%specified_tan = .true.
-      OBC%segment%u_values_needed = .true.
+      OBC%segment(l_seg)%u_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE_GRAD') then
       OBC%segment(l_seg)%specified_grad = .true.
-      OBC%segment%g_values_needed = .true.
+      OBC%segment(l_seg)%g_values_needed = .true.
     else
       call MOM_error(FATAL, "MOM_open_boundary.F90, setup_v_point_obc: "//&
                      "String '"//trim(action_str(a_loop))//"' not understood.")
