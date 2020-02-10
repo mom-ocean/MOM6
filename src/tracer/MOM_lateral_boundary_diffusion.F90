@@ -40,7 +40,6 @@ type, public :: lateral_boundary_diffusion_CS ; private
                                                                   !! and apply near boundary layer fluxes
                                                                   !! 1. Bulk-layer approach
                                                                   !! 2. Along layer
-                                                                  !! 3. Decomposition onto pressure levels
   integer :: deg                                                  !< Degree of polynomial reconstruction
   integer :: surface_boundary_scheme                              !< Which boundary layer scheme to use
                                                                   !! 1. ePBL; 2. KPP
@@ -65,7 +64,7 @@ logical function lateral_boundary_diffusion_init(Time, G, param_file, diag, diab
   type(param_file_type),            intent(in)    :: param_file    !< Parameter file structure
   type(diag_ctrl), target,          intent(inout) :: diag          !< Diagnostics control structure
   type(diabatic_CS),                pointer       :: diabatic_CSp  !< KPP control structure needed to get BLD
-  type(lateral_boundary_diffusion_CS), pointer       :: CS         !< Lateral boundary mixing control structure
+  type(lateral_boundary_diffusion_CS), pointer    :: CS            !< Lateral boundary mixing control structure
 
   ! local variables
   character(len=80)  :: string  ! Temporary strings
@@ -101,8 +100,7 @@ logical function lateral_boundary_diffusion_init(Time, G, param_file, diag, diab
   call get_param(param_file, mdl, "LATERAL_BOUNDARY_METHOD", CS%method, &
                  "Determine how to apply boundary lateral diffusion of tracers: \n"//&
                  "1. Bulk layer approach  \n"//&
-                 "2. Along layer approach \n"//&
-                 "3. Decomposition on to pressure levels", default=1)
+                 "2. Along layer approach", default=1)
   call get_param(param_file, mdl, "LBD_BOUNDARY_EXTRAP", boundary_extrap, &
                  "Use boundary extrapolation in LBD code", &
                  default=.false.)
@@ -116,8 +114,11 @@ logical function lateral_boundary_diffusion_init(Time, G, param_file, diag, diab
 
 end function lateral_boundary_diffusion_init
 
-!> Driver routine for calculating lateral diffusive fluxes near the top and bottom boundaries. Two different methods
-!! Method 1: Calculate fluxes from bulk layer integrated quantities
+!> Driver routine for calculating lateral diffusive fluxes near the top and bottom boundaries.
+!! Two different methods are available:
+!! Method 1: lower order representation, calculate fluxes from bulk layer integrated quantities.
+!! Method 2: more straight forward, diffusion is applied layer by layer using only information
+!! from neighboring cells.
 subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   type(ocean_grid_type),                intent(inout) :: G   !< Grid type
   type(verticalGrid_type),              intent(in)    :: GV  !< ocean vertical grid structure
@@ -136,12 +137,14 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G),CS%deg+1) :: ppoly0_coefs !< Coefficients of polynomial
   real, dimension(SZI_(G),SZJ_(G),SZK_(G),2)        :: ppoly0_E     !< Edge values from reconstructions
   real, dimension(SZK_(G),CS%deg+1)                 :: ppoly_S      !< Slopes from reconstruction (placeholder)
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: uFlx        !< Zonal flux of tracer [H conc ~> m conc or conc kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: uFlx        !< Zonal flux of tracer [conc m^3]
   real, dimension(SZIB_(G),SZJ_(G))         :: uFLx_bulk   !< Total calculated bulk-layer u-flux for the tracer
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vFlx        !< Meridional flux of tracer
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vFlx        !< Meridional flux of tracer [conc m^3]
   real, dimension(SZI_(G),SZJB_(G))         :: vFlx_bulk   !< Total calculated bulk-layer v-flux for the tracer
   real, dimension(SZIB_(G),SZJ_(G))         :: uwork_2d    !< Layer summed u-flux transport
   real, dimension(SZI_(G),SZJB_(G))         :: vwork_2d    !< Layer summed v-flux transport
+  real, dimension(SZI_(G),SZJ_(G),G%ke)     :: tendency    !< tendency array for diagn
+  real, dimension(SZI_(G),SZJ_(G))          :: tendency_2d !< depth integrated content tendency for diagn
   type(tracer_type), pointer                :: Tracer => NULL() !< Pointer to the current tracer
   integer :: remap_method !< Reconstruction method
   integer :: i,j,k,m      !< indices to loop over
@@ -153,9 +156,14 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US)
 
   call pass_var(hbl,G%Domain)
-
   do m = 1,Reg%ntr
     tracer => Reg%tr(m)
+
+    ! for diagnostics
+    if (tracer%id_lbdxy_conc > 0 .or. tracer%id_lbdxy_cont > 0 .or. tracer%id_lbdxy_cont_2d > 0) then
+      tendency(:,:,:)  = 0.0
+    endif
+
     do j = G%jsc-1, G%jec+1
       ! Interpolate state to interface
       do i = G%isc-1, G%iec+1
@@ -195,16 +203,14 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       if (tracer%id_lbd_bulk_dfx>0) call post_data(tracer%id_lbd_bulk_dfx, uFlx_bulk*Idt, CS%diag)
       if (tracer%id_lbd_bulk_dfy>0) call post_data(tracer%id_lbd_bulk_dfy, vFlx_bulk*Idt, CS%diag)
 
-      ! TODO: this is where we would filter vFlx and uFlux to get rid of checkerboard noise
-
     ! Method #2
     elseif (CS%method == 2) then
       do j=G%jsc,G%jec
         do i=G%isc-1,G%iec
           if (G%mask2dCu(I,j)>0.) then
-            call fluxes_layer_method(SURFACE, GV%ke, CS%deg, h(i,j,:), h(i+1,j,:), hbl(i,j), hbl(i+1,j), &
-              tracer%t(i,j,:), tracer%t(i+1,j,:), ppoly0_coefs(i,j,:,:), ppoly0_coefs(i+1,j,:,:), ppoly0_E(i,j,:,:), &
-              ppoly0_E(i+1,j,:,:), remap_method, Coef_x(I,j), uFlx(I,j,:))
+            call fluxes_layer_method(SURFACE, GV%ke, CS%deg, h(I,j,:), h(I+1,j,:), hbl(I,j), hbl(I+1,j), &
+              G%areaT(I,j), G%areaT(I+1,j), tracer%t(I,j,:), tracer%t(I+1,j,:), ppoly0_coefs(I,j,:,:), &
+              ppoly0_coefs(I+1,j,:,:), ppoly0_E(I,j,:,:), ppoly0_E(I+1,j,:,:), remap_method, Coef_x(I,j), uFlx(I,j,:))
           endif
         enddo
       enddo
@@ -212,8 +218,8 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
         do i=G%isc,G%iec
           if (G%mask2dCv(i,J)>0.) then
             call fluxes_layer_method(SURFACE, GV%ke, CS%deg, h(i,J,:), h(i,J+1,:), hbl(i,J), hbl(i,J+1), &
-              tracer%t(i,J,:), tracer%t(i,J+1,:), ppoly0_coefs(i,J,:,:), ppoly0_coefs(i,J+1,:,:), ppoly0_E(i,J,:,:), &
-              ppoly0_E(i,J+1,:,:), remap_method, Coef_y(i,J), vFlx(i,J,:))
+              G%areaT(i,J), G%areaT(i,J+1), tracer%t(i,J,:), tracer%t(i,J+1,:), ppoly0_coefs(i,J,:,:), &
+              ppoly0_coefs(i,J+1,:,:), ppoly0_E(i,J,:,:), ppoly0_E(i,J+1,:,:), remap_method, Coef_y(i,J), vFlx(i,J,:))
           endif
         enddo
       enddo
@@ -224,6 +230,11 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       if (G%mask2dT(i,j)>0.) then
         tracer%t(i,j,k) = tracer%t(i,j,k) + (( (uFlx(I-1,j,k)-uFlx(I,j,k)) ) + ( (vFlx(i,J-1,k)-vFlx(i,J,k) ) ))* &
                           (G%IareaT(i,j)/( h(i,j,k) + GV%H_subroundoff))
+
+        if (tracer%id_lbdxy_conc > 0  .or. tracer%id_lbdxy_cont > 0 .or. tracer%id_lbdxy_cont_2d > 0 ) then
+          tendency(i,j,k) = (( (uFlx(I-1,j,k)-uFlx(I,j,k)) ) + ( (vFlx(i,J-1,k)-vFlx(i,J,k) ) )) * G%IareaT(i,j) * Idt
+        endif
+
       endif
     enddo ; enddo ; enddo
 
@@ -245,6 +256,33 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       enddo; enddo; enddo
       call post_data(tracer%id_lbd_dfy_2d, vwork_2d, CS%diag)
     endif
+
+    ! post tendency of tracer content
+    if (tracer%id_lbdxy_cont > 0) then
+      call post_data(tracer%id_lbdxy_cont, tendency(:,:,:), CS%diag)
+    endif
+
+    ! post depth summed tendency for tracer content
+    if (tracer%id_lbdxy_cont_2d > 0) then
+      tendency_2d(:,:) = 0.
+      do j = G%jsc,G%jec ; do i = G%isc,G%iec
+        do k = 1, GV%ke
+          tendency_2d(i,j) = tendency_2d(i,j) + tendency(i,j,k)
+        enddo
+      enddo ; enddo
+      call post_data(tracer%id_lbdxy_cont_2d, tendency_2d(:,:), CS%diag)
+    endif
+
+    ! post tendency of tracer concentration; this step must be
+    ! done after posting tracer content tendency, since we alter
+    ! the tendency array.
+    if (tracer%id_lbdxy_conc > 0) then
+      do k = 1, GV%ke ; do j = G%jsc,G%jec ; do i = G%isc,G%iec
+        tendency(i,j,k) =  tendency(i,j,k) / ( h(i,j,k) + GV%H_subroundoff )
+      enddo ; enddo ; enddo
+      call post_data(tracer%id_lbdxy_conc, tendency, CS%diag)
+    endif
+
   enddo
 
 end subroutine lateral_boundary_diffusion
@@ -271,8 +309,8 @@ real function bulk_average(boundary, nk, deg, h, hBLT, phi, ppoly0_E, ppoly0_coe
                                            !! (0 if none, 1. if all). For the bottom boundary layer, this is always 1.
                                            !! because integration starts at the bottom                  [nondim]
   ! Local variables
-  real    :: htot ! Running sum of the thicknesses (top to bottom)
-  integer :: k    ! k indice
+  real    :: htot !< Running sum of the thicknesses (top to bottom)
+  integer :: k    !< k indice
 
 
   htot = 0.
@@ -317,7 +355,7 @@ end function harmonic_mean
 subroutine boundary_k_range(boundary, nk, h, hbl, k_top, zeta_top, k_bot, zeta_bot)
   integer,             intent(in   ) :: boundary !< SURFACE or BOTTOM                       [nondim]
   integer,             intent(in   ) :: nk       !< Number of layers                        [nondim]
-  real, dimension(nk), intent(in   ) :: h        !< Layer thicknesses of the coluymn        [m]
+  real, dimension(nk), intent(in   ) :: h        !< Layer thicknesses of the column         [m]
   real,                intent(in   ) :: hbl      !< Thickness of the boundary layer         [m]
                                                  !! If surface, with respect to zbl_ref = 0.
                                                  !! If bottom, with respect to zbl_ref = SUM(h)
@@ -338,6 +376,11 @@ subroutine boundary_k_range(boundary, nk, h, hbl, k_top, zeta_top, k_bot, zeta_b
     k_bot = 1
     zeta_bot = 0.
     if (hbl == 0.) return
+    if (hbl >= SUM(h(:))) then
+      k_bot = nk
+      zeta_bot = 0.
+      return
+    endif
     do k=1,nk
       htot = htot + h(k)
       if ( htot >= hbl) then
@@ -354,6 +397,11 @@ subroutine boundary_k_range(boundary, nk, h, hbl, k_top, zeta_top, k_bot, zeta_b
     zeta_bot = 1.
     htot = 0.
     if (hbl == 0.) return
+    if (hbl >= SUM(h(:))) then
+      k_top = 1
+      zeta_top = 0.
+      return
+    endif
     do k=nk,1,-1
       htot = htot + h(k)
       if (htot >= hbl) then
@@ -371,8 +419,8 @@ end subroutine boundary_k_range
 
 !> Calculate the lateral boundary diffusive fluxes using the layer by layer method.
 !! See \ref section_method2
-subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, ppoly0_coefs_L, &
-                                   ppoly0_coefs_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
+subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L, area_R, phi_L, phi_R, &
+                              ppoly0_coefs_L, ppoly0_coefs_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
 
   integer,                   intent(in   )       :: boundary !< Which boundary layer SURFACE or BOTTOM  [nondim]
   integer,                   intent(in   )       :: nk       !< Number of layers                        [nondim]
@@ -382,33 +430,38 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L,
   real,                      intent(in   )       :: hbl_L    !< Thickness of the boundary boundary
                                                                        !! layer (left)                  [m]
   real,                      intent(in   )       :: hbl_R    !< Thickness of the boundary boundary
-                                                             !! layer (left)                            [m]
-  real, dimension(nk),       intent(in   )       :: phi_L    !< Tracer values (left)                    [ nondim m^-3 ]
-  real, dimension(nk),       intent(in   )       :: phi_R    !< Tracer values (right)                   [ nondim m^-3 ]
-  real, dimension(nk,deg+1), intent(in   )       :: ppoly0_coefs_L !< Tracer reconstruction (left)      [ nondim m^-3 ]
-  real, dimension(nk,deg+1), intent(in   )       :: ppoly0_coefs_R !< Tracer reconstruction (right)     [ nondim m^-3 ]
+                                                             !! layer (right)                           [m]
+  real,                      intent(in   )       :: area_L   !< Area of the horizontal grid (left)      [m^2]
+  real,                      intent(in   )       :: area_R   !< Area of the horizontal grid (right)     [m^2]
+  real, dimension(nk),       intent(in   )       :: phi_L    !< Tracer values (left)                    [conc]
+  real, dimension(nk),       intent(in   )       :: phi_R    !< Tracer values (right)                   [conc]
+  real, dimension(nk,deg+1), intent(in   )       :: ppoly0_coefs_L !< Tracer reconstruction (left)      [conc]
+  real, dimension(nk,deg+1), intent(in   )       :: ppoly0_coefs_R !< Tracer reconstruction (right)     [conc]
   real, dimension(nk,2),     intent(in   )       :: ppoly0_E_L !< Polynomial edge values (left)         [ nondim ]
   real, dimension(nk,2),     intent(in   )       :: ppoly0_E_R !< Polynomial edge values (right)        [ nondim ]
   integer,                   intent(in   )       :: method   !< Method of polynomial integration        [ nondim ]
   real,                      intent(in   )       :: khtr_u   !< Horizontal diffusivities times delta t at U-point [m^2]
-  real, dimension(nk),       intent(  out)       :: F_layer  !< Layerwise diffusive flux at U-point     [m^2 conc]
+  real, dimension(nk),       intent(  out)       :: F_layer  !< Layerwise diffusive flux at U- or V-point [m^3 conc]
+
   ! Local variables
-  real, dimension(nk) :: h_means              ! Calculate the layer-wise harmonic means           [m]
-  real, dimension(nk) :: h_u                  ! Thickness at the u-point                          [m]
-  real                :: hbl_u                ! Boundary layer Thickness at the u-point           [m]
-  real                :: khtr_avg             ! Thickness-weighted diffusivity at the u-point     [m^2 s^-1]
-  real                :: heff                 ! Harmonic mean of layer thicknesses                [m]
-  real                :: inv_heff             ! Inverse of the harmonic mean of layer thicknesses [m^[-1]
-  real                :: phi_L_avg, phi_R_avg ! Bulk, thickness-weighted tracer averages (left and right column)
-                                              !                                                   [conc m^-3 ]
-  real    :: htot                 ! Total column thickness [m]
-  integer :: k, k_bot_min, k_top_max
-  integer :: k_top_L, k_bot_L, k_top_u
-  integer :: k_top_R, k_bot_R, k_bot_u
-  real    :: zeta_top_L, zeta_top_R, zeta_top_u
-  real    :: zeta_bot_L, zeta_bot_R, zeta_bot_u
-  real    :: h_work_L, h_work_R  ! dummy variables
-  real    :: hbl_min             ! minimum BLD (left and right)
+  real, dimension(nk) :: h_means              !< Calculate the layer-wise harmonic means           [m]
+  real                :: khtr_avg             !< Thickness-weighted diffusivity at the u-point     [m^2 s^-1]
+                                              !! This is just to remind developers that khtr_avg should be
+                                              !! computed once khtr is 3D.
+  real                :: heff                 !< Harmonic mean of layer thicknesses                [m]
+  real                :: inv_heff             !< Inverse of the harmonic mean of layer thicknesses [m^[-1]
+  real                :: phi_L_avg, phi_R_avg !< Bulk, thickness-weighted tracer averages (left and right column)
+                                              !!                                                   [conc m^-3 ]
+  real    :: htot    !< Total column thickness [m]
+  integer :: k, k_bot_min, k_top_max   !< k-indices, min and max for top and bottom, respectively
+  integer :: k_top_L, k_bot_L          !< k-indices left
+  integer :: k_top_R, k_bot_R          !< k-indices right
+  real    :: zeta_top_L, zeta_top_R    !< distance from the top of a layer to the boundary
+                                       !! layer depth                                     [nondim]
+  real    :: zeta_bot_L, zeta_bot_R    !< distance from the bottom of a layer to the boundary
+                                       !!layer depth                                      [nondim]
+  real    :: h_work_L, h_work_R  !< dummy variables
+  real    :: hbl_min             !< minimum BLD (left and right)                                   [m]
 
   F_layer(:) = 0.0
   if (hbl_L == 0. .or. hbl_R == 0.) then
@@ -438,10 +491,12 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L,
     phi_R_avg = average_value_ppoly( nk, phi_R, ppoly0_E_R, ppoly0_coefs_R, method, k_bot_R, 0., zeta_bot_R)
     heff = harmonic_mean(h_work_L, h_work_R)
     ! tracer flux where the minimum BLD intersets layer
-    F_layer(k_bot_min) = -heff * (phi_R_avg - phi_L_avg)
+    ! GMM, khtr_avg should be computed once khtr is 3D
+    F_layer(k_bot_min) = -(heff * khtr_u) * (phi_R_avg - phi_L_avg)
+
     do k = k_bot_min-1,1,-1
       heff = harmonic_mean(h_L(k), h_R(k))
-      F_layer(k) = -heff * (phi_R(k) - phi_L(k))
+      F_layer(k) = -(heff * khtr_u) * (phi_R(k) - phi_L(k))
     enddo
   endif
 
@@ -466,6 +521,7 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L,
 
     ! tracer flux where the minimum BLD intersets layer
     F_layer(k_top_max) = (-heff * khtr_u) * (phi_R_avg - phi_L_avg)
+
     do k = k_top_max+1,nk
       heff = harmonic_mean(h_L(k), h_R(k))
       F_layer(k) = -(heff * khtr_u) * (phi_R(k) - phi_L(k))
@@ -490,36 +546,39 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
                                                              !! layer (left)                            [m]
   real,                      intent(in   )       :: area_L   !< Area of the horizontal grid (left)      [m^2]
   real,                      intent(in   )       :: area_R   !< Area of the horizontal grid (right)     [m^2]
-  real, dimension(nk),       intent(in   )       :: phi_L    !< Tracer values (left)                    [ nondim m^-3 ]
-  real, dimension(nk),       intent(in   )       :: phi_R    !< Tracer values (right)                   [ nondim m^-3 ]
-  real, dimension(nk,deg+1), intent(in   )       :: ppoly0_coefs_L !< Tracer reconstruction (left)      [ nondim m^-3 ]
-  real, dimension(nk,deg+1), intent(in   )       :: ppoly0_coefs_R !< Tracer reconstruction (right)     [ nondim m^-3 ]
-  real, dimension(nk,2),     intent(in   )       :: ppoly0_E_L !< Polynomial edge values (left)         [ nondim ]
-  real, dimension(nk,2),     intent(in   )       :: ppoly0_E_R !< Polynomial edge values (right)        [ nondim ]
-  integer,                   intent(in   )       :: method   !< Method of polynomial integration        [ nondim ]
+  real, dimension(nk),       intent(in   )       :: phi_L    !< Tracer values (left)                    [conc]
+  real, dimension(nk),       intent(in   )       :: phi_R    !< Tracer values (right)                   [conc]
+  real, dimension(nk,deg+1), intent(in   )       :: ppoly0_coefs_L !< Tracer reconstruction (left)      [conc]
+  real, dimension(nk,deg+1), intent(in   )       :: ppoly0_coefs_R !< Tracer reconstruction (right)     [conc]
+  real, dimension(nk,2),     intent(in   )       :: ppoly0_E_L !< Polynomial edge values (left)         [nondim]
+  real, dimension(nk,2),     intent(in   )       :: ppoly0_E_R !< Polynomial edge values (right)        [nondim]
+  integer,                   intent(in   )       :: method   !< Method of polynomial integration        [nondim]
   real,                      intent(in   )       :: khtr_u   !< Horizontal diffusivities times delta t at U-point [m^2]
-  real,                      intent(  out)       :: F_bulk   !< The bulk mixed layer lateral flux       [m^2 conc]
-  real, dimension(nk),       intent(  out)       :: F_layer  !< Layerwise diffusive flux at U-point     [m^2 conc]
+  real,                      intent(  out)       :: F_bulk   !< The bulk mixed layer lateral flux       [m^3 conc]
+  real, dimension(nk),       intent(  out)       :: F_layer  !< Layerwise diffusive flux at U-point     [m^3 conc]
   real, optional, dimension(nk), intent(  out)   :: F_limit  !< The amount of flux not applied due to limiter
-                                                             !! F_layer(k) - F_max                      [m^2 conc]
+                                                             !! F_layer(k) - F_max                      [m^3 conc]
   ! Local variables
-  real, dimension(nk) :: h_means              ! Calculate the layer-wise harmonic means           [m]
-  real, dimension(nk) :: h_u                  ! Thickness at the u-point                          [m]
-  real                :: hbl_u                ! Boundary layer Thickness at the u-point           [m]
-  real                :: khtr_avg             ! Thickness-weighted diffusivity at the u-point     [m^2 s^-1]
-  real                :: heff                 ! Harmonic mean of layer thicknesses                [m]
-  real                :: inv_heff             ! Inverse of the harmonic mean of layer thicknesses [m^[-1]
-  real                :: phi_L_avg, phi_R_avg ! Bulk, thickness-weighted tracer averages (left and right column)
-                                              !                                                   [conc m^-3 ]
-  real    :: htot                 ! Total column thickness [m]
-  integer :: k, k_min, k_max
-  integer :: k_top_L, k_bot_L, k_top_u
-  integer :: k_top_R, k_bot_R, k_bot_u
-  real    :: zeta_top_L, zeta_top_R, zeta_top_u
-  real    :: zeta_bot_L, zeta_bot_R, zeta_bot_u
-  real    :: h_work_L, h_work_R  ! dummy variables
-  real    :: F_max   !< The maximum amount of flux that can leave a cell
-  logical :: limited !< True if the flux limiter was applied
+  real, dimension(nk) :: h_means              !< Calculate the layer-wise harmonic means           [m]
+  real                :: khtr_avg             !< Thickness-weighted diffusivity at the u-point     [m^2 s^-1]
+                                              !! This is just to remind developers that khtr_avg should be
+                                              !! computed once khtr is 3D.
+  real                :: heff                 !< Harmonic mean of layer thicknesses                [m]
+  real                :: inv_heff             !< Inverse of the harmonic mean of layer thicknesses [m^[-1]
+  real                :: phi_L_avg, phi_R_avg !< Bulk, thickness-weighted tracer averages (left and right column)
+                                              !!                                                   [conc m^-3 ]
+  real    :: htot                             ! Total column thickness [m]
+  integer :: k, k_min, k_max                  !< k-indices, min and max for top and bottom, respectively
+  integer :: k_top_L, k_bot_L                 !< k-indices left
+  integer :: k_top_R, k_bot_R                 !< k-indices right
+  real    :: zeta_top_L, zeta_top_R           !< distance from the top of a layer to the
+                                              !! boundary layer   [nondim]
+  real    :: zeta_bot_L, zeta_bot_R           !< distance from the bottom of a layer to the
+                                              !! boundary layer   [nondim]
+  real    :: h_work_L, h_work_R               !< dummy variables
+  real    :: F_max                            !< The maximum amount of flux that can leave a
+                                              !! cell  [m^3 conc]
+  logical :: limited                          !< True if the flux limiter was applied
   real    :: hfrac, F_bulk_remain
 
   if (hbl_L == 0. .or. hbl_R == 0.) then
@@ -537,13 +596,9 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
                             zeta_top_L, k_bot_L, zeta_bot_L)
   phi_R_avg  = bulk_average(boundary, nk, deg, h_R, hbl_R, phi_R, ppoly0_E_R, ppoly0_coefs_R, method, k_top_R, &
                             zeta_top_R, k_bot_R, zeta_bot_R)
-  do k=1,nk
-    h_u(k) = 0.5 * (h_L(k) + h_R(k))
-  enddo
-  hbl_u = 0.5*(hbl_L + hbl_R)
-  call boundary_k_range(boundary, nk, h_u, hbl_u, k_top_u, zeta_top_u, k_bot_u, zeta_bot_u)
 
   ! Calculate the 'bulk' diffusive flux from the bulk averaged quantities
+  ! GMM, khtr_avg should be computed once khtr is 3D
   heff = harmonic_mean(hbl_L, hbl_R)
   F_bulk = -(khtr_u * heff) * (phi_R_avg - phi_L_avg)
   F_bulk_remain = F_bulk
@@ -599,42 +654,41 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
 
   if ( SUM(h_means) == 0. ) then
     return
+ ! Decompose the bulk flux onto the individual layers
   else
     ! Initialize remaining thickness
     inv_heff = 1./SUM(h_means)
-    ! Decompose the bulk flux onto the individual layers
     do k=1,nk
       if (h_means(k) > 0.) then
-        ! Limit the tracer flux so that the donor cell with positive concentration can't go negative
-        ! If a tracer can go negative, it is unclear what the limiter should be. BOB ALISTAIR?!
         hfrac = h_means(k)*inv_heff
         F_layer(k) = F_bulk * hfrac
-        if ( SIGN(1.,F_bulk) == SIGN(1., F_layer(k))) then
-          ! limit the flux to 0.25 of the total tracer in the cell
-          if (F_bulk < 0. .and. phi_R(k) >= 0.) then
-            F_max = 0.25 * (area_R*(phi_R(k)*h_R(k)))
-          elseif (F_bulk > 0. .and. phi_L(k) >= 0.) then
-            F_max = 0.25 * (area_L*(phi_L(k)*h_L(k)))
-          else ! The above quantities are always positive, so we can use F_max < -1 to see if we don't need to limit
-            F_max = -1.
-          endif
+        ! limit the flux to 0.2 of the tracer *gradient*
+        ! Why 0.2?
+        !  t=0         t=inf
+        !   0           .2
+        ! 0 1 0       .2.2.2
+        !   0           .2
+        !
+        F_max = -0.2 * ((area_R*(phi_R(k)*h_R(k)))-(area_L*(phi_L(k)*h_R(k))))
+
+        ! check if bulk flux (or F_layer) and F_max have same direction
+        if ( SIGN(1.,F_bulk) == SIGN(1., F_max)) then
           ! Distribute bulk flux onto layers
           if ( ((boundary == SURFACE) .and. (k == k_min)) .or. ((boundary == BOTTOM) .and. (k == nk)) ) then
-            F_layer(k) = F_bulk_remain
+            F_layer(k) = F_bulk_remain ! GMM, are not using F_bulk_remain for now. Should we keep it?
           endif
           F_bulk_remain = F_bulk_remain - F_layer(k)
 
           ! Apply flux limiter calculated above
           if (F_max >= 0.) then
-            if (F_layer(k) > 0.) then
-              limited = F_layer(k) > F_max
-              F_layer(k) = MIN(F_layer(k),F_max)
-            elseif (F_layer(k) < 0.) then
-              limited = F_layer(k) < -F_max
-              F_layer(k) = MAX(F_layer(k),-F_max) ! Note negative to make the sign of flux consistent
-            endif
+            limited = F_layer(k) > F_max
+            F_layer(k) = MIN(F_layer(k),F_max)
+          else
+            limited = F_layer(k) < F_max
+            F_layer(k) = MAX(F_layer(k),F_max)
           endif
 
+          ! GMM, again we are not using F_limit. Should we delete it?
           if (PRESENT(F_limit)) then
             if (limited) then
               F_limit(k) = F_layer(k) - F_max
@@ -643,6 +697,7 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
             endif
           endif
         else
+          ! do not apply a flux on this layer
           F_bulk_remain = F_bulk_remain - F_layer(k)
           F_layer(k) = 0.
         endif
@@ -653,191 +708,6 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
   endif
 
 end subroutine fluxes_bulk_method
-
-! TODO: GMM,  this is a placeholder for the pressure reconstruction.
-! get rid of all the T/S related variables below. We need to use the
-! continuous version since pressure will be continuous. However,
-! for tracer we will need to use a discontinuous reconstruction.
-! Mimic the neutral diffusion driver to calculate and apply sub-layer
-! fluxes.
-
-!> Returns positions within left/right columns of combined interfaces using continuous reconstructions of T/S
-!subroutine find_neutral_surface_positions_continuous(nk, Pl, Pr, PoL, PoR, KoL, KoR, hEff)
-!   integer,                    intent(in)    :: nk    !< Number of levels
-!  real, dimension(nk+1),      intent(in)    :: Pl    !< Left-column interface pressure [Pa]
-!  real, dimension(2*nk+2),    intent(inout) :: PoL   !< Fractional position of neutral surface within
-!                                                     !! layer KoL of left column
-!  real, dimension(2*nk+2),    intent(inout) :: PoR   !< Fractional position of neutral surface within
-!                                                     !! layer KoR of right column
-!  integer, dimension(2*nk+2), intent(inout) :: KoL   !< Index of first left interface above neutral surface
-!  integer, dimension(2*nk+2), intent(inout) :: KoR   !< Index of first right interface above neutral surface
-!  real, dimension(2*nk+1),    intent(inout) :: hEff  !< Effective thickness between two neutral surfaces [Pa]
-!
-!  ! Local variables
-!  integer :: ns                     ! Number of neutral surfaces
-!  integer :: k_surface              ! Index of neutral surface
-!  integer :: kl                     ! Index of left interface
-!  integer :: kr                     ! Index of right interface
-!  real    :: dRdT, dRdS             ! dRho/dT and dRho/dS for the neutral surface
-!  logical :: searching_left_column  ! True if searching for the position of a right interface in the left column
-!  logical :: searching_right_column ! True if searching for the position of a left interface in the right column
-!  logical :: reached_bottom         ! True if one of the bottom-most interfaces has been used as the target
-!  integer :: krm1, klm1
-!  real    :: dRho, dRhoTop, dRhoBot, hL, hR
-!  integer :: lastK_left, lastK_right
-!  real    :: lastP_left, lastP_right
-!
-!  ns = 2*nk+2
-!  ! Initialize variables for the search
-!  kr = 1 ; lastK_right = 1 ; lastP_right = 0.
-!  kl = 1 ; lastK_left = 1 ; lastP_left = 0.
-!  reached_bottom = .false.
-!
-!  ! Loop over each neutral surface, working from top to bottom
-!  neutral_surfaces: do k_surface = 1, ns
-!    klm1 = max(kl-1, 1)
-!    if (klm1>nk) stop 'find_neutral_surface_positions(): klm1 went out of bounds!'
-!    krm1 = max(kr-1, 1)
-!    if (krm1>nk) stop 'find_neutral_surface_positions(): krm1 went out of bounds!'
-!
-!    ! TODO: GMM, instead of dRho we need dP (pressure at right - pressure at left)
-!
-!    ! Potential density difference, rho(kr) - rho(kl)
-!    dRho = 0.5 * ( ( dRdTr(kr) + dRdTl(kl) ) * ( Tr(kr) - Tl(kl) ) &
-!                 + ( dRdSr(kr) + dRdSl(kl) ) * ( Sr(kr) - Sl(kl) ) )
-!    ! Which column has the lighter surface for the current indexes, kr and kl
-!    if (.not. reached_bottom) then
-!      if (dRho < 0.) then
-!        searching_left_column = .true.
-!        searching_right_column = .false.
-!      elseif (dRho > 0.) then
-!        searching_right_column = .true.
-!        searching_left_column = .false.
-!      else ! dRho == 0.
-!        if (kl + kr == 2) then ! Still at surface
-!          searching_left_column = .true.
-!          searching_right_column = .false.
-!        else ! Not the surface so we simply change direction
-!          searching_left_column = .not.  searching_left_column
-!          searching_right_column = .not.  searching_right_column
-!        endif
-!      endif
-!    endif
-!
-!    if (searching_left_column) then
-!      ! Interpolate for the neutral surface position within the left column, layer klm1
-!      ! Potential density difference, rho(kl-1) - rho(kr) (should be negative)
-!      dRhoTop = 0.5 * ( ( dRdTl(klm1) + dRdTr(kr) ) * ( Tl(klm1) - Tr(kr) ) &
-!                     + ( dRdSl(klm1) + dRdSr(kr) ) * ( Sl(klm1) - Sr(kr) ) )
-!      ! Potential density difference, rho(kl) - rho(kr) (will be positive)
-!      dRhoBot = 0.5 * ( ( dRdTl(klm1+1) + dRdTr(kr) ) * ( Tl(klm1+1) - Tr(kr) ) &
-!                      + ( dRdSl(klm1+1) + dRdSr(kr) ) * ( Sl(klm1+1) - Sr(kr) ) )
-!
-!      ! Because we are looking left, the right surface, kr, is lighter than klm1+1 and should be denser than klm1
-!      ! unless we are still at the top of the left column (kl=1)
-!      if (dRhoTop > 0. .or. kr+kl==2) then
-!        PoL(k_surface) = 0. ! The right surface is lighter than anything in layer klm1
-!      elseif (dRhoTop >= dRhoBot) then ! Left layer is unstratified
-!        PoL(k_surface) = 1.
-!      else
-!        ! Linearly interpolate for the position between Pl(kl-1) and Pl(kl) where the density difference
-!        ! between right and left is zero.
-!
-!        ! TODO: GMM, write the linear solution instead of using interpolate_for_nondim_position
-!        PoL(k_surface) = interpolate_for_nondim_position( dRhoTop, Pl(klm1), dRhoBot, Pl(klm1+1) )
-!      endif
-!      if (PoL(k_surface)>=1. .and. klm1<nk) then ! >= is really ==, when PoL==1 we point to the bottom of the cell
-!        klm1 = klm1 + 1
-!        PoL(k_surface) = PoL(k_surface) - 1.
-!      endif
-!      if (real(klm1-lastK_left)+(PoL(k_surface)-lastP_left)<0.) then
-!        PoL(k_surface) = lastP_left
-!        klm1 = lastK_left
-!      endif
-!      KoL(k_surface) = klm1
-!      if (kr <= nk) then
-!        PoR(k_surface) = 0.
-!        KoR(k_surface) = kr
-!      else
-!        PoR(k_surface) = 1.
-!        KoR(k_surface) = nk
-!      endif
-!      if (kr <= nk) then
-!        kr = kr + 1
-!      else
-!        reached_bottom = .true.
-!        searching_right_column = .true.
-!        searching_left_column = .false.
-!      endif
-!    elseif (searching_right_column) then
-!      ! Interpolate for the neutral surface position within the right column, layer krm1
-!      ! Potential density difference, rho(kr-1) - rho(kl) (should be negative)
-!      dRhoTop = 0.5 * ( ( dRdTr(krm1) + dRdTl(kl) ) * ( Tr(krm1) - Tl(kl) ) &
-!                     + ( dRdSr(krm1) + dRdSl(kl) ) * ( Sr(krm1) - Sl(kl) ) )
-!      ! Potential density difference, rho(kr) - rho(kl) (will be positive)
-!      dRhoBot = 0.5 * ( ( dRdTr(krm1+1) + dRdTl(kl) ) * ( Tr(krm1+1) - Tl(kl) ) &
-!                   + ( dRdSr(krm1+1) + dRdSl(kl) ) * ( Sr(krm1+1) - Sl(kl) ) )
-!
-!      ! Because we are looking right, the left surface, kl, is lighter than krm1+1 and should be denser than krm1
-!      ! unless we are still at the top of the right column (kr=1)
-!      if (dRhoTop >= 0. .or. kr+kl==2) then
-!        PoR(k_surface) = 0. ! The left surface is lighter than anything in layer krm1
-!      elseif (dRhoTop >= dRhoBot) then ! Right layer is unstratified
-!        PoR(k_surface) = 1.
-!      else
-!        ! Linearly interpolate for the position between Pr(kr-1) and Pr(kr) where the density difference
-!        ! between right and left is zero.
-!        PoR(k_surface) = interpolate_for_nondim_position( dRhoTop, Pr(krm1), dRhoBot, Pr(krm1+1) )
-!      endif
-!      if (PoR(k_surface)>=1. .and. krm1<nk) then ! >= is really ==, when PoR==1 we point to the bottom of the cell
-!        krm1 = krm1 + 1
-!        PoR(k_surface) = PoR(k_surface) - 1.
-!      endif
-!      if (real(krm1-lastK_right)+(PoR(k_surface)-lastP_right)<0.) then
-!        PoR(k_surface) = lastP_right
-!        krm1 = lastK_right
-!      endif
-!      KoR(k_surface) = krm1
-!      if (kl <= nk) then
-!        PoL(k_surface) = 0.
-!        KoL(k_surface) = kl
-!      else
-!        PoL(k_surface) = 1.
-!        KoL(k_surface) = nk
-!      endif
-!      if (kl <= nk) then
-!        kl = kl + 1
-!      else
-!        reached_bottom = .true.
-!        searching_right_column = .false.
-!        searching_left_column = .true.
-!      endif
-!    else
-!      stop 'Else what?'
-!    endif
-!
-!    lastK_left = KoL(k_surface) ; lastP_left = PoL(k_surface)
-!    lastK_right = KoR(k_surface) ; lastP_right = PoR(k_surface)
-!
-!    ! Effective thickness
-!    ! NOTE: This would be better expressed in terms of the layers thicknesses rather
-!    ! than as differences of position - AJA
-!
-!    ! TODO: GMM, we need to import absolute_position from neutral diffusion. This gives us
-!    !! the depth of the interface on the left and right side.
-!
-!    if (k_surface>1) then
-!      hL = absolute_position(nk,ns,Pl,KoL,PoL,k_surface) - absolute_position(nk,ns,Pl,KoL,PoL,k_surface-1)
-!      hR = absolute_position(nk,ns,Pr,KoR,PoR,k_surface) - absolute_position(nk,ns,Pr,KoR,PoR,k_surface-1)
-!      if ( hL + hR > 0.) then
-!        hEff(k_surface-1) = 2. * hL * hR / ( hL + hR ) ! Harmonic mean of layer thicknesses
-!      else
-!        hEff(k_surface-1) = 0.
-!      endif
-!    endif
-!
-!  enddo neutral_surfaces
-!end subroutine find_neutral_surface_positions_continuous
 
 !> Unit tests for near-boundary horizontal mixing
 logical function near_boundary_unit_tests( verbose )
@@ -881,7 +751,7 @@ logical function near_boundary_unit_tests( verbose )
   test_name = 'Surface boundary spans the entire column'
   h_L = (/5.,5./)
   call boundary_k_range(SURFACE, nk, h_L, 10., k_top, zeta_top, k_bot, zeta_bot)
-  near_boundary_unit_tests = test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, 1, 0., 2, 1., test_name, verbose)
+  near_boundary_unit_tests = test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, 1, 0., 2, 0., test_name, verbose)
 
   test_name = 'Bottom boundary spans the entire bottom cell'
   h_L = (/5.,5./)
@@ -902,6 +772,11 @@ logical function near_boundary_unit_tests( verbose )
   h_L = (/10.,10./)
   call boundary_k_range(SURFACE, nk, h_L, 2.5, k_top, zeta_top, k_bot, zeta_bot)
   near_boundary_unit_tests = test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, 1, 0., 1, 0.25, test_name, verbose)
+
+  test_name = 'Surface boundary is deeper than column thickness'
+  h_L = (/10.,10./)
+  call boundary_k_range(SURFACE, nk, h_L, 21.0, k_top, zeta_top, k_bot, zeta_bot)
+  near_boundary_unit_tests = test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, 1, 0., 2, 0., test_name, verbose)
 
   test_name = 'Bottom boundary intersects first layer'
   h_L = (/10.,10./)
@@ -1061,8 +936,8 @@ logical function near_boundary_unit_tests( verbose )
   ppoly0_E_L(2,1) = 0.; ppoly0_E_L(2,2) = 0.
   ppoly0_E_R(1,1) = 0.; ppoly0_E_R(1,2) = 1.
   ppoly0_E_R(2,1) = 1.; ppoly0_E_R(2,2) = 3.
-  call fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L, area_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
-                                    ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer)
+  call fluxes_layer_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L, area_R, phi_L, phi_R, phi_pp_L, &
+                                    phi_pp_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
   near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-2.,-2./) )
 
   ! unit tests for layer by layer method
@@ -1079,8 +954,8 @@ logical function near_boundary_unit_tests( verbose )
   ppoly0_E_R(1,1) = 1.; ppoly0_E_R(1,2) = 1.
   ppoly0_E_R(2,1) = 1.; ppoly0_E_R(2,2) = 1.
   khtr_u = 1.
-  call fluxes_layer_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
-                                    ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
+  call fluxes_layer_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L, area_R, phi_L, phi_R, phi_pp_L, &
+                                    phi_pp_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
   near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-7.5,0.0/) )
 
   test_name = 'Different hbl and different column thicknesses (linear profile right)'
@@ -1097,8 +972,8 @@ logical function near_boundary_unit_tests( verbose )
   ppoly0_E_R(1,1) = 0.; ppoly0_E_R(1,2) = 2.
   ppoly0_E_R(2,1) = 2.; ppoly0_E_R(2,2) = 4.
   khtr_u = 1.
-  call fluxes_layer_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
-                                    ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
+  call fluxes_layer_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L, area_R, phi_L, phi_R, phi_pp_L, &
+                                    phi_pp_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
   near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-3.75,0.0/) )
 end function near_boundary_unit_tests
 
@@ -1178,41 +1053,74 @@ end function test_boundary_k_range
 !! Boundary lateral diffusion can be applied using one of the three methods:
 !!
 !! * [Method #1: Bulk layer](@ref section_method1) (default);
-!! * [Method #2: Along layer](ref section_method2);
-!! * [Method #3: Decomposition on to pressure levels](@ref section_method3).
+!! * [Method #2: Along layer](@ref section_method2);
 !!
 !! A brief summary of these methods is provided below.
 !!
 !! \subsection section_method1 Bulk layer approach (Method #1)
 !!
-!! Apply the lateral boundary diffusive fluxes calculated from a 'bulk model'
+!! Apply the lateral boundary diffusive fluxes calculated from a 'bulk model'.This
+!! is a lower order representation (Kraus-Turner like approach) which assumes that
+!! eddies are acting along well mixed layers (i.e., eddies do not know care about
+!! vertical tracer gradients within the boundary layer).
 !!
-!! Step #1: get vertical indices containing the boundary layer depth. These are
+!! Step #1: compute vertical indices containing boundary layer (boundary_k_range).
+!! For the TOP boundary layer, these are:
+!!
 !! k_top, k_bot, zeta_top, zeta_bot
 !!
-!! Step #2: compute bulk averages (thickness weighted). phi_L and phi_R
+!! Step #2: compute bulk averages (thickness weighted) tracer averages (phi_L and phi_R),
+!! then calculate the bulk diffusive flux (F_{bulk}):
 !!
-!! Step #3: compute a diffusive bulk flux
-!! \f[ F_{bulk} = -(KHTR \times heff) \times (\phi_R - \phi_L),  \f]
-!! where heff is the harmonic mean of the boundary layer depth in the left and
-!! right columns (\f[ HBL_L \f] and \f[ HBL_R \f], respectively).
+!! \f[ F_{bulk} = -KHTR \times h_{eff} \times (\phi_R - \phi_L),  \f]
+!! where h_eff is the [harmonic mean](@ref section_harmonic_mean) of the boundary layer depth
+!! in the left and right columns (\f[ HBL_L \f] and \f[ HBL_R \f], respectively).
 !!
-!! Step #4: limit the tracer flux so that the donor cell, with positive
-!! concentration, cannot go negative. If a tracer can go negative (e.g.,
-!! temperature at high latitudes) it is unclear what limiter should be used.
-!! (TODO: ask Bob and Alistair).
+!! Step #3: decompose F_bulk onto individual layers:
 !!
-!! Step #5: decompose the bulk flux into individual layers and keep track of
-!! the remaining flux. The limiter described above is also applied during
-!! this step.
+!! \f[ F_{layer}(k) = F_{bulk} \times h_{frac}(k) ,  \f]
+!!
+!! where h_{frac} is
+!!
+!! \f[ h_{frac}(k) = h_u(k) \times \frac{1}{\sum(h_u)}.  \f]
+!!
+!! h_u is the [harmonic mean](@ref section_harmonic_mean) of thicknesses at each layer.
+!! Special care (layer reconstruction) must be taken at k_min = min(k_botL, k_bot_R).
+!!
+!! Step #4: limit the tracer flux so that 1) only down-gradient fluxes are applied,
+!! and 2) the flux cannot be larger than F_max, which is defined using the tracer
+!! gradient:
+!!
+!! \f[ F_{max} = -0.2 \times [(V_R(k) \times \phi_R(k)) - (V_L(k) \times \phi_L(k))],  \f]
+!! where V is the cell volume. Why 0.2?
+!!          t=0         t=inf
+!!           0           .2
+!!         0 1 0       .2.2.2
+!!           0           .2
 !!
 !! \subsection section_method2 Along layer approach (Method #2)
 !!
-!! \subsection section_method3 Decomposition on to pressure levels (Method #3)
+!! This is a more straight forward method where diffusion is applied layer by layer using
+!! only information from neighboring cells.
 !!
-!! To be implemented
+!! Step #1: compute vertical indices containing boundary layer (boundary_k_range).
+!! For the TOP boundary layer, these are:
+!!
+!! k_top, k_bot, zeta_top, zeta_bot
+!!
+!! Step #2: calculate the diffusive flux at each layer:
+!!
+!! \f[ F_{k} = -KHTR \times h_{eff}(k) \times (\phi_R(k) - \phi_L(k)),  \f]
+!! where h_eff is the [harmonic mean](@ref section_harmonic_mean) of the layer thickness
+!! in the left and right columns. Special care (layer reconstruction) must be taken at
+!! k_min = min(k_botL, k_bot_R). This method does not require a limiter since KHTR
+!! is already limted based on a diffusive CFL condition prior to the call of this
+!! module.
 !!
 !! \subsection section_harmonic_mean Harmonic Mean
 !!
+!! The harmonic mean (HM) betwen h1 and h2 is defined as:
+!!
+!! \f[ HM = \frac{2 \times h1 \times h2}{h1 + h2} \f]
 !!
 end module MOM_lateral_boundary_diffusion
