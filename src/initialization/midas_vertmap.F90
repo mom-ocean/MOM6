@@ -20,8 +20,8 @@ public find_interfaces, meshgrid
 
 !> Fill grid edges
 interface fill_boundaries
-   module procedure fill_boundaries_real
-   module procedure fill_boundaries_int
+  module procedure fill_boundaries_real
+  module procedure fill_boundaries_int
 end interface
 
 contains
@@ -236,7 +236,7 @@ function tracer_z_init(tr_in, z_edges, e, nkml, nkbl, land_fill, wet, nlay, nlev
           if (kz /= k_bot_prev) then
             ! Calculate the intra-cell profile.
             if ((kz < nlevs_data(i,j)) .and. (kz > 1)) then
-               sl_tr = find_limited_slope(tr_1d, z_edges, kz)
+              sl_tr = find_limited_slope(tr_1d, z_edges, kz)
             endif
           endif
           if (kz > nlevs_data(i,j)) kz = nlevs_data(i,j)
@@ -261,7 +261,7 @@ function tracer_z_init(tr_in, z_edges, e, nkml, nkbl, land_fill, wet, nlay, nlev
             ! Calculate the intra-cell profile.
             sl_tr = 0.0 ! ; cur_tr = 0.0
             if ((kz < nlevs_data(i,j)) .and. (kz > 1)) then
-               sl_tr = find_limited_slope(tr_1d, z_edges, kz)
+              sl_tr = find_limited_slope(tr_1d, z_edges, kz)
             endif
             ! This is the piecewise linear form.
             tr(i,j,k) = tr(i,j,k) + wt(kz) * &
@@ -484,13 +484,12 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
   real :: Ih, e_c, tot_wt, I_totwt
   integer :: k
 
-  wt(:)=0.0 ; z1(:)=0.0 ; z2(:)=0.0
-  k_top = k_start ; k_bot = k_start ; wt(1) = 1.0 ; z1(1) = -0.5 ; z2(1) = 0.5
+  wt(:) = 0.0 ; z1(:) = 0.0 ; z2(:) = 0.0 ; k_bot = k_max
+  wt(1) = 1.0 ; z1(1) = -0.5 ; z2(1) = 0.5
 
   do k=k_start,k_max ; if (e(K+1) < Z_top) exit ; enddo
   k_top = k
-
-  if (k>k_max) return
+  if (k_top > k_max) return
 
   ! Determine the fractional weights of each layer.
   ! Note that by convention, e and Z_int decrease with increasing k.
@@ -502,7 +501,6 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
     z2(k) = (e_c - Z_bot) * Ih
   else
     wt(k) = MIN(e(K),Z_top) - e(K+1) ; tot_wt = wt(k) ! These are always > 0.
-    ! Ih = 0.0 ; if (e(K) /= e(K+1)) Ih = 1.0 / (e(K)-e(K+1))
     if (e(K) /= e(K+1)) then
       z1(k) = (0.5*(e(K)+e(K+1)) - MIN(e(K), Z_top)) / (e(K)-e(K+1))
     else ; z1(k) = -0.5 ; endif
@@ -528,36 +526,27 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
 
 end subroutine find_overlap
 
-!> This subroutine determines a limited slope for val to be advected with
+!> This function determines a limited slope for val to be advected with
 !! a piecewise limited scheme.
 function find_limited_slope(val, e, k) result(slope)
-  real, dimension(:), intent(in) :: val !< An column the values that are being interpolated.
+  real, dimension(:), intent(in) :: val !< A column of values that are being interpolated, in arbitrary units [A].
   real, dimension(:), intent(in) :: e   !< A column's interface heights [Z ~> m] or other units.
   integer,            intent(in) :: k   !< The layer whose slope is being determined.
-  real :: slope !< The normalized slope in the intracell distribution of val.
+  real :: slope !< The normalized slope in the intracell distribution of val [A Z-1 ~> A m-1] or other units.
   ! Local variables
-  real :: amn, cmn
-  real :: d1, d2
+  real :: d1, d2  ! Thicknesses in the units of e [Z ~> m].
 
-  if ((val(k)-val(k-1)) * (val(k)-val(k+1)) >= 0.0) then
-    slope = 0.0 ! ; curvature = 0.0
+  d1 = 0.5*(e(K-1)-e(K+1)) ; d2 = 0.5*(e(K)-e(K+2))
+  if (((val(k)-val(k-1)) * (val(k)-val(k+1)) >= 0.0) .or. (d1*d2 <= 0.0)) then
+    slope = 0.0
   else
-    d1 = 0.5*(e(K-1)-e(K+1)) ; d2 = 0.5*(e(K)-e(K+2))
-    if (d1*d2 > 0.0) then
-      slope = ((d1**2)*(val(k+1) - val(k)) + (d2**2)*(val(k) - val(k-1))) * &
-              (e(K) - e(K+1)) / (d1*d2*(d1+d2))
-      ! slope = 0.5*(val(k+1) - val(k-1))
-      ! This is S.J. Lin's form of the PLM limiter.
-      amn = min(abs(slope), 2.0*(max(val(k-1), val(k), val(k+1)) - val(k)))
-      cmn = 2.0*(val(k) - min(val(k-1), val(k), val(k+1)))
-      slope = sign(1.0, slope) * min(amn, cmn)
-
-      ! min(abs(slope), 2.0*(max(val(k-1),val(k),val(k+1)) - val(k)), &
-      !                 2.0*(val(k) - min(val(k-1),val(k),val(k+1))))
-      ! curvature = 0.0
-    else
-      slope = 0.0 ! ; curvature = 0.0
-    endif
+    slope = ((d1**2)*(val(k+1) - val(k)) + (d2**2)*(val(k) - val(k-1))) * &
+            (e(K) - e(K+1)) / (d1*d2*(d1+d2))
+    ! slope = 0.5*(val(k+1) - val(k-1))
+    ! This is S.J. Lin's form of the PLM limiter.
+    slope = sign(1.0, slope) * min(abs(slope), &
+        2.0*(max(val(k-1), val(k), val(k+1)) - val(k)),  &
+        2.0*(val(k) - min(val(k-1), val(k), val(k+1))))
   endif
 
 end function find_limited_slope
