@@ -1060,7 +1060,7 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
                  "initial value of MEKE.", default=.false.)
   call get_param(param_file, mdl, "MEKE_EQUILIBRIUM_RESTORING", CS%MEKE_equilibrium_restoring, &
                  "If true, restore MEKE back to its equilibrium value, which is calculated at"//&
-                 "each time step.", default=CS%MEKE_equilibrium_alt)
+                 "each time step.", default=.false.)
   if (CS%MEKE_equilibrium_restoring) then
     call get_param(param_file, mdl, "MEKE_RESTORING_TIMESCALE", MEKE_restoring_timescale, &
                    "The timescale used to nudge MEKE toward its equilibrium value.", units="s", &
