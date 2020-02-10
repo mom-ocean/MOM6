@@ -640,7 +640,12 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
 
   buoy_scale = US%L_to_m**2*US%s_to_T**3
 
-  !$OMP parallel do default(shared) firstprivate(nonLocalTrans)
+  !$OMP parallel do default(none) firstprivate(nonLocalTrans)                               &
+  !$OMP                           private(surfFricVel, iFaceHeight, hcorr, dh, cellHeight,  &
+  !$OMP                           surfBuoyFlux, Kdiffusivity, Kviscosity, LangEnhK, sigma,  &
+  !$OMP                           sigmaRatio)                                               &
+  !$OMP                           shared(G, GV, CS, US, uStar, h, buoy_scale, buoyFlux, Kt, &
+  !$OMP                           Ks, Kv, nonLocalTransHeat, nonLocalTransScalar, waves)
   ! loop over horizontal points on processor
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
@@ -957,7 +962,16 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
   buoy_scale = US%L_to_m**2*US%s_to_T**3
 
   ! loop over horizontal points on processor
-  !$OMP parallel do default(shared)
+  !$OMP parallel do default(none) private(surfFricVel, iFaceHeight, hcorr, dh, cellHeight,  &
+  !$OMP                           surfBuoyFlux, U_H, V_H, u, v, Coriolis, pRef, SLdepth_0d, &
+  !$OMP                           ksfc, surfHtemp, surfHsalt, surfHu, surfHv, surfHuS,      &
+  !$OMP                           surfHvS, hTot, delH, surftemp, surfsalt, surfu, surfv,    &
+  !$OMP                           surfUs, surfVs, Uk, Vk, deltaU2, km1, kk, pres_1D,        &
+  !$OMP                           Temp_1D, salt_1D, surfBuoyFlux2, MLD_GUESS, LA, rho_1D,   &
+  !$OMP                           deltarho, N2_1d, ws_1d, LangEnhVT2, enhvt2, wst,          &
+  !$OMP                           BulkRi_1d, zBottomMinusOffset) &
+  !$OMP                           shared(G, GV, CS, US, uStar, h, buoy_scale, buoyFlux,     &
+  !$OMP                           Temp, Salt, waves, EOS, GoRho)
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
 
@@ -1463,7 +1477,7 @@ subroutine KPP_NonLocalTransport_temp(CS, G, GV, h, nonLocalTrans, surfFlux, &
 
 
   dtracer(:,:,:) = 0.0
-  !$OMP parallel do default(shared)
+  !$OMP parallel do default(none) shared(dtracer, nonLocalTrans, h, G, GV, surfFlux)
   do k = 1, G%ke
     do j = G%jsc, G%jec
       do i = G%isc, G%iec
@@ -1522,7 +1536,7 @@ subroutine KPP_NonLocalTransport_saln(CS, G, GV, h, nonLocalTrans, surfFlux, dt,
 
 
   dtracer(:,:,:) = 0.0
-  !$OMP parallel do default(shared)
+  !$OMP parallel do default(none) shared(dtracer, nonLocalTrans, h, G, GV, surfFlux)
   do k = 1, G%ke
     do j = G%jsc, G%jec
       do i = G%isc, G%iec

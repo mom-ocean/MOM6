@@ -1058,18 +1058,16 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   call get_param(param_file, mdl, "MEKE_EQUILIBRIUM_ALT", CS%MEKE_equilibrium_alt, &
                  "If true, use an alternative formula for computing the (equilibrium)"//&
                  "initial value of MEKE.", default=.false.)
-  if (CS%MEKE_equilibrium_alt) then
-    call get_param(param_file, mdl, "MEKE_EQUILIBRIUM_RESTORING", CS%MEKE_equilibrium_restoring, &
-                   "If true, restore MEKE back to its equilibrium value, which is calculated at"//&
-                   "each time step.", default=.false.)
-    if (CS%MEKE_equilibrium_restoring) then
-      call get_param(param_file, mdl, "MEKE_RESTORING_TIMESCALE", MEKE_restoring_timescale, &
-                     "The timescale used to nudge MEKE toward its equilibrium value.", units="s", &
-                     default=1e6, scale=US%T_to_s)
-      CS%MEKE_restoring_rate = 1.0 / MEKE_restoring_timescale
-    endif
-
+  call get_param(param_file, mdl, "MEKE_EQUILIBRIUM_RESTORING", CS%MEKE_equilibrium_restoring, &
+                 "If true, restore MEKE back to its equilibrium value, which is calculated at"//&
+                 "each time step.", default=.false.)
+  if (CS%MEKE_equilibrium_restoring) then
+    call get_param(param_file, mdl, "MEKE_RESTORING_TIMESCALE", MEKE_restoring_timescale, &
+                   "The timescale used to nudge MEKE toward its equilibrium value.", units="s", &
+                   default=1e6, scale=US%T_to_s)
+    CS%MEKE_restoring_rate = 1.0 / MEKE_restoring_timescale
   endif
+
   call get_param(param_file, mdl, "MEKE_FRCOEFF", CS%MEKE_FrCoeff, &
                  "The efficiency of the conversion of mean energy into "//&
                  "MEKE.  If MEKE_FRCOEFF is negative, this conversion "//&
