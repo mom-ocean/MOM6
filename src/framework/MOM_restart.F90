@@ -1355,7 +1355,11 @@ subroutine restore_state(filename, directory, day, G, CS)
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "restore_state: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
-
+  ! define the io domain if using 1 pe and the io domain is not set
+  if (mpp_get_domain_npes(G%domain%mpp_domain) .eq. 1 ) then
+    if (.not. associated(mpp_get_io_domain(G%domain%mpp_domain))) &
+      call mpp_define_io_domain(G%domain%mpp_domain, (/1,1/))
+  endif
 
   str_index = 0
   ! get the base restart file name
@@ -1367,8 +1371,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   endif
 
   ! append '.nc.' to the file name if it is missing
-  base_file_name = ''
-
+  base_file_name = ""
   str_index = INDEX(temp_file_name, ".nc")
   if (str_index <=0) then
      base_file_name = trim(append_substring(temp_file_name, ".nc"))
