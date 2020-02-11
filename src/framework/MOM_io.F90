@@ -1394,19 +1394,6 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, var_desc, &
     filename_temp = filename
   endif
 
-  ! get the pes associated with the file.
-  !>\note this is required so that only pe(1) is identified as the root pe to create the file
-  !! Otherwise, multiple pes may try to open the file in write (NC_NOCLOBBER) mode, leading to failure
-  allocate(pelist(mpp_npes()))
-  pelist(:) = 0
-  do i=1,size(pelist)
-    pelist(i) = i-1
-  enddo
-  ! open the file
-  if (.not.(check_if_open(fileobj))) &
-    file_open_success = fms2_open_file(fileobj, trim(filename_temp), lowercase(trim(mode)), is_restart=.false., &
-                                       pelist=pelist)
-
   ! get the dimension names and lengths
   ! NOTE: the t_grid argument is set to '1' (do nothing) because the presence of a time dimension is user-specified
   ! and not assumed from the var_desc%t_grid value.
