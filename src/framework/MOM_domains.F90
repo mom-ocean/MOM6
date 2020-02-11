@@ -1302,7 +1302,11 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 !$   else
 !$     adder = omp_get_thread_num()
 !$   endif
-!$   call set_affinity(component="MOM_domains", use_hyper_thread=ocean_omp_hyper_thread, nthreads=base_cpu + adder)
+!$   if (base_cpu + adder >= 1) then
+!$     call set_affinity(component="MOM_domains", use_hyper_thread=ocean_omp_hyper_thread, nthreads=base_cpu + adder)
+!$   else
+!$     call set_affinity(component="MOM_domains", use_hyper_thread=ocean_omp_hyper_thread, nthreads=1)
+!$   endif
 !!$     write(6,*) " ocean  ", base_cpu, get_affinity(), adder, omp_get_thread_num(), omp_get_num_threads()
 !!$     call flush(6)
 !$OMP END PARALLEL

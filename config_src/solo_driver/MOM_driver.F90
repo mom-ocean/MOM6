@@ -263,9 +263,13 @@ program MOM_main
 !$        adder = ncores_per_node + omp_get_thread_num()/2
 !$     endif
 !$  else
-!$     adder = omp_get_thread_num()
+!$     adder = omp_get_num_threads()
 !$  endif
-!$  call set_affinity(component="MOM_driver", use_hyper_thread=use_hyper_thread, nthreads=base_cpu + adder)
+!$  if (base_cpu + adder >= 1) then
+!$    call set_affinity(component="MOM_driver", use_hyper_thread=use_hyper_thread, nthreads=base_cpu + adder)
+!$  else
+!$    call set_affinity(component="MOM_driver", use_hyper_thread=use_hyper_thread, nthreads=1)
+!$  endif
 !$  write(6,*) " ocean ", base_cpu, get_affinity(), adder, omp_get_thread_num(), omp_get_num_threads()
 !$  call flush(6)
 !$OMP END PARALLEL
