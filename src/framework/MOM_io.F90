@@ -1230,7 +1230,7 @@ subroutine write_scalar(filename, fieldname, data, mode, time_level, time_units,
   ! local
   type(FmsNetcdfFile_t) :: fileobj ! netCDF file object returned by call to open_file
   logical :: file_open_success !.true. if call to open_file is successful
-  integer :: num_dims, time_index, substring_index
+  integer :: i, num_dims, time_index, substring_index
   integer :: dim_unlim_size ! size of the unlimited dimension
   real :: file_time ! most recent time currently written to file
   character(len=20) :: t_units ! time units
