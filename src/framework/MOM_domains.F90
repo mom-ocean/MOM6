@@ -9,7 +9,6 @@ use MOM_cpu_clock, only : cpu_clock_begin, cpu_clock_end
 use MOM_error_handler, only : MOM_error, MOM_mesg, NOTE, WARNING, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version
 use MOM_file_parser, only : param_file_type
-use MOM_io, only :: fms_affinity_get, fms_affinity_set
 use MOM_string_functions, only : slasher
 
 use mpp_domains_mod, only : mpp_define_layout, mpp_get_boundary
@@ -29,8 +28,10 @@ use mpp_domains_mod, only : compute_block_extent => mpp_compute_block_extent
 use mpp_parameter_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
 use mpp_parameter_mod, only : To_East => WUPDATE, To_West => EUPDATE, Omit_Corners => EDGEUPDATE
 use mpp_parameter_mod, only : To_North => SUPDATE, To_South => NUPDATE, CENTER
-use fms_io_mod,        only : file_exist, parse_mask_table
-
+use fms_io_mod,        only : parse_mask_table ! TODO: move function to MOM_io
+use fms2_io_mod, only : file_exists ! NOTE: need direct call to avoid cirular dependency in MOM_io
+use fms_affinity_mod, only : get_affinity=>fms_affinity_get, set_affinity=>fms_affinity_set ! NOTE: need direct call
+                                                                                 !to avoid cirular dependency in MOM_io
 implicit none ; private
 
 public :: MOM_domains_init, MOM_infra_init, MOM_infra_end, get_domain_extent, get_domain_extent_dsamp2
@@ -1290,7 +1291,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 !$              fail_if_missing=.true., layoutParam=.true.)
 !$   endif
 !$   call omp_set_num_threads(ocean_nthreads)
-!$   base_cpu = fms_affinity_get()
+!$   base_cpu = get_affinity()
 !$OMP PARALLEL private(adder)
 !$   if (ocean_omp_hyper_thread) then
 !$     if (mod(omp_get_thread_num(),2) == 0) then
@@ -1301,8 +1302,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 !$   else
 !$     adder = omp_get_thread_num()
 !$   endif
-!$   call fms_affinity_set(base_cpu + adder)
-!!$     write(6,*) " ocean  ", base_cpu, fms_affinity_get(), adder, omp_get_thread_num(), omp_get_num_threads()
+!$   call set_affinity(component="MOM_domains", use_hyper_thread=ocean_omp_hyper_thread, nthreads=base_cpu + adder)
+!!$     write(6,*) " ocean  ", base_cpu, get_affinity(), adder, omp_get_thread_num(), omp_get_num_threads()
 !!$     call flush(6)
 !$OMP END PARALLEL
 !$ endif
@@ -1411,7 +1412,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  " 2\n 4,6\n 1,2\n 3,6\n", default="MOM_mask_table", &
                  layoutParam=.true.)
   mask_table = trim(inputdir)//trim(mask_table)
-  mask_table_exists = file_exist(mask_table)
+  mask_table_exists = file_exists(mask_table)
 
   if (is_static) then
     layout(1) = NIPROC ; layout(2) = NJPROC
