@@ -237,8 +237,6 @@ type, public :: barotropic_CS ; private
   logical :: linearized_BT_PV  !< If true, the PV and interface thicknesses used
                              !! in the barotropic Coriolis calculation is time
                              !! invariant and linearized.
-  real    :: mean_SL         !< A mean sea level that is added to bathyT when
-                             !! linearized_BT_PV is true [Z ~> m]
   logical :: use_wide_halos  !< If true, use wide halos and march in during the
                              !! barotropic time stepping for efficiency.
   logical :: clip_velocity   !< If true, limit any velocity components that are
@@ -3899,6 +3897,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                       ! a restart file to the internal representation in this run.
   real :: uH_rescale  ! A rescaling factor for thickness transports from the representation in
                       ! a restart file to the internal representation in this run.
+  real :: mean_SL     ! The mean sea level that is used along with the bathymetry to estimate the
+                      ! geometry when LINEARIZED_BT_CORIOLIS is true or BT_NONLIN_STRESS is false [Z ~> m].
   real, allocatable, dimension(:,:) :: lin_drag_h
   type(memory_size_type) :: MS
   type(group_pass_type) :: pass_static_data, pass_q_D_Cor
@@ -4177,9 +4177,6 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                  "If True, use an order of operations that is not bitwise "//&
                  "rotationally symmetric in the meridional Coriolis term of "//&
                  "the barotropic solver.", default=.false.)
-  call get_param(param_file, mdl, "MEAN_SEALEV", CS%Mean_SL, &
-                 "A mean sea level that is added to bathyT when LINEARIZED_BT_PV is true.", &
-                 units="m", default=0.0, scale=US%m_to_Z, do_not_log=.not.CS%linearized_BT_PV)
 
   ! Initialize a version of the MOM domain that is specific to the barotropic solver.
   call clone_MOM_domain(G%Domain, CS%BT_Domain, min_halo=wd_halos, symmetric=.true.)
@@ -4274,20 +4271,21 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
     ALLOC_(CS%D_v_Cor(CS%isdw:CS%iedw,CS%jsdw-1:CS%jedw))
     CS%q_D(:,:) = 0.0 ; CS%D_u_Cor(:,:) = 0.0 ; CS%D_v_Cor(:,:) = 0.0
 
+    Mean_SL = G%Z_ref
     do j=js,je ; do I=is-1,ie
-      CS%D_u_Cor(I,j) = 0.5 * (max(CS%Mean_SL+G%bathyT(i+1,j),0.0) + max(CS%Mean_SL+G%bathyT(i,j),0.0))
+      CS%D_u_Cor(I,j) = 0.5 * (max(Mean_SL+G%bathyT(i+1,j),0.0) + max(Mean_SL+G%bathyT(i,j),0.0))
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
-      CS%D_v_Cor(i,J) = 0.5 * (max(CS%Mean_SL+G%bathyT(i,j+1),0.0) + max(CS%Mean_SL+G%bathyT(i,j),0.0))
+      CS%D_v_Cor(i,J) = 0.5 * (max(Mean_SL+G%bathyT(i,j+1),0.0) + max(Mean_SL+G%bathyT(i,j),0.0))
     enddo ; enddo
     do J=js-1,je ; do I=is-1,ie
       if (G%mask2dT(i,j)+G%mask2dT(i,j+1)+G%mask2dT(i+1,j)+G%mask2dT(i+1,j+1)>0.) then
         CS%q_D(I,J) = 0.25 * (CS%BT_Coriolis_scale * G%CoriolisBu(I,J)) * &
            ((G%areaT(i,j) + G%areaT(i+1,j+1)) + (G%areaT(i+1,j) + G%areaT(i,j+1))) / &
-           (max(((G%areaT(i,j) * max(CS%Mean_SL+G%bathyT(i,j),0.0) + &
-                  G%areaT(i+1,j+1) * max(CS%Mean_SL+G%bathyT(i+1,j+1),0.0)) + &
-                 (G%areaT(i+1,j) * max(CS%Mean_SL+G%bathyT(i+1,j),0.0) + &
-                  G%areaT(i,j+1) * max(CS%Mean_SL+G%bathyT(i,j+1),0.0))), GV%H_to_Z*GV%H_subroundoff) )
+           (max(((G%areaT(i,j) * max(Mean_SL+G%bathyT(i,j),0.0) + &
+                  G%areaT(i+1,j+1) * max(Mean_SL+G%bathyT(i+1,j+1),0.0)) + &
+                 (G%areaT(i+1,j) * max(Mean_SL+G%bathyT(i+1,j),0.0) + &
+                  G%areaT(i,j+1) * max(Mean_SL+G%bathyT(i,j+1),0.0))), GV%H_to_Z*GV%H_subroundoff) )
       else ! All four h points are masked out so q_D(I,J) will is meaningless
         CS%q_D(I,J) = 0.
       endif
@@ -4499,20 +4497,23 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
 
 !   Calculate other constants which are used for btstep.
 
-  do j=js,je ; do I=is-1,ie
-    if (G%mask2dCu(I,j)>0.) then
-      CS%IDatu(I,j) = G%mask2dCu(I,j) * 2.0 / ((G%bathyT(i+1,j) + G%bathyT(i,j)) + 2.0*CS%Mean_SL)
-    else ! Both neighboring H points are masked out so IDatu(I,j) is meaningless
-      CS%IDatu(I,j) = 0.
-    endif
-  enddo ; enddo
-  do J=js-1,je ; do i=is,ie
-    if (G%mask2dCv(i,J)>0.) then
-      CS%IDatv(i,J) = G%mask2dCv(i,J) * 2.0 / ((G%bathyT(i,j+1) + G%bathyT(i,j)) + 2.0*CS%Mean_SL)
-    else ! Both neighboring H points are masked out so IDatv(I,j) is meaningless
-      CS%IDatv(i,J) = 0.
-    endif
-  enddo ; enddo
+  if (.not.CS%nonlin_stress) then
+    Mean_SL = G%Z_ref
+    do j=js,je ; do I=is-1,ie
+      if (G%mask2dCu(I,j)>0.) then
+        CS%IDatu(I,j) = G%mask2dCu(I,j) * 2.0 / ((G%bathyT(i+1,j) + G%bathyT(i,j)) + 2.0*Mean_SL)
+      else ! Both neighboring H points are masked out so IDatu(I,j) is meaningless
+        CS%IDatu(I,j) = 0.
+      endif
+    enddo ; enddo
+    do J=js-1,je ; do i=is,ie
+      if (G%mask2dCv(i,J)>0.) then
+        CS%IDatv(i,J) = G%mask2dCv(i,J) * 2.0 / ((G%bathyT(i,j+1) + G%bathyT(i,j)) + 2.0*Mean_SL)
+      else ! Both neighboring H points are masked out so IDatv(I,j) is meaningless
+        CS%IDatv(i,J) = 0.
+      endif
+    enddo ; enddo
+  endif
 
   call find_face_areas(Datu, Datv, G, GV, US, CS, MS, halo=1)
   if ((CS%bound_BT_corr) .and. .not.(use_BT_Cont_type .and. CS%BT_cont_bounds)) then
