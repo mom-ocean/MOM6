@@ -30,8 +30,8 @@ use mpp_parameter_mod, only : To_East => WUPDATE, To_West => EUPDATE, Omit_Corne
 use mpp_parameter_mod, only : To_North => SUPDATE, To_South => NUPDATE, CENTER
 use fms_io_mod,        only : parse_mask_table ! TODO: move function to MOM_io
 use fms2_io_mod, only : file_exists ! NOTE: need direct call to avoid cirular dependency in MOM_io
-use fms_affinity_mod, only : get_affinity=>fms_affinity_get, set_affinity=>fms_affinity_set ! NOTE: need direct call
-                                                                                 !to avoid cirular dependency in MOM_io
+use fms_affinity_mod, only : get_cpu_affinity=>fms_affinity_get, set_cpu_affinity=>fms_affinity_set
+
 implicit none ; private
 
 public :: MOM_domains_init, MOM_infra_init, MOM_infra_end, get_domain_extent, get_domain_extent_dsamp2
@@ -1291,7 +1291,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 !$              fail_if_missing=.true., layoutParam=.true.)
 !$   endif
 !$   call omp_set_num_threads(ocean_nthreads)
-!$   base_cpu = get_affinity()
+!$   base_cpu = get_cpu_affinity()
 !$OMP PARALLEL private(adder)
 !$   if (ocean_omp_hyper_thread) then
 !$     if (mod(omp_get_thread_num(),2) == 0) then
@@ -1303,11 +1303,12 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 !$     adder = omp_get_thread_num()
 !$   endif
 !$   if (base_cpu + adder >= 1) then
-!$     call set_affinity(component="MOM_domains", use_hyper_thread=ocean_omp_hyper_thread, nthreads=base_cpu + adder)
+!$     call set_cpu_affinity(component="MOM_domains", use_hyper_thread=ocean_omp_hyper_thread, &
+!$                           nthreads=base_cpu + adder)
 !$   else
-!$     call set_affinity(component="MOM_domains", use_hyper_thread=ocean_omp_hyper_thread, nthreads=1)
+!$     call set_cpu_affinity(component="MOM_domains", use_hyper_thread=ocean_omp_hyper_thread, nthreads=1)
 !$   endif
-!!$     write(6,*) " ocean  ", base_cpu, get_affinity(), adder, omp_get_thread_num(), omp_get_num_threads()
+!!$     write(6,*) " ocean  ", base_cpu, get_cpu_affinity(), adder, omp_get_thread_num(), omp_get_num_threads()
 !!$     call flush(6)
 !$OMP END PARALLEL
 !$ endif

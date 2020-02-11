@@ -768,7 +768,6 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
                                               !! tracer fluxes.
 
   integer :: xsz, ysz, layout(2), io_layout(2)
-  !type(domain2d), pointer :: io_domain_ptr
   ! ice-ocean-boundary fields are always allocated using absolute indicies
   ! and have no halos.
   integer :: isc, iec, jsc, jec
@@ -783,7 +782,6 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
   call mpp_get_compute_domain(Ocean_sfc%Domain, isc, iec, jsc, jec)
   io_layout = mpp_get_io_domain_layout(input_domain)
   call mpp_define_io_domain(Ocean_sfc%Domain, io_layout)
-  !io_domain_ptr=mpp_get_io_domain(input_domain)
 
   allocate ( Ocean_sfc%t_surf (isc:iec,jsc:jec), &
              Ocean_sfc%s_surf (isc:iec,jsc:jec), &

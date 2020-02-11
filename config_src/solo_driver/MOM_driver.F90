@@ -64,7 +64,7 @@ program MOM_main
 
   use ensemble_manager_mod, only : ensemble_manager_init, get_ensemble_size
   use ensemble_manager_mod, only : ensemble_pelist_setup
-  use fms_affinity_mod, only : get_affinity=>fms_affinity_get, set_affinity=>fms_affinity_set
+  use fms_affinity_mod, only : get_cpu_affinity=>fms_affinity_get, set_cpu_affinity=>fms_affinity_set
   use mpp_mod, only : set_current_pelist => mpp_set_current_pelist
   use time_interp_external_mod, only : time_interp_external_init
 
@@ -254,7 +254,7 @@ program MOM_main
   endif
 
 !$  call omp_set_num_threads(ocean_nthreads)
-!$  base_cpu = get_affinity()
+!$  base_cpu = get_cpu_affinity()
 !$OMP PARALLEL private(adder)
 !$  if (use_hyper_thread) then
 !$     if (mod(omp_get_thread_num(),2) == 0) then
@@ -263,14 +263,14 @@ program MOM_main
 !$        adder = ncores_per_node + omp_get_thread_num()/2
 !$     endif
 !$  else
-!$     adder = omp_get_num_threads()
+!$     adder = omp_get_thread_num()
 !$  endif
 !$  if (base_cpu + adder >= 1) then
-!$    call set_affinity(component="MOM_driver", use_hyper_thread=use_hyper_thread, nthreads=base_cpu + adder)
+!$    call set_cpu_affinity(component="MOM_driver", use_hyper_thread=use_hyper_thread, nthreads=base_cpu + adder)
 !$  else
-!$    call set_affinity(component="MOM_driver", use_hyper_thread=use_hyper_thread, nthreads=1)
+!$    call set_cpu_affinity(component="MOM_driver", use_hyper_thread=use_hyper_thread, nthreads=1)
 !$  endif
-!$  write(6,*) " ocean ", base_cpu, get_affinity(), adder, omp_get_thread_num(), omp_get_num_threads()
+!$  write(6,*) " ocean ", base_cpu, get_cpu_affinity(), adder, omp_get_thread_num(), omp_get_num_threads()
 !$  call flush(6)
 !$OMP END PARALLEL
 
