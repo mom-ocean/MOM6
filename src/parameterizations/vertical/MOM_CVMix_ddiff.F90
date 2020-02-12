@@ -145,8 +145,11 @@ logical function CVMix_ddiff_init(Time, G, GV, US, param_file, diag, CS)
 
   CS%id_R_rho = register_diag_field('ocean_model','R_rho',diag%axesTi,Time, &
          'Double-diffusion density ratio', 'nondim')
-  if (CS%id_R_rho > 0) &
-     allocate(CS%R_rho( SZI_(G), SZJ_(G), SZK_(G)+1)); CS%R_rho(:,:,:) = 0.0
+
+  if (CS%id_R_rho > 0) then
+     allocate(CS%R_rho( SZI_(G), SZJ_(G), SZK_(G)+1))
+     CS%R_rho(:,:,:) = 0.0
+  endif
 
   call cvmix_init_ddiff(strat_param_max=CS%strat_param_max,          &
                         kappa_ddiff_s=CS%kappa_ddiff_s,           &
