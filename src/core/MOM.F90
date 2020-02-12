@@ -1817,7 +1817,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "constant. This is only used if ENABLE_THERMODYNAMICS is "//&
                  "true. The default value is from the TEOS-10 definition "//&
                  "of conservative temperature.", units="J kg-1 K-1", &
-                 default=3991.86795711963)
+                 default=3991.86795711963, scale=US%J_kg_to_Q)
   endif
   if (use_EOS) call get_param(param_file, "MOM", "P_REF", CS%tv%P_Ref, &
                  "The pressure that is used for calculating the coordinate "//&
@@ -1994,11 +1994,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     if (CS%tv%T_is_conT) then
       vd_T = var_desc(name="contemp", units="Celsius", longname="Conservative Temperature", &
                       cmor_field_name="thetao", cmor_longname="Sea Water Potential Temperature", &
-                      conversion=CS%tv%C_p)
+                      conversion=US%Q_to_J_kg*CS%tv%C_p)
     else
       vd_T = var_desc(name="temp", units="degC", longname="Potential Temperature", &
                       cmor_field_name="thetao", cmor_longname="Sea Water Potential Temperature", &
-                      conversion=CS%tv%C_p)
+                      conversion=US%Q_to_J_kg*CS%tv%C_p)
     endif
     if (CS%tv%S_is_absS) then
       vd_S = var_desc(name="abssalt",units="g kg-1",longname="Absolute Salinity", &
@@ -2012,7 +2012,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
     if (advect_TS) then
       S_flux_units = get_tr_flux_units(GV, "psu") ! Could change to "kg m-2 s-1"?
-      conv2watt    = GV%H_to_kg_m2 * CS%tv%C_p
+      conv2watt    = GV%H_to_kg_m2 * US%Q_to_J_kg*CS%tv%C_p
       if (GV%Boussinesq) then
         conv2salt = GV%H_to_m ! Could change to GV%H_to_kg_m2 * 0.001?
       else
@@ -2923,7 +2923,7 @@ subroutine extract_surface_state(CS, sfc_state)
 
        if (G%mask2dT(i,j)>0.) then
          ! instantaneous melt_potential [J m-2]
-         sfc_state%melt_potential(i,j) = CS%tv%C_p * US%R_to_kg_m3*GV%Rho0 * delT(i)
+         sfc_state%melt_potential(i,j) = US%Q_to_J_kg*CS%tv%C_p * US%R_to_kg_m3*GV%Rho0 * delT(i)
        endif
       enddo
     enddo ! end of j loop
@@ -3089,21 +3089,21 @@ end function MOM_state_is_synchronized
 
 !> This subroutine offers access to values or pointers to other types from within
 !! the MOM_control_struct, allowing the MOM_control_struct to be opaque.
-subroutine get_MOM_state_elements(CS, G, GV, US, C_p, use_temp)
-  type(MOM_control_struct), pointer :: CS !< MOM control structure
-  type(ocean_grid_type), &
-               optional, pointer :: G    !< structure containing metrics and grid info
-  type(verticalGrid_type), &
-               optional, pointer :: GV   !< structure containing vertical grid info
-  type(unit_scale_type), &
-               optional, pointer :: US   !< A dimensional unit scaling type
-  real,    optional, intent(out) :: C_p  !< The heat capacity
-  logical, optional, intent(out) :: use_temp !< Indicates whether temperature is a state variable
+subroutine get_MOM_state_elements(CS, G, GV, US, C_p, C_p_scaled, use_temp)
+  type(MOM_control_struct),          pointer     :: CS !< MOM control structure
+  type(ocean_grid_type),   optional, pointer     :: G    !< structure containing metrics and grid info
+  type(verticalGrid_type), optional, pointer     :: GV   !< structure containing vertical grid info
+  type(unit_scale_type),   optional, pointer     :: US   !< A dimensional unit scaling type
+  real,                    optional, intent(out) :: C_p  !< The heat capacity [J kg degC-1]
+  real,                    optional, intent(out) :: C_p_scaled !< The heat capacity in scaled
+                                                         !! units [Q degC-1 ~> J kg degC-1]
+  logical,                 optional, intent(out) :: use_temp !< True if temperature is a state variable
 
   if (present(G)) G => CS%G
   if (present(GV)) GV => CS%GV
   if (present(US)) US => CS%US
-  if (present(C_p)) C_p = CS%tv%C_p
+  if (present(C_p)) C_p = CS%US%Q_to_J_kg * CS%tv%C_p
+  if (present(C_p_scaled)) C_p_scaled = CS%tv%C_p
   if (present(use_temp)) use_temp = associated(CS%tv%T)
 end subroutine get_MOM_state_elements
 
@@ -3118,7 +3118,7 @@ subroutine get_ocean_stocks(CS, mass, heat, salt, on_PE_only)
   if (present(mass)) &
     mass = global_mass_integral(CS%h, CS%G, CS%GV, on_PE_only=on_PE_only)
   if (present(heat)) &
-    heat = CS%tv%C_p * global_mass_integral(CS%h, CS%G, CS%GV, CS%tv%T, on_PE_only=on_PE_only)
+    heat = CS%US%Q_to_J_kg*CS%tv%C_p * global_mass_integral(CS%h, CS%G, CS%GV, CS%tv%T, on_PE_only=on_PE_only)
   if (present(salt)) &
     salt = 1.0e-3 * global_mass_integral(CS%h, CS%G, CS%GV, CS%tv%S, on_PE_only=on_PE_only)
 

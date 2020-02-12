@@ -271,8 +271,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
                       OS%restart_CSp, Time_in, offline_tracer_mode=OS%offline_tracer_mode, &
                       diag_ptr=OS%diag, count_calls=.true.)
   call get_MOM_state_elements(OS%MOM_CSp, G=OS%grid, GV=OS%GV, US=OS%US, C_p=OS%C_p, &
-                              use_temp=use_temperature)
-  OS%fluxes%C_p = OS%C_p
+                              C_p_scaled=OS%fluxes%C_p, use_temp=use_temperature)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -1066,9 +1065,9 @@ subroutine ocean_model_data1D_get(OS, Ocean, name, value)
 
   select case(name)
   case('c_p')
-     value = OS%C_p
+    value = OS%C_p
   case default
-     call MOM_error(FATAL,'get_ocean_grid_data1D: unknown argument name='//name)
+    call MOM_error(FATAL,'get_ocean_grid_data1D: unknown argument name='//name)
   end select
 
 end subroutine ocean_model_data1D_get

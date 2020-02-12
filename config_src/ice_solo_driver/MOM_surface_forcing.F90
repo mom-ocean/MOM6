@@ -238,11 +238,11 @@ subroutine set_forcing(sfc_state, forcing, fluxes, day_start, day_interval, G, U
   if ((CS%variable_buoyforce .or. CS%first_call_set_forcing) .and. &
       (.not.CS%adiabatic)) then
     if (trim(CS%buoy_config) == "file") then
-      call buoyancy_forcing_from_files(sfc_state, fluxes, day_center, dt, G, CS)
+      call buoyancy_forcing_from_files(sfc_state, fluxes, day_center, dt, G, US, CS)
     elseif (trim(CS%buoy_config) == "zero") then
       call buoyancy_forcing_zero(sfc_state, fluxes, day_center, dt, G, CS)
     elseif (trim(CS%buoy_config) == "linear") then
-      call buoyancy_forcing_linear(sfc_state, fluxes, day_center, dt, G, CS)
+      call buoyancy_forcing_linear(sfc_state, fluxes, day_center, dt, G, US, CS)
     elseif (trim(CS%buoy_config) == "MESO") then
       call MOM_error(FATAL, "MESO forcing is not available with the ice-shelf"//&
                "version of MOM_surface_forcing.")
@@ -590,7 +590,7 @@ end subroutine wind_forcing_from_file
 
 !> This subroutine specifies the current surface fluxes of buoyancy, temperature and fresh water
 !! by reading a file. It may also be modified to add surface fluxes of user provided tracers.
-subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
+subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(forcing),         intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
@@ -598,6 +598,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
   real,                  intent(in)    :: dt   !< The amount of time over which
                                                !! the fluxes apply [s]
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
+  type(unit_scale_type), intent(in)    :: US     !< A dimensional unit scaling type
   type(surface_forcing_CS), pointer    :: CS   !< A pointer to the control structure returned by a
                                                !! previous surface_forcing_init call
 
@@ -628,7 +629,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
   ! allocate and initialize arrays
   call buoyancy_forcing_allocate(fluxes, G, CS)
 
-  if (CS%use_temperature) rhoXcp = CS%Rho0 * fluxes%C_p
+  if (CS%use_temperature) rhoXcp = CS%Rho0 * US%Q_to_J_kg*fluxes%C_p
   Irho0 = 1.0/(US%R_to_kg_m3*CS%Rho0)
 
   ! Read the file containing the buoyancy forcing.
@@ -731,7 +732,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
       fluxes%sw(i,j)                   = fluxes%sw(i,j)               * G%mask2dT(i,j)
       fluxes%latent(i,j)               = fluxes%latent(i,j)           * G%mask2dT(i,j)
 
-      fluxes%heat_content_lrunoff(i,j) = fluxes%C_p * &
+      fluxes%heat_content_lrunoff(i,j) = US%Q_to_J_kg*fluxes%C_p * &
                                          fluxes%lrunoff(i,j)*sfc_state%SST(i,j)
       fluxes%latent_evap_diag(i,j)     = fluxes%latent_evap_diag(i,j) * G%mask2dT(i,j)
       fluxes%latent_fprec_diag(i,j)    = -US%R_to_kg_m3*US%Z_to_m*US%s_to_T*fluxes%fprec(i,j)*hlf
@@ -825,7 +826,7 @@ end subroutine buoyancy_forcing_zero
 
 !> This subroutine specifies the current surface fluxes of buoyancy, temperature and fresh water.
 !! It may also be modified to add surface fluxes of user provided tracers.
-subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, CS)
+subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, US, CS)
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(forcing),         intent(inout) :: fluxes !< A structure with pointers to thermodynamic forcing fields
@@ -833,6 +834,7 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, CS)
   real,                  intent(in)    :: dt   !< The amount of time over which
                                                !! the fluxes apply, in s
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
+  type(unit_scale_type), intent(in)    :: US     !< A dimensional unit scaling type
   type(surface_forcing_CS), pointer    :: CS   !< A pointer to the control structure returned by a
                                                !! previous surface_forcing_init call
 
@@ -877,8 +879,8 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, CS)
         T_restore = CS%T_south + (CS%T_north-CS%T_south)*y
         S_restore = CS%S_south + (CS%S_north-CS%S_south)*y
         if (G%mask2dT(i,j) > 0) then
-          fluxes%heat_restore(i,j) = G%mask2dT(i,j) * US%Z_to_m*US%s_to_T * &
-              ((T_Restore - sfc_state%SST(i,j)) * (((US%R_to_kg_m3*CS%Rho0) * fluxes%C_p) * CS%Flux_const))
+          fluxes%heat_restore(i,j) = G%mask2dT(i,j) * US%QRZ_T_to_W_m2 * &
+              ((T_Restore - sfc_state%SST(i,j)) * ((CS%Rho0 * fluxes%C_p) * CS%Flux_const))
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
               (S_Restore - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + S_Restore))

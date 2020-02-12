@@ -253,7 +253,7 @@ subroutine SCM_CVMix_tests_buoyancy_forcing(state, fluxes, day, G, US, CS)
     ! therefore must convert to W/m2 by multiplying
     ! by Rho0*Cp
     do J=Jsq,Jeq ; do i=is,ie
-      fluxes%sens(i,J) = CS%surf_HF * CS%Rho0 * fluxes%C_p
+      fluxes%sens(i,J) = CS%surf_HF * CS%Rho0 * US%Q_to_J_kg*fluxes%C_p
     enddo ; enddo
   endif
 
@@ -273,7 +273,7 @@ subroutine SCM_CVMix_tests_buoyancy_forcing(state, fluxes, day, G, US, CS)
     ! by Rho0*Cp
     ! Note diurnal cycle peaks at Noon.
       fluxes%sw(i,J) = CS%Max_sw * max(0.0,cos(2*PI*     &
-           (time_type_to_real(DAY)/86400.-0.5))) * CS%RHO0 * fluxes%C_p
+           (time_type_to_real(DAY)/86400.-0.5))) * CS%RHO0 * US%Q_to_J_kg*fluxes%C_p
     enddo ; enddo
   endif
 

@@ -706,7 +706,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     do k=1,nz ; do j=js,je ; do i=is,ie
       Salt_int(i,j) = Salt_int(i,j) + tv%S(i,j,k) * &
                       (h(i,j,k)*(H_to_kg_m2 * areaTm(i,j)))
-      Temp_int(i,j) = Temp_int(i,j) + (tv%C_p * tv%T(i,j,k)) * &
+      Temp_int(i,j) = Temp_int(i,j) + (US%Q_to_J_kg*tv%C_p * tv%T(i,j,k)) * &
                       (h(i,j,k)*(H_to_kg_m2 * areaTm(i,j)))
     enddo ; enddo ; enddo
     Salt = reproducing_sum(Salt_int, EFP_sum=salt_EFP)
@@ -778,7 +778,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   if (CS%use_temperature) then
     salin = Salt / mass_tot ; salin_anom = Salt_anom / mass_tot
    ! salin_chg = Salt_chg / mass_tot
-    temp = heat / (mass_tot*tv%C_p) ; temp_anom = Heat_anom / (mass_tot*tv%C_p)
+    temp = heat / (mass_tot*US%Q_to_J_kg*tv%C_p) ; temp_anom = Heat_anom / (mass_tot*US%Q_to_J_kg*tv%C_p)
   endif
   En_mass = toten / mass_tot
 
@@ -974,7 +974,7 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
   integer :: i, j, is, ie, js, je
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  C_p = fluxes%C_p
+  C_p = US%Q_to_J_kg*fluxes%C_p
   RZL2_to_kg = US%L_to_m**2*US%R_to_kg_m3*US%Z_to_m
 
   FW_in(:,:) = 0.0 ; FW_input = 0.0

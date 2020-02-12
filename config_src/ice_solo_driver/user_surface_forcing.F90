@@ -249,7 +249,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
       call MOM_error(FATAL, "User_buoyancy_surface_forcing: " // &
         "Temperature and salinity restoring used without modification." )
 
-      rhoXcp = US%R_to_kg_m3*CS%Rho0 * fluxes%C_p
+      rhoXcp = US%R_to_kg_m3*CS%Rho0 * US%Q_to_J_kg*fluxes%C_p
       do j=js,je ; do i=is,ie
         !   Set Temp_restore and Salin_restore to the temperature (in degC) and
         ! salinity (in ppt or PSU) that are being restored toward.

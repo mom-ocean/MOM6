@@ -132,7 +132,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
   if (.not.CS%apply_geothermal) return
 
   nkmb      = GV%nk_rho_varies
-  Irho_cp   = 1.0 / (GV%H_to_kg_m2 * tv%C_p)
+  Irho_cp   = 1.0 / (GV%H_to_kg_m2 * US%Q_to_J_kg*tv%C_p)
   Angstrom  = GV%Angstrom_H
   H_neglect = GV%H_subroundoff
   p_ref(:)  = tv%P_Ref
@@ -337,7 +337,8 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
 
         ! Calculate heat tendency due to addition and transfer of internal heat
         if (CS%id_internal_heat_heat_tendency > 0) then
-          work_3d(i,j,k) = ((GV%H_to_kg_m2 * tv%C_p) * Idt) * (h(i,j,k) * tv%T(i,j,k) - h_old(i,j,k) * T_old(i,j,k))
+          work_3d(i,j,k) = ((GV%H_to_kg_m2 * US%Q_to_J_kg*tv%C_p) * Idt) * &
+                           (h(i,j,k) * tv%T(i,j,k) - h_old(i,j,k) * T_old(i,j,k))
         endif
 
       endif ; enddo

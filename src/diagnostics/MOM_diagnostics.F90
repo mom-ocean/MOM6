@@ -1272,7 +1272,7 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
   ! post temperature of P-E+R
   if (associated(tv%TempxPmE) .and. (IDs%id_Heat_PmE > 0)) then
     do j=js,je ; do i=is,ie
-      work_2d(i,j) = tv%TempxPmE(i,j) * (tv%C_p * I_time_int)
+      work_2d(i,j) = tv%TempxPmE(i,j) * (US%Q_to_J_kg*tv%C_p * I_time_int)
     enddo ; enddo
     call post_data(IDs%id_Heat_PmE, work_2d, diag, mask=G%mask2dT)
   endif
@@ -1280,7 +1280,7 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
   ! post geothermal heating or internal heat source/sinks
   if (associated(tv%internal_heat) .and. (IDs%id_intern_heat > 0)) then
     do j=js,je ; do i=is,ie
-      work_2d(i,j) = tv%internal_heat(i,j) * (tv%C_p * I_time_int)
+      work_2d(i,j) = tv%internal_heat(i,j) * (US%Q_to_J_kg*tv%C_p * I_time_int)
     enddo ; enddo
     call post_data(IDs%id_intern_heat, work_2d, diag, mask=G%mask2dT)
   endif
@@ -2026,7 +2026,7 @@ subroutine write_static_fields(G, GV, US, tv, diag)
           'heat capacity of sea water', 'J kg-1 K-1', cmor_field_name='cpocean', &
           cmor_standard_name='specific_heat_capacity_of_sea_water', &
           cmor_long_name='specific_heat_capacity_of_sea_water')
-     if (id > 0) call post_data(id, tv%C_p, diag, .true.)
+     if (id > 0) call post_data(id, US%Q_to_J_kg*tv%C_p, diag, .true.)
   endif
 
 end subroutine write_static_fields

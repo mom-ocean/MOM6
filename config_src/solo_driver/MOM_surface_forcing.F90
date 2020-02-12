@@ -775,7 +775,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
 
   real :: kg_m2_s_conversion  ! A combination of unit conversion factors for rescaling
                               ! mass fluxes [R Z s m2 kg-1 T-1 ~> 1].
-  real :: rhoXcp ! reference density times heat capacity [J m-3 degC-1]
+  real :: rhoXcp ! reference density times heat capacity [Q R degC-1 ~> J m-3 degC-1]
 
   integer :: time_lev_daily     ! time levels to read for fields with daily cycle
   integer :: time_lev_monthly   ! time levels to read for fields with monthly cycle
@@ -789,7 +789,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je = G%jec
   kg_m2_s_conversion = US%kg_m3_to_R*US%m_to_Z*US%T_to_s
 
-  if (CS%use_temperature) rhoXcp = US%R_to_kg_m3*CS%Rho0 * fluxes%C_p
+  if (CS%use_temperature) rhoXcp = CS%Rho0 * fluxes%C_p
 
   ! Read the buoyancy forcing file
   call get_time(day, seconds, days)
@@ -988,7 +988,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
     if (CS%use_temperature) then
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
-          fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
+          fluxes%heat_added(i,j) = G%mask2dT(i,j) * US%QRZ_T_to_W_m2 * &
               ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const_T)
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const_S) * &
               (CS%S_Restore(i,j) - sfc_state%SSS(i,j)) / &
@@ -1054,7 +1054,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
                   ! anomalies [ppt].
   real :: kg_m2_s_conversion  ! A combination of unit conversion factors for rescaling
                               ! mass fluxes [R Z s m2 kg-1 T-1 ~> 1].
-  real :: rhoXcp ! The mean density times the heat capacity [J m-3 degC-1].
+  real :: rhoXcp ! The mean density times the heat capacity [Q R degC-1 ~> J m-3 degC-1].
 
   integer :: time_lev_daily     ! The time levels to read for fields with
   integer :: time_lev_monthly   ! daily and montly cycles.
@@ -1143,14 +1143,14 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
     if (CS%use_temperature) then
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
-          fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
+          fluxes%heat_added(i,j) = G%mask2dT(i,j) * US%QRZ_T_to_W_m2 * &
               ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const_T)
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const_S) * &
               (CS%S_Restore(i,j) - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j)))
         else
           fluxes%heat_added(i,j) = 0.0
-          fluxes%vprec(i,j)        = 0.0
+          fluxes%vprec(i,j)      = 0.0
         endif
       enddo ; enddo
     else
@@ -1341,7 +1341,7 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, US, CS)
         T_restore = CS%T_south + (CS%T_north-CS%T_south)*y
         S_restore = CS%S_south + (CS%S_north-CS%S_south)*y
         if (G%mask2dT(i,j) > 0) then
-          fluxes%heat_added(i,j) = G%mask2dT(i,j) * (US%R_to_kg_m3*US%Z_to_m*US%s_to_T) * &
+          fluxes%heat_added(i,j) = G%mask2dT(i,j) * (US%QRZ_T_to_W_m2) * &
               ((T_Restore - sfc_state%SST(i,j)) * ((CS%Rho0 * fluxes%C_p) * CS%Flux_const))
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
               (S_Restore - sfc_state%SSS(i,j)) / &
@@ -1678,7 +1678,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
                  "The constant that relates the restoring surface fluxes "//&
                  "to the relative surface anomalies (akin to a piston "//&
                  "velocity).  Note the non-MKS units.", &
-                 units="m day-1", scale=US%m_to_Z*US%T_to_s, &
+                 units="m day-1", scale=US%m_to_Z*US%T_to_s / 86400.0, &
                  fail_if_missing=.true., unscaled=flux_const_default)
 
     if (CS%use_temperature) then
@@ -1686,22 +1686,15 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
            "The constant that relates the restoring surface temperature "//&
            "flux to the relative surface anomaly (akin to a piston "//&
            "velocity).  Note the non-MKS units.", &
-           units="m day-1", scale=1.0, & ! scale=US%m_to_Z*US%T_to_s,
+           units="m day-1", scale=US%m_to_Z*US%T_to_s / 86400.0, &
            default=flux_const_default)
       call get_param(param_file, mdl, "FLUXCONST_S", CS%Flux_const_S, &
            "The constant that relates the restoring surface salinity "//&
            "flux to the relative surface anomaly (akin to a piston "//&
            "velocity).  Note the non-MKS units.", &
-           units="m day-1", scale=US%m_to_Z*US%T_to_s, &
+           units="m day-1", scale=US%m_to_Z*US%T_to_s / 86400.0, &
            default=flux_const_default)
     endif
-
-    !### Convert flux constants from m day-1 to m s-1.  Folding these into the scaling
-    ! factors above could change a division into a multiply by a reciprocal, which could
-    ! change answers at the level of roundoff.
-    CS%Flux_const = CS%Flux_const / 86400.0
-    CS%Flux_const_T = CS%Flux_const_T / 86400.0
-    CS%Flux_const_S = CS%Flux_const_S / 86400.0
 
     if (trim(CS%buoy_config) == "linear") then
       call get_param(param_file, mdl, "SST_NORTH", CS%T_north, &

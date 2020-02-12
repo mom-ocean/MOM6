@@ -1,3 +1,4 @@
+
 !> Provides functions for some diabatic processes such as fraxil, brine rejection,
 !! tendency due to surface flux divergence.
 module MOM_diabatic_aux
@@ -99,13 +100,14 @@ contains
 !! This subroutine warms any water that is colder than the (currently
 !! surface) freezing point up to the freezing point and accumulates
 !! the required heat (in J m-2) in tv%frazil.
-subroutine make_frazil(h, tv, G, GV, CS, p_surf, halo)
+subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
   type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(inout) :: tv !< Structure containing pointers to any available
                                                !! thermodynamic fields.
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(diabatic_aux_CS),   intent(in)    :: CS !< The control structure returned by a previous
                                                !! call to diabatic_aux_init.
   real, dimension(SZI_(G),SZJ_(G)), &
@@ -167,7 +169,7 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf, halo)
         if (tv%T(i,j,1) > T_freeze(i)) then
     ! If frazil had previously been formed, but the surface temperature is now
     ! above freezing, cool the surface layer with the frazil heat deficit.
-          hc = (tv%C_p*GV%H_to_kg_m2) * h(i,j,1)
+          hc = (US%Q_to_J_kg*tv%C_p*GV%H_to_kg_m2) * h(i,j,1)
           if (tv%frazil(i,j) - hc * (tv%T(i,j,1) - T_freeze(i)) <= 0.0) then
             tv%T(i,j,1) = tv%T(i,j,1) - tv%frazil(i,j)/hc
             tv%frazil(i,j) = 0.0
@@ -190,7 +192,7 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf, halo)
             T_fr_set = .true.
           endif
 
-          hc = (tv%C_p*GV%H_to_kg_m2) * h(i,j,k)
+          hc = (US%Q_to_J_kg*tv%C_p*GV%H_to_kg_m2) * h(i,j,k)
           if (h(i,j,k) <= 10.0*GV%Angstrom_H) then
             ! Very thin layers should not be cooled by the frazil flux.
             if (tv%T(i,j,k) < T_freeze(i)) then
@@ -660,9 +662,10 @@ subroutine set_pen_shortwave(optics, fluxes, G, GV, CS, opacity_CSp, tracer_flow
                                                    !! unused fields have NULL ptrs
   type(ocean_grid_type),   intent(in)    :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
-  type(diabatic_aux_CS),   pointer       :: CS !< Control structure for diabatic_aux
+  type(diabatic_aux_CS),   pointer       :: CS     !< Control structure for diabatic_aux
   type(opacity_CS),        pointer       :: opacity_CSp !< The control structure for the opacity module.
-  type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp !< A pointer to the control structure of the tracer modules.
+  type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp !< A pointer to the control structure
+                                                   !! organizing the tracer modules.
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G))          :: chl_2d !< Vertically uniform chlorophyll-A concentractions [mg m-3]
@@ -1115,10 +1118,10 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
           ! Diagnostics of heat content associated with mass fluxes
           if (associated(fluxes%heat_content_massin))                             &
             fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) +   &
-                         T2d(i,k) * max(0.,dThickness) * GV%H_to_RZ * fluxes%C_p * Idt
+                         T2d(i,k) * max(0.,dThickness) * GV%H_to_RZ * US%Q_to_J_kg*fluxes%C_p * Idt
           if (associated(fluxes%heat_content_massout))                            &
             fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) + &
-                         T2d(i,k) * min(0.,dThickness) * GV%H_to_RZ * fluxes%C_p * Idt
+                         T2d(i,k) * min(0.,dThickness) * GV%H_to_RZ * US%Q_to_J_kg*fluxes%C_p * Idt
           if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
                          T2d(i,k) * dThickness * GV%H_to_RZ
 
@@ -1198,10 +1201,10 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
           ! Diagnostics of heat content associated with mass fluxes
           if (associated(fluxes%heat_content_massin)) &
             fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) + &
-                         T2d(i,k) * max(0.,dThickness) * GV%H_to_RZ * fluxes%C_p * Idt
+                         T2d(i,k) * max(0.,dThickness) * GV%H_to_RZ * US%Q_to_J_kg*fluxes%C_p * Idt
           if (associated(fluxes%heat_content_massout)) &
             fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) + &
-                         T2d(i,k) * min(0.,dThickness) * GV%H_to_RZ * fluxes%C_p * Idt
+                         T2d(i,k) * min(0.,dThickness) * GV%H_to_RZ * US%Q_to_J_kg*fluxes%C_p * Idt
           if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
                          T2d(i,k) * dThickness * GV%H_to_RZ
 
@@ -1307,7 +1310,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
 
       ! convergence of SW into a layer
       do k=1,nz ; do i=is,ie
-        CS%penSW_diag(i,j,k) = (T2d(i,k)-CS%penSW_diag(i,j,k))*h(i,j,k) * US%s_to_T*Idt * tv%C_p * GV%H_to_kg_m2
+        CS%penSW_diag(i,j,k) = (T2d(i,k)-CS%penSW_diag(i,j,k))*h(i,j,k) * Idt * tv%C_p * &
+                               US%Q_to_J_kg*GV%H_to_kg_m2*US%s_to_T
       enddo ; enddo
 
       ! Perform a cumulative sum upwards from bottom to
