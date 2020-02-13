@@ -381,7 +381,6 @@ subroutine wind_forcing_const(sfc_state, forces, tau_x0, tau_y0, day, G, US, CS)
   Pa_conversion = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z
 
   !set steady surface wind stresses, in units of Pa.
-  !### mag_tau = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * sqrt( tau_x0**2 + tau_y0**2)
   mag_tau = Pa_conversion * sqrt( tau_x0**2 + tau_y0**2)
 
   do j=js,je ; do I=is-1,Ieq
@@ -1674,11 +1673,12 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   call get_param(param_file, mdl, "LATENT_HEAT_VAPORIZATION", CS%latent_heat_vapor, &
                  "The latent heat of fusion.", units="J/kg", default=hlv)
   if (CS%restorebuoy) then
+    ! These three variables use non-standard time units, but are rescaled as they are read.
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
                  "The constant that relates the restoring surface fluxes "//&
                  "to the relative surface anomalies (akin to a piston "//&
                  "velocity).  Note the non-MKS units.", &
-                 units="m day-1", scale=US%m_to_Z*US%T_to_s / 86400.0, &
+                 units="m day-1", scale=US%m_to_Z*US%T_to_s/86400.0, &
                  fail_if_missing=.true., unscaled=flux_const_default)
 
     if (CS%use_temperature) then
@@ -1686,13 +1686,13 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
            "The constant that relates the restoring surface temperature "//&
            "flux to the relative surface anomaly (akin to a piston "//&
            "velocity).  Note the non-MKS units.", &
-           units="m day-1", scale=US%m_to_Z*US%T_to_s / 86400.0, &
+           units="m day-1", scale=US%m_to_Z*US%T_to_s/86400.0, &
            default=flux_const_default)
       call get_param(param_file, mdl, "FLUXCONST_S", CS%Flux_const_S, &
            "The constant that relates the restoring surface salinity "//&
            "flux to the relative surface anomaly (akin to a piston "//&
            "velocity).  Note the non-MKS units.", &
-           units="m day-1", scale=US%m_to_Z*US%T_to_s / 86400.0, &
+           units="m day-1", scale=US%m_to_Z*US%T_to_s/86400.0, &
            default=flux_const_default)
     endif
 

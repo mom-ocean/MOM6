@@ -2034,7 +2034,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
   logical :: homogenize, useALEremapping, remap_full_column, remap_general, remap_old_alg
-  logical :: answers_2018, default_2018_answers
+  logical :: answers_2018, default_2018_answers, hor_regrid_answers_2018
   logical :: use_ice_shelf
   character(len=10) :: remappingScheme
   real :: tempAvg, saltAvg
@@ -2112,15 +2112,19 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
                  "If false, uses the preferred remapping algorithm for initialization. "//&
                  "If true, use an older, less robust algorithm for remapping.", &
                  default=.true., do_not_log=just_read)
-  if (useALEremapping) then
-    call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+  call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
                  default=.true.)
+  if (useALEremapping) then
     call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
   endif
+  call get_param(PF, mdl, "HOR_REGRID_2018_ANSWERS", hor_regrid_answers_2018, &
+                 "If true, use the order of arithmetic for horizonal regridding that recovers "//&
+                 "the answers from the end of 2018.  Otherwise, use rotationally symmetric "//&
+                 "forms of the same expressions.", default=default_2018_answers)
   call get_param(PF, mdl, "ICE_SHELF", use_ice_shelf, default=.false.)
   if (use_ice_shelf) then
     call get_param(PF, mdl, "ICE_THICKNESS_FILE", ice_shelf_file, &
@@ -2149,8 +2153,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
     return ! All run-time parameters have been read, so return.
   endif
 
-  !### Change this to GV%Angstrom_Z
-  eps_z = 1.0e-10*US%m_to_Z
+  eps_z = GV%Angstrom_Z
   eps_rho = 1.0e-10*US%kg_m3_to_R
 
   ! Read input grid coordinates for temperature and salinity field
@@ -2170,11 +2173,11 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
   call horiz_interp_and_extrap_tracer(tfilename, potemp_var, 1.0, 1, &
        G, temp_z, mask_z, z_in, z_edges_in, missing_value_temp, reentrant_x, &
-       tripolar_n, homogenize, m_to_Z=US%m_to_Z)
+       tripolar_n, homogenize, m_to_Z=US%m_to_Z, answers_2018=hor_regrid_answers_2018)
 
   call horiz_interp_and_extrap_tracer(sfilename, salin_var, 1.0, 1, &
        G, salt_z, mask_z, z_in, z_edges_in, missing_value_salt, reentrant_x, &
-       tripolar_n, homogenize, m_to_Z=US%m_to_Z)
+       tripolar_n, homogenize, m_to_Z=US%m_to_Z, answers_2018=hor_regrid_answers_2018)
 
   kd = size(z_in,1)
 
