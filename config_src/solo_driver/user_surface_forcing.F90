@@ -207,7 +207,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
         Temp_restore = 0.0
         Salin_restore = 0.0
 
-        fluxes%heat_added(i,j) = (G%mask2dT(i,j) * (rhoXcp * US%QRZ_T_to_W_m2*CS%Flux_const)) * &
+        fluxes%heat_added(i,j) = (G%mask2dT(i,j) * (rhoXcp * CS%Flux_const)) * &
             (Temp_restore - sfc_state%SST(i,j))
         fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
             ((Salin_restore - sfc_state%SSS(i,j)) / (0.5 * (Salin_restore + sfc_state%SSS(i,j))))

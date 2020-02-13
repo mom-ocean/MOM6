@@ -73,7 +73,7 @@ type, public :: forcing
     latent           => NULL(), & !< latent [W m-2]   (typically < 0)
     sens             => NULL(), & !< sensible [W m-2] (typically negative)
     seaice_melt_heat => NULL(), & !< sea ice and snow melt or formation [W m-2] (typically negative)
-    heat_added       => NULL()    !< additional heat flux from SST restoring or flux adjustments [W m-2]
+    heat_added       => NULL()    !< additional heat flux from SST restoring or flux adjustments [Q R Z T-1 ~> W m-2]
 
   ! components of latent heat fluxes used for diagnostic purposes
   real, pointer, dimension(:,:) :: &
@@ -415,6 +415,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
                               ! or 0 for no limiting [H-1 ~> m-1 or m2 kg-1]
   real :: scale               ! scale scales away fluxes if depth < FluxRescaleDepth
   real :: W_m2_to_H_T         ! converts W/m^2 to H degC T-1 [degC H T-1 W-2 m2 ~> degC m3 J-1 or degC kg J-1]
+  real :: QRZ_to_H            ! Converts heat in Q R Z to H degC [degC H Q-1 R-1 Z-1 ~> degC m3 J-1 or degC kg J-1]
   real :: RZ_T_to_W_m2_degC   ! Converts mass fluxes to heat fluxes per degree temperature
                               ! change [W m-2 degC-1 T R-1 Z-1 ~> J kg degC]
   real :: I_Cp                ! 1.0 / C_p [kg decC J-1]
@@ -445,6 +446,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
   RZ_T_to_W_m2_degC = US%QRZ_T_to_W_m2*fluxes%C_p
   I_Cp      = 1.0 / (US%Q_to_J_kg*fluxes%C_p)
   W_m2_to_H_T = 1.0 / (US%s_to_T * GV%H_to_kg_m2 * US%Q_to_J_kg * fluxes%C_p)
+  QRZ_to_H = US%R_to_kg_m3 * US%Z_to_m * (1.0 / (GV%H_to_kg_m2 *fluxes%C_p))
 
   RZcP_to_H = 1.0 / (GV%H_to_RZ * US%Q_to_J_kg*fluxes%C_p)
 
@@ -599,8 +601,8 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
 
     ! Add heat flux from surface damping (restoring) (K * H) or flux adjustments.
     if (associated(fluxes%heat_added)) then
-      net_heat(i) = net_heat(i) + (scale * (dt_in_T * W_m2_to_H_T)) * fluxes%heat_added(i,j)
-      if (do_NHR) net_heat_rate(i) = net_heat_rate(i) + (scale * (W_m2_to_H_T)) * fluxes%heat_added(i,j)
+      net_heat(i) = net_heat(i) + (scale * (dt_in_T * QRZ_to_H)) * fluxes%heat_added(i,j)
+      if (do_NHR) net_heat_rate(i) = net_heat_rate(i) + (scale * QRZ_to_H) * fluxes%heat_added(i,j)
     endif
 
     ! Add explicit heat flux for runoff (which is part of the ice-ocean boundary
@@ -1591,7 +1593,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
         cmor_long_name='Heat flux into ocean from snow and sea ice melt')
 
   handles%id_heat_added = register_diag_field('ocean_model', 'heat_added', diag%axesT1, Time, &
-        'Flux Adjustment or restoring surface heat flux into ocean', 'W m-2')
+        'Flux Adjustment or restoring surface heat flux into ocean', 'W m-2', conversion=US%QRZ_T_to_W_m2)
 
 
   !===============================================================
@@ -2556,7 +2558,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, G, US, time_end, diag, handles
           if (associated(fluxes%heat_content_massout)) &
             res(i,j) = res(i,j) + RZ_T_conversion*fluxes%heat_content_massout(i,j)
         !endif
-        if (associated(fluxes%heat_added)) res(i,j) = res(i,j) + fluxes%heat_added(i,j)
+        if (associated(fluxes%heat_added)) res(i,j) = res(i,j) + US%QRZ_T_to_W_m2*fluxes%heat_added(i,j)
       enddo ; enddo
       if (handles%id_net_heat_surface > 0) call post_data(handles%id_net_heat_surface, res, diag)
 
@@ -2735,7 +2737,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, G, US, time_end, diag, handles
     endif
 
     if ((handles%id_total_heat_added > 0) .and. associated(fluxes%heat_added)) then
-      total_transport = global_area_integral(fluxes%heat_added,G)
+      total_transport = global_area_integral(fluxes%heat_added, G, scale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_total_heat_added, total_transport, diag)
     endif
 
