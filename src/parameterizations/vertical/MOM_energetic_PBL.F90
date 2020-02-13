@@ -709,9 +709,6 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   real :: dMKE_src_dK  ! The partial derivative of MKE_src with Kddt_h(K) [R Z3 T-2 H-1 ~> J m-3 or J kg-1].
   real :: Kd_guess0    ! A first guess of the diapycnal diffusivity [Z2 T-1 ~> m2 s-1].
   real :: PE_chg_g0    ! The potential energy change when Kd is Kd_guess0 [R Z3 T-2 ~> J m-2]
-  !### The following might be unused.
-  real :: dPEa_dKd_g0  ! The derivative of the change in the potential energy of the column above an interface
-                       ! with the diffusivity when the Kd is Kd_guess0 [R Z T-1 ~> J s m-4]
   real :: Kddt_h_g0    ! The first guess diapycnal diffusivity times a timestep divided
                        ! by the average thicknesses around a layer [H ~> m or kg m-2].
   real :: PE_chg_max   ! The maximum PE change for very large values of Kddt_h(K) [R Z3 T-2 ~> J m-2].
@@ -1135,16 +1132,14 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
                      dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), &
                      pres_Z(K), dT_to_dColHt(k), dS_to_dColHt(k), &
                      dT_to_dColHt_a(k-1), dS_to_dColHt_a(k-1), &
-                     PE_chg=PE_chg_g0, dPEc_dKd=dPEa_dKd_g0, dPE_max=PE_chg_max, &
-                     dPEc_dKd_0=dPEc_dKd_Kd0 )
+                     PE_chg=PE_chg_g0, dPE_max=PE_chg_max, dPEc_dKd_0=dPEc_dKd_Kd0 )
           else
             call find_PE_chg(0.0, Kddt_h_g0, hp_a, h(k), &
                      Th_a(k-1), Sh_a(k-1), Th_b(k), Sh_b(k), &
                      dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), dT_to_dPE(k), dS_to_dPE(k), &
                      pres_Z(K), dT_to_dColHt_a(k-1), dS_to_dColHt_a(k-1), &
                      dT_to_dColHt(k), dS_to_dColHt(k), &
-                     PE_chg=PE_chg_g0, dPEc_dKd=dPEa_dKd_g0, dPE_max=PE_chg_max, &
-                     dPEc_dKd_0=dPEc_dKd_Kd0 )
+                     PE_chg=PE_chg_g0, dPE_max=PE_chg_max, dPEc_dKd_0=dPEc_dKd_Kd0 )
           endif
 
           MKE_src = dMKE_max*(1.0 - exp(-Kddt_h_g0 * MKE2_Hharm))
@@ -1821,7 +1816,7 @@ subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, UStar_Mean,&
   MStar = MStar * MStar_Conv_Red
 
   if (present(Langmuir_Number)) then
-    !### In this call, ustar was previously ustar_mean.  Is this change deliberate?
+    !### In this call, ustar was previously ustar_mean.  Is this change deliberate, Brandon?  -RWH
     call mstar_Langmuir(CS, US, Abs_Coriolis, Buoyancy_Flux, UStar, BLD, Langmuir_Number, MStar, &
                         MStar_LT, Convect_Langmuir_Number)
   endif

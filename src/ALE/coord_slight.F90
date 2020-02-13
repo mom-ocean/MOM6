@@ -687,7 +687,7 @@ subroutine rho_interfaces_col(rho_col, h_col, z_col, rho_tgt, nz, z_col_new, &
       if (k_layer > 0) then  ! The new location is inside of layer k_layer.
         ! Note that this is coded assuming that this layer is stably stratified.
         if (.not.(ppoly_i_E(k1,2) > ppoly_i_E(k1,1))) call MOM_error(FATAL, &
-          "build_grid_SLight: Erroneously searching for an interface in an unstratified layer.") !### COMMENT OUT LATER?
+          "build_grid_SLight: Erroneously searching for an interface in an unstratified layer.")
 
         ! Use the false position method to find the location (degree <= 1) or the first guess.
         zf = (rt - ppoly_i_E(k1,1)) / (ppoly_i_E(k1,2) - ppoly_i_E(k1,1))
@@ -698,7 +698,7 @@ subroutine rho_interfaces_col(rho_col, h_col, z_col, rho_tgt, nz, z_col_new, &
           ! Bracket the root.
           zf1 = 0.0 ; rfn1 = a(1)
           zf2 = 1.0 ; rfn2 =  a(1) + (a(2) + (a(3) + (a(4) + a(5))))
-          if (rfn1 * rfn2 > 0.0) call MOM_error(FATAL, "build_grid_SLight: Bad bracketing.") !### COMMENT OUT LATER?
+          if (rfn1 * rfn2 > 0.0) call MOM_error(FATAL, "build_grid_SLight: Bad bracketing.")
 
           do itt=1,max_itt
             rfn = a(1) + zf*(a(2) + zf*(a(3) + zf*(a(4) + zf*a(5))))

@@ -232,10 +232,9 @@ integer :: id_clock_pass, id_clock_pass_init
 contains
 
 !> RK2 splitting for time stepping MOM adiabatic dynamics
-subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
-                 Time_local, dt, forces, p_surf_begin, p_surf_end, &
-                 uh, vh, uhtr, vhtr, eta_av, &
-                 G, GV, US, CS, calc_dtbt, VarMix, MEKE, thickness_diffuse_CSp, Waves)
+subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_surf_begin, p_surf_end, &
+                                  uh, vh, uhtr, vhtr, eta_av, G, GV, US, CS, calc_dtbt, VarMix, &
+                                  MEKE, thickness_diffuse_CSp, Waves)
   type(ocean_grid_type),             intent(inout) :: G            !< ocean grid structure
   type(verticalGrid_type),           intent(in)    :: GV           !< ocean vertical grid structure
   type(unit_scale_type),             intent(in)    :: US           !< A dimensional unit scaling type
@@ -272,8 +271,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   logical,                           intent(in)    :: calc_dtbt    !< if true, recalculate barotropic time step
   type(VarMix_CS),                   pointer       :: VarMix       !< specify the spatially varying viscosities
   type(MEKE_type),                   pointer       :: MEKE         !< related to mesoscale eddy kinetic energy param
-  type(thickness_diffuse_CS),        pointer       :: thickness_diffuse_CSp!< Pointer to a structure containing
-                                                                    !! interface height diffusivities
+  type(thickness_diffuse_CS),        pointer       :: thickness_diffuse_CSp !< Pointer to a structure containing
+                                                                   !! interface height diffusivities
   type(wave_parameters_CS), optional, pointer      :: Waves        !< A pointer to a structure containing
                                                                    !! fields related to the surface wave conditions
 
@@ -954,7 +953,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                       diag, CS, restart_CS, dt, Accel_diag, Cont_diag, MIS, &
                       VarMix, MEKE, thickness_diffuse_CSp,                  &
                       OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
-                      visc, dirs, ntrunc, calc_dtbt)
+                      visc, dirs, ntrunc, calc_dtbt, cont_stencil)
   type(ocean_grid_type),            intent(inout) :: G          !< ocean grid structure
   type(verticalGrid_type),          intent(in)    :: GV         !< ocean vertical grid structure
   type(unit_scale_type),            intent(in)    :: US         !< A dimensional unit scaling type
@@ -995,6 +994,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                                                                 !! the number of times the velocity is
                                                                 !! truncated (this should be 0).
   logical,                          intent(out)   :: calc_dtbt  !< If true, recalculate the barotropic time step
+  integer,                optional, intent(out)   :: cont_stencil !< The stencil for thickness
+                                                                !! from the continuity solver.
 
   ! local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_tmp
@@ -1104,6 +1105,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                                      grain=CLOCK_ROUTINE)
 
   call continuity_init(Time, G, GV, US, param_file, diag, CS%continuity_CSp)
+  if (present(cont_stencil)) cont_stencil = continuity_stencil(CS%continuity_CSp)
   call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv_CSp)
   if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &

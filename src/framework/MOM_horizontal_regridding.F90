@@ -100,7 +100,7 @@ end subroutine myStats
 !! valid data (good=1). If no information is available,
 !! Then use a previous guess (prev). Optionally (smooth)
 !! blend the filled points to achieve a more desirable result.
-subroutine fill_miss_2d(aout, good, fill, prev, G, smooth, num_pass, relc, crit, keep_bug, debug)
+subroutine fill_miss_2d(aout, good, fill, prev, G, smooth, num_pass, relc, crit, debug, answers_2018)
   use MOM_coms, only : sum_across_PEs
 
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
@@ -119,9 +119,10 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, smooth, num_pass, relc, crit,
   integer,     optional, intent(in)    :: num_pass !< The maximum number of iterations
   real,        optional, intent(in)    :: relc !< A relaxation coefficient for Laplacian (ND)
   real,        optional, intent(in)    :: crit !< A minimal value for deltas between iterations.
-  logical,     optional, intent(in)    :: keep_bug !< Use an algorithm with a bug that dates
-                                                   !! to the "sienna" code release.
   logical,     optional, intent(in)    :: debug !< If true, write verbose debugging messages.
+  logical,     optional, intent(in)    :: answers_2018 !< If true, use expressions that give the same
+                                                !! answers as the code did in late 2018.  Otherwise
+                                                !! add parentheses for rotational symmetry.
 
   real, dimension(SZI_(G),SZJ_(G)) :: b,r
   real, dimension(SZI_(G),SZJ_(G)) :: fill_pts, good_, good_new
@@ -138,7 +139,7 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, smooth, num_pass, relc, crit,
   integer :: npass
   integer :: is, ie, js, je
   real    :: relax_coeff, acrit, ares
-  logical :: debug_it
+  logical :: debug_it, ans_2018
 
   debug_it=.false.
   if (PRESENT(debug)) debug_it=debug
@@ -154,11 +155,10 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, smooth, num_pass, relc, crit,
   acrit = crit_default
   if (PRESENT(crit)) acrit = crit
 
-  siena_bug=.false.
-  if (PRESENT(keep_bug)) siena_bug = keep_bug
-
   do_smooth=.false.
   if (PRESENT(smooth)) do_smooth=smooth
+
+  ans_2018 = .true. ; if (PRESENT(answers_2018)) ans_2018 = answers_2018
 
   fill_pts(:,:) = fill(:,:)
 
@@ -189,11 +189,17 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, smooth, num_pass, relc, crit,
       if (gn == 1.0) north = aout(i,j+1)*gn
       if (gs == 1.0) south = aout(i,j-1)*gs
 
-      ngood = ge+gw+gn+gs
+      if (ans_2018) then
+        ngood = ge+gw+gn+gs
+      else
+        ngood = (ge+gw) + (gn+gs)
+      endif
       if (ngood > 0.) then
-        b(i,j)=(east+west+north+south)/ngood
-        !### Replace this with
-        ! b(i,j) = ((east+west) + (north+south))/ngood
+        if (ans_2018) then
+          b(i,j)=(east+west+north+south)/ngood
+        else
+          b(i,j) = ((east+west) + (north+south))/ngood
+        endif
         fill_pts(i,j) = 0.0
         good_new(i,j) = 1.0
       endif
@@ -230,13 +236,15 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, smooth, num_pass, relc, crit,
       if (fill(i,j) == 1) then
         east = max(good(i+1,j),fill(i+1,j)) ; west = max(good(i-1,j),fill(i-1,j))
         north = max(good(i,j+1),fill(i,j+1)) ; south = max(good(i,j-1),fill(i,j-1))
-        r(i,j) = relax_coeff*(south*aout(i,j-1)+north*aout(i,j+1) + &
-                              west*aout(i-1,j)+east*aout(i+1,j) - &
-                             (south+north+west+east)*aout(i,j))
-        !### Appropriate parentheses should be added here, but they will change answers.
-        ! r(i,j) = relax_coeff*( ((south*aout(i,j-1) + north*aout(i,j+1)) + &
-        !                         (west*aout(i-1,j)+east*aout(i+1,j))) - &
-        !                        ((south+north)+(west+east))*aout(i,j) )
+        if (ans_2018) then
+          r(i,j) = relax_coeff*(south*aout(i,j-1)+north*aout(i,j+1) + &
+                                west*aout(i-1,j)+east*aout(i+1,j) - &
+                               (south+north+west+east)*aout(i,j))
+        else
+          r(i,j) = relax_coeff*( ((south*aout(i,j-1) + north*aout(i,j+1)) + &
+                                  (west*aout(i-1,j)+east*aout(i+1,j))) - &
+                                 ((south+north)+(west+east))*aout(i,j) )
+        endif
       else
         r(i,j) = 0.
       endif
@@ -264,7 +272,7 @@ end subroutine fill_miss_2d
 !> Extrapolate and interpolate from a file record
 subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, recnum, G, tr_z, &
                                                  mask_z, z_in, z_edges_in, missing_value, reentrant_x, &
-                                                 tripolar_n, homogenize, m_to_Z)
+                                                 tripolar_n, homogenize, m_to_Z, answers_2018)
 
   character(len=*),      intent(in)    :: filename   !< Path to file containing tracer to be
                                                      !! interpolated.
@@ -285,6 +293,9 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
                                                      !! to produce perfectly "flat" initial conditions
   real,        optional, intent(in)    :: m_to_Z     !< A conversion factor from meters to the units
                                                      !! of depth.  If missing, G%bathyT must be in m.
+  logical,     optional, intent(in)    :: answers_2018 !< If true, use expressions that give the same
+                                                     !! answers as the code did in late 2018.  Otherwise
+                                                     !! add parentheses for rotational symmetry.
 
   ! Local variables
   real, dimension(:,:),  allocatable   :: tr_in, tr_inp ! A 2-d array for holding input data on
@@ -568,7 +579,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     good2(:,:) = good(:,:)
     fill2(:,:) = fill(:,:)
 
-    call fill_miss_2d(tr_outf, good2, fill2, tr_prev, G, smooth=.true.)
+    call fill_miss_2d(tr_outf, good2, fill2, tr_prev, G, smooth=.true., answers_2018=answers_2018)
     call myStats(tr_outf, missing_value, is, ie, js, je, k, 'field from fill_miss_2d()')
 
     tr_z(:,:,k) = tr_outf(:,:) * G%mask2dT(:,:)
@@ -587,7 +598,7 @@ end subroutine horiz_interp_and_extrap_tracer_record
 !> Extrapolate and interpolate using a FMS time interpolation handle
 subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, tr_z, mask_z, &
                                                  z_in, z_edges_in, missing_value, reentrant_x, &
-                                                 tripolar_n, homogenize, spongeOngrid, m_to_Z)
+                                                 tripolar_n, homogenize, spongeOngrid, m_to_Z, answers_2018)
 
   integer,               intent(in)    :: fms_id     !< A unique id used by the FMS time interpolator
   type(time_type),       intent(in)    :: Time       !< A FMS time type
@@ -607,6 +618,9 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   logical,     optional, intent(in)    :: spongeOngrid !< If present and true, the sponge data are on the model grid
   real,        optional, intent(in)    :: m_to_Z     !< A conversion factor from meters to the units
                                                      !! of depth.  If missing, G%bathyT must be in m.
+  logical,     optional, intent(in)    :: answers_2018 !< If true, use expressions that give the same
+                                                     !! answers as the code did in late 2018.  Otherwise
+                                                     !! add parentheses for rotational symmetry.
 
   ! Local variables
   real, dimension(:,:),  allocatable   :: tr_in,tr_inp !< A 2-d array for holding input data on
@@ -841,7 +855,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
       good2(:,:) = good(:,:)
       fill2(:,:) = fill(:,:)
 
-      call fill_miss_2d(tr_outf, good2, fill2, tr_prev, G, smooth=.true.)
+      call fill_miss_2d(tr_outf, good2, fill2, tr_prev, G, smooth=.true., answers_2018=answers_2018)
 
 !     if (debug) then
 !       call hchksum(tr_outf, 'field from fill_miss_2d ', G%HI)
