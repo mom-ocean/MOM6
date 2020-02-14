@@ -194,8 +194,8 @@ type, public :: MOM_control_struct ; private
                     !! multiple coupling timesteps.
   real :: t_dyn_rel_diag !< The time of the diagnostics relative to diabatic processes and remapping
                     !!  [T ~> s].  t_dyn_rel_diag is always positive, since the diagnostics must lag.
-  integer :: ndyn_per_adv = 0 !< Number of calls to dynamics since the last call to advection.
-                    !### Must be saved if thermo spans coupling?
+  logical :: preadv_h_stored = .false. !< If true, the thicknesses from before the advective cycle
+                    !! have been stored for use in diagnostics.
 
   type(diag_ctrl)     :: diag !< structure to regulate diagnostic output timing
   type(vertvisc_type) :: visc !< structure containing vertical viscosities,
@@ -225,6 +225,7 @@ type, public :: MOM_control_struct ; private
   logical :: debug                   !< If true, write verbose checksums for debugging purposes.
   integer :: ntrunc                  !< number u,v truncations since last call to write_energy
 
+  integer :: cont_stencil            !< The stencil for thickness from the continuity solver.
   ! These elements are used to control the dynamics updates.
   logical :: do_dynamics             !< If false, does not call step_MOM_dyn_*. This is an
                                      !! undocumented run-time flag that is fragile.
@@ -292,6 +293,9 @@ type, public :: MOM_control_struct ; private
   real    :: bad_val_sst_min    !< Minimum SST before triggering bad value message [degC]
   real    :: bad_val_sss_max    !< Maximum SSS before triggering bad value message [ppt]
   real    :: bad_val_col_thick  !< Minimum column thickness before triggering bad value message [m]
+  logical :: answers_2018       !< If true, use expressions for the surface properties that recover
+                                !! the answers from the end of 2018. Otherwise, use more appropriate
+                                !! expressions that differ at roundoff for non-Boussinsq cases.
 
   type(MOM_diag_IDs)       :: IDs      !<  Handles used for diagnostics.
   type(transport_diag_IDs) :: transport_IDs  !< Handles used for transport diagnostics.
@@ -330,7 +334,8 @@ type, public :: MOM_control_struct ; private
     !< Pointer to the MOM along-isopycnal tracer diffusion control structure
   type(tracer_flow_control_CS),  pointer :: tracer_flow_CSp => NULL()
     !< Pointer to the control structure that orchestrates the calling of tracer packages
-  !### update_OBC_CS might not be needed outside of initialization?
+    ! Although update_OBC_CS is not used directly outside of initialization, other modules
+    ! set pointers to this type, so it should be kept for the duration of the run.
   type(update_OBC_CS),           pointer :: update_OBC_CSp => NULL()
     !< Pointer to the control structure for updating open boundary condition properties
   type(ocean_OBC_type),          pointer :: OBC => NULL()
@@ -660,12 +665,12 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_int_in, CS, &
     endif ! end of block "(CS%diabatic_first .and. (CS%t_dyn_rel_adv==0.0))"
 
     if (do_dyn) then
-      ! Store pre-dynamics grids for proper diagnostic remapping for transports
-      ! or advective tendencies.  If there are more dynamics steps per advective
-      ! steps (i.e DT_THERM /= DT), this needs to be stored at the first call.
-      if (CS%ndyn_per_adv == 0 .and. CS%t_dyn_rel_adv == 0.) then
+      ! Store pre-dynamics thicknesses for proper diagnostic remapping for transports or
+      ! advective tendencies.  If there are more than one dynamics steps per advective
+      ! step (i.e DT_THERM > DT), this needs to be stored at the first dynamics call.
+      if (.not.CS%preadv_h_stored .and. (CS%t_dyn_rel_adv == 0.)) then
         call diag_copy_diag_to_storage(CS%diag_pre_dyn, h, CS%diag)
-        CS%ndyn_per_adv = CS%ndyn_per_adv + 1
+        CS%preadv_h_stored = .true.
       endif
 
       ! The pre-dynamics velocities might be stored for debugging truncations.
@@ -719,7 +724,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_int_in, CS, &
 
       if (do_advection) then ! Do advective transport and lateral tracer mixing.
         call step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
-        CS%ndyn_per_adv = 0
         if (CS%diabatic_first .and. abs(CS%t_dyn_rel_thermo) > 1e-6*dt) call MOM_error(FATAL, &
                 "step_MOM: Mismatch between the dynamics and diabatic times "//&
                 "with DIABATIC_FIRST.")
@@ -927,7 +931,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt_thermo, G, GV, US, &
                            CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
     call cpu_clock_end(id_clock_thick_diff)
-    call pass_var(h, G%Domain, clock=id_clock_pass) !###, halo=max(2,cont_stensil))
+    call pass_var(h, G%Domain, clock=id_clock_pass, halo=max(2,CS%cont_stencil))
     call disable_averaging(CS%diag)
     if (showCallTree) call callTree_waypoint("finished thickness_diffuse_first (step_MOM)")
 
@@ -1002,7 +1006,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
 
     if (CS%debug) call hchksum(h,"Post-thickness_diffuse h", G%HI, haloshift=1, scale=GV%H_to_m)
     call cpu_clock_end(id_clock_thick_diff)
-    call pass_var(h, G%Domain, clock=id_clock_pass) !###, halo=max(2,cont_stensil))
+    call pass_var(h, G%Domain, clock=id_clock_pass, halo=max(2,CS%cont_stencil))
     if (showCallTree) call callTree_waypoint("finished thickness_diffuse (step_MOM)")
   endif
 
@@ -1017,7 +1021,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     call mixedlayer_restrat(h, CS%uhtr, CS%vhtr, CS%tv, forces, dt, CS%visc%MLD, &
                             CS%VarMix, G, GV, US, CS%mixedlayer_restrat_CSp)
     call cpu_clock_end(id_clock_ml_restrat)
-    call pass_var(h, G%Domain, clock=id_clock_pass) !###, halo=max(2,cont_stensil))
+    call pass_var(h, G%Domain, clock=id_clock_pass, halo=max(2,CS%cont_stencil))
     if (CS%debug) then
       call hchksum(h,"Post-mixedlayer_restrat h", G%HI, haloshift=1, scale=GV%H_to_m)
       call uvchksum("Post-mixedlayer_restrat [uv]htr", &
@@ -1120,6 +1124,8 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
     call create_group_pass(pass_T_S, CS%tv%S, G%Domain, To_All+Omit_Corners, halo=1)
     call do_group_pass(pass_T_S, G%Domain, clock=id_clock_pass)
   endif
+
+  CS%preadv_h_stored = .false.
 
 end subroutine step_MOM_tracer_dyn
 
@@ -1562,6 +1568,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                                ! with accumulated heat deficit returned to surface ocean.
   logical :: bound_salinity    ! If true, salt is added to keep salinity above
                                ! a minimum value, and the deficit is reported.
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
   logical :: use_conT_absS     ! If true, the prognostics T & S are conservative temperature
                                ! and absolute salinity. Care should be taken to convert them
                                ! to potential temperature and practical salinity before
@@ -1875,6 +1882,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "triggered, if CHECK_BAD_SURFACE_VALS is true.", units="m", &
                  default=0.0)
   endif
+  call get_param(param_file, "MOM", "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
+  call get_param(param_file, "MOM", "SURFACE_2018_ANSWERS", CS%answers_2018, &
+                 "If true, use expressions for the surface properties that recover the answers "//&
+                 "from the end of 2018. Otherwise, use more appropriate expressions that differ "//&
+                 "at roundoff for non-Boussinsq cases.", default=default_2018_answers)
 
   call get_param(param_file, "MOM", "SAVE_INITIAL_CONDS", save_IC, &
                  "If true, write the initial conditions to a file given "//&
@@ -2314,7 +2328,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
               CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE, &
               CS%thickness_diffuse_CSp,                                      &
               CS%OBC, CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp,        &
-              CS%visc, dirs, CS%ntrunc, calc_dtbt=calc_dtbt)
+              CS%visc, dirs, CS%ntrunc, calc_dtbt=calc_dtbt, cont_stencil=CS%cont_stencil)
     if (CS%dtbt_reset_period > 0.0) then
       CS%dtbt_reset_interval = real_to_time(CS%dtbt_reset_period)
       ! Set dtbt_reset_time to be the next even multiple of dtbt_reset_interval.
@@ -2332,13 +2346,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
             param_file, diag, CS%dyn_unsplit_RK2_CSp, restart_CSp,         &
             CS%ADp, CS%CDp, MOM_internal_state, CS%MEKE, CS%OBC,           &
             CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, &
-            CS%ntrunc)
+            CS%ntrunc, cont_stencil=CS%cont_stencil)
   else
     call initialize_dyn_unsplit(CS%u, CS%v, CS%h, Time, G, GV, US,         &
             param_file, diag, CS%dyn_unsplit_CSp, restart_CSp,             &
             CS%ADp, CS%CDp, MOM_internal_state, CS%MEKE, CS%OBC,           &
             CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, &
-            CS%ntrunc)
+            CS%ntrunc, cont_stencil=CS%cont_stencil)
   endif
 
   call callTree_waypoint("dynamics initialized (initialize_MOM)")
@@ -2711,21 +2725,26 @@ subroutine extract_surface_state(CS, sfc_state)
                                                 !! structure shared with the calling routine
                                                 !! data in this structure is intent out.
 
-  ! local
+  ! Local variables
   real :: hu, hv  ! Thicknesses interpolated to velocity points [H ~> m or kg m-2]
-  type(ocean_grid_type),   pointer :: G => NULL() !< pointer to a structure containing
-                                      !! metrics and related information
+  type(ocean_grid_type),   pointer :: G => NULL()  !< pointer to a structure containing
+                                                   !! metrics and related information
   type(verticalGrid_type), pointer :: GV => NULL() !< structure containing vertical grid info
   type(unit_scale_type),   pointer :: US => NULL() !< structure containing various unit conversion factors
   real, dimension(:,:,:),  pointer :: &
     h => NULL()    !< h : layer thickness [H ~> m or kg m-2]
-  real :: depth(SZI_(CS%G))  !< Distance from the surface in depth units [Z ~> m]
+  real :: depth(SZI_(CS%G))  !< Distance from the surface in depth units [Z ~> m] or [H ~> m or kg m-2]
   real :: depth_ml           !< Depth over which to average to determine mixed
-                             !! layer properties [Z ~> m]
-  real :: dh                 !< Thickness of a layer within the mixed layer [Z ~> m]
+                             !! layer properties [Z ~> m] or [H ~> m or kg m-2]
+  real :: dh                 !< Thickness of a layer within the mixed layer [Z ~> m] or [H ~> m or kg m-2]
   real :: mass               !< Mass per unit area of a layer [kg m-2]
   real :: bathy_m            !< The depth of bathymetry [m] (not Z), used for error checking.
   real :: T_freeze           !< freezing temperature [degC]
+  real :: I_depth            !< The inverse of depth [Z-1 ~> m-1] or [H-1 ~> m-1 or m2 kg-1]
+  real :: missing_depth      !< The portion of depth_ml that can not be found in a column [H ~> m or kg m-2]
+  real :: H_rescale          !< A conversion factor from thickness units to the units used in the
+                             !! calculation of properties of the uppermost ocean [nondim] or [Z H-1 ~> 1 or m3 kg-1]
+                             !  After the ANSWERS_2018 flag has been obsoleted, H_rescale will be 1.
   real :: delT(SZI_(CS%G))   !< T-T_freeze [degC]
   logical :: use_temperature !< If true, temp and saln used as state variables.
   integer :: i, j, k, is, ie, js, je, nz, numberOfErrors, ig, jg
@@ -2777,9 +2796,9 @@ subroutine extract_surface_state(CS, sfc_state)
     enddo ; enddo
 
   else  ! (CS%Hmix >= 0.0)
-    !### This calculation should work in thickness (H) units instead of Z, but that
-    !### would change answers at roundoff in non-Boussinesq cases.
+    H_rescale = 1.0 ; if (CS%answers_2018) H_rescale = GV%H_to_Z
     depth_ml = CS%Hmix
+    if (.not.CS%answers_2018) depth_ml = CS%Hmix*GV%Z_to_H
   !   Determine the mean tracer properties of the uppermost depth_ml fluid.
     !$OMP parallel do default(shared) private(depth,dh)
     do j=js,je
@@ -2793,8 +2812,8 @@ subroutine extract_surface_state(CS, sfc_state)
       enddo
 
       do k=1,nz ; do i=is,ie
-        if (depth(i) + h(i,j,k)*GV%H_to_Z < depth_ml) then
-          dh = h(i,j,k)*GV%H_to_Z
+        if (depth(i) + h(i,j,k)*H_rescale < depth_ml) then
+          dh = h(i,j,k)*H_rescale
         elseif (depth(i) < depth_ml) then
           dh = depth_ml - depth(i)
         else
@@ -2810,16 +2829,36 @@ subroutine extract_surface_state(CS, sfc_state)
       enddo ; enddo
   ! Calculate the average properties of the mixed layer depth.
       do i=is,ie
-        if (depth(i) < GV%H_subroundoff*GV%H_to_Z) &
-            depth(i) = GV%H_subroundoff*GV%H_to_Z
-        if (use_temperature) then
-          sfc_state%SST(i,j) = sfc_state%SST(i,j) / depth(i)
-          sfc_state%SSS(i,j) = sfc_state%SSS(i,j) / depth(i)
+        if (CS%answers_2018) then
+          if (depth(i) < GV%H_subroundoff*H_rescale) &
+              depth(i) = GV%H_subroundoff*H_rescale
+          if (use_temperature) then
+            sfc_state%SST(i,j) = sfc_state%SST(i,j) / depth(i)
+            sfc_state%SSS(i,j) = sfc_state%SSS(i,j) / depth(i)
+          else
+            sfc_state%sfc_density(i,j) = sfc_state%sfc_density(i,j) / depth(i)
+          endif
         else
-          sfc_state%sfc_density(i,j) = sfc_state%sfc_density(i,j) / depth(i)
+          if (depth(i) < GV%H_subroundoff*H_rescale) then
+            I_depth = 1.0 / (GV%H_subroundoff*H_rescale)
+            missing_depth = GV%H_subroundoff*H_rescale - depth(i)
+            if (use_temperature) then
+              sfc_state%SST(i,j) = (sfc_state%SST(i,j) + missing_depth*CS%tv%T(i,j,1)) * I_depth
+              sfc_state%SSS(i,j) = (sfc_state%SSS(i,j) + missing_depth*CS%tv%S(i,j,1)) * I_depth
+            else
+              sfc_state%sfc_density(i,j) = (sfc_state%sfc_density(i,j) + &
+                                            missing_depth*US%R_to_kg_m3*GV%Rlay(1)) * I_depth
+            endif
+          else
+            I_depth = 1.0 / depth(i)
+            if (use_temperature) then
+              sfc_state%SST(i,j) = sfc_state%SST(i,j) * I_depth
+              sfc_state%SSS(i,j) = sfc_state%SSS(i,j) * I_depth
+            else
+              sfc_state%sfc_density(i,j) = sfc_state%sfc_density(i,j) * I_depth
+            endif
+          endif
         endif
-        !### Verify that this is no longer needed.
-        ! sfc_state%Hml(i,j) = US%Z_to_m * depth(i)
       enddo
     enddo ! end of j loop
 
@@ -2828,9 +2867,8 @@ subroutine extract_surface_state(CS, sfc_state)
     !       required by the speed diagnostic on the non-symmetric grid.
     !       This assumes that u and v halos have already been updated.
     if (CS%Hmix_UV>0.) then
-      !### This calculation should work in thickness (H) units instead of Z, but that
-      !### would change answers at roundoff in non-Boussinesq cases.
       depth_ml = CS%Hmix_UV
+      if (.not.CS%answers_2018) depth_ml = CS%Hmix_UV*GV%Z_to_H
       !$OMP parallel do default(shared) private(depth,dh,hv)
       do J=js-1,ie
         do i=is,ie
@@ -2838,7 +2876,7 @@ subroutine extract_surface_state(CS, sfc_state)
           sfc_state%v(i,J) = 0.0
         enddo
         do k=1,nz ; do i=is,ie
-          hv = 0.5 * (h(i,j,k) + h(i,j+1,k)) * GV%H_to_Z
+          hv = 0.5 * (h(i,j,k) + h(i,j+1,k)) * H_rescale
           if (depth(i) + hv < depth_ml) then
             dh = hv
           elseif (depth(i) < depth_ml) then
@@ -2851,9 +2889,7 @@ subroutine extract_surface_state(CS, sfc_state)
         enddo ; enddo
         ! Calculate the average properties of the mixed layer depth.
         do i=is,ie
-          if (depth(i) < GV%H_subroundoff*GV%H_to_Z) &
-              depth(i) = GV%H_subroundoff*GV%H_to_Z
-          sfc_state%v(i,J) = sfc_state%v(i,J) / depth(i)
+          sfc_state%v(i,J) = sfc_state%v(i,J) / max(depth(i), GV%H_subroundoff*H_rescale)
         enddo
       enddo ! end of j loop
 
@@ -2864,7 +2900,7 @@ subroutine extract_surface_state(CS, sfc_state)
           sfc_state%u(I,j) = 0.0
         enddo
         do k=1,nz ; do I=is-1,ie
-          hu = 0.5 * (h(i,j,k) + h(i+1,j,k)) * GV%H_to_Z
+          hu = 0.5 * (h(i,j,k) + h(i+1,j,k)) * H_rescale
           if (depth(i) + hu < depth_ml) then
             dh = hu
           elseif (depth(I) < depth_ml) then
@@ -2877,9 +2913,7 @@ subroutine extract_surface_state(CS, sfc_state)
         enddo ; enddo
         ! Calculate the average properties of the mixed layer depth.
         do I=is-1,ie
-          if (depth(I) < GV%H_subroundoff*GV%H_to_Z) &
-              depth(I) = GV%H_subroundoff*GV%H_to_Z
-          sfc_state%u(I,j) = sfc_state%u(I,j) / depth(I)
+          sfc_state%u(I,j) = sfc_state%u(I,j) / max(depth(I), GV%H_subroundoff*H_rescale)
         enddo
       enddo ! end of j loop
     else ! Hmix_UV<=0.
@@ -2933,7 +2967,7 @@ subroutine extract_surface_state(CS, sfc_state)
     !$OMP parallel do default(shared)
     do j=js,je ; do i=is,ie
       ! Convert from gSalt to kgSalt
-      sfc_state%salt_deficit(i,j) = 1000.0 * US%R_to_kg_m3*US%Z_to_m*CS%tv%salt_deficit(i,j)
+      sfc_state%salt_deficit(i,j) = 0.001 * US%R_to_kg_m3*US%Z_to_m*CS%tv%salt_deficit(i,j)
     enddo ; enddo
   endif
   if (allocated(sfc_state%TempxPmE) .and. associated(CS%tv%TempxPmE)) then

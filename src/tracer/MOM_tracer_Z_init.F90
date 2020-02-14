@@ -3,7 +3,6 @@ module MOM_tracer_Z_init
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!use MOM_diag_to_Z, only : find_overlap, find_limited_slope
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 ! use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
@@ -73,7 +72,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
 
   logical :: has_edges, use_missing, zero_surface
   character(len=80) :: loc_msg
-  integer :: k_top, k_bot, k_bot_prev
+  integer :: k_top, k_bot, k_bot_prev, k_start
   integer :: i, j, k, kz, is, ie, js, je, nz, nz_in
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -140,7 +139,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
         e(nz+1) = -G%bathyT(i,j)
         do k=nz,1,-1 ; e(K) = e(K+1) + dilate * h(i,j,k) ; enddo
 
-        ! Create a single-column copy of tr_in.  ### CHANGE THIS LATER?
+        ! Create a single-column copy of tr_in.  Efficiency is not an issue here.
         do k=1,nz_in ; tr_1d(k) = tr_in(i,j,k) ; enddo
         k_bot = 1 ; k_bot_prev = -1
         do k=1,nz
@@ -149,18 +148,18 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
           elseif (e(K) < z_edges(nz_in+1)) then
             tr(i,j,k) = tr_1d(nz_in)
           else
+            k_start = k_bot ! The starting point for this search
             call find_overlap(z_edges, e(K), e(K+1), nz_in, &
-                              k_bot, k_top, k_bot, wt, z1, z2)
+                              k_start, k_top, k_bot, wt, z1, z2)
             kz = k_top
             if (kz /= k_bot_prev) then
               ! Calculate the intra-cell profile.
               sl_tr = 0.0 ! ; cur_tr = 0.0
-              if ((kz < nz_in) .and. (kz > 1)) call &
-                find_limited_slope(tr_1d, z_edges, sl_tr, kz)
+              if ((kz < nz_in) .and. (kz > 1)) &
+                sl_tr = find_limited_slope(tr_1d, z_edges, kz)
             endif
             ! This is the piecewise linear form.
-            tr(i,j,k) = wt(kz) * &
-                (tr_1d(kz) + 0.5*sl_tr*(z2(kz) + z1(kz)))
+            tr(i,j,k) = wt(kz) * (tr_1d(kz) + 0.5*sl_tr*(z2(kz) + z1(kz)))
             ! For the piecewise parabolic form add the following...
             !     + C1_3*cur_tr*(z2(kz)**2 + z2(kz)*z1(kz) + z1(kz)**2))
             do kz=k_top+1,k_bot-1
@@ -170,8 +169,8 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
               kz = k_bot
               ! Calculate the intra-cell profile.
               sl_tr = 0.0 ! ; cur_tr = 0.0
-              if ((kz < nz_in) .and. (kz > 1)) call &
-                find_limited_slope(tr_1d, z_edges, sl_tr, kz)
+              if ((kz < nz_in) .and. (kz > 1)) &
+                sl_tr = find_limited_slope(tr_1d, z_edges, kz)
               ! This is the piecewise linear form.
               tr(i,j,k) = tr(i,j,k) + wt(kz) * &
                   (tr_1d(kz) + 0.5*sl_tr*(z2(kz) + z1(kz)))
@@ -215,7 +214,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
         e(nz+1) = -G%bathyT(i,j)
         do k=nz,1,-1 ; e(K) = e(K+1) + dilate * h(i,j,k) ; enddo
 
-        ! Create a single-column copy of tr_in.  ### CHANGE THIS LATER?
+        ! Create a single-column copy of tr_in.  Efficiency is not an issue here.
         do k=1,nz_in ; tr_1d(k) = tr_in(i,j,k) ; enddo
         k_bot = 1
         do k=1,nz
@@ -224,8 +223,9 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
           elseif (z_edges(nz_in) > e(K)) then
             tr(i,j,k) = tr_1d(nz_in)
           else
+            k_start = k_bot ! The starting point for this search
             call find_overlap(z_edges, e(K), e(K+1), nz_in-1, &
-                              k_bot, k_top, k_bot, wt, z1, z2)
+                              k_start, k_top, k_bot, wt, z1, z2)
 
             kz = k_top
             if (k_top < nz_in) then
@@ -410,20 +410,16 @@ end subroutine read_Z_edges
 !! with the depth range between Z_top and Z_bot, and the fractional weights
 !! of each layer. It also calculates the normalized relative depths of the range
 !! of each layer that overlaps that depth range.
-
-! ### TODO: Merge with midas_vertmap.F90:find_overlap()
 subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z2)
-  real, dimension(:), intent(in)    :: e      !< Column interface heights, in arbitrary units.
-  real,               intent(in)    :: Z_top  !< Top of range being mapped to, in the units of e.
-  real,               intent(in)    :: Z_bot  !< Bottom of range being mapped to, in the units of e.
-  integer,            intent(in)    :: k_max  !< Number of valid layers.
-  integer,            intent(in)    :: k_start !< Layer at which to start searching.
-  integer,            intent(inout) :: k_top  !< Indices of top layers that overlap with the depth
-                                              !! range.
-  integer,            intent(inout) :: k_bot  !< Indices of bottom layers that overlap with the
-                                              !! depth range.
-  real, dimension(:), intent(out)   :: wt     !< Relative weights of each layer from k_top to k_bot.
-  real, dimension(:), intent(out)   :: z1     !< Depth of the top limits of the part of
+  real, dimension(:), intent(in)  :: e      !< Column interface heights, [Z ~> m] or other units.
+  real,               intent(in)  :: Z_top  !< Top of range being mapped to, in the units of e [Z ~> m].
+  real,               intent(in)  :: Z_bot  !< Bottom of range being mapped to, in the units of e [Z ~> m].
+  integer,            intent(in)  :: k_max  !< Number of valid layers.
+  integer,            intent(in)  :: k_start !< Layer at which to start searching.
+  integer,            intent(out) :: k_top  !< Indices of top layers that overlap with the depth range.
+  integer,            intent(out) :: k_bot  !< Indices of bottom layers that overlap with the depth range.
+  real, dimension(:), intent(out) :: wt     !< Relative weights of each layer from k_top to k_bot [nondim].
+  real, dimension(:), intent(out) :: z1     !< Depth of the top limits of the part of
        !! a layer that contributes to a depth level, relative to the cell center and normalized
        !! by the cell thickness [nondim].  Note that -1/2 <= z1 < z2 <= 1/2.
   real, dimension(:), intent(out)   :: z2     !< Depths of the bottom limit of the part of
@@ -433,17 +429,19 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
   real    :: Ih, e_c, tot_wt, I_totwt
   integer :: k
 
-  do k=k_start,k_max ; if (e(K+1)<Z_top) exit ; enddo
+  wt(:) = 0.0 ; z1(:) = 0.0 ; z2(:) = 0.0 ; k_bot = k_max
+
+  do k=k_start,k_max ; if (e(K+1) < Z_top) exit ; enddo
   k_top = k
-  if (k>k_max) return
+  if (k_top > k_max) return
 
   ! Determine the fractional weights of each layer.
   ! Note that by convention, e and Z_int decrease with increasing k.
-  if (e(K+1)<=Z_bot) then
+  if (e(K+1) <= Z_bot) then
     wt(k) = 1.0 ; k_bot = k
     Ih = 0.0 ; if (e(K) /= e(K+1)) Ih = 1.0 / (e(K)-e(K+1))
     e_c = 0.5*(e(K)+e(K+1))
-    z1(k) = (e_c - MIN(e(K),Z_top)) * Ih
+    z1(k) = (e_c - MIN(e(K), Z_top)) * Ih
     z2(k) = (e_c - Z_bot) * Ih
   else
     wt(k) = MIN(e(K),Z_top) - e(K+1) ; tot_wt = wt(k) ! These are always > 0.
@@ -453,7 +451,7 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
     z2(k) = 0.5
     k_bot = k_max
     do k=k_top+1,k_max
-      if (e(K+1)<=Z_bot) then
+      if (e(K+1) <= Z_bot) then
         k_bot = k
         wt(k) = e(K) - Z_bot ; z1(k) = -0.5
         if (e(K) /= e(K+1)) then
@@ -466,38 +464,39 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
       if (k>=k_bot) exit
     enddo
 
-    I_totwt = 1.0 / tot_wt
+    I_totwt = 0.0 ; if (tot_wt > 0.0) I_totwt = 1.0 / tot_wt
     do k=k_top,k_bot ; wt(k) = I_totwt*wt(k) ; enddo
   endif
 
 end subroutine find_overlap
 
-!> This subroutine determines a limited slope for val to be advected with
+!> This function determines a limited slope for val to be advected with
 !! a piecewise limited scheme.
-! ### TODO: Merge with midas_vertmap.F90:find_limited_slope()
-subroutine find_limited_slope(val, e, slope, k)
-  real, dimension(:), intent(in)  :: val !< A column of values that are being interpolated.
-  real, dimension(:), intent(in)  :: e   !< Column interface heights in arbitrary units
-  real,               intent(out) :: slope !< Normalized slope in the intracell distribution of val.
-  integer,            intent(in)  :: k   !< Layer whose slope is being determined.
+function find_limited_slope(val, e, k) result(slope)
+  real, dimension(:), intent(in)  :: val !< A column of values that are being interpolated, in arbitrary units [A].
+  real, dimension(:), intent(in)  :: e   !< A column's interface heights [Z ~> m] or other units.
+  integer,            intent(in)  :: k   !< The layer whose slope is being determined.
+  real                            :: slope !< The normalized slope in the intracell distribution of
+                                           !! val [A Z-1 ~> A m-1] or other units.
   ! Local variables
-  real :: d1, d2  ! Thicknesses in the units of e.
+  real :: d1, d2  ! Thicknesses in the units of e [Z ~> m].
 
   d1 = 0.5*(e(K-1)-e(K+1)) ; d2 = 0.5*(e(K)-e(K+2))
   if (((val(k)-val(k-1)) * (val(k)-val(k+1)) >= 0.0) .or. (d1*d2 <= 0.0)) then
-    slope = 0.0 ! ; curvature = 0.0
+    slope = 0.0
   else
-    slope = (d1**2*(val(k+1) - val(k)) + d2**2*(val(k) - val(k-1))) * &
+    ! This line has an extra set of parentheses on the second line, so it gives slightly
+    ! different answers than the version of find_limited_slope in midas_vertmap.F90.
+    slope = ((d1**2)*(val(k+1) - val(k)) + (d2**2)*(val(k) - val(k-1))) * &
             ((e(K) - e(K+1)) / (d1*d2*(d1+d2)))
     ! slope = 0.5*(val(k+1) - val(k-1))
     ! This is S.J. Lin's form of the PLM limiter.
-    slope = sign(1.0,slope) * min(abs(slope), &
-        2.0*(max(val(k-1),val(k),val(k+1)) - val(k)), &
-        2.0*(val(k) - min(val(k-1),val(k),val(k+1))))
-    ! curvature = 0.0
+    slope = sign(1.0, slope) * min(abs(slope), &
+        2.0*(max(val(k-1), val(k), val(k+1)) - val(k)), &
+        2.0*(val(k) - min(val(k-1), val(k), val(k+1))))
   endif
 
-end subroutine find_limited_slope
+end function find_limited_slope
 
 
 end module MOM_tracer_Z_init

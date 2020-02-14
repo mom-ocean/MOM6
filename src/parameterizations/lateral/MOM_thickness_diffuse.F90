@@ -69,6 +69,9 @@ type, public :: thickness_diffuse_CS ; private
                                  !! the GEOMETRIC thickness difussion [nondim]
   real    :: MEKE_GEOMETRIC_epsilon !< Minimum Eady growth rate for the GEOMETRIC thickness
                                  !! diffusivity [T-1 ~> s-1].
+  logical :: MEKE_GEOM_answers_2018  !< If true, use expressions in the MEKE_GEOMETRIC calculation
+                                 !! that recover the answers from the original implementation.
+                                 !! Otherwise, use expressions that satisfy rotational symmetry.
   logical :: Use_KH_in_MEKE      !< If true, uses the thickness diffusivity calculated here to diffuse MEKE.
   logical :: GM_src_alt          !< If true, use the GM energy conversion form S^2*N^2*kappa rather
                                  !! than the streamfunction for the GM source term.
@@ -151,7 +154,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   real :: KH_u_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities [L2 T-1 ~> m2 s-1]
   real :: KH_v_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities [L2 T-1 ~> m2 s-1]
 
-  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_thickness_diffuse:"// &
+  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_thickness_diffuse: "//&
          "Module must be initialized before it is used.")
 
   if ((.not.CS%thickness_diffuse) .or. &
@@ -366,13 +369,25 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 
   if (associated(MEKE)) then ; if (associated(MEKE%Kh)) then
     if (CS%MEKE_GEOMETRIC) then
-!$OMP do
-      do j=js,je ; do I=is,ie
-        !### This will not give bitwise rotational symmetry.  Add parentheses.
-        MEKE%Kh(i,j) = CS%MEKE_GEOMETRIC_alpha * MEKE%MEKE(i,j) / &
-                       (0.25*(VarMix%SN_u(I,j)+VarMix%SN_u(I-1,j)+VarMix%SN_v(i,J)+VarMix%SN_v(i,J-1)) + &
-                       CS%MEKE_GEOMETRIC_epsilon)
-      enddo ; enddo
+      if (CS%MEKE_GEOM_answers_2018) then
+        !$OMP do
+        do j=js,je ; do I=is,ie
+          ! This does not give bitwise rotational symmetry.
+          MEKE%Kh(i,j) = CS%MEKE_GEOMETRIC_alpha * MEKE%MEKE(i,j) / &
+                         (0.25*(VarMix%SN_u(I,j)+VarMix%SN_u(I-1,j) + &
+                                VarMix%SN_v(i,J)+VarMix%SN_v(i,J-1)) + &
+                          CS%MEKE_GEOMETRIC_epsilon)
+        enddo ; enddo
+      else
+        !$OMP do
+        do j=js,je ; do I=is,ie
+          ! With the additional parentheses this gives bitwise rotational symmetry.
+          MEKE%Kh(i,j) = CS%MEKE_GEOMETRIC_alpha * MEKE%MEKE(i,j) / &
+                         (0.25*((VarMix%SN_u(I,j)+VarMix%SN_u(I-1,j)) + &
+                                (VarMix%SN_v(i,J)+VarMix%SN_v(i,J-1))) + &
+                          CS%MEKE_GEOMETRIC_epsilon)
+        enddo ; enddo
+      endif
     endif
   endif ; endif
 
@@ -1768,7 +1783,10 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_thickness_diffuse" ! This module's name.
   real :: omega        ! The Earth's rotation rate [T-1 ~> s-1]
-  real :: strat_floor
+  real :: strat_floor  ! A floor for Brunt-Vasaila frequency in the Ferrari et al. 2010,
+                       ! streamfunction formulation, expressed as a fraction of planetary
+                       ! rotation [nondim].
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
 
   if (associated(CS)) then
     call MOM_error(WARNING, &
@@ -1852,32 +1870,38 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
                  default=.false., debuggingParam=.true.)
 
   call get_param(param_file, mdl, "MEKE_GM_SRC_ALT", CS%GM_src_alt, &
-                 "If true, use the GM energy conversion form S^2*N^2*kappa rather \n"//&
+                 "If true, use the GM energy conversion form S^2*N^2*kappa rather "//&
                  "than the streamfunction for the GM source term.", default=.false.)
   call get_param(param_file, mdl, "MEKE_GEOMETRIC", CS%MEKE_GEOMETRIC, &
-                 "If true, uses the GM coefficient formulation \n"//&
-                 "from the GEOMETRIC framework (Marshall et al., 2012).", default=.false.)
+                 "If true, uses the GM coefficient formulation from the GEOMETRIC "//&
+                 "framework (Marshall et al., 2012).", default=.false.)
   if (CS%MEKE_GEOMETRIC) then
-
     call get_param(param_file, mdl, "MEKE_GEOMETRIC_EPSILON", CS%MEKE_GEOMETRIC_epsilon, &
-                 "Minimum Eady growth rate used in the calculation of \n"//&
-                 "GEOMETRIC thickness diffusivity.", units="s-1", default=1.0e-7, scale=US%T_to_s)
-
+                 "Minimum Eady growth rate used in the calculation of GEOMETRIC "//&
+                 "thickness diffusivity.", units="s-1", default=1.0e-7, scale=US%T_to_s)
     call get_param(param_file, mdl, "MEKE_GEOMETRIC_ALPHA", CS%MEKE_GEOMETRIC_alpha, &
-                 "The nondimensional coefficient governing the efficiency of the GEOMETRIC \n"//&
+                 "The nondimensional coefficient governing the efficiency of the GEOMETRIC "//&
                  "thickness diffusion.", units="nondim", default=0.05)
+
+    call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
+    call get_param(param_file, mdl, "MEKE_GEOMETRIC_2018_ANSWERS", CS%MEKE_GEOM_answers_2018, &
+                 "If true, use expressions in the MEKE_GEOMETRIC calculation that recover the "//&
+                 "answers from the original implementation.  Otherwise, use expressions that "//&
+                 "satisfy rotational symmetry.", default=default_2018_answers)
   endif
 
   call get_param(param_file, mdl, "USE_KH_IN_MEKE", CS%Use_KH_in_MEKE, &
-                 "If true, uses the thickness diffusivity calculated here to diffuse \n"//&
-                 "MEKE.", default=.false.)
+                 "If true, uses the thickness diffusivity calculated here to diffuse MEKE.", &
+                 default=.false.)
 
   call get_param(param_file, mdl, "USE_GME", CS%use_GME_thickness_diffuse, &
-                 "If true, use the GM+E backscatter scheme in association \n"//&
+                 "If true, use the GM+E backscatter scheme in association "//&
                  "with the Gent and McWilliams parameterization.", default=.false.)
 
   call get_param(param_file, mdl, "USE_GM_WORK_BUG", CS%use_GM_work_bug, &
-                 "If true, compute the top-layer work tendency on the u-grid " // &
+                 "If true, compute the top-layer work tendency on the u-grid "//&
                  "with the incorrect sign, for legacy reproducibility.", &
                  default=.true.)
 
