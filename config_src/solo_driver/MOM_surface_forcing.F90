@@ -882,11 +882,11 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       case (365)   ; time_lev = time_lev_daily
       case default ; time_lev = 1
     end select
-    call MOM_read_data(CS%shortwave_file, CS%SW_var, fluxes%sw(:,:), &
-             G%Domain, timelevel=time_lev)
+    call MOM_read_data(CS%shortwave_file, CS%SW_var, fluxes%sw(:,:), G%Domain, &
+                       timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
     if (CS%archaic_OMIP_file) then
-      call MOM_read_data(CS%shortwaveup_file, "swup_sfc", temp(:,:), &
-               G%Domain, timelevel=time_lev)
+      call MOM_read_data(CS%shortwaveup_file, "swup_sfc", temp(:,:), G%Domain, &
+                         timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
       do j=js,je ; do i=is,ie
         fluxes%sw(i,j) = fluxes%sw(i,j) - temp(i,j)
       enddo ; enddo
@@ -1081,7 +1081,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
   je_in = G%jec - G%jsd + 1
 
   call data_override('OCN', 'lw', fluxes%lw(:,:), day, &
-       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in) ! scale=US%W_m2_to_QRZ_T
   if (US%QRZ_T_to_W_m2 /= 1.0) then ; do j=js,je ; do i=is,ie
     fluxes%lw(i,j) = fluxes%lw(i,j) * US%W_m2_to_QRZ_T
   enddo ; enddo ; endif
@@ -1108,7 +1108,10 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
   enddo ; enddo
 
   call data_override('OCN', 'sw', fluxes%sw(:,:), day, &
-       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in) ! scale=US%W_m2_to_QRZ_T
+  if (US%QRZ_T_to_W_m2 /= 1.0) then ; do j=js,je ; do i=is,ie
+    fluxes%sw(i,j) = fluxes%sw(i,j) * US%W_m2_to_QRZ_T
+  enddo ; enddo ; endif
 
   call data_override('OCN', 'snow', fluxes%fprec(:,:), day, &
        is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in) ! scale=kg_m2_s_conversion

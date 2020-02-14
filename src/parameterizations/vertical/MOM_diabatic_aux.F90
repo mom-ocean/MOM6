@@ -655,13 +655,14 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb)
 end subroutine find_uv_at_h
 
 
-subroutine set_pen_shortwave(optics, fluxes, G, GV, CS, opacity_CSp, tracer_flow_CSp)
+subroutine set_pen_shortwave(optics, fluxes, G, GV, US, CS, opacity_CSp, tracer_flow_CSp)
   type(optics_type),       pointer       :: optics !< An optics structure that has will contain
                                                    !! information about shortwave fluxes and absorption.
   type(forcing),           intent(inout) :: fluxes !< points to forcing fields
                                                    !! unused fields have NULL ptrs
   type(ocean_grid_type),   intent(in)    :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   type(diabatic_aux_CS),   pointer       :: CS     !< Control structure for diabatic_aux
   type(opacity_CS),        pointer       :: opacity_CSp !< The control structure for the opacity module.
   type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp !< A pointer to the control structure
@@ -693,7 +694,7 @@ subroutine set_pen_shortwave(optics, fluxes, G, GV, CS, opacity_CSp, tracer_flow
       if (CS%id_chl > 0) call post_data(CS%id_chl, chl_2d, CS%diag)
 
       call set_opacity(optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
-                       fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, opacity_CSp, chl_2d=chl_2d)
+                       fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, US, opacity_CSp, chl_2d=chl_2d)
     else
       if (.not.associated(tracer_flow_CSp)) call MOM_error(FATAL, &
         "The tracer flow control structure must be associated when the model sets "//&
@@ -703,11 +704,11 @@ subroutine set_pen_shortwave(optics, fluxes, G, GV, CS, opacity_CSp, tracer_flow
       if (CS%id_chl > 0) call post_data(CS%id_chl, chl_3d(:,:,1), CS%diag)
 
       call set_opacity(optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
-                       fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, opacity_CSp, chl_3d=chl_3d)
+                       fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, US, opacity_CSp, chl_3d=chl_3d)
     endif
   else
     call set_opacity(optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
-                     fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, opacity_CSp)
+                     fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, US, opacity_CSp)
   endif
 
 end subroutine set_pen_shortwave

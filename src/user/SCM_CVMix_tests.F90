@@ -40,7 +40,7 @@ type SCM_CVMix_tests_CS ; private
   real :: tau_y !< (Constant) Wind stress, Y [Pa]
   real :: surf_HF !< (Constant) Heat flux [degC Z T-1 ~> m degC s-1]
   real :: surf_evap !< (Constant) Evaporation rate [Z T-1 ~> m s-1]
-  real :: Max_sw !< maximum of diurnal sw radiation [m degC s-1]
+  real :: Max_sw !< maximum of diurnal sw radiation [degC Z T-1 ~> degC m s-1]
   real :: Rho0 !< reference density [R ~> kg m-3]
 end type
 
@@ -189,7 +189,7 @@ subroutine SCM_CVMix_tests_surface_forcing_init(Time, G, param_file, CS)
     call get_param(param_file, mdl, "SCM_DIURNAL_SW_MAX",             &
                  CS%Max_sw, "Maximum diurnal sw radiation "//         &
                  "used in the SCM CVMix test surface forcing.",       &
-                 units='m K/s', fail_if_missing=.true.)
+                 units='m K/s', scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
   endif
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
@@ -274,12 +274,10 @@ subroutine SCM_CVMix_tests_buoyancy_forcing(state, fluxes, day, G, US, CS)
 
   if (CS%UseDiurnalSW) then
     do J=Jsq,Jeq ; do i=is,ie
-    ! Note CVMix test inputs give max sw rad in [m K/s]
-    ! therefore must convert to W/m2 by multiplying
-    ! by Rho0*Cp
+    ! Note CVMix test inputs give max sw rad in [m degC/s]
+    ! therefore must convert to W/m2 by multiplying by Rho0*Cp
     ! Note diurnal cycle peaks at Noon.
-      fluxes%sw(i,J) = CS%Max_sw * max(0.0,cos(2*PI*     &
-           (time_type_to_real(DAY)/86400.-0.5))) * CS%RHO0 * US%Q_to_J_kg*fluxes%C_p
+      fluxes%sw(i,J) = CS%Max_sw *  max(0.0, cos(2*PI*(time_type_to_real(DAY)/86400.0 - 0.5))) * CS%RHO0 * fluxes%C_p
     enddo ; enddo
   endif
 

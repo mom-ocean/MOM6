@@ -675,12 +675,12 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
     enddo ; enddo
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%sensibleheat_file), "shflx", &
-             fluxes%sens(:,:), G%Domain, timelevel=time_lev, scale=-US%W_m2_to_QRZ_T*)
+             fluxes%sens(:,:), G%Domain, timelevel=time_lev, scale=-US%W_m2_to_QRZ_T)
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%shortwavedown_file), "swdn_sfc", &
-             fluxes%sw(:,:), G%Domain, timelevel=time_lev)
+             fluxes%sw(:,:), G%Domain, timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
     call MOM_read_data(trim(CS%inputdir)//trim(CS%shortwaveup_file), "swup_sfc", &
-             temp(:,:), G%Domain, timelevel=time_lev)
+             temp(:,:), G%Domain, timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
     do j=js,je ; do i=is,ie
       fluxes%sw(i,j) = fluxes%sw(i,j) - temp(i,j)
     enddo ; enddo
