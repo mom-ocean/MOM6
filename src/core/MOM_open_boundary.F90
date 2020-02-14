@@ -1962,6 +1962,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            if (dhdt*dhdx < 0.0) dhdt = 0.0
            rx_new = dhdt*dhdx
            cff_new = max(dhdx*dhdx + dhdy*dhdy, eps)
+           rx_new = min(rx_new, cff_new*rx_max)
            ry_new = min(cff_new,max(dhdt*dhdy,-cff_new))
            if (gamma_u < 1.0) then
              rx_avg = (1.0-gamma_u)*segment%rx_norm_obl(I,j,k) + gamma_u*rx_new
@@ -2207,6 +2208,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
 
            rx_new = dhdt*dhdx
            cff_new = max(dhdx*dhdx + dhdy*dhdy, eps)
+           rx_new = min(rx_new, cff_new*rx_max)
            ry_new = min(cff_new,max(dhdt*dhdy,-cff_new))
            if (gamma_u < 1.0) then
              rx_avg = (1.0-gamma_u)*segment%rx_norm_obl(I,j,k) + gamma_u*rx_new
@@ -2451,6 +2453,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            if (dhdt*dhdy < 0.0) dhdt = 0.0
            ry_new = dhdt*dhdy
            cff_new = max(dhdx*dhdx + dhdy*dhdy, eps)
+           ry_new = min(ry_new, cff_new*ry_max)
            rx_new = min(cff_new,max(dhdt*dhdx,-cff_new))
            if (gamma_u < 1.0) then
              rx_avg = (1.0-gamma_u)*segment%rx_norm_obl(I,j,k) + gamma_u*rx_new
@@ -2696,6 +2699,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
 
            ry_new = dhdt*dhdy
            cff_new = max(dhdx*dhdx + dhdy*dhdy, eps)
+           ry_new = min(ry_new, cff_new*ry_max)
            rx_new = min(cff_new,max(dhdt*dhdx,-cff_new))
            if (gamma_u < 1.0) then
              rx_avg = (1.0-gamma_u)*segment%rx_norm_obl(I,j,k) + gamma_u*rx_new
