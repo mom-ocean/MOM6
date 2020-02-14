@@ -66,11 +66,11 @@ type, public :: forcing
     sw_vis_dif => NULL(), & !< visible, diffuse shortwave [W m-2]
     sw_nir_dir => NULL(), & !< near-IR, direct shortwave [W m-2]
     sw_nir_dif => NULL(), & !< near-IR, diffuse shortwave [W m-2]
-    lw         => NULL()    !< longwave [W m-2] (typically negative)
+    lw         => NULL()    !< longwave [Q R Z T-1 ~> W m-2] (typically negative)
 
   ! turbulent heat fluxes into the ocean [W m-2]
   real, pointer, dimension(:,:) :: &
-    latent           => NULL(), & !< latent [W m-2]   (typically < 0)
+    latent           => NULL(), & !< latent [Q R Z T-1 ~> W m-2] (typically < 0)
     sens             => NULL(), & !< sensible [W m-2] (typically negative)
     seaice_melt_heat => NULL(), & !< sea ice and snow melt or formation [W m-2] (typically negative)
     heat_added       => NULL()    !< additional heat flux from SST restoring or flux adjustments [Q R Z T-1 ~> W m-2]
@@ -585,18 +585,18 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
     ! CIME provides heat flux from snow&ice melt (seaice_melt_heat), so this is added below
     if (associated(fluxes%seaice_melt_heat)) then
       net_heat(i) = scale * dt_in_T * W_m2_to_H_T * &
-                    ( fluxes%sw(i,j) +  ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j) + &
+                    ( fluxes%sw(i,j) +  (US%QRZ_T_to_W_m2*(fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j) + &
                       fluxes%seaice_melt_heat(i,j)) )
       !Repeats above code w/ dt=1. for legacy reason
       if (do_NHR)  net_heat_rate(i) = scale * W_m2_to_H_T * &
-           ( fluxes%sw(i,j) +  ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j) + &
+           ( fluxes%sw(i,j) +  (US%QRZ_T_to_W_m2*(fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j) + &
              fluxes%seaice_melt_heat(i,j)))
     else
       net_heat(i) = scale * dt_in_T * W_m2_to_H_T * &
-                    ( fluxes%sw(i,j) +  ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
+                    ( fluxes%sw(i,j) +  (US%QRZ_T_to_W_m2*(fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
       !Repeats above code w/ dt=1. for legacy reason
       if (do_NHR)  net_heat_rate(i) = scale * W_m2_to_H_T * &
-           ( fluxes%sw(i,j) +  ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
+           ( fluxes%sw(i,j) +  (US%QRZ_T_to_W_m2*(fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
     endif
 
     ! Add heat flux from surface damping (restoring) (K * H) or flux adjustments.
@@ -1043,9 +1043,9 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, US, haloshift)
   if (associated(fluxes%sw_nir_dif)) &
     call hchksum(fluxes%sw_nir_dif, mesg//" fluxes%sw_nir_dif",G%HI,haloshift=hshift)
   if (associated(fluxes%lw)) &
-    call hchksum(fluxes%lw, mesg//" fluxes%lw",G%HI,haloshift=hshift)
+    call hchksum(fluxes%lw, mesg//" fluxes%lw", G%HI, haloshift=hshift, scale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%latent)) &
-    call hchksum(fluxes%latent, mesg//" fluxes%latent",G%HI,haloshift=hshift)
+    call hchksum(fluxes%latent, mesg//" fluxes%latent", G%HI, haloshift=hshift, scale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%latent_evap_diag)) &
     call hchksum(fluxes%latent_evap_diag, mesg//" fluxes%latent_evap_diag",G%HI,haloshift=hshift)
   if (associated(fluxes%latent_fprec_diag)) &
@@ -1551,7 +1551,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
         'Combined longwave, latent, and sensible heating at ocean surface', 'W m-2')
 
   handles%id_lw = register_diag_field('ocean_model', 'LW', diag%axesT1, Time, &
-        'Longwave radiation flux into ocean', 'W m-2',                        &
+        'Longwave radiation flux into ocean', 'W m-2', conversion=US%QRZ_T_to_W_m2, &
         standard_name='surface_net_downward_longwave_flux',                   &
         cmor_field_name='rlntds',                                             &
         cmor_standard_name='surface_net_downward_longwave_flux',              &
@@ -1559,7 +1559,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
   handles%id_lat = register_diag_field('ocean_model', 'latent', diag%axesT1, Time,                    &
         'Latent heat flux into ocean due to fusion and evaporation (negative means ocean heat loss)', &
-        'W m-2', cmor_field_name='hflso',                                                             &
+        'W m-2', conversion=US%QRZ_T_to_W_m2, cmor_field_name='hflso',                                &
         cmor_standard_name='surface_downward_latent_heat_flux',                                       &
         cmor_long_name='Surface Downward Latent Heat Flux due to Evap + Melt Snow/Ice')
 
@@ -2511,8 +2511,8 @@ subroutine forcing_diagnostics(fluxes, sfc_state, G, US, time_end, diag, handles
         handles%id_net_heat_coupler_ga > 0. ) then
       do j=js,je ; do i=is,ie
       res(i,j) = 0.0
-      if (associated(fluxes%LW))               res(i,j) = res(i,j) + fluxes%LW(i,j)
-      if (associated(fluxes%latent))           res(i,j) = res(i,j) + fluxes%latent(i,j)
+      if (associated(fluxes%LW))               res(i,j) = res(i,j) + US%QRZ_T_to_W_m2*fluxes%lw(i,j)
+      if (associated(fluxes%latent))           res(i,j) = res(i,j) + US%QRZ_T_to_W_m2*fluxes%latent(i,j)
       if (associated(fluxes%sens))             res(i,j) = res(i,j) + fluxes%sens(i,j)
       if (associated(fluxes%SW))               res(i,j) = res(i,j) + fluxes%SW(i,j)
       if (associated(fluxes%seaice_melt_heat)) res(i,j) = res(i,j) + fluxes%seaice_melt_heat(i,j)
@@ -2532,8 +2532,8 @@ subroutine forcing_diagnostics(fluxes, sfc_state, G, US, time_end, diag, handles
         handles%id_net_heat_surface_ga > 0. ) then
       do j=js,je ; do i=is,ie
         res(i,j) = 0.0
-        if (associated(fluxes%LW))                   res(i,j) = res(i,j) + fluxes%LW(i,j)
-        if (associated(fluxes%latent))               res(i,j) = res(i,j) + fluxes%latent(i,j)
+        if (associated(fluxes%LW))                   res(i,j) = res(i,j) + US%QRZ_T_to_W_m2*fluxes%lw(i,j)
+        if (associated(fluxes%latent))               res(i,j) = res(i,j) + US%QRZ_T_to_W_m2*fluxes%latent(i,j)
         if (associated(fluxes%sens))                 res(i,j) = res(i,j) + fluxes%sens(i,j)
         if (associated(fluxes%SW))                   res(i,j) = res(i,j) + fluxes%SW(i,j)
         if (associated(fluxes%seaice_melt_heat))     res(i,j) = res(i,j) + fluxes%seaice_melt_heat(i,j)
@@ -2619,7 +2619,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, G, US, time_end, diag, handles
     if ((handles%id_LwLatSens > 0) .and. associated(fluxes%lw) .and. &
          associated(fluxes%latent) .and. associated(fluxes%sens)) then
       do j=js,je ; do i=is,ie
-        res(i,j) = (fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)
+        res(i,j) = US%QRZ_T_to_W_m2*(fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)
       enddo ; enddo
       call post_data(handles%id_LwLatSens, res, diag)
     endif
@@ -2627,7 +2627,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, G, US, time_end, diag, handles
     if ((handles%id_total_LwLatSens > 0) .and. associated(fluxes%lw) .and. &
          associated(fluxes%latent) .and. associated(fluxes%sens)) then
       do j=js,je ; do i=is,ie
-        res(i,j) = (fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)
+        res(i,j) = US%QRZ_T_to_W_m2*(fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)
       enddo ; enddo
       total_transport = global_area_integral(res,G)
       call post_data(handles%id_total_LwLatSens, total_transport, diag)
@@ -2636,7 +2636,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, G, US, time_end, diag, handles
     if ((handles%id_LwLatSens_ga > 0) .and. associated(fluxes%lw) .and. &
          associated(fluxes%latent) .and. associated(fluxes%sens)) then
       do j=js,je ; do i=is,ie
-        res(i,j) = (fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)
+        res(i,j) = US%QRZ_T_to_W_m2*(fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)
       enddo ; enddo
       ave_flux = global_area_mean(res,G)
       call post_data(handles%id_LwLatSens_ga, ave_flux, diag)
@@ -2666,11 +2666,11 @@ subroutine forcing_diagnostics(fluxes, sfc_state, G, US, time_end, diag, handles
       call post_data(handles%id_lw, fluxes%lw, diag)
     endif
     if ((handles%id_total_lw > 0) .and. associated(fluxes%lw)) then
-      total_transport = global_area_integral(fluxes%lw,G)
+      total_transport = global_area_integral(fluxes%lw, G, scale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_total_lw, total_transport, diag)
     endif
     if ((handles%id_lw_ga > 0) .and. associated(fluxes%lw)) then
-      ave_flux = global_area_mean(fluxes%lw,G)
+      ave_flux = global_area_mean(fluxes%lw, G, scale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_lw_ga, ave_flux, diag)
     endif
 
@@ -2678,11 +2678,11 @@ subroutine forcing_diagnostics(fluxes, sfc_state, G, US, time_end, diag, handles
       call post_data(handles%id_lat, fluxes%latent, diag)
     endif
     if ((handles%id_total_lat > 0) .and. associated(fluxes%latent)) then
-      total_transport = global_area_integral(fluxes%latent,G)
+      total_transport = global_area_integral(fluxes%latent, G, scale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_total_lat, total_transport, diag)
     endif
     if ((handles%id_lat_ga > 0) .and. associated(fluxes%latent)) then
-      ave_flux = global_area_mean(fluxes%latent,G)
+      ave_flux = global_area_mean(fluxes%latent, G, scale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_lat_ga, ave_flux, diag)
     endif
 

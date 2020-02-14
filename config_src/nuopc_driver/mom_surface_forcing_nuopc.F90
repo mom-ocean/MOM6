@@ -465,7 +465,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
        fluxes%heat_content_frunoff(i,j) = kg_m2_s_conversion*IOB%calving_hflx(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (associated(IOB%lw_flux)) &
-         fluxes%LW(i,j) = IOB%lw_flux(i-i0,j-j0) * G%mask2dT(i,j)
+      fluxes%lw(i,j) = US%W_m2_to_QRZ_T * IOB%lw_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (associated(IOB%t_flux)) &
          fluxes%sens(i,j) = IOB%t_flux(i-i0,j-j0) * G%mask2dT(i,j)
@@ -480,15 +480,18 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
     fluxes%latent(i,j) = 0.0
     if (associated(IOB%fprec)) then
-       fluxes%latent(i,j)            = fluxes%latent(i,j) + IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
+       fluxes%latent(i,j)            = fluxes%latent(i,j) + &
+           IOB%fprec(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
        fluxes%latent_fprec_diag(i,j) = G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
     endif
     if (associated(IOB%calving)) then
-       fluxes%latent(i,j)              = fluxes%latent(i,j) + IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
+       fluxes%latent(i,j)              = fluxes%latent(i,j) + &
+           IOB%calving(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
        fluxes%latent_frunoff_diag(i,j) = G%mask2dT(i,j) * IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
     endif
     if (associated(IOB%q_flux)) then
-       fluxes%latent(i,j)           = fluxes%latent(i,j) + IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
+       fluxes%latent(i,j)           = fluxes%latent(i,j) + &
+           IOB%q_flux(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_vapor
        fluxes%latent_evap_diag(i,j) = G%mask2dT(i,j) * IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
     endif
     fluxes%latent(i,j) = G%mask2dT(i,j) * fluxes%latent(i,j)

@@ -468,7 +468,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
     ! longwave radiation, sum up and down (W/m2)
     if (associated(IOB%lw_flux)) &
-         fluxes%LW(i,j) = IOB%lw_flux(i-i0,j-j0) * G%mask2dT(i,j)
+         fluxes%lw(i,j) = US%W_m2_to_QRZ_T * IOB%lw_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
     ! sensible heat flux (W/m2)
     if (associated(IOB%t_flux)) &
@@ -486,17 +486,20 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     fluxes%latent(i,j) = 0.0
     ! contribution from frozen ppt
     if (associated(IOB%fprec)) then
-      fluxes%latent(i,j)              = fluxes%latent(i,j) + IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
+      fluxes%latent(i,j)              = fluxes%latent(i,j) + &
+          IOB%fprec(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
       fluxes%latent_fprec_diag(i,j)   = G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
     endif
     ! contribution from frozen runoff
     if (associated(fluxes%frunoff)) then
-      fluxes%latent(i,j)              = fluxes%latent(i,j) + IOB%rofi_flux(i-i0,j-j0)*CS%latent_heat_fusion
+      fluxes%latent(i,j)              = fluxes%latent(i,j) + &
+          IOB%rofi_flux(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
       fluxes%latent_frunoff_diag(i,j) = G%mask2dT(i,j) * IOB%rofi_flux(i-i0,j-j0)*CS%latent_heat_fusion
     endif
     ! contribution from evaporation
     if (associated(IOB%q_flux)) then
-      fluxes%latent(i,j)             = fluxes%latent(i,j) + IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
+      fluxes%latent(i,j)             = fluxes%latent(i,j) + &
+          IOB%q_flux(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_vapor
       fluxes%latent_evap_diag(i,j)  = G%mask2dT(i,j) * IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
     endif
     fluxes%latent(i,j) = G%mask2dT(i,j) * fluxes%latent(i,j)

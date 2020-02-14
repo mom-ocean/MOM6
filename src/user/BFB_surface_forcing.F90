@@ -106,7 +106,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
       ! vprec will be set later, if it is needed for salinity restoring.
       fluxes%vprec(i,j) = 0.0
 
-      ! Heat fluxes are in units of [W m-2] and are positive into the ocean.
+      ! Heat fluxes are in units of [Q R Z T-1 ~> W m-2] and are positive into the ocean.
       fluxes%lw(i,j) = 0.0 * G%mask2dT(i,j)
       fluxes%latent(i,j) = 0.0 * G%mask2dT(i,j)
       fluxes%sens(i,j) = 0.0 * G%mask2dT(i,j)

@@ -820,11 +820,11 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       case (365)   ; time_lev = time_lev_daily
       case default ; time_lev = 1
     end select
-    call MOM_read_data(CS%longwave_file, CS%LW_var, fluxes%LW(:,:), &
-                   G%Domain, timelevel=time_lev)
+    call MOM_read_data(CS%longwave_file, CS%LW_var, fluxes%lw(:,:), &
+                       G%Domain, timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
     if (CS%archaic_OMIP_file) then
       call MOM_read_data(CS%longwaveup_file, "lwup_sfc", temp(:,:), G%Domain, &
-                         timelevel=time_lev)
+                         timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
       do j=js,je ; do i=is,ie ; fluxes%LW(i,j) = fluxes%LW(i,j) - temp(i,j) ; enddo ; enddo
     endif
     CS%LW_last_lev = time_lev
@@ -839,9 +839,9 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       call MOM_read_data(CS%evaporation_file, CS%evap_var, temp(:,:), &
                      G%Domain, timelevel=time_lev)
       do j=js,je ; do i=is,ie
-        fluxes%latent(i,j)           = -CS%latent_heat_vapor*temp(i,j)
+        fluxes%latent(i,j)           = -US%W_m2_to_QRZ_T*CS%latent_heat_vapor*temp(i,j)
         fluxes%evap(i,j)             = -kg_m2_s_conversion*temp(i,j)
-        fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
+        fluxes%latent_evap_diag(i,j) = US%QRZ_T_to_W_m2*fluxes%latent(i,j)
       enddo ; enddo
     else
       call MOM_read_data(CS%evaporation_file, CS%evap_var, fluxes%evap(:,:), &
@@ -856,9 +856,9 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
     end select
     if (.not.CS%archaic_OMIP_file) then
       call MOM_read_data(CS%latentheat_file, CS%latent_var, fluxes%latent(:,:), &
-                     G%Domain, timelevel=time_lev)
+                     G%Domain, timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
       do j=js,je ; do i=is,ie
-        fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
+        fluxes%latent_evap_diag(i,j) = US%QRZ_T_to_W_m2*fluxes%latent(i,j)
       enddo ; enddo
     endif
     CS%latent_last_lev = time_lev
@@ -968,7 +968,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       fluxes%fprec(i,j)   = fluxes%fprec(i,j)   * G%mask2dT(i,j)
       fluxes%lrunoff(i,j) = fluxes%lrunoff(i,j) * G%mask2dT(i,j)
       fluxes%frunoff(i,j) = fluxes%frunoff(i,j) * G%mask2dT(i,j)
-      fluxes%LW(i,j)      = fluxes%LW(i,j)      * G%mask2dT(i,j)
+      fluxes%lw(i,j)      = fluxes%lw(i,j)      * G%mask2dT(i,j)
       fluxes%sens(i,j)    = fluxes%sens(i,j)    * G%mask2dT(i,j)
       fluxes%sw(i,j)      = fluxes%sw(i,j)      * G%mask2dT(i,j)
       fluxes%latent(i,j)  = fluxes%latent(i,j)  * G%mask2dT(i,j)
@@ -1081,8 +1081,11 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
   js_in = G%jsc - G%jsd + 1
   je_in = G%jec - G%jsd + 1
 
-  call data_override('OCN', 'lw', fluxes%LW(:,:), day, &
+  call data_override('OCN', 'lw', fluxes%lw(:,:), day, &
        is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+  if (US%QRZ_T_to_W_m2 /= 1.0) then ; do j=js,je ; do i=is,ie
+    fluxes%lw(i,j) = fluxes%lw(i,j) * US%W_m2_to_QRZ_T
+  enddo ; enddo ; endif
   call data_override('OCN', 'evap', fluxes%evap(:,:), day, &
        is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
 
@@ -1091,8 +1094,8 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
     ! This is dangerous because it is not clear whether the data files have been read!
     fluxes%evap(i,j) = -fluxes%evap(i,j)  ! Normal convention is positive into the ocean
                                           ! but evap is normally a positive quantity in the files
-    fluxes%latent(i,j)           = CS%latent_heat_vapor*fluxes%evap(i,j)
-    fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
+    fluxes%latent(i,j)           = US%W_m2_to_QRZ_T * CS%latent_heat_vapor*fluxes%evap(i,j)
+    fluxes%latent_evap_diag(i,j) = US%QRZ_T_to_W_m2*fluxes%latent(i,j)
     fluxes%evap(i,j) = kg_m2_s_conversion*fluxes%evap(i,j)
   enddo ; enddo
 
@@ -1182,7 +1185,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
     fluxes%fprec(i,j)   = fluxes%fprec(i,j)   * G%mask2dT(i,j)
     fluxes%lrunoff(i,j) = fluxes%lrunoff(i,j) * G%mask2dT(i,j)
     fluxes%frunoff(i,j) = fluxes%frunoff(i,j) * G%mask2dT(i,j)
-    fluxes%LW(i,j)      = fluxes%LW(i,j)      * G%mask2dT(i,j)
+    fluxes%lw(i,j)      = fluxes%lw(i,j)      * G%mask2dT(i,j)
     fluxes%latent(i,j)  = fluxes%latent(i,j)  * G%mask2dT(i,j)
     fluxes%sens(i,j)    = fluxes%sens(i,j)    * G%mask2dT(i,j)
     fluxes%sw(i,j)      = fluxes%sw(i,j)      * G%mask2dT(i,j)

@@ -662,17 +662,17 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
 
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%longwavedown_file), "lwdn_sfc", &
-             fluxes%LW(:,:), G%Domain, timelevel=time_lev)
+             fluxes%LW(:,:), G%Domain, timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
     call MOM_read_data(trim(CS%inputdir)//trim(CS%longwaveup_file), "lwup_sfc", &
-             temp(:,:), G%Domain, timelevel=time_lev)
+             temp(:,:), G%Domain, timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
     do j=js,je ; do i=is,ie ; fluxes%LW(i,j) = fluxes%LW(i,j) - temp(i,j) ; enddo ; enddo
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%evaporation_file), "evap", &
              temp(:,:), G%Domain, timelevel=time_lev)
     do j=js,je ; do i=is,ie
-      fluxes%latent(i,j)           = -hlv*temp(i,j)
+      fluxes%latent(i,j)           = -US%W_m2_to_QRZ_T*hlv*temp(i,j)
       fluxes%evap(i,j)             = -US%kg_m3_to_R*US%m_to_Z*US%T_to_s * temp(i,j)
-      fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
+      fluxes%latent_evap_diag(i,j) = US%QRZ_T_to_W_m2*fluxes%latent(i,j)
 
     enddo ; enddo
 
