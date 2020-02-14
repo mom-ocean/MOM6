@@ -468,11 +468,11 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
       fluxes%lw(i,j) = US%W_m2_to_QRZ_T * IOB%lw_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (associated(IOB%t_flux)) &
-         fluxes%sens(i,j) = IOB%t_flux(i-i0,j-j0) * G%mask2dT(i,j)
+      fluxes%sens(i,j) = US%W_m2_to_QRZ_T * IOB%t_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
-    ! sea ice and snow melt heat flux [W/m2]
+    ! sea ice and snow melt heat flux [Q R Z T-1 ~> W/m2]
     if (associated(IOB%seaice_melt_heat)) &
-         fluxes%seaice_melt_heat(i,j) = G%mask2dT(i,j) * IOB%seaice_melt_heat(i-i0,j-j0)
+         fluxes%seaice_melt_heat(i,j) = US%W_m2_to_QRZ_T * G%mask2dT(i,j) * IOB%seaice_melt_heat(i-i0,j-j0)
 
     ! water flux due to sea ice and snow melt [kg/m2/s]
     if (associated(IOB%seaice_melt)) &
@@ -482,17 +482,17 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     if (associated(IOB%fprec)) then
        fluxes%latent(i,j)            = fluxes%latent(i,j) + &
            IOB%fprec(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
-       fluxes%latent_fprec_diag(i,j) = G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
+       fluxes%latent_fprec_diag(i,j) = G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
     endif
     if (associated(IOB%calving)) then
        fluxes%latent(i,j)              = fluxes%latent(i,j) + &
            IOB%calving(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
-       fluxes%latent_frunoff_diag(i,j) = G%mask2dT(i,j) * IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
+       fluxes%latent_frunoff_diag(i,j) = G%mask2dT(i,j) * IOB%calving(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
     endif
     if (associated(IOB%q_flux)) then
        fluxes%latent(i,j)           = fluxes%latent(i,j) + &
            IOB%q_flux(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_vapor
-       fluxes%latent_evap_diag(i,j) = G%mask2dT(i,j) * IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
+       fluxes%latent_evap_diag(i,j) = G%mask2dT(i,j) * IOB%q_flux(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_vapor
     endif
     fluxes%latent(i,j) = G%mask2dT(i,j) * fluxes%latent(i,j)
 

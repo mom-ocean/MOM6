@@ -307,7 +307,7 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
     elseif (trim(CS%buoy_config) == "zero") then
       call buoyancy_forcing_zero(sfc_state, fluxes, day_center, dt, G, CS)
     elseif (trim(CS%buoy_config) == "const") then
-      call buoyancy_forcing_const(sfc_state, fluxes, day_center, dt, G, CS)
+      call buoyancy_forcing_const(sfc_state, fluxes, day_center, dt, G, US, CS)
     elseif (trim(CS%buoy_config) == "linear") then
       call buoyancy_forcing_linear(sfc_state, fluxes, day_center, dt, G, US, CS)
     elseif (trim(CS%buoy_config) == "MESO") then
@@ -841,7 +841,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       do j=js,je ; do i=is,ie
         fluxes%latent(i,j)           = -US%W_m2_to_QRZ_T*CS%latent_heat_vapor*temp(i,j)
         fluxes%evap(i,j)             = -kg_m2_s_conversion*temp(i,j)
-        fluxes%latent_evap_diag(i,j) = US%QRZ_T_to_W_m2*fluxes%latent(i,j)
+        fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
       enddo ; enddo
     else
       call MOM_read_data(CS%evaporation_file, CS%evap_var, fluxes%evap(:,:), &
@@ -858,7 +858,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       call MOM_read_data(CS%latentheat_file, CS%latent_var, fluxes%latent(:,:), &
                      G%Domain, timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
       do j=js,je ; do i=is,ie
-        fluxes%latent_evap_diag(i,j) = US%QRZ_T_to_W_m2*fluxes%latent(i,j)
+        fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
       enddo ; enddo
     endif
     CS%latent_last_lev = time_lev
@@ -869,12 +869,11 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       case default ; time_lev = 1
     end select
     if (CS%archaic_OMIP_file) then
-      call MOM_read_data(CS%sensibleheat_file, CS%sens_var, temp(:,:), &
-                     G%Domain, timelevel=time_lev)
-      do j=js,je ; do i=is,ie ; fluxes%sens(i,j) = -temp(i,j) ; enddo ; enddo
+      call MOM_read_data(CS%sensibleheat_file, CS%sens_var, fluxes%sens(:,:), &
+                     G%Domain, timelevel=time_lev, scale=-US%W_m2_to_QRZ_T)
     else
       call MOM_read_data(CS%sensibleheat_file, CS%sens_var, fluxes%sens(:,:), &
-                     G%Domain, timelevel=time_lev)
+                     G%Domain, timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
     endif
     CS%sens_last_lev = time_lev
 
@@ -974,8 +973,8 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       fluxes%latent(i,j)  = fluxes%latent(i,j)  * G%mask2dT(i,j)
 
       fluxes%latent_evap_diag(i,j)     = fluxes%latent_evap_diag(i,j) * G%mask2dT(i,j)
-      fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*CS%latent_heat_fusion
-      fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*CS%latent_heat_fusion
+      fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
+      fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
     enddo ; enddo
 
   endif ! time_lev /= CS%buoy_last_lev_read
@@ -1095,7 +1094,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
     fluxes%evap(i,j) = -fluxes%evap(i,j)  ! Normal convention is positive into the ocean
                                           ! but evap is normally a positive quantity in the files
     fluxes%latent(i,j)           = US%W_m2_to_QRZ_T * CS%latent_heat_vapor*fluxes%evap(i,j)
-    fluxes%latent_evap_diag(i,j) = US%QRZ_T_to_W_m2*fluxes%latent(i,j)
+    fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
     fluxes%evap(i,j) = kg_m2_s_conversion*fluxes%evap(i,j)
   enddo ; enddo
 
@@ -1104,7 +1103,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
 
   ! note the sign convention
   do j=js,je ; do i=is,ie
-     fluxes%sens(i,j) = -fluxes%sens(i,j)  ! Normal convention is positive into the ocean
+     fluxes%sens(i,j) = -US%W_m2_to_QRZ_T * fluxes%sens(i,j)  ! Normal convention is positive into the ocean
                                            ! but sensible is normally a positive quantity in the files
   enddo ; enddo
 
@@ -1191,8 +1190,8 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
     fluxes%sw(i,j)      = fluxes%sw(i,j)      * G%mask2dT(i,j)
 
     fluxes%latent_evap_diag(i,j)     = fluxes%latent_evap_diag(i,j) * G%mask2dT(i,j)
-    fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*CS%latent_heat_fusion
-    fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*CS%latent_heat_fusion
+    fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
+    fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
   enddo ; enddo
 
 
@@ -1253,7 +1252,7 @@ end subroutine buoyancy_forcing_zero
 
 
 !> Sets up spatially and temporally constant surface heat fluxes.
-subroutine buoyancy_forcing_const(sfc_state, fluxes, day, dt, G, CS)
+subroutine buoyancy_forcing_const(sfc_state, fluxes, day, dt, G, US, CS)
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(forcing),         intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
@@ -1261,6 +1260,7 @@ subroutine buoyancy_forcing_const(sfc_state, fluxes, day, dt, G, CS)
   real,                  intent(in)    :: dt   !< The amount of time over which
                                                !! the fluxes apply [s]
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
+  type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   type(surface_forcing_CS), pointer    :: CS   !< pointer to control struct returned by
                                                !! a previous surface_forcing_init call
   ! Local variables
@@ -1278,7 +1278,7 @@ subroutine buoyancy_forcing_const(sfc_state, fluxes, day, dt, G, CS)
       fluxes%frunoff(i,j)              = 0.0
       fluxes%lw(i,j)                   = 0.0
       fluxes%latent(i,j)               = 0.0
-      fluxes%sens(i,j)                 = CS%constantHeatForcing * G%mask2dT(i,j)
+      fluxes%sens(i,j)                 = US%W_m2_to_QRZ_T * CS%constantHeatForcing * G%mask2dT(i,j)
       fluxes%sw(i,j)                   = 0.0
       fluxes%latent_evap_diag(i,j)     = 0.0
       fluxes%latent_fprec_diag(i,j)    = 0.0
@@ -1763,7 +1763,6 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   elseif (trim(CS%wind_config) == "SCM_CVmix_tests" .or. &
           trim(CS%buoy_config) == "SCM_CVmix_tests") then
     call SCM_CVmix_tests_surface_forcing_init(Time, G, param_file, CS%SCM_CVmix_tests_CSp)
-    CS%SCM_CVmix_tests_CSp%Rho0 = US%R_to_kg_m3*CS%Rho0 !copy reference density for pass
   endif
 
   call register_forcing_type_diags(Time, diag, US, CS%use_temperature, CS%handles)

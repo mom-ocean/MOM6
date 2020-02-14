@@ -150,7 +150,7 @@ subroutine MESO_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
       !   Heat fluxes are in units of [Q R Z T-1 ~> W m-2] and are positive into the ocean.
       fluxes%lw(i,j)                 = 0.0 * G%mask2dT(i,j)
       fluxes%latent(i,j)             = 0.0 * G%mask2dT(i,j)
-      fluxes%sens(i,j)               = CS%Heat(i,j) * G%mask2dT(i,j)
+      fluxes%sens(i,j)               = US%W_m2_to_QRZ_T * CS%Heat(i,j) * G%mask2dT(i,j)
       fluxes%sw(i,j)                 = CS%Solar(i,j) * G%mask2dT(i,j)
     enddo ; enddo
   else ! This is the buoyancy only mode.

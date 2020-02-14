@@ -38,10 +38,10 @@ type SCM_CVMix_tests_CS ; private
   logical :: UseDiurnalSW   !< True to use diurnal sw radiation
   real :: tau_x !< (Constant) Wind stress, X [Pa]
   real :: tau_y !< (Constant) Wind stress, Y [Pa]
-  real :: surf_HF !< (Constant) Heat flux [m degC s-1]
-  real :: surf_evap !< (Constant) Evaporation rate [m s-1]
+  real :: surf_HF !< (Constant) Heat flux [degC Z T-1 ~> m degC s-1]
+  real :: surf_evap !< (Constant) Evaporation rate [Z T-1 ~> m s-1]
   real :: Max_sw !< maximum of diurnal sw radiation [m degC s-1]
-  real,public :: Rho0 !< reference density copied for easy passing [kg m-3]
+  real :: Rho0 !< reference density [R ~> kg m-3]
 end type
 
 ! This include declares and sets the variable "version".
@@ -177,13 +177,13 @@ subroutine SCM_CVMix_tests_surface_forcing_init(Time, G, param_file, CS)
     call get_param(param_file, mdl, "SCM_HEAT_FLUX",                  &
                  CS%surf_HF, "Constant surface heat flux "//          &
                  "used in the SCM CVMix test surface forcing.",       &
-                 units='m K/s', fail_if_missing=.true.)
+                 units='m K/s', scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
   endif
   if (CS%UseEvaporation) then
     call get_param(param_file, mdl, "SCM_EVAPORATION",                &
                  CS%surf_evap, "Constant surface evaporation "//      &
                  "used in the SCM CVMix test surface forcing.",       &
-                 units='m/s', fail_if_missing=.true.)
+                 units='m/s', scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
   endif
   if (CS%UseDiurnalSW) then
     call get_param(param_file, mdl, "SCM_DIURNAL_SW_MAX",             &
@@ -191,6 +191,12 @@ subroutine SCM_CVMix_tests_surface_forcing_init(Time, G, param_file, CS)
                  "used in the SCM CVMix test surface forcing.",       &
                  units='m K/s', fail_if_missing=.true.)
   endif
+  call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
+                 "The mean ocean density used with BOUSSINESQ true to "//&
+                 "calculate accelerations and the mass for conservation "//&
+                 "properties, or with BOUSSINSEQ false to convert some "//&
+                 "parameters from vertical units of m to kg m-2.", &
+                 units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
 
 end subroutine SCM_CVMix_tests_surface_forcing_init
 
@@ -221,7 +227,7 @@ subroutine SCM_CVMix_tests_wind_forcing(state, forces, day, G, US, CS)
 
   mag_tau = sqrt(CS%tau_x*CS%tau_x + CS%tau_y*CS%tau_y)
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
-    forces%ustar(i,j) = sqrt( US%L_to_Z * mag_tau / (US%kg_m3_to_R*CS%Rho0) )
+    forces%ustar(i,j) = sqrt( US%L_to_Z * mag_tau / (CS%Rho0) )
   enddo ; enddo ; endif
 
 end subroutine SCM_CVMix_tests_wind_forcing
@@ -253,7 +259,7 @@ subroutine SCM_CVMix_tests_buoyancy_forcing(state, fluxes, day, G, US, CS)
     ! therefore must convert to W/m2 by multiplying
     ! by Rho0*Cp
     do J=Jsq,Jeq ; do i=is,ie
-      fluxes%sens(i,J) = CS%surf_HF * CS%Rho0 * US%Q_to_J_kg*fluxes%C_p
+      fluxes%sens(i,J) = CS%surf_HF * CS%Rho0 * fluxes%C_p
     enddo ; enddo
   endif
 
@@ -262,7 +268,7 @@ subroutine SCM_CVMix_tests_buoyancy_forcing(state, fluxes, day, G, US, CS)
     ! Note CVMix test inputs give evaporation in [m s-1]
     ! This therefore must be converted to mass flux in [R Z T-1 ~> kg m-2 s-1]
     ! by multiplying by density and some unit conversion factors.
-      fluxes%evap(i,J) = CS%surf_evap * US%kg_m3_to_R*US%m_to_Z*US%T_to_s * CS%Rho0
+      fluxes%evap(i,J) = CS%surf_evap * CS%Rho0
     enddo ; enddo
   endif
 

@@ -668,17 +668,14 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
     do j=js,je ; do i=is,ie ; fluxes%LW(i,j) = fluxes%LW(i,j) - temp(i,j) ; enddo ; enddo
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%evaporation_file), "evap", &
-             temp(:,:), G%Domain, timelevel=time_lev)
+             fluxes%evap(:,:), G%Domain, timelevel=time_lev, scale=-US%kg_m3_to_R*US%m_to_Z*US%T_to_s)
     do j=js,je ; do i=is,ie
-      fluxes%latent(i,j)           = -US%W_m2_to_QRZ_T*hlv*temp(i,j)
-      fluxes%evap(i,j)             = -US%kg_m3_to_R*US%m_to_Z*US%T_to_s * temp(i,j)
-      fluxes%latent_evap_diag(i,j) = US%QRZ_T_to_W_m2*fluxes%latent(i,j)
-
+      fluxes%latent(i,j)           = US%J_kg_to_Q*hlv*fluxes%evap(i,j)
+      fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
     enddo ; enddo
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%sensibleheat_file), "shflx", &
-             temp(:,:), G%Domain, timelevel=time_lev)
-    do j=js,je ; do i=is,ie ; fluxes%sens(i,j) = -temp(i,j) ; enddo ; enddo
+             fluxes%sens(:,:), G%Domain, timelevel=time_lev, scale=-US%W_m2_to_QRZ_T*)
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%shortwavedown_file), "swdn_sfc", &
              fluxes%sw(:,:), G%Domain, timelevel=time_lev)
@@ -735,8 +732,8 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       fluxes%heat_content_lrunoff(i,j) = US%Q_to_J_kg*fluxes%C_p * &
                                          fluxes%lrunoff(i,j)*sfc_state%SST(i,j)
       fluxes%latent_evap_diag(i,j)     = fluxes%latent_evap_diag(i,j) * G%mask2dT(i,j)
-      fluxes%latent_fprec_diag(i,j)    = -US%R_to_kg_m3*US%Z_to_m*US%s_to_T*fluxes%fprec(i,j)*hlf
-      fluxes%latent_frunoff_diag(i,j)  = -US%R_to_kg_m3*US%Z_to_m*US%s_to_T*fluxes%frunoff(i,j)*hlf
+      fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*US%J_kg_to_Q*hlf
+      fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*US%J_kg_to_Q*hlf
     enddo ; enddo
 
   endif ! time_lev /= CS%buoy_last_lev_read

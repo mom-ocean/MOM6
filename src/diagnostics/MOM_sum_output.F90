@@ -1001,11 +1001,12 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
 
     if (associated(fluxes%sw)) then ; do j=js,je ; do i=is,ie
       heat_in(i,j) = heat_in(i,j) + dt*US%T_to_s*US%L_to_m**2*G%areaT(i,j) * (fluxes%sw(i,j) + &
-             (US%QRZ_T_to_W_m2*fluxes%lw(i,j) + (US%QRZ_T_to_W_m2*fluxes%latent(i,j) + fluxes%sens(i,j))))
+             US%QRZ_T_to_W_m2*(fluxes%lw(i,j) + (fluxes%latent(i,j) + fluxes%sens(i,j))))
     enddo ; enddo ; endif
 
     if (associated(fluxes%seaice_melt_heat)) then ; do j=js,je ; do i=is,ie
-       heat_in(i,j) = heat_in(i,j) + dt*US%T_to_s*US%L_to_m**2*G%areaT(i,j) * fluxes%seaice_melt_heat(i,j)
+       heat_in(i,j) = heat_in(i,j) + dt*US%T_to_s*US%L_to_m**2*US%QRZ_T_to_W_m2*G%areaT(i,j) * &
+                                     fluxes%seaice_melt_heat(i,j)
     enddo ; enddo ; endif
 
     ! smg: new code
