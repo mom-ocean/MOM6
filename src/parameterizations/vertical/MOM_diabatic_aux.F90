@@ -82,11 +82,11 @@ type, public :: diabatic_aux_CS ; private
   real, allocatable, dimension(:,:)   :: createdH       !< The amount of volume added in order to
                                                         !! avoid grounding [H T-1 ~> m s-1]
   real, allocatable, dimension(:,:,:) :: penSW_diag     !< Heating in a layer from convergence of
-                                                        !! penetrative SW [W m-2]
+                                                        !! penetrative SW [Q R Z T-1 ~> W m-2]
   real, allocatable, dimension(:,:,:) :: penSWflux_diag !< Penetrative SW flux at base of grid
-                                                        !! layer [W m-2]
+                                                        !! layer [Q R Z T-1 ~> W m-2]
   real, allocatable, dimension(:,:)   :: nonpenSW_diag  !< Non-downwelling SW radiation at ocean
-                                                        !! surface [W m-2]
+                                                        !! surface [Q R Z T-1 ~> W m-2]
 
 end type diabatic_aux_CS
 
@@ -1305,14 +1305,13 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
       tv%T(i,j,k) = T2d(i,k)
     enddo ; enddo
 
-    ! Diagnose heating [W m-2] applied to a grid cell from SW penetration
+    ! Diagnose heating [Q R Z T-1 ~> W m-2] applied to a grid cell from SW penetration
     ! Also diagnose the penetrative SW heat flux at base of layer.
     if (CS%id_penSW_diag > 0 .or. CS%id_penSWflux_diag > 0) then
 
       ! convergence of SW into a layer
       do k=1,nz ; do i=is,ie
-        CS%penSW_diag(i,j,k) = (T2d(i,k)-CS%penSW_diag(i,j,k))*h(i,j,k) * Idt * tv%C_p * &
-                               US%Q_to_J_kg*GV%H_to_kg_m2*US%s_to_T
+        CS%penSW_diag(i,j,k) = (T2d(i,k)-CS%penSW_diag(i,j,k))*h(i,j,k) * Idt * tv%C_p * GV%H_to_RZ
       enddo ; enddo
 
       ! Perform a cumulative sum upwards from bottom to
@@ -1332,7 +1331,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     ! Fill CS%nonpenSW_diag
     if (CS%id_nonpenSW_diag > 0) then
       do i=is,ie
-        CS%nonpenSW_diag(i,j) = nonpenSW(i)
+        CS%nonpenSW_diag(i,j) = nonpenSW(i) * Idt * tv%C_p * GV%H_to_RZ
       enddo
     endif
 
@@ -1498,30 +1497,29 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
     ! diagnostic for heating of a grid cell from convergence of SW heat into the cell
     CS%id_penSW_diag = register_diag_field('ocean_model', 'rsdoabsorb',                     &
           diag%axesTL, Time, 'Convergence of Penetrative Shortwave Flux in Sea Water Layer',&
-          'W m-2', standard_name='net_rate_of_absorption_of_shortwave_energy_in_ocean_layer',v_extensive=.true.)
+          'W m-2', conversion=US%QRZ_T_to_W_m2, &
+          standard_name='net_rate_of_absorption_of_shortwave_energy_in_ocean_layer', v_extensive=.true.)
 
     ! diagnostic for penetrative SW heat flux at top interface of tracer cell (nz+1 interfaces)
     ! k=1 gives penetrative SW at surface; SW(k=nz+1)=0 (no penetration through rock).
     CS%id_penSWflux_diag = register_diag_field('ocean_model', 'rsdo',                               &
           diag%axesTi, Time, 'Downwelling Shortwave Flux in Sea Water at Grid Cell Upper Interface',&
-          'W m-2', standard_name='downwelling_shortwave_flux_in_sea_water')
+          'W m-2', conversion=US%QRZ_T_to_W_m2, standard_name='downwelling_shortwave_flux_in_sea_water')
 
     ! need both arrays for the SW diagnostics (one for flux, one for convergence)
     if (CS%id_penSW_diag>0 .or. CS%id_penSWflux_diag>0) then
-       allocate(CS%penSW_diag(isd:ied,jsd:jed,nz))
-       CS%penSW_diag(:,:,:) = 0.0
-       allocate(CS%penSWflux_diag(isd:ied,jsd:jed,nz+1))
-       CS%penSWflux_diag(:,:,:) = 0.0
+      allocate(CS%penSW_diag(isd:ied,jsd:jed,nz)) ; CS%penSW_diag(:,:,:) = 0.0
+      allocate(CS%penSWflux_diag(isd:ied,jsd:jed,nz+1)) ; CS%penSWflux_diag(:,:,:) = 0.0
     endif
 
     ! diagnostic for non-downwelling SW radiation (i.e., SW absorbed at ocean surface)
     CS%id_nonpenSW_diag = register_diag_field('ocean_model', 'nonpenSW',                       &
           diag%axesT1, Time,                                                                   &
           'Non-downwelling SW radiation (i.e., SW absorbed in ocean surface with LW,SENS,LAT)',&
-          'W m-2', standard_name='nondownwelling_shortwave_flux_in_sea_water')
+          'W m-2', conversion=US%QRZ_T_to_W_m2, &
+          standard_name='nondownwelling_shortwave_flux_in_sea_water')
     if (CS%id_nonpenSW_diag > 0) then
-       allocate(CS%nonpenSW_diag(isd:ied,jsd:jed))
-       CS%nonpenSW_diag(:,:) = 0.0
+      allocate(CS%nonpenSW_diag(isd:ied,jsd:jed)) ; CS%nonpenSW_diag(:,:) = 0.0
     endif
   endif
 

@@ -487,8 +487,8 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
   do k=2,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,k) ; enddo ; enddo
 
   if (nsw >= 1) then
-    call extract_optics_slice(optics, j, G, GV, penSW_top=Pen_SW_bnd) !, penSW_scale=W_m2_to_H_T*dt_in_T
-    if (do_PSWBR) call extract_optics_slice(optics, j, G, GV, penSW_top=Pen_SW_bnd_rate) !, penSW_scale=W_m2_to_H_T
+    call extract_optics_slice(optics, j, G, GV, penSW_top=Pen_SW_bnd)
+    if (do_PSWBR) call extract_optics_slice(optics, j, G, GV, penSW_top=Pen_SW_bnd_rate)
   endif
 
   do i=is,ie
@@ -499,8 +499,8 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
     ! (H=m for Bouss, H=kg/m2 for non-Bouss)
     Pen_sw_tot(i) = 0.0
     if (nsw >= 1) then
-     do n=1,nsw
-        Pen_SW_bnd(n,i) = W_m2_to_H_T*scale*dt_in_T * max(0.0, Pen_SW_bnd(n,i))
+      do n=1,nsw
+        Pen_SW_bnd(n,i) = US%QRZ_T_to_W_m2*W_m2_to_H_T*scale*dt_in_T * max(0.0, Pen_SW_bnd(n,i))
         Pen_sw_tot(i)   = Pen_sw_tot(i) + Pen_SW_bnd(n,i)
       enddo
     else
@@ -511,7 +511,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
       pen_sw_tot_rate(i) = 0.0
       if (nsw >= 1) then
         do n=1,nsw
-          Pen_SW_bnd_rate(n,i) = W_m2_to_H_T*scale * max(0.0, Pen_SW_bnd_rate(n,i))
+          Pen_SW_bnd_rate(n,i) = US%QRZ_T_to_W_m2*W_m2_to_H_T*scale * max(0.0, Pen_SW_bnd_rate(n,i))
           pen_sw_tot_rate(i) = pen_sw_tot_rate(i) + pen_sw_bnd_rate(n,i)
         enddo
       else

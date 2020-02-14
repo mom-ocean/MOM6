@@ -532,9 +532,13 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
       if (CS%check_no_land_fluxes) &
         call check_mask_val_consistency(IOB%sw_flux_nir_dif(i-i0,j-j0), G%mask2dT(i,j), i, j, 'sw_flux_nir_dif', G)
     endif
-    ! The parentheses here reproduce what most compilers do without any parentheses.
-    fluxes%sw(i,j) = ((fluxes%sw_vis_dir(i,j)  + fluxes%sw_vis_dif(i,j)) + &
-                       fluxes%sw_nir_dir(i,j)) + fluxes%sw_nir_dif(i,j)
+    if (CS%answers_2018) then
+      fluxes%sw(i,j) = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j) + &
+                       fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j)
+    else
+      fluxes%sw(i,j) = (fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j)) + &
+                       (fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j))
+    endif
 
   enddo ; enddo
 
