@@ -3,7 +3,7 @@ module MOM_hor_index
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_domains, only : MOM_domain_type, get_domain_extent
+use MOM_domains, only : MOM_domain_type, get_domain_extent, get_global_shape
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 
@@ -46,6 +46,9 @@ type, public :: hor_index_type
   integer :: idg_offset !< The offset between the corresponding global and local i-indices.
   integer :: jdg_offset !< The offset between the corresponding global and local j-indices.
   logical :: symmetric  !< True if symmetric memory is used.
+
+  integer :: niglobal !< The global number of h-cells in the i-direction
+  integer :: njglobal !< The global number of h-cells in the j-direction
 end type hor_index_type
 
 !> Copy the contents of one horizontal index type into another
@@ -71,6 +74,7 @@ subroutine hor_index_init(Domain, HI, param_file, local_indexing, index_offset)
                          HI%isg, HI%ieg, HI%jsg, HI%jeg, &
                          HI%idg_offset, HI%jdg_offset, HI%symmetric, &
                          local_indexing=local_indexing)
+  call get_global_shape(Domain, HI%niglobal, HI%njglobal)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, "MOM_hor_index", version, &
@@ -108,12 +112,13 @@ subroutine HIT_assign(HI1, HI2)
 
   HI1%idg_offset = HI2%idg_offset ; HI1%jdg_offset = HI2%jdg_offset
   HI1%symmetric = HI2%symmetric
+  HI1%niglobal = HI2%niglobal ; HI1%njglobal = HI2%njglobal
 
 end subroutine HIT_assign
 
 !> \namespace mom_hor_index
 !!
-!! The hor_index_type provides the decalarations and loop ranges for almost all data with horizontal extent.
+!! The hor_index_type provides the declarations and loop ranges for almost all data with horizontal extent.
 !!
 !! Declarations and loop ranges should always be coded with the symmetric memory model in mind.
 !! The non-symmetric memory mode will then also work, albeit with a different (less efficient) communication pattern.

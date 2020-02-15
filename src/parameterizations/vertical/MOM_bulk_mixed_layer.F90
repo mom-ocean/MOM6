@@ -111,6 +111,8 @@ type, public :: bulkmixedlayer_CS ; private
                              !! using SST for temperature of liq_runoff
   logical :: use_calving_heat_content !< Use SST for temperature of froz_runoff
   logical :: salt_reject_below_ML !< It true, add salt below mixed layer (layer mode only)
+  logical :: convect_mom_bug !< If true, use code with a bug that causes a loss of momentum
+                             !! conservation during mixedlayer convection.
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate the
                              !! timing of diagnostic output.
@@ -1123,6 +1125,9 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
                          T_precip * netMassIn(i) * GV%H_to_RZ * fluxes%C_p * Idt
     if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
                          T_precip * netMassIn(i) * GV%H_to_RZ
+  else  ! This is a massless column, but zero out the summed variables anyway for safety.
+    htot(i) = 0.0 ; Ttot(i) = 0.0 ; Stot(i) = 0.0 ; R0_tot(i) = 0.0 ; Rcv_tot = 0.0
+    uhtot(i) = 0.0 ; vhtot(i) = 0.0 ; Conv_En(i) = 0.0 ; dKE_FC(i) = 0.0
   endif ; enddo
 
   ! Now do netMassOut case in this block.
@@ -1288,9 +1293,11 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
           htot(i)  = htot(i)  + h_ent
           h(i,k) = h(i,k) - h_ent
           d_eb(i,k) = d_eb(i,k) - h_ent
-          uhtot(i) = u(i,k)*h_ent ; vhtot(i) = v(i,k)*h_ent
-          !### I think that the line above should instead be:
-          ! uhtot(i) = uhtot(i) + h_ent*u(i,k) ; vhtot(i) = vhtot(i) + h_ent*v(i,k)
+          if (CS%convect_mom_bug) then
+            uhtot(i) = u(i,k)*h_ent ; vhtot(i) = v(i,k)*h_ent
+          else
+            uhtot(i) = uhtot(i) + h_ent*u(i,k) ; vhtot(i) = vhtot(i) + h_ent*v(i,k)
+          endif
         endif
 
 
@@ -3568,6 +3575,9 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
                  "If true, use the fluxes%calving_Hflx field to set the "//&
                  "heat carried by runoff, instead of using SST*CP*froz_runoff.", &
                  default=.false.)
+  call get_param(param_file, mdl, "BULKML_CONV_MOMENTUM_BUG", CS%convect_mom_bug, &
+                 "If true, use code with a bug that causes a loss of momentum conservation "//&
+                 "during mixedlayer convection.", default=.true.)
 
   call get_param(param_file, mdl, "ALLOW_CLOCKS_IN_OMP_LOOPS", &
                  CS%allow_clocks_in_omp_loops, &
