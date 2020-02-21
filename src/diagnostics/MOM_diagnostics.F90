@@ -1793,7 +1793,8 @@ subroutine register_surface_diags(Time, G, US, IDs, diag, tv)
     endif
     if (associated(tv%frazil)) then
       IDs%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time, &
-            'Heat from frazil formation', 'W m-2', conversion=US%s_to_T, cmor_field_name='hfsifrazil', &
+            'Heat from frazil formation', 'W m-2', conversion=US%QRZ_T_to_W_m2, &
+            cmor_field_name='hfsifrazil', &
             cmor_standard_name='heat_flux_into_sea_water_due_to_frazil_ice_formation', &
             cmor_long_name='Heat Flux into Sea Water due to Frazil Ice Formation')
     endif

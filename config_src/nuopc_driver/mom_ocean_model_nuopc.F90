@@ -907,7 +907,7 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, US, patm, press_
     enddo ; enddo
   endif
 
-  if (associated(sfc_state%frazil)) then
+  if (allocated(sfc_state%frazil)) then
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
       Ocean_sfc%frazil(i,j) = sfc_state%frazil(i+i0,j+j0)
     enddo ; enddo

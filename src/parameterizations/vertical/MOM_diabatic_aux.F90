@@ -99,7 +99,7 @@ contains
 !> Frazil formation keeps the temperature above the freezing point.
 !! This subroutine warms any water that is colder than the (currently
 !! surface) freezing point up to the freezing point and accumulates
-!! the required heat (in J m-2) in tv%frazil.
+!! the required heat (in [Q R Z ~> J m-2]) in tv%frazil.
 subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
   type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure
@@ -116,12 +116,12 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
 
   ! Local variables
   real, dimension(SZI_(G)) :: &
-    fraz_col, & ! The accumulated heat requirement due to frazil [J].
+    fraz_col, & ! The accumulated heat requirement due to frazil [Q R Z ~> J m-2].
     T_freeze, & ! The freezing potential temperature at the current salinity [degC].
     ps          ! pressure
   real, dimension(SZI_(G),SZK_(G)) :: &
     pressure    ! The pressure at the middle of each layer [Pa].
-  real :: hc    ! A layer's heat capacity [J m-2 degC-1].
+  real :: hc    ! A layer's heat capacity [Q R Z degC-1 ~> J m-2 degC-1].
   logical :: T_fr_set  ! True if the freezing point has been calculated for a
                        ! row of points.
   integer :: i, j, k, is, ie, js, je, nz
@@ -169,9 +169,9 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
         if (tv%T(i,j,1) > T_freeze(i)) then
     ! If frazil had previously been formed, but the surface temperature is now
     ! above freezing, cool the surface layer with the frazil heat deficit.
-          hc = (US%Q_to_J_kg*tv%C_p*GV%H_to_kg_m2) * h(i,j,1)
+          hc = (tv%C_p*GV%H_to_RZ) * h(i,j,1)
           if (tv%frazil(i,j) - hc * (tv%T(i,j,1) - T_freeze(i)) <= 0.0) then
-            tv%T(i,j,1) = tv%T(i,j,1) - tv%frazil(i,j)/hc
+            tv%T(i,j,1) = tv%T(i,j,1) - tv%frazil(i,j) / hc
             tv%frazil(i,j) = 0.0
           else
             tv%frazil(i,j) = tv%frazil(i,j) - hc * (tv%T(i,j,1) - T_freeze(i))
@@ -192,7 +192,7 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
             T_fr_set = .true.
           endif
 
-          hc = (US%Q_to_J_kg*tv%C_p*GV%H_to_kg_m2) * h(i,j,k)
+          hc = (tv%C_p*GV%H_to_RZ) * h(i,j,k)
           if (h(i,j,k) <= 10.0*GV%Angstrom_H) then
             ! Very thin layers should not be cooled by the frazil flux.
             if (tv%T(i,j,k) < T_freeze(i)) then
@@ -201,7 +201,7 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
             endif
           else
             if (fraz_col(i) + hc * (T_freeze(i) - tv%T(i,j,k)) <= 0.0) then
-              tv%T(i,j,k) = tv%T(i,j,k) - fraz_col(i)/hc
+              tv%T(i,j,k) = tv%T(i,j,k) - fraz_col(i) / hc
               fraz_col(i) = 0.0
             else
               fraz_col(i) = fraz_col(i) + hc * (T_freeze(i) - tv%T(i,j,k))

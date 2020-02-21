@@ -1079,8 +1079,8 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
                   haloshift=0, scale=GV%H_to_m*US%L_to_m**2)
     if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre-advection T", G%HI, haloshift=1)
     if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Pre-advection S", G%HI, haloshift=1)
-    if (associated(CS%tv%frazil)) call hchksum(CS%tv%frazil, &
-                   "Pre-advection frazil", G%HI, haloshift=0)
+    if (associated(CS%tv%frazil)) call hchksum(CS%tv%frazil, "Pre-advection frazil", G%HI, haloshift=0, &
+                                               scale=G%US%Q_to_J_kg*G%US%R_to_kg_m3*G%US%Z_to_m)
     if (associated(CS%tv%salt_deficit)) call hchksum(CS%tv%salt_deficit, &
                    "Pre-advection salt deficit", G%HI, haloshift=0, scale=US%R_to_kg_m3*US%Z_to_m)
   ! call MOM_thermo_chksum("Pre-advection ", CS%tv, G, US)
@@ -1270,8 +1270,8 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     !                       h, CS%uhtr, CS%vhtr, G, GV, haloshift=1)
       if (associated(tv%T)) call hchksum(tv%T, "Post-diabatic T", G%HI, haloshift=1)
       if (associated(tv%S)) call hchksum(tv%S, "Post-diabatic S", G%HI, haloshift=1)
-      if (associated(tv%frazil)) call hchksum(tv%frazil, &
-                               "Post-diabatic frazil", G%HI, haloshift=0)
+      if (associated(tv%frazil)) call hchksum(tv%frazil, "Post-diabatic frazil", G%HI, haloshift=0, &
+                                              scale=G%US%Q_to_J_kg*G%US%R_to_kg_m3*G%US%Z_to_m)
       if (associated(tv%salt_deficit)) call hchksum(tv%salt_deficit, &
                                "Post-diabatic salt deficit", G%HI, haloshift=0, scale=US%R_to_kg_m3*US%Z_to_m)
     ! call MOM_thermo_chksum("Post-diabatic ", tv, G, US)
@@ -2766,15 +2766,19 @@ subroutine extract_surface_state(CS, sfc_state)
   if (.not.sfc_state%arrays_allocated) then
     !  Consider using a run-time flag to determine whether to do the vertical
     ! integrals, since the 3-d sums are not negligible in cost.
-    call allocate_surface_state(sfc_state, G, use_temperature, do_integrals=.true.)
+    call allocate_surface_state(sfc_state, G, use_temperature, do_integrals=.true., &
+                                omit_frazil=.not.associated(CS%tv%frazil))
   endif
-  sfc_state%frazil => CS%tv%frazil
   sfc_state%T_is_conT = CS%tv%T_is_conT
   sfc_state%S_is_absS = CS%tv%S_is_absS
 
   do j=js,je ; do i=is,ie
     sfc_state%sea_lev(i,j) = CS%ave_ssh_ibc(i,j)
   enddo ; enddo
+
+  if (allocated(sfc_state%frazil) .and. associated(CS%tv%frazil)) then ; do j=js,je ; do i=is,ie
+    sfc_state%frazil(i,j) = US%Q_to_J_kg*US%R_to_kg_m3*US%Z_to_m * CS%tv%frazil(i,j)
+  enddo ; enddo ; endif
 
   ! copy Hml into sfc_state, so that caps can access it
   if (associated(CS%Hml)) then
@@ -2799,7 +2803,8 @@ subroutine extract_surface_state(CS, sfc_state)
     H_rescale = 1.0 ; if (CS%answers_2018) H_rescale = GV%H_to_Z
     depth_ml = CS%Hmix
     if (.not.CS%answers_2018) depth_ml = CS%Hmix*GV%Z_to_H
-  !   Determine the mean tracer properties of the uppermost depth_ml fluid.
+    ! Determine the mean tracer properties of the uppermost depth_ml fluid.
+
     !$OMP parallel do default(shared) private(depth,dh)
     do j=js,je
       do i=is,ie
