@@ -282,7 +282,7 @@ subroutine tracer_z_init_array(tr_in, z_edges, e, nkml, nkbl, land_fill, wet, nl
                        eps_z, tr)
   real, dimension(:,:,:),           intent(in) :: tr_in !< The z-space array of tracer concentrations that is read in.
   real, dimension(size(tr_in,3)+1), intent(in) :: z_edges !< The depths of the cell edges in the input z* data
-                                                       !! [Z ~> m or m]
+                                                          !! [Z ~> m or m]
   integer,                          intent(in) :: nlay !< The number of vertical layers in the target grid
   real, dimension(size(tr_in,1),size(tr_in,2),nlay+1), &
                                     intent(in) :: e !< The depths of the target layer interfaces [Z ~> m or m]
@@ -293,7 +293,7 @@ subroutine tracer_z_init_array(tr_in, z_edges, e, nkml, nkbl, land_fill, wet, nl
                                     intent(in) :: wet !< The wet mask for the source data (valid points)
   integer, dimension(size(tr_in,1),size(tr_in,2)), &
                                     intent(in) :: nlevs !< The number of input levels with valid data
-  real,                             intent(in) :: eps_z ! A negligibly thin layer thickness [Z ~> m].
+  real,                             intent(in) :: eps_z !< A negligibly thin layer thickness [Z ~> m].
   real, dimension(size(tr_in,1),size(tr_in,2),nlay), intent(out) :: tr !< tracers in layer space
 
   ! Local variables
