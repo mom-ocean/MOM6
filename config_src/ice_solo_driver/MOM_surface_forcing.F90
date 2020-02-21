@@ -602,7 +602,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
   type(surface_forcing_CS), pointer    :: CS   !< A pointer to the control structure returned by a
                                                !! previous surface_forcing_init call
 
-  real :: rhoXcp ! mean density times the heat capacity [J m-3 degC-1].
+  real :: rhoXcp ! mean density times the heat capacity [Q R degC-1 ~> J m-3 degC-1].
   real :: Irho0  ! inverse Boussinesq reference density [m3 kg-1].
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
 
@@ -629,7 +629,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
   ! allocate and initialize arrays
   call buoyancy_forcing_allocate(fluxes, G, CS)
 
-  if (CS%use_temperature) rhoXcp = CS%Rho0 * US%Q_to_J_kg*fluxes%C_p
+  if (CS%use_temperature) rhoXcp = CS%Rho0 * fluxes%C_p
   Irho0 = 1.0/(US%R_to_kg_m3*CS%Rho0)
 
   ! Read the file containing the buoyancy forcing.
@@ -729,8 +729,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       fluxes%sw(i,j)                   = fluxes%sw(i,j)               * G%mask2dT(i,j)
       fluxes%latent(i,j)               = fluxes%latent(i,j)           * G%mask2dT(i,j)
 
-      fluxes%heat_content_lrunoff(i,j) = US%Q_to_J_kg*fluxes%C_p * &
-                                         fluxes%lrunoff(i,j)*sfc_state%SST(i,j)
+      fluxes%heat_content_lrunoff(i,j) = fluxes%C_p * fluxes%lrunoff(i,j)*sfc_state%SST(i,j)
       fluxes%latent_evap_diag(i,j)     = fluxes%latent_evap_diag(i,j) * G%mask2dT(i,j)
       fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*US%J_kg_to_Q*hlf
       fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*US%J_kg_to_Q*hlf
@@ -742,13 +741,13 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
     if (CS%use_temperature) then
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
-          fluxes%heat_restore(i,j) = G%mask2dT(i,j) * &
-              ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * US%Z_to_m*US%s_to_T*CS%Flux_const)
+          fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
+              ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const)
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
               (CS%S_Restore(i,j) - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j)))
         else
-          fluxes%heat_restore(i,j) = 0.0
+          fluxes%heat_added(i,j) = 0.0
           fluxes%vprec(i,j) = 0.0
         endif
       enddo ; enddo
@@ -876,13 +875,13 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, US, CS)
         T_restore = CS%T_south + (CS%T_north-CS%T_south)*y
         S_restore = CS%S_south + (CS%S_north-CS%S_south)*y
         if (G%mask2dT(i,j) > 0) then
-          fluxes%heat_restore(i,j) = G%mask2dT(i,j) * US%QRZ_T_to_W_m2 * &
+          fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
               ((T_Restore - sfc_state%SST(i,j)) * ((CS%Rho0 * fluxes%C_p) * CS%Flux_const))
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
               (S_Restore - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + S_Restore))
         else
-          fluxes%heat_restore(i,j) = 0.0
+          fluxes%heat_added(i,j) = 0.0
           fluxes%vprec(i,j) = 0.0
         endif
       enddo ; enddo
@@ -1090,9 +1089,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
                  "The constant that relates the restoring surface fluxes "//&
                  "to the relative surface anomalies (akin to a piston "//&
                  "velocity).  Note the non-MKS units.", &
-                 units="m day-1", scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
-    ! Convert CS%Flux_const from m day-1 to m s-1.
-    CS%Flux_const = CS%Flux_const / 86400.0
+                 units="m day-1", scale=US%m_to_Z*US%T_to_s/86400.0, fail_if_missing=.true.)
     if (trim(CS%buoy_config) == "linear") then
       call get_param(param_file, mdl, "SST_NORTH", CS%T_north, &
                  "With buoy_config linear, the sea surface temperature "//&

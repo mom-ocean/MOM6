@@ -457,14 +457,14 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
          fluxes%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
 
     ! GMM, cime does not not have an equivalent for heat_content_lrunoff and
-    ! heat_content_frunoff. I am seeting these to zero for now.
+    ! heat_content_frunoff. I am setting these to zero for now.
     if (associated(fluxes%heat_content_lrunoff)) &
       fluxes%heat_content_lrunoff(i,j) = 0.0 * G%mask2dT(i,j)
     if (associated(fluxes%heat_content_frunoff)) &
       fluxes%heat_content_frunoff(i,j) = 0.0 * G%mask2dT(i,j)
 
     if (associated(IOB%calving_hflx)) &
-      fluxes%heat_content_frunoff(i,j) = kg_m2_s_conversion * IOB%calving_hflx(i-i0,j-j0) * G%mask2dT(i,j)
+      fluxes%heat_content_frunoff(i,j) = US%W_m2_to_QRZ_T * IOB%calving_hflx(i-i0,j-j0) * G%mask2dT(i,j)
 
     ! longwave radiation, sum up and down (W/m2)
     if (associated(IOB%lw_flux)) &

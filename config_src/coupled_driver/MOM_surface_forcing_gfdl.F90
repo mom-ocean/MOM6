@@ -470,13 +470,13 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     endif
 
     if (associated(IOB%runoff_hflx)) then
-      fluxes%heat_content_lrunoff(i,j) = kg_m2_s_conversion * IOB%runoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
+      fluxes%heat_content_lrunoff(i,j) = US%W_m2_to_QRZ_T * IOB%runoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
       if (CS%check_no_land_fluxes) &
         call check_mask_val_consistency(IOB%runoff_hflx(i-i0,j-j0), G%mask2dT(i,j), i, j, 'runoff_hflx', G)
     endif
 
     if (associated(IOB%calving_hflx)) then
-      fluxes%heat_content_frunoff(i,j) = kg_m2_s_conversion * IOB%calving_hflx(i-i0,j-j0) * G%mask2dT(i,j)
+      fluxes%heat_content_frunoff(i,j) = US%W_m2_to_QRZ_T * IOB%calving_hflx(i-i0,j-j0) * G%mask2dT(i,j)
       if (CS%check_no_land_fluxes) &
         call check_mask_val_consistency(IOB%calving_hflx(i-i0,j-j0), G%mask2dT(i,j), i, j, 'calving_hflx', G)
     endif

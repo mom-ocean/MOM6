@@ -1119,10 +1119,10 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
           ! Diagnostics of heat content associated with mass fluxes
           if (associated(fluxes%heat_content_massin))                             &
             fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) +   &
-                         T2d(i,k) * max(0.,dThickness) * GV%H_to_RZ * US%Q_to_J_kg*fluxes%C_p * Idt
+                         T2d(i,k) * max(0.,dThickness) * GV%H_to_RZ * fluxes%C_p * Idt
           if (associated(fluxes%heat_content_massout))                            &
             fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) + &
-                         T2d(i,k) * min(0.,dThickness) * GV%H_to_RZ * US%Q_to_J_kg*fluxes%C_p * Idt
+                         T2d(i,k) * min(0.,dThickness) * GV%H_to_RZ * fluxes%C_p * Idt
           if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
                          T2d(i,k) * dThickness * GV%H_to_RZ
 
@@ -1202,10 +1202,10 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
           ! Diagnostics of heat content associated with mass fluxes
           if (associated(fluxes%heat_content_massin)) &
             fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) + &
-                         T2d(i,k) * max(0.,dThickness) * GV%H_to_RZ * US%Q_to_J_kg*fluxes%C_p * Idt
+                         T2d(i,k) * max(0.,dThickness) * GV%H_to_RZ * fluxes%C_p * Idt
           if (associated(fluxes%heat_content_massout)) &
             fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) + &
-                         T2d(i,k) * min(0.,dThickness) * GV%H_to_RZ * US%Q_to_J_kg*fluxes%C_p * Idt
+                         T2d(i,k) * min(0.,dThickness) * GV%H_to_RZ * fluxes%C_p * Idt
           if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
                          T2d(i,k) * dThickness * GV%H_to_RZ
 

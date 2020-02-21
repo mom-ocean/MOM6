@@ -1012,7 +1012,7 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
     ! smg: new code
     ! include heat content from water transport across ocean surface
 !    if (associated(fluxes%heat_content_lprec)) then ; do j=js,je ; do i=is,ie
-!      heat_in(i,j) = heat_in(i,j) + dt*RZL2_to_kg*G%areaT(i,j) * &
+!      heat_in(i,j) = heat_in(i,j) + dt*US%T_to_s*US%L_to_m**2*US%QRZ_T_to_W_m2*G%areaT(i,j) * &
 !         (fluxes%heat_content_lprec(i,j)   + (fluxes%heat_content_fprec(i,j)   &
 !       + (fluxes%heat_content_lrunoff(i,j) + (fluxes%heat_content_frunoff(i,j) &
 !       + (fluxes%heat_content_cond(i,j)    + (fluxes%heat_content_vprec(i,j)   &
