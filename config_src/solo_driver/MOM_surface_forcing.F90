@@ -83,8 +83,8 @@ type, public :: surface_forcing_CS ; private
   real :: Flux_const            !< piston velocity for surface restoring [Z T-1 ~> m s-1]
   real :: Flux_const_T          !< piston velocity for surface temperature restoring [m s-1]
   real :: Flux_const_S          !< piston velocity for surface salinity restoring [Z T-1 ~> m s-1]
-  real :: latent_heat_fusion    !< latent heat of fusion times scaling factors [J T m-2 R-1 Z-1 s-1 ~> J kg-1]
-  real :: latent_heat_vapor     !< latent heat of vaporization [J kg-1]
+  real :: latent_heat_fusion    !< latent heat of fusion times [Q ~> J kg-1]
+  real :: latent_heat_vapor     !< latent heat of vaporization [Q ~> J kg-1]
   real :: tau_x0                !< Constant zonal wind stress used in the WIND_CONFIG="const" forcing
   real :: tau_y0                !< Constant meridional wind stress used in the WIND_CONFIG="const" forcing
 
@@ -121,7 +121,7 @@ type, public :: surface_forcing_CS ; private
   logical :: dataOverrideIsInitialized = .false. !< If true, data override has been initialized
 
   real :: wind_scale          !< value by which wind-stresses are scaled, ND.
-  real :: constantHeatForcing !< value used for sensible heat flux when buoy_config="const"
+  real :: constantHeatForcing !< value used for sensible heat flux when buoy_config="const" [Q R Z T-1 ~> W m-2]
 
   character(len=8)   :: wind_stagger !< A character indicating how the wind stress components
                               !! are staggered in WIND_FILE.  Valid values are A or C for now.
@@ -836,11 +836,10 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       case default ; time_lev = 1
     end select
     if (CS%archaic_OMIP_file) then
-      call MOM_read_data(CS%evaporation_file, CS%evap_var, temp(:,:), &
-                     G%Domain, timelevel=time_lev)
+      call MOM_read_data(CS%evaporation_file, CS%evap_var, fluxes%evap(:,:), &
+                     G%Domain, timelevel=time_lev, scale=-kg_m2_s_conversion)
       do j=js,je ; do i=is,ie
-        fluxes%latent(i,j)           = -US%W_m2_to_QRZ_T*CS%latent_heat_vapor*temp(i,j)
-        fluxes%evap(i,j)             = -kg_m2_s_conversion*temp(i,j)
+        fluxes%latent(i,j)           = CS%latent_heat_vapor*fluxes%evap(i,j)
         fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
       enddo ; enddo
     else
@@ -973,8 +972,8 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       fluxes%latent(i,j)  = fluxes%latent(i,j)  * G%mask2dT(i,j)
 
       fluxes%latent_evap_diag(i,j)     = fluxes%latent_evap_diag(i,j) * G%mask2dT(i,j)
-      fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
-      fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
+      fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*CS%latent_heat_fusion
+      fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*CS%latent_heat_fusion
     enddo ; enddo
 
   endif ! time_lev /= CS%buoy_last_lev_read
@@ -1090,12 +1089,12 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
 
   ! note the sign convention
   do j=js,je ; do i=is,ie
-    ! This is dangerous because it is not clear whether the data files have been read!
-    fluxes%evap(i,j) = -fluxes%evap(i,j)  ! Normal convention is positive into the ocean
-                                          ! but evap is normally a positive quantity in the files
-    fluxes%latent(i,j)           = US%W_m2_to_QRZ_T * CS%latent_heat_vapor*fluxes%evap(i,j)
+    ! The normal convention is that fluxes%evap positive into the ocean
+    ! but evap is normally a positive quantity in the files
+    ! This conversion is dangerous because it is not clear whether the data files have been read!
+    fluxes%evap(i,j) = -kg_m2_s_conversion*fluxes%evap(i,j)
+    fluxes%latent(i,j)           = CS%latent_heat_vapor*fluxes%evap(i,j)
     fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
-    fluxes%evap(i,j) = kg_m2_s_conversion*fluxes%evap(i,j)
   enddo ; enddo
 
   call data_override('OCN', 'sens', fluxes%sens(:,:), day, &
@@ -1193,8 +1192,8 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
     fluxes%sw(i,j)      = fluxes%sw(i,j)      * G%mask2dT(i,j)
 
     fluxes%latent_evap_diag(i,j)     = fluxes%latent_evap_diag(i,j) * G%mask2dT(i,j)
-    fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
-    fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
+    fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*CS%latent_heat_fusion
+    fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*CS%latent_heat_fusion
   enddo ; enddo
 
 
@@ -1281,7 +1280,7 @@ subroutine buoyancy_forcing_const(sfc_state, fluxes, day, dt, G, US, CS)
       fluxes%frunoff(i,j)              = 0.0
       fluxes%lw(i,j)                   = 0.0
       fluxes%latent(i,j)               = 0.0
-      fluxes%sens(i,j)                 = US%W_m2_to_QRZ_T * CS%constantHeatForcing * G%mask2dT(i,j)
+      fluxes%sens(i,j)                 = CS%constantHeatForcing * G%mask2dT(i,j)
       fluxes%sw(i,j)                   = 0.0
       fluxes%latent_evap_diag(i,j)     = 0.0
       fluxes%latent_fprec_diag(i,j)    = 0.0
@@ -1595,7 +1594,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
     call get_param(param_file, mdl, "SENSIBLE_HEAT_FLUX", CS%constantHeatForcing, &
                  "A constant heat forcing (positive into ocean) applied "//&
                  "through the sensible heat flux field. ", &
-                 units='W/m2', fail_if_missing=.true.)
+                 units='W/m2', scale=US%W_m2_to_QRZ_T, fail_if_missing=.true.)
   endif
   call get_param(param_file, mdl, "WIND_CONFIG", CS%wind_config, &
                  "The character string that indicates how wind forcing "//&
@@ -1675,9 +1674,9 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
                  "given by FLUXCONST.", default= .false.)
   call get_param(param_file, mdl, "LATENT_HEAT_FUSION", CS%latent_heat_fusion, &
                  "The latent heat of fusion.", default=hlf, &
-                 units="J/kg", scale=US%R_to_kg_m3*US%Z_to_m*US%s_to_T)
+                 units="J/kg", scale=US%J_kg_to_Q)
   call get_param(param_file, mdl, "LATENT_HEAT_VAPORIZATION", CS%latent_heat_vapor, &
-                 "The latent heat of fusion.", units="J/kg", default=hlv)
+                 "The latent heat of fusion.", default=hlv, units="J/kg", scale=US%J_kg_to_Q)
   if (CS%restorebuoy) then
     ! These three variables use non-standard time units, but are rescaled as they are read.
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &

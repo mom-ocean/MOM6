@@ -2745,7 +2745,7 @@ subroutine extract_surface_state(CS, sfc_state)
   real :: H_rescale          !< A conversion factor from thickness units to the units used in the
                              !! calculation of properties of the uppermost ocean [nondim] or [Z H-1 ~> 1 or m3 kg-1]
                              !  After the ANSWERS_2018 flag has been obsoleted, H_rescale will be 1.
-  real :: delT(SZI_(CS%G))   !< T-T_freeze [degC]
+  real :: delT(SZI_(CS%G))   !< Depth integral of T-T_freeze [m degC]
   logical :: use_temperature !< If true, temp and saln used as state variables.
   integer :: i, j, k, is, ie, js, je, nz, numberOfErrors, ig, jg
   integer :: isd, ied, jsd, jed
@@ -2941,7 +2941,7 @@ subroutine extract_surface_state(CS, sfc_state)
       enddo
 
       do k=1,nz ; do i=is,ie
-        depth_ml = min(CS%HFrz,CS%visc%MLD(i,j))
+        depth_ml = min(CS%HFrz, CS%visc%MLD(i,j))
         if (depth(i) + h(i,j,k)*GV%H_to_m < depth_ml) then
           dh = h(i,j,k)*GV%H_to_m
         elseif (depth(i) < depth_ml) then
@@ -2962,7 +2962,7 @@ subroutine extract_surface_state(CS, sfc_state)
 
        if (G%mask2dT(i,j)>0.) then
          ! instantaneous melt_potential [J m-2]
-         sfc_state%melt_potential(i,j) = US%Q_to_J_kg*CS%tv%C_p * US%R_to_kg_m3*GV%Rho0 * delT(i)
+         sfc_state%melt_potential(i,j) = US%Q_to_J_kg*US%R_to_kg_m3 * CS%tv%C_p * GV%Rho0 * delT(i)
        endif
       enddo
     enddo ! end of j loop

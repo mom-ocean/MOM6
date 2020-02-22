@@ -414,11 +414,8 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
   real :: Ih_limit            ! inverse depth at which surface fluxes start to be limited
                               ! or 0 for no limiting [H-1 ~> m-1 or m2 kg-1]
   real :: scale               ! scale scales away fluxes if depth < FluxRescaleDepth
-  real :: QRZ_to_H            ! Converts heat in Q R Z to H degC [degC H Q-1 R-1 Z-1 ~> degC m3 J-1 or degC kg J-1]
-  real :: RZ_T_to_W_m2_degC   ! Converts mass fluxes to heat fluxes per degree temperature
-                              ! change [W m-2 degC-1 T R-1 Z-1 ~> J kg degC]
   real :: I_Cp                ! 1.0 / C_p [degC Q-1 ~> kg degC J-1]
-  real :: RZcp_to_H           ! Unit convsersion factors divided by the heat capacity
+  real :: I_Cp_Hconvert       ! Unit conversion factors divided by the heat capacity
                               ! [degC H R-1 Z-1 Q-1 ~> degC m3 J-1 or kg degC J-1]
   logical :: calculate_diags  ! Indicate to calculate/update diagnostic arrays
   character(len=200) :: mesg
@@ -441,11 +438,8 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
   !}BGR
 
   Ih_limit  = 0.0 ; if (FluxRescaleDepth > 0.0) Ih_limit  = 1.0 / FluxRescaleDepth
-  ! RZ_T_to_W_m2_degC = US%Q_to_J_kg*fluxes%C_p*US%R_to_kg_m3*US%Z_to_m*US%s_to_T
-  RZ_T_to_W_m2_degC = US%QRZ_T_to_W_m2*fluxes%C_p
   I_Cp      = 1.0 / fluxes%C_p
-  QRZ_to_H = US%R_to_kg_m3 * US%Z_to_m * (1.0 / (GV%H_to_kg_m2 * fluxes%C_p))
-  RZcP_to_H = 1.0 / (GV%H_to_RZ * fluxes%C_p)
+  I_Cp_Hconvert = 1.0 / (GV%H_to_RZ * fluxes%C_p)
 
   is = G%isc ; ie = G%iec ; nz = G%ke
 
@@ -497,7 +491,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
     Pen_sw_tot(i) = 0.0
     if (nsw >= 1) then
       do n=1,nsw
-        Pen_SW_bnd(n,i) = RZcP_to_H*scale*dt * max(0.0, Pen_SW_bnd(n,i))
+        Pen_SW_bnd(n,i) = I_Cp_Hconvert*scale*dt * max(0.0, Pen_SW_bnd(n,i))
         Pen_sw_tot(i)   = Pen_sw_tot(i) + Pen_SW_bnd(n,i)
       enddo
     else
@@ -508,7 +502,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
       pen_sw_tot_rate(i) = 0.0
       if (nsw >= 1) then
         do n=1,nsw
-          Pen_SW_bnd_rate(n,i) = RZcP_to_H*scale * max(0.0, Pen_SW_bnd_rate(n,i))
+          Pen_SW_bnd_rate(n,i) = I_Cp_Hconvert*scale * max(0.0, Pen_SW_bnd_rate(n,i))
           pen_sw_tot_rate(i) = pen_sw_tot_rate(i) + pen_sw_bnd_rate(n,i)
         enddo
       else
@@ -581,36 +575,36 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
 
     ! CIME provides heat flux from snow&ice melt (seaice_melt_heat), so this is added below
     if (associated(fluxes%seaice_melt_heat)) then
-      net_heat(i) = scale * dt * RZcP_to_H * &
+      net_heat(i) = scale * dt * I_Cp_Hconvert * &
                     ( fluxes%sw(i,j) + (((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) + &
                       fluxes%seaice_melt_heat(i,j)) )
       !Repeats above code w/ dt=1. for legacy reason
-      if (do_NHR)  net_heat_rate(i) = scale * RZcP_to_H * &
+      if (do_NHR)  net_heat_rate(i) = scale * I_Cp_Hconvert * &
            ( fluxes%sw(i,j) + (((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) + &
              fluxes%seaice_melt_heat(i,j)))
     else
-      net_heat(i) = scale * dt * RZcP_to_H * &
+      net_heat(i) = scale * dt * I_Cp_Hconvert * &
                     ( fluxes%sw(i,j) + ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
       !Repeats above code w/ dt=1. for legacy reason
-      if (do_NHR)  net_heat_rate(i) = scale * RZcP_to_H * &
+      if (do_NHR)  net_heat_rate(i) = scale * I_Cp_Hconvert * &
            ( fluxes%sw(i,j) + ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
     endif
 
     ! Add heat flux from surface damping (restoring) (K * H) or flux adjustments.
     if (associated(fluxes%heat_added)) then
-      net_heat(i) = net_heat(i) + (scale * (dt * QRZ_to_H)) * fluxes%heat_added(i,j)
-      if (do_NHR) net_heat_rate(i) = net_heat_rate(i) + (scale * QRZ_to_H) * fluxes%heat_added(i,j)
+      net_heat(i) = net_heat(i) + (scale * (dt * I_Cp_Hconvert)) * fluxes%heat_added(i,j)
+      if (do_NHR) net_heat_rate(i) = net_heat_rate(i) + (scale * I_Cp_Hconvert) * fluxes%heat_added(i,j)
     endif
 
     ! Add explicit heat flux for runoff (which is part of the ice-ocean boundary
     ! flux type). Runoff is otherwise added with a temperature of SST.
     if (useRiverHeatContent) then
       ! remove lrunoff*SST here, to counteract its addition elsewhere
-      net_heat(i) = (net_heat(i) + (scale*(dt * RZcP_to_H)) * fluxes%heat_content_lrunoff(i,j)) - &
+      net_heat(i) = (net_heat(i) + (scale*(dt * I_Cp_Hconvert)) * fluxes%heat_content_lrunoff(i,j)) - &
                      (GV%RZ_to_H * (scale * dt)) * fluxes%lrunoff(i,j) * T(i,1)
       !BGR-Jul 5, 2017{
       !Intentionally neglect the following contribution to rate for legacy reasons.
-      !if (do_NHR) net_heat_rate(i) = (net_heat_rate(i) + (scale*RZcP_to_H) * fluxes%heat_content_lrunoff(i,j)) - &
+      !if (do_NHR) net_heat_rate(i) = (net_heat_rate(i) + (scale*I_Cp_Hconvert) * fluxes%heat_content_lrunoff(i,j)) - &
       !               (GV%RZ_to_H * (scale)) * fluxes%lrunoff(i,j) * T(i,1)
       !}BGR
       if (calculate_diags .and. associated(tv%TempxPmE)) then
@@ -623,11 +617,11 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
     ! flux type). Calving is otherwise added with a temperature of SST.
     if (useCalvingHeatContent) then
       ! remove frunoff*SST here, to counteract its addition elsewhere
-      net_heat(i) = net_heat(i) + (scale*(dt * RZcP_to_H)) * fluxes%heat_content_frunoff(i,j) - &
+      net_heat(i) = net_heat(i) + (scale*(dt * I_Cp_Hconvert)) * fluxes%heat_content_frunoff(i,j) - &
                     (GV%RZ_to_H * (scale * dt)) * fluxes%frunoff(i,j) * T(i,1)
       !BGR-Jul 5, 2017{
       !Intentionally neglect the following contribution to rate for legacy reasons.
-!      if (do_NHR) net_heat_rate(i) = net_heat_rate(i) + (scale*RZcP_to_H) * fluxes%heat_content_frunoff(i,j) - &
+!      if (do_NHR) net_heat_rate(i) = net_heat_rate(i) + (scale*I_Cp_Hconvert) * fluxes%heat_content_frunoff(i,j) - &
 !                    (GV%RZ_to_H * scale) * fluxes%frunoff(i,j) * T(i,1)
       !}BGR
       if (calculate_diags .and. associated(tv%TempxPmE)) then
@@ -646,19 +640,19 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
     ! When evap, lprec, or vprec > 0, then we know their heat content here
     ! via settings from inside of the appropriate config_src driver files.
 !    if (associated(fluxes%heat_content_lprec)) then
-!      net_heat(i) = net_heat(i) + scale * dt * RZcP_to_H * &
+!      net_heat(i) = net_heat(i) + scale * dt * I_Cp_Hconvert * &
 !     (fluxes%heat_content_lprec(i,j)    + (fluxes%heat_content_fprec(i,j)   + &
 !     (fluxes%heat_content_lrunoff(i,j)  + (fluxes%heat_content_frunoff(i,j) + &
 !     (fluxes%heat_content_cond(i,j)     +  fluxes%heat_content_vprec(i,j))))))
 !    endif
 
     if (fluxes%num_msg < fluxes%max_msg) then
-      if (Pen_SW_tot(i) > 1.000001 * RZcP_to_H*scale*dt*fluxes%sw(i,j)) then
+      if (Pen_SW_tot(i) > 1.000001 * I_Cp_Hconvert*scale*dt*fluxes%sw(i,j)) then
         fluxes%num_msg = fluxes%num_msg + 1
         write(mesg,'("Penetrating shortwave of ",1pe17.10, &
                     &" exceeds total shortwave of ",1pe17.10,&
                     &" at ",1pg11.4,"E, "1pg11.4,"N.")') &
-               Pen_SW_tot(i), RZcP_to_H*scale*dt * fluxes%sw(i,j), &
+               Pen_SW_tot(i), I_Cp_Hconvert*scale*dt * fluxes%sw(i,j), &
                G%geoLonT(i,j),G%geoLatT(i,j)
         call MOM_error(WARNING,mesg)
       endif
@@ -672,7 +666,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
 
     ! diagnose non-downwelling SW
     if (present(nonPenSW)) then
-      nonPenSW(i) = scale * dt * RZcP_to_H * fluxes%sw(i,j) - Pen_SW_tot(i)
+      nonPenSW(i) = scale * dt * I_Cp_Hconvert * fluxes%sw(i,j) - Pen_SW_tot(i)
     endif
 
     ! Salt fluxes

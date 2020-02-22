@@ -1059,9 +1059,9 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
       ! Note the following is hard coded for ISOMIP
       if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
         fluxes%vprec(i,j) = -mean_melt_flux * CS%density_ice/1000. ! evap is negative
-        fluxes%sens(i,j) = US%W_m2_to_QRZ_T*fluxes%vprec(i,j) * CS%Cp * CS%T0 ! W /m^2
         ! Rescale fluxes%vprec to the proper units.
         fluxes%vprec(i,j) =  US%kg_m3_to_R*US%m_to_Z*US%T_to_s * fluxes%vprec(i,j)
+        fluxes%sens(i,j) = fluxes%vprec(i,j) * US%J_kg_to_Q*CS%Cp * CS%T0 ! [ Q R Z T-1 ~> W /m^2 ]
         fluxes%salt_flux(i,j) = fluxes%vprec(i,j) * CS%S0*1.0e-3 ! kg (salt)/(m^2 s)
       endif
     enddo ; enddo

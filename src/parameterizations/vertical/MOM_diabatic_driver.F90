@@ -2945,7 +2945,7 @@ subroutine diagnose_diabatic_diff_tendency(tv, h, temp_old, saln_old, dt, G, GV,
   ! heat tendency
   if (CS%id_diabatic_diff_heat_tend > 0 .or. CS%id_diabatic_diff_heat_tend_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      work_3d(i,j,k) = h(i,j,k) * GV%H_to_kg_m2 * US%Q_to_J_kg*tv%C_p * work_3d(i,j,k)
+      work_3d(i,j,k) = h(i,j,k) * tv%C_p * work_3d(i,j,k)
     enddo ; enddo ; enddo
     if (CS%id_diabatic_diff_heat_tend > 0) then
       call post_data(CS%id_diabatic_diff_heat_tend, work_3d, CS%diag, alt_h=h)
@@ -3128,7 +3128,7 @@ subroutine diagnose_frazil_tendency(tv, h, temp_old, dt, G, GV, US, CS)
   ! heat tendency
   if (CS%id_frazil_heat_tend > 0 .or. CS%id_frazil_heat_tend_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      CS%frazil_heat_diag(i,j,k) = GV%H_to_kg_m2 * US%Q_to_J_kg*tv%C_p * h(i,j,k) * Idt * (tv%T(i,j,k)-temp_old(i,j,k))
+      CS%frazil_heat_diag(i,j,k) = tv%C_p * h(i,j,k) * Idt * (tv%T(i,j,k)-temp_old(i,j,k))
     enddo ; enddo ; enddo
     if (CS%id_frazil_heat_tend > 0) call post_data(CS%id_frazil_heat_tend, CS%frazil_heat_diag(:,:,:), CS%diag)
 
@@ -3538,7 +3538,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
     CS%id_diabatic_diff_heat_tend = register_diag_field('ocean_model',                             &
         'diabatic_heat_tendency', diag%axesTL, Time,                                               &
         'Diabatic diffusion heat tendency',                                                        &
-        'W m-2', conversion=US%s_to_T, cmor_field_name='opottempdiff',                             &
+        'W m-2', conversion=GV%H_to_RZ*US%QRZ_T_to_W_m2, cmor_field_name='opottempdiff',           &
         cmor_standard_name='tendency_of_sea_water_potential_temperature_expressed_as_heat_content_'// &
                            'due_to_parameterized_dianeutral_mixing',                               &
         cmor_long_name='Tendency of sea water potential temperature expressed as heat content '//  &
@@ -3565,7 +3565,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
     CS%id_diabatic_diff_heat_tend_2d = register_diag_field('ocean_model',                        &
         'diabatic_heat_tendency_2d', diag%axesT1, Time,                                          &
         'Depth integrated diabatic diffusion heat tendency',                                     &
-        'W m-2', conversion=US%s_to_T, cmor_field_name='opottempdiff_2d',                        &
+        'W m-2', conversion=GV%H_to_RZ*US%QRZ_T_to_W_m2, cmor_field_name='opottempdiff_2d',      &
         cmor_standard_name='tendency_of_sea_water_potential_temperature_expressed_as_heat_content_'//&
                            'due_to_parameterized_dianeutral_mixing_depth_integrated',            &
         cmor_long_name='Tendency of sea water potential temperature expressed as heat content '//&
@@ -3664,7 +3664,8 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   ! diagnostic for tendency of heat due to frazil
   CS%id_frazil_heat_tend = register_diag_field('ocean_model',&
       'frazil_heat_tendency', diag%axesTL, Time,             &
-      'Heat tendency due to frazil formation', 'W m-2', conversion=US%s_to_T, v_extensive=.true.)
+      'Heat tendency due to frazil formation', &
+      'W m-2', conversion=GV%H_to_RZ*US%QRZ_T_to_W_m2, v_extensive=.true.)
   if (CS%id_frazil_heat_tend > 0) then
     CS%frazil_tendency_diag = .true.
   endif
@@ -3672,7 +3673,8 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   ! if all is working propertly, this diagnostic should equal to hfsifrazil
   CS%id_frazil_heat_tend_2d = register_diag_field('ocean_model',&
       'frazil_heat_tendency_2d', diag%axesT1, Time,             &
-      'Depth integrated heat tendency due to frazil formation', 'W m-2', conversion=US%s_to_T)
+      'Depth integrated heat tendency due to frazil formation', &
+      'W m-2', conversion=GV%H_to_RZ*US%QRZ_T_to_W_m2)
   if (CS%id_frazil_heat_tend_2d > 0) then
     CS%frazil_tendency_diag = .true.
   endif
