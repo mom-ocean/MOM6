@@ -493,10 +493,10 @@ contains
     !Calculate tendencies (i.e., field changes at dt) from the sources / sinks
     !
 
-    call generic_tracer_source(tv%T,tv%S,rho_dzt,dzt,Hml,G%isd,G%jsd,1,dt,&
+    call generic_tracer_source(tv%T, tv%S, rho_dzt, dzt, Hml, G%isd, G%jsd, 1, dt, &
          G%US%L_to_m**2*G%areaT(:,:), get_diag_time_end(CS%diag), &
          optics%nbands, optics%max_wavelength_band, optics%sw_pen_band, optics%opacity_band, &
-         internal_heat=tv%internal_heat, &
+         internal_heat=G%US%R_to_kg_m3*G%US%Z_to_m*tv%internal_heat(:,:), &
          frunoff=G%US%R_to_kg_m3*G%US%Z_to_m*G%US%s_to_T*fluxes%frunoff(:,:), sosga=sosga)
 
     ! This uses applyTracerBoundaryFluxesInOut to handle the change in tracer due to freshwater fluxes

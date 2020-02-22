@@ -2106,11 +2106,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! initialization routine for tv.
   if (use_EOS) call EOS_init(param_file, CS%tv%eqn_of_state)
   if (use_temperature) then
-    allocate(CS%tv%TempxPmE(isd:ied,jsd:jed))
-    CS%tv%TempxPmE(:,:) = 0.0
+    allocate(CS%tv%TempxPmE(isd:ied,jsd:jed)) ; CS%tv%TempxPmE(:,:) = 0.0
     if (use_geothermal) then
-      allocate(CS%tv%internal_heat(isd:ied,jsd:jed))
-      CS%tv%internal_heat(:,:) = 0.0
+      allocate(CS%tv%internal_heat(isd:ied,jsd:jed)) ; CS%tv%internal_heat(:,:) = 0.0
     endif
   endif
   call callTree_waypoint("state variables allocated (initialize_MOM)")
@@ -2984,7 +2982,7 @@ subroutine extract_surface_state(CS, sfc_state)
   if (allocated(sfc_state%internal_heat) .and. associated(CS%tv%internal_heat)) then
     !$OMP parallel do default(shared)
     do j=js,je ; do i=is,ie
-      sfc_state%internal_heat(i,j) = CS%tv%internal_heat(i,j)
+      sfc_state%internal_heat(i,j) = US%R_to_kg_m3*US%Z_to_m*CS%tv%internal_heat(i,j)
     enddo ; enddo
   endif
   if (allocated(sfc_state%taux_shelf) .and. associated(CS%visc%taux_shelf)) then

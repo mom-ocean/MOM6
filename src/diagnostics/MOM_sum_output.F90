@@ -964,6 +964,7 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
                      ! over a time step and summed over space [J].
   real :: C_p        ! The heat capacity of seawater [J degC-1 kg-1].
   real :: RZL2_to_kg ! A combination of scaling factors for mass [kg R-1 Z-1 L-2 ~> 1]
+  real :: QRZL2_to_J ! A combination of scaling factors for heat [J Q-1 R-1 Z-1 L-2 ~> 1]
 
   type(EFP_type) :: &
     FW_in_EFP,   & ! Extended fixed point version of FW_input [kg]
@@ -976,6 +977,7 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   C_p = US%Q_to_J_kg*fluxes%C_p
   RZL2_to_kg = US%L_to_m**2*US%R_to_kg_m3*US%Z_to_m
+  QRZL2_to_J = RZL2_to_kg*US%Q_to_J_kg
 
   FW_in(:,:) = 0.0 ; FW_input = 0.0
   if (associated(fluxes%evap)) then
@@ -1000,19 +1002,19 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
   if (CS%use_temperature) then
 
     if (associated(fluxes%sw)) then ; do j=js,je ; do i=is,ie
-      heat_in(i,j) = heat_in(i,j) + dt*US%T_to_s*US%L_to_m**2*US%QRZ_T_to_W_m2*G%areaT(i,j) * (fluxes%sw(i,j) + &
+      heat_in(i,j) = heat_in(i,j) + dt * QRZL2_to_J * G%areaT(i,j) * (fluxes%sw(i,j) + &
              (fluxes%lw(i,j) + (fluxes%latent(i,j) + fluxes%sens(i,j))))
     enddo ; enddo ; endif
 
     if (associated(fluxes%seaice_melt_heat)) then ; do j=js,je ; do i=is,ie
-       heat_in(i,j) = heat_in(i,j) + dt*US%T_to_s*US%L_to_m**2*US%QRZ_T_to_W_m2*G%areaT(i,j) * &
+       heat_in(i,j) = heat_in(i,j) + dt * QRZL2_to_J * G%areaT(i,j) * &
                                      fluxes%seaice_melt_heat(i,j)
     enddo ; enddo ; endif
 
     ! smg: new code
     ! include heat content from water transport across ocean surface
 !    if (associated(fluxes%heat_content_lprec)) then ; do j=js,je ; do i=is,ie
-!      heat_in(i,j) = heat_in(i,j) + dt*US%T_to_s*US%L_to_m**2*US%QRZ_T_to_W_m2*G%areaT(i,j) * &
+!      heat_in(i,j) = heat_in(i,j) + dt * QRZL2_to_J * G%areaT(i,j) * &
 !         (fluxes%heat_content_lprec(i,j)   + (fluxes%heat_content_fprec(i,j)   &
 !       + (fluxes%heat_content_lrunoff(i,j) + (fluxes%heat_content_frunoff(i,j) &
 !       + (fluxes%heat_content_cond(i,j)    + (fluxes%heat_content_vprec(i,j)   &
@@ -1034,15 +1036,15 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
     ! The following heat sources may or may not be used.
     if (associated(tv%internal_heat)) then
       do j=js,je ; do i=is,ie
-        heat_in(i,j) = heat_in(i,j) + (C_p * US%L_to_m**2*G%areaT(i,j)) * &
+        heat_in(i,j) = heat_in(i,j) + (C_p * RZL2_to_kg*G%areaT(i,j)) * &
                        tv%internal_heat(i,j)
       enddo ; enddo
     endif
     if (associated(tv%frazil)) then ; do j=js,je ; do i=is,ie
-      heat_in(i,j) = heat_in(i,j) + US%L_to_m**2*G%areaT(i,j) * US%Q_to_J_kg*US%R_to_kg_m3*US%Z_to_m*tv%frazil(i,j)
+      heat_in(i,j) = heat_in(i,j) + QRZL2_to_J * G%areaT(i,j) * tv%frazil(i,j)
     enddo ; enddo ; endif
     if (associated(fluxes%heat_added)) then ; do j=js,je ; do i=is,ie
-      heat_in(i,j) = heat_in(i,j) + RZL2_to_kg*US%Q_to_J_kg * dt*G%areaT(i,j) * fluxes%heat_added(i,j)
+      heat_in(i,j) = heat_in(i,j) + QRZL2_to_J * dt*G%areaT(i,j) * fluxes%heat_added(i,j)
     enddo ; enddo ; endif
 !    if (associated(sfc_state%sw_lost)) then ; do j=js,je ; do i=is,ie
 !      heat_in(i,j) = heat_in(i,j) - US%L_to_m**2*G%areaT(i,j) * sfc_state%sw_lost(i,j)

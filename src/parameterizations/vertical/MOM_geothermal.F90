@@ -345,7 +345,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
     enddo ! k-loop
 
     if (associated(tv%internal_heat)) then ; do i=is,ie
-      tv%internal_heat(i,j) = tv%internal_heat(i,j) + GV%H_to_kg_m2 * &
+      tv%internal_heat(i,j) = tv%internal_heat(i,j) + GV%H_to_RZ * &
            (G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp)) - heat_rem(i))
     enddo ; endif
   enddo ! j-loop
@@ -368,7 +368,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
   endif
 
 !  do i=is,ie ; do j=js,je
-!    resid(i,j) = tv%internal_heat(i,j) - resid(i,j) - GV%H_to_kg_m2 * &
+!    resid(i,j) = tv%internal_heat(i,j) - resid(i,j) - GV%H_to_RZ * &
 !           (G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp)))
 !  enddo ; enddo
 
