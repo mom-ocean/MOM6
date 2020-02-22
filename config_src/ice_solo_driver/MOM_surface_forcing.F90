@@ -46,6 +46,8 @@ module MOM_surface_forcing
 !*  The boundaries always run through q grid points (x).               *
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
+
+use MOM_constants,           only : hlv, hlf
 use MOM_cpu_clock,           only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,           only : CLOCK_MODULE
 use MOM_diag_mediator,       only : post_data, query_averaging_enabled
@@ -89,72 +91,89 @@ public forcing_save_restart
 ! which may be used to drive MOM.  All fluxes are positive into the ocean.
 type, public :: surface_forcing_CS ; private
 
-  logical :: use_temperature    ! if true, temp & salinity used as state variables
-  logical :: restorebuoy        ! if true, use restoring surface buoyancy forcing
-  logical :: adiabatic          ! if true, no diapycnal mass fluxes or surface buoyancy forcing
-  logical :: variable_winds     ! if true, wind stresses vary with time
-  logical :: variable_buoyforce ! if true, buoyancy forcing varies with time.
-  real    :: south_lat          ! southern latitude of the domain
-  real    :: len_lat            ! domain length in latitude
+  logical :: use_temperature    !< if true, temp & salinity used as state variables
+  logical :: restorebuoy        !< if true, use restoring surface buoyancy forcing
+  logical :: adiabatic          !< if true, no diapycnal mass fluxes or surface buoyancy forcing
+  logical :: variable_winds     !< if true, wind stresses vary with time
+  logical :: variable_buoyforce !< if true, buoyancy forcing varies with time.
+  real    :: south_lat          !< southern latitude of the domain
+  real    :: len_lat            !< domain length in latitude
 
-  real :: Rho0                  ! Boussinesq reference density [R ~> kg m-3]
-  real :: G_Earth               ! gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
-  real :: Flux_const            ! piston velocity for surface restoring [Z T-1 ~> m s-1]
+  real :: Rho0                  !< Boussinesq reference density [R ~> kg m-3]
+  real :: G_Earth               !< gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
+  real :: Flux_const            !< piston velocity for surface restoring [Z T-1 ~> m s-1]
+  real :: latent_heat_fusion    !< latent heat of fusion times [Q ~> J kg-1]
+  real :: latent_heat_vapor     !< latent heat of vaporization [Q ~> J kg-1]
 
-  real    :: gust_const                 ! constant unresolved background gustiness for ustar [R L Z T-1 ~> Pa]
-  logical :: read_gust_2d               ! if true, use 2-dimensional gustiness supplied from a file
-  real, pointer :: gust(:,:) => NULL()  ! spatially varying unresolved background gustiness [R L Z T-1 ~> Pa]
-                                        ! gust is used when read_gust_2d is true.
+  real    :: gust_const                 !< constant unresolved background gustiness for ustar [R L Z T-1 ~> Pa]
+  logical :: read_gust_2d               !< if true, use 2-dimensional gustiness supplied from a file
+  real, pointer :: gust(:,:) => NULL()  !< spatially varying unresolved background gustiness [R L Z T-1 ~> Pa]
+                                        !< gust is used when read_gust_2d is true.
 
-  real, pointer :: T_Restore(:,:)    => NULL()  ! temperature to damp (restore) the SST to [degC]
-  real, pointer :: S_Restore(:,:)    => NULL()  ! salinity to damp (restore) the SSS [ppt]
-  real, pointer :: Dens_Restore(:,:) => NULL()  ! density to damp (restore) surface density [kg m-3]
+  real, pointer :: T_Restore(:,:)    => NULL()  !< temperature to damp (restore) the SST to [degC]
+  real, pointer :: S_Restore(:,:)    => NULL()  !< salinity to damp (restore) the SSS [ppt]
+  real, pointer :: Dens_Restore(:,:) => NULL()  !< density to damp (restore) surface density [kg m-3]
 
-  integer :: wind_last_lev_read = -1 ! The last time level read from the wind input files
-  integer :: buoy_last_lev_read = -1 ! The last time level read from buoyancy input files
+  integer :: wind_last_lev_read = -1 !< The last time level read from the wind input files
+  integer :: buoy_last_lev_read = -1 !< The last time level read from buoyancy input files
 
-  real :: gyres_taux_const, gyres_taux_sin_amp, gyres_taux_cos_amp, gyres_taux_n_pis
-                             ! if WIND_CONFIG=='gyres' then use
-                             ! = A, B, C and n respectively for
-                             ! taux = A + B*sin(n*pi*y/L) + C*cos(n*pi*y/L)
+  ! if WIND_CONFIG=='gyres' then use the following as  = A, B, C and n respectively for
+  ! taux = A + B*sin(n*pi*y/L) + C*cos(n*pi*y/L)
+  real :: gyres_taux_const   !< A constant wind stress [Pa].
+  real :: gyres_taux_sin_amp !< The amplitude of cosine wind stress gyres [Pa], if WIND_CONFIG=='gyres'.
+  real :: gyres_taux_cos_amp !< The amplitude of cosine wind stress gyres [Pa], if WIND_CONFIG=='gyres'.
+  real :: gyres_taux_n_pis   !< The number of sine lobes in the basin if  if WIND_CONFIG=='gyres'
 
-  real :: T_north, T_south   ! target temperatures at north and south used in
-                             ! buoyancy_forcing_linear
-  real :: S_north, S_south   ! target salinity at north and south used in
-                             ! buoyancy_forcing_linear
+  real :: T_north   !< target temperatures at north used in buoyancy_forcing_linear
+  real :: T_south   !< target temperatures at south used in buoyancy_forcing_linear
+  real :: S_north   !< target salinity at north used in buoyancy_forcing_linear
+  real :: S_south   !< target salinity at south used in buoyancy_forcing_linear
 
-  logical          :: first_call_set_forcing = .true.
-  real             :: wind_scale    ! value by which wind-stresses are scaled (nondimensional)
-  character(len=8) :: wind_stagger
+  logical :: first_call_set_forcing = .true. !< True until after the first call to set_forcing
 
-  type(tracer_flow_control_CS), pointer :: tracer_flow_CSp  => NULL()
-  type(MOM_restart_CS), pointer         :: restart_CSp      => NULL()
+  real :: wind_scale          !< value by which wind-stresses are scaled, ND.
+  character(len=8)   :: wind_stagger !< A character indicating how the wind stress components
+                              !! are staggered in WIND_FILE.  Valid values are A or C for now.
 
-  type(diag_ctrl), pointer :: diag ! structure used to regulate timing of diagnostic output
+  type(tracer_flow_control_CS), pointer :: tracer_flow_CSp => NULL() !< A pointer to the structure
+                              !! that is used to orchestrate the calling of tracer packages
+  type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< A pointer to the restart control structure
 
-  character(len=200) :: inputdir     ! The directory where NetCDF input files are.
-  character(len=200) :: wind_config  ! Indicator for wind forcing type (2gyre, USER, FILE..)
-  character(len=200) :: wind_file    ! If wind_config is "file", file to use
-  character(len=200) :: buoy_config  ! Indicator for buoyancy forcing type
-  character(len=200) :: longwavedown_file
-  character(len=200) :: longwaveup_file
-  character(len=200) :: evaporation_file
-  character(len=200) :: sensibleheat_file
-  character(len=200) :: shortwaveup_file
-  character(len=200) :: shortwavedown_file
-  character(len=200) :: snow_file
-  character(len=200) :: precip_file
-  character(len=200) :: freshdischarge_file
-  character(len=200) :: SSTrestore_file
-  character(len=200) :: salinityrestore_file
-  character(len=80)  :: stress_x_var, stress_y_var
+  type(diag_ctrl), pointer :: diag !< structure used to regulate timing of diagnostic output
 
-  ! Diagnostics handles
-  type(forcing_diags), public :: handles
+  character(len=200) :: inputdir    !< directory where NetCDF input files are.
+  character(len=200) :: wind_config !< indicator for wind forcing type (2gyre, USER, FILE..)
+  character(len=200) :: wind_file   !< if wind_config is "file", file to use
+  character(len=200) :: buoy_config !< indicator for buoyancy forcing type
 
-  type(user_revise_forcing_CS),   pointer :: urf_CS           => NULL()
-  type(user_surface_forcing_CS),  pointer :: user_forcing_CSp => NULL()
-!  type(MESO_surface_forcing_CS), pointer :: MESO_forcing_CSp => NULL()
+  character(len=200) :: longwavedown_file  = '' !< The file from which the downward longwave heat flux is read
+  character(len=200) :: shortwavedown_file = '' !< The file from which the downward shortwave heat flux is read
+  character(len=200) :: evaporation_file  = '' !< The file from which the evaporation is read
+  character(len=200) :: sensibleheat_file = '' !< The file from which the sensible heat flux is read
+  character(len=200) :: latentheat_file   = '' !< The file from which the latent heat flux is read
+
+  character(len=200) :: precip_file   = '' !< The file from which the rainfall is read
+  character(len=200) :: snow_file   = '' !< The file from which the snowfall is read
+  character(len=200) :: freshdischarge_file = '' !< The file from which the runoff and calving are read
+
+  character(len=200) :: longwaveup_file  = '' !< The file from which the upward longwave heat flux is read
+  character(len=200) :: shortwaveup_file = '' !< The file from which the upward shorwave heat flux is read
+
+  character(len=200) :: SSTrestore_file      = '' !< The file from which to read the sea surface
+                                                  !! temperature to restore toward
+  character(len=200) :: salinityrestore_file = '' !< The file from which to read the sea surface
+                                                  !! salinity to restore toward
+
+  character(len=80)  :: stress_x_var  = '' !< X-windstress variable name in the input file
+  character(len=80)  :: stress_y_var  = '' !< Y-windstress variable name in the input file
+
+  type(forcing_diags), public :: handles !< A structure with diagnostics handles
+
+  !>@{ Control structures for named forcing packages
+  type(user_revise_forcing_CS),  pointer :: urf_CS => NULL()
+  type(user_surface_forcing_CS), pointer :: user_forcing_CSp => NULL()
+  ! type(MESO_surface_forcing_CS), pointer :: MESO_forcing_CSp => NULL()
+  !!@}
 end type surface_forcing_CS
 
 integer :: id_clock_forcing
@@ -670,7 +689,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
     call MOM_read_data(trim(CS%inputdir)//trim(CS%evaporation_file), "evap", &
              fluxes%evap(:,:), G%Domain, timelevel=time_lev, scale=-US%kg_m3_to_R*US%m_to_Z*US%T_to_s)
     do j=js,je ; do i=is,ie
-      fluxes%latent(i,j)           = US%J_kg_to_Q*hlv*fluxes%evap(i,j)
+      fluxes%latent(i,j)           = CS%latent_heat_vapor*fluxes%evap(i,j)
       fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
     enddo ; enddo
 
@@ -731,8 +750,8 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
 
       fluxes%heat_content_lrunoff(i,j) = fluxes%C_p * fluxes%lrunoff(i,j)*sfc_state%SST(i,j)
       fluxes%latent_evap_diag(i,j)     = fluxes%latent_evap_diag(i,j) * G%mask2dT(i,j)
-      fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*US%J_kg_to_Q*hlf
-      fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*US%J_kg_to_Q*hlf
+      fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*CS%latent_heat_fusion
+      fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*CS%latent_heat_fusion
     enddo ; enddo
 
   endif ! time_lev /= CS%buoy_last_lev_read
@@ -1084,6 +1103,11 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
                  "If true, the buoyancy fluxes drive the model back "//&
                  "toward some specified surface state with a rate "//&
                  "given by FLUXCONST.", default= .false.)
+  call get_param(param_file, mdl, "LATENT_HEAT_FUSION", CS%latent_heat_fusion, &
+                 "The latent heat of fusion.", default=hlf, &
+                 units="J/kg", scale=US%J_kg_to_Q)
+  call get_param(param_file, mdl, "LATENT_HEAT_VAPORIZATION", CS%latent_heat_vapor, &
+                 "The latent heat of fusion.", default=hlv, units="J/kg", scale=US%J_kg_to_Q)
   if (CS%restorebuoy) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
                  "The constant that relates the restoring surface fluxes "//&
