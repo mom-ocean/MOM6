@@ -118,6 +118,8 @@ type, public :: surface_forcing_CS ; private
   real    :: max_delta_srestore             !< maximum delta salinity used for restoring
   real    :: max_delta_trestore             !< maximum delta sst used for restoring
   real, pointer, dimension(:,:) :: basin_mask => NULL() !< mask for SSS restoring by basin
+  logical :: fix_ustar_gustless_bug         !< If true correct a bug in the time-averaging of the
+                                            !! gustless wind friction velocity.
   type(diag_ctrl), pointer :: diag          !< structure to regulate diagnostic output timing
   character(len=200)       :: inputdir      !< directory where NetCDF input files are
   character(len=200)       :: salt_restore_file !< filename for salt restoring data
@@ -276,8 +278,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   ! allocation and initialization if this is the first time that this
   ! flux type has been used.
   if (fluxes%dt_buoy_accum < 0) then
-    call allocate_forcing_type(G, fluxes, water=.true., heat=.true., &
-                               ustar=.true., press=.true.)
+    call allocate_forcing_type(G, fluxes, water=.true., heat=.true., ustar=.true., &
+                               press=.true., fix_accum_bug=CS%fix_ustar_gustless_bug)
 
     call safe_alloc_ptr(fluxes%sw_vis_dir,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_vis_dif,isd,ied,jsd,jed)
@@ -1255,9 +1257,12 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
 
     call safe_alloc_ptr(CS%gust,isd,ied,jsd,jed)
     gust_file = trim(CS%inputdir) // trim(gust_file)
-    call MOM_read_data(gust_file,'gustiness',CS%gust,G%domain, timelevel=1, &
+    call MOM_read_data(gust_file, 'gustiness', CS%gust, G%domain, timelevel=1, &
                scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z) ! units in file should be Pa
   endif
+  call get_param(param_file, mdl, "FIX_USTAR_GUSTLESS_BUG", CS%fix_ustar_gustless_bug, &
+                 "If true correct a bug in the time-averaging of the gustless wind friction velocity", &
+                 default=.false.)
 
 ! See whether sufficiently thick sea ice should be treated as rigid.
   call get_param(param_file, mdl, "USE_RIGID_SEA_ICE", CS%rigid_sea_ice, &

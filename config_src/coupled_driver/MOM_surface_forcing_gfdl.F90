@@ -130,6 +130,8 @@ type, public :: surface_forcing_CS ; private
   logical :: answers_2018       !< If true, use the order of arithmetic and expressions that recover
                                 !! the answers from the end of 2018.  Otherwise, use a simpler
                                 !! expression to calculate gustiness.
+  logical :: fix_ustar_gustless_bug         !< If true correct a bug in the time-averaging of the
+                                            !! gustless wind friction velocity.
   logical :: check_no_land_fluxes           !< Return warning if IOB flux over land is non-zero
 
   type(diag_ctrl), pointer :: diag => NULL()  !< Structure to regulate diagnostic output timing
@@ -274,8 +276,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   ! allocation and initialization if this is the first time that this
   ! flux type has been used.
   if (fluxes%dt_buoy_accum < 0) then
-    call allocate_forcing_type(G, fluxes, water=.true., heat=.true., &
-                               ustar=.true., press=.true.)
+    call allocate_forcing_type(G, fluxes, water=.true., heat=.true., ustar=.true., press=.true., &
+                               fix_accum_bug=CS%fix_ustar_gustless_bug)
 
     call safe_alloc_ptr(fluxes%sw_vis_dir,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_vis_dif,isd,ied,jsd,jed)
@@ -1493,6 +1495,9 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "If true, use the order of arithmetic and expressions that recover the answers "//&
                  "from the end of 2018.  Otherwise, use a simpler expression to calculate gustiness.", &
                  default=default_2018_answers)
+  call get_param(param_file, mdl, "FIX_USTAR_GUSTLESS_BUG", CS%fix_ustar_gustless_bug, &
+                 "If true correct a bug in the time-averaging of the gustless wind friction velocity", &
+                 default=.false.)
 
 ! See whether sufficiently thick sea ice should be treated as rigid.
   call get_param(param_file, mdl, "USE_RIGID_SEA_ICE", CS%rigid_sea_ice, &
