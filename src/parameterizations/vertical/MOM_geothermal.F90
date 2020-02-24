@@ -337,7 +337,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
 
         ! Calculate heat tendency due to addition and transfer of internal heat
         if (CS%id_internal_heat_heat_tendency > 0) then
-          work_3d(i,j,k) = (tv%C_p * Idt) * (h(i,j,k) * tv%T(i,j,k) - h_old(i,j,k) * T_old(i,j,k))
+          work_3d(i,j,k) = ((GV%H_to_RZ*tv%C_p) * Idt) * (h(i,j,k) * tv%T(i,j,k) - h_old(i,j,k) * T_old(i,j,k))
         endif
 
       endif ; enddo
@@ -465,7 +465,7 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS)
   CS%id_internal_heat_heat_tendency=register_diag_field('ocean_model', &
         'internal_heat_heat_tendency', diag%axesTL, Time,              &
         'Heat tendency (in 3D) due to internal (geothermal) sources',  &
-        'W m-2', conversion=GV%H_to_RZ*US%QRZ_T_to_W_m2, v_extensive=.true.)
+        'W m-2', conversion=US%QRZ_T_to_W_m2, v_extensive=.true.)
   CS%id_internal_heat_temp_tendency=register_diag_field('ocean_model', &
         'internal_heat_temp_tendency', diag%axesTL, Time,              &
         'Temperature tendency (in 3D) due to internal (geothermal) sources', &
