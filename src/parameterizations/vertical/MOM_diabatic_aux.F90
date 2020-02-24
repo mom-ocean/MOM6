@@ -1,3 +1,4 @@
+
 !> Provides functions for some diabatic processes such as fraxil, brine rejection,
 !! tendency due to surface flux divergence.
 module MOM_diabatic_aux
@@ -81,11 +82,11 @@ type, public :: diabatic_aux_CS ; private
   real, allocatable, dimension(:,:)   :: createdH       !< The amount of volume added in order to
                                                         !! avoid grounding [H T-1 ~> m s-1]
   real, allocatable, dimension(:,:,:) :: penSW_diag     !< Heating in a layer from convergence of
-                                                        !! penetrative SW [W m-2]
+                                                        !! penetrative SW [Q R Z T-1 ~> W m-2]
   real, allocatable, dimension(:,:,:) :: penSWflux_diag !< Penetrative SW flux at base of grid
-                                                        !! layer [W m-2]
+                                                        !! layer [Q R Z T-1 ~> W m-2]
   real, allocatable, dimension(:,:)   :: nonpenSW_diag  !< Non-downwelling SW radiation at ocean
-                                                        !! surface [W m-2]
+                                                        !! surface [Q R Z T-1 ~> W m-2]
 
 end type diabatic_aux_CS
 
@@ -98,14 +99,15 @@ contains
 !> Frazil formation keeps the temperature above the freezing point.
 !! This subroutine warms any water that is colder than the (currently
 !! surface) freezing point up to the freezing point and accumulates
-!! the required heat (in J m-2) in tv%frazil.
-subroutine make_frazil(h, tv, G, GV, CS, p_surf, halo)
+!! the required heat (in [Q R Z ~> J m-2]) in tv%frazil.
+subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
   type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(inout) :: tv !< Structure containing pointers to any available
                                                !! thermodynamic fields.
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(diabatic_aux_CS),   intent(in)    :: CS !< The control structure returned by a previous
                                                !! call to diabatic_aux_init.
   real, dimension(SZI_(G),SZJ_(G)), &
@@ -114,12 +116,12 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf, halo)
 
   ! Local variables
   real, dimension(SZI_(G)) :: &
-    fraz_col, & ! The accumulated heat requirement due to frazil [J].
+    fraz_col, & ! The accumulated heat requirement due to frazil [Q R Z ~> J m-2].
     T_freeze, & ! The freezing potential temperature at the current salinity [degC].
     ps          ! pressure
   real, dimension(SZI_(G),SZK_(G)) :: &
     pressure    ! The pressure at the middle of each layer [Pa].
-  real :: hc    ! A layer's heat capacity [J m-2 degC-1].
+  real :: hc    ! A layer's heat capacity [Q R Z degC-1 ~> J m-2 degC-1].
   logical :: T_fr_set  ! True if the freezing point has been calculated for a
                        ! row of points.
   integer :: i, j, k, is, ie, js, je, nz
@@ -167,9 +169,9 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf, halo)
         if (tv%T(i,j,1) > T_freeze(i)) then
     ! If frazil had previously been formed, but the surface temperature is now
     ! above freezing, cool the surface layer with the frazil heat deficit.
-          hc = (tv%C_p*GV%H_to_kg_m2) * h(i,j,1)
+          hc = (tv%C_p*GV%H_to_RZ) * h(i,j,1)
           if (tv%frazil(i,j) - hc * (tv%T(i,j,1) - T_freeze(i)) <= 0.0) then
-            tv%T(i,j,1) = tv%T(i,j,1) - tv%frazil(i,j)/hc
+            tv%T(i,j,1) = tv%T(i,j,1) - tv%frazil(i,j) / hc
             tv%frazil(i,j) = 0.0
           else
             tv%frazil(i,j) = tv%frazil(i,j) - hc * (tv%T(i,j,1) - T_freeze(i))
@@ -190,7 +192,7 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf, halo)
             T_fr_set = .true.
           endif
 
-          hc = (tv%C_p*GV%H_to_kg_m2) * h(i,j,k)
+          hc = (tv%C_p*GV%H_to_RZ) * h(i,j,k)
           if (h(i,j,k) <= 10.0*GV%Angstrom_H) then
             ! Very thin layers should not be cooled by the frazil flux.
             if (tv%T(i,j,k) < T_freeze(i)) then
@@ -199,7 +201,7 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf, halo)
             endif
           else
             if (fraz_col(i) + hc * (T_freeze(i) - tv%T(i,j,k)) <= 0.0) then
-              tv%T(i,j,k) = tv%T(i,j,k) - fraz_col(i)/hc
+              tv%T(i,j,k) = tv%T(i,j,k) - fraz_col(i) / hc
               fraz_col(i) = 0.0
             else
               fraz_col(i) = fraz_col(i) + hc * (T_freeze(i) - tv%T(i,j,k))
@@ -653,16 +655,18 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb)
 end subroutine find_uv_at_h
 
 
-subroutine set_pen_shortwave(optics, fluxes, G, GV, CS, opacity_CSp, tracer_flow_CSp)
+subroutine set_pen_shortwave(optics, fluxes, G, GV, US, CS, opacity_CSp, tracer_flow_CSp)
   type(optics_type),       pointer       :: optics !< An optics structure that has will contain
                                                    !! information about shortwave fluxes and absorption.
   type(forcing),           intent(inout) :: fluxes !< points to forcing fields
                                                    !! unused fields have NULL ptrs
   type(ocean_grid_type),   intent(in)    :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
-  type(diabatic_aux_CS),   pointer       :: CS !< Control structure for diabatic_aux
+  type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
+  type(diabatic_aux_CS),   pointer       :: CS     !< Control structure for diabatic_aux
   type(opacity_CS),        pointer       :: opacity_CSp !< The control structure for the opacity module.
-  type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp !< A pointer to the control structure of the tracer modules.
+  type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp !< A pointer to the control structure
+                                                   !! organizing the tracer modules.
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G))          :: chl_2d !< Vertically uniform chlorophyll-A concentractions [mg m-3]
@@ -690,7 +694,7 @@ subroutine set_pen_shortwave(optics, fluxes, G, GV, CS, opacity_CSp, tracer_flow
       if (CS%id_chl > 0) call post_data(CS%id_chl, chl_2d, CS%diag)
 
       call set_opacity(optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
-                       fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, opacity_CSp, chl_2d=chl_2d)
+                       fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, US, opacity_CSp, chl_2d=chl_2d)
     else
       if (.not.associated(tracer_flow_CSp)) call MOM_error(FATAL, &
         "The tracer flow control structure must be associated when the model sets "//&
@@ -700,11 +704,11 @@ subroutine set_pen_shortwave(optics, fluxes, G, GV, CS, opacity_CSp, tracer_flow
       if (CS%id_chl > 0) call post_data(CS%id_chl, chl_3d(:,:,1), CS%diag)
 
       call set_opacity(optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
-                       fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, opacity_CSp, chl_3d=chl_3d)
+                       fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, US, opacity_CSp, chl_3d=chl_3d)
     endif
   else
     call set_opacity(optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
-                     fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, opacity_CSp)
+                     fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, US, opacity_CSp)
   endif
 
 end subroutine set_pen_shortwave
@@ -1301,13 +1305,13 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
       tv%T(i,j,k) = T2d(i,k)
     enddo ; enddo
 
-    ! Diagnose heating [W m-2] applied to a grid cell from SW penetration
+    ! Diagnose heating [Q R Z T-1 ~> W m-2] applied to a grid cell from SW penetration
     ! Also diagnose the penetrative SW heat flux at base of layer.
     if (CS%id_penSW_diag > 0 .or. CS%id_penSWflux_diag > 0) then
 
       ! convergence of SW into a layer
       do k=1,nz ; do i=is,ie
-        CS%penSW_diag(i,j,k) = (T2d(i,k)-CS%penSW_diag(i,j,k))*h(i,j,k) * US%s_to_T*Idt * tv%C_p * GV%H_to_kg_m2
+        CS%penSW_diag(i,j,k) = (T2d(i,k)-CS%penSW_diag(i,j,k))*h(i,j,k) * Idt * tv%C_p * GV%H_to_RZ
       enddo ; enddo
 
       ! Perform a cumulative sum upwards from bottom to
@@ -1327,7 +1331,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     ! Fill CS%nonpenSW_diag
     if (CS%id_nonpenSW_diag > 0) then
       do i=is,ie
-        CS%nonpenSW_diag(i,j) = nonpenSW(i)
+        CS%nonpenSW_diag(i,j) = nonpenSW(i) * Idt * tv%C_p * GV%H_to_RZ
       enddo
     endif
 
@@ -1493,30 +1497,29 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
     ! diagnostic for heating of a grid cell from convergence of SW heat into the cell
     CS%id_penSW_diag = register_diag_field('ocean_model', 'rsdoabsorb',                     &
           diag%axesTL, Time, 'Convergence of Penetrative Shortwave Flux in Sea Water Layer',&
-          'W m-2', standard_name='net_rate_of_absorption_of_shortwave_energy_in_ocean_layer',v_extensive=.true.)
+          'W m-2', conversion=US%QRZ_T_to_W_m2, &
+          standard_name='net_rate_of_absorption_of_shortwave_energy_in_ocean_layer', v_extensive=.true.)
 
     ! diagnostic for penetrative SW heat flux at top interface of tracer cell (nz+1 interfaces)
     ! k=1 gives penetrative SW at surface; SW(k=nz+1)=0 (no penetration through rock).
     CS%id_penSWflux_diag = register_diag_field('ocean_model', 'rsdo',                               &
           diag%axesTi, Time, 'Downwelling Shortwave Flux in Sea Water at Grid Cell Upper Interface',&
-          'W m-2', standard_name='downwelling_shortwave_flux_in_sea_water')
+          'W m-2', conversion=US%QRZ_T_to_W_m2, standard_name='downwelling_shortwave_flux_in_sea_water')
 
     ! need both arrays for the SW diagnostics (one for flux, one for convergence)
     if (CS%id_penSW_diag>0 .or. CS%id_penSWflux_diag>0) then
-       allocate(CS%penSW_diag(isd:ied,jsd:jed,nz))
-       CS%penSW_diag(:,:,:) = 0.0
-       allocate(CS%penSWflux_diag(isd:ied,jsd:jed,nz+1))
-       CS%penSWflux_diag(:,:,:) = 0.0
+      allocate(CS%penSW_diag(isd:ied,jsd:jed,nz)) ; CS%penSW_diag(:,:,:) = 0.0
+      allocate(CS%penSWflux_diag(isd:ied,jsd:jed,nz+1)) ; CS%penSWflux_diag(:,:,:) = 0.0
     endif
 
     ! diagnostic for non-downwelling SW radiation (i.e., SW absorbed at ocean surface)
     CS%id_nonpenSW_diag = register_diag_field('ocean_model', 'nonpenSW',                       &
           diag%axesT1, Time,                                                                   &
           'Non-downwelling SW radiation (i.e., SW absorbed in ocean surface with LW,SENS,LAT)',&
-          'W m-2', standard_name='nondownwelling_shortwave_flux_in_sea_water')
+          'W m-2', conversion=US%QRZ_T_to_W_m2, &
+          standard_name='nondownwelling_shortwave_flux_in_sea_water')
     if (CS%id_nonpenSW_diag > 0) then
-       allocate(CS%nonpenSW_diag(isd:ied,jsd:jed))
-       CS%nonpenSW_diag(:,:) = 0.0
+      allocate(CS%nonpenSW_diag(isd:ied,jsd:jed)) ; CS%nonpenSW_diag(:,:) = 0.0
     endif
   endif
 
