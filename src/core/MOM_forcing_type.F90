@@ -164,7 +164,8 @@ type, public :: forcing
   real :: dt_buoy_accum = -1.0    !< The amount of time over which the buoyancy fluxes
                                   !! should be applied [T ~> s].  If negative, this forcing
                                   !! type variable has not yet been inialized.
-
+  logical :: gustless_accum_bug = .true. !< If true, use an incorrect expression in the time
+                                  !! average of the gustless wind stress.
   real :: C_p                !< heat capacity of seawater [J kg-1 degC-1].
                              !! C_p is is the same value as in thermovar_ptrs_type.
 
@@ -1946,9 +1947,11 @@ subroutine fluxes_accumulate(flux_tmp, fluxes, G, wt2, forces)
 
   ! Average the water, heat, and salt fluxes, and ustar.
   do j=js,je ; do i=is,ie
-!### Replace the expression for ustar_gustless with this one...
-!    fluxes%ustar_gustless(i,j) = wt1*fluxes%ustar_gustless(i,j) + wt2*flux_tmp%ustar_gustless(i,j)
-    fluxes%ustar_gustless(i,j) = flux_tmp%ustar_gustless(i,j)
+    if (fluxes%gustless_accum_bug) then
+      fluxes%ustar_gustless(i,j) = flux_tmp%ustar_gustless(i,j)
+    else
+      fluxes%ustar_gustless(i,j) = wt1*fluxes%ustar_gustless(i,j) + wt2*flux_tmp%ustar_gustless(i,j)
+    endif
 
     fluxes%evap(i,j) = wt1*fluxes%evap(i,j) + wt2*flux_tmp%evap(i,j)
     fluxes%lprec(i,j) = wt1*fluxes%lprec(i,j) + wt2*flux_tmp%lprec(i,j)
@@ -2112,9 +2115,12 @@ subroutine set_derived_forcing_fields(forces, fluxes, G, US, Rho0)
                  G%mask2dCv(i,J) * forces%tauy(i,J)**2) / &
                 (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
 
-      fluxes%ustar_gustless(i,j) = sqrt(US%L_to_Z * sqrt(taux2 + tauy2) / Rho0)
-!### For efficiency this could be changed to:
-!      fluxes%ustar_gustless(i,j) = sqrt(sqrt(taux2 + tauy2) * Irho0)
+      if (fluxes%gustless_accum_bug) then
+        ! This change is just for computational efficiency, but it is wrapped with another change.
+        fluxes%ustar_gustless(i,j) = sqrt(US%L_to_Z * sqrt(taux2 + tauy2) / Rho0)
+      else
+        fluxes%ustar_gustless(i,j) = sqrt(sqrt(taux2 + tauy2) * Irho0)
+      endif
     enddo ; enddo
   endif
 
@@ -2805,7 +2811,7 @@ end subroutine forcing_diagnostics
 
 
 !> Conditionally allocate fields within the forcing type
-subroutine allocate_forcing_type(G, fluxes, water, heat, ustar, press, shelf, iceberg, salt)
+subroutine allocate_forcing_type(G, fluxes, water, heat, ustar, press, shelf, iceberg, salt, fix_accum_bug)
   type(ocean_grid_type), intent(in) :: G       !< Ocean grid structure
   type(forcing),      intent(inout) :: fluxes  !< A structure containing thermodynamic forcing fields
   logical, optional,     intent(in) :: water   !< If present and true, allocate water fluxes
@@ -2815,6 +2821,8 @@ subroutine allocate_forcing_type(G, fluxes, water, heat, ustar, press, shelf, ic
   logical, optional,     intent(in) :: shelf   !< If present and true, allocate fluxes for ice-shelf
   logical, optional,     intent(in) :: iceberg !< If present and true, allocate fluxes for icebergs
   logical, optional,     intent(in) :: salt    !< If present and true, allocate salt fluxes
+  logical, optional,     intent(in) :: fix_accum_bug !< If present and true, avoid using a bug in
+                                               !! accumulation of ustar_gustless
 
   ! Local variables
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -2869,6 +2877,8 @@ subroutine allocate_forcing_type(G, fluxes, water, heat, ustar, press, shelf, ic
   call myAlloc(fluxes%ustar_berg,isd,ied,jsd,jed, iceberg)
   call myAlloc(fluxes%area_berg,isd,ied,jsd,jed, iceberg)
   call myAlloc(fluxes%mass_berg,isd,ied,jsd,jed, iceberg)
+
+  if (present(fix_accum_bug)) fluxes%gustless_accum_bug = .not.fix_accum_bug
 
 end subroutine allocate_forcing_type
 

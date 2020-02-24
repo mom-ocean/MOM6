@@ -109,6 +109,8 @@ type, public :: surface_forcing_CS ; private
                              !! the answers from the end of 2018.  Otherwise, use a form of the gyre
                              !! wind stresses that are rotationally invariant and more likely to be
                              !! the same between compilers.
+  logical :: fix_ustar_gustless_bug         !< If true correct a bug in the time-averaging of the
+                                            !! gustless wind friction velocity.
 
   real :: T_north   !< target temperatures at north used in buoyancy_forcing_linear
   real :: T_south   !< target temperatures at south used in buoyancy_forcing_linear
@@ -244,7 +246,7 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
     ! Allocate memory for the mechanical and thermodyanmic forcing fields.
     call allocate_mech_forcing(G, forces, stress=.true., ustar=.true., press=.true.)
 
-    call allocate_forcing_type(G, fluxes, ustar=.true.)
+    call allocate_forcing_type(G, fluxes, ustar=.true., fix_accum_bug=CS%fix_ustar_gustless_bug)
     if (trim(CS%buoy_config) /= "NONE") then
       if ( CS%use_temperature ) then
         call allocate_forcing_type(G, fluxes, water=.true., heat=.true., press=.true.)
@@ -1662,6 +1664,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
     CS%south_lat = G%south_lat
     CS%len_lat = G%len_lat
   endif
+
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
                  "calculate accelerations and the mass for conservation "//&
@@ -1727,6 +1730,9 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
                  "The background gustiness in the winds.", &
                  units="Pa", default=0.02, scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z)
+  call get_param(param_file, mdl, "FIX_USTAR_GUSTLESS_BUG", CS%fix_ustar_gustless_bug, &
+                 "If true correct a bug in the time-averaging of the gustless wind friction velocity", &
+                 default=.false.)
   call get_param(param_file, mdl, "READ_GUST_2D", CS%read_gust_2d, &
                  "If true, use a 2-dimensional gustiness supplied from "//&
                  "an input file", default=.false.)
