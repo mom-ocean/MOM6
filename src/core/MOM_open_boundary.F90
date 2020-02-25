@@ -1960,9 +1960,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
              dhdy = segment%grad_normal(J,1,k)
            endif
            if (dhdt*dhdx < 0.0) dhdt = 0.0
-           rx_new = dhdt*dhdx
            cff_new = max(dhdx*dhdx + dhdy*dhdy, eps)
-           rx_new = min(rx_new, cff_new*rx_max)
+           rx_new = min(dhdt*dhdx, cff_new*rx_max)
            ry_new = min(cff_new,max(dhdt*dhdy,-cff_new))
            if (gamma_u < 1.0) then
              rx_avg = (1.0-gamma_u)*segment%rx_norm_obl(I,j,k) + gamma_u*rx_new
@@ -2103,8 +2102,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
                  dhdy = segment%grad_tan(j+1,1,k)
                endif
                if (dhdt*dhdx < 0.0) dhdt = 0.0
-               rx_new = dhdt*dhdx
                cff_new = max(dhdx*dhdx + dhdy*dhdy, eps)
+               rx_new = min(dhdt*dhdx, cff_new*rx_max)
                ry_new = min(cff_new,max(dhdt*dhdy,-cff_new))
                rx_tang_obl(I,j,k) = rx_new
                ry_tang_obl(i,J,k) = ry_new
@@ -2206,9 +2205,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            endif
            if (dhdt*dhdx < 0.0) dhdt = 0.0
 
-           rx_new = dhdt*dhdx
            cff_new = max(dhdx*dhdx + dhdy*dhdy, eps)
-           rx_new = min(rx_new, cff_new*rx_max)
+           rx_new = min(dhdt*dhdx, cff_new*rx_max)
            ry_new = min(cff_new,max(dhdt*dhdy,-cff_new))
            if (gamma_u < 1.0) then
              rx_avg = (1.0-gamma_u)*segment%rx_norm_obl(I,j,k) + gamma_u*rx_new
@@ -2349,8 +2347,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
                  dhdy = segment%grad_tan(j+1,1,k)
                endif
                if (dhdt*dhdx < 0.0) dhdt = 0.0
-               rx_new = dhdt*dhdx
                cff_new = max(dhdx*dhdx + dhdy*dhdy, eps)
+               rx_new = min(dhdt*dhdx, cff_new*rx_max)
                ry_new = min(cff_new,max(dhdt*dhdy,-cff_new))
                rx_tang_obl(I,j,k) = rx_new
                ry_tang_obl(i,J,k) = ry_new
@@ -2451,9 +2449,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
              dhdx = segment%grad_normal(I,1,k)
            endif
            if (dhdt*dhdy < 0.0) dhdt = 0.0
-           ry_new = dhdt*dhdy
            cff_new = max(dhdx*dhdx + dhdy*dhdy, eps)
-           ry_new = min(ry_new, cff_new*ry_max)
+           ry_new = min(dhdt*dhdy, cff_new*ry_max)
            rx_new = min(cff_new,max(dhdt*dhdx,-cff_new))
            if (gamma_u < 1.0) then
              rx_avg = (1.0-gamma_u)*segment%rx_norm_obl(I,j,k) + gamma_u*rx_new
@@ -2594,8 +2591,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
                  dhdx = segment%grad_tan(i+1,1,k)
                endif
                if (dhdt*dhdy < 0.0) dhdt = 0.0
-               ry_new = dhdt*dhdy
                cff_new = max(dhdx*dhdx + dhdy*dhdy, eps)
+               ry_new = min(dhdt*dhdy, cff_new*ry_max)
                rx_new = min(cff_new,max(dhdt*dhdx,-cff_new))
                rx_tang_obl(I,j,k) = rx_new
                ry_tang_obl(i,J,k) = ry_new
@@ -2697,9 +2694,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            endif
            if (dhdt*dhdy < 0.0) dhdt = 0.0
 
-           ry_new = dhdt*dhdy
            cff_new = max(dhdx*dhdx + dhdy*dhdy, eps)
-           ry_new = min(ry_new, cff_new*ry_max)
+           ry_new = min(dhdt*dhdy, cff_new*ry_max)
            rx_new = min(cff_new,max(dhdt*dhdx,-cff_new))
            if (gamma_u < 1.0) then
              rx_avg = (1.0-gamma_u)*segment%rx_norm_obl(I,j,k) + gamma_u*rx_new
@@ -2840,8 +2836,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
                  dhdx = segment%grad_tan(i+1,1,k)
                endif
                if (dhdt*dhdy < 0.0) dhdt = 0.0
-               ry_new = dhdt*dhdy
                cff_new = max(dhdx*dhdx + dhdy*dhdy, eps)
+               ry_new = min(dhdt*dhdy, cff_new*ry_max)
                rx_new = min(cff_new,max(dhdt*dhdx,-cff_new))
                rx_tang_obl(I,j,k) = rx_new
                ry_tang_obl(i,J,k) = ry_new
