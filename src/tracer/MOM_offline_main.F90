@@ -663,7 +663,8 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, e
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), &
                     intent(inout)      :: ebtr       !< Entrainment from layer below [H ~> m or kg m-2]
 
-  real, dimension(SZI_(CS%G),SZJ_(CS%G))    :: sw, sw_vis, sw_nir !< Save old value of shortwave radiation
+  real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: &
+    sw, sw_vis, sw_nir !< Save old values of shortwave radiation [Q R Z T-1 ~> W m-2]
   real :: hval
   integer :: i,j,k
   integer :: is, ie, js, je, nz
@@ -728,7 +729,8 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, e
   endif
 
   if (associated(CS%optics)) &
-    call set_pen_shortwave(CS%optics, fluxes, CS%G, CS%GV, CS%diabatic_aux_CSp, CS%opacity_CSp, CS%tracer_flow_CSp)
+    call set_pen_shortwave(CS%optics, fluxes, CS%G, CS%GV, CS%US, CS%diabatic_aux_CSp, &
+                           CS%opacity_CSp, CS%tracer_flow_CSp)
 
   ! Note that tracerBoundaryFluxesInOut within this subroutine should NOT be called
   ! as the freshwater fluxes have already been accounted for
