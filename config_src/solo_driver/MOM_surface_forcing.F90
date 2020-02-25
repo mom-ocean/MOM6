@@ -788,7 +788,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
   call callTree_enter("buoyancy_forcing_from_files, MOM_surface_forcing.F90")
 
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je = G%jec
-  kg_m2_s_conversion = US%kg_m3_to_R*US%m_to_Z*US%T_to_s
+  kg_m2_s_conversion = US%kg_m2s_to_RZ_T
 
   if (CS%use_temperature) rhoXcp = CS%Rho0 * fluxes%C_p
 
@@ -1067,7 +1067,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
 
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  kg_m2_s_conversion = US%kg_m3_to_R*US%m_to_Z*US%T_to_s
+  kg_m2_s_conversion = US%kg_m2s_to_RZ_T
 
   if (CS%use_temperature) rhoXcp = CS%Rho0 * fluxes%C_p
 
