@@ -1079,8 +1079,8 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
                   haloshift=0, scale=GV%H_to_m*US%L_to_m**2)
     if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre-advection T", G%HI, haloshift=1)
     if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Pre-advection S", G%HI, haloshift=1)
-    if (associated(CS%tv%frazil)) call hchksum(CS%tv%frazil, &
-                   "Pre-advection frazil", G%HI, haloshift=0)
+    if (associated(CS%tv%frazil)) call hchksum(CS%tv%frazil, "Pre-advection frazil", G%HI, haloshift=0, &
+                                               scale=G%US%Q_to_J_kg*G%US%R_to_kg_m3*G%US%Z_to_m)
     if (associated(CS%tv%salt_deficit)) call hchksum(CS%tv%salt_deficit, &
                    "Pre-advection salt deficit", G%HI, haloshift=0, scale=US%R_to_kg_m3*US%Z_to_m)
   ! call MOM_thermo_chksum("Pre-advection ", CS%tv, G, US)
@@ -1270,8 +1270,8 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     !                       h, CS%uhtr, CS%vhtr, G, GV, haloshift=1)
       if (associated(tv%T)) call hchksum(tv%T, "Post-diabatic T", G%HI, haloshift=1)
       if (associated(tv%S)) call hchksum(tv%S, "Post-diabatic S", G%HI, haloshift=1)
-      if (associated(tv%frazil)) call hchksum(tv%frazil, &
-                               "Post-diabatic frazil", G%HI, haloshift=0)
+      if (associated(tv%frazil)) call hchksum(tv%frazil, "Post-diabatic frazil", G%HI, haloshift=0, &
+                                              scale=G%US%Q_to_J_kg*G%US%R_to_kg_m3*G%US%Z_to_m)
       if (associated(tv%salt_deficit)) call hchksum(tv%salt_deficit, &
                                "Post-diabatic salt deficit", G%HI, haloshift=0, scale=US%R_to_kg_m3*US%Z_to_m)
     ! call MOM_thermo_chksum("Post-diabatic ", tv, G, US)
@@ -1824,7 +1824,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "constant. This is only used if ENABLE_THERMODYNAMICS is "//&
                  "true. The default value is from the TEOS-10 definition "//&
                  "of conservative temperature.", units="J kg-1 K-1", &
-                 default=3991.86795711963)
+                 default=3991.86795711963, scale=US%J_kg_to_Q)
   endif
   if (use_EOS) call get_param(param_file, "MOM", "P_REF", CS%tv%P_Ref, &
                  "The pressure that is used for calculating the coordinate "//&
@@ -2008,11 +2008,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     if (CS%tv%T_is_conT) then
       vd_T = var_desc(name="contemp", units="Celsius", longname="Conservative Temperature", &
                       cmor_field_name="thetao", cmor_longname="Sea Water Potential Temperature", &
-                      conversion=CS%tv%C_p)
+                      conversion=US%Q_to_J_kg*CS%tv%C_p)
     else
       vd_T = var_desc(name="temp", units="degC", longname="Potential Temperature", &
                       cmor_field_name="thetao", cmor_longname="Sea Water Potential Temperature", &
-                      conversion=CS%tv%C_p)
+                      conversion=US%Q_to_J_kg*CS%tv%C_p)
     endif
     if (CS%tv%S_is_absS) then
       vd_S = var_desc(name="abssalt",units="g kg-1",longname="Absolute Salinity", &
@@ -2026,7 +2026,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
     if (advect_TS) then
       S_flux_units = get_tr_flux_units(GV, "psu") ! Could change to "kg m-2 s-1"?
-      conv2watt    = GV%H_to_kg_m2 * CS%tv%C_p
+      conv2watt    = GV%H_to_kg_m2 * US%Q_to_J_kg*CS%tv%C_p
       if (GV%Boussinesq) then
         conv2salt = GV%H_to_m ! Could change to GV%H_to_kg_m2 * 0.001?
       else
@@ -2106,11 +2106,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! initialization routine for tv.
   if (use_EOS) call EOS_init(param_file, CS%tv%eqn_of_state)
   if (use_temperature) then
-    allocate(CS%tv%TempxPmE(isd:ied,jsd:jed))
-    CS%tv%TempxPmE(:,:) = 0.0
+    allocate(CS%tv%TempxPmE(isd:ied,jsd:jed)) ; CS%tv%TempxPmE(:,:) = 0.0
     if (use_geothermal) then
-      allocate(CS%tv%internal_heat(isd:ied,jsd:jed))
-      CS%tv%internal_heat(:,:) = 0.0
+      allocate(CS%tv%internal_heat(isd:ied,jsd:jed)) ; CS%tv%internal_heat(:,:) = 0.0
     endif
   endif
   call callTree_waypoint("state variables allocated (initialize_MOM)")
@@ -2745,7 +2743,7 @@ subroutine extract_surface_state(CS, sfc_state)
   real :: H_rescale          !< A conversion factor from thickness units to the units used in the
                              !! calculation of properties of the uppermost ocean [nondim] or [Z H-1 ~> 1 or m3 kg-1]
                              !  After the ANSWERS_2018 flag has been obsoleted, H_rescale will be 1.
-  real :: delT(SZI_(CS%G))   !< T-T_freeze [degC]
+  real :: delT(SZI_(CS%G))   !< Depth integral of T-T_freeze [m degC]
   logical :: use_temperature !< If true, temp and saln used as state variables.
   integer :: i, j, k, is, ie, js, je, nz, numberOfErrors, ig, jg
   integer :: isd, ied, jsd, jed
@@ -2766,15 +2764,19 @@ subroutine extract_surface_state(CS, sfc_state)
   if (.not.sfc_state%arrays_allocated) then
     !  Consider using a run-time flag to determine whether to do the vertical
     ! integrals, since the 3-d sums are not negligible in cost.
-    call allocate_surface_state(sfc_state, G, use_temperature, do_integrals=.true.)
+    call allocate_surface_state(sfc_state, G, use_temperature, do_integrals=.true., &
+                                omit_frazil=.not.associated(CS%tv%frazil))
   endif
-  sfc_state%frazil => CS%tv%frazil
   sfc_state%T_is_conT = CS%tv%T_is_conT
   sfc_state%S_is_absS = CS%tv%S_is_absS
 
   do j=js,je ; do i=is,ie
     sfc_state%sea_lev(i,j) = CS%ave_ssh_ibc(i,j)
   enddo ; enddo
+
+  if (allocated(sfc_state%frazil) .and. associated(CS%tv%frazil)) then ; do j=js,je ; do i=is,ie
+    sfc_state%frazil(i,j) = US%Q_to_J_kg*US%R_to_kg_m3*US%Z_to_m * CS%tv%frazil(i,j)
+  enddo ; enddo ; endif
 
   ! copy Hml into sfc_state, so that caps can access it
   if (associated(CS%Hml)) then
@@ -2799,7 +2801,8 @@ subroutine extract_surface_state(CS, sfc_state)
     H_rescale = 1.0 ; if (CS%answers_2018) H_rescale = GV%H_to_Z
     depth_ml = CS%Hmix
     if (.not.CS%answers_2018) depth_ml = CS%Hmix*GV%Z_to_H
-  !   Determine the mean tracer properties of the uppermost depth_ml fluid.
+    ! Determine the mean tracer properties of the uppermost depth_ml fluid.
+
     !$OMP parallel do default(shared) private(depth,dh)
     do j=js,je
       do i=is,ie
@@ -2936,7 +2939,7 @@ subroutine extract_surface_state(CS, sfc_state)
       enddo
 
       do k=1,nz ; do i=is,ie
-        depth_ml = min(CS%HFrz,CS%visc%MLD(i,j))
+        depth_ml = min(CS%HFrz, CS%visc%MLD(i,j))
         if (depth(i) + h(i,j,k)*GV%H_to_m < depth_ml) then
           dh = h(i,j,k)*GV%H_to_m
         elseif (depth(i) < depth_ml) then
@@ -2957,7 +2960,7 @@ subroutine extract_surface_state(CS, sfc_state)
 
        if (G%mask2dT(i,j)>0.) then
          ! instantaneous melt_potential [J m-2]
-         sfc_state%melt_potential(i,j) = CS%tv%C_p * US%R_to_kg_m3*GV%Rho0 * delT(i)
+         sfc_state%melt_potential(i,j) = US%Q_to_J_kg*US%R_to_kg_m3 * CS%tv%C_p * GV%Rho0 * delT(i)
        endif
       enddo
     enddo ! end of j loop
@@ -2979,7 +2982,7 @@ subroutine extract_surface_state(CS, sfc_state)
   if (allocated(sfc_state%internal_heat) .and. associated(CS%tv%internal_heat)) then
     !$OMP parallel do default(shared)
     do j=js,je ; do i=is,ie
-      sfc_state%internal_heat(i,j) = CS%tv%internal_heat(i,j)
+      sfc_state%internal_heat(i,j) = US%R_to_kg_m3*US%Z_to_m*CS%tv%internal_heat(i,j)
     enddo ; enddo
   endif
   if (allocated(sfc_state%taux_shelf) .and. associated(CS%visc%taux_shelf)) then
@@ -3123,21 +3126,21 @@ end function MOM_state_is_synchronized
 
 !> This subroutine offers access to values or pointers to other types from within
 !! the MOM_control_struct, allowing the MOM_control_struct to be opaque.
-subroutine get_MOM_state_elements(CS, G, GV, US, C_p, use_temp)
-  type(MOM_control_struct), pointer :: CS !< MOM control structure
-  type(ocean_grid_type), &
-               optional, pointer :: G    !< structure containing metrics and grid info
-  type(verticalGrid_type), &
-               optional, pointer :: GV   !< structure containing vertical grid info
-  type(unit_scale_type), &
-               optional, pointer :: US   !< A dimensional unit scaling type
-  real,    optional, intent(out) :: C_p  !< The heat capacity
-  logical, optional, intent(out) :: use_temp !< Indicates whether temperature is a state variable
+subroutine get_MOM_state_elements(CS, G, GV, US, C_p, C_p_scaled, use_temp)
+  type(MOM_control_struct),          pointer     :: CS !< MOM control structure
+  type(ocean_grid_type),   optional, pointer     :: G    !< structure containing metrics and grid info
+  type(verticalGrid_type), optional, pointer     :: GV   !< structure containing vertical grid info
+  type(unit_scale_type),   optional, pointer     :: US   !< A dimensional unit scaling type
+  real,                    optional, intent(out) :: C_p  !< The heat capacity [J kg degC-1]
+  real,                    optional, intent(out) :: C_p_scaled !< The heat capacity in scaled
+                                                         !! units [Q degC-1 ~> J kg degC-1]
+  logical,                 optional, intent(out) :: use_temp !< True if temperature is a state variable
 
   if (present(G)) G => CS%G
   if (present(GV)) GV => CS%GV
   if (present(US)) US => CS%US
-  if (present(C_p)) C_p = CS%tv%C_p
+  if (present(C_p)) C_p = CS%US%Q_to_J_kg * CS%tv%C_p
+  if (present(C_p_scaled)) C_p_scaled = CS%tv%C_p
   if (present(use_temp)) use_temp = associated(CS%tv%T)
 end subroutine get_MOM_state_elements
 
@@ -3152,7 +3155,7 @@ subroutine get_ocean_stocks(CS, mass, heat, salt, on_PE_only)
   if (present(mass)) &
     mass = global_mass_integral(CS%h, CS%G, CS%GV, on_PE_only=on_PE_only)
   if (present(heat)) &
-    heat = CS%tv%C_p * global_mass_integral(CS%h, CS%G, CS%GV, CS%tv%T, on_PE_only=on_PE_only)
+    heat = CS%US%Q_to_J_kg*CS%tv%C_p * global_mass_integral(CS%h, CS%G, CS%GV, CS%tv%T, on_PE_only=on_PE_only)
   if (present(salt)) &
     salt = 1.0e-3 * global_mass_integral(CS%h, CS%G, CS%GV, CS%tv%S, on_PE_only=on_PE_only)
 
