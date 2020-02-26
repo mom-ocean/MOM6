@@ -1038,7 +1038,7 @@ logical function test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, k_top_a
 
 end function test_boundary_k_range
 
-!> \namespace mom_lbd
+!> \namespace mom_lateral_boundary_diffusion
 !!
 !! \section section_LBD The Lateral Boundary Diffusion (LBD) framework
 !!
