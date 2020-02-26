@@ -104,7 +104,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
   real :: I_h           ! inverse thickness [H-1 ~> m-1 or m2 kg-1]
   real :: dTemp         ! temperature increase in a layer [degC]
   real :: Irho_cp       ! inverse of heat capacity per unit layer volume
-                        ! [degC H m2 J-1 ~> degC m3 J-1 or degC kg J-1]
+                        ! [degC H Q-1 R-1 Z-1 ~> degC m3 J-1 or degC kg J-1]
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: T_old   ! Temperature of each layer
                                                       ! before any heat is added,
@@ -132,7 +132,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
   if (.not.CS%apply_geothermal) return
 
   nkmb      = GV%nk_rho_varies
-  Irho_cp   = 1.0 / (GV%H_to_kg_m2 * tv%C_p)
+  Irho_cp   = 1.0 / (GV%H_to_RZ * tv%C_p)
   Angstrom  = GV%Angstrom_H
   H_neglect = GV%H_subroundoff
   p_ref(:)  = tv%P_Ref
@@ -337,7 +337,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
 
         ! Calculate heat tendency due to addition and transfer of internal heat
         if (CS%id_internal_heat_heat_tendency > 0) then
-          work_3d(i,j,k) = ((GV%H_to_kg_m2 * tv%C_p) * Idt) * (h(i,j,k) * tv%T(i,j,k) - h_old(i,j,k) * T_old(i,j,k))
+          work_3d(i,j,k) = ((GV%H_to_RZ*tv%C_p) * Idt) * (h(i,j,k) * tv%T(i,j,k) - h_old(i,j,k) * T_old(i,j,k))
         endif
 
       endif ; enddo
@@ -345,7 +345,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
     enddo ! k-loop
 
     if (associated(tv%internal_heat)) then ; do i=is,ie
-      tv%internal_heat(i,j) = tv%internal_heat(i,j) + GV%H_to_kg_m2 * &
+      tv%internal_heat(i,j) = tv%internal_heat(i,j) + GV%H_to_RZ * &
            (G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp)) - heat_rem(i))
     enddo ; endif
   enddo ! j-loop
@@ -368,7 +368,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
   endif
 
 !  do i=is,ie ; do j=js,je
-!    resid(i,j) = tv%internal_heat(i,j) - resid(i,j) - GV%H_to_kg_m2 * &
+!    resid(i,j) = tv%internal_heat(i,j) - resid(i,j) - GV%H_to_RZ * &
 !           (G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp)))
 !  enddo ; enddo
 
@@ -391,8 +391,8 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS)
   character(len=48)  :: thickness_units
   ! Local variables
   character(len=200) :: inputdir, geo_file, filename, geotherm_var
-  real :: scale  ! A constant heat flux or dimensionally rescaled scaling factor
-                 ! [J m-2 T-1 ~> W m-2] or [s T-1 ~> 1]
+  real :: geo_scale  ! A constant heat flux or dimensionally rescaled geothermal flux scaling factor
+                     ! [Q R Z T-1 ~> W m-2] or [Q R Z m2 s J-1 T-1 ~> 1]
   integer :: i, j, isd, ied, jsd, jed, id
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
@@ -407,12 +407,12 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS)
 
   ! write parameters to the model log.
   call log_version(param_file, mdl, version, "")
-  call get_param(param_file, mdl, "GEOTHERMAL_SCALE", scale, &
+  call get_param(param_file, mdl, "GEOTHERMAL_SCALE", geo_scale, &
                  "The constant geothermal heat flux, a rescaling "//&
                  "factor for the heat flux read from GEOTHERMAL_FILE, or "//&
                  "0 to disable the geothermal heating.", &
-                 units="W m-2 or various", default=0.0, scale=US%T_to_s)
-  CS%apply_geothermal = .not.(scale == 0.0)
+                 units="W m-2 or various", default=0.0, scale=US%W_m2_to_QRZ_T)
+  CS%apply_geothermal = .not.(geo_scale == 0.0)
   if (.not.CS%apply_geothermal) return
 
   call safe_alloc_ptr(CS%geo_heat, isd, ied, jsd, jed) ; CS%geo_heat(:,:) = 0.0
@@ -441,11 +441,11 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS)
                  "GEOTHERMAL_FILE.", default="geo_heat")
     call MOM_read_data(filename, trim(geotherm_var), CS%geo_heat, G%Domain)
     do j=jsd,jed ; do i=isd,ied
-      CS%geo_heat(i,j) = (G%mask2dT(i,j) * scale) * CS%geo_heat(i,j)
+      CS%geo_heat(i,j) = (G%mask2dT(i,j) * geo_scale) * CS%geo_heat(i,j)
     enddo ; enddo
   else
     do j=jsd,jed ; do i=isd,ied
-      CS%geo_heat(i,j) = G%mask2dT(i,j) * scale
+      CS%geo_heat(i,j) = G%mask2dT(i,j) * geo_scale
     enddo ; enddo
   endif
   call pass_var(CS%geo_heat, G%domain)
@@ -454,7 +454,7 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS)
 
   ! post the static geothermal heating field
   id = register_static_field('ocean_model', 'geo_heat', diag%axesT1,   &
-        'Geothermal heat flux into ocean', 'W m-2', conversion=US%s_to_T, &
+        'Geothermal heat flux into ocean', 'W m-2', conversion=US%QRZ_T_to_W_m2, &
         cmor_field_name='hfgeou', cmor_units='W m-2',                  &
         cmor_standard_name='upward_geothermal_heat_flux_at_sea_floor', &
         cmor_long_name='Upward geothermal heat flux at sea floor', &
@@ -465,7 +465,7 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS)
   CS%id_internal_heat_heat_tendency=register_diag_field('ocean_model', &
         'internal_heat_heat_tendency', diag%axesTL, Time,              &
         'Heat tendency (in 3D) due to internal (geothermal) sources',  &
-        'W m-2', conversion=US%s_to_T, v_extensive=.true.)
+        'W m-2', conversion=US%QRZ_T_to_W_m2, v_extensive=.true.)
   CS%id_internal_heat_temp_tendency=register_diag_field('ocean_model', &
         'internal_heat_temp_tendency', diag%axesTL, Time,              &
         'Temperature tendency (in 3D) due to internal (geothermal) sources', &

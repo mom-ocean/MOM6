@@ -318,7 +318,7 @@ program MOM_main
                         tracer_flow_CSp=tracer_flow_CSp)
   endif
 
-  call get_MOM_state_elements(MOM_CSp, G=grid, GV=GV, US=US, C_p=fluxes%C_p)
+  call get_MOM_state_elements(MOM_CSp, G=grid, GV=GV, US=US, C_p_scaled=fluxes%C_p)
   Master_Time = Time
 
   call callTree_waypoint("done initialize_MOM")

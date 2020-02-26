@@ -1291,7 +1291,7 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
     ! Use TEOS-10 function calls convert T&S diagnostics from conservative temp
     ! to potential temperature.
     do j=js,je ; do i=is,ie
-      work_2d(i,j) = gsw_pt_from_ct(sfc_state%SSS(i,j),sfc_state%SST(i,j))
+      work_2d(i,j) = gsw_pt_from_ct(sfc_state%SSS(i,j), sfc_state%SST(i,j))
     enddo ; enddo
     if (IDs%id_sst > 0) call post_data(IDs%id_sst, work_2d, diag, mask=G%mask2dT)
   else
@@ -1793,7 +1793,8 @@ subroutine register_surface_diags(Time, G, US, IDs, diag, tv)
     endif
     if (associated(tv%frazil)) then
       IDs%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time, &
-            'Heat from frazil formation', 'W m-2', conversion=US%s_to_T, cmor_field_name='hfsifrazil', &
+            'Heat from frazil formation', 'W m-2', conversion=US%QRZ_T_to_W_m2, &
+            cmor_field_name='hfsifrazil', &
             cmor_standard_name='heat_flux_into_sea_water_due_to_frazil_ice_formation', &
             cmor_long_name='Heat Flux into Sea Water due to Frazil Ice Formation')
     endif
@@ -1801,12 +1802,13 @@ subroutine register_surface_diags(Time, G, US, IDs, diag, tv)
 
   IDs%id_salt_deficit = register_diag_field('ocean_model', 'salt_deficit', diag%axesT1, Time, &
          'Salt sink in ocean due to ice flux', &
-         'psu m-2 s-1', conversion=G%US%R_to_kg_m3*G%US%Z_to_m*US%s_to_T)
+         'psu m-2 s-1', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T)
   IDs%id_Heat_PmE = register_diag_field('ocean_model', 'Heat_PmE', diag%axesT1, Time, &
          'Heat flux into ocean from mass flux into ocean', &
-         'W m-2', conversion=G%US%R_to_kg_m3*G%US%Z_to_m*US%s_to_T)
+         'W m-2', conversion=US%QRZ_T_to_W_m2)
   IDs%id_intern_heat = register_diag_field('ocean_model', 'internal_heat', diag%axesT1, Time,&
-         'Heat flux into ocean from geothermal or other internal sources', 'W m-2', conversion=US%s_to_T)
+         'Heat flux into ocean from geothermal or other internal sources', &
+         'W m-2', conversion=US%QRZ_T_to_W_m2)
 
 end subroutine register_surface_diags
 
@@ -2022,11 +2024,12 @@ subroutine write_static_fields(G, GV, US, tv, diag)
 
   use_temperature = associated(tv%T)
   if (use_temperature) then
-     id = register_static_field('ocean_model','C_p', diag%axesNull, &
-          'heat capacity of sea water', 'J kg-1 K-1', cmor_field_name='cpocean', &
-          cmor_standard_name='specific_heat_capacity_of_sea_water', &
-          cmor_long_name='specific_heat_capacity_of_sea_water')
-     if (id > 0) call post_data(id, tv%C_p, diag, .true.)
+    id = register_static_field('ocean_model','C_p', diag%axesNull, &
+         'heat capacity of sea water', 'J kg-1 K-1', conversion=US%Q_to_J_kg, &
+         cmor_field_name='cpocean', &
+         cmor_standard_name='specific_heat_capacity_of_sea_water', &
+         cmor_long_name='specific_heat_capacity_of_sea_water')
+    if (id > 0) call post_data(id, tv%C_p, diag, .true.)
   endif
 
 end subroutine write_static_fields
