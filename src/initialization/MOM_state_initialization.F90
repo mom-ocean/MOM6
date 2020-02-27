@@ -88,10 +88,7 @@ use BFB_initialization, only : BFB_initialize_sponges_southonly
 use dense_water_initialization, only : dense_water_initialize_TS
 use dense_water_initialization, only : dense_water_initialize_sponges
 use dumbbell_initialization, only : dumbbell_initialize_sponges
-
-use midas_vertmap, only : find_interfaces, tracer_Z_init
-use midas_vertmap, only : determine_temperature
-
+use MOM_tracer_Z_init, only : find_interfaces, tracer_Z_init_array, determine_temperature
 use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
 use MOM_ALE, only : ALE_remap_scalar, ALE_build_grid, ALE_regrid_accelerated
 use MOM_regridding, only : regridding_CS, set_regrid_params, getCoordinateResolution
@@ -99,7 +96,6 @@ use MOM_regridding, only : regridding_main
 use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_remapping, only : remapping_core_h
 use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
-
 use fms_io_mod, only : field_size
 
 implicit none ; private
@@ -2018,7 +2014,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   real, dimension(:,:,:), allocatable, target :: temp_z, salt_z, mask_z
   real, dimension(:,:,:), allocatable :: rho_z ! Densities in Z-space [R ~> kg m-3]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: zi   ! Interface heights [Z ~> m].
-  real, dimension(SZI_(G),SZJ_(G))  :: nlevs
+  integer, dimension(SZI_(G),SZJ_(G))  :: nlevs
   real, dimension(SZI_(G))   :: press  ! Pressures [Pa].
 
   ! Local variables for ALE remapping
@@ -2323,7 +2319,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
     ! Next find interface positions using local arrays
     ! nlevs contains the number of valid data points in each column
-    nlevs = sum(mask_z,dim=3)
+    nlevs = int(sum(mask_z,dim=3))
 
     ! Rb contains the layer interface densities
     allocate(Rb(nz+1))
@@ -2359,12 +2355,12 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
       endif
     endif
 
-    tv%T(is:ie,js:je,:) = tracer_z_init(temp_z(is:ie,js:je,:), z_edges_in, zi(is:ie,js:je,:), &
-                                        nkml, nkbl, missing_value, G%mask2dT(is:ie,js:je), nz, &
-                                        nlevs(is:ie,js:je),dbg,idbg,jdbg, eps_z=eps_z)
-    tv%S(is:ie,js:je,:) = tracer_z_init(salt_z(is:ie,js:je,:), z_edges_in, zi(is:ie,js:je,:), &
-                                        nkml, nkbl, missing_value, G%mask2dT(is:ie,js:je), nz, &
-                                        nlevs(is:ie,js:je), eps_z=eps_z)
+    call tracer_z_init_array(temp_z(is:ie,js:je,:), z_edges_in, zi(is:ie,js:je,:), &
+         nkml, nkbl, missing_value, G%mask2dT(is:ie,js:je), nz, &
+         nlevs(is:ie,js:je), eps_z, tv%T(is:ie,js:je,:))
+    call tracer_z_init_array(salt_z(is:ie,js:je,:), z_edges_in, zi(is:ie,js:je,:), &
+         nkml, nkbl, missing_value, G%mask2dT(is:ie,js:je), nz, &
+         nlevs(is:ie,js:je), eps_z, tv%S(is:ie,js:je,:))
 
     do k=1,nz
       nPoints = 0 ; tempAvg = 0. ; saltAvg = 0.
