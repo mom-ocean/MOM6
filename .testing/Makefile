@@ -88,6 +88,13 @@ SOURCE = $(wildcard $(BASE)/src/*/*.F90 $(BASE)/src/*/*/*.F90 $(BASE)/config_src
 all: $(foreach b,$(BUILDS),$(BUILD)/$(b)/MOM6)
 build.regressions: $(foreach b,symmetric target,$(BUILD)/$(b)/MOM6)
 
+# Shortcuts to build executables
+build-symmetric: $(BUILD)/symmetric/MOM6
+build-asymmetric: $(BUILD)/asymmetric/MOM6
+build-openmp: $(BUILD)/openmp/MOM6
+build-repro: $(BUILD)/repro/MOM6
+build-fms: $(FMS)/lib/libfms.a
+
 # Executable
 BUILD_TARGETS = MOM6 Makefile path_names
 .PRECIOUS: $(foreach b,$(BUILDS),$(foreach f,$(BUILD_TARGETS),$(BUILD)/$(b)/$(f)))
