@@ -321,7 +321,7 @@ results/%/ocean.stats.restart: ../build/symmetric/MOM6
 clean: clean.stats
 	@# Assert that we are in .testing for recursive delete
 	@[ $$(basename $$(pwd)) = .testing ]
-	rm -rf ../build
+	rm -rf ../build ../deps/fms
 
 .PHONY: clean.stats
 clean.stats:
