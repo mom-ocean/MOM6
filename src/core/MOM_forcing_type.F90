@@ -688,7 +688,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
       ! Store Net_salt for unknown reason?
       if (associated(fluxes%salt_flux)) then
         ! This seems like a bad idea to me. -RWH
-        if (calculate_diags) fluxes%netSalt(i,j) = US%kg_m3_to_R*US%m_to_Z*US%T_to_s*Net_salt(i)
+        if (calculate_diags) fluxes%netSalt(i,j) = US%kg_m2s_to_RZ_T*Net_salt(i)
       endif
 
       ! Initialize heat_content_massin that is diagnosed in mixedlayer_convection or
@@ -1015,7 +1015,7 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, US, haloshift)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   hshift = 1 ; if (present(haloshift)) hshift = haloshift
-  RZ_T_conversion = US%R_to_kg_m3*US%Z_to_m*US%s_to_T
+  RZ_T_conversion = US%RZ_T_to_kg_m2s
 
   ! Note that for the chksum calls to be useful for reproducing across PE
   ! counts, there must be no redundant points, so all variables use is..ie
@@ -1067,8 +1067,8 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, US, haloshift)
   if (associated(fluxes%salt_flux)) &
     call hchksum(fluxes%salt_flux, mesg//" fluxes%salt_flux",G%HI,haloshift=hshift, scale=RZ_T_conversion)
   if (associated(fluxes%TKE_tidal)) &
-    call hchksum(fluxes%TKE_tidal, mesg//" fluxes%TKE_tidal",G%HI,haloshift=hshift, &
-                 scale=US%R_to_kg_m3**3*US%Z_to_m**3*US%s_to_T)
+    call hchksum(fluxes%TKE_tidal, mesg//" fluxes%TKE_tidal", G%HI, haloshift=hshift, &
+                 scale=US%RZ3_T3_to_W_m2)
   if (associated(fluxes%ustar_tidal)) &
     call hchksum(fluxes%ustar_tidal, mesg//" fluxes%ustar_tidal",G%HI,haloshift=hshift, scale=US%Z_to_m*US%s_to_T)
   if (associated(fluxes%lrunoff)) &
@@ -1271,7 +1271,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
         cmor_standard_name='sea_water_pressure_at_sea_water_surface')
 
   handles%id_TKE_tidal = register_diag_field('ocean_model', 'TKE_tidal', diag%axesT1, Time, &
-        'Tidal source of BBL mixing', 'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+        'Tidal source of BBL mixing', 'W m-2', conversion=US%RZ3_T3_to_W_m2)
 
   if (.not. use_temperature) then
     handles%id_buoy = register_diag_field('ocean_model', 'buoy', diag%axesT1, Time, &
@@ -1291,7 +1291,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
   handles%id_evap = register_diag_field('ocean_model', 'evap', diag%axesT1, Time, &
        'Evaporation/condensation at ocean surface (evaporation is negative)', &
-       'kg m-2 s-1', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T, &
+       'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
        standard_name='water_evaporation_flux', cmor_field_name='evs', &
        cmor_standard_name='water_evaporation_flux', &
        cmor_long_name='Water Evaporation Flux Where Ice Free Ocean over Sea')
@@ -1299,7 +1299,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   ! smg: seaice_melt field requires updates to the sea ice model
   handles%id_seaice_melt = register_diag_field('ocean_model', 'seaice_melt',       &
      diag%axesT1, Time, 'water flux to ocean from snow/sea ice melting(> 0) or formation(< 0)', &
-     'kg m-2 s-1', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T, &
+     'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
       standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',     &
       cmor_field_name='fsitherm',                                                  &
       cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',&
@@ -1311,24 +1311,24 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
   handles%id_fprec = register_diag_field('ocean_model', 'fprec', diag%axesT1, Time,     &
         'Frozen precipitation into ocean', &
-        units='kg m-2 s-1', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T,   &
+        units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s,   &
         standard_name='snowfall_flux', cmor_field_name='prsn',                          &
         cmor_standard_name='snowfall_flux', cmor_long_name='Snowfall Flux where Ice Free Ocean over Sea')
 
   handles%id_lprec = register_diag_field('ocean_model', 'lprec', diag%axesT1, Time,       &
         'Liquid precipitation into ocean', &
-        units='kg m-2 s-1', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T,                 &
+        units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s,                 &
         standard_name='rainfall_flux',                                                    &
         cmor_field_name='prlq', cmor_standard_name='rainfall_flux',                       &
         cmor_long_name='Rainfall Flux where Ice Free Ocean over Sea')
 
   handles%id_vprec = register_diag_field('ocean_model', 'vprec', diag%axesT1, Time, &
         'Virtual liquid precip into ocean due to SSS restoring', &
-        units='kg m-2 s-1', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T)
+        units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
 
   handles%id_frunoff = register_diag_field('ocean_model', 'frunoff', diag%axesT1, Time,    &
         'Frozen runoff (calving) and iceberg melt into ocean', &
-        units='kg m-2 s-1', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T, &
+        units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
         standard_name='water_flux_into_sea_water_from_icebergs',                           &
         cmor_field_name='ficeberg',                                                        &
         cmor_standard_name='water_flux_into_sea_water_from_icebergs',                      &
@@ -1336,7 +1336,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
   handles%id_lrunoff = register_diag_field('ocean_model', 'lrunoff', diag%axesT1, Time, &
         'Liquid runoff (rivers) into ocean', &
-        units='kg m-2 s-1', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T, &
+        units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
         standard_name='water_flux_into_sea_water_from_rivers', cmor_field_name='friver',      &
         cmor_standard_name='water_flux_into_sea_water_from_rivers',                           &
         cmor_long_name='Water Flux into Sea Water From Rivers')
@@ -1813,22 +1813,22 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
   handles%id_saltflux = register_diag_field('ocean_model', 'salt_flux', diag%axesT1, Time,&
         'Net salt flux into ocean at surface (restoring + sea-ice)',                      &
-        units='kg m-2 s-1', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T, &
+        units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
         cmor_field_name='sfdsi', cmor_standard_name='downward_sea_ice_basal_salt_flux', &
         cmor_long_name='Downward Sea Ice Basal Salt Flux')
 
   handles%id_saltFluxIn = register_diag_field('ocean_model', 'salt_flux_in', diag%axesT1, Time, &
         'Salt flux into ocean at surface from coupler', &
-        units='kg m-2 s-1', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T)
+        units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
 
   handles%id_saltFluxAdded = register_diag_field('ocean_model', 'salt_flux_added', &
         diag%axesT1,Time,'Salt flux into ocean at surface due to restoring or flux adjustment', &
-        units='kg m-2 s-1', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T)
+        units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
 
   handles%id_saltFluxGlobalAdj = register_scalar_field('ocean_model',              &
         'salt_flux_global_restoring_adjustment', Time, diag,                       &
         'Adjustment needed to balance net global salt flux into ocean at surface', &
-         units='kg m-2 s-1') !, conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T)
+         units='kg m-2 s-1') !, conversion=US%RZ_T_to_kg_m2s)
 
   handles%id_vPrecGlobalAdj = register_scalar_field('ocean_model',  &
         'vprec_global_adjustment', Time, diag,                      &
@@ -2153,7 +2153,7 @@ subroutine get_net_mass_forcing(fluxes, G, US, net_mass_src)
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-  RZ_T_conversion = US%R_to_kg_m3*US%Z_to_m*US%s_to_T
+  RZ_T_conversion = US%RZ_T_to_kg_m2s
 
   net_mass_src(:,:) = 0.0
   if (associated(fluxes%lprec)) then ; do j=js,je ; do i=is,ie
@@ -2261,7 +2261,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, G, US, time_end, diag, handles
   call cpu_clock_begin(handles%id_clock_forcing)
 
   C_p     = US%Q_to_J_kg*fluxes%C_p
-  RZ_T_conversion = US%R_to_kg_m3*US%Z_to_m*US%s_to_T
+  RZ_T_conversion = US%RZ_T_to_kg_m2s
   I_dt    = 1.0 / (US%T_to_s*fluxes%dt_buoy_accum)
   ppt2mks = 1e-3
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec

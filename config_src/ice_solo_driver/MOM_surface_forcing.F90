@@ -687,7 +687,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
     do j=js,je ; do i=is,ie ; fluxes%LW(i,j) = fluxes%LW(i,j) - temp(i,j) ; enddo ; enddo
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%evaporation_file), "evap", &
-             fluxes%evap(:,:), G%Domain, timelevel=time_lev, scale=-US%kg_m3_to_R*US%m_to_Z*US%T_to_s)
+             fluxes%evap(:,:), G%Domain, timelevel=time_lev, scale=-US%kg_m2s_to_RZ_T)
     do j=js,je ; do i=is,ie
       fluxes%latent(i,j)           = CS%latent_heat_vapor*fluxes%evap(i,j)
       fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
@@ -705,20 +705,20 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
     enddo ; enddo
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%snow_file), "snow", &
-             fluxes%fprec(:,:), G%Domain, timelevel=time_lev, scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s)
+             fluxes%fprec(:,:), G%Domain, timelevel=time_lev, scale=US%kg_m2s_to_RZ_T)
     call MOM_read_data(trim(CS%inputdir)//trim(CS%precip_file), "precip", &
-             fluxes%lprec(:,:), G%Domain, timelevel=time_lev, scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s)
+             fluxes%lprec(:,:), G%Domain, timelevel=time_lev, scale=US%kg_m2s_to_RZ_T)
     do j=js,je ; do i=is,ie
       fluxes%lprec(i,j) = fluxes%lprec(i,j) - fluxes%fprec(i,j)
     enddo ; enddo
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%freshdischarge_file), "disch_w", &
-             temp(:,:), G%Domain, timelevel=time_lev_monthly, scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s)
+             temp(:,:), G%Domain, timelevel=time_lev_monthly, scale=US%kg_m2s_to_RZ_T)
     do j=js,je ; do i=is,ie
       fluxes%lrunoff(i,j) = temp(i,j)*US%m_to_L**2*G%IareaT(i,j)
     enddo ; enddo
     call MOM_read_data(trim(CS%inputdir)//trim(CS%freshdischarge_file), "disch_s", &
-              temp(:,:), G%Domain, timelevel=time_lev_monthly, scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s)
+              temp(:,:), G%Domain, timelevel=time_lev_monthly, scale=US%kg_m2s_to_RZ_T)
     do j=js,je ; do i=is,ie
       fluxes%frunoff(i,j) = temp(i,j)*US%m_to_L**2*G%IareaT(i,j)
     enddo ; enddo

@@ -2107,16 +2107,16 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
 
       CS%id_FrictWork_GME = register_diag_field('ocean_model','FrictWork_GME',diag%axesTL,Time,&
       'Integral work done by lateral friction terms in GME (excluding diffusion of energy)', &
-      'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T**3*US%L_to_m**2)
+      'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
   endif
 
   CS%id_FrictWork = register_diag_field('ocean_model','FrictWork',diag%axesTL,Time,&
       'Integral work done by lateral friction terms', &
-      'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T**3*US%L_to_m**2)
+      'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
 
   CS%id_FrictWorkIntz = register_diag_field('ocean_model','FrictWorkIntz',diag%axesT1,Time,      &
       'Depth integrated work done by lateral friction', &
-      'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T**3*US%L_to_m**2, &
+      'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2, &
       cmor_field_name='dispkexyfo',                                                              &
       cmor_long_name='Depth integrated ocean kinetic energy dissipation due to lateral friction',&
       cmor_standard_name='ocean_kinetic_energy_dissipation_per_unit_area_due_to_xy_friction')
