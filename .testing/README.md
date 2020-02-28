@@ -166,6 +166,7 @@ The following test configurations (TCs) are supported:
 - tc2: An ALE configuration based on tc1 with tides
   - tc2.a: Use sigma, PPM_H4 and no tides
 - tc3: An open-boundary condition (OBC) test based on `circle_obcs`
+- tc4: Sponge test using data in files
 
 
 ## Code coverage
