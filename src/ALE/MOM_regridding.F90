@@ -574,7 +574,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
 
   if (coordinateMode(coord_mode) == REGRIDDING_ADAPTIVE) then
     call get_param(param_file, mdl, "ADAPT_TIME_RATIO", adaptTimeRatio, &
-         "Ratio of ALE timestep to grid timescale.", units="s", default=1e-1) !### Should the units be "nondim"?
+         "Ratio of ALE timestep to grid timescale.", units="nondim", default=1e-1)
     call get_param(param_file, mdl, "ADAPT_ZOOM_DEPTH", adaptZoom, &
          "Depth of near-surface zooming region.", units="m", default=200.0, scale=GV%m_to_H)
     call get_param(param_file, mdl, "ADAPT_ZOOM_COEFF", adaptZoomCoeff, &

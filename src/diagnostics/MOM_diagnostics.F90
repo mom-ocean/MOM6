@@ -1291,7 +1291,7 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
     ! Use TEOS-10 function calls convert T&S diagnostics from conservative temp
     ! to potential temperature.
     do j=js,je ; do i=is,ie
-      work_2d(i,j) = gsw_pt_from_ct(sfc_state%SSS(i,j),sfc_state%SST(i,j))
+      work_2d(i,j) = gsw_pt_from_ct(sfc_state%SSS(i,j), sfc_state%SST(i,j))
     enddo ; enddo
     if (IDs%id_sst > 0) call post_data(IDs%id_sst, work_2d, diag, mask=G%mask2dT)
   else
@@ -1604,18 +1604,18 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   ! layer thickness variables
   !if (GV%nk_rho_varies > 0) then
     CS%id_h_Rlay = register_diag_field('ocean_model', 'h_rho', diag%axesTL, Time, &
-        'Layer thicknesses in pure potential density coordinates', thickness_units, &
-        conversion=convert_H)
+        'Layer thicknesses in pure potential density coordinates', &
+        thickness_units, conversion=convert_H)
     if (CS%id_h_Rlay>0) call safe_alloc_ptr(CS%h_Rlay,isd,ied,jsd,jed,nz)
 
     CS%id_uh_Rlay = register_diag_field('ocean_model', 'uh_rho', diag%axesCuL, Time, &
-        'Zonal volume transport in pure potential density coordinates', flux_units, &
-        conversion=US%L_to_m**2*US%s_to_T*convert_H)
+        'Zonal volume transport in pure potential density coordinates', &
+        flux_units, conversion=US%L_to_m**2*US%s_to_T*convert_H)
     if (CS%id_uh_Rlay>0) call safe_alloc_ptr(CS%uh_Rlay,IsdB,IedB,jsd,jed,nz)
 
     CS%id_vh_Rlay = register_diag_field('ocean_model', 'vh_rho', diag%axesCvL, Time, &
-        'Meridional volume transport in pure potential density coordinates', flux_units, &
-        conversion=US%L_to_m**2*US%s_to_T*convert_H)
+        'Meridional volume transport in pure potential density coordinates', &
+        flux_units, conversion=US%L_to_m**2*US%s_to_T*convert_H)
     if (CS%id_vh_Rlay>0) call safe_alloc_ptr(CS%vh_Rlay,isd,ied,JsdB,JedB,nz)
 
     CS%id_uhGM_Rlay = register_diag_field('ocean_model', 'uhGM_rho', diag%axesCuL, Time, &
@@ -1632,44 +1632,44 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
 
   ! terms in the kinetic energy budget
   CS%id_KE = register_diag_field('ocean_model', 'KE', diag%axesTL, Time, &
-      'Layer kinetic energy per unit mass', 'm2 s-2', &
-      conversion=US%L_T_to_m_s**2)
+      'Layer kinetic energy per unit mass', &
+      'm2 s-2', conversion=US%L_T_to_m_s**2)
   if (CS%id_KE>0) call safe_alloc_ptr(CS%KE,isd,ied,jsd,jed,nz)
 
   CS%id_dKEdt = register_diag_field('ocean_model', 'dKE_dt', diag%axesTL, Time, &
-      'Kinetic Energy Tendency of Layer', 'm3 s-3', &
-      conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
+      'Kinetic Energy Tendency of Layer', &
+      'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
   if (CS%id_dKEdt>0) call safe_alloc_ptr(CS%dKE_dt,isd,ied,jsd,jed,nz)
 
   CS%id_PE_to_KE = register_diag_field('ocean_model', 'PE_to_KE', diag%axesTL, Time, &
-      'Potential to Kinetic Energy Conversion of Layer', 'm3 s-3', &
-      conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
+      'Potential to Kinetic Energy Conversion of Layer', &
+      'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
   if (CS%id_PE_to_KE>0) call safe_alloc_ptr(CS%PE_to_KE,isd,ied,jsd,jed,nz)
 
   CS%id_KE_Coradv = register_diag_field('ocean_model', 'KE_Coradv', diag%axesTL, Time, &
-      'Kinetic Energy Source from Coriolis and Advection', 'm3 s-3', &
-      conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
+      'Kinetic Energy Source from Coriolis and Advection', &
+      'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
   if (CS%id_KE_Coradv>0) call safe_alloc_ptr(CS%KE_Coradv,isd,ied,jsd,jed,nz)
 
   CS%id_KE_adv = register_diag_field('ocean_model', 'KE_adv', diag%axesTL, Time, &
-      'Kinetic Energy Source from Advection', 'm3 s-3', &
-      conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
+      'Kinetic Energy Source from Advection', &
+      'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
   if (CS%id_KE_adv>0) call safe_alloc_ptr(CS%KE_adv,isd,ied,jsd,jed,nz)
 
   CS%id_KE_visc = register_diag_field('ocean_model', 'KE_visc', diag%axesTL, Time, &
-      'Kinetic Energy Source from Vertical Viscosity and Stresses', 'm3 s-3', &
-      conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
+      'Kinetic Energy Source from Vertical Viscosity and Stresses', &
+      'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
   if (CS%id_KE_visc>0) call safe_alloc_ptr(CS%KE_visc,isd,ied,jsd,jed,nz)
 
   CS%id_KE_horvisc = register_diag_field('ocean_model', 'KE_horvisc', diag%axesTL, Time, &
-      'Kinetic Energy Source from Horizontal Viscosity', 'm3 s-3', &
-      conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
+      'Kinetic Energy Source from Horizontal Viscosity', &
+      'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
   if (CS%id_KE_horvisc>0) call safe_alloc_ptr(CS%KE_horvisc,isd,ied,jsd,jed,nz)
 
   if (.not. adiabatic) then
     CS%id_KE_dia = register_diag_field('ocean_model', 'KE_dia', diag%axesTL, Time, &
-        'Kinetic Energy Source from Diapycnal Diffusion', 'm3 s-3', &
-        conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
+        'Kinetic Energy Source from Diapycnal Diffusion', &
+        'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
     if (CS%id_KE_dia>0) call safe_alloc_ptr(CS%KE_dia,isd,ied,jsd,jed,nz)
   endif
 
@@ -1793,7 +1793,8 @@ subroutine register_surface_diags(Time, G, US, IDs, diag, tv)
     endif
     if (associated(tv%frazil)) then
       IDs%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time, &
-            'Heat from frazil formation', 'W m-2', conversion=US%s_to_T, cmor_field_name='hfsifrazil', &
+            'Heat from frazil formation', 'W m-2', conversion=US%QRZ_T_to_W_m2, &
+            cmor_field_name='hfsifrazil', &
             cmor_standard_name='heat_flux_into_sea_water_due_to_frazil_ice_formation', &
             cmor_long_name='Heat Flux into Sea Water due to Frazil Ice Formation')
     endif
@@ -1801,12 +1802,13 @@ subroutine register_surface_diags(Time, G, US, IDs, diag, tv)
 
   IDs%id_salt_deficit = register_diag_field('ocean_model', 'salt_deficit', diag%axesT1, Time, &
          'Salt sink in ocean due to ice flux', &
-         'psu m-2 s-1', conversion=G%US%R_to_kg_m3*G%US%Z_to_m*US%s_to_T)
+         'psu m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
   IDs%id_Heat_PmE = register_diag_field('ocean_model', 'Heat_PmE', diag%axesT1, Time, &
          'Heat flux into ocean from mass flux into ocean', &
-         'W m-2', conversion=G%US%R_to_kg_m3*G%US%Z_to_m*US%s_to_T)
+         'W m-2', conversion=US%QRZ_T_to_W_m2)
   IDs%id_intern_heat = register_diag_field('ocean_model', 'internal_heat', diag%axesT1, Time,&
-         'Heat flux into ocean from geothermal or other internal sources', 'W m-2', conversion=US%s_to_T)
+         'Heat flux into ocean from geothermal or other internal sources', &
+         'W m-2', conversion=US%QRZ_T_to_W_m2)
 
 end subroutine register_surface_diags
 
@@ -1933,12 +1935,11 @@ subroutine write_static_fields(G, GV, US, tv, diag)
   if (id > 0) call post_data(id, G%areaBu, diag, .true.)
 
   id = register_static_field('ocean_model', 'depth_ocean', diag%axesT1,  &
-        'Depth of the ocean at tracer points', 'm',                      &
+        'Depth of the ocean at tracer points', 'm', conversion=US%Z_to_m, &
         standard_name='sea_floor_depth_below_geoid',                     &
         cmor_field_name='deptho', cmor_long_name='Sea Floor Depth',      &
         cmor_standard_name='sea_floor_depth_below_geoid', area=diag%axesT1%id_area, &
-        x_cell_method='mean', y_cell_method='mean', area_cell_method='mean', &
-        conversion=US%Z_to_m)
+        x_cell_method='mean', y_cell_method='mean', area_cell_method='mean')
   if (id > 0) call post_data(id, G%bathyT, diag, .true., mask=G%mask2dT)
 
   id = register_static_field('ocean_model', 'wet', diag%axesT1, &
@@ -2005,28 +2006,28 @@ subroutine write_static_fields(G, GV, US, tv, diag)
   ! This static diagnostic is from CF 1.8, and is the fraction of a cell
   ! covered by ocean, given as a percentage (poorly named).
   id = register_static_field('ocean_model', 'area_t_percent', diag%axesT1, &
-        'Percentage of cell area covered by ocean', '%', &
+        'Percentage of cell area covered by ocean', '%', conversion=100.0, &
         cmor_field_name='sftof', cmor_standard_name='SeaAreaFraction', &
         cmor_long_name='Sea Area Fraction', &
-        x_cell_method='mean', y_cell_method='mean', area_cell_method='mean', &
-        conversion=100.0)
+        x_cell_method='mean', y_cell_method='mean', area_cell_method='mean')
   if (id > 0) call post_data(id, G%mask2dT, diag, .true.)
 
 
   id = register_static_field('ocean_model','Rho_0', diag%axesNull, &
        'mean ocean density used with the Boussinesq approximation', &
-       'kg m-3', cmor_field_name='rhozero', conversion=US%R_to_kg_m3, &
+       'kg m-3', conversion=US%R_to_kg_m3, cmor_field_name='rhozero', &
        cmor_standard_name='reference_sea_water_density_for_boussinesq_approximation', &
        cmor_long_name='reference sea water density for boussinesq approximation')
   if (id > 0) call post_data(id, GV%Rho0, diag, .true.)
 
   use_temperature = associated(tv%T)
   if (use_temperature) then
-     id = register_static_field('ocean_model','C_p', diag%axesNull, &
-          'heat capacity of sea water', 'J kg-1 K-1', cmor_field_name='cpocean', &
-          cmor_standard_name='specific_heat_capacity_of_sea_water', &
-          cmor_long_name='specific_heat_capacity_of_sea_water')
-     if (id > 0) call post_data(id, tv%C_p, diag, .true.)
+    id = register_static_field('ocean_model','C_p', diag%axesNull, &
+         'heat capacity of sea water', 'J kg-1 K-1', conversion=US%Q_to_J_kg, &
+         cmor_field_name='cpocean', &
+         cmor_standard_name='specific_heat_capacity_of_sea_water', &
+         cmor_long_name='specific_heat_capacity_of_sea_water')
+    if (id > 0) call post_data(id, tv%C_p, diag, .true.)
   endif
 
 end subroutine write_static_fields

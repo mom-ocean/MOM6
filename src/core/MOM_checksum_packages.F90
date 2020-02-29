@@ -129,11 +129,12 @@ subroutine MOM_thermo_chksum(mesg, tv, G, US, haloshift)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   hs=1; if (present(haloshift)) hs=haloshift
 
-  if (associated(tv%T)) call hchksum(tv%T, mesg//" T",G%HI,haloshift=hs)
-  if (associated(tv%S)) call hchksum(tv%S, mesg//" S",G%HI,haloshift=hs)
-  if (associated(tv%frazil)) call hchksum(tv%frazil, mesg//" frazil",G%HI,haloshift=hs)
+  if (associated(tv%T)) call hchksum(tv%T, mesg//" T", G%HI, haloshift=hs)
+  if (associated(tv%S)) call hchksum(tv%S, mesg//" S", G%HI, haloshift=hs)
+  if (associated(tv%frazil)) call hchksum(tv%frazil, mesg//" frazil", G%HI, haloshift=hs, &
+                                          scale=G%US%Q_to_J_kg*G%US%R_to_kg_m3*G%US%Z_to_m)
   if (associated(tv%salt_deficit)) &
-    call hchksum(tv%salt_deficit, mesg//" salt deficit",G%HI,haloshift=hs, scale=US%R_to_kg_m3*US%Z_to_m)
+    call hchksum(tv%salt_deficit, mesg//" salt deficit", G%HI, haloshift=hs, scale=US%RZ_to_kg_m2)
 
 end subroutine MOM_thermo_chksum
 
@@ -163,7 +164,7 @@ subroutine MOM_surface_chksum(mesg, sfc, G, haloshift, symmetric)
   if (allocated(sfc%u) .and. allocated(sfc%v)) &
     call uvchksum(mesg//" SSU", sfc%u, sfc%v, G%HI, haloshift=hs, symmetric=sym)
 !  if (allocated(sfc%salt_deficit)) call hchksum(sfc%salt_deficit, mesg//" salt deficit",G%HI,haloshift=hs)
-  if (associated(sfc%frazil)) call hchksum(sfc%frazil, mesg//" frazil",G%HI,haloshift=hs)
+  if (allocated(sfc%frazil)) call hchksum(sfc%frazil, mesg//" frazil", G%HI, haloshift=hs)
 
 end subroutine MOM_surface_chksum
 

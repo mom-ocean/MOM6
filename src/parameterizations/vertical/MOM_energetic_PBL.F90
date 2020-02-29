@@ -709,9 +709,6 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   real :: dMKE_src_dK  ! The partial derivative of MKE_src with Kddt_h(K) [R Z3 T-2 H-1 ~> J m-3 or J kg-1].
   real :: Kd_guess0    ! A first guess of the diapycnal diffusivity [Z2 T-1 ~> m2 s-1].
   real :: PE_chg_g0    ! The potential energy change when Kd is Kd_guess0 [R Z3 T-2 ~> J m-2]
-  !### The following might be unused.
-  real :: dPEa_dKd_g0  ! The derivative of the change in the potential energy of the column above an interface
-                       ! with the diffusivity when the Kd is Kd_guess0 [R Z T-1 ~> J s m-4]
   real :: Kddt_h_g0    ! The first guess diapycnal diffusivity times a timestep divided
                        ! by the average thicknesses around a layer [H ~> m or kg m-2].
   real :: PE_chg_max   ! The maximum PE change for very large values of Kddt_h(K) [R Z3 T-2 ~> J m-2].
@@ -1135,16 +1132,14 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
                      dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), &
                      pres_Z(K), dT_to_dColHt(k), dS_to_dColHt(k), &
                      dT_to_dColHt_a(k-1), dS_to_dColHt_a(k-1), &
-                     PE_chg=PE_chg_g0, dPEc_dKd=dPEa_dKd_g0, dPE_max=PE_chg_max, &
-                     dPEc_dKd_0=dPEc_dKd_Kd0 )
+                     PE_chg=PE_chg_g0, dPE_max=PE_chg_max, dPEc_dKd_0=dPEc_dKd_Kd0 )
           else
             call find_PE_chg(0.0, Kddt_h_g0, hp_a, h(k), &
                      Th_a(k-1), Sh_a(k-1), Th_b(k), Sh_b(k), &
                      dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), dT_to_dPE(k), dS_to_dPE(k), &
                      pres_Z(K), dT_to_dColHt_a(k-1), dS_to_dColHt_a(k-1), &
                      dT_to_dColHt(k), dS_to_dColHt(k), &
-                     PE_chg=PE_chg_g0, dPEc_dKd=dPEa_dKd_g0, dPE_max=PE_chg_max, &
-                     dPEc_dKd_0=dPEc_dKd_Kd0 )
+                     PE_chg=PE_chg_g0, dPE_max=PE_chg_max, dPEc_dKd_0=dPEc_dKd_Kd0 )
           endif
 
           MKE_src = dMKE_max*(1.0 - exp(-Kddt_h_g0 * MKE2_Hharm))
@@ -1821,7 +1816,7 @@ subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, UStar_Mean,&
   MStar = MStar * MStar_Conv_Red
 
   if (present(Langmuir_Number)) then
-    !### In this call, ustar was previously ustar_mean.  Is this change deliberate?
+    !### In this call, ustar was previously ustar_mean.  Is this change deliberate, Brandon?  -RWH
     call mstar_Langmuir(CS, US, Abs_Coriolis, Buoyancy_Flux, UStar, BLD, Langmuir_Number, MStar, &
                         MStar_LT, Convect_Langmuir_Number)
   endif
@@ -1952,7 +1947,6 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   character(len=40)  :: mdl = "MOM_energetic_PBL"  ! This module's name.
   character(len=20)  :: tmpstr
   real :: omega_frac_dflt
-  real :: R_Z3_T3_to_kg_s3 ! A conversion factor for work diagnostics [kg T3 R-1 Z-3 s-3 ~> nondim]
   integer :: isd, ied, jsd, jed
   integer :: mstar_mode, LT_enhance, wT_mode
   logical :: default_2018_answers
@@ -2309,25 +2303,25 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
 
 
 !/ Checking output flags
-  R_Z3_T3_to_kg_s3 = US%R_to_kg_m3 * US%Z_to_m**3  * US%s_to_T**3
+  !### Most of these units are wrong and should be W m-2
   CS%id_ML_depth = register_diag_field('ocean_model', 'ePBL_h_ML', diag%axesT1, &
       Time, 'Surface boundary layer depth', 'm', conversion=US%Z_to_m, &
       cmor_long_name='Ocean Mixed Layer Thickness Defined by Mixing Scheme')
   CS%id_TKE_wind = register_diag_field('ocean_model', 'ePBL_TKE_wind', diag%axesT1, &
-      Time, 'Wind-stirring source of mixed layer TKE', 'm3 s-3', conversion=R_Z3_T3_to_kg_s3)
+      Time, 'Wind-stirring source of mixed layer TKE', 'm3 s-3', conversion=US%RZ3_T3_to_W_m2)
   CS%id_TKE_MKE = register_diag_field('ocean_model', 'ePBL_TKE_MKE', diag%axesT1, &
-      Time, 'Mean kinetic energy source of mixed layer TKE', 'm3 s-3', conversion=R_Z3_T3_to_kg_s3)
+      Time, 'Mean kinetic energy source of mixed layer TKE', 'm3 s-3', conversion=US%RZ3_T3_to_W_m2)
   CS%id_TKE_conv = register_diag_field('ocean_model', 'ePBL_TKE_conv', diag%axesT1, &
-      Time, 'Convective source of mixed layer TKE', 'm3 s-3', conversion=R_Z3_T3_to_kg_s3)
+      Time, 'Convective source of mixed layer TKE', 'm3 s-3', conversion=US%RZ3_T3_to_W_m2)
   CS%id_TKE_forcing = register_diag_field('ocean_model', 'ePBL_TKE_forcing', diag%axesT1, &
       Time, 'TKE consumed by mixing surface forcing or penetrative shortwave radation '//&
-            'through model layers', 'm3 s-3', conversion=R_Z3_T3_to_kg_s3)
+            'through model layers', 'm3 s-3', conversion=US%RZ3_T3_to_W_m2)
   CS%id_TKE_mixing = register_diag_field('ocean_model', 'ePBL_TKE_mixing', diag%axesT1, &
-      Time, 'TKE consumed by mixing that deepens the mixed layer', 'm3 s-3', conversion=R_Z3_T3_to_kg_s3)
+      Time, 'TKE consumed by mixing that deepens the mixed layer', 'm3 s-3', conversion=US%RZ3_T3_to_W_m2)
   CS%id_TKE_mech_decay = register_diag_field('ocean_model', 'ePBL_TKE_mech_decay', diag%axesT1, &
-      Time, 'Mechanical energy decay sink of mixed layer TKE', 'm3 s-3', conversion=R_Z3_T3_to_kg_s3)
+      Time, 'Mechanical energy decay sink of mixed layer TKE', 'm3 s-3', conversion=US%RZ3_T3_to_W_m2)
   CS%id_TKE_conv_decay = register_diag_field('ocean_model', 'ePBL_TKE_conv_decay', diag%axesT1, &
-      Time, 'Convective energy decay sink of mixed layer TKE', 'm3 s-3', conversion=R_Z3_T3_to_kg_s3)
+      Time, 'Convective energy decay sink of mixed layer TKE', 'm3 s-3', conversion=US%RZ3_T3_to_W_m2)
   CS%id_Mixing_Length = register_diag_field('ocean_model', 'Mixing_Length', diag%axesTi, &
       Time, 'Mixing Length that is used', 'm', conversion=US%Z_to_m)
   CS%id_Velocity_Scale = register_diag_field('ocean_model', 'Velocity_Scale', diag%axesTi, &

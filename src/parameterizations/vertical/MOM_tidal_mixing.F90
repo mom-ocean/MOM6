@@ -604,7 +604,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
     else
       CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal',diag%axesT1,Time, &
           'Internal Tide Driven Turbulent Kinetic Energy', &
-          'W m-2', conversion=(US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3))
+          'W m-2', conversion=US%RZ3_T3_to_W_m2)
       CS%id_Nb = register_diag_field('ocean_model','Nb',diag%axesT1,Time, &
            'Bottom Buoyancy Frequency', 's-1', conversion=US%s_to_T)
 
@@ -637,20 +637,20 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
 
       CS%id_Kd_Itidal_Work = register_diag_field('ocean_model','Kd_Itidal_Work',diag%axesTL,Time, &
            'Work done by Internal Tide Diapycnal Mixing', &
-           'W m-2', conversion=(US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3))
+           'W m-2', conversion=US%RZ3_T3_to_W_m2)
 
       CS%id_Kd_Niku_Work = register_diag_field('ocean_model','Kd_Nikurashin_Work',diag%axesTL,Time, &
            'Work done by Nikurashin Lee Wave Drag Scheme', &
-           'W m-2', conversion=(US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3))
+           'W m-2', conversion=US%RZ3_T3_to_W_m2)
 
       CS%id_Kd_Lowmode_Work = register_diag_field('ocean_model','Kd_Lowmode_Work',diag%axesTL,Time, &
            'Work done by Internal Tide Diapycnal Mixing (low modes)', &
-           'W m-2', conversion=(US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3))
+           'W m-2', conversion=US%RZ3_T3_to_W_m2)
 
       if (CS%Lee_wave_dissipation) then
         CS%id_TKE_leewave = register_diag_field('ocean_model','TKE_leewave',diag%axesT1,Time, &
             'Lee wave Driven Turbulent Kinetic Energy', &
-            'W m-2', conversion=(US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3))
+            'W m-2', conversion=US%RZ3_T3_to_W_m2)
         CS%id_Kd_Niku = register_diag_field('ocean_model','Kd_Nikurashin',diag%axesTi,Time, &
             'Lee Wave Driven Diffusivity', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
       endif

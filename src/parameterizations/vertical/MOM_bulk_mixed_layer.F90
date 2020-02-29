@@ -111,6 +111,8 @@ type, public :: bulkmixedlayer_CS ; private
                              !! using SST for temperature of liq_runoff
   logical :: use_calving_heat_content !< Use SST for temperature of froz_runoff
   logical :: salt_reject_below_ML !< It true, add salt below mixed layer (layer mode only)
+  logical :: convect_mom_bug !< If true, use code with a bug that causes a loss of momentum
+                             !! conservation during mixedlayer convection.
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate the
                              !! timing of diagnostic output.
@@ -1123,6 +1125,9 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
                          T_precip * netMassIn(i) * GV%H_to_RZ * fluxes%C_p * Idt
     if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
                          T_precip * netMassIn(i) * GV%H_to_RZ
+  else  ! This is a massless column, but zero out the summed variables anyway for safety.
+    htot(i) = 0.0 ; Ttot(i) = 0.0 ; Stot(i) = 0.0 ; R0_tot(i) = 0.0 ; Rcv_tot = 0.0
+    uhtot(i) = 0.0 ; vhtot(i) = 0.0 ; Conv_En(i) = 0.0 ; dKE_FC(i) = 0.0
   endif ; enddo
 
   ! Now do netMassOut case in this block.
@@ -1288,9 +1293,11 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
           htot(i)  = htot(i)  + h_ent
           h(i,k) = h(i,k) - h_ent
           d_eb(i,k) = d_eb(i,k) - h_ent
-          uhtot(i) = u(i,k)*h_ent ; vhtot(i) = v(i,k)*h_ent
-          !### I think that the line above should instead be:
-          ! uhtot(i) = uhtot(i) + h_ent*u(i,k) ; vhtot(i) = vhtot(i) + h_ent*v(i,k)
+          if (CS%convect_mom_bug) then
+            uhtot(i) = u(i,k)*h_ent ; vhtot(i) = v(i,k)*h_ent
+          else
+            uhtot(i) = uhtot(i) + h_ent*u(i,k) ; vhtot(i) = vhtot(i) + h_ent*v(i,k)
+          endif
         endif
 
 
@@ -3568,6 +3575,9 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
                  "If true, use the fluxes%calving_Hflx field to set the "//&
                  "heat carried by runoff, instead of using SST*CP*froz_runoff.", &
                  default=.false.)
+  call get_param(param_file, mdl, "BULKML_CONV_MOMENTUM_BUG", CS%convect_mom_bug, &
+                 "If true, use code with a bug that causes a loss of momentum conservation "//&
+                 "during mixedlayer convection.", default=.true.)
 
   call get_param(param_file, mdl, "ALLOW_CLOCKS_IN_OMP_LOOPS", &
                  CS%allow_clocks_in_omp_loops, &
@@ -3584,8 +3594,8 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
       Time, 'Mean kinetic energy source of mixed layer TKE', &
       'm3 s-3', conversion=US%Z_to_m*(US%L_to_m**2)*(US%s_to_T**3))
   CS%id_TKE_conv = register_diag_field('ocean_model', 'TKE_conv', diag%axesT1, &
-      Time, 'Convective source of mixed layer TKE', 'm3 s-3', &
-      conversion=US%Z_to_m*(US%L_to_m**2)*(US%s_to_T**3))
+      Time, 'Convective source of mixed layer TKE', &
+      'm3 s-3', conversion=US%Z_to_m*(US%L_to_m**2)*(US%s_to_T**3))
   CS%id_TKE_pen_SW = register_diag_field('ocean_model', 'TKE_pen_SW', diag%axesT1, &
       Time, 'TKE consumed by mixing penetrative shortwave radation through the mixed layer', &
       'm3 s-3', conversion=US%Z_to_m*(US%L_to_m**2)*(US%s_to_T**3))
@@ -3603,10 +3613,10 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
       'm3 s-3', conversion=US%Z_to_m*(US%L_to_m**2)*(US%s_to_T**3))
   CS%id_PE_detrain = register_diag_field('ocean_model', 'PE_detrain', diag%axesT1, &
       Time, 'Spurious source of potential energy from mixed layer detrainment', &
-      'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*(US%L_to_m**2)*(US%s_to_T**3))
+      'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
   CS%id_PE_detrain2 = register_diag_field('ocean_model', 'PE_detrain2', diag%axesT1, &
       Time, 'Spurious source of potential energy from mixed layer only detrainment', &
-      'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*(US%L_to_m**2)*(US%s_to_T**3))
+      'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
   CS%id_h_mismatch = register_diag_field('ocean_model', 'h_miss_ML', diag%axesT1, &
       Time, 'Summed absolute mismatch in entrainment terms', 'm', conversion=US%Z_to_m)
   CS%id_Hsfc_used = register_diag_field('ocean_model', 'Hs_used', diag%axesT1, &

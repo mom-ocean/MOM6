@@ -78,6 +78,15 @@ type, public :: Kappa_shear_CS ; private
                              !  I can think of no good reason why this should be false. - RWH
   real    :: vel_underflow   !< Velocity components smaller than vel_underflow
                              !! are set to 0 [L T-1 ~> m s-1].
+  real    :: kappa_src_max_chg !< The maximum permitted increase in the kappa source within an
+                             !! iteration relative to the local source [nondim].  This must be
+                             !! greater than 1.  The lower limit for the permitted fractional
+                             !! decrease is (1 - 0.5/kappa_src_max_chg).  These limits could
+                             !! perhaps be made dynamic with an improved iterative solver.
+  logical :: all_layer_TKE_bug !< If true, report back the latest estimate of TKE instead of the
+                             !! time average TKE when there is mass in all layers.  Otherwise always
+                             !! report the time-averaged TKE, as is currently done when there
+                             !! are some massless layers.
 !  logical :: layer_stagger = .false. ! If true, do the calculations centered at
                              !  layers, rather than the interfaces.
   logical :: debug = .false. !< If true, write verbose debugging messages.
@@ -301,8 +310,11 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
       if (nz == nzc) then
         do K=1,nz+1
           kappa_2d(i,K) = kappa_avg(K)
-          !### Should this be tke_avg?
-          tke_2d(i,K) = tke(K)
+          if (CS%all_layer_TKE_bug) then
+            tke_2d(i,K) = tke(K)
+          else
+            tke_2d(i,K) = tke_avg(K)
+          endif
         enddo
       else
         do K=1,nz+1
@@ -599,8 +611,11 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
       if (nz == nzc) then
         do K=1,nz+1
           kappa_2d(I,K,J2) = kappa_avg(K)
-          !### Should this be tke_avg?
-          tke_2d(I,K) = tke(K)
+          if (CS%all_layer_TKE_bug) then
+            tke_2d(i,K) = tke(K)
+          else
+            tke_2d(i,K) = tke_avg(K)
+          endif
         enddo
       else
         do K=1,nz+1
@@ -752,7 +767,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   real :: g_R0          ! g_R0 is a rescaled version of g/Rho [Z R-1 T-2 ~> m4 kg-1 s-2].
   real :: Norm          ! A factor that normalizes two weights to 1 [Z-2 ~> m-2].
   real :: tol_dksrc     ! Tolerance for the change in the kappa source within an iteration
-                        ! relative to the local source [nondim].
+                        ! relative to the local source [nondim].  This must be greater than 1.
   real :: tol2          ! The tolerance for the change in the kappa source within an iteration
                         ! relative to the average local source over previous iterations [nondim].
   real :: tol_dksrc_low ! The tolerance for the fractional decrease in ksrc
@@ -801,9 +816,15 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   gR0 = GV%z_to_H*GV%H_to_Pa
   g_R0 = (US%L_to_Z**2 * GV%g_Earth) / (GV%Rho0)
   k0dt = dt*CS%kappa_0
-  !### These 3 tolerances are hard-coded and fixed for now.  Perhaps these could be made dynamic later?
-  ! tol_dksrc = 0.5*tol_ksrc_chg ; tol_dksrc_low = 1.0 - 1.0/tol_ksrc_chg ?
-  tol_dksrc = 10.0 ; tol_dksrc_low = 0.95 ; tol2 = 2.0*CS%kappa_tol_err
+
+  tol_dksrc = CS%kappa_src_max_chg
+  if (tol_dksrc == 10.0) then
+    ! This is equivalent to the expression below, but avoids changes at roundoff for the default value.
+    tol_dksrc_low = 0.95
+  else
+    tol_dksrc_low = (tol_dksrc - 0.5)/tol_dksrc
+  endif
+  tol2 = 2.0*CS%kappa_tol_err
   dt_refinements = 5 ! Selected so that 1/2^dt_refinements < 1-tol_dksrc_low
   use_temperature = .false. ; if (associated(tv%T)) use_temperature = .true.
 
@@ -2062,6 +2083,12 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
                  "components are set to 0.  A reasonable value might be "//&
                  "1e-30 m/s, which is less than an Angstrom divided by "//&
                  "the age of the universe.", units="m s-1", default=0.0, scale=US%m_s_to_L_T)
+  call get_param(param_file, mdl, "KAPPA_SHEAR_MAX_KAP_SRC_CHG", CS%kappa_src_max_chg, &
+                 "The maximum permitted increase in the kappa source within an iteration relative "//&
+                 "to the local source; this must be greater than 1.  The lower limit for the "//&
+                 "permitted fractional decrease is (1 - 0.5/kappa_src_max_chg).  These limits "//&
+                 "could perhaps be made dynamic with an improved iterative solver.", &
+                 default=10.0, units="nondim")
 
   call get_param(param_file, mdl, "DEBUG_KAPPA_SHEAR", CS%debug, &
                  "If true, write debugging data for the kappa-shear code. \n"//&
@@ -2072,6 +2099,11 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
                  "If true. use an older, dimensionally inconsistent estimate of the "//&
                  "derivative of diffusivity with energy in the Newton's method iteration.  "//&
                  "The bug causes undercorrections when dz > 1m.", default=.true.)
+  call get_param(param_file, mdl, "KAPPA_SHEAR_ALL_LAYER_TKE_BUG", CS%all_layer_TKE_bug, &
+                 "If true, report back the latest estimate of TKE instead of the time average "//&
+                 "TKE when there is mass in all layers.  Otherwise always report the time "//&
+                 "averaged TKE, as is currently done when there are some massless layers.", &
+                 default=.true.)
 !    id_clock_KQ = cpu_clock_id('Ocean KS kappa_shear', grain=CLOCK_ROUTINE)
 !    id_clock_avg = cpu_clock_id('Ocean KS avg', grain=CLOCK_ROUTINE)
 !    id_clock_project = cpu_clock_id('Ocean KS project', grain=CLOCK_ROUTINE)

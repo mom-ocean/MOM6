@@ -158,11 +158,10 @@ subroutine iceberg_fluxes(G, US, fluxes, use_ice_shelf, sfc_state, &
         ! form of surface layer evaporation [R Z T-1 ~> kg m-2 s-1]. Update lprec in the
         ! control structure for diagnostic purposes.
 
-        if (associated(sfc_state%frazil)) then
+        if (allocated(sfc_state%frazil)) then
           fraz = US%kg_m3_to_R*US%m_to_Z*sfc_state%frazil(i,j) * I_dt_LHF
-          if (associated(fluxes%evap)) &
-            fluxes%evap(i,j) = fluxes%evap(i,j) - fraz
-          ! fluxes%lprec(i,j) = fluxes%lprec(i,j) - fraz
+          if (associated(fluxes%evap))  fluxes%evap(i,j)  = fluxes%evap(i,j)  - fraz
+        ! if (associated(fluxes%lprec)) fluxes%lprec(i,j) = fluxes%lprec(i,j) - fraz
           sfc_state%frazil(i,j) = 0.0
         endif
 

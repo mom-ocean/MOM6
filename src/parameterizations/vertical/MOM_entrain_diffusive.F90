@@ -190,7 +190,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
   real :: h_avail    ! The thickness that is available for entrainment [H ~> m or kg m-2].
   real :: dS_kb_eff  ! The value of dS_kb after limiting is taken into account.
   real :: Rho_cor    ! The depth-integrated potential density anomaly that
-                     ! needs to be corrected for [H kg m-3 ~> kg m-2 or kg2 m-5].
+                     ! needs to be corrected for [H R ~> kg m-2 or kg2 m-5].
   real :: ea_cor     ! The corrective adjustment to eakb [H ~> m or kg m-2].
   real :: h1         ! The layer thickness after entrainment through the
                      ! interface below is taken into account [H ~> m or kg m-2].
@@ -2141,8 +2141,8 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS)
   CS%id_Kd = register_diag_field('ocean_model', 'Kd_effective', diag%axesTL, Time, &
       'Diapycnal diffusivity as applied', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
   CS%id_diff_work = register_diag_field('ocean_model', 'diff_work', diag%axesTi, Time, &
-      'Work actually done by diapycnal diffusion across each interface', 'W m-2', &
-      conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+      'Work actually done by diapycnal diffusion across each interface', &
+      'W m-2', conversion=US%RZ3_T3_to_W_m2)
 
 end subroutine entrain_diffusive_init
 
