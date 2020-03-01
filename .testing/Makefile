@@ -9,20 +9,17 @@ DO_REPRO_TESTS ?= true
 
 #---
 # Dependencies
-BASE = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))/..
-DEPS = $(BASE)/deps
-BUILD = $(BASE)/build
 
 # mkmf, list_paths (GFDL build toolchain)
 MKMF_URL ?= https://github.com/NOAA-GFDL/mkmf.git
 MKMF_COMMIT ?= master
-LIST_PATHS := $(abspath $(DEPS)/mkmf/bin/list_paths)
-MKMF := $(abspath $(DEPS)/mkmf/bin/mkmf)
+LIST_PATHS := $(abspath build/mkmf/bin/list_paths)
+MKMF := $(abspath build/mkmf/bin/mkmf)
 
 # FMS framework
 FMS_URL ?= https://github.com/NOAA-GFDL/FMS.git
 FMS_COMMIT ?= f2e2c86f6c0eb6d389a20509a8a60fa22924e16b
-FMS := $(DEPS)/fms
+FMS := build/fms
 
 #---
 # Build configuration
@@ -33,8 +30,8 @@ MKMF_CPP = "-Duse_libMPI -Duse_netCDF -DSPMD"
 # Environment
 # TODO: This info ought to be determined by CMake, automake, etc.
 #MKMF_TEMPLATE ?= .testing/linux-ubuntu-xenial-gnu.mk
-MKMF_TEMPLATE ?= $(DEPS)/mkmf/templates/ncrc-gnu.mk
-#MKMF_TEMPLATE ?= $(DEPS)/mkmf/templates/ncrc-intel.mk
+MKMF_TEMPLATE ?= build/mkmf/templates/ncrc-gnu.mk
+#MKMF_TEMPLATE ?= build/mkmf/templates/ncrc-intel.mk
 
 #---
 # Test configuration
@@ -71,67 +68,67 @@ ifeq ($(DO_REGRESSION_TESTS), true)
   MOM_TARGET_LOCAL_BRANCH ?= dev/gfdl
   MOM_TARGET_BRANCH := origin/$(MOM_TARGET_LOCAL_BRANCH)
 
-  TARGET_CODEBASE = $(BUILD)/target_codebase
+  TARGET_CODEBASE = build/target_codebase
 else
   MOM_TARGET_URL =
   MOM_TARGET_BRANCH =
   TARGET_CODEBASE =
 endif
 
-SOURCE = $(wildcard $(BASE)/src/*/*.F90 $(BASE)/src/*/*/*.F90 $(BASE)/config_src/solo_driver/*.F90)
+SOURCE = $(wildcard src/*/*.F90 src/*/*/*.F90 config_src/solo_driver/*.F90)
 
 
 #---
 # Rules
 
 .PHONY: all build.regressions
-all: $(foreach b,$(BUILDS),$(BUILD)/$(b)/MOM6)
-build.regressions: $(foreach b,symmetric target,$(BUILD)/$(b)/MOM6)
+all: $(foreach b,$(BUILDS),build/$(b)/MOM6)
+build.regressions: $(foreach b,symmetric target,build/$(b)/MOM6)
 
 # Executable
 BUILD_TARGETS = MOM6 Makefile path_names
-.PRECIOUS: $(foreach b,$(BUILDS),$(foreach f,$(BUILD_TARGETS),$(BUILD)/$(b)/$(f)))
+.PRECIOUS: $(foreach b,$(BUILDS),$(foreach f,$(BUILD_TARGETS),build/$(b)/$(f)))
 
 # Conditionally build symmetric with coverage support
 COVFLAG=$(if $(REPORT_COVERAGE),COVERAGE=1,)
 
-$(BUILD)/target/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
-$(BUILD)/symmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 $(COVFLAG)
-$(BUILD)/asymmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
-$(BUILD)/repro/MOM6: MOMFLAGS=NETCDF=3 REPRO=1
-$(BUILD)/openmp/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 OPENMP=1
+build/target/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
+build/symmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 $(COVFLAG)
+build/asymmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
+build/repro/MOM6: MOMFLAGS=NETCDF=3 REPRO=1
+build/openmp/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 OPENMP=1
 
-$(BUILD)/asymmetric/path_names: GRID_SRC=config_src/dynamic
-$(BUILD)/%/path_names: GRID_SRC=config_src/dynamic_symmetric
+build/asymmetric/path_names: GRID_SRC=config_src/dynamic
+build/%/path_names: GRID_SRC=config_src/dynamic_symmetric
 
-$(BUILD)/%/MOM6: $(BUILD)/%/Makefile $(FMS)/lib/libfms.a
+build/%/MOM6: build/%/Makefile $(FMS)/lib/libfms.a
 	make -C $(@D) $(MOMFLAGS) $(@F)
 
-$(BUILD)/%/Makefile: $(BUILD)/%/path_names
+build/%/Makefile: build/%/path_names
 	cp $(MKMF_TEMPLATE) $(@D)
 	cd $(@D) && $(MKMF) \
 		-t $(notdir $(MKMF_TEMPLATE)) \
-		-o '-I $(FMS)/build' \
+		-o '-I ../fms/build' \
 		-p MOM6 \
-		-l '$(FMS)/lib/libfms.a' \
+		-l '../fms/lib/libfms.a' \
 		-c $(MKMF_CPP) \
 		path_names
 
 # NOTE: These path_names rules could be merged
 
-$(BUILD)/target/path_names: $(LIST_PATHS) $(TARGET_CODEBASE)
+build/target/path_names: $(LIST_PATHS) $(TARGET_CODEBASE)
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l \
-		$(TARGET_CODEBASE)/src \
-		$(TARGET_CODEBASE)/config_src/solo_driver \
-		$(TARGET_CODEBASE)/$(GRID_SRC)
+		../../$(TARGET_CODEBASE)/src \
+		../../$(TARGET_CODEBASE)/config_src/solo_driver \
+		../../$(TARGET_CODEBASE)/$(GRID_SRC)
 
-$(BUILD)/%/path_names: $(LIST_PATHS) $(SOURCE)
+build/%/path_names: $(LIST_PATHS) $(SOURCE)
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l \
-		$(BASE)/src \
-		$(BASE)/config_src/solo_driver \
-		$(BASE)/$(GRID_SRC)
+		../../../src \
+		../../../config_src/solo_driver \
+		../../../$(GRID_SRC)
 
 # Target repository for regression tests
 $(TARGET_CODEBASE):
@@ -167,8 +164,8 @@ $(FMS)/src:
 # Build Toolchain
 
 $(LIST_PATHS) $(MKMF):
-	git clone $(MKMF_URL) $(DEPS)/mkmf
-	cd $(DEPS)/mkmf; git checkout $(MKMF_COMMIT)
+	git clone $(MKMF_URL) build/mkmf
+	cd build/mkmf; git checkout $(MKMF_COMMIT)
 
 
 #----
@@ -247,8 +244,8 @@ endif
 # $(5): Environment variables
 # $(6): Number of MPI ranks
 define STAT_RULE
-results/%/ocean.stats.$(1): ../build/$(2)/MOM6
-	if [ $(3) ]; then find ../build/$(2) -name *.gcda -exec rm -f '{}' \; ; fi
+results/%/ocean.stats.$(1): build/$(2)/MOM6
+	if [ $(3) ]; then find build/$(2) -name *.gcda -exec rm -f '{}' \; ; fi
 	mkdir -p work/$$*/$(1)
 	cp -rL $$*/* work/$$*/$(1)
 	cd work/$$*/$(1) && if [ -f Makefile ]; then make; fi
@@ -282,7 +279,7 @@ $(eval $(call STAT_RULE,dim.h,symmetric,,H_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.z,symmetric,,Z_RESCALE_POWER=11,,1))
 
 # Restart tests require significant preprocessing, and are handled separately.
-results/%/ocean.stats.restart: ../build/symmetric/MOM6
+results/%/ocean.stats.restart: build/symmetric/MOM6
 	rm -rf work/$*/restart
 	mkdir -p work/$*/restart
 	cp -rL $*/* work/$*/restart
@@ -321,7 +318,7 @@ results/%/ocean.stats.restart: ../build/symmetric/MOM6
 clean: clean.stats
 	@# Assert that we are in .testing for recursive delete
 	@[ $$(basename $$(pwd)) = .testing ]
-	rm -rf ../build
+	rm -rf build
 
 .PHONY: clean.stats
 clean.stats:
