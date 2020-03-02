@@ -211,13 +211,13 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, diabatic
                    default = .true.)
   endif
 
-  if (CS%interior_only) then
-    call extract_diabatic_member(diabatic_CSp, KPP_CSp=CS%KPP_CSp)
-    call extract_diabatic_member(diabatic_CSp, energetic_PBL_CSp=CS%energetic_PBL_CSp)
-    if ( .not. ASSOCIATED(CS%energetic_PBL_CSp) .and. .not. ASSOCIATED(CS%KPP_CSp) ) then
-      call MOM_error(FATAL,"NDIFF_INTERIOR_ONLY is true, but no valid boundary layer scheme was found")
-    endif
-  endif
+!  if (CS%interior_only) then
+!    call extract_diabatic_member(diabatic_CSp, KPP_CSp=CS%KPP_CSp)
+!    call extract_diabatic_member(diabatic_CSp, energetic_PBL_CSp=CS%energetic_PBL_CSp)
+!    if ( .not. ASSOCIATED(CS%energetic_PBL_CSp) .and. .not. ASSOCIATED(CS%KPP_CSp) ) then
+!      call MOM_error(FATAL,"NDIFF_INTERIOR_ONLY is true, but no valid boundary layer scheme was found")
+!    endif
+!  endif
 
 ! call get_param(param_file, mdl, "KHTR", CS%KhTr, &
 !                "The background along-isopycnal tracer diffusivity.", &
@@ -293,7 +293,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS)
 
   ! check if hbl needs to be extracted
   if (CS%interior_only) then
-    hbl(:,:) = 0.
+    hbl(:,:) = 100.
     if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G)
     if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US)
     call pass_var(hbl,G%Domain)
