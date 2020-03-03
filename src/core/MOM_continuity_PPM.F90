@@ -1979,7 +1979,7 @@ subroutine PPM_reconstruction_y(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
 
   local_open_BC = .false.
   if (present(OBC)) then ; if (associated(OBC)) then
-    local_open_BC = OBC%open_u_BCs_exist_globally
+    local_open_BC = OBC%open_v_BCs_exist_globally
   endif ; endif
 
   isl = LB%ish ; iel = LB%ieh ; jsl = LB%jsh-1 ; jel = LB%jeh+1
