@@ -2897,7 +2897,7 @@ subroutine extract_surface_state(CS, sfc_state)
 
 
   if (allocated(sfc_state%melt_potential)) then
-  !$OMP parallel do default(shared)
+  !$OMP parallel do default(shared) private(depth_ml, dh, T_freeze, depth, delT)
     do j=js,je
       do i=is,ie
         depth(i) = 0.0
