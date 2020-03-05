@@ -75,8 +75,17 @@ else
   TARGET_CODEBASE =
 endif
 
-SOURCE = $(wildcard src/*/*.F90 src/*/*/*.F90 config_src/solo_driver/*.F90)
+# List of source files to link this Makefile's dependencies to model Makefiles
+# Assumes a depth of two, and the following extensions: F90 inc c h
+# (1): Root directory
+# NOTE: extensions could be a second variable
+SOURCE = \
+  $(foreach ext,F90 inc c h,$(wildcard $(1)/*/*.$(ext) $(1)/*/*/*.$(ext)))
 
+MOM_SOURCE = $(call SOURCE,../src) $(wildcard ../config_src/solo_driver/*.F90)
+TARGET_SOURCE = $(call SOURCE,build/target_codebase/src) \
+  $(wildcard build/target_codebase/config_src/solo_driver/*.F90)
+FMS_SOURCE = $(call SOURCE,build/fms/src)
 
 #---
 # Rules
@@ -116,14 +125,14 @@ build/%/Makefile: build/%/path_names
 
 # NOTE: These path_names rules could be merged
 
-build/target/path_names: $(LIST_PATHS) $(TARGET_CODEBASE)
+build/target/path_names: $(LIST_PATHS) $(TARGET_CODEBASE) $(TARGET_SOURCE)
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l \
 		../../$(TARGET_CODEBASE)/src \
 		../../$(TARGET_CODEBASE)/config_src/solo_driver \
 		../../$(TARGET_CODEBASE)/$(GRID_SRC)
 
-build/%/path_names: $(LIST_PATHS) $(SOURCE)
+build/%/path_names: $(LIST_PATHS) $(MOM_SOURCE)
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l \
 		../../../src \
@@ -151,7 +160,7 @@ $(FMS)/build/Makefile: $(FMS)/build/path_names
 		-c $(MKMF_CPP) \
 		path_names
 
-$(FMS)/build/path_names: $(FMS)/src $(FMS_FILES) $(LIST_PATHS)
+$(FMS)/build/path_names: $(LIST_PATHS) $(FMS)/src $(FMS_SOURCE)
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l ../src
 
