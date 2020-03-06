@@ -102,11 +102,11 @@ BUILD_TARGETS = MOM6 Makefile path_names
 # Conditionally build symmetric with coverage support
 COVFLAG=$(if $(REPORT_COVERAGE),COVERAGE=1,)
 
-build/target/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
-build/symmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 $(COVFLAG)
-build/asymmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
+build/target/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 INIT=1
+build/symmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 INIT=1 $(COVFLAG)
+build/asymmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 INIT=1
 build/repro/MOM6: MOMFLAGS=NETCDF=3 REPRO=1
-build/openmp/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 OPENMP=1
+build/openmp/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 OPENMP=1 INIT=1
 
 build/asymmetric/path_names: GRID_SRC=config_src/dynamic
 build/%/path_names: GRID_SRC=config_src/dynamic_symmetric
