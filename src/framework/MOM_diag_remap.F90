@@ -112,6 +112,7 @@ type :: diag_remap_ctrl
   type(regridding_CS) :: regrid_cs !< Regridding control structure that defines the coordiantes for this axes
   integer :: nz = 0 !< Number of vertical levels used for remapping
   real, dimension(:,:,:), allocatable :: h !< Remap grid thicknesses
+  real, dimension(:,:,:), allocatable :: h_extensive !< Remap grid thicknesses for extensive variables
   real, dimension(:), allocatable :: dz !< Nominal layer thicknesses
   integer :: interface_axes_id = 0 !< Vertical axes id for remapping at interfaces
   integer :: layer_axes_id = 0 !< Vertical axes id for remapping on layers
@@ -271,15 +272,16 @@ end function
 !! height or layer thicknesses changes. In the case of density-based
 !! coordinates then technically we should also regenerate the
 !! target grid whenever T/S change.
-subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state)
-  type(diag_remap_ctrl), intent(inout) :: remap_cs !< Diagnostic coordinate control structure
-  type(ocean_grid_type),    pointer    :: G  !< The ocean's grid type
-  type(verticalGrid_type),  intent(in) :: GV !< ocean vertical grid structure
-  type(unit_scale_type),    intent(in) :: US !< A dimensional unit scaling type
-  real, dimension(:, :, :), intent(in) :: h  !< New thickness
-  real, dimension(:, :, :), intent(in) :: T  !< New T
-  real, dimension(:, :, :), intent(in) :: S  !< New S
+subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_target)
+  type(diag_remap_ctrl), intent(inout)    :: remap_cs !< Diagnostic coordinate control structure
+  type(ocean_grid_type),    pointer       :: G  !< The ocean's grid type
+  type(verticalGrid_type),  intent(in   ) :: GV !< ocean vertical grid structure
+  type(unit_scale_type),    intent(in   ) :: US !< A dimensional unit scaling type
+  real, dimension(:, :, :), intent(in   ) :: h  !< Thicknesses used to construct new diagnostic grid
+  real, dimension(:, :, :), intent(in   ) :: T  !< Temperatures used to construct new diagnostic grid
+  real, dimension(:, :, :), intent(in   ) :: S  !< Salinity used to construct new diagnostic grid
   type(EOS_type),           pointer    :: eqn_of_state !< A pointer to the equation of state
+  real, dimension(:, :, :), intent(inout) :: h_target  !< Where to store the new diagnostic array
 
   ! Local variables
   real, dimension(remap_cs%nz + 1) :: zInterfaces
@@ -306,6 +308,7 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state)
     call initialize_remapping(remap_cs%remap_cs, 'PPM_IH4', boundary_extrapolation=.false., &
                               answers_2018=remap_cs%answers_2018)
     allocate(remap_cs%h(G%isd:G%ied,G%jsd:G%jed, nz))
+    allocate(remap_cs%h_extensive(G%isd:G%ied,G%jsd:G%jed, nz))
     remap_cs%initialized = .true.
   endif
 
@@ -314,7 +317,7 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state)
   ! assumption that h, T, S has changed.
   do j=G%jsc-1, G%jec+1 ; do i=G%isc-1, G%iec+1
     if (G%mask2dT(i,j)==0.) then
-      remap_cs%h(i,j,:) = 0.
+      h_target(i,j,:) = 0.
       cycle
     endif
 
@@ -338,7 +341,7 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state)
 !                           US%Z_to_m*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
       call MOM_error(FATAL,"diag_remap_update: HYCOM1 coordinate not coded for diagnostics yet!")
     endif
-    remap_cs%h(i,j,:) = zInterfaces(1:nz) - zInterfaces(2:nz+1)
+    h_target(i,j,:) = zInterfaces(1:nz) - zInterfaces(2:nz+1)
   enddo ; enddo
 
 end subroutine diag_remap_update
