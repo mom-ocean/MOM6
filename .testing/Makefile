@@ -9,17 +9,18 @@ DO_REPRO_TESTS ?= true
 
 #---
 # Dependencies
+DEPS = deps
 
 # mkmf, list_paths (GFDL build toolchain)
 MKMF_URL ?= https://github.com/NOAA-GFDL/mkmf.git
 MKMF_COMMIT ?= master
-LIST_PATHS := $(abspath build/mkmf/bin/list_paths)
-MKMF := $(abspath build/mkmf/bin/mkmf)
+LIST_PATHS := $(abspath $(DEPS)/mkmf/bin/list_paths)
+MKMF := $(abspath $(DEPS)/mkmf/bin/mkmf)
 
 # FMS framework
 FMS_URL ?= https://github.com/NOAA-GFDL/FMS.git
-FMS_COMMIT ?= f2e2c86f6c0eb6d389a20509a8a60fa22924e16b
-FMS := build/fms
+FMS_COMMIT ?= 2019.01.01
+FMS := $(DEPS)/fms
 
 #---
 # Build configuration
@@ -85,7 +86,7 @@ SOURCE = \
 MOM_SOURCE = $(call SOURCE,../src) $(wildcard ../config_src/solo_driver/*.F90)
 TARGET_SOURCE = $(call SOURCE,build/target_codebase/src) \
   $(wildcard build/target_codebase/config_src/solo_driver/*.F90)
-FMS_SOURCE = $(call SOURCE,build/fms/src)
+FMS_SOURCE = $(call SOURCE,$(DEPS)/fms/src)
 
 #---
 # Rules
@@ -101,11 +102,11 @@ BUILD_TARGETS = MOM6 Makefile path_names
 # Conditionally build symmetric with coverage support
 COVFLAG=$(if $(REPORT_COVERAGE),COVERAGE=1,)
 
-build/target/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
-build/symmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 $(COVFLAG)
-build/asymmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
+build/target/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 INIT=1
+build/symmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 INIT=1 $(COVFLAG)
+build/asymmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 INIT=1
 build/repro/MOM6: MOMFLAGS=NETCDF=3 REPRO=1
-build/openmp/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 OPENMP=1
+build/openmp/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 OPENMP=1 INIT=1
 
 build/asymmetric/path_names: GRID_SRC=config_src/dynamic
 build/%/path_names: GRID_SRC=config_src/dynamic_symmetric
@@ -117,9 +118,9 @@ build/%/Makefile: build/%/path_names
 	cp $(MKMF_TEMPLATE) $(@D)
 	cd $(@D) && $(MKMF) \
 		-t $(notdir $(MKMF_TEMPLATE)) \
-		-o '-I ../fms/build' \
+		-o '-I ../../$(DEPS)/fms/build' \
 		-p MOM6 \
-		-l '../fms/lib/libfms.a' \
+		-l '../../$(DEPS)/fms/lib/libfms.a' \
 		-c $(MKMF_CPP) \
 		path_names
 
@@ -173,8 +174,8 @@ $(FMS)/src:
 # Build Toolchain
 
 $(LIST_PATHS) $(MKMF):
-	git clone $(MKMF_URL) build/mkmf
-	cd build/mkmf; git checkout $(MKMF_COMMIT)
+	git clone $(MKMF_URL) $(DEPS)/mkmf
+	cd $(DEPS)/mkmf; git checkout $(MKMF_COMMIT)
 
 
 #----
