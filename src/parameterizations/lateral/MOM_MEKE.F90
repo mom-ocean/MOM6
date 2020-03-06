@@ -286,7 +286,8 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     ! Calculates bottomFac2, barotrFac2 and LmixScale
     call MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, MEKE%MEKE, bottomFac2, barotrFac2, LmixScale)
     if (CS%debug) then
-      call uvchksum("MEKE drag_vel_[uv]", drag_vel_u, drag_vel_v, G%HI, scale=US%Z_to_m*US%s_to_T)
+      if (CS%visc_drag) &
+        call uvchksum("MEKE drag_vel_[uv]", drag_vel_u, drag_vel_v, G%HI, scale=US%Z_to_m*US%s_to_T)
       call hchksum(mass, 'MEKE mass',G%HI,haloshift=1, scale=US%R_to_kg_m3*US%Z_to_m)
       call hchksum(drag_rate_visc, 'MEKE drag_rate_visc', G%HI, scale=US%L_T_to_m_s)
       call hchksum(bottomFac2, 'MEKE bottomFac2', G%HI)
