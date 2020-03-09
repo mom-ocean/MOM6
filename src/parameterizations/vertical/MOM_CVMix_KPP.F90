@@ -962,16 +962,16 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
   buoy_scale = US%L_to_m**2*US%s_to_T**3
 
   ! loop over horizontal points on processor
-  !$OMP parallel do default(none) private(surfFricVel, iFaceHeight, hcorr, dh, cellHeight,  &
-  !$OMP                           surfBuoyFlux, U_H, V_H, u, v, Coriolis, pRef, SLdepth_0d, &
-  !$OMP                           ksfc, surfHtemp, surfHsalt, surfHu, surfHv, surfHuS,      &
-  !$OMP                           surfHvS, hTot, delH, surftemp, surfsalt, surfu, surfv,    &
-  !$OMP                           surfUs, surfVs, Uk, Vk, deltaU2, km1, kk, pres_1D,        &
-  !$OMP                           Temp_1D, salt_1D, surfBuoyFlux2, MLD_GUESS, LA, rho_1D,   &
-  !$OMP                           deltarho, N2_1d, ws_1d, LangEnhVT2, enhvt2, wst,          &
-  !$OMP                           BulkRi_1d, zBottomMinusOffset) &
-  !$OMP                           shared(G, GV, CS, US, uStar, h, buoy_scale, buoyFlux,     &
-  !$OMP                           Temp, Salt, waves, EOS, GoRho)
+  !GOMP parallel do default(none) private(surfFricVel, iFaceHeight, hcorr, dh, cellHeight,  &
+  !GOMP                           surfBuoyFlux, U_H, V_H, u, v, Coriolis, pRef, SLdepth_0d, &
+  !GOMP                           ksfc, surfHtemp, surfHsalt, surfHu, surfHv, surfHuS,      &
+  !GOMP                           surfHvS, hTot, delH, surftemp, surfsalt, surfu, surfv,    &
+  !GOMP                           surfUs, surfVs, Uk, Vk, deltaU2, km1, kk, pres_1D,        &
+  !GOMP                           Temp_1D, salt_1D, surfBuoyFlux2, MLD_GUESS, LA, rho_1D,   &
+  !GOMP                           deltarho, N2_1d, ws_1d, LangEnhVT2, enhvt2, wst,          &
+  !GOMP                           BulkRi_1d, zBottomMinusOffset) &
+  !GOMP                           shared(G, GV, CS, US, uStar, h, buoy_scale, buoyFlux,     &
+  !GOMP                           Temp, Salt, waves, EOS, GoRho)
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
 
