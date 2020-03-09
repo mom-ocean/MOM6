@@ -3,7 +3,7 @@
 
 # This is a not a c-language project but we use the same environment.
 language: c
-dist: xenial
+dist: bionic
 
 # --depth flag is breaking our merge, try disabling it
 # NOTE: We may be able to go back to depth=50 in production

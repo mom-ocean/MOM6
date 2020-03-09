@@ -134,7 +134,7 @@ subroutine MOM_thermo_chksum(mesg, tv, G, US, haloshift)
   if (associated(tv%frazil)) call hchksum(tv%frazil, mesg//" frazil", G%HI, haloshift=hs, &
                                           scale=G%US%Q_to_J_kg*G%US%R_to_kg_m3*G%US%Z_to_m)
   if (associated(tv%salt_deficit)) &
-    call hchksum(tv%salt_deficit, mesg//" salt deficit", G%HI, haloshift=hs, scale=US%R_to_kg_m3*US%Z_to_m)
+    call hchksum(tv%salt_deficit, mesg//" salt deficit", G%HI, haloshift=hs, scale=US%RZ_to_kg_m2)
 
 end subroutine MOM_thermo_chksum
 

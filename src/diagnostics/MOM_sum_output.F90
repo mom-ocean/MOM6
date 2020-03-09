@@ -660,7 +660,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     !   Calculate the Available Potential Energy integrated over each interface.  With a nonlinear
     ! equation of state or with a bulk mixed layer this calculation is only approximate.
     ! With an ALE model this does not make sense and should be revisited.
-    PE_scale_factor = US%Z_to_m*US%L_to_m**2*US%L_T_to_m_s**2*US%R_to_kg_m3
+    PE_scale_factor = US%RZ_to_kg_m2*US%L_to_m**2*US%L_T_to_m_s**2
     PE_pt(:,:,:) = 0.0
     if (GV%Boussinesq) then
       do j=js,je ; do i=is,ie
@@ -978,7 +978,7 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-  RZL2_to_kg = US%L_to_m**2*US%R_to_kg_m3*US%Z_to_m
+  RZL2_to_kg = US%L_to_m**2*US%RZ_to_kg_m2
   QRZL2_to_J = RZL2_to_kg*US%Q_to_J_kg
 
   FW_in(:,:) = 0.0 ; FW_input = 0.0
