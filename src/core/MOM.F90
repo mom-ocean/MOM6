@@ -1080,9 +1080,9 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
     if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre-advection T", G%HI, haloshift=1)
     if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Pre-advection S", G%HI, haloshift=1)
     if (associated(CS%tv%frazil)) call hchksum(CS%tv%frazil, "Pre-advection frazil", G%HI, haloshift=0, &
-                                               scale=G%US%Q_to_J_kg*G%US%R_to_kg_m3*G%US%Z_to_m)
+                                               scale=G%US%Q_to_J_kg*G%US%RZ_to_kg_m2)
     if (associated(CS%tv%salt_deficit)) call hchksum(CS%tv%salt_deficit, &
-                   "Pre-advection salt deficit", G%HI, haloshift=0, scale=US%R_to_kg_m3*US%Z_to_m)
+                   "Pre-advection salt deficit", G%HI, haloshift=0, scale=US%RZ_to_kg_m2)
   ! call MOM_thermo_chksum("Pre-advection ", CS%tv, G, US)
     call cpu_clock_end(id_clock_other)
   endif
@@ -1271,9 +1271,9 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
       if (associated(tv%T)) call hchksum(tv%T, "Post-diabatic T", G%HI, haloshift=1)
       if (associated(tv%S)) call hchksum(tv%S, "Post-diabatic S", G%HI, haloshift=1)
       if (associated(tv%frazil)) call hchksum(tv%frazil, "Post-diabatic frazil", G%HI, haloshift=0, &
-                                              scale=G%US%Q_to_J_kg*G%US%R_to_kg_m3*G%US%Z_to_m)
+                                              scale=G%US%Q_to_J_kg*G%US%RZ_to_kg_m2)
       if (associated(tv%salt_deficit)) call hchksum(tv%salt_deficit, &
-                               "Post-diabatic salt deficit", G%HI, haloshift=0, scale=US%R_to_kg_m3*US%Z_to_m)
+                               "Post-diabatic salt deficit", G%HI, haloshift=0, scale=US%RZ_to_kg_m2)
     ! call MOM_thermo_chksum("Post-diabatic ", tv, G, US)
       call check_redundant("Post-diabatic ", u, v, G)
     endif
@@ -2775,7 +2775,7 @@ subroutine extract_surface_state(CS, sfc_state)
   enddo ; enddo
 
   if (allocated(sfc_state%frazil) .and. associated(CS%tv%frazil)) then ; do j=js,je ; do i=is,ie
-    sfc_state%frazil(i,j) = US%Q_to_J_kg*US%R_to_kg_m3*US%Z_to_m * CS%tv%frazil(i,j)
+    sfc_state%frazil(i,j) = US%Q_to_J_kg*US%RZ_to_kg_m2 * CS%tv%frazil(i,j)
   enddo ; enddo ; endif
 
   ! copy Hml into sfc_state, so that caps can access it
@@ -2970,19 +2970,19 @@ subroutine extract_surface_state(CS, sfc_state)
     !$OMP parallel do default(shared)
     do j=js,je ; do i=is,ie
       ! Convert from gSalt to kgSalt
-      sfc_state%salt_deficit(i,j) = 0.001 * US%R_to_kg_m3*US%Z_to_m*CS%tv%salt_deficit(i,j)
+      sfc_state%salt_deficit(i,j) = 0.001 * US%RZ_to_kg_m2*CS%tv%salt_deficit(i,j)
     enddo ; enddo
   endif
   if (allocated(sfc_state%TempxPmE) .and. associated(CS%tv%TempxPmE)) then
     !$OMP parallel do default(shared)
     do j=js,je ; do i=is,ie
-      sfc_state%TempxPmE(i,j) = US%R_to_kg_m3*US%Z_to_m*CS%tv%TempxPmE(i,j)
+      sfc_state%TempxPmE(i,j) = US%RZ_to_kg_m2*CS%tv%TempxPmE(i,j)
     enddo ; enddo
   endif
   if (allocated(sfc_state%internal_heat) .and. associated(CS%tv%internal_heat)) then
     !$OMP parallel do default(shared)
     do j=js,je ; do i=is,ie
-      sfc_state%internal_heat(i,j) = US%R_to_kg_m3*US%Z_to_m*CS%tv%internal_heat(i,j)
+      sfc_state%internal_heat(i,j) = US%RZ_to_kg_m2*CS%tv%internal_heat(i,j)
     enddo ; enddo
   endif
   if (allocated(sfc_state%taux_shelf) .and. associated(CS%visc%taux_shelf)) then

@@ -2141,8 +2141,8 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS)
   CS%id_Kd = register_diag_field('ocean_model', 'Kd_effective', diag%axesTL, Time, &
       'Diapycnal diffusivity as applied', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
   CS%id_diff_work = register_diag_field('ocean_model', 'diff_work', diag%axesTi, Time, &
-      'Work actually done by diapycnal diffusion across each interface', 'W m-2', &
-      conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+      'Work actually done by diapycnal diffusion across each interface', &
+      'W m-2', conversion=US%RZ3_T3_to_W_m2)
 
 end subroutine entrain_diffusive_init
 

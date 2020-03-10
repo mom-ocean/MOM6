@@ -33,6 +33,11 @@ type, public :: unit_scale_type
   real :: m2_s_to_Z2_T !< Convert vertical diffusivities from m2 s-1 to Z2 T-1.
   real :: W_m2_to_QRZ_T !< Convert heat fluxes from W m-2 to Q R Z T-1.
   real :: QRZ_T_to_W_m2 !< Convert heat fluxes from Q R Z T-1 to W m-2.
+  ! Not used enough:  real :: kg_m2_to_RZ   !< Convert mass loads from kg m-2 to R Z.
+  real :: RZ_to_kg_m2   !< Convert mass loads from R Z to kg m-2.
+  real :: kg_m2s_to_RZ_T  !< Convert mass fluxes from kg m-2 s-1 to R Z T-1.
+  real :: RZ_T_to_kg_m2s  !< Convert mass fluxes from R Z T-1 to kg m-2 s-1.
+  real :: RZ3_T3_to_W_m2  !< Convert turbulent kinetic energy fluxes from R Z3 T-3 to W m-2.
 
   ! These are used for changing scaling across restarts.
   real :: m_to_Z_restart = 0.0 !< A copy of the m_to_Z that is used in restart files.
@@ -130,6 +135,11 @@ subroutine unit_scaling_init( param_file, US )
   ! It does not look like US%m_s2_to_L_T2 would be used, so it does not exist.
   US%Z2_T_to_m2_s = US%Z_to_m**2 * US%s_to_T
   US%m2_s_to_Z2_T = US%m_to_Z**2 * US%T_to_s
+  ! It does not seem like US%kg_m2_to_RZ would be used enough in MOM6 to justify its existence.
+  US%RZ_to_kg_m2  = US%R_to_kg_m3 * US%Z_to_m
+  US%kg_m2s_to_RZ_T = US%kg_m3_to_R * US%m_to_Z * US%T_to_s
+  US%RZ_T_to_kg_m2s = US%R_to_kg_m3 * US%Z_to_m * US%s_to_T
+  US%RZ3_T3_to_W_m2 = US%R_to_kg_m3 * US%Z_to_m**3 * US%s_to_T**3
   US%W_m2_to_QRZ_T = US%J_kg_to_Q * US%kg_m3_to_R * US%m_to_Z * US%T_to_s
   US%QRZ_T_to_W_m2 = US%Q_to_J_kg * US%R_to_kg_m3 * US%Z_to_m * US%s_to_T
 

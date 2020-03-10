@@ -3730,7 +3730,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                   net_H_int = sum( h(i,j+jshift,:) )
                   scl_fac = net_H_int / net_H_src
                   call remapping_core_h(OBC%remap_CS, &
-                       segment%field(m)%nk_src,segment%field(m)%dz_src(i,J,:), &
+                       segment%field(m)%nk_src, scl_fac*segment%field(m)%dz_src(i,J,:), &
                        segment%field(m)%buffer_src(i,J,:), &
                        G%ke, h(i,j+jshift,:), segment%field(m)%buffer_dst(i,J,:))
                 endif
