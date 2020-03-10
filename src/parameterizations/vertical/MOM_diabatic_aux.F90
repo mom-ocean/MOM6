@@ -92,7 +92,7 @@ end type diabatic_aux_CS
 
 !>@{ CPU time clock IDs
 integer :: id_clock_uv_at_h, id_clock_frazil
-!!@}
+!>@}
 
 contains
 

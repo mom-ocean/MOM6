@@ -68,14 +68,14 @@ type, public :: regularize_layers_CS ; private
   integer :: id_def_rat_v_2 = -1, id_def_rat_v_2b = -1
   integer :: id_def_rat_u_3 = -1, id_def_rat_u_3b = -1
   integer :: id_def_rat_v_3 = -1, id_def_rat_v_3b = -1
-  !!@}
+  !>@}
 #endif
 end type regularize_layers_CS
 
 !>@{ Clock IDs
 !! \todo Should these be global?
 integer :: id_clock_pass, id_clock_EOS
-!!@}
+!>@}
 
 contains
 

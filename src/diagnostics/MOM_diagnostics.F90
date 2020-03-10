@@ -134,7 +134,8 @@ type, public :: diagnostics_CS ; private
   integer :: id_pbo            = -1
   integer :: id_thkcello       = -1, id_rhoinsitu      = -1
   integer :: id_rhopot0        = -1, id_rhopot2        = -1
-  integer :: id_h_pre_sync     = -1   !!@}
+  integer :: id_h_pre_sync     = -1
+  !>@}
   !> The control structure for calculating wave speed.
   type(wave_speed_CS), pointer :: wave_speed_CSp => NULL()
 
@@ -168,7 +169,7 @@ type, public :: surface_diag_IDs ; private
   integer :: id_salt_deficit = -1
   integer :: id_Heat_PmE     = -1
   integer :: id_intern_heat  = -1
-  !!@}
+  !>@}
 end type surface_diag_IDs
 
 
@@ -177,7 +178,8 @@ type, public :: transport_diag_IDs ; private
   !>@{  Diagnostics for tracer horizontal transport
   integer :: id_uhtr = -1, id_umo = -1, id_umo_2d = -1
   integer :: id_vhtr = -1, id_vmo = -1, id_vmo_2d = -1
-  integer :: id_dynamics_h = -1, id_dynamics_h_tendency = -1   !!@}
+  integer :: id_dynamics_h = -1, id_dynamics_h_tendency = -1
+  !>@}
 end type transport_diag_IDs
 
 

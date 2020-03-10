@@ -69,7 +69,7 @@ real, parameter :: b0 = 5.790749e8,  b1 = 3.516535e6,  b2 = -4.002714e4  ! b0/b1
 real, parameter :: b3 = 2.084372e2,  b4 = 5.944068e5,  b5 = -9.643486e3
 real, parameter :: c0 = 1.704853e5,  c1 = 7.904722e2,  c2 = -7.984422    ! c0/c1 ~= 216  ; c0/c4 ~= -740
 real, parameter :: c3 = 5.140652e-2, c4 = -2.302158e2, c5 = -3.079464
-!!@}
+!>@}
 
 contains
 

@@ -47,7 +47,7 @@ type, public :: CVMix_shear_cs ! TODO: private
   !>@{ Diagnostic handles
   integer :: id_N2 = -1, id_S2 = -1, id_ri_grad = -1, id_kv = -1, id_kd = -1
   integer :: id_ri_grad_smooth = -1
-  !!@}
+  !>@}
 
 end type CVMix_shear_cs
 

@@ -99,7 +99,7 @@ type, public :: MOM_restart_CS ; private
   type(p2d), pointer :: var_ptr2d(:) => NULL()
   type(p3d), pointer :: var_ptr3d(:) => NULL()
   type(p4d), pointer :: var_ptr4d(:) => NULL()
-  !!@}
+  !>@}
   integer :: max_fields !< The maximum number of restart fields
 end type MOM_restart_CS
 

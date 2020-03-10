@@ -140,7 +140,7 @@ type, public :: KPP_CS ; private
   integer :: id_EnhW     = -1
   integer :: id_La_SL    = -1
   integer :: id_OBLdepth_original = -1
-  !!@}
+  !>@}
 
   ! Diagnostics arrays
   real, allocatable, dimension(:,:)   :: OBLdepth  !< Depth (positive) of OBL [m]

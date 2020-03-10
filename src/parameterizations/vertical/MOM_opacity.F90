@@ -70,12 +70,12 @@ type, public :: opacity_CS ; private
   !>@{ Diagnostic IDs
   integer :: id_sw_pen = -1, id_sw_vis_pen = -1
   integer, pointer :: id_opacity(:) => NULL()
-  !!@}
+  !>@}
 end type opacity_CS
 
 !>@{ Coded integers to specify the opacity scheme
 integer, parameter :: NO_SCHEME = 0, MANIZZA_05 = 1, MOREL_88 = 2, SINGLE_EXP = 3, DOUBLE_EXP = 4
-!!@}
+!>@}
 
 character*(10), parameter :: MANIZZA_05_STRING = "MANIZZA_05" !< String to specify the opacity scheme
 character*(10), parameter :: MOREL_88_STRING   = "MOREL_88"   !< String to specify the opacity scheme

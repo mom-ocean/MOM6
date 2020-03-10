@@ -134,7 +134,7 @@ type, public :: int_tide_CS ; private
   integer, allocatable, dimension(:,:) :: &
              id_En_ang_mode, &
              id_itidal_loss_ang_mode
-  !!@}
+  !>@}
 
 end type int_tide_CS
 
@@ -142,7 +142,7 @@ end type int_tide_CS
 type :: loop_bounds_type ; private
   !>@{ The active loop bounds
   integer :: ish, ieh, jsh, jeh
-  !!@}
+  !>@}
 end type loop_bounds_type
 
 contains

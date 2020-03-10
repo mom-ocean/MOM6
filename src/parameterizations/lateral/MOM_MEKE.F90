@@ -87,7 +87,7 @@ type, public :: MEKE_CS ; private
   integer :: id_KhMEKE_u = -1, id_KhMEKE_v = -1, id_Ku = -1, id_Au = -1
   integer :: id_Le = -1, id_gamma_b = -1, id_gamma_t = -1
   integer :: id_Lrhines = -1, id_Leady = -1
-  !!@}
+  !>@}
 
   ! Infrastructure
   integer :: id_clock_pass !< Clock for group pass calls
