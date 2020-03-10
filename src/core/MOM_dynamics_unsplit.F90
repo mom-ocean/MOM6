@@ -308,8 +308,9 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   if (dyn_p_surf) then ; do j=js-2,je+2 ; do i=is-2,ie+2
     p_surf(i,j) = 0.75*p_surf_begin(i,j) + 0.25*p_surf_end(i,j)
   enddo ; enddo ; endif
-  call PressureForce(h_av, tv, CS%PFu, CS%PFv, G, GV, US, &
-                     CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
+! GMM, turn off pressure force
+!  call PressureForce(h_av, tv, CS%PFu, CS%PFv, G, GV, US, &
+!                     CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
   call cpu_clock_end(id_clock_pres)
 
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
@@ -377,8 +378,9 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   if (dyn_p_surf) then ; do j=js-2,je+2 ; do i=is-2,ie+2
     p_surf(i,j) = 0.25*p_surf_begin(i,j) + 0.75*p_surf_end(i,j)
   enddo ; enddo ; endif
-  call PressureForce(h_av, tv, CS%PFu, CS%PFv, G, GV, US, &
-                     CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
+! GMM, turn off pressure force
+!  call PressureForce(h_av, tv, CS%PFu, CS%PFv, G, GV, US, &
+!                     CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
   call cpu_clock_end(id_clock_pres)
 
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
@@ -456,8 +458,9 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 
 ! PFu = d/dx M(h_av,T,S)
   call cpu_clock_begin(id_clock_pres)
-  call PressureForce(h_av, tv, CS%PFu, CS%PFv, G, GV, US, &
-                     CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
+! GMM, turn off pressure force
+!  call PressureForce(h_av, tv, CS%PFu, CS%PFv, G, GV, US, &
+!                     CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
   call cpu_clock_end(id_clock_pres)
 
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
