@@ -454,7 +454,9 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L
   real                :: phi_L_avg, phi_R_avg !< Bulk, thickness-weighted tracer averages (left and right column)
                                               !!                                                   [conc m^-3 ]
   real    :: htot    !< Total column thickness [m]
-  integer :: k, k_bot_min, k_top_max   !< k-indices, min and max for top and bottom, respectively
+  integer :: k, k_bot_min, k_top_max   !< k-indices, min and max for bottom and top, respectively
+  integer :: k_bot_max, k_top_min      !< k-indices, max and min for bottom and top, respectively
+  integer :: k_bot_diff, k_top_diff    !< different between left and right k-indices for bottom and top, respectively
   integer :: k_top_L, k_bot_L          !< k-indices left
   integer :: k_top_R, k_bot_R          !< k-indices right
   real    :: zeta_top_L, zeta_top_R    !< distance from the top of a layer to the boundary
@@ -462,8 +464,9 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L
   real    :: zeta_bot_L, zeta_bot_R    !< distance from the bottom of a layer to the boundary
                                        !!layer depth                                      [nondim]
   real    :: h_work_L, h_work_R  !< dummy variables
-  real    :: hbl_min             !< minimum BLD (left and right)                                   [m]
-
+  real    :: hbl_min             !< minimum BLD (left and right)                          [m]
+  real    :: wgt                 !< weight to be used in the linear transition to the interior [nondim]
+  real    :: a                   !< coefficient to be used in the linear transition to the interior [nondim]
   F_layer(:) = 0.0
   if (hbl_L == 0. .or. hbl_R == 0.) then
     return
@@ -475,6 +478,9 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L
 
   if (boundary == SURFACE) then
     k_bot_min = MIN(k_bot_L, k_bot_R)
+    k_bot_max = MAX(k_bot_L, k_bot_R)
+    k_bot_diff = (k_bot_max - k_bot_min)
+
     ! make sure left and right k indices span same range
     if (k_bot_min .ne. k_bot_L) then
       k_bot_L = k_bot_min
@@ -493,12 +499,21 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L
     heff = harmonic_mean(h_work_L, h_work_R)
     ! tracer flux where the minimum BLD intersets layer
     ! GMM, khtr_avg should be computed once khtr is 3D
-    F_layer(k_bot_min) = -(heff * khtr_u) * (phi_R_avg - phi_L_avg)
+    !F_layer(k_bot_min) = -(heff * khtr_u) * (phi_R_avg - phi_L_avg)
 
-    do k = k_bot_min-1,1,-1
+    do k = k_bot_min,1,-1
       heff = harmonic_mean(h_L(k), h_R(k))
       F_layer(k) = -(heff * khtr_u) * (phi_R(k) - phi_L(k))
     enddo
+
+    if (k_bot_diff .gt. 1) then
+      a = -1.0/k_bot_diff
+      do k = k_bot_min+1,k_bot_max-1, 1
+        wgt = (a*(k-k_bot_min)) + 1.0
+        heff = harmonic_mean(h_L(k), h_R(k))
+        F_layer(k) = -(heff * khtr_u) * (phi_R(k) - phi_L(k)) * wgt
+      enddo
+    endif
   endif
 
   if (boundary == BOTTOM) then
@@ -570,6 +585,7 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
                                               !!                                                   [conc m^-3 ]
   real    :: htot                             ! Total column thickness [m]
   integer :: k, k_min, k_max                  !< k-indices, min and max for top and bottom, respectively
+  integer :: k_diff                           !< difference between k_max and k_min
   integer :: k_top_L, k_bot_L                 !< k-indices left
   integer :: k_top_R, k_bot_R                 !< k-indices right
   real    :: zeta_top_L, zeta_top_R           !< distance from the top of a layer to the
@@ -580,7 +596,7 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
   real    :: F_max                            !< The maximum amount of flux that can leave a
                                               !! cell  [m^3 conc]
   logical :: limited                          !< True if the flux limiter was applied
-  real    :: hfrac, F_bulk_remain
+  real    :: hfrac, F_bulk_remain, wgt, a
 
   if (hbl_L == 0. .or. hbl_R == 0.) then
     F_bulk = 0.
@@ -609,26 +625,36 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
 
   if (boundary == SURFACE) then
     k_min = MIN(k_bot_L, k_bot_R)
+    k_max = MAX(k_bot_L, k_bot_R)
+    k_diff = (k_max - k_min)
 
-    ! left hand side
-    if (k_bot_L == k_min) then
-      h_work_L = h_L(k_min) * zeta_bot_L
-    else
-      h_work_L = h_L(k_min)
-    endif
+!    ! left hand side
+!    if (k_bot_L == k_min) then
+!      h_work_L = h_L(k_min) * zeta_bot_L
+!    else
+!      h_work_L = h_L(k_min)
+!    endif
+!
+!    ! right hand side
+!    if (k_bot_R == k_min) then
+!      h_work_R = h_R(k_min) * zeta_bot_R
+!    else
+!      h_work_R = h_R(k_min)
+!    endif
 
-    ! right hand side
-    if (k_bot_R == k_min) then
-      h_work_R = h_R(k_min) * zeta_bot_R
-    else
-      h_work_R = h_R(k_min)
-    endif
+!    h_means(k_min) = harmonic_mean(h_work_L,h_work_R)
 
-    h_means(k_min) = harmonic_mean(h_work_L,h_work_R)
-
-    do k=1,k_min-1
+    do k=1,k_min
       h_means(k) = harmonic_mean(h_L(k),h_R(k))
     enddo
+
+    if (k_diff .gt. 1) then
+      a = -1.0/k_diff
+      do k = k_min+1,k_max-1, 1
+        wgt = (a*(k-k_min)) + 1.0
+        h_means(k) = harmonic_mean(h_L(k), h_R(k)) * wgt
+      enddo
+    endif
 
   elseif (boundary == BOTTOM) then
     k_max = MAX(k_top_L, k_top_R)
