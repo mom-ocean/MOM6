@@ -272,7 +272,7 @@ end function
 !! height or layer thicknesses changes. In the case of density-based
 !! coordinates then technically we should also regenerate the
 !! target grid whenever T/S change.
-subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, intensive)
+subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_target)
   type(diag_remap_ctrl), intent(inout)    :: remap_cs !< Diagnostic coordinate control structure
   type(ocean_grid_type),    pointer       :: G  !< The ocean's grid type
   type(verticalGrid_type),  intent(in   ) :: GV !< ocean vertical grid structure
@@ -281,9 +281,7 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, intensi
   real, dimension(:, :, :), intent(in   ) :: T  !< Temperatures used to construct new diagnostic grid
   real, dimension(:, :, :), intent(in   ) :: S  !< Salinity used to construct new diagnostic grid
   type(EOS_type),           pointer    :: eqn_of_state !< A pointer to the equation of state
-  logical,                  intent(in   ) :: intensive !< If true, update the intensive diagnostic array
-
-  real, dimension(:,:,:), pointer :: h_target  !< Where to store the new diagnostic array
+  real, dimension(:, :, :), intent(inout) :: h_target  !< Where to store the new diagnostic array
 
   ! Local variables
   real, dimension(remap_cs%nz + 1) :: zInterfaces
@@ -312,12 +310,6 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, intensi
     allocate(remap_cs%h(G%isd:G%ied,G%jsd:G%jed, nz))
     allocate(remap_cs%h_extensive(G%isd:G%ied,G%jsd:G%jed, nz))
     remap_cs%initialized = .true.
-  endif
-
-  if (intensive) then
-    h_target => remap_cs%h
-  else
-    h_target => reamp_cs%h_extensive
   endif
 
   ! Calculate remapping thicknesses for different target grids based on

@@ -3250,13 +3250,13 @@ subroutine diag_update_remap_grids(diag_cs, alt_h, alt_T, alt_S, update_intensiv
   if (update_intensive_local) then
     do i=1, diag_cs%num_diag_coords
       call diag_remap_update(diag_cs%diag_remap_cs(i), diag_cs%G, diag_cs%GV, diag_cs%US, h_diag, T_diag, S_diag, &
-                             diag_cs%eqn_of_state, intensive=.true.)
+                             diag_cs%eqn_of_state, diag_cs%diag_remap_cs(i)%h)
     enddo
   endif
   if (update_extensive_local) then
     do i=1, diag_cs%num_diag_coords
       call diag_remap_update(diag_cs%diag_remap_cs(i), diag_cs%G, diag_cs%GV, diag_cs%US, h_diag, T_diag, S_diag, &
-                             diag_cs%eqn_of_state, intensive=.false.)
+                             diag_cs%eqn_of_state, diag_cs%diag_remap_cs(i)%h_extensive)
     enddo
   endif
 
