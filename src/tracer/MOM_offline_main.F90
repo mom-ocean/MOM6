@@ -150,7 +150,7 @@ type, public :: offline_transport_CS ; private
     id_temp_regrid = -1, &
     id_salt_regrid = -1, &
     id_h_regrid = -1
-  !!@}
+  !>@}
 
   ! IDs for timings of various offline components
   integer :: id_clock_read_fields = -1   !< A CPU time clock

@@ -327,7 +327,7 @@ type, public :: forcing_diags
   ! Iceberg + Ice shelf diagnostic handles
   integer :: id_ustar_ice_cover = -1
   integer :: id_frac_ice_cover = -1
-  !!@}
+  !>@}
 
   integer :: id_clock_forcing = -1 !< CPU clock id
 

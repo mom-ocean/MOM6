@@ -38,7 +38,7 @@ type, public :: CVMix_conv_cs
   type(diag_ctrl), pointer :: diag => NULL() !< Pointer to diagnostics control structure
   !>@{ Diagnostics handles
   integer :: id_N2 = -1, id_kd_conv = -1, id_kv_conv = -1
-  !!@}
+  !>@}
 
   ! Diagnostics arrays
   real, allocatable, dimension(:,:,:) :: N2      !< Squared Brunt-Vaisala frequency [s-2]

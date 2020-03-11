@@ -29,7 +29,7 @@ logical, parameter :: unused_params_fatal_default = .false.
 logical, parameter :: log_to_stdout_default = .false.
 logical, parameter :: complete_doc_default = .true.
 logical, parameter :: minimal_doc_default = .true.
-!!@}
+!>@}
 
 !> The valid lines extracted from an input parameter file without comments
 type, private :: file_data_type ; private

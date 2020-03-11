@@ -183,7 +183,7 @@ type, public :: hor_visc_CS ; private
   integer :: id_vort_xy_q = -1, id_div_xx_h      = -1
   integer :: id_FrictWork = -1, id_FrictWorkIntz = -1
   integer :: id_FrictWork_GME = -1
-  !!@}
+  !>@}
 
 
 end type hor_visc_CS

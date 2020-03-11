@@ -207,7 +207,7 @@ type, public :: surface_forcing_CS ; private
   type(Neverland_surface_forcing_CS), pointer :: Neverland_forcing_CSp => NULL()
   type(idealized_hurricane_CS), pointer :: idealized_hurricane_CSp => NULL()
   type(SCM_CVmix_tests_CS),      pointer :: SCM_CVmix_tests_CSp => NULL()
-  !!@}
+  !>@}
 
 end type surface_forcing_CS
 

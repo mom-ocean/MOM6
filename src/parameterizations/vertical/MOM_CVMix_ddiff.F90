@@ -44,7 +44,7 @@ type, public :: CVMix_ddiff_cs
   type(diag_ctrl), pointer :: diag => NULL() !< Pointer to diagnostics control structure
   !>@{ Diagnostics handles
   integer :: id_KT_extra = -1, id_KS_extra = -1, id_R_rho = -1
-  !!@}
+  !>@}
 
   ! Diagnostics arrays
 !  real, allocatable, dimension(:,:,:) :: KT_extra  !< Double diffusion diffusivity for temp [Z2 s-1 ~> m2 s-1]

@@ -94,7 +94,7 @@ type, public :: Kappa_shear_CS ; private
                              !! regulate the timing of diagnostic output.
   !>@{ Diagnostic IDs
   integer :: id_Kd_shear = -1, id_TKE = -1, id_ILd2 = -1, id_dz_Int = -1
-  !!@}
+  !>@}
 end type Kappa_shear_CS
 
 ! integer :: id_clock_project, id_clock_KQ, id_clock_avg, id_clock_setup

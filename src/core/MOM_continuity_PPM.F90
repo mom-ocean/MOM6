@@ -22,7 +22,7 @@ public continuity_PPM, continuity_PPM_init, continuity_PPM_end, continuity_PPM_s
 
 !>@{ CPU time clock IDs
 integer :: id_clock_update, id_clock_correct
-!!@}
+!>@}
 
 !> Control structure for mom_continuity_ppm
 type, public :: continuity_PPM_CS ; private
@@ -66,7 +66,7 @@ end type continuity_PPM_CS
 type :: loop_bounds_type ; private
   !>@{ Loop bounds
   integer :: ish, ieh, jsh, jeh
-  !!@}
+  !>@}
 end type loop_bounds_type
 
 contains

@@ -46,7 +46,7 @@ type, public :: PressureForce_Mont_CS ; private
                             !! deriving from density gradients within layers [L T-2 ~> m s-2].
   !>@{ Diagnostic IDs
   integer :: id_PFu_bc = -1, id_PFv_bc = -1, id_e_tidal = -1
-  !!@}
+  !>@}
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL() !< The tidal forcing control structure
 end type PressureForce_Mont_CS
 

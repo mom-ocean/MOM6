@@ -151,7 +151,7 @@ type, public :: ice_shelf_dyn_CS ; private
   integer :: id_u_shelf = -1, id_v_shelf = -1, id_t_shelf = -1, &
              id_float_frac = -1, id_col_thick = -1, id_OD_av = -1, &
              id_u_mask = -1, id_v_mask = -1, id_t_mask = -1
-  !!@}
+  !>@}
   ! ids for outputting intermediate thickness in advection subroutine (debugging)
   !integer :: id_h_after_uflux = -1, id_h_after_vflux = -1, id_h_after_adv = -1
 

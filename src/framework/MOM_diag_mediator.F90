@@ -216,7 +216,7 @@ type diagcs_dsamp
   type(axes_grp)  :: axesB1, axesT1, axesCu1, axesCv1
   type(axes_grp), dimension(:), allocatable :: remap_axesTL, remap_axesBL, remap_axesCuL, remap_axesCvL
   type(axes_grp), dimension(:), allocatable :: remap_axesTi, remap_axesBi, remap_axesCui, remap_axesCvi
-  !!@}
+  !>@}
 
   real, dimension(:,:),   pointer :: mask2dT   => null() !< 2D mask array for cell-center points
   real, dimension(:,:),   pointer :: mask2dBu  => null() !< 2D mask array for cell-corner points
@@ -231,7 +231,7 @@ type diagcs_dsamp
   real, dimension(:,:,:), pointer :: mask3dBi  => null()
   real, dimension(:,:,:), pointer :: mask3dCui => null()
   real, dimension(:,:,:), pointer :: mask3dCvi => null()
-  !!@}
+  !>@}
 end type diagcs_dsamp
 
 !> The following data type a list of diagnostic fields an their variants,
@@ -264,7 +264,7 @@ type, public :: diag_ctrl
   type(axes_grp) :: axesBL, axesTL, axesCuL, axesCvL
   type(axes_grp) :: axesBi, axesTi, axesCui, axesCvi
   type(axes_grp) :: axesB1, axesT1, axesCu1, axesCv1
-  !!@}
+  !>@}
   type(axes_grp) :: axesZi !< A 1-D z-space axis at interfaces
   type(axes_grp) :: axesZL !< A 1-D z-space axis at layer centers
   type(axes_grp) :: axesNull !< An axis group for scalars
@@ -285,7 +285,7 @@ type, public :: diag_ctrl
 
   type(diagcs_dsamp), dimension(2:MAX_DSAMP_LEV) :: dsamp !< Downsample control container
 
-  !!@}
+  !>@}
 
 ! Space for diagnostics is dynamically allocated as it is needed.
 ! The chunk size is how much the array should grow on each new allocation.
@@ -306,10 +306,10 @@ type, public :: diag_ctrl
   type(axes_grp), dimension(:), allocatable :: &
     remap_axesZL, &  !< The 1-D z-space cell-centered axis for remapping
     remap_axesZi     !< The 1-D z-space interface axis for remapping
-  !!@{
+  !>@{ Axes used for remapping
   type(axes_grp), dimension(:), allocatable :: remap_axesTL, remap_axesBL, remap_axesCuL, remap_axesCvL
   type(axes_grp), dimension(:), allocatable :: remap_axesTi, remap_axesBi, remap_axesCui, remap_axesCvi
-  !!@}
+  !>@}
 
   ! Pointer to H, G and T&S needed for remapping
   real, dimension(:,:,:), pointer :: h => null() !< The thicknesses needed for remapping
@@ -334,8 +334,9 @@ type, public :: diag_ctrl
 
 end type diag_ctrl
 
-! CPU clocks
+!>@{ CPU clocks
 integer :: id_clock_diag_mediator, id_clock_diag_remap, id_clock_diag_grid_updates
+!>@}
 
 contains
 
