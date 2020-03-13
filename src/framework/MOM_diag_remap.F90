@@ -317,7 +317,7 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, intensi
   if (intensive) then
     h_target => remap_cs%h
   else
-    h_target => reamp_cs%h_extensive
+    h_target => remap_cs%h_extensive
   endif
 
   ! Calculate remapping thicknesses for different target grids based on
@@ -495,11 +495,12 @@ subroutine diag_remap_calc_hmask(remap_cs, G, mask)
 end subroutine diag_remap_calc_hmask
 
 !> Vertically re-grid an already vertically-integrated diagnostic field to alternative vertical grid.
-subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, staggered_in_y, &
+subroutine vertically_reintegrate_diag_field(remap_cs, G, h, h_dest, staggered_in_x, staggered_in_y, &
                                              mask, missing_value, field, reintegrated_field)
   type(diag_remap_ctrl),  intent(in) :: remap_cs !< Diagnostic coodinate control structure
   type(ocean_grid_type),  intent(in) :: G !< Ocean grid structure
-  real, dimension(:,:,:), intent(in) :: h   !< The current thicknesses
+  real, dimension(:,:,:), intent(in) :: h      !< The thicknesses of the source grid
+  real, dimension(:,:,:), intent(in) :: h_target !< The thicknesses of the target grid
   logical,                intent(in) :: staggered_in_x !< True is the x-axis location is at u or q points
   logical,                intent(in) :: staggered_in_y !< True is the y-axis location is at v or q points
   real, dimension(:,:,:), pointer    :: mask !< A mask for the field
@@ -536,7 +537,7 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
           if (mask(I,j,1) == 0.) cycle
         endif
         h_src(:) = 0.5 * (h(i_lo,j,:) + h(i_hi,j,:))
-        h_dest(:) = 0.5 * (remap_cs%h(i_lo,j,:) + remap_cs%h(i_hi,j,:))
+        h_dest(:) = 0.5 * (h_target(i_lo,j,:) + h_target(i_hi,j,:))
         call reintegrate_column(nz_src, h_src, field(I1,j,:), &
                                 nz_dest, h_dest, 0., reintegrated_field(I1,j,:))
       enddo
@@ -551,7 +552,7 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
           if (mask(i,J,1) == 0.) cycle
         endif
         h_src(:) = 0.5 * (h(i,j_lo,:) + h(i,j_hi,:))
-        h_dest(:) = 0.5 * (remap_cs%h(i,j_lo,:) + remap_cs%h(i,j_hi,:))
+        h_dest(:) = 0.5 * (h_target(i,j_lo,:) + h_target(i,j_hi,:))
         call reintegrate_column(nz_src, h_src, field(i,J1,:), &
                                 nz_dest, h_dest, 0., reintegrated_field(i,J1,:))
       enddo
@@ -564,7 +565,7 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
           if (mask(i,j,1) == 0.) cycle
         endif
         h_src(:) = h(i,j,:)
-        h_dest(:) = remap_cs%h(i,j,:)
+        h_dest(:) = h_target(i,j,:)
         call reintegrate_column(nz_src, h_src, field(i,j,:), &
                                 nz_dest, h_dest, 0., reintegrated_field(i,j,:))
       enddo
