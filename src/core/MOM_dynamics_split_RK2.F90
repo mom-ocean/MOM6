@@ -163,7 +163,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   ! Split scheme only.
   integer :: id_uav        = -1, id_vav        = -1
   integer :: id_u_BT_accel = -1, id_v_BT_accel = -1
-  !!@}
+  !>@}
 
   type(diag_ctrl), pointer       :: diag !< A structure that is used to regulate the
                                          !! timing of diagnostic output.
@@ -227,7 +227,7 @@ integer :: id_clock_horvisc, id_clock_mom_update
 integer :: id_clock_continuity, id_clock_thick_diff
 integer :: id_clock_btstep, id_clock_btcalc, id_clock_btforce
 integer :: id_clock_pass, id_clock_pass_init
-!!@}
+!>@}
 
 contains
 

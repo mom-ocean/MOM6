@@ -190,7 +190,7 @@ type, public :: energetic_PBL_CS ; private
   integer :: id_TKE_mech_decay = -1, id_TKE_conv_decay = -1
   integer :: id_Mixing_Length = -1, id_Velocity_Scale = -1
   integer :: id_MSTAR_mix = -1, id_LA_mod = -1, id_LA = -1, id_MSTAR_LT = -1
-  !!@}
+  !>@}
 end type energetic_PBL_CS
 
 !>@{ Enumeration values for mstar_Scheme
@@ -215,14 +215,14 @@ character*(20), parameter :: ROOT_TKE_STRING = "CUBE_ROOT_TKE"
 character*(20), parameter :: NONE_STRING = "NONE"
 character*(20), parameter :: RESCALED_STRING = "RESCALE"
 character*(20), parameter :: ADDITIVE_STRING = "ADDITIVE"
-!!@}
+!>@}
 
 !> A type for conveniently passing around ePBL diagnostics for a column.
 type, public :: ePBL_column_diags ; private
   !>@{ Local column copies of energy change diagnostics, all in [R Z3 T-3 ~> W m-2].
   real :: dTKE_conv, dTKE_forcing, dTKE_wind, dTKE_mixing
   real :: dTKE_MKE, dTKE_mech_decay, dTKE_conv_decay
-  !!@}
+  !>@}
   real :: LA        !< The value of the Langmuir number [nondim]
   real :: LAmod     !< The modified Langmuir number by convection [nondim]
   real :: mstar     !< The value of mstar used in ePBL [nondim]

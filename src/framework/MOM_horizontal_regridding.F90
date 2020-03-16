@@ -60,10 +60,10 @@ contains
 subroutine myStats(array, missing, is, ie, js, je, k, mesg)
   real, dimension(:,:), intent(in) :: array !< input array (ND)
   real, intent(in) :: missing !< missing value (ND)
-  !!@{
-  !> Horizontal loop bounds to calculate statistics for
-  integer :: is,ie,js,je
-  !!@}
+  integer :: is   !< Start index in i
+  integer :: ie   !< End index in i
+  integer :: js   !< Start index in j
+  integer :: je   !< End index in j
   integer :: k !< Level to calculate statistics for
   character(len=*) :: mesg !< Label to use in message
   ! Local variables

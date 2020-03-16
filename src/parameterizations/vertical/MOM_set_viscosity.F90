@@ -102,7 +102,7 @@ type, public :: set_visc_CS ; private
   integer :: id_bbl_thick_v = -1, id_kv_bbl_v = -1, id_bbl_v = -1
   integer :: id_Ray_u = -1, id_Ray_v = -1
   integer :: id_nkml_visc_u = -1, id_nkml_visc_v = -1
-  !!@}
+  !>@}
 end type set_visc_CS
 
 contains

@@ -56,7 +56,7 @@ type, public :: int_tide_input_CS ; private
 
   !>@{ Diagnostic IDs
   integer :: id_TKE_itidal = -1, id_Nb = -1, id_N2_bot = -1
-  !!@}
+  !>@}
 end type int_tide_input_CS
 
 !> This type is used to exchange fields related to the internal tides.

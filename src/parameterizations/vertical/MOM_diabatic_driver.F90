@@ -203,7 +203,7 @@ type, public:: diabatic_CS; private
   integer :: id_frazil_temp_tend    = -1
   integer :: id_frazil_heat_tend    = -1
   integer :: id_frazil_heat_tend_2d = -1
-  !!@}
+  !>@}
 
   logical :: diabatic_diff_tendency_diag = .false. !< If true calculate diffusive tendency diagnostics
   logical :: boundary_forcing_tendency_diag = .false. !< If true calculate frazil diagnostics
@@ -244,11 +244,12 @@ type, public:: diabatic_CS; private
   type(time_type), pointer :: Time !< Pointer to model time (needed for sponges)
 end type diabatic_CS
 
-! clock ids
+!>@{ clock ids
 integer :: id_clock_entrain, id_clock_mixedlayer, id_clock_set_diffusivity
 integer :: id_clock_tracers, id_clock_tridiag, id_clock_pass, id_clock_sponge
 integer :: id_clock_geothermal, id_clock_differential_diff, id_clock_remap
 integer :: id_clock_kpp
+!>@}
 
 contains
 

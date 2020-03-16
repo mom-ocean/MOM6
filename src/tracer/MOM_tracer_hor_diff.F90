@@ -71,7 +71,7 @@ type, public :: tracer_hor_diff_CS ; private
   integer :: id_CFL     = -1
   integer :: id_khdt_x  = -1
   integer :: id_khdt_y  = -1
-  !!@}
+  !>@}
 
   type(group_pass_type) :: pass_t !< For group halo pass, used in both
                                   !! tracer_hordiff and tracer_epipycnal_ML_diff
@@ -88,7 +88,7 @@ end type p2di
 
 !>@{ CPU time clocks
 integer :: id_clock_diffuse, id_clock_epimix, id_clock_pass, id_clock_sync
-!!@}
+!>@}
 
 contains
 

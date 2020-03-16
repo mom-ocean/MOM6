@@ -102,7 +102,7 @@ type, public :: tracer_flow_control_CS ; private
   type(pseudo_salt_tracer_CS), pointer :: pseudo_salt_tracer_CSp => NULL()
   type(boundary_impulse_tracer_CS), pointer :: boundary_impulse_tracer_CSp => NULL()
   type(dyed_obc_tracer_CS), pointer :: dyed_obc_tracer_CSp => NULL()
-  !!@}
+  !>@}
 end type tracer_flow_control_CS
 
 contains

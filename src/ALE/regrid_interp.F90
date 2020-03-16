@@ -54,7 +54,7 @@ integer, parameter :: INTERPOLATION_PQM_IH6IH5 = 9 !< O(h^5)
 !>@{ Interpolant degrees
 integer, parameter :: DEGREE_1 = 1, DEGREE_2 = 2, DEGREE_3 = 3, DEGREE_4 = 4
 integer, public, parameter :: DEGREE_MAX = 5
-!!@}
+!>@}
 
 !> When the N-R algorithm produces an estimate that lies outside [0,1], the
 !! estimate is set to be equal to the boundary location, 0 or 1, plus or minus

@@ -130,7 +130,7 @@ type, public :: MOM_dyn_unsplit_RK2_CS ; private
   !>@{ Diagnostic IDs
   integer :: id_uh = -1, id_vh = -1
   integer :: id_PFu = -1, id_PFv = -1, id_CAu = -1, id_CAv = -1
-  !!@}
+  !>@}
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                    !! regulate the timing of diagnostic output.
@@ -178,7 +178,7 @@ public initialize_dyn_unsplit_RK2, end_dyn_unsplit_RK2
 integer :: id_clock_Cor, id_clock_pres, id_clock_vertvisc
 integer :: id_clock_horvisc, id_clock_continuity, id_clock_mom_update
 integer :: id_clock_pass, id_clock_pass_init
-!!@}
+!>@}
 
 contains
 

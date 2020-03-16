@@ -164,7 +164,7 @@ type, public :: set_diffusivity_CS ; private
   integer :: id_maxTKE     = -1, id_TKE_to_Kd   = -1, id_Kd_user    = -1
   integer :: id_Kd_layer   = -1, id_Kd_BBL      = -1, id_N2         = -1
   integer :: id_Kd_Work    = -1, id_KT_extra    = -1, id_KS_extra   = -1
-  !!@}
+  !>@}
 
 end type set_diffusivity_CS
 
@@ -187,7 +187,7 @@ end type diffusivity_diags
 
 !>@{ CPU time clocks
 integer :: id_clock_kappaShear, id_clock_CVMix_ddiff
-!!@}
+!>@}
 
 contains
 

@@ -143,7 +143,8 @@ implicit none ; private
 !> A structure with diagnostic IDs of the state variables
 type MOM_diag_IDs
   !>@{ 3-d state field diagnostic IDs
-  integer :: id_u  = -1, id_v  = -1, id_h  = -1  !!@}
+  integer :: id_u  = -1, id_v  = -1, id_h  = -1
+  !>@}
   !> 2-d state field diagnotic ID
   integer :: id_ssh_inst = -1
 end type MOM_diag_IDs
@@ -389,7 +390,7 @@ integer :: id_clock_pass_init  ! also in dynamics d/r
 integer :: id_clock_ALE
 integer :: id_clock_other
 integer :: id_clock_offline_tracer
-!!@}
+!>@}
 
 contains
 

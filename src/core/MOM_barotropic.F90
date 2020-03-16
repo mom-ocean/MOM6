@@ -86,7 +86,7 @@ type, private :: BT_OBC_type
   !>@{ Index ranges for the open boundary conditions
   integer :: is_u_obc, ie_u_obc, js_u_obc, je_u_obc
   integer :: is_v_obc, ie_v_obc, js_v_obc, je_v_obc
-  !!@}
+  !>@}
   logical :: is_alloced = .false. !< True if BT_OBC is in use and has been allocated
 
   type(group_pass_type) :: pass_uv   !< Structure for group halo pass
@@ -273,10 +273,10 @@ type, public :: barotropic_CS ; private
   type(time_type), pointer :: Time  => NULL() !< A pointer to the ocean models clock.
   type(diag_ctrl), pointer :: diag => NULL()  !< A structure that is used to regulate
                              !! the timing of diagnostic output.
-  type(MOM_domain_type), pointer :: BT_Domain => NULL()
+  type(MOM_domain_type), pointer :: BT_Domain => NULL()  !< Barotropic MOM domain
   type(hor_index_type), pointer :: debug_BT_HI => NULL() !< debugging copy of horizontal index_type
-  type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
-  logical :: module_is_initialized = .false.
+  type(tidal_forcing_CS), pointer :: tides_CSp => NULL() !< Control structure for tides
+  logical :: module_is_initialized = .false.  !< If true, module has been initialized
 
   integer :: isdw !< The lower i-memory limit for the wide halo arrays.
   integer :: iedw !< The upper i-memory limit for the wide halo arrays.
@@ -312,7 +312,7 @@ type, public :: barotropic_CS ; private
   integer :: id_BTC_FA_v_NN = -1, id_BTC_FA_v_N0 = -1, id_BTC_FA_v_S0 = -1, id_BTC_FA_v_SS = -1
   integer :: id_BTC_vbt_NN = -1, id_BTC_vbt_SS = -1
   integer :: id_uhbt0 = -1, id_vhbt0 = -1
-  !!@}
+  !>@}
 
 end type barotropic_CS
 
@@ -360,14 +360,14 @@ end type local_BT_cont_v_type
 type, private :: memory_size_type
   !>@{ Currently active memory limits
   integer :: isdw, iedw, jsdw, jedw ! The memory limits of the wide halo arrays.
-  !!@}
+  !>@}
 end type memory_size_type
 
 !>@{ CPU time clock IDs
 integer :: id_clock_sync=-1, id_clock_calc=-1
 integer :: id_clock_calc_pre=-1, id_clock_calc_post=-1
 integer :: id_clock_pass_step=-1, id_clock_pass_pre=-1, id_clock_pass_post=-1
-!!@}
+!>@}
 
 !>@{ Enumeration values for various schemes
 integer, parameter :: HARMONIC        = 1
@@ -379,7 +379,7 @@ character*(20), parameter :: HYBRID_STRING = "HYBRID"
 character*(20), parameter :: HARMONIC_STRING = "HARMONIC"
 character*(20), parameter :: ARITHMETIC_STRING = "ARITHMETIC"
 character*(20), parameter :: BT_CONT_STRING = "FROM_BT_CONT"
-!!@}
+!>@}
 
 contains
 
