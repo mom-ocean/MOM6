@@ -332,6 +332,8 @@ type, public :: diag_ctrl
   !> Number of checksum-only diagnostics
   integer :: num_chksum_diags
 
+  real, dimension(:,:,:), allocatable :: h_begin
+
 end type diag_ctrl
 
 ! CPU clocks
@@ -1504,6 +1506,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
       allocate(remapped_field(size(field,1), size(field,2), diag%axes%nz))
       call vertically_reintegrate_diag_field(                                    &
         diag_cs%diag_remap_cs(diag%axes%vertical_coordinate_number), diag_cs%G,  &
+        diag_cs%h_extensive,
         diag_cs%diag_remap_cs(diag%axes%vertical_coordinate_number)%h_extensive, &
         staggered_in_x, staggered_in_y, diag%axes%mask3d, diag_cs%missing_value, &
         field, remapped_field)
@@ -3066,6 +3069,7 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
   diag_cs%S => null()
   diag_cs%eqn_of_state => null()
 
+  allocate(diag_cs%h_begin(G%isd:G%ied,G%jsd:G%jed,nz))
 #if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
   allocate(diag_cs%h_old(G%isd:G%ied,G%jsd:G%jed,nz))
   diag_cs%h_old(:,:,:) = 0.0
@@ -3254,6 +3258,7 @@ subroutine diag_update_remap_grids(diag_cs, alt_h, alt_T, alt_S, update_intensiv
     enddo
   endif
   if (update_extensive_local) then
+    CS%h_begin(:,:,:) = CS%h(:,:,:)
     do i=1, diag_cs%num_diag_coords
       call diag_remap_update(diag_cs%diag_remap_cs(i), diag_cs%G, diag_cs%GV, diag_cs%US, h_diag, T_diag, S_diag, &
                              diag_cs%eqn_of_state, diag_cs%diag_remap_cs(i)%h_extensive)
