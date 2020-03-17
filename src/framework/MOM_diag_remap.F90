@@ -341,7 +341,9 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
 !                           US%Z_to_m*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
       call MOM_error(FATAL,"diag_remap_update: HYCOM1 coordinate not coded for diagnostics yet!")
     endif
-    h_target(i,j,:) = zInterfaces(1:nz) - zInterfaces(2:nz+1)
+    do k = 1,nz
+      h_target(i,j,k) = zInterfaces(k) - zInterfaces(k+1)
+    enddo
   enddo ; enddo
 
 end subroutine diag_remap_update
