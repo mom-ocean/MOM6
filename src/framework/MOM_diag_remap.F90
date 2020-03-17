@@ -307,8 +307,6 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
     ! Initialize remapping and regridding on the first call
     call initialize_remapping(remap_cs%remap_cs, 'PPM_IH4', boundary_extrapolation=.false., &
                               answers_2018=remap_cs%answers_2018)
-    allocate(remap_cs%h(G%isd:G%ied,G%jsd:G%jed, nz))
-    allocate(remap_cs%h_extensive(G%isd:G%ied,G%jsd:G%jed, nz))
     remap_cs%initialized = .true.
   endif
 
