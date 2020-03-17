@@ -312,12 +312,6 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
     remap_cs%initialized = .true.
   endif
 
-  if (intensive) then
-    h_target => remap_cs%h
-  else
-    h_target => remap_cs%h_extensive
-  endif
-
   ! Calculate remapping thicknesses for different target grids based on
   ! nominal/target interface locations. This happens for every call on the
   ! assumption that h, T, S has changed.
@@ -493,11 +487,11 @@ subroutine diag_remap_calc_hmask(remap_cs, G, mask)
 end subroutine diag_remap_calc_hmask
 
 !> Vertically re-grid an already vertically-integrated diagnostic field to alternative vertical grid.
-subroutine vertically_reintegrate_diag_field(remap_cs, G, h, h_dest, staggered_in_x, staggered_in_y, &
+subroutine vertically_reintegrate_diag_field(remap_cs, G, h, h_target, staggered_in_x, staggered_in_y, &
                                              mask, missing_value, field, reintegrated_field)
   type(diag_remap_ctrl),  intent(in) :: remap_cs !< Diagnostic coodinate control structure
-  type(ocean_grid_type),  intent(in) :: G !< Ocean grid structure
-  real, dimension(:,:,:), intent(in) :: h      !< The thicknesses of the source grid
+  type(ocean_grid_type),  intent(in) :: G        !< Ocean grid structure
+  real, dimension(:,:,:), intent(in) :: h        !< The thicknesses of the source grid
   real, dimension(:,:,:), intent(in) :: h_target !< The thicknesses of the target grid
   logical,                intent(in) :: staggered_in_x !< True is the x-axis location is at u or q points
   logical,                intent(in) :: staggered_in_y !< True is the y-axis location is at v or q points
