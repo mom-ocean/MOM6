@@ -412,7 +412,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     call barotropic_get_tav(BT, ubtav, vbtav, G, US)
     call pass_vector(ubtav, vbtav, G%Domain)
 
-    do j=js-1,je+1 ; do i=is-1,ie+1
+    do j=js-1,je+2 ; do i=is-1,ie+2
       dudx_bt(i,j) = CS%DY_dxT(i,j)*(G%IdyCu(I,j) * ubtav(I,j) - &
                                      G%IdyCu(I-1,j) * ubtav(I-1,j))
       dvdy_bt(i,j) = CS%DX_dyT(i,j)*(G%IdxCv(i,J) * vbtav(i,J) - &
@@ -430,6 +430,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       dudy_bt(I,J) = CS%DX_dyBu(I,J)*(ubtav(I,j+1)*G%IdxCu(I,j+1) &
                                     - ubtav(I,j)*G%IdxCu(I,j))
     enddo ; enddo
+
+    call pass_vector(dudx_bt, dvdy_bt, G%Domain, stagger=BGRID_NE)
+    call pass_vector(dvdx_bt, dudy_bt, G%Domain, stagger=AGRID)
 
     if (CS%no_slip) then
       do J=js-1,Jeq ; do I=is-1,Ieq
@@ -1061,6 +1064,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
     if (CS%use_GME) then
       call thickness_diffuse_get_KH(TD, KH_u_GME, KH_v_GME, G)
+      call pass_vector(KH_u_GME, KH_v_GME, G%Domain)
 
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         if (grad_vel_mag_bt_h(i,j)>0) then
