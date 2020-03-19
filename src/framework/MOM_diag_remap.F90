@@ -276,14 +276,14 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state)
   type(ocean_grid_type),    pointer    :: G  !< The ocean's grid type
   type(verticalGrid_type),  intent(in) :: GV !< ocean vertical grid structure
   type(unit_scale_type),    intent(in) :: US !< A dimensional unit scaling type
-  real, dimension(:, :, :), intent(in) :: h  !< New thickness
-  real, dimension(:, :, :), intent(in) :: T  !< New T
-  real, dimension(:, :, :), intent(in) :: S  !< New S
+  real, dimension(:, :, :), intent(in) :: h  !< New thickness [H ~> m or kg m-2]
+  real, dimension(:, :, :), intent(in) :: T  !< New temperatures [degC]
+  real, dimension(:, :, :), intent(in) :: S  !< New salinities [ppt]
   type(EOS_type),           pointer    :: eqn_of_state !< A pointer to the equation of state
 
   ! Local variables
-  real, dimension(remap_cs%nz + 1) :: zInterfaces
-  real :: h_neglect, h_neglect_edge
+  real, dimension(remap_cs%nz + 1) :: zInterfaces ! Interface positions [H ~> m or kg m-2]
+  real :: h_neglect, h_neglect_edge ! Negligible thicknesses [H ~> m or kg m-2]
   integer :: i, j, k, nz
 
   ! Note that coordinateMode('LAYER') is never 'configured' so will
@@ -326,16 +326,17 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state)
       call build_sigma_column(get_sigma_CS(remap_cs%regrid_cs), &
                               GV%Z_to_H*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
     elseif (remap_cs%vertical_coord == coordinateMode('RHO')) then
+!### I think that the conversion factor in the 2nd line should be GV%Z_to_H
       call build_rho_column(get_rho_CS(remap_cs%regrid_cs), G%ke, &
                             US%Z_to_m*G%bathyT(i,j), h(i,j,:), T(i,j,:), S(i,j,:), &
                             eqn_of_state, zInterfaces, h_neglect, h_neglect_edge)
     elseif (remap_cs%vertical_coord == coordinateMode('SLIGHT')) then
 !     call build_slight_column(remap_cs%regrid_cs,remap_cs%remap_cs, nz, &
-!                           US%Z_to_m*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
+!                           GV%Z_to_H*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
       call MOM_error(FATAL,"diag_remap_update: SLIGHT coordinate not coded for diagnostics yet!")
     elseif (remap_cs%vertical_coord == coordinateMode('HYCOM1')) then
 !     call build_hycom1_column(remap_cs%regrid_cs, nz, &
-!                           US%Z_to_m*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
+!                           GV%Z_to_H*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
       call MOM_error(FATAL,"diag_remap_update: HYCOM1 coordinate not coded for diagnostics yet!")
     endif
     remap_cs%h(i,j,:) = zInterfaces(1:nz) - zInterfaces(2:nz+1)
