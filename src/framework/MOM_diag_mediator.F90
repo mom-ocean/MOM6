@@ -145,7 +145,8 @@ end type diag_grids_type
 !> Stores all the remapping grids and the model's native space thicknesses
 type, public :: diag_grid_storage
   integer                                          :: num_diag_coords !< Number of target coordinates
-  real, dimension(:,:,:), allocatable              :: h_state         !< Layer thicknesses in native space
+  real, dimension(:,:,:), allocatable              :: h_state         !< Layer thicknesses in native
+                                                                      !! space [H ~> m or kg m-2]
   type(diag_grids_type), dimension(:), allocatable :: diag_grids      !< Primarily empty, except h field
 end type diag_grid_storage
 
@@ -312,9 +313,9 @@ type, public :: diag_ctrl
   !>@}
 
   ! Pointer to H, G and T&S needed for remapping
-  real, dimension(:,:,:), pointer :: h => null() !< The thicknesses needed for remapping
-  real, dimension(:,:,:), pointer :: T => null() !< The temperatures needed for remapping
-  real, dimension(:,:,:), pointer :: S => null() !< The salinities needed for remapping
+  real, dimension(:,:,:), pointer :: h => null() !< The thicknesses needed for remapping [H ~> m or kg m-2]
+  real, dimension(:,:,:), pointer :: T => null() !< The temperatures needed for remapping [degC]
+  real, dimension(:,:,:), pointer :: S => null() !< The salinities needed for remapping [ppt]
   type(EOS_type),  pointer :: eqn_of_state => null() !< The equation of state type
   type(ocean_grid_type), pointer :: G => null()  !< The ocean grid type
   type(verticalGrid_type), pointer :: GV => null()  !< The model's vertical ocean grid
@@ -324,7 +325,7 @@ type, public :: diag_ctrl
   integer :: volume_cell_measure_dm_id = -1
 
 #if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
-  ! Keep a copy of h so that we know whether it has changed. If it has then
+  ! Keep a copy of h so that we know whether it has changed [H ~> m or kg m-2]. If it has then
   ! need the target grid for vertical remapping needs to have been updated.
   real, dimension(:,:,:), allocatable :: h_old
 #endif
@@ -1525,8 +1526,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
 
       if (id_clock_diag_remap>0) call cpu_clock_begin(id_clock_diag_remap)
       allocate(remapped_field(size(field,1), size(field,2), diag%axes%nz))
-      call diag_remap_do_remap(diag_cs%diag_remap_cs( &
-              diag%axes%vertical_coordinate_number), &
+      call diag_remap_do_remap(diag_cs%diag_remap_cs(diag%axes%vertical_coordinate_number), &
               diag_cs%G, diag_cs%GV, h_diag, staggered_in_x, staggered_in_y, &
               diag%axes%mask3d, diag_cs%missing_value, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
@@ -3202,7 +3202,7 @@ subroutine diag_update_remap_grids(diag_cs, alt_h, alt_T, alt_S)
                                                         !! the current salinity
   ! Local variables
   integer :: i
-  real, dimension(:,:,:), pointer :: h_diag => NULL()
+  real, dimension(:,:,:), pointer :: h_diag => NULL() ! The layer thickneses for diagnostics [H ~> m or kg m-2]
   real, dimension(:,:,:), pointer :: T_diag => NULL(), S_diag => NULL()
 
   if (present(alt_h)) then
@@ -3231,9 +3231,8 @@ subroutine diag_update_remap_grids(diag_cs, alt_h, alt_T, alt_S)
   endif
 
   do i=1, diag_cs%num_diag_coords
-    call diag_remap_update(diag_cs%diag_remap_cs(i), &
-                           diag_cs%G, diag_cs%GV, diag_cs%US, h_diag, T_diag, S_diag, &
-                           diag_cs%eqn_of_state)
+    call diag_remap_update(diag_cs%diag_remap_cs(i), diag_cs%G, diag_cs%GV, diag_cs%US, &
+                           h_diag, T_diag, S_diag, diag_cs%eqn_of_state)
   enddo
 
 #if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
@@ -3518,7 +3517,7 @@ end subroutine diag_grid_storage_init
 !> Copy from the main diagnostic arrays to the grid storage as well as the native thicknesses
 subroutine diag_copy_diag_to_storage(grid_storage, h_state, diag)
   type(diag_grid_storage), intent(inout) :: grid_storage !< Structure containing a snapshot of the target grids
-  real, dimension(:,:,:),  intent(in)    :: h_state     !< Current model thicknesses
+  real, dimension(:,:,:),  intent(in)    :: h_state     !< Current model thicknesses [H ~> m or kg m-2]
   type(diag_ctrl),         intent(in)    :: diag     !< Diagnostic control structure used as the contructor
 
   integer :: m

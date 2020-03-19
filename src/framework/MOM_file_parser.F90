@@ -1556,8 +1556,7 @@ subroutine log_param_time(CS, modulename, varname, value, desc, units, &
         call doc_param(CS%doc, varname, desc, myunits, real_time)
       endif
     else
-      myunits='not defined'; if (present(units)) write(myunits(1:240),'(A)') trim(units)
-      call doc_param(CS%doc, varname, desc, myunits, value, default)
+      call doc_param(CS%doc, varname, desc, value, default, units=units)
     endif
   endif
 
