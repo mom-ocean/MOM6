@@ -31,7 +31,7 @@ type, public :: user_change_diff_CS ; private
                         !! a diffusivity scaled by Kd_add is added [degLat].
   real :: rho_range(4)  !< 4 values that define the coordinate potential
                         !! density range over which a diffusivity scaled by
-                        !! Kd_add is added [kg m-3].
+                        !! Kd_add is added [R ~> kg m-3].
   logical :: use_abs_lat  !< If true, use the absolute value of latitude when
                           !! setting lat_range.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
@@ -44,13 +44,14 @@ contains
 !! main code to alter the diffusivities as needed.  The specific example
 !! implemented here augments the diffusivity for a specified range of latitude
 !! and coordinate potential density.
-subroutine user_change_diff(h, tv, G, GV, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_add)
+subroutine user_change_diff(h, tv, G, GV, US, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_add)
   type(ocean_grid_type),                    intent(in)    :: G   !< The ocean's grid structure.
   type(verticalGrid_type),                  intent(in)    :: GV  !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h   !< Layer thickness [H ~> m or kg m-2].
   type(thermo_var_ptrs),                    intent(in)    :: tv  !< A structure containing pointers
                                                                  !! to any available thermodynamic
                                                                  !! fields. Absent fields have NULL ptrs.
+  type(unit_scale_type),                    intent(in)    :: US  !< A dimensional unit scaling type
   type(user_change_diff_CS),                pointer       :: CS  !< This module's control structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity of
                                                                   !! each layer [Z2 T-1 ~> m2 s-1].
@@ -64,7 +65,7 @@ subroutine user_change_diff(h, tv, G, GV, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_a
                                                                   !! diffusivity that is being added at
                                                                   !! each interface [Z2 T-1 ~> m2 s-1].
   ! Local variables
-  real :: Rcv(SZI_(G),SZK_(G)) ! The coordinate density in layers [kg m-3].
+  real :: Rcv(SZI_(G),SZK_(G)) ! The coordinate density in layers [R ~> kg m-3].
   real :: p_ref(SZI_(G))       ! An array of tv%P_Ref pressures.
   real :: rho_fn      ! The density dependence of the input function, 0-1 [nondim].
   real :: lat_fn      ! The latitude dependence of the input function, 0-1 [nondim].
@@ -106,13 +107,13 @@ subroutine user_change_diff(h, tv, G, GV, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_a
   do j=js,je
     if (present(T_f) .and. present(S_f)) then
       do k=1,nz
-        call calculate_density(T_f(:,j,k),S_f(:,j,k),p_ref,Rcv(:,k),&
-                               is,ie-is+1,tv%eqn_of_state)
+        call calculate_density(T_f(:,j,k), S_f(:,j,k), p_ref, Rcv(:,k),&
+                               is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
       enddo
     else
       do k=1,nz
-        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),p_ref,Rcv(:,k),&
-                               is,ie-is+1,tv%eqn_of_state)
+        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, Rcv(:,k),&
+                               is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
       enddo
     endif
 
@@ -135,7 +136,6 @@ subroutine user_change_diff(h, tv, G, GV, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_a
         else
           lat_fn = val_weights(G%geoLatT(i,j), CS%lat_range)
         endif
-        !   rho_int = 0.5*(Rcv(i,k-1) + Rcv(i,k))
         rho_fn = val_weights( 0.5*(Rcv(i,k-1) + Rcv(i,k)), CS%rho_range)
         if (rho_fn * lat_fn > 0.0) then
           Kd_int(i,j,K) = Kd_int(i,j,K) + CS%Kd_add * rho_fn * lat_fn
@@ -163,9 +163,9 @@ end function range_OK
 !! hit 0 and 1.  The values in range must be in ascending order, as can be
 !! checked by calling range_OK.
 function val_weights(val, range) result(ans)
-  real,               intent(in) :: val    !< Value for which we need an answer.
-  real, dimension(4), intent(in) :: range  !< Range over which the answer is non-zero.
-  real                           :: ans    !< Return value.
+  real,               intent(in) :: val    !< Value for which we need an answer [arbitrary units].
+  real, dimension(4), intent(in) :: range  !< Range over which the answer is non-zero [arbitrary units].
+  real                           :: ans    !< Return value [nondim].
   ! Local variables
   real :: x   ! A nondimensional number between 0 and 1.
 
@@ -238,7 +238,7 @@ subroutine user_change_diff_init(Time, G, GV, US, param_file, diag, CS)
                  "is applied.  The four values specify the density at "//&
                  "which the extra diffusivity starts to increase from 0, "//&
                  "hits its full value, starts to decrease again, and is "//&
-                 "back to 0.", units="kg m-3", default=-1.0e9)
+                 "back to 0.", units="kg m-3", default=-1.0e9, scale=US%kg_m3_to_R)
     call get_param(param_file, mdl, "USER_KD_ADD_USE_ABS_LAT", CS%use_abs_lat, &
                  "If true, use the absolute value of latitude when "//&
                  "checking whether a point fits into range of latitudes.", &
