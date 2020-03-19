@@ -365,7 +365,6 @@ subroutine DOME2d_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, AC
   ! Local variables
   real :: T(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for temp [degC]
   real :: S(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for salt [ppt]
-  real :: RHO(SZI_(G),SZJ_(G),SZK_(G)) ! A temporary array for RHO [kg m-3]
   real :: h(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for thickness [H ~> m or kg m-2].
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for thickness [Z ~> m]
   real :: Idamp(SZI_(G),SZJ_(G))       ! The inverse damping rate [T-1 ~> s-1].
