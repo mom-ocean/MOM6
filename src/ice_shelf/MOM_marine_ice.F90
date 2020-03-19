@@ -96,8 +96,6 @@ subroutine iceberg_forces(G, forces, use_ice_shelf, sfc_state, &
     forces%rigidity_ice_v(i,J) = forces%rigidity_ice_v(i,J) + kv_rho_ice * &
                          min(forces%mass_berg(i,j), forces%mass_berg(i,j+1))
   enddo ; enddo
-  !### This halo update may be unnecessary. Test it.  -RWH
-  call pass_vector(forces%frac_shelf_u, forces%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
 
 end subroutine iceberg_forces
 
