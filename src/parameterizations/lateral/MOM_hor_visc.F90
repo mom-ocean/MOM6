@@ -468,7 +468,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   !$OMP   h_neglect, h_neglect3, FWfrac, inv_PI3, inv_PI5, H0_GME, &
   !$OMP   diffu, diffv, max_diss_rate_h, max_diss_rate_q, &
   !$OMP   Kh_h, Kh_q, Ah_h, Ah_q, FrictWork, FrictWork_GME, &
-  !$OMP   div_xx_h, vort_xy_q, GME_coeff_h, GME_coeff_q &
+  !$OMP   div_xx_h, vort_xy_q, GME_coeff_h, GME_coeff_q, &
+  !$OMP   TD, KH_u_GME, KH_v_GME &
   !$OMP ) &
   !$OMP private( &
   !$OMP   i, j, k, n, &
