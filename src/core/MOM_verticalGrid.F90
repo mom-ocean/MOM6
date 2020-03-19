@@ -29,7 +29,7 @@ type, public :: verticalGrid_type
   real :: mks_g_Earth !< The gravitational acceleration in unscaled MKS units [m s-2].
   real :: g_Earth   !< The gravitational acceleration [L2 Z-1 T-2 ~> m s-2].
   real :: Rho0      !< The density used in the Boussinesq approximation or nominal
-                    !! density used to convert depths into mass units [kg m-3].
+                    !! density used to convert depths into mass units [R ~> kg m-3].
 
   ! Vertical coordinate descriptions for diagnostics and I/O
   character(len=40) :: zAxisUnits !< The units that vertical coordinates are written in

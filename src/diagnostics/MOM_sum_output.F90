@@ -386,7 +386,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     PE_pt              ! The potential energy at each point [J].
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Temp_int, Salt_int ! Layer and cell integrated heat and salt [J] and [g Salt].
-  real :: HL2_to_kg    ! A conversion factor form a thickness-volume to mass [kg H-1 L-2 ~> kg m-3 or 1]
+  real :: HL2_to_kg    ! A conversion factor from a thickness-volume to mass [kg H-1 L-2 ~> kg m-3 or 1]
   real :: KE_scale_factor   ! The combination of unit rescaling factors in the kinetic energy
                             ! calculation [kg T2 H-1 L-2 s-2 ~> kg m-3 or nondim]
   real :: PE_scale_factor   ! The combination of unit rescaling factors in the potential energy
