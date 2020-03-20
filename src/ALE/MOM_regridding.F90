@@ -560,7 +560,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       call get_param(param_file, mdl, "HALOCLINE_FILTER_LENGTH", filt_len, &
                  "A length scale over which to smooth the temperature and "//&
                  "salinity before identifying erroneously unstable haloclines.", &
-                 units="m", default=2.0)
+                 units="m", default=2.0, scale=GV%m_to_H)
       call get_param(param_file, mdl, "HALOCLINE_STRAT_TOL", strat_tol, &
                  "A tolerance for the ratio of the stratification of the "//&
                  "apparent coordinate stratification to the actual value "//&
@@ -2247,7 +2247,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
                                                     !! resolved stratification [nondim]
   logical, optional, intent(in) :: fix_haloclines   !< Detect regions with much weaker stratification in the coordinate
   real,    optional, intent(in) :: halocline_filt_len !< Length scale over which to filter T & S when looking for
-                                                    !! spuriously unstable water mass profiles [m]
+                                                    !! spuriously unstable water mass profiles [H ~> m or kg m-2]
   real,    optional, intent(in) :: halocline_strat_tol !< Value of the stratification ratio that defines a problematic
                                                     !! halocline region.
   logical, optional, intent(in) :: integrate_downward_for_e !< If true, integrate for interface positions downward

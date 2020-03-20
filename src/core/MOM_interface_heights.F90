@@ -47,11 +47,11 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
              !! the units of eta to m; by default this is US%Z_to_m.
 
   ! Local variables
-  real :: p(SZI_(G),SZJ_(G),SZK_(G)+1)
+  real :: p(SZI_(G),SZJ_(G),SZK_(G)+1)    ! Hydrostatic pressure at each interface [Pa]
   real :: dz_geo(SZI_(G),SZJ_(G),SZK_(G)) ! The change in geopotential height
                                           ! across a layer [m2 s-2].
   real :: dilate(SZI_(G))                 ! non-dimensional dilation factor
-  real :: htot(SZI_(G))                   ! total thickness H
+  real :: htot(SZI_(G))                   ! total thickness [H ~> m or kg m-2]
   real :: I_gEarth
   real :: Z_to_eta, H_to_eta, H_to_rho_eta ! Unit conversion factors with obvious names.
   integer i, j, k, isv, iev, jsv, jev, nz, halo
