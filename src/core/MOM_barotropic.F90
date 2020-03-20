@@ -2540,9 +2540,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
   integer :: i, j, is, ie, js, je
   real, dimension(SZIB_(G),SZJB_(G)) :: grad
   real, parameter :: eps = 1.0e-20
-  real :: rx_max, ry_max ! coefficients for radiation
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
-  rx_max = OBC%rx_max ; ry_max = OBC%rx_max
 
   if (BT_OBC%apply_u_OBCs) then
     do j=js,je ; do I=is-1,ie ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
