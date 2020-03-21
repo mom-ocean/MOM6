@@ -49,7 +49,7 @@ subroutine USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, 
   real, dimension(SZDI_(G),SZDJ_(G)), &
                            intent(out) :: h_shelf !< The ice shelf thickness [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                           intent(out) :: area_shelf_h !< The area per cell covered by the ice shelf [m2].
+                           intent(out) :: area_shelf_h !< The area per cell covered by the ice shelf [L2 ~> m2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                            intent(out) :: hmask !< A mask indicating which tracer points are
                                                 !! partly or fully covered by an ice-shelf
@@ -105,7 +105,7 @@ subroutine USER_init_ice_thickness(h_shelf, area_shelf_h, hmask, G, US, param_fi
   real, dimension(SZDI_(G),SZDJ_(G)), &
                            intent(out) :: h_shelf !< The ice shelf thickness [m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                           intent(out) :: area_shelf_h !< The area per cell covered by the ice shelf [m2].
+                           intent(out) :: area_shelf_h !< The area per cell covered by the ice shelf [L2 ~> m2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                            intent(out) :: hmask !< A mask indicating which tracer points are
                                                 !! partly or fully covered by an ice-shelf
@@ -128,7 +128,7 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
                            intent(inout) :: mass_shelf !< The ice shelf mass per unit area averaged
                                                   !! over the full ocean cell [kg m-2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                           intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [m2].
+                           intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [L2 ~> m2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                            intent(inout) :: h_shelf !< The ice shelf thickness [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
@@ -168,11 +168,11 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
         h_shelf (i,j) = 0.0
       else
         if (G%geoLonCu(i,j) > edge_pos) then
-          area_shelf_h(i,j) = G%US%L_to_m**2*G%areaT(i,j) * (edge_pos - G%geoLonCu(i-1,j)) / &
+          area_shelf_h(i,j) = G%areaT(i,j) * (edge_pos - G%geoLonCu(i-1,j)) / &
                               (G%geoLonCu(i,j) - G%geoLonCu(i-1,j))
           hmask (i,j) = 2.0
         else
-          area_shelf_h(i,j) = G%US%L_to_m**2*G%areaT(i,j)
+          area_shelf_h(i,j) = G%areaT(i,j)
           hmask (i,j) = 1.0
         endif
 

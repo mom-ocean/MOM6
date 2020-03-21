@@ -637,7 +637,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
 
   ! mass flux [kg s-1], part of ISOMIP diags.
   mass_flux(:,:) = 0.0
-  mass_flux(:,:) = ISS%water_flux(:,:) * ISS%area_shelf_h(:,:)
+  mass_flux(:,:) = ISS%water_flux(:,:) * US%L_to_m**2*ISS%area_shelf_h(:,:)
 
   if (CS%active_shelf_dynamics .or. CS%override_shelf_movement) then
     call cpu_clock_begin(id_clock_pass)
@@ -786,21 +786,21 @@ subroutine add_shelf_forces(G, US, CS, forces, do_shelf_area)
     do j=jsd,jed ; do I=isd,ied-1
       forces%frac_shelf_u(I,j) = 0.0
       if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%areaCu(I,j) > 0.0)) &
-        forces%frac_shelf_u(I,j) = ((ISS%area_shelf_h(i,j) + ISS%area_shelf_h(i+1,j)) / &
-                                    (US%L_to_m**2*G%areaT(i,j) + US%L_to_m**2*G%areaT(i+1,j)))
+        forces%frac_shelf_u(I,j) = (ISS%area_shelf_h(i,j) + ISS%area_shelf_h(i+1,j)) / &
+                                   (G%areaT(i,j) + G%areaT(i+1,j))
     enddo ; enddo
     do J=jsd,jed-1 ; do i=isd,ied
       forces%frac_shelf_v(i,J) = 0.0
       if ((G%areaT(i,j) + G%areaT(i,j+1) > 0.0)) & ! .and. (G%areaCv(i,J) > 0.0)) &
-        forces%frac_shelf_v(i,J) = ((ISS%area_shelf_h(i,j) + ISS%area_shelf_h(i,j+1)) / &
-                                    (US%L_to_m**2*G%areaT(i,j) + US%L_to_m**2*G%areaT(i,j+1)))
+        forces%frac_shelf_v(i,J) = (ISS%area_shelf_h(i,j) + ISS%area_shelf_h(i,j+1)) / &
+                                   (G%areaT(i,j) + G%areaT(i,j+1))
     enddo ; enddo
     call pass_vector(forces%frac_shelf_u, forces%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
   endif
 
   !### Consider working over a smaller array range.
   do j=jsd,jed ; do i=isd,ied
-    press_ice = (ISS%area_shelf_h(i,j) * US%m_to_L**2*G%IareaT(i,j)) * (CS%g_Earth * ISS%mass_shelf(i,j))
+    press_ice = (ISS%area_shelf_h(i,j) * G%IareaT(i,j)) * (CS%g_Earth * ISS%mass_shelf(i,j))
     if (associated(forces%p_surf)) then
       if (.not.forces%accumulate_p_surf) forces%p_surf(i,j) = 0.0
       forces%p_surf(i,j) = forces%p_surf(i,j) + press_ice
@@ -852,7 +852,7 @@ subroutine add_shelf_pressure(G, US, CS, fluxes)
     call MOM_error(FATAL,"add_shelf_pressure: Incompatible ocean and ice shelf grids.")
 
   do j=js,je ; do i=is,ie
-    press_ice = (CS%ISS%area_shelf_h(i,j) * US%m_to_L**2*G%IareaT(i,j)) * (CS%g_Earth * CS%ISS%mass_shelf(i,j))
+    press_ice = (CS%ISS%area_shelf_h(i,j) * G%IareaT(i,j)) * (CS%g_Earth * CS%ISS%mass_shelf(i,j))
     if (associated(fluxes%p_surf)) then
       if (.not.fluxes%accumulate_p_surf) fluxes%p_surf(i,j) = 0.0
       fluxes%p_surf(i,j) = fluxes%p_surf(i,j) + press_ice
@@ -882,7 +882,7 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
   real :: taux2, tauy2    !< The squared surface stresses [Pa].
   real :: press_ice       !< The pressure of the ice shelf per unit area of ocean (not ice) [Pa].
   real :: asu1, asu2      !< Ocean areas covered by ice shelves at neighboring u-
-  real :: asv1, asv2      !< and v-points [m2].
+  real :: asv1, asv2      !< and v-points [L2 ~> m2].
   real :: fraz            !< refreezing rate [kg m-2 s-1]
   real :: mean_melt_flux  !< spatial mean melt flux [kg s-1] or [kg m-2 s-1] at various points in the code.
   real :: sponge_area     !< total area of sponge region [m2]
@@ -894,7 +894,7 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
                           !! at at previous time (Time-dt)
   real, dimension(SZDI_(G),SZDJ_(G))  :: last_hmask !< Ice shelf mask
                           !! at at previous time (Time-dt)
-  real, dimension(SZDI_(G),SZDJ_(G))  :: last_area_shelf_h !< Ice shelf area [m2]
+  real, dimension(SZDI_(G),SZDJ_(G))  :: last_area_shelf_h !< Ice shelf area [L2 ~> m2]
                           !! at at previous time (Time-dt)
   type(ice_shelf_state), pointer :: ISS => NULL() !< A structure with elements that describe
                                           !! the ice-shelf state
@@ -951,7 +951,7 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
   if (CS%active_shelf_dynamics .or. CS%override_shelf_movement) then
     do j=jsd,jed ; do i=isd,ied
       if (G%areaT(i,j) > 0.0) &
-        fluxes%frac_shelf_h(i,j) = ISS%area_shelf_h(i,j) * US%m_to_L**2*G%IareaT(i,j)
+        fluxes%frac_shelf_h(i,j) = ISS%area_shelf_h(i,j) * G%IareaT(i,j)
     enddo ; enddo
   endif
 
@@ -998,7 +998,7 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
     do j=js,je ; do i=is,ie
       frac_area = fluxes%frac_shelf_h(i,j)
       if (frac_area > 0.0) &
-        mean_melt_flux = mean_melt_flux + (ISS%water_flux(i,j)) * ISS%area_shelf_h(i,j)
+        mean_melt_flux = mean_melt_flux + (ISS%water_flux(i,j)) * US%L_to_m**2*ISS%area_shelf_h(i,j)
 
       !### These hard-coded limits need to be corrected.  They are inappropriate here.
       if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
@@ -1031,8 +1031,8 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
           ! just floating shelf (0.1 is a threshold for min ocean thickness)
           if (((1.0/CS%density_ocean_avg)*state%ocean_mass(i,j) > 0.1) .and. &
               (ISS%area_shelf_h(i,j) > 0.0)) then
-            shelf_mass0 = shelf_mass0 + (last_mass_shelf(i,j) * ISS%area_shelf_h(i,j))
-            shelf_mass1 = shelf_mass1 + (ISS%mass_shelf(i,j) * ISS%area_shelf_h(i,j))
+            shelf_mass0 = shelf_mass0 + (last_mass_shelf(i,j) * US%L_to_m**2*ISS%area_shelf_h(i,j))
+            shelf_mass1 = shelf_mass1 + (ISS%mass_shelf(i,j) * US%L_to_m**2*ISS%area_shelf_h(i,j))
           endif
         enddo ; enddo
         call sum_across_PEs(shelf_mass0); call sum_across_PEs(shelf_mass1)
@@ -1099,7 +1099,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   type(directories)  :: dirs
   type(dyn_horgrid_type), pointer :: dG => NULL()
   real    :: Z_rescale  ! A rescaling factor for heights from the representation in
-                        ! a reastart fole to the internal representation in this run.
+                        ! a restart file to the internal representation in this run.
+  real    :: L_rescale  ! A rescaling factor for horizontal lengths from the representation in
+                        ! a restart file to the internal representation in this run.
   real :: cdrag, drag_bg_vel
   logical :: new_sim, save_IC, var_force
   !This include declares and sets the variable "version".
@@ -1328,7 +1330,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
     TideAmp_file = trim(inputdir) // trim(TideAmp_file)
-    call MOM_read_data(TideAmp_file,'tideamp',CS%utide,G%domain,timelevel=1)
+    call MOM_read_data(TideAmp_file, 'tideamp', CS%utide, G%domain, timelevel=1)
   else
     call get_param(param_file, mdl, "UTIDE", utide, &
                  "The constant tidal amplitude used with INT_TIDE_DISSIPATION.", &
@@ -1421,6 +1423,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                               "ice sheet/shelf thickness", "m")
   call register_restart_field(US%m_to_Z_restart, "m_to_Z", .false., CS%restart_CSp, &
                               "Height unit conversion factor", "Z meter-1")
+  call register_restart_field(US%m_to_L_restart, "m_to_L", .false., CS%restart_CSp, &
+                              "Length unit conversion factor", "L meter-1")
   if (CS%active_shelf_dynamics) then
     call register_restart_field(ISS%hmask, "h_mask", .true., CS%restart_CSp, &
                                 "ice sheet/shelf thickness mask" ,"none")
@@ -1503,6 +1507,13 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
       enddo ; enddo
     endif
 
+    if ((US%m_to_L_restart /= 0.0) .and. (US%m_to_L_restart /= US%m_to_L)) then
+      L_rescale = US%m_to_L / US%m_to_L_restart
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        ISS%area_shelf_h(i,j) = L_rescale**2 * ISS%area_shelf_h(i,j)
+      enddo ; enddo
+    endif
+
   endif ! .not. new_sim
 
   CS%Time = Time
@@ -1516,13 +1527,13 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   call cpu_clock_end(id_clock_pass)
 
   do j=jsd,jed ; do i=isd,ied
-    if (ISS%area_shelf_h(i,j) > US%L_to_m**2*G%areaT(i,j)) then
+    if (ISS%area_shelf_h(i,j) > G%areaT(i,j)) then
       call MOM_error(WARNING,"Initialize_ice_shelf: area_shelf_h exceeds G%areaT.")
-      ISS%area_shelf_h(i,j) = US%L_to_m**2*G%areaT(i,j)
+      ISS%area_shelf_h(i,j) = G%areaT(i,j)
     endif
   enddo ; enddo
   if (present(fluxes)) then ; do j=jsd,jed ; do i=isd,ied
-    if (G%areaT(i,j) > 0.0) fluxes%frac_shelf_h(i,j) = ISS%area_shelf_h(i,j) / (US%L_to_m**2*G%areaT(i,j))
+    if (G%areaT(i,j) > 0.0) fluxes%frac_shelf_h(i,j) = ISS%area_shelf_h(i,j) / G%areaT(i,j)
   enddo ; enddo ; endif
 
   if (CS%debug) then
@@ -1558,13 +1569,13 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
 
 
   CS%id_area_shelf_h = register_diag_field('ocean_model', 'area_shelf_h', CS%diag%axesT1, CS%Time, &
-     'Ice Shelf Area in cell', 'meter-2')
+     'Ice Shelf Area in cell', 'meter-2', conversion=US%L_to_m**2)
   CS%id_shelf_mass = register_diag_field('ocean_model', 'shelf_mass', CS%diag%axesT1, CS%Time, &
      'mass of shelf', 'kg/m^2')
   CS%id_h_shelf = register_diag_field('ocean_model', 'h_shelf', CS%diag%axesT1, CS%Time, &
        'ice shelf thickness', 'm', conversion=US%Z_to_m)
   CS%id_mass_flux = register_diag_field('ocean_model', 'mass_flux', CS%diag%axesT1,&
-     CS%Time,'Total mass flux of freshwater across the ice-ocean interface.', 'kg/s')
+     CS%Time, 'Total mass flux of freshwater across the ice-ocean interface.', 'kg/s')
   CS%id_melt = register_diag_field('ocean_model', 'melt', CS%diag%axesT1, CS%Time, &
      'Ice Shelf Melt Rate', 'm yr-1')
   CS%id_thermal_driving = register_diag_field('ocean_model', 'thermal_driving', CS%diag%axesT1, CS%Time, &
@@ -1695,7 +1706,7 @@ subroutine update_shelf_mass(G, CS, ISS, Time)
     ISS%area_shelf_h(i,j) = 0.0
     ISS%hmask(i,j) = 0.
     if (ISS%mass_shelf(i,j) > 0.0) then
-      ISS%area_shelf_h(i,j) = G%US%L_to_m**2*G%areaT(i,j)
+      ISS%area_shelf_h(i,j) = G%areaT(i,j)
       ISS%h_shelf(i,j) = ISS%mass_shelf(i,j) / CS%rho_ice
       ISS%hmask(i,j) = 1.
     endif

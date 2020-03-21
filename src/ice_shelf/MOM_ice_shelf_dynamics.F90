@@ -83,11 +83,11 @@ type, public :: ice_shelf_dyn_CS ; private
                 !!  The exact form depends on basal law exponent and/or whether flow is "hybridized" a la Goldberg 2011
 
   real, pointer, dimension(:,:) :: OD_rt => NULL()         !< A running total for calculating OD_av.
-  real, pointer, dimension(:,:) :: float_frac_rt => NULL() !< A running total for calculating float_frac.
+  real, pointer, dimension(:,:) :: ground_frac_rt => NULL() !< A running total for calculating ground_frac.
   real, pointer, dimension(:,:) :: OD_av => NULL()         !< The time average open ocean depth [Z ~> m].
-  real, pointer, dimension(:,:) :: float_frac => NULL()   !< Fraction of the time a cell is "exposed", i.e. the column
-                               !! thickness is below a threshold.
-                       !### [if float_frac = 1 ==> grounded; obviously counterintuitive; might fix]
+  real, pointer, dimension(:,:) :: ground_frac => NULL()   !< Fraction of the time a cell is "exposed", i.e. the column
+                               !! thickness is below a threshold and interacting with the rock [nondim].  When this
+                               !! is 1, the ice-shelf is grounded
   integer :: OD_rt_counter = 0 !< A counter of the number of contributions to OD_rt.
 
   real :: velocity_update_time_step !< The time interval over which to update the ice shelf velocity
@@ -149,7 +149,7 @@ type, public :: ice_shelf_dyn_CS ; private
 
   !>@{ Diagnostic handles
   integer :: id_u_shelf = -1, id_v_shelf = -1, id_t_shelf = -1, &
-             id_float_frac = -1, id_col_thick = -1, id_OD_av = -1, &
+             id_ground_frac = -1, id_col_thick = -1, id_OD_av = -1, &
              id_u_mask = -1, id_v_mask = -1, id_t_mask = -1
   !>@}
   ! ids for outputting intermediate thickness in advection subroutine (debugging)
@@ -237,7 +237,7 @@ subroutine register_ice_shelf_dyn_restarts(G, param_file, CS, restart_CS)
     allocate( CS%ice_visc(isd:ied,jsd:jed) )    ; CS%ice_visc(:,:) = 0.0
     allocate( CS%taub_beta_eff(isd:ied,jsd:jed) ) ; CS%taub_beta_eff(:,:) = 0.0
     allocate( CS%OD_av(isd:ied,jsd:jed) )       ; CS%OD_av(:,:) = 0.0
-    allocate( CS%float_frac(isd:ied,jsd:jed) )  ; CS%float_frac(:,:) = 0.0
+    allocate( CS%ground_frac(isd:ied,jsd:jed) )  ; CS%ground_frac(:,:) = 0.0
 
     ! additional restarts for ice shelf state
     call register_restart_field(CS%u_shelf, "u_shelf", .false., restart_CS, &
@@ -248,7 +248,7 @@ subroutine register_ice_shelf_dyn_restarts(G, param_file, CS, restart_CS)
                                 "ice sheet/shelf vertically averaged temperature", "deg C")
     call register_restart_field(CS%OD_av, "OD_av", .true., restart_CS, &
                                 "Average open ocean depth in a cell","m")
-    call register_restart_field(CS%float_frac, "float_frac", .true., restart_CS, &
+    call register_restart_field(CS%ground_frac, "ground_frac", .true., restart_CS, &
                                 "fractional degree of grounding", "nondim")
     call register_restart_field(CS%ice_visc, "viscosity", .true., restart_CS, &
                                 "Glens law ice viscosity", "m (seems wrong)")
@@ -276,7 +276,7 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
 
   ! Local variables
   real    :: Z_rescale  ! A rescaling factor for heights from the representation in
-                        ! a reastart fole to the internal representation in this run.
+                        ! a restart file to the internal representation in this run.
   !This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=200) :: config
@@ -420,7 +420,7 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
 
     CS%OD_rt_counter = 0
     allocate( CS%OD_rt(isd:ied,jsd:jed) ) ; CS%OD_rt(:,:) = 0.0
-    allocate( CS%float_frac_rt(isd:ied,jsd:jed) ) ; CS%float_frac_rt(:,:) = 0.0
+    allocate( CS%ground_frac_rt(isd:ied,jsd:jed) ) ; CS%ground_frac_rt(:,:) = 0.0
 
     if (CS%calve_to_mask) then
       allocate( CS%calve_mask(isd:ied,jsd:jed) ) ; CS%calve_mask(:,:) = 0.0
@@ -459,7 +459,7 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
     endif
 
     call pass_var(CS%OD_av,G%domain)
-    call pass_var(CS%float_frac,G%domain)
+    call pass_var(CS%ground_frac,G%domain)
     call pass_var(CS%ice_visc,G%domain)
     call pass_var(CS%taub_beta_eff,G%domain)
     call pass_vector(CS%u_shelf, CS%v_shelf, G%domain, TO_ALL, BGRID_NE)
@@ -513,8 +513,8 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
        'mask for v-nodes', 'none')
 !    CS%id_surf_elev = register_diag_field('ocean_model','ice_surf',CS%diag%axesT1, Time, &
 !       'ice surf elev', 'm')
-    CS%id_float_frac = register_diag_field('ocean_model','ice_float_frac',CS%diag%axesT1, Time, &
-       'fraction of cell that is floating (sort of)', 'none')
+    CS%id_ground_frac = register_diag_field('ocean_model','ice_ground_frac',CS%diag%axesT1, Time, &
+       'fraction of cell that is grounded', 'none')
     CS%id_col_thick = register_diag_field('ocean_model','col_thick',CS%diag%axesT1, Time, &
        'ocean column thickness passed to ice model', 'm', conversion=US%Z_to_m)
     CS%id_OD_av = register_diag_field('ocean_model','OD_av',CS%diag%axesT1, Time, &
@@ -558,10 +558,10 @@ subroutine initialize_diagnostic_fields(CS, ISS, G, US, Time)
       if (OD >= 0) then
     ! ice thickness does not take up whole ocean column -> floating
         CS%OD_av(i,j) = OD
-        CS%float_frac(i,j) = 0.
+        CS%ground_frac(i,j) = 0.
       else
         CS%OD_av(i,j) = 0.
-        CS%float_frac(i,j) = 1.
+        CS%ground_frac(i,j) = 1.
       endif
     enddo
   enddo
@@ -651,7 +651,7 @@ subroutine update_ice_shelf(CS, ISS, G, US, time_step, Time, ocean_mass, coupled
     if (CS%id_u_shelf > 0) call post_data(CS%id_u_shelf,CS%u_shelf,CS%diag)
     if (CS%id_v_shelf > 0) call post_data(CS%id_v_shelf,CS%v_shelf,CS%diag)
     if (CS%id_t_shelf > 0) call post_data(CS%id_t_shelf,CS%t_shelf,CS%diag)
-    if (CS%id_float_frac > 0) call post_data(CS%id_float_frac,CS%float_frac,CS%diag)
+    if (CS%id_ground_frac > 0) call post_data(CS%id_ground_frac, CS%ground_frac,CS%diag)
     if (CS%id_OD_av >0) call post_data(CS%id_OD_av, CS%OD_av,CS%diag)
 
     if (CS%id_u_mask > 0) call post_data(CS%id_u_mask,CS%umask,CS%diag)
@@ -849,7 +849,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u, v, iters, time)
         enddo
         if ((nodefloat > 0) .and. (nodefloat < 4)) then
           float_cond(i,j) = 1.0
-          CS%float_frac(i,j) = 1.0
+          CS%ground_frac(i,j) = 1.0
         endif
       enddo
     enddo
@@ -891,7 +891,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u, v, iters, time)
   ! makes sure basal stress is only applied when it is supposed to be
 
   do j=G%jsd,G%jed ; do i=G%isd,G%ied
-    CS%taub_beta_eff(i,j) = CS%taub_beta_eff(i,j) * CS%float_frac(i,j)
+    CS%taub_beta_eff(i,j) = CS%taub_beta_eff(i,j) * CS%ground_frac(i,j)
   enddo ; enddo
 
   call apply_boundary_values(CS, ISS, G, time, Phisub, H_node, CS%ice_visc, &
@@ -948,7 +948,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u, v, iters, time)
     ! makes sure basal stress is only applied when it is supposed to be
 
     do j=G%jsd,G%jed ; do i=G%isd,G%ied
-      CS%taub_beta_eff(i,j) = CS%taub_beta_eff(i,j) * CS%float_frac(i,j)
+      CS%taub_beta_eff(i,j) = CS%taub_beta_eff(i,j) * CS%ground_frac(i,j)
     enddo ; enddo
 
     u_bdry_cont(:,:) = 0 ; v_bdry_cont(:,:) = 0
@@ -1896,7 +1896,9 @@ subroutine shelf_advance_front(CS, ISS, G, flux_enter)
   integer :: i_off, j_off
   integer :: iter_flag
 
-  real :: h_reference, dxh, dyh, dxdyh, rho, partial_vol, tot_flux
+  real :: h_reference, dxh, dyh, rho, tot_flux
+  real :: partial_vol ! The volume covered by ice shelf [m L2 ~> m3]
+  real :: dxdyh       ! Cell area [L2 ~> m2]
   character(len=160) :: mesg  ! The text of an error message
   integer, dimension(4) :: mapi, mapj, new_partial
 !   real, dimension(size(flux_enter,1),size(flux_enter,2),size(flux_enter,2)) :: flux_enter_replace
@@ -1957,9 +1959,9 @@ subroutine shelf_advance_front(CS, ISS, G, flux_enter)
             enddo
 
             if (n_flux > 0) then
-              dxdyh = G%US%L_to_m**2*G%areaT(i,j)
+              dxdyh = G%areaT(i,j)
               h_reference = h_reference / real(n_flux)
-              partial_vol = ISS%h_shelf(i,j) * ISS%area_shelf_h(i,j) + tot_flux
+              partial_vol = ISS%h_shelf(i,j) * ISS%area_shelf_h(i,j) + G%US%m_to_L**2*tot_flux
 
               if ((partial_vol / dxdyh) == h_reference) then ! cell is exactly covered, no overflow
                 ISS%hmask(i,j) = 1
@@ -1967,7 +1969,7 @@ subroutine shelf_advance_front(CS, ISS, G, flux_enter)
                 ISS%area_shelf_h(i,j) = dxdyh
               elseif ((partial_vol / dxdyh) < h_reference) then
                 ISS%hmask(i,j) = 2
-        !         ISS%mass_shelf(i,j) = partial_vol * rho
+        !         ISS%mass_shelf(i,j) = G%US%L_to_m**2*partial_vol * rho
                 ISS%area_shelf_h(i,j) = partial_vol / h_reference
                 ISS%h_shelf(i,j) = h_reference
               else
@@ -1988,8 +1990,6 @@ subroutine shelf_advance_front(CS, ISS, G, flux_enter)
                     n_flux = n_flux + 1
                     new_partial(k) = 1
                   endif
-                enddo
-                do k=1,2
                   if (CS%v_face_mask(i,j-2+k) == 2) then
                     n_flux = n_flux + 1
                   elseif (ISS%hmask(i,j+2*k-3) == 0) then
@@ -2005,11 +2005,9 @@ subroutine shelf_advance_front(CS, ISS, G, flux_enter)
 
                   do k=1,2
                     if (new_partial(k) == 1) &
-                      flux_enter_replace(i+2*k-3,j,3-k) = partial_vol / real(n_flux)
-                  enddo
-                  do k=1,2 ! ### Combine these two loops?
+                      flux_enter_replace(i+2*k-3,j,3-k) = G%US%L_to_m**2*partial_vol / real(n_flux)
                     if (new_partial(k+2) == 1) &
-                      flux_enter_replace(i,j+2*k-3,5-k) = partial_vol / real(n_flux)
+                      flux_enter_replace(i,j+2*k-3,5-k) = G%US%L_to_m**2*partial_vol / real(n_flux)
                   enddo
                 endif
 
@@ -2037,12 +2035,10 @@ end subroutine shelf_advance_front
 !> Apply a very simple calving law using a minimum thickness rule
 subroutine ice_shelf_min_thickness_calve(G, h_shelf, area_shelf_h, hmask, thickness_calve)
   type(ocean_grid_type), intent(in)    :: G  !< The grid structure used by the ice shelf.
-  real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: h_shelf !< The ice shelf thickness [Z ~> m].
-  real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [m2].
-  real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: hmask !< A mask indicating which tracer points are
+  real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: h_shelf !< The ice shelf thickness [Z ~> m].
+  real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: area_shelf_h !< The area per cell covered by
+                                             !! the ice shelf [L2 ~> m2].
+  real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
   real,                  intent(in)    :: thickness_calve !< The thickness at which to trigger calving [Z ~> m].
 
@@ -2051,7 +2047,7 @@ subroutine ice_shelf_min_thickness_calve(G, h_shelf, area_shelf_h, hmask, thickn
   do j=G%jsd,G%jed
     do i=G%isd,G%ied
 !      if ((h_shelf(i,j) < CS%thickness_calve) .and. (hmask(i,j) == 1) .and. &
-!           (CS%float_frac(i,j) == 0.0)) then
+!           (CS%ground_frac(i,j) == 0.0)) then
       if ((h_shelf(i,j) < thickness_calve) .and. (area_shelf_h(i,j) > 0.)) then
         h_shelf(i,j) = 0.0
         area_shelf_h(i,j) = 0.0
@@ -2064,16 +2060,13 @@ end subroutine ice_shelf_min_thickness_calve
 
 subroutine calve_to_mask(G, h_shelf, area_shelf_h, hmask, calve_mask)
   type(ocean_grid_type), intent(in) :: G  !< The grid structure used by the ice shelf.
-  real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: h_shelf !< The ice shelf thickness [Z ~> m].
-  real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [m2].
-  real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: hmask !< A mask indicating which tracer points are
-                                             !! partly or fully covered by an ice-shelf
-  real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(in)    :: calve_mask !< A mask that indicates where the ice shelf
-                                             !! can exist, and where it will calve.
+  real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: h_shelf !< The ice shelf thickness [Z ~> m].
+  real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: area_shelf_h !< The area per cell covered by
+                                                             !! the ice shelf [L2 ~> m2].
+  real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: hmask !< A mask indicating which tracer points are
+                                                             !! partly or fully covered by an ice-shelf
+  real, dimension(SZDI_(G),SZDJ_(G)), intent(in)    :: calve_mask !< A mask that indicates where the ice
+                                                             !! shelf can exist, and where it will calve.
 
   integer                        :: i,j
 
@@ -2235,7 +2228,7 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, TAUD_X, TAUD_Y, OD)
         taud_x(I,J) = taud_x(I,J) - .25 * rho * grav * ISS%h_shelf(i,j) * sx * dxdyh
         taud_y(I,J) = taud_y(I,J) - .25 * rho * grav * ISS%h_shelf(i,j) * sy * dxdyh
 
-        if (CS%float_frac(i,j) == 1) then
+        if (CS%ground_frac(i,j) == 1) then
           neumann_val = .5 * grav * (rho * ISS%h_shelf(i,j)**2 - rhow * G%bathyT(i,j)**2)
         else
           neumann_val = .5 * grav * (1-rho/rhow) * rho * ISS%h_shelf(i,j)**2
@@ -3066,7 +3059,7 @@ subroutine update_OD_ffrac(CS, G, US, ocean_mass, find_avg)
   do j=jsc,jec ; do i=isc,iec
     CS%OD_rt(i,j) = CS%OD_rt(i,j) + ocean_mass(i,j)*I_rho_ocean
     if (ocean_mass(i,j)*I_rho_ocean > CS%thresh_float_col_depth) then
-      CS%float_frac_rt(i,j) = CS%float_frac_rt(i,j) + 1.0
+      CS%ground_frac_rt(i,j) = CS%ground_frac_rt(i,j) + 1.0
     endif
   enddo ; enddo
   CS%OD_rt_counter = CS%OD_rt_counter + 1
@@ -3074,13 +3067,13 @@ subroutine update_OD_ffrac(CS, G, US, ocean_mass, find_avg)
   if (find_avg) then
     I_counter = 1.0 / real(CS%OD_rt_counter)
     do j=jsc,jec ; do i=isc,iec
-      CS%float_frac(i,j) = 1.0 - (CS%float_frac_rt(i,j) * I_counter)
+      CS%ground_frac(i,j) = 1.0 - (CS%ground_frac_rt(i,j) * I_counter)
       CS%OD_av(i,j) = CS%OD_rt(i,j) * I_counter
 
-      CS%OD_rt(i,j) = 0.0 ; CS%float_frac_rt(i,j) = 0.0
+      CS%OD_rt(i,j) = 0.0 ; CS%ground_frac_rt(i,j) = 0.0
     enddo ; enddo
 
-    call pass_var(CS%float_frac, G%domain)
+    call pass_var(CS%ground_frac, G%domain)
     call pass_var(CS%OD_av, G%domain)
   endif
 
@@ -3104,10 +3097,10 @@ subroutine update_OD_ffrac_uncoupled(CS, G, h_shelf)
       if (OD >= 0) then
     ! ice thickness does not take up whole ocean column -> floating
         CS%OD_av(i,j) = OD
-        CS%float_frac(i,j) = 0.
+        CS%ground_frac(i,j) = 0.
       else
         CS%OD_av(i,j) = 0.
-        CS%float_frac(i,j) = 1.
+        CS%ground_frac(i,j) = 1.
       endif
     enddo
   enddo
@@ -3463,7 +3456,7 @@ subroutine ice_shelf_dyn_end(CS)
 
   deallocate(CS%ice_visc, CS%taub_beta_eff)
   deallocate(CS%OD_rt, CS%OD_av)
-  deallocate(CS%float_frac, CS%float_frac_rt)
+  deallocate(CS%ground_frac, CS%ground_frac_rt)
 
   deallocate(CS)
 

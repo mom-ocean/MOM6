@@ -30,7 +30,7 @@ subroutine initialize_ice_thickness(h_shelf, area_shelf_h, hmask, G, US, PF)
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: h_shelf !< The ice shelf thickness [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [m2].
+                         intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [L2 ~> m2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
@@ -60,9 +60,9 @@ end subroutine initialize_ice_thickness
 subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, US, PF)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: h_shelf !< The ice shelf thickness [m].
+                         intent(inout) :: h_shelf !< The ice shelf thickness [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [m2].
+                         intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [L2 ~> m2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
@@ -70,7 +70,7 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
   type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
 
   !  This subroutine reads ice thickness and area from a file and puts it into
-  !  h_shelf and area_shelf_h in m (and dimensionless) and updates hmask
+  !  h_shelf [Z ~> m] and area_shelf_h [L2 ~> m2] (and dimensionless) and updates hmask
   character(len=200) :: filename,thickness_file,inputdir ! Strings for file/path
   character(len=200) :: thickness_varname, area_varname  ! Variable name in file
   character(len=40)  :: mdl = "initialize_ice_thickness_from_file" ! This subroutine's name.
@@ -101,7 +101,7 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
        " initialize_topography_from_file: Unable to open "//trim(filename))
 
   call MOM_read_data(filename, trim(thickness_varname), h_shelf, G%Domain, scale=US%m_to_Z)
-  call MOM_read_data(filename,trim(area_varname),area_shelf_h,G%Domain)
+  call MOM_read_data(filename,trim(area_varname), area_shelf_h, G%Domain, scale=US%m_to_L**2)
 
 !  call get_param(PF, mdl, "ICE_BOUNDARY_CONFIG", config, &
 !                 "This specifies how the ice domain boundary is specified", &
@@ -120,7 +120,7 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
         udh = exp(-(G%geoLonCv(i,j)-len_sidestress)/5.0) * h_shelf(i,j)
         if (udh <= 25.0) then
           h_shelf(i,j) = 0.0
-          area_shelf_h (i,j) = 0.0
+          area_shelf_h(i,j) = 0.0
         else
           h_shelf(i,j) = udh
         endif
@@ -128,18 +128,17 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
 
       ! update thickness mask
 
-      if (area_shelf_h (i,j) >= US%L_to_m**2*G%areaT(i,j)) then
+      if (area_shelf_h (i,j) >= G%areaT(i,j)) then
         hmask(i,j) = 1.
       elseif (area_shelf_h (i,j) == 0.0) then
         hmask(i,j) = 0.
-      elseif ((area_shelf_h(i,j) > 0) .and. (area_shelf_h(i,j) <= US%L_to_m**2*G%areaT(i,j))) then
+      elseif ((area_shelf_h(i,j) > 0) .and. (area_shelf_h(i,j) <= G%areaT(i,j))) then
         hmask(i,j) = 2.
       else
         call MOM_error(FATAL,mdl// " AREA IN CELL OUT OF RANGE")
       endif
     enddo
   enddo
-
 
 end subroutine initialize_ice_thickness_from_file
 
@@ -149,7 +148,7 @@ subroutine initialize_ice_thickness_channel(h_shelf, area_shelf_h, hmask, G, US,
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: h_shelf !< The ice shelf thickness [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [m2].
+                         intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [L2 ~> m2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
@@ -206,11 +205,11 @@ subroutine initialize_ice_thickness_channel(h_shelf, area_shelf_h, hmask, G, US,
           h_shelf (i,j) = 0.0
         else
           if (G%geoLonCu(i,j) > edge_pos) then
-            area_shelf_h(i,j) = US%L_to_m**2*G%areaT(i,j) * (edge_pos - G%geoLonCu(i-1,j)) / &
-                            (G%geoLonCu(i,j) - G%geoLonCu(i-1,j))
+            area_shelf_h(i,j) = G%areaT(i,j) * (edge_pos - G%geoLonCu(i-1,j)) / &
+                                (G%geoLonCu(i,j) - G%geoLonCu(i-1,j))
             hmask (i,j) = 2.0
           else
-            area_shelf_h(i,j) = US%L_to_m**2*G%areaT(i,j)
+            area_shelf_h(i,j) = G%areaT(i,j)
             hmask (i,j) = 1.0
           endif
 

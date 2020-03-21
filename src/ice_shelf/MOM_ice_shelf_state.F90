@@ -24,7 +24,7 @@ public ice_shelf_state_end, ice_shelf_state_init
 type, public :: ice_shelf_state
   real, pointer, dimension(:,:) :: &
     mass_shelf => NULL(), &    !< The mass per unit area of the ice shelf or sheet [kg m-2].
-    area_shelf_h => NULL(), &  !< The area per cell covered by the ice shelf [m2].
+    area_shelf_h => NULL(), &  !< The area per cell covered by the ice shelf [L2 ~> m2].
     h_shelf => NULL(), &       !< the thickness of the shelf [m], redundant with mass but may
                                !! make the code more readable
     hmask => NULL(),&          !< Mask used to indicate ice-covered or partiall-covered cells
