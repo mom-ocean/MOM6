@@ -42,7 +42,7 @@ type, public :: ice_shelf_state
     salt_flux => NULL(), &     !< The downward salt flux at the ocean-ice
                                !! interface [kg m-2 s-1].
     water_flux => NULL(), &    !< The net downward liquid water flux at the
-                               !! ocean-ice interface [kg m-2 s-1].
+                               !! ocean-ice interface [R Z T-1 ~> kg m-2 s-1].
     tflux_shelf => NULL(), &   !< The UPWARD diffusive heat flux in the ice
                                !! shelf at the ice-ocean interface [W m-2].
 

@@ -3472,7 +3472,7 @@ subroutine ice_shelf_temp(CS, ISS, G, US, time_step, melt_rate, Time)
   type(unit_scale_type), intent(in)    :: US !< Pointer to a structure containing unit conversion factors
   real,                  intent(in) :: time_step !< The time step for this update [s].
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(in) :: melt_rate !< basal melt rate [kg m-2 s-1]
+                         intent(in) :: melt_rate !< basal melt rate [R Z T-1 ~> kg m-2 s-1]
   type(time_type),       intent(in) :: Time !< The current model time
 
 ! 5/23/12 OVS
@@ -3507,12 +3507,15 @@ subroutine ice_shelf_temp(CS, ISS, G, US, time_step, melt_rate, Time)
   real, dimension(SZDI_(G),SZDJ_(G))   :: th_after_uflux, th_after_vflux, TH
   real, dimension(SZDI_(G),SZDJ_(G),4) :: flux_enter
   integer                           :: isd, ied, jsd, jed, i, j, isc, iec, jsc, jec
-  real                              :: rho, spy, t_bd, Tsurf, adot
+  real                              :: rho, t_bd, Tsurf
+  real                              :: spy  ! The amount of time in a year [T ~> s]
+  real                              :: adot ! A surface heat exchange coefficient [Z T-1 ~> m s-1].
 
   rho = CS%density_ice
-  spy = 365 * 86400 ! seconds per year; is there a global constant for this?  No - it is dependent upon a calendar.
+  spy = 365. * 86400. * US%s_to_T
 
-  adot = 0.1*US%m_to_Z/spy ! for now adot and Tsurf are defined here adot=surf acc 0.1m/yr, Tsurf=-20oC, vary them later
+  ! For now adot and Tsurf are defined here adot=surf acc 0.1m/yr, Tsurf=-20oC, vary them later
+  adot = 0.1*US%m_to_Z / spy
   Tsurf = -20.0
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -3546,8 +3549,8 @@ subroutine ice_shelf_temp(CS, ISS, G, US, time_step, melt_rate, Time)
 !  if (CS%id_h_after_vflux > 0) call post_data(CS%id_h_after_vflux, h_after_vflux, CS%diag)
 !  call disable_averaging(CS%diag)
 
-  call ice_shelf_advect_temp_x(CS, G, time_step/spy, ISS%hmask, TH, th_after_uflux, flux_enter)
-  call ice_shelf_advect_temp_y(CS, G, time_step/spy, ISS%hmask, th_after_uflux, th_after_vflux, flux_enter)
+  call ice_shelf_advect_temp_x(CS, G, US%s_to_T*time_step/spy, ISS%hmask, TH, th_after_uflux, flux_enter)
+  call ice_shelf_advect_temp_y(CS, G, US%s_to_T*time_step/spy, ISS%hmask, th_after_uflux, th_after_vflux, flux_enter)
 
   do j=jsd,jed
     do i=isd,ied
@@ -3576,9 +3579,9 @@ subroutine ice_shelf_temp(CS, ISS, G, US, time_step, melt_rate, Time)
       if ((ISS%hmask(i,j) == 1) .or. (ISS%hmask(i,j) == 2)) then
         if (ISS%h_shelf(i,j) > 0.0) then
 !         CS%t_shelf(i,j) = CS%t_shelf(i,j) + &
-!             time_step*(adot*Tsurf - US%m_to_Z*melt_rate(i,j)*ISS%tfreeze(i,j))/(ISS%h_shelf(i,j))
+!             US%s_to_T*time_step*(adot*Tsurf - US%R_to_kg_m3*melt_rate(i,j)*ISS%tfreeze(i,j))/(ISS%h_shelf(i,j))
           CS%t_shelf(i,j) = CS%t_shelf(i,j) + &
-              time_step*(adot*Tsurf - (3.0*US%m_to_Z/spy)*ISS%tfreeze(i,j)) / ISS%h_shelf(i,j)
+              US%s_to_T*time_step*(adot*Tsurf - (3.0*US%m_to_Z/spy)*ISS%tfreeze(i,j)) / ISS%h_shelf(i,j)
         else
           ! the ice is about to melt away
           ! in this case set thickness, area, and mask to zero
