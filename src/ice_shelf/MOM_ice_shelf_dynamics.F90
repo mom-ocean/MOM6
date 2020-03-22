@@ -1969,7 +1969,7 @@ subroutine shelf_advance_front(CS, ISS, G, flux_enter)
                 ISS%area_shelf_h(i,j) = dxdyh
               elseif ((partial_vol / dxdyh) < h_reference) then
                 ISS%hmask(i,j) = 2
-        !         ISS%mass_shelf(i,j) = G%US%L_to_m**2*partial_vol * rho
+        !         ISS%mass_shelf(i,j) = G%US%L_to_Z*G%US%L_to_m*partial_vol * G%US%kg_m3_to_R*rho
                 ISS%area_shelf_h(i,j) = partial_vol / h_reference
                 ISS%h_shelf(i,j) = h_reference
               else

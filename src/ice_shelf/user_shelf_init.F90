@@ -27,7 +27,7 @@ public USER_init_ice_thickness
 
 !> The control structure for the user_ice_shelf module
 type, public :: user_ice_shelf_CS ; private
-  real :: Rho_ocean  !< The ocean's typical density [kg m-2 Z-1].
+  real :: Rho_ocean  !< The ocean's typical density [R ~> kg m-3].
   real :: max_draft  !< The maximum ocean draft of the ice shelf [Z ~> m].
   real :: min_draft  !< The minimum ocean draft of the ice shelf [Z ~> m].
   real :: flat_shelf_width !< The range over which the shelf is min_draft thick [km].
@@ -45,7 +45,7 @@ subroutine USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, 
   type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
                            intent(out) :: mass_shelf !< The ice shelf mass per unit area averaged
-                                                  !! over the full ocean cell [kg m-2].
+                                                  !! over the full ocean cell [R Z ~> kg m-2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                            intent(out) :: h_shelf !< The ice shelf thickness [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
@@ -60,7 +60,6 @@ subroutine USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, 
                                                    !! being started from a restart file.
 
 ! This subroutine sets up the initial mass and area covered by the ice shelf.
-  real :: Rho_ocean  ! The ocean's typical density [kg m-3].
   real :: max_draft  ! The maximum ocean draft of the ice shelf [Z ~> m].
   real :: min_draft  ! The minimum ocean draft of the ice shelf [Z ~> m].
   real :: flat_shelf_width ! The range over which the shelf is min_draft thick.
@@ -81,7 +80,7 @@ subroutine USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, 
                  "calculate accelerations and the mass for conservation "//&
                  "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
-                 units="kg m-3", default=1035.0, scale=US%Z_to_m)
+                 units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "SHELF_MAX_DRAFT", CS%max_draft, &
                  units="m", default=1.0, scale=US%m_to_Z)
   call get_param(param_file, mdl, "SHELF_MIN_DRAFT", CS%min_draft, &
@@ -126,7 +125,7 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
                            intent(inout) :: mass_shelf !< The ice shelf mass per unit area averaged
-                                                  !! over the full ocean cell [kg m-2].
+                                                  !! over the full ocean cell [R Z ~> kg m-2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                            intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [L2 ~> m2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
