@@ -665,7 +665,8 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
 
     ! advect the ice shelf, and advance the front. Calving will be in here somewhere as well..
     ! when we decide on how to do it
-    call update_ice_shelf(CS%dCS, ISS, G, US, time_step, Time, state%ocean_mass, coupled_GL)
+    call update_ice_shelf(CS%dCS, ISS, G, US, time_step, Time, &
+                          US%kg_m3_to_R*US%m_to_Z*state%ocean_mass(:,:), coupled_GL)
 
   endif
 
