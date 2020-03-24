@@ -279,8 +279,8 @@ subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, G
   real :: b1(SZI_(G))          ! b1 and c1 are variables used by the
   real :: c1(SZI_(G),SZK_(G))  ! tridiagonal solver.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
-  real :: melt(SZI_(G),SZJ_(G)) ! melt water (positive for melting, negative for freezing) [Z year-1 ~> m year-1]
-  real :: mmax                ! The global maximum melting rate [Z year-1 ~> m year-1]
+  real :: melt(SZI_(G),SZJ_(G)) ! melt water (positive for melting, negative for freezing) [R Z T-1 ~> kg m-2 s-1]
+  real :: mmax                ! The global maximum melting rate [R Z T-1 ~> kg m-2 s-1]
   character(len=256) :: mesg  ! The text of an error message
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke

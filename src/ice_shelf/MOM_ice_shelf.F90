@@ -279,7 +279,6 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
   real, parameter :: c2_3 = 2.0/3.0
   character(len=160) :: mesg  ! The text of an error message
   integer :: i, j, is, ie, js, je, ied, jed, it1, it3
-  real, parameter :: rho_fw = 1000.0 ! fresh water density
 
   if (.not. associated(CS)) call MOM_error(FATAL, "shelf_calc_flux: "// &
        "initialize_ice_shelf must be called before shelf_calc_flux.")
@@ -594,12 +593,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
   enddo ! j-loop
 
   ! ISS%water_flux = net liquid water into the ocean [R Z T-1 ~> kg m-2 s-1]
-  ! We want melt in m/year
-  if (CS%const_gamma) then ! use ISOMIP+ eq. with rho_fw
-    fluxes%iceshelf_melt = ISS%water_flux  * (86400.0*365.0*US%s_to_T/rho_fw) * CS%flux_factor
-  else ! use original eq.
-    fluxes%iceshelf_melt = ISS%water_flux  * (86400.0*365.0*US%s_to_T/CS%density_ice) * CS%flux_factor
-  endif
+  fluxes%iceshelf_melt(:,:) = ISS%water_flux(:,:) * CS%flux_factor
 
   do j=js,je ; do i=is,ie
     if ((iDens*state%ocean_mass(i,j) > CS%col_thick_melt_threshold) .and. &
@@ -907,8 +901,6 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
   type(ice_shelf_state), pointer :: ISS => NULL() !< A structure with elements that describe
                                           !! the ice-shelf state
 
-  real :: kv_rho_ice ! The viscosity of ice divided by its density [m5 kg-1 s-1]
-  real :: rho_fw = 1000.0     ! Fresh water density [R ~> kg m-3]
   character(len=160) :: mesg  ! The text of an error message
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -920,7 +912,6 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
 
   ISS => CS%ISS
 
-  rho_fw = 1000.0*US%kg_m3_to_R ! fresh water density
 
   call add_shelf_pressure(G, US, CS, fluxes)
 
@@ -1049,7 +1040,6 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
         enddo ; enddo
         call sum_across_PEs(shelf_mass0); call sum_across_PEs(shelf_mass1)
         delta_mass_shelf = (shelf_mass1 - shelf_mass0)/CS%time_step
-!          delta_mass_shelf = (shelf_mass1 - shelf_mass0) * (rho_fw/(CS%density_ice*CS%time_step))
 !        write(mesg,*) 'delta_mass_shelf = ', delta_mass_shelf
 !        call MOM_mesg(mesg,5)
       else! first time step
@@ -1114,6 +1104,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                         ! a restart file to the internal representation in this run.
   real    :: L_rescale  ! A rescaling factor for horizontal lengths from the representation in
                         ! a restart file to the internal representation in this run.
+  real :: meltrate_conversion ! The conversion factor to use for in the melt rate diagnostic.
   real :: cdrag, drag_bg_vel
   logical :: new_sim, save_IC, var_force
   !This include declares and sets the variable "version".
@@ -1596,8 +1587,14 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   CS%id_mass_flux = register_diag_field('ocean_model', 'mass_flux', CS%diag%axesT1,&
      CS%Time, 'Total mass flux of freshwater across the ice-ocean interface.', &
      'kg/s', conversion=US%RZ_T_to_kg_m2s*US%L_to_m**2)
+
+  if (CS%const_gamma) then ! use ISOMIP+ eq. with rho_fw = 1000. kg m-3
+    meltrate_conversion = 86400.0*365.0*US%Z_to_m*US%s_to_T / (1000.0*US%kg_m3_to_R)
+  else ! use original eq.
+    meltrate_conversion = 86400.0*365.0*US%Z_to_m*US%s_to_T / CS%density_ice
+  endif
   CS%id_melt = register_diag_field('ocean_model', 'melt', CS%diag%axesT1, CS%Time, &
-     'Ice Shelf Melt Rate', 'm yr-1', conversion=US%Z_to_m)
+     'Ice Shelf Melt Rate', 'm yr-1', conversion= meltrate_conversion)
   CS%id_thermal_driving = register_diag_field('ocean_model', 'thermal_driving', CS%diag%axesT1, CS%Time, &
      'pot. temp. in the boundary layer minus freezing pot. temp. at the ice-ocean interface.', 'Celsius')
   CS%id_haline_driving = register_diag_field('ocean_model', 'haline_driving', CS%diag%axesT1, CS%Time, &
