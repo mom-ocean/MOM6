@@ -383,6 +383,8 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   logical :: usePLMslope
   logical, dimension(SZJ_(G),SZK_(G)) :: domore_u_initial
 
+  ! keep a local copy of the initial values of domore_u, which is to be used when computing ad2d_x
+  ! diagnostic at the end of this subroutine.
   domore_u_initial = domore_u
 
   usePLMslope = .not. (usePPM .and. useHuynh)
@@ -686,6 +688,8 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
 
   enddo ! End of j-loop.
 
+  ! compute ad2d_x diagnostic outside above j-loop so as to make the summation ordered when OMP is active.
+
   !$OMP ordered
   do j=js,je ; if (domore_u_initial(j,k)) then
     do m=1,ntr
@@ -749,7 +753,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
   logical :: do_j_tr(SZJ_(G))   ! If true, calculate the tracer profiles.
-  logical :: do_i(SZIB_(G))     ! If true, work on given points.
+  logical :: do_i(SZIB_(G), SZJ_(G))     ! If true, work on given points.
   logical :: do_any_i
   integer :: i, j, j2, m, n, j_up, stencil
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
@@ -1026,36 +1030,33 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   do j=js,je ; if (do_j_tr(j)) then
     do i=is,ie
       if ((vhh(i,J) /= 0.0) .or. (vhh(i,J-1) /= 0.0)) then
-        do_i(i) = .true.
+        do_i(i,j) = .true.
         hlst(i) = hprev(i,j,k)
         hprev(i,j,k) = max(hprev(i,j,k) - (vhh(i,J) - vhh(i,J-1)), 0.0)
-        if (hprev(i,j,k) <= 0.0) then ; do_i(i) = .false.
+        if (hprev(i,j,k) <= 0.0) then ; do_i(i,j) = .false.
         elseif (hprev(i,j,k) < h_neglect*G%areaT(i,j)) then
           hlst(i) = hlst(i) + (h_neglect*G%areaT(i,j) - hprev(i,j,k))
           Ihnew(i) = 1.0 / (h_neglect*G%areaT(i,j))
         else ;  Ihnew(i) = 1.0 / hprev(i,j,k) ; endif
-      else ; do_i(i) = .false. ; endif
+      else ; do_i(i,j) = .false. ; endif
     enddo
 
     ! update tracer and save some diagnostics
     do m=1,ntr
-      do i=is,ie ; if (do_i(i)) then
+      do i=is,ie ; if (do_i(i,j)) then
         Tr(m)%t(i,j,k) = (Tr(m)%t(i,j,k) * hlst(i) - &
                           (flux_y(i,m,J) - flux_y(i,m,J-1))) * Ihnew(i)
       endif ; enddo
 
       ! diagnostics
-      if (associated(Tr(m)%ad_y)) then ; do i=is,ie ; if (do_i(i)) then
+      if (associated(Tr(m)%ad_y)) then ; do i=is,ie ; if (do_i(i,j)) then
         Tr(m)%ad_y(i,J,k) = Tr(m)%ad_y(i,J,k) + flux_y(i,m,J)*Idt
-      endif ; enddo ; endif
-      if (associated(Tr(m)%ad2d_y)) then ; do i=is,ie ; if (do_i(i)) then
-        Tr(m)%ad2d_y(i,J) = Tr(m)%ad2d_y(i,J) + flux_y(i,m,J)*Idt
       endif ; enddo ; endif
 
       ! diagnose convergence of flux_y and add to convergence of flux_x.
       ! division by areaT to get into W/m2 for heat and kg/(s*m2) for salt.
       if (associated(Tr(m)%advection_xy)) then
-        do i=is,ie ; if (do_i(i)) then
+        do i=is,ie ; if (do_i(i,j)) then
           Tr(m)%advection_xy(i,j,k) = Tr(m)%advection_xy(i,j,k) - (flux_y(i,m,J) - flux_y(i,m,J-1))* Idt * &
                                           G%IareaT(i,j)
         endif ; enddo
@@ -1063,6 +1064,18 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 
     enddo
   endif ; enddo ! End of j-loop.
+
+  ! compute ad2d_y diagnostic outside above j-loop so as to make the summation ordered when OMP is active.
+
+  !$OMP ordered
+  do j=js,je ; if (do_j_tr(j)) then
+    do m=1,ntr
+      if (associated(Tr(m)%ad2d_y)) then ; do i=is,ie ; if (do_i(i,j)) then
+        Tr(m)%ad2d_y(i,J) = Tr(m)%ad2d_y(i,J) + flux_y(i,m,J)*Idt
+      endif ; enddo ; endif
+    enddo
+  endif ; enddo ! End of j-loop.
+  !$OMP end ordered
 
 end subroutine advect_y
 
