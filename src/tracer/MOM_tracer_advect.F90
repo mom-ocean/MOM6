@@ -250,49 +250,62 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
     isv = isv + stencil ; iev = iev - stencil
     jsv = jsv + stencil ; jev = jev - stencil
 
-!$OMP parallel do ordered default(private) shared(nz,domore_k,x_first,Tr,hprev,uhr,uh_neglect,  &
-!$OMP                                  OBC,domore_u,ntr,Idt,isv,iev,jsv,jev,stencil, &
-!$OMP                                  G,GV,CS,vhr,vh_neglect,domore_v,US)
-
     !  To ensure positive definiteness of the thickness at each iteration, the
     !  mass fluxes out of each layer are checked each step, and limited to keep
     !  the thicknesses positive.  This means that several iterations may be required
     !  for all the transport to happen.  The sum over domore_k keeps the processors
     !  synchronized.  This may not be very efficient, but it should be reliable.
-    do k=1,nz ; if (domore_k(k) > 0) then
 
-      if (x_first) then
+!$OMP parallel default(private) shared(nz,domore_k,x_first,Tr,hprev,uhr,uh_neglect,  &
+!$OMP                                  OBC,domore_u,ntr,Idt,isv,iev,jsv,jev,stencil, &
+!$OMP                                  G,GV,CS,vhr,vh_neglect,domore_v,US)
 
+    if (x_first) then
+
+      !$OMP do ordered
+      do k=1,nz ; if (domore_k(k) > 0) then
         ! First, advect zonally.
         call advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                       isv, iev, jsv-stencil, jev+stencil, k, G, GV, US, CS%usePPM, CS%useHuynh)
+      endif ; enddo
 
+      !$OMP do ordered
+      do k=1,nz ; if (domore_k(k) > 0) then
         !  Next, advect meridionally.
         call advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                       isv, iev, jsv, jev, k, G, GV, US, CS%usePPM, CS%useHuynh)
 
+        ! Update domore_k(k) for the next iteration
         domore_k(k) = 0
         do j=jsv-stencil,jev+stencil ; if (domore_u(j,k)) domore_k(k) = 1 ; enddo
         do J=jsv-1,jev ; if (domore_v(J,k)) domore_k(k) = 1 ; enddo
 
-      else
+      endif ; enddo
 
+    else
+
+      !$OMP do ordered
+      do k=1,nz ; if (domore_k(k) > 0) then
         ! First, advect meridionally.
         call advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                       isv-stencil, iev+stencil, jsv, jev, k, G, GV, US, CS%usePPM, CS%useHuynh)
+      endif ; enddo
 
+      !$OMP do ordered
+      do k=1,nz ; if (domore_k(k) > 0) then
         ! Next, advect zonally.
         call advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                       isv, iev, jsv, jev, k, G, GV, US, CS%usePPM, CS%useHuynh)
 
+        ! Update domore_k(k) for the next iteration
         domore_k(k) = 0
         do j=jsv,jev ; if (domore_u(j,k)) domore_k(k) = 1 ; enddo
         do J=jsv-1,jev ; if (domore_v(J,k)) domore_k(k) = 1 ; enddo
+      endif ; enddo
 
-      endif
+    endif ! x_first
 
-
-    endif ; enddo ! End of k-loop
+!$OMP end parallel
 
     ! If the advection just isn't finishing after max_iter, move on.
     if (itt >= max_iter) then
@@ -668,9 +681,6 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
       if (associated(Tr(m)%ad_x)) then ; do i=is,ie ; if (do_i(i,j)) then
         Tr(m)%ad_x(I,j,k) = Tr(m)%ad_x(I,j,k) + flux_x(I,j,m)*Idt
       endif ; enddo ; endif
-      !!if (associated(Tr(m)%ad2d_x)) then ; do i=is,ie ; if (do_i(i,j)) then
-      !!  Tr(m)%ad2d_x(I,j) = Tr(m)%ad2d_x(I,j) + flux_x(I,j,m)*Idt
-      !!endif ; enddo ; endif
 
       ! diagnose convergence of flux_x (do not use the Ihnew(i) part of the logic).
       ! division by areaT to get into W/m2 for heat and kg/(s*m2) for salt.
