@@ -709,10 +709,10 @@ subroutine ice_shelf_advect(CS, ISS, G, time_step, Time)
   ! ###Perhaps flux_enter should be changed into u-face and v-face
   ! ###fluxes, which can then be used in halo updates, etc.
   !
-  !   from left neighbor:   flux_enter(:,:,1)
-  !   from right neighbor:  flux_enter(:,:,2)
-  !   from bottom neighbor: flux_enter(:,:,3)
-  !   from top neighbor:    flux_enter(:,:,4)
+  !   from eastern neighbor:  flux_enter(:,:,1)
+  !   from western neighbor:  flux_enter(:,:,2)
+  !   from southern neighbor: flux_enter(:,:,3)
+  !   from northern neighbor: flux_enter(:,:,4)
   !
   !  THESE ARE NOT CONSISTENT ==> FIND OUT WHAT YOU IMPLEMENTED
 
@@ -1329,10 +1329,10 @@ subroutine ice_shelf_advect_thickness_x(CS, G, time_step, hmask, h0, h_after_ufl
 
   ! flux_enter(isd:ied,jsd:jed,1:4): if cell is not ice-covered, gives flux of ice into cell from kth boundary
   !
-  !   from left neighbor:   flux_enter(:,:,1)
-  !   from right neighbor:  flux_enter(:,:,2)
-  !   from bottom neighbor: flux_enter(:,:,3)
-  !   from top neighbor:    flux_enter(:,:,4)
+  !   from eastern neighbor:  flux_enter(:,:,1)
+  !   from western neighbor:  flux_enter(:,:,2)
+  !   from southern neighbor: flux_enter(:,:,3)
+  !   from northern neighbor: flux_enter(:,:,4)
   !
   !        o--- (4) ---o
   !        |           |
@@ -1433,11 +1433,11 @@ subroutine ice_shelf_advect_thickness_x(CS, G, time_step, hmask, h0, h_after_ufl
 
             ! NEXT DO RIGHT FACE
 
-            ! get u-velocity at center of right face
+            ! get u-velocity at center of east face
 
-            if (CS%u_face_mask(I+1,j) == 4.) then
+            if (CS%u_face_mask(I,j) == 4.) then
 
-              flux_diff = flux_diff + G%dyCu(I,j) * time_step * CS%u_flux_bdry_val(I+1,j) / G%areaT(i,j)
+              flux_diff = flux_diff + G%dyCu(I,j) * time_step * CS%u_flux_bdry_val(I,j) / G%areaT(i,j)
 
             else
 
@@ -1502,8 +1502,8 @@ subroutine ice_shelf_advect_thickness_x(CS, G, time_step, hmask, h0, h_after_ufl
             if (at_east_bdry .AND. (hmask(i+1,j) == 3)) then
               u_face = 0.5 * (CS%u_shelf(I,J-1) + CS%u_shelf(I,J))
               flux_enter(i,j,2) = ABS(u_face) * G%dyCu(I,j) * time_step * CS%thickness_bdry_val(i+1,j)
-            elseif (CS%u_face_mask(I+1,j) == 4.) then
-              flux_enter(i,j,2) = G%dyCu(I,j) * time_step * CS%u_flux_bdry_val(I+1,j)
+            elseif (CS%u_face_mask(I,j) == 4.) then
+              flux_enter(i,j,2) = G%dyCu(I,j) * time_step * CS%u_flux_bdry_val(I,j)
             endif
 
             if ((i == is) .AND. (hmask(i,j) == 0) .AND. (hmask(i-1,j) == 1)) then
@@ -1556,10 +1556,10 @@ subroutine ice_shelf_advect_thickness_y(CS, G, time_step, hmask, h_after_uflux, 
 
   ! flux_enter(isd:ied,jsd:jed,1:4): if cell is not ice-covered, gives flux of ice into cell from kth boundary
   !
-  !   from left neighbor:   flux_enter(:,:,1)
-  !   from right neighbor:  flux_enter(:,:,2)
-  !   from bottom neighbor: flux_enter(:,:,3)
-  !   from top neighbor:    flux_enter(:,:,4)
+  !   from eastern neighbor:  flux_enter(:,:,1)
+  !   from western neighbor:  flux_enter(:,:,2)
+  !   from southern neighbor: flux_enter(:,:,3)
+  !   from northern neighbor: flux_enter(:,:,4)
   !
   !        o--- (4) ---o
   !        |           |
@@ -1661,9 +1661,9 @@ subroutine ice_shelf_advect_thickness_y(CS, G, time_step, hmask, h_after_uflux, 
 
             ! NEXT DO north FACE
 
-            if (CS%v_face_mask(i,J+1) == 4.) then
+            if (CS%v_face_mask(i,J) == 4.) then
 
-              flux_diff = flux_diff + G%dxCv(i,J) * time_step * CS%v_flux_bdry_val(i,J+1) / G%areaT(i,j)
+              flux_diff = flux_diff + G%dxCv(i,J) * time_step * CS%v_flux_bdry_val(i,J) / G%areaT(i,j)
 
             else
 
@@ -1718,8 +1718,8 @@ subroutine ice_shelf_advect_thickness_y(CS, G, time_step, hmask, h_after_uflux, 
             if (at_north_bdry .AND. (hmask(i,j+1) == 3)) then
               v_face = 0.5 * (CS%u_shelf(I-1,J) + CS%u_shelf(I,J))
               flux_enter(i,j,4) = ABS(v_face) * G%dxCv(i,J) * time_step * CS%thickness_bdry_val(i,j+1)
-            elseif (CS%v_face_mask(i,J+1) == 4.) then
-              flux_enter(i,j,4) = G%dxCv(i,J) * time_step * CS%v_flux_bdry_val(i,J+1)
+            elseif (CS%v_face_mask(i,J) == 4.) then
+              flux_enter(i,j,4) = G%dxCv(i,J) * time_step * CS%v_flux_bdry_val(i,J)
             endif
 
             if ((j == js) .AND. (hmask(i,j) == 0) .AND. (hmask(i,j-1) == 1)) then
@@ -1766,10 +1766,10 @@ subroutine shelf_advance_front(CS, ISS, G, flux_enter)
 
   ! flux_enter(isd:ied,jsd:jed,1:4): if cell is not ice-covered, gives flux of ice into cell from kth boundary
   !
-  !   from left neighbor:   flux_enter(:,:,1)
-  !   from right neighbor:  flux_enter(:,:,2)
-  !   from bottom neighbor: flux_enter(:,:,3)
-  !   from top neighbor:    flux_enter(:,:,4)
+  !   from eastern neighbor:  flux_enter(:,:,1)
+  !   from western neighbor:  flux_enter(:,:,2)
+  !   from southern neighbor: flux_enter(:,:,3)
+  !   from northern neighbor: flux_enter(:,:,4)
   !
   !        o--- (4) ---o
   !        |           |
@@ -2042,7 +2042,7 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
           else
             sx = 0
           endif
-        elseif ((i+i_off) == giec) then ! at right computational bdry
+        elseif ((i+i_off) == giec) then ! at east computational bdry
           if (ISS%hmask(i-1,j) == 1) then
             sx = (S(i,j)-S(i-1,j))/dxh
           else
@@ -2140,7 +2140,7 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
         endif
 
         if ((CS%u_face_mask(I,j) == 2) .OR. (ISS%hmask(i+1,j) == 0) .OR. (ISS%hmask(i+1,j) == 2) ) then
-          ! right face of the cell is at a stress boundary
+          ! east face of the cell is at a stress boundary
           taudx(I,J-1) = taudx(I,J-1) + .5 * dyh * neumann_val
           taudx(I,J) = taudx(I,J) + .5 * dyh * neumann_val
         endif
@@ -3145,9 +3145,8 @@ subroutine update_velocity_masks(CS, G, hmask, umask, vmask, u_face_mask, v_face
         !endif
 
         if (i < G%ied) then
-          if ((hmask(i+1,j) == 0) &
-              .OR. (hmask(i+1,j) == 2)) then
-            !right boundary or adjacent to unfilled cell
+          if ((hmask(i+1,j) == 0) .OR. (hmask(i+1,j) == 2)) then
+            ! east boundary or adjacent to unfilled cell
             u_face_mask(I,j) = 2.
           endif
         endif
@@ -3278,10 +3277,10 @@ subroutine ice_shelf_temp(CS, ISS, G, US, time_step, melt_rate, Time)
   ! ###Perhaps flux_enter should be changed into u-face and v-face
   ! ###fluxes, which can then be used in halo updates, etc.
   !
-  !   from left neighbor:   flux_enter(:,:,1)
-  !   from right neighbor:  flux_enter(:,:,2)
-  !   from bottom neighbor: flux_enter(:,:,3)
-  !   from top neighbor:    flux_enter(:,:,4)
+  !   from eastern neighbor:  flux_enter(:,:,1)
+  !   from western neighbor:  flux_enter(:,:,2)
+  !   from southern neighbor: flux_enter(:,:,3)
+  !   from northern neighbor: flux_enter(:,:,4)
   !
   !  THESE ARE NOT CONSISTENT ==> FIND OUT WHAT YOU IMPLEMENTED
 
@@ -3411,10 +3410,10 @@ subroutine ice_shelf_advect_temp_x(CS, G, time_step, hmask, h0, h_after_uflux, f
 
   ! flux_enter(isd:ied,jsd:jed,1:4): if cell is not ice-covered, gives flux of ice into cell from kth boundary
   !
-  !   from left neighbor:   flux_enter(:,:,1)
-  !   from right neighbor:  flux_enter(:,:,2)
-  !   from bottom neighbor: flux_enter(:,:,3)
-  !   from top neighbor:    flux_enter(:,:,4)
+  !   from eastern neighbor:  flux_enter(:,:,1)
+  !   from western neighbor:  flux_enter(:,:,2)
+  !   from southern neighbor: flux_enter(:,:,3)
+  !   from northern neighbor: flux_enter(:,:,4)
   !
   !        o--- (4) ---o
   !        |           |
@@ -3517,11 +3516,11 @@ subroutine ice_shelf_advect_temp_x(CS, G, time_step, hmask, h0, h_after_uflux, f
 
             ! NEXT DO RIGHT FACE
 
-            ! get u-velocity at center of right face
+            ! get u-velocity at center of eastern face
 
-            if (CS%u_face_mask(I+1,j) == 4.) then
+            if (CS%u_face_mask(I,j) == 4.) then
 
-              flux_diff = flux_diff + G%dyCu(I,j) * time_step * CS%u_flux_bdry_val(I+1,j) *&
+              flux_diff = flux_diff + G%dyCu(I,j) * time_step * CS%u_flux_bdry_val(I,j) *&
                                CS%t_bdry_val(i+1,j) / G%areaT(i,j)
             else
 
@@ -3589,18 +3588,18 @@ subroutine ice_shelf_advect_temp_x(CS, G, time_step, hmask, h0, h_after_uflux, f
               u_face = 0.5 * (CS%u_shelf(I,J-1) + CS%u_shelf(I,J))
               flux_enter(i,j,2) = ABS(u_face) * G%dyCu(I,j) * time_step * CS%t_bdry_val(i+1,j)* &
                                   CS%thickness_bdry_val(i+1,j)
-            elseif (CS%u_face_mask(I+1,j) == 4.) then
-              flux_enter(i,j,2) = G%dyCu(I,j) * time_step * CS%u_flux_bdry_val(I+1,j) * CS%t_bdry_val(i+1,j)
+            elseif (CS%u_face_mask(I,j) == 4.) then
+              flux_enter(i,j,2) = G%dyCu(I,j) * time_step * CS%u_flux_bdry_val(I,j) * CS%t_bdry_val(i+1,j)
             endif
 
 !            if ((i == is) .AND. (hmask(i,j) == 0) .AND. (hmask(i-1,j) == 1)) then
               ! this is solely for the purposes of keeping the mask consistent while advancing
-              ! the front without having to call pass_var - if cell is empty and cell to left
+              ! the front without having to call pass_var - if cell is empty and cell to west
               ! is ice-covered then this cell will become partly covered
 !              hmask(i,j) = 2
 !            elseif ((i == ie) .AND. (hmask(i,j) == 0) .AND. (hmask(i+1,j) == 1)) then
               ! this is solely for the purposes of keeping the mask consistent while advancing
-              ! the front without having to call pass_var - if cell is empty and cell to left
+              ! the front without having to call pass_var - if cell is empty and cell to west
               ! is ice-covered then this cell will become partly covered
 !              hmask(i,j) = 2
 
@@ -3641,10 +3640,10 @@ subroutine ice_shelf_advect_temp_y(CS, G, time_step, hmask, h_after_uflux, h_aft
 
   ! flux_enter(isd:ied,jsd:jed,1:4): if cell is not ice-covered, gives flux of ice into cell from kth boundary
   !
-  !   from left neighbor:   flux_enter(:,:,1)
-  !   from right neighbor:  flux_enter(:,:,2)
-  !   from bottom neighbor: flux_enter(:,:,3)
-  !   from top neighbor:    flux_enter(:,:,4)
+  !   from eastern neighbor:  flux_enter(:,:,1)
+  !   from western neighbor:  flux_enter(:,:,2)
+  !   from southern neighbor: flux_enter(:,:,3)
+  !   from northern neighbor: flux_enter(:,:,4)
   !
   !        o--- (4) ---o
   !        |           |
@@ -3700,7 +3699,7 @@ subroutine ice_shelf_advect_temp_y(CS, G, time_step, hmask, h_after_uflux, h_aft
                                  CS%t_bdry_val(i,j-1)/ G%areaT(i,j)
             else
 
-              ! get u-velocity at center of left face
+              ! get u-velocity at center of west face
               v_face = 0.5 * (CS%v_shelf(I-1,J-1) + CS%v_shelf(I,J-1))
 
               if (v_face > 0) then !flux is into cell - we need info from h(j-2), h(j-1) if available
@@ -3744,13 +3743,13 @@ subroutine ice_shelf_advect_temp_y(CS, G, time_step, hmask, h_after_uflux, h_aft
 
             ! NEXT DO north FACE
 
-            if (CS%v_face_mask(i,J+1) == 4.) then
+            if (CS%v_face_mask(i,J) == 4.) then
 
-              flux_diff = flux_diff + G%dxCv(i,J) * time_step * CS%v_flux_bdry_val(i,J+1) *&
+              flux_diff = flux_diff + G%dxCv(i,J) * time_step * CS%v_flux_bdry_val(i,J) *&
                                CS%t_bdry_val(i,j+1)/ G%areaT(i,j)
             else
 
-            ! get u-velocity at center of right face
+            ! get u-velocity at center of east face
               v_face = 0.5 * (CS%v_shelf(I-1,J) + CS%v_shelf(I,J))
 
               if (v_face < 0) then !flux is into cell - we need info from h(j+2), h(j+1) if available
@@ -3803,18 +3802,18 @@ subroutine ice_shelf_advect_temp_y(CS, G, time_step, hmask, h_after_uflux, h_aft
               v_face = 0.5 * (CS%v_shelf(I-1,J) + CS%v_shelf(I,J))
               flux_enter(i,j,4) = ABS(v_face) * G%dxCv(i,J) * time_step * CS%t_bdry_val(i,j+1)* &
                                    CS%thickness_bdry_val(i,j+1)
-            elseif (CS%v_face_mask(i,J+1) == 4.) then
-              flux_enter(i,j,4) = G%dxCv(i,J) * time_step * CS%v_flux_bdry_val(i,J+1)*CS%t_bdry_val(i,j+1)
+            elseif (CS%v_face_mask(i,J) == 4.) then
+              flux_enter(i,j,4) = G%dxCv(i,J) * time_step * CS%v_flux_bdry_val(i,J)*CS%t_bdry_val(i,j+1)
             endif
 
 !            if ((j == js) .AND. (hmask(i,j) == 0) .AND. (hmask(i,j-1) == 1)) then
                ! this is solely for the purposes of keeping the mask consistent while advancing
-               ! the front without having to call pass_var - if cell is empty and cell to left
+               ! the front without having to call pass_var - if cell is empty and cell to west
                ! is ice-covered then this cell will become partly covered
  !             hmask(i,j) = 2
  !           elseif ((j == je) .AND. (hmask(i,j) == 0) .AND. (hmask(i,j+1) == 1)) then
                 ! this is solely for the purposes of keeping the mask consistent while advancing the
-                ! front without having to call pass_var - if cell is empty and cell to left is
+                ! front without having to call pass_var - if cell is empty and cell to west is
                 ! ice-covered then this cell will become partly covered
 !              hmask(i,j) = 2
 !            endif
