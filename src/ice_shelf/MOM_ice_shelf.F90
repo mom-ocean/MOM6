@@ -8,8 +8,8 @@ module MOM_ice_shelf
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_COMPONENT, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : diag_mediator_init, set_diag_mediator_grid
-use MOM_diag_mediator, only : diag_ctrl, time_type, enable_averaging, disable_averaging
+use MOM_diag_mediator, only : diag_mediator_init, set_diag_mediator_grid, diag_ctrl, time_type
+use MOM_diag_mediator, only : enable_averages, enable_averaging, disable_averaging
 use MOM_domains, only : MOM_domains_init, clone_MOM_domain
 use MOM_domains, only : pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE, CORNER
 use MOM_dyn_horgrid, only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
@@ -26,7 +26,7 @@ use MOM_io, only : slasher, fieldtype
 use MOM_io, only : write_field, close_file, SINGLE_FILE, MULTIPLE
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, restore_state, MOM_restart_CS
-use MOM_time_manager, only : time_type, time_type_to_real, time_type_to_real, real_to_time
+use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
 use MOM_transcribe_grid, only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid
 use MOM_unit_scaling, only : unit_scale_type, unit_scaling_init, fix_restart_unit_scaling
 use MOM_variables, only : surface
@@ -60,7 +60,7 @@ implicit none ; private
 #endif
 
 public shelf_calc_flux, add_shelf_flux, initialize_ice_shelf, ice_shelf_end
-public ice_shelf_save_restart, solo_time_step, add_shelf_forces
+public ice_shelf_save_restart, solo_step_ice_shelf, add_shelf_forces
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -1786,72 +1786,66 @@ subroutine ice_shelf_end(CS)
 end subroutine ice_shelf_end
 
 !> This routine is for stepping a stand-alone ice shelf model without an ocean.
-subroutine solo_time_step(CS, time_interval, nsteps, Time, min_time_step_in)
-  type(ice_shelf_CS), pointer    :: CS !< A pointer to the ice shelf control structure
-  real,            intent(in)    :: time_interval !< The time interval for this update [s].
+subroutine solo_step_ice_shelf(CS, time_interval, nsteps, Time, min_time_step_in)
+  type(ice_shelf_CS), pointer    :: CS      !< A pointer to the ice shelf control structure
+  type(time_type), intent(in)    :: time_interval !< The time interval for this update [s].
   integer,         intent(inout) :: nsteps  !< The running number of ice shelf steps.
-  type(time_type), intent(inout) :: Time !< The current model time
-  real,  optional, intent(in)    :: min_time_step_in !< The minimum permitted time step [s].
+  type(time_type), intent(inout) :: Time    !< The current model time
+  real,  optional, intent(in)    :: min_time_step_in !< The minimum permitted time step [T ~> s].
 
-  type(ocean_grid_type), pointer :: G => NULL()
+  type(ocean_grid_type), pointer :: G => NULL()  ! A pointer to the ocean's grid structure
   type(unit_scale_type), pointer :: US => NULL() ! Pointer to a structure containing
                                                  ! various unit conversion factors
   type(ice_shelf_state), pointer :: ISS => NULL() !< A structure with elements that describe
                                           !! the ice-shelf state
-  integer :: is, iec, js, jec, i, j
-  real :: time_step
-  real :: time_step_remain
-  real :: time_step_int, min_time_step
+  real :: remaining_time    ! The remaining time in this call [T ~> s]
+  real :: time_step         ! The internal time step during this call [T ~> s]
+  real :: min_time_step     ! The minimal required timestep that would indicate a fatal problem [T ~> s]
   character(len=240) :: mesg
   logical :: update_ice_vel ! If true, it is time to update the ice shelf velocities.
   logical :: coupled_GL     ! If true the grouding line position is determined based on
                             ! coupled ice-ocean dynamics.
+  integer :: is, iec, js, jec, i, j
 
   G => CS%grid
   US => CS%US
   ISS => CS%ISS
   is = G%isc ; iec = G%iec ; js = G%jsc ; jec = G%jec
 
-  time_step = time_interval
+  remaining_time = US%s_to_T*time_type_to_real(time_interval)
 
-  time_step_remain = time_step
   if (present (min_time_step_in)) then
     min_time_step = min_time_step_in
   else
-    min_time_step = 1000.0 ! This is in seconds - at 1 km resolution it would imply ice is moving at ~1 meter per second
+    min_time_step = 1000.0*US%s_to_T ! At 1 km resolution this would imply ice is moving at ~1 meter per second
   endif
 
   write (mesg,*) "TIME in ice shelf call, yrs: ", time_type_to_real(Time)/(365. * 86400.)
-  call MOM_mesg("solo_time_step: "//mesg)
+  call MOM_mesg("solo_step_ice_shelf: "//mesg, 5)
 
-  do while (time_step_remain > 0.0)
+  do while (remaining_time > 0.0)
     nsteps = nsteps+1
 
-    ! If time_step is not too long, this is unnecessary.
-    time_step_int = min(US%T_to_s*ice_time_step_CFL(CS%dCS, ISS, G), time_step)
+    ! If time_interval is not too long, this is unnecessary.
+    time_step = min(ice_time_step_CFL(CS%dCS, ISS, G), remaining_time)
 
-    write (mesg,*) "Ice model timestep = ", time_step_int, " seconds"
-    if (time_step_int < min_time_step) then
-      call MOM_error(FATAL, "MOM_ice_shelf:solo_time_step: abnormally small timestep "//mesg)
+    write (mesg,*) "Ice model timestep = ", US%T_to_s*time_step, " seconds"
+    if ((time_step < min_time_step) .and. (time_step < remaining_time))  then
+      call MOM_error(FATAL, "MOM_ice_shelf:solo_step_ice_shelf: abnormally small timestep "//mesg)
     else
-      call MOM_mesg("solo_time_step: "//mesg)
+      call MOM_mesg("solo_step_ice_shelf: "//mesg, 5)
     endif
 
-    if (time_step_int >= time_step_remain) then
-      time_step_int = time_step_remain
-      time_step_remain = 0.0
-    else
-      time_step_remain = time_step_remain - time_step_int
-    endif
+    remaining_time = remaining_time - time_step
 
     ! If the last mini-timestep is a day or less, we cannot expect velocities to change by much.
     ! Do not update the velocities if the last step is very short.
-    update_ice_vel = ((time_step_int > min_time_step) .or. (time_step_int >= time_step))
+    update_ice_vel = ((time_step > min_time_step) .or. (remaining_time > 0.0))
     coupled_GL = .false.
 
-    call update_ice_shelf(CS%dCS, ISS, G, US, US%s_to_T*time_step_int, Time, must_update_vel=update_ice_vel)
+    call update_ice_shelf(CS%dCS, ISS, G, US, time_step, Time, must_update_vel=update_ice_vel)
 
-    call enable_averaging(time_step,Time,CS%diag)
+    call enable_averages(time_step, Time, CS%diag)
     if (CS%id_area_shelf_h > 0) call post_data(CS%id_area_shelf_h, ISS%area_shelf_h, CS%diag)
     if (CS%id_h_shelf > 0) call post_data(CS%id_h_shelf, ISS%h_shelf, CS%diag)
     if (CS%id_h_mask > 0) call post_data(CS%id_h_mask, ISS%hmask, CS%diag)
@@ -1859,7 +1853,7 @@ subroutine solo_time_step(CS, time_interval, nsteps, Time, min_time_step_in)
 
   enddo
 
-end subroutine solo_time_step
+end subroutine solo_step_ice_shelf
 
 !> \namespace mom_ice_shelf
 !!
@@ -1877,7 +1871,7 @@ end subroutine solo_time_step
 !!             h_shelf and density_ice immediately afterwards. Possibly subroutine should be renamed
 !!  update_shelf_mass - updates ice shelf mass via netCDF file
 !!                      USER_update_shelf_mass (TODO).
-!!    solo_time_step - called only in ice-only mode.
+!!    solo_step_ice_shelf - called only in ice-only mode.
 !!    shelf_calc_flux - after melt rate & fluxes are calculated, ice dynamics are done. currently mass_shelf is
 !! updated immediately after ice_shelf_advect in fully dynamic mode.
 !!
