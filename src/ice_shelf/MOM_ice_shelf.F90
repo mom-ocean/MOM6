@@ -665,7 +665,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
 
     ! advect the ice shelf, and advance the front. Calving will be in here somewhere as well..
     ! when we decide on how to do it
-    call update_ice_shelf(CS%dCS, ISS, G, US, time_step, Time, &
+    call update_ice_shelf(CS%dCS, ISS, G, US, US%s_to_T*time_step, Time, &
                           US%kg_m3_to_R*US%m_to_Z*state%ocean_mass(:,:), coupled_GL)
 
   endif
@@ -1786,9 +1786,9 @@ subroutine ice_shelf_end(CS)
 end subroutine ice_shelf_end
 
 !> This routine is for stepping a stand-alone ice shelf model without an ocean.
-subroutine solo_time_step(CS, time_step, nsteps, Time, min_time_step_in)
+subroutine solo_time_step(CS, time_interval, nsteps, Time, min_time_step_in)
   type(ice_shelf_CS), pointer    :: CS !< A pointer to the ice shelf control structure
-  real,            intent(in)    :: time_step !< The time interval for this update [s].
+  real,            intent(in)    :: time_interval !< The time interval for this update [s].
   integer,         intent(inout) :: nsteps  !< The running number of ice shelf steps.
   type(time_type), intent(inout) :: Time !< The current model time
   real,  optional, intent(in)    :: min_time_step_in !< The minimum permitted time step [s].
@@ -1799,6 +1799,7 @@ subroutine solo_time_step(CS, time_step, nsteps, Time, min_time_step_in)
   type(ice_shelf_state), pointer :: ISS => NULL() !< A structure with elements that describe
                                           !! the ice-shelf state
   integer :: is, iec, js, jec, i, j
+  real :: time_step
   real :: time_step_remain
   real :: time_step_int, min_time_step
   character(len=240) :: mesg
@@ -1810,6 +1811,8 @@ subroutine solo_time_step(CS, time_step, nsteps, Time, min_time_step_in)
   US => CS%US
   ISS => CS%ISS
   is = G%isc ; iec = G%iec ; js = G%jsc ; jec = G%jec
+
+  time_step = time_interval
 
   time_step_remain = time_step
   if (present (min_time_step_in)) then
@@ -1825,7 +1828,7 @@ subroutine solo_time_step(CS, time_step, nsteps, Time, min_time_step_in)
     nsteps = nsteps+1
 
     ! If time_step is not too long, this is unnecessary.
-    time_step_int = min(ice_time_step_CFL(CS%dCS, ISS, G), time_step)
+    time_step_int = min(US%T_to_s*ice_time_step_CFL(CS%dCS, ISS, G), time_step)
 
     write (mesg,*) "Ice model timestep = ", time_step_int, " seconds"
     if (time_step_int < min_time_step) then
@@ -1846,7 +1849,7 @@ subroutine solo_time_step(CS, time_step, nsteps, Time, min_time_step_in)
     update_ice_vel = ((time_step_int > min_time_step) .or. (time_step_int >= time_step))
     coupled_GL = .false.
 
-    call update_ice_shelf(CS%dCS, ISS, G, US, time_step_int, Time, must_update_vel=update_ice_vel)
+    call update_ice_shelf(CS%dCS, ISS, G, US, US%s_to_T*time_step_int, Time, must_update_vel=update_ice_vel)
 
     call enable_averaging(time_step,Time,CS%diag)
     if (CS%id_area_shelf_h > 0) call post_data(CS%id_area_shelf_h, ISS%area_shelf_h, CS%diag)
