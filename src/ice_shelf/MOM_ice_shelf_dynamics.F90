@@ -1310,7 +1310,7 @@ subroutine ice_shelf_advect_thickness_x(CS, G, LB, time_step, hmask, h0, h_after
                           intent(inout) :: h_after_uflux !< The ice shelf thicknesses after
                                               !! the zonal mass fluxes [Z ~> m].
   real, dimension(SZDIB_(G),SZDJ_(G)), &
-                          intent(inout) :: uh_ice ! The accumulated zonal ice volume flux [Z L2 ~> m3]
+                          intent(inout) :: uh_ice !< The accumulated zonal ice volume flux [Z L2 ~> m3]
 
   ! use will be made of ISS%hmask here - its value at the boundary will be zero, just like uncovered cells
   ! if there is an input bdry condition, the thickness there will be set in initialization
@@ -1393,7 +1393,7 @@ subroutine ice_shelf_advect_thickness_y(CS, G, LB, time_step, hmask, h0, h_after
                           intent(inout) :: h_after_vflux !< The ice shelf thicknesses after
                                               !! the meridional mass fluxes [Z ~> m].
   real, dimension(SZDI_(G),SZDJB_(G)), &
-                          intent(inout) :: vh_ice ! The accumulated meridional ice volume flux [Z L2 ~> m3]
+                          intent(inout) :: vh_ice !< The accumulated meridional ice volume flux [Z L2 ~> m3]
 
   ! use will be made of ISS%hmask here - its value at the boundary will be zero, just like uncovered cells
   ! if there is an input bdry condition, the thickness there will be set in initialization
@@ -1467,9 +1467,9 @@ subroutine shelf_advance_front(CS, ISS, G, hmask, uh_ice, vh_ice)
                           intent(inout) :: hmask !< A mask indicating which tracer points are
                                               !! partly or fully covered by an ice-shelf
   real, dimension(SZDIB_(G),SZDJ_(G)), &
-                          intent(inout) :: uh_ice ! The accumulated zonal ice volume flux [Z L2 ~> m3]
+                          intent(inout) :: uh_ice !< The accumulated zonal ice volume flux [Z L2 ~> m3]
   real, dimension(SZDI_(G),SZDJB_(G)), &
-                          intent(inout) :: vh_ice ! The accumulated meridional ice volume flux [Z L2 ~> m3]
+                          intent(inout) :: vh_ice !< The accumulated meridional ice volume flux [Z L2 ~> m3]
 
   ! in this subroutine we go through the computational cells only and, if they are empty or partial cells,
   ! we find the reference thickness and update the shelf mass and partial area fraction and the hmask if necessary
