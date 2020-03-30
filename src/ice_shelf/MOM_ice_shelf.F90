@@ -245,19 +245,18 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
   real :: hBL_neut !< The neutral boundary layer thickness [Z ~> m].
   real :: hBL_neut_h_molec !< The ratio of the neutral boundary layer thickness
                    !! to the molecular boundary layer thickness [nondim].
-  !### THESE ARE CURRENTLY POSITIVE UPWARD.
-  real :: wT_flux !< The upward vertical flux of heat just inside the ocean [degC Z T-1 ~> degC m s-1].
-  real :: wB_flux !< The upward vertical flux of buoyancy just inside the ocean [Z2 T-3 ~> m2 s-3].
+  real :: wT_flux !< The downward vertical flux of heat just inside the ocean [degC Z T-1 ~> degC m s-1].
+  real :: wB_flux !< The downward vertical flux of buoyancy just inside the ocean [Z2 T-3 ~> m2 s-3].
   real :: dB_dS   !< The derivative of buoyancy with salinity [Z T-2 ppt-1 ~> m s-2 ppt-1].
   real :: dB_dT   !< The derivative of buoyancy with temperature [Z T-2 degC-1 ~> m s-2 degC-1].
   real :: I_n_star ! [nondim]
   real :: n_star_term ! A term in the expression for nstar [T3 Z-2 ~> s3 m-2]
   real :: absf     ! The absolute value of the Coriolis parameter [T-1 ~> s-1]
   real :: dIns_dwB !< The partial derivative of I_n_star with wB_flux, in [T3 Z-2 ~> s3 m-2]
-  real :: dT_ustar ! The difference between the ocean boundary layer temperature and the freezing
-                   ! freezing point times the friction velocity [degC Z T-1 ~> degC m s-1]
-  real :: dS_ustar ! The difference between the ocean boundary layer salinity and the salinity
-                   ! at the ice-ocean interface the friction velocity [ppt Z T-1 ~> ppt m s-1]
+  real :: dT_ustar ! The difference between the the freezing point and the ocean boundary layer
+                   ! temperature times the friction velocity [degC Z T-1 ~> degC m s-1]
+  real :: dS_ustar ! The difference between the salinity at the ice-ocean interface and the ocean
+                   ! boundary layer salinity times the friction velocity [ppt Z T-1 ~> ppt m s-1]
   real :: ustar_h  ! The friction velocity in the water below the ice shelf [Z T-1 ~> m s-1]
   real :: Gam_turb ! [nondim]
   real :: Gam_mol_t, Gam_mol_s
@@ -429,8 +428,8 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
             ! Determine the potential temperature at the ice-ocean interface.
             call calculate_TFreeze(Sbdry(i,j), p_int(i), ISS%tfreeze(i,j), CS%eqn_of_state)
 
-            dT_ustar = (state%sst(i,j) - ISS%tfreeze(i,j)) * ustar_h
-            dS_ustar = (state%sss(i,j) - Sbdry(i,j)) * ustar_h
+            dT_ustar = (ISS%tfreeze(i,j) - state%sst(i,j)) * ustar_h
+            dS_ustar = (Sbdry(i,j) - state%sss(i,j)) * ustar_h
 
             ! First, determine the buoyancy flux assuming no effects of stability
             ! on the turbulence.  Following H & J '99, this limit also applies
@@ -449,7 +448,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
             wT_flux = dT_ustar * I_Gam_T
             wB_flux = dB_dS * (dS_ustar * I_Gam_S) + dB_dT * wT_flux
 
-            if (wB_flux > 0.0) then
+            if (wB_flux < 0.0) then
               ! The buoyancy flux is stabilizing and will reduce the tubulent
               ! fluxes, and iteration is required.
               n_star_term = (ZETA_N/RC) * (hBL_neut * VK) / (ustar_h)**3
@@ -458,7 +457,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
                ! to the neutral thickness.
                ! hBL = n_star*hBL_neut ; hSub = 1/8*n_star*hBL
 
-                I_n_star = sqrt(1.0 + n_star_term * wB_flux)
+                I_n_star = sqrt(1.0 - n_star_term * wB_flux)
                 dIns_dwB = 0.5 * n_star_term / I_n_star
                 if (hBL_neut_h_molec > I_n_star**2) then
                   Gam_turb = I_VK * ((ln_neut - 2.0*log(I_n_star)) + &
@@ -484,18 +483,17 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
                 wB_flux_new = dB_dS * (dS_ustar * I_Gam_S) + dB_dT * wT_flux
 
                 ! Find the root where wB_flux_new = wB_flux.
-                if (abs(wB_flux_new - wB_flux) < &
-                    1e-4*(abs(wB_flux_new) + abs(wB_flux))) exit
+                if (abs(wB_flux_new - wB_flux) < 1e-4*(abs(wB_flux_new) + abs(wB_flux))) exit
 
-                dDwB_dwB_in = -dG_dwB * (dB_dS * (dS_ustar * I_Gam_S**2) + &
-                                         dB_dT * (dT_ustar * I_Gam_T**2)) - 1.0
+                dDwB_dwB_in = dG_dwB * (dB_dS * (dS_ustar * I_Gam_S**2) + &
+                                        dB_dT * (dT_ustar * I_Gam_T**2)) - 1.0
                 ! This is Newton's method without any bounds.
                 ! ### SHOULD BOUNDS BE NEEDED?
                 wB_flux_new = wB_flux - (wB_flux_new - wB_flux) / dDwB_dwB_in
               enddo !it3
             endif
 
-            ISS%tflux_ocn(i,j)  = -RhoCp * wT_flux
+            ISS%tflux_ocn(i,j)  = RhoCp * wT_flux
             exch_vel_t(i,j) = ustar_h * I_Gam_T
             exch_vel_s(i,j) = ustar_h * I_Gam_S
 
@@ -1109,7 +1107,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   real :: cdrag, drag_bg_vel
   logical :: new_sim, save_IC, var_force
   !This include declares and sets the variable "version".
-#include "version_variable.h"
+# include "version_variable.h"
   character(len=200) :: config
   character(len=200) :: IC_file,filename,inputdir
   character(len=40)  :: mdl = "MOM_ice_shelf"  ! This module's name.
