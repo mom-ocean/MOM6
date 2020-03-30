@@ -137,11 +137,12 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   real, dimension(SZI_(G), SZJB_(G)) :: &
     KH_v_CFL      ! The maximum stable interface height diffusivity at v grid points [L2 T-1 ~> m2 s-1]
   real :: Khth_Loc_u(SZIB_(G), SZJ_(G))
+  real :: Khth_Loc_v(SZI_(G), SZJB_(G))
   real :: Khth_Loc(SZIB_(G), SZJB_(G))  ! locally calculated thickness diffusivity [L2 T-1 ~> m2 s-1]
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
   real, dimension(:,:), pointer :: cg1 => null() !< Wave speed [L T-1 ~> m s-1]
-  logical :: use_VarMix, Resoln_scaled, use_stored_slopes, khth_use_ebt_struct, use_Visbeck
+  logical :: use_VarMix, Resoln_scaled, Depth_scaled, use_stored_slopes, khth_use_ebt_struct, use_Visbeck
   logical :: use_QG_Leith
   integer :: i, j, k, is, ie, js, je, nz
   real :: hu(SZI_(G), SZJ_(G))       ! u-thickness [H ~> m or kg m-2]
@@ -166,10 +167,12 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 
   use_VarMix = .false. ; Resoln_scaled = .false. ; use_stored_slopes = .false.
   khth_use_ebt_struct = .false. ; use_Visbeck = .false. ; use_QG_Leith = .false.
+  Depth_scaled = .false.
 
   if (associated(VarMix)) then
     use_VarMix = VarMix%use_variable_mixing .and. (CS%KHTH_Slope_Cff > 0.)
     Resoln_scaled = VarMix%Resoln_scaled_KhTh
+    Depth_scaled = VarMix%Depth_scaled_KhTh
     use_stored_slopes = VarMix%use_stored_slopes
     khth_use_ebt_struct = VarMix%khth_use_ebt_struct
     use_Visbeck = VarMix%use_Visbeck
@@ -198,7 +201,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 !$OMP parallel default(none) shared(is,ie,js,je,Khth_Loc_u,CS,use_VarMix,VarMix,    &
 !$OMP                               MEKE,Resoln_scaled,KH_u,G,use_QG_Leith,use_Visbeck,&
 !$OMP                               KH_u_CFL,nz,Khth_Loc,KH_v,KH_v_CFL,int_slope_u, &
-!$OMP                               int_slope_v,khth_use_ebt_struct)
+!$OMP                               int_slope_v,khth_use_ebt_struct, Depth_scaled, &
+!$OMP                               Khth_loc_v)
 !$OMP do
   do j=js,je; do I=is-1,ie
     Khth_loc_u(I,j) = CS%Khth
@@ -233,6 +237,13 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 !$OMP do
     do j=js,je; do I=is-1,ie
       Khth_loc_u(I,j) = Khth_loc_u(I,j) * VarMix%Res_fn_u(I,j)
+    enddo ; enddo
+  endif
+
+  if (Depth_scaled) then
+!$OMP do
+    do j=js,je; do I=is-1,ie
+      Khth_loc_u(I,j) = Khth_loc_u(I,j) * VarMix%Depth_fn_u(I,j)
     enddo ; enddo
   endif
 
@@ -282,55 +293,62 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 
 !$OMP do
   do J=js-1,je ; do i=is,ie
-    Khth_loc(i,j) = CS%Khth
+    Khth_loc_v(i,J) = CS%Khth
   enddo ; enddo
 
   if (use_VarMix) then
     if (use_Visbeck) then
 !$OMP do
       do J=js-1,je ; do i=is,ie
-        Khth_loc(i,j) = Khth_loc(i,j) + CS%KHTH_Slope_Cff*VarMix%L2v(i,J)*VarMix%SN_v(i,J)
+        Khth_loc_v(i,J) = Khth_loc_v(i,J) + CS%KHTH_Slope_Cff*VarMix%L2v(i,J)*VarMix%SN_v(i,J)
       enddo ; enddo
     endif
   endif
   if (associated(MEKE)) then ; if (associated(MEKE%Kh)) then
     if (CS%MEKE_GEOMETRIC) then
 !$OMP do
-      do j=js-1,je ; do I=is,ie
-        Khth_loc(I,j) = Khth_loc(I,j) + G%mask2dCv(i,J) * CS%MEKE_GEOMETRIC_alpha * &
+      do J=js-1,je ; do i=is,ie
+        Khth_loc_v(i,J) = Khth_loc_v(i,J) + G%mask2dCv(i,J) * CS%MEKE_GEOMETRIC_alpha * &
                         0.5*(MEKE%MEKE(i,j)+MEKE%MEKE(i,j+1)) / &
                         (VarMix%SN_v(i,J) + CS%MEKE_GEOMETRIC_epsilon)
       enddo ; enddo
     else
       do J=js-1,je ; do i=is,ie
-        Khth_loc(i,j) = Khth_loc(i,j) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i,j+1))
+        Khth_loc_v(i,J) = Khth_loc_v(i,J) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i,j+1))
       enddo ; enddo
     endif
   endif ; endif
 
   if (Resoln_scaled) then
 !$OMP do
+    do J=js-1,je; do i=is,ie
+      Khth_loc_v(i,J) = Khth_loc_v(i,J) * VarMix%Res_fn_v(i,J)
+    enddo ; enddo
+  endif
+
+  if (Depth_scaled) then
+!$OMP do
     do J=js-1,je ; do i=is,ie
-      Khth_loc(i,j) = Khth_loc(i,j) * VarMix%Res_fn_v(i,J)
+      Khth_loc_v(i,J) = Khth_loc_v(i,J) * VarMix%Depth_fn_v(i,J)
     enddo ; enddo
   endif
 
   if (CS%Khth_Max > 0) then
 !$OMP do
     do J=js-1,je ; do i=is,ie
-      Khth_loc(i,j) = max(CS%Khth_Min, min(Khth_loc(i,j), CS%Khth_Max))
+      Khth_loc_v(i,J) = max(CS%Khth_Min, min(Khth_loc_v(i,J), CS%Khth_Max))
     enddo ; enddo
   else
 !$OMP do
     do J=js-1,je ; do i=is,ie
-      Khth_loc(i,j) = max(CS%Khth_Min, Khth_loc(i,j))
+      Khth_loc_v(i,J) = max(CS%Khth_Min, Khth_loc_v(i,J))
     enddo ; enddo
   endif
 
   if (CS%max_Khth_CFL > 0.0) then
 !$OMP do
     do J=js-1,je ; do i=is,ie
-      KH_v(i,J,1) = min(KH_v_CFL(i,J), Khth_loc(i,j))
+      KH_v(i,J,1) = min(KH_v_CFL(i,J), Khth_loc_v(i,J))
     enddo ; enddo
   endif
 
