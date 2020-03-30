@@ -45,7 +45,8 @@ use MOM_ice_shelf_initialize, only : initialize_ice_thickness
 use MOM_ice_shelf_state, only : ice_shelf_state, ice_shelf_state_end, ice_shelf_state_init
 use user_shelf_init, only : USER_initialize_shelf_mass, USER_update_shelf_mass
 use user_shelf_init, only : user_ice_shelf_CS
-use MOM_coms, only : reproducing_sum, sum_across_PEs
+use MOM_coms, only : reproducing_sum
+use MOM_spatial_means, only : global_area_integral
 use MOM_checksums, only : hchksum, qchksum, chksum, uchksum, vchksum, uvchksum
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
@@ -877,20 +878,21 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
   real :: Irho0           !< The inverse of the mean density times unit conversion factors that
                           !! arise because state uses MKS units [Z2 m s2 kg-1 T-2 ~> m3 kg-1].
   real :: frac_area       !< The fractional area covered by the ice shelf [nondim].
-  real :: shelf_mass0     !< Total ice shelf mass at previous time (Time-dt).
-  real :: shelf_mass1     !< Total ice shelf mass at current time (Time).
   real :: delta_mass_shelf!< Change in ice shelf mass over one time step [kg s-1]
   real :: taux2, tauy2    !< The squared surface stresses [Pa].
   real :: press_ice       !< The pressure of the ice shelf per unit area of ocean (not ice) [Pa].
   real :: asu1, asu2      !< Ocean areas covered by ice shelves at neighboring u-
   real :: asv1, asv2      !< and v-points [L2 ~> m2].
   real :: fraz            !< refreezing rate [kg m-2 s-1]
-  real :: mean_melt_flux  !< spatial mean melt flux [kg s-1] or [kg m-2 s-1] at various points in the code.
+  real :: mean_melt_flux  !< Spatial mean melt flux [R Z T-1 ~> kg m-2 s-1]
   real :: sponge_area     !< total area of sponge region [m2]
   real :: t0              !< The previous time (Time-dt) [s].
   type(time_type) :: Time0!< The previous time (Time-dt)
+  real, dimension(SZDI_(G),SZDJ_(G)) :: in_sponge !< 1 where the property damping occurs, 0 otherwise [nondim]
   real, dimension(SZDI_(G),SZDJ_(G)) :: last_mass_shelf !< Ice shelf mass
                           !! at at previous time (Time-dt) [R Z ~> kg m-2]
+  real, dimension(SZDI_(G),SZDJ_(G)) :: delta_float_mass   !< The change in the floating mass between
+                          !! the two timesteps at (Time) and (Time-dt) [R Z ~> kg m-2].
   real, dimension(SZDI_(G),SZDJ_(G))  :: last_h_shelf !< Ice shelf thickness [Z ~> m]
                           !! at at previous time (Time-dt)
   real, dimension(SZDI_(G),SZDJ_(G))  :: last_hmask !< Ice shelf mask
@@ -994,15 +996,13 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
     if (.not. associated(fluxes%vprec)) allocate(fluxes%vprec(ie,je))
     fluxes%salt_flux(:,:) = 0.0 ; fluxes%vprec(:,:) = 0.0
 
-    mean_melt_flux = 0.0; sponge_area = 0.0
     do j=js,je ; do i=is,ie
-      frac_area = fluxes%frac_shelf_h(i,j)
-      if (frac_area > 0.0) &
-        mean_melt_flux = mean_melt_flux + (ISS%water_flux(i,j)) * US%RZ_T_to_kg_m2s*US%L_to_m**2*ISS%area_shelf_h(i,j)
 
       !### These hard-coded limits need to be corrected.  They are inappropriate here.
       if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
-        sponge_area = sponge_area + US%L_to_m**2*G%areaT(i,j)
+        in_sponge(i,j) = 1.0
+      else
+        in_sponge(i,j) = 0.0
       endif
     enddo ; enddo
 
@@ -1027,20 +1027,18 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
           last_mass_shelf(:,:) = last_h_shelf(:,:) * CS%density_ice
         endif
 
-        shelf_mass0 = 0.0; shelf_mass1 = 0.0
         ! get total ice shelf mass at (Time-dt) and (Time), in kg
         do j=js,je ; do i=is,ie
           ! just floating shelf (0.1 is a threshold for min ocean thickness)
           if (((1.0/CS%density_ocean_avg)*state%ocean_mass(i,j) > 0.1) .and. &
               (ISS%area_shelf_h(i,j) > 0.0)) then
-            shelf_mass0 = shelf_mass0 + US%RZ_to_kg_m2*US%L_to_m**2*(last_mass_shelf(i,j) * ISS%area_shelf_h(i,j))
-            shelf_mass1 = shelf_mass1 + US%RZ_to_kg_m2*US%L_to_m**2*(ISS%mass_shelf(i,j) * ISS%area_shelf_h(i,j))
+            delta_float_mass(i,j) = ISS%mass_shelf(i,j) - last_mass_shelf(i,j)
+          else
+            delta_float_mass(i,j) = 0.0
           endif
         enddo ; enddo
-        call sum_across_PEs(shelf_mass0); call sum_across_PEs(shelf_mass1)
-        delta_mass_shelf = (shelf_mass1 - shelf_mass0)/CS%time_step
-!        write(mesg,*) 'delta_mass_shelf = ', delta_mass_shelf
-!        call MOM_mesg(mesg,5)
+        delta_mass_shelf = US%kg_m2s_to_RZ_T*(global_area_integral(delta_float_mass, G, scale=US%RZ_to_kg_m2, &
+                                                                   area=ISS%area_shelf_h) / CS%time_step)
       else! first time step
         delta_mass_shelf = 0.0
       endif
@@ -1048,18 +1046,22 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
       delta_mass_shelf = 0.0
     endif
 
-    call sum_across_PEs(mean_melt_flux)
-    call sum_across_PEs(sponge_area)
-
     ! average total melt flux over sponge area
-    mean_melt_flux = (mean_melt_flux+delta_mass_shelf) / sponge_area !kg/(m^2 s)
+    sponge_area = global_area_integral(in_sponge, G)
+    if (sponge_area > 0.0) then
+      mean_melt_flux = US%kg_m2s_to_RZ_T*(global_area_integral(ISS%water_flux, G, scale=US%RZ_T_to_kg_m2s, &
+                                                               area=ISS%area_shelf_h) + &
+                                          delta_mass_shelf ) / sponge_area
+    else
+      mean_melt_flux = 0.0
+    endif
 
     ! apply fluxes
     do j=js,je ; do i=is,ie
       ! Note the following is hard coded for ISOMIP
       if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
         ! evap is negative, and vprec has units of [R Z T-1 ~> kg m-2 s-1]
-        fluxes%vprec(i,j) = -US%kg_m2s_to_RZ_T*mean_melt_flux * CS%density_ice / (1000.0*US%kg_m3_to_R)
+        fluxes%vprec(i,j) = -mean_melt_flux * CS%density_ice / (1000.0*US%kg_m3_to_R)
         fluxes%sens(i,j) = fluxes%vprec(i,j) * CS%Cp * CS%T0 ! [ Q R Z T-1 ~> W /m^2 ]
         fluxes%salt_flux(i,j) = fluxes%vprec(i,j) * CS%S0*1.0e-3 ! [kgSalt/kg R Z T-1 ~> kgSalt m-2 s-1]
       endif
