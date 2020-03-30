@@ -2252,7 +2252,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, G, US, time_end, diag, handles
   real, dimension(SZI_(G),SZJ_(G)) :: res
   real :: total_transport ! for diagnosing integrated boundary transport
   real :: ave_flux        ! for diagnosing averaged   boundary flux
-  real :: C_p             ! seawater heat capacity (J/(deg K * kg))
+  real :: C_p             ! seawater heat capacity [J degC-1 kg-1]
   real :: RZ_T_conversion ! A combination of scaling factors for mass fluxes [kg T m-2 s-1 R-1 Z-1 ~> 1]
   real :: I_dt            ! inverse time step [s-1]
   real :: ppt2mks         ! conversion between ppt and mks

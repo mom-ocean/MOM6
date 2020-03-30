@@ -228,6 +228,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   real :: Rcv(SZI_(G),SZJ_(G),SZK_(G))  ! Coordinate variable potential density [R ~> kg m-3].
   real :: work_3d(SZI_(G),SZJ_(G),SZK_(G)) ! A 3-d temporary work array.
   real :: work_2d(SZI_(G),SZJ_(G))         ! A 2-d temporary work array.
+  real :: rho_in_situ(SZI_(G))             ! In situ density [R ~> kg m-3]
 
   ! tmp array for surface properties
   real :: surface_field(SZI_(G),SZJ_(G))
@@ -328,17 +329,17 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   ! diagnose thickness/volumes of grid cells [m]
   if (CS%id_thkcello>0 .or. CS%id_volcello>0) then
     if (GV%Boussinesq) then ! thkcello = h for Boussinesq
-      if (CS%id_thkcello > 0) then ; if (GV%H_to_m == 1.0) then
+      if (CS%id_thkcello > 0) then ; if (GV%H_to_Z == 1.0) then
         call post_data(CS%id_thkcello, h, CS%diag)
       else
         do k=1,nz; do j=js,je ; do i=is,ie
-          work_3d(i,j,k) = GV%H_to_m*h(i,j,k)
+          work_3d(i,j,k) = GV%H_to_Z*h(i,j,k)
         enddo ; enddo ; enddo
         call post_data(CS%id_thkcello, work_3d, CS%diag)
       endif ; endif
       if (CS%id_volcello > 0) then ! volcello = h*area for Boussinesq
         do k=1,nz; do j=js,je ; do i=is,ie
-          work_3d(i,j,k) = ( GV%H_to_m*h(i,j,k) ) * US%L_to_m**2*G%areaT(i,j)
+          work_3d(i,j,k) = ( GV%H_to_Z*h(i,j,k) ) * US%Z_to_m*US%L_to_m**2*G%areaT(i,j)
         enddo ; enddo ; enddo
         call post_data(CS%id_volcello, work_3d, CS%diag)
       endif
@@ -357,11 +358,11 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
           do i=is,ie ! Pressure for EOS at the layer center [Pa]
             pressure_1d(i) = pressure_1d(i) + 0.5*GV%H_to_Pa*h(i,j,k)
           enddo
-          ! Store in-situ density [kg m-3] in work_3d
+          ! Store in-situ density [R ~> kg m-3] in work_3d
           call calculate_density(tv%T(:,j,k),tv%S(:,j,k), pressure_1d, &
-                                 work_3d(:,j,k), is, ie-is+1, tv%eqn_of_state)
+                                 rho_in_situ, is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
           do i=is,ie ! Cell thickness = dz = dp/(g*rho) (meter); store in work_3d
-            work_3d(i,j,k) = (GV%H_to_kg_m2*h(i,j,k)) / work_3d(i,j,k)
+            work_3d(i,j,k) = (GV%H_to_RZ*h(i,j,k)) / rho_in_situ(i)
           enddo
           do i=is,ie ! Pressure for EOS at the bottom interface [Pa]
             pressure_1d(i) = pressure_1d(i) + 0.5*GV%H_to_Pa*h(i,j,k)
@@ -371,7 +372,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       if (CS%id_thkcello > 0) call post_data(CS%id_thkcello, work_3d, CS%diag)
       if (CS%id_volcello > 0) then
         do k=1,nz; do j=js,je ; do i=is,ie ! volcello = dp/(rho*g)*area for non-Boussinesq
-          work_3d(i,j,k) = US%L_to_m**2*G%areaT(i,j) * work_3d(i,j,k)
+          work_3d(i,j,k) = US%Z_to_m*US%L_to_m**2*G%areaT(i,j) * work_3d(i,j,k)
         enddo ; enddo ; enddo
         call post_data(CS%id_volcello, work_3d, CS%diag)
       endif
@@ -465,7 +466,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       !$OMP parallel do default(shared)
       do k=1,nz ; do j=js-1,je+1
         call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pressure_1d, &
-                               Rcv(:,j,k), is-1, ie-is+3, tv%eqn_of_state, scale=US%kg_m3_to_R)
+                               Rcv(:,j,k), is-1, ie-is+3, tv%eqn_of_state , scale=US%kg_m3_to_R)
       enddo ; enddo
     else ! Rcv should not be used much in this case, so fill in sensible values.
       do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
@@ -778,7 +779,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
     z_top, &  ! Height of the top of a layer or the ocean [Z ~> m].
     z_bot, &  ! Height of the bottom of a layer (for id_mass) or the
               ! (positive) depth of the ocean (for id_col_ht) [Z ~> m].
-    mass, &   ! integrated mass of the water column [kg m-2].  For
+    mass, &   ! integrated mass of the water column [R Z ~> kg m-2].  For
               ! non-Boussinesq models this is rho*dz. For Boussinesq
               ! models, this is either the integral of in-situ density
               ! (rho*dz for col_mass) or reference density (Rho_0*dz for mass_wt).
@@ -788,7 +789,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
     dpress, & ! Change in hydrostatic pressure across a layer [Pa].
     tr_int    ! vertical integral of a tracer times density,
               ! (Rho_0 in a Boussinesq model) [TR kg m-2].
-  real    :: IG_Earth  ! Inverse of gravitational acceleration [s2 m-1].
+  real    :: IG_Earth  ! Inverse of gravitational acceleration [s2 Z m-2 ~> s2 m-1].
 
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -796,7 +797,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
   if (CS%id_mass_wt > 0) then
     do j=js,je ; do i=is,ie ; mass(i,j) = 0.0 ; enddo ; enddo
     do k=1,nz ; do j=js,je ; do i=is,ie
-      mass(i,j) = mass(i,j) + GV%H_to_kg_m2*h(i,j,k)
+      mass(i,j) = mass(i,j) + GV%H_to_RZ*h(i,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_mass_wt, mass, CS%diag)
   endif
@@ -804,7 +805,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
   if (CS%id_temp_int > 0) then
     do j=js,je ; do i=is,ie ; tr_int(i,j) = 0.0 ; enddo ; enddo
     do k=1,nz ; do j=js,je ; do i=is,ie
-      tr_int(i,j) = tr_int(i,j) + (GV%H_to_kg_m2*h(i,j,k))*tv%T(i,j,k)
+      tr_int(i,j) = tr_int(i,j) + (GV%H_to_RZ*h(i,j,k))*tv%T(i,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_temp_int, tr_int, CS%diag)
   endif
@@ -812,7 +813,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
   if (CS%id_salt_int > 0) then
     do j=js,je ; do i=is,ie ; tr_int(i,j) = 0.0 ; enddo ; enddo
     do k=1,nz ; do j=js,je ; do i=is,ie
-      tr_int(i,j) = tr_int(i,j) + (GV%H_to_kg_m2*h(i,j,k))*tv%S(i,j,k)
+      tr_int(i,j) = tr_int(i,j) + (GV%H_to_RZ*h(i,j,k))*tv%S(i,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_salt_int, tr_int, CS%diag)
   endif
@@ -830,7 +831,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
     do j=js,je ; do i=is,ie ; mass(i,j) = 0.0 ; enddo ; enddo
     if (GV%Boussinesq) then
       if (associated(tv%eqn_of_state)) then
-        IG_Earth = 1.0 / GV%mks_g_Earth
+        IG_Earth = 1.0 / (US%Z_to_m*GV%mks_g_Earth)
 !       do j=js,je ; do i=is,ie ; z_bot(i,j) = -P_SURF(i,j)/GV%H_to_Pa ; enddo ; enddo
         do j=G%jscB,G%jecB+1 ; do i=G%iscB,G%iecB+1
           z_bot(i,j) = 0.0
@@ -844,17 +845,17 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
                               z_top, z_bot, 0.0, US%R_to_kg_m3*GV%Rho0, GV%mks_g_Earth*US%Z_to_m, &
                               G%HI, G%HI, tv%eqn_of_state, dpress)
           do j=js,je ; do i=is,ie
-            mass(i,j) = mass(i,j) + dpress(i,j) * IG_Earth
+            mass(i,j) = mass(i,j) + dpress(i,j) * US%kg_m3_to_R*IG_Earth
           enddo ; enddo
         enddo
       else
         do k=1,nz ; do j=js,je ; do i=is,ie
-          mass(i,j) = mass(i,j) + (GV%H_to_m*US%R_to_kg_m3*GV%Rlay(k))*h(i,j,k)
+          mass(i,j) = mass(i,j) + (GV%H_to_Z*GV%Rlay(k))*h(i,j,k)
         enddo ; enddo ; enddo
       endif
     else
       do k=1,nz ; do j=js,je ; do i=is,ie
-        mass(i,j) = mass(i,j) + GV%H_to_kg_m2*h(i,j,k)
+        mass(i,j) = mass(i,j) + GV%H_to_RZ*h(i,j,k)
       enddo ; enddo ; enddo
     endif
     if (CS%id_col_mass > 0) then
@@ -866,7 +867,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
       !     pbo = (mass * g) + p_surf
       ! where p_surf is the sea water pressure at sea water surface.
       do j=js,je ; do i=is,ie
-        btm_pres(i,j) = mass(i,j) * GV%mks_g_Earth
+        btm_pres(i,j) = US%RZ_to_kg_m2*mass(i,j) * GV%mks_g_Earth
         if (associated(p_surf)) then
           btm_pres(i,j) = btm_pres(i,j) + p_surf(i,j)
         endif
@@ -1353,20 +1354,20 @@ subroutine post_transport_diagnostics(G, GV, US, uhtr, vhtr, h, IDs, diag_pre_dy
   type(tracer_registry_type), pointer     :: Reg !< Pointer to the tracer registry
 
   ! Local variables
-  real, dimension(SZIB_(G), SZJ_(G)) :: umo2d ! Diagnostics of integrated mass transport [kg s-1]
-  real, dimension(SZI_(G), SZJB_(G)) :: vmo2d ! Diagnostics of integrated mass transport [kg s-1]
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)) :: umo ! Diagnostics of layer mass transport [kg s-1]
-  real, dimension(SZI_(G), SZJB_(G), SZK_(G)) :: vmo ! Diagnostics of layer mass transport [kg s-1]
+  real, dimension(SZIB_(G), SZJ_(G)) :: umo2d ! Diagnostics of integrated mass transport [R Z L2 T-1 ~> kg s-1]
+  real, dimension(SZI_(G), SZJB_(G)) :: vmo2d ! Diagnostics of integrated mass transport [R Z L2 T-1 ~> kg s-1]
+  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)) :: umo ! Diagnostics of layer mass transport [R Z L2 T-1 ~> kg s-1]
+  real, dimension(SZI_(G), SZJB_(G), SZK_(G)) :: vmo ! Diagnostics of layer mass transport [R Z L2 T-1 ~> kg s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G))    :: h_tend ! Change in layer thickness due to dynamics
                           ! [H s-1 ~> m s-1 or kg m-2 s-1].
   real :: Idt             ! The inverse of the time interval [T-1 ~> s-1]
-  real :: H_to_kg_m2_dt   ! A conversion factor from accumulated transports to fluxes
-                          ! [kg L-2 H-1 T-1 ~> kg m-3 s-1 or s-1].
+  real :: H_to_RZ_dt   ! A conversion factor from accumulated transports to fluxes
+                          ! [R Z H-1 T-1 ~> kg m-3 s-1 or s-1].
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   Idt = 1. / dt_trans
-  H_to_kg_m2_dt = GV%H_to_kg_m2 * US%L_to_m**2 * US%s_to_T * Idt
+  H_to_RZ_dt = GV%H_to_RZ * Idt
 
   call diag_save_grids(diag)
   call diag_copy_storage_to_diag(diag, diag_pre_dyn)
@@ -1374,28 +1375,28 @@ subroutine post_transport_diagnostics(G, GV, US, uhtr, vhtr, h, IDs, diag_pre_dy
   if (IDs%id_umo_2d > 0) then
     umo2d(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=is-1,ie
-      umo2d(I,j) = umo2d(I,j) + uhtr(I,j,k) * H_to_kg_m2_dt
+      umo2d(I,j) = umo2d(I,j) + uhtr(I,j,k) * H_to_RZ_dt
     enddo ; enddo ; enddo
     call post_data(IDs%id_umo_2d, umo2d, diag)
   endif
   if (IDs%id_umo > 0) then
     ! Convert to kg/s.
     do k=1,nz ; do j=js,je ; do I=is-1,ie
-      umo(I,j,k) = uhtr(I,j,k) * H_to_kg_m2_dt
+      umo(I,j,k) = uhtr(I,j,k) * H_to_RZ_dt
     enddo ; enddo ; enddo
     call post_data(IDs%id_umo, umo, diag, alt_h = diag_pre_dyn%h_state)
   endif
   if (IDs%id_vmo_2d > 0) then
     vmo2d(:,:) = 0.0
     do k=1,nz ; do J=js-1,je ; do i=is,ie
-      vmo2d(i,J) = vmo2d(i,J) + vhtr(i,J,k) * H_to_kg_m2_dt
+      vmo2d(i,J) = vmo2d(i,J) + vhtr(i,J,k) * H_to_RZ_dt
     enddo ; enddo ; enddo
     call post_data(IDs%id_vmo_2d, vmo2d, diag)
   endif
   if (IDs%id_vmo > 0) then
     ! Convert to kg/s.
     do k=1,nz ; do J=js-1,je ; do i=is,ie
-      vmo(i,J,k) = vhtr(i,J,k) * H_to_kg_m2_dt
+      vmo(i,J,k) = vhtr(i,J,k) * H_to_RZ_dt
     enddo ; enddo ; enddo
     call post_data(IDs%id_vmo, vmo, diag, alt_h = diag_pre_dyn%h_state)
   endif
@@ -1501,10 +1502,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       diag, 'Mass of liquid ocean', 'kg', standard_name='sea_water_mass')
 
   CS%id_thkcello = register_diag_field('ocean_model', 'thkcello', diag%axesTL, Time, &
-      long_name = 'Cell Thickness', standard_name='cell_thickness', units='m', v_extensive=.true.)
+      long_name = 'Cell Thickness', standard_name='cell_thickness', &
+      units='m', conversion=US%Z_to_m, v_extensive=.true.)
   CS%id_h_pre_sync = register_diag_field('ocean_model', 'h_pre_sync', diag%axesTL, Time, &
-      long_name = 'Cell thickness from the previous timestep', units='m', &
-      v_extensive=.true., conversion=GV%H_to_m)
+      long_name = 'Cell thickness from the previous timestep', &
+      units='m', conversion=GV%H_to_m, v_extensive=.true.)
 
   ! Note that CS%id_volcello would normally be registered here but because it is a "cell measure" and
   ! must be registered first. We earlier stored the handle of volcello but need it here for posting
@@ -1707,24 +1709,24 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   endif
 
   CS%id_mass_wt = register_diag_field('ocean_model', 'mass_wt', diag%axesT1, Time,  &
-      'The column mass for calculating mass-weighted average properties', 'kg m-2')
+      'The column mass for calculating mass-weighted average properties', 'kg m-2', conversion=US%RZ_to_kg_m2)
 
   if (use_temperature) then
     CS%id_temp_int = register_diag_field('ocean_model', 'temp_int', diag%axesT1, Time,                &
-        'Density weighted column integrated potential temperature', 'degC kg m-2',                    &
+        'Density weighted column integrated potential temperature', 'degC kg m-2', conversion=US%RZ_to_kg_m2, &
         cmor_field_name='opottempmint',                                                               &
         cmor_long_name='integral_wrt_depth_of_product_of_sea_water_density_and_potential_temperature',&
         cmor_standard_name='Depth integrated density times potential temperature')
 
     CS%id_salt_int = register_diag_field('ocean_model', 'salt_int', diag%axesT1, Time,   &
-        'Density weighted column integrated salinity', 'psu kg m-2',                     &
+        'Density weighted column integrated salinity', 'psu kg m-2', conversion=US%RZ_to_kg_m2, &
         cmor_field_name='somint',                                                        &
         cmor_long_name='integral_wrt_depth_of_product_of_sea_water_density_and_salinity',&
         cmor_standard_name='Depth integrated density times salinity')
   endif
 
   CS%id_col_mass = register_diag_field('ocean_model', 'col_mass', diag%axesT1, Time, &
-      'The column integrated in situ density', 'kg m-2')
+      'The column integrated in situ density', 'kg m-2', conversion=US%RZ_to_kg_m2)
 
   CS%id_col_ht = register_diag_field('ocean_model', 'col_height', diag%axesT1, Time, &
       'The height of the water column', 'm', conversion=US%Z_to_m)
@@ -1841,16 +1843,20 @@ subroutine register_transport_diags(Time, G, GV, US, IDs, diag)
       'Accumulated meridional thickness fluxes to advect tracers', 'kg', &
       x_cell_method='sum', v_extensive=.true., conversion=H_convert*US%L_to_m**2)
   IDs%id_umo = register_diag_field('ocean_model', 'umo', &
-      diag%axesCuL, Time, 'Ocean Mass X Transport', 'kg s-1', &
+      diag%axesCuL, Time, 'Ocean Mass X Transport', &
+      'kg s-1', conversion=US%RZ_T_to_kg_m2s*US%L_to_m**2, &
       standard_name='ocean_mass_x_transport', y_cell_method='sum', v_extensive=.true.)
   IDs%id_vmo = register_diag_field('ocean_model', 'vmo', &
-      diag%axesCvL, Time, 'Ocean Mass Y Transport', 'kg s-1', &
+      diag%axesCvL, Time, 'Ocean Mass Y Transport', &
+      'kg s-1', conversion=US%RZ_T_to_kg_m2s*US%L_to_m**2, &
       standard_name='ocean_mass_y_transport', x_cell_method='sum', v_extensive=.true.)
   IDs%id_umo_2d = register_diag_field('ocean_model', 'umo_2d', &
-      diag%axesCu1, Time, 'Ocean Mass X Transport Vertical Sum', 'kg s-1', &
+      diag%axesCu1, Time, 'Ocean Mass X Transport Vertical Sum', &
+      'kg s-1', conversion=US%RZ_T_to_kg_m2s*US%L_to_m**2, &
       standard_name='ocean_mass_x_transport_vertical_sum', y_cell_method='sum')
   IDs%id_vmo_2d = register_diag_field('ocean_model', 'vmo_2d', &
-      diag%axesCv1, Time, 'Ocean Mass Y Transport Vertical Sum', 'kg s-1', &
+      diag%axesCv1, Time, 'Ocean Mass Y Transport Vertical Sum', &
+      'kg s-1', conversion=US%RZ_T_to_kg_m2s*US%L_to_m**2, &
       standard_name='ocean_mass_y_transport_vertical_sum', x_cell_method='sum')
   IDs%id_dynamics_h = register_diag_field('ocean_model','dynamics_h',  &
       diag%axesTl, Time, 'Change in layer thicknesses due to horizontal dynamics', &

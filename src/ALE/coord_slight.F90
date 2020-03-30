@@ -76,7 +76,7 @@ subroutine init_coord_slight(CS, nk, ref_pressure, target_density, interp_CS, m_
   type(slight_CS),      pointer    :: CS !< Unassociated pointer to hold the control structure
   integer,              intent(in) :: nk !< Number of layers in the grid
   real,                 intent(in) :: ref_pressure !< Coordinate reference pressure [Pa]
-  real, dimension(:),   intent(in) :: target_density !< Nominal density of interfaces [kg m-3]
+  real, dimension(:),   intent(in) :: target_density !< Nominal density of interfaces [R ~> kg m-3]
   type(interp_CS_type), intent(in) :: interp_CS !< Controls for interpolation
   real,       optional, intent(in) :: m_to_H !< A conversion factor from m to the units of thicknesses
   real,       optional, intent(in) :: rho_scale !< A dimensional scaling factor for target_density
@@ -202,10 +202,10 @@ subroutine build_slight_column(CS, eqn_of_state, H_to_Pa, H_subroundoff, &
   real,        optional, intent(in)    :: h_neglect_edge !< A negligibly small width for the purpose
                                                 !! of edge value calculations [H ~> m or kg m-2].
   ! Local variables
-  real, dimension(nz) :: rho_col ! Layer densities [R ~> kg m-3]
-  real, dimension(nz) :: T_f, S_f  ! Filtered ayer quantities
+  real, dimension(nz) :: rho_col        ! Layer densities [R ~> kg m-3]
+  real, dimension(nz) :: T_f, S_f       ! Filtered layer temperature [degC] and salinity [ppt]
   logical, dimension(nz+1) :: reliable  ! If true, this interface is in a reliable position.
-  real, dimension(nz+1) :: T_int, S_int ! Temperature and salinity interpolated to interfaces.
+  real, dimension(nz+1) :: T_int, S_int ! Temperature [degC] and salinity [ppt] interpolated to interfaces.
   real, dimension(nz+1) :: rho_tmp      ! A temporary density [R ~> kg m-3]
   real, dimension(nz+1) :: drho_dp      ! The partial derivative of density with pressure [kg m-3 Pa-1]
   real, dimension(nz+1) :: p_IS, p_R
@@ -224,7 +224,7 @@ subroutine build_slight_column(CS, eqn_of_state, H_to_Pa, H_subroundoff, &
   real :: z_int_unst
   real :: dz      ! A uniform layer thickness in very shallow water [H ~> m or kg m-2].
   real :: dz_ur   ! The total thickness of an unstable region [H ~> m or kg m-2].
-  real :: wgt, cowgt  ! A weight and its complement, nondim.
+  real :: wgt, cowgt  ! A weight and its complement [nondim].
   real :: rho_ml_av ! The average potential density in a near-surface region [R ~> kg m-3].
   real :: H_ml_av ! A thickness to try to use in taking the near-surface average [H ~> m or kg m-2].
   real :: rho_x_z ! A cumulative integral of a density [R H ~> kg m-2 or kg2 m-5].
@@ -492,38 +492,38 @@ end subroutine build_slight_column
 subroutine rho_interfaces_col(rho_col, h_col, z_col, rho_tgt, nz, z_col_new, &
                               CS, reliable, debug, h_neglect, h_neglect_edge)
   integer,               intent(in)    :: nz      !< Number of layers
-  real, dimension(nz),   intent(in)    :: rho_col !< Initial layer reference densities.
-  real, dimension(nz),   intent(in)    :: h_col   !< Initial layer thicknesses.
-  real, dimension(nz+1), intent(in)    :: z_col   !< Initial interface heights.
+  real, dimension(nz),   intent(in)    :: rho_col !< Initial layer reference densities [R ~> kg m-3].
+  real, dimension(nz),   intent(in)    :: h_col   !< Initial layer thicknesses [H ~> m or kg m-2].
+  real, dimension(nz+1), intent(in)    :: z_col   !< Initial interface heights [H ~> m or kg m-2].
   real, dimension(nz+1), intent(in)    :: rho_tgt !< Interface target densities.
-  real, dimension(nz+1), intent(inout) :: z_col_new !< New interface heights.
+  real, dimension(nz+1), intent(inout) :: z_col_new !< New interface heights [H ~> m or kg m-2].
   type(slight_CS),       intent(in)    :: CS      !< Coordinate control structure
   logical, dimension(nz+1), intent(inout) :: reliable !< If true, the interface positions
                                                   !! are well defined from a stable region.
-  logical,   optional, intent(in)    :: debug     !< If present and true, do debugging checks.
-  real,      optional, intent(in)    :: h_neglect !< A negligibly small width for the
-                                             !! purpose of cell reconstructions
-                                             !! in the same units as h_col.
-  real,      optional, intent(in)    :: h_neglect_edge !< A negligibly small width
-                                             !! for the purpose of edge value calculations
-                                             !! in the same units as h_col.
+  logical,     optional, intent(in)    :: debug   !< If present and true, do debugging checks.
+  real,        optional, intent(in)    :: h_neglect !< A negligibly small width for the purpose of
+                                                  !! cell reconstructions [H ~> m or kg m-2]
+  real,        optional, intent(in)    :: h_neglect_edge !< A negligibly small width for the purpose
+                                                  !! of edge value calculations [H ~> m or kg m-2]
 
   real, dimension(nz+1) :: ru_max_int ! The maximum and minimum densities in
-  real, dimension(nz+1) :: ru_min_int ! an unstable region around an interface.
+  real, dimension(nz+1) :: ru_min_int ! an unstable region around an interface [R ~> kg m-3].
   real, dimension(nz)   :: ru_max_lay ! The maximum and minimum densities in
-  real, dimension(nz)   :: ru_min_lay ! an unstable region containing a layer.
-  real, dimension(nz,2) :: ppoly_i_E ! Edge value of polynomial
-  real, dimension(nz,2) :: ppoly_i_S ! Edge slope of polynomial
-  real, dimension(nz,DEGREE_MAX+1) :: ppoly_i_coefficients ! Coefficients of polynomial
+  real, dimension(nz)   :: ru_min_lay ! an unstable region containing a layer [R ~> kg m-3].
+  real, dimension(nz,2) :: ppoly_i_E  ! Edge value of polynomial [R ~> kg m-3]
+  real, dimension(nz,2) :: ppoly_i_S  ! Edge slope of polynomial [R H-1 ~> kg m-4 or m-1]
+  real, dimension(nz,DEGREE_MAX+1) :: ppoly_i_coefficients ! Coefficients of polynomial [R ~> kg m-3]
   logical, dimension(nz)   :: unstable_lay ! If true, this layer is in an unstable region.
   logical, dimension(nz+1) :: unstable_int ! If true, this interface is in an unstable region.
-  real :: rt  ! The current target density [kg m-3].
-  real :: zf  ! The fractional z-position within a layer of the target density.
-  real :: rfn
-  real :: a(5) ! Coefficients of a local polynomial minus the target density.
-  real :: zf1, zf2, rfn1, rfn2
-  real :: drfn_dzf, sgn, delta_zf, zf_prev
-  real :: tol
+  real :: rt  ! The current target density [R ~> kg m-3].
+  real :: zf  ! The fractional z-position within a layer of the target density [nondim].
+  real :: rfn ! The target density relative to the interpolated density [R ~> kg m-3]
+  real :: a(5) ! Coefficients of a local polynomial minus the target density [R ~> kg m-3].
+  real :: zf1, zf2   ! Two previous estimates of zf [nondim]
+  real :: rfn1, rfn2 ! Values of rfn at zf1 and zf2 [R ~> kg m-3]
+  real :: drfn_dzf   ! The partial derivative of rfn with zf [R ~> kg m-3]
+  real :: sgn, delta_zf, zf_prev ! [nondim]
+  real :: tol  ! The tolerance for convergence of zf [nondim]
   logical :: k_found ! If true, the position has been found.
   integer :: k_layer ! The index of the stable layer containing an interface.
   integer :: ppoly_degree

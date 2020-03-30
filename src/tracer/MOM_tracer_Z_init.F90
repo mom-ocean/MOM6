@@ -30,7 +30,7 @@ contains
 function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
   logical :: tracer_Z_init !< A return code indicating if the initialization has been successful
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
-  type(unit_scale_type), intent(in)    :: US !< A dimensional unit scaling type
+  type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                          intent(out)   :: tr   !< The tracer to initialize
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -612,63 +612,64 @@ function find_limited_slope(val, e, k) result(slope)
 end function find_limited_slope
 
 !> Find interface positions corresponding to density profile
-function find_interfaces(rho, zin, Rb, depth, nlevs, nkml, nkbl, hml, debug, eps_z, eps_rho) result(zi)
-  real, dimension(:,:,:), &
-                      intent(in) :: rho   !< potential density in z-space [kg m-3 or R ~> kg m-3]
-  real, dimension(size(rho,3)), &
-                      intent(in) :: zin   !< Input data levels [m or Z ~> m].
-  real, dimension(:), intent(in) :: Rb    !< target interface densities [kg m-3 or R ~> kg m-3]
-  real, dimension(size(rho,1),size(rho,2)), &
-                      intent(in) :: depth !< ocean depth [Z ~> m].
-  integer, dimension(size(rho,1),size(rho,2)), &
-            optional, intent(in) :: nlevs !< number of valid points in each column
-  logical,  optional, intent(in) :: debug !< optional debug flag
-  integer,  optional, intent(in) :: nkml  !< number of mixed layer pieces
-  integer,  optional, intent(in) :: nkbl  !< number of buffer layer pieces
-  real,     optional, intent(in) :: hml   !< mixed layer depth [Z ~> m].
-  real,     optional, intent(in) :: eps_z !< A negligibly small layer thickness [m or Z ~> m].
-  real,     optional, intent(in) :: eps_rho !< A negligibly small density difference [kg m-3 or R ~> kg m-3].
-  real, dimension(size(rho,1),size(rho,2),size(Rb,1)) :: zi !< The returned interface, in the same units az zin.
+subroutine find_interfaces(rho, zin, nk_data, Rb, depth, zi, G, US, nlevs, nkml, nkbl, hml, debug, eps_z, eps_rho)
+  type(ocean_grid_type),      intent(in) :: G     !< The ocean's grid structure
+  integer,                    intent(in) :: nk_data !<  The number of levels in the input data
+  real, dimension(SZI_(G),SZJ_(G),nk_data), &
+                              intent(in) :: rho   !< Potential density in z-space [R ~> kg m-3]
+  real, dimension(nk_data),   intent(in) :: zin   !< Input data levels [Z ~> m].
+  real, dimension(SZK_(G)+1), intent(in) :: Rb    !< target interface densities [R ~> kg m-3]
+  real, dimension(SZI_(G),SZJ_(G)), &
+                              intent(in) :: depth !< ocean depth [Z ~> m].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                             intent(out) :: zi    !< The returned interface heights [Z ~> m]
+  type(unit_scale_type),      intent(in) :: US    !< A dimensional unit scaling type
+  integer, dimension(SZI_(G),SZJ_(G)), &
+                    optional, intent(in) :: nlevs !< number of valid points in each column
+  logical,          optional, intent(in) :: debug !< optional debug flag
+  integer,          optional, intent(in) :: nkml  !< number of mixed layer pieces
+  integer,          optional, intent(in) :: nkbl  !< number of buffer layer pieces
+  real,             optional, intent(in) :: hml   !< mixed layer depth [Z ~> m].
+  real,             optional, intent(in) :: eps_z !< A negligibly small layer thickness [Z ~> m].
+  real,             optional, intent(in) :: eps_rho !< A negligibly small density difference [R ~> kg m-3].
 
   ! Local variables
-  real, dimension(size(rho,1),size(rho,3)) :: rho_ ! A slice of densities [R ~> kg m-3]
-  real, dimension(size(rho,1)) :: depth_
+  real, dimension(SZI_(G),nk_data) :: rho_ ! A slice of densities [R ~> kg m-3]
   logical :: unstable
   integer :: dir
-  integer, dimension(size(rho,1),size(Rb,1)) :: ki_
-  real, dimension(size(rho,1),size(Rb,1)) :: zi_
-  integer, dimension(size(rho,1),size(rho,2)) :: nlevs_data
-  integer, dimension(size(rho,1)) :: lo, hi
+  integer, dimension(SZI_(G),SZK_(G)+1) :: ki_
+  real, dimension(SZI_(G),SZK_(G)+1) :: zi_
+  integer, dimension(SZI_(G),SZJ_(G)) :: nlevs_data
+  integer, dimension(SZI_(G)) :: lo, hi
   real :: slope,rsm,drhodz,hml_
-  integer :: n,i,j,k,l,nx,ny,nz,nt
-  integer :: nlay,kk,nkml_,nkbl_
-  logical :: debug_ = .false.
   real    :: epsln_Z    ! A negligibly thin layer thickness [m or Z ~> m].
   real    :: epsln_rho  ! A negligibly small density change [kg m-3 or R ~> kg m-3].
   real, parameter :: zoff=0.999
+  integer :: kk,nkml_,nkbl_
+  logical :: debug_ = .false.
+  integer :: i, j, k, m, n, is, ie, js, je, nz
 
-  nlay=size(Rb)-1
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   zi(:,:,:) = 0.0
 
   if (PRESENT(debug)) debug_=debug
 
-  nx = size(rho,1); ny=size(rho,2); nz = size(rho,3)
-  nlevs_data(:,:) = size(rho,3)
+  nlevs_data(:,:) = nz
 
   nkml_ = 0 ;  if (PRESENT(nkml)) nkml_ = max(0, nkml)
   nkbl_ = 0 ;  if (PRESENT(nkbl)) nkbl_ = max(0, nkbl)
   hml_ = 0.0 ; if (PRESENT(hml)) hml_ = hml
-  epsln_Z = 1.0e-10 ; if (PRESENT(eps_z)) epsln_Z = eps_z
-  epsln_rho = 1.0e-10 ; if (PRESENT(eps_rho)) epsln_rho = eps_rho
+  epsln_Z = 1.0e-10*US%m_to_Z ; if (PRESENT(eps_z)) epsln_Z = eps_z
+  epsln_rho = 1.0e-10*US%kg_m3_to_R ; if (PRESENT(eps_rho)) epsln_rho = eps_rho
 
   if (PRESENT(nlevs)) then
     nlevs_data(:,:) = nlevs(:,:)
   endif
 
-  do j=1,ny
+  do j=js,je
     rho_(:,:) = rho(:,j,:)
-    i_loop: do i=1,nx
+    i_loop: do i=is,ie
       if (debug_) then
         print *,'looking for interfaces, i,j,nlevs= ',i,j,nlevs_data(i,j)
         print *,'initial density profile= ', rho_(i,:)
@@ -712,60 +713,73 @@ function find_interfaces(rho, zin, Rb, depth, nlevs, nkml, nkbl, hml, debug, eps
 
     ki_(:,:) = 0
     zi_(:,:) = 0.0
-    depth_(:) = -1.0*depth(:,j)
     lo(:) = 1
     hi(:) = nlevs_data(:,j)
     ki_ = bisect_fast(rho_, Rb, lo, hi)
     ki_(:,:) = max(1, ki_(:,:)-1)
-    do i=1,nx
-      do l=2,nlay
-        slope = (zin(ki_(i,l)+1) - zin(ki_(i,l))) / max(rho_(i,ki_(i,l)+1) - rho_(i,ki_(i,l)),epsln_rho)
-        zi_(i,l) = -1.0*(zin(ki_(i,l)) + slope*(Rb(l)-rho_(i,ki_(i,l))))
-        zi_(i,l) = max(zi_(i,l), depth_(i))
-        zi_(i,l) = min(zi_(i,l), -1.0*hml_)
+    do i=is,ie
+      do m=2,nz
+        slope = (zin(ki_(i,m)+1) - zin(ki_(i,m))) / max(rho_(i,ki_(i,m)+1) - rho_(i,ki_(i,m)),epsln_rho)
+        zi_(i,m) = -1.0*(zin(ki_(i,m)) + slope*(Rb(m)-rho_(i,ki_(i,m))))
+        zi_(i,m) = max(zi_(i,m), -depth(i,j))
+        zi_(i,m) = min(zi_(i,m), -1.0*hml_)
       enddo
-      zi_(i,nlay+1) = depth_(i)
-      do l=2,nkml_+1
-        zi_(i,l) = max(hml_*((1.0-real(l))/real(nkml_)), depth_(i))
+      zi_(i,nz+1) = -depth(i,j)
+      do m=2,nkml_+1
+        zi_(i,m) = max(hml_*((1.0-real(m))/real(nkml_)), -depth(i,j))
       enddo
-      do l=nlay,nkml_+2,-1
-        if (zi_(i,l) < zi_(i,l+1) + epsln_Z) zi_(i,l) = zi_(i,l+1) + epsln_Z
-        if (zi_(i,l) > -1.0*hml_)  zi_(i,l) = max(-1.0*hml_, depth_(i))
+      do m=nz,nkml_+2,-1
+        if (zi_(i,m) < zi_(i,m+1) + epsln_Z) zi_(i,m) = zi_(i,m+1) + epsln_Z
+        if (zi_(i,m) > -1.0*hml_)  zi_(i,m) = max(-1.0*hml_, -depth(i,j))
       enddo
     enddo
     zi(:,j,:) = zi_(:,:)
   enddo
 
-end function find_interfaces
+end subroutine find_interfaces
 
 !> This subroutine determines the potential temperature and salinity that
 !! is consistent with the target density using provided initial guess
-subroutine determine_temperature(temp, salt, R, p_ref, niter, land_fill, h, k_start, eos)
+subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, k_start, US, eos, h_massless)
   real, dimension(:,:,:),        intent(inout) :: temp !< potential temperature [degC]
   real, dimension(:,:,:),        intent(inout) :: salt !< salinity [PSU]
-  real, dimension(size(temp,3)), intent(in)    :: R !< desired potential density [kg m-3].
+  real, dimension(size(temp,3)), intent(in)    :: R_tgt !< desired potential density [R ~> kg m-3].
   real,                          intent(in)    :: p_ref !< reference pressure [Pa].
   integer,                       intent(in)    :: niter !< maximum number of iterations
   integer,                       intent(in)    :: k_start !< starting index (i.e. below the buffer layer)
   real,                          intent(in)    :: land_fill !< land fill value
-  real, dimension(:,:,:),        intent(in)    :: h   !< layer thickness, used only to avoid working on massless layers
+  real, dimension(:,:,:),        intent(in)    :: h   !< layer thickness, used only to avoid working on
+                                                      !! massless layers [H ~> m or kg m-2]
+  type(unit_scale_type),         intent(in)    :: US  !< A dimensional unit scaling type
   type(eos_type),                pointer       :: eos !< seawater equation of state control structure
+  real,                optional, intent(in)    :: h_massless !< A threshold below which a layer is
+                                                      !! determined to be massless [H ~> m or kg m-2]
 
   real, parameter :: T_max = 31.0, T_min = -2.0
   ! Local variables (All of which need documentation!)
-  real(kind=8), dimension(size(temp,1),size(temp,3)) :: T, S, dT, dS, rho, hin
-  real(kind=8), dimension(size(temp,1),size(temp,3)) :: drho_dT, drho_dS
-  real(kind=8), dimension(size(temp,1)) :: press
+  real, dimension(size(temp,1),size(temp,3)) :: &
+    T, S, dT, dS, &
+    rho, & ! Layer densities [R ~> kg m-3]
+    hin, & ! Input layer thicknesses [H ~> m or kg m-2]
+    drho_dT, & ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
+    drho_dS    ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
+  real, dimension(size(temp,1)) :: press
   integer :: nx, ny, nz, nt, i, j, k, n, itt
   real    :: dT_dS_gauge  ! The relative penalizing of temperature to salinity changes when
                           ! minimizing property changes while correcting density [degC ppt-1].
   real    :: I_denom      ! The inverse of the magnitude squared of the density gradient in
-                          ! T-S space streched with dT_dS_gauge [m6 kg-2 ppt-1]
+                          ! T-S space streched with dT_dS_gauge [ppt2 R-2 ~> ppt2 m6 kg-2]
   logical :: adjust_salt, old_fit
-  real, parameter :: S_min = 0.5, S_max=65.0
-  real, parameter :: tol_T=1.e-4, tol_S=1.e-4, tol_rho=1.e-4
-  real, parameter :: max_t_adj=1.0, max_s_adj = 0.5
+  real :: S_min, S_max
+  real :: tol_T    ! The tolerance for temperature matches [degC]
+  real :: tol_S    ! The tolerance for salinity matches [ppt]
+  real :: tol_rho  ! The tolerance for density matches [R ~> kg m-3]
+  real :: max_t_adj, max_s_adj
 
+  ! These hard coded parameters need to be set properly.
+  S_min = 0.5 ; S_max = 65.0
+  max_t_adj = 1.0 ; max_s_adj = 0.5
+  tol_T=1.e-4 ; tol_S=1.e-4 ; tol_rho = 1.e-4*US%kg_m3_to_R
   old_fit = .true.   ! reproduces siena behavior
 
   ! ### The whole determine_temperature subroutine needs to be reexamined, both the algorithms
@@ -780,28 +794,29 @@ subroutine determine_temperature(temp, salt, R, p_ref, niter, land_fill, h, k_st
 
   do j=1,ny
     dS(:,:) = 0. ! Needs to be zero everywhere since there is a maxval(abs(dS)) later...
-    T=temp(:,j,:)
-    S=salt(:,j,:)
-    hin=h(:,j,:)
-    dT=0.0
+    T(:,:) = temp(:,j,:)
+    S(:,:) = salt(:,j,:)
+    hin(:,:) = h(:,j,:)
+    dT(:,:) = 0.0
     adjust_salt = .true.
     iter_loop: do itt = 1,niter
       do k=1, nz
-        call calculate_density(T(:,k), S(:,k), press, rho(:,k), 1, nx, eos)
-        call calculate_density_derivs(T(:,k), S(:,k), press, drho_dT(:,k), drho_dS(:,k), 1, nx, eos)
+        call calculate_density(T(:,k), S(:,k), press, rho(:,k), 1, nx, eos, scale=US%kg_m3_to_R)
+        call calculate_density_derivs(T(:,k), S(:,k), press, drho_dT(:,k), drho_dS(:,k), 1, nx, &
+                                      eos, scale=US%kg_m3_to_R)
       enddo
       do k=k_start,nz ; do i=1,nx
 
-!       if (abs(rho(i,k)-R(k))>tol .and. hin(i,k)>epsln .and. abs(T(i,k)-land_fill) < epsln) then
-        if (abs(rho(i,k)-R(k))>tol_rho) then
+!       if (abs(rho(i,k)-R_tgt(k))>tol_rho .and. hin(i,k)>h_massless .and. abs(T(i,k)-land_fill) < epsln) then
+        if (abs(rho(i,k)-R_tgt(k))>tol_rho) then
           if (old_fit) then
-            dT(i,k) = max(min((R(k)-rho(i,k)) / drho_dT(i,k), max_t_adj), -max_t_adj)
+            dT(i,k) = max(min((R_tgt(k)-rho(i,k)) / drho_dT(i,k), max_t_adj), -max_t_adj)
             T(i,k) = max(min(T(i,k)+dT(i,k), T_max), T_min)
           else
             dT_dS_gauge = 10.0  ! 10 degC is weighted equivalently to 1 ppt.
             I_denom = 1.0 / (drho_dS(i,k)**2 + dT_dS_gauge**2*drho_dT(i,k)**2)
-            dS(i,k) = (R(k)-rho(i,k)) * drho_dS(i,k) * I_denom
-            dT(i,k) = (R(k)-rho(i,k)) * dT_dS_gauge**2*drho_dT(i,k) * I_denom
+            dS(i,k) = (R_tgt(k)-rho(i,k)) * drho_dS(i,k) * I_denom
+            dT(i,k) = (R_tgt(k)-rho(i,k)) * dT_dS_gauge**2*drho_dT(i,k) * I_denom
 
             T(i,k) = max(min(T(i,k)+dT(i,k), T_max), T_min)
             S(i,k) = max(min(S(i,k)+dS(i,k), S_max), S_min)
@@ -816,21 +831,22 @@ subroutine determine_temperature(temp, salt, R, p_ref, niter, land_fill, h, k_st
 
     if (adjust_salt .and. old_fit) then ; do itt = 1,niter
       do k=1, nz
-        call calculate_density(T(:,k),S(:,k),press,rho(:,k),1,nx,eos)
-        call calculate_density_derivs(T(:,k),S(:,k),press,drho_dT(:,k),drho_dS(:,k),1,nx,eos)
+        call calculate_density(T(:,k), S(:,k), press, rho(:,k), 1, nx, eos, scale=US%kg_m3_to_R)
+        call calculate_density_derivs(T(:,k), S(:,k), press, drho_dT(:,k), drho_dS(:,k), 1, nx, &
+                                      eos, scale=US%kg_m3_to_R)
       enddo
       do k=k_start,nz ; do i=1,nx
-!       if (abs(rho(i,k)-R(k))>tol .and. hin(i,k)>epsln .and. abs(T(i,k)-land_fill) < epsln ) then
-        if (abs(rho(i,k)-R(k)) > tol_rho) then
-          dS(i,k) = max(min((R(k)-rho(i,k)) / drho_dS(i,k), max_s_adj), -max_s_adj)
+!       if (abs(rho(i,k)-R_tgt(k))>tol_rho .and. hin(i,k)>h_massless .and. abs(T(i,k)-land_fill) < epsln ) then
+        if (abs(rho(i,k)-R_tgt(k)) > tol_rho) then
+          dS(i,k) = max(min((R_tgt(k)-rho(i,k)) / drho_dS(i,k), max_s_adj), -max_s_adj)
           S(i,k) = max(min(S(i,k)+dS(i,k), S_max), S_min)
         endif
       enddo ; enddo
       if (maxval(abs(dS)) < tol_S) exit
     enddo ; endif
 
-    temp(:,j,:)=T(:,:)
-    salt(:,j,:)=S(:,:)
+    temp(:,j,:) = T(:,:)
+    salt(:,j,:) = S(:,:)
   enddo
 
 end subroutine determine_temperature

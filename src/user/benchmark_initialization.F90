@@ -232,7 +232,7 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, US, param_file, &
                                                       !! only read parameters without changing h.
   ! Local variables
   real :: T0(SZK_(G)), S0(SZK_(G))
-  real :: pres(SZK_(G))      ! Reference pressure [kg m-3].
+  real :: pres(SZK_(G))      ! Reference pressure [Pa].
   real :: drho_dT(SZK_(G))   ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
   real :: drho_dS(SZK_(G))   ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
   real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 [R ~> kg m-3].

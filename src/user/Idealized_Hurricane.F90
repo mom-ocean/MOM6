@@ -652,7 +652,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
     endif
     forces%tauy(I,j) = CS%rho_a * US%L_to_Z * G%mask2dCv(I,j) * Cd*dU10*dV
   enddo ; enddo
-  ! Set the surface friction velocity [m s-1]. ustar is always positive.
+  ! Set the surface friction velocity [Z T-1 ~> m s-1]. ustar is always positive.
   do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
     forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(US%L_to_Z * (CS%gustiness/CS%Rho0 + &

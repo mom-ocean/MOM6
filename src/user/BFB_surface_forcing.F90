@@ -98,7 +98,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
     ! Set whichever fluxes are to be used here.  Any fluxes that
     ! are always zero do not need to be changed here.
     do j=js,je ; do i=is,ie
-      ! Fluxes of fresh water through the surface are in units of [kg m-2 s-1]
+      ! Fluxes of fresh water through the surface are in units of [R Z T-1 ~> kg m-2 s-1]
       ! and are positive downward - i.e. evaporation should be negative.
       fluxes%evap(i,j) = -0.0 * G%mask2dT(i,j)
       fluxes%lprec(i,j) = 0.0 * G%mask2dT(i,j)
@@ -151,7 +151,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
       Temp_restore = 0.0
       do j=js,je ; do i=is,ie
        !   Set density_restore to an expression for the surface potential
-       ! density [kg m-3] that is being restored toward.
+       ! density [R ~> kg m-3] that is being restored toward.
         if (G%geoLatT(i,j) < CS%lfrslat) then
             Temp_restore = CS%SST_s
         elseif (G%geoLatT(i,j) > CS%lfrnlat) then

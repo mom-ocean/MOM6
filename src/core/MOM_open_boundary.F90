@@ -74,7 +74,8 @@ type, public :: OBC_segment_data_type
   real, pointer, dimension(:,:,:) :: buffer_src=>NULL() !< buffer for segment data located at cell faces
                                                 !! and on the original vertical grid
   integer                         :: nk_src     !< Number of vertical levels in the source data
-  real, dimension(:,:,:), pointer :: dz_src=>NULL()     !< vertical grid cell spacing of the incoming segment data [m]
+  real, dimension(:,:,:), pointer :: dz_src=>NULL()     !< vertical grid cell spacing of the incoming segment
+                                                        !! data, set in [Z ~> m] then scaled to [H ~> m or kg m-2]
   real, dimension(:,:,:), pointer :: buffer_dst=>NULL() !< buffer src data remapped to the target vertical grid
   real, dimension(:,:), pointer   :: bt_vel=>NULL()     !< barotropic velocity [L T-1 ~> m s-1]
   real                            :: value              !< constant value if fid is equal to -1
@@ -260,6 +261,7 @@ type, public :: ocean_OBC_type
   real :: rx_max   !< The maximum magnitude of the baroclinic radiation
                    !! velocity (or speed of characteristics) [m s-1].  The
                    !! default value is 10 m s-1.
+                   !### The description above seems inconsistent with the code, and the units should be [nondim].
   logical :: OBC_pe !< Is there an open boundary on this tile?
   type(remapping_CS),      pointer :: remap_CS   !< ALE remapping control structure for segments only
   type(OBC_registry_type), pointer :: OBC_Reg => NULL()  !< Registry type for boundaries
@@ -478,11 +480,13 @@ subroutine open_boundary_config(G, US, param_file, OBC)
     call initialize_segment_data(G, OBC, param_file)
 
     if (open_boundary_query(OBC, apply_open_OBC=.true.)) then
+      !### I think that OBC%rx_max as used is actually nondimensional, with effective
+      !    units of grid points per time step.
       call get_param(param_file, mdl, "OBC_RADIATION_MAX", OBC%rx_max, &
                    "The maximum magnitude of the baroclinic radiation "//&
                    "velocity (or speed of characteristics).  This is only "//&
                    "used if one of the open boundary segments is using Orlanski.", &
-                   units="m s-1", default=10.0)
+                   units="m s-1", default=10.0) !### Should the units here be "nondim"?
       call get_param(param_file, mdl, "OBC_RAD_VEL_WT", OBC%gamma_uv, &
                    "The relative weighting for the baroclinic radiation "//&
                    "velocities (or speed of characteristics) at the new "//&
@@ -3421,7 +3425,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
   type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
   type(ocean_OBC_type),                      pointer       :: OBC  !< Open boundary structure
   type(thermo_var_ptrs),                     intent(in)    :: tv   !< Thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h    !< Thickness [m]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h    !< Thickness [H ~> m or kg m-2]
   type(time_type),                           intent(in)    :: Time !< Model time
   ! Local variables
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed
@@ -3429,8 +3433,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
   character(len=40)  :: mdl = "set_OBC_segment_data" ! This subroutine's name.
   character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
   type(OBC_segment_type), pointer :: segment => NULL()
-  integer, dimension(4) :: siz,siz2
-  real :: sumh ! column sum of thicknesses [m]
+  integer, dimension(4) :: siz
   integer :: ni_seg, nj_seg  ! number of src gridpoints along the segments
   integer :: i2, j2          ! indices for referencing local domain array
   integer :: is_obc, ie_obc, js_obc, je_obc  ! segment indices within local domain

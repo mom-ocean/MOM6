@@ -85,9 +85,6 @@ type, public :: VarMix_CS
   real, dimension(:,:,:), pointer :: &
     slope_x => NULL(), &  !< Zonal isopycnal slope [nondim]
     slope_y => NULL(), &  !< Meridional isopycnal slope [nondim]
-    !### These are posted as diagnostics but are never set.
-    N2_u => NULL(), &     !< Brunt-Vaisala frequency at u-points [s-2]
-    N2_v => NULL(), &     !< Brunt-Vaisala frequency at v-points [s-2]
     ebt_struct => NULL()  !< Vertical structure function to scale diffusivities with [nondim]
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
     Laplac3_const_u       !< Laplacian metric-dependent constants [L3 ~> m3]
@@ -422,14 +419,14 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
   endif
 
   if (query_averaging_enabled(CS%diag)) then
-    if (CS%id_SN_u > 0)     call post_data(CS%id_SN_u, CS%SN_u, CS%diag)
-    if (CS%id_SN_v > 0)     call post_data(CS%id_SN_v, CS%SN_v, CS%diag)
-    if (CS%id_L2u > 0)      call post_data(CS%id_L2u, CS%L2u, CS%diag)
-    if (CS%id_L2v > 0)      call post_data(CS%id_L2v, CS%L2v, CS%diag)
-    !### I do not believe that CS%N2_u and CS%N2_v are ever set, but because the contents
-    !    of CS are public, they might be set somewhere outside of this module.
-    if (CS%id_N2_u > 0)     call post_data(CS%id_N2_u, CS%N2_u, CS%diag)
-    if (CS%id_N2_v > 0)     call post_data(CS%id_N2_v, CS%N2_v, CS%diag)
+    if (CS%id_SN_u > 0) call post_data(CS%id_SN_u, CS%SN_u, CS%diag)
+    if (CS%id_SN_v > 0) call post_data(CS%id_SN_v, CS%SN_v, CS%diag)
+    if (CS%id_L2u > 0)  call post_data(CS%id_L2u, CS%L2u, CS%diag)
+    if (CS%id_L2v > 0)  call post_data(CS%id_L2v, CS%L2v, CS%diag)
+    if (CS%calculate_Eady_growth_rate .and. CS%use_stored_slopes) then
+      if (CS%id_N2_u > 0) call post_data(CS%id_N2_u, N2_u, CS%diag)
+      if (CS%id_N2_v > 0) call post_data(CS%id_N2_v, N2_v, CS%diag)
+    endif
   endif
 
 end subroutine calc_slope_functions
@@ -992,8 +989,6 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     in_use = .true.
     allocate(CS%slope_x(IsdB:IedB,jsd:jed,G%ke+1)) ; CS%slope_x(:,:,:) = 0.0
     allocate(CS%slope_y(isd:ied,JsdB:JedB,G%ke+1)) ; CS%slope_y(:,:,:) = 0.0
-    allocate(CS%N2_u(IsdB:IedB,jsd:jed,G%ke+1)) ; CS%N2_u(:,:,:) = 0.0
-    allocate(CS%N2_v(isd:ied,JsdB:JedB,G%ke+1)) ; CS%N2_v(:,:,:) = 0.0
     call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_smooth, &
                  "A diapycnal diffusivity that is used to interpolate "//&
                  "more sensible values of T & S into thin layers.", &
@@ -1041,16 +1036,19 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
        'm2', conversion=US%L_to_m**2)
   endif
 
-  if (CS%use_stored_slopes) then
+  if (CS%calculate_Eady_growth_rate .and. CS%use_stored_slopes) then
     CS%id_N2_u = register_diag_field('ocean_model', 'N2_u', diag%axesCui, Time, &
-         'Square of Brunt-Vaisala frequency, N^2, at u-points, as used in Visbeck et al.', 's-2')
+         'Square of Brunt-Vaisala frequency, N^2, at u-points, as used in Visbeck et al.', &
+         's-2', conversion=US%s_to_T**2)
     CS%id_N2_v = register_diag_field('ocean_model', 'N2_v', diag%axesCvi, Time, &
-         'Square of Brunt-Vaisala frequency, N^2, at v-points, as used in Visbeck et al.', 's-2')
-    !### The units of the next two diagnostics should be 'nondim'.
+         'Square of Brunt-Vaisala frequency, N^2, at v-points, as used in Visbeck et al.', &
+         's-2', conversion=US%s_to_T**2)
+  endif
+  if (CS%use_stored_slopes) then
     CS%id_S2_u = register_diag_field('ocean_model', 'S2_u', diag%axesCu1, Time, &
-         'Depth average square of slope magnitude, S^2, at u-points, as used in Visbeck et al.', 's-2')
+         'Depth average square of slope magnitude, S^2, at u-points, as used in Visbeck et al.', 'nondim')
     CS%id_S2_v = register_diag_field('ocean_model', 'S2_v', diag%axesCv1, Time, &
-         'Depth average square of slope magnitude, S^2, at v-points, as used in Visbeck et al.', 's-2')
+         'Depth average square of slope magnitude, S^2, at v-points, as used in Visbeck et al.', 'nondim')
   endif
 
   oneOrTwo = 1.0

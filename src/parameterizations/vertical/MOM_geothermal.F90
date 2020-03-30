@@ -111,11 +111,11 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
                                                       ! for diagnostics [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_old   ! Thickness of each layer
                                                       ! before any heat is added,
-                                                      ! for diagnostics [m or kg m-2]
+                                                      ! for diagnostics [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: work_3d ! Scratch variable used to
                                                       ! calculate change in heat
                                                       ! due to geothermal
-  real :: Idt           ! inverse of the timestep [s-1]
+  real :: Idt           ! inverse of the timestep [T-1 ~> s-1]
 
   logical :: do_i(SZI_(G))
   logical :: compute_h_old, compute_T_old

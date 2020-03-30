@@ -1400,7 +1400,6 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
                     ! normalized by the arithmetic mean thickness.
   real :: Kh_scale  ! A ratio by which Kh_u_CFL is scaled for maximally jagged
                     ! layers [nondim].
-!  real :: Kh_det    ! The detangling diffusivity [m2 s-1].
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
 
@@ -1422,7 +1421,6 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
                     ! the damping timescale [T-1 ~> s-1].
   real :: Fn_R      ! A function of Rsl, such that Rsl < Fn_R < 1.
   real :: denom, I_denom ! A denominator and its inverse, various units.
- ! real :: Kh_min    ! A local floor on the diffusivity [m2 s-1].
   real :: Kh_max    ! A local ceiling on the diffusivity [L2 T-1 ~> m2 s-1].
   real :: wt1, wt2  ! Nondimensional weights.
   !   Variables used only in testing code.
