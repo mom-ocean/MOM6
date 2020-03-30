@@ -1190,9 +1190,9 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
                  "CDRAG is the drag coefficient relating the magnitude of "//&
                  "the velocity field to the bottom stress.", units="nondim", &
                  default=0.003)
-  call get_param(param_file, mdl, "CDRAG_MEKE", CS%cdrag, &
-                 "CDRAG is the drag coefficient relating the magnitude of "//&
-                 "the velocity field to the bottom stress.", units="nondim", &
+  call get_param(param_file, mdl, "MEKE_CDRAG", CS%cdrag, &
+                 "Drag coefficient relating the magnitude of the velocity "//&
+                 "field to the bottom stress in MEKE.", units="nondim", &
                  default=cdrag)
   call get_param(param_file, mdl, "LAPLACIAN", laplacian, default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "BIHARMONIC", biharmonic, default=.false., do_not_log=.true.)
