@@ -47,14 +47,18 @@ function global_area_mean(var, G, scale)
 
 end function global_area_mean
 
-!> Return the global area integral of a variable. This uses reproducing sums.
-function global_area_integral(var, G, scale)
-  type(ocean_grid_type),             intent(in)  :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G), SZJ_(G)), intent(in)  :: var  !< The variable to integrate
-  real,                    optional, intent(in)  :: scale !< A rescaling factor for the variable
-  real, dimension(SZI_(G), SZJ_(G))              :: tmpForSumming
-  real :: global_area_integral
-
+!> Return the global area integral of a variable, by default using the masked area from the
+!! grid, but an alternate could be used instead.  This uses reproducing sums.
+function global_area_integral(var, G, scale, area)
+  type(ocean_grid_type),            intent(in)  :: G     !< The ocean's grid structure
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: var   !< The variable to integrate
+  real,                   optional, intent(in)  :: scale !< A rescaling factor for the variable
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: area !< The alternate area to use, including
+                                                          !! any required masking [L2 ~> m2].
+  real :: global_area_integral !< The returned area integral, usually in the units of var times [m2].
+  
+  ! Local variables
+  real, dimension(SZI_(G),SZJ_(G)) :: tmpForSumming
   real :: scalefac  ! An overall scaling factor for the areas and variable.
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -62,9 +66,15 @@ function global_area_integral(var, G, scale)
   scalefac = G%US%L_to_m**2 ; if (present(scale)) scalefac = G%US%L_to_m**2*scale
 
   tmpForSumming(:,:) = 0.
-  do j=js,je ; do i=is, ie
-    tmpForSumming(i,j) = var(i,j) * (scalefac * G%areaT(i,j) * G%mask2dT(i,j))
-  enddo ; enddo
+  if (present(area)) then
+    do j=js,je ; do i=is,ie
+      tmpForSumming(i,j) = var(i,j) * (scalefac * area(i,j))
+    enddo ; enddo
+  else
+    do j=js,je ; do i=is,ie
+      tmpForSumming(i,j) = var(i,j) * (scalefac * G%areaT(i,j) * G%mask2dT(i,j))
+    enddo ; enddo
+  endif
   global_area_integral = reproducing_sum(tmpForSumming)
 
 end function global_area_integral
@@ -96,7 +106,7 @@ function global_layer_mean(var, h, G, GV, scale)
   global_temp_scalar   = reproducing_sum(tmpForSumming,sums=scalarij)
   global_weight_scalar = reproducing_sum(weight,sums=weightij)
 
-  do k=1, nz
+  do k=1,nz
     global_layer_mean(k) = scalarij(k) / weightij(k)
   enddo
 
