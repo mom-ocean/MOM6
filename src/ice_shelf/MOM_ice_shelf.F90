@@ -87,7 +87,7 @@ type, public :: ice_shelf_CS ; private
   type(ice_shelf_dyn_CS), pointer :: dCS => NULL() !< The control structure for the ice-shelf dynamics.
 
   real, pointer, dimension(:,:) :: &
-    utide   => NULL()  !< tidal velocity [m s-1]
+    utide   => NULL()  !< An unresolved tidal velocity [L T-1 ~> m s-1]
 
   real :: ustar_bg     !< A minimum value for ustar under ice shelves [Z T-1 ~> m s-1].
   real :: cdrag        !< drag coefficient under ice shelves [nondim].
@@ -360,13 +360,12 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
           !   Iteratively determine a self-consistent set of fluxes, with the ocean
           ! salinity just below the ice-shelf as the variable that is being
           ! iterated for.
-          ! ### SHOULD USTAR_SHELF BE SET YET?
 
-          !### I think that CS%utide**1 should be CS%utide**2
-          !    Also I think that if taux_shelf and tauy_shelf have been calculated by the
+          ! ### SHOULD USTAR_SHELF BE SET YET, or should it be set from taux_shelf & tauy_shelf?
+          !    I think that if taux_shelf and tauy_shelf have been calculated by the
           ! ocean stress calculation, they should be used here or later to set ustar_shelf. - RWH
-          fluxes%ustar_shelf(i,j) = MAX(CS%ustar_bg, US%m_to_Z*US%T_to_s * &
-              sqrt(CS%cdrag*((state%u(i,j)**2 + state%v(i,j)**2) + CS%utide(i,j)**1)))
+          fluxes%ustar_shelf(i,j) = MAX(CS%ustar_bg, US%L_TO_Z * &
+              sqrt(CS%cdrag*(US%m_s_to_L_T**2*(state%u(i,j)**2 + state%v(i,j)**2) + CS%utide(i,j)**2)))
 
           ustar_h = fluxes%ustar_shelf(i,j)
 
@@ -495,7 +494,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
                 dDwB_dwB_in = dG_dwB * (dB_dS * (dS_ustar * I_Gam_S**2) + &
                                         dB_dT * (dT_ustar * I_Gam_T**2)) - 1.0
                 ! This is Newton's method without any bounds.
-                ! ### SHOULD BOUNDS BE NEEDED?
+                ! ### SHOULD BOUNDS BE NEEDED IN THIS NEWTONS METHOD SOLVER?
                 wB_flux_new = wB_flux - (wB_flux_new - wB_flux) / dDwB_dwB_in
               enddo !it3
             endif
@@ -1121,7 +1120,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   integer :: wd_halos(2)
   logical :: read_TideAmp, shelf_mass_is_dynamic, debug
   character(len=240) :: Tideamp_file
-  real    :: utide
+  real    :: utide  ! A tidal velocity [L T-1 ~> m s-1]
   if (associated(CS)) then
     call MOM_error(FATAL, "MOM_ice_shelf.F90, initialize_ice_shelf: "// &
                           "called with an associated control structure.")
@@ -1218,7 +1217,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  "(no conduction).", default=.false.)
   call get_param(param_file, mdl, "MELTING_CUTOFF_DEPTH", CS%cutoff_depth, &
                  "Depth above which the melt is set to zero (it must be >= 0) "//&
-                 "Default value won't affect the solution.", default=0.0, scale=US%m_to_Z) !###, units="m"
+                 "Default value won't affect the solution.", units="m", default=0.0, scale=US%m_to_Z)
   if (CS%cutoff_depth < 0.) &
     call MOM_error(WARNING,"Initialize_ice_shelf: MELTING_CUTOFF_DEPTH must be >= 0.")
 
@@ -1342,11 +1341,11 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
     TideAmp_file = trim(inputdir) // trim(TideAmp_file)
-    call MOM_read_data(TideAmp_file, 'tideamp', CS%utide, G%domain, timelevel=1)
+    call MOM_read_data(TideAmp_file, 'tideamp', CS%utide, G%domain, timelevel=1, scale=US%m_s_to_L_T)
   else
     call get_param(param_file, mdl, "UTIDE", utide, &
                  "The constant tidal amplitude used with INT_TIDE_DISSIPATION.", &
-                 units="m s-1", default=0.0)
+                 units="m s-1", default=0.0 , scale=US%m_s_to_L_T)
     CS%utide(:,:) = utide
   endif
 
@@ -1443,10 +1442,10 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                                 "ice sheet/shelf thickness mask" ,"none")
   endif
 
-  ! if (CS%active_shelf_dynamics) then  !### Consider adding an ice shelf dynamics switch.
+  if (CS%active_shelf_dynamics) then
     ! Allocate CS%dCS and specify additional restarts for ice shelf dynamics
     call register_ice_shelf_dyn_restarts(G, param_file, CS%dCS, CS%restart_CSp)
-  ! endif
+  endif
 
   !GMM - I think we do not need to save ustar_shelf and iceshelf_melt in the restart file
   !if (.not. CS%solo_ice_sheet) then

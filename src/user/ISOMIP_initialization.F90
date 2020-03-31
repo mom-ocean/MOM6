@@ -172,14 +172,14 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, US, param_file, tv, just_read
   select case ( coordinateMode(verticalCoordinate) )
 
   case ( REGRIDDING_LAYER, REGRIDDING_RHO ) ! Initial thicknesses for isopycnal coordinates
-    call get_param(param_file, mdl, "ISOMIP_T_SUR",t_sur, &
-                   'Temperature at the surface (interface)', default=-1.9, do_not_log=just_read)
+    call get_param(param_file, mdl, "ISOMIP_T_SUR", t_sur, &
+                   'Temperature at the surface (interface)', units="degC", default=-1.9, do_not_log=just_read)
     call get_param(param_file, mdl, "ISOMIP_S_SUR", s_sur, &
-                   'Salinity at the surface (interface)',  default=33.8, do_not_log=just_read)
+                   'Salinity at the surface (interface)', units="ppt",  default=33.8, do_not_log=just_read)
     call get_param(param_file, mdl, "ISOMIP_T_BOT", t_bot, &
-                   'Temperature at the bottom (interface)', default=-1.9, do_not_log=just_read)
+                   'Temperature at the bottom (interface)', units="degC", default=-1.9, do_not_log=just_read)
     call get_param(param_file, mdl, "ISOMIP_S_BOT", s_bot,&
-                   'Salinity at the bottom (interface)', default=34.55, do_not_log=just_read)
+                   'Salinity at the bottom (interface)', units="ppt", default=34.55, do_not_log=just_read)
 
     if (just_read) return ! All run-time parameters have been read, so return.
 
