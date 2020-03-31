@@ -26,7 +26,7 @@ use MOM_io, only : slasher, fieldtype
 use MOM_io, only : write_field, close_file, SINGLE_FILE, MULTIPLE
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, restore_state, MOM_restart_CS
-use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
+use MOM_time_manager, only : time_type, time_type_to_real, real_to_time, operator(>), operator(-)
 use MOM_transcribe_grid, only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid
 use MOM_unit_scaling, only : unit_scale_type, unit_scaling_init, fix_restart_unit_scaling
 use MOM_variables, only : surface
@@ -106,6 +106,7 @@ type, public :: ice_shelf_CS ; private
   real :: kd_molec_temp!< The molecular diffusivity of heat [Z2 T-1 ~> m2 s-1].
   real :: Lat_fusion   !< The latent heat of fusion [Q ~> J kg-1].
   real :: Gamma_T_3EQ  !<  Nondimensional heat-transfer coefficient, used in the 3Eq. formulation
+  real :: Gamma_S_3EQ  !<  Nondimensional salt-transfer coefficient, used in the 3Eq. formulation
                        !<  This number should be specified by the user.
   real :: col_thick_melt_threshold !< if the mixed layer is below this threshold, melt rate
   logical :: mass_from_file !< Read the ice shelf mass from a file every dt
@@ -150,14 +151,13 @@ type, public :: ice_shelf_CS ; private
                                          !! interface.
   logical :: insulator                   !< If true, ice shelf is a perfect insulator
   logical :: const_gamma                 !< If true, gamma_T is specified by the user.
-  logical :: find_salt_root              !< If true, if true find Sbdry using a quadratic eq.
   logical :: constant_sea_level          !< if true, apply an evaporative, heat and salt
                                          !! fluxes. It will avoid large increase in sea level.
   real    :: cutoff_depth                !< Depth above which melt is set to zero (>= 0) [Z ~> m].
-  ! The following parameters are needed if find_salt_root = true
-  real    :: lambda1                     !< liquidus coeff.  The freezing point at 0 pressure and 0 salinity [degC]
-  real    :: lambda2                     !< Partial derivative of freezing temperature with salinity [degC ppt-1]
-  real    :: lambda3                     !< Partial derivative of freezing temperature with pressure [degC Pa-1]
+  logical :: find_salt_root              !< If true, if true find Sbdry using a quadratic eq.
+  real    :: TFr_0_0                     !< The freezing point at 0 pressure and 0 salinity [degC]
+  real    :: dTFr_dS                     !< Partial derivative of freezing temperature with salinity [degC ppt-1]
+  real    :: dTFr_dp                     !< Partial derivative of freezing temperature with pressure [degC Pa-1]
   !>@{ Diagnostic handles
   integer :: id_melt = -1, id_exch_vel_s = -1, id_exch_vel_t = -1, &
              id_tfreeze = -1, id_tfl_shelf = -1, &
@@ -241,7 +241,8 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
   real, dimension(SZDI_(CS%grid),SZDJ_(CS%grid)) :: &
     Sbdry     !< Salinities in the ocean at the interface with the ice shelf [ppt].
   real :: Sbdry_it
-  real :: Sbdry1, Sbdry2, S_a, S_b, S_c  ! Variables used to find salt roots
+  real :: Sbdry1, Sbdry2
+  real :: S_a, S_b, S_c  ! Variables used to find salt roots
   real :: dS_it    !< The interface salinity change during an iteration [ppt].
   real :: hBL_neut !< The neutral boundary layer thickness [Z ~> m].
   real :: hBL_neut_h_molec !< The ratio of the neutral boundary layer thickness
@@ -391,26 +392,31 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
           ln_neut = 0.0 ; if (hBL_neut_h_molec > 1.0) ln_neut = log(hBL_neut_h_molec)
 
           if (CS%find_salt_root) then
-            ! read liquidus parameters
+            ! Solve for the skin salinity using the linearized liquidus parameters and
+            ! balancing the turbulent fresh water flux in the near-boundary layer with
+            ! the net fresh water or salt added by melting:
+            ! (Cp/Lat_fusion)*Gamma_T_3Eq*(TFr_skin-T_ocn) = Gamma_S_3Eq*(S_skin-S_ocn)/S_skin
 
-            !### This should be CS%lamda2!
-            S_a = CS%lambda1 * CS%Gamma_T_3EQ * CS%Cp
-            ! The value of 35.0 here should be a parameter?
-            !### This should be (CS%lambda1 + CS%lambda3*p_int(i) - state%sst(i,j))
-            S_b = CS%Gamma_T_3EQ*CS%Cp*(CS%lambda2 + CS%lambda3*p_int(i)- state%sst(i,j)) - &
-                  CS%Lat_fusion * CS%Gamma_T_3EQ/35.0
-            S_c = CS%Lat_fusion * (CS%Gamma_T_3EQ/35.0) * state%sss(i,j)
+            ! S_a is always < 0.0 with a realistic expression for the freezing point.
+            S_a = CS%dTFr_dS * CS%Gamma_T_3EQ * CS%Cp
+            S_b = CS%Gamma_T_3EQ*CS%Cp*(CS%TFr_0_0 + CS%dTFr_dp*p_int(i) - state%sst(i,j)) - &
+                  CS%Lat_fusion * CS%Gamma_S_3EQ    ! S_b Can take either sign, but is usually negative.
+            S_c = CS%Lat_fusion * CS%Gamma_S_3EQ * state%sss(i,j) ! Always >= 0
 
-            !### Depending on the sign of S_b, one of these will be inaccurate!
-            ! if (S_b >= 0.0) then
-              Sbdry1 = (-S_b + SQRT(S_b*S_b - 4*S_a*S_c)) / (2*S_a)
-              ! Sbdry1 = 2*S_c / (S_b + SQRT(S_b*S_b - 4*S_a*S_c))
-              Sbdry2 = (-S_b - SQRT(S_b*S_b - 4*S_a*S_c)) / (2*S_a)
-            ! else
-            !   Sbdry1 = (-S_b + SQRT(S_b*S_b - 4.*S_a*S_c)) / (2.*S_a)
-              ! Sbdry2 = -2.*S_c / (-S_b + SQRT(S_b*S_b - 4.*S_a*S_c))
-            ! endif
-            Sbdry(i,j) = MAX(Sbdry1, Sbdry2)
+            if (S_c == 0.0) then  ! The solution for fresh water.
+              Sbdry(i,j) = 0.0
+            elseif (S_a < 0.0) then ! This is the usual ocean case
+              if (S_b < 0.0) then ! This is almost always the case
+                Sbdry(i,j) = 2.0*S_c / (-S_b + SQRT(S_b*S_b - 4.*S_a*S_c))
+              else
+                Sbdry(i,j) = (S_b + SQRT(S_b*S_b - 4.*S_a*S_c)) / (-2.*S_a)
+              endif
+            elseif ((S_a == 0.0) .and. (S_b < 0.0)) then ! It should be the case that S_b < 0.
+              Sbdry(i,j) = -S_c / S_b
+            else
+              call MOM_error(FATAL, "Impossible conditions found in 3-equation skin salinity calculation.")
+            endif
+
             ! Safety check
             if (Sbdry(i,j) < 0.) then
               write(mesg,*) 'state%sss(i,j) = ',state%sss(i,j), 'S_a, S_b, S_c', S_a, S_b, S_c
@@ -439,7 +445,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
             if (CS%const_gamma) then ! if using a constant gamma_T
               ! note the different form, here I_Gam_T is NOT 1/Gam_T!
               I_Gam_T = CS%Gamma_T_3EQ
-              I_Gam_S = CS%Gamma_T_3EQ/35.
+              I_Gam_S = CS%Gamma_S_3EQ
             else
               Gam_turb = I_VK * (ln_neut + (0.5 * I_ZETA_N - 1.0))
               I_Gam_T = 1.0 / (Gam_mol_t + Gam_turb)
@@ -474,7 +480,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
                 if (CS%const_gamma) then ! if using a constant gamma_T
                   ! note the different form, here I_Gam_T is NOT 1/Gam_T!
                   I_Gam_T = CS%Gamma_T_3EQ
-                  I_Gam_S = CS%Gamma_T_3EQ/35.
+                  I_Gam_S = CS%Gamma_S_3EQ
                 else
                   I_Gam_T = 1.0 / (Gam_mol_t + Gam_turb)
                   I_Gam_S = 1.0 / (Gam_mol_s + Gam_turb)
@@ -883,11 +889,10 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
   real :: press_ice       !< The pressure of the ice shelf per unit area of ocean (not ice) [Pa].
   real :: asu1, asu2      !< Ocean areas covered by ice shelves at neighboring u-
   real :: asv1, asv2      !< and v-points [L2 ~> m2].
-  real :: fraz            !< refreezing rate [kg m-2 s-1]
   real :: mean_melt_flux  !< Spatial mean melt flux [R Z T-1 ~> kg m-2 s-1]
   real :: sponge_area     !< total area of sponge region [m2]
-  real :: t0              !< The previous time (Time-dt) [s].
-  type(time_type) :: Time0!< The previous time (Time-dt)
+  type(time_type) :: dTime !< The time step as a time_type
+  type(time_type) :: Time0 !< The previous time (Time-dt)
   real, dimension(SZDI_(G),SZDJ_(G)) :: in_sponge !< 1 where the property damping occurs, 0 otherwise [nondim]
   real, dimension(SZDI_(G),SZDJ_(G)) :: last_mass_shelf !< Ice shelf mass
                           !! at at previous time (Time-dt) [R Z ~> kg m-2]
@@ -989,8 +994,7 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
   ! This is needed for some of the ISOMIP+ experiments.
 
   if (CS%constant_sea_level) then
-    !### This code has lots of problems with hard coded constants and the use of
-    !### of non-reproducing sums.  It needs to be refactored. -RWH
+    !### This code has problems with hard coded constants that need to be refactored. -RWH
 
     if (.not. associated(fluxes%salt_flux)) allocate(fluxes%salt_flux(ie,je))
     if (.not. associated(fluxes%vprec)) allocate(fluxes%vprec(ie,je))
@@ -1008,11 +1012,11 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
 
     ! take into account changes in mass (or thickness) when imposing ice shelf mass
     if (CS%override_shelf_movement .and. CS%mass_from_file) then
-      t0 = time_type_to_real(CS%Time) - CS%time_step
+      dTime = real_to_time(CS%time_step)
 
-      ! just compute changes in mass after first time step
-      if (t0>0.0) then
-        Time0 = real_to_time(t0)
+      ! Compute changes in mass after at least one full time step
+      if (CS%Time > dTime) then
+        Time0 = CS%Time - dTime
         last_hmask(:,:) = ISS%hmask(:,:) ; last_area_shelf_h(:,:) = ISS%area_shelf_h(:,:)
         call time_interp_external(CS%id_read_mass, Time0, last_mass_shelf)
         ! This should only be done if time_interp_external did an update.
@@ -1058,9 +1062,9 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
 
     ! apply fluxes
     do j=js,je ; do i=is,ie
-      ! Note the following is hard coded for ISOMIP
-      if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
+      if (in_sponge(i,j) > 0.0) then
         ! evap is negative, and vprec has units of [R Z T-1 ~> kg m-2 s-1]
+        !### Why does mean_melt_flux need to be rescaled to get vprec?
         fluxes%vprec(i,j) = -mean_melt_flux * CS%density_ice / (1000.0*US%kg_m3_to_R)
         fluxes%sens(i,j) = fluxes%vprec(i,j) * CS%Cp * CS%T0 ! [ Q R Z T-1 ~> W /m^2 ]
         fluxes%salt_flux(i,j) = fluxes%vprec(i,j) * CS%S0*1.0e-3 ! [kgSalt/kg R Z T-1 ~> kgSalt m-2 s-1]
@@ -1073,7 +1077,7 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
       call MOM_forcing_chksum("After constant sea level", fluxes, G, CS%US, haloshift=0)
     endif
 
-  endif !constant_sea_level
+  endif ! constant_sea_level
 
 end subroutine add_shelf_flux
 
@@ -1238,9 +1242,14 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  "If true, user specifies a constant nondimensional heat-transfer coefficient "//&
                  "(GAMMA_T_3EQ), from which the salt-transfer coefficient is then computed "//&
                  " as GAMMA_T_3EQ/35. This is used with SHELF_THREE_EQN.", default=.false.)
-  if (CS%const_gamma) call get_param(param_file, mdl, "SHELF_3EQ_GAMMA_T", CS%Gamma_T_3EQ, &
-                 "Nondimensional heat-transfer coefficient.",default=2.2E-2, &
-                  units="nondim.", fail_if_missing=.true.)
+  if (CS%const_gamma) then
+    call get_param(param_file, mdl, "SHELF_3EQ_GAMMA_T", CS%Gamma_T_3EQ, &
+                 "Nondimensional heat-transfer coefficient.", &
+                  units="nondim", default=2.2e-2)
+    call get_param(param_file, mdl, "SHELF_3EQ_GAMMA_S", CS%Gamma_S_3EQ, &
+                 "Nondimensional salt-transfer coefficient.", &
+                 default=CS%Gamma_T_3EQ/35.0, units="nondim")
+  endif
 
   call get_param(param_file, mdl, "ICE_SHELF_MASS_FROM_FILE", &
                  CS%mass_from_file, "Read the mass of the "//&
@@ -1252,14 +1261,13 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  "is computed from a quadratic equation. Otherwise, the previous "//&
                  "interactive method to estimate Sbdry is used.", default=.false.)
   if (CS%find_salt_root) then ! read liquidus coeffs.
-     call get_param(param_file, mdl, "TFREEZE_S0_P0", CS%lambda1, &
+     call get_param(param_file, mdl, "TFREEZE_S0_P0", CS%TFr_0_0, &
                  "this is the freezing potential temperature at "//&
                  "S=0, P=0.", units="degC", default=0.0, do_not_log=.true.)
-    call get_param(param_file, mdl, "DTFREEZE_DS", CS%lambda1, & !### This should be CS%lambda2!
+    call get_param(param_file, mdl, "DTFREEZE_DS", CS%dTFr_dS, &
                  "this is the derivative of the freezing potential "//&
-                 "temperature with salinity.", &
-                 units="degC psu-1", default=-0.054, do_not_log=.true.)
-    call get_param(param_file, mdl, "DTFREEZE_DP", CS%lambda3, &
+                 "temperature with salinity.", units="degC psu-1", default=-0.054, do_not_log=.true.)
+    call get_param(param_file, mdl, "DTFREEZE_DP", CS%dTFr_dp, &
                  "this is the derivative of the freezing potential "//&
                  "temperature with pressure.", &
                  units="degC Pa-1", default=0.0, do_not_log=.true.)
