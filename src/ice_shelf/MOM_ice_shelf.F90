@@ -94,7 +94,7 @@ type, public :: ice_shelf_CS ; private
   real :: cdrag        !< drag coefficient under ice shelves [nondim].
   real :: g_Earth      !< The gravitational acceleration [Z T-2 ~> m s-2]
   real :: Cp           !< The heat capacity of sea water [Q degC-1 ~> J kg-1 degC-1].
-  real :: Rho0         !< A reference ocean density [R ~> kg m-3].
+  real :: Rho_ocn      !< A reference ocean density [R ~> kg m-3].
   real :: Cp_ice       !< The heat capacity of fresh ice [Q degC-1 ~> J kg-1 degC-1].
   real :: gamma_t      !< The (fixed) turbulent exchange velocity in the
                        !< 2-equation formulation [Z T-1 ~> m s-1].
@@ -109,7 +109,8 @@ type, public :: ice_shelf_CS ; private
   real :: Gamma_T_3EQ  !<  Nondimensional heat-transfer coefficient, used in the 3Eq. formulation
   real :: Gamma_S_3EQ  !<  Nondimensional salt-transfer coefficient, used in the 3Eq. formulation
                        !<  This number should be specified by the user.
-  real :: col_thick_melt_threshold !< if the mixed layer is below this threshold, melt rate
+  real :: col_mass_melt_threshold !< An ocean column mass below the iceshelf below which melting
+                       !! does not occur [kg m-2]
   logical :: mass_from_file !< Read the ice shelf mass from a file every dt
 
   !!!! PHYSICAL AND NUMERICAL PARAMETERS FOR ICE DYNAMICS !!!!!!
@@ -127,10 +128,6 @@ type, public :: ice_shelf_CS ; private
                             !!determined by ocean column thickness means update_OD_ffrac
                             !! will be called (note: GL_regularize and GL_couple
                             !! should be exclusive)
-  real :: density_ocean_avg !< this does not affect ocean circulation OR thermodynamics
-                            !! it is to estimate the gravitational driving force at the
-                            !! shelf front (until we think of a better way to do it,
-                            !! but any difference will be negligible)
   logical :: calve_to_mask  !< If true, calve any ice that passes outside of a masked area
   real :: min_thickness_simple_calve !< min. ice shelf thickness criteria for calving [Z ~> m].
   real :: T0                !< temperature at ocean surface in the restoring region [degC]
@@ -154,6 +151,9 @@ type, public :: ice_shelf_CS ; private
   logical :: const_gamma                 !< If true, gamma_T is specified by the user.
   logical :: constant_sea_level          !< if true, apply an evaporative, heat and salt
                                          !! fluxes. It will avoid large increase in sea level.
+  real    :: min_ocean_mass_float        !< The minimum ocean mass per unit area before the ice
+                                         !! shelf is considered to float when constant_sea_level
+                                         !! is used [kg m-2]
   real    :: cutoff_depth                !< Depth above which melt is set to zero (>= 0) [Z ~> m].
   logical :: find_salt_root              !< If true, if true find Sbdry using a quadratic eq.
   real    :: TFr_0_0                     !< The freezing point at 0 pressure and 0 salinity [degC]
@@ -270,7 +270,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
   real :: dS_min, dS_max
   ! Variables used in iterating for wB_flux.
   real :: wB_flux_new, dDwB_dwB_in
-  real :: I_Gam_T, I_Gam_S, iDens
+  real :: I_Gam_T, I_Gam_S
   real :: dG_dwB   ! The derivative of Gam_turb with wB [T3 Z-2 ~> s3 m-2]
   real :: Isqrt2
   logical :: Sb_min_set, Sb_max_set
@@ -296,14 +296,12 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
   SC = CS%kv_molec/CS%kd_molec_salt
   PR = CS%kv_molec/CS%kd_molec_temp
   I_VK = 1.0/VK
-  RhoCp = CS%Rho0 * CS%Cp
+  RhoCp = CS%Rho_ocn * CS%Cp
   Isqrt2 = 1.0/sqrt(2.0)
 
   !first calculate molecular component
   Gam_mol_t = 12.5 * (PR**c2_3) - 6
   Gam_mol_s = 12.5 * (SC**c2_3) - 6
-
-  iDens = 1.0/CS%density_ocean_avg
 
   ! GMM, zero some fields of the ice shelf structure (ice_shelf_CS)
   ! these fields are already set to zero during initialization
@@ -350,7 +348,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
       ! but it won't make a difference otherwise.
       fluxes%ustar_shelf(i,j)= 0.0
 
-      if ((iDens*state%ocean_mass(i,j) > CS%col_thick_melt_threshold) .and. &
+      if ((state%ocean_mass(i,j) > CS%col_mass_melt_threshold) .and. &
           (ISS%area_shelf_h(i,j) > 0.0) .and. CS%isthermo) then
 
         if (CS%threeeq) then
@@ -370,7 +368,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
           ! if (allocated(state%taux_shelf) .and. allocated(state%tauy_shelf)) then
           !   ! These arrays are supposed to be stress components at C-grid points, which is
           !   ! inconsistent with what is coded up here.
-          !   state%taux_shelf(i,j) = US%RZ_T_to_kg_m2s*US%Z_to_m*US%s_to_T * ustar_h**2 * CS%Rho0*Isqrt2
+          !   state%taux_shelf(i,j) = US%RZ_T_to_kg_m2s*US%Z_to_m*US%s_to_T * ustar_h**2 * CS%Rho_ocn*Isqrt2
           !   state%tauy_shelf(i,j) = state%taux_shelf(i,j)
           ! endif
 
@@ -537,7 +535,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
               exit ! no need to do interaction, so exit loop
             else
 
-              mass_exch = exch_vel_s(i,j) * CS%Rho0
+              mass_exch = exch_vel_s(i,j) * CS%Rho_ocn
               Sbdry_it = (state%sss(i,j) * mass_exch + CS%Salin_ice * ISS%water_flux(i,j)) / &
                          (mass_exch + ISS%water_flux(i,j))
               dS_it = Sbdry_it - Sbdry(i,j)
@@ -595,17 +593,17 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
   fluxes%iceshelf_melt(:,:) = ISS%water_flux(:,:) * CS%flux_factor
 
   do j=js,je ; do i=is,ie
-    if ((iDens*state%ocean_mass(i,j) > CS%col_thick_melt_threshold) .and. &
+    if ((state%ocean_mass(i,j) > CS%col_mass_melt_threshold) .and. &
         (ISS%area_shelf_h(i,j) > 0.0) .and.  (CS%isthermo)) then
 
-      ! Set melt to zero above a cutoff pressure (CS%Rho0*CS%cutoff_depth*CS%g_Earth).
+      ! Set melt to zero above a cutoff pressure (CS%Rho_ocn*CS%cutoff_depth*CS%g_Earth).
       ! This is needed for the ISOMIP test case.
-      if (ISS%mass_shelf(i,j) < CS%Rho0*CS%cutoff_depth) then
+      if (ISS%mass_shelf(i,j) < CS%Rho_ocn*CS%cutoff_depth) then
         ISS%water_flux(i,j) = 0.0
         fluxes%iceshelf_melt(i,j) = 0.0
       endif
       ! Compute haline driving, which is one of the diags. used in ISOMIP
-      haline_driving(i,j) = (ISS%water_flux(i,j) * Sbdry(i,j)) / (CS%Rho0 * exch_vel_s(i,j))
+      haline_driving(i,j) = (ISS%water_flux(i,j) * Sbdry(i,j)) / (CS%Rho_ocn * exch_vel_s(i,j))
 
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!Safety checks !!!!!!!!!!!!!!!!!!!!!!!!!
       !1)Check if haline_driving computed above is consistent with
@@ -739,20 +737,13 @@ subroutine change_thickness_using_melt(ISS, G, US, time_step, fluxes, density_ic
         ISS%hmask(i,j) = 0.0
         ISS%area_shelf_h(i,j) = 0.0
       endif
+      ISS%mass_shelf(i,j) = ISS%h_shelf(i,j) * density_ice
     endif
   enddo ; enddo
 
   call pass_var(ISS%area_shelf_h, G%domain)
   call pass_var(ISS%h_shelf, G%domain)
   call pass_var(ISS%hmask, G%domain)
-
-  !### combine this with the loops above.
-  do j=G%jsd,G%jed ; do i=G%isd,G%ied
-    if ((ISS%hmask(i,j) == 1) .or. (ISS%hmask(i,j) == 2)) then
-      ISS%mass_shelf(i,j) = ISS%h_shelf(i,j) * density_ice
-    endif
-  enddo ; enddo
-
   call pass_var(ISS%mass_shelf, G%domain)
 
 end subroutine change_thickness_using_melt
@@ -801,8 +792,7 @@ subroutine add_shelf_forces(G, US, CS, forces, do_shelf_area)
     call pass_vector(forces%frac_shelf_u, forces%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
   endif
 
-  !### Consider working over a smaller array range.
-  do j=jsd,jed ; do i=isd,ied
+  do j=js,je ; do i=is,ie
     press_ice = (ISS%area_shelf_h(i,j) * G%IareaT(i,j)) * &
                 US%RZ_to_kg_m2*US%Z_to_m*US%s_to_T**2*(CS%g_Earth * ISS%mass_shelf(i,j))
     if (associated(forces%p_surf)) then
@@ -935,7 +925,7 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
     call pass_vector(state%taux_shelf, state%tauy_shelf, G%domain, TO_ALL, CGRID_NE)
   ! GMM: melting is computed using ustar_shelf (and not ustar), which has already
   ! been passed, I so believe we do not need to update fluxes%ustar.
-!  Irho0 = US%m_to_Z*US%T_to_s*US%kg_m2s_to_RZ_T / CS%Rho0
+!  Irho0 = US%m_to_Z*US%T_to_s*US%kg_m2s_to_RZ_T / CS%Rho_ocn
 !  do j=js,je ; do i=is,ie ; if (fluxes%frac_shelf_h(i,j) > 0.0) then
     ! ### THIS SHOULD BE AN AREA WEIGHTED AVERAGE OF THE ustar_shelf POINTS.
     ! taux2 = 0.0 ; tauy2 = 0.0
@@ -969,7 +959,7 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
     ! Replace fluxes intercepted by the ice shelf with fluxes from the ice shelf
     frac_shelf = min(1.0, ISS%area_shelf_h(i,j) * G%IareaT(i,j))
     frac_open = max(0.0, 1.0 - frac_shelf)
-    
+
     if (associated(fluxes%sw)) fluxes%sw(i,j) = frac_open * fluxes%sw(i,j)
     if (associated(fluxes%sw_vis_dir)) fluxes%sw_vis_dir(i,j) = frac_open * fluxes%sw_vis_dir(i,j)
     if (associated(fluxes%sw_vis_dif)) fluxes%sw_vis_dif(i,j) = frac_open * fluxes%sw_vis_dif(i,j)
@@ -1042,8 +1032,8 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
 
         ! get total ice shelf mass at (Time-dt) and (Time), in kg
         do j=js,je ; do i=is,ie
-          ! just floating shelf (0.1 is a threshold for min ocean thickness)
-          if (((1.0/CS%density_ocean_avg)*state%ocean_mass(i,j) > 0.1) .and. &
+          ! Just consider the change in the mass of the floating shelf.
+          if ((state%ocean_mass(i,j) > CS%min_ocean_mass_float) .and. &
               (ISS%area_shelf_h(i,j) > 0.0)) then
             delta_float_mass(i,j) = ISS%mass_shelf(i,j) - last_mass_shelf(i,j)
           else
@@ -1127,6 +1117,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   real    :: L_rescale  ! A rescaling factor for horizontal lengths from the representation in
                         ! a restart file to the internal representation in this run.
   real :: meltrate_conversion ! The conversion factor to use for in the melt rate diagnostic.
+  real :: dz_ocean_min_float ! The minimum ocean thickness above which the ice shelf is considered
+                        ! to be floating when CONST_SEA_LEVEL = True [m].
   real :: cdrag, drag_bg_vel
   logical :: new_sim, save_IC, var_force
   !This include declares and sets the variable "version".
@@ -1139,6 +1131,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   logical :: read_TideAmp, shelf_mass_is_dynamic, debug
   character(len=240) :: Tideamp_file
   real    :: utide  ! A tidal velocity [L T-1 ~> m s-1]
+  real    :: col_thick_melt_thresh ! An ocean column thickness below which iceshelf melting
+                       ! does not occur [m]
   if (associated(CS)) then
     call MOM_error(FATAL, "MOM_ice_shelf.F90, initialize_ice_shelf: "// &
                           "called with an associated control structure.")
@@ -1246,6 +1240,10 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  "ISOMIP+ experiments (Ocean3 and Ocean4). "//&
                  "IMPORTANT: it is not currently possible to do "//&
                  "prefect restarts using this flag.", default=.false.)
+  call get_param(param_file, mdl, "MIN_OCEAN_FLOAT_THICK", dz_ocean_min_float, &
+                 "The minimum ocean thickness above which the ice shelf is considered to be "//&
+                 "floating when CONST_SEA_LEVEL = True.", &
+                 default=0.1, units="m", do_not_log=.not.CS%constant_sea_level)
 
   call get_param(param_file, mdl, "ISOMIP_S_SUR_SPONGE", CS%S0, &
                  "Surface salinity in the restoring region.", &
@@ -1303,15 +1301,16 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  "The heat capacity of sea water, approximated as a constant. "//&
                  "The default value is from the TEOS-10 definition of conservative temperature.", &
                  units="J kg-1 K-1", default=3991.86795711963, scale=US%J_kg_to_Q)
-  call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
+  call get_param(param_file, mdl, "RHO_0", CS%Rho_ocn, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
                  "calculate accelerations and the mass for conservation "//&
                  "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
-                 units="kg m-3", default=1035.0, scale=US%kg_m3_to_R) !### MAKE THIS A SEPARATE PARAMETER.
+                 units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "C_P_ICE", CS%Cp_ice, &
                  "The heat capacity of ice.", units="J kg-1 K-1", scale=US%J_kg_to_Q, &
                  default=2.10e3)
+  if (CS%constant_sea_level) CS%min_ocean_mass_float = dz_ocean_min_float*CS%Rho_ocn
 
   call get_param(param_file, mdl, "ICE_SHELF_FLUX_FACTOR", CS%flux_factor, &
                  "Non-dimensional factor applied to shelf thermodynamic "//&
@@ -1334,17 +1333,15 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   call get_param(param_file, mdl, "KD_TEMP_MOLECULAR", CS%kd_molec_temp, &
                  "The molecular diffusivity of heat in sea water at the "//&
                  "freezing point.", units="m2 s-1", default=1.41e-7, scale=US%m2_s_to_Z2_T)
-  call get_param(param_file, mdl, "RHO_0", CS%density_ocean_avg, &
-                 "avg ocean density used in floatation cond", &
-                 units="kg m-3", default=1035.)
   call get_param(param_file, mdl, "DT_FORCING", CS%time_step, &
                  "The time step for changing forcing, coupling with other "//&
                  "components, or potentially writing certain diagnostics. "//&
                  "The default value is given by DT.", units="s", default=0.0)
 
-  call get_param(param_file, mdl, "COL_THICK_MELT_THRESHOLD", CS%col_thick_melt_threshold, &
-                 "The minimum ML thickness where melting is allowed.", units="m", &
+  call get_param(param_file, mdl, "COL_THICK_MELT_THRESHOLD", col_thick_melt_thresh, &
+                 "The minimum ocean column thickness where melting is allowed.", units="m", &
                  default=0.0)
+  CS%col_mass_melt_threshold =  CS%Rho_ocn * col_thick_melt_thresh
 
   call get_param(param_file, mdl, "READ_TIDEAMP", read_TIDEAMP, &
                  "If true, read a file (given by TIDEAMP_FILE) containing "//&
