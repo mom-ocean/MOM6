@@ -1806,7 +1806,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   if (use_temperature) then
     call get_param(param_file, "MOM", "FRAZIL", use_frazil, &
                  "If true, water freezes if it gets too cold, and the "//&
-                 "the accumulated heat deficit is returned in the "//&
+                 "accumulated heat deficit is returned in the "//&
                  "surface state.  FRAZIL is only used if "//&
                  "ENABLE_THERMODYNAMICS is true.", default=.false.)
     call get_param(param_file, "MOM", "DO_GEOTHERMAL", use_geothermal, &
@@ -1888,7 +1888,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call get_param(param_file, "MOM", "SURFACE_2018_ANSWERS", CS%answers_2018, &
                  "If true, use expressions for the surface properties that recover the answers "//&
                  "from the end of 2018. Otherwise, use more appropriate expressions that differ "//&
-                 "at roundoff for non-Boussinsq cases.", default=default_2018_answers)
+                 "at roundoff for non-Boussinesq cases.", default=default_2018_answers)
 
   call get_param(param_file, "MOM", "SAVE_INITIAL_CONDS", save_IC, &
                  "If true, write the initial conditions to a file given "//&
