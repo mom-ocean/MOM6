@@ -5,6 +5,7 @@ module MOM_ice_shelf
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_constants, only : hlf
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_COMPONENT, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
@@ -351,7 +352,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
 
       ! DNG - to allow this everywhere Hml>0.0 allows for melting under grounded cells
       !       propose instead to allow where Hml > [some threshold]
-
+      !### I do not know what the Hml flag adds; consider removing it.
       if ((iDens*state%ocean_mass(i,j) > CS%col_thick_melt_threshold) .and. &
           (ISS%area_shelf_h(i,j) > 0.0) .and. &
           (CS%isthermo) .and. (state%Hml(i,j) > 0.0) ) then
@@ -961,6 +962,10 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
     enddo ; enddo
   endif
 
+  if (CS%debug) then
+    call MOM_forcing_chksum("Before adding shelf fluxes", fluxes, G, CS%US, haloshift=0)
+  endif
+
   do j=js,je ; do i=is,ie ; if (ISS%area_shelf_h(i,j) > 0.0) then
     frac_area = fluxes%frac_shelf_h(i,j)  !### Should this be 1-frac_shelf_h?
     if (associated(fluxes%sw)) fluxes%sw(i,j) = 0.0
@@ -985,6 +990,12 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
     if (associated(fluxes%salt_flux)) &
       fluxes%salt_flux(i,j) = frac_area * ISS%salt_flux(i,j)*CS%flux_factor
   endif ; enddo ; enddo
+
+  if (CS%debug) then
+    call hchksum(ISS%water_flux, "water_flux add shelf fluxes", G%HI, haloshift=0, scale=US%RZ_T_to_kg_m2s)
+    call hchksum(ISS%tflux_ocn, "tflux_ocn add shelf fluxes", G%HI, haloshift=0, scale=US%QRZ_T_to_W_m2)
+    call MOM_forcing_chksum("After adding shelf fluxes", fluxes, G, CS%US, haloshift=0)
+  endif
 
   ! keep sea level constant by removing mass in the sponge
   ! region (via virtual precip, vprec). Apply additional
@@ -1071,7 +1082,7 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
     enddo ; enddo
 
     if (CS%debug) then
-      write(mesg,*) 'Mean melt flux (kg/(m^2 s)), dt = ', mean_melt_flux, CS%time_step
+      write(mesg,*) 'Mean melt flux (kg/(m^2 s)), dt = ', mean_melt_flux*US%RZ_T_to_kg_m2s, CS%time_step
       call MOM_mesg(mesg)
       call MOM_forcing_chksum("After constant sea level", fluxes, G, CS%US, haloshift=0)
     endif
@@ -1177,8 +1188,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
   Isdq = G%IsdB ; Iedq = G%IedB ; Jsdq = G%JsdB ; Jedq = G%JedB
 
-  !### This should be a run-time parameter that is read in consistently with MOM6 and SIS2.
-  CS%Lat_fusion = 3.34e5*US%J_kg_to_Q
   CS%override_shelf_movement = .false. ; CS%active_shelf_dynamics = .false.
 
   call log_version(param_file, mdl, version, "")
@@ -1208,6 +1217,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   call get_param(param_file, mdl, "SHELF_THERMO", CS%isthermo, &
                  "If true, use a thermodynamically interactive ice shelf.", &
                  default=.false.)
+  call get_param(param_file, mdl, "LATENT_HEAT_FUSION", CS%Lat_fusion, &
+                 "The latent heat of fusion.", units="J/kg", default=hlf, scale=US%J_kg_to_Q)
   call get_param(param_file, mdl, "SHELF_THREE_EQN", CS%threeeq, &
                  "If true, use the three equation expression of "//&
                  "consistency to calculate the fluxes at the ice-ocean "//&
@@ -1223,25 +1234,36 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
 
   call get_param(param_file, mdl, "CONST_SEA_LEVEL", CS%constant_sea_level, &
                  "If true, apply evaporative, heat and salt fluxes in "//&
-                  "the sponge region. This will avoid a large increase "//&
+                 "the sponge region. This will avoid a large increase "//&
                  "in sea level. This option is needed for some of the "//&
                  "ISOMIP+ experiments (Ocean3 and Ocean4). "//&
                  "IMPORTANT: it is not currently possible to do "//&
                  "prefect restarts using this flag.", default=.false.)
 
-  call get_param(param_file, mdl, "ISOMIP_S_SUR_SPONGE", &
-                CS%S0, "Surface salinity in the resoring region.", &
-                default=33.8, do_not_log=.true.)
+  call get_param(param_file, mdl, "ISOMIP_S_SUR_SPONGE", CS%S0, &
+                 "Surface salinity in the restoring region.", &
+                default=33.8, units='ppt', do_not_log=.true.)
 
-  call get_param(param_file, mdl, "ISOMIP_T_SUR_SPONGE", &
-                CS%T0, "Surface temperature in the resoring region.", &
-                default=-1.9, do_not_log=.true.)
+  call get_param(param_file, mdl, "ISOMIP_T_SUR_SPONGE", CS%T0, &
+                "Surface temperature in the restoring region.", &
+                default=-1.9, units='degC', do_not_log=.true.)
 
   call get_param(param_file, mdl, "SHELF_3EQ_GAMMA", CS%const_gamma, &
                  "If true, user specifies a constant nondimensional heat-transfer coefficient "//&
-                 "(GAMMA_T_3EQ), from which the salt-transfer coefficient is then computed "//&
-                 " as GAMMA_T_3EQ/35. This is used with SHELF_THREE_EQN.", default=.false.)
-  if (CS%const_gamma) then
+                 "(GAMMA_T_3EQ), from which the default salt-transfer coefficient is set "//&
+                 "as GAMMA_T_3EQ/35. This is used with SHELF_THREE_EQN.", default=.false.)
+  if (CS%threeeq) then
+    call get_param(param_file, mdl, "SHELF_S_ROOT", CS%find_salt_root, &
+                 "If SHELF_S_ROOT = True, salinity at the ice/ocean interface (Sbdry) "//&
+                 "is computed from a quadratic equation. Otherwise, the previous "//&
+                 "interactive method to estimate Sbdry is used.", default=.false.)
+  else
+    call get_param(param_file, mdl, "SHELF_2EQ_GAMMA_T", CS%gamma_t, &
+                 "If SHELF_THREE_EQN is false, this the fixed turbulent "//&
+                 "exchange velocity at the ice-ocean interface.", &
+                 units="m s-1", scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
+  endif
+  if (CS%const_gamma .or. CS%find_salt_root) then
     call get_param(param_file, mdl, "SHELF_3EQ_GAMMA_T", CS%Gamma_T_3EQ, &
                  "Nondimensional heat-transfer coefficient.", &
                   units="nondim", default=2.2e-2)
@@ -1254,11 +1276,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  CS%mass_from_file, "Read the mass of the "//&
                  "ice shelf (every time step) from a file.", default=.false.)
 
-  if (CS%threeeq) &
-    call get_param(param_file, mdl, "SHELF_S_ROOT", CS%find_salt_root, &
-                 "If SHELF_S_ROOT = True, salinity at the ice/ocean interface (Sbdry) "//&
-                 "is computed from a quadratic equation. Otherwise, the previous "//&
-                 "interactive method to estimate Sbdry is used.", default=.false.)
   if (CS%find_salt_root) then ! read liquidus coeffs.
      call get_param(param_file, mdl, "TFREEZE_S0_P0", CS%TFr_0_0, &
                  "this is the freezing potential temperature at "//&
@@ -1272,24 +1289,19 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  units="degC Pa-1", default=0.0, do_not_log=.true.)
   endif
 
-  if (.not.CS%threeeq) &
-    call get_param(param_file, mdl, "SHELF_2EQ_GAMMA_T", CS%gamma_t, &
-                 "If SHELF_THREE_EQN is false, this the fixed turbulent "//&
-                 "exchange velocity at the ice-ocean interface.", &
-                 units="m s-1", scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
-
   call get_param(param_file, mdl, "G_EARTH", CS%g_Earth, &
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default = 9.80, scale=US%m_to_Z*US%T_to_s**2)
   call get_param(param_file, mdl, "C_P", CS%Cp, &
-                 "The heat capacity of sea water.", units="J kg-1 K-1", scale=US%J_kg_to_Q, &
-                 fail_if_missing=.true.)
+                 "The heat capacity of sea water, approximated as a constant. "//&
+                 "The default value is from the TEOS-10 definition of conservative temperature.", &
+                 units="J kg-1 K-1", default=3991.86795711963, scale=US%J_kg_to_Q)
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
                  "calculate accelerations and the mass for conservation "//&
                  "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
-                 units="kg m-3", default=1035.0, scale=US%R_to_kg_m3) !### MAKE THIS A SEPARATE PARAMETER.
+                 units="kg m-3", default=1035.0, scale=US%kg_m3_to_R) !### MAKE THIS A SEPARATE PARAMETER.
   call get_param(param_file, mdl, "C_P_ICE", CS%Cp_ice, &
                  "The heat capacity of ice.", units="J kg-1 K-1", scale=US%J_kg_to_Q, &
                  default=2.10e3)
