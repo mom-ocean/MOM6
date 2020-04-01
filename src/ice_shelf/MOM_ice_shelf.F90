@@ -350,12 +350,8 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
       ! but it won't make a difference otherwise.
       fluxes%ustar_shelf(i,j)= 0.0
 
-      ! DNG - to allow this everywhere Hml>0.0 allows for melting under grounded cells
-      !       propose instead to allow where Hml > [some threshold]
-      !### I do not know what the Hml flag adds; consider removing it.
       if ((iDens*state%ocean_mass(i,j) > CS%col_thick_melt_threshold) .and. &
-          (ISS%area_shelf_h(i,j) > 0.0) .and. &
-          (CS%isthermo) .and. (state%Hml(i,j) > 0.0) ) then
+          (ISS%area_shelf_h(i,j) > 0.0) .and. CS%isthermo ) then
 
         if (CS%threeeq) then
           !   Iteratively determine a self-consistent set of fluxes, with the ocean
@@ -602,8 +598,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
 
   do j=js,je ; do i=is,ie
     if ((iDens*state%ocean_mass(i,j) > CS%col_thick_melt_threshold) .and. &
-        (ISS%area_shelf_h(i,j) > 0.0) .and. &
-        (CS%isthermo) .and. (state%Hml(i,j) > 0.0) ) then
+        (ISS%area_shelf_h(i,j) > 0.0) .and. CS%isthermo) then
 
       ! Set melt to zero above a cutoff pressure (CS%Rho0*CS%cutoff_depth*CS%g_Earth).
       ! This is needed for the ISOMIP test case.
