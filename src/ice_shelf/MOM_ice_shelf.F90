@@ -351,7 +351,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
       fluxes%ustar_shelf(i,j)= 0.0
 
       if ((iDens*state%ocean_mass(i,j) > CS%col_thick_melt_threshold) .and. &
-          (ISS%area_shelf_h(i,j) > 0.0) .and. CS%isthermo ) then
+          (ISS%area_shelf_h(i,j) > 0.0) .and. CS%isthermo) then
 
         if (CS%threeeq) then
           !   Iteratively determine a self-consistent set of fluxes, with the ocean
@@ -485,13 +485,12 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
                 wT_flux = dT_ustar * I_Gam_T
                 wB_flux_new = dB_dS * (dS_ustar * I_Gam_S) + dB_dT * wT_flux
 
-                ! Find the root where wB_flux_new = wB_flux.
-                if (abs(wB_flux_new - wB_flux) < 1e-4*(abs(wB_flux_new) + abs(wB_flux))) exit
+                ! Find the root where wB_flux_new = wB_flux.  Make the 1.0e-4 below into a parameter?
+                if (abs(wB_flux_new - wB_flux) < 1.0e-4*(abs(wB_flux_new) + abs(wB_flux))) exit
 
                 dDwB_dwB_in = dG_dwB * (dB_dS * (dS_ustar * I_Gam_S**2) + &
                                         dB_dT * (dT_ustar * I_Gam_T**2)) - 1.0
-                ! This is Newton's method without any bounds.
-                ! ### SHOULD BOUNDS BE NEEDED IN THIS NEWTONS METHOD SOLVER?
+                ! This is Newton's method without any bounds.  Should bounds be needed?
                 wB_flux_new = wB_flux - (wB_flux_new - wB_flux) / dDwB_dwB_in
               enddo !it3
             endif
@@ -500,13 +499,12 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
             exch_vel_t(i,j) = ustar_h * I_Gam_T
             exch_vel_s(i,j) = ustar_h * I_Gam_S
 
-    !Calculate the heat flux inside the ice shelf.
-
-    !vertical adv/diff as in H+J 1999, eqns (26) & approx from (31).
-    ! Q_ice = density_ice * CS%Cp_ice * K_ice * dT/dz (at interface)
-    !vertical adv/diff as in H+J 199, eqs (31) & (26)...
-    !  dT/dz ~= min( (lprec/(density_ice*K_ice))*(CS%Temp_Ice-T_freeze) , 0.0 )
-    !If this approximation is not made, iterations are required... See H+J Fig 3.
+            ! Calculate the heat flux inside the ice shelf.
+            ! Vertical adv/diff as in H+J 1999, eqns (26) & approx from (31).
+            !   Q_ice = density_ice * CS%Cp_ice * K_ice * dT/dz (at interface)
+            ! vertical adv/diff as in H+J 1999, eqs (31) & (26)...
+            !   dT/dz ~= min( (lprec/(density_ice*K_ice))*(CS%Temp_Ice-T_freeze) , 0.0 )
+            ! If this approximation is not made, iterations are required... See H+J Fig 3.
 
             if (ISS%tflux_ocn(i,j) >= 0.0) then
               ! Freezing occurs due to downward ocean heat flux, so zero iout ce heat flux.
@@ -548,19 +546,17 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
 
               if (dS_it < 0.0) then ! Sbdry is now the upper bound.
                 if (Sb_max_set .and. (Sbdry(i,j) > Sb_max)) &
-                call MOM_error(FATAL,"shelf_calc_flux: Irregular iteration for Sbdry (max).")
+                  call MOM_error(FATAL,"shelf_calc_flux: Irregular iteration for Sbdry (max).")
                 Sb_max = Sbdry(i,j) ; dS_max = dS_it ; Sb_max_set = .true.
               else ! Sbdry is now the lower bound.
                 if (Sb_min_set .and. (Sbdry(i,j) < Sb_min)) &
-                   call MOM_error(FATAL, &
-                   "shelf_calc_flux: Irregular iteration for Sbdry (min).")
-                   Sb_min = Sbdry(i,j) ; dS_min = dS_it ; Sb_min_set = .true.
+                   call MOM_error(FATAL, "shelf_calc_flux: Irregular iteration for Sbdry (min).")
+                 Sb_min = Sbdry(i,j) ; dS_min = dS_it ; Sb_min_set = .true.
               endif ! dS_it < 0.0
 
               if (Sb_min_set .and. Sb_max_set) then
                 ! Use the false position method for the next iteration.
-                Sbdry(i,j) = Sb_min + (Sb_max-Sb_min) * &
-                            (dS_min / (dS_min - dS_max))
+                Sbdry(i,j) = Sb_min + (Sb_max-Sb_min) * (dS_min / (dS_min - dS_max))
               else
                 Sbdry(i,j) = Sbdry_it
               endif ! Sb_min_set
@@ -569,7 +565,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
             endif ! CS%find_salt_root
 
           enddo !it1
-  ! Check for non-convergence and/or non-boundedness?
+          ! Check for non-convergence and/or non-boundedness?
 
         else
           !   In the 2-equation form, the mixed layer turbulent exchange velocity
@@ -584,7 +580,9 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
           ISS%water_flux(i,j) = -I_LF * ISS%tflux_ocn(i,j)
           Sbdry(i,j) = 0.0
         endif
-      else !not shelf
+      elseif (ISS%area_shelf_h(i,j) > 0.0) then ! This is an ice-sheet, not a floating shelf.
+        ISS%tflux_ocn(i,j) = 0.0
+      else ! There is no ice shelf or sheet here.
         ISS%tflux_ocn(i,j) = 0.0
       endif
 
@@ -598,7 +596,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
 
   do j=js,je ; do i=is,ie
     if ((iDens*state%ocean_mass(i,j) > CS%col_thick_melt_threshold) .and. &
-        (ISS%area_shelf_h(i,j) > 0.0) .and. CS%isthermo) then
+        (ISS%area_shelf_h(i,j) > 0.0) .and.  (CS%isthermo)) then
 
       ! Set melt to zero above a cutoff pressure (CS%Rho0*CS%cutoff_depth*CS%g_Earth).
       ! This is needed for the ISOMIP test case.
@@ -627,8 +625,13 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
         write(mesg,*) "|melt| = ",fluxes%iceshelf_melt(i,j)," > 0 and ustar_shelf = 0. at i,j", i, j
         call MOM_error(FATAL, "shelf_calc_flux: "//trim(mesg))
       endif
-    endif ! area_shelf_h
        !!!!!!!!!!!!!!!!!!!!!!!!!!!!End of safety checks !!!!!!!!!!!!!!!!!!!
+    elseif (ISS%area_shelf_h(i,j) > 0.0) then
+      ! This is grounded ice, that could be modified to melt if a geothermal heat flux were used.
+      haline_driving(i,j) = 0.0
+      ISS%water_flux(i,j) = 0.0
+      fluxes%iceshelf_melt(i,j) = 0.0
+    endif ! area_shelf_h
   enddo ; enddo ! i- and j-loops
 
   ! mass flux [kg s-1], part of ISOMIP diags.
@@ -1069,8 +1072,7 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
     do j=js,je ; do i=is,ie
       if (in_sponge(i,j) > 0.0) then
         ! evap is negative, and vprec has units of [R Z T-1 ~> kg m-2 s-1]
-        !### Why does mean_melt_flux need to be rescaled to get vprec?
-        fluxes%vprec(i,j) = -mean_melt_flux * CS%density_ice / (1000.0*US%kg_m3_to_R)
+        fluxes%vprec(i,j) = -mean_melt_flux
         fluxes%sens(i,j) = fluxes%vprec(i,j) * CS%Cp * CS%T0 ! [ Q R Z T-1 ~> W /m^2 ]
         fluxes%salt_flux(i,j) = fluxes%vprec(i,j) * CS%S0*1.0e-3 ! [kgSalt/kg R Z T-1 ~> kgSalt m-2 s-1]
       endif
