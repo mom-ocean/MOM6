@@ -99,13 +99,13 @@ function register_advection_test_tracer(HI, GV, param_file, CS, tr_Reg, restart_
   call log_version(param_file, mdl, version, "")
 
   call get_param(param_file, mdl, "ADVECTION_TEST_X_ORIGIN", CS%x_origin, &
-        "The x-coorindate of the center of the test-functions.", default=0.)
+        "The x-coordinate of the center of the test-functions.", units="same as geoLon", default=0.)
   call get_param(param_file, mdl, "ADVECTION_TEST_Y_ORIGIN", CS%y_origin, &
-        "The y-coorindate of the center of the test-functions.", default=0.)
+        "The y-coordinate of the center of the test-functions.", units="same as geoLat", default=0.)
   call get_param(param_file, mdl, "ADVECTION_TEST_X_WIDTH", CS%x_width, &
-        "The x-width of the test-functions.", default=0.)
+        "The x-width of the test-functions.", units="same as geoLon", default=0.)
   call get_param(param_file, mdl, "ADVECTION_TEST_Y_WIDTH", CS%y_width, &
-        "The y-width of the test-functions.", default=0.)
+        "The y-width of the test-functions.", units="same as geoLat", default=0.)
   call get_param(param_file, mdl, "ADVECTION_TEST_TRACER_IC_FILE", CS%tracer_IC_file, &
                  "The name of a file from which to read the initial "//&
                  "conditions for the tracers, or blank to initialize "//&
