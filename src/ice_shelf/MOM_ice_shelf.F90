@@ -881,7 +881,8 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
   ! local variables
   real :: Irho0           !< The inverse of the mean density times unit conversion factors that
                           !! arise because state uses MKS units [Z2 m s2 kg-1 T-2 ~> m3 kg-1].
-  real :: frac_area       !< The fractional area covered by the ice shelf [nondim].
+  real :: frac_shelf      !< The fractional area covered by the ice shelf [nondim].
+  real :: frac_open       !< The fractional area of the ocean that is not covered by the ice shelf [nondim].
   real :: delta_mass_shelf!< Change in ice shelf mass over one time step [kg s-1]
   real :: taux2, tauy2    !< The squared surface stresses [Pa].
   real :: press_ice       !< The pressure of the ice shelf per unit area of ocean (not ice) [Pa].
@@ -956,7 +957,7 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
   if (CS%active_shelf_dynamics .or. CS%override_shelf_movement) then
     do j=jsd,jed ; do i=isd,ied
       if (G%areaT(i,j) > 0.0) &
-        fluxes%frac_shelf_h(i,j) = ISS%area_shelf_h(i,j) * G%IareaT(i,j)
+        fluxes%frac_shelf_h(i,j) = min(1.0, ISS%area_shelf_h(i,j) * G%IareaT(i,j))
     enddo ; enddo
   endif
 
@@ -965,28 +966,32 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
   endif
 
   do j=js,je ; do i=is,ie ; if (ISS%area_shelf_h(i,j) > 0.0) then
-    frac_area = fluxes%frac_shelf_h(i,j)  !### Should this be 1-frac_shelf_h?
-    if (associated(fluxes%sw)) fluxes%sw(i,j) = 0.0
-    if (associated(fluxes%sw_vis_dir)) fluxes%sw_vis_dir(i,j) = 0.0
-    if (associated(fluxes%sw_vis_dif)) fluxes%sw_vis_dif(i,j) = 0.0
-    if (associated(fluxes%sw_nir_dir)) fluxes%sw_nir_dir(i,j) = 0.0
-    if (associated(fluxes%sw_nir_dif)) fluxes%sw_nir_dif(i,j) = 0.0
-    if (associated(fluxes%lw)) fluxes%lw(i,j) = 0.0
-    if (associated(fluxes%latent)) fluxes%latent(i,j) = 0.0
-    if (associated(fluxes%evap)) fluxes%evap(i,j) = 0.0
+    ! Replace fluxes intercepted by the ice shelf with fluxes from the ice shelf
+    frac_shelf = min(1.0, ISS%area_shelf_h(i,j) * G%IareaT(i,j))
+    frac_open = max(0.0, 1.0 - frac_shelf)
+    
+    if (associated(fluxes%sw)) fluxes%sw(i,j) = frac_open * fluxes%sw(i,j)
+    if (associated(fluxes%sw_vis_dir)) fluxes%sw_vis_dir(i,j) = frac_open * fluxes%sw_vis_dir(i,j)
+    if (associated(fluxes%sw_vis_dif)) fluxes%sw_vis_dif(i,j) = frac_open * fluxes%sw_vis_dif(i,j)
+    if (associated(fluxes%sw_nir_dir)) fluxes%sw_nir_dir(i,j) = frac_open * fluxes%sw_nir_dir(i,j)
+    if (associated(fluxes%sw_nir_dif)) fluxes%sw_nir_dif(i,j) = frac_open * fluxes%sw_nir_dif(i,j)
+    if (associated(fluxes%lw)) fluxes%lw(i,j) = frac_open * fluxes%lw(i,j)
+    if (associated(fluxes%latent)) fluxes%latent(i,j) = frac_open * fluxes%latent(i,j)
+    if (associated(fluxes%evap)) fluxes%evap(i,j) = frac_open * fluxes%evap(i,j)
     if (associated(fluxes%lprec)) then
       if (ISS%water_flux(i,j) > 0.0) then
-        fluxes%lprec(i,j) =  frac_area*ISS%water_flux(i,j)*CS%flux_factor
+        fluxes%lprec(i,j) =  frac_shelf*ISS%water_flux(i,j)*CS%flux_factor + frac_open * fluxes%lprec(i,j)
       else
-        fluxes%lprec(i,j) = 0.0
-        fluxes%evap(i,j) = frac_area*ISS%water_flux(i,j)*CS%flux_factor
+        fluxes%lprec(i,j) = frac_open * fluxes%lprec(i,j)
+        fluxes%evap(i,j) = fluxes%evap(i,j) + frac_shelf*ISS%water_flux(i,j)*CS%flux_factor
       endif
     endif
 
     if (associated(fluxes%sens)) &
-      fluxes%sens(i,j) = frac_area*ISS%tflux_ocn(i,j)*CS%flux_factor
+      fluxes%sens(i,j) = frac_shelf*ISS%tflux_ocn(i,j)*CS%flux_factor + frac_open * fluxes%sens(i,j)
+    ! The salt flux should be mostly from sea ice, so perhaps none should be intercepted and this should be changed.
     if (associated(fluxes%salt_flux)) &
-      fluxes%salt_flux(i,j) = frac_area * ISS%salt_flux(i,j)*CS%flux_factor
+      fluxes%salt_flux(i,j) = frac_shelf * ISS%salt_flux(i,j)*CS%flux_factor + frac_open * fluxes%salt_flux(i,j)
   endif ; enddo ; enddo
 
   if (CS%debug) then
@@ -1008,16 +1013,6 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
     if (.not. associated(fluxes%vprec)) allocate(fluxes%vprec(ie,je))
     fluxes%salt_flux(:,:) = 0.0 ; fluxes%vprec(:,:) = 0.0
 
-    do j=js,je ; do i=is,ie
-
-      !### These hard-coded limits need to be corrected.  They are inappropriate here.
-      if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
-        in_sponge(i,j) = 1.0
-      else
-        in_sponge(i,j) = 0.0
-      endif
-    enddo ; enddo
-
     ! take into account changes in mass (or thickness) when imposing ice shelf mass
     if (CS%override_shelf_movement .and. CS%mass_from_file) then
       dTime = real_to_time(CS%time_step)
@@ -1025,18 +1020,24 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
       ! Compute changes in mass after at least one full time step
       if (CS%Time > dTime) then
         Time0 = CS%Time - dTime
-        last_hmask(:,:) = ISS%hmask(:,:) ; last_area_shelf_h(:,:) = ISS%area_shelf_h(:,:)
+        do j=js,je ; do i=is,ie
+          last_hmask(i,j) = ISS%hmask(i,j) ; last_area_shelf_h(i,j) = ISS%area_shelf_h(i,j)
+        enddo ; enddo
         call time_interp_external(CS%id_read_mass, Time0, last_mass_shelf)
+        do j=js,je ; do i=is,ie
         ! This should only be done if time_interp_external did an update.
-        last_mass_shelf(:,:) = US%kg_m3_to_R*US%m_to_Z * last_mass_shelf(:,:) ! Rescale after time_interp
-        last_h_shelf(:,:) = last_mass_shelf(:,:) / CS%density_ice
+          last_mass_shelf(i,j) = US%kg_m3_to_R*US%m_to_Z * last_mass_shelf(i,j) ! Rescale after time_interp
+          last_h_shelf(i,j) = last_mass_shelf(i,j) / CS%density_ice
+        enddo ; enddo
 
         ! apply calving
         if (CS%min_thickness_simple_calve > 0.0) then
           call ice_shelf_min_thickness_calve(G, last_h_shelf, last_area_shelf_h, last_hmask, &
-                                       CS%min_thickness_simple_calve)
+                                       CS%min_thickness_simple_calve, halo=0)
           ! convert to mass again
-          last_mass_shelf(:,:) = last_h_shelf(:,:) * CS%density_ice
+          do j=js,je ; do i=is,ie
+            last_mass_shelf(i,j) = last_h_shelf(i,j) * CS%density_ice
+          enddo ; enddo
         endif
 
         ! get total ice shelf mass at (Time-dt) and (Time), in kg
@@ -1059,6 +1060,15 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
     endif
 
     ! average total melt flux over sponge area
+    do j=js,je ; do i=is,ie
+      !### These hard-coded limits need to be corrected.  They are inappropriate here.
+      if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
+        in_sponge(i,j) = 1.0
+      else
+        in_sponge(i,j) = 0.0
+      endif
+    enddo ; enddo
+
     sponge_area = global_area_integral(in_sponge, G)
     if (sponge_area > 0.0) then
       mean_melt_flux = US%kg_m2s_to_RZ_T*(global_area_integral(ISS%water_flux, G, scale=US%RZ_T_to_kg_m2s, &
@@ -1754,7 +1764,7 @@ subroutine update_shelf_mass(G, US, CS, ISS, Time)
 
   if (CS%min_thickness_simple_calve > 0.0) then
     call ice_shelf_min_thickness_calve(G, ISS%h_shelf, ISS%area_shelf_h, ISS%hmask, &
-                                       CS%min_thickness_simple_calve)
+                                       CS%min_thickness_simple_calve, halo=0)
   endif
 
   call pass_var(ISS%area_shelf_h, G%domain)
