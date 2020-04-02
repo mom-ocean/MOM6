@@ -56,7 +56,7 @@ function global_area_integral(var, G, scale, area)
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: area !< The alternate area to use, including
                                                           !! any required masking [L2 ~> m2].
   real :: global_area_integral !< The returned area integral, usually in the units of var times [m2].
-  
+
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: tmpForSumming
   real :: scalefac  ! An overall scaling factor for the areas and variable.
