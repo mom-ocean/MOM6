@@ -145,8 +145,7 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, CS)
   call get_param(param_file, mdl, "NDIFF_REF_PRES", CS%ref_pres,                    &
                  "The reference pressure (Pa) used for the derivatives of "//&
                  "the equation of state. If negative (default), local "//&
-                 "pressure is used.", &
-                 default = -1.)
+                 "pressure is used.", units="Pa", default = -1.)
   ! Initialize and configure remapping
   if ( .not.CS%continuous_reconstruction ) then
     call get_param(param_file, mdl, "NDIFF_BOUNDARY_EXTRAP", boundary_extrap, &
