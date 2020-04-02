@@ -374,10 +374,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
 
   if (.not.use_BBL_EOS) Rml_vel(:,:) = 0.0
 
-  !$OMP parallel do default(private) shared(u,v,h,tv,visc,G,GV,US,CS,Rml,is,ie,js,je,nz,nkmb, &
+  !$OMP parallel do default(private) shared(u,v,h,tv,visc,G,GV,US,CS,Rml,nz,nkmb, &
   !$OMP                                     nkml,Isq,Ieq,Jsq,Jeq,h_neglect,Rho0x400_G,C2pi_3, &
   !$OMP                                     U_bg_sq,cdrag_sqrt_Z,cdrag_sqrt,K2,use_BBL_EOS,   &
-  !$OMP                                     OBC,maxitt,Vol_quit,D_u,D_v,mask_u,mask_v)
+  !$OMP                                     OBC,maxitt,D_u,D_v,mask_u,mask_v) &
+  !$OMP                              firstprivate(Vol_quit)
   do j=Jsq,Jeq ; do m=1,2
 
     if (m==1) then
