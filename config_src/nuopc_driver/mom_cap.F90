@@ -763,11 +763,6 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   end if
 
   if (cesm_coupled) then
-  !TODO: check if still needed
-     if (len_trim(scalar_field_name) > 0) then
-        call fld_list_add(fldsToOcn_num, fldsToOcn, trim(scalar_field_name), "will_provide")
-        call fld_list_add(fldsFrOcn_num, fldsFrOcn, trim(scalar_field_name), "will_provide")
-     endif
     !call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_lamult"                 , "will provide")
     !call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_ustokes"                , "will provide")
     !call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_vstokes"                , "will provide")
