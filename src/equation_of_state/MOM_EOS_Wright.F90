@@ -408,7 +408,7 @@ end subroutine calculate_compress_wright
 !! finite-volume form pressure accelerations in a Boussinesq model.
 subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, &
                                  dpa, intz_dpa, intx_dpa, inty_dpa, &
-                                 bathyT, dz_neglect, useMassWghtInterp)
+                                 bathyT, dz_neglect, useMassWghtInterp, rho_scale, pres_scale)
   type(hor_index_type), intent(in)  :: HII      !< The horizontal index type for the input arrays.
   type(hor_index_type), intent(in)  :: HIO      !< The horizontal index type for the output arrays.
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
@@ -420,40 +420,48 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
                         intent(in)  :: z_t      !< Height at the top of the layer in depth units [Z ~> m].
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: z_b      !< Height at the top of the layer [Z ~> m].
-  real,                 intent(in)  :: rho_ref  !< A mean density [kg m-3], that is subtracted out
-                                                !! to reduce the magnitude of each of the integrals.
+  real,                 intent(in)  :: rho_ref  !< A mean density [R ~> kg m-3] or [kg m-3], that is subtracted
+                                                !! out to reduce the magnitude of each of the integrals.
                                                 !! (The pressure is calucated as p~=-z*rho_0*G_e.)
-  real,                 intent(in)  :: rho_0    !< Density [kg m-3], that is used to calculate the
-                                                !! pressure (as p~=-z*rho_0*G_e) used in the
-                                                !! equation of state.
-  real,                 intent(in)  :: G_e      !< The Earth's gravitational acceleration [m2 Z-1 s-2 ~> m s-2].
+  real,                 intent(in)  :: rho_0    !< Density [R ~> kg m-3] or [kg m-3], that is used
+                                                !! to calculate the pressure (as p~=-z*rho_0*G_e)
+                                                !! used in the equation of state.
+  real,                 intent(in)  :: G_e      !< The Earth's gravitational acceleration
+                                                !! [L2 Z-1 T-2 ~> m s-2] or [m2 Z-1 s-2 ~> m s-2].
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
                         intent(inout) :: dpa    !< The change in the pressure anomaly across the
-                                                !! layer [Pa].
+                                                !! layer [R L2 T-2 ~> Pa] or [Pa].
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
               optional, intent(inout) :: intz_dpa !< The integral through the thickness of the layer
                                                 !! of the pressure anomaly relative to the anomaly
-                                                !! at the top of the layer [Pa Z ~> Pa m].
+                                                !! at the top of the layer [R Z L2 T-2 ~> Pa m].
   real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed), &
               optional, intent(inout) :: intx_dpa !< The integral in x of the difference between the
                                                 !! pressure anomaly at the top and bottom of the
-                                                !! layer divided by the x grid spacing [Pa].
+                                                !! layer divided by the x grid spacing [R L2 T-2 ~> Pa].
   real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB), &
               optional, intent(inout) :: inty_dpa !< The integral in y of the difference between the
                                                 !! pressure anomaly at the top and bottom of the
-                                                !! layer divided by the y grid spacing [Pa].
+                                                !! layer divided by the y grid spacing [R L2 T-2 ~> Pa].
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
               optional, intent(in)  :: bathyT   !< The depth of the bathymetry [Z ~> m].
   real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m].
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
                                                 !! interpolate T/S for top and bottom integrals.
+  real,       optional, intent(in)  :: rho_scale !< A multiplicative factor by which to scale density
+                                                 !! from kg m-3 to the desired units [R m3 kg-1 ~> 1]
+  real,       optional, intent(in)  :: pres_scale !< A multiplicative factor to convert pressure
+                                                 !! into Pa [Pa T2 R-1 L-2 ~> 1].
 
   ! Local variables
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed) :: al0_2d, p0_2d, lambda_2d
   real :: al0, p0, lambda
   real :: rho_anom   ! The density anomaly from rho_ref [kg m-3].
   real :: eps, eps2, rem
-  real :: GxRho, I_Rho
+  real :: GxRho      ! The gravitational acceleration times density and unit conversion factors [Pa Z-1 ~> kg m-2 s-2]
+  real :: g_Earth    ! The gravitational acceleration [m2 Z-1 s-2 ~> m s-2]
+  real :: I_Rho      ! The inverse of the Boussinesq density [m3 kg-1]
+  real :: rho_ref_mks ! The reference density in MKS units, never rescaled from kg m-3 [kg m-3]
   real :: p_ave, I_al0, I_Lzz
   real :: dz         ! The layer thickness [Z ~> m].
   real :: hWght      ! A pressure-thickness below topography [Z ~> m].
@@ -464,7 +472,9 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
   real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
   real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
   real :: intz(5)    ! The integrals of density with height at the
-                     ! 5 sub-column locations [Pa].
+                     ! 5 sub-column locations [R L2 T-2 ~> Pa].
+  real :: Pa_to_RL2_T2 ! A conversion factor of pressures from Pa to the output units indicated by
+                       ! pres_scale [R L2 T-2 Pa-1 ~> 1] or [1].
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   real, parameter :: C1_3 = 1.0/3.0, C1_7 = 1.0/7.0    ! Rational constants.
   real, parameter :: C1_9 = 1.0/9.0, C1_90 = 1.0/90.0  ! Rational constants.
@@ -480,8 +490,19 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
   is = HIO%isc + ioff ; ie = HIO%iec + ioff
   js = HIO%jsc + joff ; je = HIO%jec + joff
 
-  GxRho = G_e * rho_0
-  I_Rho = 1.0 / rho_0
+  if (present(pres_scale)) then
+    GxRho = pres_scale * G_e * rho_0 ; g_Earth = pres_scale * G_e
+    Pa_to_RL2_T2 = 1.0 / pres_scale
+  else
+    GxRho = G_e * rho_0 ; g_Earth = G_e
+    Pa_to_RL2_T2 = 1.0
+  endif
+  if (present(rho_scale)) then
+    g_Earth = g_Earth * rho_scale
+    rho_ref_mks = rho_ref / rho_scale ; I_Rho = rho_scale / rho_0
+  else
+    rho_ref_mks = rho_ref ; I_Rho = 1.0 / rho_0
+  endif
 
   do_massWeight = .false.
   if (present(useMassWghtInterp)) then ; if (useMassWghtInterp) then
@@ -508,12 +529,12 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
 
 !     rho(j) = (pressure(j) + p0) / (lambda + al0*(pressure(j) + p0))
 
-    rho_anom = (p0 + p_ave)*(I_Lzz*I_al0) - rho_ref
+    rho_anom = (p0 + p_ave)*(I_Lzz*I_al0) - rho_ref_mks
     rem = I_Rho * (lambda * I_al0**2) * eps2 * &
           (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
-    dpa(i-ioff,j-joff) = G_e*rho_anom*dz - 2.0*eps*rem
+    dpa(i-ioff,j-joff) = Pa_to_RL2_T2 * (g_Earth*rho_anom*dz - 2.0*eps*rem)
     if (present(intz_dpa)) &
-      intz_dpa(i-ioff,j-joff) = 0.5*G_e*rho_anom*dz**2 - dz*(1.0+eps)*rem
+      intz_dpa(i-ioff,j-joff) = Pa_to_RL2_T2 * (0.5*g_Earth*rho_anom*dz**2 - dz*(1.0+eps)*rem)
   enddo ; enddo
 
   if (present(intx_dpa)) then ; do j=js,je ; do I=Isq,Ieq
@@ -551,13 +572,11 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
       I_Lzz = 1.0 / (p0 + (lambda * I_al0) + p_ave)
       eps = 0.5*GxRho*dz*I_Lzz ; eps2 = eps*eps
 
-      intz(m) = G_e*dz*((p0 + p_ave)*(I_Lzz*I_al0) - rho_ref) - 2.0*eps * &
-               I_Rho * (lambda * I_al0**2) * eps2 * &
-               (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
+      intz(m) = Pa_to_RL2_T2 * ( g_Earth*dz*((p0 + p_ave)*(I_Lzz*I_al0) - rho_ref_mks) - 2.0*eps * &
+                I_Rho * (lambda * I_al0**2) * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2))) )
     enddo
     ! Use Bode's rule to integrate the values.
-    intx_dpa(i-ioff,j-joff) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
-                           12.0*intz(3))
+    intx_dpa(i-ioff,j-joff) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + 12.0*intz(3))
   enddo ; enddo ; endif
 
   if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=is,ie
@@ -595,14 +614,13 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
       I_Lzz = 1.0 / (p0 + (lambda * I_al0) + p_ave)
       eps = 0.5*GxRho*dz*I_Lzz ; eps2 = eps*eps
 
-      intz(m) = G_e*dz*((p0 + p_ave)*(I_Lzz*I_al0) - rho_ref) - 2.0*eps * &
-               I_Rho * (lambda * I_al0**2) * eps2 * &
-               (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
+      intz(m) = Pa_to_RL2_T2 * ( g_Earth*dz*((p0 + p_ave)*(I_Lzz*I_al0) - rho_ref_mks) - 2.0*eps * &
+                I_Rho * (lambda * I_al0**2) * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2))) )
     enddo
     ! Use Bode's rule to integrate the values.
-    inty_dpa(i-ioff,j-joff) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
-                           12.0*intz(3))
+    inty_dpa(i-ioff,j-joff) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + 12.0*intz(3))
   enddo ; enddo ; endif
+
 end subroutine int_density_dz_wright
 
 !>   This subroutine calculates analytical and nearly-analytical integrals in

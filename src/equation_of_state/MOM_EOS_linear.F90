@@ -339,42 +339,43 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
                         intent(in)  :: z_t       !< Height at the top of the layer in depth units [Z ~> m].
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: z_b       !< Height at the top of the layer [Z ~> m].
-  real,                 intent(in)  :: rho_ref   !< A mean density [kg m-3], that is subtracted
-                                                 !! out to reduce the magnitude of each of the
-                                                 !! integrals.
-  real,                 intent(in)  :: rho_0_pres !< A density [kg m-3], that is used to calculate
+  real,                 intent(in)  :: rho_ref   !< A mean density [R ~> kg m-3] or [kg m-3], that
+                                                 !! is subtracted out to reduce the magnitude of
+                                                 !! each of the integrals.
+  real,                 intent(in)  :: rho_0_pres !< A density [R ~> kg m-3], used to calculate
                                                  !! the pressure (as p~=-z*rho_0_pres*G_e) used in
-                                                 !! the equation of state. rho_0_pres is not used
-                                                 !! here.
-  real,                 intent(in)  :: G_e       !< The Earth's gravitational acceleration [m2 Z-1 s-2 ~> m s-2].
-  real,                 intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
+                                                 !! the equation of state. rho_0_pres is not used.
+  real,                 intent(in)  :: G_e       !< The Earth's gravitational acceleration
+                                                 !! [L2 Z-1 T-2 ~> m s-2] or [m2 Z-1 s-2 ~> m s-2].
+  real,                 intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0 [R ~> kg m-3] or [kg m-3].
   real,                 intent(in)  :: dRho_dT   !< The derivative of density with temperature,
-                                                 !! [kg m-3 degC-1].
+                                                 !! [R degC-1 ~> kg m-3 degC-1] or [kg m-3 degC-1].
   real,                 intent(in)  :: dRho_dS   !< The derivative of density with salinity,
-                                                 !! in [kg m-3 ppt-1].
+                                                 !! in [R ppt-1 ~> kg m-3 ppt-1] or [kg m-3 ppt-1].
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
                         intent(out) :: dpa       !< The change in the pressure anomaly across the
-                                                 !! layer [Pa].
+                                                 !! layer [R L2 T-2 ~> Pa] or [Pa].
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
               optional, intent(out) :: intz_dpa  !< The integral through the thickness of the layer
                                                  !! of the pressure anomaly relative to the anomaly
-                                                 !! at the top of the layer [Pa Z].
+                                                 !! at the top of the layer [R L2 Z T-2 ~> Pa Z] or [Pa Z].
   real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed),  &
               optional, intent(out) :: intx_dpa  !< The integral in x of the difference between the
                                                  !! pressure anomaly at the top and bottom of the
-                                                 !! layer divided by the x grid spacing [Pa].
+                                                 !! layer divided by the x grid spacing [R L2 T-2 ~> Pa] or [Pa].
   real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB),  &
               optional, intent(out) :: inty_dpa  !< The integral in y of the difference between the
                                                  !! pressure anomaly at the top and bottom of the
-                                                 !! layer divided by the y grid spacing [Pa].
+                                                 !! layer divided by the y grid spacing [R L2 T-2 ~> Pa] or [Pa].
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
               optional, intent(in)  :: bathyT    !< The depth of the bathymetry [Z ~> m].
   real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m].
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
                                                  !! interpolate T/S for top and bottom integrals.
+
   ! Local variables
-  real :: rho_anom      ! The density anomaly from rho_ref [kg m-3].
-  real :: raL, raR      ! rho_anom to the left and right [kg m-3].
+  real :: rho_anom      ! The density anomaly from rho_ref [R ~> kg m-3].
+  real :: raL, raR      ! rho_anom to the left and right [R ~> kg m-3].
   real :: dz, dzL, dzR  ! Layer thicknesses [Z ~> m].
   real :: hWght      ! A pressure-thickness below topography [Z ~> m].
   real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Z ~> m].
@@ -384,7 +385,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
   real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
   real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
   real :: intz(5)    ! The integrals of density with height at the
-                     ! 5 sub-column locations [Pa].
+                     ! 5 sub-column locations [R L2 T-2 ~> Pa] or [Pa].
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   real, parameter :: C1_6 = 1.0/6.0, C1_90 = 1.0/90.0  ! Rational constants.
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j, ioff, joff, m
