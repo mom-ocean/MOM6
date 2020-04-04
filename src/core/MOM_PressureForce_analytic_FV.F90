@@ -36,7 +36,7 @@ public PressureForce_AFV_Bouss, PressureForce_AFV_nonBouss
 type, public :: PressureForce_AFV_CS ; private
   logical :: tides          !< If true, apply tidal momentum forcing.
   real    :: Rho0           !< The density used in the Boussinesq
-                            !! approximation [kg m-3].
+                            !! approximation [R ~> kg m-3].
   real    :: GFS_scale      !< A scaling of the surface pressure gradients to
                             !! allow the use of a reduced gravity model [nondim].
   type(time_type), pointer :: Time !< A pointer to the ocean model's clock.
@@ -77,7 +77,7 @@ subroutine PressureForce_AFV(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbc
                                                            !! or atmosphere-ocean interface [Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(out) :: pbce !< The baroclinic pressure
                                                            !! anomaly in each layer due to eta anomalies
-                                                           !! [m2 s-2 H-1 ~> m s-2 or m4 s-2 kg-1].
+                                                           !! [L2 T-2 H-1 ~> m s-2 or m4 s-2 kg-1].
   real, dimension(SZI_(G),SZJ_(G)),          optional, intent(out) :: eta !< The bottom mass used to
                                                            !! calculate PFu and PFv [H ~> m or kg m-2], with any tidal
                                                            !! contributions or compressibility compensation.
@@ -113,7 +113,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
                                                            !! or atmosphere-ocean interface [Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(out) :: pbce !< The baroclinic pressure
                                                            !! anomaly in each layer due to eta anomalies
-                                                           !! [m2 s-2 H-1 ~> m s-2 or m4 s-2 kg-1].
+                                                           !! [L2 T-2 H-1 ~> m s-2 or m4 s-2 kg-1].
   real, dimension(SZI_(G),SZJ_(G)),          optional, intent(out) :: eta !< The bottom mass used to
                                                            !! calculate PFu and PFv [H ~> m or kg m-2], with any tidal
                                                            !! contributions or compressibility compensation.
@@ -194,7 +194,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
   if (associated(ALE_CSp)) use_ALE = CS%reconstruct .and. use_EOS
 
   dp_neglect = GV%H_to_Pa * GV%H_subroundoff
-  alpha_ref = 1.0/CS%Rho0
+  alpha_ref = 1.0/(US%R_to_kg_m3*CS%Rho0)
   g_Earth_z = US%L_T_to_m_s**2 * GV%g_Earth
   I_gEarth = 1.0 / g_Earth_z
 
@@ -456,7 +456,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
                                                          !! or atmosphere-ocean interface [Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(out) :: pbce !< The baroclinic pressure
                                                          !! anomaly in each layer due to eta anomalies
-                                                         !! [m2 s-2 H-1 ~> m s-2 or m4 s-2 kg-1].
+                                                         !! [L2 T-2 H-1 ~> m s-2 or m4 s-2 kg-1].
   real, dimension(SZI_(G),SZJ_(G)),          optional, intent(out) :: eta !< The bottom mass used to
                                                          !! calculate PFu and PFv [H ~> m or kg m-2], with any
                                                          !! tidal contributions or compressibility compensation.
@@ -471,22 +471,21 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
     Rho_cv_BL   !   The coordinate potential density in the deepest variable
                 ! density near-surface layer [R ~> kg m-3].
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    dz_geo, &   ! The change in geopotential thickness through a layer times some dimensional
-                ! rescaling factors [kg m-1 R-1 s-2 ~> m2 s-2].
+    dz_geo, &   ! The change in geopotential thickness through a layer [L2 T-2 ~> m2 s-2].
     pa, &       ! The pressure anomaly (i.e. pressure + g*RHO_0*e) at the
-                ! the interface atop a layer [Pa].
+                ! the interface atop a layer [R L2 T-2 ~> Pa].
     dpa, &      ! The change in pressure anomaly between the top and bottom
-                ! of a layer [Pa].
+                ! of a layer [R L2 T-2 ~> Pa].
     intz_dpa    ! The vertical integral in depth of the pressure anomaly less the
-                ! pressure anomaly at the top of the layer [H Pa ~> m Pa or kg m-2 Pa].
+                ! pressure anomaly at the top of the layer [H R L2 T-2 ~> m Pa or kg m-2 Pa].
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     intx_pa, &  ! The zonal integral of the pressure anomaly along the interface
-                ! atop a layer, divided by the grid spacing [Pa].
-    intx_dpa    ! The change in intx_pa through a layer [Pa].
+                ! atop a layer, divided by the grid spacing [R L2 T-2 ~> Pa].
+    intx_dpa    ! The change in intx_pa through a layer [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJB_(G)) :: &
     inty_pa, &  ! The meridional integral of the pressure anomaly along the
-                ! interface atop a layer, divided by the grid spacing [Pa].
-    inty_dpa    ! The change in inty_pa through a layer [Pa].
+                ! interface atop a layer, divided by the grid spacing [R L2 T-2 ~> Pa].
+    inty_dpa    ! The change in inty_pa through a layer [R L2 T-2 ~> Pa].
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target :: &
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
@@ -502,12 +501,9 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
   real :: p0(SZI_(G))        ! An array of zeros to use for pressure [Pa].
   real :: h_neglect          ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected [H ~> m].
-  real :: g_Earth_mks_z      ! A scaled version of g_Earth [m2 Z-1 s-2 ~> m s-2].
-  real :: g_Earth_z_geo      ! Another scaled version of g_Earth [R m5 kg-1 Z-1 s-2 ~> m s-2].
-  real :: I_Rho0             ! 1/Rho0 times unit scaling factors [L2 m kg-1 s2 T-2 ~> m3 kg-1].
+  real :: I_Rho0             ! The inverse of the Boussinesq reference density [R-1 ~> m3 kg-1].
   real :: G_Rho0             ! G_Earth / Rho0 in [L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1].
-  real :: Rho_ref            ! The reference density [R ~> kg m-3].
-  real :: Rho_ref_mks        ! The reference density in mks units [kg m-3].
+  real :: rho_ref            ! The reference density [R ~> kg m-3].
   real :: dz_neglect         ! A minimal thickness [Z ~> m], like e.
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
   logical :: use_ALE         ! If true, use an ALE pressure reconstruction.
@@ -534,12 +530,9 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
 
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff * GV%H_to_Z
-  I_Rho0 = US%m_s_to_L_T**2 / (US%R_to_kg_m3*GV%Rho0)
-  g_Earth_mks_z = US%L_T_to_m_s**2 * GV%g_Earth
-  g_Earth_z_geo = US%R_to_kg_m3*US%L_T_to_m_s**2 * GV%g_Earth
+  I_Rho0 = 1.0 / GV%Rho0
   G_Rho0 = GV%g_Earth / GV%Rho0
-  rho_ref_mks = CS%Rho0
-  rho_ref = rho_ref_mks*US%kg_m3_to_R
+  rho_ref = CS%Rho0
 
   if (CS%tides) then
     !   Determine the surface height anomaly for calculating self attraction
@@ -651,12 +644,12 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
   if (use_p_atm) then
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      pa(i,j) = (rho_ref*g_Earth_z_geo)*e(i,j,1) + p_atm(i,j)
+      pa(i,j) = (rho_ref*GV%g_Earth)*e(i,j,1) + US%kg_m3_to_R*US%m_s_to_L_T**2 * p_atm(i,j)
     enddo ; enddo
   else
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      pa(i,j) = (rho_ref*g_Earth_z_geo)*e(i,j,1)
+      pa(i,j) = (rho_ref*GV%g_Earth)*e(i,j,1)
     enddo ; enddo
   endif
   !$OMP parallel do default(shared)
@@ -680,24 +673,21 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
       ! where the layers are located.
       if ( use_ALE ) then
         if ( CS%Recon_Scheme == 1 ) then
-          call int_density_dz_generic_plm( T_t(:,:,k), T_b(:,:,k), &
-                    S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
-                    rho_ref_mks, CS%Rho0, g_Earth_mks_z, &
-                    dz_neglect, G%bathyT, G%HI, G%HI, &
-                    tv%eqn_of_state, dpa, intz_dpa, intx_dpa, inty_dpa, &
-                    useMassWghtInterp = CS%useMassWghtInterp)
+          call int_density_dz_generic_plm( T_t(:,:,k), T_b(:,:,k), S_t(:,:,k), S_b(:,:,k),&
+                    e(:,:,K), e(:,:,K+1), rho_ref, CS%Rho0, GV%g_Earth, dz_neglect, G%bathyT, G%HI, G%HI, &
+                    tv%eqn_of_state, dpa, intz_dpa, intx_dpa, inty_dpa, useMassWghtInterp=CS%useMassWghtInterp, &
+                    rho_scale=US%kg_m3_to_R, pres_scale=US%R_to_kg_m3*US%L_T_to_m_s**2)
         elseif ( CS%Recon_Scheme == 2 ) then
           call int_density_dz_generic_ppm( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
-                    tv%S(:,:,k), S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
-                    rho_ref_mks, CS%Rho0, g_Earth_mks_z, &
-                    G%HI, G%HI, tv%eqn_of_state, dpa, intz_dpa, &
-                    intx_dpa, inty_dpa)
+                    tv%S(:,:,k), S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), rho_ref, CS%Rho0, &
+                    GV%g_Earth, G%HI, G%HI, tv%eqn_of_state, dpa, intz_dpa, intx_dpa, inty_dpa, &
+                    rho_scale=US%kg_m3_to_R, pres_scale=US%R_to_kg_m3*US%L_T_to_m_s**2)
         endif
       else
         call int_density_dz(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), e(:,:,K), e(:,:,K+1), &
-                  rho_ref_mks, CS%Rho0, g_Earth_mks_z, G%HI, G%HI, tv%eqn_of_state, &
-                  dpa, intz_dpa, intx_dpa, inty_dpa, &
-                  G%bathyT, dz_neglect, CS%useMassWghtInterp)
+                  rho_ref, CS%Rho0, GV%g_Earth, G%HI, G%HI, tv%eqn_of_state, &
+                  dpa, intz_dpa, intx_dpa, inty_dpa, G%bathyT, dz_neglect, CS%useMassWghtInterp, &
+                  rho_scale=US%kg_m3_to_R, pres_scale=US%R_to_kg_m3*US%L_T_to_m_s**2)
       endif
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -706,7 +696,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
     else
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        dz_geo(i,j) = g_Earth_z_geo * GV%H_to_Z*h(i,j,k)
+        dz_geo(i,j) = GV%g_Earth * GV%H_to_Z*h(i,j,k)
         dpa(i,j) = (GV%Rlay(k) - rho_ref) * dz_geo(i,j)
         intz_dpa(i,j) = 0.5*(GV%Rlay(k) - rho_ref) * dz_geo(i,j)*h(i,j,k)
       enddo ; enddo
@@ -767,15 +757,14 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
 
   if (present(eta)) then
     if (CS%tides) then
-    ! eta is the sea surface height relative to a time-invariant geoid, for
-    ! comparison with what is used for eta in btstep.  See how e was calculated
-    ! about 200 lines above.
-    !$OMP parallel do default(shared)
+    ! eta is the sea surface height relative to a time-invariant geoid, for comparison with
+    ! what is used for eta in btstep.  See how e was calculated about 200 lines above.
+      !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         eta(i,j) = e(i,j,1)*GV%Z_to_H + e_tidal(i,j)*GV%Z_to_H
       enddo ; enddo
     else
-    !$OMP parallel do default(shared)
+      !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         eta(i,j) = e(i,j,1)*GV%Z_to_H
       enddo ; enddo
@@ -819,7 +808,7 @@ subroutine PressureForce_AFV_init(Time, G, GV, US, param_file, diag, CS, tides_C
                  "calculate accelerations and the mass for conservation "//&
                  "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
-                 units="kg m-3", default=1035.0)
+                 units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "TIDES", CS%tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
   call get_param(param_file, "MOM", "USE_REGRIDDING", use_ALE, &

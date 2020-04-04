@@ -31,7 +31,7 @@ public Set_pbce_nonBouss, PressureForce_Mont_init, PressureForce_Mont_end
 type, public :: PressureForce_Mont_CS ; private
   logical :: tides          !< If true, apply tidal momentum forcing.
   real    :: Rho0           !< The density used in the Boussinesq
-                            !! approximation [kg m-3].
+                            !! approximation [R ~> kg m-3].
   real    :: GFS_scale      !< Ratio between gravity applied to top interface and the
                             !! gravitational acceleration of the planet [nondim].
                             !! Usually this ratio is 1.
@@ -401,7 +401,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
                              ! attraction and loading, in depth units [Z ~> m].
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
                              ! density [Pa] (usually 2e7 Pa = 2000 dbar).
-  real :: I_Rho0             ! 1/Rho0 [m3 kg-1].
+  real :: I_Rho0             ! 1/Rho0 [R-1 ~> m3 kg-1].
   real :: G_Rho0             ! G_Earth / Rho0 [L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1].
   real :: PFu_bc, PFv_bc     ! The pressure gradient force due to along-layer
                              ! compensated density gradients [L T-2 ~> m s-2]
@@ -520,7 +520,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         M(i,j,1) = CS%GFS_scale * (rho_star(i,j,1) * e(i,j,1))
-        if (use_p_atm) M(i,j,1) = M(i,j,1) + US%m_s_to_L_T**2*p_atm(i,j) * I_Rho0
+        if (use_p_atm) M(i,j,1) = M(i,j,1) + US%kg_m3_to_R*US%m_s_to_L_T**2*p_atm(i,j) * I_Rho0
       enddo
       do k=2,nz ; do i=Isq,Ieq+1
         M(i,j,k) = M(i,j,k-1) + (rho_star(i,j,k) - rho_star(i,j,k-1)) * e(i,j,K)
@@ -531,7 +531,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         M(i,j,1) = GV%g_prime(1) * e(i,j,1)
-        if (use_p_atm) M(i,j,1) = M(i,j,1) + US%m_s_to_L_T**2*p_atm(i,j) * I_Rho0
+        if (use_p_atm) M(i,j,1) = M(i,j,1) + US%kg_m3_to_R*US%m_s_to_L_T**2*p_atm(i,j) * I_Rho0
       enddo
       do k=2,nz ; do i=Isq,Ieq+1
         M(i,j,k) = M(i,j,k-1) + GV%g_prime(K) * e(i,j,K)
@@ -609,7 +609,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: e !< Interface height [Z ~> m].
   type(thermo_var_ptrs),                intent(in)  :: tv   !< Thermodynamic variables
   type(unit_scale_type),                intent(in)  :: US   !< A dimensional unit scaling type
-  real,                                 intent(in)  :: Rho0 !< The "Boussinesq" ocean density [kg m-3].
+  real,                                 intent(in)  :: Rho0 !< The "Boussinesq" ocean density [R ~> kg m-3].
   real,                                 intent(in)  :: GFS_scale !< Ratio between gravity applied to top
                                                             !! interface and the gravitational acceleration of
                                                             !! the planet [nondim]. Usually this ratio is 1.
@@ -623,13 +623,13 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
 
   ! Local variables
   real :: Ihtot(SZI_(G))     ! The inverse of the sum of the layer thicknesses [H-1 ~> m-1 or m2 kg-1].
-  real :: press(SZI_(G))     ! Interface pressure [Pa].
+  real :: press(SZI_(G))     ! Interface pressure [R L2 T-2 ~> Pa].
   real :: T_int(SZI_(G))     ! Interface temperature [degC].
   real :: S_int(SZI_(G))     ! Interface salinity [ppt].
   real :: dR_dT(SZI_(G))     ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
   real :: dR_dS(SZI_(G))     ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
   real :: rho_in_situ(SZI_(G)) ! In-situ density at the top of a layer [R ~> kg m-3].
-  real :: G_Rho0             ! A scaled version of g_Earth / Rho0 [L2 m3 Z-1 T-2 kg-1 ~> m4 s-2 kg-1]
+  real :: G_Rho0             ! A scaled version of g_Earth / Rho0 [L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1]
   real :: Rho0xG             ! g_Earth * Rho0 [kg s-2 m-1 Z-1 ~> kg s-2 m-2]
   logical :: use_EOS         ! If true, density is calculated from T & S using
                              ! an equation of state.
@@ -639,7 +639,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
 
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
 
-  Rho0xG = Rho0*US%L_T_to_m_s**2 * GV%g_Earth
+  Rho0xG = Rho0 * GV%g_Earth
   G_Rho0 = GV%g_Earth / GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
   z_neglect = GV%H_subroundoff*GV%H_to_Z
@@ -664,8 +664,8 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
           Ihtot(i) = GV%H_to_Z / ((e(i,j,1)-e(i,j,nz+1)) + z_neglect)
           press(i) = -Rho0xG*e(i,j,1)
         enddo
-        call calculate_density(tv%T(:,j,1), tv%S(:,j,1), press, rho_in_situ, &
-                               Isq, Ieq-Isq+2, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density(tv%T(:,j,1), tv%S(:,j,1), press, rho_in_situ, Isq, Ieq-Isq+2, &
+                 tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%R_to_kg_m3*US%L_T_to_m_s**2)
         do i=Isq,Ieq+1
           pbce(i,j,1) = G_Rho0*(GFS_scale * rho_in_situ(i)) * GV%H_to_Z
         enddo
@@ -675,8 +675,8 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
             T_int(i) = 0.5*(tv%T(i,j,k-1)+tv%T(i,j,k))
             S_int(i) = 0.5*(tv%S(i,j,k-1)+tv%S(i,j,k))
           enddo
-          call calculate_density_derivs(T_int, S_int, press, dR_dT, dR_dS, &
-                                        Isq, Ieq-Isq+2, tv%eqn_of_state, scale=US%kg_m3_to_R)
+          call calculate_density_derivs(T_int, S_int, press, dR_dT, dR_dS, Isq, Ieq-Isq+2, &
+                   tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%R_to_kg_m3*US%L_T_to_m_s**2)
           do i=Isq,Ieq+1
             pbce(i,j,k) = pbce(i,j,k-1) + G_Rho0 * &
                ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i)) * &
@@ -851,7 +851,7 @@ subroutine PressureForce_Mont_init(Time, G, GV, US, param_file, diag, CS, tides_
                  "calculate accelerations and the mass for conservation "//&
                  "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
-                 units="kg m-3", default=1035.0)
+                 units="kg m-3", default=1035.0, scale=US%R_to_kg_m3)
   call get_param(param_file, mdl, "TIDES", CS%tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
   call get_param(param_file, mdl, "USE_EOS", use_EOS, default=.true., &
