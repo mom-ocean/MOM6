@@ -800,43 +800,50 @@ end subroutine calculate_compress_scalar
 !! series for log(1-eps/1+eps) that assumes that |eps| <  .
 subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                dza, intp_dza, intx_dza, inty_dza, halo_size, &
-                               bathyP, dP_tiny, useMassWghtInterp)
+                               bathyP, dP_tiny, useMassWghtInterp, SV_scale, pres_scale)
   type(hor_index_type), intent(in)  :: HI  !< The horizontal index structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T   !< Potential temperature referenced to the surface [degC]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: S   !< Salinity [ppt]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: p_t !< Pressure at the top of the layer [Pa].
+                        intent(in)  :: p_t !< Pressure at the top of the layer [R L2 T-2 ~> Pa] or [Pa].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: p_b !< Pressure at the bottom of the layer [Pa].
+                        intent(in)  :: p_b !< Pressure at the bottom of the layer [R L2 T-2 ~> Pa] or [Pa].
   real,                 intent(in)  :: alpha_ref !< A mean specific volume that is subtracted out
-                            !! to reduce the magnitude of each of the integrals, m3 kg-1. The
-                            !! calculation is mathematically identical with different values of
+                            !! to reduce the magnitude of each of the integrals [R-1 ~> m3 kg-1].
+                            !! The calculation is mathematically identical with different values of
                             !! alpha_ref, but this reduces the effects of roundoff.
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(inout) :: dza !< The change in the geopotential anomaly across
-                            !! the layer [m2 s-2].
+                            !! the layer [T-2 ~> m2 s-2] or [m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(inout) :: intp_dza !< The integral in pressure through the layer of the
                             !! geopotential anomaly relative to the anomaly at the bottom of the
-                            !! layer [Pa m2 s-2].
+                            !! layer [R L4 T-4 ~> Pa m2 s-2] or [Pa m2 s-2].
   real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
               optional, intent(inout) :: intx_dza !< The integral in x of the difference between the
                             !! geopotential anomaly at the top and bottom of the layer divided by
-                            !! the x grid spacing [m2 s-2].
+                            !! the x grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
               optional, intent(inout) :: inty_dza !< The integral in y of the difference between the
                             !! geopotential anomaly at the top and bottom of the layer divided by
-                            !! the y grid spacing [m2 s-2].
+                            !! the y grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2].
   integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate dza.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(in)  :: bathyP  !< The pressure at the bathymetry [Pa]
+              optional, intent(in)  :: bathyP  !< The pressure at the bathymetry [R L2 T-2 ~> Pa] or [Pa]
   real,       optional, intent(in)  :: dP_tiny !< A miniscule pressure change with
-                                               !! the same units as p_t (Pa?)
+                            !! the same units as p_t [R L2 T-2 ~> Pa] or [Pa]
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
                             !! to interpolate T/S for top and bottom integrals.
+  real,       optional, intent(in)  :: SV_scale !< A multiplicative factor by which to scale specific
+                            !! volume from m3 kg-1 to the desired units [kg m-3 R-1 ~> 1]
+  real,       optional, intent(in)  :: pres_scale !< A multiplicative factor to convert pressure
+                            !! into Pa [Pa T2 R-1 L-2 ~> 1].
+
+  ! Local variables
+  real :: rho_scale         ! A scaling factor for densities from kg m-3 to R [R m3 kg-1 ~> 1]
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "int_specific_vol_dp called with an unassociated EOS_type EOS.")
@@ -844,21 +851,29 @@ subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
   if (EOS%EOS_quadrature) then
     call int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                  dza, intp_dza, intx_dza, inty_dza, halo_size, &
-                                 bathyP, dP_tiny, useMassWghtInterp)
+                                 bathyP, dP_tiny, useMassWghtInterp, SV_scale, pres_scale)
   else ; select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
-      call int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, EOS%Rho_T0_S0, &
+      if (present(SV_scale)) then
+        rho_scale = 1.0 / SV_scale
+        call int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, rho_scale*EOS%Rho_T0_S0, &
+                                  rho_scale*EOS%dRho_dT, rho_scale*EOS%dRho_dS, dza, intp_dza, &
+                                  intx_dza, inty_dza, halo_size, &
+                                  bathyP, dP_tiny, useMassWghtInterp)
+      else
+        call int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, EOS%Rho_T0_S0, &
                                   EOS%dRho_dT, EOS%dRho_dS, dza, intp_dza, &
                                   intx_dza, inty_dza, halo_size, &
                                   bathyP, dP_tiny, useMassWghtInterp)
+      endif
     case (EOS_WRIGHT)
       call int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, HI, dza, &
                                   intp_dza, intx_dza, inty_dza, halo_size, &
-                                  bathyP, dP_tiny, useMassWghtInterp)
+                                  bathyP, dP_tiny, useMassWghtInterp, SV_scale, pres_scale)
     case default
       call int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                    dza, intp_dza, intx_dza, inty_dza, halo_size, &
-                                   bathyP, dP_tiny, useMassWghtInterp)
+                                   bathyP, dP_tiny, useMassWghtInterp, SV_scale, pres_scale)
   end select ; endif
 
 end subroutine int_specific_vol_dp
@@ -1176,7 +1191,7 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
   real,       optional, intent(in)  :: pres_scale !< A multiplicative factor to convert pressure
                                           !! into Pa [Pa T2 R-1 L-2 ~> 1].
   ! Local variables
-  real :: T5(5), S5(5)    ! Temperatures and salinities at five quadrature points [degC] and [ppt]
+  real :: T5(5), S5(5) ! Temperatures and salinities at five quadrature points [degC] and [ppt]
   real :: p5(5)      ! Pressures at five quadrature points, never rescaled from Pa [Pa]
   real :: r5(5)      ! Densities at five quadrature points [R ~> kg m-3] or [kg m-3]
   real :: rho_anom   ! The depth averaged density anomaly [R ~> kg m-3] or [kg m-3].
@@ -2198,44 +2213,48 @@ end subroutine evaluate_shape_quadratic
 !! no free assumptions, apart from the use of Bode's rule quadrature to do the integrals.
 subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                    dza, intp_dza, intx_dza, inty_dza, halo_size, &
-                                   bathyP, dP_neglect, useMassWghtInterp)
+                                   bathyP, dP_neglect, useMassWghtInterp, SV_scale, pres_scale)
   type(hor_index_type), intent(in)  :: HI !< A horizontal index type structure.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T  !< Potential temperature of the layer [degC].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: S  !< Salinity of the layer [ppt].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: p_t !< Pressure atop the layer [Pa].
+                        intent(in)  :: p_t !< Pressure atop the layer [R L2 T-2 ~> Pa] or [Pa].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: p_b !< Pressure below the layer [Pa].
-  real,                 intent(in)  :: alpha_ref !< A mean specific volume that is
-                            !! subtracted out to reduce the magnitude of each of the
-                            !! integrals [m3 kg-1]. The calculation is mathematically
-                            !! identical with different values of alpha_ref, but alpha_ref
-                            !! alters the effects of roundoff, and answers do change.
+                        intent(in)  :: p_b !< Pressure below the layer [R L2 T-2 ~> Pa] or [Pa].
+  real,                 intent(in)  :: alpha_ref !< A mean specific volume that is subtracted out
+                            !! to reduce the magnitude of each of the integrals [R-1 ~> m3 kg-1].
+                            !! The calculation is mathematically identical with different values of
+                            !! alpha_ref, but alpha_ref alters the effects of roundoff, and
+                            !! answers do change.
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(inout) :: dza !< The change in the geopotential anomaly
-                            !! across the layer [m2 s-2].
+                            !! across the layer [L2 T-2 ~> m2 s-2] or [m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(inout) :: intp_dza !< The integral in pressure through the
-                            !! layer of the geopotential anomaly relative to the anomaly
-                            !! at the bottom of the layer [Pa m2 s-2].
+              optional, intent(inout) :: intp_dza !< The integral in pressure through the layer of
+                            !! the geopotential anomaly relative to the anomaly at the bottom of the
+                            !! layer [R L4 T-4 ~> Pa m2 s-2] or [Pa m2 s-2].
   real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
-              optional, intent(inout) :: intx_dza  !< The integral in x of the difference
-                            !! between the geopotential anomaly at the top and bottom of
-                            !! the layer divided by the x grid spacing [m2 s-2].
+              optional, intent(inout) :: intx_dza  !< The integral in x of the difference between
+                            !! the geopotential anomaly at the top and bottom of the layer divided
+                            !! by the x grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
-              optional, intent(inout) :: inty_dza  !< The integral in y of the difference
-                            !! between the geopotential anomaly at the top and bottom of
-                            !! the layer divided by the y grid spacing [m2 s-2].
+              optional, intent(inout) :: inty_dza  !< The integral in y of the difference between
+                            !! the geopotential anomaly at the top and bottom of the layer divided
+                            !! by the y grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2].
   integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate dza.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(in)  :: bathyP !< The pressure at the bathymetry [Pa]
+              optional, intent(in)  :: bathyP !< The pressure at the bathymetry [R L2 T-2 ~> Pa] or [Pa]
   real,       optional, intent(in)  :: dP_neglect !< A miniscule pressure change with
-                                             !! the same units as p_t (Pa?)
+                                             !! the same units as p_t [R L2 T-2 ~> Pa] or [Pa]
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
                             !! to interpolate T/S for top and bottom integrals.
+  real,       optional, intent(in)  :: SV_scale !< A multiplicative factor by which to scale specific
+                                          !! volume from m3 kg-1 to the desired units [kg m-3 R-1 ~> 1]
+  real,       optional, intent(in)  :: pres_scale !< A multiplicative factor to convert pressure
+                                          !! into Pa [Pa T2 R-1 L-2 ~> 1].
 
 !   This subroutine calculates analytical and nearly-analytical integrals in
 ! pressure across layers of geopotential anomalies, which are required for
@@ -2244,19 +2263,24 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
 ! Bode's rule to do the horizontal integrals, and from a truncation in the
 ! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
 
-  real :: T5(5), S5(5), p5(5), a5(5)
-  real :: alpha_anom ! The depth averaged specific density anomaly [m3 kg-1].
-  real :: dp         ! The pressure change through a layer [Pa].
-!  real :: dp_90(2:4) ! The pressure change through a layer divided by 90 [Pa].
-  real :: hWght      ! A pressure-thickness below topography [Pa].
-  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Pa].
-  real :: iDenom     ! The inverse of the denominator in the weights [Pa-2].
+  ! Local variables
+  real :: T5(5)      ! Temperatures at five quadrature points [degC]
+  real :: S5(5)      ! Salinities at five quadrature points [ppt]
+  real :: p5(5)      ! Pressures at five quadrature points, scaled back to Pa if necessary [Pa]
+  real :: a5(5)      ! Specific volumes at five quadrature points [R-1 ~> m3 kg-1] or [m3 kg-1]
+  real :: alpha_anom ! The depth averaged specific density anomaly [R-1 ~> m3 kg-1].
+  real :: dp         ! The pressure change through a layer [R L2 T-2 ~> Pa].
+  real :: hWght      ! A pressure-thickness below topography [R L2 T-2 ~> Pa].
+  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [R L2 T-2 ~> Pa].
+  real :: alpha_ref_mks ! The reference specific volume in MKS units, never rescaled from m3 kg-1 [m3 kg-1]
+  real :: iDenom     ! The inverse of the denominator in the weights [T4 R-2 L-4 ~> Pa-2].
   real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim].
   real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim].
   real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
   real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
   real :: intp(5)    ! The integrals of specific volume with pressure at the
-                     ! 5 sub-column locations [m2 s-2].
+                     ! 5 sub-column locations [L2 T-2 ~> m2 s-2].
+  real :: RL2_T2_to_Pa  ! A unit conversion factor from the rescaled units of pressure to Pa [Pa T2 R-1 L-2 ~> 1]
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   real, parameter :: C1_90 = 1.0/90.0  ! A rational constant.
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, n, halo
@@ -2266,6 +2290,9 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
   ish = HI%isc-halo ; ieh = HI%iec+halo ; jsh = HI%jsc-halo ; jeh = HI%jec+halo
   if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh); endif
   if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh); endif
+
+  RL2_T2_to_Pa = 1.0 ; if (present(pres_scale)) RL2_T2_to_Pa = pres_scale
+  alpha_ref_mks = alpha_ref ; if (present(SV_scale)) alpha_ref_mks = alpha_ref / SV_scale
 
   do_massWeight = .false.
   if (present(useMassWghtInterp)) then ; if (useMassWghtInterp) then
@@ -2280,9 +2307,9 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
     dp = p_b(i,j) - p_t(i,j)
     do n=1,5
       T5(n) = T(i,j) ; S5(n) = S(i,j)
-      p5(n) = p_b(i,j) - 0.25*real(n-1)*dp
+      p5(n) = RL2_T2_to_Pa * (p_b(i,j) - 0.25*real(n-1)*dp)
     enddo
-    call calculate_spec_vol(T5, S5, p5, a5, 1, 5, EOS, alpha_ref)
+    call calculate_spec_vol(T5, S5, p5, a5, 1, 5, EOS, alpha_ref_mks, scale=SV_scale)
 
     ! Use Bode's rule to estimate the interface height anomaly change.
     alpha_anom = C1_90*(7.0*(a5(1)+a5(5)) + 32.0*(a5(2)+a5(4)) + 12.0*a5(3))
@@ -2318,15 +2345,15 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
 
       ! T, S, and p are interpolated in the horizontal.  The p interpolation
       ! is linear, but for T and S it may be thickness wekghted.
-      p5(1) = wt_L*p_b(i,j) + wt_R*p_b(i+1,j)
+      p5(1) = RL2_T2_to_Pa * (wt_L*p_b(i,j) + wt_R*p_b(i+1,j))
       dp = wt_L*(p_b(i,j) - p_t(i,j)) + wt_R*(p_b(i+1,j) - p_t(i+1,j))
       T5(1) = wtT_L*T(i,j) + wtT_R*T(i+1,j)
       S5(1) = wtT_L*S(i,j) + wtT_R*S(i+1,j)
 
       do n=2,5
-        T5(n) = T5(1) ; S5(n) = S5(1) ; p5(n) = p5(n-1) - 0.25*dp
+        T5(n) = T5(1) ; S5(n) = S5(1) ; p5(n) = p5(n-1) - RL2_T2_to_Pa * 0.25*dp
       enddo
-      call calculate_spec_vol(T5, S5, p5, a5, 1, 5, EOS, alpha_ref)
+      call calculate_spec_vol(T5, S5, p5, a5, 1, 5, EOS, alpha_ref_mks, scale=SV_scale)
 
     ! Use Bode's rule to estimate the interface height anomaly change.
       intp(m) = dp*( C1_90*(7.0*(a5(1)+a5(5)) + 32.0*(a5(2)+a5(4)) + &
@@ -2362,14 +2389,14 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
 
       ! T, S, and p are interpolated in the horizontal.  The p interpolation
       ! is linear, but for T and S it may be thickness wekghted.
-      p5(1) = wt_L*p_b(i,j) + wt_R*p_b(i,j+1)
+      p5(1) = RL2_T2_to_Pa * (wt_L*p_b(i,j) + wt_R*p_b(i,j+1))
       dp = wt_L*(p_b(i,j) - p_t(i,j)) + wt_R*(p_b(i,j+1) - p_t(i,j+1))
       T5(1) = wtT_L*T(i,j) + wtT_R*T(i,j+1)
       S5(1) = wtT_L*S(i,j) + wtT_R*S(i,j+1)
       do n=2,5
-        T5(n) = T5(1) ; S5(n) = S5(1) ; p5(n) = p5(n-1) - 0.25*dp
+        T5(n) = T5(1) ; S5(n) = S5(1) ; p5(n) = RL2_T2_to_Pa * (p5(n-1) - 0.25*dp)
       enddo
-      call calculate_spec_vol(T5, S5, p5, a5, 1, 5, EOS, alpha_ref)
+      call calculate_spec_vol(T5, S5, p5, a5, 1, 5, EOS, alpha_ref_mks, scale=SV_scale)
 
     ! Use Bode's rule to estimate the interface height anomaly change.
       intp(m) = dp*( C1_90*(7.0*(a5(1)+a5(5)) + 32.0*(a5(2)+a5(4)) + &
@@ -2388,7 +2415,7 @@ end subroutine int_spec_vol_dp_generic
 !! no free assumptions, apart from the use of Bode's rule quadrature to do the integrals.
 subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, &
                              dP_neglect, bathyP, HI, EOS, dza, &
-                             intp_dza, intx_dza, inty_dza, useMassWghtInterp)
+                             intp_dza, intx_dza, inty_dza, useMassWghtInterp, SV_scale, pres_scale)
   type(hor_index_type), intent(in)  :: HI !< A horizontal index type structure.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T_t  !< Potential temperature at the top of the layer [degC].
@@ -2399,36 +2426,40 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: S_b  !< Salinity at the bottom the layer [ppt].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: p_t !< Pressure atop the layer [Pa].
+                        intent(in)  :: p_t !< Pressure atop the layer [R L2 T-2 ~> Pa] or [Pa].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: p_b !< Pressure below the layer [Pa].
-  real,                 intent(in)  :: alpha_ref !< A mean specific volume that is
-                            !! subtracted out to reduce the magnitude of each of the
-                            !! integrals [m3 kg-1]. The calculation is mathematically
-                            !! identical with different values of alpha_ref, but alpha_ref
-                            !! alters the effects of roundoff, and answers do change.
-  real,                 intent(in)  :: dP_neglect !< A miniscule pressure change with
-                                             !! the same units as p_t (Pa?)
+                        intent(in)  :: p_b !< Pressure below the layer [R L2 T-2 ~> Pa] or [Pa].
+  real,                 intent(in)  :: alpha_ref !< A mean specific volume that is subtracted out
+                            !! to reduce the magnitude of each of the integrals [R-1 ~> m3 kg-1].
+                            !! The calculation is mathematically identical with different values of
+                            !! alpha_ref, but alpha_ref alters the effects of roundoff, and
+                            !! answers do change.
+  real,                 intent(in)  :: dP_neglect !<!< A miniscule pressure change with
+                                             !! the same units as p_t [R L2 T-2 ~> Pa] or [Pa]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: bathyP !< The pressure at the bathymetry [Pa]
+                        intent(in)  :: bathyP !< The pressure at the bathymetry [R L2 T-2 ~> Pa] or [Pa]
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(inout) :: dza !< The change in the geopotential anomaly
-                            !! across the layer [m2 s-2].
+                            !! across the layer [L2 T-2 ~> m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(inout) :: intp_dza !< The integral in pressure through the
-                            !! layer of the geopotential anomaly relative to the anomaly
-                            !! at the bottom of the layer [Pa m2 s-2].
+              optional, intent(inout) :: intp_dza !< The integral in pressure through the layer of
+                            !! the geopotential anomaly relative to the anomaly at the bottom of the
+                            !! layer [R L4 T-4 ~> Pa m2 s-2] or [Pa m2 s-2].
   real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
-              optional, intent(inout) :: intx_dza  !< The integral in x of the difference
-                            !! between the geopotential anomaly at the top and bottom of
-                            !! the layer divided by the x grid spacing [m2 s-2].
+              optional, intent(inout) :: intx_dza  !< The integral in x of the difference between
+                            !! the geopotential anomaly at the top and bottom of the layer divided
+                            !! by the x grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
-              optional, intent(inout) :: inty_dza  !< The integral in y of the difference
-                            !! between the geopotential anomaly at the top and bottom of
-                            !! the layer divided by the y grid spacing [m2 s-2].
+              optional, intent(inout) :: inty_dza  !< The integral in y of the difference between
+                            !! the geopotential anomaly at the top and bottom of the layer divided
+                            !! by the y grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2].
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
                             !! to interpolate T/S for top and bottom integrals.
+  real,       optional, intent(in)  :: SV_scale !< A multiplicative factor by which to scale specific
+                                          !! volume from m3 kg-1 to the desired units [kg m-3 R-1 ~> 1]
+  real,       optional, intent(in)  :: pres_scale !< A multiplicative factor to convert pressure
+                                          !! into Pa [Pa T2 R-1 L-2 ~> 1].
 
 !   This subroutine calculates analytical and nearly-analytical integrals in
 ! pressure across layers of geopotential anomalies, which are required for
@@ -2437,23 +2468,31 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
 ! Bode's rule to do the horizontal integrals, and from a truncation in the
 ! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
 
-  real, dimension(5) :: T5, S5, p5, a5
-  real, dimension(15) :: T15, S15, p15, a15
-  real :: wt_t(5), wt_b(5)
+  real :: T5(5)      ! Temperatures at five quadrature points [degC]
+  real :: S5(5)      ! Salinities at five quadrature points [ppt]
+  real :: p5(5)      ! Pressures at five quadrature points, scaled back to Pa as necessary [Pa]
+  real :: a5(5)      ! Specific volumes at five quadrature points [R-1 ~> m3 kg-1] or [m3 kg-1]
+  real :: T15(15)    ! Temperatures at fifteen interior quadrature points [degC]
+  real :: S15(15)    ! Salinities at fifteen interior quadrature points [ppt]
+  real :: p15(15)    ! Pressures at fifteen quadrature points, scaled back to Pa as necessary [Pa]
+  real :: a15(15)    ! Specific volumes at fifteen quadrature points [R-1 ~> m3 kg-1] or [m3 kg-1]
+  real :: wt_t(5), wt_b(5) ! Weights of top and bottom values at quadrature points [nondim]
   real :: T_top, T_bot, S_top, S_bot, P_top, P_bot
 
   real :: alpha_anom ! The depth averaged specific density anomaly [m3 kg-1].
-  real :: dp         ! The pressure change through a layer [Pa].
-  real :: dp_90(2:4) ! The pressure change through a layer divided by 90 [Pa].
-  real :: hWght      ! A pressure-thickness below topography [Pa].
-  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Pa].
-  real :: iDenom     ! The inverse of the denominator in the weights [Pa-2].
+  real :: dp         ! The pressure change through a layer [R L2 T-2 ~> Pa].
+  real :: dp_90(2:4) ! The pressure change through a layer divided by 90 [R L2 T-2 ~> Pa].
+  real :: hWght      ! A pressure-thickness below topography [R L2 T-2 ~> Pa].
+  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [R L2 T-2 ~> Pa].
+  real :: alpha_ref_mks ! The reference specific volume in MKS units, never rescaled from m3 kg-1 [m3 kg-1]
+  real :: iDenom     ! The inverse of the denominator in the weights [T4 R-2 L-4 ~> Pa-2].
   real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim].
   real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim].
   real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
   real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
   real :: intp(5)    ! The integrals of specific volume with pressure at the
-                     ! 5 sub-column locations [m2 s-2].
+                     ! 5 sub-column locations [L2 T-2 ~> m2 s-2].
+  real :: RL2_T2_to_Pa  ! A unit conversion factor from the rescaled units of pressure to Pa [Pa T2 R-1 L-2 ~> 1]
   real, parameter :: C1_90 = 1.0/90.0  ! A rational constant.
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n, pos
@@ -2462,6 +2501,10 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
 
   do_massWeight = .false.
   if (present(useMassWghtInterp)) do_massWeight = useMassWghtInterp
+
+  RL2_T2_to_Pa = 1.0 ; if (present(pres_scale)) RL2_T2_to_Pa = pres_scale
+  alpha_ref_mks = alpha_ref ; if (present(SV_scale)) alpha_ref_mks = alpha_ref / SV_scale
+
 
   do n = 1, 5 ! Note that these are reversed from int_density_dz.
     wt_t(n) = 0.25 * real(n-1)
@@ -2474,11 +2517,11 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
   do j=Jsq,Jeq+1; do i=Isq,Ieq+1
     dp = p_b(i,j) - p_t(i,j)
     do n=1,5 ! T, S and p are linearly interpolated in the vertical.
-      p5(n) = wt_t(n) * p_t(i,j) + wt_b(n) * p_b(i,j)
+      p5(n) = RL2_T2_to_Pa * (wt_t(n) * p_t(i,j) + wt_b(n) * p_b(i,j))
       S5(n) = wt_t(n) * S_t(i,j) + wt_b(n) * S_b(i,j)
       T5(n) = wt_t(n) * T_t(i,j) + wt_b(n) * T_b(i,j)
     enddo
-    call calculate_spec_vol(T5, S5, p5, a5, 1, 5, EOS, alpha_ref)
+    call calculate_spec_vol(T5, S5, p5, a5, 1, 5, EOS, alpha_ref_mks, scale=SV_scale)
 
     ! Use Bode's rule to estimate the interface height anomaly change.
     alpha_anom = C1_90*((7.0*(a5(1)+a5(5)) + 32.0*(a5(2)+a5(4))) + 12.0*a5(3))
@@ -2529,13 +2572,13 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
       ! Salinity, temperature and pressure with linear interpolation in the vertical.
       pos = (m-2)*5
       do n=1,5
-        p15(pos+n) = wt_t(n) * P_top + wt_b(n) * P_bot
+        p15(pos+n) = RL2_T2_to_Pa * (wt_t(n) * P_top + wt_b(n) * P_bot)
         S15(pos+n) = wt_t(n) * S_top + wt_b(n) * S_bot
         T15(pos+n) = wt_t(n) * T_top + wt_b(n) * T_bot
       enddo
     enddo
 
-    call calculate_spec_vol(T15, S15, p15, a15, 1, 15, EOS, alpha_ref)
+    call calculate_spec_vol(T15, S15, p15, a15, 1, 15, EOS, alpha_ref_mks, scale=SV_scale)
 
     intp(1) = dza(i,j) ; intp(5) = dza(i+1,j)
     do m=2,4
@@ -2588,13 +2631,13 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
       ! Salinity, temperature and pressure with linear interpolation in the vertical.
       pos = (m-2)*5
       do n=1,5
-        p15(pos+n) = wt_t(n) * P_top + wt_b(n) * P_bot
+        p15(pos+n) = RL2_T2_to_Pa * (wt_t(n) * P_top + wt_b(n) * P_bot)
         S15(pos+n) = wt_t(n) * S_top + wt_b(n) * S_bot
         T15(pos+n) = wt_t(n) * T_top + wt_b(n) * T_bot
       enddo
     enddo
 
-    call calculate_spec_vol(T15, S15, p15, a15, 1, 15, EOS, alpha_ref)
+    call calculate_spec_vol(T15, S15, p15, a15, 1, 15, EOS, alpha_ref_mks, scale=SV_scale)
 
     intp(1) = dza(i,j) ; intp(5) = dza(i,j+1)
     do m=2,4
