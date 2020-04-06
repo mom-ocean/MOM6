@@ -1332,6 +1332,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   nkmb = GV%nk_rho_varies
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect*h_neglect
   Kd_heat(:,:,:) = 0.0 ; Kd_salt(:,:,:) = 0.0
+  ea_s(:,:,:) = 0.0; eb_s(:,:,:) = 0.0; ea_t(:,:,:) = 0.0; eb_t(:,:,:) = 0.0
 
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("diabatic_ALE(), MOM_diabatic_driver.F90")
@@ -2860,12 +2861,14 @@ end subroutine layered_diabatic
 
 !> Returns pointers or values of members within the diabatic_CS type. For extensibility,
 !! each returned argument is an optional argument
-subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, &
-                                   evap_CFL_limit, minimum_forcing_depth, diabatic_aux_CSp)
-  type(diabatic_CS),           intent(in   ) :: CS !< module control structure
+subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, evap_CFL_limit, &
+                                   minimum_forcing_depth, KPP_CSp, energetic_PBL_CSp, diabatic_aux_CSp)
+  type(diabatic_CS), intent(in   )           :: CS !< module control structure
   ! All output arguments are optional
   type(opacity_CS),  optional, pointer       :: opacity_CSp !< A pointer to be set to the opacity control structure
   type(optics_type), optional, pointer       :: optics_CSp  !< A pointer to be set to the optics control structure
+  type(KPP_CS),      optional, pointer       :: KPP_CSp     !< A pointer to be set to the KPP CS
+  type(energetic_PBL_CS), optional, pointer  :: energetic_PBL_CSp !< A pointer to be set to the ePBL CS
   real,              optional, intent(  out) :: evap_CFL_limit !<The largest fraction of a layer that can be
                                                             !! evaporated in one time-step [nondim].
   real,              optional, intent(  out) :: minimum_forcing_depth !< The smallest depth over which heat
@@ -2874,9 +2877,10 @@ subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, &
                                                             !! control structure
 
   ! Pointers to control structures
-  if (present(opacity_CSp)) opacity_CSp => CS%opacity_CSp
-  if (present(optics_CSp))  optics_CSp  => CS%optics
-  if (present(diabatic_aux_CSp)) diabatic_aux_CSp  => CS%diabatic_aux_CSp
+  if (present(opacity_CSp))       opacity_CSp => CS%opacity_CSp
+  if (present(optics_CSp))        optics_CSp  => CS%optics
+  if (present(KPP_CSp))           KPP_CSp     => CS%KPP_CSp
+  if (present(energetic_PBL_CSp)) energetic_PBL_CSp => CS%energetic_PBL_CSp
 
   ! Constants within diabatic_CS
   if (present(evap_CFL_limit))        evap_CFL_limit = CS%evap_CFL_limit

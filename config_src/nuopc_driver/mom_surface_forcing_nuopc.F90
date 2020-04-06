@@ -444,12 +444,12 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     ! liquid runoff flux
     if (associated(IOB%lrunoff)) then
       if(CS%liquid_runoff_from_data)call data_override('OCN', 'runoff', IOB%lrunoff, Time)
-      fluxes%lrunoff(i,j) = IOB%lrunoff(i-i0,j-j0) * G%mask2dT(i,j)
+      fluxes%lrunoff(i,j) = kg_m2_s_conversion * IOB%lrunoff(i-i0,j-j0) * G%mask2dT(i,j)
     endif
 
     ! ice runoff flux
     if (associated(IOB%frunoff)) then
-      fluxes%frunoff(i,j) = IOB%frunoff(i-i0,j-j0) * G%mask2dT(i,j)
+      fluxes%frunoff(i,j) = kg_m2_s_conversion * IOB%frunoff(i-i0,j-j0) * G%mask2dT(i,j)
     endif
 
     if (associated(IOB%ustar_berg)) &
@@ -465,7 +465,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
       fluxes%heat_content_lrunoff(i,j) = IOB%lrunoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (associated(IOB%frunoff_hflx)) &
-      fluxes%heat_content_frunoff(i,j) = IOB%frunoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
+      fluxes%heat_content_frunoff(i,j) = kg_m2_s_conversion * IOB%frunoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (associated(IOB%lw_flux)) &
          fluxes%LW(i,j) = IOB%lw_flux(i-i0,j-j0) * G%mask2dT(i,j)
