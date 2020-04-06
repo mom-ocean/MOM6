@@ -785,11 +785,11 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
               ! (rho*dz for col_mass) or reference density (Rho_0*dz for mass_wt).
     btm_pres,&! The pressure at the ocean bottom, or CMIP variable 'pbo'.
               ! This is the column mass multiplied by gravity plus the pressure
-              ! at the ocean surface [Pa].
-    dpress, & ! Change in hydrostatic pressure across a layer [Pa].
+              ! at the ocean surface [R L2 T-2 ~> Pa].
+    dpress, & ! Change in hydrostatic pressure across a layer [R L2 T-2 ~> Pa].
     tr_int    ! vertical integral of a tracer times density,
               ! (Rho_0 in a Boussinesq model) [TR kg m-2].
-  real    :: IG_Earth  ! Inverse of gravitational acceleration [s2 Z m-2 ~> s2 m-1].
+  real    :: IG_Earth  ! Inverse of gravitational acceleration [T2 Z L-2 ~> s2 m-1].
 
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -831,7 +831,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
     do j=js,je ; do i=is,ie ; mass(i,j) = 0.0 ; enddo ; enddo
     if (GV%Boussinesq) then
       if (associated(tv%eqn_of_state)) then
-        IG_Earth = 1.0 / (US%Z_to_m*GV%mks_g_Earth)
+        IG_Earth = 1.0 / GV%g_Earth
 !       do j=js,je ; do i=is,ie ; z_bot(i,j) = -P_SURF(i,j)/GV%H_to_Pa ; enddo ; enddo
         do j=G%jscB,G%jecB+1 ; do i=G%iscB,G%iecB+1
           z_bot(i,j) = 0.0
@@ -841,11 +841,11 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
             z_top(i,j) = z_bot(i,j)
             z_bot(i,j) = z_top(i,j) - GV%H_to_Z*h(i,j,k)
           enddo ; enddo
-          call int_density_dz(tv%T(:,:,k), tv%S(:,:,k), &
-                              z_top, z_bot, 0.0, US%R_to_kg_m3*GV%Rho0, GV%mks_g_Earth*US%Z_to_m, &
-                              G%HI, G%HI, tv%eqn_of_state, dpress)
+          call int_density_dz(tv%T(:,:,k), tv%S(:,:,k), z_top, z_bot, 0.0, GV%Rho0, GV%g_Earth, &
+                              G%HI, G%HI, tv%eqn_of_state, dpress, rho_scale=US%kg_m3_to_R, &
+                              pres_scale=US%R_to_kg_m3*US%L_T_to_m_s**2)
           do j=js,je ; do i=is,ie
-            mass(i,j) = mass(i,j) + dpress(i,j) * US%kg_m3_to_R*IG_Earth
+            mass(i,j) = mass(i,j) + dpress(i,j) * IG_Earth
           enddo ; enddo
         enddo
       else
@@ -867,9 +867,9 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
       !     pbo = (mass * g) + p_surf
       ! where p_surf is the sea water pressure at sea water surface.
       do j=js,je ; do i=is,ie
-        btm_pres(i,j) = US%RZ_to_kg_m2*mass(i,j) * GV%mks_g_Earth
+        btm_pres(i,j) = GV%g_Earth * mass(i,j)
         if (associated(p_surf)) then
-          btm_pres(i,j) = btm_pres(i,j) + p_surf(i,j)
+          btm_pres(i,j) = btm_pres(i,j) + US%kg_m3_to_R*US%m_s_to_L_T**2*p_surf(i,j)
         endif
       enddo ; enddo
       call post_data(CS%id_pbo, btm_pres, CS%diag)
@@ -1732,7 +1732,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       'The height of the water column', 'm', conversion=US%Z_to_m)
   CS%id_pbo = register_diag_field('ocean_model', 'pbo', diag%axesT1, Time, &
       long_name='Sea Water Pressure at Sea Floor', standard_name='sea_water_pressure_at_sea_floor', &
-      units='Pa')
+      units='Pa', conversion=US%R_to_kg_m3*US%L_T_to_m_s**2)
 
   call set_dependent_diagnostics(MIS, ADp, CDp, G, CS)
 
