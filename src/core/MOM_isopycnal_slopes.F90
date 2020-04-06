@@ -55,7 +55,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
                   ! in massless layers filled vertically by diffusion.
 !    Rho           ! Density itself, when a nonlinear equation of state is not in use [R ~> kg m-3].
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
-    pres          ! The pressure at an interface [Pa].
+    pres          ! The pressure at an interface [R L2 T-2 ~> Pa].
   real, dimension(SZIB_(G)) :: &
     drho_dT_u, &  ! The derivative of density with temperature at u points [R degC-1 ~> kg m-3 degC-1].
     drho_dS_u     ! The derivative of density with salinity at u points [R ppt-1 ~> kg m-3 ppt-1].
@@ -65,11 +65,11 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   real, dimension(SZIB_(G)) :: &
     T_u, &        ! Temperature on the interface at the u-point [degC].
     S_u, &        ! Salinity on the interface at the u-point [ppt].
-    pres_u        ! Pressure on the interface at the u-point [Pa].
+    pres_u        ! Pressure on the interface at the u-point [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G)) :: &
     T_v, &        ! Temperature on the interface at the v-point [degC].
     S_v, &        ! Salinity on the interface at the v-point [ppt].
-    pres_v        ! Pressure on the interface at the v-point [Pa].
+    pres_v        ! Pressure on the interface at the v-point [R L2 T-2 ~> Pa].
   real :: drdiA, drdiB  ! Along layer zonal- and meridional- potential density
   real :: drdjA, drdjB  ! gradients in the layers above (A) and below (B) the
                         ! interface times the grid spacing [R ~> kg m-3].
@@ -147,12 +147,11 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   !$OMP parallel do default(shared)
   do j=js-1,je+1 ; do i=is-1,ie+1
     pres(i,j,1) = 0.0  ! ### This should be atmospheric pressure.
-    pres(i,j,2) = pres(i,j,1) + GV%H_to_Pa*h(i,j,1)
   enddo ; enddo
   !$OMP parallel do default(shared)
   do j=js-1,je+1
-    do k=2,nz ; do i=is-1,ie+1
-      pres(i,j,K+1) = pres(i,j,K) + GV%H_to_Pa*h(i,j,k)
+    do k=1,nz ; do i=is-1,ie+1
+      pres(i,j,K+1) = pres(i,j,K) + GV%g_Earth * GV%H_to_RZ * h(i,j,k)
     enddo ; enddo
   enddo
 
@@ -177,7 +176,8 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
         S_u(I) = 0.25*((S(i,j,k) + S(i+1,j,k)) + (S(i,j,k-1) + S(i+1,j,k-1)))
       enddo
       call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u, &
-                   drho_dS_u, (is-IsdB+1)-1, ie-is+2, tv%eqn_of_state, scale=US%kg_m3_to_R)
+                   drho_dS_u, (is-IsdB+1)-1, ie-is+2, tv%eqn_of_state, scale=US%kg_m3_to_R, &
+                   pres_scale=US%R_to_kg_m3*US%L_T_to_m_s**2)
     endif
 
     do I=is-1,ie
@@ -263,7 +263,8 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
         S_v(i) = 0.25*((S(i,j,k) + S(i,j+1,k)) + (S(i,j,k-1) + S(i,j+1,k-1)))
       enddo
       call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, &
-                   drho_dS_v, is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+                   drho_dS_v, is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R, &
+                   pres_scale=US%R_to_kg_m3*US%L_T_to_m_s**2)
     endif
     do i=is,ie
       if (use_EOS) then
