@@ -600,7 +600,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       if (CS%id_rhopot2 > 0) call post_data(CS%id_rhopot2, Rcv, CS%diag)
     endif
     if (CS%id_rhoinsitu > 0) then
-!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pressure_1d,h,GV)
+!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,h,GV) private(pressure_1d)
       do j=js,je
         pressure_1d(:) = 0. ! Start at p=0 Pa at surface
         do k=1,nz
