@@ -187,7 +187,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
       do k=1,nz
         call int_specific_vol_dp(tv%T(:,:,k), tv%S(:,:,k), p(:,:,k), p(:,:,k+1), &
                                  0.0, G%HI, tv%eqn_of_state, dz_geo(:,:,k), halo_size=1, &
-                                 SV_scale=US%R_to_kg_m3, pres_scale=US%R_to_kg_m3*US%L_T_to_m_s**2)
+                                 SV_scale=US%R_to_kg_m3, pres_scale=US%RL2_T2_to_Pa)
       enddo
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do k=1,nz ; do i=Isq,Ieq+1
@@ -660,7 +660,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
           press(i) = -Rho0xG*e(i,j,1)
         enddo
         call calculate_density(tv%T(:,j,1), tv%S(:,j,1), press, rho_in_situ, Isq, Ieq-Isq+2, &
-                 tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%R_to_kg_m3*US%L_T_to_m_s**2)
+                 tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
         do i=Isq,Ieq+1
           pbce(i,j,1) = G_Rho0*(GFS_scale * rho_in_situ(i)) * GV%H_to_Z
         enddo
@@ -671,7 +671,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
             S_int(i) = 0.5*(tv%S(i,j,k-1)+tv%S(i,j,k))
           enddo
           call calculate_density_derivs(T_int, S_int, press, dR_dT, dR_dS, Isq, Ieq-Isq+2, &
-                   tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%R_to_kg_m3*US%L_T_to_m_s**2)
+                   tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
           do i=Isq,Ieq+1
             pbce(i,j,k) = pbce(i,j,k-1) + G_Rho0 * &
                ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i)) * &
@@ -757,7 +757,7 @@ subroutine Set_pbce_nonBouss(p, tv, G, GV, US, GFS_scale, pbce, alpha_star)
       do j=Jsq,Jeq+1
         call calculate_density(tv%T(:,j,nz), tv%S(:,j,nz), p(:,j,nz+1), rho_in_situ, &
                                Isq, Ieq-Isq+2, tv%eqn_of_state, scale=US%kg_m3_to_R, &
-                               pres_scale=US%R_to_kg_m3*US%L_T_to_m_s**2)
+                               pres_scale=US%RL2_T2_to_Pa)
         do i=Isq,Ieq+1
           C_htot(i,j) = dP_dH / ((p(i,j,nz+1)-p(i,j,1)) + dp_neglect)
           pbce(i,j,nz) = dP_dH / (rho_in_situ(i))
@@ -768,10 +768,10 @@ subroutine Set_pbce_nonBouss(p, tv, G, GV, US, GFS_scale, pbce, alpha_star)
             S_int(i) = 0.5*(tv%S(i,j,k)+tv%S(i,j,k+1))
           enddo
           call calculate_density(T_int, S_int, p(:,j,k+1), rho_in_situ, Isq, Ieq-Isq+2, tv%eqn_of_state, &
-                                 scale=US%kg_m3_to_R, pres_scale=US%R_to_kg_m3*US%L_T_to_m_s**2)
+                                 scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
           call calculate_density_derivs(T_int, S_int, p(:,j,k+1), dR_dT, dR_dS, &
                                  Isq, Ieq-Isq+2, tv%eqn_of_state, &
-                                 scale=US%kg_m3_to_R, pres_scale=US%R_to_kg_m3*US%L_T_to_m_s**2)
+                                 scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
           do i=Isq,Ieq+1
             pbce(i,j,k) = pbce(i,j,k+1) + ((p(i,j,K+1)-p(i,j,1))*C_htot(i,j)) *  &
                 ((dR_dT(i)*(tv%T(i,j,k+1)-tv%T(i,j,k)) + &

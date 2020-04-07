@@ -137,7 +137,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
   if (CS%debug) then
     call hchksum(N2_bot,"N2_bot",G%HI,haloshift=0, scale=US%s_to_T**2)
     call hchksum(itide%TKE_itidal_input,"TKE_itidal_input",G%HI,haloshift=0, &
-                 scale=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+                 scale=US%RZ3_T3_to_W_m2)
   endif
 
   if (CS%id_TKE_itidal > 0) call post_data(CS%id_TKE_itidal, itide%TKE_itidal_input, CS%diag)
@@ -349,7 +349,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   call get_param(param_file, mdl, "TKE_ITIDE_MAX", CS%TKE_itide_max, &
                "The maximum internal tide energy source available to mix "//&
                "above the bottom boundary layer with INT_TIDE_DISSIPATION.", &
-               units="W m-2", default=1.0e3, scale=US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**3)
+               units="W m-2", default=1.0e3, scale=US%W_m2_to_RZ3_T3)
 
   call get_param(param_file, mdl, "READ_TIDEAMP", read_tideamp, &
                "If true, read a file (given by TIDEAMP_FILE) containing "//&

@@ -2987,13 +2987,13 @@ subroutine extract_surface_state(CS, sfc_state)
   if (allocated(sfc_state%taux_shelf) .and. associated(CS%visc%taux_shelf)) then
     !$OMP parallel do default(shared)
     do j=js,je ; do I=is-1,ie
-      sfc_state%taux_shelf(I,j) = US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*CS%visc%taux_shelf(I,j)
+      sfc_state%taux_shelf(I,j) = US%RZ_T_to_kg_m2s*US%L_T_to_m_s*CS%visc%taux_shelf(I,j)
     enddo ; enddo
   endif
   if (allocated(sfc_state%tauy_shelf) .and. associated(CS%visc%tauy_shelf)) then
     !$OMP parallel do default(shared)
     do J=js-1,je ; do i=is,ie
-      sfc_state%tauy_shelf(i,J) = US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*CS%visc%tauy_shelf(i,J)
+      sfc_state%tauy_shelf(i,J) = US%RZ_T_to_kg_m2s*US%L_T_to_m_s*CS%visc%tauy_shelf(i,J)
     enddo ; enddo
   endif
 

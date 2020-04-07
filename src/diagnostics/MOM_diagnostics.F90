@@ -843,7 +843,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
           enddo ; enddo
           call int_density_dz(tv%T(:,:,k), tv%S(:,:,k), z_top, z_bot, 0.0, GV%Rho0, GV%g_Earth, &
                               G%HI, G%HI, tv%eqn_of_state, dpress, rho_scale=US%kg_m3_to_R, &
-                              pres_scale=US%R_to_kg_m3*US%L_T_to_m_s**2)
+                              pres_scale=US%RL2_T2_to_Pa)
           do j=js,je ; do i=is,ie
             mass(i,j) = mass(i,j) + dpress(i,j) * IG_Earth
           enddo ; enddo
@@ -1732,7 +1732,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       'The height of the water column', 'm', conversion=US%Z_to_m)
   CS%id_pbo = register_diag_field('ocean_model', 'pbo', diag%axesT1, Time, &
       long_name='Sea Water Pressure at Sea Floor', standard_name='sea_water_pressure_at_sea_floor', &
-      units='Pa', conversion=US%R_to_kg_m3*US%L_T_to_m_s**2)
+      units='Pa', conversion=US%RL2_T2_to_Pa)
 
   call set_dependent_diagnostics(MIS, ADp, CDp, G, CS)
 

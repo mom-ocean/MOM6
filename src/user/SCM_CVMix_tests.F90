@@ -167,11 +167,11 @@ subroutine SCM_CVMix_tests_surface_forcing_init(Time, G, param_file, CS)
     call get_param(param_file, mdl, "SCM_TAU_X",                      &
                  CS%tau_x, "Constant X-dir wind stress "//            &
                  "used in the SCM CVMix test surface forcing.",       &
-                 units='N/m2', scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z, fail_if_missing=.true.)
+                 units='N/m2', scale=US%kg_m2s_to_RZ_T*US%m_s_to_L_T, fail_if_missing=.true.)
     call get_param(param_file, mdl, "SCM_TAU_Y",                      &
                  CS%tau_y, "Constant y-dir wind stress "//            &
                  "used in the SCM CVMix test surface forcing.",       &
-                 units='N/m2', scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z, fail_if_missing=.true.)
+                 units='N/m2', scale=US%kg_m2s_to_RZ_T*US%m_s_to_L_T, fail_if_missing=.true.)
   endif
   if (CS%UseHeatFlux) then
     call get_param(param_file, mdl, "SCM_HEAT_FLUX",                  &

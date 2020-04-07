@@ -249,7 +249,7 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
                                dza(:,:,k), intp_dza(:,:,k), intx_dza(:,:,k), &
                                inty_dza(:,:,k), bathyP=p(:,:,nz+1), dP_tiny=dp_neglect, &
                                useMassWghtInterp=CS%useMassWghtInterp, &
-                               SV_scale=US%R_to_kg_m3, pres_scale=US%R_to_kg_m3*US%L_T_to_m_s**2)
+                               SV_scale=US%R_to_kg_m3, pres_scale=US%RL2_T2_to_Pa)
     else
       alpha_anom = 1.0 / GV%Rlay(k) - alpha_ref
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -303,7 +303,7 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
       !$OMP parallel do default(shared) private(rho_in_situ)
       do j=Jsq,Jeq+1
         call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p(:,j,1), rho_in_situ, Isq, Ieq-Isq+2, &
-                               tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%R_to_kg_m3*US%L_T_to_m_s**2)
+                               tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
 
         do i=Isq,Ieq+1
           dM(i,j) = (CS%GFS_scale - 1.0) * (p(i,j,1)*(1.0/rho_in_situ(i) - alpha_ref) + za(i,j))
@@ -670,20 +670,20 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
                       e(:,:,K), e(:,:,K+1), rho_ref, CS%Rho0, GV%g_Earth, dz_neglect, G%bathyT, G%HI, &
                       G%Block(n), tv%eqn_of_state, dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk, &
                       useMassWghtInterp=CS%useMassWghtInterp, &
-                      rho_scale=US%kg_m3_to_R, pres_scale=US%R_to_kg_m3*US%L_T_to_m_s**2)
+                      rho_scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
           elseif ( CS%Recon_Scheme == 2 ) then
             call int_density_dz_generic_ppm( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
                       tv%S(:,:,k), S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), rho_ref, CS%Rho0, &
                       GV%g_Earth, G%HI, G%Block(n), tv%eqn_of_state, dpa_bk, intz_dpa_bk,    &
                       intx_dpa_bk, inty_dpa_bk, &
-                      rho_scale=US%kg_m3_to_R, pres_scale=US%R_to_kg_m3*US%L_T_to_m_s**2)
+                      rho_scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
           endif
         else
           call int_density_dz(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), e(:,:,K), e(:,:,K+1), &
                     rho_ref, CS%Rho0, GV%g_Earth, G%HI, G%Block(n), tv%eqn_of_state, &
                     dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk, &
                     G%bathyT, dz_neglect, CS%useMassWghtInterp, &
-                    rho_scale=US%kg_m3_to_R, pres_scale=US%R_to_kg_m3*US%L_T_to_m_s**2)
+                    rho_scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
         endif
         do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
           intz_dpa_bk(ib,jb) = intz_dpa_bk(ib,jb)*GV%Z_to_H

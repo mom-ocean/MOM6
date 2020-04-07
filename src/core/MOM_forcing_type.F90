@@ -1116,7 +1116,7 @@ subroutine MOM_mech_forcing_chksum(mesg, forces, G, US, haloshift)
   ! and js...je as their extent.
   if (associated(forces%taux) .and. associated(forces%tauy)) &
     call uvchksum(mesg//" forces%tau[xy]", forces%taux, forces%tauy, G%HI, &
-                  haloshift=hshift, symmetric=.true., scale=US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L)
+                  haloshift=hshift, symmetric=.true., scale=US%RZ_T_to_kg_m2s*US%L_T_to_m_s)
   if (associated(forces%p_surf)) &
     call hchksum(forces%p_surf, mesg//" forces%p_surf",G%HI,haloshift=hshift)
   if (associated(forces%ustar)) &
@@ -1230,17 +1230,17 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
   handles%id_taux = register_diag_field('ocean_model', 'taux', diag%axesCu1, Time,  &
         'Zonal surface stress from ocean interactions with atmos and ice', &
-        'Pa', conversion=US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L, &
+        'Pa', conversion=US%RZ_T_to_kg_m2s*US%L_T_to_m_s, &
         standard_name='surface_downward_x_stress', cmor_field_name='tauuo',         &
         cmor_units='N m-2', cmor_long_name='Surface Downward X Stress',             &
         cmor_standard_name='surface_downward_x_stress')
 
   handles%id_tauy = register_diag_field('ocean_model', 'tauy', diag%axesCv1, Time,  &
         'Meridional surface stress ocean interactions with atmos and ice', &
-        'Pa',  conversion=US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L, &
-         standard_name='surface_downward_y_stress', cmor_field_name='tauvo',        &
-         cmor_units='N m-2', cmor_long_name='Surface Downward Y Stress',            &
-         cmor_standard_name='surface_downward_y_stress')
+        'Pa',  conversion=US%RZ_T_to_kg_m2s*US%L_T_to_m_s, &
+        standard_name='surface_downward_y_stress', cmor_field_name='tauvo',        &
+        cmor_units='N m-2', cmor_long_name='Surface Downward Y Stress',            &
+        cmor_standard_name='surface_downward_y_stress')
 
   handles%id_ustar = register_diag_field('ocean_model', 'ustar', diag%axesT1, Time, &
       'Surface friction velocity = [(gustiness + tau_magnitude)/rho0]^(1/2)', &

@@ -2084,7 +2084,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   call get_param(param_file, mdl, "KD_SMOOTH", CS%Kd_smooth, &
                  "A diapycnal diffusivity that is used to interpolate "//&
                  "more sensible values of T & S into thin layers.", &
-                 default=1.0e-6, scale=US%m_to_Z**2*US%T_to_s)
+                 units="m2 s-1", default=1.0e-6, scale=US%m2_s_to_Z2_T)
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", &
@@ -2096,19 +2096,18 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
 
   call get_param(param_file, mdl, "DISSIPATION_MIN", CS%dissip_min, &
                  "The minimum dissipation by which to determine a lower "//&
-                 "bound of Kd (a floor).", units="W m-3", default=0.0, &
-                 scale=US%kg_m3_to_R*US%m2_s_to_Z2_T*(US%T_to_s**2))
+                 "bound of Kd (a floor).", &
+                 units="W m-3", default=0.0, scale=US%W_m2_to_RZ3_T3*US%Z_to_m)
   call get_param(param_file, mdl, "DISSIPATION_N0", CS%dissip_N0, &
                  "The intercept when N=0 of the N-dependent expression "//&
                  "used to set a minimum dissipation by which to determine "//&
                  "a lower bound of Kd (a floor): A in eps_min = A + B*N.", &
-                 units="W m-3", default=0.0, &
-                 scale=US%kg_m3_to_R*US%m2_s_to_Z2_T*(US%T_to_s**2))
+                 units="W m-3", default=0.0, scale=US%W_m2_to_RZ3_T3*US%Z_to_m)
   call get_param(param_file, mdl, "DISSIPATION_N1", CS%dissip_N1, &
                  "The coefficient multiplying N, following Gargett, used to "//&
                  "set a minimum dissipation by which to determine a lower "//&
                  "bound of Kd (a floor): B in eps_min = A + B*N", &
-                 units="J m-3", default=0.0, scale=US%kg_m3_to_R*US%m2_s_to_Z2_T*US%T_to_s)
+                 units="J m-3", default=0.0, scale=US%W_m2_to_RZ3_T3*US%Z_to_m*US%s_to_T)
   call get_param(param_file, mdl, "DISSIPATION_KD_MIN", CS%dissip_Kd_min, &
                  "The minimum vertical diffusivity applied as a floor.", &
                  units="m2 s-1", default=0.0, scale=US%m2_s_to_Z2_T)

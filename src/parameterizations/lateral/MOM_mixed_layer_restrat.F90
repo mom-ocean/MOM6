@@ -353,7 +353,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
     call hchksum(forces%ustar,'mixed_layer_restrat: u*', G%HI, haloshift=1, scale=US%Z_to_m*US%s_to_T)
     call hchksum(MLD_fast,'mixed_layer_restrat: MLD', G%HI, haloshift=1, scale=GV%H_to_m)
     call hchksum(Rml_av_fast,'mixed_layer_restrat: rml', G%HI, haloshift=1, &
-                 scale=US%m_to_Z*US%L_to_m**2*US%s_to_T**2)
+                 scale=US%m_to_Z*US%L_T_to_m_s**2)
   endif
 
 ! TO DO:
