@@ -1978,6 +1978,7 @@ subroutine ModelSetRunClock(gcomp, rc)
      restart_ymd = 0
 
      if (cesm_coupled) then
+
         call NUOPC_CompAttributeGet(gcomp, name="restart_option", value=restart_option, rc=rc)
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
 
@@ -2033,40 +2034,29 @@ subroutine ModelSetRunClock(gcomp, rc)
             endif
           else
             restart_option = 'none'
-            call ESMF_LogWrite(subname//" Set restart option = "//restart_option, &
-                 ESMF_LOGMSG_INFO, rc=rc)
-            !TODO: Find a better way
-            !Create but disable the restart_alarm; this is so restart writing can function w or w/o
-            !restart_n=0
-            restart_alarm = ESMF_AlarmCreate(mclock, ringtime=dstopTime, name = "restart_alarm", enabled = .false., rc=rc)
-            call ESMF_LogWrite(subname//" Restart alarm is Created but Disabled", ESMF_LOGMSG_INFO, rc=rc)
+            call ESMF_LogWrite(subname//" Set restart option = "//restart_option, ESMF_LOGMSG_INFO, rc=rc)
           endif
         endif
      endif
 
-     ! Do not initialize an alarm if the restart option is none
-     if (restart_option /= 'none') then
-        call AlarmInit(mclock, &
-             alarm   = restart_alarm,         &
-             option  = trim(restart_option),  &
-             opt_n   = restart_n,             &
-             opt_ymd = restart_ymd,           &
-             RefTime = mcurrTime,             &
-             alarmname = 'restart_alarm', rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-             line=__LINE__, &
-             file=__FILE__)) &
-             return  ! bail out
+     call AlarmInit(mclock, &
+          alarm   = restart_alarm,         &
+          option  = trim(restart_option),  &
+          opt_n   = restart_n,             &
+          opt_ymd = restart_ymd,           &
+          RefTime = mcurrTime,             &
+          alarmname = 'restart_alarm', rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
 
-        call ESMF_AlarmSet(restart_alarm, clock=mclock, rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-             line=__LINE__, &
-             file=__FILE__)) &
-             return  ! bail out
-        call ESMF_LogWrite(subname//" Restart alarm is Created and Set", ESMF_LOGMSG_INFO, rc=rc)
-     end if
-
-     first_time = .false.
+     call ESMF_AlarmSet(restart_alarm, clock=mclock, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+     call ESMF_LogWrite(subname//" Restart alarm is Created and Set", ESMF_LOGMSG_INFO, rc=rc)
 
      ! create a 1-shot alarm at the driver stop time
      stop_alarm = ESMF_AlarmCreate(mclock, ringtime=dstopTime, name = "stop_alarm", rc=rc)
@@ -2076,6 +2066,9 @@ subroutine ModelSetRunClock(gcomp, rc)
  
      call ESMF_TimeGet(dstoptime, timestring=timestr, rc=rc)
      call ESMF_LogWrite("Stop Alarm will ring at : "//trim(timestr), ESMF_LOGMSG_INFO, rc=rc)
+
+     first_time = .false.
+
   endif
 
   !--------------------------------
