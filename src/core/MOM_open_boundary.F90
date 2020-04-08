@@ -9,6 +9,7 @@ use MOM_diag_mediator,        only : diag_ctrl, time_type
 use MOM_domains,              only : pass_var, pass_vector
 use MOM_domains,              only : To_All, SCALAR_PAIR, CGRID_NE
 use MOM_error_handler,        only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
+use MOM_error_handler,        only : NOTE
 use MOM_file_parser,          only : get_param, log_version, param_file_type, log_param
 use MOM_grid,                 only : ocean_grid_type, hor_index_type
 use MOM_dyn_horgrid,          only : dyn_horgrid_type
@@ -18,6 +19,7 @@ use MOM_io,                   only : vardesc, query_vardesc, var_desc
 use MOM_restart,              only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_obsolete_params,      only : obsolete_logical, obsolete_int, obsolete_real, obsolete_char
 use MOM_string_functions,     only : extract_word, remove_spaces
+use MOM_time_manager,         only : time_type, time_type_to_real, operator(-)
 use MOM_tracer_registry,      only : tracer_type, tracer_registry_type, tracer_name_lookup
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
@@ -54,6 +56,7 @@ public register_temp_salt_segments
 public fill_temp_salt_segments
 public open_boundary_register_restarts
 public update_segment_tracer_reservoirs
+public update_OBC_ramp
 
 integer, parameter, public :: OBC_NONE = 0      !< Indicates the use of no open boundary
 integer, parameter, public :: OBC_SIMPLE = 1    !< Indicates the use of a simple inflow open boundary
@@ -280,6 +283,14 @@ type, public :: ocean_OBC_type
                    !! the independence of the OBCs to this external data [H ~> m or kg m-2].
   real :: silly_u  !< A silly value of velocity outside of the domain that can be used to test
                    !! the independence of the OBCs to this external data [L T-1 ~> m s-1].
+  logical :: ramp = .false.                 !< If True, ramp from zero to the external values
+                                            !! for SSH.
+  logical :: ramping_is_activated = .false. !< True if the ramping has been initialized
+  real :: ramp_timescale                    !< If ramp is True, use this timescale for ramping.
+  real :: trunc_ramp_time                   !< If ramp is True, time after which ramp is done.
+  real :: ramp_value                        !< If ramp is True, where we are on the ramp from
+                                            !! zero to one.
+  type(time_type) :: ramp_start_time        !< Time when model was started.
 end type ocean_OBC_type
 
 !> Control structure for open boundaries that read from files.
@@ -402,6 +413,14 @@ subroutine open_boundary_config(G, US, param_file, OBC)
     call get_param(param_file, mdl, "MASK_OUTSIDE_OBCS", mask_outside, &
          "If true, set the areas outside open boundaries to be land.", &
          default=.false.)
+    call get_param(param_file, mdl, "RAMP_OBCS", OBC%ramp, &
+         "If true, ramps from zero to the external values over time, with"//&
+         "a ramping timescale given by RAMP_TIMESCALE. Ramping SSH only so far", &
+         default=.false.)
+    call get_param(param_file, mdl, "OBC_RAMP_TIMESCALE", OBC%ramp_timescale, &
+         "If RAMP_OBCS is true, this sets the ramping timescale.", &
+         units="days", default=1.0, scale=86400.0*US%s_to_T)
+
     call get_param(param_file, mdl, "DEBUG", debug, default=.false.)
     call get_param(param_file, mdl, "DEBUG_OBC", debug_OBC, default=.false.)
     if (debug_OBC .or. debug) &
@@ -3873,11 +3892,19 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
       endif
 
       if (trim(segment%field(m)%name) == 'SSH') then
-        do j=js_obc2,je_obc
-          do i=is_obc2,ie_obc
-            segment%eta(i,j) = segment%field(m)%buffer_dst(i,j,1)
+        if (OBC%ramp) then
+          do j=js_obc2,je_obc
+            do i=is_obc2,ie_obc
+              segment%eta(i,j) = OBC%ramp_value * segment%field(m)%buffer_dst(i,j,1)
+            enddo
           enddo
-        enddo
+        else
+          do j=js_obc2,je_obc
+            do i=is_obc2,ie_obc
+              segment%eta(i,j) = segment%field(m)%buffer_dst(i,j,1)
+            enddo
+          enddo
+        endif
       endif
 
       if (trim(segment%field(m)%name) == 'TEMP') then
@@ -3919,6 +3946,48 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
   enddo ! end segment loop
 
 end subroutine update_OBC_segment_data
+
+!> Update the OBC ramp value as a function of time.
+!! If called with the optional argument activate=.true., record the
+!! value of Time as the beginning of the ramp period.
+subroutine update_OBC_ramp(Time, OBC, activate)
+  type(time_type), target, intent(in)    :: Time     !< Current model time
+  type(ocean_OBC_type),    pointer       :: OBC      !< Open boundary structure
+  logical, optional,       intent(in)    :: activate !< Specifiy whether to record the value of
+                                                     !! Time as the beginning of the ramp period
+
+  ! Local variables
+  real :: deltaTime, wghtA
+  character(len=12) :: msg
+
+  if (.not. OBC%ramp) return ! This indicates the ramping is turned off
+
+  ! We use the optional argument to indicate this Time should be recorded as the
+  ! beginning of the ramp-up period.
+  if (present(activate)) then
+    if (activate) then
+      OBC%ramp_start_time = Time ! Record the current time
+      OBC%ramping_is_activated = .true.
+      OBC%trunc_ramp_time = OBC%ramp_timescale ! times 3.0 for tanh
+    endif
+  endif
+  if (.not.OBC%ramping_is_activated) return
+  deltaTime = max( 0., time_type_to_real( Time - OBC%ramp_start_time ) )
+  if (deltaTime >= OBC%trunc_ramp_time) then
+    OBC%ramp_value = 1.0
+    OBC%ramp = .false. ! This turns off ramping after this call
+  else
+    wghtA = min( 1., deltaTime / OBC%ramp_timescale ) ! Linear profile in time
+    !wghtA = wghtA*wghtA ! Convert linear profile to parabolic profile in time
+    !wghtA = wghtA*wghtA*(3. - 2.*wghtA) ! Convert linear profile to cosine profile
+    !wghtA = 1. - ( (1. - wghtA)**2 ) ! Convert linear profile to inverted parabolic profile
+    !wghtA = tanh(wghtA)              ! Convert linear profile to tanh
+    OBC%ramp_value = wghtA
+  endif
+  write(msg(1:12),'(es12.3)') OBC%ramp_value
+  call MOM_error(NOTE, "MOM_open_boundary: update_OBC_ramp set OBC"// &
+                       " ramp to "//trim(msg))
+end subroutine update_OBC_ramp
 
 !> register open boundary objects for boundary updates.
 subroutine register_OBC(name, param_file, Reg)
