@@ -208,7 +208,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
                                                  !! accelerations in momentum equation.
   type(cont_diag_ptrs),    intent(in)    :: CDp  !< structure with pointers to
                                                  !! terms in continuity equation.
-  real, dimension(:,:),    pointer       :: p_surf !< A pointer to the surface pressure [Pa].
+  real, dimension(:,:),    pointer       :: p_surf !< A pointer to the surface pressure [R L2 T-2 ~> Pa].
                                                  !! If p_surf is not associated, it is the same
                                                  !! as setting the surface pressure to 0.
   real,                    intent(in)    :: dt   !< The time difference since the last
@@ -345,9 +345,9 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       endif
     else ! thkcello = dp/(rho*g) for non-Boussinesq
       do j=js,je
-        if (associated(p_surf)) then ! Pressure loading at top of surface layer [Pa]
+        if (associated(p_surf)) then ! Pressure loading at top of surface layer [R L2 T-2 ~> Pa]
           do i=is,ie
-            pressure_1d(i) = p_surf(i,j)
+            pressure_1d(i) = US%RL2_T2_to_Pa * p_surf(i,j)
           enddo
         else
           do i=is,ie
@@ -769,7 +769,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various
                                                  !! thermodynamic variables.
-  real, dimension(:,:),    pointer       :: p_surf !< A pointer to the surface pressure [Pa].
+  real, dimension(:,:),    pointer       :: p_surf !< A pointer to the surface pressure [R L2 T-2 ~> Pa].
                                                  !! If p_surf is not associated, it is the same
                                                  !! as setting the surface pressure to 0.
   type(diagnostics_CS),    intent(inout) :: CS   !< Control structure returned by a
@@ -869,7 +869,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
       do j=js,je ; do i=is,ie
         btm_pres(i,j) = GV%g_Earth * mass(i,j)
         if (associated(p_surf)) then
-          btm_pres(i,j) = btm_pres(i,j) + US%kg_m3_to_R*US%m_s_to_L_T**2*p_surf(i,j)
+          btm_pres(i,j) = btm_pres(i,j) + p_surf(i,j)
         endif
       enddo ; enddo
       call post_data(CS%id_pbo, btm_pres, CS%diag)

@@ -111,7 +111,7 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
   type(diabatic_aux_CS),   intent(in)    :: CS !< The control structure returned by a previous
                                                !! call to diabatic_aux_init.
   real, dimension(SZI_(G),SZJ_(G)), &
-                 optional, intent(in)    :: p_surf !< The pressure at the ocean surface [Pa].
+                 optional, intent(in)    :: p_surf !< The pressure at the ocean surface [R L2 T-2 ~> Pa].
   integer,       optional, intent(in)    :: halo !< Halo width over which to calculate frazil
 
   ! Local variables
@@ -136,13 +136,13 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
   if (.not.CS%pressure_dependent_frazil) then
     do k=1,nz ; do i=is,ie ; pressure(i,k) = 0.0 ; enddo ; enddo
   endif
-!$OMP parallel do default(none) shared(is,ie,js,je,CS,G,GV,h,nz,tv,p_surf) &
+!$OMP parallel do default(none) shared(is,ie,js,je,CS,G,GV,US,h,nz,tv,p_surf) &
 !$OMP                           private(fraz_col,T_fr_set,T_freeze,hc,ps)  &
 !$OMP                      firstprivate(pressure)    !pressure might be set above, so should be firstprivate
   do j=js,je
     ps(:) = 0.0
     if (PRESENT(p_surf)) then ; do i=is,ie
-      ps(i) = p_surf(i,j)
+      ps(i) = US%RL2_T2_to_Pa*p_surf(i,j)
     enddo ; endif
 
     do i=is,ie ; fraz_col(i) = 0.0 ; enddo

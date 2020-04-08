@@ -116,13 +116,13 @@ type, public :: forcing
 
   ! applied surface pressure from other component models (e.g., atmos, sea ice, land ice)
   real, pointer, dimension(:,:) :: p_surf_full => NULL()
-                !< Pressure at the top ocean interface [Pa].
+                !< Pressure at the top ocean interface [R L2 T-2 ~> Pa].
                 !! if there is sea-ice, then p_surf_flux is at ice-ocean interface
   real, pointer, dimension(:,:) :: p_surf => NULL()
-                !< Pressure at the top ocean interface [Pa] as used to drive the ocean model.
+                !< Pressure at the top ocean interface [R L2 T-2 ~> Pa] as used to drive the ocean model.
                 !! If p_surf is limited, p_surf may be smaller than p_surf_full, otherwise they are the same.
   real, pointer, dimension(:,:) :: p_surf_SSH => NULL()
-                !< Pressure at the top ocean interface [Pa] that is used in corrections to the sea surface
+                !< Pressure at the top ocean interface [R L2 T-2 ~> Pa] that is used in corrections to the sea surface
                 !! height field that is passed back to the calling routines.
                 !! p_surf_SSH may point to p_surf or to p_surf_full.
   logical :: accumulate_p_surf = .false. !< If true, the surface pressure due to the atmosphere
@@ -195,14 +195,14 @@ type, public :: mech_forcing
 
   ! applied surface pressure from other component models (e.g., atmos, sea ice, land ice)
   real, pointer, dimension(:,:) :: p_surf_full => NULL()
-                !< Pressure at the top ocean interface [Pa].
+                !< Pressure at the top ocean interface [R L2 T-2 ~> Pa].
                 !! if there is sea-ice, then p_surf_flux is at ice-ocean interface
   real, pointer, dimension(:,:) :: p_surf => NULL()
-                !< Pressure at the top ocean interface [Pa] as used to drive the ocean model.
+                !< Pressure at the top ocean interface [R L2 T-2 ~> Pa] as used to drive the ocean model.
                 !! If p_surf is limited, p_surf may be smaller than p_surf_full, otherwise they are the same.
   real, pointer, dimension(:,:) :: p_surf_SSH => NULL()
-                !< Pressure at the top ocean interface that is used in corrections to the sea surface
-                !! height field that is passed back to the calling routines.
+                !< Pressure at the top ocean interface [R L2 T-2 ~> Pa] that is used in corrections
+                !! to the sea surface height field that is passed back to the calling routines.
                 !! p_surf_SSH may point to p_surf or to p_surf_full.
 
   ! iceberg related inputs
@@ -1063,9 +1063,9 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, US, haloshift)
     call hchksum(fluxes%seaice_melt_heat, mesg//" fluxes%seaice_melt_heat", G%HI, &
                  haloshift=hshift, scale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%p_surf)) &
-    call hchksum(fluxes%p_surf, mesg//" fluxes%p_surf",G%HI,haloshift=hshift)
+    call hchksum(fluxes%p_surf, mesg//" fluxes%p_surf", G%HI, haloshift=hshift , scale=US%RL2_T2_to_Pa)
   if (associated(fluxes%salt_flux)) &
-    call hchksum(fluxes%salt_flux, mesg//" fluxes%salt_flux",G%HI,haloshift=hshift, scale=RZ_T_conversion)
+    call hchksum(fluxes%salt_flux, mesg//" fluxes%salt_flux", G%HI, haloshift=hshift, scale=RZ_T_conversion)
   if (associated(fluxes%TKE_tidal)) &
     call hchksum(fluxes%TKE_tidal, mesg//" fluxes%TKE_tidal", G%HI, haloshift=hshift, &
                  scale=US%RZ3_T3_to_W_m2)
@@ -1118,7 +1118,7 @@ subroutine MOM_mech_forcing_chksum(mesg, forces, G, US, haloshift)
     call uvchksum(mesg//" forces%tau[xy]", forces%taux, forces%tauy, G%HI, &
                   haloshift=hshift, symmetric=.true., scale=US%RZ_T_to_kg_m2s*US%L_T_to_m_s)
   if (associated(forces%p_surf)) &
-    call hchksum(forces%p_surf, mesg//" forces%p_surf",G%HI,haloshift=hshift)
+    call hchksum(forces%p_surf, mesg//" forces%p_surf", G%HI, haloshift=hshift, scale=US%RL2_T2_to_Pa)
   if (associated(forces%ustar)) &
     call hchksum(forces%ustar, mesg//" forces%ustar",G%HI,haloshift=hshift, scale=US%Z_to_m*US%s_to_T)
   if (associated(forces%rigidity_ice_u) .and. associated(forces%rigidity_ice_v)) &
@@ -1265,9 +1265,10 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
     endif
   endif
 
-  handles%id_psurf = register_diag_field('ocean_model', 'p_surf', diag%axesT1, Time,           &
-        'Pressure at ice-ocean or atmosphere-ocean interface', 'Pa', cmor_field_name='pso',    &
-        cmor_long_name='Sea Water Pressure at Sea Water Surface',                              &
+  handles%id_psurf = register_diag_field('ocean_model', 'p_surf', diag%axesT1, Time, &
+        'Pressure at ice-ocean or atmosphere-ocean interface', &
+        'Pa', conversion=US%RL2_T2_to_Pa, cmor_field_name='pso', &
+        cmor_long_name='Sea Water Pressure at Sea Water Surface', &
         cmor_standard_name='sea_water_pressure_at_sea_water_surface')
 
   handles%id_TKE_tidal = register_diag_field('ocean_model', 'TKE_tidal', diag%axesT1, Time, &

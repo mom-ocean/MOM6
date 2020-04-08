@@ -31,7 +31,7 @@ subroutine full_convection(G, GV, US, h, tv, T_adj, S_adj, p_surf, Kddt_smooth, 
                            intent(out)   :: T_adj !< Adjusted potential temperature [degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(out)   :: S_adj !< Adjusted salinity [ppt].
-  real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface [Pa] (or NULL).
+  real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface [R L2 T-2 ~> Pa] (or NULL).
   real,                    intent(in)    :: Kddt_smooth  !< A smoothing vertical
                                                   !! diffusivity times a timestep [H2 ~> m2 or kg2 m-4].
   real,          optional, intent(in)    :: Kddt_convect !< A large convecting vertical
@@ -335,7 +335,7 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
                                                !! potential density with salinity [R degC-1 ~> kg m-3 ppt-1]
   type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
   integer,                 intent(in)  :: j    !< The j-point to work on.
-  real, dimension(:,:),    pointer     :: p_surf !< The pressure at the ocean surface [Pa].
+  real, dimension(:,:),    pointer     :: p_surf !< The pressure at the ocean surface [R L2 T-2 ~> Pa].
   integer,       optional, intent(in)  :: halo !< Halo width over which to compute
 
   ! Local variables
@@ -403,7 +403,7 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
   endif
 
   if (associated(p_surf)) then
-    do i=is,ie ; pres(i) = p_surf(i,j) ; enddo
+    do i=is,ie ; pres(i) = US%RL2_T2_to_Pa*p_surf(i,j) ; enddo
   else
     do i=is,ie ; pres(i) = 0.0 ; enddo
   endif

@@ -803,11 +803,11 @@ subroutine add_shelf_forces(G, US, CS, forces, do_shelf_area)
     press_ice = (ISS%area_shelf_h(i,j) * US%m_to_L**2*G%IareaT(i,j)) * (CS%g_Earth * ISS%mass_shelf(i,j))
     if (associated(forces%p_surf)) then
       if (.not.forces%accumulate_p_surf) forces%p_surf(i,j) = 0.0
-      forces%p_surf(i,j) = forces%p_surf(i,j) + press_ice
+      forces%p_surf(i,j) = forces%p_surf(i,j) + US%kg_m3_to_R*US%m_s_to_L_T**2*press_ice
     endif
     if (associated(forces%p_surf_full)) then
       if (.not.forces%accumulate_p_surf) forces%p_surf_full(i,j) = 0.0
-      forces%p_surf_full(i,j) = forces%p_surf_full(i,j) + press_ice
+      forces%p_surf_full(i,j) = forces%p_surf_full(i,j) + US%kg_m3_to_R*US%m_s_to_L_T**2*press_ice
     endif
   enddo ; enddo
 
@@ -855,11 +855,11 @@ subroutine add_shelf_pressure(G, US, CS, fluxes)
     press_ice = (CS%ISS%area_shelf_h(i,j) * US%m_to_L**2*G%IareaT(i,j)) * (CS%g_Earth * CS%ISS%mass_shelf(i,j))
     if (associated(fluxes%p_surf)) then
       if (.not.fluxes%accumulate_p_surf) fluxes%p_surf(i,j) = 0.0
-      fluxes%p_surf(i,j) = fluxes%p_surf(i,j) + press_ice
+      fluxes%p_surf(i,j) = fluxes%p_surf(i,j) + US%kg_m3_to_R*US%m_s_to_L_T**2*press_ice
     endif
     if (associated(fluxes%p_surf_full)) then
       if (.not.fluxes%accumulate_p_surf) fluxes%p_surf_full(i,j) = 0.0
-      fluxes%p_surf_full(i,j) = fluxes%p_surf_full(i,j) + press_ice
+      fluxes%p_surf_full(i,j) = fluxes%p_surf_full(i,j) + US%kg_m3_to_R*US%m_s_to_L_T**2*press_ice
     endif
   enddo ; enddo
 

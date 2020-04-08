@@ -68,9 +68,9 @@ type, public :: surface_forcing_CS ; private
   real :: latent_heat_fusion    !< latent heat of fusion [J kg-1]
   real :: latent_heat_vapor     !< latent heat of vaporization [J kg-1]
 
-  real :: max_p_surf            !< maximum surface pressure that can be
-                                !! exerted by the atmosphere and floating sea-ice,
-                                !! [Pa].  This is needed because the FMS coupling
+  real :: max_p_surf            !< The maximum surface pressure that can be exerted by
+                                !! the atmosphere and floating sea-ice [R L2 T-2 ~> Pa].
+                                !! This is needed because the FMS coupling
                                 !! structure does not limit the water that can be
                                 !! frozen out of the ocean and the ice-ocean heat
                                 !! fluxes are treated explicitly.
@@ -528,11 +528,13 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
      if (CS%max_p_surf >= 0.0) then
         do j=js,je ; do i=is,ie
            fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
+US%kg_m3_to_R*US%m_s_to_L_T**2*IOB%p(i-i0,j-j0)
            fluxes%p_surf(i,j) = MIN(fluxes%p_surf_full(i,j),CS%max_p_surf)
         enddo; enddo
      else
         do j=js,je ; do i=is,ie
            fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
+US%kg_m3_to_R*US%m_s_to_L_T**2*IOB%p(i-i0,j-j0)
            fluxes%p_surf(i,j) = fluxes%p_surf_full(i,j)
         enddo; enddo
      endif
@@ -621,7 +623,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
   real :: tau_mag       !< magnitude of the wind stress [R Z L T-2 ~> Pa]
   real :: Pa_conversion ! A unit conversion factor from Pa to the internal wind stress units [R Z L T-2 Pa-1 ~> 1]
   real :: stress_conversion ! A unit conversion factor from Pa times any stress multiplier [R Z L T-2 Pa-1 ~> 1]
-  real :: I_GEarth      !< 1.0 / G%G_Earth  [s2 m-1]
+  real :: I_GEarth      !< Pressure conversion factors times 1.0 / G_Earth [kg m-2 T2 R-1 L-2 ~> s2 m-1]
   real :: Kv_rho_ice    !< (CS%kv_sea_ice / CS%density_sea_ice) [m5 s-1 kg-1]
   real :: mass_ice      !< mass of sea ice at a face [kg m-2]
   real :: mass_eff      !< effective mass of sea ice for rigidity [kg m-2]
@@ -687,11 +689,13 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
     if (CS%max_p_surf >= 0.0) then
       do j=js,je ; do i=is,ie
         forces%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
+US%kg_m3_to_R*US%m_s_to_L_T**2*IOB%p(i-i0,j-j0)
         forces%p_surf(i,j) = MIN(forces%p_surf_full(i,j),CS%max_p_surf)
       enddo ; enddo
     else
       do j=js,je ; do i=is,ie
         forces%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
+US%kg_m3_to_R*US%m_s_to_L_T**2*IOB%p(i-i0,j-j0)
         forces%p_surf(i,j) = forces%p_surf_full(i,j)
       enddo ; enddo
     endif
@@ -845,7 +849,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
 
   if (CS%rigid_sea_ice) then
     call pass_var(forces%p_surf_full, G%Domain, halo=1)
-    I_GEarth = 1.0 / CS%G_Earth
+    I_GEarth = US%RL2_T2_to_Pa / CS%g_Earth
     Kv_rho_ice = (CS%kv_sea_ice / CS%density_sea_ice)
     do I=is-1,ie ; do j=js,je
       mass_ice = min(forces%p_surf_full(i,j), forces%p_surf_full(i+1,j)) * I_GEarth
@@ -1077,8 +1081,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
                  "needed because the FMS coupling structure does not "//&
                  "limit the water that can be frozen out of the ocean and "//&
                  "the ice-ocean heat fluxes are treated explicitly.  No "//&
-                 "limit is applied if a negative value is used.", units="Pa", &
-                 default=-1.0)
+                 "limit is applied if a negative value is used.", &
+                 units="Pa", default=-1.0, scale=US%kg_m3_to_R*US%m_s_to_L_T**2)
   call get_param(param_file, mdl, "ADJUST_NET_SRESTORE_TO_ZERO", &
                  CS%adjust_net_srestore_to_zero, &
                  "If true, adjusts the salinity restoring seen to zero "//&

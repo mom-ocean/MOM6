@@ -71,7 +71,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
                                                                 !! (equal to -dM/dy) [L T-2 ~> m s-2].
   type(PressureForce_Mont_CS),               pointer     :: CS  !< Control structure for Montgomery potential PGF
   real, dimension(:,:),            optional, pointer     :: p_atm !< The pressure at the ice-ocean or
-                                                                !! atmosphere-ocean [Pa].
+                                                                !! atmosphere-ocean [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                    optional, intent(out) :: pbce !< The baroclinic pressure anomaly in
                                                                 !! each layer due to free surface height anomalies,
@@ -150,7 +150,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
 
   if (use_p_atm) then
     !$OMP parallel do default(shared)
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1 ; p(i,j,1) = US%kg_m3_to_R*US%m_s_to_L_T**2*p_atm(i,j) ; enddo ; enddo
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1 ; p(i,j,1) = p_atm(i,j) ; enddo ; enddo
   else
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1 ; p(i,j,1) = 0.0 ; enddo ; enddo
@@ -165,7 +165,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
     if (use_p_atm) then
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        eta(i,j) = (p(i,j,nz+1) - US%kg_m3_to_R*US%m_s_to_L_T**2*p_atm(i,j)) * Pa_to_H ! eta has the same units as h.
+        eta(i,j) = (p(i,j,nz+1) - p_atm(i,j)) * Pa_to_H ! eta has the same units as h.
       enddo ; enddo
     else
       !$OMP parallel do default(shared)
@@ -367,7 +367,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
                                                                 !! (equal to -dM/dy) [L T-2 ~> m s2].
   type(PressureForce_Mont_CS),               pointer     :: CS  !< Control structure for Montgomery potential PGF
   real, dimension(:,:),                     optional, pointer     :: p_atm !< The pressure at the ice-ocean or
-                                                                !! atmosphere-ocean [Pa].
+                                                                !! atmosphere-ocean [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: pbce !< The baroclinic pressure anomaly in
                                                                 !! each layer due to free surface height anomalies
                                                                 !! [L2 T-2 H-1 ~> m s-2].
@@ -515,7 +515,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         M(i,j,1) = CS%GFS_scale * (rho_star(i,j,1) * e(i,j,1))
-        if (use_p_atm) M(i,j,1) = M(i,j,1) + US%kg_m3_to_R*US%m_s_to_L_T**2*p_atm(i,j) * I_Rho0
+        if (use_p_atm) M(i,j,1) = M(i,j,1) + p_atm(i,j) * I_Rho0
       enddo
       do k=2,nz ; do i=Isq,Ieq+1
         M(i,j,k) = M(i,j,k-1) + (rho_star(i,j,k) - rho_star(i,j,k-1)) * e(i,j,K)
@@ -526,7 +526,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         M(i,j,1) = GV%g_prime(1) * e(i,j,1)
-        if (use_p_atm) M(i,j,1) = M(i,j,1) + US%kg_m3_to_R*US%m_s_to_L_T**2*p_atm(i,j) * I_Rho0
+        if (use_p_atm) M(i,j,1) = M(i,j,1) + p_atm(i,j) * I_Rho0
       enddo
       do k=2,nz ; do i=Isq,Ieq+1
         M(i,j,k) = M(i,j,k-1) + GV%g_prime(K) * e(i,j,K)

@@ -264,9 +264,9 @@ type, public :: MOM_control_struct ; private
                                 !! a previous time-step or the ocean restart file.
                                 !! This is only valid when interp_p_surf is true.
   real, dimension(:,:), pointer :: &
-    p_surf_prev  => NULL(), &   !< surface pressure [Pa] at end  previous call to step_MOM
-    p_surf_begin => NULL(), &   !< surface pressure [Pa] at start of step_MOM_dyn_...
-    p_surf_end   => NULL()      !< surface pressure [Pa] at end   of step_MOM_dyn_...
+    p_surf_prev  => NULL(), &   !< surface pressure [R L2 T-2 ~> Pa] at end  previous call to step_MOM
+    p_surf_begin => NULL(), &   !< surface pressure [R L2 T-2 ~> Pa] at start of step_MOM_dyn_...
+    p_surf_end   => NULL()      !< surface pressure [R L2 T-2 ~> Pa] at end   of step_MOM_dyn_...
 
   ! Variables needed to reach between start and finish phases of initialization
   logical :: write_IC           !< If true, then the initial conditions will be written to file
@@ -473,7 +473,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_int_in, CS, &
     v => NULL(), & ! v : meridional velocity component [L T-1 ~> m s-1]
     h => NULL()    ! h : layer thickness [H ~> m or kg m-2]
   real, dimension(:,:), pointer :: &
-    p_surf => NULL() ! A pointer to the ocean surface pressure [Pa].
+    p_surf => NULL() ! A pointer to the ocean surface pressure [R L2 T-2 ~> Pa].
   real :: I_wt_ssh  ! The inverse of the time weights [T-1 ~> s-1]
 
   type(time_type) :: Time_local, end_time_thermo, Time_temp
@@ -878,10 +878,10 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   type(mech_forcing), intent(in)    :: forces     !< A structure with the driving mechanical forces
   real, dimension(:,:), pointer     :: p_surf_begin !< A pointer (perhaps NULL) to the surface
                                                   !! pressure at the beginning of this dynamic
-                                                  !! step, intent in [Pa].
+                                                  !! step, intent in [R L2 T-2 ~> Pa].
   real, dimension(:,:), pointer     :: p_surf_end !< A pointer (perhaps NULL) to the surface
                                                   !! pressure at the end of this dynamic step,
-                                                  !! intent in [Pa].
+                                                  !! intent in [R L2 T-2 ~> Pa].
   real,               intent(in)    :: dt         !< time interval covered by this call [T ~> s].
   real,               intent(in)    :: dt_thermo  !< time interval covered by any updates that may
                                                   !! span multiple dynamics steps [T ~> s].
@@ -2449,8 +2449,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   endif
 
   if (CS%interp_p_surf) then
-    CS%p_surf_prev_set = &
-      query_initialized(CS%p_surf_prev,"p_surf_prev",restart_CSp)
+    CS%p_surf_prev_set = query_initialized(CS%p_surf_prev,"p_surf_prev",restart_CSp)
 
     if (CS%p_surf_prev_set) call pass_var(CS%p_surf_prev, G%domain)
   endif
@@ -2683,13 +2682,13 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
   type(verticalGrid_type),           intent(in)    :: GV  !< ocean vertical grid structure
   type(unit_scale_type),             intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: ssh !< time mean surface height [m]
-  real, dimension(:,:),    optional, pointer       :: p_atm !< atmospheric pressure [Pa]
+  real, dimension(:,:),    optional, pointer       :: p_atm !< atmospheric pressure [R L2 T-2 ~> Pa]
   logical,                 optional, intent(in)    :: use_EOS !< If true, calculate the density for
                                                        !! the SSH correction using the equation of state.
 
   real :: Rho_conv    ! The density used to convert surface pressure to
                       ! a corrected effective SSH [R ~> kg m-3].
-  real :: IgR0        ! The SSH conversion factor from Pa to m [m Pa-1].
+  real :: IgR0        ! The SSH conversion factor from R L2 T-2 to m [m T2 R-1 L-2 ~> m Pa-1].
   logical :: calc_rho
   integer :: i, j, is, ie, js, je
 
@@ -2701,12 +2700,12 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
     ! atmospheric pressure
     do j=js,je ; do i=is,ie
       if (calc_rho) then
-        call calculate_density(tv%T(i,j,1), tv%S(i,j,1), p_atm(i,j)/2.0, &
-                               Rho_conv, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density(tv%T(i,j,1), tv%S(i,j,1), p_atm(i,j)/2.0, Rho_conv, &
+                               tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
       else
         Rho_conv = GV%Rho0
       endif
-      IgR0 = 1.0 / (Rho_conv * US%R_to_kg_m3*GV%mks_g_Earth)
+      IgR0 = US%Z_to_m / (Rho_conv * GV%g_Earth)
       ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0
     enddo ; enddo
   endif ; endif

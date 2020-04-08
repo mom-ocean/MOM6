@@ -836,7 +836,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
       do i=is,ie ; diff_work(i,j,1) = 0.0 ; diff_work(i,j,nz+1) = 0.0 ; enddo
       if (associated(tv%eqn_of_state)) then
         if (associated(fluxes%p_surf)) then
-          do i=is,ie ; pressure(i) = fluxes%p_surf(i,j) ; enddo
+          do i=is,ie ; pressure(i) = US%RL2_T2_to_Pa*fluxes%p_surf(i,j) ; enddo
         else
           do i=is,ie ; pressure(i) = 0.0 ; enddo
         endif

@@ -119,7 +119,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   type(thermo_var_ptrs),   intent(in)    :: tv     !< A structure containing pointers to any
                                                    !! available thermodynamic fields. Absent fields
                                                    !! have NULL ptrs.
-  real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface [Pa] (or NULL).
+  real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface [R L2 T-2 ~> Pa] (or NULL).
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(inout) :: kappa_io !< The diapycnal diffusivity at each interface
                                                    !! (not layer!) [Z2 T-1 ~> m2 s-1].  Initially this is the
@@ -283,7 +283,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
       endif
       f2 = 0.25 * ((G%CoriolisBu(I,j)**2 + G%CoriolisBu(I-1,J-1)**2) + &
                    (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
-      surface_pres = 0.0 ; if (associated(p_surf)) surface_pres = p_surf(i,j)
+      surface_pres = 0.0 ; if (associated(p_surf)) surface_pres = US%RL2_T2_to_Pa*p_surf(i,j)
 
     ! ----------------------------------------------------    I_Ld2_1d, dz_Int_1d
 
@@ -389,7 +389,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   type(thermo_var_ptrs),   intent(in)    :: tv     !< A structure containing pointers to any
                                                    !! available thermodynamic fields. Absent fields
                                                    !! have NULL ptrs.
-  real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface [Pa]
+  real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface [R L2 T-2 ~> Pa]
                                                    !! (or NULL).
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(out)   :: kappa_io !< The diapycnal diffusivity at each interface
@@ -585,8 +585,8 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
       endif
       f2 = G%CoriolisBu(I,J)**2
       surface_pres = 0.0 ; if (associated(p_surf)) &
-        surface_pres = 0.25 * ((p_surf(i,j) + p_surf(i+1,j+1)) + &
-                               (p_surf(i+1,j) + p_surf(i,j+1)))
+        surface_pres = 0.25 * US%RL2_T2_to_Pa*((p_surf(i,j) + p_surf(i+1,j+1)) + &
+                                               (p_surf(i+1,j) + p_surf(i,j+1)))
 
     ! ----------------------------------------------------
     ! Set the initial guess for kappa, here defined at interfaces.

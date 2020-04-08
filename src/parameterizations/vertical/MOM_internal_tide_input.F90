@@ -199,7 +199,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
   do j=js,je
     if (associated(tv%eqn_of_state)) then
       if (associated(fluxes%p_surf)) then
-        do i=is,ie ; pres(i) = fluxes%p_surf(i,j) ; enddo
+        do i=is,ie ; pres(i) = US%RL2_T2_to_Pa*fluxes%p_surf(i,j) ; enddo
       else
         do i=is,ie ; pres(i) = 0.0 ; enddo
       endif

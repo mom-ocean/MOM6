@@ -1395,8 +1395,8 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
       endif ; enddo ! I-loop
 
       if (use_EOS) then
-        call calculate_density_derivs(T_EOS, S_EOS, forces%p_surf(:,j), &
-                     dR_dT, dR_dS, Isq-G%IsdB+1, Ieq-Isq+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density_derivs(T_EOS, S_EOS, forces%p_surf(:,j), dR_dT, dR_dS, &
+                 Isq-G%IsdB+1, Ieq-Isq+1, tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_PA)
       endif
 
       do I=Isq,Ieq ; if (do_i(I)) then
@@ -1632,8 +1632,8 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
       endif ; enddo ! I-loop
 
       if (use_EOS) then
-        call calculate_density_derivs(T_EOS, S_EOS, forces%p_surf(:,j), &
-                     dR_dT, dR_dS, is-G%IsdB+1, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density_derivs(T_EOS, S_EOS, forces%p_surf(:,j), dR_dT, dR_dS, &
+                 is-G%IsdB+1, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_PA)
       endif
 
       do i=is,ie ; if (do_i(i)) then

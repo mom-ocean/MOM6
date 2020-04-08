@@ -896,7 +896,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
   enddo
   if (associated(tv%eqn_of_state)) then
     if (associated(fluxes%p_surf)) then
-      do i=is,ie ; pres(i) = fluxes%p_surf(i,j) ; enddo
+      do i=is,ie ; pres(i) = US%RL2_T2_to_Pa*fluxes%p_surf(i,j) ; enddo
     else
       do i=is,ie ; pres(i) = 0.0 ; enddo
     endif

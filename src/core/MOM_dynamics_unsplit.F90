@@ -200,9 +200,9 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   real,                    intent(in)    :: dt     !< The dynamics time step [T ~> s].
   type(mech_forcing),      intent(in)    :: forces !< A structure with the driving mechanical forces
   real, dimension(:,:),    pointer       :: p_surf_begin !< A pointer (perhaps NULL) to the surface
-                                                   !! pressure at the start of this dynamic step [Pa].
+                                                   !! pressure at the start of this dynamic step [R L2 T-2 ~> Pa].
   real, dimension(:,:),    pointer       :: p_surf_end   !< A pointer (perhaps NULL) to the surface
-                                                   !! pressure at the end of this dynamic step [Pa].
+                                                   !! pressure at the end of this dynamic step [R L2 T-2 ~> Pa].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uh !< The zonal volume or mass transport
                                                    !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vh !< The meridional volume or mass

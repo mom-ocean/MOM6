@@ -74,7 +74,7 @@ subroutine PressureForce_blk_AFV(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm,
   type(PressureForce_blk_AFV_CS),            pointer       :: CS  !< Finite volume PGF control structure
   type(ALE_CS),                              pointer       :: ALE_CSp !< ALE control structure
   real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
-                                                           !! or atmosphere-ocean interface [Pa].
+                                                           !! or atmosphere-ocean interface [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(out) :: pbce !< The baroclinic pressure
                                                            !! anomaly in each layer due to eta anomalies
                                                            !! [L2 T-2 H-1 ~> m s-2 or m4 s-2 kg-1].
@@ -109,7 +109,7 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: PFv !< Meridional acceleration [L T-2 ~> m s-2]
   type(PressureForce_blk_AFV_CS),                pointer       :: CS  !< Finite volume PGF control structure
   real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
-                                                           !! or atmosphere-ocean interface [Pa].
+                                                           !! or atmosphere-ocean interface [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(out) :: pbce !< The baroclinic pressure
                                                            !! anomaly in each layer due to eta anomalies
                                                            !! [L2 T-2 H-1 ~> m s-2 or m4 s-2 kg-1].
@@ -196,7 +196,7 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
   if (use_p_atm) then
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      p(i,j,1) = US%kg_m3_to_R*US%m_s_to_L_T**2*p_atm(i,j)
+      p(i,j,1) = p_atm(i,j)
     enddo ; enddo
   else
     !$OMP parallel do default(shared)
@@ -396,7 +396,7 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
     if (use_p_atm) then
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        eta(i,j) = (p(i,j,nz+1) - US%kg_m3_to_R*US%m_s_to_L_T**2*p_atm(i,j))*Pa_to_H ! eta has the same units as h.
+        eta(i,j) = (p(i,j,nz+1) - p_atm(i,j))*Pa_to_H ! eta has the same units as h.
       enddo ; enddo
     else
       !$OMP parallel do default(shared)
@@ -430,7 +430,7 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
   type(PressureForce_blk_AFV_CS),            pointer     :: CS  !< Finite volume PGF control structure
   type(ALE_CS),                              pointer     :: ALE_CSp !< ALE control structure
   real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
-                                                         !! or atmosphere-ocean interface [Pa].
+                                                         !! or atmosphere-ocean interface [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(out) :: pbce !< The baroclinic pressure
                                                          !! anomaly in each layer due to eta anomalies
                                                          !! [L2 T-2 H-1 ~> m s-2 or m4 s-2 kg-1].
@@ -587,11 +587,11 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1
         if (use_p_atm) then
-          call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p_atm(:,j), &
-                                 rho_in_situ, Isq, Ieq-Isq+2, tv%eqn_of_state, scale=US%kg_m3_to_R)
+          call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p_atm(:,j), rho_in_situ, Isq, &
+                       Ieq-Isq+2, tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
         else
-          call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p0, &
-                                 rho_in_situ, Isq, Ieq-Isq+2, tv%eqn_of_state, scale=US%kg_m3_to_R)
+          call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p0, rho_in_situ, &
+                                 Isq, Ieq-Isq+2, tv%eqn_of_state, scale=US%kg_m3_to_R)
         endif
         do i=Isq,Ieq+1
           dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * rho_in_situ(i)) * e(i,j,1)
@@ -639,7 +639,7 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
     if (use_p_atm) then
       do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
         i = ib+ioff_bk ; j = jb+joff_bk
-        pa_bk(ib,jb) = (Rho_ref*GV%g_Earth)*e(i,j,1) + US%kg_m3_to_R*US%m_s_to_L_T**2*p_atm(i,j)
+        pa_bk(ib,jb) = (Rho_ref*GV%g_Earth)*e(i,j,1) + p_atm(i,j)
       enddo ; enddo
     else
       do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
