@@ -172,14 +172,14 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, US, param_file, tv, just_read
   select case ( coordinateMode(verticalCoordinate) )
 
   case ( REGRIDDING_LAYER, REGRIDDING_RHO ) ! Initial thicknesses for isopycnal coordinates
-    call get_param(param_file, mdl, "ISOMIP_T_SUR",t_sur, &
-                   'Temperature at the surface (interface)', default=-1.9, do_not_log=just_read)
+    call get_param(param_file, mdl, "ISOMIP_T_SUR", t_sur, &
+                   "Temperature at the surface (interface)", units="degC", default=-1.9, do_not_log=just_read)
     call get_param(param_file, mdl, "ISOMIP_S_SUR", s_sur, &
-                   'Salinity at the surface (interface)',  default=33.8, do_not_log=just_read)
+                   "Salinity at the surface (interface)", units="ppt",  default=33.8, do_not_log=just_read)
     call get_param(param_file, mdl, "ISOMIP_T_BOT", t_bot, &
-                   'Temperature at the bottom (interface)', default=-1.9, do_not_log=just_read)
+                   "Temperature at the bottom (interface)", units="degC", default=-1.9, do_not_log=just_read)
     call get_param(param_file, mdl, "ISOMIP_S_BOT", s_bot,&
-                   'Salinity at the bottom (interface)', default=34.55, do_not_log=just_read)
+                   "Salinity at the bottom (interface)", units="ppt", default=34.55, do_not_log=just_read)
 
     if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -293,13 +293,13 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
   call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
   call get_param(param_file, mdl, "ISOMIP_T_SUR",t_sur, &
-                 'Temperature at the surface (interface)', default=-1.9, do_not_log=just_read)
+                 "Temperature at the surface (interface)", units="degC", default=-1.9, do_not_log=just_read)
   call get_param(param_file, mdl, "ISOMIP_S_SUR", s_sur, &
-                 'Salinity at the surface (interface)',  default=33.8, do_not_log=just_read)
+                 "Salinity at the surface (interface)", units="ppt", default=33.8, do_not_log=just_read)
   call get_param(param_file, mdl, "ISOMIP_T_BOT", t_bot, &
-                 'Temperature at the bottom (interface)', default=-1.9, do_not_log=just_read)
+                 "Temperature at the bottom (interface)", units="degC", default=-1.9, do_not_log=just_read)
   call get_param(param_file, mdl, "ISOMIP_S_BOT", s_bot, &
-                 'Salinity at the bottom (interface)', default=34.55, do_not_log=just_read)
+                 "Salinity at the bottom (interface)", units="ppt", default=34.55, do_not_log=just_read)
 
   call calculate_density(t_sur,s_sur,0.0,rho_sur,eqn_of_state, scale=US%kg_m3_to_R)
   ! write(mesg,*) 'Density in the surface layer:', rho_sur
@@ -481,16 +481,16 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
                  do_not_log=.true.)
 
   call get_param(PF, mdl, "ISOMIP_S_SUR_SPONGE", s_sur, &
-                 'Surface salinity in sponge layer.', default=s_ref) ! units="ppt")
+                 "Surface salinity in sponge layer.", units="ppt", default=s_ref) ! units="ppt")
 
   call get_param(PF, mdl, "ISOMIP_S_BOT_SPONGE", s_bot, &
-                 'Bottom salinity in sponge layer.', default=s_ref) ! units="ppt")
+                 "Bottom salinity in sponge layer.", units="ppt", default=s_ref) ! units="ppt")
 
   call get_param(PF, mdl, "ISOMIP_T_SUR_SPONGE", t_sur, &
-                 'Surface temperature in sponge layer.', default=t_ref) ! units="degC")
+                 "Surface temperature in sponge layer.", units="degC", default=t_ref) ! units="degC")
 
   call get_param(PF, mdl, "ISOMIP_T_BOT_SPONGE", t_bot, &
-                 'Bottom temperature in sponge layer.', default=t_ref) ! units="degC")
+                 "Bottom temperature in sponge layer.", units="degC", default=t_ref) ! units="degC")
 
   T(:,:,:) = 0.0 ; S(:,:,:) = 0.0 ; Idamp(:,:) = 0.0 !; RHO(:,:,:) = 0.0
 

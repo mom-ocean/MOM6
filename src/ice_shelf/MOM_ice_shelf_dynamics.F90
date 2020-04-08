@@ -1650,7 +1650,7 @@ subroutine shelf_advance_front(CS, ISS, G, hmask, uh_ice, vh_ice)
 end subroutine shelf_advance_front
 
 !> Apply a very simple calving law using a minimum thickness rule
-subroutine ice_shelf_min_thickness_calve(G, h_shelf, area_shelf_h, hmask, thickness_calve)
+subroutine ice_shelf_min_thickness_calve(G, h_shelf, area_shelf_h, hmask, thickness_calve, halo)
   type(ocean_grid_type), intent(in)    :: G  !< The grid structure used by the ice shelf.
   real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: h_shelf !< The ice shelf thickness [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: area_shelf_h !< The area per cell covered by
@@ -1658,20 +1658,25 @@ subroutine ice_shelf_min_thickness_calve(G, h_shelf, area_shelf_h, hmask, thickn
   real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
   real,                  intent(in)    :: thickness_calve !< The thickness at which to trigger calving [Z ~> m].
+  integer,     optional, intent(in)    :: halo  !< The number of halo points to use.  If not present,
+                                                !! work on the entire data domain.
+  integer :: i, j, is, ie, js, je
 
-  integer                        :: i,j
+  if (present(halo)) then
+    is = G%isc - halo ; ie = G%iec + halo ; js = G%jsc - halo ; je = G%jec + halo
+  else
+    is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
+  endif
 
-  do j=G%jsd,G%jed
-    do i=G%isd,G%ied
-!      if ((h_shelf(i,j) < CS%thickness_calve) .and. (hmask(i,j) == 1) .and. &
-!           (CS%ground_frac(i,j) == 0.0)) then
-      if ((h_shelf(i,j) < thickness_calve) .and. (area_shelf_h(i,j) > 0.)) then
-        h_shelf(i,j) = 0.0
-        area_shelf_h(i,j) = 0.0
-        hmask(i,j) = 0.0
-      endif
-    enddo
-  enddo
+  do j=js,je ; do i=is,ie
+!    if ((h_shelf(i,j) < CS%thickness_calve) .and. (hmask(i,j) == 1) .and. &
+!        (CS%ground_frac(i,j) == 0.0)) then
+    if ((h_shelf(i,j) < thickness_calve) .and. (area_shelf_h(i,j) > 0.)) then
+      h_shelf(i,j) = 0.0
+      area_shelf_h(i,j) = 0.0
+      hmask(i,j) = 0.0
+    endif
+  enddo ; enddo
 
 end subroutine ice_shelf_min_thickness_calve
 
