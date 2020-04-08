@@ -1573,8 +1573,8 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  default=.true.)
   call get_param(param_file, mdl, "VERT_FRICTION_2018_ANSWERS", CS%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the answers "//&
-                 "from the end of 2018.  Otherwise, use expressions that do not use an arbitary "//&
-                 "and hard-coded maximum viscous coupling coefficient between layers.", &
+                 "from the end of 2018.  Otherwise, use expressions that do not use an arbitrary "//&
+                 "hard-coded maximum viscous coupling coefficient between layers.", &
                  default=default_2018_answers)
   call get_param(param_file, mdl, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
                  "If true, the bottom stress is calculated with a drag "//&

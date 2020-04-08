@@ -5,6 +5,7 @@ module MOM_neutral_diffusion
 
 use MOM_cpu_clock,             only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,             only : CLOCK_MODULE, CLOCK_ROUTINE
+use MOM_domains,               only : pass_var
 use MOM_diag_mediator,         only : diag_ctrl, time_type
 use MOM_diag_mediator,         only : post_data, register_diag_field
 use MOM_EOS,                   only : EOS_type, EOS_manual_init, calculate_compress, calculate_density_derivs
@@ -23,7 +24,10 @@ use MOM_verticalGrid,          only : verticalGrid_type
 use polynomial_functions,      only : evaluation_polynomial, first_derivative_polynomial
 use PPM_functions,             only : PPM_reconstruction, PPM_boundary_extrapolation
 use regrid_edge_values,        only : edge_values_implicit_h4
-
+use MOM_CVMix_KPP,             only : KPP_get_BLD, KPP_CS
+use MOM_energetic_PBL,         only : energetic_PBL_get_MLD, energetic_PBL_CS
+use MOM_diabatic_driver,       only : diabatic_CS, extract_diabatic_member
+use MOM_lateral_boundary_diffusion, only : boundary_k_range, SURFACE, BOTTOM
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -39,11 +43,13 @@ type, public :: neutral_diffusion_CS ; private
   integer :: deg = 2  !< Degree of polynomial used for reconstructions
   logical :: continuous_reconstruction = .true. !< True if using continuous PPM reconstruction at interfaces
   logical :: debug = .false. !< If true, write verbose debugging messages
+  logical :: hard_fail_heff !< Bring down the model if a problem with heff is detected
   integer :: max_iter !< Maximum number of iterations if refine_position is defined
   real :: drho_tol    !< Convergence criterion representing difference from true neutrality
   real :: x_tol       !< Convergence criterion for how small an update of the position can be
   real :: ref_pres    !< Reference pressure, negative if using locally referenced neutral density
-
+  logical :: interior_only !< If true, only applies neutral diffusion in the ocean interior.
+                      !! That is, the algorithm will exclude the surface and bottom boundary layers.
   ! Positions of neutral surfaces in both the u, v directions
   real,    allocatable, dimension(:,:,:) :: uPoL  !< Non-dimensional position with left layer uKoL-1, u-point
   real,    allocatable, dimension(:,:,:) :: uPoR  !< Non-dimensional position with right layer uKoR-1, u-point
@@ -91,6 +97,8 @@ type, public :: neutral_diffusion_CS ; private
   logical :: remap_answers_2018    !< If true, use the order of arithmetic and expressions that
                                    !! recover the answers for remapping from the end of 2018.
                                    !! Otherwise, use more robust forms of the same expressions.
+  type(KPP_CS),           pointer :: KPP_CSp => NULL()          !< KPP control structure needed to get BLD
+  type(energetic_PBL_CS), pointer :: energetic_PBL_CSp => NULL()!< ePBL control structure needed to get MLD
 end type neutral_diffusion_CS
 
 ! This include declares and sets the variable "version".
@@ -100,12 +108,13 @@ character(len=40)  :: mdl = "MOM_neutral_diffusion" !< module name
 contains
 
 !> Read parameters and allocate control structure for neutral_diffusion module.
-logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, CS)
+logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, diabatic_CSp, CS)
   type(time_type), target,    intent(in)    :: Time       !< Time structure
   type(ocean_grid_type),      intent(in)    :: G          !< Grid structure
   type(diag_ctrl), target,    intent(inout) :: diag       !< Diagnostics control structure
   type(param_file_type),      intent(in)    :: param_file !< Parameter file structure
   type(EOS_type),  target,    intent(in)    :: EOS        !< Equation of state
+  type(diabatic_CS),          pointer       :: diabatic_CSp!< KPP control structure needed to get BLD
   type(neutral_diffusion_CS), pointer       :: CS         !< Neutral diffusion control structure
 
   ! Local variables
@@ -118,6 +127,7 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, CS)
     call MOM_error(FATAL, "neutral_diffusion_init called with associated control structure.")
     return
   endif
+
 
   ! Log this module and master switch for turning it on/off
   call log_version(param_file, mdl, version, &
@@ -145,8 +155,12 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, CS)
   call get_param(param_file, mdl, "NDIFF_REF_PRES", CS%ref_pres,                    &
                  "The reference pressure (Pa) used for the derivatives of "//&
                  "the equation of state. If negative (default), local "//&
-                 "pressure is used.", &
-                 default = -1.)
+                 "pressure is used.", units="Pa", default = -1.)
+  call get_param(param_file, mdl, "NDIFF_INTERIOR_ONLY", CS%interior_only,                    &
+                 "If true, only applies neutral diffusion in the ocean interior."//&
+                 "That is, the algorithm will exclude the surface and bottom"//&
+                 "boundary layers.", default = .false.)
+
   ! Initialize and configure remapping
   if ( .not.CS%continuous_reconstruction ) then
     call get_param(param_file, mdl, "NDIFF_BOUNDARY_EXTRAP", boundary_extrap, &
@@ -203,6 +217,17 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, CS)
                    "Turns on verbose output for discontinuous neutral "//&
                    "diffusion routines.", &
                    default = .false.)
+    call get_param(param_file, mdl, "HARD_FAIL_HEFF", CS%hard_fail_heff, &
+                  "Bring down the model if a problem with heff is detected",&
+                   default = .true.)
+  endif
+
+  if (CS%interior_only) then
+    call extract_diabatic_member(diabatic_CSp, KPP_CSp=CS%KPP_CSp)
+    call extract_diabatic_member(diabatic_CSp, energetic_PBL_CSp=CS%energetic_PBL_CSp)
+    if ( .not. ASSOCIATED(CS%energetic_PBL_CSp) .and. .not. ASSOCIATED(CS%KPP_CSp) ) then
+      call MOM_error(FATAL,"NDIFF_INTERIOR_ONLY is true, but no valid boundary layer scheme was found")
+    endif
   endif
 
 ! call get_param(param_file, mdl, "KHTR", CS%KhTr, &
@@ -246,9 +271,10 @@ end function neutral_diffusion_init
 
 !> Calculate remapping factors for u/v columns used to map adjoining columns to
 !! a shared coordinate space.
-subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
+subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS)
   type(ocean_grid_type),                    intent(in) :: G   !< Ocean grid structure
   type(verticalGrid_type),                  intent(in) :: GV  !< ocean vertical grid structure
+  type(unit_scale_type),                    intent(in) :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h   !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: T   !< Potential temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: S   !< Salinity [ppt]
@@ -259,12 +285,35 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
   ! Variables used for reconstructions
   real, dimension(SZK_(G),2) :: ppoly_r_S       ! Reconstruction slopes
   real, dimension(SZI_(G), SZJ_(G)) :: hEff_sum ! Summed effective face thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G))  :: hbl      ! Boundary layer depth [m]
   integer :: iMethod
   real, dimension(SZI_(G)) :: ref_pres ! Reference pressure used to calculate alpha/beta
+  real, dimension(SZI_(G)) :: rho_tmp  ! Routine to calculate drho_dp, returns density which is not used
   real :: h_neglect, h_neglect_edge    ! Negligible thicknesses [H ~> m or kg m-2]
+  integer, dimension(SZI_(G), SZJ_(G)) :: k_top  ! Index of the first layer within the boundary
+  real,    dimension(SZI_(G), SZJ_(G)) :: zeta_top ! Distance from the top of a layer to the intersection of the
+                                                   ! top extent of the boundary layer (0 at top, 1 at bottom) [nondim]
+  integer, dimension(SZI_(G), SZJ_(G)) :: k_bot    ! Index of the last layer within the boundary
+  real,    dimension(SZI_(G), SZJ_(G)) :: zeta_bot ! Distance of the lower layer to the boundary layer depth
   real :: pa_to_H                      ! A conversion factor from Pa to H [H Pa-1 ~> m Pa-1 or s2 m-2]
 
   pa_to_H = 1. / GV%H_to_pa
+
+  k_top(:,:) = 1     ; k_bot(:,:) = 1
+  zeta_top(:,:) = 0. ; zeta_bot(:,:) = 1.
+
+  ! Check if hbl needs to be extracted
+  if (CS%interior_only) then
+    hbl(:,:) = 0.
+    if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G)
+    if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US)
+    call pass_var(hbl, G%Domain)
+    ! get k-indices and zeta
+    do j=G%jsc-1, G%jec+1 ; do i=G%isc-1,G%iec+1
+      call boundary_k_range(SURFACE, G%ke, h(i,j,:), hbl(i,j), k_top(i,j), zeta_top(i,j), k_bot(i,j), zeta_bot(i,j))
+    enddo; enddo
+    ! TODO: add similar code for BOTTOM boundary layer
+  endif
 
   if (.not.CS%remap_answers_2018) then
     h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
@@ -358,7 +407,14 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
   if (.not. CS%continuous_reconstruction) then
     do j = G%jsc-1, G%jec+1 ; do i = G%isc-1, G%iec+1
       call mark_unstable_cells( CS, G%ke, CS%T_i(i,j,:,:), CS%S_i(i,j,:,:), CS%P_i(i,j,:,:), CS%stable_cell(i,j,:) )
-      enddo ; enddo
+      if (CS%interior_only) then
+        if (.not. CS%stable_cell(i,j,k_bot(i,j))) zeta_bot(i,j) = -1.
+        ! set values in the surface and bottom boundary layer to false.
+        do k = 1, k_bot(i,j)-1
+          CS%stable_cell(i,j,k) = .false.
+        enddo
+      endif
+    enddo ; enddo
   endif
 
   CS%uhEff(:,:,:) = 0.
@@ -379,14 +435,16 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
         call find_neutral_surface_positions_continuous(G%ke,                                    &
                 CS%Pint(i,j,:), CS%Tint(i,j,:), CS%Sint(i,j,:), CS%dRdT(i,j,:), CS%dRdS(i,j,:),            &
                 CS%Pint(i+1,j,:), CS%Tint(i+1,j,:), CS%Sint(i+1,j,:), CS%dRdT(i+1,j,:), CS%dRdS(i+1,j,:),  &
-                CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:) )
+                CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:),           &
+                k_bot(I,j), k_bot(I+1,j), 1.-zeta_bot(I,j), 1.-zeta_bot(I+1,j))
       else
         call find_neutral_surface_positions_discontinuous(CS, G%ke,                                            &
             CS%P_i(i,j,:,:), h(i,j,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:), CS%ppoly_coeffs_T(i,j,:,:),           &
             CS%ppoly_coeffs_S(i,j,:,:),CS%stable_cell(i,j,:),                                                  &
             CS%P_i(i+1,j,:,:), h(i+1,j,:), CS%T_i(i+1,j,:,:), CS%S_i(i+1,j,:,:), CS%ppoly_coeffs_T(i+1,j,:,:), &
-            CS%ppoly_coeffs_S(i+1,j,:,:), CS%stable_cell(i+1,j,:),                                              &
-            CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:))
+            CS%ppoly_coeffs_S(i+1,j,:,:), CS%stable_cell(i+1,j,:),                                             &
+            CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:),                   &
+            hard_fail_heff = CS%hard_fail_heff)
       endif
     endif
   enddo ; enddo
@@ -395,17 +453,19 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
   do J = G%jsc-1, G%jec ; do i = G%isc, G%iec
     if (G%mask2dCv(i,J) > 0.) then
       if (CS%continuous_reconstruction) then
-        call find_neutral_surface_positions_continuous(G%ke,                                  &
+        call find_neutral_surface_positions_continuous(G%ke,                                              &
                 CS%Pint(i,j,:), CS%Tint(i,j,:), CS%Sint(i,j,:), CS%dRdT(i,j,:), CS%dRdS(i,j,:),           &
                 CS%Pint(i,j+1,:), CS%Tint(i,j+1,:), CS%Sint(i,j+1,:), CS%dRdT(i,j+1,:), CS%dRdS(i,j+1,:), &
-                CS%vPoL(i,J,:), CS%vPoR(i,J,:), CS%vKoL(i,J,:), CS%vKoR(i,J,:), CS%vhEff(i,J,:) )
+                CS%vPoL(i,J,:), CS%vPoR(i,J,:), CS%vKoL(i,J,:), CS%vKoR(i,J,:), CS%vhEff(i,J,:),          &
+                k_bot(i,J), k_bot(i,J+1), 1.-zeta_bot(i,J), 1.-zeta_bot(i,J+1))
       else
         call find_neutral_surface_positions_discontinuous(CS, G%ke,                                            &
             CS%P_i(i,j,:,:), h(i,j,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:), CS%ppoly_coeffs_T(i,j,:,:),           &
             CS%ppoly_coeffs_S(i,j,:,:),CS%stable_cell(i,j,:),                                                  &
             CS%P_i(i,j+1,:,:), h(i,j+1,:), CS%T_i(i,j+1,:,:), CS%S_i(i,j+1,:,:), CS%ppoly_coeffs_T(i,j+1,:,:), &
             CS%ppoly_coeffs_S(i,j+1,:,:), CS%stable_cell(i,j+1,:),                                             &
-            CS%vPoL(I,j,:), CS%vPoR(I,j,:), CS%vKoL(I,j,:), CS%vKoR(I,j,:), CS%vhEff(I,j,:))
+            CS%vPoL(I,j,:), CS%vPoR(I,j,:), CS%vKoL(I,j,:), CS%vKoR(I,j,:), CS%vhEff(I,j,:),                   &
+            hard_fail_heff = CS%hard_fail_heff)
       endif
     endif
   enddo ; enddo
@@ -844,7 +904,7 @@ end function fvlsq_slope
 
 !> Returns positions within left/right columns of combined interfaces using continuous reconstructions of T/S
 subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, Sr, &
-                                                     dRdTr, dRdSr, PoL, PoR, KoL, KoR, hEff)
+                                                     dRdTr, dRdSr, PoL, PoR, KoL, KoR, hEff, bl_kl, bl_kr, bl_zl, bl_zr)
   integer,                    intent(in)    :: nk    !< Number of levels
   real, dimension(nk+1),      intent(in)    :: Pl    !< Left-column interface pressure [Pa]
   real, dimension(nk+1),      intent(in)    :: Tl    !< Left-column interface potential temperature [degC]
@@ -863,6 +923,10 @@ subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdS
   integer, dimension(2*nk+2), intent(inout) :: KoL   !< Index of first left interface above neutral surface
   integer, dimension(2*nk+2), intent(inout) :: KoR   !< Index of first right interface above neutral surface
   real, dimension(2*nk+1),    intent(inout) :: hEff  !< Effective thickness between two neutral surfaces [Pa]
+  integer, optional,          intent(in)    :: bl_kl !< Layer index of the boundary layer (left)
+  integer, optional,          intent(in)    :: bl_kr !< Layer index of the boundary layer (right)
+  real, optional,             intent(in)    :: bl_zl !< Nondimensional position of the boundary layer (left)
+  real, optional,             intent(in)    :: bl_zr !< Nondimensional position of the boundary layer (right)
 
   ! Local variables
   integer :: ns                     ! Number of neutral surfaces
@@ -877,12 +941,21 @@ subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdS
   real    :: dRho, dRhoTop, dRhoBot, hL, hR
   integer :: lastK_left, lastK_right
   real    :: lastP_left, lastP_right
+  logical :: interior_limit
 
   ns = 2*nk+2
+
   ! Initialize variables for the search
-  kr = 1 ; lastK_right = 1 ; lastP_right = 0.
-  kl = 1 ; lastK_left = 1 ; lastP_left = 0.
+  kr = 1 ;
+  kl = 1 ;
+  lastP_right = 0.
+  lastP_left = 0.
+  lastK_right = 1
+  lastK_left  = 1
   reached_bottom = .false.
+
+  ! Check to see if we should limit the diffusion to the interior
+  interior_limit = PRESENT(bl_kl) .and. PRESENT(bl_kr) .and. PRESENT(bl_zr) .and. PRESENT(bl_zl)
 
   ! Loop over each neutral surface, working from top to bottom
   neutral_surfaces: do k_surface = 1, ns
@@ -1002,10 +1075,23 @@ subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdS
     else
       stop 'Else what?'
     endif
+    if (interior_limit) then
+      if (KoL(k_surface)<=bl_kl) then
+        KoL(k_surface) = bl_kl
+        if (PoL(k_surface)<bl_zl) then
+          PoL(k_surface) = bl_zl
+        endif
+      endif
+      if (KoR(k_surface)<=bl_kr) then
+        KoR(k_surface) = bl_kr
+        if (PoR(k_surface)<bl_zr) then
+          PoR(k_surface) = bl_zr
+        endif
+      endif
+    endif
 
     lastK_left = KoL(k_surface) ; lastP_left = PoL(k_surface)
     lastK_right = KoR(k_surface) ; lastP_right = PoR(k_surface)
-
     ! Effective thickness
     ! NOTE: This would be better expressed in terms of the layers thicknesses rather
     ! than as differences of position - AJA
@@ -1064,7 +1150,8 @@ end function interpolate_for_nondim_position
 !! of T and S are optional to aid with unit testing, but will always be passed otherwise
 subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, Tl, Sl, ppoly_T_l, ppoly_S_l, stable_l,&
                                                                 Pres_r, hcol_r, Tr, Sr, ppoly_T_r, ppoly_S_r, stable_r,&
-                                                                PoL, PoR, KoL, KoR, hEff)
+                                                                PoL, PoR, KoL, KoR, hEff, zeta_bot_L, zeta_bot_R,      &
+                                                                k_bot_L, k_bot_R, hard_fail_heff)
 
   type(neutral_diffusion_CS),     intent(inout) :: CS        !< Neutral diffusion control structure
   integer,                        intent(in)    :: nk        !< Number of levels
@@ -1089,7 +1176,15 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, 
   integer, dimension(4*nk),       intent(inout) :: KoL       !< Index of first left interface above neutral surface
   integer, dimension(4*nk),       intent(inout) :: KoR       !< Index of first right interface above neutral surface
   real, dimension(4*nk-1),        intent(inout) :: hEff      !< Effective thickness between two neutral surfaces (Pa)
+  real, optional,                 intent(in)    :: zeta_bot_L!< Non-dimensional distance to where the boundary layer
+                                                             !! intersetcs the cell (left) [nondim]
+  real, optional,                 intent(in)    :: zeta_bot_R!< Non-dimensional distance to where the boundary layer
+                                                             !! intersetcs the cell (right) [nondim]
 
+  integer, optional,              intent(in)    :: k_bot_L   !< k-index for the boundary layer (left) [nondim]
+  integer, optional,              intent(in)    :: k_bot_R   !< k-index for the boundary layer (right) [nondim]
+  logical, optional,              intent(in)    :: hard_fail_heff !< If true (default) bring down the model if the
+                                                             !! neutral surfaces ever cross [logical]
   ! Local variables
   integer :: ns                     ! Number of neutral surfaces
   integer :: k_surface              ! Index of neutral surface
@@ -1099,6 +1194,7 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, 
   logical :: searching_right_column ! True if searching for the position of a left interface in the right column
   logical :: reached_bottom         ! True if one of the bottom-most interfaces has been used as the target
   logical :: search_layer
+  logical :: fail_heff              ! By default,
   real    :: dRho, dRhoTop, dRhoBot, hL, hR
   real    :: z0, pos
   real    :: dRdT_from_top, dRdS_from_top   ! Density derivatives at the searched from interface
@@ -1107,7 +1203,8 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, 
   real    :: dRdT_to_bot, dRdS_to_bot       ! Density derivatives at the interfaces being searched
   real    :: T_ref, S_ref, P_ref, P_top, P_bot
   real    :: lastP_left, lastP_right
-
+  integer :: k_init_L, k_init_R             ! Starting indices layers for left and right
+  real    :: p_init_L, p_init_R             ! Starting positions for left and right
   ! Initialize variables for the search
   ns = 4*nk
   ki_right = 1
@@ -1120,6 +1217,18 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, 
   searching_left_column = .false.
   searching_right_column = .false.
 
+  fail_heff = .true.
+  if (PRESENT(hard_fail_heff)) fail_heff = hard_fail_heff
+
+  if (PRESENT(k_bot_L) .and. PRESENT(k_bot_R) .and. PRESENT(zeta_bot_L) .and. PRESENT(zeta_bot_R)) then
+    k_init_L = k_bot_L; k_init_R = k_bot_R
+    p_init_L = zeta_bot_L; p_init_R = zeta_bot_R
+    lastP_left = zeta_bot_L; lastP_right = zeta_bot_R
+    kl_left = k_bot_L; kl_right = k_bot_R
+  else
+    k_init_L = 1  ; k_init_R = 1
+    p_init_L = 0. ; p_init_R = 0.
+  endif
   ! Loop over each neutral surface, working from top to bottom
   neutral_surfaces: do k_surface = 1, ns
 
@@ -1136,10 +1245,10 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, 
         PoR(k_surface) = PoR(k_surface-1)
         KoR(k_surface) = KoR(k_surface-1)
       else
-        PoR(k_surface) = 0.
-        KoR(k_surface) = 1
-        PoL(k_surface) = 0.
-        KoL(k_Surface) = 1
+        PoR(k_surface) = p_init_R
+        KoR(k_surface) = k_init_R
+        PoL(k_surface) = p_init_L
+        KoL(k_Surface) = k_init_L
       endif
       call increment_interface(nk, kl_left, ki_left, reached_bottom, searching_left_column, searching_right_column)
       searching_left_column = .true.
@@ -1244,7 +1353,17 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, 
         hL = (PoL(k_surface) - PoL(k_surface-1))*hcol_l(KoL(k_surface))
         hR = (PoR(k_surface) - PoR(k_surface-1))*hcol_r(KoR(k_surface))
         if (hL < 0. .or. hR < 0.) then
-          call MOM_error(FATAL,"Negative thicknesses in neutral diffusion")
+          if (fail_heff) then
+            call MOM_error(FATAL,"Negative thicknesses in neutral diffusion")
+          else
+            if (searching_left_column) then
+              PoL(k_surface) = PoL(k_surface-1)
+              KoL(k_surface) = KoL(k_surface-1)
+            elseif (searching_right_column) then
+              PoR(k_surface) = PoR(k_surface-1)
+              KoR(k_surface) = KoR(k_surface-1)
+            endif
+          endif
         elseif ( hL + hR == 0. ) then
            hEff(k_surface-1) = 0.
         else

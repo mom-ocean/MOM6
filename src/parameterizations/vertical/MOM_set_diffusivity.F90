@@ -1930,10 +1930,9 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  "The flux Richardson number where the stratification is "//&
                  "large enough that N2 > omega2.  The full expression for "//&
                  "the Flux Richardson number is usually "//&
-                 "FLUX_RI_MAX*N2/(N2+OMEGA2).", default=0.2)
+                 "FLUX_RI_MAX*N2/(N2+OMEGA2).", units="nondim", default=0.2)
   call get_param(param_file, mdl, "OMEGA", CS%omega, &
-                 "The rotation rate of the earth.", units="s-1", &
-                 default=7.2921e-5, scale=US%T_to_s)
+                 "The rotation rate of the earth.", units="s-1", default=7.2921e-5, scale=US%T_to_s)
 
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
@@ -1956,8 +1955,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
     call get_param(param_file, mdl, "ML_RAD_EFOLD_COEFF", CS%ML_rad_efold_coeff, &
                  "A coefficient that is used to scale the penetration "//&
                  "depth for turbulence below the base of the mixed layer. "//&
-                 "This is only used if ML_RADIATION is true.", units="nondim", &
-                 default=0.2)
+                 "This is only used if ML_RADIATION is true.", units="nondim", default=0.2)
     call get_param(param_file, mdl, "ML_RAD_BUG", CS%ML_rad_bug, &
                  "If true use code with a bug that reduces the energy available "//&
                  "in the transition layer by a factor of the inverse of the energy "//&
@@ -1966,8 +1964,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  "The maximum diapycnal diffusivity due to turbulence "//&
                  "radiated from the base of the mixed layer. "//&
                  "This is only used if ML_RADIATION is true.", &
-                 units="m2 s-1", default=1.0e-3, &
-                 scale=US%m2_s_to_Z2_T)
+                 units="m2 s-1", default=1.0e-3, scale=US%m2_s_to_Z2_T)
     call get_param(param_file, mdl, "ML_RAD_COEFF", CS%ML_rad_coeff, &
                  "The coefficient which scales MSTAR*USTAR^3 to obtain "//&
                  "the energy available for mixing below the base of the "//&
@@ -1976,8 +1973,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
     call get_param(param_file, mdl, "ML_RAD_APPLY_TKE_DECAY", CS%ML_rad_TKE_decay, &
                  "If true, apply the same exponential decay to ML_rad as "//&
                  "is applied to the other surface sources of TKE in the "//&
-                 "mixed layer code. This is only used if ML_RADIATION is true.", &
-                 default=.true.)
+                 "mixed layer code. This is only used if ML_RADIATION is true.", default=.true.)
     call get_param(param_file, mdl, "MSTAR", CS%mstar, &
                  "The ratio of the friction velocity cubed to the TKE "//&
                  "input to the mixed layer.", "units=nondim", default=1.2)
@@ -2003,9 +1999,8 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   call get_param(param_file, mdl, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
                  "If true, the bottom stress is calculated with a drag "//&
                  "law of the form c_drag*|u|*u. The velocity magnitude "//&
-                 "may be an assumed value or it may be based on the "//&
-                 "actual velocity in the bottommost HBBL, depending on "//&
-                 "LINEAR_DRAG.", default=.true.)
+                 "may be an assumed value or it may be based on the actual "//&
+                 "velocity in the bottommost HBBL, depending on LINEAR_DRAG.", default=.true.)
   if  (CS%bottomdraglaw) then
     call get_param(param_file, mdl, "CDRAG", CS%cdrag, &
                  "The drag coefficient relating the magnitude of the "//&
@@ -2046,8 +2041,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  "If true, uses a simple estimate of Kd/TKE that will "//&
                  "work for arbitrary vertical coordinates. If false, "//&
                  "calculates Kd/TKE and bounds based on exact energetics "//&
-                 "for an isopycnal layer-formulation.", &
-                 default=.false.)
+                 "for an isopycnal layer-formulation.", default=.false.)
 
   ! set params releted to the background mixing
   call bkgnd_mixing_init(Time, G, GV, US, param_file, CS%diag, CS%bkgnd_mixing_csp)
@@ -2055,8 +2049,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   call get_param(param_file, mdl, "KV", CS%Kv, &
                  "The background kinematic viscosity in the interior. "//&
                  "The molecular value, ~1e-6 m2 s-1, may be used.", &
-                 units="m2 s-1", scale=US%m2_s_to_Z2_T, &
-                 fail_if_missing=.true.)
+                 units="m2 s-1", scale=US%m2_s_to_Z2_T, fail_if_missing=.true.)
 
   call get_param(param_file, mdl, "KD", CS%Kd, &
                  "The background diapycnal diffusivity of density in the "//&
@@ -2065,13 +2058,11 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "KD_MIN", CS%Kd_min, &
                  "The minimum diapycnal diffusivity.", &
-                 units="m2 s-1", default=0.01*CS%Kd*US%Z2_T_to_m2_s, &
-                 scale=US%m2_s_to_Z2_T)
+                 units="m2 s-1", default=0.01*CS%Kd*US%Z2_T_to_m2_s, scale=US%m2_s_to_Z2_T)
   call get_param(param_file, mdl, "KD_MAX", CS%Kd_max, &
                  "The maximum permitted increment for the diapycnal "//&
-                 "diffusivity from TKE-based parameterizations, or a "//&
-                 "negative value for no limit.", units="m2 s-1", default=-1.0, &
-                 scale=US%m2_s_to_Z2_T)
+                 "diffusivity from TKE-based parameterizations, or a negative "//&
+                 "value for no limit.", units="m2 s-1", default=-1.0, scale=US%m2_s_to_Z2_T)
   if (CS%simple_TKE_to_Kd .and. CS%Kd_max<=0.) call MOM_error(FATAL, &
          "set_diffusivity_init: To use SIMPLE_TKE_TO_KD, KD_MAX must be set to >0.")
   call get_param(param_file, mdl, "KD_ADD", CS%Kd_add, &
@@ -2091,8 +2082,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  default=.false., debuggingParam=.true.)
 
   call get_param(param_file, mdl, "USER_CHANGE_DIFFUSIVITY", CS%user_change_diff, &
-                 "If true, call user-defined code to change the diffusivity.", &
-                 default=.false.)
+                 "If true, call user-defined code to change the diffusivity.", default=.false.)
 
   call get_param(param_file, mdl, "DISSIPATION_MIN", CS%dissip_min, &
                  "The minimum dissipation by which to determine a lower "//&
@@ -2154,9 +2144,8 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  "Maximum salt diffusivity for salt fingering regime.", &
                  default=1.e-4, units="m2 s-1", scale=US%m2_s_to_Z2_T)
     call get_param(param_file, mdl, "KV_MOLECULAR", CS%Kv_molecular, &
-                 "Molecular viscosity for calculation of fluxes under "//&
-                 "double-diffusive convection.", default=1.5e-6, units="m2 s-1", &
-                 scale=US%m2_s_to_Z2_T)
+                 "Molecular viscosity for calculation of fluxes under double-diffusive "//&
+                 "convection.", default=1.5e-6, units="m2 s-1", scale=US%m2_s_to_Z2_T)
     ! The default molecular viscosity follows the CCSM4.0 and MOM4p1 defaults.
 
     CS%id_KT_extra = register_diag_field('ocean_model', 'KT_extra', diag%axesTi, Time, &
