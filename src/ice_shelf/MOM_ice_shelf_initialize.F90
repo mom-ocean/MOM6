@@ -30,7 +30,7 @@ subroutine initialize_ice_thickness(h_shelf, area_shelf_h, hmask, G, US, PF)
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: h_shelf !< The ice shelf thickness [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [m2].
+                         intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [L2 ~> m2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
@@ -60,9 +60,9 @@ end subroutine initialize_ice_thickness
 subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, US, PF)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: h_shelf !< The ice shelf thickness [m].
+                         intent(inout) :: h_shelf !< The ice shelf thickness [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [m2].
+                         intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [L2 ~> m2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
@@ -70,7 +70,7 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
   type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
 
   !  This subroutine reads ice thickness and area from a file and puts it into
-  !  h_shelf and area_shelf_h in m (and dimensionless) and updates hmask
+  !  h_shelf [Z ~> m] and area_shelf_h [L2 ~> m2] (and dimensionless) and updates hmask
   character(len=200) :: filename,thickness_file,inputdir ! Strings for file/path
   character(len=200) :: thickness_varname, area_varname  ! Variable name in file
   character(len=40)  :: mdl = "initialize_ice_thickness_from_file" ! This subroutine's name.
@@ -101,7 +101,7 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
        " initialize_topography_from_file: Unable to open "//trim(filename))
 
   call MOM_read_data(filename, trim(thickness_varname), h_shelf, G%Domain, scale=US%m_to_Z)
-  call MOM_read_data(filename,trim(area_varname),area_shelf_h,G%Domain)
+  call MOM_read_data(filename,trim(area_varname), area_shelf_h, G%Domain, scale=US%m_to_L**2)
 
 !  call get_param(PF, mdl, "ICE_BOUNDARY_CONFIG", config, &
 !                 "This specifies how the ice domain boundary is specified", &
@@ -120,7 +120,7 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
         udh = exp(-(G%geoLonCv(i,j)-len_sidestress)/5.0) * h_shelf(i,j)
         if (udh <= 25.0) then
           h_shelf(i,j) = 0.0
-          area_shelf_h (i,j) = 0.0
+          area_shelf_h(i,j) = 0.0
         else
           h_shelf(i,j) = udh
         endif
@@ -128,18 +128,17 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
 
       ! update thickness mask
 
-      if (area_shelf_h (i,j) >= US%L_to_m**2*G%areaT(i,j)) then
+      if (area_shelf_h (i,j) >= G%areaT(i,j)) then
         hmask(i,j) = 1.
       elseif (area_shelf_h (i,j) == 0.0) then
         hmask(i,j) = 0.
-      elseif ((area_shelf_h(i,j) > 0) .and. (area_shelf_h(i,j) <= US%L_to_m**2*G%areaT(i,j))) then
+      elseif ((area_shelf_h(i,j) > 0) .and. (area_shelf_h(i,j) <= G%areaT(i,j))) then
         hmask(i,j) = 2.
       else
         call MOM_error(FATAL,mdl// " AREA IN CELL OUT OF RANGE")
       endif
     enddo
   enddo
-
 
 end subroutine initialize_ice_thickness_from_file
 
@@ -149,7 +148,7 @@ subroutine initialize_ice_thickness_channel(h_shelf, area_shelf_h, hmask, G, US,
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: h_shelf !< The ice shelf thickness [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [m2].
+                         intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [L2 ~> m2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
@@ -206,11 +205,11 @@ subroutine initialize_ice_thickness_channel(h_shelf, area_shelf_h, hmask, G, US,
           h_shelf (i,j) = 0.0
         else
           if (G%geoLonCu(i,j) > edge_pos) then
-            area_shelf_h(i,j) = US%L_to_m**2*G%areaT(i,j) * (edge_pos - G%geoLonCu(i-1,j)) / &
-                            (G%geoLonCu(i,j) - G%geoLonCu(i-1,j))
+            area_shelf_h(i,j) = G%areaT(i,j) * (edge_pos - G%geoLonCu(i-1,j)) / &
+                                (G%geoLonCu(i,j) - G%geoLonCu(i-1,j))
             hmask (i,j) = 2.0
           else
-            area_shelf_h(i,j) = US%L_to_m**2*G%areaT(i,j)
+            area_shelf_h(i,j) = G%areaT(i,j)
             hmask (i,j) = 1.0
           endif
 
@@ -241,30 +240,31 @@ end subroutine initialize_ice_thickness_channel
 !BEGIN MJH
 ! subroutine initialize_ice_shelf_boundary(u_face_mask_bdry, v_face_mask_bdry, &
 !                u_flux_bdry_val, v_flux_bdry_val, u_bdry_val, v_bdry_val, h_bdry_val, &
-!                hmask, G, PF )
+!                hmask, G, US, PF )
 
 !   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
 !   real, dimension(SZIB_(G),SZJ_(G)), &
 !                          intent(inout) :: u_face_mask_bdry !< A boundary-type mask at C-grid u faces
 !   real, dimension(SZIB_(G),SZJ_(G)), &
 !                          intent(inout) :: u_flux_bdry_val  !< The boundary thickness flux through
-                                                       !! C-grid u faces [m2 s-1].
+!                                                      !! C-grid u faces [L Z T-1 ~> m2 s-1].
 !   real, dimension(SZI_(G),SZJB_(G)), &
 !                          intent(inout) :: v_face_mask_bdry !< A boundary-type mask at C-grid v faces
 !   real, dimension(SZI_(G),SZJB_(G)), &
 !                          intent(inout) :: v_flux_bdry_val  !< The boundary thickness flux through
-                                                       !! C-grid v faces [m2 s-1].
+!                                                      !! C-grid v faces [L Z T-1 ~> m2 s-1].
 !   real, dimension(SZIB_(G),SZJB_(G)), &
 !                          intent(inout) :: u_bdry_val !< The zonal ice shelf velocity at open
-                                                       !! boundary vertices [m yr-1].
+!                                                      !! boundary vertices [L T-1 ~> m s-1].
 !   real, dimension(SZIB_(G),SZJB_(G)), &
 !                          intent(inout) :: v_bdry_val !< The meridional ice shelf velocity at open
-                                                       !! boundary vertices [m yr-1].
+!                                                      !! boundary vertices [L T-1 ~> m s-1].
 !   real, dimension(SZDI_(G),SZDJ_(G)), &
-!                          intent(inout) :: h_bdry_val !< The ice shelf thickness at open boundaries
+!                          intent(inout) :: h_bdry_val !< The ice shelf thickness at open boundaries [Z ~> m]
 !   real, dimension(SZDI_(G),SZDJ_(G)), &
 !                          intent(inout) :: hmask !< A mask indicating which tracer points are
 !                                              !! partly or fully covered by an ice-shelf
+!   type(unit_scale_type), intent(in)    :: US !< A structure containing unit conversion factors
 !   type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
 
 !   character(len=40)  :: mdl = "initialize_ice_shelf_boundary" ! This subroutine's name.
@@ -297,45 +297,48 @@ end subroutine initialize_ice_thickness_channel
 
 ! subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_bdry, &
 !                u_flux_bdry_val, v_flux_bdry_val, u_bdry_val, v_bdry_val, h_bdry_val, &
-!                hmask, G, flux_bdry, PF )
+!                hmask, G, flux_bdry, US, PF )
 
 !   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
 !   real, dimension(SZIB_(G),SZJ_(G)), &
 !                          intent(inout) :: u_face_mask_bdry !< A boundary-type mask at C-grid u faces
 !   real, dimension(SZIB_(G),SZJ_(G)), &
 !                          intent(inout) :: u_flux_bdry_val  !< The boundary thickness flux through
-                                                       !! C-grid u faces [m2 s-1].
+!                                                      !! C-grid u faces [L Z T-1 ~> m2 s-1].
 !   real, dimension(SZI_(G),SZJB_(G)), &
 !                          intent(inout) :: v_face_mask_bdry !< A boundary-type mask at C-grid v faces
 !   real, dimension(SZI_(G),SZJB_(G)), &
 !                          intent(inout) :: v_flux_bdry_val  !< The boundary thickness flux through
-                                                       !! C-grid v faces [m2 s-1].
+!                                                      !! C-grid v faces [L Z T-1 ~> m2 s-1].
 !   real, dimension(SZIB_(G),SZJB_(G)), &
 !                          intent(inout) :: u_bdry_val !< The zonal ice shelf velocity at open
-                                                       !! boundary vertices [m yr-1].
+                                                       !! boundary vertices [L T-1 ~> m s-1].
 !   real, dimension(SZIB_(G),SZJB_(G)), &
 !                          intent(inout) :: v_bdry_val !< The meridional ice shelf velocity at open
-                                                       !! boundary vertices [m yr-1].
+                                                       !! boundary vertices [L T-1 ~> m s-1].
 !   real, dimension(SZDI_(G),SZDJ_(G)), &
-!                          intent(inout) :: h_bdry_val !< The ice shelf thickness at open boundaries
+!                          intent(inout) :: h_bdry_val !< The ice shelf thickness at open boundaries [Z ~> m]
 !   real, dimension(SZDI_(G),SZDJ_(G)), &
 !                          intent(inout) :: hmask !< A mask indicating which tracer points are
 !                                              !! partly or fully covered by an ice-shelf
 !   logical,               intent(in)    :: flux_bdry !< If true, use mass fluxes as the boundary value.
+!   type(unit_scale_type), intent(in)    :: US !< A structure containing unit conversion factors
 !   type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
 
 !   character(len=40)  :: mdl = "initialize_ice_shelf_boundary_channel" ! This subroutine's name.
 !   integer :: i, j, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc, isc, jsc, iec, jec, ied, jed
-!   real                                                  :: lenlat, input_thick, input_flux, len_stress
+!   real    :: input_thick ! The input ice shelf thickness [Z ~> m]
+!   real    :: input_flux  ! The input ice flux per unit length [L Z T-1 ~> m2 s-1]
+!   real    :: lenlat, len_stress
 
 !   call get_param(PF, mdl, "LENLAT", lenlat, fail_if_missing=.true.)
 
 !   call get_param(PF, mdl, "INPUT_FLUX_ICE_SHELF", input_flux, &
 !                  "volume flux at upstream boundary", &
-!                  units="m2 s-1", default=0.)
+!                  units="m2 s-1", default=0., scale=US%m_s_to_L_T*US%m_to_Z)
 !   call get_param(PF, mdl, "INPUT_THICK_ICE_SHELF", input_thick, &
 !                  "flux thickness at upstream boundary", &
-!                  units="m", default=1000.)
+!                  units="m", default=1000., scale=US%m_to_Z)
 !   call get_param(PF, mdl, "LEN_SIDE_STRESS", len_stress, &
 !                  "maximum position of no-flow condition in along-flow direction", &
 !                  units="km", default=0.)

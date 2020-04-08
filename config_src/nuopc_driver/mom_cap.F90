@@ -123,6 +123,7 @@ integer              :: import_slice = 1
 integer              :: export_slice = 1
 character(len=256)   :: tmpstr
 logical              :: write_diagnostics = .false.
+logical              :: overwrite_timeslice = .false.
 character(len=32)    :: runtype  !< run type
 integer              :: logunit  !< stdout logging unit number
 logical              :: profile_memory = .true.
@@ -273,6 +274,21 @@ subroutine InitializeP0(gcomp, importState, exportState, clock, rc)
 
   write(logmsg,*) write_diagnostics
   call ESMF_LogWrite('MOM_cap:DumpFields = '//trim(logmsg), ESMF_LOGMSG_INFO, rc=rc)
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+       line=__LINE__, &
+       file=__FILE__)) &
+       return
+
+  overwrite_timeslice = .false.
+  call NUOPC_CompAttributeGet(gcomp, name="OverwriteSlice", value=value, &
+       isPresent=isPresent, isSet=isSet, rc=rc)
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+       line=__LINE__, &
+       file=__FILE__)) &
+       return
+  if (isPresent .and. isSet) overwrite_timeslice=(trim(value)=="true")
+  write(logmsg,*) overwrite_timeslice
+  call ESMF_LogWrite('MOM_cap:OverwriteSlice = '//trim(logmsg), ESMF_LOGMSG_INFO, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
        line=__LINE__, &
        file=__FILE__)) &
@@ -708,12 +724,10 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
              Ice_ocean_boundary% seaice_melt (isc:iec,jsc:jec),     &
              Ice_ocean_boundary% mi (isc:iec,jsc:jec),              &
              Ice_ocean_boundary% p (isc:iec,jsc:jec),               &
-             Ice_ocean_boundary% runoff (isc:iec,jsc:jec),          &
-             Ice_ocean_boundary% calving (isc:iec,jsc:jec),         &
-             Ice_ocean_boundary% runoff_hflx (isc:iec,jsc:jec),     &
-             Ice_ocean_boundary% calving_hflx (isc:iec,jsc:jec),    &
-             Ice_ocean_boundary% rofl_flux (isc:iec,jsc:jec),       &
-             Ice_ocean_boundary% rofi_flux (isc:iec,jsc:jec))
+             Ice_ocean_boundary% lrunoff_hflx (isc:iec,jsc:jec),    &
+             Ice_ocean_boundary% frunoff_hflx (isc:iec,jsc:jec),    &
+             Ice_ocean_boundary% lrunoff (isc:iec,jsc:jec),       &
+             Ice_ocean_boundary% frunoff (isc:iec,jsc:jec))
 
   Ice_ocean_boundary%u_flux          = 0.0
   Ice_ocean_boundary%v_flux          = 0.0
@@ -731,12 +745,10 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   Ice_ocean_boundary%seaice_melt_heat= 0.0
   Ice_ocean_boundary%mi              = 0.0
   Ice_ocean_boundary%p               = 0.0
-  Ice_ocean_boundary%runoff          = 0.0
-  Ice_ocean_boundary%calving         = 0.0
-  Ice_ocean_boundary%runoff_hflx     = 0.0
-  Ice_ocean_boundary%calving_hflx    = 0.0
-  Ice_ocean_boundary%rofl_flux       = 0.0
-  Ice_ocean_boundary%rofi_flux       = 0.0
+  Ice_ocean_boundary%lrunoff_hflx    = 0.0
+  Ice_ocean_boundary%frunoff_hflx    = 0.0
+  Ice_ocean_boundary%lrunoff         = 0.0
+  Ice_ocean_boundary%frunoff         = 0.0
 
   ocean_internalstate%ptr%ocean_state_type_ptr => ocean_state
   call ESMF_GridCompSetInternalState(gcomp, ocean_internalstate, rc)
@@ -745,11 +757,12 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
     file=__FILE__)) &
     return  ! bail out
 
+  if (len_trim(scalar_field_name) > 0) then
+   call fld_list_add(fldsToOcn_num, fldsToOcn, trim(scalar_field_name), "will_provide")
+   call fld_list_add(fldsFrOcn_num, fldsFrOcn, trim(scalar_field_name), "will_provide")
+  end if
+
   if (cesm_coupled) then
-     if (len_trim(scalar_field_name) > 0) then
-        call fld_list_add(fldsToOcn_num, fldsToOcn, trim(scalar_field_name), "will_provide")
-        call fld_list_add(fldsFrOcn_num, fldsFrOcn, trim(scalar_field_name), "will_provide")
-     endif
     !call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_lamult"                 , "will provide")
     !call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_ustokes"                , "will provide")
     !call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_vstokes"                , "will provide")
@@ -780,11 +793,9 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofi"                  , "will provide") !-> ice runoff
   call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_fresh_water_to_ocean_rate", "will provide")
   call fld_list_add(fldsToOcn_num, fldsToOcn, "net_heat_flx_to_ocn"        , "will provide")
-
- !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_rate"           , "will provide")
- !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_rate"          , "will provide")
- !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"       , "will provide")
- !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"      , "will provide")
+  !These are not currently used and changing requires a nuopc dictionary change
+  !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"        , "will provide")
+  !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"       , "will provide")
 
   !--------- export fields -------------
   call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocean_mask"                 , "will provide")
@@ -1494,13 +1505,11 @@ subroutine DataInitialize(gcomp, rc)
   ocean_state        => ocean_internalstate%ptr%ocean_state_type_ptr
   call get_ocean_grid(ocean_state, ocean_grid)
 
-  if (cesm_coupled) then
-     call mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock, rc=rc)
-     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, &
-          file=__FILE__)) &
-          return  ! bail out
-  endif
+  call mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock, rc=rc)
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+    line=__LINE__, &
+    file=__FILE__)) &
+    return  ! bail out
 
   call ESMF_StateGet(exportState, itemCount=fieldCount, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -1543,7 +1552,7 @@ subroutine DataInitialize(gcomp, rc)
 
   if(write_diagnostics) then
     call NUOPC_Write(exportState, fileNamePrefix='field_init_ocn_export_', &
-      timeslice=import_slice, relaxedFlag=.true., rc=rc)
+      overwrite=overwrite_timeslice,timeslice=import_slice, relaxedFlag=.true., rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -1697,7 +1706,7 @@ subroutine ModelAdvance(gcomp, rc)
 
      if (write_diagnostics) then
         call NUOPC_Write(importState, fileNamePrefix='field_ocn_import_', &
-             timeslice=import_slice, relaxedFlag=.true., rc=rc)
+             overwrite=overwrite_timeslice,timeslice=import_slice, relaxedFlag=.true., rc=rc)
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
              line=__LINE__, &
              file=__FILE__)) &
@@ -1853,7 +1862,7 @@ subroutine ModelAdvance(gcomp, rc)
 
   if (write_diagnostics) then
      call NUOPC_Write(exportState, fileNamePrefix='field_ocn_export_', &
-          timeslice=export_slice, relaxedFlag=.true., rc=rc)
+          overwrite=overwrite_timeslice,timeslice=export_slice, relaxedFlag=.true., rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &

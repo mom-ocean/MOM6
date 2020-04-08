@@ -931,7 +931,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   real, dimension(max(nsw,1),SZI_(G),SZK_(G)) :: &
     opacityBand      ! The opacity (inverse of the exponential absorption length) of each frequency
                      ! band of shortwave radation in each layer [H-1 ~> m-1 or m2 kg-1]
-  real, dimension(maxGroundings) :: hGrounding
+  real, dimension(maxGroundings) :: hGrounding ! Thickness added by each grounding event [H ~> m or kg m-2]
   real    :: Temp_in, Salin_in
   real    :: g_Hconv2 ! A conversion factor for use in the TKE calculation
                       ! in units of [Z3 R2 T-2 H-2 ~> kg2 m-5 s-2 or m s-2].
@@ -1380,7 +1380,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     do i = 1, min(numberOfGroundings, maxGroundings)
       call forcing_SinglePointPrint(fluxes,G,iGround(i),jGround(i),'applyBoundaryFluxesInOut (grounding)')
       write(mesg(1:45),'(3es15.3)') G%geoLonT( iGround(i), jGround(i) ), &
-                             G%geoLatT( iGround(i), jGround(i)) , hGrounding(i)
+                             G%geoLatT( iGround(i), jGround(i)), hGrounding(i)*GV%H_to_m
       call MOM_error(WARNING, "MOM_diabatic_driver.F90, applyBoundaryFluxesInOut(): "//&
                               "Mass created. x,y,dh= "//trim(mesg), all_print=.true.)
     enddo
