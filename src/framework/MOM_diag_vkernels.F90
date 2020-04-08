@@ -221,7 +221,7 @@ logical function diag_vkernels_unit_tests(verbose)
                      4, (/0.,2.,6.,0./), (/mv,1.,3.,8.,mv/) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
-  if (v) write(0,*) '- - - - - - - - - - reintegration tests  - - - - - - - - -'
+  if (v) write(6,*) '- - - - - - - - - - reintegration tests  - - - - - - - - -'
 
   fail = test_reintegrate(v,mv,'Identity: 3 layer', &
                      3, (/1.,2.,3./), (/-5.,2.,1./), &
@@ -309,6 +309,7 @@ logical function test_interp(verbose, missing_value, msg, nsrc, h_src, u_src, nd
       if (error==0.) then
         write(6,'(i3,3(1pe24.16))') k,u_dest(k),u_true(k),u_dest(k)-u_true(k)
       else
+        write(6,'(i3,3(1pe24.16),x,a)') k,u_dest(k),u_true(k),u_dest(k)-u_true(k),'<--- WRONG!'
         write(0,'(i3,3(1pe24.16),x,a)') k,u_dest(k),u_true(k),u_dest(k)-u_true(k),'<--- WRONG!'
       endif
     enddo
@@ -347,6 +348,7 @@ logical function test_reintegrate(verbose, missing_value, msg, nsrc, h_src, uh_s
       if (error==0.) then
         write(6,'(i3,3(1pe24.16))') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k)
       else
+        write(6,'(i3,3(1pe24.16),x,a)') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k),'<--- WRONG!'
         write(0,'(i3,3(1pe24.16),x,a)') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k),'<--- WRONG!'
       endif
     enddo

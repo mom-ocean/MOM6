@@ -362,7 +362,10 @@ logical function localTestS(verbose,str1,str2)
   if (trim(str1)/=trim(str2)) localTestS=.true.
   if (localTestS .or. verbose) then
     write(*,*) '>'//trim(str1)//'<'
-    if (localTestS) write(*,*) trim(str1),':',trim(str2), '<-- FAIL'
+    if (localTestS) then
+      write(*,*) trim(str1),':',trim(str2), '<-- FAIL'
+      write(0,*) trim(str1),':',trim(str2), '<-- FAIL'
+    endif
   endif
 end function localTestS
 
@@ -375,7 +378,10 @@ logical function localTestI(verbose,i1,i2)
   if (i1/=i2) localTestI=.true.
   if (localTestI .or. verbose) then
     write(*,*) i1,i2
-    if (localTestI) write(*,*) i1,'!=',i2, '<-- FAIL'
+    if (localTestI) then
+      write(*,*) i1,'!=',i2, '<-- FAIL'
+      write(0,*) i1,'!=',i2, '<-- FAIL'
+    endif
   endif
 end function localTestI
 

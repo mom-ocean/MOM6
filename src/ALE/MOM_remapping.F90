@@ -1903,6 +1903,7 @@ logical function test_answer(verbose, n, u, u_true, label, tol)
     do k = 1, n
       if (abs(u(k) - u_true(k)) > tolerance) then
         write(*,'(i4,1p2e24.16,a,1pe24.16,a)') k,u(k),u_true(k),' err=',u(k)-u_true(k),' < wrong'
+        write(0,'(i4,1p2e24.16,a,1pe24.16,a)') k,u(k),u_true(k),' err=',u(k)-u_true(k),' < wrong'
       else
         write(*,'(i4,1p2e24.16)') k,u(k),u_true(k)
       endif

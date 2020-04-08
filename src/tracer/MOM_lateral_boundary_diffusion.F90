@@ -993,8 +993,12 @@ logical function test_layer_fluxes(verbose, nk, test_name, F_calc, F_ans)
   do k=1,nk
     if ( F_calc(k) /= F_ans(k) ) then
       test_layer_fluxes = .true.
-      write(stdunit,*) "UNIT TEST FAILED: ", test_name
+      write(stdunit,*) "MOM_lateral_boundary_diffusion, UNIT TEST FAILED: ", test_name
       write(stdunit,10) k, F_calc(k), F_ans(k)
+      ! ### Once these unit tests are passing, and failures are caught properly,
+      ! we will post failure notifications to both stdout and stderr.
+      !write(0,*) "MOM_lateral_boundary_diffusion, UNIT TEST FAILED: ", test_name
+      !write(0,10) k, F_calc(k), F_ans(k)
     elseif (verbose) then
       write(stdunit,10) k, F_calc(k), F_ans(k)
     endif
