@@ -92,7 +92,7 @@ type, public :: ice_shelf_CS ; private
 
   real :: ustar_bg     !< A minimum value for ustar under ice shelves [Z T-1 ~> m s-1].
   real :: cdrag        !< drag coefficient under ice shelves [nondim].
-  real :: g_Earth      !< The gravitational acceleration [Z T-2 ~> m s-2]
+  real :: g_Earth      !< The gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
   real :: Cp           !< The heat capacity of sea water [Q degC-1 ~> J kg-1 degC-1].
   real :: Rho_ocn      !< A reference ocean density [R ~> kg m-3].
   real :: Cp_ice       !< The heat capacity of fresh ice [Q degC-1 ~> J kg-1 degC-1].
@@ -371,7 +371,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
   do j=js,je
     ! Find the pressure at the ice-ocean interface, averaged only over the
     ! part of the cell covered by ice shelf.
-    do i=is,ie ; p_int(i) = US%RZ_to_kg_m2*US%Z_to_m*US%s_to_T**2*CS%g_Earth * ISS%mass_shelf(i,j) ; enddo
+    do i=is,ie ; p_int(i) = US%RL2_T2_to_Pa*CS%g_Earth * ISS%mass_shelf(i,j) ; enddo
 
     ! Calculate insitu densities and expansion coefficients
     call calculate_density(state%sst(:,j), state%sss(:,j), p_int, &
@@ -399,8 +399,8 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
           hBL_neut_h_molec = ZETA_N * ((hBL_neut * ustar_h) / (5.0 * CS%kv_molec))
 
           ! Determine the mixed layer buoyancy flux, wB_flux.
-          dB_dS = (CS%g_Earth / Rhoml(i)) * dR0_dS(i)
-          dB_dT = (CS%g_Earth / Rhoml(i)) * dR0_dT(i)
+          dB_dS = (US%L_to_Z**2*CS%g_Earth / Rhoml(i)) * dR0_dS(i)
+          dB_dT = (US%L_to_Z**2*CS%g_Earth / Rhoml(i)) * dR0_dT(i)
           ln_neut = 0.0 ; if (hBL_neut_h_molec > 1.0) ln_neut = log(hBL_neut_h_molec)
 
           if (CS%find_salt_root) then
@@ -776,7 +776,7 @@ subroutine add_shelf_forces(G, US, CS, forces, do_shelf_area)
   logical, optional,     intent(in)    :: do_shelf_area !< If true find the shelf-covered areas.
 
   real :: kv_rho_ice ! The viscosity of ice divided by its density [m3 s-1 R-1 Z-1 ~> m5 kg-1 s-1].
-  real :: press_ice  ! The pressure of the ice shelf per unit area of ocean (not ice) [Pa].
+  real :: press_ice  ! The pressure of the ice shelf per unit area of ocean (not ice) [R L2 T-2 ~> Pa].
   logical :: find_area ! If true find the shelf areas at u & v points.
   type(ice_shelf_state), pointer :: ISS => NULL() ! A structure with elements that describe
                                           ! the ice-shelf state
@@ -811,15 +811,14 @@ subroutine add_shelf_forces(G, US, CS, forces, do_shelf_area)
   endif
 
   do j=js,je ; do i=is,ie
-    press_ice = (ISS%area_shelf_h(i,j) * G%IareaT(i,j)) * &
-                US%RZ_to_kg_m2*US%Z_to_m*US%s_to_T**2*(CS%g_Earth * ISS%mass_shelf(i,j))
+    press_ice = (ISS%area_shelf_h(i,j) * G%IareaT(i,j)) * (CS%g_Earth * ISS%mass_shelf(i,j))
     if (associated(forces%p_surf)) then
       if (.not.forces%accumulate_p_surf) forces%p_surf(i,j) = 0.0
-      forces%p_surf(i,j) = forces%p_surf(i,j) + US%kg_m3_to_R*US%m_s_to_L_T**2*press_ice
+      forces%p_surf(i,j) = forces%p_surf(i,j) + press_ice
     endif
     if (associated(forces%p_surf_full)) then
       if (.not.forces%accumulate_p_surf) forces%p_surf_full(i,j) = 0.0
-      forces%p_surf_full(i,j) = forces%p_surf_full(i,j) + US%kg_m3_to_R*US%m_s_to_L_T**2*press_ice
+      forces%p_surf_full(i,j) = forces%p_surf_full(i,j) + press_ice
     endif
   enddo ; enddo
 
@@ -855,7 +854,7 @@ subroutine add_shelf_pressure(G, US, CS, fluxes)
   type(ice_shelf_CS),    intent(in)    :: CS   !< This module's control structure.
   type(forcing),         intent(inout) :: fluxes  !< A structure of surface fluxes that may be updated.
 
-  real :: press_ice       !< The pressure of the ice shelf per unit area of ocean (not ice) [Pa].
+  real :: press_ice       !< The pressure of the ice shelf per unit area of ocean (not ice) [R L2 T-2 ~> Pa].
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
@@ -864,15 +863,14 @@ subroutine add_shelf_pressure(G, US, CS, fluxes)
     call MOM_error(FATAL,"add_shelf_pressure: Incompatible ocean and ice shelf grids.")
 
   do j=js,je ; do i=is,ie
-    press_ice = (CS%ISS%area_shelf_h(i,j) * G%IareaT(i,j)) * &
-                 US%RZ_to_kg_m2*US%Z_to_m*US%s_to_T**2*(CS%g_Earth * CS%ISS%mass_shelf(i,j))
+    press_ice = (CS%ISS%area_shelf_h(i,j) * G%IareaT(i,j)) * (CS%g_Earth * CS%ISS%mass_shelf(i,j))
     if (associated(fluxes%p_surf)) then
       if (.not.fluxes%accumulate_p_surf) fluxes%p_surf(i,j) = 0.0
-      fluxes%p_surf(i,j) = fluxes%p_surf(i,j) + US%kg_m3_to_R*US%m_s_to_L_T**2*press_ice
+      fluxes%p_surf(i,j) = fluxes%p_surf(i,j) + press_ice
     endif
     if (associated(fluxes%p_surf_full)) then
       if (.not.fluxes%accumulate_p_surf) fluxes%p_surf_full(i,j) = 0.0
-      fluxes%p_surf_full(i,j) = fluxes%p_surf_full(i,j) + US%kg_m3_to_R*US%m_s_to_L_T**2*press_ice
+      fluxes%p_surf_full(i,j) = fluxes%p_surf_full(i,j) + press_ice
     endif
   enddo ; enddo
 
@@ -890,7 +888,6 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
   real :: frac_shelf      !< The fractional area covered by the ice shelf [nondim].
   real :: frac_open       !< The fractional area of the ocean that is not covered by the ice shelf [nondim].
   real :: delta_mass_shelf!< Change in ice shelf mass over one time step [kg s-1]
-  real :: press_ice       !< The pressure of the ice shelf per unit area of ocean (not ice) [Pa].
   real :: balancing_flux  !< The fresh water flux that balances the integrated melt flux [R Z T-1 ~> kg m-2 s-1]
   real :: balancing_area   !< total area where the balancing flux is applied [m2]
   type(time_type) :: dTime !< The time step as a time_type
@@ -1285,7 +1282,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
 
   call get_param(param_file, mdl, "G_EARTH", CS%g_Earth, &
                  "The gravitational acceleration of the Earth.", &
-                 units="m s-2", default = 9.80, scale=US%m_to_Z*US%T_to_s**2)
+                 units="m s-2", default = 9.80, scale=US%m_s_to_L_T**2*US%Z_to_m)
   call get_param(param_file, mdl, "C_P", CS%Cp, &
                  "The heat capacity of sea water, approximated as a constant. "//&
                  "The default value is from the TEOS-10 definition of conservative temperature.", &
