@@ -49,7 +49,7 @@ use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_open_boundary,         only : ocean_OBC_type, radiation_open_bdry_conds
 use MOM_open_boundary,         only : open_boundary_zero_normal_flow
-use MOM_open_boundary,         only : open_boundary_test_extern_h
+use MOM_open_boundary,         only : open_boundary_test_extern_h, update_OBC_ramp
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_ML, set_visc_CS
 use MOM_thickness_diffuse,     only : thickness_diffuse_CS
@@ -363,6 +363,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
 
   if (associated(CS%OBC)) then
     if (CS%debug_OBC) call open_boundary_test_extern_h(G, GV, CS%OBC, h)
+
+    ! Update OBC ramp value as function of time
+    call update_OBC_ramp(Time_local, CS%OBC)
 
     do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
       u_old_rad_OBC(I,j,k) = u_av(I,j,k)
@@ -1120,7 +1123,11 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                                 activate=is_new_run(restart_CS) )
 
   if (associated(ALE_CSp)) CS%ALE_CSp => ALE_CSp
-  if (associated(OBC)) CS%OBC => OBC
+  if (associated(OBC)) then
+    CS%OBC => OBC
+    if (OBC%ramp) call update_OBC_ramp(Time, CS%OBC, &
+                                activate=is_new_run(restart_CS) )
+  endif
   if (associated(update_OBC_CSp)) CS%update_OBC_CSp => update_OBC_CSp
 
   eta_rest_name = "sfc" ; if (.not.GV%Boussinesq) eta_rest_name = "p_bot"
