@@ -167,7 +167,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
   real, dimension(SZI_(G),SZK_(G)+1) :: &
     dRho_int      ! The unfiltered density differences across interfaces [R ~> kg m-3].
   real, dimension(SZI_(G)) :: &
-    pres, &       ! The pressure at each interface [Pa].
+    pres, &       ! The pressure at each interface [R L2 T-2 ~> Pa].
     Temp_int, &   ! The temperature at each interface [degC].
     Salin_int, &  ! The salinity at each interface [ppt].
     drho_bot, &   ! The density difference at the bottom of a layer [R ~> kg m-3]
@@ -199,18 +199,18 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
   do j=js,je
     if (associated(tv%eqn_of_state)) then
       if (associated(fluxes%p_surf)) then
-        do i=is,ie ; pres(i) = US%RL2_T2_to_Pa*fluxes%p_surf(i,j) ; enddo
+        do i=is,ie ; pres(i) = fluxes%p_surf(i,j) ; enddo
       else
         do i=is,ie ; pres(i) = 0.0 ; enddo
       endif
       do K=2,nz
         do i=is,ie
-          pres(i) = pres(i) + GV%H_to_Pa*h(i,j,k-1)
+          pres(i) = pres(i) + (GV%g_Earth*GV%H_to_RZ)*h(i,j,k-1)
           Temp_Int(i) = 0.5 * (T_f(i,j,k) + T_f(i,j,k-1))
           Salin_Int(i) = 0.5 * (S_f(i,j,k) + S_f(i,j,k-1))
         enddo
-        call calculate_density_derivs(Temp_int, Salin_int, pres, &
-                 dRho_dT(:), dRho_dS(:), is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density_derivs(Temp_int, Salin_int, pres, dRho_dT(:), dRho_dS(:), &
+                     is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
         do i=is,ie
           dRho_int(i,K) = max(dRho_dT(i)*(T_f(i,j,k) - T_f(i,j,k-1)) + &
                               dRho_dS(i)*(S_f(i,j,k) - S_f(i,j,k-1)), 0.0)

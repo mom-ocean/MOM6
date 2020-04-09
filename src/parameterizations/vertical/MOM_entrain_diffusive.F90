@@ -174,7 +174,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
   real :: g_2dt     ! 0.5 * G_Earth / dt, times unit conversion factors
                     ! [m3 H-2 s-2 T-1 ~> m s-3 or m7 kg-2 s-3].
   real, dimension(SZI_(G)) :: &
-    pressure, &      ! The pressure at an interface [Pa].
+    pressure, &      ! The pressure at an interface [R L2 T-2 ~> Pa].
     T_eos, S_eos, &  ! The potential temperature and salinity at which to
                      ! evaluate dRho_dT and dRho_dS [degC] and [ppt].
     dRho_dT, dRho_dS ! The partial derivatives of potential density with temperature and
@@ -836,12 +836,12 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
       do i=is,ie ; diff_work(i,j,1) = 0.0 ; diff_work(i,j,nz+1) = 0.0 ; enddo
       if (associated(tv%eqn_of_state)) then
         if (associated(fluxes%p_surf)) then
-          do i=is,ie ; pressure(i) = US%RL2_T2_to_Pa*fluxes%p_surf(i,j) ; enddo
+          do i=is,ie ; pressure(i) = fluxes%p_surf(i,j) ; enddo
         else
           do i=is,ie ; pressure(i) = 0.0 ; enddo
         endif
         do K=2,nz
-          do i=is,ie ; pressure(i) = pressure(i) + GV%H_to_Pa*h(i,j,k-1) ; enddo
+          do i=is,ie ; pressure(i) = pressure(i) + (GV%g_Earth*GV%H_to_RZ)*h(i,j,k-1) ; enddo
           do i=is,ie
             if (k==kb(i)) then
               T_eos(i) = 0.5*(tv%T(i,j,kmb) + tv%T(i,j,k))
@@ -851,8 +851,8 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
               S_eos(i) = 0.5*(tv%S(i,j,k-1) + tv%S(i,j,k))
             endif
           enddo
-          call calculate_density_derivs(T_eos, S_eos, pressure, &
-                  dRho_dT, dRho_dS, is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+          call calculate_density_derivs(T_eos, S_eos, pressure, dRho_dT, dRho_dS, is, ie-is+1, &
+                             tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
           do i=is,ie
             if ((k>kmb) .and. (k<kb(i))) then ; diff_work(i,j,K) = 0.0
             else

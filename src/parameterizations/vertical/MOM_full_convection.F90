@@ -345,7 +345,7 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
   real :: c1(SZI_(G),SZK_(G))      ! tridiagonal solver.
   real :: T_f(SZI_(G),SZK_(G))     ! Filtered temperatures [degC]
   real :: S_f(SZI_(G),SZK_(G))     ! Filtered salinities [ppt]
-  real :: pres(SZI_(G))            ! Interface pressures [Pa].
+  real :: pres(SZI_(G))            ! Interface pressures [R L2 T-2 ~> Pa].
   real :: T_EOS(SZI_(G))           ! Filtered and vertically averaged temperatures [degC]
   real :: S_EOS(SZI_(G))           ! Filtered and vertically averaged salinities [ppt]
   real :: kap_dt_x2                ! The product of 2*kappa*dt [H2 ~> m2 or kg2 m-4].
@@ -403,24 +403,24 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
   endif
 
   if (associated(p_surf)) then
-    do i=is,ie ; pres(i) = US%RL2_T2_to_Pa*p_surf(i,j) ; enddo
+    do i=is,ie ; pres(i) = p_surf(i,j) ; enddo
   else
     do i=is,ie ; pres(i) = 0.0 ; enddo
   endif
-  call calculate_density_derivs(T_f(:,1), S_f(:,1), pres, dR_dT(:,1), dR_dS(:,1), &
-                                is-G%isd+1, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
-  do i=is,ie ; pres(i) = pres(i) + h(i,j,1)*GV%H_to_Pa ; enddo
+  call calculate_density_derivs(T_f(:,1), S_f(:,1), pres, dR_dT(:,1), dR_dS(:,1), is-G%isd+1, ie-is+1, &
+                                tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
+  do i=is,ie ; pres(i) = pres(i) + h(i,j,1)*(GV%H_to_RZ*GV%g_Earth) ; enddo
   do K=2,nz
     do i=is,ie
       T_EOS(i) = 0.5*(T_f(i,k-1) + T_f(i,k))
       S_EOS(i) = 0.5*(S_f(i,k-1) + S_f(i,k))
     enddo
-    call calculate_density_derivs(T_EOS, S_EOS, pres, dR_dT(:,K), dR_dS(:,K), &
-                                  is-G%isd+1, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
-    do i=is,ie ; pres(i) = pres(i) + h(i,j,k)*GV%H_to_Pa ; enddo
+    call calculate_density_derivs(T_EOS, S_EOS, pres, dR_dT(:,K), dR_dS(:,K), is-G%isd+1, ie-is+1, &
+                                  tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
+    do i=is,ie ; pres(i) = pres(i) + h(i,j,k)*(GV%H_to_RZ*GV%g_Earth) ; enddo
   enddo
-  call calculate_density_derivs(T_f(:,nz), S_f(:,nz), pres, dR_dT(:,nz+1), dR_dS(:,nz+1), &
-                                is-G%isd+1, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+  call calculate_density_derivs(T_f(:,nz), S_f(:,nz), pres, dR_dT(:,nz+1), dR_dS(:,nz+1), is-G%isd+1, &
+                       ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
 
 
 end subroutine smoothed_dRdT_dRdS

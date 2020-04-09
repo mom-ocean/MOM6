@@ -868,7 +868,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
     dRho_dS            ! partial derivative of density wrt saln [R ppt-1 ~> kg m-3 ppt-1]
 
   real, dimension(SZI_(G)) :: &
-    pres,      &  ! pressure at each interface [Pa]
+    pres,      &  ! pressure at each interface [R L2 T-2 ~> Pa]
     Temp_int,  &  ! temperature at each interface [degC]
     Salin_int, &  ! salinity at each interface [ppt]
     drho_bot,  &  ! A density difference [R ~> kg m-3]
@@ -896,18 +896,18 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
   enddo
   if (associated(tv%eqn_of_state)) then
     if (associated(fluxes%p_surf)) then
-      do i=is,ie ; pres(i) = US%RL2_T2_to_Pa*fluxes%p_surf(i,j) ; enddo
+      do i=is,ie ; pres(i) = fluxes%p_surf(i,j) ; enddo
     else
       do i=is,ie ; pres(i) = 0.0 ; enddo
     endif
     do K=2,nz
       do i=is,ie
-        pres(i) = pres(i) + GV%H_to_Pa*h(i,j,k-1)
+        pres(i) = pres(i) + (GV%g_Earth*GV%H_to_RZ)*h(i,j,k-1)
         Temp_Int(i) = 0.5 * (T_f(i,j,k) + T_f(i,j,k-1))
         Salin_Int(i) = 0.5 * (S_f(i,j,k) + S_f(i,j,k-1))
       enddo
-      call calculate_density_derivs(Temp_int, Salin_int, pres, &
-               dRho_dT(:,K), dRho_dS(:,K), is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density_derivs(Temp_int, Salin_int, pres, dRho_dT(:,K), dRho_dS(:,K), &
+                   is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
       do i=is,ie
         dRho_int(i,K) = max(dRho_dT(i,K)*(T_f(i,j,k) - T_f(i,j,k-1)) + &
                             dRho_dS(i,K)*(S_f(i,j,k) - S_f(i,j,k-1)), 0.0)

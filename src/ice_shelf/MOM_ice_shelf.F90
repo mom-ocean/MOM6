@@ -158,7 +158,8 @@ type, public :: ice_shelf_CS ; private
   logical :: find_salt_root              !< If true, if true find Sbdry using a quadratic eq.
   real    :: TFr_0_0                     !< The freezing point at 0 pressure and 0 salinity [degC]
   real    :: dTFr_dS                     !< Partial derivative of freezing temperature with salinity [degC ppt-1]
-  real    :: dTFr_dp                     !< Partial derivative of freezing temperature with pressure [degC Pa-1]
+  real    :: dTFr_dp                     !< Partial derivative of freezing temperature with
+                                         !! pressure [degC T2 R-1 L-2 ~> degC Pa-1]
   !>@{ Diagnostic handles
   integer :: id_melt = -1, id_exch_vel_s = -1, id_exch_vel_t = -1, &
              id_tfreeze = -1, id_tfl_shelf = -1, &
@@ -217,7 +218,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
                !< with temperature [kg m-3 degC-1].
     dR0_dS, &  !< Partial derivative of the mixed layer density
                !< with salinity [kg m-3 ppt-1].
-    p_int      !< The pressure at the ice-ocean interface [Pa].
+    p_int      !< The pressure at the ice-ocean interface [R L2 T-2 ~> Pa].
 
   real, dimension(SZI_(CS%grid),SZJ_(CS%grid)) :: &
     exch_vel_t, &  !< Sub-shelf thermal exchange velocity [Z T-1 ~> m s-1]
@@ -371,13 +372,13 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
   do j=js,je
     ! Find the pressure at the ice-ocean interface, averaged only over the
     ! part of the cell covered by ice shelf.
-    do i=is,ie ; p_int(i) = US%RL2_T2_to_Pa*CS%g_Earth * ISS%mass_shelf(i,j) ; enddo
+    do i=is,ie ; p_int(i) = CS%g_Earth * ISS%mass_shelf(i,j) ; enddo
 
     ! Calculate insitu densities and expansion coefficients
     call calculate_density(state%sst(:,j), state%sss(:,j), p_int, &
-             Rhoml(:), is, ie-is+1, CS%eqn_of_state)
+             Rhoml(:), is, ie-is+1, CS%eqn_of_state, pres_scale=US%RL2_T2_to_Pa)
     call calculate_density_derivs(state%sst(:,j), state%sss(:,j), p_int, &
-             dR0_dT, dR0_dS, is, ie-is+1, CS%eqn_of_state)
+             dR0_dT, dR0_dS, is, ie-is+1, CS%eqn_of_state, pres_scale=US%RL2_T2_to_Pa)
 
     do i=is,ie
       if ((state%ocean_mass(i,j) > US%RZ_to_kg_m2*CS%col_mass_melt_threshold) .and. &
@@ -445,7 +446,8 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
 
           do it1 = 1,20
             ! Determine the potential temperature at the ice-ocean interface.
-            call calculate_TFreeze(Sbdry(i,j), p_int(i), ISS%tfreeze(i,j), CS%eqn_of_state)
+            call calculate_TFreeze(Sbdry(i,j), p_int(i), ISS%tfreeze(i,j), CS%eqn_of_state, &
+                                   pres_scale=US%RL2_T2_to_Pa)
 
             dT_ustar = (ISS%tfreeze(i,j) - state%sst(i,j)) * ustar_h
             dS_ustar = (Sbdry(i,j) - state%sss(i,j)) * ustar_h
@@ -588,7 +590,8 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
           ! is specified and large enough that the ocean salinity at the interface
           ! is about the same as the boundary layer salinity.
 
-          call calculate_TFreeze(state%sss(i,j), p_int(i), ISS%tfreeze(i,j), CS%eqn_of_state)
+          call calculate_TFreeze(state%sss(i,j), p_int(i), ISS%tfreeze(i,j), CS%eqn_of_state, &
+                                 pres_scale=US%RL2_T2_to_Pa)
 
           exch_vel_t(i,j) = CS%gamma_t
           ISS%tflux_ocn(i,j) = RhoCp * exch_vel_t(i,j) * (ISS%tfreeze(i,j) - state%sst(i,j))
@@ -1272,12 +1275,11 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  "this is the freezing potential temperature at "//&
                  "S=0, P=0.", units="degC", default=0.0, do_not_log=.true.)
     call get_param(param_file, mdl, "DTFREEZE_DS", CS%dTFr_dS, &
-                 "this is the derivative of the freezing potential "//&
-                 "temperature with salinity.", units="degC psu-1", default=-0.054, do_not_log=.true.)
+                 "this is the derivative of the freezing potential temperature with salinity.", &
+                 units="degC psu-1", default=-0.054, do_not_log=.true.)
     call get_param(param_file, mdl, "DTFREEZE_DP", CS%dTFr_dp, &
-                 "this is the derivative of the freezing potential "//&
-                 "temperature with pressure.", &
-                 units="degC Pa-1", default=0.0, do_not_log=.true.)
+                 "this is the derivative of the freezing potential temperature with pressure.", &
+                 units="degC Pa-1", default=0.0, scale=US%RL2_T2_to_Pa, do_not_log=.true.)
   endif
 
   call get_param(param_file, mdl, "G_EARTH", CS%g_Earth, &

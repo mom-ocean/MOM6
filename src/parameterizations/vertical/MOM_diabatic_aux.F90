@@ -118,9 +118,10 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
   real, dimension(SZI_(G)) :: &
     fraz_col, & ! The accumulated heat requirement due to frazil [Q R Z ~> J m-2].
     T_freeze, & ! The freezing potential temperature at the current salinity [degC].
-    ps          ! pressure
+    ps          ! Surface pressure [R L2 T-2 ~> Pa]
   real, dimension(SZI_(G),SZK_(G)) :: &
-    pressure    ! The pressure at the middle of each layer [Pa].
+    pressure    ! The pressure at the middle of each layer [R L2 T-2 ~> Pa].
+  real :: H_to_RL2_T2  ! A conversion factor from thicknesses in H to pressure [R L2 T-2 H-1 ~> Pa m-1 or Pa m2 kg-1]
   real :: hc    ! A layer's heat capacity [Q R Z degC-1 ~> J m-2 degC-1].
   logical :: T_fr_set  ! True if the freezing point has been calculated for a
                        ! row of points.
@@ -135,6 +136,8 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
 
   if (.not.CS%pressure_dependent_frazil) then
     do k=1,nz ; do i=is,ie ; pressure(i,k) = 0.0 ; enddo ; enddo
+  else
+    H_to_RL2_T2 = GV%H_to_RZ * GV%g_Earth
   endif
 !$OMP parallel do default(none) shared(is,ie,js,je,CS,G,GV,US,h,nz,tv,p_surf) &
 !$OMP                           private(fraz_col,T_fr_set,T_freeze,hc,ps)  &
@@ -142,18 +145,18 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
   do j=js,je
     ps(:) = 0.0
     if (PRESENT(p_surf)) then ; do i=is,ie
-      ps(i) = US%RL2_T2_to_Pa*p_surf(i,j)
+      ps(i) = p_surf(i,j)
     enddo ; endif
 
     do i=is,ie ; fraz_col(i) = 0.0 ; enddo
 
     if (CS%pressure_dependent_frazil) then
       do i=is,ie
-        pressure(i,1) = ps(i) + (0.5*GV%H_to_Pa)*h(i,j,1)
+        pressure(i,1) = ps(i) + (0.5*H_to_RL2_T2)*h(i,j,1)
       enddo
       do k=2,nz ; do i=is,ie
         pressure(i,k) = pressure(i,k-1) + &
-          (0.5*GV%H_to_Pa) * (h(i,j,k) + h(i,j,k-1))
+          (0.5*H_to_RL2_T2) * (h(i,j,k) + h(i,j,k-1))
       enddo ; enddo
     endif
 
@@ -162,7 +165,7 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
       do i=is,ie ; if (tv%frazil(i,j) > 0.0) then
         if (.not.T_fr_set) then
           call calculate_TFreeze(tv%S(i:,j,1), pressure(i:,1), T_freeze(i:), &
-                                 1, ie-i+1, tv%eqn_of_state)
+                                 1, ie-i+1, tv%eqn_of_state, pres_scale=US%RL2_T2_to_Pa)
           T_fr_set = .true.
         endif
 
@@ -188,7 +191,7 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
             ((tv%T(i,j,k) < 0.0) .or. (fraz_col(i) > 0.0))) then
           if (.not.T_fr_set) then
             call calculate_TFreeze(tv%S(i:,j,k), pressure(i:,k), T_freeze(i:), &
-                                   1, ie-i+1, tv%eqn_of_state)
+                                   1, ie-i+1, tv%eqn_of_state, pres_scale=US%RL2_T2_to_Pa)
             T_fr_set = .true.
           endif
 
