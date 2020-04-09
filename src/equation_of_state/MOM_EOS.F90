@@ -166,8 +166,7 @@ subroutine calculate_density_scalar(T, S, pressure, rho, EOS, rho_ref, scale, pr
     case (EOS_NEMO)
       call calculate_density_nemo(T, S, p_scale*pressure, rho, rho_ref)
     case default
-      call MOM_error(FATAL, &
-           "calculate_density_scalar: EOS is not valid.")
+      call MOM_error(FATAL, "calculate_density_scalar: EOS is not valid.")
   end select
 
   if (present(scale)) then ; if (scale /= 1.0) then
@@ -214,8 +213,7 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_re
       case (EOS_NEMO)
       call calculate_density_nemo(T, S, pressure, rho, start, npts, rho_ref)
       case default
-        call MOM_error(FATAL, &
-             "calculate_density_array: EOS%form_of_EOS is not valid.")
+        call MOM_error(FATAL, "calculate_density_array: EOS%form_of_EOS is not valid.")
     end select
   else
     do j=start,start+npts-1 ; pres(j) = p_scale * pressure(j) ; enddo
@@ -232,8 +230,7 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_re
       case (EOS_NEMO)
       call calculate_density_nemo(T, S, pres, rho, start, npts, rho_ref)
       case default
-        call MOM_error(FATAL, &
-             "calculate_density_array: EOS%form_of_EOS is not valid.")
+        call MOM_error(FATAL, "calculate_density_array: EOS%form_of_EOS is not valid.")
     end select
   endif
 
@@ -370,33 +367,38 @@ end subroutine calculate_spec_vol_array
 
 
 !> Calls the appropriate subroutine to calculate the freezing point for scalar inputs.
-subroutine calculate_TFreeze_scalar(S, pressure, T_fr, EOS)
+subroutine calculate_TFreeze_scalar(S, pressure, T_fr, EOS, pres_scale)
   real,           intent(in)  :: S !< Salinity [ppt]
   real,           intent(in)  :: pressure !< Pressure [Pa]
   real,           intent(out) :: T_fr !< Freezing point potential temperature referenced
                                       !! to the surface [degC]
   type(EOS_type), pointer     :: EOS !< Equation of state structure
+  real, optional, intent(in)  :: pres_scale !< A multiplicative factor to convert pressure into Pa.
+
+  ! Local variables
+  real :: p_scale ! A factor to convert pressure to units of Pa.
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_TFreeze_scalar called with an unassociated EOS_type EOS.")
 
+  p_scale = 1.0 ; if (present(pres_scale)) p_scale = pres_scale
+
   select case (EOS%form_of_TFreeze)
     case (TFREEZE_LINEAR)
-      call calculate_TFreeze_linear(S, pressure, T_fr, EOS%TFr_S0_P0, &
+      call calculate_TFreeze_linear(S, p_scale*pressure, T_fr, EOS%TFr_S0_P0, &
                                     EOS%dTFr_dS, EOS%dTFr_dp)
     case (TFREEZE_MILLERO)
-      call calculate_TFreeze_Millero(S, pressure, T_fr)
+      call calculate_TFreeze_Millero(S, p_scale*pressure, T_fr)
     case (TFREEZE_TEOS10)
-      call calculate_TFreeze_teos10(S, pressure, T_fr)
+      call calculate_TFreeze_teos10(S, p_scale*pressure, T_fr)
     case default
-      call MOM_error(FATAL, &
-           "calculate_TFreeze_scalar: form_of_TFreeze is not valid.")
+      call MOM_error(FATAL, "calculate_TFreeze_scalar: form_of_TFreeze is not valid.")
   end select
 
 end subroutine calculate_TFreeze_scalar
 
 !> Calls the appropriate subroutine to calculate the freezing point for a 1-D array.
-subroutine calculate_TFreeze_array(S, pressure, T_fr, start, npts, EOS)
+subroutine calculate_TFreeze_array(S, pressure, T_fr, start, npts, EOS, pres_scale)
   real, dimension(:), intent(in)    :: S        !< Salinity [ppt]
   real, dimension(:), intent(in)    :: pressure !< Pressure [Pa]
   real, dimension(:), intent(inout) :: T_fr     !< Freezing point potential temperature referenced
@@ -404,22 +406,44 @@ subroutine calculate_TFreeze_array(S, pressure, T_fr, start, npts, EOS)
   integer,            intent(in)    :: start    !< Starting index within the array
   integer,            intent(in)    :: npts     !< The number of values to calculate
   type(EOS_type),     pointer       :: EOS      !< Equation of state structure
+  real,     optional, intent(in)    :: pres_scale !< A multiplicative factor to convert pressure into Pa.
+
+  ! Local variables
+  real, dimension(size(pressure)) :: pres  ! Pressure converted to [Pa]
+  real :: p_scale ! A factor to convert pressure to units of Pa.
+  integer :: j
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_TFreeze_scalar called with an unassociated EOS_type EOS.")
 
-  select case (EOS%form_of_TFreeze)
-    case (TFREEZE_LINEAR)
-      call calculate_TFreeze_linear(S, pressure, T_fr, start, npts, &
-                                    EOS%TFr_S0_P0, EOS%dTFr_dS, EOS%dTFr_dp)
-    case (TFREEZE_MILLERO)
-      call calculate_TFreeze_Millero(S, pressure, T_fr, start, npts)
-    case (TFREEZE_TEOS10)
-      call calculate_TFreeze_teos10(S, pressure, T_fr, start, npts)
-    case default
-      call MOM_error(FATAL, &
-           "calculate_TFreeze_scalar: form_of_TFreeze is not valid.")
-  end select
+  p_scale = 1.0 ; if (present(pres_scale)) p_scale = pres_scale
+
+  if (p_scale == 1.0) then
+    select case (EOS%form_of_TFreeze)
+      case (TFREEZE_LINEAR)
+        call calculate_TFreeze_linear(S, pressure, T_fr, start, npts, &
+                                      EOS%TFr_S0_P0, EOS%dTFr_dS, EOS%dTFr_dp)
+      case (TFREEZE_MILLERO)
+        call calculate_TFreeze_Millero(S, pressure, T_fr, start, npts)
+      case (TFREEZE_TEOS10)
+        call calculate_TFreeze_teos10(S, pressure, T_fr, start, npts)
+      case default
+        call MOM_error(FATAL, "calculate_TFreeze_scalar: form_of_TFreeze is not valid.")
+    end select
+  else
+    do j=start,start+npts-1 ; pres(j) = p_scale * pressure(j) ; enddo
+    select case (EOS%form_of_TFreeze)
+      case (TFREEZE_LINEAR)
+        call calculate_TFreeze_linear(S, pres, T_fr, start, npts, &
+                                      EOS%TFr_S0_P0, EOS%dTFr_dS, EOS%dTFr_dp)
+      case (TFREEZE_MILLERO)
+        call calculate_TFreeze_Millero(S, pres, T_fr, start, npts)
+      case (TFREEZE_TEOS10)
+        call calculate_TFreeze_teos10(S, pres, T_fr, start, npts)
+      case default
+        call MOM_error(FATAL, "calculate_TFreeze_scalar: form_of_TFreeze is not valid.")
+    end select
+  endif
 
 end subroutine calculate_TFreeze_array
 
@@ -522,8 +546,7 @@ subroutine calculate_density_derivs_scalar(T, S, pressure, drho_dT, drho_dS, EOS
     case (EOS_TEOS10)
       call calculate_density_derivs_teos10(T, S, p_scale*pressure, drho_dT, drho_dS)
     case default
-      call MOM_error(FATAL, &
-           "calculate_density_derivs_scalar: EOS%form_of_EOS is not valid.")
+      call MOM_error(FATAL, "calculate_density_derivs_scalar: EOS%form_of_EOS is not valid.")
   end select
 
   if (present(scale)) then ; if (scale /= 1.0) then
@@ -656,8 +679,7 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
       call calculate_density_second_derivs_teos10(T, S, p_scale*pressure, drho_dS_dS, drho_dS_dT, &
                                                   drho_dT_dT, drho_dS_dP, drho_dT_dP)
     case default
-      call MOM_error(FATAL, &
-           "calculate_density_derivs: EOS%form_of_EOS is not valid.")
+      call MOM_error(FATAL, "calculate_density_derivs: EOS%form_of_EOS is not valid.")
   end select
 
   if (present(scale)) then ; if (scale /= 1.0) then
@@ -725,8 +747,7 @@ subroutine calculate_specific_vol_derivs(T, S, pressure, dSV_dT, dSV_dS, start, 
         dSV_dS(j) = -dRho_DS(j)/(rho(j)**2)
       enddo
     case default
-      call MOM_error(FATAL, &
-           "calculate_density_derivs: EOS%form_of_EOS is not valid.")
+      call MOM_error(FATAL, "calculate_density_derivs: EOS%form_of_EOS is not valid.")
   end select
 
   if (present(scale)) then ; if (scale /= 1.0) then ; do j=start,start+npts-1
@@ -765,8 +786,7 @@ subroutine calculate_compress_array(T, S, pressure, rho, drho_dp, start, npts, E
     case (EOS_NEMO)
       call calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
     case default
-      call MOM_error(FATAL, &
-           "calculate_compress: EOS%form_of_EOS is not valid.")
+      call MOM_error(FATAL, "calculate_compress: EOS%form_of_EOS is not valid.")
   end select
 
 end subroutine calculate_compress_array
