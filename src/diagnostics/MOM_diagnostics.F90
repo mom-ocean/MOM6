@@ -232,7 +232,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
 
   ! tmp array for surface properties
   real :: surface_field(SZI_(G),SZJ_(G))
-  real :: pressure_1d(SZI_(G)) ! Temporary array for pressure when calling EOS
+  real :: pressure_1d(SZI_(G)) ! Temporary array for pressure when calling EOS [R L2 T-2 ~> Pa] or [Pa]
   real :: wt, wt_p
 
   real :: f2_h     ! Squared Coriolis parameter at to h-points [T-2 ~> s-2]
@@ -347,7 +347,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       do j=js,je
         if (associated(p_surf)) then ! Pressure loading at top of surface layer [R L2 T-2 ~> Pa]
           do i=is,ie
-            pressure_1d(i) = US%RL2_T2_to_Pa * p_surf(i,j)
+            pressure_1d(i) = p_surf(i,j)
           enddo
         else
           do i=is,ie
@@ -356,16 +356,16 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
         endif
         do k=1,nz ! Integrate vertically downward for pressure
           do i=is,ie ! Pressure for EOS at the layer center [Pa]
-            pressure_1d(i) = pressure_1d(i) + 0.5*GV%H_to_Pa*h(i,j,k)
+            pressure_1d(i) = pressure_1d(i) + 0.5*(GV%H_to_RZ*GV%g_Earth)*h(i,j,k)
           enddo
           ! Store in-situ density [R ~> kg m-3] in work_3d
-          call calculate_density(tv%T(:,j,k),tv%S(:,j,k), pressure_1d, &
-                                 rho_in_situ, is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+          call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pressure_1d, rho_in_situ, G%HI, &
+                                 tv%eqn_of_state, US)
           do i=is,ie ! Cell thickness = dz = dp/(g*rho) (meter); store in work_3d
             work_3d(i,j,k) = (GV%H_to_RZ*h(i,j,k)) / rho_in_situ(i)
           enddo
           do i=is,ie ! Pressure for EOS at the bottom interface [Pa]
-            pressure_1d(i) = pressure_1d(i) + 0.5*GV%H_to_Pa*h(i,j,k)
+            pressure_1d(i) = pressure_1d(i) + 0.5*(GV%H_to_RZ*GV%g_Earth)*h(i,j,k)
           enddo
         enddo ! k
       enddo ! j
@@ -465,8 +465,8 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       pressure_1d(:) = tv%P_Ref
       !$OMP parallel do default(shared)
       do k=1,nz ; do j=js-1,je+1
-        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pressure_1d, &
-                               Rcv(:,j,k), is-1, ie-is+3, tv%eqn_of_state , scale=US%kg_m3_to_R)
+        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pressure_1d, Rcv(:,j,k), G%HI, &
+                               tv%eqn_of_state, US, halo=1)
       enddo ; enddo
     else ! Rcv should not be used much in this case, so fill in sensible values.
       do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1

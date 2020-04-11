@@ -106,7 +106,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
     geopot_bot    !   Bottom geopotential relative to time-mean sea level,
                   ! including any tidal contributions [L2 T-2 ~> m2 s-2].
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
-                             ! density [Pa] (usually 2e7 Pa = 2000 dbar).
+                             ! density [R L2 T-2 ~> Pa] (usually 2e7 Pa = 2000 dbar).
   real :: rho_in_situ(SZI_(G)) !In-situ density of a layer [R ~> kg m-3].
   real :: PFu_bc, PFv_bc     ! The pressure gradient force due to along-layer
                              ! compensated density gradients [L T-2 ~> m s-2]
@@ -227,8 +227,8 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
         do k=1,nkmb ; do i=Isq,Ieq+1
           tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
         enddo ; enddo
-        call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, &
-                        Rho_cv_BL(:), Isq, Ieq-Isq+2, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, Rho_cv_BL(:), G%HI, &
+                               tv%eqn_of_state, US, halo=1)
         do k=nkmb+1,nz ; do i=Isq,Ieq+1
           if (GV%Rlay(k) < Rho_cv_BL(i)) then
             tv_tmp%T(i,j,k) = tv%T(i,j,nkmb) ; tv_tmp%S(i,j,k) = tv%S(i,j,nkmb)
@@ -244,8 +244,8 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
     endif
     !$OMP parallel do default(shared) private(rho_in_situ)
     do k=1,nz ; do j=Jsq,Jeq+1
-      call calculate_density(tv_tmp%T(:,j,k),tv_tmp%S(:,j,k),p_ref, &
-                             rho_in_situ,Isq,Ieq-Isq+2,tv%eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density(tv_tmp%T(:,j,k), tv_tmp%S(:,j,k), p_ref, rho_in_situ, G%HI, &
+                             tv%eqn_of_state, US, halo=1)
       do i=Isq,Ieq+1 ; alpha_star(i,j,k) = 1.0 / rho_in_situ(i) ; enddo
     enddo ; enddo
   endif                                               ! use_EOS
@@ -394,7 +394,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
                              ! forces from astronomical sources and self-
                              ! attraction and loading, in depth units [Z ~> m].
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
-                             ! density [Pa] (usually 2e7 Pa = 2000 dbar).
+                             ! density [R L2 T-2 ~> Pa] (usually 2e7 Pa = 2000 dbar).
   real :: I_Rho0             ! 1/Rho0 [R-1 ~> m3 kg-1].
   real :: G_Rho0             ! G_Earth / Rho0 [L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1].
   real :: PFu_bc, PFv_bc     ! The pressure gradient force due to along-layer
@@ -482,8 +482,8 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
         do k=1,nkmb ; do i=Isq,Ieq+1
           tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
         enddo ; enddo
-        call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, &
-                        Rho_cv_BL(:), Isq, Ieq-Isq+2, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, Rho_cv_BL(:), G%HI, &
+                               tv%eqn_of_state, US, halo=1)
 
         do k=nkmb+1,nz ; do i=Isq,Ieq+1
           if (GV%Rlay(k) < Rho_cv_BL(i)) then
@@ -503,8 +503,9 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
     ! will come down with a fatal error if there is any compressibility.
     !$OMP parallel do default(shared)
     do k=1,nz+1 ; do j=Jsq,Jeq+1
-      call calculate_density(tv_tmp%T(:,j,k), tv_tmp%S(:,j,k), p_ref, rho_star(:,j,k), &
-                             Isq, Ieq-Isq+2, tv%eqn_of_state, scale=US%kg_m3_to_R*G_Rho0)
+      call calculate_density(tv_tmp%T(:,j,k), tv_tmp%S(:,j,k), p_ref, rho_star(:,j,k), G%HI, &
+                             tv%eqn_of_state, US, halo=1)
+      do i=Isq,Ieq+1 ; rho_star(i,j,k) = G_Rho0*rho_star(i,j,k) ; enddo
     enddo ; enddo
   endif                                               ! use_EOS
 

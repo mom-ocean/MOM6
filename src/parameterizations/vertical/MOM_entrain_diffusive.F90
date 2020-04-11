@@ -243,7 +243,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
 
   correct_density = (CS%correct_density .and. associated(tv%eqn_of_state))
   if (correct_density) then
-    pres(:) = US%kg_m3_to_R*US%m_s_to_L_T**2*tv%P_Ref
+    pres(:) = tv%P_Ref
   else
     pres(:) = 0.0
   endif
@@ -1082,7 +1082,7 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, GV, US, CS, j, Ent_bl, 
   max_ent = 1.0e4*GV%m_to_H
   h_neglect = GV%H_subroundoff
 
-  do i=is,ie ; pres(i) = US%kg_m3_to_R*US%m_s_to_L_T**2*tv%P_Ref ; enddo
+  do i=is,ie ; pres(i) = tv%P_Ref ; enddo
   do k=1,kmb
     call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pres, Rcv, G%HI, tv%eqn_of_state, US)
     do i=is,ie

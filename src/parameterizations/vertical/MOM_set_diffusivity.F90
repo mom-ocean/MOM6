@@ -711,7 +711,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   ! Determine kb - the index of the shallowest active interior layer.
   if (CS%bulkmixedlayer) then
     kmb = GV%nk_rho_varies
-    do i=is,ie ; p_0(i) = 0.0 ; p_ref(i) = US%kg_m3_to_R*US%m_s_to_L_T**2*tv%P_Ref ; enddo
+    do i=is,ie ; p_0(i) = 0.0 ; p_ref(i) = tv%P_Ref ; enddo
     do k=1,nz
       call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_0, rho_0(:,k), G%HI, &
                              tv%eqn_of_state, US)
@@ -1816,7 +1816,7 @@ subroutine set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1, rho_0)
     g_R0 = GV%g_Earth / (GV%Rho0)
     kmb = GV%nk_rho_varies
     eps = 0.1
-    do i=is,ie ; p_ref(i) = US%kg_m3_to_R*US%m_s_to_L_T**2*tv%P_Ref ; enddo
+    do i=is,ie ; p_ref(i) = tv%P_Ref ; enddo
     do k=1,kmb
       call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, Rcv(:,k), G%HI, tv%eqn_of_state, US)
     enddo

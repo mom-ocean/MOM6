@@ -66,7 +66,7 @@ subroutine user_change_diff(h, tv, G, GV, US, CS, Kd_lay, Kd_int, T_f, S_f, Kd_i
                                                                   !! each interface [Z2 T-1 ~> m2 s-1].
   ! Local variables
   real :: Rcv(SZI_(G),SZK_(G)) ! The coordinate density in layers [R ~> kg m-3].
-  real :: p_ref(SZI_(G))       ! An array of tv%P_Ref pressures.
+  real :: p_ref(SZI_(G))       ! An array of tv%P_Ref pressures [R L2 T-2 ~> Pa].
   real :: rho_fn      ! The density dependence of the input function, 0-1 [nondim].
   real :: lat_fn      ! The latitude dependence of the input function, 0-1 [nondim].
   logical :: use_EOS  ! If true, density is calculated from T & S using an
@@ -107,13 +107,11 @@ subroutine user_change_diff(h, tv, G, GV, US, CS, Kd_lay, Kd_int, T_f, S_f, Kd_i
   do j=js,je
     if (present(T_f) .and. present(S_f)) then
       do k=1,nz
-        call calculate_density(T_f(:,j,k), S_f(:,j,k), p_ref, Rcv(:,k),&
-                               is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density(T_f(:,j,k), S_f(:,j,k), p_ref, Rcv(:,k), G%HI, tv%eqn_of_state, US)
       enddo
     else
       do k=1,nz
-        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, Rcv(:,k),&
-                               is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, Rcv(:,k), G%HI, tv%eqn_of_state, US)
       enddo
     endif
 

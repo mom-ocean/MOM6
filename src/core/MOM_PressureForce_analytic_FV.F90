@@ -157,7 +157,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: &
     inty_dza    ! The change in inty_za through a layer [L2 T-2 ~> m2 s-2].
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
-                             ! density, [Pa] (usually 2e7 Pa = 2000 dbar).
+                             ! density, [R L2 T-2 ~> Pa] (usually 2e7 Pa = 2000 dbar).
 
   real :: dp_neglect         ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected [R L2 T-2 ~> Pa].
@@ -227,8 +227,8 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
         do k=1,nkmb ; do i=Isq,Ieq+1
           tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
         enddo ; enddo
-        call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, &
-                        Rho_cv_BL(:), Isq, Ieq-Isq+2, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, Rho_cv_BL(:), G%HI, &
+                               tv%eqn_of_state, US, halo=1)
         do k=nkmb+1,nz ; do i=Isq,Ieq+1
           if (GV%Rlay(k) < Rho_cv_BL(i)) then
             tv_tmp%T(i,j,k) = tv%T(i,j,nkmb) ; tv_tmp%S(i,j,k) = tv%S(i,j,nkmb)
@@ -489,7 +489,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
                        ! of salinity and temperature within each layer.
   real :: rho_in_situ(SZI_(G)) ! The in situ density [R ~> kg m-3].
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
-                             ! density, [Pa] (usually 2e7 Pa = 2000 dbar).
+                             ! density, [R L2 T-2 ~> Pa] (usually 2e7 Pa = 2000 dbar).
   real :: p0(SZI_(G))        ! An array of zeros to use for pressure [Pa].
   real :: h_neglect          ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected [H ~> m].
@@ -576,8 +576,8 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
         do k=1,nkmb ; do i=Isq,Ieq+1
           tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
         enddo ; enddo
-        call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, &
-                        Rho_cv_BL(:), Isq, Ieq-Isq+2, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, Rho_cv_BL(:), G%HI, &
+                               tv%eqn_of_state, US, halo=1)
 
         do k=nkmb+1,nz ; do i=Isq,Ieq+1
           if (GV%Rlay(k) < Rho_cv_BL(i)) then

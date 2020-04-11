@@ -77,7 +77,7 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, PF, use_ALE, CSp, ACSp)
   real :: h(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for thickness at h points
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate at h points [T-1 ~> s-1].
   real :: TNUDG                     ! Nudging time scale [T ~> s]
-  real :: pres(SZI_(G))             ! An array of the reference pressure, in Pa
+  real :: pres(SZI_(G))             ! An array of the reference pressure [R L2 T-2 ~> Pa]
   real :: e0(SZK_(G)+1)               ! The resting interface heights, in m, usually !
                                     ! negative because it is positive upward.      !
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta.
@@ -213,8 +213,7 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, PF, use_ALE, CSp, ACSp)
       do i=is-1,ie ; pres(i) = tv%P_Ref ; enddo
 
       do j=js,je
-        call calculate_density(T(:,j,1), S(:,j,1), pres, tmp(:,j), &
-                          is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density(T(:,j,1), S(:,j,1), pres, tmp(:,j), G%HI, tv%eqn_of_state, US)
       enddo
 
       call set_up_sponge_ML_density(tmp, G, CSp)

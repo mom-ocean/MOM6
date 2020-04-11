@@ -427,7 +427,7 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt, id_brine_lay)
   ! because it is not convergent when resolution becomes very fine. I think that this whole
   ! subroutine needs to be revisited.- RWH
 
-  p_ref_cv(:) = US%kg_m3_to_R*US%m_s_to_L_T**2*tv%P_Ref
+  p_ref_cv(:) = tv%P_Ref
   brine_dz = 1.0*GV%m_to_H
 
   inject_layer(:,:) = nz
@@ -458,7 +458,8 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt, id_brine_lay)
       if ((G%mask2dT(i,j) > 0.0) .and. dzbr(i) < brine_dz .and. salt(i) > 0.) then
         s_new = S(i,k) + salt(i) / (GV%H_to_RZ * h_2d(i,k))
         t0 = T(i,k)
-        call calculate_density(t0, s_new, tv%P_Ref, R_new, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density(t0, s_new, tv%P_Ref, R_new, tv%eqn_of_state, &
+                               scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
         if (R_new < 0.5*(Rcv(i,k)+Rcv(i,k+1)) .and. s_new<s_max) then
           dzbr(i) = dzbr(i)+h_2d(i,k)
           inject_layer(i,j) = min(inject_layer(i,j),real(k))

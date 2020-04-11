@@ -376,7 +376,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
   Idt_diag = 1.0 / (dt__diag)
   write_diags = .true. ; if (present(last_call)) write_diags = last_call
 
-  p_ref(:) = 0.0 ; p_ref_cv(:) = US%kg_m3_to_R*US%m_s_to_L_T**2*tv%P_Ref
+  p_ref(:) = 0.0 ; p_ref_cv(:) = tv%P_Ref
 
   nsw = CS%nsw
 

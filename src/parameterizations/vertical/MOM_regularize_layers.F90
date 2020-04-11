@@ -240,7 +240,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   I_dtol = 1.0 / max(CS%h_def_tol2 - CS%h_def_tol1, 1e-40)
   I_dtol34 = 1.0 / max(CS%h_def_tol4 - CS%h_def_tol3, 1e-40)
 
-  p_ref_cv(:) = US%kg_m3_to_R*US%m_s_to_L_T**2*tv%P_Ref
+  p_ref_cv(:) = tv%P_Ref
 
   do j=js-1,je+1 ; do i=is-1,ie+1
     e(i,j,1) = 0.0

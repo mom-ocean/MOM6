@@ -671,7 +671,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     left_set, &  ! If true, the left or right point determines the density of
     right_set    ! of the trio.  If densities are exactly equal, both are true.
   real :: tmp
-  real :: p_ref_cv(SZI_(G))
+  real :: p_ref_cv(SZI_(G)) ! The reference pressure for the coordinate density [R L2 T-2 ~> Pa]
 
   integer :: k_max, k_min, k_test, itmp
   integer :: i, j, k, k2, m, is, ie, js, je, nz, nkmb
@@ -698,8 +698,8 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   ! Determine which layers the mixed- and buffer-layers map into...
   !$OMP parallel do default(shared)
   do k=1,nkmb ; do j=js-2,je+2
-    call calculate_density(tv%T(:,j,k),tv%S(:,j,k), p_ref_cv, &
-                         rho_coord(:,j,k), is-2, ie-is+5, tv%eqn_of_state, scale=US%kg_m3_to_R)
+    call calculate_density(tv%T(:,j,k),tv%S(:,j,k), p_ref_cv, rho_coord(:,j,k), G%HI, &
+                           tv%eqn_of_state, US, halo=2)
   enddo ; enddo
 
   do j=js-2,je+2 ; do i=is-2,ie+2

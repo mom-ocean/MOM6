@@ -2680,7 +2680,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     call cpu_clock_begin(id_clock_sponge)
     ! Layer mode sponge
     if (CS%bulkmixedlayer .and. associated(tv%eqn_of_state)) then
-      do i=is,ie ; p_ref_cv(i) = US%kg_m3_to_R*US%m_s_to_L_T**2*tv%P_Ref ; enddo
+      do i=is,ie ; p_ref_cv(i) = tv%P_Ref ; enddo
       !$OMP parallel do default(shared)
       do j=js,je
          call calculate_density(tv%T(:,j,1), tv%S(:,j,1), p_ref_cv, Rcv_ml(:,j), G%HI, &
