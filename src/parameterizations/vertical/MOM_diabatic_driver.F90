@@ -1979,9 +1979,8 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   integer :: kb(SZI_(G),SZJ_(G)) ! index of the lightest layer denser
                                  ! than the buffer layer [nondim]
 
-  real :: p_ref_cv(SZI_(G))      ! Reference pressure for the potential
-                                 ! density which defines the coordinate
-                                 ! variable, set to P_Ref [Pa].
+  real :: p_ref_cv(SZI_(G))      ! Reference pressure for the potential density that defines the
+                                 ! coordinate variable, set to P_Ref [R L2 T-2 ~> Pa].
 
   logical :: in_boundary(SZI_(G)) ! True if there are no massive layers below,
                                   ! where massive is defined as sufficiently thick that
@@ -2681,11 +2680,11 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     call cpu_clock_begin(id_clock_sponge)
     ! Layer mode sponge
     if (CS%bulkmixedlayer .and. associated(tv%eqn_of_state)) then
-      do i=is,ie ; p_ref_cv(i) = tv%P_Ref ; enddo
+      do i=is,ie ; p_ref_cv(i) = US%kg_m3_to_R*US%m_s_to_L_T**2*tv%P_Ref ; enddo
       !$OMP parallel do default(shared)
       do j=js,je
-         call calculate_density(tv%T(:,j,1), tv%S(:,j,1), p_ref_cv, Rcv_ml(:,j), &
-                             is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+         call calculate_density(tv%T(:,j,1), tv%S(:,j,1), p_ref_cv, Rcv_ml(:,j), G%HI, &
+                                tv%eqn_of_state, US)
       enddo
       call apply_sponge(h, dt, G, GV, US, ea, eb, CS%sponge_CSp, Rcv_ml)
     else

@@ -2685,11 +2685,11 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
   type(verticalGrid_type),           intent(in)    :: GV  !< ocean vertical grid structure
   type(unit_scale_type),             intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: ssh !< time mean surface height [m]
-  real, dimension(:,:),    optional, pointer       :: p_atm !< atmospheric pressure [R L2 T-2 ~> Pa]
+  real, dimension(:,:),    optional, pointer       :: p_atm !< Ocean surface pressure [R L2 T-2 ~> Pa]
   logical,                 optional, intent(in)    :: use_EOS !< If true, calculate the density for
                                                        !! the SSH correction using the equation of state.
 
-  real :: Rho_conv    ! The density used to convert surface pressure to
+  real :: Rho_conv(SZI_(G))  ! The density used to convert surface pressure to
                       ! a corrected effective SSH [R ~> kg m-3].
   real :: IgR0        ! The SSH conversion factor from R L2 T-2 to m [m T2 R-1 L-2 ~> m Pa-1].
   logical :: calc_rho
@@ -2699,18 +2699,21 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
   if (present(p_atm)) then ; if (associated(p_atm)) then
     calc_rho = associated(tv%eqn_of_state)
     if (present(use_EOS) .and. calc_rho) calc_rho = use_EOS
-    ! Correct the output sea surface height for the contribution from the
-    ! atmospheric pressure
-    do j=js,je ; do i=is,ie
+    ! Correct the output sea surface height for the contribution from the ice pressure.
+    do j=js,je
       if (calc_rho) then
-        call calculate_density(tv%T(i,j,1), tv%S(i,j,1), p_atm(i,j)/2.0, Rho_conv, &
-                               tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
+        call calculate_density(tv%T(:,j,1), tv%S(:,j,1), 0.5*p_atm(:,j), Rho_conv, G%HI, &
+                               tv%eqn_of_state, US)
+        do i=is,ie
+          IgR0 = US%Z_to_m / (Rho_conv(i) * GV%g_Earth)
+          ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0
+        enddo
       else
-        Rho_conv = GV%Rho0
+        do i=is,ie
+          ssh(i,j) = ssh(i,j) + p_atm(i,j) * (US%Z_to_m / (GV%Rho0 * GV%g_Earth))
+        enddo
       endif
-      IgR0 = US%Z_to_m / (Rho_conv * GV%g_Earth)
-      ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0
-    enddo ; enddo
+    enddo
   endif ; endif
 
 end subroutine adjust_ssh_for_p_atm

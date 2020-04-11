@@ -197,27 +197,27 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
                                                 !! describe the surface state of the ocean.  The
                                                 !! intent is only inout to allow for halo updates.
   type(forcing),         intent(inout) :: fluxes !< structure containing pointers to any possible
-                                                 !! thermodynamic or mass-flux forcing fields.
+                                                !! thermodynamic or mass-flux forcing fields.
   type(time_type),       intent(in)    :: Time  !< Start time of the fluxes.
-  real,                  intent(in)    :: time_step !< Length of time over which
-                                                    !! these fluxes will be applied [s].
-  type(ice_shelf_CS),    pointer       :: CS !< A pointer to the control structure
-                                             !! returned by a previous call to
-                                             !! initialize_ice_shelf.
+  real,                  intent(in)    :: time_step !< Length of time over which these fluxes
+                                                !! will be applied [s].
+  type(ice_shelf_CS),    pointer       :: CS    !< A pointer to the control structure returned
+                                                !! by a previous call to initialize_ice_shelf.
   type(mech_forcing), optional, intent(inout) :: forces !< A structure with the driving mechanical forces
 
-  type(ocean_grid_type), pointer :: G => NULL() ! The grid structure used by the ice shelf.
-  type(unit_scale_type), pointer :: US => NULL() ! Pointer to a structure containing
-                                                 ! various unit conversion factors
+  ! Local variables
+  type(ocean_grid_type), pointer :: G => NULL()  !< The grid structure used by the ice shelf.
+  type(unit_scale_type), pointer :: US => NULL() !< Pointer to a structure containing
+                                                 !! various unit conversion factors
   type(ice_shelf_state), pointer :: ISS => NULL() !< A structure with elements that describe
-                                          !! the ice-shelf state
+                                                 !! the ice-shelf state
 
   real, dimension(SZI_(CS%grid)) :: &
-    Rhoml, &   !< Ocean mixed layer density [kg m-3].
+    Rhoml, &   !< Ocean mixed layer density [R ~> kg m-3].
     dR0_dT, &  !< Partial derivative of the mixed layer density
-               !< with temperature [kg m-3 degC-1].
+               !< with temperature [R degC-1 ~> kg m-3 degC-1].
     dR0_dS, &  !< Partial derivative of the mixed layer density
-               !< with salinity [kg m-3 ppt-1].
+               !< with salinity [R ppt-1 ~> kg m-3 ppt-1].
     p_int      !< The pressure at the ice-ocean interface [R L2 T-2 ~> Pa].
 
   real, dimension(SZI_(CS%grid),SZJ_(CS%grid)) :: &
@@ -235,8 +235,8 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
                !! viscosity is linearly increasing [nondim]. (Was 1/8. Why?)
   real, parameter :: RC    = 0.20     ! critical flux Richardson number.
   real :: I_ZETA_N !< The inverse of ZETA_N [nondim].
-  real :: I_LF     !< The inverse of the latent Heat of fusion [Q-1 ~> kg J-1].
-  real :: I_VK     !< The inverse of VK.
+  real :: I_LF     !< The inverse of the latent heat of fusion [Q-1 ~> kg J-1].
+  real :: I_VK     !< The inverse of the Von Karman constant [nondim].
   real :: PR, SC   !< The Prandtl number and Schmidt number [nondim].
 
   ! 3 equations formulation variables
@@ -263,7 +263,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
                    ! boundary layer salinity times the friction velocity [ppt Z T-1 ~> ppt m s-1]
   real :: ustar_h  ! The friction velocity in the water below the ice shelf [Z T-1 ~> m s-1]
   real :: Gam_turb ! [nondim]
-  real :: Gam_mol_t, Gam_mol_s
+  real :: Gam_mol_t, Gam_mol_s ! Relative coefficients of molecular diffusivites [nondim]
   real :: RhoCp     ! A typical ocean density times the heat capacity of water [Q R ~> J m-3]
   real :: ln_neut
   real :: mass_exch ! A mass exchange rate [R Z T-1 ~> kg m-2 s-1]
@@ -306,8 +306,8 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
   RhoCp = CS%Rho_ocn * CS%Cp
 
   !first calculate molecular component
-  Gam_mol_t = 12.5 * (PR**c2_3) - 6
-  Gam_mol_s = 12.5 * (SC**c2_3) - 6
+  Gam_mol_t = 12.5 * (PR**c2_3) - 6.0
+  Gam_mol_s = 12.5 * (SC**c2_3) - 6.0
 
   ! GMM, zero some fields of the ice shelf structure (ice_shelf_CS)
   ! these fields are already set to zero during initialization
@@ -375,10 +375,10 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
     do i=is,ie ; p_int(i) = CS%g_Earth * ISS%mass_shelf(i,j) ; enddo
 
     ! Calculate insitu densities and expansion coefficients
-    call calculate_density(state%sst(:,j), state%sss(:,j), p_int, &
-             Rhoml(:), is, ie-is+1, CS%eqn_of_state, pres_scale=US%RL2_T2_to_Pa)
-    call calculate_density_derivs(state%sst(:,j), state%sss(:,j), p_int, &
-             dR0_dT, dR0_dS, is, ie-is+1, CS%eqn_of_state, pres_scale=US%RL2_T2_to_Pa)
+    call calculate_density(state%sst(:,j), state%sss(:,j), p_int, Rhoml(:), G%HI, &
+                           CS%eqn_of_state, US)
+    call calculate_density_derivs(state%sst(:,j), state%sss(:,j), p_int, dR0_dT, dR0_dS, G%HI, &
+                                  CS%eqn_of_state, US)
 
     do i=is,ie
       if ((state%ocean_mass(i,j) > US%RZ_to_kg_m2*CS%col_mass_melt_threshold) .and. &

@@ -408,11 +408,11 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt, id_brine_lay)
   real :: dzbr(SZI_(G)) ! Cumulative depth over which brine is distributed [H ~> m to kg m-2]
   real :: inject_layer(SZI_(G),SZJ_(G)) ! diagnostic
 
-  real :: p_ref_cv(SZI_(G))
+  real :: p_ref_cv(SZI_(G))       ! The pressure used to calculate the coordinate density [R L2 T-2 ~> Pa]
   real :: T(SZI_(G),SZK_(G))
   real :: S(SZI_(G),SZK_(G))
   real :: h_2d(SZI_(G),SZK_(G))   ! A 2-d slice of h with a minimum thickness [H ~> m to kg m-2]
-  real :: Rcv(SZI_(G),SZK_(G))
+  real :: Rcv(SZI_(G),SZK_(G))    ! The coordinate density [R ~> kg m-3]
   real :: s_new,R_new,t0,scale, cdz
   integer :: i, j, k, is, ie, js, je, nz, ks
 
@@ -427,7 +427,7 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt, id_brine_lay)
   ! because it is not convergent when resolution becomes very fine. I think that this whole
   ! subroutine needs to be revisited.- RWH
 
-  p_ref_cv(:)  = tv%P_ref
+  p_ref_cv(:) = US%kg_m3_to_R*US%m_s_to_L_T**2*tv%P_Ref
   brine_dz = 1.0*GV%m_to_H
 
   inject_layer(:,:) = nz
@@ -447,8 +447,7 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt, id_brine_lay)
         h_2d(i,k) = MAX(h(i,j,k), GV%Angstrom_H)
       enddo
 
-      call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), is, &
-                             ie-is+1, tv%eqn_of_state)
+      call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), G%HI, tv%eqn_of_state, US)
     enddo
 
     ! First, try to find an interior layer where inserting all the salt
@@ -459,7 +458,7 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt, id_brine_lay)
       if ((G%mask2dT(i,j) > 0.0) .and. dzbr(i) < brine_dz .and. salt(i) > 0.) then
         s_new = S(i,k) + salt(i) / (GV%H_to_RZ * h_2d(i,k))
         t0 = T(i,k)
-        call calculate_density(t0, s_new, tv%P_Ref, R_new, tv%eqn_of_state)
+        call calculate_density(t0, s_new, tv%P_Ref, R_new, tv%eqn_of_state, scale=US%kg_m3_to_R)
         if (R_new < 0.5*(Rcv(i,k)+Rcv(i,k+1)) .and. s_new<s_max) then
           dzbr(i) = dzbr(i)+h_2d(i,k)
           inject_layer(i,j) = min(inject_layer(i,j),real(k))

@@ -123,7 +123,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
     htot, &       ! The total thickness above or below a layer [H ~> m or kg m-2].
     Rcv, &        ! Value of the coordinate variable (potential density)
                   ! based on the simulated T and S and P_Ref [R ~> kg m-3].
-    pres, &       ! Reference pressure (P_Ref) [Pa].
+    pres, &       ! Reference pressure (P_Ref) [R L2 T-2 ~> Pa].
     eakb, &       ! The entrainment from above by the layer below the buffer
                   ! layer (i.e. layer kb) [H ~> m or kg m-2].
     ea_kbp1, &    ! The entrainment from above by layer kb+1 [H ~> m or kg m-2].
@@ -243,7 +243,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
 
   correct_density = (CS%correct_density .and. associated(tv%eqn_of_state))
   if (correct_density) then
-    pres(:) = tv%P_Ref
+    pres(:) = US%kg_m3_to_R*US%m_s_to_L_T**2*tv%P_Ref
   else
     pres(:) = 0.0
   endif
@@ -700,8 +700,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
         call determine_dSkb(h_bl, Sref, Ent_bl, eakb, is, ie, kmb, G, GV, &
                             .true., dS_kb, dS_anom_lim=dS_anom_lim)
         do k=nz-1,kb_min,-1
-          call calculate_density(tv%T(is:ie,j,k), tv%S(is:ie,j,k), pres(is:ie), &
-                                 Rcv(is:ie), 1, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+          call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pres, Rcv, G%HI, tv%eqn_of_state, US)
           do i=is,ie
             if ((k>kb(i)) .and. (F(i,k) > 0.0)) then
               ! Within a time step, a layer may entrain no more than its
@@ -784,9 +783,8 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
         enddo
 
       else ! not bulkmixedlayer
-        do k=K2,nz-1
-          call calculate_density(tv%T(is:ie,j,k), tv%S(is:ie,j,k), pres(is:ie), &
-                                 Rcv(is:ie), 1, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        do k=K2,nz-1;
+          call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pres, Rcv, G%HI, tv%eqn_of_state, US)
           do i=is,ie ; if (F(i,k) > 0.0) then
             ! Within a time step, a layer may entrain no more than
             ! its thickness for correction.  This limitation should
@@ -851,8 +849,8 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
               S_eos(i) = 0.5*(tv%S(i,j,k-1) + tv%S(i,j,k))
             endif
           enddo
-          call calculate_density_derivs(T_eos, S_eos, pressure, dRho_dT, dRho_dS, is, ie-is+1, &
-                             tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
+          call calculate_density_derivs(T_eos, S_eos, pressure, dRho_dT, dRho_dS, G%HI, &
+                                        tv%eqn_of_state, US)
           do i=is,ie
             if ((k>kmb) .and. (k<kb(i))) then ; diff_work(i,j,K) = 0.0
             else
@@ -1065,7 +1063,7 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, GV, US, CS, j, Ent_bl, 
     b1, d1, &   ! Variables used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1] and [nondim].
     Rcv, &      ! Value of the coordinate variable (potential density)
                 ! based on the simulated T and S and P_Ref [R ~> kg m-3].
-    pres, &     ! Reference pressure (P_Ref) [Pa].
+    pres, &     ! Reference pressure (P_Ref) [R L2 T-2 ~> Pa].
     frac_rem, & ! The fraction of the diffusion remaining [nondim].
     h_interior  ! The interior thickness available for entrainment [H ~> m or kg m-2].
   real, dimension(SZI_(G), SZK_(G)) :: &
@@ -1084,10 +1082,9 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, GV, US, CS, j, Ent_bl, 
   max_ent = 1.0e4*GV%m_to_H
   h_neglect = GV%H_subroundoff
 
-  do i=is,ie ; pres(i) = tv%P_Ref ; enddo
+  do i=is,ie ; pres(i) = US%kg_m3_to_R*US%m_s_to_L_T**2*tv%P_Ref ; enddo
   do k=1,kmb
-    call calculate_density(tv%T(is:ie,j,k), tv%S(is:ie,j,k), pres(is:ie), &
-                           Rcv(is:ie), 1, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+    call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pres, Rcv, G%HI, tv%eqn_of_state, US)
     do i=is,ie
       h_bl(i,k) = h(i,j,k) + h_neglect
       Sref(i,k) = Rcv(i) - CS%Rho_sig_off

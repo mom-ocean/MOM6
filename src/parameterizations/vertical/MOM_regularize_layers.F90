@@ -179,7 +179,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
                 ! d_ea mean a net gain in mass by a layer from downward motion.
   real, dimension(SZI_(G)) :: &
     p_ref_cv, & !   Reference pressure for the potential density which defines
-                ! the coordinate variable, set to P_Ref [Pa].
+                ! the coordinate variable, set to P_Ref [R L2 T-2 ~> Pa].
     Rcv_tol, &  !   A tolerence, relative to the target density differences
                 ! between layers, for detraining into the interior [nondim].
     h_add_tgt, h_add_tot, &
@@ -240,7 +240,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   I_dtol = 1.0 / max(CS%h_def_tol2 - CS%h_def_tol1, 1e-40)
   I_dtol34 = 1.0 / max(CS%h_def_tol4 - CS%h_def_tol3, 1e-40)
 
-  p_ref_cv(:) = tv%P_Ref
+  p_ref_cv(:) = US%kg_m3_to_R*US%m_s_to_L_T**2*tv%P_Ref
 
   do j=js-1,je+1 ; do i=is-1,ie+1
     e(i,j,1) = 0.0
@@ -312,8 +312,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   do j=js,je ; if (do_j(j)) then
 
 !  call cpu_clock_begin(id_clock_EOS)
-!  call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, &
-!                                is, ie-is+1, tv%eqn_of_state)
+!  call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, G%HI, tv%eqn_of_state, US)
 !  call cpu_clock_end(id_clock_EOS)
 
     do k=1,nz ; do i=is,ie ; d_ea(i,k) = 0.0 ; d_eb(i,k) = 0.0 ; enddo ; enddo
@@ -445,8 +444,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
     if (det_any) then
       call cpu_clock_begin(id_clock_EOS)
       do k=1,nkmb
-        call calculate_density(T_2d(:,k),S_2d(:,k),p_ref_cv,Rcv(:,k), &
-                               is,ie-is+1,tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density(T_2d(:,k), S_2d(:,k), p_ref_cv, Rcv(:,k), G%HI, tv%eqn_of_state, US)
       enddo
       call cpu_clock_end(id_clock_EOS)
 

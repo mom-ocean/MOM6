@@ -301,8 +301,8 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
     if (use_EOS) then
       !$OMP parallel do default(shared) private(rho_in_situ)
       do j=Jsq,Jeq+1
-        call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p(:,j,1), rho_in_situ, Isq, Ieq-Isq+2, &
-                               tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
+        call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p(:,j,1), rho_in_situ, G%HI, &
+                               tv%eqn_of_state, US, halo=1)
 
         do i=Isq,Ieq+1
           dM(i,j) = (CS%GFS_scale - 1.0) * (p(i,j,1)*(1.0/rho_in_situ(i) - alpha_ref) + za(i,j))
@@ -586,11 +586,11 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1
         if (use_p_atm) then
-          call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p_atm(:,j), rho_in_situ, Isq, &
-                       Ieq-Isq+2, tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
+          call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p_atm(:,j), rho_in_situ, G%HI, &
+                                 tv%eqn_of_state, US, halo=1)
         else
-          call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p0, rho_in_situ, &
-                                 Isq, Ieq-Isq+2, tv%eqn_of_state, scale=US%kg_m3_to_R)
+          call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p0, rho_in_situ, G%HI, &
+                                 tv%eqn_of_state, US, halo=1)
         endif
         do i=Isq,Ieq+1
           dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * rho_in_situ(i)) * e(i,j,1)

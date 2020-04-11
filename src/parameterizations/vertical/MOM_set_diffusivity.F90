@@ -661,11 +661,10 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   real, dimension(SZI_(G)) :: &
     htot,    &    ! total thickness above or below a layer, or the
                   ! integrated thickness in the BBL [Z ~> m].
-    mFkb,    &    ! total thickness in the mixed and buffer layers
-                  ! times ds_dsp1 [Z ~> m].
-    p_ref,   &    ! array of tv%P_Ref pressures
+    mFkb,    &    ! total thickness in the mixed and buffer layers times ds_dsp1 [Z ~> m].
+    p_ref,   &    ! array of tv%P_Ref pressures [R L2 T-2 ~> Pa]
     Rcv_kmb, &    ! coordinate density in the lowest buffer layer [R ~> kg m-3]
-    p_0           ! An array of 0 pressures
+    p_0           ! An array of 0 pressures [R L2 T-2 ~> Pa]
 
   real :: dh_max      ! maximum amount of entrainment a layer could
                       ! undergo before entraining all fluid in the layers
@@ -712,13 +711,13 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   ! Determine kb - the index of the shallowest active interior layer.
   if (CS%bulkmixedlayer) then
     kmb = GV%nk_rho_varies
-    do i=is,ie ; p_0(i) = 0.0 ; p_ref(i) = tv%P_Ref ; enddo
+    do i=is,ie ; p_0(i) = 0.0 ; p_ref(i) = US%kg_m3_to_R*US%m_s_to_L_T**2*tv%P_Ref ; enddo
     do k=1,nz
-      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_0, rho_0(:,k), &
-                             is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_0, rho_0(:,k), G%HI, &
+                             tv%eqn_of_state, US)
     enddo
-    call calculate_density(tv%T(:,j,kmb), tv%S(:,j,kmb), p_ref, Rcv_kmb, &
-                           is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+    call calculate_density(tv%T(:,j,kmb), tv%S(:,j,kmb), p_ref, Rcv_kmb, G%HI, &
+                           tv%eqn_of_state, US)
 
     kb_min = kmb+1
     do i=is,ie
@@ -906,8 +905,8 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
         Temp_Int(i) = 0.5 * (T_f(i,j,k) + T_f(i,j,k-1))
         Salin_Int(i) = 0.5 * (S_f(i,j,k) + S_f(i,j,k-1))
       enddo
-      call calculate_density_derivs(Temp_int, Salin_int, pres, dRho_dT(:,K), dRho_dS(:,K), &
-                   is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
+      call calculate_density_derivs(Temp_int, Salin_int, pres, dRho_dT(:,K), dRho_dS(:,K), G%HI, &
+                                    tv%eqn_of_state, US)
       do i=is,ie
         dRho_int(i,K) = max(dRho_dT(i,K)*(T_f(i,j,k) - T_f(i,j,k-1)) + &
                             dRho_dS(i,K)*(S_f(i,j,k) - S_f(i,j,k-1)), 0.0)
@@ -1794,7 +1793,7 @@ subroutine set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1, rho_0)
   real :: g_R0                     ! g_R0 is a rescaled version of g/Rho [L2 Z-1 R-1 T-2 ~> m4 kg-1 s-2]
   real :: eps, tmp                 ! nondimensional temproray variables
   real :: a(SZK_(G)), a_0(SZK_(G)) ! nondimensional temporary variables
-  real :: p_ref(SZI_(G))           ! an array of tv%P_Ref pressures
+  real :: p_ref(SZI_(G))           ! an array of tv%P_Ref pressures [R L2 T-2 ~> Pa]
   real :: Rcv(SZI_(G),SZK_(G))     ! coordinate density in the mixed and buffer layers [R ~> kg m-3]
   real :: I_Drho                   ! temporary variable [R-1 ~> m3 kg-1]
 
@@ -1817,10 +1816,9 @@ subroutine set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1, rho_0)
     g_R0 = GV%g_Earth / (GV%Rho0)
     kmb = GV%nk_rho_varies
     eps = 0.1
-    do i=is,ie ; p_ref(i) = tv%P_Ref ; enddo
+    do i=is,ie ; p_ref(i) = US%kg_m3_to_R*US%m_s_to_L_T**2*tv%P_Ref ; enddo
     do k=1,kmb
-      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, Rcv(:,k), &
-                             is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, Rcv(:,k), G%HI, tv%eqn_of_state, US)
     enddo
     do i=is,ie
       if (kb(i) <= nz-1) then

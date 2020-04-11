@@ -212,7 +212,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   real, dimension(SZI_(G),SZJ_(G),max(GV%nk_rho_varies,1)) :: &
     Rml                    ! The mixed layer coordinate density [R ~> kg m-3].
   real :: p_ref(SZI_(G))   !   The pressure used to calculate the coordinate
-                           ! density [Pa] (usually set to 2e7 Pa = 2000 dbar).
+                           ! density [R L2 T-2 ~> Pa] (usually set to 2e7 Pa = 2000 dbar).
 
   real :: D_vel            ! The bottom depth at a velocity point [H ~> m or kg m-2].
   real :: Dp, Dm           ! The depths at the edges of a velocity cell [H ~> m or kg m-2].
@@ -312,11 +312,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
 !  if (CS%linear_drag) ustar(:) = cdrag_sqrt_Z*CS%drag_bg_vel
 
   if ((nkml>0) .and. .not.use_BBL_EOS) then
-    do i=Isq,Ieq+1 ; p_ref(i) = tv%P_ref ; enddo
+    do i=Isq,Ieq+1 ; p_ref(i) = US%kg_m3_to_R*US%m_s_to_L_T**2*tv%P_Ref ; enddo
     !$OMP parallel do default(shared)
-    do j=Jsq,Jeq+1 ; do k=1,nkmb
-      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, &
-                      Rml(:,j,k), Isq, Ieq-Isq+2, tv%eqn_of_state, scale=US%kg_m3_to_R)
+    do k=1,nkmb ; do j=Jsq,Jeq+1
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, Rml(:,j,k), G%HI, &
+                             tv%eqn_of_state, US, halo=1)
     enddo ; enddo
   endif
 

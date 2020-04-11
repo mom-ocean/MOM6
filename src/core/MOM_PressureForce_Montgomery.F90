@@ -766,9 +766,6 @@ subroutine Set_pbce_nonBouss(p, tv, G, GV, US, GFS_scale, pbce, alpha_star)
             S_int(i) = 0.5*(tv%S(i,j,k)+tv%S(i,j,k+1))
           enddo
           call calculate_density(T_int, S_int, p(:,j,k+1), rho_in_situ, G%HI, tv%eqn_of_state, US, halo=1)
-!          call calculate_density_derivs(T_int, S_int, p(:,j,k+1), dR_dT, dR_dS, &
-!                                 Isq, Ieq-Isq+2, tv%eqn_of_state, &
-!                                 scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
           call calculate_density_derivs(T_int, S_int, p(:,j,k+1), dR_dT, dR_dS, G%HI, &
                                         tv%eqn_of_state, US, halo=1)
           do i=Isq,Ieq+1

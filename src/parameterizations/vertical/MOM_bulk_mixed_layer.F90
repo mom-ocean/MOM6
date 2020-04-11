@@ -291,9 +291,9 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
     Net_salt, & ! The surface salt flux into the ocean over a time step, ppt H.
     Idecay_len_TKE, &  ! The inverse of a turbulence decay length scale [H-1 ~> m-1 or m2 kg-1].
     p_ref, &    !   Reference pressure for the potential density governing mixed
-                ! layer dynamics, almost always 0 (or 1e5) Pa.
+                ! layer dynamics, almost always 0 (or 1e5) [R L2 T-2 ~> Pa].
     p_ref_cv, & !   Reference pressure for the potential density which defines
-                ! the coordinate variable, set to P_Ref [Pa].
+                ! the coordinate variable, set to P_Ref [R L2 T-2 ~> Pa].
     dR0_dT, &   !   Partial derivative of the mixed layer potential density with
                 ! temperature [R degC-1 ~> kg m-3 degC-1].
     dRcv_dT, &  !   Partial derivative of the coordinate variable potential
@@ -376,7 +376,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
   Idt_diag = 1.0 / (dt__diag)
   write_diags = .true. ; if (present(last_call)) write_diags = last_call
 
-  p_ref(:) = 0.0 ; p_ref_cv(:) = tv%P_Ref
+  p_ref(:) = 0.0 ; p_ref_cv(:) = US%kg_m3_to_R*US%m_s_to_L_T**2*tv%P_Ref
 
   nsw = CS%nsw
 
@@ -464,17 +464,14 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
     ! Calculate an estimate of the mid-mixed layer pressure [Pa]
     do i=is,ie ; p_ref(i) = 0.0 ; enddo
     do k=1,CS%nkml ; do i=is,ie
-      p_ref(i) = p_ref(i) + 0.5*GV%H_to_Pa*h(i,k)
+      p_ref(i) = p_ref(i) + 0.5*(GV%H_to_RZ*GV%g_Earth)*h(i,k)
     enddo ; enddo
-    call calculate_density_derivs(T(:,1), S(:,1), p_ref, dR0_dT, dR0_dS, &
-                                  is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
-    call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, &
-                                  is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+    call calculate_density_derivs(T(:,1), S(:,1), p_ref, dR0_dT, dR0_dS, G%HI, tv%eqn_of_state, US)
+    call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, G%HI, &
+                                  tv%eqn_of_state, US)
     do k=1,nz
-      call calculate_density(T(:,k), S(:,k), p_ref, R0(:,k), is, ie-is+1, &
-                             tv%eqn_of_state, scale=US%kg_m3_to_R)
-      call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), is, &
-                             ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density(T(:,k), S(:,k), p_ref, R0(:,k), G%HI, tv%eqn_of_state, US)
+      call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), G%HI, tv%eqn_of_state, US)
     enddo
     if (id_clock_EOS>0) call cpu_clock_end(id_clock_EOS)
 
