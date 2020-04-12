@@ -3129,19 +3129,16 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
 end subroutine int_spec_vol_dp_generic_plm
 
 !> Convert T&S to Absolute Salinity and Conservative Temperature if using TEOS10
-subroutine convert_temp_salt_for_TEOS10(T, S, press, G, kd, mask_z, EOS)
-  use MOM_grid, only : ocean_grid_type
-
-  type(ocean_grid_type), intent(in)    :: G   !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), &
-                         intent(inout) :: T   !< Potential temperature referenced to the surface [degC]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), &
-                         intent(inout) :: S   !< Salinity [ppt]
-  real, dimension(:),    intent(in)    :: press !< Pressure at the top of the layer [Pa].
-  type(EOS_type),        pointer       :: EOS !< Equation of state structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), &
-                         intent(in)    :: mask_z !< 3d mask regulating which points to convert.
+subroutine convert_temp_salt_for_TEOS10(T, S, HI, kd, mask_z, EOS)
   integer,               intent(in)    :: kd  !< The number of layers to work on
+  type(hor_index_type),  intent(in)    :: HI       !< The horizontal index structure
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed,kd), &
+                         intent(inout) :: T   !< Potential temperature referenced to the surface [degC]
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed,kd), &
+                         intent(inout) :: S   !< Salinity [ppt]
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed,kd), &
+                         intent(in)    :: mask_z !< 3d mask regulating which points to convert.
+  type(EOS_type),        pointer       :: EOS !< Equation of state structure
 
   integer :: i,j,k
   real :: gsw_sr_from_sp, gsw_ct_from_pt, gsw_sa_from_sp
@@ -3152,12 +3149,14 @@ subroutine convert_temp_salt_for_TEOS10(T, S, press, G, kd, mask_z, EOS)
 
   if ((EOS%form_of_EOS /= EOS_TEOS10) .and. (EOS%form_of_EOS /= EOS_NEMO)) return
 
-  do k=1,kd ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
+  do k=1,kd ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
     if (mask_z(i,j,k) >= 1.0) then
      S(i,j,k) = gsw_sr_from_sp(S(i,j,k))
-!     p=press(k)/10000. !convert pascal to dbar
-!     S(i,j,k) = gsw_sa_from_sp(S(i,j,k),p,G%geoLonT(i,j),G%geoLatT(i,j))
-     T(i,j,k) = gsw_ct_from_pt(S(i,j,k),T(i,j,k))
+!     Get absolute salnity from practical salinity, converting pressures from Pascal to dbar.
+!     If this option is activated, pressure will need to be added as an argument, and it should be
+!     moved out into module that is not shared between components, where the ocean_grid can be used.
+!     S(i,j,k) = gsw_sa_from_sp(S(i,j,k),pres(i,j,k)*1.0e-4,G%geoLonT(i,j),G%geoLatT(i,j))
+     T(i,j,k) = gsw_ct_from_pt(S(i,j,k), T(i,j,k))
     endif
   enddo ; enddo ; enddo
 end subroutine convert_temp_salt_for_TEOS10

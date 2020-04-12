@@ -291,9 +291,9 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
        case ("ISOMIP"); call ISOMIP_initialize_thickness(h, G, GV, US, PF, tv, &
                                  just_read_params=just_read)
        case ("benchmark"); call benchmark_initialize_thickness(h, G, GV, US, PF, &
-                                    tv%eqn_of_state, US%RL2_T2_to_Pa*tv%P_Ref, just_read_params=just_read)
+                                    tv%eqn_of_state, tv%P_Ref, just_read_params=just_read)
        case ("Neverland"); call Neverland_initialize_thickness(h, G, GV, US, PF, &
-                                 tv%eqn_of_state, US%RL2_T2_to_Pa*tv%P_Ref)
+                                 tv%eqn_of_state, tv%P_Ref)
        case ("search"); call initialize_thickness_search
        case ("circle_obcs"); call circle_obcs_initialize_thickness(h, G, GV, PF, &
                                       just_read_params=just_read)
@@ -348,11 +348,11 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
 !            " \t baroclinic_zone - an analytic baroclinic zone. \n"//&
       select case (trim(config))
         case ("fit"); call initialize_temp_salt_fit(tv%T, tv%S, G, GV, US, PF, &
-                               eos, US%RL2_T2_to_Pa*tv%P_Ref, just_read_params=just_read)
+                               eos, tv%P_Ref, just_read_params=just_read)
         case ("file"); call initialize_temp_salt_from_file(tv%T, tv%S, G, &
                                 PF, just_read_params=just_read)
         case ("benchmark"); call benchmark_init_temperature_salinity(tv%T, tv%S, &
-                                     G, GV, US, PF, eos, US%RL2_T2_to_Pa*tv%P_Ref, just_read_params=just_read)
+                                     G, GV, US, PF, eos, tv%P_Ref, just_read_params=just_read)
         case ("TS_profile") ; call initialize_temp_salt_from_profile(tv%T, tv%S, &
                                        G, PF, just_read_params=just_read)
         case ("linear"); call initialize_temp_salt_linear(tv%T, tv%S, G, PF, &
@@ -1561,7 +1561,7 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P
                                                        !! parameters.
   type(EOS_type),          pointer     :: eqn_of_state !< Integer that selects the equatio of state.
   real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure
-                                                       !! [Pa].
+                                                       !! [R L2 T-2 ~> Pa].
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                        !! only read parameters without changing h.
   ! Local variables
@@ -1569,7 +1569,7 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P
   real :: S0(SZK_(G))   ! Layer salinities [degC]
   real :: T_Ref         ! Reference Temperature [degC]
   real :: S_Ref         ! Reference Salinity [ppt]
-  real :: pres(SZK_(G))      ! An array of the reference pressure [Pa].
+  real :: pres(SZK_(G))      ! An array of the reference pressure [R L2 T-2 ~> Pa].
   real :: drho_dT(SZK_(G))   ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
   real :: drho_dS(SZK_(G))   ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
   real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 [R ~> kg m-3].
@@ -1601,8 +1601,10 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P
     T0(k) = T_Ref
   enddo
 
-  call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),eqn_of_state, scale=US%kg_m3_to_R)
-  call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,eqn_of_state, scale=US%kg_m3_to_R)
+  call calculate_density(T0(1), S0(1), pres(1), rho_guess(1), eqn_of_state, &
+                         scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
+  call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, 1, 1, eqn_of_state, &
+                         scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
 
   if (fit_salin) then
     ! A first guess of the layers' temperatures.
@@ -1611,8 +1613,10 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P
     enddo
     ! Refine the guesses for each layer.
     do itt=1,6
-      call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state, scale=US%kg_m3_to_R)
-      call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density(T0, S0, pres, rho_guess, 1, nz, eqn_of_state, &
+                         scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
+      call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, 1, nz, eqn_of_state, &
+                         scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
       do k=1,nz
         S0(k) = max(0.0, S0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dS(k))
       enddo
@@ -1623,8 +1627,10 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P
       T0(k) = T0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dT(1)
     enddo
     do itt=1,6
-      call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state, scale=US%kg_m3_to_R)
-      call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density(T0, S0, pres, rho_guess, 1, nz, eqn_of_state, &
+                         scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
+      call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, 1, nz, eqn_of_state, &
+                         scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
       do k=1,nz
         T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
       enddo
@@ -2185,8 +2191,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   allocate(frac_shelf_h(isd:ied,jsd:jed))
 
   ! Convert T&S to Absolute Salinity and Conservative Temperature if using TEOS10 or NEMO
-  press(:) = US%RL2_T2_to_Pa*tv%P_Ref
-  call convert_temp_salt_for_TEOS10(temp_z, salt_z, press, G, kd, mask_z, eos)
+  call convert_temp_salt_for_TEOS10(temp_z, salt_z, G%HI, kd, mask_z, eos)
 
   press(:) = tv%P_Ref
   do k=1,kd ; do j=js,je
@@ -2397,7 +2402,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
   if (adjust_temperature .and. .not. useALEremapping) then
     call determine_temperature(tv%T(is:ie,js:je,:), tv%S(is:ie,js:je,:), &
-            GV%Rlay(1:nz), US%RL2_T2_to_Pa*tv%P_Ref, niter, missing_value, h(is:ie,js:je,:), ks, US, eos)
+            GV%Rlay(1:nz), tv%P_Ref, niter, missing_value, h(is:ie,js:je,:), ks, US, eos)
   endif
 
   deallocate(z_in, z_edges_in, temp_z, salt_z, mask_z)

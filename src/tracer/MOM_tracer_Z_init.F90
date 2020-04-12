@@ -744,7 +744,7 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
   real, dimension(:,:,:),        intent(inout) :: temp !< potential temperature [degC]
   real, dimension(:,:,:),        intent(inout) :: salt !< salinity [PSU]
   real, dimension(size(temp,3)), intent(in)    :: R_tgt !< desired potential density [R ~> kg m-3].
-  real,                          intent(in)    :: p_ref !< reference pressure [Pa].
+  real,                          intent(in)    :: p_ref !< reference pressure [R L2 T-2 ~> Pa].
   integer,                       intent(in)    :: niter !< maximum number of iterations
   integer,                       intent(in)    :: k_start !< starting index (i.e. below the buffer layer)
   real,                          intent(in)    :: land_fill !< land fill value
@@ -763,7 +763,7 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
     hin, & ! Input layer thicknesses [H ~> m or kg m-2]
     drho_dT, & ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
     drho_dS    ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
-  real, dimension(size(temp,1)) :: press
+  real, dimension(size(temp,1)) :: press ! Reference pressures [R L2 T-2 ~> Pa]
   integer :: nx, ny, nz, nt, i, j, k, n, itt
   real    :: dT_dS_gauge  ! The relative penalizing of temperature to salinity changes when
                           ! minimizing property changes while correcting density [degC ppt-1].
@@ -801,9 +801,10 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
     adjust_salt = .true.
     iter_loop: do itt = 1,niter
       do k=1, nz
-        call calculate_density(T(:,k), S(:,k), press, rho(:,k), 1, nx, eos, scale=US%kg_m3_to_R)
+        call calculate_density(T(:,k), S(:,k), press, rho(:,k), 1, nx, eos, &
+                               scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
         call calculate_density_derivs(T(:,k), S(:,k), press, drho_dT(:,k), drho_dS(:,k), 1, nx, &
-                                      eos, scale=US%kg_m3_to_R)
+                                      eos, scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
       enddo
       do k=k_start,nz ; do i=1,nx
 
@@ -831,9 +832,10 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
 
     if (adjust_salt .and. old_fit) then ; do itt = 1,niter
       do k=1, nz
-        call calculate_density(T(:,k), S(:,k), press, rho(:,k), 1, nx, eos, scale=US%kg_m3_to_R)
+        call calculate_density(T(:,k), S(:,k), press, rho(:,k), 1, nx, eos, &
+                               scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
         call calculate_density_derivs(T(:,k), S(:,k), press, drho_dT(:,k), drho_dS(:,k), 1, nx, &
-                                      eos, scale=US%kg_m3_to_R)
+                                      eos, scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
       enddo
       do k=k_start,nz ; do i=1,nx
 !       if (abs(rho(i,k)-R_tgt(k))>tol_rho .and. hin(i,k)>h_massless .and. abs(T(i,k)-land_fill) < epsln ) then

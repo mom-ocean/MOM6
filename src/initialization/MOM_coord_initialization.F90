@@ -89,11 +89,11 @@ subroutine MOM_initialize_coord(GV, US, PF, write_geom, output_dir, tv, max_dept
     case ("linear")
       call set_coord_linear(GV%Rlay, GV%g_prime, GV, US, PF)
     case ("ts_ref")
-      call set_coord_from_ts_ref(GV%Rlay, GV%g_prime, GV, US, PF, eos, US%RL2_T2_to_Pa*tv%P_Ref)
+      call set_coord_from_TS_ref(GV%Rlay, GV%g_prime, GV, US, PF, eos, tv%P_Ref)
     case ("ts_profile")
-      call set_coord_from_TS_profile(GV%Rlay, GV%g_prime, GV, US, PF, eos, US%RL2_T2_to_Pa*tv%P_Ref)
+      call set_coord_from_TS_profile(GV%Rlay, GV%g_prime, GV, US, PF, eos, tv%P_Ref)
     case ("ts_range")
-      call set_coord_from_TS_range(GV%Rlay, GV%g_prime, GV, US, PF, eos, US%RL2_T2_to_Pa*tv%P_Ref)
+      call set_coord_from_TS_range(GV%Rlay, GV%g_prime, GV, US, PF, eos, tv%P_Ref)
     case ("file")
       call set_coord_from_file(GV%Rlay, GV%g_prime, GV, US, PF)
     case ("USER")
@@ -198,8 +198,7 @@ subroutine set_coord_from_layer_density(Rlay, g_prime, GV, US, param_file)
 end subroutine set_coord_from_layer_density
 
 !> Sets the layer densities (Rlay) and the interface reduced gravities (g) from a profile of g'.
-subroutine set_coord_from_TS_ref(Rlay, g_prime, GV, US, param_file, eqn_of_state, &
-                                 P_Ref)
+subroutine set_coord_from_TS_ref(Rlay, g_prime, GV, US, param_file, eqn_of_state, P_Ref)
   real, dimension(:),      intent(out) :: Rlay         !< The layers' target coordinate values
                                                        !! (potential density) [R ~> kg m-3].
   real, dimension(:),      intent(out) :: g_prime      !< The reduced gravity across the interfaces
@@ -209,7 +208,8 @@ subroutine set_coord_from_TS_ref(Rlay, g_prime, GV, US, param_file, eqn_of_state
   type(param_file_type),   intent(in)  :: param_file   !< A structure to parse for run-time
                                                        !! parameters
   type(EOS_type),          pointer     :: eqn_of_state !< integer selecting the equation of state.
-  real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure [Pa].
+  real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure
+                                                       !! [R L2 T-2 ~> Pa].
   ! Local variables
   real :: T_ref   ! Reference temperature
   real :: S_ref   ! Reference salinity
@@ -240,7 +240,8 @@ subroutine set_coord_from_TS_ref(Rlay, g_prime, GV, US, param_file, eqn_of_state
 !    The uppermost layer's density is set here.  Subsequent layers'  !
 !  densities are determined from this value and the g values.        !
 !        T0 = 28.228 ; S0 = 34.5848 ; Pref = P_Ref
-  call calculate_density(T_ref, S_ref, P_ref, Rlay(1), eqn_of_state, scale=US%kg_m3_to_R)
+  call calculate_density(T_ref, S_ref, P_ref, Rlay(1), eqn_of_state, &
+                         scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
 
 !    These statements set the layer densities.                       !
   do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(GV%Rho0/GV%g_Earth) ; enddo
@@ -249,8 +250,7 @@ subroutine set_coord_from_TS_ref(Rlay, g_prime, GV, US, param_file, eqn_of_state
 end subroutine set_coord_from_TS_ref
 
 !> Sets the layer densities (Rlay) and the interface reduced gravities (g) from a T-S profile.
-subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, &
-                                     eqn_of_state, P_Ref)
+subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, eqn_of_state, P_Ref)
   real, dimension(:),      intent(out) :: Rlay         !< The layers' target coordinate values
                                                        !! (potential density) [R ~> kg m-3].
   real, dimension(:),      intent(out) :: g_prime      !< The reduced gravity across the interfaces
@@ -260,7 +260,9 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, &
   type(param_file_type),   intent(in)  :: param_file   !< A structure to parse for run-time
                                                        !! parameters
   type(EOS_type),          pointer     :: eqn_of_state !< integer that selects equation of state.
-  real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure [Pa].
+  real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure
+                                                       !! [R L2 T-2 ~> Pa].
+
   ! Local variables
   real, dimension(GV%ke) :: T0, S0,  Pref
   real :: g_fs    ! Reduced gravity across the free surface [L2 Z-1 T-2 ~> m s-2].
@@ -289,16 +291,15 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, &
       " set_coord_from_TS_profile: Unable to open " //trim(filename))
 !    These statements set the interface reduced gravities.           !
   g_prime(1) = g_fs
-  do k=1,nz ; Pref(k) = P_ref ; enddo
-  call calculate_density(T0, S0, Pref, Rlay, 1, nz, eqn_of_state, scale=US%kg_m3_to_R)
+  do k=1,nz ; Pref(k) = P_Ref ; enddo
+  call calculate_density(T0, S0, Pref, Rlay, 1, nz, eqn_of_state, scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
   do k=2,nz; g_prime(k) = (GV%g_Earth/(GV%Rho0)) * (Rlay(k) - Rlay(k-1)) ; enddo
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine set_coord_from_TS_profile
 
 !> Sets the layer densities (Rlay) and the interface reduced gravities (g) from a linear T-S profile.
-subroutine set_coord_from_TS_range(Rlay, g_prime, GV, US, param_file, &
-                                   eqn_of_state, P_Ref)
+subroutine set_coord_from_TS_range(Rlay, g_prime, GV, US, param_file, eqn_of_state, P_Ref)
   real, dimension(:),      intent(out) :: Rlay         !< The layers' target coordinate values
                                                        !! (potential density) [R ~> kg m-3].
   real, dimension(:),      intent(out) :: g_prime      !< The reduced gravity across the interfaces
@@ -308,7 +309,8 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, GV, US, param_file, &
   type(param_file_type),   intent(in)  :: param_file   !< A structure to parse for run-time
                                                        !! parameters
   type(EOS_type),          pointer     :: eqn_of_state !< integer that selects equation of state
-  real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure [Pa]
+  real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure
+                                                       !! [R L2 T-2 ~> Pa].
 
   ! Local variables
   real, dimension(GV%ke) :: T0, S0,  Pref
@@ -369,8 +371,9 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, GV, US, param_file, &
   enddo
 
   g_prime(1) = g_fs
-  do k=1,nz ; Pref(k) = P_ref ; enddo
-  call calculate_density(T0, S0, Pref, Rlay, k_light, nz-k_light+1, eqn_of_state, scale=US%kg_m3_to_R)
+  do k=1,nz ; Pref(k) = P_Ref ; enddo
+  call calculate_density(T0, S0, Pref, Rlay, k_light, nz-k_light+1, eqn_of_state, &
+                         scale=US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
   ! Extrapolate target densities for the variable density mixed and buffer layers.
   do k=k_light-1,1,-1
     Rlay(k) = 2.0*Rlay(k+1) - Rlay(k+2)
