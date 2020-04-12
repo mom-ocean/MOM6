@@ -911,7 +911,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
       Sal_int(K) = 0.5*(Sal(k-1) + Sal(k))
     enddo
     call calculate_density_derivs(T_int, Sal_int, pressure, dbuoy_dT, dbuoy_dS, 2, nzc-1, &
-                 tv%eqn_of_state, scale=-g_R0*US%kg_m3_to_R, pres_scale=US%RL2_T2_to_Pa)
+                                  tv%eqn_of_state, US=US, scale=-g_R0)
   else
     do K=1,nzc+1 ; dbuoy_dT(K) = -g_R0 ; dbuoy_dS(K) = 0.0 ; enddo
   endif

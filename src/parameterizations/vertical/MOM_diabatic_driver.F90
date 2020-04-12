@@ -35,7 +35,6 @@ use MOM_energetic_PBL,       only : energetic_PBL_get_MLD
 use MOM_entrain_diffusive,   only : entrainment_diffusive, entrain_diffusive_init
 use MOM_entrain_diffusive,   only : entrain_diffusive_end, entrain_diffusive_CS
 use MOM_EOS,                 only : calculate_density, calculate_TFreeze
-use MOM_EOS,                 only : calculate_specific_vol_derivs
 use MOM_error_handler,       only : MOM_error, FATAL, WARNING, callTree_showQuery,MOM_mesg
 use MOM_error_handler,       only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,         only : get_param, log_version, param_file_type, read_param
