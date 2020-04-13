@@ -102,14 +102,14 @@ type, public :: EOS_type ; private
                              !! code for the integrals of density.
   logical :: Compressible = .true. !< If true, in situ density is a function of pressure.
 ! The following parameters are used with the linear equation of state only.
-  real :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
+  real :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3]
   real :: dRho_dT   !< The partial derivative of density with temperature [kg m-3 degC-1]
-  real :: dRho_dS   !< The partial derivative of density with salinity [kg m-3 ppt-1].
+  real :: dRho_dS   !< The partial derivative of density with salinity [kg m-3 ppt-1]
 ! The following parameters are use with the linear expression for the freezing
 ! point only.
-  real :: TFr_S0_P0 !< The freezing potential temperature at S=0, P=0 [degC].
-  real :: dTFr_dS   !< The derivative of freezing point with salinity [degC ppt-1].
-  real :: dTFr_dp   !< The derivative of freezing point with pressure [degC Pa-1].
+  real :: TFr_S0_P0 !< The freezing potential temperature at S=0, P=0 [degC]
+  real :: dTFr_dS   !< The derivative of freezing point with salinity [degC ppt-1]
+  real :: dTFr_dp   !< The derivative of freezing point with pressure [degC Pa-1]
 
 !  logical :: test_EOS = .true. ! If true, test the equation of state
 end type EOS_type
@@ -149,13 +149,13 @@ subroutine calculate_density_scalar(T, S, pressure, rho, EOS, rho_ref, US, scale
   real,           intent(in)  :: pressure !< Pressure [Pa] or [R L2 T-2 ~> Pa]
   real,           intent(out) :: rho      !< Density (in-situ if pressure is local) [kg m-3] or [R ~> kg m-3]
   type(EOS_type), pointer     :: EOS      !< Equation of state structure
-  real, optional, intent(in)  :: rho_ref  !< A reference density [kg m-3].
+  real, optional, intent(in)  :: rho_ref  !< A reference density [kg m-3]
   type(unit_scale_type), optional, intent(in) :: US  !< A dimensional unit scaling type
   real, optional, intent(in)  :: scale    !< A multiplicative factor by which to scale density in
                                           !! combination with scaling given by US [various]
 
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
-  real :: p_scale ! A factor to convert pressure to units of Pa.
+  real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_scalar called with an unassociated EOS_type EOS.")
@@ -191,17 +191,17 @@ end subroutine calculate_density_scalar
 subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_ref, US, scale)
   real, dimension(:), intent(in)    :: T        !< Potential temperature referenced to the surface [degC]
   real, dimension(:), intent(in)    :: S        !< Salinity [ppt]
-  real, dimension(:), intent(in)    :: pressure !< Pressure [Pa] or [other ~> Pa]
+  real, dimension(:), intent(in)    :: pressure !< Pressure [Pa] or [R L2 T-2 ~> Pa]
   real, dimension(:), intent(inout) :: rho      !< Density (in-situ if pressure is local) [kg m-3] or [R ~> kg m-3]
   integer,            intent(in)    :: start    !< Start index for computation
   integer,            intent(in)    :: npts     !< Number of point to compute
   type(EOS_type),     pointer       :: EOS      !< Equation of state structure
-  real,                  optional, intent(in) :: rho_ref  !< A reference density [kg m-3].
+  real,                  optional, intent(in) :: rho_ref  !< A reference density [kg m-3]
   type(unit_scale_type), optional, intent(in) :: US       !< A dimensional unit scaling type
   real,                  optional, intent(in) :: scale    !< A multiplicative factor by which to scale density
                                                 !! in combination with scaling given by US [various]
 
-  real :: p_scale   ! A factor to convert pressure to units of Pa.
+  real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
   real, dimension(size(pressure)) :: pres  ! Pressure converted to [Pa]
   integer :: j
@@ -329,12 +329,12 @@ subroutine calculate_spec_vol_scalar(T, S, pressure, specvol, EOS, spv_ref, US, 
   real,           intent(in)  :: pressure !< Pressure [Pa] or [R L2 T-2 ~> Pa]
   real,           intent(out) :: specvol  !< In situ? specific volume [m3 kg-1] or [R-1 ~> m3 kg-1]
   type(EOS_type), pointer     :: EOS      !< Equation of state structure
-  real, optional, intent(in)  :: spv_ref  !< A reference specific volume [m3 kg-1].
+  real, optional, intent(in)  :: spv_ref  !< A reference specific volume [m3 kg-1]
   type(unit_scale_type), optional, intent(in) :: US       !< A dimensional unit scaling type
   real, optional, intent(in)  :: scale    !< A multiplicative factor by which to scale specific
                                           !! volume in combination with scaling given by US [various]
 
-  real :: p_scale ! A factor to convert pressure to units of Pa.
+  real :: p_scale ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
   real :: rho     ! Density [kg m-3]
   real :: spv_scale ! A factor to convert specific volume from m3 kg-1 to the desired units [kg R-1 m-3 ~> 1]
 
@@ -375,21 +375,21 @@ end subroutine calculate_spec_vol_scalar
 !> Calls the appropriate subroutine to calculate the specific volume of sea water
 !! for 1-D array inputs.
 subroutine calculate_spec_vol_array(T, S, pressure, specvol, start, npts, EOS, spv_ref, US, scale)
-  real, dimension(:), intent(in)    :: T        !< potential temperature relative to the surface [degC].
-  real, dimension(:), intent(in)    :: S        !< salinity [ppt].
-  real, dimension(:), intent(in)    :: pressure !< pressure [Pa] or [R L2 T-2 ~> Pa].
-  real, dimension(:), intent(inout) :: specvol  !< in situ specific volume [kg m-3] or [R-1 ~> m3 kg-1].
+  real, dimension(:), intent(in)    :: T        !< potential temperature relative to the surface [degC]
+  real, dimension(:), intent(in)    :: S        !< salinity [ppt]
+  real, dimension(:), intent(in)    :: pressure !< pressure [Pa] or [R L2 T-2 ~> Pa]
+  real, dimension(:), intent(inout) :: specvol  !< in situ specific volume [kg m-3] or [R-1 ~> m3 kg-1]
   integer,            intent(in)    :: start    !< the starting point in the arrays.
   integer,            intent(in)    :: npts     !< the number of values to calculate.
   type(EOS_type),     pointer       :: EOS      !< Equation of state structure
-  real,     optional, intent(in)    :: spv_ref  !< A reference specific volume [m3 kg-1].
+  real,     optional, intent(in)    :: spv_ref  !< A reference specific volume [m3 kg-1]
   type(unit_scale_type), optional, intent(in) :: US       !< A dimensional unit scaling type
   real,     optional, intent(in)    :: scale    !< A multiplicative factor by which to scale specific
                                                 !! volume in combination with scaling given by US [various]
 
   real, dimension(size(pressure)) :: pres  ! Pressure converted to [Pa]
   real, dimension(size(specvol))  :: rho   ! Density [kg m-3]
-  real :: p_scale ! A factor to convert pressure to units of Pa.
+  real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
   real :: spv_scale ! A factor to convert specific volume from m3 kg-1 to the desired units [kg R-1 m-3 ~> 1]
   integer :: j
 
@@ -462,7 +462,7 @@ subroutine calculate_spec_vol_HI_1d(T, S, pressure, specvol, HI, EOS, US, halo, 
   type(EOS_type),                 pointer       :: EOS      !< Equation of state structure
   type(unit_scale_type),          intent(in)    :: US       !< A dimensional unit scaling type
   integer,              optional, intent(in)    :: halo     !< The halo size to work on; missing is equivalent to 0.
-  real,                 optional, intent(in)    :: spv_ref  !< A reference specific volume [R-1 ~> m3 kg-1].
+  real,                 optional, intent(in)    :: spv_ref  !< A reference specific volume [R-1 ~> m3 kg-1]
 
   ! Local variables
   real, dimension(HI%isd:HI%ied) :: pres  ! Pressure converted to [Pa]
@@ -549,11 +549,11 @@ end subroutine calculate_spec_vol_HI_1d
 !> Calls the appropriate subroutine to calculate the freezing point for scalar inputs.
 subroutine calculate_TFreeze_scalar(S, pressure, T_fr, EOS, pres_scale)
   real,           intent(in)  :: S !< Salinity [ppt]
-  real,           intent(in)  :: pressure !< Pressure [Pa]
+  real,           intent(in)  :: pressure !< Pressure [Pa] or [other]
   real,           intent(out) :: T_fr !< Freezing point potential temperature referenced
                                       !! to the surface [degC]
   type(EOS_type), pointer     :: EOS !< Equation of state structure
-  real, optional, intent(in)  :: pres_scale !< A multiplicative factor to convert pressure into Pa.
+  real, optional, intent(in)  :: pres_scale !< A multiplicative factor to convert pressure into Pa
 
   ! Local variables
   real :: p_scale ! A factor to convert pressure to units of Pa.
@@ -580,7 +580,7 @@ end subroutine calculate_TFreeze_scalar
 !> Calls the appropriate subroutine to calculate the freezing point for a 1-D array.
 subroutine calculate_TFreeze_array(S, pressure, T_fr, start, npts, EOS, pres_scale)
   real, dimension(:), intent(in)    :: S        !< Salinity [ppt]
-  real, dimension(:), intent(in)    :: pressure !< Pressure [Pa]
+  real, dimension(:), intent(in)    :: pressure !< Pressure [Pa] or [other]
   real, dimension(:), intent(inout) :: T_fr     !< Freezing point potential temperature referenced
                                                 !! to the surface [degC]
   integer,            intent(in)    :: start    !< Starting index within the array
@@ -633,9 +633,9 @@ subroutine calculate_density_derivs_array(T, S, pressure, drho_dT, drho_dS, star
   real, dimension(:), intent(in)    :: S        !< Salinity [ppt]
   real, dimension(:), intent(in)    :: pressure !< Pressure [Pa] or [R L2 T-2 ~> Pa]
   real, dimension(:), intent(inout) :: drho_dT  !< The partial derivative of density with potential
-                                                !! temperature [kg m-3 degC-1] or [R degC-1 ~> kg m-3 degC-1].
+                                                !! temperature [kg m-3 degC-1] or [R degC-1 ~> kg m-3 degC-1]
   real, dimension(:), intent(inout) :: drho_dS  !< The partial derivative of density with salinity,
-                                                !! in [kg m-3 ppt-1] or [R degC-1 ~> kg m-3 ppt-1].
+                                                !! in [kg m-3 ppt-1] or [R degC-1 ~> kg m-3 ppt-1]
   integer,            intent(in)    :: start    !< Starting index within the array
   integer,            intent(in)    :: npts     !< The number of values to calculate
   type(EOS_type),     pointer       :: EOS      !< Equation of state structure
@@ -646,7 +646,7 @@ subroutine calculate_density_derivs_array(T, S, pressure, drho_dT, drho_dS, star
   ! Local variables
   real, dimension(size(pressure)) :: pres  ! Pressure converted to [Pa]
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
-  real :: p_scale ! A factor to convert pressure to units of Pa.
+  real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
   integer :: j
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
@@ -778,7 +778,7 @@ subroutine calculate_density_derivs_scalar(T, S, pressure, drho_dT, drho_dS, EOS
   real,           intent(out) :: drho_dT !< The partial derivative of density with potential
                                          !! temperature [kg m-3 degC-1] or [R degC-1 ~> kg m-3 degC-1]
   real,           intent(out) :: drho_dS !< The partial derivative of density with salinity,
-                                         !! in [kg m-3 ppt-1] or [R ppt-1 ~> kg m-3 ppt-1].
+                                         !! in [kg m-3 ppt-1] or [R ppt-1 ~> kg m-3 ppt-1]
   type(EOS_type), pointer     :: EOS     !< Equation of state structure
   type(unit_scale_type), optional, intent(in) :: US    !< A dimensional unit scaling type
   real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale density
@@ -786,7 +786,7 @@ subroutine calculate_density_derivs_scalar(T, S, pressure, drho_dT, drho_dS, EOS
 
   ! Local variables
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
-  real :: p_scale ! A factor to convert pressure to units of Pa.
+  real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
   integer :: j
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
@@ -841,8 +841,8 @@ subroutine calculate_density_second_derivs_array(T, S, pressure, drho_dS_dS, drh
   ! Local variables
   real, dimension(size(pressure)) :: pres  ! Pressure converted to [Pa]
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
-  real :: p_scale   ! A factor to convert pressure to units of Pa.
-  real :: I_p_scale ! The inverse of the factor to convert pressure to units of Pa.
+  real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
+  real :: I_p_scale ! The inverse of the factor to convert pressure to units of Pa [R L2 T-2 Pa-1 ~> 1]
   integer :: j
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
@@ -906,7 +906,7 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
                                                   drho_dS_dP, drho_dT_dP, EOS, US, scale)
   real, intent(in)  :: T !< Potential temperature referenced to the surface [degC]
   real, intent(in)  :: S !< Salinity [ppt]
-  real, intent(in)  :: pressure   !< Pressure [Pa]
+  real, intent(in)  :: pressure   !< Pressure [Pa] or [R L2 T-2 ~> Pa]
   real, intent(out) :: drho_dS_dS !< Partial derivative of beta with respect to S
                                   !! [kg m-3 ppt-2] or [R ppt-2 ~> kg m-3 ppt-2]
   real, intent(out) :: drho_dS_dT !< Partial derivative of beta with respect to T
@@ -923,8 +923,8 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
                                                 !! in combination with scaling given by US [various]
   ! Local variables
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
-  real :: p_scale   ! A factor to convert pressure to units of Pa.
-  real :: I_p_scale ! The inverse of the factor to convert pressure to units of Pa.
+  real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
+  real :: I_p_scale ! The inverse of the factor to convert pressure to units of Pa [R L2 T-2 Pa-1 ~> 1]
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_derivs called with an unassociated EOS_type EOS.")
@@ -971,7 +971,7 @@ subroutine calculate_spec_vol_derivs_array(T, S, pressure, dSV_dT, dSV_dS, start
   real, dimension(:), intent(inout) :: dSV_dT !< The partial derivative of specific volume with potential
                                               !! temperature [m3 kg-1 degC-1] or [R-1 degC-1 ~> m3 kg-1 degC-1]
   real, dimension(:), intent(inout) :: dSV_dS !< The partial derivative of specific volume with salinity
-                                              !! [m3 kg-1 ppt-1] or [R-1 ppt-1 ~> m3 kg-1 ppt-1].
+                                              !! [m3 kg-1 ppt-1] or [R-1 ppt-1 ~> m3 kg-1 ppt-1]
   integer,            intent(in)  :: start  !< Starting index within the array
   integer,            intent(in)  :: npts   !< The number of values to calculate
   type(EOS_type),     pointer     :: EOS    !< Equation of state structure
@@ -984,7 +984,7 @@ subroutine calculate_spec_vol_derivs_array(T, S, pressure, dSV_dT, dSV_dS, start
   real, dimension(size(T)) :: rho     ! In situ density [kg m-3]
   real, dimension(size(T)) :: dRho_dT ! Derivative of density with temperature [kg m-3 degC-1]
   real, dimension(size(T)) :: dRho_dS ! Derivative of density with salinity [kg m-3 ppt-1]
-  real :: p_scale   ! A factor to convert pressure to units of Pa.
+  real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
   real :: spv_scale ! A factor to convert specific volume from m3 kg-1 to the desired units [kg R-1 m-3 ~> 1]
   integer :: j
 
@@ -1066,7 +1066,7 @@ subroutine calculate_spec_vol_derivs_HI_1d(T, S, pressure, dSV_dT, dSV_dS, HI, E
   real, dimension(HI%isd:HI%ied), intent(inout) :: dSV_dT   !< The partial derivative of specific volume with potential
                                                             !! temperature [R-1 degC-1 ~> m3 kg-1 degC-1]
   real, dimension(HI%isd:HI%ied), intent(inout) :: dSV_dS   !< The partial derivative of specific volume with salinity
-                                                            !! [R-1 ppt-1 ~> m3 kg-1 ppt-1].
+                                                            !! [R-1 ppt-1 ~> m3 kg-1 ppt-1]
   type(EOS_type),                 pointer       :: EOS      !< Equation of state structure
   type(unit_scale_type),          intent(in)    :: US       !< A dimensional unit scaling type
   integer,              optional, intent(in)    :: halo     !< The halo size to work on; missing is equivalent to 0.
@@ -1156,9 +1156,9 @@ subroutine calculate_compress_array(T, S, pressure, rho, drho_dp, start, npts, E
   real, dimension(:), intent(in)  :: T        !< Potential temperature referenced to the surface [degC]
   real, dimension(:), intent(in)  :: S        !< Salinity [PSU]
   real, dimension(:), intent(in)  :: pressure !< Pressure [Pa]
-  real, dimension(:), intent(inout) :: rho      !< In situ density [kg m-3].
+  real, dimension(:), intent(inout) :: rho      !< In situ density [kg m-3]
   real, dimension(:), intent(inout) :: drho_dp  !< The partial derivative of density with pressure
-                                                !! (also the inverse of the square of sound speed) [s2 m-2].
+                                                !! (also the inverse of the square of sound speed) [s2 m-2]
   integer,            intent(in)  :: start    !< Starting index within the array
   integer,            intent(in)  :: npts     !< The number of values to calculate
   type(EOS_type),     pointer     :: EOS      !< Equation of state structure
@@ -1192,7 +1192,7 @@ subroutine calculate_compress_scalar(T, S, pressure, rho, drho_dp, EOS)
   real, intent(in)        :: pressure !< Pressure [Pa]
   real, intent(out)       :: rho      !< In situ density [kg m-3]
   real, intent(out)       :: drho_dp  !< The partial derivative of density with pressure
-                                      !! (also the inverse of the square of sound speed) [s2 m-2].
+                                      !! (also the inverse of the square of sound speed) [s2 m-2]
   type(EOS_type), pointer :: EOS      !< Equation of state structure
 
   real, dimension(1) :: Ta, Sa, pa, rhoa, drho_dpa
@@ -1222,29 +1222,29 @@ subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: S   !< Salinity [ppt]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: p_t !< Pressure at the top of the layer [R L2 T-2 ~> Pa] or [Pa].
+                        intent(in)  :: p_t !< Pressure at the top of the layer [R L2 T-2 ~> Pa] or [Pa]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: p_b !< Pressure at the bottom of the layer [R L2 T-2 ~> Pa] or [Pa].
+                        intent(in)  :: p_b !< Pressure at the bottom of the layer [R L2 T-2 ~> Pa] or [Pa]
   real,                 intent(in)  :: alpha_ref !< A mean specific volume that is subtracted out
-                            !! to reduce the magnitude of each of the integrals [R-1 ~> m3 kg-1].
+                            !! to reduce the magnitude of each of the integrals [R-1 ~> m3 kg-1]
                             !! The calculation is mathematically identical with different values of
                             !! alpha_ref, but this reduces the effects of roundoff.
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(inout) :: dza !< The change in the geopotential anomaly across
-                            !! the layer [T-2 ~> m2 s-2] or [m2 s-2].
+                            !! the layer [T-2 ~> m2 s-2] or [m2 s-2]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(inout) :: intp_dza !< The integral in pressure through the layer of the
                             !! geopotential anomaly relative to the anomaly at the bottom of the
-                            !! layer [R L4 T-4 ~> Pa m2 s-2] or [Pa m2 s-2].
+                            !! layer [R L4 T-4 ~> Pa m2 s-2] or [Pa m2 s-2]
   real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
               optional, intent(inout) :: intx_dza !< The integral in x of the difference between the
                             !! geopotential anomaly at the top and bottom of the layer divided by
-                            !! the x grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2].
+                            !! the x grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2]
   real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
               optional, intent(inout) :: inty_dza !< The integral in y of the difference between the
                             !! geopotential anomaly at the top and bottom of the layer divided by
-                            !! the y grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2].
+                            !! the y grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2]
   integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate dza.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(in)  :: bathyP  !< The pressure at the bathymetry [R L2 T-2 ~> Pa] or [Pa]
@@ -1308,9 +1308,9 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, EOS, dp
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: S   !< Salinity [ppt]
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: z_t !< Height at the top of the layer in depth units [Z ~> m].
+                        intent(in)  :: z_t !< Height at the top of the layer in depth units [Z ~> m]
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: z_b !< Height at the bottom of the layer [Z ~> m].
+                        intent(in)  :: z_b !< Height at the bottom of the layer [Z ~> m]
   real,                 intent(in)  :: rho_ref !< A mean density [R ~> kg m-3] or [kg m-3], that is
                                            !! subtracted out to reduce the magnitude of each of the
                                            !! integrals.
@@ -1318,34 +1318,34 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, EOS, dp
                                            !! to calculate the pressure (as p~=-z*rho_0*G_e)
                                            !! used in the equation of state.
   real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration
-                                           !! [L2 Z-1 T-2 ~> m s-2] or [m2 Z-1 s-2 ~> m s-2].
+                                           !! [L2 Z-1 T-2 ~> m s-2] or [m2 Z-1 s-2 ~> m s-2]
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
                       intent(inout) :: dpa !< The change in the pressure anomaly
-                                           !! across the layer [R L2 T-2 ~> Pa] or [Pa].
+                                           !! across the layer [R L2 T-2 ~> Pa] or [Pa]
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
             optional, intent(inout) :: intz_dpa !< The integral through the thickness of the
                                            !! layer of the pressure anomaly relative to the
-                                           !! anomaly at the top of the layer [R L2 Z T-2 ~> Pa m].
+                                           !! anomaly at the top of the layer [R L2 Z T-2 ~> Pa m]
   real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed), &
             optional, intent(inout) :: intx_dpa !< The integral in x of the difference between
                                           !! the pressure anomaly at the top and bottom of the
-                                          !! layer divided by the x grid spacing [R L2 T-2 ~> Pa].
+                                          !! layer divided by the x grid spacing [R L2 T-2 ~> Pa]
   real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB), &
             optional, intent(inout) :: inty_dpa !< The integral in y of the difference between
                                           !! the pressure anomaly at the top and bottom of the
-                                          !! layer divided by the y grid spacing [R L2 T-2 ~> Pa].
+                                          !! layer divided by the y grid spacing [R L2 T-2 ~> Pa]
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-              optional, intent(in)  :: bathyT !< The depth of the bathymetry [Z ~> m].
-  real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m].
+              optional, intent(in)  :: bathyT !< The depth of the bathymetry [Z ~> m]
+  real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m]
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
                                            !! interpolate T/S for top and bottom integrals.
   type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 
   ! Local variables
   real :: rho_scale  ! A multiplicative factor by which to scale density from kg m-3 to the
-                     ! desired units [R m3 kg-1 ~> 1].
-  real :: pres_scale ! A multiplicative factor to convert pressure into Pa [Pa T2 R-1 L-2 ~> 1].
+                     ! desired units [R m3 kg-1 ~> 1]
+  real :: pres_scale ! A multiplicative factor to convert pressure into Pa [Pa T2 R-1 L-2 ~> 1]
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "int_density_dz called with an unassociated EOS_type EOS.")
@@ -1509,11 +1509,11 @@ subroutine EOS_manual_init(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Co
                                              !! in [kg m-3 degC-1]
   real   , optional, intent(in) :: dRho_dS   !< Partial derivative of density with salinity
                                              !! in [kg m-3 ppt-1]
-  real   , optional, intent(in) :: TFr_S0_P0 !< The freezing potential temperature at S=0, P=0 [degC].
+  real   , optional, intent(in) :: TFr_S0_P0 !< The freezing potential temperature at S=0, P=0 [degC]
   real   , optional, intent(in) :: dTFr_dS   !< The derivative of freezing point with salinity
-                                             !! in [degC ppt-1].
+                                             !! in [degC ppt-1]
   real   , optional, intent(in) :: dTFr_dp   !< The derivative of freezing point with pressure
-                                             !! in [degC Pa-1].
+                                             !! in [degC Pa-1]
 
   if (present(form_of_EOS    ))  EOS%form_of_EOS     = form_of_EOS
   if (present(form_of_TFreeze))  EOS%form_of_TFreeze = form_of_TFreeze
@@ -1577,13 +1577,13 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
   type(hor_index_type), intent(in)  :: HII !< Horizontal index type for input variables.
   type(hor_index_type), intent(in)  :: HIO !< Horizontal index type for output variables.
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: T  !< Potential temperature of the layer [degC].
+                        intent(in)  :: T  !< Potential temperature of the layer [degC]
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: S  !< Salinity of the layer [ppt].
+                        intent(in)  :: S  !< Salinity of the layer [ppt]
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: z_t !< Height at the top of the layer in depth units [Z ~> m].
+                        intent(in)  :: z_t !< Height at the top of the layer in depth units [Z ~> m]
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: z_b !< Height at the bottom of the layer [Z ~> m].
+                        intent(in)  :: z_b !< Height at the bottom of the layer [Z ~> m]
   real,                 intent(in)  :: rho_ref !< A mean density [R ~> kg m-3] or [kg m-3], that is
                                           !! subtracted out to reduce the magnitude
                                           !! of each of the integrals.
@@ -1591,26 +1591,26 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
                                           !! to calculate the pressure (as p~=-z*rho_0*G_e)
                                           !! used in the equation of state.
   real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration
-                                          !! [L2 Z-1 T-2 ~> m s-2] or [m2 Z-1 s-2 ~> m s-2].
+                                          !! [L2 Z-1 T-2 ~> m s-2] or [m2 Z-1 s-2 ~> m s-2]
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
                       intent(inout) :: dpa !< The change in the pressure anomaly
-                                          !! across the layer [R L2 T-2 ~> Pa] or [Pa].
+                                          !! across the layer [R L2 T-2 ~> Pa] or [Pa]
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
             optional, intent(inout) :: intz_dpa !< The integral through the thickness of the
                                           !! layer of the pressure anomaly relative to the
-                                          !! anomaly at the top of the layer [R L2 Z T-2 ~> Pa m].
+                                          !! anomaly at the top of the layer [R L2 Z T-2 ~> Pa m]
   real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed), &
             optional, intent(inout) :: intx_dpa !< The integral in x of the difference between
                                           !! the pressure anomaly at the top and bottom of the
-                                          !! layer divided by the x grid spacing [R L2 T-2 ~> Pa].
+                                          !! layer divided by the x grid spacing [R L2 T-2 ~> Pa]
   real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB), &
             optional, intent(inout) :: inty_dpa !< The integral in y of the difference between
                                           !! the pressure anomaly at the top and bottom of the
-                                          !! layer divided by the y grid spacing [R L2 T-2 ~> Pa].
+                                          !! layer divided by the y grid spacing [R L2 T-2 ~> Pa]
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-              optional, intent(in)  :: bathyT !< The depth of the bathymetry [Z ~> m].
-  real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m].
+              optional, intent(in)  :: bathyT !< The depth of the bathymetry [Z ~> m]
+  real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m]
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
                                           !! interpolate T/S for top and bottom integrals.
   type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
@@ -1619,23 +1619,23 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
   real :: T5(5), S5(5) ! Temperatures and salinities at five quadrature points [degC] and [ppt]
   real :: p5(5)      ! Pressures at five quadrature points, never rescaled from Pa [Pa]
   real :: r5(5)      ! Densities at five quadrature points [R ~> kg m-3] or [kg m-3]
-  real :: rho_anom   ! The depth averaged density anomaly [R ~> kg m-3] or [kg m-3].
-  real :: w_left, w_right ! Left and right weights [nondim].
+  real :: rho_anom   ! The depth averaged density anomaly [R ~> kg m-3] or [kg m-3]
+  real :: w_left, w_right ! Left and right weights [nondim]
   real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
   real :: GxRho      ! The gravitational acceleration times density and unit conversion factors [Pa Z-1 ~> kg m-2 s-2]
   real :: I_Rho      ! The inverse of the Boussinesq density [R-1 ~> m3 kg-1] or [m3 kg-1]
   real :: rho_scale  ! A scaling factor for densities from kg m-3 to R [R m3 kg-1 ~> 1]
   real :: rho_ref_mks ! The reference density in MKS units, never rescaled from kg m-3 [kg m-3]
-  real :: dz         ! The layer thickness [Z ~> m].
-  real :: hWght      ! A pressure-thickness below topography [Z ~> m].
-  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Z ~> m].
-  real :: iDenom     ! The inverse of the denominator in the weights [Z-2 ~> m-2].
-  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim].
-  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim].
-  real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
-  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
+  real :: dz         ! The layer thickness [Z ~> m]
+  real :: hWght      ! A pressure-thickness below topography [Z ~> m]
+  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Z ~> m]
+  real :: iDenom     ! The inverse of the denominator in the weights [Z-2 ~> m-2]
+  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim]
+  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim]
+  real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim]
+  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim]
   real :: intz(5)    ! The gravitational acceleration times the integrals of density
-                     ! with height at the 5 sub-column locations [R L2 T-2 ~> Pa] or [Pa].
+                     ! with height at the 5 sub-column locations [R L2 T-2 ~> Pa] or [Pa]
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j, m, n, ioff, joff
 
@@ -1794,32 +1794,32 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: S_b !< Salinity at the cell bottom [ppt]
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: z_t !< The geometric height at the top of the layer [Z ~> m].
+                        intent(in)  :: z_t !< The geometric height at the top of the layer [Z ~> m]
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: z_b !< The geometric height at the bottom of the layer [Z ~> m].
+                        intent(in)  :: z_b !< The geometric height at the bottom of the layer [Z ~> m]
   real,                 intent(in)  :: rho_ref !< A mean density [R ~> kg m-3] or [kg m-3], that is subtracted
                                            !! out to reduce the magnitude of each of the integrals.
   real,                 intent(in)  :: rho_0 !< A density [R ~> kg m-3] or [kg m-3], that is used to calculate
                                            !! the pressure (as p~=-z*rho_0*G_e) used in the equation of state.
-  real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration [L2 Z-1 T-2 ~> m s-2].
-  real,                 intent(in)  :: dz_subroundoff !< A miniscule thickness change [Z ~> m].
+  real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
+  real,                 intent(in)  :: dz_subroundoff !< A miniscule thickness change [Z ~> m]
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: bathyT !< The depth of the bathymetry [Z ~> m].
+                        intent(in)  :: bathyT !< The depth of the bathymetry [Z ~> m]
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
-                        intent(inout) :: dpa !< The change in the pressure anomaly across the layer [R L2 T-2 ~> Pa].
+                        intent(inout) :: dpa !< The change in the pressure anomaly across the layer [R L2 T-2 ~> Pa]
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
               optional, intent(inout) :: intz_dpa !< The integral through the thickness of the layer of
                                            !! the pressure anomaly relative to the anomaly at the
-                                           !! top of the layer [R L2 Z T-2 ~> Pa Z].
+                                           !! top of the layer [R L2 Z T-2 ~> Pa Z]
   real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed), &
               optional, intent(inout) :: intx_dpa !< The integral in x of the difference between the
                                            !! pressure anomaly at the top and bottom of the layer
-                                           !! divided by the x grid spacing [R L2 T-2 ~> Pa].
+                                           !! divided by the x grid spacing [R L2 T-2 ~> Pa]
   real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB), &
               optional, intent(inout) :: inty_dpa !< The integral in y of the difference between the
                                            !! pressure anomaly at the top and bottom of the layer
-                                           !! divided by the y grid spacing [R L2 T-2 ~> Pa].
+                                           !! divided by the y grid spacing [R L2 T-2 ~> Pa]
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
                                            !! interpolate T/S for top and bottom integrals.
   type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
@@ -1836,37 +1836,37 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
 ! a linear interpolation is used to compute intermediate values.
 
   ! Local variables
-  real :: T5((5*HIO%iscB+1):(5*(HIO%iecB+2)))  ! Temperatures along a line of subgrid locations [degC].
-  real :: S5((5*HIO%iscB+1):(5*(HIO%iecB+2)))  ! Salinities along a line of subgrid locations [ppt].
+  real :: T5((5*HIO%iscB+1):(5*(HIO%iecB+2)))  ! Temperatures along a line of subgrid locations [degC]
+  real :: S5((5*HIO%iscB+1):(5*(HIO%iecB+2)))  ! Salinities along a line of subgrid locations [ppt]
   real :: p5((5*HIO%iscB+1):(5*(HIO%iecB+2)))  ! Pressures along a line of subgrid locations, never
-                                               ! rescaled from Pa [Pa].
+                                               ! rescaled from Pa [Pa]
   real :: r5((5*HIO%iscB+1):(5*(HIO%iecB+2)))  ! Densities anomalies along a line of subgrid
-                                               ! locations [R ~> kg m-3] or [kg m-3].
-  real :: T15((15*HIO%iscB+1):(15*(HIO%iecB+1))) ! Temperatures at an array of subgrid locations [degC].
-  real :: S15((15*HIO%iscB+1):(15*(HIO%iecB+1))) ! Salinities at an array of subgrid locations [ppt].
-  real :: p15((15*HIO%iscB+1):(15*(HIO%iecB+1))) ! Pressures at an array of subgrid locations [Pa].
+                                               ! locations [R ~> kg m-3] or [kg m-3]
+  real :: T15((15*HIO%iscB+1):(15*(HIO%iecB+1))) ! Temperatures at an array of subgrid locations [degC]
+  real :: S15((15*HIO%iscB+1):(15*(HIO%iecB+1))) ! Salinities at an array of subgrid locations [ppt]
+  real :: p15((15*HIO%iscB+1):(15*(HIO%iecB+1))) ! Pressures at an array of subgrid locations [Pa]
   real :: r15((15*HIO%iscB+1):(15*(HIO%iecB+1))) ! Densities at an array of subgrid locations
-                                                 ! [R ~> kg m-3] or [kg m-3].
-  real :: wt_t(5), wt_b(5)          ! Top and bottom weights [nondim].
-  real :: rho_anom                  ! A density anomaly [R ~> kg m-3] or [kg m-3].
-  real :: w_left, w_right           ! Left and right weights [nondim].
+                                                 ! [R ~> kg m-3] or [kg m-3]
+  real :: wt_t(5), wt_b(5)          ! Top and bottom weights [nondim]
+  real :: rho_anom                  ! A density anomaly [R ~> kg m-3] or [kg m-3]
+  real :: w_left, w_right           ! Left and right weights [nondim]
   real :: intz(5)    ! The gravitational acceleration times the integrals of density
-                     ! with height at the 5 sub-column locations [R L2 T-2 ~> Pa] or [Pa].
-  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim].
+                     ! with height at the 5 sub-column locations [R L2 T-2 ~> Pa] or [Pa]
+  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
   real :: GxRho      ! The gravitational acceleration times density and unit conversion factors [Pa Z-1 ~> kg m-2 s-2]
   real :: I_Rho      ! The inverse of the Boussinesq density [R-1 ~> m3 kg-1] or [m3 kg-1]
   real :: rho_scale  ! A scaling factor for densities from kg m-3 to R [R m3 kg-1 ~> 1]
   real :: rho_ref_mks ! The reference density in MKS units, never rescaled from kg m-3 [kg m-3]
-  real :: dz(HIO%iscB:HIO%iecB+1)   ! Layer thicknesses at tracer points [Z ~> m].
-  real :: dz_x(5,HIO%iscB:HIO%iecB) ! Layer thicknesses along an x-line of subrid locations [Z ~> m].
-  real :: dz_y(5,HIO%isc:HIO%iec)   ! Layer thicknesses along a y-line of subrid locations [Z ~> m].
-  real :: weight_t, weight_b        ! Nondimensional weights of the top and bottom.
-  real :: massWeightToggle          ! A nondimensional toggle factor (0 or 1).
-  real :: Ttl, Tbl, Ttr, Tbr        ! Temperatures at the velocity cell corners [degC].
-  real :: Stl, Sbl, Str, Sbr        ! Salinities at the velocity cell corners [ppt].
-  real :: hWght                     ! A topographically limited thicknes weight [Z ~> m].
-  real :: hL, hR                    ! Thicknesses to the left and right [Z ~> m].
-  real :: iDenom                    ! The denominator of the thickness weight expressions [Z-2 ~> m-2].
+  real :: dz(HIO%iscB:HIO%iecB+1)   ! Layer thicknesses at tracer points [Z ~> m]
+  real :: dz_x(5,HIO%iscB:HIO%iecB) ! Layer thicknesses along an x-line of subrid locations [Z ~> m]
+  real :: dz_y(5,HIO%isc:HIO%iec)   ! Layer thicknesses along a y-line of subrid locations [Z ~> m]
+  real :: weight_t, weight_b        ! Nondimensional weights of the top and bottom [nondim]
+  real :: massWeightToggle          ! A nondimensional toggle factor (0 or 1) [nondim]
+  real :: Ttl, Tbl, Ttr, Tbr        ! Temperatures at the velocity cell corners [degC]
+  real :: Stl, Sbl, Str, Sbr        ! Salinities at the velocity cell corners [ppt]
+  real :: hWght                     ! A topographically limited thicknes weight [Z ~> m]
+  real :: hL, hR                    ! Thicknesses to the left and right [Z ~> m]
+  real :: iDenom                    ! The denominator of the thickness weight expressions [Z-2 ~> m-2]
   integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n
   integer :: iin, jin, ioff, joff
   integer :: pos
@@ -2108,16 +2108,16 @@ subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_t
   real,           intent(in)  :: T_b !< Potential temperatue at the cell bottom [degC]
   real,           intent(in)  :: S_t !< Salinity at the cell top [ppt]
   real,           intent(in)  :: S_b !< Salinity at the cell bottom [ppt]
-  real,           intent(in)  :: z_t !< Absolute height of top of cell [Z ~> m].   (Boussinesq ????)
-  real,           intent(in)  :: z_b !< Absolute height of bottom of cell [Z ~> m].
+  real,           intent(in)  :: z_t !< Absolute height of top of cell [Z ~> m]   (Boussinesq ????)
+  real,           intent(in)  :: z_b !< Absolute height of bottom of cell [Z ~> m]
   real,           intent(in)  :: P_t !< Anomalous pressure of top of cell, relative to g*rho_ref*z_t [Pa]
   real,           intent(in)  :: P_tgt !< Target pressure at height z_out, relative to g*rho_ref*z_out [Pa]
   real,           intent(in)  :: rho_ref !< Reference density with which calculation are anomalous to
   real,           intent(in)  :: G_e !< Gravitational acceleration [m2 Z-1 s-2 ~> m s-2]
   type(EOS_type), pointer     :: EOS !< Equation of state structure
   real,           intent(out) :: P_b !< Pressure at the bottom of the cell [Pa]
-  real,           intent(out) :: z_out !< Absolute depth at which anomalous pressure = p_tgt [Z ~> m].
-  real, optional, intent(in)  :: z_tol !< The tolerance in finding z_out [Z ~> m].
+  real,           intent(out) :: z_out !< Absolute depth at which anomalous pressure = p_tgt [Z ~> m]
+  real, optional, intent(in)  :: z_tol !< The tolerance in finding z_out [Z ~> m]
   ! Local variables
   real :: top_weight, bottom_weight, rho_anom, w_left, w_right, GxRho, dz, dp, F_guess, F_l, F_r
   real :: Pa, Pa_left, Pa_right, Pa_tol ! Pressure anomalies, P = integral of g*(rho-rho_ref) dz
@@ -2185,7 +2185,7 @@ real function frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, pos, EO
   real,           intent(in)  :: rho_ref !< A mean density [kg m-3], that is subtracted out to
                                      !! reduce the magnitude of each of the integrals.
   real,           intent(in)  :: G_e !< The Earth's gravitational acceleration [m s-2]
-  real,           intent(in)  :: pos !< The fractional vertical position, 0 to 1 [nondim].
+  real,           intent(in)  :: pos !< The fractional vertical position, 0 to 1 [nondim]
   type(EOS_type), pointer     :: EOS !< Equation of state structure
   ! Local variables
   real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
@@ -2235,9 +2235,9 @@ subroutine int_density_dz_generic_ppm(T, T_t, T_b, S, S_t, S_b, &
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: S_b !< Salinity at the cell bottom [ppt]
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: z_t !< Height at the top of the layer [Z ~> m].
+                        intent(in)  :: z_t !< Height at the top of the layer [Z ~> m]
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: z_b !< Height at the bottom of the layer [Z ~> m].
+                        intent(in)  :: z_b !< Height at the bottom of the layer [Z ~> m]
   real,                 intent(in)  :: rho_ref !< A mean density [R ~> kg m-3] or [kg m-3], that is
                                            !! subtracted out to reduce the magnitude of each of the integrals.
   real,                 intent(in)  :: rho_0 !< A density [R ~> kg m-3] or [kg m-3], that is used to calculate
@@ -2245,19 +2245,19 @@ subroutine int_density_dz_generic_ppm(T, T_t, T_b, S, S_t, S_b, &
   real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration [m s-2]
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
-                        intent(inout) :: dpa !< The change in the pressure anomaly across the layer [Pa].
+                        intent(inout) :: dpa !< The change in the pressure anomaly across the layer [R L2 T-2 ~> Pa]
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
               optional, intent(inout) :: intz_dpa !< The integral through the thickness of the layer of
                                            !! the pressure anomaly relative to the anomaly at the
-                                           !! top of the layer [Pa Z ~> Pa m].
+                                           !! top of the layer [R L2 Z T-2 ~> Pa m]
   real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed), &
               optional, intent(inout) :: intx_dpa !< The integral in x of the difference between the
                                            !! pressure anomaly at the top and bottom of the layer
-                                           !! divided by the x grid spacing [Pa].
+                                           !! divided by the x grid spacing [R L2 T-2 ~> Pa]
   real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB), &
               optional, intent(inout) :: inty_dpa !< The integral in y of the difference between the
                                            !! pressure anomaly at the top and bottom of the layer
-                                           !! divided by the y grid spacing [Pa].
+                                           !! divided by the y grid spacing [R L2 T-2 ~> Pa]
   type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 
 ! This subroutine calculates (by numerical quadrature) integrals of
@@ -2278,9 +2278,9 @@ subroutine int_density_dz_generic_ppm(T, T_t, T_b, S, S_t, S_b, &
   real :: p5(5)      ! Pressures at five quadrature points, never rescaled from Pa [Pa]
   real :: r5(5)      ! Density anomalies from rho_ref at quadrature points [R ~> kg m-3] or [kg m-3]
   real :: rho_anom   ! The integrated density anomaly [R ~> kg m-3] or [kg m-3]
-  real :: w_left, w_right  ! Left and right weights [nondim].
+  real :: w_left, w_right  ! Left and right weights [nondim]
   real :: intz(5)    ! The gravitational acceleration times the integrals of density
-                     ! with height at the 5 sub-column locations [R L2 T-2 ~> Pa] or [Pa].
+                     ! with height at the 5 sub-column locations [R L2 T-2 ~> Pa] or [Pa]
   real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
   real :: GxRho      ! The gravitational acceleration times density and unit conversion factors [Pa Z-1 ~> kg m-2 s-2]
   real :: I_Rho      ! The inverse of the Boussinesq density [R-1 ~> m3 kg-1] or [m3 kg-1]
@@ -2679,34 +2679,34 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, dza, &
                                    bathyP, dP_neglect, useMassWghtInterp, US)
   type(hor_index_type), intent(in)  :: HI !< A horizontal index type structure.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: T  !< Potential temperature of the layer [degC].
+                        intent(in)  :: T  !< Potential temperature of the layer [degC]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: S  !< Salinity of the layer [ppt].
+                        intent(in)  :: S  !< Salinity of the layer [ppt]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: p_t !< Pressure atop the layer [R L2 T-2 ~> Pa] or [Pa].
+                        intent(in)  :: p_t !< Pressure atop the layer [R L2 T-2 ~> Pa] or [Pa]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: p_b !< Pressure below the layer [R L2 T-2 ~> Pa] or [Pa].
+                        intent(in)  :: p_b !< Pressure below the layer [R L2 T-2 ~> Pa] or [Pa]
   real,                 intent(in)  :: alpha_ref !< A mean specific volume that is subtracted out
-                            !! to reduce the magnitude of each of the integrals [R-1 ~> m3 kg-1].
+                            !! to reduce the magnitude of each of the integrals [R-1 ~> m3 kg-1]
                             !! The calculation is mathematically identical with different values of
                             !! alpha_ref, but alpha_ref alters the effects of roundoff, and
                             !! answers do change.
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(inout) :: dza !< The change in the geopotential anomaly
-                            !! across the layer [L2 T-2 ~> m2 s-2] or [m2 s-2].
+                            !! across the layer [L2 T-2 ~> m2 s-2] or [m2 s-2]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(inout) :: intp_dza !< The integral in pressure through the layer of
                             !! the geopotential anomaly relative to the anomaly at the bottom of the
-                            !! layer [R L4 T-4 ~> Pa m2 s-2] or [Pa m2 s-2].
+                            !! layer [R L4 T-4 ~> Pa m2 s-2] or [Pa m2 s-2]
   real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
               optional, intent(inout) :: intx_dza  !< The integral in x of the difference between
                             !! the geopotential anomaly at the top and bottom of the layer divided
-                            !! by the x grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2].
+                            !! by the x grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2]
   real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
               optional, intent(inout) :: inty_dza  !< The integral in y of the difference between
                             !! the geopotential anomaly at the top and bottom of the layer divided
-                            !! by the y grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2].
+                            !! by the y grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2]
   integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate dza.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(in)  :: bathyP !< The pressure at the bathymetry [R L2 T-2 ~> Pa] or [Pa]
@@ -2728,18 +2728,18 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, dza, &
   real :: S5(5)      ! Salinities at five quadrature points [ppt]
   real :: p5(5)      ! Pressures at five quadrature points, scaled back to Pa if necessary [Pa]
   real :: a5(5)      ! Specific volumes at five quadrature points [R-1 ~> m3 kg-1] or [m3 kg-1]
-  real :: alpha_anom ! The depth averaged specific density anomaly [R-1 ~> m3 kg-1].
-  real :: dp         ! The pressure change through a layer [R L2 T-2 ~> Pa].
-  real :: hWght      ! A pressure-thickness below topography [R L2 T-2 ~> Pa].
-  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [R L2 T-2 ~> Pa].
+  real :: alpha_anom ! The depth averaged specific density anomaly [R-1 ~> m3 kg-1]
+  real :: dp         ! The pressure change through a layer [R L2 T-2 ~> Pa]
+  real :: hWght      ! A pressure-thickness below topography [R L2 T-2 ~> Pa]
+  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [R L2 T-2 ~> Pa]
   real :: alpha_ref_mks ! The reference specific volume in MKS units, never rescaled from m3 kg-1 [m3 kg-1]
-  real :: iDenom     ! The inverse of the denominator in the weights [T4 R-2 L-4 ~> Pa-2].
-  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim].
-  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim].
-  real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
-  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
+  real :: iDenom     ! The inverse of the denominator in the weights [T4 R-2 L-4 ~> Pa-2]
+  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim]
+  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim]
+  real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim]
+  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim]
   real :: intp(5)    ! The integrals of specific volume with pressure at the
-                     ! 5 sub-column locations [L2 T-2 ~> m2 s-2].
+                     ! 5 sub-column locations [L2 T-2 ~> m2 s-2]
   real :: RL2_T2_to_Pa  ! A unit conversion factor from the rescaled units of pressure to Pa [Pa T2 R-1 L-2 ~> 1]
   real :: SV_scale   ! A multiplicative factor by which to scale specific
                      ! volume from m3 kg-1 to the desired units [kg m-3 R-1 ~> 1]
@@ -2894,19 +2894,19 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
                              intp_dza, intx_dza, inty_dza, useMassWghtInterp, US)
   type(hor_index_type), intent(in)  :: HI !< A horizontal index type structure.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: T_t  !< Potential temperature at the top of the layer [degC].
+                        intent(in)  :: T_t  !< Potential temperature at the top of the layer [degC]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: T_b  !< Potential temperature at the bottom of the layer [degC].
+                        intent(in)  :: T_b  !< Potential temperature at the bottom of the layer [degC]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: S_t  !< Salinity at the top the layer [ppt].
+                        intent(in)  :: S_t  !< Salinity at the top the layer [ppt]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: S_b  !< Salinity at the bottom the layer [ppt].
+                        intent(in)  :: S_b  !< Salinity at the bottom the layer [ppt]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: p_t !< Pressure atop the layer [R L2 T-2 ~> Pa] or [Pa].
+                        intent(in)  :: p_t !< Pressure atop the layer [R L2 T-2 ~> Pa] or [Pa]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: p_b !< Pressure below the layer [R L2 T-2 ~> Pa] or [Pa].
+                        intent(in)  :: p_b !< Pressure below the layer [R L2 T-2 ~> Pa] or [Pa]
   real,                 intent(in)  :: alpha_ref !< A mean specific volume that is subtracted out
-                            !! to reduce the magnitude of each of the integrals [R-1 ~> m3 kg-1].
+                            !! to reduce the magnitude of each of the integrals [R-1 ~> m3 kg-1]
                             !! The calculation is mathematically identical with different values of
                             !! alpha_ref, but alpha_ref alters the effects of roundoff, and
                             !! answers do change.
@@ -2917,19 +2917,19 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(inout) :: dza !< The change in the geopotential anomaly
-                            !! across the layer [L2 T-2 ~> m2 s-2].
+                            !! across the layer [L2 T-2 ~> m2 s-2]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(inout) :: intp_dza !< The integral in pressure through the layer of
                             !! the geopotential anomaly relative to the anomaly at the bottom of the
-                            !! layer [R L4 T-4 ~> Pa m2 s-2] or [Pa m2 s-2].
+                            !! layer [R L4 T-4 ~> Pa m2 s-2] or [Pa m2 s-2]
   real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
               optional, intent(inout) :: intx_dza  !< The integral in x of the difference between
                             !! the geopotential anomaly at the top and bottom of the layer divided
-                            !! by the x grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2].
+                            !! by the x grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2]
   real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
               optional, intent(inout) :: inty_dza  !< The integral in y of the difference between
                             !! the geopotential anomaly at the top and bottom of the layer divided
-                            !! by the y grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2].
+                            !! by the y grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2]
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
                             !! to interpolate T/S for top and bottom integrals.
   type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
@@ -2952,19 +2952,19 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
   real :: wt_t(5), wt_b(5) ! Weights of top and bottom values at quadrature points [nondim]
   real :: T_top, T_bot, S_top, S_bot, P_top, P_bot
 
-  real :: alpha_anom ! The depth averaged specific density anomaly [m3 kg-1].
-  real :: dp         ! The pressure change through a layer [R L2 T-2 ~> Pa].
-  real :: dp_90(2:4) ! The pressure change through a layer divided by 90 [R L2 T-2 ~> Pa].
-  real :: hWght      ! A pressure-thickness below topography [R L2 T-2 ~> Pa].
-  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [R L2 T-2 ~> Pa].
+  real :: alpha_anom ! The depth averaged specific density anomaly [m3 kg-1]
+  real :: dp         ! The pressure change through a layer [R L2 T-2 ~> Pa]
+  real :: dp_90(2:4) ! The pressure change through a layer divided by 90 [R L2 T-2 ~> Pa]
+  real :: hWght      ! A pressure-thickness below topography [R L2 T-2 ~> Pa]
+  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [R L2 T-2 ~> Pa]
   real :: alpha_ref_mks ! The reference specific volume in MKS units, never rescaled from m3 kg-1 [m3 kg-1]
-  real :: iDenom     ! The inverse of the denominator in the weights [T4 R-2 L-4 ~> Pa-2].
-  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim].
-  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim].
-  real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
-  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
+  real :: iDenom     ! The inverse of the denominator in the weights [T4 R-2 L-4 ~> Pa-2]
+  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim]
+  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim]
+  real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim]
+  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim]
   real :: intp(5)    ! The integrals of specific volume with pressure at the
-                     ! 5 sub-column locations [L2 T-2 ~> m2 s-2].
+                     ! 5 sub-column locations [L2 T-2 ~> m2 s-2]
   real :: RL2_T2_to_Pa  ! A unit conversion factor from the rescaled units of pressure to Pa [Pa T2 R-1 L-2 ~> 1]
   real :: SV_scale   ! A multiplicative factor by which to scale specific
                      ! volume from m3 kg-1 to the desired units [kg m-3 R-1 ~> 1]
@@ -3189,11 +3189,11 @@ subroutine extract_member_EOS(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature,
                                               !! in [kg m-3 degC-1]
   real   , optional, intent(out) :: dRho_dS   !< Partial derivative of density with salinity
                                               !! in [kg m-3 ppt-1]
-  real   , optional, intent(out) :: TFr_S0_P0 !< The freezing potential temperature at S=0, P=0 [degC].
+  real   , optional, intent(out) :: TFr_S0_P0 !< The freezing potential temperature at S=0, P=0 [degC]
   real   , optional, intent(out) :: dTFr_dS   !< The derivative of freezing point with salinity
-                                              !! [degC PSU-1].
+                                              !! [degC PSU-1]
   real   , optional, intent(out) :: dTFr_dp   !< The derivative of freezing point with pressure
-                                              !! [degC Pa-1].
+                                              !! [degC Pa-1]
 
   if (present(form_of_EOS    ))  form_of_EOS     = EOS%form_of_EOS
   if (present(form_of_TFreeze))  form_of_TFreeze = EOS%form_of_TFreeze

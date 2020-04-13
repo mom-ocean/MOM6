@@ -172,7 +172,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
   real :: alpha_ref     ! A reference specific volume [R-1 ~> m3 kg-1] that is used
                         ! to reduce the impact of truncation errors.
   real :: rho_in_situ(SZI_(G)) ! The in situ density [R ~> kg m-3].
-  real :: Pa_to_H       ! A factor to convert from Pa to the thicknesss units (H) [H T2 R-1 L-12 ~> H Pa-1].
+  real :: Pa_to_H       ! A factor to convert from Pa to the thicknesss units (H) [H T2 R-1 L-2 ~> H Pa-1].
   real :: H_to_RL2_T2   ! A factor to convert from thicknesss units (H) to pressure units [R L2 T-2 H-1 ~> Pa H-1].
 !  real :: oneatm = 101325.0  ! 1 atm in [Pa] = [kg m-1 s-2]
   real, parameter :: C1_6 = 1.0/6.0
@@ -490,7 +490,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
   real :: rho_in_situ(SZI_(G)) ! The in situ density [R ~> kg m-3].
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
                              ! density, [R L2 T-2 ~> Pa] (usually 2e7 Pa = 2000 dbar).
-  real :: p0(SZI_(G))        ! An array of zeros to use for pressure [Pa].
+  real :: p0(SZI_(G))        ! An array of zeros to use for pressure [R L2 T-2 ~> Pa].
   real :: h_neglect          ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected [H ~> m].
   real :: I_Rho0             ! The inverse of the Boussinesq reference density [R-1 ~> m3 kg-1].
