@@ -147,7 +147,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
                 ! layer with temperature [R degC-1 ~> kg m-3 degC-1].
     dR_dS, &    !   Partial derivative of the density in the bottom boundary
                 ! layer with salinity [R ppt-1 ~> kg m-3 ppt-1].
-    press       !   The pressure at which dR_dT and dR_dS are evaluated [Pa].
+    press       !   The pressure at which dR_dT and dR_dS are evaluated [R L2 T-2 ~> Pa].
   real :: htot      ! Sum of the layer thicknesses up to some point [H ~> m or kg m-2].
   real :: htot_vel  ! Sum of the layer thicknesses up to some point [H ~> m or kg m-2].
 
@@ -566,14 +566,14 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
 
     if (use_BBL_EOS) then
       do i=is,ie
-        press(i) = 0.0 ! or = forces%p_surf(i,j)
+        press(i) = 0.0 ! or = forces%p_surf(i) !###
         if (.not.do_i(i)) then ; T_EOS(i) = 0.0 ; S_EOS(i) = 0.0 ; endif
       enddo
       do k=1,nz ; do i=is,ie
-        press(i) = press(i) + GV%H_to_Pa * h_vel(i,k)
+        press(i) = press(i) + (GV%H_to_RZ*GV%g_Earth) * h_vel(i,k)
       enddo ; enddo
       call calculate_density_derivs(T_EOS, S_EOS, press, dR_dT, dR_dS, &
-                                    is-G%IsdB+1, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+                                    is-G%IsdB+1, ie-is+1, tv%eqn_of_state, US=US)
     endif
 
     do i=is,ie ; if (do_i(i)) then
@@ -1086,7 +1086,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
     dR_dS, &    !   Partial derivative of the density at the base of layer nkml
                 ! (roughly the base of the mixed layer) with salinity [R ppt-1 ~> kg m-3 ppt-1].
     ustar, &    !   The surface friction velocity under ice shelves [Z T-1 ~> m s-1].
-    press, &    ! The pressure at which dR_dT and dR_dS are evaluated [Pa].
+    press, &    ! The pressure at which dR_dT and dR_dS are evaluated [R L2 T-2 ~> Pa].
     T_EOS, &    ! The potential temperature at which dR_dT and dR_dS are evaluated [degC]
     S_EOS       ! The salinity at which dR_dT and dR_dS are evaluated [ppt].
   real, dimension(SZIB_(G),SZJ_(G)) :: &
@@ -1269,14 +1269,14 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
           if (use_EOS .and. (k==nkml+1)) then
             ! Find dRho/dT and dRho_dS.
             do I=Isq,Ieq
-              press(I) = GV%H_to_Pa * htot(I)
+              press(I) = (GV%H_to_RZ*GV%g_Earth) * htot(I)
               k2 = max(1,nkml)
               I_2hlay = 1.0 / (h(i,j,k2) + h(i+1,j,k2) + h_neglect)
               T_EOS(I) = (h(i,j,k2)*tv%T(i,j,k2) + h(i+1,j,k2)*tv%T(i+1,j,k2)) * I_2hlay
               S_EOS(I) = (h(i,j,k2)*tv%S(i,j,k2) + h(i+1,j,k2)*tv%S(i+1,j,k2)) * I_2hlay
             enddo
             call calculate_density_derivs(T_EOS, S_EOS, press, dR_dT, dR_dS, &
-                                          Isq-G%IsdB+1, Ieq-Isq+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+                                          Isq-G%IsdB+1, Ieq-Isq+1, tv%eqn_of_state, US=US)
           endif
 
           do I=Isq,Ieq ; if (do_i(I)) then
@@ -1506,14 +1506,14 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
           if (use_EOS .and. (k==nkml+1)) then
             ! Find dRho/dT and dRho_dS.
             do i=is,ie
-              press(i) = GV%H_to_Pa * htot(i)
+              press(i) = (GV%H_to_RZ * GV%g_Earth) * htot(i)
               k2 = max(1,nkml)
               I_2hlay = 1.0 / (h(i,j,k2) + h(i,j+1,k2) + h_neglect)
               T_EOS(i) = (h(i,j,k2)*tv%T(i,j,k2) + h(i,j+1,k2)*tv%T(i,j+1,k2)) * I_2hlay
               S_EOS(i) = (h(i,j,k2)*tv%S(i,j,k2) + h(i,j+1,k2)*tv%S(i,j+1,k2)) * I_2hlay
             enddo
             call calculate_density_derivs(T_EOS, S_EOS, press, dR_dT, dR_dS, &
-                                          is-G%IsdB+1, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+                                          is-G%IsdB+1, ie-is+1, tv%eqn_of_state, US=US)
           endif
 
           do i=is,ie ; if (do_i(i)) then

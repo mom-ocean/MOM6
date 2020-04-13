@@ -851,10 +851,7 @@ subroutine extractFluxes2d(G, GV, US, fluxes, optics, nsw, dt, FluxRescaleDepth,
   logical,                          intent(in)    :: aggregate_FW   !< For determining how to aggregate the forcing.
 
   integer :: j
-!$OMP parallel do default(none) shared(G, GV, US, fluxes, optics, nsw, dt, FluxRescaleDepth, &
-!$OMP                                  useRiverHeatContent, useCalvingHeatContent,             &
-!$OMP                                  h,T,netMassInOut,netMassOut,Net_heat,Net_salt,Pen_SW_bnd,tv, &
-!$OMP                                  aggregate_FW)
+  !$OMP parallel do default(shared)
   do j=G%jsc, G%jec
     call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
             FluxRescaleDepth, useRiverHeatContent, useCalvingHeatContent,&
@@ -891,7 +888,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   logical,                        optional, intent(in)    :: skip_diags     !< If present and true, skip calculating
                                                                             !! diagnostics inside extractFluxes1d()
   ! local variables
-  integer                               :: start, npts, k
+  integer                               :: k
   real, parameter                       :: dt = 1.    ! to return a rate from extractFluxes1d
   real, dimension(SZI_(G))              :: netH       ! net FW flux [H s-1 ~> m s-1 or kg m-2 s-1]
   real, dimension(SZI_(G))              :: netEvap    ! net FW flux leaving ocean via evaporation
@@ -899,7 +896,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   real, dimension(SZI_(G))              :: netHeat    ! net temp flux [degC H s-1 ~> degC m s-2 or degC kg m-2 s-1]
   real, dimension(max(nsw,1), SZI_(G))  :: penSWbnd   ! penetrating SW radiation by band
                                                       ! [degC H ~> degC m or degC kg m-2]
-  real, dimension(SZI_(G))              :: pressure   ! pressurea the surface [Pa]
+  real, dimension(SZI_(G))              :: pressure   ! pressure at the surface [R L2 T-2 ~> Pa]
   real, dimension(SZI_(G))              :: dRhodT     ! density partial derivative wrt temp [R degC-1 ~> kg m-3 degC-1]
   real, dimension(SZI_(G))              :: dRhodS     ! density partial derivative wrt saln [R ppt-1 ~> kg m-3 ppt-1]
   real, dimension(SZI_(G),SZK_(G)+1)    :: netPen     ! The net penetrating shortwave radiation at each level
@@ -917,10 +914,8 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   useCalvingHeatContent = .False.
 
   depthBeforeScalingFluxes = max( GV%Angstrom_H, 1.e-30*GV%m_to_H )
-  pressure(:) = 0. ! Ignore atmospheric pressure
+  pressure(:) = 0. ! Ignores atmospheric pressure ###
   GoRho       = (GV%g_Earth * GV%H_to_Z*US%T_to_s) / GV%Rho0
-  start       = 1 + G%isc - G%isd
-  npts        = 1 + G%iec - G%isc
 
   H_limit_fluxes = depthBeforeScalingFluxes
 
@@ -931,7 +926,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   ! netSalt    = salt via surface fluxes [ppt H s-1 ~> ppt m s-1 or gSalt m-2 s-1]
   ! Note that unlike other calls to extractFLuxes1d() that return the time-integrated flux
   ! this call returns the rate because dt=1
-  call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt*US%s_to_T,                         &
+  call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt*US%s_to_T,               &
                 depthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
                 h(:,j,:), Temp(:,j,:), netH, netEvap, netHeatMinusSW,                 &
                 netSalt, penSWbnd, tv, .false., skip_diags=skip_diags)
@@ -942,8 +937,8 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
                       H_limit_fluxes, .true., penSWbnd, netPen)
 
   ! Density derivatives
-  call calculate_density_derivs(Temp(:,j,1), Salt(:,j,1), pressure, &
-                                dRhodT, dRhodS, start, npts, tv%eqn_of_state, scale=US%kg_m3_to_R)
+  call calculate_density_derivs(Temp(:,j,1), Salt(:,j,1), pressure, dRhodT, dRhodS, G%HI, &
+                                tv%eqn_of_state, US)
 
   ! Adjust netSalt to reflect dilution effect of FW flux
   netSalt(G%isc:G%iec) = netSalt(G%isc:G%iec) - Salt(G%isc:G%iec,j,1) * netH(G%isc:G%iec) ! ppt H/s

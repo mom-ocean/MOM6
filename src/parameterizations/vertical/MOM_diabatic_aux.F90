@@ -518,9 +518,9 @@ subroutine triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, T, S)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: hold !< The layer thicknesses before entrainment,
                                                                   !! [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: ea !< The amount of fluid entrained from the layer
-                                                 !! above within this time step [H ~> m or kg m-2].
+                                                                !! above within this time step [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: eb !< The amount of fluid entrained from the layer
-                                                 !! below within this time step [H ~> m or kg m-2].
+                                                                !! below within this time step [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: T  !< Layer potential temperatures [degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: S  !< Layer salinities [ppt].
 
@@ -737,7 +737,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
 
   ! Local variables
   real, dimension(SZI_(G)) :: deltaRhoAtKm1, deltaRhoAtK ! Density differences [R ~> kg m-3].
-  real, dimension(SZI_(G)) :: pRef_MLD, pRef_N2 ! Reference pressures [Pa].
+  real, dimension(SZI_(G)) :: pRef_MLD, pRef_N2 ! Reference pressures [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G)) :: H_subML, dH_N2    ! Summed thicknesses used in N2 calculation [H ~> m].
   real, dimension(SZI_(G)) :: T_subML, T_deeper ! Temperatures used in the N2 calculation [degC].
   real, dimension(SZI_(G)) :: S_subML, S_deeper ! Salinities used in the N2 calculation [ppt].
@@ -767,8 +767,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   pRef_MLD(:) = 0.0
   do j=js,je
     do i=is,ie ; dK(i) = 0.5 * h(i,j,1) * GV%H_to_Z ; enddo ! Depth of center of surface layer
-    call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, is, ie-is+1, &
-                           tv%eqn_of_state, scale=US%kg_m3_to_R)
+    call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, G%HI, tv%eqn_of_state, US)
     do i=is,ie
       deltaRhoAtK(i) = 0.
       MLD(i,j) = 0.
@@ -809,8 +808,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
 
       ! Mixed-layer depth, using sigma-0 (surface reference pressure)
       do i=is,ie ; deltaRhoAtKm1(i) = deltaRhoAtK(i) ; enddo ! Store value from previous iteration of K
-      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, is, ie-is+1, &
-                             tv%eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, G%HI, tv%eqn_of_state, US)
       do i = is, ie
         deltaRhoAtK(i) = deltaRhoAtK(i) - rhoSurf(i) ! Density difference between layer K and surface
         ddRho = deltaRhoAtK(i) - deltaRhoAtKm1(i)
@@ -827,16 +825,14 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
     enddo
 
     if (id_N2>0) then  ! Now actually calculate stratification, N2, below the mixed layer.
-      do i=is,ie ; pRef_N2(i) = GV%H_to_Pa * (H_subML(i) + 0.5*dH_N2(i)) ; enddo
+      do i=is,ie ; pRef_N2(i) = (GV%g_Earth * GV%H_to_RZ) * (H_subML(i) + 0.5*dH_N2(i)) ; enddo
       ! if ((.not.N2_region_set(i)) .and. (dH_N2(i) > 0.5*dH_subML)) then
       !    ! Use whatever stratification we can, measured over whatever distance is available?
       !    T_deeper(i) = tv%T(i,j,nz) ; S_deeper(i) = tv%S(i,j,nz)
       !    N2_region_set(i) = .true.
       ! endif
-      call calculate_density(T_subML, S_subML, pRef_N2, rho_subML, is, ie-is+1, &
-                             tv%eqn_of_state, scale=US%kg_m3_to_R)
-      call calculate_density(T_deeper, S_deeper, pRef_N2, rho_deeper, is, ie-is+1, &
-                             tv%eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density(T_subML, S_subML, pRef_N2, rho_subML, G%HI, tv%eqn_of_state, US)
+      call calculate_density(T_deeper, S_deeper, pRef_N2, rho_deeper, G%HI, tv%eqn_of_state, US)
       do i=is,ie ; if ((G%mask2dT(i,j)>0.5) .and. N2_region_set(i)) then
         subMLN2(i,j) =  gE_rho0 * (rho_deeper(i) - rho_subML(i)) / (GV%H_to_z * dH_N2(i))
       endif ; enddo
@@ -897,9 +893,9 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   real :: RivermixConst  ! A constant used in implementing river mixing [R Z2 T-1 ~> Pa s].
 
   real, dimension(SZI_(G)) :: &
-    d_pres,       &  ! pressure change across a layer [Pa]
-    p_lay,        &  ! average pressure in a layer [Pa]
-    pres,         &  ! pressure at an interface [Pa]
+    d_pres,       &  ! pressure change across a layer [R L2 T-2 ~> Pa]
+    p_lay,        &  ! average pressure in a layer [R L2 T-2 ~> Pa]
+    pres,         &  ! pressure at an interface [R L2 T-2 ~> Pa]
     netMassInOut, &  ! surface water fluxes [H ~> m or kg m-2] over time step
     netMassIn,    &  ! mass entering ocean surface [H ~> m or kg m-2] over a time step
     netMassOut,   &  ! mass leaving ocean surface [H ~> m or kg m-2] over a time step
@@ -909,7 +905,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                      ! [ppt H ~> ppt m or ppt kg m-2]
     nonpenSW,     &  ! non-downwelling SW, which is absorbed at ocean surface
                      ! [degC H ~> degC m or degC kg m-2]
-    SurfPressure, &  ! Surface pressure (approximated as 0.0) [Pa]
+    SurfPressure, &  ! Surface pressure (approximated as 0.0) [R L2 T-2 ~> Pa]
     dRhodT,       &  ! change in density per change in temperature [R degC-1 ~> kg m-3 degC-1]
     dRhodS,       &  ! change in density per change in salinity [R ppt-1 ~> kg m-3 ppt-1]
     netheat_rate, &  ! netheat but for dt=1 [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
@@ -942,7 +938,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   logical :: calculate_energetics
   logical :: calculate_buoyancy
   integer :: i, j, is, ie, js, je, k, nz, n, nb
-  integer :: start, npts
   character(len=45) :: mesg
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -960,10 +955,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
 
   if (present(cTKE)) cTKE(:,:,:) = 0.0
   if (calculate_buoyancy) then
-    SurfPressure(:) = 0.0
+    SurfPressure(:) = 0.0 !### Add fluxes%p_surf_full?
     GoRho       = US%L_to_Z**2*GV%g_Earth / GV%Rho0
-    start       = 1 + G%isc - G%isd
-    npts        = 1 + G%iec - G%isc
   endif
 
   ! H_limit_fluxes is used by extractFluxes1d to scale down fluxes if the total
@@ -991,7 +984,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   !$OMP                                  netmassinout_rate,netheat_rate,netsalt_rate,      &
   !$OMP                                  drhodt,drhods,pen_sw_bnd_rate,                    &
   !$OMP                                  pen_TKE_2d,Temp_in,Salin_in,RivermixConst)        &
-  !$OMP                     firstprivate(start,npts,SurfPressure)
+  !$OMP                     firstprivate(SurfPressure)
   do j=js,je
   ! Work in vertical slices for efficiency
 
@@ -1006,15 +999,15 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
       ! The partial derivatives of specific volume with temperature and
       ! salinity need to be precalculated to avoid having heating of
       ! tiny layers give nonsensical values.
-      do i=is,ie ; pres(i) = 0.0 ; enddo ! Add surface pressure?
+      do i=is,ie ; pres(i) = 0.0 ; enddo ! ###Add surface pressure?
       do k=1,nz
         do i=is,ie
-          d_pres(i) = GV%H_to_Pa * h2d(i,k)
+          d_pres(i) = (GV%g_Earth * GV%H_to_RZ) * h2d(i,k)
           p_lay(i) = pres(i) + 0.5*d_pres(i)
           pres(i) = pres(i) + d_pres(i)
         enddo
         call calculate_specific_vol_derivs(T2d(:,k), tv%S(:,j,k), p_lay(:),&
-                 dSV_dT(:,j,k), dSV_dS(:,j,k), is, ie-is+1, tv%eqn_of_state, scale=US%R_to_kg_m3)
+                 dSV_dT(:,j,k), dSV_dS(:,j,k), is, ie-is+1, tv%eqn_of_state, US=US)
         do i=is,ie ; dSV_dT_2d(i,k) = dSV_dT(i,j,k) ; enddo
       enddo
       pen_TKE_2d(:,:) = 0.0
@@ -1355,8 +1348,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
       do i=is,ie ; do nb=1,nsw ; netPen_rate(i) = netPen_rate(i) + pen_SW_bnd_rate(nb,i) ; enddo ; enddo
 
       ! Density derivatives
-      call calculate_density_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, &
-           dRhodT, dRhodS, start, npts, tv%eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, dRhodT, dRhodS, G%HI, &
+                                    tv%eqn_of_state, US)
       ! 1. Adjust netSalt to reflect dilution effect of FW flux
       ! 2. Add in the SW heating for purposes of calculating the net
       ! surface buoyancy flux affecting the top layer.

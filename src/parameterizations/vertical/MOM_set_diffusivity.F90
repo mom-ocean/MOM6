@@ -1036,7 +1036,7 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
   real, dimension(SZI_(G)) :: &
     dRho_dT,  &    ! partial derivatives of density wrt temp [R degC-1 ~> kg m-3 degC-1]
     dRho_dS,  &    ! partial derivatives of density wrt saln [R ppt-1 ~> kg m-3 ppt-1]
-    pres,     &    ! pressure at each interface [Pa]
+    pres,     &    ! pressure at each interface [R L2 T-2 ~> Pa]
     Temp_int, &    ! temperature at interfaces [degC]
     Salin_int      ! Salinity at interfaces [ppt]
 
@@ -1054,18 +1054,18 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
   is = G%isc ; ie = G%iec ; nz = G%ke
 
   if (associated(tv%eqn_of_state)) then
-    do i=is,ie
+    do i=is,ie !### Add surface pressure.
       pres(i) = 0.0 ; Kd_T_dd(i,1) = 0.0 ; Kd_S_dd(i,1) = 0.0
       Kd_T_dd(i,nz+1) = 0.0 ; Kd_S_dd(i,nz+1) = 0.0
     enddo
     do K=2,nz
       do i=is,ie
-        pres(i) = pres(i) + GV%H_to_Pa*h(i,j,k-1)
+        pres(i) = pres(i) + (GV%g_Earth*GV%H_to_RZ)*h(i,j,k-1)
         Temp_Int(i) = 0.5 * (T_f(i,j,k-1) + T_f(i,j,k))
         Salin_Int(i) = 0.5 * (S_f(i,j,k-1) + S_f(i,j,k))
       enddo
-      call calculate_density_derivs(Temp_int, Salin_int, pres, &
-             dRho_dT(:), dRho_dS(:), is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density_derivs(Temp_int, Salin_int, pres, dRho_dT, dRho_dS, G%HI, &
+                                    tv%eqn_of_state, US)
 
       do i=is,ie
         alpha_dT = -1.0*dRho_dT(i) * (T_f(i,j,k-1) - T_f(i,j,k))
