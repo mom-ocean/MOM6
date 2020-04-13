@@ -64,7 +64,7 @@ end interface calculate_density
 
 !> Calculates specific volume of sea water from T, S and P
 interface calculate_spec_vol
-  module procedure calculate_spec_vol_scalar , calculate_spec_vol_array, calculate_spec_vol_HI_1d
+  module procedure calc_spec_vol_scalar, calculate_spec_vol_array, calc_spec_vol_HI_1d, calc_spec_vol_US
 end interface calculate_spec_vol
 
 !> Calculate the derivatives of density with temperature and salinity from T, S, and P
@@ -74,7 +74,7 @@ interface calculate_density_derivs
 end interface calculate_density_derivs
 
 interface calculate_specific_vol_derivs
-  module procedure calculate_spec_vol_derivs_array, calculate_spec_vol_derivs_HI_1d
+  module procedure calculate_spec_vol_derivs_array, calc_spec_vol_derivs_US, calc_spec_vol_derivs_HI_1d
 end interface calculate_specific_vol_derivs
 
 !> Calculates the second derivatives of density with various combinations of temperature,
@@ -280,39 +280,11 @@ subroutine calculate_density_HI_1d(T, S, pressure, rho, HI, EOS, US, halo)
   npts = HI%iec - HI%isc + 1 + 2*halo_sz
   is = HI%isc - halo_sz ; ie = HI%iec + halo_sz
 
-  if ((US%RL2_T2_to_Pa == 1.0) .and. (US%R_to_kg_M3 == 1.0)) then
-    select case (EOS%form_of_EOS)
-      case (EOS_LINEAR)
-        call calculate_density_linear(T, S, pressure, rho, start, npts, &
-                                      EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS)
-      case (EOS_UNESCO)
-        call calculate_density_unesco(T, S, pressure, rho, start, npts)
-      case (EOS_WRIGHT)
-        call calculate_density_wright(T, S, pressure, rho, start, npts)
-      case (EOS_TEOS10)
-        call calculate_density_teos10(T, S, pressure, rho, start, npts)
-      case (EOS_NEMO)
-        call calculate_density_nemo(T, S, pressure, rho, start, npts)
-      case default
-        call MOM_error(FATAL, "calculate_density_HI_1d: EOS%form_of_EOS is not valid.")
-    end select
+  if (US%RL2_T2_to_Pa == 1.0) then
+    call calculate_density_array(T, S, pressure, rho, start, npts, EOS)
   else  ! There is rescaling of variables, including pressure.
     do i=is,ie ; pres(i) = US%RL2_T2_to_Pa * pressure(i) ; enddo
-    select case (EOS%form_of_EOS)
-      case (EOS_LINEAR)
-        call calculate_density_linear(T, S, pres, rho, start, npts, &
-                                      EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS)
-      case (EOS_UNESCO)
-        call calculate_density_unesco(T, S, pres, rho, start, npts)
-      case (EOS_WRIGHT)
-        call calculate_density_wright(T, S, pres, rho, start, npts)
-      case (EOS_TEOS10)
-        call calculate_density_teos10(T, S, pres, rho, start, npts)
-      case (EOS_NEMO)
-        call calculate_density_nemo(T, S, pres, rho, start, npts)
-      case default
-        call MOM_error(FATAL, "calculate_density_HI_1d: EOS%form_of_EOS is not valid.")
-    end select
+    call calculate_density_array(T, S, pres, rho, start, npts, EOS)
   endif
 
   if (US%kg_m3_to_R /= 1.0) then ; do i=is,ie
@@ -321,48 +293,83 @@ subroutine calculate_density_HI_1d(T, S, pressure, rho, HI, EOS, US, halo)
 
 end subroutine calculate_density_HI_1d
 
+!> Calls the appropriate subroutine to calculate the specific volume of sea water
+!! for 1-D array inputs.
+subroutine calculate_spec_vol_array(T, S, pressure, specvol, start, npts, EOS, spv_ref, scale)
+  real, dimension(:), intent(in)    :: T        !< potential temperature relative to the surface [degC]
+  real, dimension(:), intent(in)    :: S        !< salinity [ppt]
+  real, dimension(:), intent(in)    :: pressure !< pressure [Pa]
+  real, dimension(:), intent(inout) :: specvol  !< in situ specific volume [kg m-3]
+  integer,            intent(in)    :: start    !< the starting point in the arrays.
+  integer,            intent(in)    :: npts     !< the number of values to calculate.
+  type(EOS_type),     pointer       :: EOS      !< Equation of state structure
+  real,     optional, intent(in)    :: spv_ref  !< A reference specific volume [m3 kg-1]
+  real,     optional, intent(in)    :: scale    !< A multiplicative factor by which to scale specific
+                                                !! volume in combination with scaling given by US [various]
+
+  real, dimension(size(specvol))  :: rho   ! Density [kg m-3]
+  integer :: j
+
+  if (.not.associated(EOS)) call MOM_error(FATAL, &
+    "calculate_spec_vol_array called with an unassociated EOS_type EOS.")
+
+  select case (EOS%form_of_EOS)
+    case (EOS_LINEAR)
+      call calculate_spec_vol_linear(T, S, pressure, specvol, start, npts, &
+               EOS%rho_T0_S0, EOS%drho_dT, EOS%drho_dS, spv_ref)
+    case (EOS_UNESCO)
+      call calculate_spec_vol_unesco(T, S, pressure, specvol, start, npts, spv_ref)
+    case (EOS_WRIGHT)
+      call calculate_spec_vol_wright(T, S, pressure, specvol, start, npts, spv_ref)
+    case (EOS_TEOS10)
+      call calculate_spec_vol_teos10(T, S, pressure, specvol, start, npts, spv_ref)
+    case (EOS_NEMO)
+      call calculate_density_nemo(T, S, pressure, rho, start, npts)
+      if (present(spv_ref)) then
+        specvol(:) = 1.0 / rho(:) - spv_ref
+      else
+        specvol(:) = 1.0 / rho(:)
+      endif
+    case default
+      call MOM_error(FATAL, "calculate_spec_vol_array: EOS%form_of_EOS is not valid.")
+  end select
+
+  if (present(scale)) then ; if (scale /= 1.0) then ; do j=start,start+npts-1
+    specvol(j) = scale * specvol(j)
+  enddo ; endif ; endif
+
+end subroutine calculate_spec_vol_array
+
 !> Calls the appropriate subroutine to calculate specific volume of sea water
 !! for scalar inputs.
-subroutine calculate_spec_vol_scalar(T, S, pressure, specvol, EOS, spv_ref, US, scale)
+subroutine calc_spec_vol_scalar(T, S, pressure, specvol, EOS, spv_ref, US, scale)
   real,           intent(in)  :: T        !< Potential temperature referenced to the surface [degC]
   real,           intent(in)  :: S        !< Salinity [ppt]
   real,           intent(in)  :: pressure !< Pressure [Pa] or [R L2 T-2 ~> Pa]
   real,           intent(out) :: specvol  !< In situ? specific volume [m3 kg-1] or [R-1 ~> m3 kg-1]
   type(EOS_type), pointer     :: EOS      !< Equation of state structure
-  real, optional, intent(in)  :: spv_ref  !< A reference specific volume [m3 kg-1]
+  real, optional, intent(in)  :: spv_ref  !< A reference specific volume [m3 kg-1] or [R-1 m3 kg-1]
   type(unit_scale_type), optional, intent(in) :: US       !< A dimensional unit scaling type
   real, optional, intent(in)  :: scale    !< A multiplicative factor by which to scale specific
                                           !! volume in combination with scaling given by US [various]
 
-  real :: p_scale ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
-  real :: rho     ! Density [kg m-3]
+  real, dimension(1) :: Ta, Sa, pres, spv  ! Rescaled single element array versions of the arguments.
+  real :: spv_reference ! spv_ref converted to [m3 kg-1]
   real :: spv_scale ! A factor to convert specific volume from m3 kg-1 to the desired units [kg R-1 m-3 ~> 1]
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calculate_spec_vol_scalar called with an unassociated EOS_type EOS.")
+    "calc_spec_vol_scalar called with an unassociated EOS_type EOS.")
 
-  p_scale = 1.0 ; if (present(US)) p_scale = US%RL2_T2_to_Pa
+  pres(1) = pressure ; if (present(US)) pres(1) = US%RL2_T2_to_Pa*pressure
+  Ta(1) = T ; Sa(1) = S
 
-  select case (EOS%form_of_EOS)
-    case (EOS_LINEAR)
-      call calculate_spec_vol_linear(T, S, p_scale*pressure, specvol, &
-                                     EOS%rho_T0_S0, EOS%drho_dT, EOS%drho_dS, spv_ref)
-    case (EOS_UNESCO)
-      call calculate_spec_vol_unesco(T, S, p_scale*pressure, specvol, spv_ref)
-    case (EOS_WRIGHT)
-      call calculate_spec_vol_wright(T, S, p_scale*pressure, specvol, spv_ref)
-    case (EOS_TEOS10)
-      call calculate_spec_vol_teos10(T, S, p_scale*pressure, specvol, spv_ref)
-    case (EOS_NEMO)
-      call calculate_density_nemo(T, S, p_scale*pressure, rho)
-      if (present(spv_ref)) then
-        specvol = 1.0 / rho - spv_ref
-      else
-        specvol = 1.0 / rho
-      endif
-    case default
-      call MOM_error(FATAL, "calculate_spec_vol_scalar: EOS is not valid.")
-  end select
+  if (present(spv_ref)) then
+    spv_reference = spv_ref ; if (present(US)) spv_reference = US%kg_m3_to_R*spv_ref
+    call calculate_spec_vol_array(Ta, Sa, pres, spv, 1, 1, EOS, spv_reference)
+  else
+    call calculate_spec_vol_array(Ta, Sa, pres, spv, 1, 1, EOS)
+  endif
+  specvol = spv(1)
 
   spv_scale = 1.0 ; if (present(US)) spv_scale = US%R_to_kg_m3
   if (present(scale)) spv_scale = spv_scale * scale
@@ -370,11 +377,11 @@ subroutine calculate_spec_vol_scalar(T, S, pressure, specvol, EOS, spv_ref, US, 
     specvol = spv_scale * specvol
   endif
 
-end subroutine calculate_spec_vol_scalar
+end subroutine calc_spec_vol_scalar
 
 !> Calls the appropriate subroutine to calculate the specific volume of sea water
-!! for 1-D array inputs.
-subroutine calculate_spec_vol_array(T, S, pressure, specvol, start, npts, EOS, spv_ref, US, scale)
+!! for 1-D array inputs with dimensional rescaling.
+subroutine calc_spec_vol_US(T, S, pressure, specvol, start, npts, EOS, US, spv_ref, scale)
   real, dimension(:), intent(in)    :: T        !< potential temperature relative to the surface [degC]
   real, dimension(:), intent(in)    :: S        !< salinity [ppt]
   real, dimension(:), intent(in)    :: pressure !< pressure [Pa] or [R L2 T-2 ~> Pa]
@@ -382,78 +389,45 @@ subroutine calculate_spec_vol_array(T, S, pressure, specvol, start, npts, EOS, s
   integer,            intent(in)    :: start    !< the starting point in the arrays.
   integer,            intent(in)    :: npts     !< the number of values to calculate.
   type(EOS_type),     pointer       :: EOS      !< Equation of state structure
+  type(unit_scale_type), intent(in) :: US       !< A dimensional unit scaling type
   real,     optional, intent(in)    :: spv_ref  !< A reference specific volume [m3 kg-1]
-  type(unit_scale_type), optional, intent(in) :: US       !< A dimensional unit scaling type
   real,     optional, intent(in)    :: scale    !< A multiplicative factor by which to scale specific
                                                 !! volume in combination with scaling given by US [various]
 
   real, dimension(size(pressure)) :: pres  ! Pressure converted to [Pa]
-  real, dimension(size(specvol))  :: rho   ! Density [kg m-3]
-  real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
+  real :: spv_reference ! spv_ref converted to [m3 kg-1]
   real :: spv_scale ! A factor to convert specific volume from m3 kg-1 to the desired units [kg R-1 m-3 ~> 1]
-  integer :: j
+  integer :: i, is, ie
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_spec_vol_array called with an unassociated EOS_type EOS.")
 
-  p_scale = 1.0 ; if (present(US)) p_scale = US%RL2_T2_to_Pa
+  is = start ; ie = is + npts - 1
 
-  if (p_scale == 1.0) then
-    select case (EOS%form_of_EOS)
-      case (EOS_LINEAR)
-        call calculate_spec_vol_linear(T, S, pressure, specvol, start, npts, &
-                 EOS%rho_T0_S0, EOS%drho_dT, EOS%drho_dS, spv_ref)
-      case (EOS_UNESCO)
-        call calculate_spec_vol_unesco(T, S, pressure, specvol, start, npts, spv_ref)
-      case (EOS_WRIGHT)
-        call calculate_spec_vol_wright(T, S, pressure, specvol, start, npts, spv_ref)
-      case (EOS_TEOS10)
-        call calculate_spec_vol_teos10(T, S, pressure, specvol, start, npts, spv_ref)
-      case (EOS_NEMO)
-        call calculate_density_nemo(T, S, pressure, rho, start, npts)
-        if (present(spv_ref)) then
-          specvol(:) = 1.0 / rho(:) - spv_ref
-        else
-          specvol(:) = 1.0 / rho(:)
-        endif
-      case default
-        call MOM_error(FATAL, "calculate_spec_vol_array: EOS%form_of_EOS is not valid.")
-    end select
-  else
-    do j=start,start+npts-1 ; pres(j) = p_scale * pressure(j) ; enddo
-    select case (EOS%form_of_EOS)
-      case (EOS_LINEAR)
-        call calculate_spec_vol_linear(T, S, pres, specvol, start, npts, &
-                 EOS%rho_T0_S0, EOS%drho_dT, EOS%drho_dS, spv_ref)
-      case (EOS_UNESCO)
-        call calculate_spec_vol_unesco(T, S, pres, specvol, start, npts, spv_ref)
-      case (EOS_WRIGHT)
-        call calculate_spec_vol_wright(T, S, pres, specvol, start, npts, spv_ref)
-      case (EOS_TEOS10)
-        call calculate_spec_vol_teos10(T, S, pres, specvol, start, npts, spv_ref)
-      case (EOS_NEMO)
-        call calculate_density_nemo(T, S, pres, rho, start, npts)
-        if (present(spv_ref)) then
-          specvol = 1.0 / rho - spv_ref
-        else
-          specvol = 1.0 / rho
-        endif
-      case default
-        call MOM_error(FATAL, "calculate_spec_vol_array: EOS%form_of_EOS is not valid.")
-    end select
+  if ((US%RL2_T2_to_Pa == 1.0) .and. (US%R_to_kg_m3 == 1.0)) then
+    call calculate_spec_vol_array(T, S, pressure, specvol, start, npts, EOS, spv_ref)
+  elseif (present(spv_ref)) then ! This is the same as above, but with some extra work to rescale variables.
+    do i=is,ie ; pres(i) = US%RL2_T2_to_Pa * pressure(i) ; enddo
+    spv_reference = US%kg_m3_to_R*spv_ref
+    call calculate_spec_vol_array(T, S, pres, specvol, start, npts, EOS, spv_reference)
+  else  ! There is rescaling of variables, but spv_ref is not present. Passing a 0 value of spv_ref
+        ! changes answers at roundoff for some equations of state, like Wright and UNESCO.
+    do i=is,ie ; pres(i) = US%RL2_T2_to_Pa * pressure(i) ; enddo
+    call calculate_spec_vol_array(T, S, pres, specvol, start, npts, EOS)
   endif
 
-  spv_scale = 1.0 ; if (present(US)) spv_scale = US%R_to_kg_m3
+  spv_scale = US%R_to_kg_m3
   if (present(scale)) spv_scale = spv_scale * scale
-  if (spv_scale /= 1.0) then ; do j=start,start+npts-1
-    specvol(j) = spv_scale * specvol(j)
+  if (spv_scale /= 1.0) then ; do i=is,ie
+    specvol(i) = spv_scale * specvol(i)
   enddo ; endif
 
-end subroutine calculate_spec_vol_array
+end subroutine calc_spec_vol_US
+
 
 !> Calls the appropriate subroutine to calculate the specific volume of sea water for 1-D array
 !! inputs using array extents determined from a hor_index_type.
-subroutine calculate_spec_vol_HI_1d(T, S, pressure, specvol, HI, EOS, US, halo, spv_ref)
+subroutine calc_spec_vol_HI_1d(T, S, pressure, specvol, HI, EOS, US, halo, spv_ref)
   type(hor_index_type),           intent(in)    :: HI       !< The horizontal index structure
   real, dimension(HI%isd:HI%ied), intent(in)    :: T        !< Potential temperature referenced to the surface [degC]
   real, dimension(HI%isd:HI%ied), intent(in)    :: S        !< Salinity [ppt]
@@ -466,12 +440,11 @@ subroutine calculate_spec_vol_HI_1d(T, S, pressure, specvol, HI, EOS, US, halo, 
 
   ! Local variables
   real, dimension(HI%isd:HI%ied) :: pres  ! Pressure converted to [Pa]
-  real, dimension(HI%isd:HI%ied) :: rho   ! Density [kg m-3]
   real :: spv_reference ! spv_ref converted to [m3 kg-1]
   integer :: i, is, ie, start, npts, halo_sz
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calculate_spec_vol_HI_1d called with an unassociated EOS_type EOS.")
+    "calc_spec_vol_HI_1d called with an unassociated EOS_type EOS.")
 
   halo_sz = 0 ; if (present(halo)) halo_sz = halo
 
@@ -480,71 +453,22 @@ subroutine calculate_spec_vol_HI_1d(T, S, pressure, specvol, HI, EOS, US, halo, 
   is = HI%isc - halo_sz ; ie = HI%iec + halo_sz
 
   if ((US%RL2_T2_to_Pa == 1.0) .and. (US%R_to_kg_m3 == 1.0)) then
-    select case (EOS%form_of_EOS)
-      case (EOS_LINEAR)
-        call calculate_spec_vol_linear(T, S, pressure, specvol, start, npts, &
-                 EOS%rho_T0_S0, EOS%drho_dT, EOS%drho_dS, spv_ref)
-      case (EOS_UNESCO)
-        call calculate_spec_vol_unesco(T, S, pressure, specvol, start, npts, spv_ref)
-      case (EOS_WRIGHT)
-        call calculate_spec_vol_wright(T, S, pressure, specvol, start, npts, spv_ref)
-      case (EOS_TEOS10)
-        call calculate_spec_vol_teos10(T, S, pressure, specvol, start, npts, spv_ref)
-      case (EOS_NEMO)
-        call calculate_density_nemo(T, S, pressure, rho, start, npts)
-        if (present(spv_ref)) then
-          specvol(:) = 1.0 / rho(:) - spv_ref
-        else
-          specvol(:) = 1.0 / rho(:)
-        endif
-      case default
-        call MOM_error(FATAL, "calculate_spec_vol_HI_1d: EOS%form_of_EOS is not valid.")
-    end select
+    call calculate_spec_vol_array(T, S, pressure, specvol, start, npts, EOS, spv_ref)
   elseif (present(spv_ref)) then ! This is the same as above, but with some extra work to rescale variables.
     do i=is,ie ; pres(i) = US%RL2_T2_to_Pa * pressure(i) ; enddo
     spv_reference = US%kg_m3_to_R*spv_ref
-    select case (EOS%form_of_EOS)
-      case (EOS_LINEAR)
-        call calculate_spec_vol_linear(T, S, pres, specvol, start, npts, &
-                 EOS%rho_T0_S0, EOS%drho_dT, EOS%drho_dS, spv_reference)
-      case (EOS_UNESCO)
-        call calculate_spec_vol_unesco(T, S, pres, specvol, start, npts, spv_reference)
-      case (EOS_WRIGHT)
-        call calculate_spec_vol_wright(T, S, pres, specvol, start, npts, spv_reference)
-      case (EOS_TEOS10)
-        call calculate_spec_vol_teos10(T, S, pres, specvol, start, npts, spv_reference)
-      case (EOS_NEMO)
-        call calculate_density_nemo(T, S, pres, rho, start, npts)
-        specvol = 1.0 / rho - spv_reference
-      case default
-        call MOM_error(FATAL, "calculate_spec_vol_HI_1d: EOS%form_of_EOS is not valid.")
-    end select
+    call calculate_spec_vol_array(T, S, pres, specvol, start, npts, EOS, spv_reference)
   else  ! There is rescaling of variables, but spv_ref is not present. Passing a 0 value of spv_ref
         ! changes answers at roundoff for some equations of state, like Wright and UNESCO.
     do i=is,ie ; pres(i) = US%RL2_T2_to_Pa * pressure(i) ; enddo
-    select case (EOS%form_of_EOS)
-      case (EOS_LINEAR)
-        call calculate_spec_vol_linear(T, S, pres, specvol, start, npts, &
-                 EOS%rho_T0_S0, EOS%drho_dT, EOS%drho_dS)
-      case (EOS_UNESCO)
-        call calculate_spec_vol_unesco(T, S, pres, specvol, start, npts)
-      case (EOS_WRIGHT)
-        call calculate_spec_vol_wright(T, S, pres, specvol, start, npts)
-      case (EOS_TEOS10)
-        call calculate_spec_vol_teos10(T, S, pres, specvol, start, npts)
-      case (EOS_NEMO)
-        call calculate_density_nemo(T, S, pres, rho, start, npts)
-        do i=is,ie ; specvol(i) = 1.0 / rho(i) ; enddo
-      case default
-        call MOM_error(FATAL, "calculate_spec_vol_HI_1d: EOS%form_of_EOS is not valid.")
-    end select
+    call calculate_spec_vol_array(T, S, pres, specvol, start, npts, EOS)
   endif
 
   if (US%R_to_kg_m3 /= 1.0) then ; do i=is,ie
     specvol(i) = US%R_to_kg_m3 * specvol(i)
   enddo ; endif
 
-end subroutine calculate_spec_vol_HI_1d
+end subroutine calc_spec_vol_HI_1d
 
 !> Calls the appropriate subroutine to calculate the freezing point for scalar inputs.
 subroutine calculate_TFreeze_scalar(S, pressure, T_fr, EOS, pres_scale)
@@ -727,38 +651,10 @@ subroutine calculate_density_derivs_HI_1d(T, S, pressure, drho_dT, drho_dS, HI, 
   is = HI%isc - halo_sz ; ie = HI%iec + halo_sz
 
   if (US%RL2_T2_to_Pa == 1.0) then
-    select case (EOS%form_of_EOS)
-      case (EOS_LINEAR)
-        call calculate_density_derivs_linear(T, S, pressure, drho_dT, drho_dS, EOS%Rho_T0_S0, &
-                                             EOS%dRho_dT, EOS%dRho_dS, start, npts)
-      case (EOS_UNESCO)
-        call calculate_density_derivs_unesco(T, S, pressure, drho_dT, drho_dS, start, npts)
-      case (EOS_WRIGHT)
-        call calculate_density_derivs_wright(T, S, pressure, drho_dT, drho_dS, start, npts)
-      case (EOS_TEOS10)
-        call calculate_density_derivs_teos10(T, S, pressure, drho_dT, drho_dS, start, npts)
-      case (EOS_NEMO)
-        call calculate_density_derivs_nemo(T, S, pressure, drho_dT, drho_dS, start, npts)
-      case default
-        call MOM_error(FATAL, "calculate_density_derivs_HI_1d: EOS%form_of_EOS is not valid.")
-    end select
+    call calculate_density_derivs_array(T, S, pressure, drho_dT, drho_dS, start, npts, EOS)
   else
     do i=is,ie ; pres(i) = US%RL2_T2_to_Pa * pressure(i) ; enddo
-    select case (EOS%form_of_EOS)
-      case (EOS_LINEAR)
-        call calculate_density_derivs_linear(T, S, pres, drho_dT, drho_dS, EOS%Rho_T0_S0, &
-                                             EOS%dRho_dT, EOS%dRho_dS, start, npts)
-      case (EOS_UNESCO)
-        call calculate_density_derivs_unesco(T, S, pres, drho_dT, drho_dS, start, npts)
-      case (EOS_WRIGHT)
-        call calculate_density_derivs_wright(T, S, pres, drho_dT, drho_dS, start, npts)
-      case (EOS_TEOS10)
-        call calculate_density_derivs_teos10(T, S, pres, drho_dT, drho_dS, start, npts)
-      case (EOS_NEMO)
-        call calculate_density_derivs_nemo(T, S, pres, drho_dT, drho_dS, start, npts)
-      case default
-        call MOM_error(FATAL, "calculate_density_derivs_HI_1d: EOS%form_of_EOS is not valid.")
-    end select
+    call calculate_density_derivs_array(T, S, pres, drho_dT, drho_dS, start, npts, EOS)
   endif
 
   if (US%kg_m3_to_R /= 1.0) then ; do i=is,ie
@@ -964,101 +860,101 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
 end subroutine calculate_density_second_derivs_scalar
 
 !> Calls the appropriate subroutine to calculate specific volume derivatives for an array.
-subroutine calculate_spec_vol_derivs_array(T, S, pressure, dSV_dT, dSV_dS, start, npts, EOS, US, scale)
+subroutine calculate_spec_vol_derivs_array(T, S, pressure, dSV_dT, dSV_dS, start, npts, EOS)
   real, dimension(:), intent(in)  :: T !< Potential temperature referenced to the surface [degC]
   real, dimension(:), intent(in)  :: S !< Salinity [ppt]
-  real, dimension(:), intent(in)  :: pressure !< Pressure [Pa] or [R L2 T-2 ~> Pa]
+  real, dimension(:), intent(in)  :: pressure !< Pressure [Pa]
   real, dimension(:), intent(inout) :: dSV_dT !< The partial derivative of specific volume with potential
-                                              !! temperature [m3 kg-1 degC-1] or [R-1 degC-1 ~> m3 kg-1 degC-1]
+                                              !! temperature [m3 kg-1 degC-1]
   real, dimension(:), intent(inout) :: dSV_dS !< The partial derivative of specific volume with salinity
-                                              !! [m3 kg-1 ppt-1] or [R-1 ppt-1 ~> m3 kg-1 ppt-1]
+                                              !! [m3 kg-1 ppt-1]
   integer,            intent(in)  :: start  !< Starting index within the array
   integer,            intent(in)  :: npts   !< The number of values to calculate
   type(EOS_type),     pointer     :: EOS    !< Equation of state structure
-  type(unit_scale_type), optional, intent(in) :: US       !< A dimensional unit scaling type
-  real,     optional, intent(in)  :: scale    !< A multiplicative factor by which to scale specific
-                                              !! volume in combination with scaling given by US [various]
 
   ! Local variables
   real, dimension(size(T)) :: press   ! Pressure converted to [Pa]
   real, dimension(size(T)) :: rho     ! In situ density [kg m-3]
   real, dimension(size(T)) :: dRho_dT ! Derivative of density with temperature [kg m-3 degC-1]
   real, dimension(size(T)) :: dRho_dS ! Derivative of density with salinity [kg m-3 ppt-1]
-  real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
-  real :: spv_scale ! A factor to convert specific volume from m3 kg-1 to the desired units [kg R-1 m-3 ~> 1]
   integer :: j
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_spec_vol_derivs_array called with an unassociated EOS_type EOS.")
 
-  p_scale = 1.0 ; if (present(US)) p_scale = US%RL2_T2_to_Pa
-
-  if (p_scale == 1.0) then
-    select case (EOS%form_of_EOS)
-      case (EOS_LINEAR)
-        call calculate_specvol_derivs_linear(T, S, pressure, dSV_dT, dSV_dS, start, &
-                                             npts, EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS)
-      case (EOS_UNESCO)
-        call calculate_density_unesco(T, S, pressure, rho, start, npts)
-        call calculate_density_derivs_unesco(T, S, pressure, drho_dT, drho_dS, start, npts)
-        do j=start,start+npts-1
-          dSV_dT(j) = -dRho_DT(j)/(rho(j)**2)
-          dSV_dS(j) = -dRho_DS(j)/(rho(j)**2)
-        enddo
-      case (EOS_WRIGHT)
-        call calculate_specvol_derivs_wright(T, S, pressure, dSV_dT, dSV_dS, start, npts)
-      case (EOS_TEOS10)
-        call calculate_specvol_derivs_teos10(T, S, pressure, dSV_dT, dSV_dS, start, npts)
-      case (EOS_NEMO)
-        call calculate_density_nemo(T, S, pressure, rho, start, npts)
-        call calculate_density_derivs_nemo(T, S, pressure, drho_dT, drho_dS, start, npts)
-        do j=start,start+npts-1
-          dSV_dT(j) = -dRho_DT(j)/(rho(j)**2)
-          dSV_dS(j) = -dRho_DS(j)/(rho(j)**2)
-        enddo
-      case default
-        call MOM_error(FATAL, "calculate_spec_vol_derivs_array: EOS%form_of_EOS is not valid.")
-    end select
-  else
-    do j=start,start+npts-1 ; press(j) = p_scale * pressure(j) ; enddo
-    select case (EOS%form_of_EOS)
-      case (EOS_LINEAR)
-        call calculate_specvol_derivs_linear(T, S, press, dSV_dT, dSV_dS, start, &
-                                             npts, EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS)
-      case (EOS_UNESCO)
-        call calculate_density_unesco(T, S, press, rho, start, npts)
-        call calculate_density_derivs_unesco(T, S, press, drho_dT, drho_dS, start, npts)
-        do j=start,start+npts-1
-          dSV_dT(j) = -dRho_DT(j)/(rho(j)**2)
-          dSV_dS(j) = -dRho_DS(j)/(rho(j)**2)
-        enddo
-      case (EOS_WRIGHT)
-        call calculate_specvol_derivs_wright(T, S, press, dSV_dT, dSV_dS, start, npts)
-      case (EOS_TEOS10)
-        call calculate_specvol_derivs_teos10(T, S, press, dSV_dT, dSV_dS, start, npts)
-      case (EOS_NEMO)
-        call calculate_density_nemo(T, S, pressure, rho, start, npts)
-        call calculate_density_derivs_nemo(T, S, press, drho_dT, drho_dS, start, npts)
-        do j=start,start+npts-1
-          dSV_dT(j) = -dRho_DT(j)/(rho(j)**2)
-          dSV_dS(j) = -dRho_DS(j)/(rho(j)**2)
-        enddo
-      case default
-        call MOM_error(FATAL, "calculate_spec_vol_derivs_array: EOS%form_of_EOS is not valid.")
-    end select
-  endif
-
-  spv_scale = 1.0 ; if (present(US)) spv_scale = US%R_to_kg_m3
-  if (present(scale)) spv_scale = spv_scale * scale
-  if (spv_scale /= 1.0) then ; do j=start,start+npts-1
-    dSV_dT(j) = spv_scale * dSV_dT(j)
-    dSV_dS(j) = spv_scale * dSV_dS(j)
-  enddo ; endif
+  select case (EOS%form_of_EOS)
+    case (EOS_LINEAR)
+      call calculate_specvol_derivs_linear(T, S, pressure, dSV_dT, dSV_dS, start, &
+                                           npts, EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS)
+    case (EOS_UNESCO)
+      call calculate_density_unesco(T, S, pressure, rho, start, npts)
+      call calculate_density_derivs_unesco(T, S, pressure, drho_dT, drho_dS, start, npts)
+      do j=start,start+npts-1
+        dSV_dT(j) = -dRho_DT(j)/(rho(j)**2)
+        dSV_dS(j) = -dRho_DS(j)/(rho(j)**2)
+      enddo
+    case (EOS_WRIGHT)
+      call calculate_specvol_derivs_wright(T, S, pressure, dSV_dT, dSV_dS, start, npts)
+    case (EOS_TEOS10)
+      call calculate_specvol_derivs_teos10(T, S, pressure, dSV_dT, dSV_dS, start, npts)
+    case (EOS_NEMO)
+      call calculate_density_nemo(T, S, pressure, rho, start, npts)
+      call calculate_density_derivs_nemo(T, S, pressure, drho_dT, drho_dS, start, npts)
+      do j=start,start+npts-1
+        dSV_dT(j) = -dRho_DT(j)/(rho(j)**2)
+        dSV_dS(j) = -dRho_DS(j)/(rho(j)**2)
+      enddo
+    case default
+      call MOM_error(FATAL, "calculate_spec_vol_derivs_array: EOS%form_of_EOS is not valid.")
+  end select
 
 end subroutine calculate_spec_vol_derivs_array
 
+
+!> Calls the appropriate subroutine to calculate specific volume derivatives for an array with unit scaling.
+subroutine calc_spec_vol_derivs_US(T, S, pressure, dSV_dT, dSV_dS, start, npts, EOS, US, scale)
+  real, dimension(:), intent(in)  :: T !< Potential temperature referenced to the surface [degC]
+  real, dimension(:), intent(in)  :: S !< Salinity [ppt]
+  real, dimension(:), intent(in)  :: pressure !< Pressure [R L2 T-2 ~> Pa]
+  real, dimension(:), intent(inout) :: dSV_dT !< The partial derivative of specific volume with potential
+                                              !! temperature [R-1 degC-1 ~> m3 kg-1 degC-1]
+  real, dimension(:), intent(inout) :: dSV_dS !< The partial derivative of specific volume with salinity
+                                              !! [R-1 ppt-1 ~> m3 kg-1 ppt-1]
+  integer,            intent(in)  :: start    !< Starting index within the array
+  integer,            intent(in)  :: npts     !< The number of values to calculate
+  type(EOS_type),     pointer     :: EOS      !< Equation of state structure
+  type(unit_scale_type), intent(in) :: US     !< A dimensional unit scaling type
+  real,     optional, intent(in)  :: scale    !< A multiplicative factor by which to scale specific
+                                              !! volume in combination with scaling given by US [various]
+
+  ! Local variables
+  real, dimension(size(T)) :: press   ! Pressure converted to [Pa]
+  real :: spv_scale ! A factor to convert specific volume from m3 kg-1 to the desired units [kg R-1 m-3 ~> 1]
+  integer :: i, is, ie
+
+  if (.not.associated(EOS)) call MOM_error(FATAL, &
+    "calculate_spec_vol_derivs_array called with an unassociated EOS_type EOS.")
+
+  is = start ; ie = is + npts - 1
+
+  if (US%RL2_T2_to_Pa == 1.0) then
+    call calculate_spec_vol_derivs_array(T, S, pressure, dSV_dT, dSV_dS, start, npts, EOS)
+  else
+    do i=is,ie ; press(i) = US%RL2_T2_to_Pa * pressure(i) ; enddo
+    call calculate_spec_vol_derivs_array(T, S, press, dSV_dT, dSV_dS, start, npts, EOS)
+  endif
+
+  spv_scale = US%R_to_kg_m3
+  if (present(scale)) spv_scale = spv_scale * scale
+  if (spv_scale /= 1.0) then ; do i=is,ie
+    dSV_dT(i) = spv_scale * dSV_dT(i)
+    dSV_dS(i) = spv_scale * dSV_dS(i)
+  enddo ; endif
+
+end subroutine calc_spec_vol_derivs_US
+
 !> Calls the appropriate subroutine to calculate specific volume derivatives for an array.
-subroutine calculate_spec_vol_derivs_HI_1d(T, S, pressure, dSV_dT, dSV_dS, HI, EOS, US, halo)
+subroutine calc_spec_vol_derivs_HI_1d(T, S, pressure, dSV_dT, dSV_dS, HI, EOS, US, halo)
   type(hor_index_type),           intent(in)    :: HI       !< The horizontal index structure
   real, dimension(HI%isd:HI%ied), intent(in)    :: T        !< Potential temperature referenced to the surface [degC]
   real, dimension(HI%isd:HI%ied), intent(in)    :: S        !< Salinity [ppt]
@@ -1096,7 +992,7 @@ subroutine calculate_spec_vol_derivs_HI_1d(T, S, pressure, dSV_dT, dSV_dS, HI, E
     dSV_dS(i) = US%R_to_kg_m3 * dSV_dS(i)
   enddo ; endif
 
-end subroutine calculate_spec_vol_derivs_HI_1d
+end subroutine calc_spec_vol_derivs_HI_1d
 
 
 !> Calls the appropriate subroutine to calculate the density and compressibility for 1-D array inputs.
