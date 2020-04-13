@@ -1072,11 +1072,7 @@ subroutine calculate_spec_vol_derivs_HI_1d(T, S, pressure, dSV_dT, dSV_dS, HI, E
   integer,              optional, intent(in)    :: halo     !< The halo size to work on; missing is equivalent to 0.
 
   ! Local variables
-  real, dimension(HI%isd:HI%ied) :: rho     ! In situ density [kg m-3]
-  real, dimension(HI%isd:HI%ied) :: dRho_dT ! Derivative of density with temperature [kg m-3 degC-1]
-  real, dimension(HI%isd:HI%ied) :: dRho_dS ! Derivative of density with salinity [kg m-3 ppt-1]
   real, dimension(HI%isd:HI%ied) :: press   ! Pressure converted to [Pa]
-  real :: rho_reference ! rho_ref converted to [kg m-3]
   integer :: i, is, ie, start, npts, halo_sz
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
@@ -1089,63 +1085,15 @@ subroutine calculate_spec_vol_derivs_HI_1d(T, S, pressure, dSV_dT, dSV_dS, HI, E
   is = HI%isc - halo_sz ; ie = HI%iec + halo_sz
 
   if (US%RL2_T2_to_Pa == 1.0) then
-    select case (EOS%form_of_EOS)
-      case (EOS_LINEAR)
-        call calculate_specvol_derivs_linear(T, S, pressure, dSV_dT, dSV_dS, start, &
-                                             npts, EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS)
-      case (EOS_UNESCO)
-        call calculate_density_unesco(T, S, pressure, rho, start, npts)
-        call calculate_density_derivs_unesco(T, S, pressure, drho_dT, drho_dS, start, npts)
-        do i=is,ie
-          dSV_dT(i) = -dRho_DT(i)/(rho(i)**2)
-          dSV_dS(i) = -dRho_DS(i)/(rho(i)**2)
-        enddo
-      case (EOS_WRIGHT)
-        call calculate_specvol_derivs_wright(T, S, pressure, dSV_dT, dSV_dS, start, npts)
-      case (EOS_TEOS10)
-        call calculate_specvol_derivs_teos10(T, S, pressure, dSV_dT, dSV_dS, start, npts)
-      case (EOS_NEMO)
-        call calculate_density_nemo(T, S, pressure, rho, start, npts)
-        call calculate_density_derivs_nemo(T, S, pressure, drho_dT, drho_dS, start, npts)
-        do i=is,ie
-          dSV_dT(i) = -dRho_DT(i)/(rho(i)**2)
-          dSV_dS(i) = -dRho_DS(i)/(rho(i)**2)
-        enddo
-      case default
-        call MOM_error(FATAL, "calculate_spec_vol_derivs_HI_1d: EOS%form_of_EOS is not valid.")
-    end select
+    call calculate_spec_vol_derivs_array(T, S, pressure, dSV_dT, dSV_dS, start, npts, EOS)
   else
     do i=is,ie ; press(i) = US%RL2_T2_to_Pa * pressure(i) ; enddo
-    select case (EOS%form_of_EOS)
-      case (EOS_LINEAR)
-        call calculate_specvol_derivs_linear(T, S, press, dSV_dT, dSV_dS, start, &
-                                             npts, EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS)
-      case (EOS_UNESCO)
-        call calculate_density_unesco(T, S, press, rho, start, npts)
-        call calculate_density_derivs_unesco(T, S, press, drho_dT, drho_dS, start, npts)
-        do i=is,ie
-          dSV_dT(i) = -dRho_DT(i)/(rho(i)**2)
-          dSV_dS(i) = -dRho_DS(i)/(rho(i)**2)
-        enddo
-      case (EOS_WRIGHT)
-        call calculate_specvol_derivs_wright(T, S, press, dSV_dT, dSV_dS, start, npts)
-      case (EOS_TEOS10)
-        call calculate_specvol_derivs_teos10(T, S, press, dSV_dT, dSV_dS, start, npts)
-      case (EOS_NEMO)
-        call calculate_density_nemo(T, S, pressure, rho, start, npts)
-        call calculate_density_derivs_nemo(T, S, press, drho_dT, drho_dS, start, npts)
-        do i=is,ie
-          dSV_dT(i) = -dRho_DT(i)/(rho(i)**2)
-          dSV_dS(i) = -dRho_DS(i)/(rho(i)**2)
-        enddo
-      case default
-        call MOM_error(FATAL, "calculate_spec_vol_derivs_HI_1d: EOS%form_of_EOS is not valid.")
-    end select
+    call calculate_spec_vol_derivs_array(T, S, press, dSV_dT, dSV_dS, start, npts, EOS)
   endif
 
   if (US%R_to_kg_m3 /= 1.0) then ; do i=is,ie
-    drho_dT(i) = US%R_to_kg_m3 * drho_dT(i)
-    drho_dS(i) = US%R_to_kg_m3 * drho_dS(i)
+    dSV_dT(i) = US%R_to_kg_m3 * dSV_dT(i)
+    dSV_dS(i) = US%R_to_kg_m3 * dSV_dS(i)
   enddo ; endif
 
 end subroutine calculate_spec_vol_derivs_HI_1d
@@ -1207,7 +1155,7 @@ subroutine calculate_compress_scalar(T, S, pressure, rho, drho_dp, EOS)
 end subroutine calculate_compress_scalar
 
 
-!> Calls the appropriate subroutine to alculate analytical and nearly-analytical
+!> Calls the appropriate subroutine to calculate analytical and nearly-analytical
 !! integrals in pressure across layers of geopotential anomalies, which are
 !! required for calculating the finite-volume form pressure accelerations in a
 !! non-Boussinesq model.  There are essentially no free assumptions, apart from the

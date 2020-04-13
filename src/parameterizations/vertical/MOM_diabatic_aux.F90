@@ -1006,8 +1006,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
           p_lay(i) = pres(i) + 0.5*d_pres(i)
           pres(i) = pres(i) + d_pres(i)
         enddo
-        call calculate_specific_vol_derivs(T2d(:,k), tv%S(:,j,k), p_lay(:),&
-                 dSV_dT(:,j,k), dSV_dS(:,j,k), is, ie-is+1, tv%eqn_of_state, US=US)
+        call calculate_specific_vol_derivs(T2d(:,k), tv%S(:,j,k), p_lay(:), &
+                 dSV_dT(:,j,k), dSV_dS(:,j,k), G%HI, tv%eqn_of_state, US=US)
         do i=is,ie ; dSV_dT_2d(i,k) = dSV_dT(i,j,k) ; enddo
       enddo
       pen_TKE_2d(:,:) = 0.0
