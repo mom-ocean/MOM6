@@ -281,7 +281,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
   real :: drho_dT(SZK_(G))   ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
   real :: drho_dS(SZK_(G))   ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
   real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 [R ~> kg m-3].
-  real :: pres(SZK_(G))      ! An array of the reference pressure [Pa]. (zero here)
+  real :: pres(SZK_(G))      ! An array of the reference pressure [R L2 T-2 ~> Pa]. (zero here)
   real :: drho_dT1           ! A prescribed derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
   real :: drho_dS1           ! A prescribed derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
   real :: T_Ref, S_Ref
@@ -362,10 +362,10 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
           ! call MOM_mesg(mesg,5)
         enddo
 
-        call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, 1, 1, eqn_of_state, US)
         ! write(mesg,*) 'computed drho_dS, drho_dT', drho_dS(1), drho_dT(1)
         ! call MOM_mesg(mesg,5)
-        call calculate_density(T0(1),S0(1),0.,rho_guess(1),eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density(T0(1), S0(1), pres(1), rho_guess(1), eqn_of_state, US=US)
 
         if (fit_salin) then
           ! A first guess of the layers' salinity.
@@ -374,8 +374,8 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
           enddo
           ! Refine the guesses for each layer.
           do itt=1,6
-            call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state, scale=US%kg_m3_to_R)
-            call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state, scale=US%kg_m3_to_R)
+            call calculate_density(T0, S0, pres, rho_guess, 1, nz, eqn_of_state, US=US)
+            call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, 1, nz, eqn_of_state, US)
             do k=1,nz
               S0(k) = max(0.0, S0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dS1)
             enddo
@@ -388,8 +388,8 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
           enddo
 
           do itt=1,6
-            call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state, scale=US%kg_m3_to_R)
-            call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state, scale=US%kg_m3_to_R)
+            call calculate_density(T0, S0, pres, rho_guess, 1, nz, eqn_of_state, US=US)
+            call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, 1, nz, eqn_of_state, US)
             do k=1,nz
               T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
             enddo
