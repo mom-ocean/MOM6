@@ -1424,7 +1424,7 @@ subroutine tracer_hor_diff_init(Time, G, US, param_file, diag, EOS, diabatic_CSp
   type(unit_scale_type),      intent(in)    :: US         !< A dimensional unit scaling type
   type(diag_ctrl), target,    intent(inout) :: diag       !< diagnostic control
   type(EOS_type),  target,    intent(in)    :: EOS        !< Equation of state CS
-  type(diabatic_CS), pointer,  intent(in)    :: diabatic_CSp !< Equation of state CS
+  type(diabatic_CS), pointer, intent(in)    :: diabatic_CSp !< Equation of state CS
   type(param_file_type),      intent(in)    :: param_file !< parameter file
   type(tracer_hor_diff_CS),   pointer       :: CS         !< horz diffusion control structure
 
@@ -1495,8 +1495,8 @@ subroutine tracer_hor_diff_init(Time, G, US, param_file, diag, EOS, diabatic_CSp
                  units="nondim", default=1.0)
   endif
 
-  CS%use_neutral_diffusion = neutral_diffusion_init(Time, G, param_file, diag, EOS, diabatic_CSp, &
-                             CS%neutral_diffusion_CSp )
+  CS%use_neutral_diffusion = neutral_diffusion_init(Time, G, US, param_file, diag, EOS, &
+                                                    diabatic_CSp, CS%neutral_diffusion_CSp )
   if (CS%use_neutral_diffusion .and. CS%Diffuse_ML_interior) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
        "USE_NEUTRAL_DIFFUSION and DIFFUSE_ML_TO_INTERIOR are mutually exclusive!")
   CS%use_lateral_boundary_diffusion = lateral_boundary_diffusion_init(Time, G, param_file, diag, diabatic_CSp, &
