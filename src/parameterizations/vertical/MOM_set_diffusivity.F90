@@ -3,12 +3,11 @@ module MOM_set_diffusivity
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_checksums,           only : hchksum_pair
 use MOM_cpu_clock,           only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,           only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator,       only : diag_ctrl, time_type
 use MOM_diag_mediator,       only : post_data, register_diag_field
-use MOM_debugging,           only : hchksum, uvchksum, Bchksum
+use MOM_debugging,           only : hchksum, uvchksum, Bchksum, hchksum_pair
 use MOM_EOS,                 only : calculate_density, calculate_density_derivs
 use MOM_error_handler,       only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_error_handler,       only : callTree_showQuery
@@ -536,13 +535,15 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     endif
 
     if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) then
-      call uvchksum("BBL Kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, &
-                    G%HI, 0, symmetric=.true., scale=US%Z2_T_to_m2_s)
+      call uvchksum("BBL Kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, G%HI, &
+                    haloshift=0, symmetric=.true., scale=US%Z2_T_to_m2_s, &
+                    scalar_pair=.true.)
     endif
 
     if (associated(visc%bbl_thick_u) .and. associated(visc%bbl_thick_v)) then
-      call uvchksum("BBL bbl_thick_[uv]", visc%bbl_thick_u, &
-                    visc%bbl_thick_v, G%HI, 0, symmetric=.true., scale=US%Z_to_m)
+      call uvchksum("BBL bbl_thick_[uv]", visc%bbl_thick_u, visc%bbl_thick_v, &
+                    G%HI, haloshift=0, symmetric=.true., scale=US%Z_to_m, &
+                    scalar_pair=.true.)
     endif
 
     if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) then

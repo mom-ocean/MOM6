@@ -12,6 +12,7 @@ module MOM_ALE_sponge
 
 
 ! This file is part of MOM6. See LICENSE.md for the license.
+use MOM_array_transform, only: rotate_array
 use MOM_coms, only : sum_across_PEs
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, register_diag_field
 use MOM_diag_mediator, only : diag_ctrl
@@ -54,6 +55,7 @@ end interface
 public set_up_ALE_sponge_field, set_up_ALE_sponge_vel_field
 public get_ALE_sponge_thicknesses, get_ALE_sponge_nz_data
 public initialize_ALE_sponge, apply_ALE_sponge, ALE_sponge_end, init_ALE_sponge_diags
+public rotate_ALE_sponge, update_ALE_sponge_field
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -998,6 +1000,163 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   deallocate(tmp_val2)
 
 end subroutine apply_ALE_sponge
+
+!> Rotate the ALE sponge fields from the input to the model index map.
+subroutine rotate_ALE_sponge(sponge_in, G_in, sponge, G, turns, param_file)
+  type(ALE_sponge_CS), intent(in) :: sponge_in
+  type(ocean_grid_type), intent(in) :: G_in
+  type(ALE_sponge_CS), pointer :: sponge
+  type(ocean_grid_type), intent(in) :: G
+  integer, intent(in) :: turns
+  type(param_file_type), intent(in) :: param_file
+
+  ! First part: Index construction
+  !   1. Reconstruct Iresttime(:,:) from sponge_in
+  !   2. rotate Iresttime(:,:)
+  !   3. Call initialize_sponge using new grid and rotated Iresttime(:,:)
+  ! All the index adjustment should follow from the Iresttime rotation
+
+  real, dimension(:,:), allocatable :: Iresttime_in, Iresttime
+  real, dimension(:,:,:), allocatable :: data_h_in, data_h
+  real, dimension(:,:,:), allocatable :: sp_val_in, sp_val
+  real, dimension(:,:,:), pointer :: sp_ptr => NULL()
+  integer :: c, c_i, c_j
+  integer :: k, nz_data
+  integer :: n
+  logical :: fixed_sponge
+
+  fixed_sponge = .not. sponge_in%time_varying_sponges
+  ! NOTE: nz_data is only conditionally set when fixed_sponge is true.
+
+  allocate(Iresttime_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed))
+  allocate(Iresttime(G%isd:G%ied, G%jsd:G%jed))
+  Iresttime_in(:,:) = 0.0
+
+  if (fixed_sponge) then
+    nz_data = sponge_in%nz_data
+    allocate(data_h_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed, nz_data))
+    allocate(data_h(G%isd:G%ied, G%jsd:G%jed, nz_data))
+    data_h_in(:,:,:) = 0.
+  endif
+
+  ! Re-populate the 2D Iresttime and data_h arrays on the original grid
+  do c = 1, sponge_in%num_col
+    c_i = sponge_in%col_i(c)
+    c_j = sponge_in%col_j(c)
+    Iresttime_in(c_i, c_j) = sponge_in%Iresttime_col(c)
+    if (fixed_sponge) then
+      do k = 1, nz_data
+        data_h(c_i, c_j, k) = sponge_in%Ref_h%p(k,c)
+      enddo
+    endif
+  enddo
+
+  call rotate_array(Iresttime_in, turns, Iresttime)
+  if (fixed_sponge) then
+    call rotate_array(data_h_in, turns, data_h)
+    call initialize_ALE_sponge_fixed(Iresttime, G, param_file, sponge, &
+                                     data_h, nz_data)
+  else
+    call initialize_ALE_sponge_varying(Iresttime, G, param_file, sponge)
+  endif
+
+  deallocate(Iresttime_in)
+  deallocate(Iresttime)
+  if (fixed_sponge) then
+    deallocate(data_h_in)
+    deallocate(data_h)
+  endif
+
+  ! Second part: Provide rotated fields for which relaxation is applied
+
+  sponge%fldno = sponge_in%fldno
+
+  if (fixed_sponge) then
+    allocate(sp_val_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed, nz_data))
+    allocate(sp_val(G%isd:G%ied, G%jsd:G%jed, nz_data))
+  endif
+
+  do n = 1, sponge_in%fldno
+    ! Assume that tracers are pointers and are remapped in other functions(?)
+    sp_ptr => sponge_in%var(n)%p
+    sp_val_in(:,:,:) = 0.0
+    do c = 1, sponge_in%num_col
+      c_i = sponge_in%col_i(c)
+      c_j = sponge_in%col_j(c)
+      if (fixed_sponge) then
+        do k = 1, nz_data
+          sp_val_in(c_i, c_j, k) = sponge_in%Ref_val(n)%p(k,c)
+        enddo
+      endif
+    enddo
+
+    call rotate_array(sp_val_in, turns, sp_val)
+    if (fixed_sponge) then
+      ! NOTE: This points sp_val with the unrotated field.  See note below.
+      call set_up_ALE_sponge_field(sp_val, G, sp_ptr, sponge)
+    else
+      ! We don't want to repeat FMS init in set_up_ALE_sponge_field_varying()
+      ! (time_interp_external_init, init_external_field, etc), so we manually
+      ! do a portion of this function below.
+      sponge%Ref_val(n)%id = sponge_in%Ref_val(n)%id
+      sponge%Ref_val(n)%num_tlevs = sponge_in%Ref_val(n)%num_tlevs
+
+      nz_data = sponge_in%Ref_val(n)%nz_data
+      sponge%Ref_val(n)%nz_data = nz_data
+
+      allocate(sponge%Ref_val(n)%p(nz_data, sponge_in%num_col))
+      allocate(sponge%Ref_val(n)%h(nz_data, sponge_in%num_col))
+      sponge%Ref_val(n)%p(:,:) = 0.0
+      sponge%Ref_val(n)%h(:,:) = 0.0
+
+      ! TODO: There is currently no way to associate a generic field pointer to
+      !   its rotated equivalent without introducing a new data structure which
+      !   explicitly tracks the pairing.
+      !
+      !   As a temporary fix, we store the pointer to the unrotated field in
+      !   the rotated sponge, and use this reference to replace the pointer
+      !   to the rotated field update_ALE_sponge field.
+      !
+      !   This makes a lot of unverifiable assumptions, and should not be
+      !   considered the final solution.
+      sponge%var(n)%p => sp_ptr
+    endif
+  enddo
+
+  if (fixed_sponge) then
+    deallocate(sp_val_in)
+    deallocate(sp_val)
+  endif
+
+  ! TODO: var_u and var_v sponge dampling is not yet supported.
+  if (associated(sponge_in%var_u%p) .or. associated(sponge_in%var_v%p)) &
+    call MOM_error(FATAL, "Rotation of ALE sponge velocities is not yet " &
+      // "implemented.")
+
+  ! Transfer any existing diag_CS reference pointer
+  sponge%diag => sponge_in%diag
+
+  ! NOTE: initialize_ALE_sponge_* resolves remap_cs
+end subroutine rotate_ALE_sponge
+
+
+!> Scan the ALE sponge variables and replace a prescribed pointer to a new value.
+! TODO: This function solely exists to replace field pointers in the sponge
+!   after rotation.  This function is part of a temporary solution until
+!   something more robust is developed.
+subroutine update_ALE_sponge_field(sponge, p_old, p_new)
+  type(ALE_sponge_CS), pointer :: sponge
+  real, dimension(:,:,:), target, intent(in) :: p_old
+  real, dimension(:,:,:), target, intent(in) :: p_new
+
+  integer :: n
+
+  do n = 1, sponge%fldno
+    if (associated(sponge%var(n)%p, p_old)) &
+      sponge%var(n)%p => p_new
+  enddo
+end subroutine update_ALE_sponge_field
+
 
 ! GMM: I could not find where sponge_end is being called, but I am keeping
 !  ALE_sponge_end here so we can add that if needed.
