@@ -1094,12 +1094,12 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
                                                       !! only read parameters without changing h.
   ! Local variables
   character(len=200) :: mdl = "trim_for_ice"
-  real, dimension(SZI_(G),SZJ_(G)) :: p_surf ! Imposed pressure on ocean at surface [Pa]
+  real, dimension(SZI_(G),SZJ_(G)) :: p_surf ! Imposed pressure on ocean at surface [R L2 T-2 ~> Pa]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: S_t, S_b ! Top and bottom edge values for reconstructions
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: T_t, T_b ! of salinity and temperature within each layer.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: T_t, T_b ! of salinity [ppt] and temperature [degC] within each layer.
   character(len=200) :: inputdir, filename, p_surf_file, p_surf_var ! Strings for file/path
-  real :: scale_factor   ! A file-dependent scaling vactor for the input pressurs.
-  real :: min_thickness  ! The minimum layer thickness, recast into Z units.
+  real :: scale_factor   ! A file-dependent scaling factor for the input pressure.
+  real :: min_thickness  ! The minimum layer thickness, recast into Z units [Z ~> m].
   integer :: i, j, k
   logical :: default_2018_answers, remap_answers_2018
   logical :: just_read    ! If true, just read parameters but set nothing.
@@ -1113,7 +1113,7 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
                  fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(PF, mdl, "SURFACE_PRESSURE_VAR", p_surf_var, &
                  "The initial condition variable for the surface height.", &
-                 units="kg m-2", default="", do_not_log=just_read)
+                 units="kg m-2", default="", do_not_log=just_read) !### The units here should be Pa?
   call get_param(PF, mdl, "INPUTDIR", inputdir, default=".", do_not_log=.true.)
   filename = trim(slasher(inputdir))//trim(p_surf_file)
   if (.not.just_read) call log_param(PF,  mdl, "!INPUTDIR/SURFACE_HEIGHT_IC_FILE", filename)
@@ -1140,7 +1140,8 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
-  call MOM_read_data(filename, p_surf_var, p_surf, G%Domain, scale=scale_factor)
+  call MOM_read_data(filename, p_surf_var, p_surf, G%Domain, &
+                     scale=scale_factor*US%kg_m3_to_R*US%m_s_to_L_T**2)
 
   if (use_remapping) then
     allocate(remap_CS)
@@ -1159,7 +1160,7 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
   endif
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    call cut_off_column_top(GV%ke, tv, GV, US, GV%mks_g_Earth*US%Z_to_m, G%bathyT(i,j), &
+    call cut_off_column_top(GV%ke, tv, GV, US, GV%g_Earth, G%bathyT(i,j), &
                min_thickness, tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), &
                tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), p_surf(i,j), h(i,j,:), remap_CS, &
                z_tol=1.0e-5*US%m_to_Z, remap_answers_2018=remap_answers_2018)
@@ -1175,8 +1176,8 @@ subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, T, 
   integer,               intent(in)    :: nk  !< Number of layers
   type(thermo_var_ptrs), intent(in)    :: tv  !< Thermodynamics structure
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
-  type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
-  real,                  intent(in)    :: G_earth !< Gravitational acceleration [m2 Z-1 s-2 ~> m s-2]
+  type(unit_scale_type),   intent(in)  :: US  !< A dimensional unit scaling type
+  real,                  intent(in)    :: G_earth !< Gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
   real,                  intent(in)    :: depth !< Depth of ocean column [Z ~> m].
   real,                  intent(in)    :: min_thickness !< Smallest thickness allowed [Z ~> m].
   real, dimension(nk),   intent(inout) :: T   !< Layer mean temperature [degC]
@@ -1185,7 +1186,7 @@ subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, T, 
   real, dimension(nk),   intent(inout) :: S   !< Layer mean salinity [ppt]
   real, dimension(nk),   intent(in)    :: S_t !< Salinity at top of layer [ppt]
   real, dimension(nk),   intent(in)    :: S_b !< Salinity at bottom of layer [ppt]
-  real,                  intent(in)    :: p_surf !< Imposed pressure on ocean at surface [Pa]
+  real,                  intent(in)    :: p_surf !< Imposed pressure on ocean at surface [R L2 T-2 ~> Pa]
   real, dimension(nk),   intent(inout) :: h   !< Layer thickness [H ~> m or kg m-2]
   type(remapping_CS),    pointer       :: remap_CS !< Remapping structure for remapping T and S,
                                                    !! if associated
@@ -1197,9 +1198,10 @@ subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, T, 
                                                 !! forms of the same expressions.
 
   ! Local variables
-  real, dimension(nk+1) :: e ! Top and bottom edge values for reconstructions
+  real, dimension(nk+1) :: e ! Top and bottom edge values for reconstructions [Z ~> m]
   real, dimension(nk) :: h0, S0, T0, h1, S1, T1
-  real :: P_t, P_b, z_out, e_top
+  real :: P_t, P_b  ! Top and bottom pressures [R L2 T-2 ~> Pa]
+  real :: z_out, e_top
   logical :: answers_2018
   integer :: k
 
@@ -1216,7 +1218,7 @@ subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, T, 
   e_top = e(1)
   do k=1,nk
     call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), &
-                                        P_t, p_surf, US%R_to_kg_m3*GV%Rho0, G_earth, tv%eqn_of_state, &
+                                        P_t, p_surf, GV%Rho0, G_earth, tv%eqn_of_state, US, &
                                         P_b, z_out, z_tol=z_tol)
     if (z_out>=e(K)) then
       ! Imposed pressure was less that pressure at top of cell
@@ -2417,51 +2419,60 @@ subroutine MOM_state_init_tests(G, GV, US, tv)
   type(verticalGrid_type),   intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),     intent(in)    :: US   !< A dimensional unit scaling type
   type(thermo_var_ptrs),     intent(in)    :: tv   !< Thermodynamics structure.
+
   ! Local variables
   integer, parameter :: nk=5
-  real, dimension(nk) :: T, T_t, T_b, S, S_t, S_b, rho, h, z
-  real, dimension(nk+1) :: e
+  real, dimension(nk) :: T, T_t, T_b ! Temperatures [degC]
+  real, dimension(nk) :: S, S_t, S_b ! Salinities [ppt]
+  real, dimension(nk) :: rho ! Layer density [R ~> kg m-3]
+  real, dimension(nk) :: h   ! Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(nk) :: z   ! Height of layer center [Z ~> m]
+  real, dimension(nk+1) :: e ! Interface heights [Z ~> m]
   integer :: k
-  real :: P_tot, P_t, P_b, z_out
+  real :: P_tot, P_t, P_b    ! Pressures [R L2 T-2 ~> Pa]
+  real :: z_out              ! Output height [Z ~> m]
+  real :: I_z_scale          ! The inverse of the height scale for prescribed gradients [Z-1 ~> m-1]
   type(remapping_CS), pointer :: remap_CS => NULL()
 
+  I_z_scale = 1.0 / (500.0*US%m_to_Z)
   do k = 1, nk
-    h(k) = 100.
+    h(k) = 100.0*GV%m_to_H
   enddo
   e(1) = 0.
   do K = 1, nk
-    e(K+1) = e(K) - h(k)
+    e(K+1) = e(K) - GV%H_to_Z * h(k)
   enddo
   P_tot = 0.
   do k = 1, nk
     z(k) = 0.5 * ( e(K) + e(K+1) )
-    T_t(k) = 20.+(0./500.)*e(k)
-    T(k)   = 20.+(0./500.)*z(k)
-    T_b(k) = 20.+(0./500.)*e(k+1)
-    S_t(k) = 35.-(0./500.)*e(k)
-    S(k)   = 35.+(0./500.)*z(k)
-    S_b(k) = 35.-(0./500.)*e(k+1)
-    call calculate_density(0.5*(T_t(k)+T_b(k)), 0.5*(S_t(k)+S_b(k)), -US%R_to_kg_m3*GV%Rho0*GV%mks_g_Earth*z(k), &
-                           rho(k), tv%eqn_of_state)
-    P_tot = P_tot + GV%mks_g_Earth * rho(k) * h(k)
+    T_t(k) = 20. + (0. * I_z_scale) * e(k)
+    T(k)   = 20. + (0. * I_z_scale)*z(k)
+    T_b(k) = 20. + (0. * I_z_scale)*e(k+1)
+    S_t(k) = 35. - (0. * I_z_scale)*e(k)
+    S(k)   = 35. + (0. * I_z_scale)*z(k)
+    S_b(k) = 35. - (0. * I_z_scale)*e(k+1)
+    call calculate_density(0.5*(T_t(k)+T_b(k)), 0.5*(S_t(k)+S_b(k)), -GV%Rho0*GV%g_Earth*US%m_to_Z*z(k), &
+                           rho(k), tv%eqn_of_state, US=US)
+    P_tot = P_tot + GV%g_Earth * rho(k) * GV%H_to_Z*h(k)
   enddo
 
   P_t = 0.
   do k = 1, nk
     call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), P_t, 0.5*P_tot, &
-                                        US%R_to_kg_m3*GV%Rho0, GV%mks_g_Earth, tv%eqn_of_state, P_b, z_out)
-    write(0,*) k,P_t,P_b,0.5*P_tot,e(K),e(K+1),z_out
+                                        GV%Rho0, GV%g_Earth, tv%eqn_of_state, US, P_b, z_out)
+    write(0,*) k, US%RL2_T2_to_Pa*P_t, US%RL2_T2_to_Pa*P_b, 0.5*US%RL2_T2_to_Pa*P_tot, &
+               US%Z_to_m*e(K), US%Z_to_m*e(K+1), US%Z_to_m*z_out
     P_t = P_b
   enddo
-  write(0,*) P_b,P_tot
+  write(0,*) US%RL2_T2_to_Pa*P_b, US%RL2_T2_to_Pa*P_tot
 
   write(0,*) ''
   write(0,*) ' ==================================================================== '
   write(0,*) ''
-  write(0,*) h
-  call cut_off_column_top(nk, tv, GV, US, GV%mks_g_Earth, -e(nk+1), GV%Angstrom_H, &
+  write(0,*) GV%H_to_m*h
+  call cut_off_column_top(nk, tv, GV, US, GV%g_Earth, -e(nk+1), GV%Angstrom_Z, &
                           T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h, remap_CS)
-  write(0,*) h
+  write(0,*) GV%H_to_m*h
 
 end subroutine MOM_state_init_tests
 
