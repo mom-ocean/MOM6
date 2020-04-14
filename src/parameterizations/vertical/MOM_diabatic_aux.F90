@@ -1,4 +1,3 @@
-
 !> Provides functions for some diabatic processes such as fraxil, brine rejection,
 !! tendency due to surface flux divergence.
 module MOM_diabatic_aux
@@ -32,7 +31,7 @@ implicit none ; private
 
 public diabatic_aux_init, diabatic_aux_end
 public make_frazil, adjust_salt, insert_brine, differential_diffuse_T_S, triDiagTS
-public find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut, set_pen_shortwave
+public find_uv_at_h, diagnoseMLDbyDensityDifference, diagnoseMLDbyEnergy, applyBoundaryFluxesInOut, set_pen_shortwave
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -846,6 +845,194 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   if (id_SQ > 0)  call post_data(id_SQ, MLD2, diagPtr)
 
 end subroutine diagnoseMLDbyDensityDifference
+
+!> Diagnose a mixed layer depth (MLD) determined by the depth a given energy value would mix.
+!> This routine is appropriate in MOM_diabatic_driver due to its position within the time stepping.
+subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, diagPtr)
+  type(ocean_grid_type),   intent(in) :: G           !< Grid type
+  type(verticalGrid_type), intent(in) :: GV          !< ocean vertical grid structure
+  type(unit_scale_type),   intent(in) :: US          !< A dimensional unit scaling type
+  integer, dimension(3),   intent(in) :: id_MLD    !< Handle (ID) of MLD diagnostics
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: h           !< Layer thickness [H ~> m or kg m-2]
+  type(thermo_var_ptrs),   intent(in) :: tv          !< Structure containing pointers to any
+                                                     !! available thermodynamic fields.
+  type(diag_ctrl),         pointer    :: diagPtr     !< Diagnostics structure
+
+  ! Local variables
+  real, dimension(SZI_(G), SZJ_(G),3) :: MLD     ! Diagnosed mixed layer depth [Z ~> m].
+  real, dimension(SZK_(G)) :: Z_L, Z_C, Z_U, dZ, Rho_c, pRef_MLD
+
+  real :: PE_Before
+  real :: Rho_MixedLayer, H_MixedLayer
+
+  real, parameter :: Surface  = 0.0
+  real, parameter, dimension(3) :: Mixing_Energy = (/25.,2500.,250000./)
+
+  real :: PE_Column_before, PE_Column_Target, PE_column_0, PE_column_N
+  real :: Rho_MixedLayer_0, H_MixedLayer_0, Zc_MixedLayer_0, PE_MixedLayer_0
+  real :: Rho_MixedLayer_N, H_MixedLayer_N, Zc_MixedLayer_N, PE_MixedLayer_N
+  real :: dz_mixed_0, dz_mixed_N
+  real :: PE_interior
+  real :: dz_below, zc_below, zl_below, zu_below, rho_c_below, PE_below
+
+  real :: rho_c_mixed_n, zc_mixed_n
+
+  real :: Guess_Fraction, PE_Threshold
+  real :: A, B, C, dz_increment
+  logical :: Not_Converged
+  integer :: IT, ITT
+  real :: dz_max_incr
+
+  integer :: i, j, is, ie, js, je, k, nz, id_N2, id_SQ, iM
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  pRef_MLD(:) = 0.0
+  mld(:,:,:) = 0.0
+  do j=js,je
+    do i=is,ie
+      call calculate_density(tv%T(i,j,:), tv%S(i,j,:), pRef_MLD, rho_c, 1, nz, &
+                           tv%eqn_of_state, scale=US%kg_m3_to_R)
+      Z_U(1) = 0.0
+      do k=2,nz ; Z_U(k) = Z_U(k-1) - h(i,j,k-1)*GV%H_to_z ; enddo
+      do k=1,nz
+        Z_C(k) = Z_U(k) - 0.5 * h(i,j,k) * GV%H_to_Z
+        Z_L(k) = Z_U(k) - h(i,j,k) * GV%H_to_Z
+        dZ(k) = h(i,j,k) * GV%H_to_Z
+      enddo
+
+      do iM=1,3
+        if (id_MLD(iM)>0) then
+          ! Compute PE of column
+          call PE_Kernel(PE_Column_before,NZ,Z_L,Z_U,Rho_c)
+          PE_Column_Target = PE_Column_before + Mixing_Energy(iM)/GV%g_earth
+
+          rho_mixedlayer = 0.
+          h_mixedlayer = 0.
+          PE_threshold = Mixing_Energy(iM)/GV%g_earth*1.e-4
+
+          do k=1,NZ
+
+            !Compute the PE if the whole layer is mixed
+            Rho_MixedLayer_0 = Rho_MixedLayer + Rho_c(k)*dZ(k)
+            H_MixedLayer_0   = H_MixedLayer + dZ(k)
+            Zc_MixedLayer_0  = 0.5 * (Surface - H_MixedLayer_0)
+            PE_MixedLayer_0  = Rho_MixedLayer_0 * Zc_MixedLayer_0
+
+            !Compute the PE of the interior layers
+            call PE_Kernel(PE_Interior,NZ-(K),Z_L(K+1:NZ),Z_U(K+1:NZ),Rho_c(K+1:NZ))
+
+            PE_Column_0 = PE_MixedLayer_0+PE_Interior
+
+            !Check if we did not have enough energy to mix the whole layer
+            if (PE_Column_0>PE_Column_Target) then
+
+              !
+              dz_mixed_0 = dz(k)
+              dz_max_incr = dz(k)*0.1
+
+              ! Guess the thickness of the amount that can be mixed:
+              Guess_fraction = 0.5
+              dz_mixed_N = dZ(k)*Guess_fraction
+
+              !Compute the PE if we mixed to the guessed thickness
+              Rho_MixedLayer_N = Rho_MixedLayer + Rho_c(k)*dz_mixed_N
+              H_MixedLayer_N   = H_MixedLayer + dz_mixed_N
+              Zc_MixedLayer_N  = 0.5 * (Surface - H_MixedLayer_N)
+              PE_MixedLayer_N  = Rho_MixedLayer_N * Zc_MixedLayer_N
+
+              ! The remaining thickness is not mixed
+              dz_below    = dz(k)*(1.-Guess_fraction)
+              Zl_below    = Z_L(k)
+              Zu_below    = Z_L(k) + dz_below
+
+              !Compute the PE of the fraction of the layer that wasn't mixed
+              call PE_Kernel(PE_below, 1, (/Zl_below/),(/zu_below/), &
+                   (/Rho_c(k)/) )
+
+              PE_column_N = PE_MixedLayer_N + PE_below + PE_interior
+              ITT = 0
+              do IT = 1,20 !Do the iteration up to 20 times
+                Not_Converged = (abs(PE_column_N-PE_column_target)>PE_Threshold)
+                if (Not_Converged) then
+
+                  ITT = ITT+1
+
+                  A = PE_column_target - PE_column_N
+                  B = PE_column_N - PE_column_0
+                  C = dz_mixed_N - dz_mixed_0
+
+                  if (abs(b)>PE_threshold) then
+                    dz_increment = A*C/B
+                  else
+                    dz_increment = sign(dz(k)*1.e-4,A)
+                  endif
+
+                  if ( (dz_mixed_N+dz_increment > dz(k)) .or. &
+                      (dz_mixed_N+dz_increment < 0.0) ) then
+                    dz_increment = min(dz_max_incr,min(dz(k)-dz_mixed_n,dz_increment))
+                    dz_increment = max(-dz_max_incr,max(0.-dz_mixed_n,dz_increment))
+                  endif
+
+                  !Reset the _0's:
+                  PE_column_0 = PE_column_N
+                  dz_mixed_0  = dz_mixed_N
+
+                  !Compute the _N's:
+                  ! Guess the thickness of the amount that can be mixed:
+                  dz_mixed_N = dz_mixed_N + dz_increment
+
+                  !Compute the PE if we mixed to the guessed thickness
+                  Rho_MixedLayer_N = Rho_MixedLayer + Rho_c(k)*dz_mixed_N
+                  H_MixedLayer_N   = H_MixedLayer + dz_mixed_N
+                  Zc_MixedLayer_N  = 0.5 * (Surface - H_MixedLayer_N)
+                  PE_MixedLayer_N  = Rho_MixedLayer_N * Zc_MixedLayer_N
+
+                  ! The remaining thickness is not mixed
+                  dz_below    = dz(k) - dz_mixed_N
+                  Zl_below    = Z_L(k)
+                  Zu_below    = Z_L(k) + dz_below
+                  !Compute the PE of the fraction of the layer that wasn't mixed
+                  call PE_Kernel(PE_below, 1, (/Zl_below/), (/zu_below/), &
+                       (/Rho_c(k)/))
+
+                  PE_column_N = PE_MixedLayer_N + PE_below + PE_interior
+                endif
+              enddo
+
+              H_MixedLayer = H_MixedLayer + dz_mixed_N
+            else
+              Rho_MixedLayer = Rho_MixedLayer_0
+              H_MixedLayer   = H_MixedLayer_0
+            endif
+            mld(i,j,iM) = H_MixedLayer
+          enddo
+        endif
+      enddo
+    enddo
+  enddo
+
+  if (id_MLD(1) > 0) call post_data(id_MLD(1), MLD(:,:,1), diagPtr)
+  if (id_MLD(2) > 0) call post_data(id_MLD(2), MLD(:,:,2), diagPtr)
+  if (id_MLD(3) > 0) call post_data(id_MLD(3), MLD(:,:,3), diagPtr)
+
+  return
+end subroutine diagnoseMLDbyEnergy
+
+subroutine PE_Kernel(PE, NK, Z_L, Z_U, Rho_c )
+  integer :: NK
+  real, intent(in), dimension(NK) :: Z_L, Z_U, Rho_c
+  real, intent(out) :: PE
+  integer :: k
+
+  PE = 0.0
+  do k=1,NK
+    PE = PE + (Rho_c(k))*0.5*(Z_U(k)**2-Z_L(k)**2)
+  enddo
+
+  return
+end subroutine PE_Kernel
 
 !> Update the thickness, temperature, and salinity due to thermodynamic
 !! boundary forcing (contained in fluxes type) applied to h, tv%T and tv%S,
