@@ -14,6 +14,8 @@ use PLM_functions, only : PLM_reconstruction, PLM_boundary_extrapolation
 use PPM_functions, only : PPM_reconstruction, PPM_boundary_extrapolation
 use PQM_functions, only : PQM_reconstruction, PQM_boundary_extrapolation_v1
 
+use iso_fortran_env, only : stdout=>output_unit, stderr=>error_unit
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -1899,12 +1901,13 @@ logical function test_answer(verbose, n, u, u_true, label, tol)
     if (abs(u(k) - u_true(k)) > tolerance) test_answer = .true.
   enddo
   if (test_answer .or. verbose) then
-    write(*,'(a4,2a24,x,a)') 'k','Calculated value','Correct value',label
+    write(stdout,'(a4,2a24,x,a)') 'k','Calculated value','Correct value',label
     do k = 1, n
       if (abs(u(k) - u_true(k)) > tolerance) then
-        write(*,'(i4,1p2e24.16,a,1pe24.16,a)') k,u(k),u_true(k),' err=',u(k)-u_true(k),' < wrong'
+        write(stdout,'(i4,1p2e24.16,a,1pe24.16,a)') k,u(k),u_true(k),' err=',u(k)-u_true(k),' < wrong'
+        write(stderr,'(i4,1p2e24.16,a,1pe24.16,a)') k,u(k),u_true(k),' err=',u(k)-u_true(k),' < wrong'
       else
-        write(*,'(i4,1p2e24.16)') k,u(k),u_true(k)
+        write(stdout,'(i4,1p2e24.16)') k,u(k),u_true(k)
       endif
     enddo
   endif
@@ -1918,11 +1921,11 @@ subroutine dumpGrid(n,h,x,u)
   real, dimension(:), intent(in) :: x !< Interface delta
   real, dimension(:), intent(in) :: u !< Cell average values
   integer :: i
-  write(*,'("i=",20i10)') (i,i=1,n+1)
-  write(*,'("x=",20es10.2)') (x(i),i=1,n+1)
-  write(*,'("i=",5x,20i10)') (i,i=1,n)
-  write(*,'("h=",5x,20es10.2)') (h(i),i=1,n)
-  write(*,'("u=",5x,20es10.2)') (u(i),i=1,n)
+  write(stdout,'("i=",20i10)') (i,i=1,n+1)
+  write(stdout,'("x=",20es10.2)') (x(i),i=1,n+1)
+  write(stdout,'("i=",5x,20i10)') (i,i=1,n)
+  write(stdout,'("h=",5x,20es10.2)') (h(i),i=1,n)
+  write(stdout,'("u=",5x,20es10.2)') (u(i),i=1,n)
 end subroutine dumpGrid
 
 end module MOM_remapping

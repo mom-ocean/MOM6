@@ -28,6 +28,9 @@ use MOM_CVMix_KPP,             only : KPP_get_BLD, KPP_CS
 use MOM_energetic_PBL,         only : energetic_PBL_get_MLD, energetic_PBL_CS
 use MOM_diabatic_driver,       only : diabatic_CS, extract_diabatic_member
 use MOM_lateral_boundary_diffusion, only : boundary_k_range, SURFACE, BOTTOM
+
+use iso_fortran_env, only : stdout=>output_unit, stderr=>error_unit
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -1125,9 +1128,10 @@ real function interpolate_for_nondim_position(dRhoNeg, Pneg, dRhoPos, Ppos)
   if (Ppos < Pneg) then
     call MOM_error(FATAL, 'interpolate_for_nondim_position: Houston, we have a problem! Ppos<Pneg')
   elseif (dRhoNeg>dRhoPos) then
+    write(stderr,*) 'dRhoNeg, Pneg, dRhoPos, Ppos=',dRhoNeg, Pneg, dRhoPos, Ppos
     write(mesg,*) 'dRhoNeg, Pneg, dRhoPos, Ppos=', dRhoNeg, Pneg, dRhoPos, Ppos
     call MOM_error(WARNING, 'interpolate_for_nondim_position: '//trim(mesg))
-  elseif (dRhoNeg>dRhoPos) then !### Does this test belong here?
+  elseif (dRhoNeg>dRhoPos) then !### Does this duplicated test belong here?
     call MOM_error(FATAL, 'interpolate_for_nondim_position: Houston, we have a problem! dRhoNeg>dRhoPos')
   endif
   if (Ppos<=Pneg) then ! Handle vanished or inverted layers
@@ -1282,8 +1286,9 @@ subroutine find_neutral_surface_positions_discontinuous(CS, US, nk, &
                                      Tr(kl_right, ki_right), Sr(kl_right, ki_right), Pres_r(kl_right,ki_right), &
                                      Tl(kl_left, ki_left),   Sl(kl_left, ki_left)  , Pres_l(kl_left,ki_left),   &
                                      dRho)
-      if (CS%debug) write(*,'(A,I2,A,E12.4,A,I2,A,I2,A,I2,A,I2)') "k_surface=",k_surface,"  dRho=",US%R_to_kg_m3*dRho, &
-          "kl_left=",kl_left, "  ki_left=",ki_left,"  kl_right=",kl_right, "  ki_right=",ki_right
+      if (CS%debug) write(stdout,'(A,I2,A,E12.4,A,I2,A,I2,A,I2,A,I2)') &
+          "k_surface=",k_surface, "  dRho=",US%R_to_kg_m3*dRho, &
+          "kl_left=",kl_left, "  ki_left=",ki_left, "  kl_right=",kl_right, "  ki_right=",ki_right
       ! Which column has the lighter surface for the current indexes, kr and kl
       if (.not. reached_bottom) then
         if (dRho < 0.) then
@@ -1314,11 +1319,11 @@ subroutine find_neutral_surface_positions_discontinuous(CS, US, nk, &
         KoL(k_surface) = kl_left
 
         if (CS%debug) then
-          write(*,'(A,I2)') "Searching left layer ", kl_left
-          write(*,'(A,I2,X,I2)') "Searching from right: ", kl_right, ki_right
-          write(*,*) "Temp/Salt Reference: ", Tr(kl_right,ki_right), Sr(kl_right,ki_right)
-          write(*,*) "Temp/Salt Top L: ", Tl(kl_left,1), Sl(kl_left,1)
-          write(*,*) "Temp/Salt Bot L: ", Tl(kl_left,2), Sl(kl_left,2)
+          write(stdout,'(A,I2)') "Searching left layer ", kl_left
+          write(stdout,'(A,I2,X,I2)') "Searching from right: ", kl_right, ki_right
+          write(stdout,*) "Temp/Salt Reference: ", Tr(kl_right,ki_right), Sr(kl_right,ki_right)
+          write(stdout,*) "Temp/Salt Top L: ", Tl(kl_left,1), Sl(kl_left,1)
+          write(stdout,*) "Temp/Salt Bot L: ", Tl(kl_left,2), Sl(kl_left,2)
         endif
         call increment_interface(nk, kl_right, ki_right, reached_bottom, searching_right_column, searching_left_column)
         lastP_left = PoL(k_surface)
@@ -1337,11 +1342,11 @@ subroutine find_neutral_surface_positions_discontinuous(CS, US, nk, &
         KoR(k_surface) = kl_right
 
         if (CS%debug) then
-          write(*,'(A,I2)') "Searching right layer ", kl_right
-          write(*,'(A,I2,X,I2)') "Searching from left: ", kl_left, ki_left
-          write(*,*) "Temp/Salt Reference: ", Tl(kl_left,ki_left), Sl(kl_left,ki_left)
-          write(*,*) "Temp/Salt Top L: ", Tr(kl_right,1), Sr(kl_right,1)
-          write(*,*) "Temp/Salt Bot L: ", Tr(kl_right,2), Sr(kl_right,2)
+          write(stdout,'(A,I2)') "Searching right layer ", kl_right
+          write(stdout,'(A,I2,X,I2)') "Searching from left: ", kl_left, ki_left
+          write(stdout,*) "Temp/Salt Reference: ", Tl(kl_left,ki_left), Sl(kl_left,ki_left)
+          write(stdout,*) "Temp/Salt Top L: ", Tr(kl_right,1), Sr(kl_right,1)
+          write(stdout,*) "Temp/Salt Bot L: ", Tr(kl_right,2), Sr(kl_right,2)
         endif
         call increment_interface(nk, kl_left, ki_left, reached_bottom, searching_left_column, searching_right_column)
         lastP_right = PoR(k_surface)
@@ -1350,7 +1355,7 @@ subroutine find_neutral_surface_positions_discontinuous(CS, US, nk, &
       else
         stop 'Else what?'
       endif
-      if (CS%debug)  write(*,'(A,I3,A,ES16.6,A,I2,A,ES16.6)') "KoL:", KoL(k_surface), " PoL:", PoL(k_surface), &
+      if (CS%debug)  write(stdout,'(A,I3,A,ES16.6,A,I2,A,ES16.6)') "KoL:", KoL(k_surface), " PoL:", PoL(k_surface), &
                      "     KoR:", KoR(k_surface), " PoR:", PoR(k_surface)
     endif
     ! Effective thickness
@@ -2060,7 +2065,6 @@ logical function neutral_diffusion_unit_tests(verbose)
   neutral_diffusion_unit_tests = .false. .or. &
     ndiff_unit_tests_continuous(verbose) .or. ndiff_unit_tests_discontinuous(verbose)
 
-
 end function neutral_diffusion_unit_tests
 
 !> Returns true if unit tests of neutral_diffusion functions fail. Otherwise returns false.
@@ -2085,7 +2089,7 @@ logical function ndiff_unit_tests_continuous(verbose)
   v = verbose
 
   ndiff_unit_tests_continuous = .false. ! Normally return false
-  write(*,*) '==== MOM_neutral_diffusion: ndiff_unit_tests_continuous ='
+  write(stdout,*) '==== MOM_neutral_diffusion: ndiff_unit_tests_continuous ='
 
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
     test_fv_diff(v,1.,1.,1., 0.,1.,2., 1., 'FV: Straight line on uniform grid')
@@ -2325,7 +2329,7 @@ logical function ndiff_unit_tests_continuous(verbose)
                                    (/0.,0.,0.,0.,0.,6.,0./), & ! hEff
                                    'Two unstable mixed layers')
 
-  if (.not. ndiff_unit_tests_continuous) write(*,*) 'Pass'
+  if (.not. ndiff_unit_tests_continuous) write(stdout,*) 'Pass'
 
 end function ndiff_unit_tests_continuous
 
@@ -2359,7 +2363,7 @@ logical function ndiff_unit_tests_discontinuous(verbose)
 
   v = verbose
   ndiff_unit_tests_discontinuous = .false. ! Normally return false
-  write(*,*) '==== MOM_neutral_diffusion: ndiff_unit_tests_discontinuous ='
+  write(stdout,*) '==== MOM_neutral_diffusion: ndiff_unit_tests_discontinuous ='
 
   ! Unit tests for find_neutral_surface_positions_discontinuous
   ! Salinity is 0 for all these tests
@@ -2582,7 +2586,7 @@ logical function ndiff_unit_tests_discontinuous(verbose)
              find_neutral_pos_linear(CS, 0., 10., 35., 0., 0.8,  &
                                       0., 1.0,  0., 0.5,  &
                                      (/12.,0./), (/34.,2./)), "Salt stratified Linearized Alpha/Beta"))
-  if (.not. ndiff_unit_tests_discontinuous) write(*,*) 'Pass'
+  if (.not. ndiff_unit_tests_discontinuous) write(stdout,*) 'Pass'
 
   deallocate(US)
 
@@ -2608,8 +2612,8 @@ logical function test_fv_diff(verbose, hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue, ti
   test_fv_diff = (Pret /= Ptrue)
 
   if (test_fv_diff .or. verbose) then
-    stdunit = 6
-    if (test_fv_diff) stdunit = 0 ! In case of wrong results, write to error stream
+    stdunit = stdout
+    if (test_fv_diff) stdunit = stderr ! In case of wrong results, write to error stream
     write(stdunit,'(a)') title
     if (test_fv_diff) then
       write(stdunit,'(2(x,a,f20.16),x,a)') 'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
@@ -2640,8 +2644,8 @@ logical function test_fvlsq_slope(verbose, hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue
   test_fvlsq_slope = (Pret /= Ptrue)
 
   if (test_fvlsq_slope .or. verbose) then
-    stdunit = 6
-    if (test_fvlsq_slope) stdunit = 0 ! In case of wrong results, write to error stream
+    stdunit = stdout
+    if (test_fvlsq_slope) stdunit = stderr ! In case of wrong results, write to error stream
     write(stdunit,'(a)') title
     if (test_fvlsq_slope) then
       write(stdunit,'(2(x,a,f20.16),x,a)') 'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
@@ -2670,8 +2674,8 @@ logical function test_ifndp(verbose, rhoNeg, Pneg, rhoPos, Ppos, Ptrue, title)
   test_ifndp = (Pret /= Ptrue)
 
   if (test_ifndp .or. verbose) then
-    stdunit = 6
-    if (test_ifndp) stdunit = 0 ! In case of wrong results, write to error stream
+    stdunit = stdout
+    if (test_ifndp) stdunit = stderr ! In case of wrong results, write to error stream
     write(stdunit,'(a)') title
     if (test_ifndp) then
       write(stdunit,'(4(x,a,f20.16),2(x,a,1pe22.15),x,a)') &
@@ -2701,8 +2705,8 @@ logical function test_data1d(verbose, nk, Po, Ptrue, title)
   enddo
 
   if (test_data1d .or. verbose) then
-    stdunit = 6
-    if (test_data1d) stdunit = 0 ! In case of wrong results, write to error stream
+    stdunit = stdout
+    if (test_data1d) stdunit = stderr ! In case of wrong results, write to error stream
     write(stdunit,'(a)') title
     do k = 1,nk
       if (Po(k) /= Ptrue(k)) then
@@ -2736,8 +2740,8 @@ logical function test_data1di(verbose, nk, Po, Ptrue, title)
   enddo
 
   if (test_data1di .or. verbose) then
-    stdunit = 6
-    if (test_data1di) stdunit = 0 ! In case of wrong results, write to error stream
+    stdunit = stdout
+    if (test_data1di) stdunit = stderr ! In case of wrong results, write to error stream
     write(stdunit,'(a)') title
     do k = 1,nk
       if (Po(k) /= Ptrue(k)) then
@@ -2782,8 +2786,8 @@ logical function test_nsp(verbose, ns, KoL, KoR, pL, pR, hEff, KoL0, KoR0, pL0, 
   enddo
 
   if (test_nsp .or. verbose) then
-    stdunit = 6
-    if (test_nsp) stdunit = 0 ! In case of wrong results, write to error stream
+    stdunit = stdout
+    if (test_nsp) stdunit = stderr ! In case of wrong results, write to error stream
     write(stdunit,'(a)') title
     do k = 1,ns
       this_row_failed = compare_nsp_row(KoL(k), KoR(k), pL(k), pR(k), KoL0(k), KoR0(k), pL0(k), pR0(k))
@@ -2831,7 +2835,9 @@ logical function test_rnp(expected_pos, test_pos, title)
   real,             intent(in) :: test_pos !< The position returned by the code
   character(len=*), intent(in) :: title    !< A label for this test
   ! Local variables
-  integer :: stdunit = 6 ! Output to standard error
+  integer :: stdunit
+
+  stdunit = stdout ! Output to standard error
   test_rnp = ABS(expected_pos - test_pos) > 2*EPSILON(test_pos)
   if (test_rnp) then
     write(stdunit,'(A, f20.16, " .neq. ", f20.16, " <-- WRONG")') title, expected_pos, test_pos
