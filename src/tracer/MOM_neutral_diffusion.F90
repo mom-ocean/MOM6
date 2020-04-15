@@ -2343,7 +2343,7 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   real, dimension(ns-1)       :: hEff, Flx
   type(neutral_diffusion_CS)  :: CS        !< Neutral diffusion control structure
   type(EOS_type),     pointer :: EOS       !< Structure for linear equation of state
-  type(unit_scale_type), pointer :: US     !< A dimensional unit scaling type
+  type(unit_scale_type), pointer :: US => NULL()  !< A dimensional unit scaling type
   type(remapping_CS), pointer :: remap_CS  !< Remapping control structure (PLM)
   real, dimension(nk,2)       :: ppoly_T_l, ppoly_T_r ! Linear reconstruction for T
   real, dimension(nk,2)       :: ppoly_S_l, ppoly_S_r ! Linear reconstruction for S
@@ -2583,6 +2583,8 @@ logical function ndiff_unit_tests_discontinuous(verbose)
                                       0., 1.0,  0., 0.5,  &
                                      (/12.,0./), (/34.,2./)), "Salt stratified Linearized Alpha/Beta"))
   if (.not. ndiff_unit_tests_discontinuous) write(*,*) 'Pass'
+
+  deallocate(US)
 
 end function ndiff_unit_tests_discontinuous
 
