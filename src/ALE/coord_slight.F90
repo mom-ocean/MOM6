@@ -205,7 +205,7 @@ subroutine build_slight_column(CS, US, eqn_of_state, H_to_pres, H_subroundoff, &
   logical, dimension(nz+1) :: reliable  ! If true, this interface is in a reliable position.
   real, dimension(nz+1) :: T_int, S_int ! Temperature [degC] and salinity [ppt] interpolated to interfaces.
   real, dimension(nz+1) :: rho_tmp      ! A temporary density [R ~> kg m-3]
-  real, dimension(nz+1) :: drho_dp      ! The partial derivative of density with pressure [kg m-3 Pa-1]
+  real, dimension(nz+1) :: drho_dp      ! The partial derivative of density with pressure [T2 L-2 ~> kg m-3 Pa-1]
   real, dimension(nz+1) :: p_IS, p_R    ! Pressures [R L2 T-2 ~> Pa]
   real, dimension(nz+1) :: drhoIS_dT    ! The partial derivative of in situ density with temperature
                                         ! in [R degC-1 ~> kg m-3 degC-1]
@@ -216,19 +216,20 @@ subroutine build_slight_column(CS, US, eqn_of_state, H_to_pres, H_subroundoff, &
   real, dimension(nz+1) :: drhoR_dS     ! The partial derivative of reference density with salinity
                                         ! in [R ppt-1 ~> kg m-3 ppt-1]
   real, dimension(nz+1) :: strat_rat
-  real :: H_to_cPa
+  real :: H_to_cPa    ! A conversion factor from thicknesses to the compressibility fraction times
+                      ! the units of pressure [R L2 T-2 H-1 ~> Pa m-1 or Pa m2 kg-1]
   real :: drIS, drR   ! In situ and reference density differences [R ~> kg m-3]
-  real :: Fn_now, I_HStol, Fn_zero_val
-  real :: z_int_unst
-  real :: dz      ! A uniform layer thickness in very shallow water [H ~> m or kg m-2].
-  real :: dz_ur   ! The total thickness of an unstable region [H ~> m or kg m-2].
+  real :: Fn_now, I_HStol, Fn_zero_val ! Nondimensional variables [nondim]
+  real :: z_int_unst  ! The depth where the stratification allows the interior grid to start [H ~> m or kg m-2]
+  real :: dz          ! A uniform layer thickness in very shallow water [H ~> m or kg m-2].
+  real :: dz_ur       ! The total thickness of an unstable region [H ~> m or kg m-2].
   real :: wgt, cowgt  ! A weight and its complement [nondim].
-  real :: rho_ml_av ! The average potential density in a near-surface region [R ~> kg m-3].
-  real :: H_ml_av ! A thickness to try to use in taking the near-surface average [H ~> m or kg m-2].
-  real :: rho_x_z ! A cumulative integral of a density [R H ~> kg m-2 or kg2 m-5].
-  real :: z_wt    ! The thickness actually used in taking the near-surface average [H ~> m or kg m-2].
-  real :: k_interior  ! The (real) value of k where the interior grid starts.
-  real :: k_int2      ! The (real) value of k where the interior grid starts.
+  real :: rho_ml_av   ! The average potential density in a near-surface region [R ~> kg m-3].
+  real :: H_ml_av     ! A thickness to try to use in taking the near-surface average [H ~> m or kg m-2].
+  real :: rho_x_z     ! A cumulative integral of a density [R H ~> kg m-2 or kg2 m-5].
+  real :: z_wt        ! The thickness actually used in taking the near-surface average [H ~> m or kg m-2].
+  real :: k_interior  ! The (real) value of k where the interior grid starts [nondim].
+  real :: k_int2      ! The (real) value of k where the interior grid starts [nondim].
   real :: z_interior  ! The depth where the interior grid starts [H ~> m or kg m-2].
   real :: z_ml_fix    ! The depth at which the fixed-thickness near-surface layers end [H ~> m or kg m-2].
   real :: dz_dk       ! The thickness of layers between the fixed-thickness
@@ -378,13 +379,12 @@ subroutine build_slight_column(CS, US, eqn_of_state, H_to_pres, H_subroundoff, &
       call calculate_density_derivs(T_int, S_int, p_R, drhoR_dT, drhoR_dS, 2, nz-1, &
                                     eqn_of_state, US)
       if (CS%compressibility_fraction > 0.0) then
-        call calculate_compress(T_int, S_int, US%RL2_T2_to_Pa*p_R(:), rho_tmp, drho_dp, 2, nz-1, &
-                                      eqn_of_state)
+        call calculate_compress(T_int, S_int, p_R(:), rho_tmp, drho_dp, 2, nz-1, eqn_of_state, US)
       else
         do K=2,nz ; drho_dp(K) = 0.0 ; enddo
       endif
 
-      H_to_cPa = CS%compressibility_fraction * H_to_pres * US%L_T_to_m_s**2
+      H_to_cPa = CS%compressibility_fraction * H_to_pres
       strat_rat(1) = 1.0
       do K=2,nz
         drIS = drhoIS_dT(K) * (T_f(k) - T_f(k-1)) + &

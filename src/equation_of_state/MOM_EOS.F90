@@ -394,6 +394,7 @@ subroutine calc_spec_vol_US(T, S, pressure, specvol, start, npts, EOS, US, spv_r
   real,     optional, intent(in)    :: scale    !< A multiplicative factor by which to scale specific
                                                 !! volume in combination with scaling given by US [various]
 
+  ! Local variables
   real, dimension(size(pressure)) :: pres  ! Pressure converted to [Pa]
   real :: spv_reference ! spv_ref converted to [m3 kg-1]
   real :: spv_scale ! A factor to convert specific volume from m3 kg-1 to the desired units [kg R-1 m-3 ~> 1]
@@ -995,20 +996,34 @@ subroutine calc_spec_vol_derivs_HI_1d(T, S, pressure, dSV_dT, dSV_dS, HI, EOS, U
 end subroutine calc_spec_vol_derivs_HI_1d
 
 
-!> Calls the appropriate subroutine to calculate the density and compressibility for 1-D array inputs.
-subroutine calculate_compress_array(T, S, pressure, rho, drho_dp, start, npts, EOS)
+!> Calls the appropriate subroutine to calculate the density and compressibility for 1-D array
+!! inputs.  If US is present, the units of the inputs and outputs are rescaled.
+subroutine calculate_compress_array(T, S, press, rho, drho_dp, start, npts, EOS, US)
   real, dimension(:), intent(in)  :: T        !< Potential temperature referenced to the surface [degC]
   real, dimension(:), intent(in)  :: S        !< Salinity [PSU]
-  real, dimension(:), intent(in)  :: pressure !< Pressure [Pa]
-  real, dimension(:), intent(inout) :: rho      !< In situ density [kg m-3]
+  real, dimension(:), intent(in)  :: press    !< Pressure [Pa] or [R L2 T-2 ~> Pa]
+  real, dimension(:), intent(inout) :: rho      !< In situ density [kg m-3] or [R ~> kg m-3]
   real, dimension(:), intent(inout) :: drho_dp  !< The partial derivative of density with pressure
-                                                !! (also the inverse of the square of sound speed) [s2 m-2]
+                                                !! (also the inverse of the square of sound speed)
+                                                !! [s2 m-2] or [T2 L-2]
   integer,            intent(in)  :: start    !< Starting index within the array
   integer,            intent(in)  :: npts     !< The number of values to calculate
   type(EOS_type),     pointer     :: EOS      !< Equation of state structure
+  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
+
+  ! Local variables
+  real, dimension(size(press)) :: pressure  ! Pressure converted to [Pa]
+  integer :: i, is, ie
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_compress called with an unassociated EOS_type EOS.")
+
+  is = start ; ie = is + npts - 1
+  if (present(US)) then
+    do i=is,ie ; pressure(i) = US%RL2_T2_to_Pa * press(i) ; enddo
+  else
+    do i=is,ie ; pressure(i) = press(i) ; enddo
+  endif
 
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
@@ -1026,18 +1041,29 @@ subroutine calculate_compress_array(T, S, pressure, rho, drho_dp, start, npts, E
       call MOM_error(FATAL, "calculate_compress: EOS%form_of_EOS is not valid.")
   end select
 
+  if (present(US)) then
+    if (US%kg_m3_to_R /= 1.0) then ; do i=is,ie
+      rho(i) = US%kg_m3_to_R * rho(i)
+    enddo ; endif
+    if (US%L_T_to_m_s /= 1.0) then ; do i=is,ie
+      drho_dp(i) = US%L_T_to_m_s**2 * drho_dp(i)
+    enddo ; endif
+  endif
+
 end subroutine calculate_compress_array
 
 !> Calculate density and compressibility for a scalar. This just promotes the scalar to an array
-!! with a singleton dimension and calls calculate_compress_array
-subroutine calculate_compress_scalar(T, S, pressure, rho, drho_dp, EOS)
+!! with a singleton dimension and calls calculate_compress_array.  If US is present, the units of
+!! the inputs and outputs are rescaled.
+subroutine calculate_compress_scalar(T, S, pressure, rho, drho_dp, EOS, US)
   real, intent(in)        :: T        !< Potential temperature referenced to the surface [degC]
   real, intent(in)        :: S        !< Salinity [ppt]
-  real, intent(in)        :: pressure !< Pressure [Pa]
-  real, intent(out)       :: rho      !< In situ density [kg m-3]
-  real, intent(out)       :: drho_dp  !< The partial derivative of density with pressure
-                                      !! (also the inverse of the square of sound speed) [s2 m-2]
+  real, intent(in)        :: pressure !< Pressure [Pa] or [R L2 T-2 ~> Pa]
+  real, intent(out)       :: rho      !< In situ density [kg m-3] or [R ~> kg m-3]
+  real, intent(out)       :: drho_dp  !< The partial derivative of density with pressure (also the
+                                      !! inverse of the square of sound speed) [s2 m-2] or [T2 L-2]
   type(EOS_type), pointer :: EOS      !< Equation of state structure
+  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 
   real, dimension(1) :: Ta, Sa, pa, rhoa, drho_dpa
 
@@ -1045,7 +1071,7 @@ subroutine calculate_compress_scalar(T, S, pressure, rho, drho_dp, EOS)
     "calculate_compress called with an unassociated EOS_type EOS.")
   Ta(1) = T ; Sa(1) = S; pa(1) = pressure
 
-  call calculate_compress_array(Ta, Sa, pa, rhoa, drho_dpa, 1, 1, EOS)
+  call calculate_compress_array(Ta, Sa, pa, rhoa, drho_dpa, 1, 1, EOS, US)
   rho = rhoa(1) ; drho_dp = drho_dpa(1)
 
 end subroutine calculate_compress_scalar
@@ -1076,7 +1102,7 @@ subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(inout) :: dza !< The change in the geopotential anomaly across
-                            !! the layer [T-2 ~> m2 s-2] or [m2 s-2]
+                            !! the layer [L2 T-2 ~> m2 s-2] or [m2 s-2]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(inout) :: intp_dza !< The integral in pressure through the layer of the
                             !! geopotential anomaly relative to the anomaly at the bottom of the
