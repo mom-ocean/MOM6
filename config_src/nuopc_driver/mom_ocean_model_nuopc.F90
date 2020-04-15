@@ -730,7 +730,7 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time, write_restart)
   type(time_type),         intent(in)    :: Time        !< The model time, used for writing restarts.
   logical,                 intent(in)    :: write_restart !< true => write restart file
 
-  call ocean_model_save_restart(Ocean_state, Time)
+  if(write_restart)call ocean_model_save_restart(Ocean_state, Time)
   call diag_mediator_end(Time, Ocean_state%diag, end_diag_manager=.true.)
   call MOM_end(Ocean_state%MOM_CSp)
   if (Ocean_state%use_ice_shelf) call ice_shelf_end(Ocean_state%Ice_shelf_CSp)
