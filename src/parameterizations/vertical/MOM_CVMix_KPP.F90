@@ -1415,31 +1415,6 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
 
   enddo ! s-loop
 
-  ! Update kOBL for smoothed OBL depths
-  do j = G%jsc, G%jec
-    do i = G%isc, G%iec
-
-      ! skip land points
-      if (G%mask2dT(i,j)==0.) cycle
-
-      iFaceHeight(1) = 0.0 ! BBL is all relative to the surface
-      hcorr = 0.
-      do k=1,G%ke
-
-        ! cell center and cell bottom in meters (negative values in the ocean)
-        dh = h(i,j,k) * GV%H_to_m ! Nominal thickness to use for increment
-        dh = dh + hcorr ! Take away the accumulated error (could temporarily make dh<0)
-        hcorr = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
-        dh = max( dh, CS%min_thickness ) ! Limit increment dh>=min_thickness
-        cellHeight(k)    = iFaceHeight(k) - 0.5 * dh
-        iFaceHeight(k+1) = iFaceHeight(k) - dh
-      enddo
-
-      CS%kOBL(i,j) = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, CS%OBLdepth(i,j) )
-
-    enddo
-  enddo
-
 end subroutine KPP_smooth_BLD
 
 
