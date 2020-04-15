@@ -232,12 +232,12 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
 
   ! tmp array for surface properties
   real :: surface_field(SZI_(G),SZJ_(G))
-  real :: pressure_1d(SZI_(G)) ! Temporary array for pressure when calling EOS [R L2 T-2 ~> Pa] or [Pa]
+  real :: pressure_1d(SZI_(G)) ! Temporary array for pressure when calling EOS [R L2 T-2 ~> Pa]
   real :: wt, wt_p
 
   real :: f2_h     ! Squared Coriolis parameter at to h-points [T-2 ~> s-2]
   real :: mag_beta ! Magnitude of the gradient of f [T-1 L-1 ~> s-1 m-1]
-  real :: absurdly_small_freq2 ! Srequency squared used to avoid division by 0 [T-2 ~> s-2]
+  real :: absurdly_small_freq2 ! Frequency squared used to avoid division by 0 [T-2 ~> s-2]
 
   integer :: k_list
 
@@ -355,7 +355,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
           enddo
         endif
         do k=1,nz ! Integrate vertically downward for pressure
-          do i=is,ie ! Pressure for EOS at the layer center [Pa]
+          do i=is,ie ! Pressure for EOS at the layer center [R L2 T-2 ~> Pa]
             pressure_1d(i) = pressure_1d(i) + 0.5*(GV%H_to_RZ*GV%g_Earth)*h(i,j,k)
           enddo
           ! Store in-situ density [R ~> kg m-3] in work_3d
@@ -364,7 +364,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
           do i=is,ie ! Cell thickness = dz = dp/(g*rho) (meter); store in work_3d
             work_3d(i,j,k) = (GV%H_to_RZ*h(i,j,k)) / rho_in_situ(i)
           enddo
-          do i=is,ie ! Pressure for EOS at the bottom interface [Pa]
+          do i=is,ie ! Pressure for EOS at the bottom interface [R L2 T-2 ~> Pa]
             pressure_1d(i) = pressure_1d(i) + 0.5*(GV%H_to_RZ*GV%g_Earth)*h(i,j,k)
           enddo
         enddo ! k
@@ -586,31 +586,28 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   if (associated(tv%eqn_of_state)) then
     if (CS%id_rhopot0 > 0) then
       pressure_1d(:) = 0.
-!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pressure_1d)
+      !$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je
-        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pressure_1d, &
-                               Rcv(:,j,k),is,ie-is+1, tv%eqn_of_state)
+        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pressure_1d, Rcv(:,j,k), G%HI, tv%eqn_of_state, US)
       enddo ; enddo
       if (CS%id_rhopot0 > 0) call post_data(CS%id_rhopot0, Rcv, CS%diag)
     endif
     if (CS%id_rhopot2 > 0) then
-      pressure_1d(:) = 2.E7 ! 2000 dbars
-!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pressure_1d)
+      pressure_1d(:) = 2.0e7*US%kg_m3_to_R*US%m_s_to_L_T**2 ! 2000 dbars
+      !$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je
-        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pressure_1d, &
-                               Rcv(:,j,k),is,ie-is+1, tv%eqn_of_state)
+        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pressure_1d, Rcv(:,j,k), G%HI, tv%eqn_of_state, US)
       enddo ; enddo
       if (CS%id_rhopot2 > 0) call post_data(CS%id_rhopot2, Rcv, CS%diag)
     endif
     if (CS%id_rhoinsitu > 0) then
-!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,h,GV) private(pressure_1d)
+      !$OMP parallel do default(shared) private(pressure_1d)
       do j=js,je
         pressure_1d(:) = 0. ! Start at p=0 Pa at surface
         do k=1,nz
-          pressure_1d(:) =  pressure_1d(:) + 0.5 * h(:,j,k) * GV%H_to_Pa ! Pressure in middle of layer k
-          call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pressure_1d, &
-                                 Rcv(:,j,k),is,ie-is+1, tv%eqn_of_state)
-          pressure_1d(:) =  pressure_1d(:) + 0.5 * h(:,j,k) * GV%H_to_Pa ! Pressure at bottom of layer k
+          pressure_1d(:) =  pressure_1d(:) + 0.5 * h(:,j,k) * (GV%H_to_RZ*GV%g_Earth) ! Pressure in middle of layer k
+          call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pressure_1d, Rcv(:,j,k), G%HI, tv%eqn_of_state, US)
+          pressure_1d(:) =  pressure_1d(:) + 0.5 * h(:,j,k) * (GV%H_to_RZ*GV%g_Earth) ! Pressure at bottom of layer k
         enddo
       enddo
       if (CS%id_rhoinsitu > 0) call post_data(CS%id_rhoinsitu, Rcv, CS%diag)
@@ -1577,11 +1574,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       'Coordinate Potential Density', 'kg m-3', conversion=US%R_to_kg_m3)
 
   CS%id_rhopot0 = register_diag_field('ocean_model', 'rhopot0', diag%axesTL, Time, &
-      'Potential density referenced to surface', 'kg m-3')
+      'Potential density referenced to surface', 'kg m-3', conversion=US%R_to_kg_m3)
   CS%id_rhopot2 = register_diag_field('ocean_model', 'rhopot2', diag%axesTL, Time, &
-      'Potential density referenced to 2000 dbar', 'kg m-3')
+      'Potential density referenced to 2000 dbar', 'kg m-3', conversion=US%R_to_kg_m3)
   CS%id_rhoinsitu = register_diag_field('ocean_model', 'rhoinsitu', diag%axesTL, Time, &
-      'In situ density', 'kg m-3')
+      'In situ density', 'kg m-3', conversion=US%R_to_kg_m3)
 
   CS%id_du_dt = register_diag_field('ocean_model', 'dudt', diag%axesCuL, Time, &
       'Zonal Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
