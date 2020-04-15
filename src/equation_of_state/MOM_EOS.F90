@@ -73,6 +73,7 @@ interface calculate_density_derivs
                    calculate_density_derivs_HI_1d
 end interface calculate_density_derivs
 
+!> Calculate the derivatives of specific volume with temperature and salinity from T, S, and P
 interface calculate_specific_vol_derivs
   module procedure calculate_spec_vol_derivs_array, calc_spec_vol_derivs_US, calc_spec_vol_derivs_HI_1d
 end interface calculate_specific_vol_derivs
@@ -954,7 +955,8 @@ subroutine calc_spec_vol_derivs_US(T, S, pressure, dSV_dT, dSV_dS, start, npts, 
 
 end subroutine calc_spec_vol_derivs_US
 
-!> Calls the appropriate subroutine to calculate specific volume derivatives for an array.
+!> Calls the appropriate subroutine to calculate specific volume derivatives for array inputs
+!! using array extents determined from a hor_index_type..
 subroutine calc_spec_vol_derivs_HI_1d(T, S, pressure, dSV_dT, dSV_dS, HI, EOS, US, halo)
   type(hor_index_type),           intent(in)    :: HI       !< The horizontal index structure
   real, dimension(HI%isd:HI%ied), intent(in)    :: T        !< Potential temperature referenced to the surface [degC]
