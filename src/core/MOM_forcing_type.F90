@@ -2232,8 +2232,8 @@ subroutine mech_forcing_diags(forces_in, dt, G, time_end, diag, handles)
 
   call cpu_clock_begin(handles%id_clock_forcing)
 
-  ! NOTE: post_data expects data to be on the input index map, so any rotations
-  !   must be undone before saving the output.
+  ! NOTE: post_data expects data to be on the rotated index map, so any
+  !   rotations must be applied before saving the output.
   turns = diag%G%HI%turns
   if (turns /= 0) then
     allocate(forces)
@@ -2299,8 +2299,8 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
 
   call cpu_clock_begin(handles%id_clock_forcing)
 
-  ! NOTE: post_data expects data to be on the input index map, so any rotations
-  !   must be undone before saving the output.
+  ! NOTE: post_data expects data to be on the rotated index map, so any
+  !   rotations must be applied before saving the output.
   turns = diag%G%HI%turns
   if (turns /= 0) then
     G => diag%G

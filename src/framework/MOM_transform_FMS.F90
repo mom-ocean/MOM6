@@ -99,7 +99,7 @@ function rotated_mpp_chksum_real_2d(field, pelist, mask_val, turns) &
 
   qturns = 0
   if (present(turns)) &
-    qturns = turns
+    qturns = modulo(turns, 4)
 
   if (qturns == 0) then
     chksum = mpp_chksum(field, pelist=pelist, mask_val=mask_val)
@@ -126,7 +126,7 @@ function rotated_mpp_chksum_real_3d(field, pelist, mask_val, turns) &
 
   qturns = 0
   if (present(turns)) &
-    qturns = turns
+    qturns = modulo(turns, 4)
 
   if (qturns == 0) then
     chksum = mpp_chksum(field, pelist=pelist, mask_val=mask_val)
@@ -153,7 +153,7 @@ function rotated_mpp_chksum_real_4d(field, pelist, mask_val, turns) &
 
   qturns = 0
   if (present(turns)) &
-    qturns = turns
+    qturns = modulo(turns, 4)
 
   if (qturns == 0) then
     chksum = mpp_chksum(field, pelist=pelist, mask_val=mask_val)
@@ -220,7 +220,7 @@ subroutine rotated_write_field_real_2d(io_unit, field_md, domain, field, &
 
   qturns = 0
   if (present(turns)) &
-    qturns = turns
+    qturns = modulo(turns, 4)
 
   if (qturns == 0) then
     call write_field(io_unit, field_md, domain, field, tstamp=tstamp, &
@@ -252,7 +252,7 @@ subroutine rotated_write_field_real_3d(io_unit, field_md, domain, field, &
 
   qturns = 0
   if (present(turns)) &
-    qturns = turns
+    qturns = modulo(turns, 4)
 
   if (qturns == 0) then
     call write_field(io_unit, field_md, domain, field, tstamp=tstamp, &
@@ -283,7 +283,8 @@ subroutine rotated_write_field_real_4d(io_unit, field_md, domain, field, &
   integer :: qturns
 
   qturns = 0
-  if (present(turns)) qturns = turns
+  if (present(turns)) &
+    qturns = modulo(turns, 4)
 
   if (qturns == 0) then
     call write_field(io_unit, field_md, domain, field, tstamp=tstamp, &
@@ -338,7 +339,9 @@ subroutine rotated_time_interp_external_2d(fms_id, time, data_in, interp, &
     call MOM_error(FATAL, "Rotation of masked output not yet support")
 
   qturns = 0
-  if (present(turns)) qturns = turns
+  if (present(turns)) &
+    qturns = modulo(turns, 4)
+
 
   if (qturns == 0) then
     call time_interp_external(fms_id, time, data_in, interp=interp, &
@@ -352,6 +355,7 @@ subroutine rotated_time_interp_external_2d(fms_id, time, data_in, interp, &
         is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in, &
         window_id=window_id)
     call rotate_array(data_pre, turns, data_in)
+    deallocate(data_pre)
   endif
 end subroutine rotated_time_interp_external_2d
 
@@ -379,7 +383,8 @@ subroutine rotated_time_interp_external_3d(fms_id, time, data_in, interp, &
     call MOM_error(FATAL, "Rotation of masked output not yet support")
 
   qturns = 0
-  if (present(turns)) qturns = turns
+  if (present(turns)) &
+    qturns = modulo(turns, 4)
 
   if (qturns == 0) then
     call time_interp_external(fms_id, time, data_in, interp=interp, &
@@ -393,6 +398,7 @@ subroutine rotated_time_interp_external_3d(fms_id, time, data_in, interp, &
         is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in, &
         window_id=window_id)
     call rotate_array(data_pre, turns, data_in)
+    deallocate(data_pre)
   endif
 end subroutine rotated_time_interp_external_3d
 

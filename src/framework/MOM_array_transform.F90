@@ -83,14 +83,14 @@ subroutine rotate_array_real_2d(A_in, turns, A)
 
   select case (modulo(turns, 4))
     case(0)
-      A = A_in
+      A(:,:) = A_in(:,:)
     case(1)
-      A = transpose(A_in)
-      A = A(n:1:-1, :)
+      A(:,:) = transpose(A_in)
+      A(:,:) = A(n:1:-1, :)
     case(2)
-      A = A_in(m:1:-1, n:1:-1)
+      A(:,:) = A_in(m:1:-1, n:1:-1)
     case(3)
-      A = transpose(A_in(m:1:-1, :))
+      A(:,:) = transpose(A_in(m:1:-1, :))
   end select
 end subroutine rotate_array_real_2d
 
@@ -103,7 +103,7 @@ subroutine rotate_array_real_3d(A_in, turns, A)
 
   integer :: k
 
-  do k = lbound(A_in, 3), ubound(A_in, 3)
+  do k = 1, size(A_in, 3)
     call rotate_array(A_in(:,:,k), turns, A(:,:,k))
   enddo
 end subroutine rotate_array_real_3d
@@ -117,7 +117,7 @@ subroutine rotate_array_real_4d(A_in, turns, A)
 
   integer :: n
 
-  do n = lbound(A_in, 4), ubound(A_in, 4)
+  do n = 1, size(A_in, 4)
     call rotate_array(A_in(:,:,:,n), turns, A(:,:,:,n))
   enddo
 end subroutine rotate_array_real_4d
@@ -136,14 +136,14 @@ subroutine rotate_array_integer(A_in, turns, A)
 
   select case (modulo(turns, 4))
     case(0)
-      A = A_in
+      A(:,:) = A_in(:,:)
     case(1)
-      A = transpose(A_in)
-      A = A(n:1:-1, :)
+      A(:,:) = transpose(A_in)
+      A(:,:) = A(n:1:-1, :)
     case(2)
-      A = A_in(m:1:-1, n:1:-1)
+      A(:,:) = A_in(m:1:-1, n:1:-1)
     case(3)
-      A = transpose(A_in(m:1:-1, :))
+      A(:,:) = transpose(A_in(m:1:-1, :))
   end select
 end subroutine rotate_array_integer
 
@@ -161,14 +161,14 @@ subroutine rotate_array_logical(A_in, turns, A)
 
   select case (modulo(turns, 4))
     case(0)
-      A = A_in
+      A(:,:) = A_in(:,:)
     case(1)
-      A = transpose(A_in)
-      A = A(n:1:-1, :)
+      A(:,:) = transpose(A_in)
+      A(:,:) = A(n:1:-1, :)
     case(2)
-      A = A_in(m:1:-1, n:1:-1)
+      A(:,:) = A_in(m:1:-1, n:1:-1)
     case(3)
-      A = transpose(A_in(m:1:-1, :))
+      A(:,:) = transpose(A_in(m:1:-1, :))
   end select
 end subroutine rotate_array_logical
 
@@ -201,7 +201,7 @@ subroutine rotate_array_pair_real_3d(A_in, B_in, turns, A, B)
 
   integer :: k
 
-  do k = lbound(A_in, 3), ubound(A_in, 3)
+  do k = 1, size(A_in, 3)
     call rotate_array_pair(A_in(:,:,k), B_in(:,:,k), turns, &
         A(:,:,k), B(:,:,k))
   enddo
@@ -237,10 +237,10 @@ subroutine rotate_vector_real_2d(A_in, B_in, turns, A, B)
   call rotate_array_pair(A_in, B_in, turns, A, B)
 
   if (modulo(turns, 4) == 1 .or. modulo(turns, 4) == 2) &
-    A = -A
+    A(:,:) = -A(:,:)
 
   if (modulo(turns, 4) == 2 .or. modulo(turns, 4) == 3) &
-    B = -B
+    B(:,:) = -B(:,:)
 end subroutine rotate_vector_real_2d
 
 
@@ -254,7 +254,7 @@ subroutine rotate_vector_real_3d(A_in, B_in, turns, A, B)
 
   integer :: k
 
-  do k = lbound(A_in, 3), ubound(A_in, 3)
+  do k = 1, size(A_in, 3)
     call rotate_vector(A_in(:,:,k), B_in(:,:,k), turns, A(:,:,k), B(:,:,k))
   enddo
 end subroutine rotate_vector_real_3d
@@ -270,7 +270,7 @@ subroutine rotate_vector_real_4d(A_in, B_in, turns, A, B)
 
   integer :: n
 
-  do n = lbound(A_in, 4), ubound(A_in, 4)
+  do n = 1, size(A_in, 4)
     call rotate_vector(A_in(:,:,:,n), B_in(:,:,:,n), turns, &
         A(:,:,:,n), B(:,:,:,n))
   enddo
