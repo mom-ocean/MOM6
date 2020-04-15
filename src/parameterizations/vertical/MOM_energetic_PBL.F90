@@ -658,7 +658,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: dMass     ! The mass per unit area within a layer [Z R ~> kg m-2].
-  real :: dPres     ! The hydrostatic pressure change across a layer [R Z2 T-2 ~> kg m-1 s-2 = Pa = J m-3].
+  real :: dPres     ! The hydrostatic pressure change across a layer [R Z2 T-2 ~> Pa = J m-3].
   real :: dMKE_max  ! The maximum amount of mean kinetic energy that could be
                     ! converted to turbulent kinetic energy if the velocity in
                     ! the layer below an interface were homogenized with all of
@@ -805,7 +805,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   pres_Z(1) = 0.0
   do k=1,nz
     dMass = GV%H_to_RZ * h(k)
-    dPres = US%L_to_Z**2 * GV%g_Earth * dMass  ! Equivalent to GV%H_to_Pa * h(k) with rescaling
+    dPres = US%L_to_Z**2 * GV%g_Earth * dMass
     dT_to_dPE(k) = (dMass * (pres_Z(K) + 0.5*dPres)) * dSV_dT(k)
     dS_to_dPE(k) = (dMass * (pres_Z(K) + 0.5*dPres)) * dSV_dS(k)
     dT_to_dColHt(k) = dMass * dSV_dT(k)
