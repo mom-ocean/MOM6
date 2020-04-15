@@ -139,9 +139,8 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
   else
     H_to_RL2_T2 = GV%H_to_RZ * GV%g_Earth
   endif
-!$OMP parallel do default(none) shared(is,ie,js,je,CS,G,GV,US,h,nz,tv,p_surf) &
-!$OMP                           private(fraz_col,T_fr_set,T_freeze,hc,ps)  &
-!$OMP                      firstprivate(pressure)    !pressure might be set above, so should be firstprivate
+  !$OMP parallel do default(shared) private(fraz_col,T_fr_set,T_freeze,hc,ps)  &
+  !$OMP                             firstprivate(pressure) ! pressure might be set above, so should be firstprivate
   do j=js,je
     ps(:) = 0.0
     if (PRESENT(p_surf)) then ; do i=is,ie

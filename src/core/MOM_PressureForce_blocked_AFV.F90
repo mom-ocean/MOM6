@@ -323,8 +323,8 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
   ! linearly between the values at thickness points, but the bottom
   ! geopotentials will not now be linear at the sub-grid-scale.  Doing this
   ! ensures no motion with flat isopycnals, even with a nonlinear equation of state.
-!$OMP parallel do default(none) shared(nz,za,G,GV,dza,intx_dza,h,PFu, &
-!$OMP                                  intp_dza,p,dp_neglect,inty_dza,PFv,CS,dM,US) &
+!$OMP parallel do default(none) shared(nz,za,G,GV,dza,intx_dza,h,PFu,PFv,CS,dM,US, &
+!$OMP                                  intp_dza,p,dp_neglect,inty_dza,H_to_RL2_T2) &
 !$OMP                          private(is_bk,ie_bk,js_bk,je_bk,Isq_bk,Ieq_bk,Jsq_bk, &
 !$OMP                                  Jeq_bk,ioff_bk,joff_bk,i,j,za_bk,intx_za_bk,  &
 !$OMP                                  inty_za_bk,dp_bk)
@@ -617,7 +617,7 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
     endif
   endif
 
-!$OMP parallel do default(none) shared(use_p_atm,rho_ref,G,GV,e,p_atm,nz,use_EOS,&
+!$OMP parallel do default(none) shared(use_p_atm,rho_ref,G,GV,US,e,p_atm,nz,use_EOS,&
 !$OMP                                  use_ALE,T_t,T_b,S_t,S_b,CS,tv,tv_tmp, &
 !$OMP                                  h,PFu,I_Rho0,h_neglect,dz_neglect,PFv,dM)&
 !$OMP                          private(is_bk,ie_bk,js_bk,je_bk,Isq_bk,Ieq_bk,Jsq_bk,  &
