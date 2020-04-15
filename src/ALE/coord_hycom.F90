@@ -4,6 +4,7 @@ module coord_hycom
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_error_handler, only : MOM_error, FATAL
+use MOM_unit_scaling,  only : unit_scale_type
 use MOM_EOS,           only : EOS_type, calculate_density
 use regrid_interp,     only : interp_CS_type, build_and_interpolate_grid
 
@@ -21,9 +22,6 @@ type, public :: hycom_CS ; private
   !> Nominal density of interfaces [R ~> kg m-3]
   real, allocatable, dimension(:) :: target_density
 
-  !> Density scaling factor [R m3 kg-1 ~> 1]
-  real :: kg_m3_to_R
-
   !> Maximum depths of interfaces [H ~> m or kg m-2]
   real, allocatable, dimension(:) :: max_interface_depths
 
@@ -39,13 +37,12 @@ public init_coord_hycom, set_hycom_params, build_hycom1_column, end_coord_hycom
 contains
 
 !> Initialise a hycom_CS with pointers to parameters
-subroutine init_coord_hycom(CS, nk, coordinateResolution, target_density, interp_CS, rho_scale)
+subroutine init_coord_hycom(CS, nk, coordinateResolution, target_density, interp_CS)
   type(hycom_CS),       pointer    :: CS !< Unassociated pointer to hold the control structure
   integer,              intent(in) :: nk !< Number of layers in generated grid
   real, dimension(nk),  intent(in) :: coordinateResolution !< Nominal near-surface resolution [Z ~> m]
   real, dimension(nk+1),intent(in) :: target_density !< Interface target densities [R ~> kg m-3]
   type(interp_CS_type), intent(in) :: interp_CS !< Controls for interpolation
-  real,       optional, intent(in) :: rho_scale !< A dimensional scaling factor for target_density
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_hycom: CS already associated!")
   allocate(CS)
@@ -56,7 +53,6 @@ subroutine init_coord_hycom(CS, nk, coordinateResolution, target_density, interp
   CS%coordinateResolution(:) = coordinateResolution(:)
   CS%target_density(:)       = target_density(:)
   CS%interp_CS               = interp_CS
-  CS%kg_m3_to_R = 1.0 ; if (present(rho_scale)) CS%kg_m3_to_R = rho_scale
 
 end subroutine init_coord_hycom
 
@@ -100,16 +96,17 @@ subroutine set_hycom_params(CS, max_interface_depths, max_layer_thickness, inter
 end subroutine set_hycom_params
 
 !> Build a HyCOM coordinate column
-subroutine build_hycom1_column(CS, eqn_of_state, nz, depth, h, T, S, p_col, &
+subroutine build_hycom1_column(CS, US, eqn_of_state, nz, depth, h, T, S, p_col, &
                                z_col, z_col_new, zScale, h_neglect, h_neglect_edge)
   type(hycom_CS),        intent(in)    :: CS    !< Coordinate control structure
+  type(unit_scale_type), intent(in)    :: US    !< A dimensional unit scaling type
   type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
   integer,               intent(in)    :: nz    !< Number of levels
   real,                  intent(in)    :: depth !< Depth of ocean bottom (positive [H ~> m or kg m-2])
   real, dimension(nz),   intent(in)    :: T     !< Temperature of column [degC]
   real, dimension(nz),   intent(in)    :: S     !< Salinity of column [ppt]
   real, dimension(nz),   intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(nz),   intent(in)    :: p_col !< Layer pressure [Pa]
+  real, dimension(nz),   intent(in)    :: p_col !< Layer pressure [R L2 T-2 ~> Pa]
   real, dimension(nz+1), intent(in)    :: z_col !< Interface positions relative to the surface [H ~> m or kg m-2]
   real, dimension(CS%nk+1), intent(inout) :: z_col_new !< Absolute positions of interfaces [H ~> m or kg m-2]
   real, optional,        intent(in)    :: zScale !< Scaling factor from the input coordinate thicknesses in [Z ~> m]
@@ -136,7 +133,7 @@ subroutine build_hycom1_column(CS, eqn_of_state, nz, depth, h, T, S, p_col, &
   z_scale = 1.0 ; if (present(zScale)) z_scale = zScale
 
   ! Work bottom recording potential density
-  call calculate_density(T, S, p_col, rho_col, 1, nz, eqn_of_state, scale=CS%kg_m3_to_R)
+  call calculate_density(T, S, p_col, rho_col, 1, nz, eqn_of_state, US=US)
   ! This ensures the potential density profile is monotonic
   ! although not necessarily single valued.
   do k = nz-1, 1, -1

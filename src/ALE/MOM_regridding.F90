@@ -84,7 +84,7 @@ type, public :: regridding_CS ; private
   !> Minimum thickness allowed when building the new grid through regridding [H ~> m or kg m-2].
   real :: min_thickness
 
-  !> Reference pressure for potential density calculations [Pa]
+  !> Reference pressure for potential density calculations [R L2 T-2 ~> Pa]
   real :: ref_pressure = 2.e7
 
   !> Weight given to old coordinate when blending between new and old grids [nondim]
@@ -199,7 +199,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   logical :: tmpLogical, fix_haloclines, set_max, do_sum, main_parameters
   logical :: coord_is_state_dependent, ierr
   logical :: default_2018_answers, remap_answers_2018
-  real :: filt_len, strat_tol, index_scale, tmpReal
+  real :: filt_len, strat_tol, index_scale, tmpReal, P_Ref
   real :: maximum_depth ! The maximum depth of the ocean [m] (not in Z).
   real :: dz_fixed_sfc, Rho_avg_depth, nlay_sfc_int
   real :: adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, adaptAlpha
@@ -513,11 +513,16 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   call initCoord(CS, GV, US, coord_mode)
 
   if (main_parameters .and. coord_is_state_dependent) then
+    call get_param(param_file, mdl, "P_REF", P_Ref, &
+                 "The pressure that is used for calculating the coordinate "//&
+                 "density.  (1 Pa = 1e4 dbar, so 2e7 is commonly used.) "//&
+                 "This is only used if USE_EOS and ENABLE_THERMODYNAMICS are true.", &
+                 units="Pa", default=2.0e7, scale=US%kg_m3_to_R*US%m_s_to_L_T**2)
     call get_param(param_file, mdl, "REGRID_COMPRESSIBILITY_FRACTION", tmpReal, &
                  "When interpolating potential density profiles we can add "//&
                  "some artificial compressibility solely to make homogeneous "//&
                  "regions appear stratified.", units="nondim", default=0.)
-    call set_regrid_params(CS, compress_fraction=tmpReal)
+    call set_regrid_params(CS, compress_fraction=tmpReal, ref_pressure=P_Ref)
   endif
 
   if (main_parameters) then
@@ -865,7 +870,7 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
 
     case ( REGRIDDING_RHO )
       if (do_convective_adjustment) call convective_adjustment(G, GV, h, tv)
-      call build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
+      call build_rho_grid( G, GV, G%US, h, tv, dzInterface, remapCS, CS )
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_ARBITRARY )
@@ -873,10 +878,10 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_HYCOM1 )
-      call build_grid_HyCOM1( G, GV, h, tv, h_new, dzInterface, CS )
+      call build_grid_HyCOM1( G, GV, G%US, h, tv, h_new, dzInterface, CS )
 
     case ( REGRIDDING_SLIGHT )
-      call build_grid_SLight( G, GV, h, tv, dzInterface, CS )
+      call build_grid_SLight( G, GV, G%US, h, tv, dzInterface, CS )
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_ADAPTIVE )
@@ -1317,7 +1322,7 @@ end subroutine build_sigma_grid
 ! Build grid based on target interface densities
 !------------------------------------------------------------------------------
 !> This routine builds a new grid based on a given set of target interface densities.
-subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
+subroutine build_rho_grid( G, GV, US, h, tv, dzInterface, remapCS, CS )
 !------------------------------------------------------------------------------
 ! This routine builds a new grid based on a given set of target interface
 ! densities (these target densities are computed by taking the mean value
@@ -1336,6 +1341,7 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
   ! Arguments
   type(ocean_grid_type),                        intent(in)    :: G  !< Ocean grid structure
   type(verticalGrid_type),                      intent(in)    :: GV !< Ocean vertical grid structure
+  type(unit_scale_type),                        intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),                        intent(in)    :: tv !< Thermodynamics structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(GV)+1), intent(inout) :: dzInterface !< The change in interface depth
@@ -1380,7 +1386,7 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
       ! Local depth (G%bathyT is positive)
       nominalDepth = G%bathyT(i,j)*GV%Z_to_H
 
-      call build_rho_column(CS%rho_CS, nz, nominalDepth, h(i, j, :), &
+      call build_rho_column(CS%rho_CS, US, nz, nominalDepth, h(i, j, :), &
                             tv%T(i, j, :), tv%S(i, j, :), tv%eqn_of_state, zNew, &
                             h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
 
@@ -1449,9 +1455,10 @@ end subroutine build_rho_grid
 !! \remark { Based on Bleck, 2002: An oceanice general circulation model framed in
 !! hybrid isopycnic-Cartesian coordinates, Ocean Modelling 37, 55-88.
 !! http://dx.doi.org/10.1016/S1463-5003(01)00012-9 }
-subroutine build_grid_HyCOM1( G, GV, h, tv, h_new, dzInterface, CS )
+subroutine build_grid_HyCOM1( G, GV, US, h, tv, h_new, dzInterface, CS )
   type(ocean_grid_type),                     intent(in)    :: G  !< Grid structure
   type(verticalGrid_type),                   intent(in)    :: GV !< Ocean vertical grid structure
+  type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h  !< Existing model thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                     intent(in)    :: tv !< Thermodynamics structure
   type(regridding_CS),                       intent(in)    :: CS !< Regridding control structure
@@ -1462,7 +1469,8 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, h_new, dzInterface, CS )
   real, dimension(SZK_(GV)+1) :: z_col ! Source interface positions relative to the surface [H ~> m or kg m-2]
   real, dimension(CS%nk+1) :: z_col_new ! New interface positions relative to the surface [H ~> m or kg m-2]
   real, dimension(SZK_(GV)+1) :: dz_col  ! The realized change in z_col [H ~> m or kg m-2]
-  real, dimension(SZK_(GV))   :: p_col   ! Layer center pressure [Pa]
+  real, dimension(SZK_(GV))   :: p_col   ! Layer center pressure [R L2 T-2 ~> Pa]
+  real :: ref_pres  ! The reference pressure [R L2 T-2 ~> Pa]
   integer   :: i, j, k, nki
   real :: depth
   real :: h_neglect, h_neglect_edge
@@ -1489,12 +1497,12 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, h_new, dzInterface, CS )
       z_col(1) = 0. ! Work downward rather than bottom up
       do K = 1, GV%ke
         z_col(K+1) = z_col(K) + h(i,j,k)
-        p_col(k) = CS%ref_pressure + CS%compressibility_fraction * &
-             ( 0.5 * ( z_col(K) + z_col(K+1) ) * GV%H_to_Pa - CS%ref_pressure )
+        p_col(k) = tv%P_Ref + CS%compressibility_fraction * &
+             ( 0.5 * ( z_col(K) + z_col(K+1) ) * (GV%H_to_RZ*GV%g_Earth) - tv%P_Ref )
       enddo
 
-      call build_hycom1_column(CS%hycom_CS, tv%eqn_of_state, GV%ke, depth, &
-                               h(i, j, :), tv%T(i, j, :), tv%S(i, j, :), p_col, &
+      call build_hycom1_column(CS%hycom_CS, US, tv%eqn_of_state, GV%ke, depth, &
+                               h(i,j,:), tv%T(i,j,:), tv%S(i,j,:), p_col, &
                                z_col, z_col_new, zScale=GV%Z_to_H, &
                                h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
 
@@ -1585,9 +1593,10 @@ end subroutine build_grid_adaptive
 !! shallow topography, this will tend to give a uniform sigma-like coordinate.
 !! For sufficiently shallow water, a minimum grid spacing is used to avoid
 !! certain instabilities.
-subroutine build_grid_SLight(G, GV, h, tv, dzInterface, CS)
+subroutine build_grid_SLight(G, GV, US, h, tv, dzInterface, CS)
   type(ocean_grid_type),                       intent(in)    :: G  !< Grid structure
   type(verticalGrid_type),                     intent(in)    :: GV !< Ocean vertical grid structure
+  type(unit_scale_type),                       intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h  !< Existing model thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                       intent(in)    :: tv !< Thermodynamics structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: dzInterface !< Changes in interface position
@@ -1596,7 +1605,7 @@ subroutine build_grid_SLight(G, GV, h, tv, dzInterface, CS)
   real, dimension(SZK_(GV)+1) :: z_col   ! Interface positions relative to the surface [H ~> m or kg m-2]
   real, dimension(SZK_(GV)+1) :: z_col_new ! Interface positions relative to the surface [H ~> m or kg m-2]
   real, dimension(SZK_(GV)+1) :: dz_col  ! The realized change in z_col [H ~> m or kg m-2]
-  real, dimension(SZK_(GV))   :: p_col   ! Layer center pressure [Pa]
+  real, dimension(SZK_(GV))   :: p_col   ! Layer center pressure [R L2 T-2 ~> Pa]
   real :: depth
   integer :: i, j, k, nz
   real :: h_neglect, h_neglect_edge
@@ -1622,11 +1631,11 @@ subroutine build_grid_SLight(G, GV, h, tv, dzInterface, CS)
       z_col(1) = 0. ! Work downward rather than bottom up
       do K=1,nz
         z_col(K+1) = z_col(K) + h(i,j,k)
-        p_col(k) = CS%ref_pressure + CS%compressibility_fraction * &
-                    ( 0.5 * ( z_col(K) + z_col(K+1) ) * GV%H_to_Pa - CS%ref_pressure )
+        p_col(k) = tv%P_Ref + CS%compressibility_fraction * &
+                    ( 0.5 * ( z_col(K) + z_col(K+1) ) * (GV%H_to_RZ*GV%g_Earth) - tv%P_Ref )
       enddo
 
-      call build_slight_column(CS%slight_CS, tv%eqn_of_state, GV%H_to_Pa, &
+      call build_slight_column(CS%slight_CS, US, tv%eqn_of_state, GV%H_to_RZ*GV%g_Earth, &
                           GV%H_subroundoff, nz, depth, h(i, j, :), &
                           tv%T(i, j, :), tv%S(i, j, :), p_col, z_col, z_col_new, &
                           h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
@@ -1962,7 +1971,7 @@ end function uniformResolution
 subroutine initCoord(CS, GV, US, coord_mode)
   type(regridding_CS),     intent(inout) :: CS !< Regridding control structure
   character(len=*),        intent(in)    :: coord_mode !< A string indicating the coordinate mode.
-                                               !! See the documenttion for regrid_consts
+                                               !! See the documentation for regrid_consts
                                                !! for the recognized values.
   type(verticalGrid_type), intent(in)    :: GV !< Ocean vertical grid structure
   type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
@@ -1975,14 +1984,13 @@ subroutine initCoord(CS, GV, US, coord_mode)
   case (REGRIDDING_SIGMA)
     call init_coord_sigma(CS%sigma_CS, CS%nk, CS%coordinateResolution)
   case (REGRIDDING_RHO)
-    call init_coord_rho(CS%rho_CS, CS%nk, CS%ref_pressure, CS%target_density, CS%interp_CS, &
-                        rho_scale=US%kg_m3_to_R)
+    call init_coord_rho(CS%rho_CS, CS%nk, CS%ref_pressure, CS%target_density, CS%interp_CS)
   case (REGRIDDING_HYCOM1)
     call init_coord_hycom(CS%hycom_CS, CS%nk, CS%coordinateResolution, CS%target_density, &
-                          CS%interp_CS, rho_scale=US%kg_m3_to_R)
+                          CS%interp_CS)
   case (REGRIDDING_SLIGHT)
     call init_coord_slight(CS%slight_CS, CS%nk, CS%ref_pressure, CS%target_density, &
-                           CS%interp_CS, GV%m_to_H, rho_scale=US%kg_m3_to_R)
+                           CS%interp_CS, GV%m_to_H)
   case (REGRIDDING_ADAPTIVE)
     call init_coord_adapt(CS%adapt_CS, CS%nk, CS%coordinateResolution, GV%m_to_H)
   end select
@@ -2225,7 +2233,7 @@ end function getCoordinateShortName
 !> Can be used to set any of the parameters for MOM_regridding.
 subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_grid_weight, &
              interp_scheme, depth_of_time_filter_shallow, depth_of_time_filter_deep, &
-             compress_fraction, dz_min_surface, nz_fixed_surface, Rho_ML_avg_depth, &
+             compress_fraction, ref_pressure, dz_min_surface, nz_fixed_surface, Rho_ML_avg_depth, &
              nlay_ML_to_interior, fix_haloclines, halocline_filt_len, &
              halocline_strat_tol, integrate_downward_for_e, remap_answers_2018, &
              adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, adaptAlpha, adaptDoMin, adaptDrho0)
@@ -2237,7 +2245,9 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   character(len=*), optional, intent(in) :: interp_scheme !< Interpolation method for state-dependent coordinates
   real,    optional, intent(in) :: depth_of_time_filter_shallow !< Depth to start cubic [H ~> m or kg m-2]
   real,    optional, intent(in) :: depth_of_time_filter_deep !< Depth to end cubic [H ~> m or kg m-2]
-  real,    optional, intent(in) :: compress_fraction !< Fraction of compressibility to add to potential density
+  real,    optional, intent(in) :: compress_fraction !< Fraction of compressibility to add to potential density [nondim]
+  real,    optional, intent(in) :: ref_pressure     !< The reference pressure for density-dependent
+                                                    !! coordinates [R L2 T-2 ~> Pa]
   real,    optional, intent(in) :: dz_min_surface   !< The fixed resolution in the topmost
                                                     !! SLight_nkml_min layers [H ~> m or kg m-2]
   integer, optional, intent(in) :: nz_fixed_surface !< The number of fixed-thickness layers at the top of the model
@@ -2283,6 +2293,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
 
   if (present(min_thickness)) CS%min_thickness = min_thickness
   if (present(compress_fraction)) CS%compressibility_fraction = compress_fraction
+  if (present(ref_pressure)) CS%ref_pressure = ref_pressure
   if (present(integrate_downward_for_e)) CS%integrate_downward_for_e = integrate_downward_for_e
   if (present(remap_answers_2018)) CS%remap_answers_2018 = remap_answers_2018
 
