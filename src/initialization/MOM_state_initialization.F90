@@ -932,27 +932,26 @@ subroutine convert_thickness(h, G, GV, US, tv)
                                                !! thermodynamic variables
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    p_top, p_bot
-  real :: dz_geo(SZI_(G),SZJ_(G))      ! The change in geopotential height
-                                       ! across a layer [m2 s-2].
-  real :: rho(SZI_(G))
-  real :: I_gEarth
-  real :: Hm_rho_to_Pa  ! A conversion factor from the input geometric thicknesses times the
-                        ! layer densities into Pa [Pa m3 H-1 kg-1 ~> s-2 m2 or s-2 m5 kg-1].
-  logical :: Boussinesq
+    p_top, p_bot                  ! Pressure at the interfaces above and below a layer [R L2 T-2 ~> Pa]
+  real :: dz_geo(SZI_(G),SZJ_(G)) ! The change in geopotential height across a layer [L2 T-2 ~> m2 s-2]
+  real :: rho(SZI_(G))            ! The in situ density [R ~> kg m-3]
+  real :: I_gEarth      ! Unit conversion factors divided by the gravitational acceleration
+                        ! [H T2 R-1 L-2 ~> s2 m2 kg-1 or s2 m-1]
+  real :: HR_to_pres    ! A conversion factor from the input geometric thicknesses times the layer
+                        ! densities into pressure units [L2 T-2 H-1 ~> m s-2 or m4 kg-1 s-2].
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: itt, max_itt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   max_itt = 10
-  Boussinesq = GV%Boussinesq
-  I_gEarth = 1.0 / (GV%mks_g_Earth)
-  Hm_rho_to_Pa = GV%mks_g_Earth * GV%H_to_m ! = GV%H_to_Pa / (US%R_to_kg_m3*GV%Rho0)
 
-  if (Boussinesq) then
+  if (GV%Boussinesq) then
     call MOM_error(FATAL,"Not yet converting thickness with Boussinesq approx.")
   else
+    I_gEarth = GV%RZ_to_H / GV%g_Earth
+    HR_to_pres = GV%g_Earth * GV%H_to_Z
+
     if (associated(tv%eqn_of_state)) then
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         p_bot(i,j) = 0.0 ; p_top(i,j) = 0.0
@@ -960,31 +959,29 @@ subroutine convert_thickness(h, G, GV, US, tv)
       do k=1,nz
         do j=js,je
           do i=is,ie ; p_top(i,j) = p_bot(i,j) ; enddo
-          call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_top(:,j), rho, &
-                                 is, ie-is+1, tv%eqn_of_state)
+          call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_top(:,j), rho, G%HI, &
+                                 tv%eqn_of_state, US)
           do i=is,ie
-            p_bot(i,j) = p_top(i,j) + Hm_rho_to_Pa * (h(i,j,k) * rho(i))
+            p_bot(i,j) = p_top(i,j) + HR_to_pres * (h(i,j,k) * rho(i))
           enddo
         enddo
 
         do itt=1,max_itt
-          call int_specific_vol_dp(tv%T(:,:,k), tv%S(:,:,k), p_top, p_bot, &
-                                   0.0, G%HI, tv%eqn_of_state, dz_geo)
+          call int_specific_vol_dp(tv%T(:,:,k), tv%S(:,:,k), p_top, p_bot, 0.0, G%HI, &
+                                   tv%eqn_of_state, dz_geo, US=US)
           if (itt < max_itt) then ; do j=js,je
-            call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_bot(:,j), rho, &
-                                   is, ie-is+1, tv%eqn_of_state)
+            call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_bot(:,j), rho, G%HI, &
+                                   tv%eqn_of_state, US)
             ! Use Newton's method to correct the bottom value.
-            !   The hydrostatic equation is linear to such a
-            ! high degree that no bounds-checking is needed.
+            ! The hydrostatic equation is sufficiently linear that no bounds-checking is needed.
             do i=is,ie
-              p_bot(i,j) = p_bot(i,j) + rho(i) * &
-                (Hm_rho_to_Pa*h(i,j,k) - dz_geo(i,j))
+              p_bot(i,j) = p_bot(i,j) + rho(i) * (HR_to_pres*h(i,j,k) - dz_geo(i,j))
             enddo
           enddo ; endif
         enddo
 
         do j=js,je ; do i=is,ie
-          h(i,j,k) = (p_bot(i,j) - p_top(i,j)) * GV%kg_m2_to_H * I_gEarth
+          h(i,j,k) = (p_bot(i,j) - p_top(i,j)) * I_gEarth
         enddo ; enddo
       enddo
     else
