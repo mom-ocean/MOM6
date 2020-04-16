@@ -1505,7 +1505,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
       call vertically_reintegrate_diag_field( &
               diag_cs%diag_remap_cs(diag%axes%vertical_coordinate_number), &
               diag_cs%G, h_diag, staggered_in_x, staggered_in_y, &
-              diag%axes%mask3d, diag_cs%missing_value, field, remapped_field)
+              diag%axes%mask3d, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
       if (associated(diag%axes%mask3d)) then
         ! Since 3d masks do not vary in the vertical, just use as much as is
@@ -1528,7 +1528,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
       allocate(remapped_field(size(field,1), size(field,2), diag%axes%nz))
       call diag_remap_do_remap(diag_cs%diag_remap_cs(diag%axes%vertical_coordinate_number), &
               diag_cs%G, diag_cs%GV, h_diag, staggered_in_x, staggered_in_y, &
-              diag%axes%mask3d, diag_cs%missing_value, field, remapped_field)
+              diag%axes%mask3d, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
       if (associated(diag%axes%mask3d)) then
         ! Since 3d masks do not vary in the vertical, just use as much as is
@@ -1552,7 +1552,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
       call vertically_interpolate_diag_field(diag_cs%diag_remap_cs( &
               diag%axes%vertical_coordinate_number), &
               diag_cs%G, h_diag, staggered_in_x, staggered_in_y, &
-              diag%axes%mask3d, diag_cs%missing_value, field, remapped_field)
+              diag%axes%mask3d, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
       if (associated(diag%axes%mask3d)) then
         ! Since 3d masks do not vary in the vertical, just use as much as is
@@ -1769,7 +1769,7 @@ subroutine post_xy_average(diag_cs, diag, field)
     call horizontally_average_diag_field(diag_cs%G, diag_cs%GV, diag_cs%h, &
                                          staggered_in_x, staggered_in_y, &
                                          diag%axes%is_layer, diag%v_extensive, &
-                                         diag_cs%missing_value, field, &
+                                         field, &
                                          averaged_field, averaged_mask)
   else
     nz = size(field, 3)
@@ -1788,7 +1788,7 @@ subroutine post_xy_average(diag_cs, diag, field)
                                          diag_cs%diag_remap_cs(coord)%h, &
                                          staggered_in_x, staggered_in_y, &
                                          diag%axes%is_layer, diag%v_extensive, &
-                                         diag_cs%missing_value, field, &
+                                         field, &
                                          averaged_field, averaged_mask)
   endif
 

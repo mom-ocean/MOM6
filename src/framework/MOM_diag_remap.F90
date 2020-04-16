@@ -346,7 +346,7 @@ end subroutine diag_remap_update
 
 !> Remap diagnostic field to alternative vertical grid.
 subroutine diag_remap_do_remap(remap_cs, G, GV, h, staggered_in_x, staggered_in_y, &
-                               mask, missing_value, field, remapped_field)
+                               mask, field, remapped_field)
   type(diag_remap_ctrl),   intent(in) :: remap_cs !< Diagnostic coodinate control structure
   type(ocean_grid_type),   intent(in) :: G  !< Ocean grid structure
   type(verticalGrid_type), intent(in) :: GV !< ocean vertical grid structure
@@ -354,7 +354,6 @@ subroutine diag_remap_do_remap(remap_cs, G, GV, h, staggered_in_x, staggered_in_
   logical,                 intent(in) :: staggered_in_x !< True is the x-axis location is at u or q points
   logical,                 intent(in) :: staggered_in_y !< True is the y-axis location is at v or q points
   real, dimension(:,:,:),  pointer    :: mask !< A mask for the field
-  real,                    intent(in) :: missing_value !< A missing_value to assign land/vanished points
   real, dimension(:,:,:),  intent(in) :: field(:,:,:) !< The diagnostic field to be remapped
   real, dimension(:,:,:),  intent(inout) :: remapped_field !< Field remapped to new coordinate
   ! Local variables
@@ -486,14 +485,13 @@ end subroutine diag_remap_calc_hmask
 
 !> Vertically re-grid an already vertically-integrated diagnostic field to alternative vertical grid.
 subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, staggered_in_y, &
-                                             mask, missing_value, field, reintegrated_field)
+                                             mask, field, reintegrated_field)
   type(diag_remap_ctrl),  intent(in) :: remap_cs !< Diagnostic coodinate control structure
   type(ocean_grid_type),  intent(in) :: G !< Ocean grid structure
   real, dimension(:,:,:), intent(in) :: h   !< The current thicknesses
   logical,                intent(in) :: staggered_in_x !< True is the x-axis location is at u or q points
   logical,                intent(in) :: staggered_in_y !< True is the y-axis location is at v or q points
   real, dimension(:,:,:), pointer    :: mask !< A mask for the field
-  real,                   intent(in) :: missing_value !< A missing_value to assign land/vanished points
   real, dimension(:,:,:), intent(in) :: field !<  The diagnostic field to be remapped
   real, dimension(:,:,:), intent(inout) :: reintegrated_field !< Field argument remapped to alternative coordinate
   ! Local variables
@@ -567,14 +565,13 @@ end subroutine vertically_reintegrate_diag_field
 
 !> Vertically interpolate diagnostic field to alternative vertical grid.
 subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, staggered_in_y, &
-                                             mask, missing_value, field, interpolated_field)
+                                             mask, field, interpolated_field)
   type(diag_remap_ctrl),  intent(in) :: remap_cs !< Diagnostic coodinate control structure
   type(ocean_grid_type),  intent(in) :: G !< Ocean grid structure
   real, dimension(:,:,:), intent(in) :: h   !< The current thicknesses
   logical,                intent(in) :: staggered_in_x !< True is the x-axis location is at u or q points
   logical,                intent(in) :: staggered_in_y !< True is the y-axis location is at v or q points
   real, dimension(:,:,:), pointer    :: mask !< A mask for the field
-  real,                   intent(in) :: missing_value !< A missing_value to assign land/vanished points
   real, dimension(:,:,:), intent(in) :: field !<  The diagnostic field to be remapped
   real, dimension(:,:,:), intent(inout) :: interpolated_field !< Field argument remapped to alternative coordinate
   ! Local variables
@@ -650,7 +647,7 @@ end subroutine vertically_interpolate_diag_field
 !> Horizontally average field
 subroutine horizontally_average_diag_field(G, GV, h, staggered_in_x, staggered_in_y, &
                                            is_layer, is_extensive, &
-                                           missing_value, field, averaged_field, &
+                                           field, averaged_field, &
                                            averaged_mask)
   type(ocean_grid_type),  intent(in) :: G !< Ocean grid structure
   type(verticalGrid_type), intent(in) :: GV !< The ocean vertical grid structure
@@ -659,7 +656,6 @@ subroutine horizontally_average_diag_field(G, GV, h, staggered_in_x, staggered_i
   logical,                intent(in) :: staggered_in_y !< True if the y-axis location is at v or q points
   logical,                intent(in) :: is_layer !< True if the z-axis location is at h points
   logical,                intent(in) :: is_extensive !< True if the z-direction is spatially integrated (over layers)
-  real,                   intent(in) :: missing_value !< A missing_value to assign land/vanished points
   real, dimension(:,:,:), intent(in) :: field !<  The diagnostic field to be remapped
   real, dimension(:),  intent(inout) :: averaged_field !< Field argument horizontally averaged
   logical, dimension(:), intent(inout) :: averaged_mask  !< Mask for horizontally averaged field
