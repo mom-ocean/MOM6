@@ -4935,7 +4935,6 @@ subroutine rotate_OBC_config(OBC_in, G_in, OBC, G, turns)
 
   ! Scalar and logical transfer
   OBC%number_of_segments = OBC_in%number_of_segments
-  OBC%g_Earth = OBC_in%g_Earth
   OBC%ke = OBC_in%ke
   OBC%user_BCs_set_globally = OBC_in%user_BCs_set_globally
 
