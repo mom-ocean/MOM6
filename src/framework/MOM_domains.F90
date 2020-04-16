@@ -3,6 +3,7 @@ module MOM_domains
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_array_transform, only : rotate_array
 use MOM_coms, only : PE_here, root_PE, num_PEs, MOM_infra_init, MOM_infra_end
 use MOM_coms, only : broadcast, sum_across_PEs, min_across_PEs, max_across_PEs
 use MOM_cpu_clock, only : cpu_clock_begin, cpu_clock_end
@@ -1599,7 +1600,7 @@ end subroutine MOM_domains_init
 !> clone_MD_to_MD copies one MOM_domain_type into another, while allowing
 !! some properties of the new type to differ from the original one.
 subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
-                          domain_name)
+                          domain_name, turns)
   type(MOM_domain_type), intent(in)    :: MD_in  !< An existing MOM_domain
   type(MOM_domain_type), pointer       :: MOM_dom !< A pointer to a MOM_domain that will be
                                   !! allocated if it is unassociated, and will have data
@@ -1617,10 +1618,15 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
   character(len=*), &
                optional, intent(in)    :: domain_name !< A name for the new domain, "MOM"
                                   !! if missing.
+  integer, optional, intent(in) :: turns   !< Number of quarter turns
 
   integer :: global_indices(4)
   logical :: mask_table_exists
   character(len=64) :: dom_name
+  integer :: qturns
+
+  qturns = 0
+  if (present(turns)) qturns = turns
 
   if (.not.associated(MOM_dom)) then
     allocate(MOM_dom)
@@ -1629,19 +1635,37 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
   endif
 
 ! Save the extra data for creating other domains of different resolution that overlay this domain
-  MOM_dom%niglobal = MD_in%niglobal ; MOM_dom%njglobal = MD_in%njglobal
-  MOM_dom%nihalo = MD_in%nihalo ; MOM_dom%njhalo = MD_in%njhalo
-
   MOM_dom%symmetric = MD_in%symmetric
   MOM_dom%nonblocking_updates = MD_in%nonblocking_updates
+  MOM_dom%thin_halo_updates = MD_in%thin_halo_updates
 
-  MOM_dom%X_FLAGS = MD_in%X_FLAGS ; MOM_dom%Y_FLAGS = MD_in%Y_FLAGS
-  MOM_dom%layout(:) = MD_in%layout(:) ; MOM_dom%io_layout(:) = MD_in%io_layout(:)
+  if (modulo(qturns, 2) /= 0) then
+    MOM_dom%niglobal = MD_in%njglobal ; MOM_dom%njglobal = MD_in%niglobal
+    MOM_dom%nihalo = MD_in%njhalo ; MOM_dom%njhalo = MD_in%nihalo
+
+    MOM_dom%X_FLAGS = MD_in%Y_FLAGS ; MOM_dom%Y_FLAGS = MD_in%X_FLAGS
+    MOM_dom%layout(:) = MD_in%layout(2:1:-1)
+    MOM_dom%io_layout(:) = MD_in%io_layout(2:1:-1)
+  else
+    MOM_dom%niglobal = MD_in%niglobal ; MOM_dom%njglobal = MD_in%njglobal
+    MOM_dom%nihalo = MD_in%nihalo ; MOM_dom%njhalo = MD_in%njhalo
+
+    MOM_dom%X_FLAGS = MD_in%X_FLAGS ; MOM_dom%Y_FLAGS = MD_in%Y_FLAGS
+    MOM_dom%layout(:) = MD_in%layout(:)
+    MOM_dom%io_layout(:) = MD_in%io_layout(:)
+  endif
+
+  global_indices(1) = 1 ; global_indices(2) = MOM_dom%niglobal
+  global_indices(3) = 1 ; global_indices(4) = MOM_dom%njglobal
 
   if (associated(MD_in%maskmap)) then
     mask_table_exists = .true.
     allocate(MOM_dom%maskmap(MOM_dom%layout(1), MOM_dom%layout(2)))
-    MOM_dom%maskmap(:,:) = MD_in%maskmap(:,:)
+    if (qturns /= 0) then
+      call rotate_array(MD_in%maskmap(:,:), qturns, MOM_dom%maskmap(:,:))
+    else
+      MOM_dom%maskmap(:,:) = MD_in%maskmap(:,:)
+    endif
   else
     mask_table_exists = .false.
   endif
@@ -1665,19 +1689,34 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
   dom_name = "MOM"
   if (present(domain_name)) dom_name = trim(domain_name)
 
-  global_indices(1) = 1 ; global_indices(2) = MOM_dom%niglobal
-  global_indices(3) = 1 ; global_indices(4) = MOM_dom%njglobal
   if (mask_table_exists) then
-    call MOM_define_domain( global_indices, MOM_dom%layout, MOM_dom%mpp_domain, &
+    call MOM_define_domain(global_indices, MOM_dom%layout, MOM_dom%mpp_domain, &
                 xflags=MOM_dom%X_FLAGS, yflags=MOM_dom%Y_FLAGS, &
                 xhalo=MOM_dom%nihalo, yhalo=MOM_dom%njhalo, &
-                symmetry = MOM_dom%symmetric, name=dom_name, &
-                maskmap=MOM_dom%maskmap )
+                symmetry=MOM_dom%symmetric, name=dom_name, &
+                maskmap=MOM_dom%maskmap)
+
+    global_indices(2) = global_indices(2) / 2
+    global_indices(4) = global_indices(4) / 2
+    call MOM_define_domain(global_indices, MOM_dom%layout, &
+                MOM_dom%mpp_domain_d2, &
+                xflags=MOM_dom%X_FLAGS, yflags=MOM_dom%Y_FLAGS, &
+                xhalo=(MOM_dom%nihalo/2), yhalo=(MOM_dom%njhalo/2), &
+                symmetry=MOM_dom%symmetric, name=dom_name, &
+                maskmap=MOM_dom%maskmap)
   else
-    call MOM_define_domain( global_indices, MOM_dom%layout, MOM_dom%mpp_domain, &
+    call MOM_define_domain(global_indices, MOM_dom%layout, MOM_dom%mpp_domain, &
                 xflags=MOM_dom%X_FLAGS, yflags=MOM_dom%Y_FLAGS, &
                 xhalo=MOM_dom%nihalo, yhalo=MOM_dom%njhalo, &
-                symmetry = MOM_dom%symmetric, name=dom_name)
+                symmetry=MOM_dom%symmetric, name=dom_name)
+
+    global_indices(2) = global_indices(2) / 2
+    global_indices(4) = global_indices(4) / 2
+    call MOM_define_domain(global_indices, MOM_dom%layout, &
+                MOM_dom%mpp_domain_d2, &
+                xflags=MOM_dom%X_FLAGS, yflags=MOM_dom%Y_FLAGS, &
+                xhalo=(MOM_dom%nihalo/2), yhalo=(MOM_dom%njhalo/2), &
+                symmetry=MOM_dom%symmetric, name=dom_name)
   endif
 
   if ((MOM_dom%io_layout(1) + MOM_dom%io_layout(2) > 0) .and. &
@@ -1691,7 +1730,7 @@ end subroutine clone_MD_to_MD
 !! domain2d type, while allowing some properties of the new type to differ from
 !! the original one.
 subroutine clone_MD_to_d2D(MD_in, mpp_domain, min_halo, halo_size, symmetric, &
-                           domain_name)
+                           domain_name, turns)
   type(MOM_domain_type), intent(in)    :: MD_in !< An existing MOM_domain to be cloned
   type(domain2d),        intent(inout) :: mpp_domain !< The new mpp_domain to be set up
   integer, dimension(2), &
@@ -1707,11 +1746,15 @@ subroutine clone_MD_to_d2D(MD_in, mpp_domain, min_halo, halo_size, symmetric, &
   character(len=*), &
                optional, intent(in)    :: domain_name !< A name for the new domain, "MOM"
                                   !! if missing.
+  integer, optional, intent(in) :: turns   !< If true, swap X and Y axes
 
   integer :: global_indices(4), layout(2), io_layout(2)
   integer :: X_FLAGS, Y_FLAGS, niglobal, njglobal, nihalo, njhalo
   logical :: symmetric_dom
   character(len=64) :: dom_name
+
+  if (present(turns)) &
+    call MOM_error(FATAL, "Rotation not supported for MOM_domain to domain2d")
 
 ! Save the extra data for creating other domains of different resolution that overlay this domain
   niglobal = MD_in%niglobal ; njglobal = MD_in%njglobal
