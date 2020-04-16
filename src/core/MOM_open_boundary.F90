@@ -245,7 +245,6 @@ type, public :: ocean_OBC_type
   logical :: zero_biharmonic = .false.                !< If True, zeros the Laplacian of flow on open boundaries for
                                                       !! use in the biharmonic viscosity term.
   logical :: brushcutter_mode = .false.               !< If True, read data on supergrid.
-  real :: g_Earth                                     !< The gravitational acceleration [m s-2].
   logical, pointer, dimension(:) :: &
                    tracer_x_reservoirs_used => NULL() !< Dimensioned by the number of tracers, set globally,
                                                       !! true for those with x reservoirs (needed for restarts).
@@ -352,9 +351,6 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   call get_param(param_file, mdl, "OBC_NUMBER_OF_SEGMENTS", OBC%number_of_segments, &
                  "The number of open boundary segments.", &
                  default=0)
-  call get_param(param_file, mdl, "G_EARTH", OBC%g_Earth, &
-                 "The gravitational acceleration of the Earth.", &
-                 units="m s-2", default = 9.80)
   call get_param(param_file, mdl, "OBC_USER_CONFIG", config1, &
                  "A string that sets how the open boundary conditions are "//&
                  " configured: \n", default="none", do_not_log=.true.)
@@ -4939,7 +4935,6 @@ subroutine rotate_OBC_config(OBC_in, G_in, OBC, G, turns)
 
   ! Scalar and logical transfer
   OBC%number_of_segments = OBC_in%number_of_segments
-  OBC%g_Earth = OBC_in%g_Earth
   OBC%ke = OBC_in%ke
   OBC%user_BCs_set_globally = OBC_in%user_BCs_set_globally
 
