@@ -332,7 +332,8 @@ type, public :: diag_ctrl
   !> Number of checksum-only diagnostics
   integer :: num_chksum_diags
 
-  real, dimension(:,:,:), allocatable :: h_begin
+  real, dimension(:,:,:), allocatable :: h_begin !< Layer thicknesses at the beginning of the timestep used
+                                                 !! for remapping of extensive variables
 
 end type diag_ctrl
 
