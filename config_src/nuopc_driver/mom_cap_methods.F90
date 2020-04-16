@@ -681,7 +681,7 @@ subroutine State_SetExport(state, fldname, isc, iec, jsc, jec, input, ocean_grid
         do j = jsc, jec
            jg = j + ocean_grid%jsc - jsc
            do i = isc, iec
-              ig = i + ocean_grid%isc - isc
+             ig = i + ocean_grid%isc - isc
               n = n+1
               dataPtr1d(n) = input(i,j) * ocean_grid%mask2dT(ig,jg)
            enddo
