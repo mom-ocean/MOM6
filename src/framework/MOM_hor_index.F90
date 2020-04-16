@@ -10,6 +10,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 implicit none ; private
 
 public :: hor_index_init, assignment(=)
+public :: rotate_hor_index
 
 !> Container for horizontal index ranges for data, computational and global domains
 type, public :: hor_index_type
@@ -49,6 +50,8 @@ type, public :: hor_index_type
 
   integer :: niglobal !< The global number of h-cells in the i-direction
   integer :: njglobal !< The global number of h-cells in the j-direction
+
+  integer :: turns      !< Number of quarter-turn rotations from input to model
 end type hor_index_type
 
 !> Copy the contents of one horizontal index type into another
@@ -92,6 +95,7 @@ subroutine hor_index_init(Domain, HI, param_file, local_indexing, index_offset)
   HI%IedB = HI%ied ; HI%JedB = HI%jed
   HI%IegB = HI%ieg ; HI%JegB = HI%jeg
 
+  HI%turns = 0
 end subroutine hor_index_init
 
 !> HIT_assign copies one hor_index_type into another.  It is accessed via an
@@ -110,11 +114,56 @@ subroutine HIT_assign(HI1, HI2)
   HI1%IsdB = HI2%IsdB ; HI1%IedB = HI2%IedB ; HI1%JsdB = HI2%JsdB ; HI1%JedB = HI2%JedB
   HI1%IsgB = HI2%IsgB ; HI1%IegB = HI2%IegB ; HI1%JsgB = HI2%JsgB ; HI1%JegB = HI2%JegB
 
+  HI1%niglobal = HI2%niglobal ; HI1%njglobal = HI2%njglobal
   HI1%idg_offset = HI2%idg_offset ; HI1%jdg_offset = HI2%jdg_offset
   HI1%symmetric = HI2%symmetric
-  HI1%niglobal = HI2%niglobal ; HI1%njglobal = HI2%njglobal
-
+  HI1%turns = HI2%turns
 end subroutine HIT_assign
+
+!> Rotate the horizontal index ranges from the input to the output map.
+subroutine rotate_hor_index(HI_in, turns, HI)
+  type(hor_index_type), intent(in) :: HI_in   !< Unrotated horizontal indices
+  integer, intent(in) :: turns                !< Number of quarter turns
+  type(hor_index_type), intent(inout) :: HI   !< Rotated horizontal indices
+
+  if (modulo(turns, 2) /= 0) then
+    HI%isc = HI_in%jsc
+    HI%iec = HI_in%jec
+    HI%jsc = HI_in%isc
+    HI%jec = HI_in%iec
+    HI%isd = HI_in%jsd
+    HI%ied = HI_in%jed
+    HI%jsd = HI_in%isd
+    HI%jed = HI_in%ied
+    HI%isg = HI_in%jsg
+    HI%ieg = HI_in%jeg
+    HI%jsg = HI_in%isg
+    HI%jeg = HI_in%ieg
+
+    HI%IscB = HI_in%JscB
+    HI%IecB = HI_in%JecB
+    HI%JscB = HI_in%IscB
+    HI%JecB = HI_in%IecB
+    HI%IsdB = HI_in%JsdB
+    HI%IedB = HI_in%JedB
+    HI%JsdB = HI_in%IsdB
+    HI%JedB = HI_in%IedB
+    HI%IsgB = HI_in%JsgB
+    HI%IegB = HI_in%JegB
+    HI%JsgB = HI_in%IsgB
+    HI%JegB = HI_in%IegB
+
+    HI%niglobal = HI_in%njglobal
+    HI%njglobal = HI_in%niglobal
+    HI%idg_offset = HI_in%jdg_offset
+    HI%jdg_offset = HI_in%idg_offset
+
+    HI%symmetric = HI_in%symmetric
+  else
+    HI = HI_in
+  endif
+  HI%turns = HI_in%turns + turns
+end subroutine rotate_hor_index
 
 !> \namespace mom_hor_index
 !!

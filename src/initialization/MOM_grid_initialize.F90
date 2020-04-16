@@ -125,7 +125,8 @@ subroutine grid_metrics_chksum(parent, G, US)
 
   halo = min(G%ied-G%iec, G%jed-G%jec, 1)
 
-  call hchksum_pair(trim(parent)//': d[xy]T', G%dxT, G%dyT, G%HI, haloshift=halo, scale=L_to_m)
+  call hchksum_pair(trim(parent)//': d[xy]T', G%dxT, G%dyT, G%HI, &
+                    haloshift=halo, scale=L_to_m, scalar_pair=.true.)
 
   call uvchksum(trim(parent)//': dxC[uv]', G%dxCu, G%dyCv, G%HI, haloshift=halo, scale=L_to_m)
 
@@ -133,7 +134,8 @@ subroutine grid_metrics_chksum(parent, G, US)
 
   call Bchksum_pair(trim(parent)//': dxB[uv]', G%dxBu, G%dyBu, G%HI, haloshift=halo, scale=L_to_m)
 
-  call hchksum_pair(trim(parent)//': Id[xy]T', G%IdxT, G%IdyT, G%HI, haloshift=halo, scale=m_to_L)
+  call hchksum_pair(trim(parent)//': Id[xy]T', G%IdxT, G%IdyT, G%HI, &
+                    haloshift=halo, scale=m_to_L, scalar_pair=.true.)
 
   call uvchksum(trim(parent)//': Id[xy]C[uv]', G%IdxCu, G%IdyCv, G%HI, haloshift=halo, scale=m_to_L)
 
