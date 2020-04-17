@@ -112,6 +112,13 @@ type, public :: EOS_type ; private
   real :: dTFr_dS   !< The derivative of freezing point with salinity [degC ppt-1]
   real :: dTFr_dp   !< The derivative of freezing point with pressure [degC Pa-1]
 
+! Unit conversion factors (normally used for dimensional testing but could also allow for
+! change of units of arguments to functions)
+  real :: m_to_Z !< A constant that translates distances in meters to the units of depth.
+  real :: kg_m3_to_R    !< A constant that translates kilograms per meter cubed to the units of density.
+  real :: R_to_kg_m3    !< A constant that translates the units of density to kilograms per meter cubed.
+  real :: RL2_T2_to_Pa  !< Convert pressures from R L2 T-2 to Pa.
+
 !  logical :: test_EOS = .true. ! If true, test the equation of state
 end type EOS_type
 
@@ -161,7 +168,7 @@ subroutine calculate_density_scalar(T, S, pressure, rho, EOS, rho_ref, US, scale
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_scalar called with an unassociated EOS_type EOS.")
 
-  p_scale = 1.0 ; if (present(US)) p_scale = US%RL2_T2_to_Pa
+  p_scale = 1.0 ; if (present(US)) p_scale = EOS%RL2_T2_to_Pa
 
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
@@ -180,7 +187,7 @@ subroutine calculate_density_scalar(T, S, pressure, rho, EOS, rho_ref, US, scale
   end select
 
   if (present(US) .or. present(scale)) then
-    rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
+    rho_scale = 1.0 ; if (present(US)) rho_scale = EOS%kg_m3_to_R
     if (present(scale)) rho_scale = rho_scale * scale
     rho = rho_scale * rho
   endif
@@ -210,7 +217,7 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_re
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_array called with an unassociated EOS_type EOS.")
 
-  p_scale = 1.0 ; if (present(US)) p_scale = US%RL2_T2_to_Pa
+  p_scale = 1.0 ; if (present(US)) p_scale = EOS%RL2_T2_to_Pa
 
   if (p_scale == 1.0) then
     select case (EOS%form_of_EOS)
@@ -247,7 +254,7 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_re
     end select
   endif
 
-  rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
+  rho_scale = 1.0 ; if (present(US)) rho_scale = EOS%kg_m3_to_R
   if (present(scale)) rho_scale = rho_scale * scale
   if (rho_scale /= 1.0) then
     do j=start,start+npts-1 ; rho(j) = rho_scale * rho(j) ; enddo
@@ -281,15 +288,15 @@ subroutine calculate_density_HI_1d(T, S, pressure, rho, HI, EOS, US, halo)
   npts = HI%iec - HI%isc + 1 + 2*halo_sz
   is = HI%isc - halo_sz ; ie = HI%iec + halo_sz
 
-  if (US%RL2_T2_to_Pa == 1.0) then
+  if (EOS%RL2_T2_to_Pa == 1.0) then
     call calculate_density_array(T, S, pressure, rho, start, npts, EOS)
   else  ! There is rescaling of variables, including pressure.
-    do i=is,ie ; pres(i) = US%RL2_T2_to_Pa * pressure(i) ; enddo
+    do i=is,ie ; pres(i) = EOS%RL2_T2_to_Pa * pressure(i) ; enddo
     call calculate_density_array(T, S, pres, rho, start, npts, EOS)
   endif
 
-  if (US%kg_m3_to_R /= 1.0) then ; do i=is,ie
-    rho(i) = US%kg_m3_to_R * rho(i)
+  if (EOS%kg_m3_to_R /= 1.0) then ; do i=is,ie
+    rho(i) = EOS%kg_m3_to_R * rho(i)
   enddo ; endif
 
 end subroutine calculate_density_HI_1d
@@ -361,18 +368,18 @@ subroutine calc_spec_vol_scalar(T, S, pressure, specvol, EOS, spv_ref, US, scale
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calc_spec_vol_scalar called with an unassociated EOS_type EOS.")
 
-  pres(1) = pressure ; if (present(US)) pres(1) = US%RL2_T2_to_Pa*pressure
+  pres(1) = pressure ; if (present(US)) pres(1) = EOS%RL2_T2_to_Pa*pressure
   Ta(1) = T ; Sa(1) = S
 
   if (present(spv_ref)) then
-    spv_reference = spv_ref ; if (present(US)) spv_reference = US%kg_m3_to_R*spv_ref
+    spv_reference = spv_ref ; if (present(US)) spv_reference = EOS%kg_m3_to_R*spv_ref
     call calculate_spec_vol_array(Ta, Sa, pres, spv, 1, 1, EOS, spv_reference)
   else
     call calculate_spec_vol_array(Ta, Sa, pres, spv, 1, 1, EOS)
   endif
   specvol = spv(1)
 
-  spv_scale = 1.0 ; if (present(US)) spv_scale = US%R_to_kg_m3
+  spv_scale = 1.0 ; if (present(US)) spv_scale = EOS%R_to_kg_m3
   if (present(scale)) spv_scale = spv_scale * scale
   if (spv_scale /= 1.0) then
     specvol = spv_scale * specvol
@@ -454,20 +461,20 @@ subroutine calc_spec_vol_HI_1d(T, S, pressure, specvol, HI, EOS, US, halo, spv_r
   npts = HI%iec - HI%isc + 1 + 2*halo_sz
   is = HI%isc - halo_sz ; ie = HI%iec + halo_sz
 
-  if ((US%RL2_T2_to_Pa == 1.0) .and. (US%R_to_kg_m3 == 1.0)) then
+  if ((EOS%RL2_T2_to_Pa == 1.0) .and. (EOS%R_to_kg_m3 == 1.0)) then
     call calculate_spec_vol_array(T, S, pressure, specvol, start, npts, EOS, spv_ref)
   elseif (present(spv_ref)) then ! This is the same as above, but with some extra work to rescale variables.
-    do i=is,ie ; pres(i) = US%RL2_T2_to_Pa * pressure(i) ; enddo
-    spv_reference = US%kg_m3_to_R*spv_ref
+    do i=is,ie ; pres(i) = EOS%RL2_T2_to_Pa * pressure(i) ; enddo
+    spv_reference = EOS%kg_m3_to_R*spv_ref
     call calculate_spec_vol_array(T, S, pres, specvol, start, npts, EOS, spv_reference)
   else  ! There is rescaling of variables, but spv_ref is not present. Passing a 0 value of spv_ref
         ! changes answers at roundoff for some equations of state, like Wright and UNESCO.
-    do i=is,ie ; pres(i) = US%RL2_T2_to_Pa * pressure(i) ; enddo
+    do i=is,ie ; pres(i) = EOS%RL2_T2_to_Pa * pressure(i) ; enddo
     call calculate_spec_vol_array(T, S, pres, specvol, start, npts, EOS)
   endif
 
-  if (US%R_to_kg_m3 /= 1.0) then ; do i=is,ie
-    specvol(i) = US%R_to_kg_m3 * specvol(i)
+  if (EOS%R_to_kg_m3 /= 1.0) then ; do i=is,ie
+    specvol(i) = EOS%R_to_kg_m3 * specvol(i)
   enddo ; endif
 
 end subroutine calc_spec_vol_HI_1d
@@ -578,7 +585,7 @@ subroutine calculate_density_derivs_array(T, S, pressure, drho_dT, drho_dS, star
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_derivs called with an unassociated EOS_type EOS.")
 
-  p_scale = 1.0 ; if (present(US)) p_scale = US%RL2_T2_to_Pa
+  p_scale = 1.0 ; if (present(US)) p_scale = EOS%RL2_T2_to_Pa
 
   if (p_scale == 1.0) then
     select case (EOS%form_of_EOS)
@@ -615,7 +622,7 @@ subroutine calculate_density_derivs_array(T, S, pressure, drho_dT, drho_dS, star
     end select
   endif
 
-  rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
+  rho_scale = 1.0 ; if (present(US)) rho_scale = EOS%kg_m3_to_R
   if (present(scale)) rho_scale = rho_scale * scale
   if (rho_scale /= 1.0) then ; do j=start,start+npts-1
     drho_dT(j) = rho_scale * drho_dT(j)
@@ -652,16 +659,16 @@ subroutine calculate_density_derivs_HI_1d(T, S, pressure, drho_dT, drho_dS, HI, 
   npts = HI%iec - HI%isc + 1 + 2*halo_sz
   is = HI%isc - halo_sz ; ie = HI%iec + halo_sz
 
-  if (US%RL2_T2_to_Pa == 1.0) then
+  if (EOS%RL2_T2_to_Pa == 1.0) then
     call calculate_density_derivs_array(T, S, pressure, drho_dT, drho_dS, start, npts, EOS)
   else
-    do i=is,ie ; pres(i) = US%RL2_T2_to_Pa * pressure(i) ; enddo
+    do i=is,ie ; pres(i) = EOS%RL2_T2_to_Pa * pressure(i) ; enddo
     call calculate_density_derivs_array(T, S, pres, drho_dT, drho_dS, start, npts, EOS)
   endif
 
-  if (US%kg_m3_to_R /= 1.0) then ; do i=is,ie
-    drho_dT(i) = US%kg_m3_to_R * drho_dT(i)
-    drho_dS(i) = US%kg_m3_to_R * drho_dS(i)
+  if (EOS%kg_m3_to_R /= 1.0) then ; do i=is,ie
+    drho_dT(i) = EOS%kg_m3_to_R * drho_dT(i)
+    drho_dS(i) = EOS%kg_m3_to_R * drho_dS(i)
   enddo ; endif
 
 end subroutine calculate_density_derivs_HI_1d
@@ -690,7 +697,7 @@ subroutine calculate_density_derivs_scalar(T, S, pressure, drho_dT, drho_dS, EOS
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_derivs called with an unassociated EOS_type EOS.")
 
-  p_scale = 1.0 ; if (present(US)) p_scale = US%RL2_T2_to_Pa
+  p_scale = 1.0 ; if (present(US)) p_scale = EOS%RL2_T2_to_Pa
 
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
@@ -704,7 +711,7 @@ subroutine calculate_density_derivs_scalar(T, S, pressure, drho_dT, drho_dS, EOS
       call MOM_error(FATAL, "calculate_density_derivs_scalar: EOS%form_of_EOS is not valid.")
   end select
 
-  rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
+  rho_scale = 1.0 ; if (present(US)) rho_scale = EOS%kg_m3_to_R
   if (present(scale)) rho_scale = rho_scale * scale
   if (rho_scale /= 1.0) then
     drho_dT = rho_scale * drho_dT
@@ -746,7 +753,7 @@ subroutine calculate_density_second_derivs_array(T, S, pressure, drho_dS_dS, drh
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_derivs called with an unassociated EOS_type EOS.")
 
-  p_scale = 1.0 ; if (present(US)) p_scale = US%RL2_T2_to_Pa
+  p_scale = 1.0 ; if (present(US)) p_scale = EOS%RL2_T2_to_Pa
 
   if (p_scale == 1.0) then
     select case (EOS%form_of_EOS)
@@ -779,7 +786,7 @@ subroutine calculate_density_second_derivs_array(T, S, pressure, drho_dS_dS, drh
     end select
   endif
 
-  rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
+  rho_scale = 1.0 ; if (present(US)) rho_scale = EOS%kg_m3_to_R
   if (present(scale)) rho_scale = rho_scale * scale
   if (rho_scale /= 1.0) then ; do j=start,start+npts-1
     drho_dS_dS(j) = rho_scale * drho_dS_dS(j)
@@ -827,7 +834,7 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_derivs called with an unassociated EOS_type EOS.")
 
-  p_scale = 1.0 ; if (present(US)) p_scale = US%RL2_T2_to_Pa
+  p_scale = 1.0 ; if (present(US)) p_scale = EOS%RL2_T2_to_Pa
 
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
@@ -843,7 +850,7 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
       call MOM_error(FATAL, "calculate_density_derivs: EOS%form_of_EOS is not valid.")
   end select
 
-  rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
+  rho_scale = 1.0 ; if (present(US)) rho_scale = EOS%kg_m3_to_R
   if (present(scale)) rho_scale = rho_scale * scale
   if (rho_scale /= 1.0) then
     drho_dS_dS = rho_scale * drho_dS_dS
@@ -983,16 +990,16 @@ subroutine calc_spec_vol_derivs_HI_1d(T, S, pressure, dSV_dT, dSV_dS, HI, EOS, U
   npts = HI%iec - HI%isc + 1 + 2*halo_sz
   is = HI%isc - halo_sz ; ie = HI%iec + halo_sz
 
-  if (US%RL2_T2_to_Pa == 1.0) then
+  if (EOS%RL2_T2_to_Pa == 1.0) then
     call calculate_spec_vol_derivs_array(T, S, pressure, dSV_dT, dSV_dS, start, npts, EOS)
   else
-    do i=is,ie ; press(i) = US%RL2_T2_to_Pa * pressure(i) ; enddo
+    do i=is,ie ; press(i) = EOS%RL2_T2_to_Pa * pressure(i) ; enddo
     call calculate_spec_vol_derivs_array(T, S, press, dSV_dT, dSV_dS, start, npts, EOS)
   endif
 
-  if (US%R_to_kg_m3 /= 1.0) then ; do i=is,ie
-    dSV_dT(i) = US%R_to_kg_m3 * dSV_dT(i)
-    dSV_dS(i) = US%R_to_kg_m3 * dSV_dS(i)
+  if (EOS%R_to_kg_m3 /= 1.0) then ; do i=is,ie
+    dSV_dT(i) = EOS%R_to_kg_m3 * dSV_dT(i)
+    dSV_dS(i) = EOS%R_to_kg_m3 * dSV_dS(i)
   enddo ; endif
 
 end subroutine calc_spec_vol_derivs_HI_1d
@@ -1141,8 +1148,8 @@ subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
   else ; select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
       if (present(US)) then
-        call int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, US%kg_m3_to_R*EOS%Rho_T0_S0, &
-                                  US%kg_m3_to_R*EOS%dRho_dT, US%kg_m3_to_R*EOS%dRho_dS, dza, &
+        call int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, EOS%kg_m3_to_R*EOS%Rho_T0_S0, &
+                                  EOS%kg_m3_to_R*EOS%dRho_dT, EOS%kg_m3_to_R*EOS%dRho_dS, dza, &
                                   intp_dza, intx_dza, inty_dza, halo_size, &
                                   bathyP, dP_tiny, useMassWghtInterp)
       else
@@ -1155,7 +1162,7 @@ subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
       if (present(US)) then
         call int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, HI, dza, intp_dza, intx_dza, &
                                     inty_dza, halo_size, bathyP, dP_tiny, useMassWghtInterp, &
-                                    SV_scale=US%R_to_kg_m3, pres_scale=US%RL2_T2_to_Pa)
+                                    SV_scale=EOS%R_to_kg_m3, pres_scale=EOS%RL2_T2_to_Pa)
       else
         call int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, HI, dza, intp_dza, intx_dza, &
                                     inty_dza, halo_size, bathyP, dP_tiny, useMassWghtInterp)
@@ -1227,7 +1234,7 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, EOS, dp
                                 intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, useMassWghtInterp, US)
   else ; select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
-      rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
+      rho_scale = 1.0 ; if (present(US)) rho_scale = EOS%kg_m3_to_R
       if (rho_scale /= 1.0) then
         call int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, &
                          rho_scale*EOS%Rho_T0_S0, rho_scale*EOS%dRho_dT, rho_scale*EOS%dRho_dS, &
@@ -1238,8 +1245,8 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, EOS, dp
                          dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, useMassWghtInterp)
       endif
     case (EOS_WRIGHT)
-      rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
-      pres_scale = 1.0 ; if (present(US)) pres_scale = US%RL2_T2_to_Pa
+      rho_scale = 1.0 ; if (present(US)) rho_scale = EOS%kg_m3_to_R
+      pres_scale = 1.0 ; if (present(US)) pres_scale = EOS%RL2_T2_to_Pa
       if ((rho_scale /= 1.0) .or. (pres_scale /= 1.0)) then
         call int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, &
                                    dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, &
@@ -1267,9 +1274,11 @@ logical function query_compressible(EOS)
 end function query_compressible
 
 !> Initializes EOS_type by allocating and reading parameters
-subroutine EOS_init(param_file, EOS)
+subroutine EOS_init(param_file, EOS, US)
   type(param_file_type), intent(in) :: param_file !< Parameter file structure
   type(EOS_type),        pointer    :: EOS !< Equation of state structure
+  type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
+  optional :: US
   ! Local variables
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_EOS" ! This module's name.
@@ -1363,6 +1372,11 @@ subroutine EOS_init(param_file, EOS)
       "should only be used along with TFREEZE_FORM = TFREEZE_TEOS10 .")
   endif
 
+  ! Unit conversions
+  EOS%m_to_Z = 1. ; if (present(US)) EOS%m_to_Z = US%m_to_Z
+  EOS%kg_m3_to_R = 1. ; if (present(US)) EOS%kg_m3_to_R = US%kg_m3_to_R
+  EOS%R_to_kg_m3 = 1. ; if (present(US)) EOS%R_to_kg_m3 = US%R_to_kg_m3
+  EOS%RL2_T2_to_Pa = 1. ; if (present(US)) EOS%RL2_T2_to_Pa = US%RL2_T2_to_Pa
 
 end subroutine EOS_init
 
@@ -1521,9 +1535,9 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
   is = HIO%isc + ioff ; ie = HIO%iec + ioff
   js = HIO%jsc + joff ; je = HIO%jec + joff
 
-  rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
-  GxRho = G_e * rho_0 ; if (present(US)) GxRho = US%RL2_T2_to_Pa * G_e * rho_0
-  rho_ref_mks = rho_ref ; if (present(US)) rho_ref_mks = rho_ref * US%R_to_kg_m3
+  rho_scale = 1.0 ; if (present(US)) rho_scale = EOS%kg_m3_to_R
+  GxRho = G_e * rho_0 ; if (present(US)) GxRho = EOS%RL2_T2_to_Pa * G_e * rho_0
+  rho_ref_mks = rho_ref ; if (present(US)) rho_ref_mks = rho_ref * EOS%R_to_kg_m3
   I_Rho = 1.0 / rho_0
 
   do_massWeight = .false.
@@ -1748,9 +1762,9 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
 
   Isq = HIO%IscB ; Ieq = HIO%IecB ; Jsq = HIO%JscB ; Jeq = HIO%JecB
 
-  rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
-  GxRho = G_e * rho_0 ; if (present(US)) GxRho = US%RL2_T2_to_Pa * G_e * rho_0
-  rho_ref_mks = rho_ref ; if (present(US)) rho_ref_mks = rho_ref * US%R_to_kg_m3
+  rho_scale = 1.0 ; if (present(US)) rho_scale = EOS%kg_m3_to_R
+  GxRho = G_e * rho_0 ; if (present(US)) GxRho = EOS%RL2_T2_to_Pa * G_e * rho_0
+  rho_ref_mks = rho_ref ; if (present(US)) rho_ref_mks = rho_ref * EOS%R_to_kg_m3
   I_Rho = 1.0 / rho_0
   massWeightToggle = 0.
   if (present(useMassWghtInterp)) then
@@ -2020,7 +2034,7 @@ subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_t
   Pa_left = P_t - P_tgt ! Pa_left < 0
   F_r = 1.
   Pa_right = P_b - P_tgt ! Pa_right > 0
-  Pa_tol = GxRho * 1.0e-5*US%m_to_Z
+  Pa_tol = GxRho * 1.0e-5*EOS%m_to_Z
   if (present(z_tol)) Pa_tol = GxRho * z_tol
 
   F_guess = F_l - Pa_left / (Pa_right - Pa_left) * (F_r - F_l)
@@ -2197,9 +2211,9 @@ subroutine int_density_dz_generic_ppm(T, T_t, T_b, S, S_t, S_b, &
   is = HIO%isc + ioff ; ie = HIO%iec + ioff
   js = HIO%jsc + joff ; je = HIO%jec + joff
 
-  rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
-  GxRho = G_e * rho_0 ; if (present(US)) GxRho = US%RL2_T2_to_Pa * G_e * rho_0
-  rho_ref_mks = rho_ref ; if (present(US)) rho_ref_mks = rho_ref * US%R_to_kg_m3
+  rho_scale = 1.0 ; if (present(US)) rho_scale = EOS%kg_m3_to_R
+  GxRho = G_e * rho_0 ; if (present(US)) GxRho = EOS%RL2_T2_to_Pa * G_e * rho_0
+  rho_ref_mks = rho_ref ; if (present(US)) rho_ref_mks = rho_ref * EOS%R_to_kg_m3
   I_Rho = 1.0 / rho_0
 
   ! =============================
@@ -2639,9 +2653,9 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, dza, &
   if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh); endif
   if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh); endif
 
-  SV_scale = 1.0 ; if (present(US)) SV_scale = US%R_to_kg_m3
-  RL2_T2_to_Pa = 1.0 ; if (present(US)) RL2_T2_to_Pa = US%RL2_T2_to_Pa
-  alpha_ref_mks = alpha_ref ; if (present(US)) alpha_ref_mks = alpha_ref * US%kg_m3_to_R
+  SV_scale = 1.0 ; if (present(US)) SV_scale = EOS%R_to_kg_m3
+  RL2_T2_to_Pa = 1.0 ; if (present(US)) RL2_T2_to_Pa = EOS%RL2_T2_to_Pa
+  alpha_ref_mks = alpha_ref ; if (present(US)) alpha_ref_mks = alpha_ref * EOS%kg_m3_to_R
 
   do_massWeight = .false.
   if (present(useMassWghtInterp)) then ; if (useMassWghtInterp) then
@@ -2863,9 +2877,9 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
   do_massWeight = .false.
   if (present(useMassWghtInterp)) do_massWeight = useMassWghtInterp
 
-  SV_scale = 1.0 ; if (present(US)) SV_scale = US%R_to_kg_m3
-  RL2_T2_to_Pa = 1.0 ; if (present(US)) RL2_T2_to_Pa = US%RL2_T2_to_Pa
-  alpha_ref_mks = alpha_ref ; if (present(US)) alpha_ref_mks = alpha_ref * US%kg_m3_to_R
+  SV_scale = 1.0 ; if (present(US)) SV_scale = EOS%R_to_kg_m3
+  RL2_T2_to_Pa = 1.0 ; if (present(US)) RL2_T2_to_Pa = EOS%RL2_T2_to_Pa
+  alpha_ref_mks = alpha_ref ; if (present(US)) alpha_ref_mks = alpha_ref * EOS%kg_m3_to_R
 
   do n = 1, 5 ! Note that these are reversed from int_density_dz.
     wt_t(n) = 0.25 * real(n-1)
