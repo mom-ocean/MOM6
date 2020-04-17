@@ -607,7 +607,7 @@ end subroutine calculate_density_derivs_array
 
 
 !> Calls the appropriate subroutine to calculate density derivatives for 1-D array inputs.
-subroutine calculate_density_derivs_1d(T, S, pressure, drho_dT, drho_dS, EOS, US, dom, scale)
+subroutine calculate_density_derivs_1d(T, S, pressure, drho_dT, drho_dS, EOS, dom, scale)
   real, dimension(:),    intent(in)    :: T        !< Potential temperature referenced to the surface [degC]
   real, dimension(:),    intent(in)    :: S        !< Salinity [ppt]
   real, dimension(:),    intent(in)    :: pressure !< Pressure [R L2 T-2 ~> Pa]
@@ -616,7 +616,6 @@ subroutine calculate_density_derivs_1d(T, S, pressure, drho_dT, drho_dS, EOS, US
   real, dimension(:),    intent(inout) :: drho_dS  !< The partial derivative of density with salinity
                                                    !! [R degC-1 ~> kg m-3 ppt-1]
   type(EOS_type),        pointer       :: EOS      !< Equation of state structure
-  type(unit_scale_type), optional, intent(in) :: US    !< A dimensional unit scaling type
   integer, dimension(2), optional, intent(in) :: dom   !< The domain of indices to work on, taking
                                                        !! into account that arrays start at 1.
   real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale density
@@ -636,7 +635,7 @@ subroutine calculate_density_derivs_1d(T, S, pressure, drho_dT, drho_dS, EOS, US
     is = 1 ; ie = size(drho_dT) ; npts = 1 + ie - is
   endif
 
-  p_scale = 1.0 ; if (present(US)) p_scale = US%RL2_T2_to_Pa
+  p_scale = EOS%RL2_T2_to_Pa
 
   if (p_scale == 1.0) then
     call calculate_density_derivs_array(T, S, pressure, drho_dT, drho_dS, is, npts, EOS)
@@ -645,7 +644,7 @@ subroutine calculate_density_derivs_1d(T, S, pressure, drho_dT, drho_dS, EOS, US
     call calculate_density_derivs_array(T, S, pres, drho_dT, drho_dS, is, npts, EOS)
   endif
 
-  rho_scale = US%kg_m3_to_R
+  rho_scale = EOS%kg_m3_to_R
   if (present(scale)) rho_scale = rho_scale * scale
   if (rho_scale /= 1.0) then ; do i=is,ie
     drho_dT(i) = rho_scale * drho_dT(i)
@@ -897,7 +896,7 @@ end subroutine calculate_spec_vol_derivs_array
 
 !> Calls the appropriate subroutine to calculate specific volume derivatives for 1-d array inputs,
 !! potentially limiting the domain of indices that are worked on.
-subroutine calc_spec_vol_derivs_1d(T, S, pressure, dSV_dT, dSV_dS, EOS, US, dom, scale)
+subroutine calc_spec_vol_derivs_1d(T, S, pressure, dSV_dT, dSV_dS, EOS, dom, scale)
   real, dimension(:), intent(in)    :: T        !< Potential temperature referenced to the surface [degC]
   real, dimension(:), intent(in)    :: S        !< Salinity [ppt]
   real, dimension(:), intent(in)    :: pressure !< Pressure [R L2 T-2 ~> Pa]
@@ -906,7 +905,6 @@ subroutine calc_spec_vol_derivs_1d(T, S, pressure, dSV_dT, dSV_dS, EOS, US, dom,
   real, dimension(:), intent(inout) :: dSV_dS   !< The partial derivative of specific volume with salinity
                                                 !! [R-1 ppt-1 ~> m3 kg-1 ppt-1]
   type(EOS_type),     pointer       :: EOS      !< Equation of state structure
-  type(unit_scale_type), optional, intent(in) :: US    !< A dimensional unit scaling type
   integer, dimension(2), optional, intent(in) :: dom   !< The domain of indices to work on, taking
                                                        !! into account that arrays start at 1.
   real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale specific
@@ -926,7 +924,7 @@ subroutine calc_spec_vol_derivs_1d(T, S, pressure, dSV_dT, dSV_dS, EOS, US, dom,
   else
     is = 1 ; ie = size(dSV_dT) ; npts = 1 + ie - is
   endif
-  p_scale = 1.0 ; if (present(US)) p_scale = US%RL2_T2_to_Pa
+  p_scale = EOS%RL2_T2_to_Pa
 
   if (p_scale == 1.0) then
     call calculate_spec_vol_derivs_array(T, S, pressure, dSV_dT, dSV_dS, is, npts, EOS)
@@ -935,7 +933,7 @@ subroutine calc_spec_vol_derivs_1d(T, S, pressure, dSV_dT, dSV_dS, EOS, US, dom,
     call calculate_spec_vol_derivs_array(T, S, press, dSV_dT, dSV_dS, is, npts, EOS)
   endif
 
-  spv_scale = US%R_to_kg_m3
+  spv_scale = EOS%R_to_kg_m3
   if (present(scale)) spv_scale = spv_scale * scale
   if (spv_scale /= 1.0) then ; do i=is,ie
     dSV_dT(i) = spv_scale * dSV_dT(i)
@@ -2051,7 +2049,7 @@ end function frac_dp_at_pos
 !! are parabolic profiles
 subroutine int_density_dz_generic_ppm(T, T_t, T_b, S, S_t, S_b, &
                                       z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, &
-                                      EOS, dpa, intz_dpa, intx_dpa, inty_dpa, US)
+                                      EOS, dpa, intz_dpa, intx_dpa, inty_dpa)
 
   type(hor_index_type), intent(in)  :: HII !< Ocean horizontal index structures for the input arrays
   type(hor_index_type), intent(in)  :: HIO !< Ocean horizontal index structures for the output arrays
@@ -2091,7 +2089,6 @@ subroutine int_density_dz_generic_ppm(T, T_t, T_b, S, S_t, S_b, &
               optional, intent(inout) :: inty_dpa !< The integral in y of the difference between the
                                            !! pressure anomaly at the top and bottom of the layer
                                            !! divided by the y grid spacing [R L2 T-2 ~> Pa]
-  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 
 ! This subroutine calculates (by numerical quadrature) integrals of
 ! pressure anomalies across layers, which are required for calculating the
@@ -2144,9 +2141,9 @@ subroutine int_density_dz_generic_ppm(T, T_t, T_b, S, S_t, S_b, &
   is = HIO%isc + ioff ; ie = HIO%iec + ioff
   js = HIO%jsc + joff ; je = HIO%jec + joff
 
-  rho_scale = 1.0 ; if (present(US)) rho_scale = EOS%kg_m3_to_R
-  GxRho = G_e * rho_0 ; if (present(US)) GxRho = EOS%RL2_T2_to_Pa * G_e * rho_0
-  rho_ref_mks = rho_ref ; if (present(US)) rho_ref_mks = rho_ref * EOS%R_to_kg_m3
+  rho_scale = EOS%kg_m3_to_R
+  GxRho = EOS%RL2_T2_to_Pa * G_e * rho_0
+  rho_ref_mks = rho_ref * EOS%R_to_kg_m3
   I_Rho = 1.0 / rho_0
 
   ! =============================
@@ -2509,7 +2506,7 @@ end subroutine evaluate_shape_quadratic
 !! no free assumptions, apart from the use of Bode's rule quadrature to do the integrals.
 subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, dza, &
                                    intp_dza, intx_dza, inty_dza, halo_size, &
-                                   bathyP, dP_neglect, useMassWghtInterp, US)
+                                   bathyP, dP_neglect, useMassWghtInterp)
   type(hor_index_type), intent(in)  :: HI !< A horizontal index type structure.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T  !< Potential temperature of the layer [degC]
@@ -2547,7 +2544,6 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, dza, &
                                              !! the same units as p_t [R L2 T-2 ~> Pa] or [Pa]
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
                             !! to interpolate T/S for top and bottom integrals.
-  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 
 !   This subroutine calculates analytical and nearly-analytical integrals in
 ! pressure across layers of geopotential anomalies, which are required for
@@ -2586,9 +2582,9 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, dza, &
   if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh); endif
   if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh); endif
 
-  SV_scale = 1.0 ; if (present(US)) SV_scale = EOS%R_to_kg_m3
-  RL2_T2_to_Pa = 1.0 ; if (present(US)) RL2_T2_to_Pa = EOS%RL2_T2_to_Pa
-  alpha_ref_mks = alpha_ref ; if (present(US)) alpha_ref_mks = alpha_ref * EOS%kg_m3_to_R
+  SV_scale = EOS%R_to_kg_m3
+  RL2_T2_to_Pa = EOS%RL2_T2_to_Pa
+  alpha_ref_mks = alpha_ref * EOS%kg_m3_to_R
 
   do_massWeight = .false.
   if (present(useMassWghtInterp)) then ; if (useMassWghtInterp) then
@@ -2724,7 +2720,7 @@ end subroutine int_spec_vol_dp_generic
 !! no free assumptions, apart from the use of Bode's rule quadrature to do the integrals.
 subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, &
                              dP_neglect, bathyP, HI, EOS, dza, &
-                             intp_dza, intx_dza, inty_dza, useMassWghtInterp, US)
+                             intp_dza, intx_dza, inty_dza, useMassWghtInterp)
   type(hor_index_type), intent(in)  :: HI !< A horizontal index type structure.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T_t  !< Potential temperature at the top of the layer [degC]
@@ -2765,7 +2761,6 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
                             !! by the y grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2]
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
                             !! to interpolate T/S for top and bottom integrals.
-  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 
 !   This subroutine calculates analytical and nearly-analytical integrals in
 ! pressure across layers of geopotential anomalies, which are required for
@@ -2810,9 +2805,9 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
   do_massWeight = .false.
   if (present(useMassWghtInterp)) do_massWeight = useMassWghtInterp
 
-  SV_scale = 1.0 ; if (present(US)) SV_scale = EOS%R_to_kg_m3
-  RL2_T2_to_Pa = 1.0 ; if (present(US)) RL2_T2_to_Pa = EOS%RL2_T2_to_Pa
-  alpha_ref_mks = alpha_ref ; if (present(US)) alpha_ref_mks = alpha_ref * EOS%kg_m3_to_R
+  SV_scale = EOS%R_to_kg_m3
+  RL2_T2_to_Pa = EOS%RL2_T2_to_Pa
+  alpha_ref_mks = alpha_ref * EOS%kg_m3_to_R
 
   do n = 1, 5 ! Note that these are reversed from int_density_dz.
     wt_t(n) = 0.25 * real(n-1)
