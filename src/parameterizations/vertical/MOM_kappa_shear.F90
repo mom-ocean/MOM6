@@ -94,7 +94,7 @@ type, public :: Kappa_shear_CS ; private
                              !! regulate the timing of diagnostic output.
   !>@{ Diagnostic IDs
   integer :: id_Kd_shear = -1, id_TKE = -1, id_ILd2 = -1, id_dz_Int = -1
-  !!@}
+  !>@}
 end type Kappa_shear_CS
 
 ! integer :: id_clock_project, id_clock_KQ, id_clock_avg, id_clock_setup
@@ -2096,9 +2096,9 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
                  "be used in single-column mode!", &
                  default=.false., debuggingParam=.true.)
   call get_param(param_file, mdl, "KAPPA_SHEAR_ITER_BUG", CS%dKdQ_iteration_bug, &
-                 "If true. use an older, dimensionally inconsistent estimate of the "//&
+                 "If true, use an older, dimensionally inconsistent estimate of the "//&
                  "derivative of diffusivity with energy in the Newton's method iteration.  "//&
-                 "The bug causes undercorrections when dz > 1m.", default=.true.)
+                 "The bug causes undercorrections when dz > 1 m.", default=.true.)
   call get_param(param_file, mdl, "KAPPA_SHEAR_ALL_LAYER_TKE_BUG", CS%all_layer_TKE_bug, &
                  "If true, report back the latest estimate of TKE instead of the time average "//&
                  "TKE when there is mass in all layers.  Otherwise always report the time "//&

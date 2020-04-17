@@ -145,7 +145,8 @@ end type diag_grids_type
 !> Stores all the remapping grids and the model's native space thicknesses
 type, public :: diag_grid_storage
   integer                                          :: num_diag_coords !< Number of target coordinates
-  real, dimension(:,:,:), allocatable              :: h_state         !< Layer thicknesses in native space
+  real, dimension(:,:,:), allocatable              :: h_state         !< Layer thicknesses in native
+                                                                      !! space [H ~> m or kg m-2]
   type(diag_grids_type), dimension(:), allocatable :: diag_grids      !< Primarily empty, except h field
 end type diag_grid_storage
 
@@ -216,7 +217,7 @@ type diagcs_dsamp
   type(axes_grp)  :: axesB1, axesT1, axesCu1, axesCv1
   type(axes_grp), dimension(:), allocatable :: remap_axesTL, remap_axesBL, remap_axesCuL, remap_axesCvL
   type(axes_grp), dimension(:), allocatable :: remap_axesTi, remap_axesBi, remap_axesCui, remap_axesCvi
-  !!@}
+  !>@}
 
   real, dimension(:,:),   pointer :: mask2dT   => null() !< 2D mask array for cell-center points
   real, dimension(:,:),   pointer :: mask2dBu  => null() !< 2D mask array for cell-corner points
@@ -231,7 +232,7 @@ type diagcs_dsamp
   real, dimension(:,:,:), pointer :: mask3dBi  => null()
   real, dimension(:,:,:), pointer :: mask3dCui => null()
   real, dimension(:,:,:), pointer :: mask3dCvi => null()
-  !!@}
+  !>@}
 end type diagcs_dsamp
 
 !> The following data type a list of diagnostic fields an their variants,
@@ -264,7 +265,7 @@ type, public :: diag_ctrl
   type(axes_grp) :: axesBL, axesTL, axesCuL, axesCvL
   type(axes_grp) :: axesBi, axesTi, axesCui, axesCvi
   type(axes_grp) :: axesB1, axesT1, axesCu1, axesCv1
-  !!@}
+  !>@}
   type(axes_grp) :: axesZi !< A 1-D z-space axis at interfaces
   type(axes_grp) :: axesZL !< A 1-D z-space axis at layer centers
   type(axes_grp) :: axesNull !< An axis group for scalars
@@ -285,7 +286,7 @@ type, public :: diag_ctrl
 
   type(diagcs_dsamp), dimension(2:MAX_DSAMP_LEV) :: dsamp !< Downsample control container
 
-  !!@}
+  !>@}
 
 ! Space for diagnostics is dynamically allocated as it is needed.
 ! The chunk size is how much the array should grow on each new allocation.
@@ -306,15 +307,15 @@ type, public :: diag_ctrl
   type(axes_grp), dimension(:), allocatable :: &
     remap_axesZL, &  !< The 1-D z-space cell-centered axis for remapping
     remap_axesZi     !< The 1-D z-space interface axis for remapping
-  !!@{
+  !>@{ Axes used for remapping
   type(axes_grp), dimension(:), allocatable :: remap_axesTL, remap_axesBL, remap_axesCuL, remap_axesCvL
   type(axes_grp), dimension(:), allocatable :: remap_axesTi, remap_axesBi, remap_axesCui, remap_axesCvi
-  !!@}
+  !>@}
 
   ! Pointer to H, G and T&S needed for remapping
-  real, dimension(:,:,:), pointer :: h => null() !< The thicknesses needed for remapping
-  real, dimension(:,:,:), pointer :: T => null() !< The temperatures needed for remapping
-  real, dimension(:,:,:), pointer :: S => null() !< The salinities needed for remapping
+  real, dimension(:,:,:), pointer :: h => null() !< The thicknesses needed for remapping [H ~> m or kg m-2]
+  real, dimension(:,:,:), pointer :: T => null() !< The temperatures needed for remapping [degC]
+  real, dimension(:,:,:), pointer :: S => null() !< The salinities needed for remapping [ppt]
   type(EOS_type),  pointer :: eqn_of_state => null() !< The equation of state type
   type(ocean_grid_type), pointer :: G => null()  !< The ocean grid type
   type(verticalGrid_type), pointer :: GV => null()  !< The model's vertical ocean grid
@@ -324,7 +325,7 @@ type, public :: diag_ctrl
   integer :: volume_cell_measure_dm_id = -1
 
 #if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
-  ! Keep a copy of h so that we know whether it has changed. If it has then
+  ! Keep a copy of h so that we know whether it has changed [H ~> m or kg m-2]. If it has then
   ! need the target grid for vertical remapping needs to have been updated.
   real, dimension(:,:,:), allocatable :: h_old
 #endif
@@ -337,8 +338,9 @@ type, public :: diag_ctrl
 
 end type diag_ctrl
 
-! CPU clocks
+!>@{ CPU clocks
 integer :: id_clock_diag_mediator, id_clock_diag_remap, id_clock_diag_grid_updates
+!>@}
 
 contains
 
@@ -1535,8 +1537,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
 
       if (id_clock_diag_remap>0) call cpu_clock_begin(id_clock_diag_remap)
       allocate(remapped_field(size(field,1), size(field,2), diag%axes%nz))
-      call diag_remap_do_remap(diag_cs%diag_remap_cs( &
-              diag%axes%vertical_coordinate_number), &
+      call diag_remap_do_remap(diag_cs%diag_remap_cs(diag%axes%vertical_coordinate_number), &
               diag_cs%G, diag_cs%GV, h_diag, staggered_in_x, staggered_in_y, &
               diag%axes%mask3d, diag_cs%missing_value, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
@@ -3217,7 +3218,7 @@ subroutine diag_update_remap_grids(diag_cs, alt_h, alt_T, alt_S, update_intensiv
                                                             !! intensive diagnostics
   ! Local variables
   integer :: i
-  real, dimension(:,:,:), pointer :: h_diag => NULL()
+  real, dimension(:,:,:), pointer :: h_diag => NULL() ! The layer thickneses for diagnostics [H ~> m or kg m-2]
   real, dimension(:,:,:), pointer :: T_diag => NULL(), S_diag => NULL()
   logical :: update_intensive_local, update_extensive_local
 
@@ -3552,7 +3553,7 @@ end subroutine diag_grid_storage_init
 !> Copy from the main diagnostic arrays to the grid storage as well as the native thicknesses
 subroutine diag_copy_diag_to_storage(grid_storage, h_state, diag)
   type(diag_grid_storage), intent(inout) :: grid_storage !< Structure containing a snapshot of the target grids
-  real, dimension(:,:,:),  intent(in)    :: h_state     !< Current model thicknesses
+  real, dimension(:,:,:),  intent(in)    :: h_state     !< Current model thicknesses [H ~> m or kg m-2]
   type(diag_ctrl),         intent(in)    :: diag     !< Diagnostic control structure used as the contructor
 
   integer :: m

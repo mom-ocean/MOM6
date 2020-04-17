@@ -32,8 +32,6 @@ type, public :: PressureForce_Mont_CS ; private
   logical :: tides          !< If true, apply tidal momentum forcing.
   real    :: Rho0           !< The density used in the Boussinesq
                             !! approximation [kg m-3].
-  real    :: Rho_atm        !< The assumed atmospheric density [kg m-3].
-                            !! By default, Rho_atm is 0.
   real    :: GFS_scale      !< Ratio between gravity applied to top interface and the
                             !! gravitational acceleration of the planet [nondim].
                             !! Usually this ratio is 1.
@@ -46,7 +44,7 @@ type, public :: PressureForce_Mont_CS ; private
                             !! deriving from density gradients within layers [L T-2 ~> m s-2].
   !>@{ Diagnostic IDs
   integer :: id_PFu_bc = -1, id_PFv_bc = -1, id_e_tidal = -1
-  !!@}
+  !>@}
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL() !< The tidal forcing control structure
 end type PressureForce_Mont_CS
 

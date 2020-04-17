@@ -190,7 +190,7 @@ type, public :: energetic_PBL_CS ; private
   integer :: id_TKE_mech_decay = -1, id_TKE_conv_decay = -1
   integer :: id_Mixing_Length = -1, id_Velocity_Scale = -1
   integer :: id_MSTAR_mix = -1, id_LA_mod = -1, id_LA = -1, id_MSTAR_LT = -1
-  !!@}
+  !>@}
 end type energetic_PBL_CS
 
 !>@{ Enumeration values for mstar_Scheme
@@ -215,14 +215,14 @@ character*(20), parameter :: ROOT_TKE_STRING = "CUBE_ROOT_TKE"
 character*(20), parameter :: NONE_STRING = "NONE"
 character*(20), parameter :: RESCALED_STRING = "RESCALE"
 character*(20), parameter :: ADDITIVE_STRING = "ADDITIVE"
-!!@}
+!>@}
 
 !> A type for conveniently passing around ePBL diagnostics for a column.
 type, public :: ePBL_column_diags ; private
   !>@{ Local column copies of energy change diagnostics, all in [R Z3 T-3 ~> W m-2].
   real :: dTKE_conv, dTKE_forcing, dTKE_wind, dTKE_mixing
   real :: dTKE_MKE, dTKE_mech_decay, dTKE_conv_decay
-  !!@}
+  !>@}
   real :: LA        !< The value of the Langmuir number [nondim]
   real :: LAmod     !< The modified Langmuir number by convection [nondim]
   real :: mstar     !< The value of mstar used in ePBL [nondim]
@@ -1664,7 +1664,7 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
   real :: b1Kd          ! Temporary array [nondim]
   real :: ColHt_chg     ! The change in column thickness [Z ~> m].
   real :: dColHt_max    ! The change in column thickness for infinite diffusivity [Z ~> m].
-  real :: dColHt_dKd    ! The partial derivative of column thickness with diffusivity [s Z-1 ~> s m-1].
+  real :: dColHt_dKd    ! The partial derivative of column thickness with Kddt_h [Z H-1 ~> 1 or m3 kg-2].
   real :: dT_k, dT_km1  ! Temporary arrays [degC].
   real :: dS_k, dS_km1  ! Temporary arrays [ppt].
   real :: I_Kr_denom    ! Temporary array [H-2 ~> m-2 or m4 kg-2]
@@ -2303,25 +2303,24 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
 
 
 !/ Checking output flags
-  !### Most of these units are wrong and should be W m-2
   CS%id_ML_depth = register_diag_field('ocean_model', 'ePBL_h_ML', diag%axesT1, &
       Time, 'Surface boundary layer depth', 'm', conversion=US%Z_to_m, &
       cmor_long_name='Ocean Mixed Layer Thickness Defined by Mixing Scheme')
   CS%id_TKE_wind = register_diag_field('ocean_model', 'ePBL_TKE_wind', diag%axesT1, &
-      Time, 'Wind-stirring source of mixed layer TKE', 'm3 s-3', conversion=US%RZ3_T3_to_W_m2)
+      Time, 'Wind-stirring source of mixed layer TKE', 'W m-2', conversion=US%RZ3_T3_to_W_m2)
   CS%id_TKE_MKE = register_diag_field('ocean_model', 'ePBL_TKE_MKE', diag%axesT1, &
-      Time, 'Mean kinetic energy source of mixed layer TKE', 'm3 s-3', conversion=US%RZ3_T3_to_W_m2)
+      Time, 'Mean kinetic energy source of mixed layer TKE', 'W m-2', conversion=US%RZ3_T3_to_W_m2)
   CS%id_TKE_conv = register_diag_field('ocean_model', 'ePBL_TKE_conv', diag%axesT1, &
-      Time, 'Convective source of mixed layer TKE', 'm3 s-3', conversion=US%RZ3_T3_to_W_m2)
+      Time, 'Convective source of mixed layer TKE', 'W m-2', conversion=US%RZ3_T3_to_W_m2)
   CS%id_TKE_forcing = register_diag_field('ocean_model', 'ePBL_TKE_forcing', diag%axesT1, &
       Time, 'TKE consumed by mixing surface forcing or penetrative shortwave radation '//&
-            'through model layers', 'm3 s-3', conversion=US%RZ3_T3_to_W_m2)
+            'through model layers', 'W m-2', conversion=US%RZ3_T3_to_W_m2)
   CS%id_TKE_mixing = register_diag_field('ocean_model', 'ePBL_TKE_mixing', diag%axesT1, &
-      Time, 'TKE consumed by mixing that deepens the mixed layer', 'm3 s-3', conversion=US%RZ3_T3_to_W_m2)
+      Time, 'TKE consumed by mixing that deepens the mixed layer', 'W m-2', conversion=US%RZ3_T3_to_W_m2)
   CS%id_TKE_mech_decay = register_diag_field('ocean_model', 'ePBL_TKE_mech_decay', diag%axesT1, &
-      Time, 'Mechanical energy decay sink of mixed layer TKE', 'm3 s-3', conversion=US%RZ3_T3_to_W_m2)
+      Time, 'Mechanical energy decay sink of mixed layer TKE', 'W m-2', conversion=US%RZ3_T3_to_W_m2)
   CS%id_TKE_conv_decay = register_diag_field('ocean_model', 'ePBL_TKE_conv_decay', diag%axesT1, &
-      Time, 'Convective energy decay sink of mixed layer TKE', 'm3 s-3', conversion=US%RZ3_T3_to_W_m2)
+      Time, 'Convective energy decay sink of mixed layer TKE', 'W m-2', conversion=US%RZ3_T3_to_W_m2)
   CS%id_Mixing_Length = register_diag_field('ocean_model', 'Mixing_Length', diag%axesTi, &
       Time, 'Mixing Length that is used', 'm', conversion=US%Z_to_m)
   CS%id_Velocity_Scale = register_diag_field('ocean_model', 'Velocity_Scale', diag%axesTi, &

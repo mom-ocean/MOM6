@@ -122,7 +122,7 @@ type, public :: wave_parameters_CS ; private
   integer, public :: id_surfacestokes_x = -1 , id_surfacestokes_y = -1
   integer, public :: id_3dstokes_x = -1 , id_3dstokes_y = -1
   integer, public :: id_La_turb = -1
-  !!@}
+  !>@}
 
 end type wave_parameters_CS
 
@@ -184,7 +184,7 @@ logical :: WaveAgePeakFreq ! Flag to use W
 logical :: StaticWaves, DHH85_Is_Set
 real    :: WaveAge, WaveWind
 real    :: PI
-!!@}
+!>@}
 
 contains
 

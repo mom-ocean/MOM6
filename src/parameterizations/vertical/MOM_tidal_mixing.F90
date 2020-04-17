@@ -48,7 +48,7 @@ type, public :: tidal_mixing_diags ; private
     Kd_Niku_work          => NULL(),& !< layer integrated work by lee-wave driven mixing [R Z3 T-3 ~> W m-2]
     Kd_Itidal_Work        => NULL(),& !< layer integrated work by int tide driven mixing [R Z3 T-3 ~> W m-2]
     Kd_Lowmode_Work       => NULL(),& !< layer integrated work by low mode driven mixing [R Z3 T-3 ~> W m-2]
-    N2_int                => NULL(),& !< Bouyancy frequency squared at interfaces [s-2]
+    N2_int                => NULL(),& !< Bouyancy frequency squared at interfaces [T-2 ~> s-2]
     vert_dep_3d           => NULL(),& !< The 3-d mixing energy deposition [W m-3]
     Schmittner_coeff_3d   => NULL()   !< The coefficient in the Schmittner et al mixing scheme, in UNITS?
   real, pointer, dimension(:,:,:) :: tidal_qe_md => NULL() !< Input tidal energy dissipated locally,
@@ -61,8 +61,8 @@ type, public :: tidal_mixing_diags ; private
     TKE_itidal_used           => NULL(),& !< internal tide TKE input at ocean bottom [R Z3 T-3 ~> W m-2]
     N2_bot                    => NULL(),& !< bottom squared buoyancy frequency [T-2 ~> s-2]
     N2_meanz                  => NULL(),& !< vertically averaged buoyancy frequency [T-2 ~> s-2]
-    Polzin_decay_scale_scaled => NULL(),& !< vertical scale of decay for tidal dissipation
-    Polzin_decay_scale        => NULL(),& !< vertical decay scale for tidal diss with Polzin [m]
+    Polzin_decay_scale_scaled => NULL(),& !< vertical scale of decay for tidal dissipation [Z ~> m]
+    Polzin_decay_scale        => NULL(),& !< vertical decay scale for tidal diss with Polzin [Z ~> m]
     Simmons_coeff_2d          => NULL()   !< The Simmons et al mixing coefficient
 
 end type
@@ -153,8 +153,8 @@ type, public :: tidal_mixing_cs
                                                          !! by the bottom stratfication [R Z3 T-2 ~> J m-2].
   real, pointer, dimension(:,:) :: Nb          => NULL() !< The near bottom buoyancy frequency [T-1 ~> s-1].
   real, pointer, dimension(:,:) :: mask_itidal => NULL() !< A mask of where internal tide energy is input
-  real, pointer, dimension(:,:) :: h2          => NULL() !< Squared bottom depth variance [m2].
-  real, pointer, dimension(:,:) :: tideamp     => NULL() !< RMS tidal amplitude [m s-1]
+  real, pointer, dimension(:,:) :: h2          => NULL() !< Squared bottom depth variance [Z2 ~> m2].
+  real, pointer, dimension(:,:) :: tideamp     => NULL() !< RMS tidal amplitude [Z T-1 ~> m s-1]
   real, allocatable, dimension(:)     :: h_src           !< tidal constituent input layer thickness [m]
   real, allocatable, dimension(:,:)   :: tidal_qe_2d     !< Tidal energy input times the local dissipation
                                                          !! fraction, q*E(x,y), with the CVMix implementation
@@ -191,11 +191,11 @@ type, public :: tidal_mixing_cs
   integer :: id_Schmittner_coeff          = -1
   integer :: id_tidal_qe_md               = -1
   integer :: id_vert_dep                  = -1
-  !!@}
+  !>@}
 
 end type tidal_mixing_cs
 
-!!@{ Coded parmameters for specifying mixing schemes
+!>@{ Coded parmameters for specifying mixing schemes
 character*(20), parameter :: STLAURENT_PROFILE_STRING   = "STLAURENT_02"
 character*(20), parameter :: POLZIN_PROFILE_STRING      = "POLZIN_09"
 integer,        parameter :: STLAURENT_02 = 1
@@ -204,7 +204,7 @@ character*(20), parameter :: SIMMONS_SCHEME_STRING      = "SIMMONS"
 character*(20), parameter :: SCHMITTNER_SCHEME_STRING   = "SCHMITTNER"
 integer,        parameter :: SIMMONS   = 1
 integer,        parameter :: SCHMITTNER   = 2
-!!@}
+!>@}
 
 contains
 
@@ -590,7 +590,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
 
     if (CS%use_CVMix_tidal) then
       CS%id_N2_int = register_diag_field('ocean_model','N2_int',diag%axesTi,Time, &
-          'Bouyancy frequency squared, at interfaces', 's-2')
+          'Bouyancy frequency squared, at interfaces', 's-2') !###, conversion=US%s_to_T**2)
       !> TODO: add units
       CS%id_Simmons_coeff = register_diag_field('ocean_model','Simmons_coeff',diag%axesT1,Time, &
            'time-invariant portion of the tidal mixing coefficient using the Simmons', '')

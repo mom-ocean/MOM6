@@ -134,7 +134,7 @@ type, public :: int_tide_CS ; private
   integer, allocatable, dimension(:,:) :: &
              id_En_ang_mode, &
              id_itidal_loss_ang_mode
-  !!@}
+  !>@}
 
 end type int_tide_CS
 
@@ -142,7 +142,7 @@ end type int_tide_CS
 type :: loop_bounds_type ; private
   !>@{ The active loop bounds
   integer :: ish, ieh, jsh, jeh
-  !!@}
+  !>@}
 end type loop_bounds_type
 
 contains
@@ -441,7 +441,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
           ! Dissipate energy if Fr>1; done here with an arbitrary time scale
           if (Fr2_max > 1.0) then
             En_initial = sum(CS%En(i,j,:,fr,m)) ! for debugging
-            ! Calculate effective decay rate [s-1] if breaking occurs over a time step
+            ! Calculate effective decay rate [T-1 ~> s-1] if breaking occurs over a time step
             loss_rate = (1.0 - Fr2_max) / (Fr2_max * dt)
             do a=1,CS%nAngle
               ! Determine effective dissipation rate (Wm-2)

@@ -28,7 +28,8 @@ use MOM_error_handler,     only : callTree_enter, callTree_leave, callTree_waypo
 use MOM_file_parser,       only : get_param, log_version, param_file_type
 use MOM_get_input,         only : directories
 use MOM_io,                only : MOM_io_init, vardesc, var_desc
-use MOM_restart,           only : register_restart_field, query_initialized, save_restart
+use MOM_restart,           only : register_restart_field, register_restart_pair
+use MOM_restart,           only : query_initialized, save_restart
 use MOM_restart,           only : restart_init, is_new_run, MOM_restart_CS
 use MOM_time_manager,      only : time_type, time_type_to_real, operator(+)
 use MOM_time_manager,      only : operator(-), operator(>), operator(*), operator(/)
@@ -49,7 +50,7 @@ use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_open_boundary,         only : ocean_OBC_type, radiation_open_bdry_conds
 use MOM_open_boundary,         only : open_boundary_zero_normal_flow
-use MOM_open_boundary,         only : open_boundary_test_extern_h
+use MOM_open_boundary,         only : open_boundary_test_extern_h, update_OBC_ramp
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_ML, set_visc_CS
 use MOM_thickness_diffuse,     only : thickness_diffuse_CS
@@ -163,7 +164,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   ! Split scheme only.
   integer :: id_uav        = -1, id_vav        = -1
   integer :: id_u_BT_accel = -1, id_v_BT_accel = -1
-  !!@}
+  !>@}
 
   type(diag_ctrl), pointer       :: diag !< A structure that is used to regulate the
                                          !! timing of diagnostic output.
@@ -227,7 +228,7 @@ integer :: id_clock_horvisc, id_clock_mom_update
 integer :: id_clock_continuity, id_clock_thick_diff
 integer :: id_clock_btstep, id_clock_btcalc, id_clock_btforce
 integer :: id_clock_pass, id_clock_pass_init
-!!@}
+!>@}
 
 contains
 
@@ -363,6 +364,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
 
   if (associated(CS%OBC)) then
     if (CS%debug_OBC) call open_boundary_test_extern_h(G, GV, CS%OBC, h)
+
+    ! Update OBC ramp value as function of time
+    call update_OBC_ramp(Time_local, CS%OBC)
 
     do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
       u_old_rad_OBC(I,j,k) = u_av(I,j,k)
@@ -680,7 +684,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   call cpu_clock_begin(id_clock_horvisc)
   call horizontal_viscosity(u_av, v_av, h_av, CS%diffu, CS%diffv, &
                             MEKE, Varmix, G, GV, US, CS%hor_visc_CSp, &
-                            OBC=CS%OBC, BT=CS%barotropic_CSp)
+                            OBC=CS%OBC, BT=CS%barotropic_CSp, TD=thickness_diffuse_CSp)
   call cpu_clock_end(id_clock_horvisc)
   if (showCallTree) call callTree_wayPoint("done with horizontal_viscosity (step_MOM_dyn_split_RK2)")
 
@@ -883,11 +887,12 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, param_file, CS, restart_CS, u
   real, dimension(SZI_(HI),SZJB_(HI),SZK_(GV)), &
                          target, intent(inout) :: vh !< merid volume/mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]
 
-  type(vardesc)      :: vd
+  type(vardesc)      :: vd(2)
   character(len=40)  :: mdl = "MOM_dynamics_split_RK2" ! This module's name.
   character(len=48)  :: thickness_units, flux_units
 
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
+
   isd  = HI%isd  ; ied  = HI%ied  ; jsd  = HI%jsd  ; jed  = HI%jed ; nz = GV%ke
   IsdB = HI%IsdB ; IedB = HI%IedB ; JsdB = HI%JsdB ; JedB = HI%JedB
 
@@ -915,32 +920,26 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, param_file, CS, restart_CS, u
   flux_units = get_flux_units(GV)
 
   if (GV%Boussinesq) then
-    vd = var_desc("sfc",thickness_units,"Free surface Height",'h','1')
+    vd(1) = var_desc("sfc",thickness_units,"Free surface Height",'h','1')
   else
-    vd = var_desc("p_bot",thickness_units,"Bottom Pressure",'h','1')
+    vd(1) = var_desc("p_bot",thickness_units,"Bottom Pressure",'h','1')
   endif
-  call register_restart_field(CS%eta, vd, .false., restart_CS)
+  call register_restart_field(CS%eta, vd(1), .false., restart_CS)
 
-  vd = var_desc("u2","m s-1","Auxiliary Zonal velocity",'u','L')
-  call register_restart_field(CS%u_av, vd, .false., restart_CS)
+  vd(1) = var_desc("u2","m s-1","Auxiliary Zonal velocity",'u','L')
+  vd(2) = var_desc("v2","m s-1","Auxiliary Meridional velocity",'v','L')
+  call register_restart_pair(CS%u_av, CS%v_av, vd(1), vd(2), .false., restart_CS)
 
-  vd = var_desc("v2","m s-1","Auxiliary Meridional velocity",'v','L')
-  call register_restart_field(CS%v_av, vd, .false., restart_CS)
+  vd(1) = var_desc("h2",thickness_units,"Auxiliary Layer Thickness",'h','L')
+  call register_restart_field(CS%h_av, vd(1), .false., restart_CS)
 
-  vd = var_desc("h2",thickness_units,"Auxiliary Layer Thickness",'h','L')
-  call register_restart_field(CS%h_av, vd, .false., restart_CS)
+  vd(1) = var_desc("uh",flux_units,"Zonal thickness flux",'u','L')
+  vd(2) = var_desc("vh",flux_units,"Meridional thickness flux",'v','L')
+  call register_restart_pair(uh, vh, vd(1), vd(2), .false., restart_CS)
 
-  vd = var_desc("uh",flux_units,"Zonal thickness flux",'u','L')
-  call register_restart_field(uh, vd, .false., restart_CS)
-
-  vd = var_desc("vh",flux_units,"Meridional thickness flux",'v','L')
-  call register_restart_field(vh, vd, .false., restart_CS)
-
-  vd = var_desc("diffu","m s-2","Zonal horizontal viscous acceleration",'u','L')
-  call register_restart_field(CS%diffu, vd, .false., restart_CS)
-
-  vd = var_desc("diffv","m s-2","Meridional horizontal viscous acceleration",'v','L')
-  call register_restart_field(CS%diffv, vd, .false., restart_CS)
+  vd(1) = var_desc("diffu","m s-2","Zonal horizontal viscous acceleration",'u','L')
+  vd(2) = var_desc("diffv","m s-2","Meridional horizontal viscous acceleration",'v','L')
+  call register_restart_pair(CS%diffu, CS%diffv, vd(1), vd(2), .false., restart_CS)
 
   call register_barotropic_restarts(HI, GV, param_file, CS%barotropic_CSp, &
                                     restart_CS)
@@ -1120,7 +1119,11 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                                 activate=is_new_run(restart_CS) )
 
   if (associated(ALE_CSp)) CS%ALE_CSp => ALE_CSp
-  if (associated(OBC)) CS%OBC => OBC
+  if (associated(OBC)) then
+    CS%OBC => OBC
+    if (OBC%ramp) call update_OBC_ramp(Time, CS%OBC, &
+                                activate=is_new_run(restart_CS) )
+  endif
   if (associated(update_OBC_CSp)) CS%update_OBC_CSp => update_OBC_CSp
 
   eta_rest_name = "sfc" ; if (.not.GV%Boussinesq) eta_rest_name = "p_bot"
@@ -1151,7 +1154,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
       .not. query_initialized(CS%diffv,"diffv",restart_CS)) then
     call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, MEKE, VarMix, &
                               G, GV, US, CS%hor_visc_CSp, &
-                              OBC=CS%OBC, BT=CS%barotropic_CSp)
+                              OBC=CS%OBC, BT=CS%barotropic_CSp, &
+                              TD=thickness_diffuse_CSp)
   else
     if ( (US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
          (US%m_to_L * US%s_to_T_restart**2 /= US%m_to_L_restart * US%s_to_T**2) ) then

@@ -1009,9 +1009,9 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
                                                       !! only read parameters without changing h.
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    eta_sfc  ! The free surface height that the model should use [m].
+    eta_sfc  ! The free surface height that the model should use [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
-    eta  ! The free surface height that the model should use [m].
+    eta  ! The free surface height that the model should use [Z ~> m].
   real :: dilate  ! A ratio by which layers are dilated [nondim].
   real :: scale_factor ! A scaling factor for the eta_sfc values that are read
                        ! in, which can be used to change units, for example.
@@ -1039,15 +1039,15 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
     call log_param(param_file,  mdl, "INPUTDIR/SURFACE_HEIGHT_IC_FILE", filename)
 
   call get_param(param_file, mdl, "SURFACE_HEIGHT_IC_SCALE", scale_factor, &
-                 "A scaling factor to convert SURFACE_HEIGHT_IC_VAR into "//&
-                 "units of m", units="variable", default=1.0, do_not_log=just_read)
+                 "A scaling factor to convert SURFACE_HEIGHT_IC_VAR into units of m", &
+                 units="variable", default=1.0, scale=US%m_to_Z, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
   call MOM_read_data(filename, eta_srf_var, eta_sfc, G%Domain, scale=scale_factor)
 
   ! Convert thicknesses to interface heights.
-  call find_eta(h, tv, G, GV, US, eta, eta_to_m=1.0)
+  call find_eta(h, tv, G, GV, US, eta)
 
   do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
 !    if (eta_sfc(i,j) < eta(i,j,nz+1)) then
@@ -1398,8 +1398,9 @@ subroutine initialize_velocity_circular(u, v, G, US, param_file, just_read_param
                                                       !! only read parameters without changing h.
   ! Local variables
   character(len=200) :: mdl = "initialize_velocity_circular"
-  real :: circular_max_u
-  real :: dpi, psi1, psi2
+  real :: circular_max_u ! The amplitude of the zonal flow [L T-1 ~> m s-1]
+  real :: dpi        ! A local variable storing pi = 3.14159265358979...
+  real :: psi1, psi2 ! Values of the streamfunction at two points [L2 T-1 ~> m2 s-1]
   logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -1410,7 +1411,7 @@ subroutine initialize_velocity_circular(u, v, G, US, param_file, just_read_param
   call get_param(param_file, mdl, "CIRCULAR_MAX_U", circular_max_u, &
                  "The amplitude of zonal flow from which to scale the "// &
                  "circular stream function [m s-1].", &
-                 units="m s-1", default=0., scale=US%L_T_to_m_s, do_not_log=just_read)
+                 units="m s-1", default=0., scale=US%m_s_to_L_T, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -1419,29 +1420,29 @@ subroutine initialize_velocity_circular(u, v, G, US, param_file, just_read_param
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     psi1 = my_psi(I,j)
     psi2 = my_psi(I,j-1)
-    u(I,j,k) = (psi1-psi2) / (G%US%L_to_m*G%dy_Cu(I,j)) ! *(circular_max_u*G%len_lon/(2.0*dpi))
+    u(I,j,k) = (psi1 - psi2) / G%dy_Cu(I,j) ! *(circular_max_u*G%len_lon/(2.0*dpi))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     psi1 = my_psi(i,J)
     psi2 = my_psi(i-1,J)
-    v(i,J,k) = (psi2-psi1) / (G%US%L_to_m*G%dx_Cv(i,J)) ! *(circular_max_u*G%len_lon/(2.0*dpi))
+    v(i,J,k) = (psi2 - psi1) / G%dx_Cv(i,J) ! *(circular_max_u*G%len_lon/(2.0*dpi))
   enddo ; enddo ; enddo
 
   contains
 
-  !> Returns the value of a circular stream function at (ig,jg)
+  !> Returns the value of a circular stream function at (ig,jg) in [L2 T-1 ~> m2 s-1]
   real function my_psi(ig,jg)
     integer :: ig !< Global i-index
     integer :: jg !< Global j-index
     ! Local variables
-    real :: x, y, r
+    real :: x, y, r ! [nondim]
 
     x = 2.0*(G%geoLonBu(ig,jg)-G%west_lon) / G%len_lon - 1.0  ! -1<x<1
     y = 2.0*(G%geoLatBu(ig,jg)-G%south_lat) / G%len_lat - 1.0 ! -1<y<1
     r = sqrt( x**2 + y**2 ) ! Circular stream function is a function of radius only
     r = min(1.0, r) ! Flatten stream function in corners of box
     my_psi = 0.5*(1.0 - cos(dpi*r))
-    my_psi = my_psi * (circular_max_u*G%len_lon*1e3 / dpi) ! len_lon is in km
+    my_psi = my_psi * (circular_max_u * G%US%m_to_L*G%len_lon*1e3 / dpi) ! len_lon is in km
   end function my_psi
 
 end subroutine initialize_velocity_circular
@@ -2009,7 +2010,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   logical :: debug = .false.  ! manually set this to true for verbose output
 
   ! data arrays
-  real, dimension(:), allocatable :: z_edges_in, z_in
+  real, dimension(:), allocatable :: z_edges_in, z_in ! Interface heights [Z ~> m]
   real, dimension(:), allocatable :: Rb  ! Interface densities [R ~> kg m-3]
   real, dimension(:,:,:), allocatable, target :: temp_z, salt_z, mask_z
   real, dimension(:,:,:), allocatable :: rho_z ! Densities in Z-space [R ~> kg m-3]
@@ -2019,8 +2020,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
   ! Local variables for ALE remapping
   real, dimension(:), allocatable :: hTarget ! Target thicknesses [Z ~> m].
-  real, dimension(:,:), allocatable :: area_shelf_h
-  real, dimension(:,:), allocatable, target :: frac_shelf_h
+  real, dimension(:,:), allocatable :: area_shelf_h ! Shelf-covered area per grid cell [L2 ~> m2]
+  real, dimension(:,:), allocatable, target :: frac_shelf_h ! Fractional shelf area per grid cell [nondim]
   real, dimension(:,:,:), allocatable, target :: tmpT1dIn, tmpS1dIn
   real, dimension(:,:,:), allocatable :: tmp_mask_in
   real, dimension(:,:,:), allocatable :: h1 ! Thicknesses [H ~> m or kg m-2].
@@ -2060,7 +2061,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
 ! call mpp_get_compute_domain(G%domain%mpp_domain,isc,iec,jsc,jec)
 
-  reentrant_x = .false. ; call get_param(PF, mdl, "REENTRANT_X", reentrant_x,default=.true.)
+  reentrant_x = .false. ; call get_param(PF, mdl, "REENTRANT_X", reentrant_x, default=.true.)
   tripolar_n = .false. ;  call get_param(PF, mdl, "TRIPOLAR_N", tripolar_n, default=.false.)
   call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, default=0.0, scale=US%m_to_Z)
 
@@ -2204,14 +2205,14 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
     if (.not.file_exists(shelf_file, G%Domain)) call MOM_error(FATAL, &
       "MOM_temp_salt_initialize_from_Z: Unable to open shelf file "//trim(shelf_file))
 
-    call MOM_read_data(shelf_file, trim(area_varname), area_shelf_h, G%Domain)
+    call MOM_read_data(shelf_file, trim(area_varname), area_shelf_h, G%Domain, scale=US%m_to_L**2)
 
     ! Initialize frac_shelf_h with zeros (open water everywhere)
     frac_shelf_h(:,:) = 0.0
     ! Compute fractional ice shelf coverage of h
     do j=jsd,jed ; do i=isd,ied
       if (G%areaT(i,j) > 0.0) &
-        frac_shelf_h(i,j) = area_shelf_h(i,j) / (US%L_to_m**2*G%areaT(i,j))
+        frac_shelf_h(i,j) = area_shelf_h(i,j) / G%areaT(i,j)
     enddo ; enddo
     ! Pass to the pointer for use as an argument to regridding_main
     shelf_area => frac_shelf_h
@@ -2326,9 +2327,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
     do k=2,nz ; Rb(k) = 0.5*(GV%Rlay(k-1)+GV%Rlay(k)) ; enddo
     Rb(1) = 0.0 ;  Rb(nz+1) = 2.0*GV%Rlay(nz) - GV%Rlay(nz-1)
 
-    zi(is:ie,js:je,:) = find_interfaces(rho_z(is:ie,js:je,:), z_in, Rb, G%bathyT(is:ie,js:je), &
-                                        nlevs(is:ie,js:je), nkml, nkbl, min_depth, eps_z=eps_z, &
-                                        eps_rho=eps_rho)
+    call find_interfaces(rho_z, z_in, kd, Rb, G%bathyT, zi, G, US, &
+                         nlevs, nkml, nkbl, min_depth, eps_z=eps_z, eps_rho=eps_rho)
 
     if (correct_thickness) then
       call adjustEtaToFitBathymetry(G, GV, US, zi, h)
@@ -2399,7 +2399,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
   if (adjust_temperature .and. .not. useALEremapping) then
     call determine_temperature(tv%T(is:ie,js:je,:), tv%S(is:ie,js:je,:), &
-            US%R_to_kg_m3*GV%Rlay(1:nz), tv%p_ref, niter, missing_value, h(is:ie,js:je,:), ks, eos)
+            GV%Rlay(1:nz), tv%p_ref, niter, missing_value, h(is:ie,js:je,:), ks, US, eos)
 
   endif
 

@@ -4,10 +4,12 @@ module MOM
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 ! Infrastructure modules
+use MOM_array_transform,      only : rotate_array, rotate_vector
 use MOM_debugging,            only : MOM_debugging_init, hchksum, uvchksum
 use MOM_debugging,            only : check_redundant
 use MOM_checksum_packages,    only : MOM_thermo_chksum, MOM_state_chksum
 use MOM_checksum_packages,    only : MOM_accel_chksum, MOM_surface_chksum
+use MOM_coms,                 only : num_PEs
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,            only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
 use MOM_cpu_clock,            only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
@@ -37,7 +39,8 @@ use MOM_get_input,            only : Get_MOM_Input, directories
 use MOM_io,                   only : MOM_io_init, vardesc, var_desc
 use MOM_io,                   only : slasher, file_exists, MOM_read_data
 use MOM_obsolete_params,      only : find_obsolete_params
-use MOM_restart,              only : register_restart_field, query_initialized, save_restart
+use MOM_restart,              only : register_restart_field, register_restart_pair
+use MOM_restart,              only : query_initialized, save_restart
 use MOM_restart,              only : restart_init, is_new_run, MOM_restart_CS
 use MOM_spatial_means,        only : global_mass_integral
 use MOM_time_manager,         only : time_type, real_to_time, time_type_to_real, operator(+)
@@ -50,6 +53,7 @@ use coupler_types_mod,        only : coupler_type_send_data, coupler_1d_bc_type,
 use MOM_ALE,                   only : ALE_init, ALE_end, ALE_main, ALE_CS, adjustGridForIntegrity
 use MOM_ALE,                   only : ALE_getCoordinate, ALE_getCoordinateUnits, ALE_writeCoordinateFile
 use MOM_ALE,                   only : ALE_updateVerticalGridType, ALE_remap_init_conds, ALE_register_diags
+use MOM_ALE_sponge,            only : rotate_ALE_sponge, update_ALE_sponge_field
 use MOM_barotropic,            only : Barotropic_CS
 use MOM_boundary_update,       only : call_OBC_register, OBC_register_end, update_OBC_CS
 use MOM_coord_initialization,  only : MOM_initialize_coord
@@ -72,12 +76,16 @@ use MOM_dynamics_unsplit_RK2,  only : MOM_dyn_unsplit_RK2_CS
 use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
 use MOM_EOS,                   only : EOS_init, calculate_density, calculate_TFreeze
 use MOM_fixed_initialization,  only : MOM_initialize_fixed
+use MOM_forcing_type,          only : allocate_forcing_type, allocate_mech_forcing
+use MOM_forcing_type,          only : deallocate_mech_forcing, deallocate_forcing_type
+use MOM_forcing_type,          only : rotate_forcing, rotate_mech_forcing
 use MOM_grid,                  only : ocean_grid_type, MOM_grid_init, MOM_grid_end
 use MOM_grid,                  only : set_first_direction, rescale_grid_bathymetry
 use MOM_hor_index,             only : hor_index_type, hor_index_init
+use MOM_hor_index,             only : rotate_hor_index
 use MOM_interface_heights,     only : find_eta
 use MOM_lateral_mixing_coeffs, only : calc_slope_functions, VarMix_init
-use MOM_lateral_mixing_coeffs, only : calc_resoln_function, VarMix_CS
+use MOM_lateral_mixing_coeffs, only : calc_resoln_function, calc_depth_function, VarMix_CS
 use MOM_MEKE,                  only : MEKE_init, MEKE_alloc_register_restart, step_forward_MEKE, MEKE_CS
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_mixed_layer_restrat,   only : mixedlayer_restrat, mixedlayer_restrat_init, mixedlayer_restrat_CS
@@ -87,6 +95,7 @@ use MOM_open_boundary,         only : ocean_OBC_type, OBC_registry_type
 use MOM_open_boundary,         only : register_temp_salt_segments
 use MOM_open_boundary,         only : open_boundary_register_restarts
 use MOM_open_boundary,         only : update_segment_tracer_reservoirs
+use MOM_open_boundary,         only : rotate_OBC_config, rotate_OBC_init
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_init
 use MOM_set_visc,              only : set_visc_register_restarts, set_visc_CS
 use MOM_sponge,                only : init_sponge_diags, sponge_CS
@@ -108,11 +117,13 @@ use MOM_tracer_flow_control,   only : call_tracer_register, tracer_flow_control_
 use MOM_tracer_flow_control,   only : tracer_flow_control_init, call_tracer_surface_state
 use MOM_tracer_flow_control,   only : tracer_flow_control_end
 use MOM_transcribe_grid,       only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid
+use MOM_transcribe_grid,       only : rotate_dyngrid
 use MOM_unit_scaling,          only : unit_scale_type, unit_scaling_init
 use MOM_unit_scaling,          only : unit_scaling_end, fix_restart_unit_scaling
 use MOM_variables,             only : surface, allocate_surface_state, deallocate_surface_state
 use MOM_variables,             only : thermo_var_ptrs, vertvisc_type
 use MOM_variables,             only : accel_diag_ptrs, cont_diag_ptrs, ocean_internal_state
+use MOM_variables,             only : rotate_surface_state
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
 use MOM_verticalGrid,          only : fix_restart_scaling
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
@@ -143,7 +154,8 @@ implicit none ; private
 !> A structure with diagnostic IDs of the state variables
 type MOM_diag_IDs
   !>@{ 3-d state field diagnostic IDs
-  integer :: id_u  = -1, id_v  = -1, id_h  = -1  !!@}
+  integer :: id_u  = -1, id_v  = -1, id_h  = -1
+  !>@}
   !> 2-d state field diagnotic ID
   integer :: id_ssh_inst = -1
 end type MOM_diag_IDs
@@ -179,7 +191,10 @@ type, public :: MOM_control_struct ; private
   real :: time_in_thermo_cycle !< The running time of the current time-stepping
                     !! cycle in calls that step the thermodynamics [T ~> s].
 
-  type(ocean_grid_type) :: G  !< structure containing metrics and grid info
+  type(ocean_grid_type) :: G_in                   !< Input grid metric
+  type(ocean_grid_type), pointer :: G => NULL()   !< Model grid metric
+  logical :: rotate_index = .false.   !< True if index map is rotated
+
   type(verticalGrid_type), pointer :: &
     GV => NULL()    !< structure containing vertical grid info
   type(unit_scale_type), pointer :: &
@@ -389,7 +404,7 @@ integer :: id_clock_pass_init  ! also in dynamics d/r
 integer :: id_clock_ALE
 integer :: id_clock_other
 integer :: id_clock_offline_tracer
-!!@}
+!>@}
 
 contains
 
@@ -398,13 +413,13 @@ contains
 !! The action of lateral processes on tracers occur in calls to
 !! advect_tracer and tracer_hordiff.  Vertical mixing and possibly remapping
 !! occur inside of diabatic.
-subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_int_in, CS, &
+subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS, &
                     Waves, do_dynamics, do_thermodynamics, start_cycle, &
                     end_cycle, cycle_length, reset_therm)
-  type(mech_forcing), intent(inout) :: forces        !< A structure with the driving mechanical forces
-  type(forcing),      intent(inout) :: fluxes        !< A structure with pointers to themodynamic,
+  type(mech_forcing), target, intent(inout) :: forces_in !< A structure with the driving mechanical forces
+  type(forcing), target, intent(inout) :: fluxes_in  !< A structure with pointers to themodynamic,
                                                      !! tracer and mass exchange forcing fields
-  type(surface),      intent(inout) :: sfc_state     !< surface ocean state
+  type(surface), target, intent(inout) :: sfc_state  !< surface ocean state
   type(time_type),    intent(in)    :: Time_start    !< starting time of a segment, as a time type
   real,               intent(in)    :: time_int_in   !< time interval covered by this run segment [s].
   type(MOM_control_struct), pointer :: CS            !< control structure from initialize_MOM
@@ -429,6 +444,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_int_in, CS, &
   ! local variables
   type(ocean_grid_type),   pointer :: G => NULL()  ! pointer to a structure containing
                                                    ! metrics and related information
+  type(ocean_grid_type),   pointer :: G_in => NULL()  ! Input grid metric
   type(verticalGrid_type), pointer :: GV => NULL() ! Pointer to the vertical grid structure
   type(unit_scale_type),   pointer :: US => NULL() ! Pointer to a structure containing
                                                    ! various unit conversion factors
@@ -479,7 +495,13 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_int_in, CS, &
   type(group_pass_type) :: pass_tau_ustar_psurf
   logical :: showCallTree
 
-  G => CS%G ; GV => CS%GV ; US => CS%US
+  ! External forcing fields on the model index map
+  type(mech_forcing), pointer :: forces     ! Mechanical forcing
+  type(forcing), pointer :: fluxes          ! Boundary fluxes
+  type(surface), pointer :: sfc_state_diag  ! Surface boundary fields
+  integer :: turns  ! Number of quarter turns from input to model indexing
+
+  G => CS%G ; G_in => CS%G_in ; GV => CS%GV ; US => CS%US
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
@@ -505,6 +527,21 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_int_in, CS, &
 
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("step_MOM(), MOM.F90")
+
+  ! Rotate the forces from G_in to G
+  if (CS%rotate_index) then
+    turns = G%HI%turns
+    allocate(forces)
+    call allocate_mech_forcing(forces_in, G, forces)
+    call rotate_mech_forcing(forces_in, turns, forces)
+
+    allocate(fluxes)
+    call allocate_forcing_type(fluxes_in, G, fluxes)
+    call rotate_forcing(fluxes_in, fluxes, turns)
+  else
+    forces => forces_in
+    fluxes => fluxes_in
+  endif
 
   ! First determine the time step that is consistent with this call and an
   ! integer fraction of time_interval.
@@ -571,6 +608,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_int_in, CS, &
     if (associated(CS%VarMix)) then
       call enable_averages(cycle_time, Time_start + real_to_time(US%T_to_s*cycle_time), CS%diag)
       call calc_resoln_function(h, CS%tv, G, GV, US, CS%VarMix)
+      call calc_depth_function(G, CS%VarMix)
       call disable_averaging(CS%diag)
     endif
   endif
@@ -840,19 +878,27 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_int_in, CS, &
   endif
 
   if (showCallTree) call callTree_waypoint("calling extract_surface_state (step_MOM)")
+  ! NOTE: sfc_state uses input indexing, since it is also used by drivers.
   call extract_surface_state(CS, sfc_state)
 
   ! Do diagnostics that only occur at the end of a complete forcing step.
   if (cycle_end) then
+    if (CS%rotate_index) then
+      allocate(sfc_state_diag)
+      call rotate_surface_state(sfc_state, G_in, sfc_state_diag, G, turns)
+    else
+      sfc_state_diag => sfc_state
+    endif
+
     call cpu_clock_begin(id_clock_diagnostics)
     if (CS%time_in_cycle > 0.0) then
       call enable_averages(CS%time_in_cycle, Time_local, CS%diag)
-      call post_surface_dyn_diags(CS%sfc_IDs, G, CS%diag, sfc_state, ssh)
+      call post_surface_dyn_diags(CS%sfc_IDs, G, CS%diag, sfc_state_diag, ssh)
     endif
     if (CS%time_in_thermo_cycle > 0.0) then
       call enable_averages(CS%time_in_thermo_cycle, Time_local, CS%diag)
       call post_surface_thermo_diags(CS%sfc_IDs, G, GV, US, CS%diag, CS%time_in_thermo_cycle, &
-                                    sfc_state, CS%tv, ssh, CS%ave_ssh_ibc)
+                                     sfc_state_diag, CS%tv, ssh, CS%ave_ssh_ibc)
     endif
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_diagnostics)
@@ -869,6 +915,17 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_int_in, CS, &
                       dt_forcing=real_to_time(US%T_to_s*time_interval) )
 
   call cpu_clock_end(id_clock_other)
+
+  ! De-rotate fluxes and copy back to the input, since they can be changed.
+  if (CS%rotate_index) then
+    call rotate_forcing(fluxes, fluxes_in, -turns)
+
+    call deallocate_mech_forcing(forces)
+    deallocate(forces)
+
+    call deallocate_forcing_type(fluxes)
+    deallocate(fluxes)
+  endif
 
   if (showCallTree) call callTree_leave("step_MOM()")
   call cpu_clock_end(id_clock_ocean)
@@ -1416,6 +1473,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
           if (associated(CS%VarMix)) then
             call pass_var(CS%h, G%Domain)
             call calc_resoln_function(CS%h, CS%tv, G, GV, US, CS%VarMix)
+            call calc_depth_function(G, CS%VarMix)
             call calc_slope_functions(CS%h, CS%tv, dt_offline, G, GV, US, CS%VarMix)
           endif
           call tracer_hordiff(CS%h, dt_offline, CS%MEKE, CS%VarMix, G, GV, US, &
@@ -1441,6 +1499,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
           if (associated(CS%VarMix)) then
             call pass_var(CS%h, G%Domain)
             call calc_resoln_function(CS%h, CS%tv, G, GV, US, CS%VarMix)
+            call calc_depth_function(G, CS%VarMix)
             call calc_slope_functions(CS%h, CS%tv, dt_offline, G, GV, US, CS%VarMix)
           endif
           call tracer_hordiff(CS%h, dt_offline, CS%MEKE, CS%VarMix, G, GV, US, &
@@ -1531,13 +1590,24 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                                                           !! calls to step_MOM instead of the number of
                                                           !! dynamics timesteps.
   ! local variables
-  type(ocean_grid_type),  pointer :: G => NULL() ! A pointer to a structure with metrics and related
-  type(hor_index_type)            :: HI  !  A hor_index_type for array extents
+  type(ocean_grid_type),  pointer :: G => NULL()    ! A pointer to the metric grid use for the run
+  type(ocean_grid_type),  pointer :: G_in => NULL() ! Pointer to the input grid
+  type(hor_index_type),   pointer :: HI => NULL()   ! A hor_index_type for array extents
+  type(hor_index_type),   target  :: HI_in          ! HI on the input grid
   type(verticalGrid_type), pointer :: GV => NULL()
   type(dyn_horgrid_type), pointer :: dG => NULL()
+  type(dyn_horgrid_type), pointer :: dG_in => NULL()
   type(diag_ctrl),        pointer :: diag => NULL()
   type(unit_scale_type),  pointer :: US => NULL()
   character(len=4), parameter :: vers_num = 'v2.0'
+  integer :: turns   ! Number of grid quarter-turns
+
+  ! Initial state on the input index map
+  real, allocatable, dimension(:,:,:) :: u_in, v_in, h_in
+  real, allocatable, dimension(:,:,:), target :: T_in, S_in
+  type(ocean_OBC_type), pointer :: OBC_in => NULL()
+  type(sponge_CS), pointer :: sponge_in_CSp => NULL()
+  type(ALE_sponge_CS), pointer :: ALE_sponge_in_CSp => NULL()
 
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -1545,10 +1615,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
   real    :: dtbt        ! The barotropic timestep [s]
-  real    :: Z_diag_int  ! minimum interval between calc depth-space diagnosetics [s]
 
   real, allocatable, dimension(:,:)   :: eta ! free surface height or column mass [H ~> m or kg m-2]
-  real, allocatable, dimension(:,:)   :: area_shelf_h ! area occupied by ice shelf [m2]
+  real, allocatable, dimension(:,:)   :: area_shelf_h ! area occupied by ice shelf [L2 ~> m2]
   real, dimension(:,:), allocatable, target  :: frac_shelf_h ! fraction of total area occupied by ice shelf [nondim]
   real, dimension(:,:), pointer :: shelf_area => NULL()
   type(MOM_restart_CS),  pointer      :: restart_CSp_tmp => NULL()
@@ -1608,9 +1677,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     return
   endif
   allocate(CS)
-
-  if (test_grid_copy) then ; allocate(G)
-  else ; G => CS%G ; endif
 
   CS%Time => Time
 
@@ -1810,7 +1876,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   if (use_temperature) then
     call get_param(param_file, "MOM", "FRAZIL", use_frazil, &
                  "If true, water freezes if it gets too cold, and the "//&
-                 "the accumulated heat deficit is returned in the "//&
+                 "accumulated heat deficit is returned in the "//&
                  "surface state.  FRAZIL is only used if "//&
                  "ENABLE_THERMODYNAMICS is true.", default=.false.)
     call get_param(param_file, "MOM", "DO_GEOTHERMAL", use_geothermal, &
@@ -1892,7 +1958,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call get_param(param_file, "MOM", "SURFACE_2018_ANSWERS", CS%answers_2018, &
                  "If true, use expressions for the surface properties that recover the answers "//&
                  "from the end of 2018. Otherwise, use more appropriate expressions that differ "//&
-                 "at roundoff for non-Boussinsq cases.", default=default_2018_answers)
+                 "at roundoff for non-Boussinesq cases.", default=default_2018_answers)
 
   call get_param(param_file, "MOM", "SAVE_INITIAL_CONDS", save_IC, &
                  "If true, write the initial conditions to a file given "//&
@@ -1950,35 +2016,98 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   call callTree_waypoint("MOM parameters read (initialize_MOM)")
 
+  ! Grid rotation test
+  call get_param(param_file, "MOM", "ROTATE_INDEX", CS%rotate_index, &
+      "Enable rotation of the horizontal indices.", default=.false.)
+  if (CS%rotate_index) then
+    ! TODO: Index rotation currently only works when index rotation does not
+    !   change the MPI rank of each domain.  Resolving this will require a
+    !   modification to FMS PE assignment.
+    !   For now, we only permit single-core runs.
+
+    if (num_PEs() /= 1) &
+      call MOM_error(FATAL, "Index rotation is only supported on one PE.")
+
+    call get_param(param_file, "MOM", "INDEX_TURNS", turns, &
+        "Number of counterclockwise quarter-turn index rotations.", default=1)
+  endif
+
   ! Set up the model domain and grids.
 #ifdef SYMMETRIC_MEMORY_
   symmetric = .true.
 #else
   symmetric = .false.
 #endif
+  G_in => CS%G_in
 #ifdef STATIC_MEMORY_
-  call MOM_domains_init(G%domain, param_file, symmetric=symmetric, &
+  call MOM_domains_init(G_in%domain, param_file, symmetric=symmetric, &
             static_memory=.true., NIHALO=NIHALO_, NJHALO=NJHALO_, &
             NIGLOBAL=NIGLOBAL_, NJGLOBAL=NJGLOBAL_, NIPROC=NIPROC_, &
             NJPROC=NJPROC_)
 #else
-  call MOM_domains_init(G%domain, param_file, symmetric=symmetric)
+  call MOM_domains_init(G_in%domain, param_file, symmetric=symmetric, &
+                        domain_name="MOM_in")
 #endif
+
+  ! Copy input grid (G_in) domain to active grid G
+  ! Swap axes for quarter and 3-quarter turns
+  if (CS%rotate_index) then
+    allocate(CS%G)
+    call clone_MOM_domain(G_in%Domain, CS%G%Domain, turns=turns)
+    first_direction = modulo(first_direction + turns, 2)
+  else
+    CS%G => G_in
+  endif
+
+  ! TODO: It is unlikey that test_grid_copy and rotate_index would work at the
+  !   same time.  It may be possible to enable both but for now we prevent it.
+  if (test_grid_copy .and. CS%rotate_index) &
+    call MOM_error(FATAL, "Grid cannot be copied during index rotation.")
+
+  if (test_grid_copy) then ; allocate(G)
+  else ; G => CS%G ; endif
+
   call callTree_waypoint("domains initialized (initialize_MOM)")
 
   call MOM_debugging_init(param_file)
   call diag_mediator_infrastructure_init()
   call MOM_io_init(param_file)
 
-  call hor_index_init(G%Domain, HI, param_file, &
+  ! Create HI and dG on the input index map.
+  call hor_index_init(G_in%Domain, HI_in, param_file, &
                       local_indexing=.not.global_indexing)
+  call create_dyn_horgrid(dG_in, HI_in, bathymetry_at_vel=bathy_at_vel)
+  call clone_MOM_domain(G_in%Domain, dG_in%Domain)
 
-  call create_dyn_horgrid(dG, HI, bathymetry_at_vel=bathy_at_vel)
-  call clone_MOM_domain(G%Domain, dG%Domain)
+  ! Allocate initialize time-invariant MOM variables.
+  call MOM_initialize_fixed(dG_in, US, OBC_in, param_file, write_geom_files, &
+                            dirs%output_directory)
+
+  call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
+
+  ! Determine HI and dG for the model index map.
+  if (CS%rotate_index) then
+    allocate(HI)
+    call rotate_hor_index(HI_in, turns, HI)
+    call create_dyn_horgrid(dG, HI, bathymetry_at_vel=bathy_at_vel)
+    call clone_MOM_domain(G%Domain, dG%Domain)
+    call rotate_dyngrid(dG_in, dG, US, turns)
+    if (associated(OBC_in)) then
+      ! TODO: General OBC index rotations is not yet supported.
+      if (modulo(turns, 4) /= 1) &
+        call MOM_error(FATAL, "OBC index rotation of 180 and 270 degrees is " &
+          // "not yet unsupported.")
+      allocate(CS%OBC)
+      call rotate_OBC_config(OBC_in, dG_in, CS%OBC, dG, turns)
+    endif
+  else
+    HI => HI_in
+    dG => dG_in
+    CS%OBC => OBC_in
+  endif
 
   call verticalGridInit( param_file, CS%GV, US )
   GV => CS%GV
-!  dG%g_Earth = GV%mks_g_Earth
 
   ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
   if (CS%debug .or. dG%symmetric) &
@@ -1987,10 +2116,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call callTree_waypoint("grids initialized (initialize_MOM)")
 
   call MOM_timing_init(CS)
-
-  ! Allocate initialize time-invariant MOM variables.
-  call MOM_initialize_fixed(dG, US, CS%OBC, param_file, write_geom_files, dirs%output_directory)
-  call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
 
   if (associated(CS%OBC)) call call_OBC_register(param_file, CS%update_OBC_CSp, CS%OBC)
 
@@ -2047,6 +2172,18 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                            flux_scale=conv2salt, convergence_units='kg m-2 s-1', &
                            convergence_scale=0.001*GV%H_to_kg_m2, CMOR_tendprefix="osalt", diag_form=2)
     endif
+    ! NOTE: register_temp_salt_segments includes allocation of tracer fields
+    !   along segments.  Bit reproducibility requires that MOM_initialize_state
+    !   be called on the input index map, so we must setup both OBC and OBC_in.
+    !
+    ! XXX: This call on OBC_in allocates the tracer fields on the unrotated
+    !   grid, but also incorrectly stores a pointer to a tracer_type for the
+    !   rotated registry (e.g. segment%tr_reg%Tr(n)%Tr) from CS%tracer_reg.
+    !
+    !   While incorrect and potentially dangerous, it does not seem that this
+    !   pointer is used during initialization, so we leave it for now.
+    if (CS%rotate_index .and. associated(OBC_in)) &
+      call register_temp_salt_segments(GV, OBC_in, CS%tracer_Reg, param_file)
     if (associated(CS%OBC)) &
       call register_temp_salt_segments(GV, CS%OBC, CS%tracer_Reg, param_file)
   endif
@@ -2163,9 +2300,17 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! (potentially static) ocean-specific grid type.
   !   The next line would be needed if G%Domain had not already been init'd above:
   !     call clone_MOM_domain(dG%Domain, G%Domain)
-  call MOM_grid_init(G, param_file, US, HI, bathymetry_at_vel=bathy_at_vel)
-  call copy_dyngrid_to_MOM_grid(dG, G, US)
-  call destroy_dyn_horgrid(dG)
+
+  ! NOTE: If indices are rotated, then G and G_in must both be initialized.
+  !   If not rotated, then G_in and G are the same grid.
+  if (CS%rotate_index) then
+    call MOM_grid_init(G, param_file, US, HI, bathymetry_at_vel=bathy_at_vel)
+    call copy_dyngrid_to_MOM_grid(dG, G, US)
+    call destroy_dyn_horgrid(dG)
+  endif
+  call MOM_grid_init(G_in, param_file, US, HI_in, bathymetry_at_vel=bathy_at_vel)
+  call copy_dyngrid_to_MOM_grid(dG_in, G_in, US)
+  call destroy_dyn_horgrid(dG_in)
 
   ! Set a few remaining fields that are specific to the ocean grid type.
   call set_first_direction(G, first_direction)
@@ -2175,11 +2320,70 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   else ; G%Domain_aux => G%Domain ; endif
   ! Copy common variables from the vertical grid to the horizontal grid.
   ! Consider removing this later?
-  G%ke = GV%ke ; G%g_Earth = GV%mks_g_Earth
+  G%ke = GV%ke
 
-  call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, US, param_file, &
-                            dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
-                            CS%sponge_CSp, CS%ALE_sponge_CSp, CS%OBC, Time_in)
+  if (CS%rotate_index) then
+    G_in%ke = GV%ke
+
+    allocate(u_in(G_in%IsdB:G_in%IedB, G_in%jsd:G_in%jed, nz))
+    allocate(v_in(G_in%isd:G_in%ied, G_in%JsdB:G_in%JedB, nz))
+    allocate(h_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed, nz))
+    u_in(:,:,:) = 0.0
+    v_in(:,:,:) = 0.0
+    h_in(:,:,:) = GV%Angstrom_H
+
+    if (use_temperature) then
+      allocate(T_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed, nz))
+      allocate(S_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed, nz))
+      T_in(:,:,:) = 0.0
+      S_in(:,:,:) = 0.0
+
+      CS%tv%T => T_in
+      CS%tv%S => S_in
+    endif
+
+    call MOM_initialize_state(u_in, v_in, h_in, CS%tv, Time, G_in, GV, US, &
+        param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
+        sponge_in_CSp, ALE_sponge_in_CSp, OBC_in, Time_in)
+
+    if (use_temperature) then
+      CS%tv%T => CS%T
+      CS%tv%S => CS%S
+    endif
+
+    call rotate_initial_state(u_in, v_in, h_in, T_in, S_in, use_temperature, &
+        turns, CS%u, CS%v, CS%h, CS%T, CS%S)
+
+    if (associated(sponge_in_CSp)) then
+      ! TODO: Implementation and testing of non-ALE spong rotation
+      call MOM_error(FATAL, "Index rotation of non-ALE sponge is not yet " &
+          // "implemented.")
+    endif
+
+    if (associated(ALE_sponge_in_CSp)) then
+      call rotate_ALE_sponge(ALE_sponge_in_CSp, G_in, CS%ALE_sponge_CSp, G, &
+                             turns, param_file)
+      call update_ALE_sponge_field(CS%ALE_sponge_CSp, T_in, CS%T)
+      call update_ALE_sponge_field(CS%ALE_sponge_CSp, S_in, CS%S)
+    endif
+
+    if (associated(OBC_in)) &
+      call rotate_OBC_init(OBC_in, G, GV, US, param_file, CS%tv, restart_CSp, &
+                           CS%OBC)
+
+    deallocate(u_in)
+    deallocate(v_in)
+    deallocate(h_in)
+    if (use_temperature) then
+      deallocate(T_in)
+      deallocate(S_in)
+    endif
+  else
+    call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, US, &
+        param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
+        CS%sponge_CSp, CS%ALE_sponge_CSp, CS%OBC, Time_in)
+  endif
+
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("returned from MOM_initialize_state() (initialize_MOM)")
 
@@ -2211,7 +2415,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     if (CS%debug .or. CS%G%symmetric) then
       call clone_MOM_domain(CS%G%Domain, CS%G%Domain_aux, symmetric=.false.)
     else ; CS%G%Domain_aux => CS%G%Domain ;endif
-    G%ke = GV%ke ; G%g_Earth = GV%mks_g_Earth
+    G%ke = GV%ke
   endif
 
   ! At this point, all user-modified initialization code has been called.  The
@@ -2237,13 +2441,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
       allocate(area_shelf_h(isd:ied,jsd:jed))
       allocate(frac_shelf_h(isd:ied,jsd:jed))
-      call MOM_read_data(filename, trim(area_varname), area_shelf_h, G%Domain)
+      call MOM_read_data(filename, trim(area_varname), area_shelf_h, G%Domain, scale=US%m_to_L**2)
       ! initialize frac_shelf_h with zeros (open water everywhere)
       frac_shelf_h(:,:) = 0.0
       ! compute fractional ice shelf coverage of h
       do j=jsd,jed ; do i=isd,ied
         if (G%areaT(i,j) > 0.0) &
-          frac_shelf_h(i,j) = area_shelf_h(i,j) / (US%L_to_m**2*G%areaT(i,j))
+          frac_shelf_h(i,j) = area_shelf_h(i,j) / G%areaT(i,j)
       enddo ; enddo
       ! pass to the pointer
       shelf_area => frac_shelf_h
@@ -2389,7 +2593,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   endif
 
   call tracer_advect_init(Time, G, US, param_file, diag, CS%tracer_adv_CSp)
-  call tracer_hor_diff_init(Time, G, US, param_file, diag, CS%tv%eqn_of_state, &
+  call tracer_hor_diff_init(Time, G, US, param_file, diag, CS%tv%eqn_of_state, CS%diabatic_CSp, &
                             CS%tracer_diff_CSp)
 
   call lock_tracer_registry(CS%tracer_Reg)
@@ -2471,7 +2675,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   CS%nstep_tot = 0
   if (present(count_calls)) CS%count_calls = count_calls
-  call MOM_sum_output_init(G, US, param_file, dirs%output_directory, &
+  call MOM_sum_output_init(G_in, US, param_file, dirs%output_directory, &
                            CS%ntrunc, Time_init, CS%sum_output_CSp)
 
   ! Flag whether to save initial conditions in finish_MOM_initialization() or not.
@@ -2528,7 +2732,7 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
     call register_restart_field(z_interface, "eta", .true., restart_CSp_tmp, &
                                 "Interface heights", "meter", z_grid='i')
 
-    call save_restart(dirs%output_directory, Time, G, &
+    call save_restart(dirs%output_directory, Time, CS%G_in, &
                       restart_CSp_tmp, filename=CS%IC_file, GV=GV)
     deallocate(z_interface)
     deallocate(restart_CSp_tmp)
@@ -2619,16 +2823,19 @@ subroutine set_restart_fields(GV, US, param_file, CS, restart_CSp)
   type(verticalGrid_type),  intent(inout) :: GV         !< ocean vertical grid structure
   type(unit_scale_type),    intent(inout) :: US         !< A dimensional unit scaling type
   type(param_file_type),    intent(in) :: param_file    !< opened file for parsing to get parameters
-  type(MOM_control_struct), intent(in) :: CS            !< control structure set up by inialize_MOM
+  type(MOM_control_struct), intent(in) :: CS            !< control structure set up by initialize_MOM
   type(MOM_restart_CS),     pointer    :: restart_CSp   !< pointer to the restart control
                                                         !! structure that will be used for MOM.
   ! Local variables
   logical :: use_ice_shelf ! Needed to determine whether to add CS%Hml to restarts
   character(len=48) :: thickness_units, flux_units
-
+  type(vardesc) :: u_desc, v_desc
 
   thickness_units = get_thickness_units(GV)
   flux_units = get_flux_units(GV)
+
+  u_desc = var_desc("u", "m s-1", "Zonal velocity", hor_grid='Cu')
+  v_desc = var_desc("v", "m s-1", "Meridional velocity", hor_grid='Cv')
 
   if (associated(CS%tv%T)) &
     call register_restart_field(CS%tv%T, "Temp", .true., restart_CSp, &
@@ -2640,11 +2847,7 @@ subroutine set_restart_fields(GV, US, param_file, CS, restart_CSp)
   call register_restart_field(CS%h, "h", .true., restart_CSp, &
                               "Layer Thickness", thickness_units)
 
-  call register_restart_field(CS%u, "u", .true., restart_CSp, &
-                              "Zonal velocity", "m s-1", hor_grid='Cu')
-
-  call register_restart_field(CS%v, "v", .true., restart_CSp, &
-                              "Meridional velocity", "m s-1", hor_grid='Cv')
+  call register_restart_pair(CS%u, CS%v, u_desc, v_desc, .true., restart_CSp)
 
   if (associated(CS%tv%frazil)) &
     call register_restart_field(CS%tv%frazil, "frazil", .false., restart_CSp, &
@@ -2721,18 +2924,20 @@ end subroutine adjust_ssh_for_p_atm
 !> Set the surface (return) properties of the ocean model by
 !! setting the appropriate fields in sfc_state.  Unused fields
 !! are set to NULL or are unallocated.
-subroutine extract_surface_state(CS, sfc_state)
-  type(MOM_control_struct), pointer       :: CS !< Master MOM control structure
-  type(surface),            intent(inout) :: sfc_state !< transparent ocean surface state
-                                                !! structure shared with the calling routine
-                                                !! data in this structure is intent out.
+subroutine extract_surface_state(CS, sfc_state_in)
+  type(MOM_control_struct), pointer    :: CS !< Master MOM control structure
+  type(surface), target, intent(inout) :: sfc_state_in !< transparent ocean surface state
+                                             !! structure shared with the calling routine
+                                             !! data in this structure is intent out.
 
   ! Local variables
   real :: hu, hv  ! Thicknesses interpolated to velocity points [H ~> m or kg m-2]
-  type(ocean_grid_type),   pointer :: G => NULL()  !< pointer to a structure containing
-                                                   !! metrics and related information
+  type(ocean_grid_type),   pointer :: G => NULL() !< pointer to a structure containing
+                                                  !! metrics and related information
+  type(ocean_grid_type),   pointer :: G_in => NULL() !< Input grid metric
   type(verticalGrid_type), pointer :: GV => NULL() !< structure containing vertical grid info
   type(unit_scale_type),   pointer :: US => NULL() !< structure containing various unit conversion factors
+  type(surface),           pointer :: sfc_state => NULL()  ! surface state on the model grid
   real, dimension(:,:,:),  pointer :: &
     h => NULL()    !< h : layer thickness [H ~> m or kg m-2]
   real :: depth(SZI_(CS%G))  !< Distance from the surface in depth units [Z ~> m] or [H ~> m or kg m-2]
@@ -2754,9 +2959,10 @@ subroutine extract_surface_state(CS, sfc_state)
   integer :: iscB, iecB, jscB, jecB, isdB, iedB, jsdB, jedB
   logical :: localError
   character(240) :: msg
+  integer :: turns    ! Number of quarter turns
 
   call callTree_enter("extract_surface_state(), MOM.F90")
-  G => CS%G ; GV => CS%GV ; US => CS%US
+  G => CS%G ; G_in => CS%G_in ; GV => CS%GV ; US => CS%US
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   iscB = G%iscB ; iecB = G%iecB; jscB = G%jscB ; jecB = G%jecB
@@ -2765,12 +2971,24 @@ subroutine extract_surface_state(CS, sfc_state)
 
   use_temperature = associated(CS%tv%T)
 
-  if (.not.sfc_state%arrays_allocated) then
+  turns = 0
+  if (CS%rotate_index) &
+    turns = G%HI%turns
+
+  if (.not.sfc_state_in%arrays_allocated) &
     !  Consider using a run-time flag to determine whether to do the vertical
     ! integrals, since the 3-d sums are not negligible in cost.
-    call allocate_surface_state(sfc_state, G, use_temperature, do_integrals=.true., &
-                                omit_frazil=.not.associated(CS%tv%frazil))
+    call allocate_surface_state(sfc_state_in, G_in, use_temperature, &
+        do_integrals=.true., omit_frazil=.not.associated(CS%tv%frazil))
+
+  if (CS%rotate_index) then
+    allocate(sfc_state)
+    call allocate_surface_state(sfc_state, G, use_temperature, &
+        do_integrals=.true., omit_frazil=.not.associated(CS%tv%frazil))
+  else
+    sfc_state => sfc_state_in
   endif
+
   sfc_state%T_is_conT = CS%tv%T_is_conT
   sfc_state%S_is_absS = CS%tv%S_is_absS
 
@@ -2935,7 +3153,7 @@ subroutine extract_surface_state(CS, sfc_state)
 
 
   if (allocated(sfc_state%melt_potential)) then
-  !$OMP parallel do default(shared)
+  !$OMP parallel do default(shared) private(depth_ml, dh, T_freeze, depth, delT)
     do j=js,je
       do i=is,ie
         depth(i) = 0.0
@@ -3105,8 +3323,30 @@ subroutine extract_surface_state(CS, sfc_state)
 
   if (CS%debug) call MOM_surface_chksum("Post extract_sfc", sfc_state, G)
 
+  ! Rotate sfc_state back onto the input grid, sfc_state_in
+  if (CS%rotate_index) then
+    call rotate_surface_state(sfc_state, G, sfc_state_in, G_in, -turns)
+    call deallocate_surface_state(sfc_state)
+  endif
+
   call callTree_leave("extract_surface_sfc_state()")
 end subroutine extract_surface_state
+
+!> Rotate initialization fields from input to rotated arrays.
+subroutine rotate_initial_state(u_in, v_in, h_in, T_in, S_in, &
+    use_temperature, turns, u, v, h, T, S)
+  real, dimension(:,:,:), intent(in) :: u_in, v_in, h_in, T_in, S_in
+  logical, intent(in) :: use_temperature
+  integer, intent(in) :: turns
+  real, dimension(:,:,:), intent(out) :: u, v, h, T, S
+
+  call rotate_vector(u_in, v_in, turns, u, v)
+  call rotate_array(h_in, turns, h)
+  if (use_temperature) then
+    call rotate_array(T_in, turns, T)
+    call rotate_array(S_in, turns, S)
+  endif
+end subroutine rotate_initial_state
 
 !> Return true if all phases of step_MOM are at the same point in time.
 function MOM_state_is_synchronized(CS, adv_dyn) result(in_synch)
@@ -3140,7 +3380,7 @@ subroutine get_MOM_state_elements(CS, G, GV, US, C_p, C_p_scaled, use_temp)
                                                          !! units [Q degC-1 ~> J kg degC-1]
   logical,                 optional, intent(out) :: use_temp !< True if temperature is a state variable
 
-  if (present(G)) G => CS%G
+  if (present(G)) G => CS%G_in
   if (present(GV)) GV => CS%GV
   if (present(US)) US => CS%US
   if (present(C_p)) C_p = CS%US%Q_to_J_kg * CS%tv%C_p

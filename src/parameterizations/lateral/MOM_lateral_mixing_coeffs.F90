@@ -29,6 +29,8 @@ type, public :: VarMix_CS
                                   !! when the deformation radius is well resolved.
   logical :: Resoln_scaled_KhTh   !< If true, scale away the thickness diffusivity
                                   !! when the deformation radius is well resolved.
+  logical :: Depth_scaled_KhTh    !< If true, KHTH is scaled away when the depth is
+                                  !! shallower than a reference depth.
   logical :: Resoln_scaled_KhTr   !< If true, scale away the tracer diffusivity
                                   !! when the deformation radius is well resolved.
   logical :: interpolate_Res_fn   !< If true, interpolate the resolution function
@@ -48,6 +50,8 @@ type, public :: VarMix_CS
                                   !! This parameter is set depending on other parameters.
   logical :: calculate_res_fns    !< If true, calculate all the resolution factors.
                                   !! This parameter is set depending on other parameters.
+  logical :: calculate_depth_fns !< If true, calculate all the depth factors.
+                                  !! This parameter is set depending on other parameters.
   logical :: calculate_Eady_growth_rate !< If true, calculate all the Eady growth rate.
                                   !! This parameter is set depending on other parameters.
   real, dimension(:,:), pointer :: &
@@ -64,6 +68,10 @@ type, public :: VarMix_CS
                           !! deformation radius to the grid spacing at u points [nondim].
     Res_fn_v => NULL(), & !< Non-dimensional function of the ratio the first baroclinic
                           !! deformation radius to the grid spacing at v points [nondim].
+    Depth_fn_u => NULL(), & !< Non-dimensional function of the ratio of the depth to
+                            !! a reference depth (maximum 1) at u points [nondim]
+    Depth_fn_v => NULL(), & !< Non-dimensional function of the ratio of the depth to
+                            !! a reference depth (maximum 1) at v points [nondim]
     beta_dx2_h => NULL(), & !< The magnitude of the gradient of the Coriolis parameter
                             !! times the grid spacing squared at h points [L T-1 ~> m s-1].
     beta_dx2_q => NULL(), & !< The magnitude of the gradient of the Coriolis parameter
@@ -85,9 +93,6 @@ type, public :: VarMix_CS
   real, dimension(:,:,:), pointer :: &
     slope_x => NULL(), &  !< Zonal isopycnal slope [nondim]
     slope_y => NULL(), &  !< Meridional isopycnal slope [nondim]
-    !### These are posted as diagnostics but are never set.
-    N2_u => NULL(), &     !< Brunt-Vaisala frequency at u-points [s-2]
-    N2_v => NULL(), &     !< Brunt-Vaisala frequency at v-points [s-2]
     ebt_struct => NULL()  !< Vertical structure function to scale diffusivities with [nondim]
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
     Laplac3_const_u       !< Laplacian metric-dependent constants [L3 ~> m3]
@@ -111,6 +116,8 @@ type, public :: VarMix_CS
   real :: Res_coef_visc   !< A non-dimensional number that determines the function
                           !! of resolution, used for lateral viscosity, as:
                           !!  F = 1 / (1 + (Res_coef_visc*Ld/dx)^Res_fn_power)
+  real :: depth_scaled_khth_h0 !< The depth above which KHTH is linearly scaled away [Z ~> m]
+  real :: depth_scaled_khth_exp !< The exponent used in the depth dependent scaling function for KHTH [nondim]
   real :: kappa_smooth    !< A diffusivity for smoothing T/S in vanished layers [Z2 T-1 ~> m2 s-1]
   integer :: Res_fn_power_khth !< The power of dx/Ld in the KhTh resolution function.  Any
                                !! positive integer power may be used, but even powers
@@ -140,9 +147,43 @@ type, public :: VarMix_CS
 end type VarMix_CS
 
 public VarMix_init, calc_slope_functions, calc_resoln_function
-public calc_QG_Leith_viscosity
+public calc_QG_Leith_viscosity, calc_depth_function
 
 contains
+
+!> Calculates the non-dimensional depth functions.
+subroutine calc_depth_function(G, CS)
+  type(ocean_grid_type),                    intent(in) :: G  !< Ocean grid structure
+  type(VarMix_CS),                          pointer       :: CS !< Variable mixing coefficients
+
+  ! Local variables
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq
+  integer :: i, j
+  real    :: H0 ! local variable for reference depth
+  real    :: expo ! exponent used in the depth dependent scaling
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+
+  if (.not. associated(CS)) call MOM_error(FATAL, "calc_depth_function:"// &
+         "Module must be initialized before it is used.")
+  if (.not. CS%calculate_depth_fns) return
+  if (.not. associated(CS%Depth_fn_u)) call MOM_error(FATAL, &
+    "calc_depth_function: %Depth_fn_u is not associated with Depth_scaled_KhTh.")
+  if (.not. associated(CS%Depth_fn_v)) call MOM_error(FATAL, &
+    "calc_depth_function: %Depth_fn_v is not associated with Depth_scaled_KhTh.")
+
+  H0 = CS%depth_scaled_khth_h0
+  expo = CS%depth_scaled_khth_exp
+!$OMP do
+  do j=js,je ; do I=is-1,Ieq
+    CS%Depth_fn_u(I,j) = (MIN(1.0, 0.5*(G%bathyT(i,j) + G%bathyT(i+1,j))/H0))**expo
+  enddo ; enddo
+!$OMP do
+  do J=js-1,Jeq ; do i=is,ie
+    CS%Depth_fn_v(i,J) = (MIN(1.0, 0.5*(G%bathyT(i,j) + G%bathyT(i,j+1))/H0))**expo
+  enddo ; enddo
+
+end subroutine calc_depth_function
 
 !> Calculates and stores the non-dimensional resolution functions
 subroutine calc_resoln_function(h, tv, G, GV, US, CS)
@@ -422,14 +463,14 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
   endif
 
   if (query_averaging_enabled(CS%diag)) then
-    if (CS%id_SN_u > 0)     call post_data(CS%id_SN_u, CS%SN_u, CS%diag)
-    if (CS%id_SN_v > 0)     call post_data(CS%id_SN_v, CS%SN_v, CS%diag)
-    if (CS%id_L2u > 0)      call post_data(CS%id_L2u, CS%L2u, CS%diag)
-    if (CS%id_L2v > 0)      call post_data(CS%id_L2v, CS%L2v, CS%diag)
-    !### I do not believe that CS%N2_u and CS%N2_v are ever set, but because the contents
-    !    of CS are public, they might be set somewhere outside of this module.
-    if (CS%id_N2_u > 0)     call post_data(CS%id_N2_u, CS%N2_u, CS%diag)
-    if (CS%id_N2_v > 0)     call post_data(CS%id_N2_v, CS%N2_v, CS%diag)
+    if (CS%id_SN_u > 0) call post_data(CS%id_SN_u, CS%SN_u, CS%diag)
+    if (CS%id_SN_v > 0) call post_data(CS%id_SN_v, CS%SN_v, CS%diag)
+    if (CS%id_L2u > 0)  call post_data(CS%id_L2u, CS%L2u, CS%diag)
+    if (CS%id_L2v > 0)  call post_data(CS%id_L2v, CS%L2v, CS%diag)
+    if (CS%calculate_Eady_growth_rate .and. CS%use_stored_slopes) then
+      if (CS%id_N2_u > 0) call post_data(CS%id_N2_u, N2_u, CS%diag)
+      if (CS%id_N2_v > 0) call post_data(CS%id_N2_v, N2_v, CS%diag)
+    endif
   endif
 
 end subroutine calc_slope_functions
@@ -561,9 +602,12 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS)
   endif
 
   if (CS%debug) then
-    call uvchksum("calc_Visbeck_coeffs slope_[xy]", slope_x, slope_y, G%HI, haloshift=1)
-    call uvchksum("calc_Visbeck_coeffs N2_u, N2_v", N2_u, N2_v, G%HI, scale=US%s_to_T**2)
-    call uvchksum("calc_Visbeck_coeffs SN_[uv]", CS%SN_u, CS%SN_v, G%HI, scale=US%s_to_T)
+    call uvchksum("calc_Visbeck_coeffs slope_[xy]", slope_x, slope_y, G%HI, &
+                  haloshift=1)
+    call uvchksum("calc_Visbeck_coeffs N2_u, N2_v", N2_u, N2_v, G%HI, &
+                  scale=US%s_to_T**2, scalar_pair=.true.)
+    call uvchksum("calc_Visbeck_coeffs SN_[uv]", CS%SN_u, CS%SN_v, G%HI, &
+                  scale=US%s_to_T, scalar_pair=.true.)
   endif
 
 end subroutine calc_Visbeck_coeffs
@@ -905,7 +949,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   CS%calculate_Rd_dx = .false.
   CS%calculate_res_fns = .false.
   CS%calculate_Eady_growth_rate = .false.
-
+  CS%calculate_depth_fns = .false.
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "USE_VARIABLE_MIXING", CS%use_variable_mixing,&
@@ -921,6 +965,12 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  "If true, the Laplacian lateral viscosity is scaled away "//&
                  "when the first baroclinic deformation radius is well "//&
                  "resolved.", default=.false.)
+  call get_param(param_file, mdl, "DEPTH_SCALED_KHTH", CS%Depth_scaled_KhTh, &
+                 "If true, KHTH is scaled away when the depth is shallower"//&
+                 "than a reference depth: KHTH = MIN(1,H/H0)**N * KHTH, "//&
+                 "where H0 is a reference depth, controlled via DEPTH_SCALED_KHTH_H0, "//&
+                 "and the exponent (N) is controlled via DEPTH_SCALED_KHTH_EXP.",&
+                 default=.false.)
   call get_param(param_file, mdl, "RESOLN_SCALED_KHTH", CS%Resoln_scaled_KhTh, &
                  "If true, the interface depth diffusivity is scaled away "//&
                  "when the first baroclinic deformation radius is well "//&
@@ -970,6 +1020,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
 
+
   if (CS%Resoln_use_ebt .or. CS%khth_use_ebt_struct) then
     in_use = .true.
     call get_param(param_file, mdl, "RESOLN_N2_FILTER_DEPTH", N2_filter_depth, &
@@ -992,8 +1043,6 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     in_use = .true.
     allocate(CS%slope_x(IsdB:IedB,jsd:jed,G%ke+1)) ; CS%slope_x(:,:,:) = 0.0
     allocate(CS%slope_y(isd:ied,JsdB:JedB,G%ke+1)) ; CS%slope_y(:,:,:) = 0.0
-    allocate(CS%N2_u(IsdB:IedB,jsd:jed,G%ke+1)) ; CS%N2_u(:,:,:) = 0.0
-    allocate(CS%N2_v(isd:ied,JsdB:JedB,G%ke+1)) ; CS%N2_v(:,:,:) = 0.0
     call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_smooth, &
                  "A diapycnal diffusivity that is used to interpolate "//&
                  "more sensible values of T & S into thin layers.", &
@@ -1041,16 +1090,19 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
        'm2', conversion=US%L_to_m**2)
   endif
 
-  if (CS%use_stored_slopes) then
+  if (CS%calculate_Eady_growth_rate .and. CS%use_stored_slopes) then
     CS%id_N2_u = register_diag_field('ocean_model', 'N2_u', diag%axesCui, Time, &
-         'Square of Brunt-Vaisala frequency, N^2, at u-points, as used in Visbeck et al.', 's-2')
+         'Square of Brunt-Vaisala frequency, N^2, at u-points, as used in Visbeck et al.', &
+         's-2', conversion=US%s_to_T**2)
     CS%id_N2_v = register_diag_field('ocean_model', 'N2_v', diag%axesCvi, Time, &
-         'Square of Brunt-Vaisala frequency, N^2, at v-points, as used in Visbeck et al.', 's-2')
-    !### The units of the next two diagnostics should be 'nondim'.
+         'Square of Brunt-Vaisala frequency, N^2, at v-points, as used in Visbeck et al.', &
+         's-2', conversion=US%s_to_T**2)
+  endif
+  if (CS%use_stored_slopes) then
     CS%id_S2_u = register_diag_field('ocean_model', 'S2_u', diag%axesCu1, Time, &
-         'Depth average square of slope magnitude, S^2, at u-points, as used in Visbeck et al.', 's-2')
+         'Depth average square of slope magnitude, S^2, at u-points, as used in Visbeck et al.', 'nondim')
     CS%id_S2_v = register_diag_field('ocean_model', 'S2_v', diag%axesCv1, Time, &
-         'Depth average square of slope magnitude, S^2, at v-points, as used in Visbeck et al.', 's-2')
+         'Depth average square of slope magnitude, S^2, at v-points, as used in Visbeck et al.', 'nondim')
   endif
 
   oneOrTwo = 1.0
@@ -1151,6 +1203,18 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                   ((G%CoriolisBu(I-1,J)-G%CoriolisBu(I-1,J-1)) * G%IdyCu(I-1,j))**2) ) ))
     enddo ; enddo
 
+  endif
+
+  if (CS%Depth_scaled_KhTh) then
+    CS%calculate_depth_fns = .true.
+    allocate(CS%Depth_fn_u(IsdB:IedB,jsd:jed))     ; CS%Depth_fn_u(:,:) = 0.0
+    allocate(CS%Depth_fn_v(isd:ied,JsdB:JedB))     ; CS%Depth_fn_v(:,:) = 0.0
+    call get_param(param_file, mdl, "DEPTH_SCALED_KHTH_H0", CS%depth_scaled_khth_h0, &
+    "The depth above which KHTH is scaled away.",&
+    units="m", default=1000.)
+    call get_param(param_file, mdl, "DEPTH_SCALED_KHTH_EXP", CS%depth_scaled_khth_exp, &
+    "The exponent used in the depth dependent scaling function for KHTH.",&
+    units="nondim", default=3.0)
   endif
 
   ! Resolution %Rd_dx_h

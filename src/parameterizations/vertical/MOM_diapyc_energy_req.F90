@@ -39,7 +39,7 @@ type, public :: diapyc_energy_req_CS ; private
   integer :: id_CHCt=-1, id_CHCb=-1, id_CHCc=-1, id_CHCh=-1
   integer :: id_T0=-1, id_Tf=-1, id_S0=-1, id_Sf=-1, id_N2_0=-1, id_N2_f=-1
   integer :: id_h=-1, id_zInt=-1
-  !!@}
+  !>@}
 end type diapyc_energy_req_CS
 
 contains
@@ -1193,7 +1193,7 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
   real :: b1Kd          ! Temporary array [nondim]
   real :: ColHt_chg     ! The change in column thickness [Z ~> m].
   real :: dColHt_max    ! The change in column thickness for infinite diffusivity [Z ~> m].
-  real :: dColHt_dKd    ! The partial derivative of column thickness with diffusivity [s Z-1 ~> s m-1].
+  real :: dColHt_dKd    ! The partial derivative of column thickness with Kddt_h [Z H-1 ~> 1 or m3 kg-1].
   real :: dT_k, dT_km1  ! Temporary arrays [degC].
   real :: dS_k, dS_km1  ! Temporary arrays [ppt].
   real :: I_Kr_denom    ! Temporary arrays [H-2 ~> m-2 or m4 kg-2].

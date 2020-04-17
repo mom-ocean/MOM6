@@ -30,6 +30,8 @@ public step_forward_MEKE, MEKE_init, MEKE_alloc_register_restart, MEKE_end
 !> Control structure that contains MEKE parameters and diagnostics handles
 type, public :: MEKE_CS ; private
   ! Parameters
+  real, dimension(:,:), pointer :: equilibrium_value => NULL() !< The equilbrium value
+                        !! of MEKE to be calculated at each time step [L2 T-2 ~> m2 s-2]
   real :: MEKE_FrCoeff  !< Efficiency of conversion of ME into MEKE [nondim]
   real :: MEKE_GMcoeff  !< Efficiency of conversion of PE into MEKE [nondim]
   real :: MEKE_GMECoeff !< Efficiency of conversion of MEKE into ME by GME [nondim]
@@ -43,8 +45,12 @@ type, public :: MEKE_CS ; private
   logical :: visc_drag  !< If true use the vertvisc_type to calculate bottom drag.
   logical :: MEKE_GEOMETRIC !< If true, uses the GM coefficient formulation from the GEOMETRIC
                         !! framework (Marshall et al., 2012)
+  real    :: MEKE_GEOMETRIC_alpha !< The nondimensional coefficient governing the efficiency of the
+                        !! GEOMETRIC thickness diffusion.
   logical :: MEKE_equilibrium_alt !< If true, use an alternative calculation for the
                         !! equilibrium value of MEKE.
+  logical :: MEKE_equilibrium_restoring !< If true, restore MEKE back to its equilibrium value,
+                        !!  which is calculated at each time step.
   logical :: GM_src_alt !< If true, use the GM energy conversion form S^2*N^2*kappa rather
                         !! than the streamfunction for the MEKE GM source term.
   logical :: Rd_as_max_scale !< If true the length scale can not exceed the
@@ -75,6 +81,8 @@ type, public :: MEKE_CS ; private
   real :: MEKE_advection_factor !< A scaling in front of the advection of MEKE [nondim]
   real :: MEKE_topographic_beta !< Weight for how much topographic beta is considered
                                 !! when computing beta in Rhines scale [nondim]
+  real :: MEKE_restoring_rate !< Inverse of the timescale used to nudge MEKE toward its equilibrium value [s-1].
+
   logical :: kh_flux_enabled !< If true, lateral diffusive MEKE flux is enabled.
   logical :: initialize !< If True, invokes a steady state solver to calculate MEKE.
   logical :: debug      !< If true, write out checksums of data for debugging
@@ -87,7 +95,8 @@ type, public :: MEKE_CS ; private
   integer :: id_KhMEKE_u = -1, id_KhMEKE_v = -1, id_Ku = -1, id_Au = -1
   integer :: id_Le = -1, id_gamma_b = -1, id_gamma_t = -1
   integer :: id_Lrhines = -1, id_Leady = -1
-  !!@}
+  integer :: id_MEKE_equilibrium = -1
+  !>@}
 
   ! Infrastructure
   integer :: id_clock_pass !< Clock for group pass calls
@@ -187,8 +196,10 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       if (associated(MEKE%GM_src)) &
         call hchksum(MEKE%GM_src, 'MEKE GM_src', G%HI, scale=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
       if (associated(MEKE%MEKE)) call hchksum(MEKE%MEKE, 'MEKE MEKE', G%HI, scale=US%L_T_to_m_s**2)
-      call uvchksum("MEKE SN_[uv]", SN_u, SN_v, G%HI, scale=US%s_to_T)
-      call uvchksum("MEKE h[uv]", hu, hv, G%HI, haloshift=1, scale=GV%H_to_m*US%L_to_m**2)
+      call uvchksum("MEKE SN_[uv]", SN_u, SN_v, G%HI, scale=US%s_to_T, &
+                    scalar_pair=.true.)
+      call uvchksum("MEKE h[uv]", hu, hv, G%HI, haloshift=1, &
+                    scale=GV%H_to_m*(US%L_to_m**2))
     endif
 
     sdt = dt*CS%MEKE_dtScale ! Scaled dt to use for time-stepping
@@ -277,7 +288,9 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     ! Calculates bottomFac2, barotrFac2 and LmixScale
     call MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, MEKE%MEKE, bottomFac2, barotrFac2, LmixScale)
     if (CS%debug) then
-      call uvchksum("MEKE drag_vel_[uv]", drag_vel_u, drag_vel_v, G%HI, scale=US%Z_to_m*US%s_to_T)
+      if (CS%visc_drag) &
+        call uvchksum("MEKE drag_vel_[uv]", drag_vel_u, drag_vel_v, G%HI, &
+                      scale=US%Z_to_m*US%s_to_T, scalar_pair=.true.)
       call hchksum(mass, 'MEKE mass',G%HI,haloshift=1, scale=US%RZ_to_kg_m2)
       call hchksum(drag_rate_visc, 'MEKE drag_rate_visc', G%HI, scale=US%L_T_to_m_s)
       call hchksum(bottomFac2, 'MEKE bottomFac2', G%HI)
@@ -318,6 +331,13 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
           src(i,j) = src(i,j) - CS%MEKE_GMcoeff*I_mass(i,j)*MEKE%GM_src(i,j)
         enddo ; enddo
       endif
+    endif
+
+    if (CS%MEKE_equilibrium_restoring) then
+      call MEKE_equilibrium_restoring(CS, G, US, SN_u, SN_v)
+      do j=js,je ; do i=is,ie
+        src(i,j) = src(i,j) - CS%MEKE_restoring_rate*(MEKE%MEKE(i,j) - CS%equilibrium_value(i,j))
+      enddo ; enddo
     endif
 
     ! Increase EKE by a full time-steps worth of source
@@ -651,6 +671,8 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
   real :: tolerance ! Width of EKE bracket [L2 T-2 ~> m2 s-2].
   logical :: useSecant, debugIteration
 
+  real :: Lgrid, Ldeform, Lfrict
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   debugIteration = .false.
@@ -665,118 +687,149 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
     ! This avoids extremes values in equilibrium solution due to bad values in SN_u, SN_v
     SN = min(SN_u(I,j), SN_u(I-1,j), SN_v(i,J), SN_v(i,J-1))
 
-    FatH = 0.25*((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J-1)) + &
-                 (G%CoriolisBu(I-1,J) + G%CoriolisBu(I,J-1))) ! Coriolis parameter at h points
-
-    ! Since zero-bathymetry cells are masked, this avoids calculations on land
-    if (CS%MEKE_topographic_beta == 0. .or. G%bathyT(i,j) == 0.) then
-      beta_topo_x = 0. ; beta_topo_y = 0.
-    else
-      !### Consider different combinations of these estimates of topographic beta, and the use
-      !    of the water column thickness instead of the bathymetric depth.
-      beta_topo_x = -CS%MEKE_topographic_beta * FatH * 0.5 * ( &
-                    (G%bathyT(i+1,j)-G%bathyT(i,j)) * G%IdxCu(I,j)  &
-                / max(G%bathyT(i+1,j),G%bathyT(i,j), GV%H_subroundoff) &
-            +       (G%bathyT(i,j)-G%bathyT(i-1,j)) * G%IdxCu(I-1,j) &
-                / max(G%bathyT(i,j),G%bathyT(i-1,j), GV%H_subroundoff) )
-      beta_topo_y = -CS%MEKE_topographic_beta * FatH * 0.5 * ( &
-                    (G%bathyT(i,j+1)-G%bathyT(i,j)) * G%IdyCv(i,J)  &
-                / max(G%bathyT(i,j+1),G%bathyT(i,j), GV%H_subroundoff) + &
-                    (G%bathyT(i,j)-G%bathyT(i,j-1)) * G%IdyCv(i,J-1) &
-                / max(G%bathyT(i,j),G%bathyT(i,j-1), GV%H_subroundoff) )
-    endif
-    beta =  sqrt((G%dF_dx(i,j) + beta_topo_x)**2 + &
-                 (G%dF_dy(i,j) + beta_topo_y)**2 )
-
-    I_H = US%L_to_Z*GV%Rho0 * I_mass(i,j)
-
-    if (KhCoeff*SN*I_H>0.) then
-      ! Solve resid(E) = 0, where resid = Kh(E) * (SN)^2 - damp_rate(E) E
-      EKEmin = 0.   ! Use the trivial root as the left bracket
-      ResMin = 0.   ! Need to detect direction of left residual
-      EKEmax = 0.01*US%m_s_to_L_T**2 ! First guess at right bracket
-      useSecant = .false. ! Start using a bisection method
-
-      ! First find right bracket for which resid<0
-      resid = 1.0*US%m_to_L**2*US%T_to_s**3 ; n1 = 0
-      do while (resid>0.)
-        n1 = n1 + 1
-        EKE = EKEmax
-        call MEKE_lengthScales_0d(CS, US, G%areaT(i,j), beta, G%bathyT(i,j), &
-                                  MEKE%Rd_dx_h(i,j), SN, EKE, &
-                                  bottomFac2, barotrFac2, LmixScale, LRhines, LEady)
-        ! TODO: Should include resolution function in Kh
-        Kh = (KhCoeff * sqrt(2.*barotrFac2*EKE) * LmixScale)
-        src = Kh * (SN * SN)
-        drag_rate = I_H * sqrt(drag_rate_visc(i,j)**2 + cd2 * ( 2.0*bottomFac2*EKE + Ubg2 ) )
-        ldamping = CS%MEKE_damping + drag_rate * bottomFac2
-        resid = src - ldamping * EKE
-        ! if (debugIteration) then
-        !   write(0,*) n1, 'EKE=',EKE,'resid=',resid
-        !   write(0,*) 'EKEmin=',EKEmin,'ResMin=',ResMin
-        !   write(0,*) 'src=',src,'ldamping=',ldamping
-        !   write(0,*) 'gamma-b=',bottomFac2,'gamma-t=',barotrFac2
-        !   write(0,*) 'drag_visc=',drag_rate_visc(i,j),'Ubg2=',Ubg2
-        ! endif
-        if (resid>0.) then    ! EKE is to the left of the root
-          EKEmin = EKE        ! so we move the left bracket here
-          EKEmax = 10. * EKE  ! and guess again for the right bracket
-          if (resid<ResMin) useSecant = .true.
-          ResMin = resid
-          if (EKEmax > 2.e17*US%m_s_to_L_T**2) then
-            if (debugIteration) stop 'Something has gone very wrong'
-            debugIteration = .true.
-            resid = 1. ; n1 = 0
-            EKEmin = 0. ; ResMin = 0.
-            EKEmax = 0.01*US%m_s_to_L_T**2
-            useSecant = .false.
-          endif
-        endif
-      enddo ! while(resid>0.) searching for right bracket
-      ResMax = resid
-
-      ! Bisect the bracket
-      n2 = 0 ; EKEerr = EKEmax - EKEmin
-      do while (EKEerr > tolerance)
-        n2 = n2 + 1
-        if (useSecant) then
-          EKE = EKEmin + (EKEmax - EKEmin) * (ResMin / (ResMin - ResMax))
-        else
-          EKE = 0.5 * (EKEmin + EKEmax)
-        endif
-        EKEerr = min( EKE-EKEmin, EKEmax-EKE )
-        ! TODO: Should include resolution function in Kh
-        Kh = (KhCoeff * sqrt(2.*barotrFac2*EKE) * LmixScale)
-        src = Kh * (SN * SN)
-        drag_rate = I_H * sqrt( drag_rate_visc(i,j)**2 + cd2 * ( 2.0*bottomFac2*EKE + Ubg2 ) )
-        ldamping = CS%MEKE_damping + drag_rate * bottomFac2
-        resid = src - ldamping * EKE
-        if (useSecant .and. resid>ResMin) useSecant = .false.
-        if (resid>0.) then              ! EKE is to the left of the root
-          EKEmin = EKE                  ! so we move the left bracket here
-          if (resid<ResMin) useSecant = .true.
-          ResMin = resid                ! Save this for the secant method
-        elseif (resid<0.) then          ! EKE is to the right of the root
-          EKEmax = EKE                  ! so we move the right bracket here
-          ResMax = resid                ! Save this for the secant method
-        else
-          exit                          ! resid=0 => EKE is exactly at the root
-        endif
-        if (n2>200) stop 'Failing to converge?'
-      enddo ! while(EKEmax-EKEmin>tolerance)
-
-    else
-      EKE = 0.
-    endif
     if (CS%MEKE_equilibrium_alt) then
-      MEKE%MEKE(i,j) = (US%Z_to_L*G%bathyT(i,j) * SN / (8*CS%cdrag))**2
+      MEKE%MEKE(i,j) = (CS%MEKE_GEOMETRIC_alpha * SN * US%Z_to_m*G%bathyT(i,j))**2 / cd2
     else
+      FatH = 0.25*((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J-1)) + &
+                   (G%CoriolisBu(I-1,J) + G%CoriolisBu(I,J-1))) ! Coriolis parameter at h points
+
+      ! Since zero-bathymetry cells are masked, this avoids calculations on land
+      if (CS%MEKE_topographic_beta == 0. .or. G%bathyT(i,j) == 0.) then
+        beta_topo_x = 0. ; beta_topo_y = 0.
+      else
+        !### Consider different combinations of these estimates of topographic beta, and the use
+        !    of the water column thickness instead of the bathymetric depth.
+        beta_topo_x = -CS%MEKE_topographic_beta * FatH * 0.5 * ( &
+                      (G%bathyT(i+1,j)-G%bathyT(i,j)) * G%IdxCu(I,j)  &
+                  / max(G%bathyT(i+1,j),G%bathyT(i,j), GV%H_subroundoff) &
+              +       (G%bathyT(i,j)-G%bathyT(i-1,j)) * G%IdxCu(I-1,j) &
+                  / max(G%bathyT(i,j),G%bathyT(i-1,j), GV%H_subroundoff) )
+        beta_topo_y = -CS%MEKE_topographic_beta * FatH * 0.5 * ( &
+                      (G%bathyT(i,j+1)-G%bathyT(i,j)) * G%IdyCv(i,J)  &
+                  / max(G%bathyT(i,j+1),G%bathyT(i,j), GV%H_subroundoff) + &
+                      (G%bathyT(i,j)-G%bathyT(i,j-1)) * G%IdyCv(i,J-1) &
+                  / max(G%bathyT(i,j),G%bathyT(i,j-1), GV%H_subroundoff) )
+      endif
+      beta =  sqrt((G%dF_dx(i,j) + beta_topo_x)**2 + &
+                   (G%dF_dy(i,j) + beta_topo_y)**2 )
+
+      I_H = US%L_to_Z*GV%Rho0 * I_mass(i,j)
+
+      if (KhCoeff*SN*I_H>0.) then
+        ! Solve resid(E) = 0, where resid = Kh(E) * (SN)^2 - damp_rate(E) E
+        EKEmin = 0.   ! Use the trivial root as the left bracket
+        ResMin = 0.   ! Need to detect direction of left residual
+        EKEmax = 0.01*US%m_s_to_L_T**2 ! First guess at right bracket
+        useSecant = .false. ! Start using a bisection method
+
+        ! First find right bracket for which resid<0
+        resid = 1.0*US%m_to_L**2*US%T_to_s**3 ; n1 = 0
+        do while (resid>0.)
+          n1 = n1 + 1
+          EKE = EKEmax
+          call MEKE_lengthScales_0d(CS, US, G%areaT(i,j), beta, G%bathyT(i,j), &
+                                    MEKE%Rd_dx_h(i,j), SN, EKE, &
+                                    bottomFac2, barotrFac2, LmixScale, LRhines, LEady)
+          ! TODO: Should include resolution function in Kh
+          Kh = (KhCoeff * sqrt(2.*barotrFac2*EKE) * LmixScale)
+          src = Kh * (SN * SN)
+          drag_rate = I_H * sqrt(drag_rate_visc(i,j)**2 + cd2 * ( 2.0*bottomFac2*EKE + Ubg2 ) )
+          ldamping = CS%MEKE_damping + drag_rate * bottomFac2
+          resid = src - ldamping * EKE
+          ! if (debugIteration) then
+          !   write(0,*) n1, 'EKE=',EKE,'resid=',resid
+          !   write(0,*) 'EKEmin=',EKEmin,'ResMin=',ResMin
+          !   write(0,*) 'src=',src,'ldamping=',ldamping
+          !   write(0,*) 'gamma-b=',bottomFac2,'gamma-t=',barotrFac2
+          !   write(0,*) 'drag_visc=',drag_rate_visc(i,j),'Ubg2=',Ubg2
+          ! endif
+          if (resid>0.) then    ! EKE is to the left of the root
+            EKEmin = EKE        ! so we move the left bracket here
+            EKEmax = 10. * EKE  ! and guess again for the right bracket
+            if (resid<ResMin) useSecant = .true.
+            ResMin = resid
+            if (EKEmax > 2.e17*US%m_s_to_L_T**2) then
+              if (debugIteration) stop 'Something has gone very wrong'
+              debugIteration = .true.
+              resid = 1. ; n1 = 0
+              EKEmin = 0. ; ResMin = 0.
+              EKEmax = 0.01*US%m_s_to_L_T**2
+              useSecant = .false.
+            endif
+          endif
+        enddo ! while(resid>0.) searching for right bracket
+        ResMax = resid
+
+        ! Bisect the bracket
+        n2 = 0 ; EKEerr = EKEmax - EKEmin
+        do while (EKEerr > tolerance)
+          n2 = n2 + 1
+          if (useSecant) then
+            EKE = EKEmin + (EKEmax - EKEmin) * (ResMin / (ResMin - ResMax))
+          else
+            EKE = 0.5 * (EKEmin + EKEmax)
+          endif
+          EKEerr = min( EKE-EKEmin, EKEmax-EKE )
+          ! TODO: Should include resolution function in Kh
+          Kh = (KhCoeff * sqrt(2.*barotrFac2*EKE) * LmixScale)
+          src = Kh * (SN * SN)
+          drag_rate = I_H * sqrt( drag_rate_visc(i,j)**2 + cd2 * ( 2.0*bottomFac2*EKE + Ubg2 ) )
+          ldamping = CS%MEKE_damping + drag_rate * bottomFac2
+          resid = src - ldamping * EKE
+          if (useSecant .and. resid>ResMin) useSecant = .false.
+          if (resid>0.) then              ! EKE is to the left of the root
+            EKEmin = EKE                  ! so we move the left bracket here
+            if (resid<ResMin) useSecant = .true.
+            ResMin = resid                ! Save this for the secant method
+          elseif (resid<0.) then          ! EKE is to the right of the root
+            EKEmax = EKE                  ! so we move the right bracket here
+            ResMax = resid                ! Save this for the secant method
+          else
+            exit                          ! resid=0 => EKE is exactly at the root
+          endif
+          if (n2>200) stop 'Failing to converge?'
+        enddo ! while(EKEmax-EKEmin>tolerance)
+
+      else
+        EKE = 0.
+      endif
       MEKE%MEKE(i,j) = EKE
     endif
   enddo ; enddo
 
 end subroutine MEKE_equilibrium
 
+
+!< This subroutine calculates a new equilibrium value for MEKE at each time step. This is not copied into
+!! MEKE%MEKE; rather, it is used as a restoring term to nudge MEKE%MEKE back to an equilibrium value
+subroutine MEKE_equilibrium_restoring(CS, G, US, SN_u, SN_v)
+  type(ocean_grid_type),             intent(inout) :: G    !< Ocean grid.
+  type(unit_scale_type),             intent(in)    :: US   !< A dimensional unit scaling type.
+  type(MEKE_CS),                     pointer       :: CS   !< MEKE control structure.
+  real, dimension(SZIB_(G),SZJ_(G)), intent(in)    :: SN_u !< Eady growth rate at u-points [T-1 ~> s-1].
+  real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: SN_v !< Eady growth rate at v-points [T-1 ~> s-1].
+  ! Local variables
+  real :: SN                      ! The local Eady growth rate [T-1 ~> s-1]
+  integer :: i, j, is, ie, js, je ! local indices
+  real :: cd2                     ! bottom drag
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  cd2 = CS%cdrag**2
+
+  if (.not. associated(CS%equilibrium_value)) allocate(CS%equilibrium_value(SZI_(G),SZJ_(G)))
+  CS%equilibrium_value(:,:) = 0.0
+
+!$OMP do
+  do j=js,je ; do i=is,ie
+    ! SN = 0.25*max( (SN_u(I,j) + SN_u(I-1,j)) + (SN_v(i,J) + SN_v(i,J-1)), 0.)
+    ! This avoids extremes values in equilibrium solution due to bad values in SN_u, SN_v
+    SN = min(SN_u(I,j), SN_u(I-1,j), SN_v(i,J), SN_v(i,J-1))
+    CS%equilibrium_value(i,j) = (CS%MEKE_GEOMETRIC_alpha * SN * US%Z_to_m*G%bathyT(i,j))**2 / cd2
+  enddo ; enddo
+
+  if (CS%id_MEKE_equilibrium>0) call post_data(CS%id_MEKE_equilibrium, CS%equilibrium_value, CS%diag)
+
+end subroutine MEKE_equilibrium_restoring
 
 !> Calculates the eddy mixing length scale and \f$\gamma_b\f$ and \f$\gamma_t\f$
 !! functions that are ratios of either bottom or barotropic eddy energy to the
@@ -942,6 +995,8 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
                            ! run to the representation in a restart file.
   real    :: L_rescale     ! A rescaling factor for length from the internal representation in this
                            ! run to the representation in a restart file.
+  real    :: MEKE_restoring_timescale ! The timescale used to nudge MEKE toward its equilibrium value.
+  real :: cdrag            ! The default bottom drag coefficient [nondim].
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   logical :: laplacian, biharmonic, useVarMix, coldStart
   ! This include declares and sets the variable "version".
@@ -1001,9 +1056,22 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   call get_param(param_file, mdl, "MEKE_GEOMETRIC", CS%MEKE_GEOMETRIC, &
                  "If MEKE_GEOMETRIC is true, uses the GM coefficient formulation "//&
                  "from the GEOMETRIC framework (Marshall et al., 2012).", default=.false.)
+  call get_param(param_file, mdl, "MEKE_GEOMETRIC_ALPHA", CS%MEKE_GEOMETRIC_alpha, &
+                 "The nondimensional coefficient governing the efficiency of the GEOMETRIC \n"//&
+                 "thickness diffusion.", units="nondim", default=0.05)
   call get_param(param_file, mdl, "MEKE_EQUILIBRIUM_ALT", CS%MEKE_equilibrium_alt, &
                  "If true, use an alternative formula for computing the (equilibrium)"//&
                  "initial value of MEKE.", default=.false.)
+  call get_param(param_file, mdl, "MEKE_EQUILIBRIUM_RESTORING", CS%MEKE_equilibrium_restoring, &
+                 "If true, restore MEKE back to its equilibrium value, which is calculated at"//&
+                 "each time step.", default=.false.)
+  if (CS%MEKE_equilibrium_restoring) then
+    call get_param(param_file, mdl, "MEKE_RESTORING_TIMESCALE", MEKE_restoring_timescale, &
+                   "The timescale used to nudge MEKE toward its equilibrium value.", units="s", &
+                   default=1e6, scale=US%T_to_s)
+    CS%MEKE_restoring_rate = 1.0 / MEKE_restoring_timescale
+  endif
+
   call get_param(param_file, mdl, "MEKE_FRCOEFF", CS%MEKE_FrCoeff, &
                  "The efficiency of the conversion of mean energy into "//&
                  "MEKE.  If MEKE_FRCOEFF is negative, this conversion "//&
@@ -1121,10 +1189,14 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
                  units="nondim", default=0.0)
 
   ! Nonlocal module parameters
-  call get_param(param_file, mdl, "CDRAG", CS%cdrag, &
+  call get_param(param_file, mdl, "CDRAG", cdrag, &
                  "CDRAG is the drag coefficient relating the magnitude of "//&
                  "the velocity field to the bottom stress.", units="nondim", &
                  default=0.003)
+  call get_param(param_file, mdl, "MEKE_CDRAG", CS%cdrag, &
+                 "Drag coefficient relating the magnitude of the velocity "//&
+                 "field to the bottom stress in MEKE.", units="nondim", &
+                 default=cdrag)
   call get_param(param_file, mdl, "LAPLACIAN", laplacian, default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "BIHARMONIC", biharmonic, default=.false., do_not_log=.true.)
 
@@ -1196,6 +1268,11 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
      'Zonal diffusivity of MEKE', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
     CS%id_KhMEKE_v = register_diag_field('ocean_model', 'KHMEKE_v', diag%axesCv1, Time, &
      'Meridional diffusivity of MEKE', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
+  endif
+
+  if (CS%MEKE_equilibrium_restoring) then
+    CS%id_MEKE_equilibrium = register_diag_field('ocean_model', 'MEKE_equilibrium', diag%axesT1, Time, &
+     'Equilibrated Mesoscale Eddy Kinetic Energy', 'm2 s-2', conversion=US%L_T_to_m_s**2)
   endif
 
   CS%id_clock_pass = cpu_clock_id('(Ocean continuity halo updates)', grain=CLOCK_ROUTINE)

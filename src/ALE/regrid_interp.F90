@@ -54,17 +54,17 @@ integer, parameter :: INTERPOLATION_PQM_IH6IH5 = 9 !< O(h^5)
 !>@{ Interpolant degrees
 integer, parameter :: DEGREE_1 = 1, DEGREE_2 = 2, DEGREE_3 = 3, DEGREE_4 = 4
 integer, public, parameter :: DEGREE_MAX = 5
-!!@}
+!>@}
 
 !> When the N-R algorithm produces an estimate that lies outside [0,1], the
 !! estimate is set to be equal to the boundary location, 0 or 1, plus or minus
-!! an offset, respectively, when the derivative is zero at the boundary.
+!! an offset, respectively, when the derivative is zero at the boundary [nondim].
 real, public, parameter    :: NR_OFFSET = 1e-6
 !> Maximum number of Newton-Raphson iterations. Newton-Raphson iterations are
 !! used to build the new grid by finding the coordinates associated with
 !! target densities and interpolations of degree larger than 1.
 integer, public, parameter :: NR_ITERATIONS = 8
-!> Tolerance for Newton-Raphson iterations (stop when increment falls below this)
+!> Tolerance for Newton-Raphson iterations (stop when increment falls below this) [nondim]
 real, public, parameter    :: NR_TOLERANCE = 1e-12
 
 contains
@@ -79,17 +79,17 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
      ppoly0_coefs, degree, h_neglect, h_neglect_edge)
   type(interp_CS_type),  intent(in)    :: CS !< Interpolation control structure
   integer,               intent(in)    :: n0 !< Number of cells on source grid
-  real, dimension(n0),   intent(in)    :: densities !< Actual cell densities
-  real, dimension(n0),   intent(in)    :: h0 !< cell widths on source grid
-  real, dimension(n0,2), intent(inout) :: ppoly0_E  !< Edge value of polynomial
-  real, dimension(n0,2), intent(inout) :: ppoly0_S  !< Edge slope of polynomial
-  real, dimension(n0,DEGREE_MAX+1), intent(inout) :: ppoly0_coefs !< Coefficients of polynomial
+  real, dimension(n0),   intent(in)    :: densities !< Actual cell densities [A]
+  real, dimension(n0),   intent(in)    :: h0 !< cell widths on source grid [H]
+  real, dimension(n0,2), intent(inout) :: ppoly0_E  !< Edge value of polynomial [A]
+  real, dimension(n0,2), intent(inout) :: ppoly0_S  !< Edge slope of polynomial [A H-1]
+  real, dimension(n0,DEGREE_MAX+1), intent(inout) :: ppoly0_coefs !< Coefficients of polynomial [A]
   integer,               intent(inout) :: degree    !< The degree of the polynomials
   real,        optional, intent(in)    :: h_neglect !< A negligibly small width for the
-                                             !! purpose of cell reconstructions
+                                             !! purpose of cell reconstructions [H]
                                              !! in the same units as h0.
   real,        optional, intent(in)    :: h_neglect_edge !< A negligibly small width
-                                             !! for the purpose of edge value calculations
+                                             !! for the purpose of edge value calculations [H]
                                              !! in the same units as h0.
   ! Local variables
   logical :: extrapolate
@@ -271,15 +271,15 @@ subroutine interpolate_grid( n0, h0, x0, ppoly0_E, ppoly0_coefs, &
                              target_values, degree, n1, h1, x1, answers_2018 )
   integer,               intent(in)     :: n0            !< Number of points on source grid
   integer,               intent(in)     :: n1            !< Number of points on target grid
-  real, dimension(n0),   intent(in)     :: h0            !< Thicknesses of source grid cells
-  real, dimension(n0+1), intent(in)     :: x0            !< Source interface positions
-  real, dimension(n0,2), intent(in)     :: ppoly0_E      !< Edge values of interpolating polynomials
+  real, dimension(n0),   intent(in)     :: h0            !< Thicknesses of source grid cells [H]
+  real, dimension(n0+1), intent(in)     :: x0            !< Source interface positions [H]
+  real, dimension(n0,2), intent(in)     :: ppoly0_E      !< Edge values of interpolating polynomials [A]
   real, dimension(n0,DEGREE_MAX+1), &
-                          intent(in)    :: ppoly0_coefs  !< Coefficients of interpolating polynomials
-  real, dimension(n1+1),  intent(in)    :: target_values !< Target values of interfaces
+                          intent(in)    :: ppoly0_coefs  !< Coefficients of interpolating polynomials [A]
+  real, dimension(n1+1),  intent(in)    :: target_values !< Target values of interfaces [A]
   integer,                intent(in)    :: degree        !< Degree of interpolating polynomials
-  real, dimension(n1),    intent(inout) :: h1            !< Thicknesses of target grid cells
-  real, dimension(n1+1),  intent(inout) :: x1            !< Target interface positions
+  real, dimension(n1),    intent(inout) :: h1            !< Thicknesses of target grid cells [H]
+  real, dimension(n1+1),  intent(inout) :: x1            !< Target interface positions [H]
   logical,      optional, intent(in)    :: answers_2018  !< If true use older, less acccurate expressions.
 
   ! Local variables
@@ -309,21 +309,22 @@ subroutine build_and_interpolate_grid(CS, densities, n0, h0, x0, target_values, 
   type(interp_CS_type),  intent(in)    :: CS  !< A control structure for regrid_interp
   integer,               intent(in)    :: n0  !< The number of points on the input grid
   integer,               intent(in)    :: n1  !< The number of points on the output grid
-  real, dimension(n0),   intent(in)    :: densities !< Input cell densities [kg m-3]
-  real, dimension(n1+1), intent(in)    :: target_values !< Target values of interfaces
-  real, dimension(n0),   intent(in)    :: h0  !< Initial cell widths
-  real, dimension(n0+1), intent(in)    :: x0  !< Source interface positions
-  real, dimension(n1),   intent(inout) :: h1  !< Output cell widths
-  real, dimension(n1+1), intent(inout) :: x1  !< Target interface positions
+  real, dimension(n0),   intent(in)    :: densities !< Input cell densities [R ~> kg m-3]
+  real, dimension(n1+1), intent(in)    :: target_values !< Target values of interfaces [R ~> kg m-3]
+  real, dimension(n0),   intent(in)    :: h0  !< Initial cell widths [H]
+  real, dimension(n0+1), intent(in)    :: x0  !< Source interface positions [H]
+  real, dimension(n1),   intent(inout) :: h1  !< Output cell widths [H]
+  real, dimension(n1+1), intent(inout) :: x1  !< Target interface positions [H]
   real,        optional, intent(in)    :: h_neglect !< A negligibly small width for the
-                                           !! purpose of cell reconstructions
+                                           !! purpose of cell reconstructions [H]
                                            !! in the same units as h0.
   real,        optional, intent(in)    :: h_neglect_edge !< A negligibly small width
-                                           !! for the purpose of edge value calculations
+                                           !! for the purpose of edge value calculations [H]
                                            !! in the same units as h0.
 
-  real, dimension(n0,2) :: ppoly0_E, ppoly0_S
-  real, dimension(n0,DEGREE_MAX+1) :: ppoly0_C
+  real, dimension(n0,2) :: ppoly0_E   ! Polynomial edge values [R ~> kg m-3]
+  real, dimension(n0,2) :: ppoly0_S   ! Polynomial edge slopes [R H-1]
+  real, dimension(n0,DEGREE_MAX+1) :: ppoly0_C  ! Polynomial interpolant coeficients on the local 0-1 grid [R ~> kg m-3]
   integer :: degree
 
   call regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, ppoly0_C, &
@@ -352,28 +353,28 @@ function get_polynomial_coordinate( N, h, x_g, ppoly_E, ppoly_coefs, &
                                     target_value, degree, answers_2018 ) result ( x_tgt )
   ! Arguments
   integer,              intent(in) :: N            !< Number of grid cells
-  real, dimension(N),   intent(in) :: h            !< Grid cell thicknesses
-  real, dimension(N+1), intent(in) :: x_g          !< Grid interface locations
-  real, dimension(N,2), intent(in) :: ppoly_E      !< Edge values of interpolating polynomials
-  real, dimension(N,DEGREE_MAX+1), intent(in) :: ppoly_coefs  !< Coefficients of interpolating polynomials
-  real,                 intent(in) :: target_value !< Target value to find position for
+  real, dimension(N),   intent(in) :: h            !< Grid cell thicknesses [H]
+  real, dimension(N+1), intent(in) :: x_g          !< Grid interface locations [H]
+  real, dimension(N,2), intent(in) :: ppoly_E      !< Edge values of interpolating polynomials [A]
+  real, dimension(N,DEGREE_MAX+1), intent(in) :: ppoly_coefs  !< Coefficients of interpolating polynomials [A]
+  real,                 intent(in) :: target_value !< Target value to find position for [A]
   integer,              intent(in) :: degree       !< Degree of the interpolating polynomials
   logical,    optional, intent(in) :: answers_2018 !< If true use older, less acccurate expressions.
-  real :: x_tgt !< The position of x_g at which target_value is found.
+  real                             :: x_tgt        !< The position of x_g at which target_value is found [H]
+
   ! Local variables
-  integer                     :: i, k        ! loop indices
-  integer                     :: k_found     ! index of target cell
-  integer                     :: iter
-  real                        :: xi0         ! normalized target coordinate
-  real, dimension(DEGREE_MAX) :: a           ! polynomial coefficients
+  real                        :: xi0         ! normalized target coordinate [nondim]
+  real, dimension(DEGREE_MAX) :: a           ! polynomial coefficients [A]
   real                        :: numerator
   real                        :: denominator
-  real                        :: delta       ! Newton-Raphson increment
-  real                        :: x           ! global target coordinate
-  real                        :: eps         ! offset used to get away from
-                                             ! boundaries
-  real                        :: grad        ! gradient during N-R iterations
-  logical   :: use_2018_answers  ! If true use older, less acccurate expressions.
+  real                        :: delta       ! Newton-Raphson increment [nondim]
+!   real                        :: x           ! global target coordinate
+  real                        :: eps         ! offset used to get away from boundaries [nondim]
+  real                        :: grad        ! gradient during N-R iterations [A]
+  integer :: i, k, iter  ! loop indices
+  integer :: k_found     ! index of target cell
+  character(len=200) :: mesg
+  logical :: use_2018_answers  ! If true use older, less acccurate expressions.
 
   eps = NR_OFFSET
   k_found = -1
@@ -390,11 +391,9 @@ function get_polynomial_coordinate( N, h, x_g, ppoly_E, ppoly_coefs, &
   ! Since discontinuous edge values are allowed, we check whether the target
   ! value lies between two discontinuous edge values at interior interfaces
   do k = 2,N
-    if ( ( target_value >= ppoly_E(k-1,2) ) .AND. &
-      ( target_value <= ppoly_E(k,1) ) ) then
+    if ( ( target_value >= ppoly_E(k-1,2) ) .AND. ( target_value <= ppoly_E(k,1) ) ) then
       x_tgt = x_g(k)
       return   ! return because there is no need to look further
-      exit
     endif
   enddo
 
@@ -412,8 +411,7 @@ function get_polynomial_coordinate( N, h, x_g, ppoly_E, ppoly_coefs, &
   ! contains the target value. The variable k_found holds the index value
   ! of the cell where the taregt value lies.
   do k = 1,N
-    if ( ( target_value > ppoly_E(k,1) ) .AND. &
-         ( target_value < ppoly_E(k,2) ) ) then
+    if ( ( target_value > ppoly_E(k,1) ) .AND. ( target_value < ppoly_E(k,2) ) ) then
       k_found = k
       exit
     endif
@@ -425,12 +423,10 @@ function get_polynomial_coordinate( N, h, x_g, ppoly_E, ppoly_coefs, &
   ! means there is a major problem with the interpolant. This needs to be
   ! reported.
   if ( k_found == -1 ) then
-      write(*,*) target_value, ppoly_E(1,1), ppoly_E(N,2)
-      write(*,*) 'Could not find target coordinate in ' //&
-                 '"get_polynomial_coordinate". This is caused by an '//&
-                 'inconsistent interpolant (perhaps not monotonically '//&
-                 'increasing)'
-      call MOM_error( FATAL, 'Aborting execution' )
+    write(mesg,*) 'Could not find target coordinate', target_value, 'in get_polynomial_coordinate. This is '//&
+                  'caused by an inconsistent interpolant (perhaps not monotonically increasing):', &
+                  target_value, ppoly_E(1,1), ppoly_E(N,2)
+    call MOM_error( FATAL, mesg )
   endif
 
   ! Reset all polynomial coefficients to 0 and copy those pertaining to
@@ -440,18 +436,11 @@ function get_polynomial_coordinate( N, h, x_g, ppoly_E, ppoly_coefs, &
     a(i) = ppoly_coefs(k_found,i)
   enddo
 
-  ! Guess value to start Newton-Raphson iterations (middle of cell)
+  ! Guess the middle of the cell to start Newton-Raphson iterations
   xi0 = 0.5
-  iter = 1
-  delta = 1e10
 
   ! Newton-Raphson iterations
-  do
-    ! break if converged or too many iterations taken
-    if ( ( iter > NR_ITERATIONS ) .OR. &
-         ( abs(delta) < NR_TOLERANCE ) ) then
-      exit
-    endif
+  do iter = 1,NR_ITERATIONS
 
     if (use_2018_answers) then
       numerator = a(1) + a(2)*xi0 + a(3)*xi0*xi0 + a(4)*xi0*xi0*xi0 + &
@@ -487,7 +476,8 @@ function get_polynomial_coordinate( N, h, x_g, ppoly_E, ppoly_coefs, &
       if ( grad == 0.0 ) xi0 = xi0 - eps
     endif
 
-    iter = iter + 1
+    ! break if converged or too many iterations taken
+    if ( abs(delta) < NR_TOLERANCE ) exit
   enddo ! end Newton-Raphson iterations
 
   x_tgt = x_g(k_found) + xi0 * h(k_found)

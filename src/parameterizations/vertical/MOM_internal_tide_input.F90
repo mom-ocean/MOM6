@@ -56,7 +56,7 @@ type, public :: int_tide_input_CS ; private
 
   !>@{ Diagnostic IDs
   integer :: id_TKE_itidal = -1, id_Nb = -1, id_N2_bot = -1
-  !!@}
+  !>@}
 end type int_tide_input_CS
 
 !> This type is used to exchange fields related to the internal tides.
@@ -326,7 +326,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_fill, &
                  "A diapycnal diffusivity that is used to interpolate "//&
                  "more sensible values of T & S into thin layers.", &
-                 default=1.0e-6, scale=US%m2_s_to_Z2_T)
+                 units="m2 s-1", default=1.0e-6, scale=US%m2_s_to_Z2_T)
 
   call get_param(param_file, mdl, "UTIDE", utide, &
                "The constant tidal amplitude used with INT_TIDE_DISSIPATION.", &

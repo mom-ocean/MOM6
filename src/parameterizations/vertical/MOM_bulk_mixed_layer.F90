@@ -146,13 +146,13 @@ type, public :: bulkmixedlayer_CS ; private
   integer :: id_TKE_mech_decay = -1, id_TKE_conv_decay = -1, id_TKE_conv_s2 = -1
   integer :: id_PE_detrain = -1, id_PE_detrain2 = -1, id_h_mismatch = -1
   integer :: id_Hsfc_used = -1, id_Hsfc_max = -1, id_Hsfc_min = -1
-  !!@}
+  !>@}
 end type bulkmixedlayer_CS
 
 !>@{ CPU clock IDs
 integer :: id_clock_detrain=0, id_clock_mech=0, id_clock_conv=0, id_clock_adjustment=0
 integer :: id_clock_EOS=0, id_clock_resort=0, id_clock_pass=0
-!!@}
+!>@}
 
 contains
 

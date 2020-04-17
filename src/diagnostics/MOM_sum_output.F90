@@ -376,6 +376,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     mass_EFP, &        ! Extended fixed point sums of total mass, etc.
     salt_EFP, heat_EFP, salt_chg_EFP, heat_chg_EFP, mass_chg_EFP, &
     mass_anom_EFP, salt_anom_EFP, heat_anom_EFP
+  real :: CFL_Iarea    ! Direction-based inverse area used in CFL test [L-2].
   real :: CFL_trans    ! A transport-based definition of the CFL number [nondim].
   real :: CFL_lin      ! A simpler definition of the CFL number [nondim].
   real :: max_CFL(2)   ! The maxima of the CFL numbers [nondim].
@@ -386,7 +387,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     PE_pt              ! The potential energy at each point [J].
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Temp_int, Salt_int ! Layer and cell integrated heat and salt [J] and [g Salt].
-  real :: HL2_to_kg    ! A conversion factor form a thickness-volume to mass [kg H-1 L-2 ~> kg m-3 or 1]
+  real :: HL2_to_kg    ! A conversion factor from a thickness-volume to mass [kg H-1 L-2 ~> kg m-3 or 1]
   real :: KE_scale_factor   ! The combination of unit rescaling factors in the kinetic energy
                             ! calculation [kg T2 H-1 L-2 s-2 ~> kg m-3 or nondim]
   real :: PE_scale_factor   ! The combination of unit rescaling factors in the potential energy
@@ -719,21 +720,21 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
 ! Calculate the maximum CFL numbers.
   max_CFL(1:2) = 0.0
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    if (u(I,j,k) < 0.0) then
-      CFL_trans = (-u(I,j,k) * CS%dt_in_T) * (G%dy_Cu(I,j) * G%IareaT(i+1,j))
-    else
-      CFL_trans = (u(I,j,k) * CS%dt_in_T) * (G%dy_Cu(I,j) * G%IareaT(i,j))
-    endif
+    CFL_Iarea = G%IareaT(i,j)
+    if (u(I,j,k) < 0.0) &
+      CFL_Iarea = G%IareaT(i+1,j)
+
+    CFL_trans = abs(u(I,j,k) * CS%dt_in_T) * (G%dy_Cu(I,j) * CFL_Iarea)
     CFL_lin = abs(u(I,j,k) * CS%dt_in_T) * G%IdxCu(I,j)
     max_CFL(1) = max(max_CFL(1), CFL_trans)
     max_CFL(2) = max(max_CFL(2), CFL_lin)
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    if (v(i,J,k) < 0.0) then
-      CFL_trans = (-v(i,J,k) * CS%dt_in_T) * (G%dx_Cv(i,J) * G%IareaT(i,j+1))
-    else
-      CFL_trans = (v(i,J,k) * CS%dt_in_T) * (G%dx_Cv(i,J) * G%IareaT(i,j))
-    endif
+    CFL_Iarea = G%IareaT(i,j)
+    if (v(i,J,k) < 0.0) &
+      CFL_Iarea = G%IareaT(i,j+1)
+
+    CFL_trans = abs(v(i,J,k) * CS%dt_in_T) * (G%dx_Cv(i,J) * CFL_Iarea)
     CFL_lin = abs(v(i,J,k) * CS%dt_in_T) * G%IdyCv(i,J)
     max_CFL(1) = max(max_CFL(1), CFL_trans)
     max_CFL(2) = max(max_CFL(2), CFL_lin)

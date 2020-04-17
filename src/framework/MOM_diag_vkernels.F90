@@ -4,6 +4,8 @@ module MOM_diag_vkernels
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use iso_fortran_env, only : stdout=>output_unit, stderr=>error_unit
+
 implicit none ; private
 
 public diag_vkernels_unit_tests
@@ -173,8 +175,8 @@ logical function diag_vkernels_unit_tests(verbose)
 
   v = verbose
 
-  write(0,*) '==== MOM_diag_kernels: diag_vkernels_unit_tests =========='
-  if (v) write(0,*) '- - - - - - - - - - interpolation tests  - - - - - - - - -'
+  write(stdout,*) '==== MOM_diag_kernels: diag_vkernels_unit_tests =========='
+  if (v) write(stdout,*) '- - - - - - - - - - interpolation tests  - - - - - - - - -'
 
   fail = test_interp(v,mv,'Identity: 3 layer', &
                      3, (/1.,2.,3./), (/1.,2.,3.,4./), &
@@ -221,7 +223,7 @@ logical function diag_vkernels_unit_tests(verbose)
                      4, (/0.,2.,6.,0./), (/mv,1.,3.,8.,mv/) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
-  if (v) write(0,*) '- - - - - - - - - - reintegration tests  - - - - - - - - -'
+  if (v) write(stdout,*) '- - - - - - - - - - reintegration tests  - - - - - - - - -'
 
   fail = test_reintegrate(v,mv,'Identity: 3 layer', &
                      3, (/1.,2.,3./), (/-5.,2.,1./), &
@@ -273,7 +275,7 @@ logical function diag_vkernels_unit_tests(verbose)
                      3, (/0.,0.,0./), (/mv, mv, mv/) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
-  if (.not. fail) write(*,*) 'Pass'
+  if (.not. fail) write(stdout,*) 'Pass'
 
 end function diag_vkernels_unit_tests
 
@@ -302,14 +304,15 @@ logical function test_interp(verbose, missing_value, msg, nsrc, h_src, u_src, nd
     if (u_dest(k)/=u_true(k)) test_interp = .true.
   enddo
   if (verbose .or. test_interp) then
-    write(0,'(2a)') ' Test: ',msg
-    write(0,'(a3,3(a24))') 'k','u_result','u_true','error'
+    write(stdout,'(2a)') ' Test: ',msg
+    write(stdout,'(a3,3(a24))') 'k','u_result','u_true','error'
     do k=1,ndest+1
       error = u_dest(k)-u_true(k)
       if (error==0.) then
-        write(0,'(i3,3(1pe24.16))') k,u_dest(k),u_true(k),u_dest(k)-u_true(k)
+        write(stdout,'(i3,3(1pe24.16))') k,u_dest(k),u_true(k),u_dest(k)-u_true(k)
       else
-        write(0,'(i3,3(1pe24.16),x,a)') k,u_dest(k),u_true(k),u_dest(k)-u_true(k),'<--- WRONG!'
+        write(stdout,'(i3,3(1pe24.16),x,a)') k,u_dest(k),u_true(k),u_dest(k)-u_true(k),'<--- WRONG!'
+        write(stderr,'(i3,3(1pe24.16),x,a)') k,u_dest(k),u_true(k),u_dest(k)-u_true(k),'<--- WRONG!'
       endif
     enddo
   endif
@@ -340,14 +343,15 @@ logical function test_reintegrate(verbose, missing_value, msg, nsrc, h_src, uh_s
     if (uh_dest(k)/=uh_true(k)) test_reintegrate = .true.
   enddo
   if (verbose .or. test_reintegrate) then
-    write(0,'(2a)') ' Test: ',msg
-    write(0,'(a3,3(a24))') 'k','uh_result','uh_true','error'
+    write(stdout,'(2a)') ' Test: ',msg
+    write(stdout,'(a3,3(a24))') 'k','uh_result','uh_true','error'
     do k=1,ndest
       error = uh_dest(k)-uh_true(k)
       if (error==0.) then
-        write(0,'(i3,3(1pe24.16))') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k)
+        write(stdout,'(i3,3(1pe24.16))') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k)
       else
-        write(0,'(i3,3(1pe24.16),x,a)') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k),'<--- WRONG!'
+        write(stdout,'(i3,3(1pe24.16),x,a)') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k),'<--- WRONG!'
+        write(stderr,'(i3,3(1pe24.16),x,a)') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k),'<--- WRONG!'
       endif
     enddo
   endif

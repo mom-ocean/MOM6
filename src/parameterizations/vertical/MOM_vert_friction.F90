@@ -558,7 +558,8 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
   enddo ! end of v-component J loop
 
   if (CS%debug) then
-    call uvchksum("visc_rem_[uv]", visc_rem_u, visc_rem_v, G%HI,haloshift=0)
+    call uvchksum("visc_rem_[uv]", visc_rem_u, visc_rem_v, G%HI, haloshift=0, &
+                  scalar_pair=.true.)
   endif
 
 end subroutine vertvisc_remnant
@@ -1008,10 +1009,13 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   enddo ! end of v-point j loop
 
   if (CS%debug) then
-    call uvchksum("vertvisc_coef h_[uv]", CS%h_u, CS%h_v, G%HI, haloshift=0, scale=GV%H_to_m)
-    call uvchksum("vertvisc_coef a_[uv]", CS%a_u, CS%a_v, G%HI, haloshift=0, scale=US%Z_to_m*US%s_to_T)
+    call uvchksum("vertvisc_coef h_[uv]", CS%h_u, CS%h_v, G%HI, haloshift=0, &
+                  scale=GV%H_to_m, scalar_pair=.true.)
+    call uvchksum("vertvisc_coef a_[uv]", CS%a_u, CS%a_v, G%HI, haloshift=0, &
+                  scale=US%Z_to_m*US%s_to_T, scalar_pair=.true.)
     if (allocated(hML_u) .and. allocated(hML_v)) &
-      call uvchksum("vertvisc_coef hML_[uv]", hML_u, hML_v, G%HI, haloshift=0, scale=GV%H_to_m)
+      call uvchksum("vertvisc_coef hML_[uv]", hML_u, hML_v, G%HI, &
+                    haloshift=0, scale=GV%H_to_m, scalar_pair=.true.)
   endif
 
 ! Offer diagnostic fields for averaging.
@@ -1573,8 +1577,8 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  default=.true.)
   call get_param(param_file, mdl, "VERT_FRICTION_2018_ANSWERS", CS%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the answers "//&
-                 "from the end of 2018.  Otherwise, use expressions that do not use an arbitary "//&
-                 "and hard-coded maximum viscous coupling coefficient between layers.", &
+                 "from the end of 2018.  Otherwise, use expressions that do not use an arbitrary "//&
+                 "hard-coded maximum viscous coupling coefficient between layers.", &
                  default=default_2018_answers)
   call get_param(param_file, mdl, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
                  "If true, the bottom stress is calculated with a drag "//&

@@ -36,7 +36,7 @@ use MOM_error_handler,    only: MOM_error, FATAL, is_root_pe, WARNING
 use MOM_time_manager,     only: time_type, set_date, set_time, set_calendar_type, NOLEAP
 use MOM_time_manager,     only: operator(+), operator(-), operator(*), operator(/)
 use MOM_time_manager,     only: operator(==), operator(/=), operator(>), get_time
-use MOM_file_parser,      only: get_param, log_version, param_file_type
+use MOM_file_parser,      only: get_param, log_version, param_file_type, close_param_file
 use MOM_get_input,        only: Get_MOM_Input, directories
 use MOM_EOS,              only: gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_constants,        only: CELSIUS_KELVIN_OFFSET
@@ -280,6 +280,9 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   else
     glb%c1 = 0.0; glb%c2 = 0.0; glb%c3 = 0.0; glb%c4 = 0.0
   endif
+
+  ! Close param file before it gets opened by ocean_model_init again.
+  call close_param_file(param_file)
 
   ! Initialize the MOM6 model
   runtype = get_runtype()

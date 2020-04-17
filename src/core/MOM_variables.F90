@@ -3,6 +3,7 @@ module MOM_variables
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_array_transform, only : rotate_array, rotate_vector
 use MOM_domains, only : MOM_domain_type, get_domain_extent, group_pass_type
 use MOM_debugging, only : hchksum
 use MOM_error_handler, only : MOM_error, FATAL
@@ -11,6 +12,7 @@ use MOM_EOS, only : EOS_type
 
 use coupler_types_mod, only : coupler_1d_bc_type, coupler_2d_bc_type
 use coupler_types_mod, only : coupler_type_spawn, coupler_type_destructor
+use coupler_types_mod, only : coupler_type_initialized
 
 implicit none ; private
 
@@ -18,6 +20,7 @@ implicit none ; private
 
 public allocate_surface_state, deallocate_surface_state, MOM_thermovar_chksum
 public ocean_grid_type, alloc_BT_cont_type, dealloc_BT_cont_type
+public rotate_surface_state
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -204,7 +207,7 @@ type, public :: vertvisc_type
   real, pointer, dimension(:,:) :: TKE_BBL => NULL()
                              !< A term related to the bottom boundary layer source of turbulent kinetic
                              !! energy, currently in [Z3 T-3 ~> m3 s-3], but may at some time be changed
-                             !! to [kg Z3 m-3 T-3 ~> W m-2].
+                             !! to [R Z3 T-3 ~> W m-2].
   real, pointer, dimension(:,:) :: &
     taux_shelf => NULL(), &  !< The zonal stresses on the ocean under shelves [R Z L T-2 ~> Pa].
     tauy_shelf => NULL()     !< The meridional stresses on the ocean under shelves [R Z L T-2 ~> Pa].
@@ -394,6 +397,79 @@ subroutine deallocate_surface_state(sfc_state)
   sfc_state%arrays_allocated = .false.
 
 end subroutine deallocate_surface_state
+
+!> Rotate the surface state fields from the input to the model indices.
+subroutine rotate_surface_state(sfc_state_in, G_in, sfc_state, G, turns)
+  type(surface), intent(in) :: sfc_state_in
+  type(ocean_grid_type), intent(in) :: G_in
+  type(surface), intent(inout) :: sfc_state
+  type(ocean_grid_type), intent(in) :: G
+  integer, intent(in) :: turns
+
+  logical :: use_temperature, do_integrals, use_melt_potential, use_iceshelves
+
+  ! NOTE: Many of these are weak tests, since only one is checked
+  use_temperature = allocated(sfc_state_in%SST) &
+      .and. allocated(sfc_state_in%SSS)
+  use_melt_potential = allocated(sfc_state_in%melt_potential)
+  do_integrals = allocated(sfc_state_in%ocean_mass)
+  use_iceshelves = allocated(sfc_state_in%taux_shelf) &
+      .and. allocated(sfc_state_in%tauy_shelf)
+
+  if (.not. sfc_state%arrays_allocated) then
+    call allocate_surface_state(sfc_state, G, &
+        use_temperature=use_temperature, &
+        do_integrals=do_integrals, &
+        use_meltpot=use_melt_potential, &
+        use_iceshelves=use_iceshelves &
+    )
+    sfc_state%arrays_allocated = .true.
+  endif
+
+  if (use_temperature) then
+    call rotate_array(sfc_state_in%SST, turns, sfc_state%SST)
+    call rotate_array(sfc_state_in%SSS, turns, sfc_state%SSS)
+  else
+    call rotate_array(sfc_state_in%sfc_density, turns, sfc_state%sfc_density)
+  endif
+
+  call rotate_array(sfc_state_in%Hml, turns, sfc_state%Hml)
+  call rotate_vector(sfc_state_in%u, sfc_state_in%v, turns, &
+      sfc_state%u, sfc_state%v)
+  call rotate_array(sfc_state_in%sea_lev, turns, sfc_state%sea_lev)
+
+  if (use_melt_potential) then
+    call rotate_array(sfc_state_in%melt_potential, turns, sfc_state%melt_potential)
+  endif
+
+  if (do_integrals) then
+    call rotate_array(sfc_state_in%ocean_mass, turns, sfc_state%ocean_mass)
+    if (use_temperature) then
+      call rotate_array(sfc_state_in%ocean_heat, turns, sfc_state%ocean_heat)
+      call rotate_array(sfc_state_in%ocean_salt, turns, sfc_state%ocean_salt)
+      call rotate_array(sfc_state_in%SSS, turns, sfc_state%TempxPmE)
+      call rotate_array(sfc_state_in%salt_deficit, turns, sfc_state%salt_deficit)
+      call rotate_array(sfc_state_in%internal_heat, turns, sfc_state%internal_heat)
+    endif
+  endif
+
+  if (use_iceshelves) then
+    call rotate_vector(sfc_state_in%taux_shelf, sfc_state_in%tauy_shelf, turns, &
+        sfc_state%taux_shelf, sfc_state%tauy_shelf)
+  endif
+
+  if (use_temperature .and. allocated(sfc_state_in%frazil)) &
+    call rotate_array(sfc_state_in%frazil, turns, sfc_state%frazil)
+
+  ! Scalar transfers
+  sfc_state%T_is_conT = sfc_state_in%T_is_conT
+  sfc_state%S_is_absS = sfc_state_in%S_is_absS
+
+  ! TODO: tracer field rotation
+  if (coupler_type_initialized(sfc_state_in%tr_fields)) &
+    call MOM_error(FATAL, "Rotation of surface state tracers is not yet " &
+        // "implemented.")
+end subroutine rotate_surface_state
 
 !> Allocates the arrays contained within a BT_cont_type and initializes them to 0.
 subroutine alloc_BT_cont_type(BT_cont, G, alloc_faces)

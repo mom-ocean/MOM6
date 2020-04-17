@@ -63,9 +63,6 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
   ! Local variables
   real :: Temp_restore   ! The temperature that is being restored toward [degC].
   real :: Salin_restore  ! The salinity that is being restored toward [ppt].
-  real :: density_restore  ! The potential density that is being restored
-                         ! toward [kg m-3].
-  real :: rhoXcp ! The mean density times the heat capacity [J m-3 degC-1].
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
 
@@ -97,7 +94,7 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
     ! Set whichever fluxes are to be used here.  Any fluxes that
     ! are always zero do not need to be changed here.
     do j=js,je ; do i=is,ie
-      ! Fluxes of fresh water through the surface are in units of [kg m-2 s-1]
+      ! Fluxes of fresh water through the surface are in units of [R Z T-1 ~> kg m-2 s-1]
       ! and are positive downward - i.e. evaporation should be negative.
       fluxes%evap(i,j) = -0.0 * G%mask2dT(i,j)
       fluxes%lprec(i,j) = 0.0 * G%mask2dT(i,j)
@@ -121,8 +118,6 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
 
   if (CS%use_temperature .and. CS%restorebuoy) then
     do j=js,je ; do i=is,ie
-      !   Set density_restore to an expression for the surface potential
-      ! density [kg m-3] that is being restored toward.
       if (CS%forcing_mask(i,j)>0.) then
         fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
                 ((CS%S_restore(i,j) - state%SSS(i,j)) /  (0.5 * (CS%S_restore(i,j) + state%SSS(i,j))))
