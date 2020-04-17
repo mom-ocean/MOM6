@@ -599,7 +599,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
 
     call set_regrid_params(CS, adaptTimeRatio=adaptTimeRatio, adaptZoom=adaptZoom, &
          adaptZoomCoeff=adaptZoomCoeff, adaptBuoyCoeff=adaptBuoyCoeff, adaptAlpha=adaptAlpha, &
-         adaptDoMin=tmpLogical, adaptDrho0=US%R_to_kg_m3*adaptDrho0)
+         adaptDoMin=tmpLogical, adaptDrho0=adaptDrho0)
   endif
 
   if (main_parameters .and. coord_is_state_dependent) then
@@ -885,7 +885,7 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_ADAPTIVE )
-      call build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
+      call build_grid_adaptive(G, GV, G%US, h, tv, dzInterface, remapCS, CS)
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
     case default
@@ -1527,9 +1527,10 @@ end subroutine build_grid_HyCOM1
 
 !> This subroutine builds an adaptive grid that follows density surfaces where
 !! possible, subject to constraints on the smoothness of interface heights.
-subroutine build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
+subroutine build_grid_adaptive(G, GV, US, h, tv, dzInterface, remapCS, CS)
   type(ocean_grid_type),                       intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),                       intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),                       intent(in)    :: tv   !< A structure pointing to various
                                                                      !! thermodynamic variables
@@ -1575,7 +1576,7 @@ subroutine build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
       cycle
     endif
 
-    call build_adapt_column(CS%adapt_CS, G, GV, tv, i, j, zInt, tInt, sInt, h, zNext)
+    call build_adapt_column(CS%adapt_CS, G, GV, US, tv, i, j, zInt, tInt, sInt, h, zNext)
 
     call filtered_grid_motion(CS, nz, zInt(i,j,:), zNext, dzInterface(i,j,:))
     ! convert from depth to z
@@ -1990,7 +1991,7 @@ subroutine initCoord(CS, GV, US, coord_mode)
     call init_coord_slight(CS%slight_CS, CS%nk, CS%ref_pressure, CS%target_density, &
                            CS%interp_CS, GV%m_to_H)
   case (REGRIDDING_ADAPTIVE)
-    call init_coord_adapt(CS%adapt_CS, CS%nk, CS%coordinateResolution, GV%m_to_H)
+    call init_coord_adapt(CS%adapt_CS, CS%nk, CS%coordinateResolution, GV%m_to_H, US%kg_m3_to_R)
   end select
 end subroutine initCoord
 
@@ -2272,7 +2273,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
                                                     !! preventing interfaces from being shallower than
                                                     !! the depths specified by the regridding coordinate.
   real,    optional, intent(in) :: adaptDrho0       !< Reference density difference for stratification-dependent
-                                                    !! diffusion. [kg m-3]
+                                                    !! diffusion. [R ~> kg m-3]
 
   if (present(interp_scheme)) call set_interp_scheme(CS%interp_CS, interp_scheme)
   if (present(boundary_extrapolation)) call set_interp_extrap(CS%interp_CS, boundary_extrapolation)
