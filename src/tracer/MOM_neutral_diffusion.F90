@@ -8,8 +8,8 @@ use MOM_cpu_clock,             only : CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_domains,               only : pass_var
 use MOM_diag_mediator,         only : diag_ctrl, time_type
 use MOM_diag_mediator,         only : post_data, register_diag_field
-use MOM_EOS,                   only : EOS_type, EOS_manual_init, calculate_compress, calculate_density_derivs
-use MOM_EOS,                   only : calculate_density, calculate_density_second_derivs
+use MOM_EOS,                   only : EOS_type, EOS_manual_init, EOS_domain
+use MOM_EOS,                   only : calculate_density, calculate_density_derivs
 use MOM_EOS,                   only : extract_member_EOS, EOS_LINEAR, EOS_TEOS10, EOS_WRIGHT
 use MOM_error_handler,         only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,           only : get_param, log_version, param_file_type
@@ -390,19 +390,19 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS)
     if (CS%continuous_reconstruction) then
       do k = 1, G%ke+1
         if (CS%ref_pres<0) ref_pres(:) = CS%Pint(:,j,k)
-        call calculate_density_derivs(CS%Tint(:,j,k), CS%Sint(:,j,k), ref_pres, &
-                                      CS%dRdT(:,j,k), CS%dRdS(:,j,k), G%isc-1, G%iec-G%isc+3, CS%EOS, US)
+        call calculate_density_derivs(CS%Tint(:,j,k), CS%Sint(:,j,k), ref_pres, CS%dRdT(:,j,k), &
+                                      CS%dRdS(:,j,k), CS%EOS, US, dom=EOS_domain(G%HI, halo=1))
       enddo
     else ! Discontinuous reconstruction
       do k = 1, G%ke
         if (CS%ref_pres<0) ref_pres(:) = CS%Pint(:,j,k)
         ! Calculate derivatives for the top interface
-        call calculate_density_derivs(CS%T_i(:,j,k,1), CS%S_i(:,j,k,1), ref_pres, &
-                                      CS%dRdT_i(:,j,k,1), CS%dRdS_i(:,j,k,1), G%isc-1, G%iec-G%isc+3, CS%EOS, US)
+        call calculate_density_derivs(CS%T_i(:,j,k,1), CS%S_i(:,j,k,1), ref_pres, CS%dRdT_i(:,j,k,1), &
+                                      CS%dRdS_i(:,j,k,1), CS%EOS, US, dom=EOS_domain(G%HI, halo=1))
         if (CS%ref_pres<0) ref_pres(:) = CS%Pint(:,j,k+1)
         ! Calcualte derivatives at the bottom interface
-        call calculate_density_derivs(CS%T_i(:,j,k,2), CS%S_i(:,j,k,2), ref_pres, &
-                                      CS%dRdT_i(:,j,k,2), CS%dRdS_i(:,j,k,2), G%isc-1, G%iec-G%isc+3, CS%EOS, US)
+        call calculate_density_derivs(CS%T_i(:,j,k,2), CS%S_i(:,j,k,2), ref_pres, CS%dRdT_i(:,j,k,2), &
+                                      CS%dRdS_i(:,j,k,2), CS%EOS, US, dom=EOS_domain(G%HI, halo=1))
       enddo
     endif
   enddo

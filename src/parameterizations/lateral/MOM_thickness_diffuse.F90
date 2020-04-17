@@ -9,7 +9,7 @@ use MOM_diag_mediator,         only : register_diag_field, safe_alloc_ptr, time_
 use MOM_diag_mediator,         only : diag_update_remap_grids
 use MOM_domains,               only : pass_var, CORNER, pass_vector
 use MOM_error_handler,         only : MOM_error, FATAL, WARNING, is_root_pe
-use MOM_EOS,                   only : calculate_density, calculate_density_derivs
+use MOM_EOS,                   only : calculate_density, calculate_density_derivs, EOS_domain
 use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
 use MOM_interface_heights,     only : find_eta
@@ -1029,8 +1029,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           T_v(i) = 0.25*((T(i,j,k) + T(i,j+1,k)) + (T(i,j,k-1) + T(i,j+1,k-1)))
           S_v(i) = 0.25*((S(i,j,k) + S(i,j+1,k)) + (S(i,j,k-1) + S(i,j+1,k-1)))
         enddo
-        call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, drho_dS_v, G%HI, &
-                                      tv%eqn_of_state, US)
+        call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, drho_dS_v, &
+                                      tv%eqn_of_state, US, dom=EOS_domain(G%HI))
       endif
       do i=is,ie
         if (calc_derivatives) then
@@ -1291,8 +1291,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           T_v(i) = 0.5*(T(i,j,1) + T(i,j+1,1))
           S_v(i) = 0.5*(S(i,j,1) + S(i,j+1,1))
         enddo
-        call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, drho_dS_v, G%HI, &
-                                      tv%eqn_of_state, US)
+        call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, drho_dS_v, &
+                                      tv%eqn_of_state, US, dom=EOS_domain(G%HI))
       endif
       do i=is,ie
         vhD(i,J,1) = -vhtot(i,J)

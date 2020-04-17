@@ -18,7 +18,7 @@ use MOM_time_manager,     only : time_type, set_time, operator(+), operator(<=)
 use MOM_unit_scaling,     only : unit_scale_type
 use MOM_variables,        only : thermo_var_ptrs, vertvisc_type, p3d
 use MOM_verticalGrid,     only : verticalGrid_type
-use MOM_EOS,              only : calculate_density, calculate_density_derivs
+use MOM_EOS,              only : calculate_density, calculate_density_derivs, EOS_domain
 
 implicit none ; private
 
@@ -209,8 +209,8 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
           Temp_Int(i) = 0.5 * (T_f(i,j,k) + T_f(i,j,k-1))
           Salin_Int(i) = 0.5 * (S_f(i,j,k) + S_f(i,j,k-1))
         enddo
-        call calculate_density_derivs(Temp_int, Salin_int, pres, dRho_dT(:), dRho_dS(:), G%HI, &
-                                      tv%eqn_of_state, US)
+        call calculate_density_derivs(Temp_int, Salin_int, pres, dRho_dT(:), dRho_dS(:), &
+                                      tv%eqn_of_state, US, dom=EOS_domain(G%HI))
         do i=is,ie
           dRho_int(i,K) = max(dRho_dT(i)*(T_f(i,j,k) - T_f(i,j,k-1)) + &
                               dRho_dS(i)*(S_f(i,j,k) - S_f(i,j,k-1)), 0.0)

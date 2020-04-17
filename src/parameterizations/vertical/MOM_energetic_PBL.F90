@@ -17,8 +17,6 @@ use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_wave_interface, only: wave_parameters_CS, Get_Langmuir_Number
 
-! use MOM_EOS, only : calculate_density, calculate_density_derivs
-
 implicit none ; private
 
 #include <MOM_memory.h>

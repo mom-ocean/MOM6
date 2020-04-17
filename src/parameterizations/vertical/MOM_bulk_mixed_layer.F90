@@ -15,7 +15,7 @@ use MOM_opacity,       only : absorbRemainingSW, optics_type, extract_optics_sli
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
-use MOM_EOS, only : calculate_density, calculate_density_derivs
+use MOM_EOS,           only : calculate_density, calculate_density_derivs, EOS_domain
 
 implicit none ; private
 
@@ -466,12 +466,15 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
     do k=1,CS%nkml ; do i=is,ie
       p_ref(i) = p_ref(i) + 0.5*(GV%H_to_RZ*GV%g_Earth)*h(i,k)
     enddo ; enddo
-    call calculate_density_derivs(T(:,1), S(:,1), p_ref, dR0_dT, dR0_dS, G%HI, tv%eqn_of_state, US)
-    call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, G%HI, &
-                                  tv%eqn_of_state, US)
+    call calculate_density_derivs(T(:,1), S(:,1), p_ref, dR0_dT, dR0_dS, tv%eqn_of_state,  &
+                                  US, dom=EOS_domain(G%HI))
+    call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, tv%eqn_of_state, &
+                                  US, dom=EOS_domain(G%HI))
     do k=1,nz
-      call calculate_density(T(:,k), S(:,k), p_ref, R0(:,k), G%HI, tv%eqn_of_state, US)
-      call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), G%HI, tv%eqn_of_state, US)
+      call calculate_density(T(:,k), S(:,k), p_ref, R0(:,k), tv%eqn_of_state, &
+                             US, dom=EOS_domain(G%HI))
+      call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), tv%eqn_of_state, &
+                             US, dom=EOS_domain(G%HI))
     enddo
     if (id_clock_EOS>0) call cpu_clock_end(id_clock_EOS)
 

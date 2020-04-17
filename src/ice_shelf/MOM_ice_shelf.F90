@@ -35,7 +35,7 @@ use MOM_forcing_type, only : forcing, allocate_forcing_type, MOM_forcing_chksum
 use MOM_forcing_type, only : mech_forcing, allocate_mech_forcing, MOM_mech_forcing_chksum
 use MOM_forcing_type, only : copy_common_forcing_fields
 use MOM_get_input, only : directories, Get_MOM_input
-use MOM_EOS, only : calculate_density, calculate_density_derivs, calculate_TFreeze
+use MOM_EOS, only : calculate_density, calculate_density_derivs, calculate_TFreeze, EOS_domain
 use MOM_EOS, only : EOS_type, EOS_init
 use MOM_ice_shelf_dynamics, only : ice_shelf_dyn_CS, update_ice_shelf
 use MOM_ice_shelf_dynamics, only : register_ice_shelf_dyn_restarts, initialize_ice_shelf_dyn
@@ -375,10 +375,10 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
     do i=is,ie ; p_int(i) = CS%g_Earth * ISS%mass_shelf(i,j) ; enddo
 
     ! Calculate insitu densities and expansion coefficients
-    call calculate_density(state%sst(:,j), state%sss(:,j), p_int, Rhoml(:), G%HI, &
-                           CS%eqn_of_state, US)
-    call calculate_density_derivs(state%sst(:,j), state%sss(:,j), p_int, dR0_dT, dR0_dS, G%HI, &
-                                  CS%eqn_of_state, US)
+    call calculate_density(state%sst(:,j), state%sss(:,j), p_int, Rhoml(:), &
+                                 CS%eqn_of_state, US, dom=EOS_domain(G%HI))
+    call calculate_density_derivs(state%sst(:,j), state%sss(:,j), p_int, dR0_dT, dR0_dS, &
+                                 CS%eqn_of_state, US, dom=EOS_domain(G%HI))
 
     do i=is,ie
       if ((state%ocean_mass(i,j) > US%RZ_to_kg_m2*CS%col_mass_melt_threshold) .and. &

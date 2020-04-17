@@ -10,7 +10,7 @@ use MOM_diag_mediator, only : post_data, register_diag_field, register_scalar_fi
 use MOM_diag_mediator, only : time_type, diag_ctrl, safe_alloc_alloc, query_averaging_enabled
 use MOM_diag_mediator, only : enable_averages, enable_averaging, disable_averaging
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_EOS,           only : calculate_density_derivs
+use MOM_EOS,           only : calculate_density_derivs, EOS_domain
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_opacity,       only : sumSWoverBands, optics_type, extract_optics_slice, optics_nbands
@@ -953,8 +953,8 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
                       H_limit_fluxes, .true., penSWbnd, netPen)
 
   ! Density derivatives
-  call calculate_density_derivs(Temp(:,j,1), Salt(:,j,1), pressure, dRhodT, dRhodS, G%HI, &
-                                tv%eqn_of_state, US)
+  call calculate_density_derivs(Temp(:,j,1), Salt(:,j,1), pressure, dRhodT, dRhodS, &
+                                tv%eqn_of_state, US, dom=EOS_domain(G%HI))
 
   ! Adjust netSalt to reflect dilution effect of FW flux
   netSalt(G%isc:G%iec) = netSalt(G%isc:G%iec) - Salt(G%isc:G%iec,j,1) * netH(G%isc:G%iec) ! ppt H/s

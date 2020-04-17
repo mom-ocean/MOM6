@@ -8,7 +8,7 @@ use MOM_cpu_clock,           only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROU
 use MOM_diag_mediator,       only : diag_ctrl, time_type
 use MOM_diag_mediator,       only : post_data, register_diag_field
 use MOM_debugging,           only : hchksum, uvchksum, Bchksum, hchksum_pair
-use MOM_EOS,                 only : calculate_density, calculate_density_derivs
+use MOM_EOS,                 only : calculate_density, calculate_density_derivs, EOS_domain
 use MOM_error_handler,       only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_error_handler,       only : callTree_showQuery
 use MOM_error_handler,       only : callTree_enter, callTree_leave, callTree_waypoint
@@ -714,11 +714,11 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
     kmb = GV%nk_rho_varies
     do i=is,ie ; p_0(i) = 0.0 ; p_ref(i) = tv%P_Ref ; enddo
     do k=1,nz
-      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_0, rho_0(:,k), G%HI, &
-                             tv%eqn_of_state, US)
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_0, rho_0(:,k), &
+                             tv%eqn_of_state, US, dom=EOS_domain(G%HI))
     enddo
-    call calculate_density(tv%T(:,j,kmb), tv%S(:,j,kmb), p_ref, Rcv_kmb, G%HI, &
-                           tv%eqn_of_state, US)
+    call calculate_density(tv%T(:,j,kmb), tv%S(:,j,kmb), p_ref, Rcv_kmb, &
+                           tv%eqn_of_state, US, dom=EOS_domain(G%HI))
 
     kb_min = kmb+1
     do i=is,ie
@@ -906,8 +906,8 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
         Temp_Int(i) = 0.5 * (T_f(i,j,k) + T_f(i,j,k-1))
         Salin_Int(i) = 0.5 * (S_f(i,j,k) + S_f(i,j,k-1))
       enddo
-      call calculate_density_derivs(Temp_int, Salin_int, pres, dRho_dT(:,K), dRho_dS(:,K), G%HI, &
-                                    tv%eqn_of_state, US)
+      call calculate_density_derivs(Temp_int, Salin_int, pres, dRho_dT(:,K), dRho_dS(:,K), &
+                                    tv%eqn_of_state, US, dom=EOS_domain(G%HI))
       do i=is,ie
         dRho_int(i,K) = max(dRho_dT(i,K)*(T_f(i,j,k) - T_f(i,j,k-1)) + &
                             dRho_dS(i,K)*(S_f(i,j,k) - S_f(i,j,k-1)), 0.0)
@@ -1065,8 +1065,8 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
         Temp_Int(i) = 0.5 * (T_f(i,j,k-1) + T_f(i,j,k))
         Salin_Int(i) = 0.5 * (S_f(i,j,k-1) + S_f(i,j,k))
       enddo
-      call calculate_density_derivs(Temp_int, Salin_int, pres, dRho_dT, dRho_dS, G%HI, &
-                                    tv%eqn_of_state, US)
+      call calculate_density_derivs(Temp_int, Salin_int, pres, dRho_dT, dRho_dS, &
+                                    tv%eqn_of_state, US, dom=EOS_domain(G%HI))
 
       do i=is,ie
         alpha_dT = -1.0*dRho_dT(i) * (T_f(i,j,k-1) - T_f(i,j,k))
@@ -1819,7 +1819,8 @@ subroutine set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1, rho_0)
     eps = 0.1
     do i=is,ie ; p_ref(i) = tv%P_Ref ; enddo
     do k=1,kmb
-      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, Rcv(:,k), G%HI, tv%eqn_of_state, US)
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, Rcv(:,k), tv%eqn_of_state, US, &
+                             dom=EOS_domain(G%HI))
     enddo
     do i=is,ie
       if (kb(i) <= nz-1) then

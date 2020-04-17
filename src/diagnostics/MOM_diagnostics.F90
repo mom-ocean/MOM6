@@ -15,7 +15,7 @@ use MOM_diag_mediator,     only : diag_grid_storage
 use MOM_diag_mediator,     only : diag_save_grids, diag_restore_grids, diag_copy_storage_to_diag
 use MOM_domains,           only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,           only : To_North, To_East
-use MOM_EOS,               only : calculate_density, int_density_dz
+use MOM_EOS,               only : calculate_density, int_density_dz, EOS_domain
 use MOM_EOS,               only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_error_handler,     only : MOM_error, FATAL, WARNING
 use MOM_file_parser,       only : get_param, log_version, param_file_type
@@ -359,8 +359,8 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
             pressure_1d(i) = pressure_1d(i) + 0.5*(GV%H_to_RZ*GV%g_Earth)*h(i,j,k)
           enddo
           ! Store in-situ density [R ~> kg m-3] in work_3d
-          call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pressure_1d, rho_in_situ, G%HI, &
-                                 tv%eqn_of_state, US)
+          call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pressure_1d, rho_in_situ, &
+                                 tv%eqn_of_state, US, dom=EOS_domain(G%HI))
           do i=is,ie ! Cell thickness = dz = dp/(g*rho) (meter); store in work_3d
             work_3d(i,j,k) = (GV%H_to_RZ*h(i,j,k)) / rho_in_situ(i)
           enddo
@@ -465,8 +465,8 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       pressure_1d(:) = tv%P_Ref
       !$OMP parallel do default(shared)
       do k=1,nz ; do j=js-1,je+1
-        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pressure_1d, Rcv(:,j,k), G%HI, &
-                               tv%eqn_of_state, US, halo=1)
+        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pressure_1d, Rcv(:,j,k), tv%eqn_of_state, &
+                               US, dom=EOS_domain(G%HI, halo=1))
       enddo ; enddo
     else ! Rcv should not be used much in this case, so fill in sensible values.
       do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
@@ -588,7 +588,8 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       pressure_1d(:) = 0.
       !$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je
-        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pressure_1d, Rcv(:,j,k), G%HI, tv%eqn_of_state, US)
+        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pressure_1d, Rcv(:,j,k), &
+                                tv%eqn_of_state, US, dom=EOS_domain(G%HI))
       enddo ; enddo
       if (CS%id_rhopot0 > 0) call post_data(CS%id_rhopot0, Rcv, CS%diag)
     endif
@@ -596,7 +597,8 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       pressure_1d(:) = 2.0e7*US%kg_m3_to_R*US%m_s_to_L_T**2 ! 2000 dbars
       !$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je
-        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pressure_1d, Rcv(:,j,k), G%HI, tv%eqn_of_state, US)
+        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pressure_1d, Rcv(:,j,k), &
+                                tv%eqn_of_state, US, dom=EOS_domain(G%HI))
       enddo ; enddo
       if (CS%id_rhopot2 > 0) call post_data(CS%id_rhopot2, Rcv, CS%diag)
     endif
@@ -606,7 +608,8 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
         pressure_1d(:) = 0. ! Start at p=0 Pa at surface
         do k=1,nz
           pressure_1d(:) =  pressure_1d(:) + 0.5 * h(:,j,k) * (GV%H_to_RZ*GV%g_Earth) ! Pressure in middle of layer k
-          call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pressure_1d, Rcv(:,j,k), G%HI, tv%eqn_of_state, US)
+          call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pressure_1d, Rcv(:,j,k), &
+                                tv%eqn_of_state, US, dom=EOS_domain(G%HI))
           pressure_1d(:) =  pressure_1d(:) + 0.5 * h(:,j,k) * (GV%H_to_RZ*GV%g_Earth) ! Pressure at bottom of layer k
         enddo
       enddo

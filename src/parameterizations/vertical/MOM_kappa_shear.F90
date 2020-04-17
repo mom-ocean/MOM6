@@ -14,7 +14,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : calculate_density, calculate_density_derivs
+use MOM_EOS, only : calculate_density_derivs
 
 implicit none ; private
 
@@ -910,8 +910,8 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
       T_int(K) = 0.5*(T(k-1) + T(k))
       Sal_int(K) = 0.5*(Sal(k-1) + Sal(k))
     enddo
-    call calculate_density_derivs(T_int, Sal_int, pressure, dbuoy_dT, dbuoy_dS, 2, nzc-1, &
-                                  tv%eqn_of_state, US=US, scale=-g_R0)
+    call calculate_density_derivs(T_int, Sal_int, pressure, dbuoy_dT, dbuoy_dS, &
+                                  tv%eqn_of_state, US=US, scale=-g_R0, dom=(/2,nzc/))
   else
     do K=1,nzc+1 ; dbuoy_dT(K) = -g_R0 ; dbuoy_dS(K) = 0.0 ; enddo
   endif

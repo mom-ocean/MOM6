@@ -9,7 +9,7 @@ use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,     only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
-use MOM_EOS,           only : calculate_density, calculate_TFreeze
+use MOM_EOS,           only : calculate_density, calculate_TFreeze, EOS_domain
 use MOM_EOS,           only : calculate_specific_vol_derivs, calculate_density_derivs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, callTree_showQuery
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
@@ -446,7 +446,8 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt, id_brine_lay)
         h_2d(i,k) = MAX(h(i,j,k), GV%Angstrom_H)
       enddo
 
-      call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), G%HI, tv%eqn_of_state, US)
+      call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), tv%eqn_of_state, US, &
+                             dom=EOS_domain(G%HI))
     enddo
 
     ! First, try to find an interior layer where inserting all the salt
@@ -766,7 +767,8 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   pRef_MLD(:) = 0.0
   do j=js,je
     do i=is,ie ; dK(i) = 0.5 * h(i,j,1) * GV%H_to_Z ; enddo ! Depth of center of surface layer
-    call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, G%HI, tv%eqn_of_state, US)
+    call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, tv%eqn_of_state, US, &
+                           dom=EOS_domain(G%HI))
     do i=is,ie
       deltaRhoAtK(i) = 0.
       MLD(i,j) = 0.
@@ -807,7 +809,8 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
 
       ! Mixed-layer depth, using sigma-0 (surface reference pressure)
       do i=is,ie ; deltaRhoAtKm1(i) = deltaRhoAtK(i) ; enddo ! Store value from previous iteration of K
-      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, G%HI, tv%eqn_of_state, US)
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, tv%eqn_of_state, US, &
+                             dom=EOS_domain(G%HI))
       do i = is, ie
         deltaRhoAtK(i) = deltaRhoAtK(i) - rhoSurf(i) ! Density difference between layer K and surface
         ddRho = deltaRhoAtK(i) - deltaRhoAtKm1(i)
@@ -830,8 +833,10 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
       !    T_deeper(i) = tv%T(i,j,nz) ; S_deeper(i) = tv%S(i,j,nz)
       !    N2_region_set(i) = .true.
       ! endif
-      call calculate_density(T_subML, S_subML, pRef_N2, rho_subML, G%HI, tv%eqn_of_state, US)
-      call calculate_density(T_deeper, S_deeper, pRef_N2, rho_deeper, G%HI, tv%eqn_of_state, US)
+      call calculate_density(T_subML, S_subML, pRef_N2, rho_subML, tv%eqn_of_state, US, &
+                             dom=EOS_domain(G%HI))
+      call calculate_density(T_deeper, S_deeper, pRef_N2, rho_deeper, tv%eqn_of_state, US, &
+                             dom=EOS_domain(G%HI))
       do i=is,ie ; if ((G%mask2dT(i,j)>0.5) .and. N2_region_set(i)) then
         subMLN2(i,j) =  gE_rho0 * (rho_deeper(i) - rho_subML(i)) / (GV%H_to_z * dH_N2(i))
       endif ; enddo
@@ -1006,7 +1011,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
           pres(i) = pres(i) + d_pres(i)
         enddo
         call calculate_specific_vol_derivs(T2d(:,k), tv%S(:,j,k), p_lay(:), &
-                 dSV_dT(:,j,k), dSV_dS(:,j,k), G%HI, tv%eqn_of_state, US=US)
+                 dSV_dT(:,j,k), dSV_dS(:,j,k), tv%eqn_of_state, US=US, dom=EOS_domain(G%HI))
         do i=is,ie ; dSV_dT_2d(i,k) = dSV_dT(i,j,k) ; enddo
       enddo
       pen_TKE_2d(:,:) = 0.0
@@ -1347,8 +1352,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
       do i=is,ie ; do nb=1,nsw ; netPen_rate(i) = netPen_rate(i) + pen_SW_bnd_rate(nb,i) ; enddo ; enddo
 
       ! Density derivatives
-      call calculate_density_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, dRhodT, dRhodS, G%HI, &
-                                    tv%eqn_of_state, US)
+      call calculate_density_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, dRhodT, dRhodS, &
+                                    tv%eqn_of_state, US, dom=EOS_domain(G%HI))
       ! 1. Adjust netSalt to reflect dilution effect of FW flux
       ! 2. Add in the SW heating for purposes of calculating the net
       ! surface buoyancy flux affecting the top layer.

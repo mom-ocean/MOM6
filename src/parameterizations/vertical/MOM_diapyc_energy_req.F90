@@ -298,7 +298,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
 
   ! Solve the tridiagonal equations for new temperatures.
 
-  call calculate_specific_vol_derivs(T0, S0, p_lay, dSV_dT, dSV_dS, 1, nz, tv%eqn_of_state, US=US)
+  call calculate_specific_vol_derivs(T0, S0, p_lay, dSV_dT, dSV_dS, tv%eqn_of_state, US=US)
 
   do k=1,nz
     dMass = GV%H_to_RZ * h_tr(k)
