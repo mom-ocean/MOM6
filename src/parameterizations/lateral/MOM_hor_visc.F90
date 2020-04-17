@@ -1073,7 +1073,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         endif
 
         if (CS%Re_Ah > 0.0) then
-          KE = 0.125*((u(I,j,k)+u(I,j+1,k))**2 + (v(i,J,k)+v(i+1,J,k))**2)
+          KE = 0.125*((u(I,j,k)+u(I-1,j,k))**2 + (v(i,J,k)+v(i,J-1,k))**2)
           Ah = sqrt(KE) * CS%Re_Ah_const_xy(i,j)
         endif
 
