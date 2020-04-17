@@ -225,6 +225,11 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
                  'The number of times the 1-1-4-1-1 Laplacian filter is applied on '//  &
                  'OBL depth.',   &
                  default=0)
+  if ((CS%n_smooth > G%domain%nihalo) then
+    call MOM_error(FATAL,'KPP smoothing number (N_SMOOTH) cannot be greater than NIHALO.')
+  elseif ((CS%n_smooth > G%domain%njhalo) then
+    call MOM_error(FATAL,'KPP smoothing number (N_SMOOTH) cannot be greater than NJHALO.')
+  endif
   if (CS%n_smooth > 0) then
     call get_param(paramFile, mdl, 'DEEPEN_ONLY_VIA_SMOOTHING', CS%deepen_only,  &
                    'If true, apply OBLdepth smoothing at a cell only if the OBLdepth '// &
@@ -1362,10 +1367,10 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
   real :: pref
   integer :: i, j, k, s
 
-  do s=1,CS%n_smooth
+  ! Update halos
+  call pass_var(CS%OBLdepth, G%Domain, halo=CS%n_smooth)
 
-    ! Update halos
-    call pass_var(CS%OBLdepth, G%Domain)
+  do s=1,CS%n_smooth
 
     OBLdepth_original = CS%OBLdepth
     if (CS%id_OBLdepth_original > 0) CS%OBLdepth_original = OBLdepth_original
