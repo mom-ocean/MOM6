@@ -360,12 +360,12 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
     ! USER_initialize_temp_sal.
     pres(:) = tv%P_Ref ; S0(:) = 35.0 ; T0(1) = 25.0
     call calculate_density(T0(1), S0(1), pres(1), rho_guess(1), tv%eqn_of_state)
-    call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, 1, 1, tv%eqn_of_state)
+    call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, tv%eqn_of_state, dom=(/1,1/))
 
     do k=1,nz ; T0(k) = T0(1) + (GV%Rlay(k)-rho_guess(1)) / drho_dT(1) ; enddo
     do itt=1,6
-      call calculate_density(T0, S0, pres, rho_guess, 1, nz, tv%eqn_of_state)
-      call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, 1, nz, tv%eqn_of_state)
+      call calculate_density(T0, S0, pres, rho_guess, tv%eqn_of_state)
+      call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, tv%eqn_of_state)
       do k=1,nz ; T0(k) = T0(k) + (GV%Rlay(k)-rho_guess(k)) / drho_dT(k) ; enddo
     enddo
 

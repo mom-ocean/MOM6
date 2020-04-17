@@ -124,7 +124,7 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
 
     ! Compute densities on source column
     pres(:) = CS%ref_pressure
-    call calculate_density(T, S, pres, densities, 1, nz, eqn_of_state)
+    call calculate_density(T, S, pres, densities, eqn_of_state)
     do k = 1,count_nonzero_layers
       densities(k) = densities(mapping(k))
     enddo

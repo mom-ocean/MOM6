@@ -251,7 +251,7 @@ subroutine build_slight_column(CS, eqn_of_state, H_to_pres, H_subroundoff, &
     dz = (z_col(nz+1) - z_col(1)) / real(nz)
     do K=2,nz ; z_col_new(K) = z_col(1) + dz*real(K-1) ; enddo
   else
-    call calculate_density(T_col, S_col, p_col, rho_col, 1, nz, eqn_of_state)
+    call calculate_density(T_col, S_col, p_col, rho_col, eqn_of_state)
 
     ! Find the locations of the target potential densities, flagging
     ! locations in apparently unstable regions as not reliable.
@@ -372,10 +372,10 @@ subroutine build_slight_column(CS, eqn_of_state, H_to_pres, H_subroundoff, &
       enddo
       T_int(nz+1) = T_f(nz) ; S_int(nz+1) = S_f(nz)
       p_IS(nz+1) = z_col(nz+1) * H_to_pres
-      call calculate_density_derivs(T_int, S_int, p_IS, drhoIS_dT, drhoIS_dS, 2, nz-1, &
-                                    eqn_of_state)
-      call calculate_density_derivs(T_int, S_int, p_R, drhoR_dT, drhoR_dS, 2, nz-1, &
-                                    eqn_of_state)
+      call calculate_density_derivs(T_int, S_int, p_IS, drhoIS_dT, drhoIS_dS, &
+                                    eqn_of_state, dom=(/2,nz/))
+      call calculate_density_derivs(T_int, S_int, p_R, drhoR_dT, drhoR_dS, &
+                                    eqn_of_state, dom=(/2,nz/))
       if (CS%compressibility_fraction > 0.0) then
         call calculate_compress(T_int, S_int, p_R(:), rho_tmp, drho_dp, 2, nz-1, eqn_of_state)
       else

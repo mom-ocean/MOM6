@@ -12,7 +12,7 @@ use MOM_domains,               only : create_group_pass, do_group_pass, group_pa
 use MOM_domains,               only : pass_vector
 use MOM_debugging,             only : hchksum, uvchksum
 use MOM_diabatic_driver,              only : diabatic_CS
-use MOM_EOS,                   only : calculate_density, EOS_type
+use MOM_EOS,                   only : calculate_density, EOS_type, EOS_domain
 use MOM_error_handler,         only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_error_handler,         only : MOM_set_verbosity, callTree_showQuery
 use MOM_error_handler,         only : callTree_enter, callTree_leave, callTree_waypoint
@@ -700,8 +700,8 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   ! Determine which layers the mixed- and buffer-layers map into...
   !$OMP parallel do default(shared)
   do k=1,nkmb ; do j=js-2,je+2
-    call calculate_density(tv%T(:,j,k),tv%S(:,j,k), p_ref_cv, rho_coord(:,j,k), G%HI, &
-                           tv%eqn_of_state, halo=2)
+    call calculate_density(tv%T(:,j,k),tv%S(:,j,k), p_ref_cv, rho_coord(:,j,k), &
+                           tv%eqn_of_state, dom=EOS_domain(G%HI,halo=2))
   enddo ; enddo
 
   do j=js-2,je+2 ; do i=is-2,ie+2

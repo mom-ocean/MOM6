@@ -74,7 +74,7 @@ use MOM_dynamics_unsplit_RK2,  only : step_MOM_dyn_unsplit_RK2, register_restart
 use MOM_dynamics_unsplit_RK2,  only : initialize_dyn_unsplit_RK2, end_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2,  only : MOM_dyn_unsplit_RK2_CS
 use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
-use MOM_EOS,                   only : EOS_init, calculate_density, calculate_TFreeze
+use MOM_EOS,                   only : EOS_init, calculate_density, calculate_TFreeze, EOS_domain
 use MOM_fixed_initialization,  only : MOM_initialize_fixed
 use MOM_forcing_type,          only : allocate_forcing_type, allocate_mech_forcing
 use MOM_forcing_type,          only : deallocate_mech_forcing, deallocate_forcing_type
@@ -2904,8 +2904,8 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
     ! Correct the output sea surface height for the contribution from the ice pressure.
     do j=js,je
       if (calc_rho) then
-        call calculate_density(tv%T(:,j,1), tv%S(:,j,1), 0.5*p_atm(:,j), Rho_conv, G%HI, &
-                               tv%eqn_of_state)
+        call calculate_density(tv%T(:,j,1), tv%S(:,j,1), 0.5*p_atm(:,j), Rho_conv, &
+                               tv%eqn_of_state, dom=EOS_domain(G%HI))
         do i=is,ie
           IgR0 = US%Z_to_m / (Rho_conv(i) * GV%g_Earth)
           ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0

@@ -10,7 +10,7 @@ use MOM_grid,          only : ocean_grid_type
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, vertvisc_type, p3d
 use MOM_verticalGrid,  only : verticalGrid_type
-use MOM_EOS,           only : calculate_density
+use MOM_EOS,           only : calculate_density, EOS_domain
 
 implicit none ; private
 
@@ -107,11 +107,13 @@ subroutine user_change_diff(h, tv, G, GV, US, CS, Kd_lay, Kd_int, T_f, S_f, Kd_i
   do j=js,je
     if (present(T_f) .and. present(S_f)) then
       do k=1,nz
-        call calculate_density(T_f(:,j,k), S_f(:,j,k), p_ref, Rcv(:,k), G%HI, tv%eqn_of_state)
+        call calculate_density(T_f(:,j,k), S_f(:,j,k), p_ref, Rcv(:,k), tv%eqn_of_state, &
+                               dom=EOS_domain(G%HI))
       enddo
     else
       do k=1,nz
-        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, Rcv(:,k), G%HI, tv%eqn_of_state)
+        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, Rcv(:,k), tv%eqn_of_state, &
+                               dom=EOS_domain(G%HI))
       enddo
     endif
 

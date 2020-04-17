@@ -198,8 +198,8 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
     iej = is-1 ; do i=ie,is,-1 ; if (do_i(i)) then ; iej = i ; exit ; endif ; enddo
 
     if (nkmb > 0) then
-      call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_Ref(:), Rcv_BL(:), isj, iej-isj+1, &
-                             tv%eqn_of_state)
+      call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_Ref(:), Rcv_BL(:), &
+                             tv%eqn_of_state, dom=(/isj-(G%isd-1),iej-(G%isd-1)/))
     else
       Rcv_BL(:) = -1.0
     endif
@@ -248,8 +248,8 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
                          Rcv, tv%eqn_of_state)
             T2(1) = tv%T(i,j,k) ; S2(1) = tv%S(i,j,k)
             T2(2) = tv%T(i,j,k_tgt) ; S2(2) = tv%S(i,j,k_tgt)
-            call calculate_density_derivs(T2(:), S2(:), p_Ref(:), dRcv_dT_, dRcv_dS_, 1, 2, &
-                         tv%eqn_of_state)
+            call calculate_density_derivs(T2(:), S2(:), p_Ref(:), dRcv_dT_, dRcv_dS_, &
+                         tv%eqn_of_state, dom=(/1,2/) )
             dRcv_dT = 0.5*(dRcv_dT_(1) + dRcv_dT_(2))
           endif
 

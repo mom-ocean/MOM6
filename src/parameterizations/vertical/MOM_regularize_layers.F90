@@ -13,7 +13,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : calculate_density, calculate_density_derivs
+use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_domain
 
 implicit none ; private
 
@@ -312,7 +312,8 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   do j=js,je ; if (do_j(j)) then
 
 !  call cpu_clock_begin(id_clock_EOS)
-!  call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, G%HI, tv%eqn_of_state)
+!  call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, tv%eqn_of_state, &
+!                                dom=EOS_domain(G%HI))
 !  call cpu_clock_end(id_clock_EOS)
 
     do k=1,nz ; do i=is,ie ; d_ea(i,k) = 0.0 ; d_eb(i,k) = 0.0 ; enddo ; enddo
@@ -444,7 +445,8 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
     if (det_any) then
       call cpu_clock_begin(id_clock_EOS)
       do k=1,nkmb
-        call calculate_density(T_2d(:,k), S_2d(:,k), p_ref_cv, Rcv(:,k), G%HI, tv%eqn_of_state)
+        call calculate_density(T_2d(:,k), S_2d(:,k), p_ref_cv, Rcv(:,k), tv%eqn_of_state, &
+                               dom=EOS_domain(G%HI))
       enddo
       call cpu_clock_end(id_clock_EOS)
 

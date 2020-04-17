@@ -9,7 +9,7 @@ use MOM_diag_mediator,         only : register_diag_field, safe_alloc_ptr, time_
 use MOM_diag_mediator,         only : diag_update_remap_grids
 use MOM_domains,               only : pass_var, CORNER, pass_vector
 use MOM_error_handler,         only : MOM_error, FATAL, WARNING, is_root_pe
-use MOM_EOS,                   only : calculate_density, calculate_density_derivs
+use MOM_EOS,                   only : calculate_density, calculate_density_derivs, EOS_domain
 use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
 use MOM_interface_heights,     only : find_eta
@@ -672,6 +672,10 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: diag_sfn_y, diag_sfn_unlim_y ! Diagnostics
   logical :: present_int_slope_u, present_int_slope_v
   logical :: present_slope_x, present_slope_y, calc_derivatives
+  integer, dimension(2) ::  EOSdom_u ! The shifted i-computational domain to use for equation of
+                                     ! state calculations at u-points.
+  integer, dimension(2) ::  EOSdom_v ! The shifted I-computational domain to use for equation of
+                                     ! state calculations at v-points.
   integer :: is, ie, js, je, nz, IsdB
   integer :: i, j, k
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke ; IsdB = G%IsdB
@@ -747,12 +751,13 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   enddo ; enddo
 !$OMP end parallel
 
+    EOSdom_u(1) = (is-1) - (G%IsdB-1) ; EOSdom_u(2) = ie - (G%IsdB-1)
 !$OMP parallel do default(none) shared(nz,is,ie,js,je,find_work,use_EOS,G,GV,US,pres,T,S, &
 !$OMP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,  &
 !$OMP                                  I_slope_max2,h_neglect2,present_int_slope_u, &
 !$OMP                                  int_slope_u,KH_u,uhtot,h_frac,h_avail_rsum,  &
 !$OMP                                  uhD,h_avail,G_scale,Work_u,CS,slope_x,cg1,   &
-!$OMP                                  diag_sfn_x, diag_sfn_unlim_x,N2_floor,       &
+!$OMP                                  diag_sfn_x, diag_sfn_unlim_x,N2_floor,EOS_dom_u, &
 !$OMP                                  present_slope_x,G_rho0,Slope_x_PE,hN2_x_PE)  &
 !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
 !$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
@@ -778,8 +783,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           T_u(I) = 0.25*((T(i,j,k) + T(i+1,j,k)) + (T(i,j,k-1) + T(i+1,j,k-1)))
           S_u(I) = 0.25*((S(i,j,k) + S(i+1,j,k)) + (S(i,j,k-1) + S(i+1,j,k-1)))
         enddo
-        call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u, &
-                     drho_dS_u, (is-IsdB+1)-1, ie-is+2, tv%eqn_of_state)
+        call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u, drho_dS_u, &
+                                      tv%eqn_of_state, dom=EOSdom_u)
       endif
 
       do I=is-1,ie
@@ -1000,13 +1005,14 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   enddo ! end of j-loop
 
     ! Calculate the meridional fluxes and gradients.
+    EOSdom_v(:) = EOS_domain(G%HI)
 !$OMP parallel do default(none) shared(nz,is,ie,js,je,find_work,use_EOS,G,GV,US,pres,T,S, &
 !$OMP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,  &
 !$OMP                                  I_slope_max2,h_neglect2,present_int_slope_v, &
 !$OMP                                  int_slope_v,KH_v,vhtot,h_frac,h_avail_rsum,  &
 !$OMP                                  vhD,h_avail,G_scale,Work_v,CS,slope_y,cg1,   &
-!$OMP                                  diag_sfn_y, diag_sfn_unlim_y,N2_floor,       &
-!$OMP                                  present_slope_y,G_rho0,Slope_y_PE,hN2_y_PE) &
+!$OMP                                  diag_sfn_y,diag_sfn_unlim_y,N2_floor,EOSdom_v,&
+!$OMP                                  present_slope_y,G_rho0,Slope_y_PE,hN2_y_PE)  &
 !$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
 !$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
 !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
@@ -1029,8 +1035,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           T_v(i) = 0.25*((T(i,j,k) + T(i,j+1,k)) + (T(i,j,k-1) + T(i,j+1,k-1)))
           S_v(i) = 0.25*((S(i,j,k) + S(i,j+1,k)) + (S(i,j,k-1) + S(i,j+1,k-1)))
         enddo
-        call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, drho_dS_v, G%HI, &
-                                      tv%eqn_of_state)
+        call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, drho_dS_v, &
+                                      tv%eqn_of_state, dom=EOSdom_v)
       endif
       do i=is,ie
         if (calc_derivatives) then
@@ -1253,6 +1259,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
     do j=js,je ; do I=is-1,ie ; uhD(I,j,1) = -uhtot(I,j) ; enddo ; enddo
     do J=js-1,je ; do i=is,ie ; vhD(i,J,1) = -vhtot(i,J) ; enddo ; enddo
   else
+    EOSdom_u(1) = (is-1) - (G%IsdB-1) ; EOSdom_u(2) = ie - (G%IsdB-1)
     !$OMP parallel do default(shared) private(pres_u,T_u,S_u,drho_dT_u,drho_dS_u,drdiB)
     do j=js,je
       if (use_EOS) then
@@ -1262,7 +1269,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           S_u(I) = 0.5*(S(i,j,1) + S(i+1,j,1))
         enddo
         call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u, drho_dS_u, &
-                                      (is-IsdB+1)-1, ie-is+2, tv%eqn_of_state)
+                                      tv%eqn_of_state, dom=EOSdom_u )
       endif
       do I=is-1,ie
         uhD(I,j,1) = -uhtot(I,j)
@@ -1283,6 +1290,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
       enddo
     enddo
 
+    EOSdom_v(:) = EOS_domain(G%HI)
     !$OMP parallel do default(shared) private(pres_v,T_v,S_v,drho_dT_v,drho_dS_v,drdjB)
     do J=js-1,je
       if (use_EOS) then
@@ -1291,8 +1299,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           T_v(i) = 0.5*(T(i,j,1) + T(i,j+1,1))
           S_v(i) = 0.5*(S(i,j,1) + S(i,j+1,1))
         enddo
-        call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, drho_dS_v, G%HI, &
-                                      tv%eqn_of_state)
+        call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, drho_dS_v, &
+                                      tv%eqn_of_state, dom=EOSdom_v)
       endif
       do i=is,ie
         vhD(i,J,1) = -vhtot(i,J)

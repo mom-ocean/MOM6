@@ -131,7 +131,7 @@ subroutine build_hycom1_column(CS, eqn_of_state, nz, depth, h, T, S, p_col, &
   z_scale = 1.0 ; if (present(zScale)) z_scale = zScale
 
   ! Work bottom recording potential density
-  call calculate_density(T, S, p_col, rho_col, 1, nz, eqn_of_state)
+  call calculate_density(T, S, p_col, rho_col, eqn_of_state)
   ! This ensures the potential density profile is monotonic
   ! although not necessarily single valued.
   do k = nz-1, 1, -1

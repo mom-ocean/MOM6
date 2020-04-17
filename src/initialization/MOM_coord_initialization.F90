@@ -291,7 +291,7 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, eqn_of_s
 !    These statements set the interface reduced gravities.           !
   g_prime(1) = g_fs
   do k=1,nz ; Pref(k) = P_Ref ; enddo
-  call calculate_density(T0, S0, Pref, Rlay, 1, nz, eqn_of_state)
+  call calculate_density(T0, S0, Pref, Rlay, eqn_of_state, dom=(/1,nz/))
   do k=2,nz; g_prime(k) = (GV%g_Earth/(GV%Rho0)) * (Rlay(k) - Rlay(k-1)) ; enddo
 
   call callTree_leave(trim(mdl)//'()')
@@ -371,7 +371,7 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, GV, US, param_file, eqn_of_sta
 
   g_prime(1) = g_fs
   do k=1,nz ; Pref(k) = P_Ref ; enddo
-  call calculate_density(T0, S0, Pref, Rlay, k_light, nz-k_light+1, eqn_of_state)
+  call calculate_density(T0, S0, Pref, Rlay, eqn_of_state, dom=(/k_light,nz/) )
   ! Extrapolate target densities for the variable density mixed and buffer layers.
   do k=k_light-1,1,-1
     Rlay(k) = 2.0*Rlay(k+1) - Rlay(k+2)

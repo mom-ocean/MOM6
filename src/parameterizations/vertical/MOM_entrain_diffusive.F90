@@ -12,7 +12,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : calculate_density, calculate_density_derivs
+use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_domain
 
 implicit none ; private
 
@@ -700,7 +700,8 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
         call determine_dSkb(h_bl, Sref, Ent_bl, eakb, is, ie, kmb, G, GV, &
                             .true., dS_kb, dS_anom_lim=dS_anom_lim)
         do k=nz-1,kb_min,-1
-          call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pres, Rcv, G%HI, tv%eqn_of_state)
+          call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pres, Rcv, tv%eqn_of_state, &
+                                 dom=EOS_domain(G%HI))
           do i=is,ie
             if ((k>kb(i)) .and. (F(i,k) > 0.0)) then
               ! Within a time step, a layer may entrain no more than its
@@ -784,7 +785,8 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
 
       else ! not bulkmixedlayer
         do k=K2,nz-1;
-          call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pres, Rcv, G%HI, tv%eqn_of_state)
+          call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pres, Rcv, tv%eqn_of_state, &
+                                 dom=EOS_domain(G%HI))
           do i=is,ie ; if (F(i,k) > 0.0) then
             ! Within a time step, a layer may entrain no more than
             ! its thickness for correction.  This limitation should
@@ -849,8 +851,8 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
               S_eos(i) = 0.5*(tv%S(i,j,k-1) + tv%S(i,j,k))
             endif
           enddo
-          call calculate_density_derivs(T_eos, S_eos, pressure, dRho_dT, dRho_dS, G%HI, &
-                                        tv%eqn_of_state)
+          call calculate_density_derivs(T_eos, S_eos, pressure, dRho_dT, dRho_dS, &
+                                        tv%eqn_of_state, dom=EOS_domain(G%HI))
           do i=is,ie
             if ((k>kmb) .and. (k<kb(i))) then ; diff_work(i,j,K) = 0.0
             else
@@ -1084,7 +1086,8 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, GV, US, CS, j, Ent_bl, 
 
   do i=is,ie ; pres(i) = tv%P_Ref ; enddo
   do k=1,kmb
-    call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pres, Rcv, G%HI, tv%eqn_of_state)
+    call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pres, Rcv, tv%eqn_of_state, &
+                           dom=EOS_domain(G%HI))
     do i=is,ie
       h_bl(i,k) = h(i,j,k) + h_neglect
       Sref(i,k) = Rcv(i) - CS%Rho_sig_off

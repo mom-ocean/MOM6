@@ -41,7 +41,7 @@ use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : setVerticalGridAxes, verticalGrid_type
 use MOM_ALE, only : pressure_gradient_plm
-use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
+use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type, EOS_domain
 use MOM_EOS, only : int_specific_vol_dp, convert_temp_salt_for_TEOS10
 use user_initialization, only : user_initialize_thickness, user_initialize_velocity
 use user_initialization, only : user_init_temperature_salinity
@@ -959,8 +959,8 @@ subroutine convert_thickness(h, G, GV, US, tv)
       do k=1,nz
         do j=js,je
           do i=is,ie ; p_top(i,j) = p_bot(i,j) ; enddo
-          call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_top(:,j), rho, G%HI, &
-                                 tv%eqn_of_state)
+          call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_top(:,j), rho, &
+                                 tv%eqn_of_state, dom=EOS_domain(G%HI))
           do i=is,ie
             p_bot(i,j) = p_top(i,j) + HR_to_pres * (h(i,j,k) * rho(i))
           enddo
@@ -970,8 +970,8 @@ subroutine convert_thickness(h, G, GV, US, tv)
           call int_specific_vol_dp(tv%T(:,:,k), tv%S(:,:,k), p_top, p_bot, 0.0, G%HI, &
                                    tv%eqn_of_state, dz_geo)
           if (itt < max_itt) then ; do j=js,je
-            call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_bot(:,j), rho, G%HI, &
-                                   tv%eqn_of_state)
+            call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_bot(:,j), rho, &
+                                   tv%eqn_of_state, dom=EOS_domain(G%HI))
             ! Use Newton's method to correct the bottom value.
             ! The hydrostatic equation is sufficiently linear that no bounds-checking is needed.
             do i=is,ie
@@ -1610,8 +1610,8 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P
     enddo
     ! Refine the guesses for each layer.
     do itt=1,6
-      call calculate_density(T0, S0, pres, rho_guess, 1, nz, eqn_of_state)
-      call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, 1, nz, eqn_of_state)
+      call calculate_density(T0, S0, pres, rho_guess, eqn_of_state)
+      call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, eqn_of_state)
       do k=1,nz
         S0(k) = max(0.0, S0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dS(k))
       enddo
@@ -1622,8 +1622,8 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P
       T0(k) = T0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dT(1)
     enddo
     do itt=1,6
-      call calculate_density(T0, S0, pres, rho_guess, 1, nz, eqn_of_state)
-      call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, 1, nz, eqn_of_state)
+      call calculate_density(T0, S0, pres, rho_guess, eqn_of_state)
+      call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, eqn_of_state)
       do k=1,nz
         T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
       enddo
@@ -1869,7 +1869,8 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
     call MOM_read_data(filename, salin_var, tmp2(:,:,:), G%Domain)
 
     do j=js,je
-      call calculate_density(tmp(:,j,1), tmp2(:,j,1), pres, tmp_2d(:,j), G%HI, tv%eqn_of_state)
+      call calculate_density(tmp(:,j,1), tmp2(:,j,1), pres, tmp_2d(:,j), tv%eqn_of_state, &
+                             dom=EOS_domain(G%HI))
     enddo
 
     call set_up_sponge_ML_density(tmp_2d, G, CSp)
@@ -2188,7 +2189,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
   press(:) = tv%P_Ref
   do k=1,kd ; do j=js,je
-    call calculate_density(temp_z(:,j,k), salt_z(:,j,k), press, rho_z(:,j,k), G%HI, eos)
+    call calculate_density(temp_z(:,j,k), salt_z(:,j,k), press, rho_z(:,j,k), eos, &
+                           dom=EOS_domain(G%HI))
   enddo ; enddo
 
   call pass_var(temp_z,G%Domain)

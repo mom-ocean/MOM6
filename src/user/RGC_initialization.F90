@@ -35,7 +35,7 @@ use MOM_sponge, only : set_up_sponge_ML_density
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
+use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type, EOS_domain
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -213,7 +213,8 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, PF, use_ALE, CSp, ACSp)
       do i=is-1,ie ; pres(i) = tv%P_Ref ; enddo
 
       do j=js,je
-        call calculate_density(T(:,j,1), S(:,j,1), pres, tmp(:,j), G%HI, tv%eqn_of_state)
+        call calculate_density(T(:,j,1), S(:,j,1), pres, tmp(:,j), tv%eqn_of_state, &
+                               dom=EOS_domain(G%HI))
       enddo
 
       call set_up_sponge_ML_density(tmp, G, CSp)

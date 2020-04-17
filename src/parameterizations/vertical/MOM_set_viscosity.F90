@@ -273,7 +273,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
                            ! accuracy of a single L(:) Newton iteration
   logical :: use_L0, do_one_L_iter    ! Control flags for L(:) Newton iteration
   logical :: use_BBL_EOS, do_i(SZIB_(G))
-  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, m, n, K2, nkmb, nkml, start, npts
+  integer, dimension(2) :: EOSdom ! The computational domain for the equation of state
+  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, m, n, K2, nkmb, nkml
   integer :: itt, maxitt=20
   type(ocean_OBC_type), pointer :: OBC => NULL()
 
@@ -292,7 +293,6 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   if (present(symmetrize)) then ; if (symmetrize) then
     Jsq = js-1 ; Isq = is-1
   endif ; endif
-  start = Isq - (G%isd-1) ; npts = G%iec - Isq + 2
 
   if (CS%debug) then
     call uvchksum("Start set_viscous_BBL [uv]", u, v, G%HI, haloshift=1, scale=US%L_T_to_m_s)
@@ -313,11 +313,12 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
 !  if (CS%linear_drag) ustar(:) = cdrag_sqrt_Z*CS%drag_bg_vel
 
   if ((nkml>0) .and. .not.use_BBL_EOS) then
+    EOSdom(1) = Isq - (G%isd-1) ;  EOSdom(2) = G%iec+1 - (G%isd-1)
     do i=Isq,Ieq+1 ; p_ref(i) = tv%P_Ref ; enddo
     !$OMP parallel do default(shared)
     do k=1,nkmb ; do j=Jsq,Jeq+1
-      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, Rml(:,j,k), start, npts, &
-                             tv%eqn_of_state)
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, Rml(:,j,k), tv%eqn_of_state, &
+                             dom=EOSdom)
     enddo ; enddo
   endif
 
@@ -573,8 +574,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
       do k=1,nz ; do i=is,ie
         press(i) = press(i) + (GV%H_to_RZ*GV%g_Earth) * h_vel(i,k)
       enddo ; enddo
-      call calculate_density_derivs(T_EOS, S_EOS, press, dR_dT, dR_dS, &
-                                    is-G%IsdB+1, ie-is+1, tv%eqn_of_state)
+      call calculate_density_derivs(T_EOS, S_EOS, press, dR_dT, dR_dS, tv%eqn_of_state, &
+                                    dom=(/is-G%IsdB+1,ie-G%IsdB+1/))
     endif
 
     do i=is,ie ; if (do_i(i)) then
@@ -1277,8 +1278,8 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
               T_EOS(I) = (h(i,j,k2)*tv%T(i,j,k2) + h(i+1,j,k2)*tv%T(i+1,j,k2)) * I_2hlay
               S_EOS(I) = (h(i,j,k2)*tv%S(i,j,k2) + h(i+1,j,k2)*tv%S(i+1,j,k2)) * I_2hlay
             enddo
-            call calculate_density_derivs(T_EOS, S_EOS, press, dR_dT, dR_dS, &
-                                          Isq-G%IsdB+1, Ieq-Isq+1, tv%eqn_of_state)
+            call calculate_density_derivs(T_EOS, S_EOS, press, dR_dT, dR_dS, tv%eqn_of_state, &
+                                          dom=(/Isq-G%IsdB+1,Ieq-G%IsdB+1/))
           endif
 
           do I=Isq,Ieq ; if (do_i(I)) then
@@ -1399,7 +1400,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
 
       if (use_EOS) then
         call calculate_density_derivs(T_EOS, S_EOS, forces%p_surf(:,j), dR_dT, dR_dS, &
-                 Isq-G%IsdB+1, Ieq-Isq+1, tv%eqn_of_state)
+                                      tv%eqn_of_state, dom=(/Isq-G%IsdB+1,Ieq-G%IsdB+1/))
       endif
 
       do I=Isq,Ieq ; if (do_i(I)) then
@@ -1515,7 +1516,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
               S_EOS(i) = (h(i,j,k2)*tv%S(i,j,k2) + h(i,j+1,k2)*tv%S(i,j+1,k2)) * I_2hlay
             enddo
             call calculate_density_derivs(T_EOS, S_EOS, press, dR_dT, dR_dS, &
-                                          is-G%IsdB+1, ie-is+1, tv%eqn_of_state)
+                                          tv%eqn_of_state, dom=(/is-G%IsdB+1,ie-G%IsdB+1/))
           endif
 
           do i=is,ie ; if (do_i(i)) then
@@ -1636,7 +1637,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
 
       if (use_EOS) then
         call calculate_density_derivs(T_EOS, S_EOS, forces%p_surf(:,j), dR_dT, dR_dS, &
-                                      is-G%IsdB+1, ie-is+1, tv%eqn_of_state)
+                                      tv%eqn_of_state, dom=(/is-G%IsdB+1,ie-G%IsdB+1/))
       endif
 
       do i=is,ie ; if (do_i(i)) then
