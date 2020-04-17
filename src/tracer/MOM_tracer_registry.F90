@@ -426,12 +426,12 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
           trim(flux_units), v_extensive = .true., x_cell_method = 'sum', &
           conversion=(US%L_to_m**2)*Tr%flux_scale*US%s_to_T)
       Tr%id_lbd_dfx = register_diag_field("ocean_model", trim(shortnm)//"_lbd_diffx", &
-          diag%axesCuL, Time, trim(flux_longname)//" diffusive zonal flux from the lateral boundary diffusion "&
+          diag%axesCuL, Time, trim(flux_longname)//" diffusive zonal flux from the lateral boundary diffusion "//&
           "scheme", trim(flux_units), v_extensive = .true., y_cell_method = 'sum', &
           conversion=(US%L_to_m**2)*Tr%flux_scale*US%s_to_T)
       Tr%id_lbd_dfy = register_diag_field("ocean_model", trim(shortnm)//"_lbd_diffy", &
-          diag%axesCvL, Time, trim(flux_longname)//" diffusive meridional flux from the lateral boundary diffusion"&
-          " scheme", trim(flux_units), v_extensive = .true., x_cell_method = 'sum', &
+          diag%axesCvL, Time, trim(flux_longname)//" diffusive meridional flux from the lateral boundary diffusion "//&
+          "scheme", trim(flux_units), v_extensive = .true., x_cell_method = 'sum', &
           conversion=(US%L_to_m**2)*Tr%flux_scale*US%s_to_T)
     else
       Tr%id_adx = register_diag_field("ocean_model", trim(shortnm)//"_adx", &
