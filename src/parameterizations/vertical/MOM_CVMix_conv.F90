@@ -168,11 +168,14 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl)
   real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces [m]
   real, dimension(SZK_(G))   :: cellHeight  !< Height of cell centers [m]
   integer :: kOBL                        !< level of OBL extent
-  real :: g_o_rho0  ! Gravitational acceleration divided by density in MKS units [m4 s-2]
-  real :: pref, rhok, rhokm1, dz, dh, hcorr
+  real :: g_o_rho0  ! Gravitational acceleration divided by density times unit convserion factors
+                    ! [Z s-2 R-1 ~> m4 s-2 kg-1]
+  real :: pref      ! Interface pressures [R L2 T-2 ~> Pa]
+  real :: rhok, rhokm1 ! In situ densities of the layers above and below at the interface pressure [R ~> kg m-3]
+  real :: dz, dh, hcorr
   integer :: i, j, k
 
-  g_o_rho0 = GV%mks_g_Earth / (US%R_to_kg_m3*GV%Rho0)
+  g_o_rho0 = US%L_to_Z**2*US%s_to_T**2 * GV%g_Earth / GV%Rho0
 
   ! initialize dummy variables
   rho_lwr(:) = 0.0; rho_1d(:) = 0.0
@@ -196,12 +199,12 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl)
       ! Compute Brunt-Vaisala frequency (static stability) on interfaces
       do k=2,G%ke
 
-        ! pRef is pressure at interface between k and km1.
-        pRef = pRef + GV%H_to_Pa * h(i,j,k)
-        call calculate_density(tv%t(i,j,k), tv%s(i,j,k), pref, rhok, tv%eqn_of_state)
-        call calculate_density(tv%t(i,j,k-1), tv%s(i,j,k-1), pref, rhokm1, tv%eqn_of_state)
+        ! pRef is pressure at interface between k and km1 [R L2 T-2 ~> Pa].
+        pRef = pRef + (GV%H_to_RZ*GV%g_Earth) * h(i,j,k)
+        call calculate_density(tv%t(i,j,k), tv%s(i,j,k), pRef, rhok, tv%eqn_of_state, US=US)
+        call calculate_density(tv%t(i,j,k-1), tv%s(i,j,k-1), pRef, rhokm1, tv%eqn_of_state, US=US)
 
-        dz = ((0.5*(h(i,j,k-1) + h(i,j,k))+GV%H_subroundoff)*GV%H_to_m)
+        dz = ((0.5*(h(i,j,k-1) + h(i,j,k))+GV%H_subroundoff)*GV%H_to_Z)
         CS%N2(i,j,k) = g_o_rho0 * (rhok - rhokm1) / dz ! Can be negative
 
       enddo
