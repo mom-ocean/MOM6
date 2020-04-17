@@ -115,11 +115,11 @@ type, public :: EOS_type ; private
 
 ! Unit conversion factors (normally used for dimensional testing but could also allow for
 ! change of units of arguments to functions)
-  real :: m_to_Z       !< A constant that translates distances in meters to the units of depth.
-  real :: kg_m3_to_R   !< A constant that translates kilograms per meter cubed to the units of density.
-  real :: R_to_kg_m3   !< A constant that translates the units of density to kilograms per meter cubed.
-  real :: RL2_T2_to_Pa !< Convert pressures from R L2 T-2 to Pa.
-  real :: L_T_to_m_s   !< Convert lateral velocities from L T-1 to m s-1.
+  real :: m_to_Z = 1.      !< A constant that translates distances in meters to the units of depth.
+  real :: kg_m3_to_R = 1.  !< A constant that translates kilograms per meter cubed to the units of density.
+  real :: R_to_kg_m3 = 1.  !< A constant that translates the units of density to kilograms per meter cubed.
+  real :: RL2_T2_to_Pa = 1.!< Convert pressures from R L2 T-2 to Pa.
+  real :: L_T_to_m_s = 1.  !< Convert lateral velocities from L T-1 to m s-1.
 
 !  logical :: test_EOS = .true. ! If true, test the equation of state
 end type EOS_type
