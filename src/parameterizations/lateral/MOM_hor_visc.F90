@@ -203,7 +203,7 @@ contains
 !!   v[is-2:ie+2,js-2:je+2]
 !!   h[is-1:ie+1,js-1:je+1]
 subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, &
-                                CS, OBC, BT)
+                                CS, OBC, BT, TD)
   type(ocean_grid_type),         intent(in)  :: G      !< The ocean's grid structure.
   type(verticalGrid_type),       intent(in)  :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -228,7 +228,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   type(ocean_OBC_type), optional, pointer    :: OBC    !< Pointer to an open boundary condition type
   type(barotropic_CS),  optional, pointer    :: BT     !< Pointer to a structure containing
                                                        !! barotropic velocities.
-
+  type(thickness_diffuse_CS), optional, pointer :: TD  !< Pointer to a structure containing
+                                                       !! thickness diffusivities.
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     Del2u, &      ! The u-compontent of the Laplacian of velocity [L-1 T-1 ~> m-1 s-1]
@@ -411,14 +412,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     call barotropic_get_tav(BT, ubtav, vbtav, G, US)
     call pass_vector(ubtav, vbtav, G%Domain)
 
-    do j=js-1,je+1 ; do i=is-1,ie+1
+    do j=js-1,je+2 ; do i=is-1,ie+2
       dudx_bt(i,j) = CS%DY_dxT(i,j)*(G%IdyCu(I,j) * ubtav(I,j) - &
                                      G%IdyCu(I-1,j) * ubtav(I-1,j))
       dvdy_bt(i,j) = CS%DX_dyT(i,j)*(G%IdxCv(i,J) * vbtav(i,J) - &
                                      G%IdxCv(i,J-1) * vbtav(i,J-1))
     enddo; enddo
-
-    call pass_vector(dudx_bt, dvdy_bt, G%Domain, stagger=BGRID_NE)
 
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       sh_xx_bt(i,j) = dudx_bt(i,j) - dvdy_bt(i,j)
@@ -432,6 +431,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                                     - ubtav(I,j)*G%IdxCu(I,j))
     enddo ; enddo
 
+    call pass_vector(dudx_bt, dvdy_bt, G%Domain, stagger=BGRID_NE)
     call pass_vector(dvdx_bt, dudy_bt, G%Domain, stagger=AGRID)
 
     if (CS%no_slip) then
@@ -468,7 +468,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   !$OMP   h_neglect, h_neglect3, FWfrac, inv_PI3, inv_PI5, H0_GME, &
   !$OMP   diffu, diffv, max_diss_rate_h, max_diss_rate_q, &
   !$OMP   Kh_h, Kh_q, Ah_h, Ah_q, FrictWork, FrictWork_GME, &
-  !$OMP   div_xx_h, vort_xy_q, GME_coeff_h, GME_coeff_q &
+  !$OMP   div_xx_h, vort_xy_q, GME_coeff_h, GME_coeff_q, &
+  !$OMP   TD, KH_u_GME, KH_v_GME &
   !$OMP ) &
   !$OMP private( &
   !$OMP   i, j, k, n, &
@@ -1063,48 +1064,15 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     enddo ; enddo
 
     if (CS%use_GME) then
-      if (CS%answers_2018) then
-        do j=js,je ; do i=is,ie
-          grad_vel_mag_h(i,j) = boundary_mask_h(i,j) * (dudx(i,j)**2 + dvdy(i,j)**2 + &
-            (0.25*((dvdx(I,J) + dvdx(I-1,J-1)) + (dvdx(I,J-1) + dvdx(I-1,J))) )**2 + &
-            (0.25*((dudy(I,J) + dudy(I-1,J-1)) + (dudy(I,J-1) + dudy(I-1,J))) )**2)
-          max_diss_rate_h(i,j,k) = 2.0 * MEKE%MEKE(i,j) * sqrt(grad_vel_mag_h(i,j))
-        enddo ; enddo
-      else  ! This form is invariant to 90-degree rotations.
-        do j=js,je ; do i=is,ie
-          grad_vel_mag_h(i,j) = boundary_mask_h(i,j) * ((dudx(i,j)**2 + dvdy(i,j)**2) + &
-              ((0.25*((dvdx(I,J) + dvdx(I-1,J-1)) + (dvdx(I,J-1) + dvdx(I-1,J))) )**2 + &
-               (0.25*((dudy(I,J) + dudy(I-1,J-1)) + (dudy(I,J-1) + dudy(I-1,J))) )**2))
-          max_diss_rate_h(i,j,k) = 2.0 * MEKE%MEKE(i,j) * sqrt(grad_vel_mag_h(i,j))
-        enddo ; enddo
-      endif
+      call thickness_diffuse_get_KH(TD, KH_u_GME, KH_v_GME, G)
+      call pass_vector(KH_u_GME, KH_v_GME, G%Domain)
 
-      if (CS%answers_2018) then
-        do J = G%JscB, G%JecB ; do I = G%IscB, G%IecB
-          grad_vel_mag_q(I,J) = boundary_mask_q(I,J) * (dudx(i,j)**2 + dvdy(i,j)**2 + &
-            (0.25*((dvdx(I,J)+dvdx(I-1,J-1)) + (dvdx(I,J-1)+dvdx(I-1,J))) )**2 + &
-            (0.25*((dudy(I,J)+dudy(I-1,J-1)) + (dudy(I,J-1)+dudy(I-1,J))) )**2)
-
-          max_diss_rate_q(I,J,k) = 0.5*(MEKE%MEKE(i,j)+MEKE%MEKE(i+1,j)+ &
-            MEKE%MEKE(i,j+1)+MEKE%MEKE(i+1,j+1)) * sqrt(grad_vel_mag_q(I,J))
-        enddo ; enddo
-      else ! This form is rotationally invariant
-        do J = G%JscB, G%JecB ; do I = G%IscB, G%IecB
-          grad_vel_mag_q(I,J) = boundary_mask_q(I,J) * ((dudx(i,j)**2 + dvdy(i,j)**2) + &
-            ((0.25*((dvdx(I,J)+dvdx(I-1,J-1)) + (dvdx(I,J-1)+dvdx(I-1,J))) )**2 + &
-             (0.25*((dudy(I,J)+dudy(I-1,J-1)) + (dudy(I,J-1)+dudy(I-1,J))) )**2))
-
-          max_diss_rate_q(I,J,k) = 0.5*((MEKE%MEKE(i,j) + MEKE%MEKE(i+1,j+1)) + &
-                                        (MEKE%MEKE(i+1,j) + MEKE%MEKE(i,j+1))) * sqrt(grad_vel_mag_q(I,J))
-        enddo ; enddo
-      endif
-
-      do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        if ((grad_vel_mag_bt_h(i,j)>0) .and. (max_diss_rate_h(i,j,k)>0)) then
-          GME_coeff = (MIN(G%bathyT(i,j)/CS%GME_h0,1.0)**2) * CS%GME_efficiency*max_diss_rate_h(i,j,k) / &
-                       grad_vel_mag_bt_h(i,j)
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        if (grad_vel_mag_bt_h(i,j)>0) then
+          GME_coeff = CS%GME_efficiency * (MIN(G%bathyT(i,j)/CS%GME_h0,1.0)**2) * &
+            (0.25*(KH_u_GME(I,j,k)+KH_u_GME(I-1,j,k)+KH_v_GME(i,J,k)+KH_v_GME(i,J-1,k)))
         else
-          GME_coeff = 1.0
+          GME_coeff = 0.0
         endif
 
         ! apply mask
@@ -1117,10 +1085,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       enddo ; enddo
 
       do J=js-1,Jeq ; do I=is-1,Ieq
-
-        if ((grad_vel_mag_bt_q(I,J)>0) .and. (max_diss_rate_q(I,J,k)>0)) then
-          GME_coeff = (MIN(G%bathyT(i,j)/CS%GME_h0,1.0)**2) * CS%GME_efficiency*max_diss_rate_q(I,J,k) / &
-                       grad_vel_mag_bt_q(I,J)
+        if (grad_vel_mag_bt_q(i,j)>0) then
+          GME_coeff = CS%GME_efficiency * (MIN(G%bathyT(i,j)/CS%GME_h0,1.0)**2) * &
+              (0.25*(KH_u_GME(I,j,k)+KH_u_GME(I,j+1,k)+KH_v_GME(i,J,k)+KH_v_GME(i+1,J,k)))
         else
           GME_coeff = 0.0
         endif
@@ -1153,7 +1120,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
       if (associated(MEKE%GME_snk)) then
         do j=js,je ; do i=is,ie
-          FrictWork_GME(i,j,k) = GME_coeff_h(i,j,k) * h(i,j,k) * GV%H_to_RZ * grad_vel_mag_bt_h(i,j)
+          FrictWork_GME(i,j,k) = GME_coeff_h(i,j,k) * h(i,j,k) * GV%H_to_kg_m2 * grad_vel_mag_bt_h(i,j)
         enddo ; enddo
       endif
 
@@ -1394,8 +1361,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
                            ! whether they are used, to enable spell-checking of
                            ! valid parameters.
   logical :: split         ! If true, use the split time stepping scheme.
-                           ! If false and USE_GME = True, issue a FATAL error.
-  logical :: use_MEKE      ! If true, use the MEKE module for calculating eddy kinetic energy.
                            ! If false and USE_GME = True, issue a FATAL error.
   logical :: default_2018_answers
 
@@ -1666,14 +1631,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
                   do_not_log=.true.)
     if (.not. split) call MOM_error(FATAL,"ERROR: Currently, USE_GME = True "// &
                                            "cannot be used with SPLIT=False.")
-
-    call get_param(param_file, mdl, "USE_MEKE", use_MEKE, &
-                 "If true, turns on the MEKE scheme which calculates\n"// &
-                 "a sub-grid mesoscale eddy kinetic energy budget.", &
-                 default=.false.)
-
-    if (.not. use_MEKE) call MOM_error(FATAL,"ERROR: Currently, USE_GME = True "// &
-                                           "cannot be used with USE_MEKE=False.")
 
     call get_param(param_file, mdl, "GME_H0", CS%GME_h0, &
                  "The strength of GME tapers quadratically to zero when the bathymetric "//&

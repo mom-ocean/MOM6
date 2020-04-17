@@ -286,7 +286,8 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     ! Calculates bottomFac2, barotrFac2 and LmixScale
     call MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, MEKE%MEKE, bottomFac2, barotrFac2, LmixScale)
     if (CS%debug) then
-      call uvchksum("MEKE drag_vel_[uv]", drag_vel_u, drag_vel_v, G%HI, scale=US%Z_to_m*US%s_to_T)
+      if (CS%visc_drag) &
+        call uvchksum("MEKE drag_vel_[uv]", drag_vel_u, drag_vel_v, G%HI, scale=US%Z_to_m*US%s_to_T)
       call hchksum(mass, 'MEKE mass',G%HI,haloshift=1, scale=US%R_to_kg_m3*US%Z_to_m)
       call hchksum(drag_rate_visc, 'MEKE drag_rate_visc', G%HI, scale=US%L_T_to_m_s)
       call hchksum(bottomFac2, 'MEKE bottomFac2', G%HI)
@@ -1189,9 +1190,9 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
                  "CDRAG is the drag coefficient relating the magnitude of "//&
                  "the velocity field to the bottom stress.", units="nondim", &
                  default=0.003)
-  call get_param(param_file, mdl, "CDRAG_MEKE", CS%cdrag, &
-                 "CDRAG is the drag coefficient relating the magnitude of "//&
-                 "the velocity field to the bottom stress.", units="nondim", &
+  call get_param(param_file, mdl, "MEKE_CDRAG", CS%cdrag, &
+                 "Drag coefficient relating the magnitude of the velocity "//&
+                 "field to the bottom stress in MEKE.", units="nondim", &
                  default=cdrag)
   call get_param(param_file, mdl, "LAPLACIAN", laplacian, default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "BIHARMONIC", biharmonic, default=.false., do_not_log=.true.)
