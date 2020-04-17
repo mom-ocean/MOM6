@@ -273,7 +273,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
                            ! accuracy of a single L(:) Newton iteration
   logical :: use_L0, do_one_L_iter    ! Control flags for L(:) Newton iteration
   logical :: use_BBL_EOS, do_i(SZIB_(G))
-  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, m, n, K2, nkmb, nkml, start, npts
+  integer, dimension(2) :: EOSdom ! The computational domain for the equation of state
+  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, m, n, K2, nkmb, nkml
   integer :: itt, maxitt=20
   type(ocean_OBC_type), pointer :: OBC => NULL()
 
@@ -292,7 +293,6 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   if (present(symmetrize)) then ; if (symmetrize) then
     Jsq = js-1 ; Isq = is-1
   endif ; endif
-  start = Isq - (G%isd-1) ; npts = G%iec - Isq + 2
 
   if (CS%debug) then
     call uvchksum("Start set_viscous_BBL [uv]", u, v, G%HI, haloshift=1, scale=US%L_T_to_m_s)
@@ -313,11 +313,12 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
 !  if (CS%linear_drag) ustar(:) = cdrag_sqrt_Z*CS%drag_bg_vel
 
   if ((nkml>0) .and. .not.use_BBL_EOS) then
+    EOSdom(1) = Isq - (G%isd-1) ;  EOSdom(2) = G%iec+1 - (G%isd-1)
     do i=Isq,Ieq+1 ; p_ref(i) = tv%P_Ref ; enddo
     !$OMP parallel do default(shared)
     do k=1,nkmb ; do j=Jsq,Jeq+1
       call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, Rml(:,j,k), tv%eqn_of_state, &
-                             US=US, dom=(/start,start+npts-1/))
+                             US=US, dom=EOSdom)
     enddo ; enddo
   endif
 

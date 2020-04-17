@@ -242,8 +242,8 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
           T_int(k) = 0.5*(Tf(k,i)+Tf(k-1,i))
           S_int(k) = 0.5*(Sf(k,i)+Sf(k-1,i))
         enddo
-        call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, 2, &
-                                      kf(i)-1, tv%eqn_of_state, US)
+        call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, &
+                                      tv%eqn_of_state, US, dom=(/2,kf(i)/))
 
         ! Sum the reduced gravities to find out how small a density difference
         ! is negligibly small.
@@ -737,8 +737,8 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
             T_int(k) = 0.5*(Tf(k,i)+Tf(k-1,i))
             S_int(k) = 0.5*(Sf(k,i)+Sf(k-1,i))
           enddo
-          call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, 2, &
-                                        kf(i)-1, tv%eqn_of_state, US)
+          call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, &
+                                        tv%eqn_of_state, US, dom=(/2,kf(i)/))
 
           ! Sum the reduced gravities to find out how small a density difference
           ! is negligibly small.

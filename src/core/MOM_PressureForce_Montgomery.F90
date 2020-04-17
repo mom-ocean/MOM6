@@ -124,12 +124,13 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
   real :: alpha_Lay(SZK_(G)) ! The specific volume of each layer [R-1 ~> m3 kg-1].
   real :: dalpha_int(SZK_(G)+1) ! The change in specific volume across each
                              ! interface [R-1 ~> m3 kg-1].
-  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb, start, npts
+  integer, dimension(2) :: EOSdom ! The computational domain for the equation of state
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer :: i, j, k
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   nkmb=GV%nk_rho_varies
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  start = Isq - (G%isd-1) ; npts = G%iec - Isq + 2
+  EOSdom(1) = Isq - (G%isd-1) ;  EOSdom(2) = G%iec+1 - (G%isd-1)
 
   use_p_atm = .false.
   if (present(p_atm)) then ; if (associated(p_atm)) use_p_atm = .true. ; endif
@@ -228,8 +229,8 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
         do k=1,nkmb ; do i=Isq,Ieq+1
           tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
         enddo ; enddo
-        call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, Rho_cv_BL(:), start, npts, &
-                               tv%eqn_of_state, US=US)
+        call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, Rho_cv_BL(:), &
+                               tv%eqn_of_state, US=US, dom=EOSdom)
         do k=nkmb+1,nz ; do i=Isq,Ieq+1
           if (GV%Rlay(k) < Rho_cv_BL(i)) then
             tv_tmp%T(i,j,k) = tv%T(i,j,nkmb) ; tv_tmp%S(i,j,k) = tv%S(i,j,nkmb)
@@ -245,8 +246,8 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
     endif
     !$OMP parallel do default(shared) private(rho_in_situ)
     do k=1,nz ; do j=Jsq,Jeq+1
-      call calculate_density(tv_tmp%T(:,j,k), tv_tmp%S(:,j,k), p_ref, rho_in_situ, start, npts, &
-                             tv%eqn_of_state, US=US)
+      call calculate_density(tv_tmp%T(:,j,k), tv_tmp%S(:,j,k), p_ref, rho_in_situ, &
+                             tv%eqn_of_state, US=US, dom=EOSdom)
       do i=Isq,Ieq+1 ; alpha_star(i,j,k) = 1.0 / rho_in_situ(i) ; enddo
     enddo ; enddo
   endif                                               ! use_EOS
@@ -409,13 +410,14 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
                              ! gradient terms are to be split into
                              ! barotropic and baroclinic pieces.
   type(thermo_var_ptrs) :: tv_tmp! A structure of temporary T & S.
-  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb, start, npts
+  integer, dimension(2) :: EOSdom ! The computational domain for the equation of state
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer :: i, j, k
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   nkmb=GV%nk_rho_varies
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  start = Isq - (G%isd-1) ; npts = G%iec - Isq + 2
+  EOSdom(1) = Isq - (G%isd-1) ;  EOSdom(2) = G%iec+1 - (G%isd-1)
 
   use_p_atm = .false.
   if (present(p_atm)) then ; if (associated(p_atm)) use_p_atm = .true. ; endif
@@ -484,8 +486,8 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
         do k=1,nkmb ; do i=Isq,Ieq+1
           tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
         enddo ; enddo
-        call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, Rho_cv_BL(:), start, npts, &
-                               tv%eqn_of_state, US=US)
+        call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, Rho_cv_BL(:), &
+                               tv%eqn_of_state, US=US, dom=EOSdom)
 
         do k=nkmb+1,nz ; do i=Isq,Ieq+1
           if (GV%Rlay(k) < Rho_cv_BL(i)) then
@@ -505,8 +507,8 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
     ! will come down with a fatal error if there is any compressibility.
     !$OMP parallel do default(shared)
     do k=1,nz+1 ; do j=Jsq,Jeq+1
-      call calculate_density(tv_tmp%T(:,j,k), tv_tmp%S(:,j,k), p_ref, rho_star(:,j,k), start, npts, &
-                             tv%eqn_of_state, US=US)
+      call calculate_density(tv_tmp%T(:,j,k), tv_tmp%S(:,j,k), p_ref, rho_star(:,j,k), &
+                             tv%eqn_of_state, US=US, dom=EOSdom)
       do i=Isq,Ieq+1 ; rho_star(i,j,k) = G_Rho0*rho_star(i,j,k) ; enddo
     enddo ; enddo
   endif                                               ! use_EOS
@@ -632,10 +634,11 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
                              ! an equation of state.
   real :: z_neglect          ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected [Z ~> m].
-  integer :: Isq, Ieq, Jsq, Jeq, nz, i, j, k, start, npts
+  integer, dimension(2) :: EOSdom ! The computational domain for the equation of state
+  integer :: Isq, Ieq, Jsq, Jeq, nz, i, j, k
 
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
-  start = Isq - (G%isd-1) ; npts = G%iec - Isq + 2
+  EOSdom(1) = Isq - (G%isd-1) ;  EOSdom(2) = G%iec+1 - (G%isd-1)
 
   Rho0xG = Rho0 * GV%g_Earth
   G_Rho0 = GV%g_Earth / GV%Rho0
@@ -662,8 +665,8 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
           Ihtot(i) = GV%H_to_Z / ((e(i,j,1)-e(i,j,nz+1)) + z_neglect)
           press(i) = -Rho0xG*e(i,j,1)
         enddo
-        call calculate_density(tv%T(:,j,1), tv%S(:,j,1), press, rho_in_situ, start, npts, &
-                               tv%eqn_of_state, US=US)
+        call calculate_density(tv%T(:,j,1), tv%S(:,j,1), press, rho_in_situ, &
+                               tv%eqn_of_state, US=US, dom=EOSdom)
         do i=Isq,Ieq+1
           pbce(i,j,1) = G_Rho0*(GFS_scale * rho_in_situ(i)) * GV%H_to_Z
         enddo
@@ -673,8 +676,8 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
             T_int(i) = 0.5*(tv%T(i,j,k-1)+tv%T(i,j,k))
             S_int(i) = 0.5*(tv%S(i,j,k-1)+tv%S(i,j,k))
           enddo
-          call calculate_density_derivs(T_int, S_int, press, dR_dT, dR_dS, start, npts, &
-                                        tv%eqn_of_state, US=US)
+          call calculate_density_derivs(T_int, S_int, press, dR_dT, dR_dS, &
+                                        tv%eqn_of_state, US=US, dom=EOSdom)
           do i=Isq,Ieq+1
             pbce(i,j,k) = pbce(i,j,k-1) + G_Rho0 * &
                ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i)) * &
@@ -733,10 +736,11 @@ subroutine Set_pbce_nonBouss(p, tv, G, GV, US, GFS_scale, pbce, alpha_star)
   real :: dp_neglect         ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected [R L2 T-2 ~> Pa].
   logical :: use_EOS         ! If true, density is calculated from T & S using an equation of state.
-  integer :: Isq, Ieq, Jsq, Jeq, nz, i, j, k, start, npts
+  integer, dimension(2) :: EOSdom ! The computational domain for the equation of state
+  integer :: Isq, Ieq, Jsq, Jeq, nz, i, j, k
 
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
-  start = Isq - (G%isd-1) ; npts = G%iec - Isq + 2
+  EOSdom(1) = Isq - (G%isd-1) ;  EOSdom(2) = G%iec+1 - (G%isd-1)
 
   use_EOS = associated(tv%eqn_of_state)
 
@@ -759,8 +763,8 @@ subroutine Set_pbce_nonBouss(p, tv, G, GV, US, GFS_scale, pbce, alpha_star)
     else
       !$OMP parallel do default(shared) private(T_int,S_int,dR_dT,dR_dS,rho_in_situ)
       do j=Jsq,Jeq+1
-        call calculate_density(tv%T(:,j,nz), tv%S(:,j,nz), p(:,j,nz+1), rho_in_situ, start, npts, &
-                               tv%eqn_of_state, US=US)
+        call calculate_density(tv%T(:,j,nz), tv%S(:,j,nz), p(:,j,nz+1), rho_in_situ, &
+                               tv%eqn_of_state, US=US, dom=EOSdom)
         do i=Isq,Ieq+1
           C_htot(i,j) = dP_dH / ((p(i,j,nz+1)-p(i,j,1)) + dp_neglect)
           pbce(i,j,nz) = dP_dH / (rho_in_situ(i))
@@ -770,9 +774,9 @@ subroutine Set_pbce_nonBouss(p, tv, G, GV, US, GFS_scale, pbce, alpha_star)
             T_int(i) = 0.5*(tv%T(i,j,k)+tv%T(i,j,k+1))
             S_int(i) = 0.5*(tv%S(i,j,k)+tv%S(i,j,k+1))
           enddo
-          call calculate_density(T_int, S_int, p(:,j,k+1), rho_in_situ, start, npts, tv%eqn_of_state, US=US)
-          call calculate_density_derivs(T_int, S_int, p(:,j,k+1), dR_dT, dR_dS, start, npts, &
-                                        tv%eqn_of_state, US=US)
+          call calculate_density(T_int, S_int, p(:,j,k+1), rho_in_situ, tv%eqn_of_state, US=US, dom=EOSdom)
+          call calculate_density_derivs(T_int, S_int, p(:,j,k+1), dR_dT, dR_dS, &
+                                        tv%eqn_of_state, US=US, dom=EOSdom)
           do i=Isq,Ieq+1
             pbce(i,j,k) = pbce(i,j,k+1) + ((p(i,j,K+1)-p(i,j,1))*C_htot(i,j)) *  &
                 ((dR_dT(i)*(tv%T(i,j,k+1)-tv%T(i,j,k)) + &

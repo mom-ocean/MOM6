@@ -1889,8 +1889,7 @@ subroutine convective_adjustment(G, GV, h, tv)
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
 
     ! Compute densities within current water column
-    call calculate_density( tv%T(i,j,:), tv%S(i,j,:), p_col, &
-                            densities, 1, GV%ke, tv%eqn_of_state )
+    call calculate_density( tv%T(i,j,:), tv%S(i,j,:), p_col, densities, tv%eqn_of_state )
 
     ! Repeat restratification until complete
     do
@@ -1909,8 +1908,7 @@ subroutine convective_adjustment(G, GV, h, tv)
           tv%S(i,j,k) = S1 ; tv%S(i,j,k+1) = S0
           h(i,j,k)    = h1 ; h(i,j,k+1)    = h0
           ! Recompute densities at levels k and k+1
-          call calculate_density( tv%T(i,j,k), tv%S(i,j,k), p_col(k), &
-                                  densities(k), tv%eqn_of_state )
+          call calculate_density( tv%T(i,j,k), tv%S(i,j,k), p_col(k), densities(k), tv%eqn_of_state)
           call calculate_density( tv%T(i,j,k+1), tv%S(i,j,k+1), p_col(k+1), &
                                   densities(k+1), tv%eqn_of_state )
           stratified = .false.

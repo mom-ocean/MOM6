@@ -173,14 +173,15 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
   real :: H_to_RL2_T2   ! A factor to convert from thicknesss units (H) to pressure units [R L2 T-2 H-1 ~> Pa H-1].
 !  real :: oneatm = 101325.0  ! 1 atm in [Pa] = [kg m-1 s-2]
   real, parameter :: C1_6 = 1.0/6.0
-  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb, start, npts
+  integer, dimension(2) :: EOSdom ! The computational domain for the equation of state
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer :: is_bk, ie_bk, js_bk, je_bk, Isq_bk, Ieq_bk, Jsq_bk, Jeq_bk
   integer :: i, j, k, n, ib, jb, ioff_bk, joff_bk
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   nkmb=GV%nk_rho_varies
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  start = Isq - (G%isd-1) ; npts = G%iec - Isq + 2
+  EOSdom(1) = Isq - (G%isd-1) ;  EOSdom(2) = G%iec+1 - (G%isd-1)
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
        "MOM_PressureForce_AFV_nonBouss: Module must be initialized before it is used.")
@@ -224,8 +225,8 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
         do k=1,nkmb ; do i=Isq,Ieq+1
           tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
         enddo ; enddo
-        call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, Rho_cv_BL(:), start, npts, &
-                               tv%eqn_of_state, US=US)
+        call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, Rho_cv_BL(:), &
+                               tv%eqn_of_state, US=US, dom=EOSdom)
         do k=nkmb+1,nz ; do i=Isq,Ieq+1
           if (GV%Rlay(k) < Rho_cv_BL(i)) then
             tv_tmp%T(i,j,k) = tv%T(i,j,nkmb) ; tv_tmp%S(i,j,k) = tv%S(i,j,nkmb)
@@ -302,8 +303,8 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
     if (use_EOS) then
       !$OMP parallel do default(shared) private(rho_in_situ)
       do j=Jsq,Jeq+1
-        call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p(:,j,1), rho_in_situ, start, npts, &
-                               tv%eqn_of_state, US=US)
+        call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p(:,j,1), rho_in_situ, &
+                               tv%eqn_of_state, US=US, dom=EOSdom)
 
         do i=Isq,Ieq+1
           dM(i,j) = (CS%GFS_scale - 1.0) * (p(i,j,1)*(1.0/rho_in_situ(i) - alpha_ref) + za(i,j))
@@ -489,7 +490,8 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
   type(thermo_var_ptrs) :: tv_tmp! A structure of temporary T & S.
 
   real, parameter :: C1_6 = 1.0/6.0
-  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb, start, npts
+  integer, dimension(2) :: EOSdom ! The computational domain for the equation of state
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer :: is_bk, ie_bk, js_bk, je_bk, Isq_bk, Ieq_bk, Jsq_bk, Jeq_bk
   integer :: ioff_bk, joff_bk
   integer :: i, j, k, n, ib, jb
@@ -497,7 +499,7 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   nkmb=GV%nk_rho_varies
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  start = Isq - (G%isd-1) ; npts = G%iec - Isq + 2
+  EOSdom(1) = Isq - (G%isd-1) ;  EOSdom(2) = G%iec+1 - (G%isd-1)
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
        "MOM_PressureForce_AFV_Bouss: Module must be initialized before it is used.")
@@ -565,8 +567,8 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
         do k=1,nkmb ; do i=Isq,Ieq+1
           tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
         enddo ; enddo
-        call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, Rho_cv_BL(:), start, npts, &
-                               tv%eqn_of_state, US=US)
+        call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, Rho_cv_BL(:), &
+                               tv%eqn_of_state, US=US, dom=EOSdom)
 
         do k=nkmb+1,nz ; do i=Isq,Ieq+1
           if (GV%Rlay(k) < Rho_cv_BL(i)) then
@@ -588,11 +590,11 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1
         if (use_p_atm) then
-          call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p_atm(:,j), rho_in_situ, start, npts, &
-                                 tv%eqn_of_state, US=US)
+          call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p_atm(:,j), rho_in_situ, &
+                                 tv%eqn_of_state, US=US, dom=EOSdom)
         else
-          call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p0, rho_in_situ, start, npts, &
-                                 tv%eqn_of_state, US=US)
+          call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p0, rho_in_situ, &
+                                 tv%eqn_of_state, US=US, dom=EOSdom)
         endif
         do i=Isq,Ieq+1
           dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * rho_in_situ(i)) * e(i,j,1)
