@@ -4,7 +4,6 @@ module coord_hycom
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_error_handler, only : MOM_error, FATAL
-use MOM_unit_scaling,  only : unit_scale_type
 use MOM_EOS,           only : EOS_type, calculate_density
 use regrid_interp,     only : interp_CS_type, build_and_interpolate_grid
 
@@ -96,10 +95,9 @@ subroutine set_hycom_params(CS, max_interface_depths, max_layer_thickness, inter
 end subroutine set_hycom_params
 
 !> Build a HyCOM coordinate column
-subroutine build_hycom1_column(CS, US, eqn_of_state, nz, depth, h, T, S, p_col, &
+subroutine build_hycom1_column(CS, eqn_of_state, nz, depth, h, T, S, p_col, &
                                z_col, z_col_new, zScale, h_neglect, h_neglect_edge)
   type(hycom_CS),        intent(in)    :: CS    !< Coordinate control structure
-  type(unit_scale_type), intent(in)    :: US    !< A dimensional unit scaling type
   type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
   integer,               intent(in)    :: nz    !< Number of levels
   real,                  intent(in)    :: depth !< Depth of ocean bottom (positive [H ~> m or kg m-2])
@@ -133,7 +131,7 @@ subroutine build_hycom1_column(CS, US, eqn_of_state, nz, depth, h, T, S, p_col, 
   z_scale = 1.0 ; if (present(zScale)) z_scale = zScale
 
   ! Work bottom recording potential density
-  call calculate_density(T, S, p_col, rho_col, 1, nz, eqn_of_state, US=US)
+  call calculate_density(T, S, p_col, rho_col, 1, nz, eqn_of_state)
   ! This ensures the potential density profile is monotonic
   ! although not necessarily single valued.
   do k = nz-1, 1, -1

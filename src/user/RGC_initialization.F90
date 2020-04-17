@@ -213,7 +213,7 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, PF, use_ALE, CSp, ACSp)
       do i=is-1,ie ; pres(i) = tv%P_Ref ; enddo
 
       do j=js,je
-        call calculate_density(T(:,j,1), S(:,j,1), pres, tmp(:,j), G%HI, tv%eqn_of_state, US)
+        call calculate_density(T(:,j,1), S(:,j,1), pres, tmp(:,j), G%HI, tv%eqn_of_state)
       enddo
 
       call set_up_sponge_ML_density(tmp, G, CSp)

@@ -801,9 +801,9 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
     adjust_salt = .true.
     iter_loop: do itt = 1,niter
       do k=1, nz
-        call calculate_density(T(:,k), S(:,k), press, rho(:,k), 1, nx, eos, US=US)
+        call calculate_density(T(:,k), S(:,k), press, rho(:,k), 1, nx, eos)
         call calculate_density_derivs(T(:,k), S(:,k), press, drho_dT(:,k), drho_dS(:,k), 1, nx, &
-                                      eos, US=US)
+                                      eos)
       enddo
       do k=k_start,nz ; do i=1,nx
 
@@ -831,9 +831,9 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
 
     if (adjust_salt .and. old_fit) then ; do itt = 1,niter
       do k=1, nz
-        call calculate_density(T(:,k), S(:,k), press, rho(:,k), 1, nx, eos, US=US)
+        call calculate_density(T(:,k), S(:,k), press, rho(:,k), 1, nx, eos)
         call calculate_density_derivs(T(:,k), S(:,k), press, drho_dT(:,k), drho_dS(:,k), 1, nx, &
-                                      eos, US=US)
+                                      eos)
       enddo
       do k=k_start,nz ; do i=1,nx
 !       if (abs(rho(i,k)-R_tgt(k))>tol_rho .and. hin(i,k)>h_massless .and. abs(T(i,k)-land_fill) < epsln ) then

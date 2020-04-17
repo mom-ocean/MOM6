@@ -701,7 +701,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   !$OMP parallel do default(shared)
   do k=1,nkmb ; do j=js-2,je+2
     call calculate_density(tv%T(:,j,k),tv%S(:,j,k), p_ref_cv, rho_coord(:,j,k), G%HI, &
-                           tv%eqn_of_state, US, halo=2)
+                           tv%eqn_of_state, halo=2)
   enddo ; enddo
 
   do j=js-2,je+2 ; do i=is-2,ie+2

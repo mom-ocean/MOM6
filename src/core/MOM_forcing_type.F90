@@ -954,7 +954,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
 
   ! Density derivatives
   call calculate_density_derivs(Temp(:,j,1), Salt(:,j,1), pressure, dRhodT, dRhodS, G%HI, &
-                                tv%eqn_of_state, US)
+                                tv%eqn_of_state)
 
   ! Adjust netSalt to reflect dilution effect of FW flux
   netSalt(G%isc:G%iec) = netSalt(G%isc:G%iec) - Salt(G%isc:G%iec,j,1) * netH(G%isc:G%iec) ! ppt H/s

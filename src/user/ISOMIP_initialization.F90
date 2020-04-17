@@ -362,10 +362,10 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
           ! call MOM_mesg(mesg,5)
         enddo
 
-        call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, 1, 1, eqn_of_state, US)
+        call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, 1, 1, eqn_of_state)
         ! write(mesg,*) 'computed drho_dS, drho_dT', drho_dS(1), drho_dT(1)
         ! call MOM_mesg(mesg,5)
-        call calculate_density(T0(1), S0(1), pres(1), rho_guess(1), eqn_of_state, US=US)
+        call calculate_density(T0(1), S0(1), pres(1), rho_guess(1), eqn_of_state)
 
         if (fit_salin) then
           ! A first guess of the layers' salinity.
@@ -374,8 +374,8 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
           enddo
           ! Refine the guesses for each layer.
           do itt=1,6
-            call calculate_density(T0, S0, pres, rho_guess, 1, nz, eqn_of_state, US=US)
-            call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, 1, nz, eqn_of_state, US)
+            call calculate_density(T0, S0, pres, rho_guess, 1, nz, eqn_of_state)
+            call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, 1, nz, eqn_of_state)
             do k=1,nz
               S0(k) = max(0.0, S0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dS1)
             enddo
@@ -388,8 +388,8 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
           enddo
 
           do itt=1,6
-            call calculate_density(T0, S0, pres, rho_guess, 1, nz, eqn_of_state, US=US)
-            call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, 1, nz, eqn_of_state, US)
+            call calculate_density(T0, S0, pres, rho_guess, 1, nz, eqn_of_state)
+            call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, 1, nz, eqn_of_state)
             do k=1,nz
               T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
             enddo

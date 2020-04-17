@@ -1386,7 +1386,7 @@ subroutine build_rho_grid( G, GV, US, h, tv, dzInterface, remapCS, CS )
       ! Local depth (G%bathyT is positive)
       nominalDepth = G%bathyT(i,j)*GV%Z_to_H
 
-      call build_rho_column(CS%rho_CS, US, nz, nominalDepth, h(i, j, :), &
+      call build_rho_column(CS%rho_CS, nz, nominalDepth, h(i, j, :), &
                             tv%T(i, j, :), tv%S(i, j, :), tv%eqn_of_state, zNew, &
                             h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
 
@@ -1501,7 +1501,7 @@ subroutine build_grid_HyCOM1( G, GV, US, h, tv, h_new, dzInterface, CS )
              ( 0.5 * ( z_col(K) + z_col(K+1) ) * (GV%H_to_RZ*GV%g_Earth) - tv%P_Ref )
       enddo
 
-      call build_hycom1_column(CS%hycom_CS, US, tv%eqn_of_state, GV%ke, depth, &
+      call build_hycom1_column(CS%hycom_CS, tv%eqn_of_state, GV%ke, depth, &
                                h(i,j,:), tv%T(i,j,:), tv%S(i,j,:), p_col, &
                                z_col, z_col_new, zScale=GV%Z_to_H, &
                                h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
@@ -1635,7 +1635,7 @@ subroutine build_grid_SLight(G, GV, US, h, tv, dzInterface, CS)
                     ( 0.5 * ( z_col(K) + z_col(K+1) ) * (GV%H_to_RZ*GV%g_Earth) - tv%P_Ref )
       enddo
 
-      call build_slight_column(CS%slight_CS, US, tv%eqn_of_state, GV%H_to_RZ*GV%g_Earth, &
+      call build_slight_column(CS%slight_CS, tv%eqn_of_state, GV%H_to_RZ*GV%g_Earth, &
                           GV%H_subroundoff, nz, depth, h(i, j, :), &
                           tv%T(i, j, :), tv%S(i, j, :), p_col, z_col, z_col_new, &
                           h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)

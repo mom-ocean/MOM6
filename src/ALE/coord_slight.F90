@@ -4,7 +4,6 @@ module coord_slight
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_error_handler, only : MOM_error, FATAL
-use MOM_unit_scaling,  only : unit_scale_type
 use MOM_EOS,           only : EOS_type, calculate_compress
 use MOM_EOS,           only : calculate_density, calculate_density_derivs
 use regrid_interp,     only : interp_CS_type, regridding_set_ppolys
@@ -178,11 +177,10 @@ subroutine set_slight_params(CS, max_interface_depths, max_layer_thickness, &
 end subroutine set_slight_params
 
 !> Build a SLight coordinate column
-subroutine build_slight_column(CS, US, eqn_of_state, H_to_pres, H_subroundoff, &
+subroutine build_slight_column(CS, eqn_of_state, H_to_pres, H_subroundoff, &
                                nz, depth, h_col, T_col, S_col, p_col, z_col, z_col_new, &
                                h_neglect, h_neglect_edge)
   type(slight_CS),       intent(in)    :: CS    !< Coordinate control structure
-  type(unit_scale_type), intent(in)    :: US    !< A dimensional unit scaling type
   type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
   real,                  intent(in)    :: H_to_pres !< A conversion factor from thicknesses to
                                                 !! scaled pressure [R L2 T-2 H-1 ~> Pa m-1 or Pa m2 kg-1]
@@ -253,7 +251,7 @@ subroutine build_slight_column(CS, US, eqn_of_state, H_to_pres, H_subroundoff, &
     dz = (z_col(nz+1) - z_col(1)) / real(nz)
     do K=2,nz ; z_col_new(K) = z_col(1) + dz*real(K-1) ; enddo
   else
-    call calculate_density(T_col, S_col, p_col, rho_col, 1, nz, eqn_of_state, US=US)
+    call calculate_density(T_col, S_col, p_col, rho_col, 1, nz, eqn_of_state)
 
     ! Find the locations of the target potential densities, flagging
     ! locations in apparently unstable regions as not reliable.
@@ -375,11 +373,11 @@ subroutine build_slight_column(CS, US, eqn_of_state, H_to_pres, H_subroundoff, &
       T_int(nz+1) = T_f(nz) ; S_int(nz+1) = S_f(nz)
       p_IS(nz+1) = z_col(nz+1) * H_to_pres
       call calculate_density_derivs(T_int, S_int, p_IS, drhoIS_dT, drhoIS_dS, 2, nz-1, &
-                                    eqn_of_state, US)
+                                    eqn_of_state)
       call calculate_density_derivs(T_int, S_int, p_R, drhoR_dT, drhoR_dS, 2, nz-1, &
-                                    eqn_of_state, US)
+                                    eqn_of_state)
       if (CS%compressibility_fraction > 0.0) then
-        call calculate_compress(T_int, S_int, p_R(:), rho_tmp, drho_dp, 2, nz-1, eqn_of_state, US)
+        call calculate_compress(T_int, S_int, p_R(:), rho_tmp, drho_dp, 2, nz-1, eqn_of_state)
       else
         do K=2,nz ; drho_dp(K) = 0.0 ; enddo
       endif

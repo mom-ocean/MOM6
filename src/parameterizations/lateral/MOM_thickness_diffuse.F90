@@ -779,7 +779,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           S_u(I) = 0.25*((S(i,j,k) + S(i+1,j,k)) + (S(i,j,k-1) + S(i+1,j,k-1)))
         enddo
         call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u, &
-                     drho_dS_u, (is-IsdB+1)-1, ie-is+2, tv%eqn_of_state, US=US)
+                     drho_dS_u, (is-IsdB+1)-1, ie-is+2, tv%eqn_of_state)
       endif
 
       do I=is-1,ie
@@ -1030,7 +1030,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           S_v(i) = 0.25*((S(i,j,k) + S(i,j+1,k)) + (S(i,j,k-1) + S(i,j+1,k-1)))
         enddo
         call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, drho_dS_v, G%HI, &
-                                      tv%eqn_of_state, US)
+                                      tv%eqn_of_state)
       endif
       do i=is,ie
         if (calc_derivatives) then
@@ -1262,7 +1262,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           S_u(I) = 0.5*(S(i,j,1) + S(i+1,j,1))
         enddo
         call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u, drho_dS_u, &
-                                      (is-IsdB+1)-1, ie-is+2, tv%eqn_of_state, US=US)
+                                      (is-IsdB+1)-1, ie-is+2, tv%eqn_of_state)
       endif
       do I=is-1,ie
         uhD(I,j,1) = -uhtot(I,j)
@@ -1292,7 +1292,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           S_v(i) = 0.5*(S(i,j,1) + S(i,j+1,1))
         enddo
         call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, drho_dS_v, G%HI, &
-                                      tv%eqn_of_state, US)
+                                      tv%eqn_of_state)
       endif
       do i=is,ie
         vhD(i,J,1) = -vhtot(i,J)

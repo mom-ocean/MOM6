@@ -106,7 +106,7 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
 !$OMP do
       do k=1,nz
         call int_specific_vol_dp(tv%T(:,:,k), tv%S(:,:,k), p(:,:,K), p(:,:,K+1), &
-                                 0.0, G%HI, tv%eqn_of_state, dz_geo(:,:,k), halo_size=halo, US=US)
+                                 0.0, G%HI, tv%eqn_of_state, dz_geo(:,:,k), halo_size=halo)
       enddo
 !$OMP do
       do j=jsv,jev
@@ -208,7 +208,7 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
 !$OMP do
       do k = 1, nz
         call int_specific_vol_dp(tv%T(:,:,k), tv%S(:,:,k), p(:,:,k), p(:,:,k+1), 0.0, &
-                                 G%HI, tv%eqn_of_state, dz_geo(:,:,k), halo_size=halo, US=US)
+                                 G%HI, tv%eqn_of_state, dz_geo(:,:,k), halo_size=halo)
       enddo
 !$OMP do
       do j=js,je ; do k=1,nz ; do i=is,ie
