@@ -939,6 +939,7 @@ subroutine convert_thickness(h, G, GV, US, tv)
                         ! [H T2 R-1 L-2 ~> s2 m2 kg-1 or s2 m-1]
   real :: HR_to_pres    ! A conversion factor from the input geometric thicknesses times the layer
                         ! densities into pressure units [L2 T-2 H-1 ~> m s-2 or m4 kg-1 s-2].
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: itt, max_itt
 
@@ -956,11 +957,12 @@ subroutine convert_thickness(h, G, GV, US, tv)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         p_bot(i,j) = 0.0 ; p_top(i,j) = 0.0
       enddo ; enddo
+      EOSdom(:) = EOS_domain(G%HI)
       do k=1,nz
         do j=js,je
           do i=is,ie ; p_top(i,j) = p_bot(i,j) ; enddo
           call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_top(:,j), rho, &
-                                 tv%eqn_of_state, dom=EOS_domain(G%HI))
+                                 tv%eqn_of_state, EOSdom)
           do i=is,ie
             p_bot(i,j) = p_top(i,j) + HR_to_pres * (h(i,j,k) * rho(i))
           enddo
@@ -971,7 +973,7 @@ subroutine convert_thickness(h, G, GV, US, tv)
                                    tv%eqn_of_state, dz_geo)
           if (itt < max_itt) then ; do j=js,je
             call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_bot(:,j), rho, &
-                                   tv%eqn_of_state, dom=EOS_domain(G%HI))
+                                   tv%eqn_of_state, EOSdom)
             ! Use Newton's method to correct the bottom value.
             ! The hydrostatic equation is sufficiently linear that no bounds-checking is needed.
             do i=is,ie
@@ -1215,7 +1217,7 @@ subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, T, 
   e_top = e(1)
   do k=1,nk
     call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), &
-                                        P_t, p_surf, GV%Rho0, G_earth, tv%eqn_of_state, US, &
+                                        P_t, p_surf, GV%Rho0, G_earth, tv%eqn_of_state, &
                                         P_b, z_out, z_tol=z_tol)
     if (z_out>=e(K)) then
       ! Imposed pressure was less that pressure at top of cell
@@ -1601,7 +1603,7 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P
   enddo
 
   call calculate_density(T0(1), S0(1), pres(1), rho_guess(1), eqn_of_state)
-  call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, eqn_of_state, dom=(/1,1/))
+  call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, eqn_of_state, (/1,1/) )
 
   if (fit_salin) then
     ! A first guess of the layers' temperatures.
@@ -1735,6 +1737,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
   real :: pres(SZI_(G))     ! An array of the reference pressure [R L2 T-2 ~> Pa].
 
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz
   integer :: isd, ied, jsd, jed
   integer, dimension(4) :: siz
@@ -1864,13 +1867,13 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
     ! mixed layer density, which is used in determining which layers can be
     ! inflated without causing static instabilities.
     do i=is-1,ie ; pres(i) = tv%P_Ref ; enddo
+    EOSdom(:) = EOS_domain(G%HI)
 
     call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain)
     call MOM_read_data(filename, salin_var, tmp2(:,:,:), G%Domain)
 
     do j=js,je
-      call calculate_density(tmp(:,j,1), tmp2(:,j,1), pres, tmp_2d(:,j), tv%eqn_of_state, &
-                             dom=EOS_domain(G%HI))
+      call calculate_density(tmp(:,j,1), tmp2(:,j,1), pres, tmp_2d(:,j), tv%eqn_of_state, EOSdom)
     enddo
 
     call set_up_sponge_ML_density(tmp_2d, G, CSp)
@@ -1977,6 +1980,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_initialize_layers_from_Z" ! This module's name.
 
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: is, ie, js, je, nz ! compute domain indices
   integer :: isc,iec,jsc,jec    ! global compute domain indices
   integer :: isg, ieg, jsg, jeg ! global extent
@@ -2188,9 +2192,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   call convert_temp_salt_for_TEOS10(temp_z, salt_z, G%HI, kd, mask_z, eos)
 
   press(:) = tv%P_Ref
+  EOSdom(:) = EOS_domain(G%HI)
   do k=1,kd ; do j=js,je
-    call calculate_density(temp_z(:,j,k), salt_z(:,j,k), press, rho_z(:,j,k), eos, &
-                           dom=EOS_domain(G%HI))
+    call calculate_density(temp_z(:,j,k), salt_z(:,j,k), press, rho_z(:,j,k), eos, EOSdom)
   enddo ; enddo
 
   call pass_var(temp_z,G%Domain)
@@ -2458,7 +2462,7 @@ subroutine MOM_state_init_tests(G, GV, US, tv)
   P_t = 0.
   do k = 1, nk
     call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), P_t, 0.5*P_tot, &
-                                        GV%Rho0, GV%g_Earth, tv%eqn_of_state, US, P_b, z_out)
+                                        GV%Rho0, GV%g_Earth, tv%eqn_of_state, P_b, z_out)
     write(0,*) k, US%RL2_T2_to_Pa*P_t, US%RL2_T2_to_Pa*P_b, 0.5*US%RL2_T2_to_Pa*P_tot, &
                US%Z_to_m*e(K), US%Z_to_m*e(K+1), US%Z_to_m*z_out
     P_t = P_b

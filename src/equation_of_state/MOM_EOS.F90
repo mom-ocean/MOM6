@@ -1159,7 +1159,7 @@ end function query_compressible
 subroutine EOS_init(param_file, EOS, US)
   type(param_file_type), intent(in) :: param_file !< Parameter file structure
   type(EOS_type),        pointer    :: EOS !< Equation of state structure
-  type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
+  type(unit_scale_type), intent(in) :: US  !< A dimensional unit scaling type
   optional :: US
   ! Local variables
 #include "version_variable.h"
@@ -1869,7 +1869,7 @@ end subroutine int_density_dz_generic_plm
 
 !> Find the depth at which the reconstructed pressure matches P_tgt
 subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_tgt, &
-                       rho_ref, G_e, EOS, US, P_b, z_out, z_tol)
+                       rho_ref, G_e, EOS, P_b, z_out, z_tol)
   real,           intent(in)  :: T_t !< Potential temperatue at the cell top [degC]
   real,           intent(in)  :: T_b !< Potential temperatue at the cell bottom [degC]
   real,           intent(in)  :: S_t !< Salinity at the cell top [ppt]
@@ -1881,7 +1881,6 @@ subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_t
   real,           intent(in)  :: rho_ref !< Reference density with which calculation are anomalous to [R ~> kg m-3]
   real,           intent(in)  :: G_e !< Gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
   type(EOS_type), pointer     :: EOS !< Equation of state structure
-  type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
   real,           intent(out) :: P_b !< Pressure at the bottom of the cell [R L2 T-2 ~> Pa]
   real,           intent(out) :: z_out !< Absolute depth at which anomalous pressure = p_tgt [Z ~> m]
   real, optional, intent(in)  :: z_tol !< The tolerance in finding z_out [Z ~> m]
