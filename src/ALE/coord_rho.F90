@@ -5,7 +5,6 @@ module coord_rho
 
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_remapping,     only : remapping_CS, remapping_core_h
-use MOM_unit_scaling,  only : unit_scale_type
 use MOM_EOS,           only : EOS_type, calculate_density
 use regrid_interp,     only : interp_CS_type, build_and_interpolate_grid, DEGREE_MAX
 
@@ -88,10 +87,9 @@ end subroutine set_rho_params
 !!
 !! 1. Density profiles are calculated on the source grid.
 !! 2. Positions of target densities (for interfaces) are found by interpolation.
-subroutine build_rho_column(CS, US, nz, depth, h, T, S, eqn_of_state, z_interface, &
+subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
                             h_neglect, h_neglect_edge)
   type(rho_CS),        intent(in)    :: CS !< coord_rho control structure
-  type(unit_scale_type), intent(in)  :: US    !< A dimensional unit scaling type
   integer,             intent(in)    :: nz !< Number of levels on source grid (i.e. length of  h, T, S)
   real,                intent(in)    :: depth !< Depth of ocean bottom (positive in m)
   real, dimension(nz), intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
@@ -126,7 +124,7 @@ subroutine build_rho_column(CS, US, nz, depth, h, T, S, eqn_of_state, z_interfac
 
     ! Compute densities on source column
     pres(:) = CS%ref_pressure
-    call calculate_density(T, S, pres, densities, eqn_of_state, US=US)
+    call calculate_density(T, S, pres, densities, eqn_of_state)
     do k = 1,count_nonzero_layers
       densities(k) = densities(mapping(k))
     enddo
@@ -185,10 +183,9 @@ end subroutine build_rho_column
 !! 4. T & S are remapped onto the new grid.
 !! 5. Return to step 1 until convergence or until the maximum number of
 !!    iterations is reached, whichever comes first.
-subroutine build_rho_column_iteratively(CS, US, remapCS, nz, depth, h, T, S, eqn_of_state, &
+subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_state, &
                                         zInterface, h_neglect, h_neglect_edge, dev_tol)
   type(rho_CS),          intent(in)    :: CS !< Regridding control structure
-  type(unit_scale_type), intent(in)    :: US !< A dimensional unit scaling type
   type(remapping_CS),    intent(in)    :: remapCS !< Remapping parameters and options
   integer,               intent(in)    :: nz !< Number of levels
   real,                  intent(in)    :: depth !< Depth of ocean bottom [Z ~> m]
@@ -250,7 +247,7 @@ subroutine build_rho_column_iteratively(CS, US, remapCS, nz, depth, h, T, S, eqn
     enddo
 
     ! Compute densities within current water column
-    call calculate_density( T_tmp, S_tmp, pres, densities, eqn_of_state, US=US)
+    call calculate_density( T_tmp, S_tmp, pres, densities, eqn_of_state)
 
     do k = 1,count_nonzero_layers
       densities(k) = densities(mapping(k))

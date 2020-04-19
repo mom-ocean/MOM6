@@ -376,9 +376,9 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
 
     ! Calculate insitu densities and expansion coefficients
     call calculate_density(state%sst(:,j), state%sss(:,j), p_int, Rhoml(:), &
-                                 CS%eqn_of_state, US, dom=EOS_domain(G%HI))
+                                 CS%eqn_of_state, dom=EOS_domain(G%HI))
     call calculate_density_derivs(state%sst(:,j), state%sss(:,j), p_int, dR0_dT, dR0_dS, &
-                                 CS%eqn_of_state, US, dom=EOS_domain(G%HI))
+                                 CS%eqn_of_state, dom=EOS_domain(G%HI))
 
     do i=is,ie
       if ((state%ocean_mass(i,j) > US%RZ_to_kg_m2*CS%col_mass_melt_threshold) .and. &

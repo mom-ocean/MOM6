@@ -2242,7 +2242,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! Use the Wright equation of state by default, unless otherwise specified
   ! Note: this line and the following block ought to be in a separate
   ! initialization routine for tv.
-  if (use_EOS) call EOS_init(param_file, CS%tv%eqn_of_state)
+  if (use_EOS) call EOS_init(param_file, CS%tv%eqn_of_state, US)
   if (use_temperature) then
     allocate(CS%tv%TempxPmE(isd:ied,jsd:jed)) ; CS%tv%TempxPmE(:,:) = 0.0
     if (use_geothermal) then
@@ -2905,7 +2905,7 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
     do j=js,je
       if (calc_rho) then
         call calculate_density(tv%T(:,j,1), tv%S(:,j,1), 0.5*p_atm(:,j), Rho_conv, &
-                               tv%eqn_of_state, US, dom=EOS_domain(G%HI))
+                               tv%eqn_of_state, dom=EOS_domain(G%HI))
         do i=is,ie
           IgR0 = US%Z_to_m / (Rho_conv(i) * GV%g_Earth)
           ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0

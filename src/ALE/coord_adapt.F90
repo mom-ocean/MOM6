@@ -159,7 +159,7 @@ subroutine build_adapt_column(CS, G, GV, US, tv, i, j, zInt, tInt, sInt, h, zNex
          0.5 * (tInt(i,j,2:nz) + tInt(i,j-1,2:nz)), &
          0.5 * (sInt(i,j,2:nz) + sInt(i,j-1,2:nz)), &
          0.5 * (zInt(i,j,2:nz) + zInt(i,j-1,2:nz)) * (GV%H_to_RZ * GV%g_Earth), &
-         alpha, beta, tv%eqn_of_state, US, dom=(/2,nz/))
+         alpha, beta, tv%eqn_of_state, (/2,nz/))
 
     del2sigma(2:nz) = del2sigma(2:nz) + &
          (alpha(2:nz) * (tInt(i,j-1,2:nz) - tInt(i,j,2:nz)) + &
@@ -171,7 +171,7 @@ subroutine build_adapt_column(CS, G, GV, US, tv, i, j, zInt, tInt, sInt, h, zNex
          0.5 * (tInt(i,j,2:nz) + tInt(i,j+1,2:nz)), &
          0.5 * (sInt(i,j,2:nz) + sInt(i,j+1,2:nz)), &
          0.5 * (zInt(i,j,2:nz) + zInt(i,j+1,2:nz)) * (GV%H_to_RZ * GV%g_Earth), &
-         alpha, beta, tv%eqn_of_state, US, dom=(/2,nz/))
+         alpha, beta, tv%eqn_of_state, (/2,nz/))
 
     del2sigma(2:nz) = del2sigma(2:nz) + &
          (alpha(2:nz) * (tInt(i,j+1,2:nz) - tInt(i,j,2:nz)) + &
@@ -183,7 +183,7 @@ subroutine build_adapt_column(CS, G, GV, US, tv, i, j, zInt, tInt, sInt, h, zNex
          0.5 * (tInt(i,j,2:nz) + tInt(i-1,j,2:nz)), &
          0.5 * (sInt(i,j,2:nz) + sInt(i-1,j,2:nz)), &
          0.5 * (zInt(i,j,2:nz) + zInt(i-1,j,2:nz)) * (GV%H_to_RZ * GV%g_Earth), &
-         alpha, beta, tv%eqn_of_state, US, dom=(/2,nz/))
+         alpha, beta, tv%eqn_of_state, (/2,nz/))
 
     del2sigma(2:nz) = del2sigma(2:nz) + &
          (alpha(2:nz) * (tInt(i-1,j,2:nz) - tInt(i,j,2:nz)) + &
@@ -195,7 +195,7 @@ subroutine build_adapt_column(CS, G, GV, US, tv, i, j, zInt, tInt, sInt, h, zNex
          0.5 * (tInt(i,j,2:nz) + tInt(i+1,j,2:nz)), &
          0.5 * (sInt(i,j,2:nz) + sInt(i+1,j,2:nz)), &
          0.5 * (zInt(i,j,2:nz) + zInt(i+1,j,2:nz)) * (GV%H_to_RZ * GV%g_Earth), &
-         alpha, beta, tv%eqn_of_state, US, dom=(/2,nz/))
+         alpha, beta, tv%eqn_of_state, (/2,nz/))
 
     del2sigma(2:nz) = del2sigma(2:nz) + &
          (alpha(2:nz) * (tInt(i+1,j,2:nz) - tInt(i,j,2:nz)) + &
@@ -209,7 +209,7 @@ subroutine build_adapt_column(CS, G, GV, US, tv, i, j, zInt, tInt, sInt, h, zNex
   ! a positive curvature means we're too light relative to adjacent columns,
   ! so del2sigma needs to be positive too (push the interface deeper)
   call calculate_density_derivs(tInt(i,j,:), sInt(i,j,:), zInt(i,j,:) * (GV%H_to_RZ * GV%g_Earth), &
-       alpha, beta, tv%eqn_of_state, US, dom=(/1,nz/)) !### This should be (/1,nz+1/) - see 25 lines below.
+       alpha, beta, tv%eqn_of_state, (/1,nz/)) !### This should be (/1,nz+1/) - see 25 lines below.
   do K = 2, nz
     ! TODO make lower bound here configurable
     dh_d2s(K) = del2sigma(K) * (0.5 * (h(i,j,k-1) + h(i,j,k))) / &

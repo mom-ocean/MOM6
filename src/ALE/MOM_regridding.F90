@@ -1386,7 +1386,7 @@ subroutine build_rho_grid( G, GV, US, h, tv, dzInterface, remapCS, CS )
       ! Local depth (G%bathyT is positive)
       nominalDepth = G%bathyT(i,j)*GV%Z_to_H
 
-      call build_rho_column(CS%rho_CS, US, nz, nominalDepth, h(i, j, :), &
+      call build_rho_column(CS%rho_CS, nz, nominalDepth, h(i, j, :), &
                             tv%T(i, j, :), tv%S(i, j, :), tv%eqn_of_state, zNew, &
                             h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
 
@@ -1501,7 +1501,7 @@ subroutine build_grid_HyCOM1( G, GV, US, h, tv, h_new, dzInterface, CS )
              ( 0.5 * ( z_col(K) + z_col(K+1) ) * (GV%H_to_RZ*GV%g_Earth) - tv%P_Ref )
       enddo
 
-      call build_hycom1_column(CS%hycom_CS, US, tv%eqn_of_state, GV%ke, depth, &
+      call build_hycom1_column(CS%hycom_CS, tv%eqn_of_state, GV%ke, depth, &
                                h(i,j,:), tv%T(i,j,:), tv%S(i,j,:), p_col, &
                                z_col, z_col_new, zScale=GV%Z_to_H, &
                                h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
@@ -1636,7 +1636,7 @@ subroutine build_grid_SLight(G, GV, US, h, tv, dzInterface, CS)
                     ( 0.5 * ( z_col(K) + z_col(K+1) ) * (GV%H_to_RZ*GV%g_Earth) - tv%P_Ref )
       enddo
 
-      call build_slight_column(CS%slight_CS, US, tv%eqn_of_state, GV%H_to_RZ*GV%g_Earth, &
+      call build_slight_column(CS%slight_CS, tv%eqn_of_state, GV%H_to_RZ*GV%g_Earth, &
                           GV%H_subroundoff, nz, depth, h(i, j, :), &
                           tv%T(i, j, :), tv%S(i, j, :), p_col, z_col, z_col_new, &
                           h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
@@ -1890,7 +1890,7 @@ subroutine convective_adjustment(G, GV, h, tv)
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
 
     ! Compute densities within current water column
-    call calculate_density( tv%T(i,j,:), tv%S(i,j,:), p_col, densities, tv%eqn_of_state, US=G%US)
+    call calculate_density( tv%T(i,j,:), tv%S(i,j,:), p_col, densities, tv%eqn_of_state)
 
     ! Repeat restratification until complete
     do
@@ -1909,9 +1909,9 @@ subroutine convective_adjustment(G, GV, h, tv)
           tv%S(i,j,k) = S1 ; tv%S(i,j,k+1) = S0
           h(i,j,k)    = h1 ; h(i,j,k+1)    = h0
           ! Recompute densities at levels k and k+1
-          call calculate_density( tv%T(i,j,k), tv%S(i,j,k), p_col(k), densities(k), tv%eqn_of_state, US=G%US)
+          call calculate_density( tv%T(i,j,k), tv%S(i,j,k), p_col(k), densities(k), tv%eqn_of_state)
           call calculate_density( tv%T(i,j,k+1), tv%S(i,j,k+1), p_col(k+1), &
-                                  densities(k+1), tv%eqn_of_state, US=G%US )
+                                  densities(k+1), tv%eqn_of_state )
           stratified = .false.
         endif
       enddo  ! k

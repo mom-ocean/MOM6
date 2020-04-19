@@ -312,7 +312,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   do j=js,je ; if (do_j(j)) then
 
 !  call cpu_clock_begin(id_clock_EOS)
-!  call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, tv%eqn_of_state, US, &
+!  call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, tv%eqn_of_state, &
 !                                dom=EOS_domain(G%HI))
 !  call cpu_clock_end(id_clock_EOS)
 
@@ -445,7 +445,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
     if (det_any) then
       call cpu_clock_begin(id_clock_EOS)
       do k=1,nkmb
-        call calculate_density(T_2d(:,k), S_2d(:,k), p_ref_cv, Rcv(:,k), tv%eqn_of_state, US, &
+        call calculate_density(T_2d(:,k), S_2d(:,k), p_ref_cv, Rcv(:,k), tv%eqn_of_state, &
                                dom=EOS_domain(G%HI))
       enddo
       call cpu_clock_end(id_clock_EOS)

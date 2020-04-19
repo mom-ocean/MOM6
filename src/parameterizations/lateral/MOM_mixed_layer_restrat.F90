@@ -208,7 +208,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
     do j = js-1, je+1
       dK(:) = 0.5 * h(:,j,1) ! Depth of center of surface layer
       call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, tv%eqn_of_state, &
-                             US, dom=EOS_domain(G%HI, halo=1))
+                             dom=EOS_domain(G%HI, halo=1))
       deltaRhoAtK(:) = 0.
       MLD_fast(:,j) = 0.
       do k = 2, nz
@@ -217,7 +217,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
         ! Mixed-layer depth, using sigma-0 (surface reference pressure)
         deltaRhoAtKm1(:) = deltaRhoAtK(:) ! Store value from previous iteration of K
         call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, tv%eqn_of_state, &
-                               US, dom=EOS_domain(G%HI, halo=1))
+                               dom=EOS_domain(G%HI, halo=1))
         do i = is-1,ie+1
           deltaRhoAtK(i) = deltaRhoAtK(i) - rhoSurf(i) ! Density difference between layer K and surface
         enddo
@@ -323,7 +323,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
       enddo
       if (keep_going) then
         call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p0, rho_ml(:), tv%eqn_of_state, &
-                               US, dom=EOS_domain(G%HI, halo=1))
+                               dom=EOS_domain(G%HI, halo=1))
         line_is_empty = .true.
         do i=is-1,ie+1
           if (htot_fast(i,j) < MLD_fast(i,j)) then
@@ -648,7 +648,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
     enddo
     do k=1,nkml
       call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p0, Rho0(:), tv%eqn_of_state, &
-                             US, dom=EOS_domain(G%HI, halo=1))
+                             dom=EOS_domain(G%HI, halo=1))
       do i=is-1,ie+1
         Rml_av(i,j) = Rml_av(i,j) + h(i,j,k)*Rho0(i)
         htot(i,j) = htot(i,j) + h(i,j,k)

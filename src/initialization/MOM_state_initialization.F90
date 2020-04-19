@@ -960,7 +960,7 @@ subroutine convert_thickness(h, G, GV, US, tv)
         do j=js,je
           do i=is,ie ; p_top(i,j) = p_bot(i,j) ; enddo
           call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_top(:,j), rho, &
-                                 tv%eqn_of_state, US, dom=EOS_domain(G%HI))
+                                 tv%eqn_of_state, dom=EOS_domain(G%HI))
           do i=is,ie
             p_bot(i,j) = p_top(i,j) + HR_to_pres * (h(i,j,k) * rho(i))
           enddo
@@ -968,10 +968,10 @@ subroutine convert_thickness(h, G, GV, US, tv)
 
         do itt=1,max_itt
           call int_specific_vol_dp(tv%T(:,:,k), tv%S(:,:,k), p_top, p_bot, 0.0, G%HI, &
-                                   tv%eqn_of_state, dz_geo, US=US)
+                                   tv%eqn_of_state, dz_geo)
           if (itt < max_itt) then ; do j=js,je
             call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_bot(:,j), rho, &
-                                   tv%eqn_of_state, US, dom=EOS_domain(G%HI))
+                                   tv%eqn_of_state, dom=EOS_domain(G%HI))
             ! Use Newton's method to correct the bottom value.
             ! The hydrostatic equation is sufficiently linear that no bounds-checking is needed.
             do i=is,ie
@@ -1600,8 +1600,8 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P
     T0(k) = T_Ref
   enddo
 
-  call calculate_density(T0(1), S0(1), pres(1), rho_guess(1), eqn_of_state, US=US)
-  call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, eqn_of_state, US=US, dom=(/1,1/))
+  call calculate_density(T0(1), S0(1), pres(1), rho_guess(1), eqn_of_state)
+  call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, eqn_of_state, dom=(/1,1/))
 
   if (fit_salin) then
     ! A first guess of the layers' temperatures.
@@ -1610,8 +1610,8 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P
     enddo
     ! Refine the guesses for each layer.
     do itt=1,6
-      call calculate_density(T0, S0, pres, rho_guess, eqn_of_state, US=US)
-      call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, eqn_of_state, US=US)
+      call calculate_density(T0, S0, pres, rho_guess, eqn_of_state)
+      call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, eqn_of_state)
       do k=1,nz
         S0(k) = max(0.0, S0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dS(k))
       enddo
@@ -1622,8 +1622,8 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P
       T0(k) = T0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dT(1)
     enddo
     do itt=1,6
-      call calculate_density(T0, S0, pres, rho_guess, eqn_of_state, US=US)
-      call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, eqn_of_state, US=US)
+      call calculate_density(T0, S0, pres, rho_guess, eqn_of_state)
+      call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, eqn_of_state)
       do k=1,nz
         T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
       enddo
@@ -1869,7 +1869,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
     call MOM_read_data(filename, salin_var, tmp2(:,:,:), G%Domain)
 
     do j=js,je
-      call calculate_density(tmp(:,j,1), tmp2(:,j,1), pres, tmp_2d(:,j), tv%eqn_of_state, US, &
+      call calculate_density(tmp(:,j,1), tmp2(:,j,1), pres, tmp_2d(:,j), tv%eqn_of_state, &
                              dom=EOS_domain(G%HI))
     enddo
 
@@ -2189,7 +2189,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
   press(:) = tv%P_Ref
   do k=1,kd ; do j=js,je
-    call calculate_density(temp_z(:,j,k), salt_z(:,j,k), press, rho_z(:,j,k), eos, US, &
+    call calculate_density(temp_z(:,j,k), salt_z(:,j,k), press, rho_z(:,j,k), eos, &
                            dom=EOS_domain(G%HI))
   enddo ; enddo
 
@@ -2451,7 +2451,7 @@ subroutine MOM_state_init_tests(G, GV, US, tv)
     S(k)   = 35. + (0. * I_z_scale)*z(k)
     S_b(k) = 35. - (0. * I_z_scale)*e(k+1)
     call calculate_density(0.5*(T_t(k)+T_b(k)), 0.5*(S_t(k)+S_b(k)), -GV%Rho0*GV%g_Earth*US%m_to_Z*z(k), &
-                           rho(k), tv%eqn_of_state, US=US)
+                           rho(k), tv%eqn_of_state)
     P_tot = P_tot + GV%g_Earth * rho(k) * GV%H_to_Z*h(k)
   enddo
 

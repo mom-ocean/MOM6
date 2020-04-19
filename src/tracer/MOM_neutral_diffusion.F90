@@ -391,18 +391,18 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS)
       do k = 1, G%ke+1
         if (CS%ref_pres<0) ref_pres(:) = CS%Pint(:,j,k)
         call calculate_density_derivs(CS%Tint(:,j,k), CS%Sint(:,j,k), ref_pres, CS%dRdT(:,j,k), &
-                                      CS%dRdS(:,j,k), CS%EOS, US, dom=EOS_domain(G%HI, halo=1))
+                                      CS%dRdS(:,j,k), CS%EOS, dom=EOS_domain(G%HI, halo=1))
       enddo
     else ! Discontinuous reconstruction
       do k = 1, G%ke
         if (CS%ref_pres<0) ref_pres(:) = CS%Pint(:,j,k)
         ! Calculate derivatives for the top interface
         call calculate_density_derivs(CS%T_i(:,j,k,1), CS%S_i(:,j,k,1), ref_pres, CS%dRdT_i(:,j,k,1), &
-                                      CS%dRdS_i(:,j,k,1), CS%EOS, US, dom=EOS_domain(G%HI, halo=1))
+                                      CS%dRdS_i(:,j,k,1), CS%EOS, dom=EOS_domain(G%HI, halo=1))
         if (CS%ref_pres<0) ref_pres(:) = CS%Pint(:,j,k+1)
-        ! Calcualte derivatives at the bottom interface
+        ! Calculate derivatives at the bottom interface
         call calculate_density_derivs(CS%T_i(:,j,k,2), CS%S_i(:,j,k,2), ref_pres, CS%dRdT_i(:,j,k,2), &
-                                      CS%dRdS_i(:,j,k,2), CS%EOS, US, dom=EOS_domain(G%HI, halo=1))
+                                      CS%dRdS_i(:,j,k,2), CS%EOS, dom=EOS_domain(G%HI, halo=1))
       enddo
     endif
   enddo
@@ -1767,19 +1767,19 @@ subroutine calc_delta_rho_and_derivs(CS, US, T1, S1, p1_in, T2, S2, p2_in, drho,
   ! Use the full linear equation of state to calculate the difference in density (expensive!)
   if     (TRIM(CS%delta_rho_form) == 'full') then
     pmid = 0.5 * (p1 + p2)
-    call calculate_density( T1, S1, pmid, rho1, CS%EOS, US=US )
-    call calculate_density( T2, S2, pmid, rho2, CS%EOS, US=US )
+    call calculate_density( T1, S1, pmid, rho1, CS%EOS)
+    call calculate_density( T2, S2, pmid, rho2, CS%EOS)
     drho = rho1 - rho2
   ! Use the density derivatives at the average of pressures and the differentces int temperature
   elseif (TRIM(CS%delta_rho_form) == 'mid_pressure') then
     pmid = 0.5 * (p1 + p2)
     if (CS%ref_pres>=0) pmid = CS%ref_pres
-    call calculate_density_derivs(T1, S1, pmid, drdt1, drds1, CS%EOS, US)
-    call calculate_density_derivs(T2, S2, pmid, drdt2, drds2, CS%EOS, US)
+    call calculate_density_derivs(T1, S1, pmid, drdt1, drds1, CS%EOS)
+    call calculate_density_derivs(T2, S2, pmid, drdt2, drds2, CS%EOS)
     drho = delta_rho_from_derivs( T1, S1, p1, drdt1, drds1, T2, S2, p2, drdt2, drds2)
   elseif (TRIM(CS%delta_rho_form) == 'local_pressure') then
-    call calculate_density_derivs(T1, S1, p1, drdt1, drds1, CS%EOS, US)
-    call calculate_density_derivs(T2, S2, p2, drdt2, drds2, CS%EOS, US)
+    call calculate_density_derivs(T1, S1, p1, drdt1, drds1, CS%EOS)
+    call calculate_density_derivs(T2, S2, p2, drdt2, drds2, CS%EOS)
     drho = delta_rho_from_derivs( T1, S1, p1, drdt1, drds1, T2, S2, p2, drdt2, drds2)
   else
     call MOM_error(FATAL, "delta_rho_form is not recognized")
