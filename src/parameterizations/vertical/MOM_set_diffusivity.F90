@@ -680,6 +680,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   real :: hN2pO2      ! h (N^2 + Omega^2), in [Z T-2 ~> m s-2].
   logical :: do_i(SZI_(G))
 
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, k, is, ie, nz, i_rem, kmb, kb_min
   is = G%isc ; ie = G%iec ; nz = G%ke
 
@@ -713,12 +714,11 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   if (CS%bulkmixedlayer) then
     kmb = GV%nk_rho_varies
     do i=is,ie ; p_0(i) = 0.0 ; p_ref(i) = tv%P_Ref ; enddo
+    EOSdom(:) = EOS_domain(G%HI)
     do k=1,nz
-      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_0, rho_0(:,k), &
-                             tv%eqn_of_state, dom=EOS_domain(G%HI))
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_0, rho_0(:,k), tv%eqn_of_state, EOSdom)
     enddo
-    call calculate_density(tv%T(:,j,kmb), tv%S(:,j,kmb), p_ref, Rcv_kmb, &
-                           tv%eqn_of_state, dom=EOS_domain(G%HI))
+    call calculate_density(tv%T(:,j,kmb), tv%S(:,j,kmb), p_ref, Rcv_kmb, tv%eqn_of_state, EOSdom)
 
     kb_min = kmb+1
     do i=is,ie
@@ -883,6 +883,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
   real :: H_neglect ! negligibly small thickness, in the same units as h.
 
   logical :: do_i(SZI_(G)), do_any
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, k, is, ie, nz
 
   is = G%isc ; ie = G%iec ; nz = G%ke
@@ -900,6 +901,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
     else
       do i=is,ie ; pres(i) = 0.0 ; enddo
     endif
+    EOSdom(:) = EOS_domain(G%HI)
     do K=2,nz
       do i=is,ie
         pres(i) = pres(i) + (GV%g_Earth*GV%H_to_RZ)*h(i,j,k-1)
@@ -907,7 +909,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
         Salin_Int(i) = 0.5 * (S_f(i,j,k) + S_f(i,j,k-1))
       enddo
       call calculate_density_derivs(Temp_int, Salin_int, pres, dRho_dT(:,K), dRho_dS(:,K), &
-                                    tv%eqn_of_state, dom=EOS_domain(G%HI))
+                                    tv%eqn_of_state, EOSdom)
       do i=is,ie
         dRho_int(i,K) = max(dRho_dT(i,K)*(T_f(i,j,k) - T_f(i,j,k-1)) + &
                             dRho_dS(i,K)*(S_f(i,j,k) - S_f(i,j,k-1)), 0.0)
@@ -1051,6 +1053,7 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
 
   real, parameter :: Rrho0  = 1.9 ! limit for double-diffusive density ratio [nondim]
 
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, k, is, ie, nz
   is = G%isc ; ie = G%iec ; nz = G%ke
 
@@ -1059,6 +1062,7 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
       pres(i) = 0.0 ; Kd_T_dd(i,1) = 0.0 ; Kd_S_dd(i,1) = 0.0
       Kd_T_dd(i,nz+1) = 0.0 ; Kd_S_dd(i,nz+1) = 0.0
     enddo
+    EOSdom(:) = EOS_domain(G%HI)
     do K=2,nz
       do i=is,ie
         pres(i) = pres(i) + (GV%g_Earth*GV%H_to_RZ)*h(i,j,k-1)
@@ -1066,7 +1070,7 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
         Salin_Int(i) = 0.5 * (S_f(i,j,k-1) + S_f(i,j,k))
       enddo
       call calculate_density_derivs(Temp_int, Salin_int, pres, dRho_dT, dRho_dS, &
-                                    tv%eqn_of_state, dom=EOS_domain(G%HI))
+                                    tv%eqn_of_state, EOSdom)
 
       do i=is,ie
         alpha_dT = -1.0*dRho_dT(i) * (T_f(i,j,k-1) - T_f(i,j,k))
@@ -1798,6 +1802,7 @@ subroutine set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1, rho_0)
   real :: Rcv(SZI_(G),SZK_(G))     ! coordinate density in the mixed and buffer layers [R ~> kg m-3]
   real :: I_Drho                   ! temporary variable [R-1 ~> m3 kg-1]
 
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, k, k3, is, ie, nz, kmb
   is = G%isc ; ie = G%iec ; nz = G%ke
 
@@ -1818,9 +1823,9 @@ subroutine set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1, rho_0)
     kmb = GV%nk_rho_varies
     eps = 0.1
     do i=is,ie ; p_ref(i) = tv%P_Ref ; enddo
+    EOSdom(:) = EOS_domain(G%HI)
     do k=1,kmb
-      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, Rcv(:,k), tv%eqn_of_state, &
-                             dom=EOS_domain(G%HI))
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, Rcv(:,k), tv%eqn_of_state, EOSdom)
     enddo
     do i=is,ie
       if (kb(i) <= nz-1) then

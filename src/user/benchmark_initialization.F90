@@ -258,7 +258,7 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, US, param_file, &
 
   T0(k1) = 29.0
   call calculate_density(T0(k1), S0(k1), pres(k1), rho_guess(k1), eqn_of_state)
-  call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, eqn_of_state, dom=(/k1,k1/))
+  call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, eqn_of_state, (/k1,k1/) )
 
 ! A first guess of the layers' temperatures.                         !
   do k=1,nz

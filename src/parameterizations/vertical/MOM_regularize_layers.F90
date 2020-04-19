@@ -215,6 +215,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   logical :: debug = .false.
   logical :: fatal_error
   character(len=256) :: mesg    ! Message for error messages.
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz, nkmb, nkml, k1, k2, k3, ks, nz_filt, kmax_d_ea
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -241,6 +242,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   I_dtol34 = 1.0 / max(CS%h_def_tol4 - CS%h_def_tol3, 1e-40)
 
   p_ref_cv(:) = tv%P_Ref
+  EOSdom(:) = EOS_domain(G%HI)
 
   do j=js-1,je+1 ; do i=is-1,ie+1
     e(i,j,1) = 0.0
@@ -308,12 +310,11 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   ! Now restructure the layers.
   !$OMP parallel do default(private) shared(is,ie,js,je,nz,do_j,def_rat_h,CS,nkmb,G,GV,US, &
   !$OMP                                     e,I_dtol,h,tv,debug,h_neglect,p_ref_cv,ea, &
-  !$OMP                                     eb,id_clock_EOS,nkml)
+  !$OMP                                     eb,id_clock_EOS,nkml,EOSdom)
   do j=js,je ; if (do_j(j)) then
 
 !  call cpu_clock_begin(id_clock_EOS)
-!  call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, tv%eqn_of_state, &
-!                                dom=EOS_domain(G%HI))
+!  call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, tv%eqn_of_state, EOSdom)
 !  call cpu_clock_end(id_clock_EOS)
 
     do k=1,nz ; do i=is,ie ; d_ea(i,k) = 0.0 ; d_eb(i,k) = 0.0 ; enddo ; enddo
@@ -445,8 +446,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
     if (det_any) then
       call cpu_clock_begin(id_clock_EOS)
       do k=1,nkmb
-        call calculate_density(T_2d(:,k), S_2d(:,k), p_ref_cv, Rcv(:,k), tv%eqn_of_state, &
-                               dom=EOS_domain(G%HI))
+        call calculate_density(T_2d(:,k), S_2d(:,k), p_ref_cv, Rcv(:,k), tv%eqn_of_state, EOSdom)
       enddo
       call cpu_clock_end(id_clock_EOS)
 

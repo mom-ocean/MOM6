@@ -2012,6 +2012,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
   integer :: dir_flag     ! An integer encoding the directions in which to do halo updates.
   logical :: showCallTree ! If true, show the call tree
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb, m, halo
 
   integer :: ig, jg      ! global indices for testing testing itide point source (BDM)
@@ -2680,10 +2681,11 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     ! Layer mode sponge
     if (CS%bulkmixedlayer .and. associated(tv%eqn_of_state)) then
       do i=is,ie ; p_ref_cv(i) = tv%P_Ref ; enddo
+      EOSdom(:) = EOS_domain(G%HI)
       !$OMP parallel do default(shared)
       do j=js,je
         call calculate_density(tv%T(:,j,1), tv%S(:,j,1), p_ref_cv, Rcv_ml(:,j), &
-                               tv%eqn_of_state, dom=EOS_domain(G%HI))
+                               tv%eqn_of_state, EOSdom)
       enddo
       call apply_sponge(h, dt, G, GV, US, ea, eb, CS%sponge_CSp, Rcv_ml)
     else

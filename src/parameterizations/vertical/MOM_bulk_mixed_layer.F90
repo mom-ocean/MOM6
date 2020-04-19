@@ -352,6 +352,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
   real :: dt__diag  ! A recaled copy of dt_diag (if present) or dt [T ~> s].
   logical :: write_diags  ! If true, write out diagnostics with this step.
   logical :: reset_diags  ! If true, zero out the accumulated diagnostics.
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz, nkmb, n
   integer :: nsw    ! The number of bands of penetrating shortwave radiation.
 
@@ -437,6 +438,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
     do k=1,nz ; do i=is,ie ; dKE_CA(i,k) = 0.0 ; cTKE(i,k) = 0.0 ; enddo ; enddo
   endif
   max_BL_det(:) = -1
+  EOSdom(:) = EOS_domain(G%HI)
 
   !$OMP parallel default(shared) firstprivate(dKE_CA,cTKE,h_CA,max_BL_det,p_ref,p_ref_cv) &
   !$OMP                 private(h,u,v,h_orig,eps,T,S,opacity_band,d_ea,d_eb,R0,Rcv,ksort, &
@@ -466,15 +468,11 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
     do k=1,CS%nkml ; do i=is,ie
       p_ref(i) = p_ref(i) + 0.5*(GV%H_to_RZ*GV%g_Earth)*h(i,k)
     enddo ; enddo
-    call calculate_density_derivs(T(:,1), S(:,1), p_ref, dR0_dT, dR0_dS, tv%eqn_of_state,  &
-                                  dom=EOS_domain(G%HI))
-    call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, tv%eqn_of_state, &
-                                  dom=EOS_domain(G%HI))
+    call calculate_density_derivs(T(:,1), S(:,1), p_ref, dR0_dT, dR0_dS, tv%eqn_of_state, EOSdom)
+    call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, tv%eqn_of_state, EOSdom)
     do k=1,nz
-      call calculate_density(T(:,k), S(:,k), p_ref, R0(:,k), tv%eqn_of_state, &
-                             dom=EOS_domain(G%HI))
-      call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), tv%eqn_of_state, &
-                             dom=EOS_domain(G%HI))
+      call calculate_density(T(:,k), S(:,k), p_ref, R0(:,k), tv%eqn_of_state, EOSdom)
+      call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), tv%eqn_of_state, EOSdom)
     enddo
     if (id_clock_EOS>0) call cpu_clock_end(id_clock_EOS)
 

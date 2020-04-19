@@ -72,6 +72,7 @@ subroutine user_change_diff(h, tv, G, GV, US, CS, Kd_lay, Kd_int, T_f, S_f, Kd_i
   logical :: use_EOS  ! If true, density is calculated from T & S using an
                       ! equation of state.
   logical :: store_Kd_add  ! Save the added diffusivity as a diagnostic if true.
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz
   integer :: isd, ied, jsd, jed
 
@@ -104,16 +105,15 @@ subroutine user_change_diff(h, tv, G, GV, US, CS, Kd_lay, Kd_int, T_f, S_f, Kd_i
   if (store_Kd_add) Kd_int_add(:,:,:) = 0.0
 
   do i=is,ie ; p_ref(i) = tv%P_Ref ; enddo
+  EOSdom(:) = EOS_domain(G%HI)
   do j=js,je
     if (present(T_f) .and. present(S_f)) then
       do k=1,nz
-        call calculate_density(T_f(:,j,k), S_f(:,j,k), p_ref, Rcv(:,k), tv%eqn_of_state, &
-                               dom=EOS_domain(G%HI))
+        call calculate_density(T_f(:,j,k), S_f(:,j,k), p_ref, Rcv(:,k), tv%eqn_of_state, EOSdom)
       enddo
     else
       do k=1,nz
-        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, Rcv(:,k), tv%eqn_of_state, &
-                               dom=EOS_domain(G%HI))
+        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, Rcv(:,k), tv%eqn_of_state, EOSdom)
       enddo
     endif
 

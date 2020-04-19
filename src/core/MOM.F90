@@ -2895,9 +2895,11 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
                       ! a corrected effective SSH [R ~> kg m-3].
   real :: IgR0        ! The SSH conversion factor from R L2 T-2 to m [m T2 R-1 L-2 ~> m Pa-1].
   logical :: calc_rho
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, is, ie, js, je
 
-  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  EOSdom(:) = EOS_domain(G%HI)
   if (present(p_atm)) then ; if (associated(p_atm)) then
     calc_rho = associated(tv%eqn_of_state)
     if (present(use_EOS) .and. calc_rho) calc_rho = use_EOS
@@ -2905,7 +2907,7 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
     do j=js,je
       if (calc_rho) then
         call calculate_density(tv%T(:,j,1), tv%S(:,j,1), 0.5*p_atm(:,j), Rho_conv, &
-                               tv%eqn_of_state, dom=EOS_domain(G%HI))
+                               tv%eqn_of_state, EOSdom)
         do i=is,ie
           IgR0 = US%Z_to_m / (Rho_conv(i) * GV%g_Earth)
           ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0

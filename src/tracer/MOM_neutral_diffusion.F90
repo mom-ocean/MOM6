@@ -285,6 +285,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS)
   type(neutral_diffusion_CS),               pointer    :: CS  !< Neutral diffusion control structure
 
   ! Local variables
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k
   ! Variables used for reconstructions
   real, dimension(SZK_(G),2) :: ppoly_r_S       ! Reconstruction slopes
@@ -364,6 +365,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS)
     enddo ; enddo ; enddo
   endif
 
+  EOSdom(:) = EOS_domain(G%HI, halo=1)
   do j = G%jsc-1, G%jec+1
     ! Interpolate state to interface
     do i = G%isc-1, G%iec+1
@@ -391,18 +393,18 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS)
       do k = 1, G%ke+1
         if (CS%ref_pres<0) ref_pres(:) = CS%Pint(:,j,k)
         call calculate_density_derivs(CS%Tint(:,j,k), CS%Sint(:,j,k), ref_pres, CS%dRdT(:,j,k), &
-                                      CS%dRdS(:,j,k), CS%EOS, dom=EOS_domain(G%HI, halo=1))
+                                      CS%dRdS(:,j,k), CS%EOS, EOSdom)
       enddo
     else ! Discontinuous reconstruction
       do k = 1, G%ke
         if (CS%ref_pres<0) ref_pres(:) = CS%Pint(:,j,k)
         ! Calculate derivatives for the top interface
         call calculate_density_derivs(CS%T_i(:,j,k,1), CS%S_i(:,j,k,1), ref_pres, CS%dRdT_i(:,j,k,1), &
-                                      CS%dRdS_i(:,j,k,1), CS%EOS, dom=EOS_domain(G%HI, halo=1))
+                                      CS%dRdS_i(:,j,k,1), CS%EOS, EOSdom)
         if (CS%ref_pres<0) ref_pres(:) = CS%Pint(:,j,k+1)
         ! Calculate derivatives at the bottom interface
         call calculate_density_derivs(CS%T_i(:,j,k,2), CS%S_i(:,j,k,2), ref_pres, CS%dRdT_i(:,j,k,2), &
-                                      CS%dRdS_i(:,j,k,2), CS%EOS, dom=EOS_domain(G%HI, halo=1))
+                                      CS%dRdS_i(:,j,k,2), CS%EOS, EOSdom)
       enddo
     endif
   enddo

@@ -199,6 +199,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
   logical :: do_any
   logical :: do_entrain_eakb    ! True if buffer layer is entrained
   logical :: do_i(SZI_(G)), did_i(SZI_(G)), reiterate, correct_density
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: it, i, j, k, is, ie, js, je, nz, K2, kmb
   integer :: kb(SZI_(G))  ! The value of kb in row j.
   integer :: kb_min       ! The minimum value of kb in the current j-row.
@@ -247,6 +248,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
   else
     pres(:) = 0.0
   endif
+  EOSdom(:) = EOS_domain(G%HI)
 
   !$OMP parallel do default(none) shared(is,ie,js,je,nz,Kd_Lay,G,GV,US,dt,CS,h,tv,   &
   !$OMP                                  kmb,Angstrom,fluxes,K2,h_neglect,tolerance, &
@@ -700,8 +702,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
         call determine_dSkb(h_bl, Sref, Ent_bl, eakb, is, ie, kmb, G, GV, &
                             .true., dS_kb, dS_anom_lim=dS_anom_lim)
         do k=nz-1,kb_min,-1
-          call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pres, Rcv, tv%eqn_of_state, &
-                                 dom=EOS_domain(G%HI))
+          call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pres, Rcv, tv%eqn_of_state, EOSdom)
           do i=is,ie
             if ((k>kb(i)) .and. (F(i,k) > 0.0)) then
               ! Within a time step, a layer may entrain no more than its
@@ -785,8 +786,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
 
       else ! not bulkmixedlayer
         do k=K2,nz-1;
-          call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pres, Rcv, tv%eqn_of_state, &
-                                 dom=EOS_domain(G%HI))
+          call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pres, Rcv, tv%eqn_of_state, EOSdom)
           do i=is,ie ; if (F(i,k) > 0.0) then
             ! Within a time step, a layer may entrain no more than
             ! its thickness for correction.  This limitation should
@@ -852,7 +852,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
             endif
           enddo
           call calculate_density_derivs(T_eos, S_eos, pressure, dRho_dT, dRho_dS, &
-                                        tv%eqn_of_state, dom=EOS_domain(G%HI))
+                                        tv%eqn_of_state, EOSdom)
           do i=is,ie
             if ((k>kmb) .and. (k<kb(i))) then ; diff_work(i,j,K) = 0.0
             else
@@ -1077,6 +1077,7 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, GV, US, CS, j, Ent_bl, 
                    ! entrained [H2 ~> m2 or kg2 m-4].
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, k, is, ie, nz
   is = G%isc ; ie = G%iec ; nz = G%ke
 
@@ -1085,9 +1086,9 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, GV, US, CS, j, Ent_bl, 
   h_neglect = GV%H_subroundoff
 
   do i=is,ie ; pres(i) = tv%P_Ref ; enddo
+  EOSdom(:) = EOS_domain(G%HI)
   do k=1,kmb
-    call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pres, Rcv, tv%eqn_of_state, &
-                           dom=EOS_domain(G%HI))
+    call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pres, Rcv, tv%eqn_of_state, EOSdom)
     do i=is,ie
       h_bl(i,k) = h(i,j,k) + h_neglect
       Sref(i,k) = Rcv(i) - CS%Rho_sig_off

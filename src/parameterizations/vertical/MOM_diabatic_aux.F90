@@ -413,6 +413,7 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt, id_brine_lay)
   real :: h_2d(SZI_(G),SZK_(G))   ! A 2-d slice of h with a minimum thickness [H ~> m to kg m-2]
   real :: Rcv(SZI_(G),SZK_(G))    ! The coordinate density [R ~> kg m-3]
   real :: s_new,R_new,t0,scale, cdz
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz, ks
 
   real :: brine_dz      ! minumum thickness over which to distribute brine [H ~> m or kg m-2]
@@ -427,6 +428,7 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt, id_brine_lay)
   ! subroutine needs to be revisited.- RWH
 
   p_ref_cv(:) = tv%P_Ref
+  EOSdom(:) = EOS_domain(G%HI)
   brine_dz = 1.0*GV%m_to_H
 
   inject_layer(:,:) = nz
@@ -446,8 +448,7 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt, id_brine_lay)
         h_2d(i,k) = MAX(h(i,j,k), GV%Angstrom_H)
       enddo
 
-      call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), tv%eqn_of_state, &
-                             dom=EOS_domain(G%HI))
+      call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), tv%eqn_of_state, EOSdom)
     enddo
 
     ! First, try to find an interior layer where inserting all the salt
@@ -753,6 +754,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   real :: dH_subML         ! Depth below ML over which to diagnose stratification [H ~> m].
   real :: aFac             ! A nondimensional factor [nondim]
   real :: ddRho            ! A density difference [R ~> kg m-3]
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, is, ie, js, je, k, nz, id_N2, id_SQ
 
   id_N2 = -1 ; if (PRESENT(id_N2subML)) id_N2 = id_N2subML
@@ -765,10 +767,10 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   pRef_MLD(:) = 0.0
+  EOSdom(:) = EOS_domain(G%HI)
   do j=js,je
     do i=is,ie ; dK(i) = 0.5 * h(i,j,1) * GV%H_to_Z ; enddo ! Depth of center of surface layer
-    call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, tv%eqn_of_state, &
-                           dom=EOS_domain(G%HI))
+    call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, tv%eqn_of_state, EOSdom)
     do i=is,ie
       deltaRhoAtK(i) = 0.
       MLD(i,j) = 0.
@@ -809,8 +811,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
 
       ! Mixed-layer depth, using sigma-0 (surface reference pressure)
       do i=is,ie ; deltaRhoAtKm1(i) = deltaRhoAtK(i) ; enddo ! Store value from previous iteration of K
-      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, tv%eqn_of_state, &
-                             dom=EOS_domain(G%HI))
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, tv%eqn_of_state, EOSdom)
       do i = is, ie
         deltaRhoAtK(i) = deltaRhoAtK(i) - rhoSurf(i) ! Density difference between layer K and surface
         ddRho = deltaRhoAtK(i) - deltaRhoAtKm1(i)
@@ -833,10 +834,8 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
       !    T_deeper(i) = tv%T(i,j,nz) ; S_deeper(i) = tv%S(i,j,nz)
       !    N2_region_set(i) = .true.
       ! endif
-      call calculate_density(T_subML, S_subML, pRef_N2, rho_subML, tv%eqn_of_state, &
-                             dom=EOS_domain(G%HI))
-      call calculate_density(T_deeper, S_deeper, pRef_N2, rho_deeper, tv%eqn_of_state, &
-                             dom=EOS_domain(G%HI))
+      call calculate_density(T_subML, S_subML, pRef_N2, rho_subML, tv%eqn_of_state, EOSdom)
+      call calculate_density(T_deeper, S_deeper, pRef_N2, rho_deeper, tv%eqn_of_state, EOSdom)
       do i=is,ie ; if ((G%mask2dT(i,j)>0.5) .and. N2_region_set(i)) then
         subMLN2(i,j) =  gE_rho0 * (rho_deeper(i) - rho_subML(i)) / (GV%H_to_z * dH_N2(i))
       endif ; enddo
@@ -941,6 +940,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                       ! [Z T-2 R-1 ~> m4 s-2 kg-1]
   logical :: calculate_energetics
   logical :: calculate_buoyancy
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, is, ie, js, je, k, nz, n, nb
   character(len=45) :: mesg
 
@@ -956,6 +956,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   calculate_buoyancy = present(SkinBuoyFlux)
   if (calculate_buoyancy) SkinBuoyFlux(:,:) = 0.0
   g_Hconv2 = (US%L_to_Z**2*GV%g_Earth * GV%H_to_RZ) * GV%H_to_RZ
+  EOSdom(:) = EOS_domain(G%HI)
 
   if (present(cTKE)) cTKE(:,:,:) = 0.0
   if (calculate_buoyancy) then
@@ -1011,7 +1012,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
           pres(i) = pres(i) + d_pres(i)
         enddo
         call calculate_specific_vol_derivs(T2d(:,k), tv%S(:,j,k), p_lay(:), &
-                 dSV_dT(:,j,k), dSV_dS(:,j,k), tv%eqn_of_state, dom=EOS_domain(G%HI))
+                 dSV_dT(:,j,k), dSV_dS(:,j,k), tv%eqn_of_state, EOSdom)
         do i=is,ie ; dSV_dT_2d(i,k) = dSV_dT(i,j,k) ; enddo
       enddo
       pen_TKE_2d(:,:) = 0.0
@@ -1353,7 +1354,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
 
       ! Density derivatives
       call calculate_density_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, dRhodT, dRhodS, &
-                                    tv%eqn_of_state, dom=EOS_domain(G%HI))
+                                    tv%eqn_of_state, EOSdom)
       ! 1. Adjust netSalt to reflect dilution effect of FW flux
       ! 2. Add in the SW heating for purposes of calculating the net
       ! surface buoyancy flux affecting the top layer.

@@ -352,6 +352,7 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
   real :: h_neglect, h0            ! Negligible thicknesses to allow for zero thicknesses,
                                    ! [H ~> m or kg m-2].
   real :: h_tr                     ! The thickness at tracer points, plus h_neglect [H ~> m or kg m-2].
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, k, is, ie, nz
 
   if (present(halo)) then
@@ -407,20 +408,19 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
   else
     do i=is,ie ; pres(i) = 0.0 ; enddo
   endif
-  call calculate_density_derivs(T_f(:,1), S_f(:,1), pres, dR_dT(:,1), dR_dS(:,1), tv%eqn_of_state, &
-                                dom=EOS_domain(G%HI))
+  EOSdom(:) = EOS_domain(G%HI)
+  call calculate_density_derivs(T_f(:,1), S_f(:,1), pres, dR_dT(:,1), dR_dS(:,1), tv%eqn_of_state, EOSdom)
   do i=is,ie ; pres(i) = pres(i) + h(i,j,1)*(GV%H_to_RZ*GV%g_Earth) ; enddo
   do K=2,nz
     do i=is,ie
       T_EOS(i) = 0.5*(T_f(i,k-1) + T_f(i,k))
       S_EOS(i) = 0.5*(S_f(i,k-1) + S_f(i,k))
     enddo
-    call calculate_density_derivs(T_EOS, S_EOS, pres, dR_dT(:,K), dR_dS(:,K), tv%eqn_of_state, &
-                                  dom=EOS_domain(G%HI))
+    call calculate_density_derivs(T_EOS, S_EOS, pres, dR_dT(:,K), dR_dS(:,K), tv%eqn_of_state, EOSdom)
     do i=is,ie ; pres(i) = pres(i) + h(i,j,k)*(GV%H_to_RZ*GV%g_Earth) ; enddo
   enddo
   call calculate_density_derivs(T_f(:,nz), S_f(:,nz), pres, dR_dT(:,nz+1), dR_dS(:,nz+1), &
-                                tv%eqn_of_state, dom=EOS_domain(G%HI))
+                                tv%eqn_of_state, EOSdom)
 
 end subroutine smoothed_dRdT_dRdS
 

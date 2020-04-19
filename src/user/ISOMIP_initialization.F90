@@ -362,7 +362,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
           ! call MOM_mesg(mesg,5)
         enddo
 
-        call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, eqn_of_state, dom=(/1,1/))
+        call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, eqn_of_state, (/1,1/) )
         ! write(mesg,*) 'computed drho_dS, drho_dT', drho_dS(1), drho_dT(1)
         ! call MOM_mesg(mesg,5)
         call calculate_density(T0(1), S0(1), pres(1), rho_guess(1), eqn_of_state)

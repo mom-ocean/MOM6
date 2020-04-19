@@ -173,7 +173,6 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   real :: vtimescale_diag(SZI_(G),SZJB_(G)) ! meridional directions [T ~> s], stored in 2-D arrays
                                             ! for diagnostic purposes.
   real :: uDml_diag(SZIB_(G),SZJ_(G)), vDml_diag(SZI_(G),SZJB_(G))
-  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   real, dimension(SZI_(G)) :: rhoSurf, deltaRhoAtKm1, deltaRhoAtK ! Densities [R ~> kg m-3]
   real, dimension(SZI_(G)) :: dK, dKm1 ! Depths of layer centers [H ~> m or kg m-2].
   real, dimension(SZI_(G)) :: pRef_MLD ! A reference pressure for calculating the mixed layer
@@ -184,6 +183,8 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   real :: hAtVel, zpa, zpb, dh, res_scaling_fac
   real :: I_LFront ! The inverse of the frontal length scale [L-1 ~> m-1]
   logical :: proper_averaging, line_is_empty, keep_going, res_upscale
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
+  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
 
   real :: PSI, PSI1, z, BOTTOP, XP, DD ! For the following statement functions
   ! Stream function as a function of non-dimensional position within mixed-layer (F77 statement function)
@@ -205,10 +206,10 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   if (CS%MLE_density_diff > 0.) then ! We need to calculate a mixed layer depth, MLD.
     !! TODO: use derivatives and mid-MLD pressure. Currently this is sigma-0. -AJA
     pRef_MLD(:) = 0.
+    EOSdom(:) = EOS_domain(G%HI, halo=1)
     do j = js-1, je+1
       dK(:) = 0.5 * h(:,j,1) ! Depth of center of surface layer
-      call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, tv%eqn_of_state, &
-                             dom=EOS_domain(G%HI, halo=1))
+      call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, tv%eqn_of_state, EOSdom)
       deltaRhoAtK(:) = 0.
       MLD_fast(:,j) = 0.
       do k = 2, nz
@@ -216,8 +217,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
         dK(:) = dK(:) + 0.5 * ( h(:,j,k) + h(:,j,k-1) ) ! Depth of center of layer K
         ! Mixed-layer depth, using sigma-0 (surface reference pressure)
         deltaRhoAtKm1(:) = deltaRhoAtK(:) ! Store value from previous iteration of K
-        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, tv%eqn_of_state, &
-                               dom=EOS_domain(G%HI, halo=1))
+        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, tv%eqn_of_state, EOSdom)
         do i = is-1,ie+1
           deltaRhoAtK(i) = deltaRhoAtK(i) - rhoSurf(i) ! Density difference between layer K and surface
         enddo
@@ -300,8 +300,9 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   endif
 
   p0(:) = 0.0
+  EOSdom(:) = EOS_domain(G%HI, halo=1)
 !$OMP parallel default(none) shared(is,ie,js,je,G,GV,US,htot_fast,Rml_av_fast,tv,p0,h,h_avail,&
-!$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
+!$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,EOSdom,   &
 !$OMP                               utimescale_diag,vtimescale_diag,forces,dz_neglect, &
 !$OMP                               htot_slow,MLD_slow,Rml_av_slow,VarMix,I_LFront,    &
 !$OMP                               res_upscale,                                       &
@@ -322,8 +323,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
         h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-GV%Angstrom_H),0.0)
       enddo
       if (keep_going) then
-        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p0, rho_ml(:), tv%eqn_of_state, &
-                               dom=EOS_domain(G%HI, halo=1))
+        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p0, rho_ml(:), tv%eqn_of_state, EOSdom)
         line_is_empty = .true.
         do i=is-1,ie+1
           if (htot_fast(i,j) < MLD_fast(i,j)) then
@@ -613,6 +613,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
   real :: uDml_diag(SZIB_(G),SZJ_(G)), vDml_diag(SZI_(G),SZJB_(G))
   logical :: use_EOS    ! If true, density is calculated from T & S using an equation of state.
 
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkml
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nkml = GV%nkml
@@ -634,7 +635,8 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
   ! Fix this later for nkml >= 3.
 
   p0(:) = 0.0
-!$OMP parallel default(none) shared(is,ie,js,je,G,GV,US,htot,Rml_av,tv,p0,h,h_avail,   &
+  EOSdom(:) = EOS_domain(G%HI, halo=1)
+!$OMP parallel default(none) shared(is,ie,js,je,G,GV,US,htot,Rml_av,tv,p0,h,h_avail,EOSdom, &
 !$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
 !$OMP                               utimescale_diag,vtimescale_diag,forces,dz_neglect, &
 !$OMP                               uDml_diag,vDml_diag,nkml)                          &
@@ -647,8 +649,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
       htot(i,j) = 0.0 ; Rml_av(i,j) = 0.0
     enddo
     do k=1,nkml
-      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p0, Rho0(:), tv%eqn_of_state, &
-                             dom=EOS_domain(G%HI, halo=1))
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p0, Rho0(:), tv%eqn_of_state, EOSdom)
       do i=is-1,ie+1
         Rml_av(i,j) = Rml_av(i,j) + h(i,j,k)*Rho0(i)
         htot(i,j) = htot(i,j) + h(i,j,k)

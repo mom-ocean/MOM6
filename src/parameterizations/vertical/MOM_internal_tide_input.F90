@@ -181,17 +181,19 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
   real :: G_Rho0  ! The gravitation acceleration divided by the Boussinesq
                   ! density [Z T-2 R-1 ~> m4 s-2 kg-1].
   logical :: do_i(SZI_(G)), do_any
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   G_Rho0 = (US%L_to_Z**2*GV%g_Earth) / GV%Rho0
+  EOSdom(:) = EOS_domain(G%HI)
 
   ! Find the (limited) density jump across each interface.
   do i=is,ie
     dRho_int(i,1) = 0.0 ; dRho_int(i,nz+1) = 0.0
   enddo
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,tv,fluxes,G,GV,US,h,T_f,S_f, &
-!$OMP                                  h2,N2_bot,G_Rho0) &
+!$OMP                                  h2,N2_bot,G_Rho0,EOSdom) &
 !$OMP                          private(pres,Temp_Int,Salin_Int,dRho_dT,dRho_dS, &
 !$OMP                                  hb,dRho_bot,z_from_bot,do_i,h_amp,       &
 !$OMP                                  do_any,dz_int) &
@@ -210,7 +212,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
           Salin_Int(i) = 0.5 * (S_f(i,j,k) + S_f(i,j,k-1))
         enddo
         call calculate_density_derivs(Temp_int, Salin_int, pres, dRho_dT(:), dRho_dS(:), &
-                                      tv%eqn_of_state, dom=EOS_domain(G%HI))
+                                      tv%eqn_of_state, EOSdom)
         do i=is,ie
           dRho_int(i,K) = max(dRho_dT(i)*(T_f(i,j,k) - T_f(i,j,k-1)) + &
                               dRho_dS(i)*(S_f(i,j,k) - S_f(i,j,k-1)), 0.0)

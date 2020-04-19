@@ -675,6 +675,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   real :: tmp
   real :: p_ref_cv(SZI_(G)) ! The reference pressure for the coordinate density [R L2 T-2 ~> Pa]
 
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: k_max, k_min, k_test, itmp
   integer :: i, j, k, k2, m, is, ie, js, je, nz, nkmb
   integer :: isd, ied, jsd, jed, IsdB, IedB, k_size
@@ -695,13 +696,14 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   endif
 
   do i=is-2,ie+2 ; p_ref_cv(i) = tv%P_Ref ; enddo
+  EOSdom(:) = EOS_domain(G%HI,halo=2)
 
   call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
   ! Determine which layers the mixed- and buffer-layers map into...
   !$OMP parallel do default(shared)
   do k=1,nkmb ; do j=js-2,je+2
     call calculate_density(tv%T(:,j,k),tv%S(:,j,k), p_ref_cv, rho_coord(:,j,k), &
-                           tv%eqn_of_state, dom=EOS_domain(G%HI,halo=2))
+                           tv%eqn_of_state, EOSdom)
   enddo ; enddo
 
   do j=js-2,je+2 ; do i=is-2,ie+2

@@ -287,6 +287,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
 
   real, parameter :: c2_3 = 2.0/3.0
   character(len=160) :: mesg  ! The text of an error message
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, is, ie, js, je, ied, jed, it1, it3
 
   if (.not. associated(CS)) call MOM_error(FATAL, "shelf_calc_flux: "// &
@@ -369,6 +370,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
     fluxes%ustar_shelf(i,j) = 0.0
   endif ; enddo ; enddo
 
+  EOSdom(:) = EOS_domain(G%HI)
   do j=js,je
     ! Find the pressure at the ice-ocean interface, averaged only over the
     ! part of the cell covered by ice shelf.
@@ -376,9 +378,9 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
 
     ! Calculate insitu densities and expansion coefficients
     call calculate_density(state%sst(:,j), state%sss(:,j), p_int, Rhoml(:), &
-                                 CS%eqn_of_state, dom=EOS_domain(G%HI))
+                                 CS%eqn_of_state, EOSdom)
     call calculate_density_derivs(state%sst(:,j), state%sss(:,j), p_int, dR0_dT, dR0_dS, &
-                                 CS%eqn_of_state, dom=EOS_domain(G%HI))
+                                 CS%eqn_of_state, EOSdom)
 
     do i=is,ie
       if ((state%ocean_mass(i,j) > US%RZ_to_kg_m2*CS%col_mass_melt_threshold) .and. &

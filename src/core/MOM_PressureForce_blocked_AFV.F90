@@ -226,7 +226,7 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
           tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
         enddo ; enddo
         call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, Rho_cv_BL(:), &
-                               tv%eqn_of_state, dom=EOSdom)
+                               tv%eqn_of_state, EOSdom)
         do k=nkmb+1,nz ; do i=Isq,Ieq+1
           if (GV%Rlay(k) < Rho_cv_BL(i)) then
             tv_tmp%T(i,j,k) = tv%T(i,j,nkmb) ; tv_tmp%S(i,j,k) = tv%S(i,j,nkmb)
@@ -304,7 +304,7 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
       !$OMP parallel do default(shared) private(rho_in_situ)
       do j=Jsq,Jeq+1
         call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p(:,j,1), rho_in_situ, &
-                               tv%eqn_of_state, dom=EOSdom)
+                               tv%eqn_of_state, EOSdom)
 
         do i=Isq,Ieq+1
           dM(i,j) = (CS%GFS_scale - 1.0) * (p(i,j,1)*(1.0/rho_in_situ(i) - alpha_ref) + za(i,j))
@@ -568,7 +568,7 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
           tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
         enddo ; enddo
         call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, Rho_cv_BL(:), &
-                               tv%eqn_of_state, dom=EOSdom)
+                               tv%eqn_of_state, EOSdom)
 
         do k=nkmb+1,nz ; do i=Isq,Ieq+1
           if (GV%Rlay(k) < Rho_cv_BL(i)) then
@@ -591,10 +591,10 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
       do j=Jsq,Jeq+1
         if (use_p_atm) then
           call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p_atm(:,j), rho_in_situ, &
-                                 tv%eqn_of_state, dom=EOSdom)
+                                 tv%eqn_of_state, EOSdom)
         else
           call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p0, rho_in_situ, &
-                                 tv%eqn_of_state, dom=EOSdom)
+                                 tv%eqn_of_state, EOSdom)
         endif
         do i=Isq,Ieq+1
           dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * rho_in_situ(i)) * e(i,j,1)

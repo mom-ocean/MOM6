@@ -90,6 +90,7 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, PF, use_ALE, CSp, ACSp)
   character(len=40) :: temp_var, salt_var, eta_var, inputdir, h_var
 
   character(len=40)  :: mod = "RGC_initialize_sponges" ! This subroutine's name.
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, iscB, iecB, jscB, jecB
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -211,10 +212,9 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, PF, use_ALE, CSp, ACSp)
     ! mixed layer density, which is used in determining which layers can be
     ! inflated without causing static instabilities.
       do i=is-1,ie ; pres(i) = tv%P_Ref ; enddo
-
+      EOSdom(:) = EOS_domain(G%HI)
       do j=js,je
-        call calculate_density(T(:,j,1), S(:,j,1), pres, tmp(:,j), tv%eqn_of_state, &
-                               dom=EOS_domain(G%HI))
+        call calculate_density(T(:,j,1), S(:,j,1), pres, tmp(:,j), tv%eqn_of_state, EOSdom)
       enddo
 
       call set_up_sponge_ML_density(tmp, G, CSp)

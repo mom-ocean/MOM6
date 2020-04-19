@@ -373,9 +373,9 @@ subroutine build_slight_column(CS, eqn_of_state, H_to_pres, H_subroundoff, &
       T_int(nz+1) = T_f(nz) ; S_int(nz+1) = S_f(nz)
       p_IS(nz+1) = z_col(nz+1) * H_to_pres
       call calculate_density_derivs(T_int, S_int, p_IS, drhoIS_dT, drhoIS_dS, &
-                                    eqn_of_state, dom=(/2,nz/))
+                                    eqn_of_state, (/2,nz/) )
       call calculate_density_derivs(T_int, S_int, p_R, drhoR_dT, drhoR_dS, &
-                                    eqn_of_state, dom=(/2,nz/))
+                                    eqn_of_state, (/2,nz/) )
       if (CS%compressibility_fraction > 0.0) then
         call calculate_compress(T_int, S_int, p_R(:), rho_tmp, drho_dp, 2, nz-1, eqn_of_state)
       else
