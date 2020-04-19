@@ -179,7 +179,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
         S_u(I) = 0.25*((S(i,j,k) + S(i+1,j,k)) + (S(i,j,k-1) + S(i+1,j,k-1)))
       enddo
       call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u, drho_dS_u, &
-                                    tv%eqn_of_state, US=US, dom=EOSdom_u)
+                                    tv%eqn_of_state, dom=EOSdom_u)
     endif
 
     do I=is-1,ie
@@ -267,7 +267,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
         S_v(i) = 0.25*((S(i,j,k) + S(i,j+1,k)) + (S(i,j,k-1) + S(i,j+1,k-1)))
       enddo
       call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, drho_dS_v, tv%eqn_of_state, &
-                                    US=US, dom=EOSdom_v)
+                                    dom=EOSdom_v)
     endif
     do i=is,ie
       if (use_EOS) then

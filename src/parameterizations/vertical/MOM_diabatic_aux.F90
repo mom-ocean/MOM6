@@ -446,7 +446,7 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt, id_brine_lay)
         h_2d(i,k) = MAX(h(i,j,k), GV%Angstrom_H)
       enddo
 
-      call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), tv%eqn_of_state, US, &
+      call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), tv%eqn_of_state, &
                              dom=EOS_domain(G%HI))
     enddo
 
@@ -458,7 +458,7 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt, id_brine_lay)
       if ((G%mask2dT(i,j) > 0.0) .and. dzbr(i) < brine_dz .and. salt(i) > 0.) then
         s_new = S(i,k) + salt(i) / (GV%H_to_RZ * h_2d(i,k))
         t0 = T(i,k)
-        call calculate_density(t0, s_new, tv%P_Ref, R_new, tv%eqn_of_state, US=US)
+        call calculate_density(t0, s_new, tv%P_Ref, R_new, tv%eqn_of_state)
         if (R_new < 0.5*(Rcv(i,k)+Rcv(i,k+1)) .and. s_new<s_max) then
           dzbr(i) = dzbr(i)+h_2d(i,k)
           inject_layer(i,j) = min(inject_layer(i,j),real(k))
@@ -767,7 +767,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   pRef_MLD(:) = 0.0
   do j=js,je
     do i=is,ie ; dK(i) = 0.5 * h(i,j,1) * GV%H_to_Z ; enddo ! Depth of center of surface layer
-    call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, tv%eqn_of_state, US, &
+    call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, tv%eqn_of_state, &
                            dom=EOS_domain(G%HI))
     do i=is,ie
       deltaRhoAtK(i) = 0.
@@ -809,7 +809,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
 
       ! Mixed-layer depth, using sigma-0 (surface reference pressure)
       do i=is,ie ; deltaRhoAtKm1(i) = deltaRhoAtK(i) ; enddo ! Store value from previous iteration of K
-      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, tv%eqn_of_state, US, &
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, tv%eqn_of_state, &
                              dom=EOS_domain(G%HI))
       do i = is, ie
         deltaRhoAtK(i) = deltaRhoAtK(i) - rhoSurf(i) ! Density difference between layer K and surface
@@ -833,9 +833,9 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
       !    T_deeper(i) = tv%T(i,j,nz) ; S_deeper(i) = tv%S(i,j,nz)
       !    N2_region_set(i) = .true.
       ! endif
-      call calculate_density(T_subML, S_subML, pRef_N2, rho_subML, tv%eqn_of_state, US, &
+      call calculate_density(T_subML, S_subML, pRef_N2, rho_subML, tv%eqn_of_state, &
                              dom=EOS_domain(G%HI))
-      call calculate_density(T_deeper, S_deeper, pRef_N2, rho_deeper, tv%eqn_of_state, US, &
+      call calculate_density(T_deeper, S_deeper, pRef_N2, rho_deeper, tv%eqn_of_state, &
                              dom=EOS_domain(G%HI))
       do i=is,ie ; if ((G%mask2dT(i,j)>0.5) .and. N2_region_set(i)) then
         subMLN2(i,j) =  gE_rho0 * (rho_deeper(i) - rho_subML(i)) / (GV%H_to_z * dH_N2(i))
@@ -1011,7 +1011,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
           pres(i) = pres(i) + d_pres(i)
         enddo
         call calculate_specific_vol_derivs(T2d(:,k), tv%S(:,j,k), p_lay(:), &
-                 dSV_dT(:,j,k), dSV_dS(:,j,k), tv%eqn_of_state, US=US, dom=EOS_domain(G%HI))
+                 dSV_dT(:,j,k), dSV_dS(:,j,k), tv%eqn_of_state, dom=EOS_domain(G%HI))
         do i=is,ie ; dSV_dT_2d(i,k) = dSV_dT(i,j,k) ; enddo
       enddo
       pen_TKE_2d(:,:) = 0.0
@@ -1353,7 +1353,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
 
       ! Density derivatives
       call calculate_density_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, dRhodT, dRhodS, &
-                                    tv%eqn_of_state, US, dom=EOS_domain(G%HI))
+                                    tv%eqn_of_state, dom=EOS_domain(G%HI))
       ! 1. Adjust netSalt to reflect dilution effect of FW flux
       ! 2. Add in the SW heating for purposes of calculating the net
       ! surface buoyancy flux affecting the top layer.

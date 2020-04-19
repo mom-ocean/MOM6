@@ -1104,7 +1104,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
 
 
       ! compute in-situ density
-      call calculate_density(Temp_1D, Salt_1D, pres_1D, rho_1D, EOS, US)
+      call calculate_density(Temp_1D, Salt_1D, pres_1D, rho_1D, EOS)
 
       ! N2 (can be negative) and N (non-negative) on interfaces.
       ! deltaRho is non-local rho difference used for bulk Richardson number.

@@ -234,7 +234,7 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS)
       dS(K) = (TV%S(i,j,k-1)-TV%S(i,j,k))
     enddo ! k-loop finishes
 
-    call calculate_density_derivs(temp_int, salt_int, pres_int, drho_dT, drho_dS, tv%eqn_of_state, US)
+    call calculate_density_derivs(temp_int, salt_int, pres_int, drho_dT, drho_dS, tv%eqn_of_state)
 
     ! The "-1.0" below is needed so that the following criteria is satisfied:
     ! if ((alpha_dT > beta_dS) .and. (beta_dS > 0.0)) then "salt finger"

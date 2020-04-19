@@ -467,14 +467,14 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
       p_ref(i) = p_ref(i) + 0.5*(GV%H_to_RZ*GV%g_Earth)*h(i,k)
     enddo ; enddo
     call calculate_density_derivs(T(:,1), S(:,1), p_ref, dR0_dT, dR0_dS, tv%eqn_of_state,  &
-                                  US, dom=EOS_domain(G%HI))
+                                  dom=EOS_domain(G%HI))
     call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, tv%eqn_of_state, &
-                                  US, dom=EOS_domain(G%HI))
+                                  dom=EOS_domain(G%HI))
     do k=1,nz
       call calculate_density(T(:,k), S(:,k), p_ref, R0(:,k), tv%eqn_of_state, &
-                             US, dom=EOS_domain(G%HI))
+                             dom=EOS_domain(G%HI))
       call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), tv%eqn_of_state, &
-                             US, dom=EOS_domain(G%HI))
+                             dom=EOS_domain(G%HI))
     enddo
     if (id_clock_EOS>0) call cpu_clock_end(id_clock_EOS)
 

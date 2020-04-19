@@ -113,6 +113,14 @@ type, public :: EOS_type ; private
   real :: dTFr_dS   !< The derivative of freezing point with salinity [degC ppt-1]
   real :: dTFr_dp   !< The derivative of freezing point with pressure [degC Pa-1]
 
+! Unit conversion factors (normally used for dimensional testing but could also allow for
+! change of units of arguments to functions)
+  real :: m_to_Z = 1.      !< A constant that translates distances in meters to the units of depth.
+  real :: kg_m3_to_R = 1.  !< A constant that translates kilograms per meter cubed to the units of density.
+  real :: R_to_kg_m3 = 1.  !< A constant that translates the units of density to kilograms per meter cubed.
+  real :: RL2_T2_to_Pa = 1.!< Convert pressures from R L2 T-2 to Pa.
+  real :: L_T_to_m_s = 1.  !< Convert lateral velocities from L T-1 to m s-1.
+
 !  logical :: test_EOS = .true. ! If true, test the equation of state
 end type EOS_type
 
@@ -145,14 +153,13 @@ contains
 !! If rho_ref is present, the anomaly with respect to rho_ref is returned.  The pressure and
 !! density can be rescaled with the US.  If both the US and scale arguments are present the density
 !! scaling uses the product of the two scaling factors.
-subroutine calculate_density_scalar(T, S, pressure, rho, EOS, rho_ref, US, scale)
+subroutine calculate_density_scalar(T, S, pressure, rho, EOS, rho_ref, scale)
   real,           intent(in)  :: T        !< Potential temperature referenced to the surface [degC]
   real,           intent(in)  :: S        !< Salinity [ppt]
   real,           intent(in)  :: pressure !< Pressure [Pa] or [R L2 T-2 ~> Pa]
   real,           intent(out) :: rho      !< Density (in-situ if pressure is local) [kg m-3] or [R ~> kg m-3]
   type(EOS_type), pointer     :: EOS      !< Equation of state structure
   real, optional, intent(in)  :: rho_ref  !< A reference density [kg m-3]
-  type(unit_scale_type), optional, intent(in) :: US  !< A dimensional unit scaling type
   real, optional, intent(in)  :: scale    !< A multiplicative factor by which to scale density in
                                           !! combination with scaling given by US [various]
 
@@ -162,7 +169,7 @@ subroutine calculate_density_scalar(T, S, pressure, rho, EOS, rho_ref, US, scale
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_scalar called with an unassociated EOS_type EOS.")
 
-  p_scale = 1.0 ; if (present(US)) p_scale = US%RL2_T2_to_Pa
+  p_scale = EOS%RL2_T2_to_Pa
 
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
@@ -180,17 +187,15 @@ subroutine calculate_density_scalar(T, S, pressure, rho, EOS, rho_ref, US, scale
       call MOM_error(FATAL, "calculate_density_scalar: EOS is not valid.")
   end select
 
-  if (present(US) .or. present(scale)) then
-    rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
-    if (present(scale)) rho_scale = rho_scale * scale
-    rho = rho_scale * rho
-  endif
+  rho_scale = EOS%kg_m3_to_R
+  if (present(scale)) rho_scale = rho_scale * scale
+  rho = rho_scale * rho
 
 end subroutine calculate_density_scalar
 
 !> Calls the appropriate subroutine to calculate the density of sea water for 1-D array inputs.
 !! If rho_ref is present, the anomaly with respect to rho_ref is returned.
-subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_ref, US, scale)
+subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_ref, scale)
   real, dimension(:), intent(in)    :: T        !< Potential temperature referenced to the surface [degC]
   real, dimension(:), intent(in)    :: S        !< Salinity [ppt]
   real, dimension(:), intent(in)    :: pressure !< Pressure [Pa] or [R L2 T-2 ~> Pa]
@@ -199,7 +204,6 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_re
   integer,            intent(in)    :: npts     !< Number of point to compute
   type(EOS_type),     pointer       :: EOS      !< Equation of state structure
   real,                  optional, intent(in) :: rho_ref  !< A reference density [kg m-3]
-  type(unit_scale_type), optional, intent(in) :: US       !< A dimensional unit scaling type
   real,                  optional, intent(in) :: scale    !< A multiplicative factor by which to scale density
                                                 !! in combination with scaling given by US [various]
 
@@ -211,7 +215,7 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_re
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_array called with an unassociated EOS_type EOS.")
 
-  p_scale = 1.0 ; if (present(US)) p_scale = US%RL2_T2_to_Pa
+  p_scale = EOS%RL2_T2_to_Pa
 
   if (p_scale == 1.0) then
     select case (EOS%form_of_EOS)
@@ -248,7 +252,7 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_re
     end select
   endif
 
-  rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
+  rho_scale = EOS%kg_m3_to_R
   if (present(scale)) rho_scale = rho_scale * scale
   if (rho_scale /= 1.0) then
     do j=start,start+npts-1 ; rho(j) = rho_scale * rho(j) ; enddo
@@ -259,19 +263,17 @@ end subroutine calculate_density_array
 !> Calls the appropriate subroutine to calculate the density of sea water for 1-D array inputs,
 !! potentially limiting the domain of indices that are worked on.
 !! If rho_ref is present, the anomaly with respect to rho_ref is returned.
-subroutine calculate_density_1d(T, S, pressure, rho, EOS, US, dom, rho_ref, scale)
+subroutine calculate_density_1d(T, S, pressure, rho, EOS, dom, rho_ref, scale)
   real, dimension(:),    intent(in)    :: T        !< Potential temperature referenced to the surface [degC]
   real, dimension(:),    intent(in)    :: S        !< Salinity [ppt]
   real, dimension(:),    intent(in)    :: pressure !< Pressure [R L2 T-2 ~> Pa]
   real, dimension(:),    intent(inout) :: rho      !< Density (in-situ if pressure is local) [R ~> kg m-3]
   type(EOS_type),        pointer       :: EOS      !< Equation of state structure
-  type(unit_scale_type), optional, intent(in) :: US    !< A dimensional unit scaling type
   integer, dimension(2), optional, intent(in) :: dom   !< The domain of indices to work on, taking
                                                        !! into account that arrays start at 1.
   real,                  optional, intent(in) :: rho_ref !< A reference density [kg m-3]
   real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale density
                                                    !! in combination with scaling given by US [various]
-
   ! Local variables
   real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
@@ -289,8 +291,8 @@ subroutine calculate_density_1d(T, S, pressure, rho, EOS, US, dom, rho_ref, scal
     is = 1 ; ie = size(rho) ; npts = 1 + ie - is
   endif
 
-  p_scale = 1.0 ; if (present(US)) p_scale = US%RL2_T2_to_Pa
-  rho_unscale = 1.0 ; if (present(US)) rho_unscale = US%R_to_kg_m3
+  p_scale = EOS%RL2_T2_to_Pa
+  rho_unscale = EOS%R_to_kg_m3
 
   if ((p_scale == 1.0) .and. (rho_unscale == 1.0)) then
     call calculate_density_array(T, S, pressure, rho, is, npts, EOS, rho_ref=rho_ref)
@@ -304,16 +306,13 @@ subroutine calculate_density_1d(T, S, pressure, rho, EOS, US, dom, rho_ref, scal
     call calculate_density_array(T, S, pres, rho, is, npts, EOS)
   endif
 
-  if (present(US) .or. present(scale)) then
-    rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
-    if (present(scale)) rho_scale = rho_scale * scale
-    if (rho_scale /= 1.0) then ; do i=is,ie
-      rho(i) = rho_scale * rho(i)
-    enddo ; endif
-  endif
+  rho_scale = EOS%kg_m3_to_R
+  if (present(scale)) rho_scale = rho_scale * scale
+  if (rho_scale /= 1.0) then ; do i=is,ie
+    rho(i) = rho_scale * rho(i)
+  enddo ; endif
 
 end subroutine calculate_density_1d
-
 
 !> Calls the appropriate subroutine to calculate the specific volume of sea water
 !! for 1-D array inputs.
@@ -364,14 +363,13 @@ end subroutine calculate_spec_vol_array
 
 !> Calls the appropriate subroutine to calculate specific volume of sea water
 !! for scalar inputs.
-subroutine calc_spec_vol_scalar(T, S, pressure, specvol, EOS, spv_ref, US, scale)
+subroutine calc_spec_vol_scalar(T, S, pressure, specvol, EOS, spv_ref, scale)
   real,           intent(in)  :: T        !< Potential temperature referenced to the surface [degC]
   real,           intent(in)  :: S        !< Salinity [ppt]
   real,           intent(in)  :: pressure !< Pressure [Pa] or [R L2 T-2 ~> Pa]
   real,           intent(out) :: specvol  !< In situ? specific volume [m3 kg-1] or [R-1 ~> m3 kg-1]
   type(EOS_type), pointer     :: EOS      !< Equation of state structure
   real, optional, intent(in)  :: spv_ref  !< A reference specific volume [m3 kg-1] or [R-1 m3 kg-1]
-  type(unit_scale_type), optional, intent(in) :: US       !< A dimensional unit scaling type
   real, optional, intent(in)  :: scale    !< A multiplicative factor by which to scale specific
                                           !! volume in combination with scaling given by US [various]
 
@@ -382,18 +380,18 @@ subroutine calc_spec_vol_scalar(T, S, pressure, specvol, EOS, spv_ref, US, scale
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calc_spec_vol_scalar called with an unassociated EOS_type EOS.")
 
-  pres(1) = pressure ; if (present(US)) pres(1) = US%RL2_T2_to_Pa*pressure
+  pres(1) = EOS%RL2_T2_to_Pa*pressure
   Ta(1) = T ; Sa(1) = S
 
   if (present(spv_ref)) then
-    spv_reference = spv_ref ; if (present(US)) spv_reference = US%kg_m3_to_R*spv_ref
+    spv_reference = EOS%kg_m3_to_R*spv_ref
     call calculate_spec_vol_array(Ta, Sa, pres, spv, 1, 1, EOS, spv_reference)
   else
     call calculate_spec_vol_array(Ta, Sa, pres, spv, 1, 1, EOS)
   endif
   specvol = spv(1)
 
-  spv_scale = 1.0 ; if (present(US)) spv_scale = US%R_to_kg_m3
+  spv_scale = EOS%R_to_kg_m3
   if (present(scale)) spv_scale = spv_scale * scale
   if (spv_scale /= 1.0) then
     specvol = spv_scale * specvol
@@ -403,20 +401,18 @@ end subroutine calc_spec_vol_scalar
 
 !> Calls the appropriate subroutine to calculate the specific volume of sea water for 1-D array
 !! inputs, potentially limiting the domain of indices that are worked on.
-subroutine calc_spec_vol_1d(T, S, pressure, specvol, EOS, US, dom, spv_ref, scale)
+subroutine calc_spec_vol_1d(T, S, pressure, specvol, EOS, dom, spv_ref, scale)
   real, dimension(:),    intent(in)    :: T        !< Potential temperature referenced to the surface [degC]
   real, dimension(:),    intent(in)    :: S        !< Salinity [ppt]
   real, dimension(:),    intent(in)    :: pressure !< Pressure [R L2 T-2 ~> Pa]
   real, dimension(:),    intent(inout) :: specvol  !< In situ specific volume [R-1 ~> m3 kg-1]
   type(EOS_type),        pointer       :: EOS      !< Equation of state structure
-  type(unit_scale_type), optional, intent(in) :: US    !< A dimensional unit scaling type
   integer, dimension(2), optional, intent(in) :: dom   !< The domain of indices to work on, taking
                                                        !! into account that arrays start at 1.
   real,                  optional, intent(in) :: spv_ref !< A reference specific volume [R-1 ~> m3 kg-1]
   real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale
                                                        !! output specific volume in combination with
                                                        !! scaling given by US [various]
-
   ! Local variables
   real, dimension(size(specvol)) :: pres  ! Pressure converted to [Pa]
   real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
@@ -434,8 +430,8 @@ subroutine calc_spec_vol_1d(T, S, pressure, specvol, EOS, US, dom, spv_ref, scal
     is = 1 ; ie = size(specvol) ; npts = 1 + ie - is
   endif
 
-  p_scale = 1.0 ; if (present(US)) p_scale = US%RL2_T2_to_Pa
-  spv_unscale = 1.0 ; if (present(US)) spv_unscale = US%kg_m3_to_R
+  p_scale = EOS%RL2_T2_to_Pa
+  spv_unscale = EOS%kg_m3_to_R
 
   if ((p_scale == 1.0) .and. (spv_unscale == 1.0)) then
     call calculate_spec_vol_array(T, S, pressure, specvol, is, npts, EOS, spv_ref)
@@ -449,13 +445,11 @@ subroutine calc_spec_vol_1d(T, S, pressure, specvol, EOS, US, dom, spv_ref, scal
     call calculate_spec_vol_array(T, S, pres, specvol, is, npts, EOS)
   endif
 
-  if (present(US) .or. present(scale)) then
-    spv_scale = 1.0 ; if (present(US)) spv_scale = US%R_to_kg_m3
-    if (present(scale)) spv_scale = spv_scale * scale
-    if (spv_scale /= 1.0) then ; do i=is,ie
-      specvol(i) = spv_scale * specvol(i)
-    enddo ; endif
-  endif
+  spv_scale = EOS%R_to_kg_m3
+  if (present(scale)) spv_scale = spv_scale * scale
+  if (spv_scale /= 1.0) then ; do i=is,ie
+    specvol(i) = spv_scale * specvol(i)
+  enddo ; endif
 
 end subroutine calc_spec_vol_1d
 
@@ -542,7 +536,7 @@ subroutine calculate_TFreeze_array(S, pressure, T_fr, start, npts, EOS, pres_sca
 end subroutine calculate_TFreeze_array
 
 !> Calls the appropriate subroutine to calculate density derivatives for 1-D array inputs.
-subroutine calculate_density_derivs_array(T, S, pressure, drho_dT, drho_dS, start, npts, EOS, US, scale)
+subroutine calculate_density_derivs_array(T, S, pressure, drho_dT, drho_dS, start, npts, EOS, scale)
   real, dimension(:), intent(in)    :: T        !< Potential temperature referenced to the surface [degC]
   real, dimension(:), intent(in)    :: S        !< Salinity [ppt]
   real, dimension(:), intent(in)    :: pressure !< Pressure [Pa] or [R L2 T-2 ~> Pa]
@@ -553,7 +547,6 @@ subroutine calculate_density_derivs_array(T, S, pressure, drho_dT, drho_dS, star
   integer,            intent(in)    :: start    !< Starting index within the array
   integer,            intent(in)    :: npts     !< The number of values to calculate
   type(EOS_type),     pointer       :: EOS      !< Equation of state structure
-  type(unit_scale_type), optional, intent(in) :: US    !< A dimensional unit scaling type
   real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale density
                                                 !! in combination with scaling given by US [various]
 
@@ -566,7 +559,7 @@ subroutine calculate_density_derivs_array(T, S, pressure, drho_dT, drho_dS, star
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_derivs called with an unassociated EOS_type EOS.")
 
-  p_scale = 1.0 ; if (present(US)) p_scale = US%RL2_T2_to_Pa
+  p_scale = EOS%RL2_T2_to_Pa
 
   if (p_scale == 1.0) then
     select case (EOS%form_of_EOS)
@@ -603,7 +596,7 @@ subroutine calculate_density_derivs_array(T, S, pressure, drho_dT, drho_dS, star
     end select
   endif
 
-  rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
+  rho_scale = EOS%kg_m3_to_R
   if (present(scale)) rho_scale = rho_scale * scale
   if (rho_scale /= 1.0) then ; do j=start,start+npts-1
     drho_dT(j) = rho_scale * drho_dT(j)
@@ -614,7 +607,7 @@ end subroutine calculate_density_derivs_array
 
 
 !> Calls the appropriate subroutine to calculate density derivatives for 1-D array inputs.
-subroutine calculate_density_derivs_1d(T, S, pressure, drho_dT, drho_dS, EOS, US, dom, scale)
+subroutine calculate_density_derivs_1d(T, S, pressure, drho_dT, drho_dS, EOS, dom, scale)
   real, dimension(:),    intent(in)    :: T        !< Potential temperature referenced to the surface [degC]
   real, dimension(:),    intent(in)    :: S        !< Salinity [ppt]
   real, dimension(:),    intent(in)    :: pressure !< Pressure [R L2 T-2 ~> Pa]
@@ -623,12 +616,10 @@ subroutine calculate_density_derivs_1d(T, S, pressure, drho_dT, drho_dS, EOS, US
   real, dimension(:),    intent(inout) :: drho_dS  !< The partial derivative of density with salinity
                                                    !! [R degC-1 ~> kg m-3 ppt-1]
   type(EOS_type),        pointer       :: EOS      !< Equation of state structure
-  type(unit_scale_type), optional, intent(in) :: US    !< A dimensional unit scaling type
   integer, dimension(2), optional, intent(in) :: dom   !< The domain of indices to work on, taking
                                                        !! into account that arrays start at 1.
   real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale density
                                                        !! in combination with scaling given by US [various]
-
   ! Local variables
   real, dimension(size(drho_dT)) :: pres  ! Pressure converted to [Pa]
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
@@ -644,7 +635,7 @@ subroutine calculate_density_derivs_1d(T, S, pressure, drho_dT, drho_dS, EOS, US
     is = 1 ; ie = size(drho_dT) ; npts = 1 + ie - is
   endif
 
-  p_scale = 1.0 ; if (present(US)) p_scale = US%RL2_T2_to_Pa
+  p_scale = EOS%RL2_T2_to_Pa
 
   if (p_scale == 1.0) then
     call calculate_density_derivs_array(T, S, pressure, drho_dT, drho_dS, is, npts, EOS)
@@ -653,21 +644,19 @@ subroutine calculate_density_derivs_1d(T, S, pressure, drho_dT, drho_dS, EOS, US
     call calculate_density_derivs_array(T, S, pres, drho_dT, drho_dS, is, npts, EOS)
   endif
 
-  if (present(US) .or. present(scale)) then
-    rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
-    if (present(scale)) rho_scale = rho_scale * scale
-    if (rho_scale /= 1.0) then ; do i=is,ie
-      drho_dT(i) = rho_scale * drho_dT(i)
-      drho_dS(i) = rho_scale * drho_dS(i)
-    enddo ; endif
-  endif
+  rho_scale = EOS%kg_m3_to_R
+  if (present(scale)) rho_scale = rho_scale * scale
+  if (rho_scale /= 1.0) then ; do i=is,ie
+    drho_dT(i) = rho_scale * drho_dT(i)
+    drho_dS(i) = rho_scale * drho_dS(i)
+  enddo ; endif
 
 end subroutine calculate_density_derivs_1d
 
 
 !> Calls the appropriate subroutines to calculate density derivatives by promoting a scalar
 !! to a one-element array
-subroutine calculate_density_derivs_scalar(T, S, pressure, drho_dT, drho_dS, EOS, US, scale)
+subroutine calculate_density_derivs_scalar(T, S, pressure, drho_dT, drho_dS, EOS, scale)
   real,           intent(in)  :: T !< Potential temperature referenced to the surface [degC]
   real,           intent(in)  :: S !< Salinity [ppt]
   real,           intent(in)  :: pressure !< Pressure [Pa] or [R L2 T-2 ~> Pa]
@@ -676,10 +665,8 @@ subroutine calculate_density_derivs_scalar(T, S, pressure, drho_dT, drho_dS, EOS
   real,           intent(out) :: drho_dS !< The partial derivative of density with salinity,
                                          !! in [kg m-3 ppt-1] or [R ppt-1 ~> kg m-3 ppt-1]
   type(EOS_type), pointer     :: EOS     !< Equation of state structure
-  type(unit_scale_type), optional, intent(in) :: US    !< A dimensional unit scaling type
   real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale density
                                                 !! in combination with scaling given by US [various]
-
   ! Local variables
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
   real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
@@ -688,7 +675,7 @@ subroutine calculate_density_derivs_scalar(T, S, pressure, drho_dT, drho_dS, EOS
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_derivs called with an unassociated EOS_type EOS.")
 
-  p_scale = 1.0 ; if (present(US)) p_scale = US%RL2_T2_to_Pa
+  p_scale = EOS%RL2_T2_to_Pa
 
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
@@ -702,7 +689,7 @@ subroutine calculate_density_derivs_scalar(T, S, pressure, drho_dT, drho_dS, EOS
       call MOM_error(FATAL, "calculate_density_derivs_scalar: EOS%form_of_EOS is not valid.")
   end select
 
-  rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
+  rho_scale = EOS%kg_m3_to_R
   if (present(scale)) rho_scale = rho_scale * scale
   if (rho_scale /= 1.0) then
     drho_dT = rho_scale * drho_dT
@@ -713,7 +700,7 @@ end subroutine calculate_density_derivs_scalar
 
 !> Calls the appropriate subroutine to calculate density second derivatives for 1-D array inputs.
 subroutine calculate_density_second_derivs_array(T, S, pressure, drho_dS_dS, drho_dS_dT, drho_dT_dT, &
-                                                 drho_dS_dP, drho_dT_dP, start, npts, EOS, US, scale)
+                                                 drho_dS_dP, drho_dT_dP, start, npts, EOS, scale)
   real, dimension(:), intent(in)  :: T !< Potential temperature referenced to the surface [degC]
   real, dimension(:), intent(in)  :: S !< Salinity [ppt]
   real, dimension(:), intent(in)  :: pressure   !< Pressure [Pa] or [R L2 T-2 ~> Pa]
@@ -730,10 +717,8 @@ subroutine calculate_density_second_derivs_array(T, S, pressure, drho_dS_dS, drh
   integer,            intent(in)  :: start !< Starting index within the array
   integer,            intent(in)  :: npts  !< The number of values to calculate
   type(EOS_type),     pointer     :: EOS   !< Equation of state structure
-  type(unit_scale_type), optional, intent(in) :: US    !< A dimensional unit scaling type
   real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale density
                                                   !! in combination with scaling given by US [various]
-
   ! Local variables
   real, dimension(size(pressure)) :: pres  ! Pressure converted to [Pa]
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
@@ -744,7 +729,7 @@ subroutine calculate_density_second_derivs_array(T, S, pressure, drho_dS_dS, drh
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_derivs called with an unassociated EOS_type EOS.")
 
-  p_scale = 1.0 ; if (present(US)) p_scale = US%RL2_T2_to_Pa
+  p_scale = EOS%RL2_T2_to_Pa
 
   if (p_scale == 1.0) then
     select case (EOS%form_of_EOS)
@@ -777,7 +762,7 @@ subroutine calculate_density_second_derivs_array(T, S, pressure, drho_dS_dS, drh
     end select
   endif
 
-  rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
+  rho_scale = EOS%kg_m3_to_R
   if (present(scale)) rho_scale = rho_scale * scale
   if (rho_scale /= 1.0) then ; do j=start,start+npts-1
     drho_dS_dS(j) = rho_scale * drho_dS_dS(j)
@@ -799,7 +784,7 @@ end subroutine calculate_density_second_derivs_array
 
 !> Calls the appropriate subroutine to calculate density second derivatives for scalar nputs.
 subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, drho_dS_dT, drho_dT_dT, &
-                                                  drho_dS_dP, drho_dT_dP, EOS, US, scale)
+                                                  drho_dS_dP, drho_dT_dP, EOS, scale)
   real, intent(in)  :: T !< Potential temperature referenced to the surface [degC]
   real, intent(in)  :: S !< Salinity [ppt]
   real, intent(in)  :: pressure   !< Pressure [Pa] or [R L2 T-2 ~> Pa]
@@ -814,7 +799,6 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
   real, intent(out) :: drho_dT_dP !< Partial derivative of alpha with respect to pressure
                                   !! [kg m-3 degC-1 Pa-1] or [R degC-1 Pa-1 ~> kg m-3 degC-1 Pa-1]
   type(EOS_type), pointer    :: EOS !< Equation of state structure
-  type(unit_scale_type), optional, intent(in) :: US    !< A dimensional unit scaling type
   real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale density
                                                 !! in combination with scaling given by US [various]
   ! Local variables
@@ -825,7 +809,7 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_derivs called with an unassociated EOS_type EOS.")
 
-  p_scale = 1.0 ; if (present(US)) p_scale = US%RL2_T2_to_Pa
+  p_scale = EOS%RL2_T2_to_Pa
 
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
@@ -841,7 +825,7 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
       call MOM_error(FATAL, "calculate_density_derivs: EOS%form_of_EOS is not valid.")
   end select
 
-  rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
+  rho_scale = EOS%kg_m3_to_R
   if (present(scale)) rho_scale = rho_scale * scale
   if (rho_scale /= 1.0) then
     drho_dS_dS = rho_scale * drho_dS_dS
@@ -912,7 +896,7 @@ end subroutine calculate_spec_vol_derivs_array
 
 !> Calls the appropriate subroutine to calculate specific volume derivatives for 1-d array inputs,
 !! potentially limiting the domain of indices that are worked on.
-subroutine calc_spec_vol_derivs_1d(T, S, pressure, dSV_dT, dSV_dS, EOS, US, dom, scale)
+subroutine calc_spec_vol_derivs_1d(T, S, pressure, dSV_dT, dSV_dS, EOS, dom, scale)
   real, dimension(:), intent(in)    :: T        !< Potential temperature referenced to the surface [degC]
   real, dimension(:), intent(in)    :: S        !< Salinity [ppt]
   real, dimension(:), intent(in)    :: pressure !< Pressure [R L2 T-2 ~> Pa]
@@ -921,7 +905,6 @@ subroutine calc_spec_vol_derivs_1d(T, S, pressure, dSV_dT, dSV_dS, EOS, US, dom,
   real, dimension(:), intent(inout) :: dSV_dS   !< The partial derivative of specific volume with salinity
                                                 !! [R-1 ppt-1 ~> m3 kg-1 ppt-1]
   type(EOS_type),     pointer       :: EOS      !< Equation of state structure
-  type(unit_scale_type), optional, intent(in) :: US    !< A dimensional unit scaling type
   integer, dimension(2), optional, intent(in) :: dom   !< The domain of indices to work on, taking
                                                        !! into account that arrays start at 1.
   real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale specific
@@ -941,7 +924,7 @@ subroutine calc_spec_vol_derivs_1d(T, S, pressure, dSV_dT, dSV_dS, EOS, US, dom,
   else
     is = 1 ; ie = size(dSV_dT) ; npts = 1 + ie - is
   endif
-  p_scale = 1.0 ; if (present(US)) p_scale = US%RL2_T2_to_Pa
+  p_scale = EOS%RL2_T2_to_Pa
 
   if (p_scale == 1.0) then
     call calculate_spec_vol_derivs_array(T, S, pressure, dSV_dT, dSV_dS, is, npts, EOS)
@@ -950,21 +933,19 @@ subroutine calc_spec_vol_derivs_1d(T, S, pressure, dSV_dT, dSV_dS, EOS, US, dom,
     call calculate_spec_vol_derivs_array(T, S, press, dSV_dT, dSV_dS, is, npts, EOS)
   endif
 
-  if (present(US) .or. present(scale)) then
-    spv_scale = 1.0 ; if (present(US)) spv_scale = US%R_to_kg_m3
-    if (present(scale)) spv_scale = spv_scale * scale
-    if (spv_scale /= 1.0) then ; do i=is,ie
-      dSV_dT(i) = spv_scale * dSV_dT(i)
-      dSV_dS(i) = spv_scale * dSV_dS(i)
-    enddo ; endif
-  endif
+  spv_scale = EOS%R_to_kg_m3
+  if (present(scale)) spv_scale = spv_scale * scale
+  if (spv_scale /= 1.0) then ; do i=is,ie
+    dSV_dT(i) = spv_scale * dSV_dT(i)
+    dSV_dS(i) = spv_scale * dSV_dS(i)
+  enddo ; endif
 
 end subroutine calc_spec_vol_derivs_1d
 
 
 !> Calls the appropriate subroutine to calculate the density and compressibility for 1-D array
 !! inputs.  If US is present, the units of the inputs and outputs are rescaled.
-subroutine calculate_compress_array(T, S, press, rho, drho_dp, start, npts, EOS, US)
+subroutine calculate_compress_array(T, S, press, rho, drho_dp, start, npts, EOS)
   real, dimension(:), intent(in)  :: T        !< Potential temperature referenced to the surface [degC]
   real, dimension(:), intent(in)  :: S        !< Salinity [PSU]
   real, dimension(:), intent(in)  :: press    !< Pressure [Pa] or [R L2 T-2 ~> Pa]
@@ -975,7 +956,6 @@ subroutine calculate_compress_array(T, S, press, rho, drho_dp, start, npts, EOS,
   integer,            intent(in)  :: start    !< Starting index within the array
   integer,            intent(in)  :: npts     !< The number of values to calculate
   type(EOS_type),     pointer     :: EOS      !< Equation of state structure
-  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 
   ! Local variables
   real, dimension(size(press)) :: pressure  ! Pressure converted to [Pa]
@@ -985,11 +965,7 @@ subroutine calculate_compress_array(T, S, press, rho, drho_dp, start, npts, EOS,
     "calculate_compress called with an unassociated EOS_type EOS.")
 
   is = start ; ie = is + npts - 1
-  if (present(US)) then
-    do i=is,ie ; pressure(i) = US%RL2_T2_to_Pa * press(i) ; enddo
-  else
-    do i=is,ie ; pressure(i) = press(i) ; enddo
-  endif
+  do i=is,ie ; pressure(i) = EOS%RL2_T2_to_Pa * press(i) ; enddo
 
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
@@ -1007,21 +983,19 @@ subroutine calculate_compress_array(T, S, press, rho, drho_dp, start, npts, EOS,
       call MOM_error(FATAL, "calculate_compress: EOS%form_of_EOS is not valid.")
   end select
 
-  if (present(US)) then
-    if (US%kg_m3_to_R /= 1.0) then ; do i=is,ie
-      rho(i) = US%kg_m3_to_R * rho(i)
-    enddo ; endif
-    if (US%L_T_to_m_s /= 1.0) then ; do i=is,ie
-      drho_dp(i) = US%L_T_to_m_s**2 * drho_dp(i)
-    enddo ; endif
-  endif
+  if (EOS%kg_m3_to_R /= 1.0) then ; do i=is,ie
+      rho(i) = EOS%kg_m3_to_R * rho(i)
+  enddo ; endif
+  if (EOS%L_T_to_m_s /= 1.0) then ; do i=is,ie
+    drho_dp(i) = EOS%L_T_to_m_s**2 * drho_dp(i)
+  enddo ; endif
 
 end subroutine calculate_compress_array
 
 !> Calculate density and compressibility for a scalar. This just promotes the scalar to an array
 !! with a singleton dimension and calls calculate_compress_array.  If US is present, the units of
 !! the inputs and outputs are rescaled.
-subroutine calculate_compress_scalar(T, S, pressure, rho, drho_dp, EOS, US)
+subroutine calculate_compress_scalar(T, S, pressure, rho, drho_dp, EOS)
   real, intent(in)        :: T        !< Potential temperature referenced to the surface [degC]
   real, intent(in)        :: S        !< Salinity [ppt]
   real, intent(in)        :: pressure !< Pressure [Pa] or [R L2 T-2 ~> Pa]
@@ -1029,7 +1003,6 @@ subroutine calculate_compress_scalar(T, S, pressure, rho, drho_dp, EOS, US)
   real, intent(out)       :: drho_dp  !< The partial derivative of density with pressure (also the
                                       !! inverse of the square of sound speed) [s2 m-2] or [T2 L-2]
   type(EOS_type), pointer :: EOS      !< Equation of state structure
-  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 
   real, dimension(1) :: Ta, Sa, pa, rhoa, drho_dpa
 
@@ -1037,7 +1010,7 @@ subroutine calculate_compress_scalar(T, S, pressure, rho, drho_dp, EOS, US)
     "calculate_compress called with an unassociated EOS_type EOS.")
   Ta(1) = T ; Sa(1) = S; pa(1) = pressure
 
-  call calculate_compress_array(Ta, Sa, pa, rhoa, drho_dpa, 1, 1, EOS, US)
+  call calculate_compress_array(Ta, Sa, pa, rhoa, drho_dpa, 1, 1, EOS)
   rho = rhoa(1) ; drho_dp = drho_dpa(1)
 
 end subroutine calculate_compress_scalar
@@ -1070,7 +1043,7 @@ end function EOS_domain
 !! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
 subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                dza, intp_dza, intx_dza, inty_dza, halo_size, &
-                               bathyP, dP_tiny, useMassWghtInterp, US)
+                               bathyP, dP_tiny, useMassWghtInterp)
   type(hor_index_type), intent(in)  :: HI  !< The horizontal index structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T   !< Potential temperature referenced to the surface [degC]
@@ -1107,8 +1080,6 @@ subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                             !! the same units as p_t [R L2 T-2 ~> Pa] or [Pa]
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
                             !! to interpolate T/S for top and bottom integrals.
-  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
-
   ! Local variables
   real :: pres_scale    ! A unit conversion factor from the rescaled units of pressure to Pa [Pa T2 R-1 L-2 ~> 1]
   real :: SV_scale      ! A multiplicative factor by which to scale specific
@@ -1120,33 +1091,21 @@ subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
   if (EOS%EOS_quadrature) then
     call int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                  dza, intp_dza, intx_dza, inty_dza, halo_size, &
-                                 bathyP, dP_tiny, useMassWghtInterp, US)
+                                 bathyP, dP_tiny, useMassWghtInterp)
   else ; select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
-      if (present(US)) then
-        call int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, US%kg_m3_to_R*EOS%Rho_T0_S0, &
-                                  US%kg_m3_to_R*EOS%dRho_dT, US%kg_m3_to_R*EOS%dRho_dS, dza, &
-                                  intp_dza, intx_dza, inty_dza, halo_size, &
-                                  bathyP, dP_tiny, useMassWghtInterp)
-      else
-        call int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, EOS%Rho_T0_S0, &
-                                  EOS%dRho_dT, EOS%dRho_dS, dza, intp_dza, &
-                                  intx_dza, inty_dza, halo_size, &
-                                  bathyP, dP_tiny, useMassWghtInterp)
-      endif
+      call int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, EOS%kg_m3_to_R*EOS%Rho_T0_S0, &
+                                EOS%kg_m3_to_R*EOS%dRho_dT, EOS%kg_m3_to_R*EOS%dRho_dS, dza, &
+                                intp_dza, intx_dza, inty_dza, halo_size, &
+                                bathyP, dP_tiny, useMassWghtInterp)
     case (EOS_WRIGHT)
-      if (present(US)) then
-        call int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, HI, dza, intp_dza, intx_dza, &
-                                    inty_dza, halo_size, bathyP, dP_tiny, useMassWghtInterp, &
-                                    SV_scale=US%R_to_kg_m3, pres_scale=US%RL2_T2_to_Pa)
-      else
-        call int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, HI, dza, intp_dza, intx_dza, &
-                                    inty_dza, halo_size, bathyP, dP_tiny, useMassWghtInterp)
-      endif
+      call int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, HI, dza, intp_dza, intx_dza, &
+                                  inty_dza, halo_size, bathyP, dP_tiny, useMassWghtInterp, &
+                                  SV_scale=EOS%R_to_kg_m3, pres_scale=EOS%RL2_T2_to_Pa)
     case default
       call int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                    dza, intp_dza, intx_dza, inty_dza, halo_size, &
-                                   bathyP, dP_tiny, useMassWghtInterp, US)
+                                   bathyP, dP_tiny, useMassWghtInterp)
   end select ; endif
 
 end subroutine int_specific_vol_dp
@@ -1155,7 +1114,7 @@ end subroutine int_specific_vol_dp
 !! pressure anomalies across layers, which are required for calculating the
 !! finite-volume form pressure accelerations in a Boussinesq model.
 subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, EOS, dpa, &
-                          intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, useMassWghtInterp, US)
+                          intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, useMassWghtInterp)
   type(hor_index_type), intent(in)  :: HII !< Ocean horizontal index structures for the input arrays
   type(hor_index_type), intent(in)  :: HIO !< Ocean horizontal index structures for the output arrays
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
@@ -1195,8 +1154,6 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, EOS, dp
   real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m]
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
                                            !! interpolate T/S for top and bottom integrals.
-  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
-
   ! Local variables
   real :: rho_scale  ! A multiplicative factor by which to scale density from kg m-3 to the
                      ! desired units [R m3 kg-1 ~> 1]
@@ -1207,10 +1164,10 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, EOS, dp
 
   if (EOS%EOS_quadrature) then
     call int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, EOS, dpa, &
-                                intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, useMassWghtInterp, US)
+                                intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, useMassWghtInterp)
   else ; select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
-      rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
+      rho_scale = EOS%kg_m3_to_R
       if (rho_scale /= 1.0) then
         call int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, &
                          rho_scale*EOS%Rho_T0_S0, rho_scale*EOS%dRho_dT, rho_scale*EOS%dRho_dS, &
@@ -1221,8 +1178,8 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, EOS, dp
                          dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, useMassWghtInterp)
       endif
     case (EOS_WRIGHT)
-      rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
-      pres_scale = 1.0 ; if (present(US)) pres_scale = US%RL2_T2_to_Pa
+      rho_scale = EOS%kg_m3_to_R
+      pres_scale = EOS%RL2_T2_to_Pa
       if ((rho_scale /= 1.0) .or. (pres_scale /= 1.0)) then
         call int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, &
                                    dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, &
@@ -1234,7 +1191,7 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, EOS, dp
       endif
     case default
       call int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, EOS, dpa, &
-                                  intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, useMassWghtInterp, US)
+                                  intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, useMassWghtInterp)
   end select ; endif
 
 end subroutine int_density_dz
@@ -1250,9 +1207,11 @@ logical function query_compressible(EOS)
 end function query_compressible
 
 !> Initializes EOS_type by allocating and reading parameters
-subroutine EOS_init(param_file, EOS)
+subroutine EOS_init(param_file, EOS, US)
   type(param_file_type), intent(in) :: param_file !< Parameter file structure
   type(EOS_type),        pointer    :: EOS !< Equation of state structure
+  type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
+  optional :: US
   ! Local variables
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_EOS" ! This module's name.
@@ -1346,6 +1305,12 @@ subroutine EOS_init(param_file, EOS)
       "should only be used along with TFREEZE_FORM = TFREEZE_TEOS10 .")
   endif
 
+  ! Unit conversions
+  EOS%m_to_Z = 1. ; if (present(US)) EOS%m_to_Z = US%m_to_Z
+  EOS%kg_m3_to_R = 1. ; if (present(US)) EOS%kg_m3_to_R = US%kg_m3_to_R
+  EOS%R_to_kg_m3 = 1. ; if (present(US)) EOS%R_to_kg_m3 = US%R_to_kg_m3
+  EOS%RL2_T2_to_Pa = 1. ; if (present(US)) EOS%RL2_T2_to_Pa = US%RL2_T2_to_Pa
+  EOS%L_T_to_m_s = 1. ; if (present(US)) EOS%L_T_to_m_s = US%L_T_to_m_s
 
 end subroutine EOS_init
 
@@ -1428,7 +1393,7 @@ end subroutine EOS_use_linear
 !! finite-volume form pressure accelerations in a Boussinesq model.
 subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, &
                                   EOS, dpa, intz_dpa, intx_dpa, inty_dpa, &
-                                  bathyT, dz_neglect, useMassWghtInterp, US)
+                                  bathyT, dz_neglect, useMassWghtInterp)
   type(hor_index_type), intent(in)  :: HII !< Horizontal index type for input variables.
   type(hor_index_type), intent(in)  :: HIO !< Horizontal index type for output variables.
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
@@ -1468,8 +1433,6 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
   real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m]
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
                                           !! interpolate T/S for top and bottom integrals.
-  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
-
   ! Local variables
   real :: T5(5), S5(5) ! Temperatures and salinities at five quadrature points [degC] and [ppt]
   real :: p5(5)      ! Pressures at five quadrature points, never rescaled from Pa [Pa]
@@ -1504,9 +1467,9 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
   is = HIO%isc + ioff ; ie = HIO%iec + ioff
   js = HIO%jsc + joff ; je = HIO%jec + joff
 
-  rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
-  GxRho = G_e * rho_0 ; if (present(US)) GxRho = US%RL2_T2_to_Pa * G_e * rho_0
-  rho_ref_mks = rho_ref ; if (present(US)) rho_ref_mks = rho_ref * US%R_to_kg_m3
+  rho_scale = EOS%kg_m3_to_R
+  GxRho = EOS%RL2_T2_to_Pa * G_e * rho_0
+  rho_ref_mks = rho_ref * EOS%R_to_kg_m3
   I_Rho = 1.0 / rho_0
 
   do_massWeight = .false.
@@ -1637,7 +1600,7 @@ end subroutine int_density_dz_generic
 !! T and S are linear profiles.
 subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
                                        rho_0, G_e, dz_subroundoff, bathyT, HII, HIO, EOS, dpa, &
-                                       intz_dpa, intx_dpa, inty_dpa, useMassWghtInterp, US)
+                                       intz_dpa, intx_dpa, inty_dpa, useMassWghtInterp)
   type(hor_index_type), intent(in)  :: HII !< Ocean horizontal index structures for the input arrays
   type(hor_index_type), intent(in)  :: HIO !< Ocean horizontal index structures for the output arrays
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
@@ -1677,7 +1640,6 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
                                            !! divided by the y grid spacing [R L2 T-2 ~> Pa]
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
                                            !! interpolate T/S for top and bottom integrals.
-  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 
 ! This subroutine calculates (by numerical quadrature) integrals of
 ! pressure anomalies across layers, which are required for calculating the
@@ -1731,9 +1693,9 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
 
   Isq = HIO%IscB ; Ieq = HIO%IecB ; Jsq = HIO%JscB ; Jeq = HIO%JecB
 
-  rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
-  GxRho = G_e * rho_0 ; if (present(US)) GxRho = US%RL2_T2_to_Pa * G_e * rho_0
-  rho_ref_mks = rho_ref ; if (present(US)) rho_ref_mks = rho_ref * US%R_to_kg_m3
+  rho_scale = EOS%kg_m3_to_R
+  GxRho = EOS%RL2_T2_to_Pa * G_e * rho_0
+  rho_ref_mks = rho_ref * EOS%R_to_kg_m3
   I_Rho = 1.0 / rho_0
   massWeightToggle = 0.
   if (present(useMassWghtInterp)) then
@@ -2003,7 +1965,7 @@ subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_t
   Pa_left = P_t - P_tgt ! Pa_left < 0
   F_r = 1.
   Pa_right = P_b - P_tgt ! Pa_right > 0
-  Pa_tol = GxRho * 1.0e-5*US%m_to_Z
+  Pa_tol = GxRho * 1.0e-5*EOS%m_to_Z
   if (present(z_tol)) Pa_tol = GxRho * z_tol
 
   F_guess = F_l - Pa_left / (Pa_right - Pa_left) * (F_r - F_l)
@@ -2071,7 +2033,7 @@ real function frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, pos, EO
     T5(n) = top_weight * T_t + bottom_weight * T_b
     p5(n) = ( top_weight * z_t + bottom_weight * z_b ) * ( G_e * rho_ref )
   enddo
-  call calculate_density_array(T5, S5, p5, rho5, 1, 5, EOS, US=US)
+  call calculate_density_array(T5, S5, p5, rho5, 1, 5, EOS)
   rho5(:) = rho5(:) !- rho_ref ! Work with anomalies relative to rho_ref
 
   ! Use Bode's rule to estimate the average density
@@ -2087,7 +2049,7 @@ end function frac_dp_at_pos
 !! are parabolic profiles
 subroutine int_density_dz_generic_ppm(T, T_t, T_b, S, S_t, S_b, &
                                       z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, &
-                                      EOS, dpa, intz_dpa, intx_dpa, inty_dpa, US)
+                                      EOS, dpa, intz_dpa, intx_dpa, inty_dpa)
 
   type(hor_index_type), intent(in)  :: HII !< Ocean horizontal index structures for the input arrays
   type(hor_index_type), intent(in)  :: HIO !< Ocean horizontal index structures for the output arrays
@@ -2127,7 +2089,6 @@ subroutine int_density_dz_generic_ppm(T, T_t, T_b, S, S_t, S_b, &
               optional, intent(inout) :: inty_dpa !< The integral in y of the difference between the
                                            !! pressure anomaly at the top and bottom of the layer
                                            !! divided by the y grid spacing [R L2 T-2 ~> Pa]
-  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 
 ! This subroutine calculates (by numerical quadrature) integrals of
 ! pressure anomalies across layers, which are required for calculating the
@@ -2180,9 +2141,9 @@ subroutine int_density_dz_generic_ppm(T, T_t, T_b, S, S_t, S_b, &
   is = HIO%isc + ioff ; ie = HIO%iec + ioff
   js = HIO%jsc + joff ; je = HIO%jec + joff
 
-  rho_scale = 1.0 ; if (present(US)) rho_scale = US%kg_m3_to_R
-  GxRho = G_e * rho_0 ; if (present(US)) GxRho = US%RL2_T2_to_Pa * G_e * rho_0
-  rho_ref_mks = rho_ref ; if (present(US)) rho_ref_mks = rho_ref * US%R_to_kg_m3
+  rho_scale = EOS%kg_m3_to_R
+  GxRho = EOS%RL2_T2_to_Pa * G_e * rho_0
+  rho_ref_mks = rho_ref * EOS%R_to_kg_m3
   I_Rho = 1.0 / rho_0
 
   ! =============================
@@ -2545,7 +2506,7 @@ end subroutine evaluate_shape_quadratic
 !! no free assumptions, apart from the use of Bode's rule quadrature to do the integrals.
 subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, dza, &
                                    intp_dza, intx_dza, inty_dza, halo_size, &
-                                   bathyP, dP_neglect, useMassWghtInterp, US)
+                                   bathyP, dP_neglect, useMassWghtInterp)
   type(hor_index_type), intent(in)  :: HI !< A horizontal index type structure.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T  !< Potential temperature of the layer [degC]
@@ -2583,7 +2544,6 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, dza, &
                                              !! the same units as p_t [R L2 T-2 ~> Pa] or [Pa]
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
                             !! to interpolate T/S for top and bottom integrals.
-  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 
 !   This subroutine calculates analytical and nearly-analytical integrals in
 ! pressure across layers of geopotential anomalies, which are required for
@@ -2622,9 +2582,9 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, dza, &
   if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh); endif
   if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh); endif
 
-  SV_scale = 1.0 ; if (present(US)) SV_scale = US%R_to_kg_m3
-  RL2_T2_to_Pa = 1.0 ; if (present(US)) RL2_T2_to_Pa = US%RL2_T2_to_Pa
-  alpha_ref_mks = alpha_ref ; if (present(US)) alpha_ref_mks = alpha_ref * US%kg_m3_to_R
+  SV_scale = EOS%R_to_kg_m3
+  RL2_T2_to_Pa = EOS%RL2_T2_to_Pa
+  alpha_ref_mks = alpha_ref * EOS%kg_m3_to_R
 
   do_massWeight = .false.
   if (present(useMassWghtInterp)) then ; if (useMassWghtInterp) then
@@ -2760,7 +2720,7 @@ end subroutine int_spec_vol_dp_generic
 !! no free assumptions, apart from the use of Bode's rule quadrature to do the integrals.
 subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, &
                              dP_neglect, bathyP, HI, EOS, dza, &
-                             intp_dza, intx_dza, inty_dza, useMassWghtInterp, US)
+                             intp_dza, intx_dza, inty_dza, useMassWghtInterp)
   type(hor_index_type), intent(in)  :: HI !< A horizontal index type structure.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T_t  !< Potential temperature at the top of the layer [degC]
@@ -2801,7 +2761,6 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
                             !! by the y grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2]
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
                             !! to interpolate T/S for top and bottom integrals.
-  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 
 !   This subroutine calculates analytical and nearly-analytical integrals in
 ! pressure across layers of geopotential anomalies, which are required for
@@ -2846,9 +2805,9 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
   do_massWeight = .false.
   if (present(useMassWghtInterp)) do_massWeight = useMassWghtInterp
 
-  SV_scale = 1.0 ; if (present(US)) SV_scale = US%R_to_kg_m3
-  RL2_T2_to_Pa = 1.0 ; if (present(US)) RL2_T2_to_Pa = US%RL2_T2_to_Pa
-  alpha_ref_mks = alpha_ref ; if (present(US)) alpha_ref_mks = alpha_ref * US%kg_m3_to_R
+  SV_scale = EOS%R_to_kg_m3
+  RL2_T2_to_Pa = EOS%RL2_T2_to_Pa
+  alpha_ref_mks = alpha_ref * EOS%kg_m3_to_R
 
   do n = 1, 5 ! Note that these are reversed from int_density_dz.
     wt_t(n) = 0.25 * real(n-1)

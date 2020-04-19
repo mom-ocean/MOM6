@@ -122,7 +122,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
       enddo ! k-loop finishes
 
       ! compute in-situ density [R ~> kg m-3]
-      call calculate_density(Temp_1D, Salt_1D, pres_1D, rho_1D, tv%eqn_of_state, US)
+      call calculate_density(Temp_1D, Salt_1D, pres_1D, rho_1D, tv%eqn_of_state)
 
       ! N2 (can be negative) on interface
       do k = 1, G%ke
