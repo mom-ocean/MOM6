@@ -1601,7 +1601,7 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P
   enddo
 
   call calculate_density(T0(1), S0(1), pres(1), rho_guess(1), eqn_of_state, US=US)
-  call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, 1, 1, eqn_of_state, US=US)
+  call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, eqn_of_state, US=US, dom=(/1,1/))
 
   if (fit_salin) then
     ! A first guess of the layers' temperatures.

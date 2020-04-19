@@ -250,7 +250,7 @@ subroutine build_rho_column_iteratively(CS, US, remapCS, nz, depth, h, T, S, eqn
     enddo
 
     ! Compute densities within current water column
-    call calculate_density( T_tmp, S_tmp, pres, densities, 1, nz, eqn_of_state, US=US)
+    call calculate_density( T_tmp, S_tmp, pres, densities, eqn_of_state, US=US)
 
     do k = 1,count_nonzero_layers
       densities(k) = densities(mapping(k))
