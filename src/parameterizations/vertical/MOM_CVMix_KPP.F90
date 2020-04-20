@@ -960,7 +960,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
 #endif
 
   ! some constants
-  GoRho = GV%mks_g_Earth / GV%Rho0
+  GoRho = US%L_T_to_m_s**2*US%m_to_Z * GV%g_Earth / GV%Rho0
   buoy_scale = US%L_to_m**2*US%s_to_T**3
 
   ! loop over horizontal points on processor
