@@ -252,7 +252,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
 
   !$OMP parallel do default(none) shared(is,ie,js,je,nz,Kd_Lay,G,GV,US,dt,CS,h,tv,   &
   !$OMP                                  kmb,Angstrom,fluxes,K2,h_neglect,tolerance, &
-  !$OMP                                  ea,eb,correct_density,Kd_int,Kd_eff,        &
+  !$OMP                                  ea,eb,correct_density,Kd_int,Kd_eff,EOSdom, &
   !$OMP                                  diff_work,g_2dt, kb_out)                    &
   !$OMP                     firstprivate(kb,ds_dsp1,dsp1_ds,pres,kb_min)             &
   !$OMP                          private(dtKd,dtKd_int,do_i,Ent_bl,dtKd_kb,h_bl,     &

@@ -464,7 +464,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       associated(CS%uhGM_Rlay) .or. associated(CS%vhGM_Rlay)) then
 
     if (associated(tv%eqn_of_state)) then
-      EOSdom(:) = EOS_domain(G%HI)
+      EOSdom(:) = EOS_domain(G%HI, halo=1)
       pressure_1d(:) = tv%P_Ref
       !$OMP parallel do default(shared)
       do k=1,nz ; do j=js-1,je+1
