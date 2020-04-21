@@ -83,7 +83,7 @@ type, public :: thermo_var_ptrs
   real, pointer :: S(:,:,:) => NULL() !< Salnity [PSU] or [gSalt/kg], generically [ppt].
   type(EOS_type), pointer :: eqn_of_state => NULL() !< Type that indicates the
                          !! equation of state to use.
-  real :: P_Ref          !<   The coordinate-density reference pressure [Pa].
+  real :: P_Ref          !<   The coordinate-density reference pressure [R L2 T-2 ~> Pa].
                          !! This is the pressure used to calculate Rml from
                          !! T and S when eqn_of_state is associated.
   real :: C_p            !<   The heat capacity of seawater [Q degC-1 ~> J degC-1 kg-1].
