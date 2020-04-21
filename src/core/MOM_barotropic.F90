@@ -20,7 +20,8 @@ use MOM_io, only : vardesc, var_desc, MOM_read_data, slasher
 use MOM_open_boundary, only : ocean_OBC_type, OBC_SIMPLE, OBC_NONE, open_boundary_query
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_open_boundary, only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_segment_type
-use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
+use MOM_restart, only : register_restart_field, register_restart_pair
+use MOM_restart, only : query_initialized, MOM_restart_CS
 use MOM_tidal_forcing, only : tidal_forcing_sensitivity, tidal_forcing_CS
 use MOM_time_manager, only : time_type, real_to_time, operator(+), operator(-)
 use MOM_unit_scaling, only : unit_scale_type
@@ -1536,11 +1537,15 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     if (.not. use_BT_cont) then
       call uvchksum("BT Dat[uv]", Datu, Datv, CS%debug_BT_HI, haloshift=1, scale=US%L_to_m*GV%H_to_m)
     endif
-    call uvchksum("BT wt_[uv]", wt_u, wt_v, G%HI, 0, .true., .true.)
-    call uvchksum("BT frhat[uv]", CS%frhatu, CS%frhatv, G%HI, 0, .true., .true.)
+    call uvchksum("BT wt_[uv]", wt_u, wt_v, G%HI, haloshift=0, &
+                  symmetric=.true., omit_corners=.true., scalar_pair=.true.)
+    call uvchksum("BT frhat[uv]", CS%frhatu, CS%frhatv, G%HI, haloshift=0, &
+                  symmetric=.true., omit_corners=.true., scalar_pair=.true.)
     call uvchksum("BT bc_accel_[uv]", bc_accel_u, bc_accel_v, G%HI, haloshift=0, scale=US%L_T2_to_m_s2)
-    call uvchksum("BT IDat[uv]", CS%IDatu, CS%IDatv, G%HI, haloshift=0, scale=US%m_to_Z)
-    call uvchksum("BT visc_rem_[uv]", visc_rem_u, visc_rem_v, G%HI, haloshift=1)
+    call uvchksum("BT IDat[uv]", CS%IDatu, CS%IDatv, G%HI, haloshift=0, &
+                  scale=US%m_to_Z, scalar_pair=.true.)
+    call uvchksum("BT visc_rem_[uv]", visc_rem_u, visc_rem_v, G%HI, &
+                  haloshift=1, scalar_pair=.true.)
   endif
 
   if (query_averaging_enabled(CS%diag)) then
@@ -3113,9 +3118,13 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   enddo ; endif
 
   if (CS%debug) then
-    call uvchksum("btcalc frhat[uv]", CS%frhatu, CS%frhatv, G%HI, 0, .true., .true.)
+    call uvchksum("btcalc frhat[uv]", CS%frhatu, CS%frhatv, G%HI, &
+                  haloshift=0, symmetric=.true., omit_corners=.true., &
+                  scalar_pair=.true.)
     if (present(h_u) .and. present(h_v)) &
-      call uvchksum("btcalc h_[uv]", h_u, h_v, G%HI, 0, .true., .true., scale=GV%H_to_m)
+      call uvchksum("btcalc h_[uv]", h_u, h_v, G%HI, haloshift=0, &
+                    symmetric=.true., omit_corners=.true., scale=GV%H_to_m, &
+                    scalar_pair=.true.)
     call hchksum(h, "btcalc h",G%HI, haloshift=1, scale=GV%H_to_m)
   endif
 
@@ -4235,6 +4244,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
     CS%debug_BT_HI%IedB=CS%iedw
     CS%debug_BT_HI%JsdB=CS%jsdw-1
     CS%debug_BT_HI%JedB=CS%jedw
+    CS%debug_BT_HI%turns = G%HI%turns
   endif
 
   ! IareaT, IdxCu, and IdyCv need to be allocated with wide halos.
@@ -4607,6 +4617,7 @@ subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
   type(vardesc) :: vd(3)
   real :: slow_rate
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed
   IsdB = HI%IsdB ; IedB = HI%IedB ; JsdB = HI%JsdB ; JedB = HI%JedB
 
@@ -4628,8 +4639,7 @@ subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
                 hor_grid='u', z_grid='1')
   vd(3) = var_desc("vbtav","m s-1","Time mean barotropic meridional velocity",&
                 hor_grid='v', z_grid='1')
-  call register_restart_field(CS%ubtav, vd(2), .false., restart_CS)
-  call register_restart_field(CS%vbtav, vd(3), .false., restart_CS)
+  call register_restart_pair(CS%ubtav, CS%vbtav, vd(2), vd(3), .false., restart_CS)
 
   vd(2) = var_desc("ubt_IC", "m s-1", &
               longname="Next initial condition for the barotropic zonal velocity", &
@@ -4637,8 +4647,7 @@ subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
   vd(3) = var_desc("vbt_IC", "m s-1", &
               longname="Next initial condition for the barotropic meridional velocity",&
               hor_grid='v', z_grid='1')
-  call register_restart_field(CS%ubt_IC, vd(2), .false., restart_CS)
-  call register_restart_field(CS%vbt_IC, vd(3), .false., restart_CS)
+  call register_restart_pair(CS%ubt_IC, CS%vbt_IC, vd(2), vd(3), .false., restart_CS)
 
   if (GV%Boussinesq) then
     vd(2) = var_desc("uhbt_IC", "m3 s-1", &
@@ -4655,8 +4664,7 @@ subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
                 longname="Next initial condition for the barotropic meridional transport",&
                 hor_grid='v', z_grid='1')
   endif
-  call register_restart_field(CS%uhbt_IC, vd(2), .false., restart_CS)
-  call register_restart_field(CS%vhbt_IC, vd(3), .false., restart_CS)
+  call register_restart_pair(CS%uhbt_IC, CS%vhbt_IC, vd(2), vd(3), .false., restart_CS)
 
   call register_restart_field(CS%dtbt, "DTBT", .false., restart_CS, &
                               longname="Barotropic timestep", units="seconds")

@@ -943,10 +943,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
     if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) &
         call uvchksum("Ray [uv]", visc%Ray_u, visc%Ray_v, G%HI, haloshift=0, scale=US%Z_to_m)
     if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) &
-        call uvchksum("kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
+        call uvchksum("kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, G%HI, &
+                      haloshift=0, scale=US%Z2_T_to_m2_s, scalar_pair=.true.)
     if (associated(visc%bbl_thick_u) .and. associated(visc%bbl_thick_v)) &
-        call uvchksum("bbl_thick_[uv]", visc%bbl_thick_u, &
-                      visc%bbl_thick_v, G%HI, haloshift=0, scale=US%Z_to_m)
+        call uvchksum("bbl_thick_[uv]", visc%bbl_thick_u, visc%bbl_thick_v, &
+                      G%HI, haloshift=0, scale=US%Z_to_m, scalar_pair=.true.)
   endif
 
 end subroutine set_viscous_BBL
@@ -1710,8 +1711,8 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
 
   if (CS%debug) then
     if (associated(visc%nkml_visc_u) .and. associated(visc%nkml_visc_v)) &
-      call uvchksum("nkml_visc_[uv]", visc%nkml_visc_u, &
-                    visc%nkml_visc_v, G%HI,haloshift=0)
+      call uvchksum("nkml_visc_[uv]", visc%nkml_visc_u, visc%nkml_visc_v, &
+                    G%HI, haloshift=0, scalar_pair=.true.)
   endif
   if (CS%id_nkml_visc_u > 0) &
     call post_data(CS%id_nkml_visc_u, visc%nkml_visc_u, CS%diag)
