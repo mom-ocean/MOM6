@@ -440,7 +440,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
     call get_param(param_file, mdl, "TKE_ITIDE_MAX", CS%TKE_itide_max, &
                  "The maximum internal tide energy source available to mix "//&
                  "above the bottom boundary layer with INT_TIDE_DISSIPATION.", &
-                 units="W m-2",  default=1.0e3, scale=US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**3)
+                 units="W m-2", default=1.0e3, scale=US%W_m2_to_RZ3_T3)
 
     call get_param(param_file, mdl, "READ_TIDEAMP", read_tideamp, &
                  "If true, read a file (given by TIDEAMP_FILE) containing "//&
@@ -509,7 +509,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
                    filename)
     call safe_alloc_ptr(CS%TKE_Niku,is,ie,js,je) ; CS%TKE_Niku(:,:) = 0.0
     call MOM_read_data(filename, 'TKE_input', CS%TKE_Niku, G%domain, timelevel=1, &  ! ??? timelevel -aja
-                       scale=US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**3)
+                       scale=US%W_m2_to_RZ3_T3)
     CS%TKE_Niku(:,:) = Niku_scale * CS%TKE_Niku(:,:)
 
     call get_param(param_file, mdl, "GAMMA_NIKURASHIN",CS%Gamma_lee, &

@@ -76,7 +76,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
   real, dimension(SZK_(G)+1) :: &
     dRho_dT, &    ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
     dRho_dS, &    ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
-    pres, &       ! Interface pressure [Pa]
+    pres, &       ! Interface pressure [R L2 T-2 ~> Pa]
     T_int, &      ! Temperature interpolated to interfaces [degC]
     S_int, &      ! Salinity interpolated to interfaces [ppt]
     gprime        ! The reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
@@ -100,7 +100,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
   real :: dlam    ! The change in estimates of the eigenvalue [T2 L-2 ~> s m-1]
   real :: lam0    ! The first guess of the eigenvalue [T2 L-2 ~> s m-1]
   real :: min_h_frac ! [nondim]
-  real :: Z_to_Pa  ! A conversion factor from thicknesses (in Z) to pressure (in Pa)
+  real :: Z_to_pres  ! A conversion factor from thicknesses to pressure [R L2 T-2 Z-1 ~> Pa m-1]
   real, dimension(SZI_(G)) :: &
     htot, hmin, &  ! Thicknesses [Z ~> m]
     H_here, &      ! A thickness [Z ~> m]
@@ -158,7 +158,8 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
 
   S => tv%S ; T => tv%T
   g_Rho0 = GV%g_Earth / GV%Rho0
-  Z_to_Pa = GV%Z_to_H * GV%H_to_Pa
+  ! Simplifying the following could change answers at roundoff.
+  Z_to_pres = GV%Z_to_H * (GV%H_to_RZ * GV%g_Earth)
   use_EOS = associated(tv%eqn_of_state)
 
   rescale = 1024.0**4 ; I_rescale = 1.0/rescale
@@ -170,7 +171,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,G,GV,US,min_h_frac,use_EOS,T,S,tv,&
 !$OMP                                  calc_modal_structure,l_use_ebt_mode,modal_structure, &
 !$OMP                                  l_mono_N2_column_fraction,l_mono_N2_depth,CS,   &
-!$OMP                                  Z_to_Pa,cg1,g_Rho0,rescale,I_rescale,L2_to_Z2,c2_scale)  &
+!$OMP                                  Z_to_pres,cg1,g_Rho0,rescale,I_rescale,L2_to_Z2,c2_scale) &
 !$OMP                          private(htot,hmin,kf,H_here,HxT_here,HxS_here,HxR_here, &
 !$OMP                                  Hf,Tf,Sf,Rf,pres,T_int,S_int,drho_dT,           &
 !$OMP                                  drho_dS,drxh_sum,kc,Hc,Hc_H,Tc,Sc,I_Hnew,gprime,&
@@ -237,12 +238,12 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
       if (use_EOS) then
         pres(1) = 0.0
         do k=2,kf(i)
-          pres(k) = pres(k-1) + Z_to_Pa*Hf(k-1,i)
+          pres(k) = pres(k-1) + Z_to_pres*Hf(k-1,i)
           T_int(k) = 0.5*(Tf(k,i)+Tf(k-1,i))
           S_int(k) = 0.5*(Sf(k,i)+Sf(k-1,i))
         enddo
-        call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, 2, &
-                                      kf(i)-1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, &
+                                      tv%eqn_of_state, (/2,kf(i)/) )
 
         ! Sum the reduced gravities to find out how small a density difference
         ! is negligibly small.
@@ -567,10 +568,10 @@ end subroutine tdma6
 
 !> Calculates the wave speeds for the first few barolinic modes.
 subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
-  type(ocean_grid_type),                    intent(in)  :: G !< Ocean grid structure
+  type(ocean_grid_type),                    intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),                    intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                    intent(in)  :: tv !< Thermodynamic variables
   integer,                                  intent(in)  :: nmodes !< Number of modes
   real, dimension(G%isd:G%ied,G%jsd:G%jed,nmodes), intent(out) :: cn !< Waves speeds [L T-1 ~> m s-1]
@@ -581,7 +582,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   real, dimension(SZK_(G)+1) :: &
     dRho_dT, &    ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
     dRho_dS, &    ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
-    pres, &       ! Interface pressure [Pa]
+    pres, &       ! Interface pressure [R L2 T-2 ~> Pa]
     T_int, &      ! Temperature interpolated to interfaces [degC]
     S_int, &      ! Salinity interpolated to interfaces [ppt]
     gprime        ! The reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
@@ -621,7 +622,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   integer :: numint       ! number of widows (intervals) in root searching range
   integer :: nrootsfound  ! number of extra roots found (not including 1st root)
   real :: min_h_frac
-  real :: Z_to_Pa  ! A conversion factor from thicknesses (in Z) to pressure (in Pa)
+  real :: Z_to_pres ! A conversion factor from thicknesses to pressure [R L2 T-2 Z-1 ~> Pa m-1]
   real, dimension(SZI_(G)) :: &
     htot, hmin, &  ! Thicknesses [Z ~> m]
     H_here, &      ! A thickness [Z ~> m]
@@ -665,12 +666,13 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   S => tv%S ; T => tv%T
   g_Rho0 = GV%g_Earth / GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
-  Z_to_Pa = GV%Z_to_H * GV%H_to_Pa
+  ! Simplifying the following could change answers at roundoff.
+  Z_to_pres = GV%Z_to_H * (GV%H_to_RZ * GV%g_Earth)
   c1_thresh = 0.01*US%m_s_to_L_T
 
   min_h_frac = tol1 / real(nz)
   !$OMP parallel do default(private) shared(is,ie,js,je,nz,h,G,GV,US,min_h_frac,use_EOS,T,S, &
-  !$OMP                                     Z_to_Pa,tv,cn,g_Rho0,nmodes)
+  !$OMP                                     Z_to_pres,tv,cn,g_Rho0,nmodes)
   do j=js,je
     !   First merge very thin layers with the one above (or below if they are
     ! at the top).  This also transposes the row order so that columns can
@@ -731,12 +733,12 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
         if (use_EOS) then
           pres(1) = 0.0
           do k=2,kf(i)
-            pres(k) = pres(k-1) + Z_to_Pa*Hf(k-1,i)
+            pres(k) = pres(k-1) + Z_to_pres*Hf(k-1,i)
             T_int(k) = 0.5*(Tf(k,i)+Tf(k-1,i))
             S_int(k) = 0.5*(Sf(k,i)+Sf(k-1,i))
           enddo
-          call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, 2, &
-                                        kf(i)-1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+          call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, &
+                                        tv%eqn_of_state, (/2,kf(i)/) )
 
           ! Sum the reduced gravities to find out how small a density difference
           ! is negligibly small.
@@ -879,7 +881,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
             ! Under estimate the first eigenvalue to start with.
             lam_1 = 1.0 / speed2_tot
 
-            ! Find the first eigen value
+            ! Find the first eigenvalue
             do itt=1,max_itt
               ! calculate the determinant of (A-lam_1*I)
               call tridiag_det(a_diag(1:nrows),b_diag(1:nrows),c_diag(1:nrows), &
@@ -902,10 +904,10 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
               endif
             enddo
 
-            ! Find other eigen values if c1 is of significant magnitude, > cn_thresh
+            ! Find other eigenvalues if c1 is of significant magnitude, > cn_thresh
             nrootsfound = 0    ! number of extra roots found (not including 1st root)
             if (nmodes>1 .and. kc>=nmodes+1 .and. cn(i,j,1)>c1_thresh) then
-              ! Set the the range to look for the other desired eigen values
+              ! Set the the range to look for the other desired eigenvalues
               ! set min value just greater than the 1st root (found above)
               lamMin = lam_1*(1.0 + tol2)
               ! set max value based on a low guess at wavespeed for highest mode

@@ -1035,7 +1035,7 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, UStokes_SL, LA)
     !
     ! peak frequency (PM, Bouws, 1998)
     tmp = 2.0 * PI * u19p5_to_u10 * u10
-    fp = 0.877 * GV%mks_g_Earth / tmp
+    fp = 0.877 * US%L_T_to_m_s**2*US%m_to_Z * GV%g_Earth / tmp
     !
     ! mean frequency
     fm = fm_into_fp * fp
@@ -1168,23 +1168,25 @@ subroutine DHH85_mid(GV, US, zpt, UStokes)
   real :: ann, Bnn, Snn, Cnn, Dnn
   real :: omega_peak, omega, u10, WA, domega
   real :: omega_min, omega_max, wavespec, Stokes
+  real :: g_Earth ! Gravitational acceleration [m s-2]
   integer :: Nomega, OI
 
   WA = WaveAge
   u10 = WaveWind
+  g_Earth = US%L_T_to_m_s**2*US%m_to_Z * GV%g_Earth
 
   !/
   omega_min = 0.1 ! Hz
   ! Cut off at 30cm for now...
-  omega_max = 10. ! ~sqrt(0.2*GV%mks_g_Earth*2*pi/0.3)
+  omega_max = 10. ! ~sqrt(0.2*g_Earth*2*pi/0.3)
   NOmega = 1000
   domega = (omega_max-omega_min)/real(NOmega)
 
   !
   if (WaveAgePeakFreq) then
-    omega_peak = GV%mks_g_Earth / (WA * u10)
+    omega_peak = g_Earth / (WA * u10)
   else
-    omega_peak = 2. * pi * 0.13 * GV%mks_g_Earth / U10
+    omega_peak = 2. * pi * 0.13 * g_Earth / U10
   endif
   !/
   Ann = 0.006 * WaveAge**(-0.55)
@@ -1200,11 +1202,11 @@ subroutine DHH85_mid(GV, US, zpt, UStokes)
   do oi = 1,nomega-1
     Dnn = exp ( -0.5 * (omega-omega_peak)**2 / (Snn**2 * omega_peak**2) )
     ! wavespec units = m2s
-    wavespec = (Ann * GV%mks_g_Earth**2 / (omega_peak*omega**4 ) ) * &
+    wavespec = (Ann * g_Earth**2 / (omega_peak*omega**4 ) ) * &
                exp(-bnn*(omega_peak/omega)**4)*Cnn**Dnn
     ! Stokes units m  (multiply by frequency range for units of m/s)
     Stokes = 2.0 * wavespec * omega**3 * &
-         exp( 2.0 * omega**2 * US%Z_to_m*zpt / GV%mks_g_Earth) / GV%mks_g_Earth
+         exp( 2.0 * omega**2 * US%Z_to_m*zpt / g_Earth) / g_Earth
     UStokes = UStokes + Stokes*domega
     omega = omega + domega
   enddo

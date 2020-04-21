@@ -175,8 +175,8 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
                    optional, pointer     :: Waves !< Container for wave/Stokes information
 
   ! Fields from forces used in this subroutine:
-  !   taux: Zonal wind stress [Pa].
-  !   tauy: Meridional wind stress [Pa].
+  !   taux: Zonal wind stress [R L Z T-2 ~> Pa].
+  !   tauy: Meridional wind stress [R L Z T-2 ~> Pa].
 
   ! Local variables
 

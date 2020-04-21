@@ -77,7 +77,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
     heat_rem,  & ! remaining heat [H degC ~> m degC or kg degC m-2]
     h_geo_rem, & ! remaining thickness to apply geothermal heating [H ~> m or kg m-2]
     Rcv_BL,    & ! coordinate density in the deepest variable density layer [R ~> kg m-3]
-    p_ref        ! coordiante densities reference pressure [Pa]
+    p_ref        ! coordinate densities reference pressure [R L2 T-2 ~> Pa]
 
   real, dimension(2) :: &
     T2, S2, &   ! temp and saln in the present and target layers [degC] and [ppt]
@@ -198,8 +198,8 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
     iej = is-1 ; do i=ie,is,-1 ; if (do_i(i)) then ; iej = i ; exit ; endif ; enddo
 
     if (nkmb > 0) then
-      call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_Ref(:), &
-                             Rcv_BL(:), isj, iej-isj+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_Ref(:), Rcv_BL(:), &
+                             tv%eqn_of_state, (/isj-(G%isd-1),iej-(G%isd-1)/) )
     else
       Rcv_BL(:) = -1.0
     endif
@@ -245,11 +245,11 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
             Rcv = 0.0 ; dRcv_dT = 0.0 ! Is this OK?
           else
             call calculate_density(tv%T(i,j,k), tv%S(i,j,k), tv%P_Ref, &
-                         Rcv, tv%eqn_of_state, scale=US%kg_m3_to_R)
+                         Rcv, tv%eqn_of_state)
             T2(1) = tv%T(i,j,k) ; S2(1) = tv%S(i,j,k)
             T2(2) = tv%T(i,j,k_tgt) ; S2(2) = tv%S(i,j,k_tgt)
-            call calculate_density_derivs(T2(:), S2(:), p_Ref(:), &
-                         dRcv_dT_, dRcv_dS_, 1, 2, tv%eqn_of_state, scale=US%kg_m3_to_R)
+            call calculate_density_derivs(T2(:), S2(:), p_Ref(:), dRcv_dT_, dRcv_dS_, &
+                         tv%eqn_of_state, (/1,2/) )
             dRcv_dT = 0.5*(dRcv_dT_(1) + dRcv_dT_(2))
           endif
 
