@@ -2033,6 +2033,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   logical :: homogenize, useALEremapping, remap_full_column, remap_general, remap_old_alg
   logical :: answers_2018, default_2018_answers, hor_regrid_answers_2018
   logical :: use_ice_shelf
+  logical :: pre_gridded
   character(len=10) :: remappingScheme
   real :: tempAvg, saltAvg
   integer :: nPoints, ans
@@ -2112,6 +2113,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
                  default=.true.)
+  call get_param(PF, mdl, "TEMP_SALT_INIT_VERTICAL_REMAP_ONLY", pre_gridded, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.false.)
   if (useALEremapping) then
     call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
@@ -2168,13 +2172,14 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   ! to the North/South Pole past the limits of the input data, they are extrapolated using the average
   ! value at the northernmost/southernmost latitude.
 
+
   call horiz_interp_and_extrap_tracer(tfilename, potemp_var, 1.0, 1, &
        G, temp_z, mask_z, z_in, z_edges_in, missing_value_temp, reentrant_x, &
-       tripolar_n, homogenize, m_to_Z=US%m_to_Z, answers_2018=hor_regrid_answers_2018)
+       tripolar_n, homogenize, m_to_Z=US%m_to_Z, answers_2018=hor_regrid_answers_2018,ongrid=pre_gridded)
 
   call horiz_interp_and_extrap_tracer(sfilename, salin_var, 1.0, 1, &
        G, salt_z, mask_z, z_in, z_edges_in, missing_value_salt, reentrant_x, &
-       tripolar_n, homogenize, m_to_Z=US%m_to_Z, answers_2018=hor_regrid_answers_2018)
+       tripolar_n, homogenize, m_to_Z=US%m_to_Z, answers_2018=hor_regrid_answers_2018,ongrid=pre_gridded)
 
   kd = size(z_in,1)
 

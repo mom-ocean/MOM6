@@ -272,7 +272,7 @@ end subroutine fill_miss_2d
 !> Extrapolate and interpolate from a file record
 subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, recnum, G, tr_z, &
                                                  mask_z, z_in, z_edges_in, missing_value, reentrant_x, &
-                                                 tripolar_n, homogenize, m_to_Z, answers_2018)
+                                                 tripolar_n, homogenize, m_to_Z, answers_2018, ongrid)
 
   character(len=*),      intent(in)    :: filename   !< Path to file containing tracer to be
                                                      !! interpolated.
@@ -296,6 +296,9 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   logical,     optional, intent(in)    :: answers_2018 !< If true, use expressions that give the same
                                                      !! answers as the code did in late 2018.  Otherwise
                                                      !! add parentheses for rotational symmetry.
+  logical,     optional, intent(in)    :: ongrid     !< If true, then data are assumed to have been interpolated
+                                                     !! to the model horizontal grid. In this case, only
+                                                     !! extrapolation is performed by this routine
 
   ! Local variables
   real, dimension(:,:),  allocatable   :: tr_in, tr_inp ! A 2-d array for holding input data on
@@ -314,6 +317,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   real :: roundoff  ! The magnitude of roundoff, usually ~2e-16.
   real :: add_offset, scale_factor
   logical :: add_np
+  logical :: is_ongrid
   character(len=8)  :: laynum
   type(horiz_interp_type) :: Interp
   integer :: is, ie, js, je     ! compute domain indices
@@ -336,6 +340,8 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 
   id_clock_read = cpu_clock_id('(Initialize tracer from Z) read', grain=CLOCK_LOOP)
 
+  is_ongrid=.false.
+  if (present(ongrid)) is_ongrid=ongrid
 
   if (allocated(tr_z)) deallocate(tr_z)
   if (allocated(mask_z)) deallocate(mask_z)
@@ -418,41 +424,38 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   if (present(m_to_Z)) then ; do k=1,kd ; z_in(k) = m_to_Z * z_in(k) ; enddo ; endif
 
   ! extrapolate the input data to the north pole using the northerm-most latitude
-
-  max_lat = maxval(lat_in)
   add_np=.false.
-  if (max_lat < 90.0) then
-    add_np=.true.
-    jdp=jd+1
-    allocate(lat_inp(jdp))
-    lat_inp(1:jd)=lat_in(:)
-    lat_inp(jd+1)=90.0
-    deallocate(lat_in)
-    allocate(lat_in(1:jdp))
-    lat_in(:)=lat_inp(:)
-  else
-    jdp=jd
+  jdp=jd
+  if (.not. is_ongrid) then
+     max_lat = maxval(lat_in)
+     if (max_lat < 90.0) then
+        add_np=.true.
+        jdp=jd+1
+        allocate(lat_inp(jdp))
+        lat_inp(1:jd)=lat_in(:)
+        lat_inp(jd+1)=90.0
+        deallocate(lat_in)
+        allocate(lat_in(1:jdp))
+        lat_in(:)=lat_inp(:)
+     endif
   endif
-
   ! construct level cell boundaries as the mid-point between adjacent centers
 
   z_edges_in(1) = 0.0
   do K=2,kd
-   z_edges_in(K)=0.5*(z_in(k-1)+z_in(k))
+    z_edges_in(K)=0.5*(z_in(k-1)+z_in(k))
   enddo
   z_edges_in(kd+1)=2.0*z_in(kd) - z_in(kd-1)
 
-  call horiz_interp_init()
-
-  lon_in = lon_in*PI_180
-  lat_in = lat_in*PI_180
-  allocate(x_in(id,jdp),y_in(id,jdp))
-  call meshgrid(lon_in,lat_in, x_in, y_in)
-
-  lon_out(:,:) = G%geoLonT(:,:)*PI_180
-  lat_out(:,:) = G%geoLatT(:,:)*PI_180
-
-
+  if (.not. is_ongrid) then
+     call horiz_interp_init()
+     lon_in = lon_in*PI_180
+     lat_in = lat_in*PI_180
+     allocate(x_in(id,jdp),y_in(id,jdp))
+     call meshgrid(lon_in,lat_in, x_in, y_in)
+     lon_out(:,:) = G%geoLonT(:,:)*PI_180
+     lat_out(:,:) = G%geoLatT(:,:)*PI_180
+  endif
   allocate(tr_in(id,jd)) ; tr_in(:,:)=0.0
   allocate(tr_inp(id,jdp)) ; tr_inp(:,:)=0.0
   allocate(mask_in(id,jdp)) ; mask_in(:,:)=0.0
@@ -462,7 +465,6 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   call mpp_max(max_depth)
 
   if (z_edges_in(kd+1)<max_depth) z_edges_in(kd+1)=max_depth
-
   roundoff = 3.0*EPSILON(missing_value)
 
   ! loop through each data level and interpolate to model grid.
@@ -516,19 +518,22 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     enddo
 
 !   call fms routine horiz_interp to interpolate input level data to model horizontal grid
-
-    if (k == 1) then
-      call horiz_interp_new(Interp,x_in,y_in,lon_out(is:ie,js:je),lat_out(is:ie,js:je), &
+    if (.not. is_ongrid) then
+       if (k == 1) then
+          call horiz_interp_new(Interp,x_in,y_in,lon_out(is:ie,js:je),lat_out(is:ie,js:je), &
                interp_method='bilinear',src_modulo=.true.)
-    endif
+       endif
 
-    if (debug) then
-       call myStats(tr_inp,missing_value, is,ie,js,je,k,'Tracer from file')
+       if (debug) then
+          call myStats(tr_inp,missing_value, is,ie,js,je,k,'Tracer from file')
+       endif
     endif
-
     tr_out(:,:) = 0.0
-
-    call horiz_interp(Interp,tr_inp,tr_out(is:ie,js:je), missing_value=missing_value, new_missing_handle=.true.)
+    if (is_ongrid) then
+       tr_out(is:ie,js:je)=tr_inp(is+G%HI%idg_offset:ie+G%HI%idg_offset,js+G%HI%jdg_offset:je+G%HI%jdg_offset)
+    else
+       call horiz_interp(Interp,tr_inp,tr_out(is:ie,js:je), missing_value=missing_value, new_missing_handle=.true.)
+    endif
 
     mask_out=1.0
     do j=js,je
