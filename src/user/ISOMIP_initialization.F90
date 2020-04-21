@@ -172,22 +172,22 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, US, param_file, tv, just_read
   select case ( coordinateMode(verticalCoordinate) )
 
   case ( REGRIDDING_LAYER, REGRIDDING_RHO ) ! Initial thicknesses for isopycnal coordinates
-    call get_param(param_file, mdl, "ISOMIP_T_SUR",t_sur, &
-                   'Temperature at the surface (interface)', default=-1.9, do_not_log=just_read)
+    call get_param(param_file, mdl, "ISOMIP_T_SUR", t_sur, &
+                   "Temperature at the surface (interface)", units="degC", default=-1.9, do_not_log=just_read)
     call get_param(param_file, mdl, "ISOMIP_S_SUR", s_sur, &
-                   'Salinity at the surface (interface)',  default=33.8, do_not_log=just_read)
+                   "Salinity at the surface (interface)", units="ppt",  default=33.8, do_not_log=just_read)
     call get_param(param_file, mdl, "ISOMIP_T_BOT", t_bot, &
-                   'Temperature at the bottom (interface)', default=-1.9, do_not_log=just_read)
+                   "Temperature at the bottom (interface)", units="degC", default=-1.9, do_not_log=just_read)
     call get_param(param_file, mdl, "ISOMIP_S_BOT", s_bot,&
-                   'Salinity at the bottom (interface)', default=34.55, do_not_log=just_read)
+                   "Salinity at the bottom (interface)", units="ppt", default=34.55, do_not_log=just_read)
 
     if (just_read) return ! All run-time parameters have been read, so return.
 
     ! Compute min/max density using T_SUR/S_SUR and T_BOT/S_BOT
-    call calculate_density(t_sur, s_sur, 0.0, rho_sur, tv%eqn_of_state, scale=US%kg_m3_to_R)
+    call calculate_density(t_sur, s_sur, 0.0, rho_sur, tv%eqn_of_state)
     ! write(mesg,*) 'Surface density is:', rho_sur
     ! call MOM_mesg(mesg,5)
-    call calculate_density(t_bot, s_bot, 0.0, rho_bot, tv%eqn_of_state, scale=US%kg_m3_to_R)
+    call calculate_density(t_bot, s_bot, 0.0, rho_bot, tv%eqn_of_state)
     ! write(mesg,*) 'Bottom density is:', rho_bot
     ! call MOM_mesg(mesg,5)
     rho_range = rho_bot - rho_sur
@@ -281,7 +281,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
   real :: drho_dT(SZK_(G))   ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
   real :: drho_dS(SZK_(G))   ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
   real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 [R ~> kg m-3].
-  real :: pres(SZK_(G))      ! An array of the reference pressure [Pa]. (zero here)
+  real :: pres(SZK_(G))      ! An array of the reference pressure [R L2 T-2 ~> Pa]. (zero here)
   real :: drho_dT1           ! A prescribed derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
   real :: drho_dS1           ! A prescribed derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
   real :: T_Ref, S_Ref
@@ -293,18 +293,18 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
   call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
   call get_param(param_file, mdl, "ISOMIP_T_SUR",t_sur, &
-                 'Temperature at the surface (interface)', default=-1.9, do_not_log=just_read)
+                 "Temperature at the surface (interface)", units="degC", default=-1.9, do_not_log=just_read)
   call get_param(param_file, mdl, "ISOMIP_S_SUR", s_sur, &
-                 'Salinity at the surface (interface)',  default=33.8, do_not_log=just_read)
+                 "Salinity at the surface (interface)", units="ppt", default=33.8, do_not_log=just_read)
   call get_param(param_file, mdl, "ISOMIP_T_BOT", t_bot, &
-                 'Temperature at the bottom (interface)', default=-1.9, do_not_log=just_read)
+                 "Temperature at the bottom (interface)", units="degC", default=-1.9, do_not_log=just_read)
   call get_param(param_file, mdl, "ISOMIP_S_BOT", s_bot, &
-                 'Salinity at the bottom (interface)', default=34.55, do_not_log=just_read)
+                 "Salinity at the bottom (interface)", units="ppt", default=34.55, do_not_log=just_read)
 
-  call calculate_density(t_sur,s_sur,0.0,rho_sur,eqn_of_state, scale=US%kg_m3_to_R)
+  call calculate_density(t_sur, s_sur, 0.0, rho_sur, eqn_of_state)
   ! write(mesg,*) 'Density in the surface layer:', rho_sur
   ! call MOM_mesg(mesg,5)
-  call calculate_density(t_bot,s_bot,0.0,rho_bot,eqn_of_state, scale=US%kg_m3_to_R)
+  call calculate_density(t_bot, s_bot, 0.0, rho_bot, eqn_of_state)
   ! write(mesg,*) 'Density in the bottom layer::', rho_bot
   ! call MOM_mesg(mesg,5)
 
@@ -362,10 +362,10 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
           ! call MOM_mesg(mesg,5)
         enddo
 
-        call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, eqn_of_state, (/1,1/) )
         ! write(mesg,*) 'computed drho_dS, drho_dT', drho_dS(1), drho_dT(1)
         ! call MOM_mesg(mesg,5)
-        call calculate_density(T0(1),S0(1),0.,rho_guess(1),eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density(T0(1), S0(1), pres(1), rho_guess(1), eqn_of_state)
 
         if (fit_salin) then
           ! A first guess of the layers' salinity.
@@ -374,8 +374,8 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
           enddo
           ! Refine the guesses for each layer.
           do itt=1,6
-            call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state, scale=US%kg_m3_to_R)
-            call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state, scale=US%kg_m3_to_R)
+            call calculate_density(T0, S0, pres, rho_guess, eqn_of_state)
+            call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, eqn_of_state)
             do k=1,nz
               S0(k) = max(0.0, S0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dS1)
             enddo
@@ -388,8 +388,8 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
           enddo
 
           do itt=1,6
-            call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state, scale=US%kg_m3_to_R)
-            call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state, scale=US%kg_m3_to_R)
+            call calculate_density(T0, S0, pres, rho_guess, eqn_of_state)
+            call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, eqn_of_state)
             do k=1,nz
               T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
             enddo
@@ -481,16 +481,16 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
                  do_not_log=.true.)
 
   call get_param(PF, mdl, "ISOMIP_S_SUR_SPONGE", s_sur, &
-                 'Surface salinity in sponge layer.', default=s_ref) ! units="ppt")
+                 "Surface salinity in sponge layer.", units="ppt", default=s_ref) ! units="ppt")
 
   call get_param(PF, mdl, "ISOMIP_S_BOT_SPONGE", s_bot, &
-                 'Bottom salinity in sponge layer.', default=s_ref) ! units="ppt")
+                 "Bottom salinity in sponge layer.", units="ppt", default=s_ref) ! units="ppt")
 
   call get_param(PF, mdl, "ISOMIP_T_SUR_SPONGE", t_sur, &
-                 'Surface temperature in sponge layer.', default=t_ref) ! units="degC")
+                 "Surface temperature in sponge layer.", units="degC", default=t_ref) ! units="degC")
 
   call get_param(PF, mdl, "ISOMIP_T_BOT_SPONGE", t_bot, &
-                 'Bottom temperature in sponge layer.', default=t_ref) ! units="degC")
+                 "Bottom temperature in sponge layer.", units="degC", default=t_ref) ! units="degC")
 
   T(:,:,:) = 0.0 ; S(:,:,:) = 0.0 ; Idamp(:,:) = 0.0 !; RHO(:,:,:) = 0.0
 
@@ -521,10 +521,10 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
   enddo ; enddo
 
   ! Compute min/max density using T_SUR/S_SUR and T_BOT/S_BOT
-  call calculate_density(t_sur, s_sur, 0.0, rho_sur, tv%eqn_of_state, scale=US%kg_m3_to_R)
+  call calculate_density(t_sur, s_sur, 0.0, rho_sur, tv%eqn_of_state)
   !write (mesg,*) 'Surface density in sponge:', rho_sur
   ! call MOM_mesg(mesg,5)
-  call calculate_density(t_bot, s_bot, 0.0, rho_bot, tv%eqn_of_state, scale=US%kg_m3_to_R)
+  call calculate_density(t_bot, s_bot, 0.0, rho_bot, tv%eqn_of_state)
   !write (mesg,*) 'Bottom density in sponge:', rho_bot
   ! call MOM_mesg(mesg,5)
   rho_range = rho_bot - rho_sur

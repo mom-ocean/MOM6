@@ -11,6 +11,8 @@ use MersenneTwister_mod, only : new_RandomNumberSequence ! Constructor/initializ
 use MersenneTwister_mod, only : getRandomReal ! Generates a random number
 use MersenneTwister_mod, only : getRandomPositiveInt ! Generates a random positive integer
 
+use iso_fortran_env, only : stdout=>output_unit, stderr=>error_unit
+
 implicit none ; private
 
 public :: random_0d_constructor
@@ -205,7 +207,7 @@ logical function random_unit_tests(verbose)
   HI%jdg_offset = 0
 
   random_unit_tests = .false.
-  stdunit = 6
+  stdunit = stdout
   write(stdunit,'(1x,a)') '==== MOM_random: random_unit_tests ======================='
 
   if (verbose) write(stdunit,'(1x,"random: ",a)') '-- Time-based seeds ---------------------'
@@ -417,15 +419,17 @@ logical function test_fn(verbose, good, label, rvalue, ivalue)
 
   if (present(ivalue)) then
     if (.not. good) then
-      write(0,'(1x,a,i10,1x,a,a)') 'random: result =',ivalue,label,' <------- FAIL!'
+      write(stdout,'(1x,a,i10,1x,a,a)') 'random: result =',ivalue,label,' <------- FAIL!'
+      write(stderr,'(1x,a,i10,1x,a,a)') 'random: result =',ivalue,label,' <------- FAIL!'
     elseif (verbose) then
-      write(6,'(1x,a,i10,1x,a)') 'random: result =',ivalue,label
+      write(stdout,'(1x,a,i10,1x,a)') 'random: result =',ivalue,label
     endif
   else
     if (.not. good) then
-      write(0,'(1x,a,1pe15.8,1x,a,a)') 'random: result =',rvalue,label,' <------- FAIL!'
+      write(stdout,'(1x,a,1pe15.8,1x,a,a)') 'random: result =',rvalue,label,' <------- FAIL!'
+      write(stderr,'(1x,a,1pe15.8,1x,a,a)') 'random: result =',rvalue,label,' <------- FAIL!'
     elseif (verbose) then
-      write(6,'(1x,a,1pe15.8,1x,a)') 'random: result =',rvalue,label
+      write(stdout,'(1x,a,1pe15.8,1x,a)') 'random: result =',rvalue,label
     endif
   endif
   test_fn = .not. good

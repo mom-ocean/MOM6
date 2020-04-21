@@ -175,8 +175,8 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
                    optional, pointer     :: Waves !< Container for wave/Stokes information
 
   ! Fields from forces used in this subroutine:
-  !   taux: Zonal wind stress [Pa].
-  !   tauy: Meridional wind stress [Pa].
+  !   taux: Zonal wind stress [R L Z T-2 ~> Pa].
+  !   tauy: Meridional wind stress [R L Z T-2 ~> Pa].
 
   ! Local variables
 
@@ -558,7 +558,8 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
   enddo ! end of v-component J loop
 
   if (CS%debug) then
-    call uvchksum("visc_rem_[uv]", visc_rem_u, visc_rem_v, G%HI,haloshift=0)
+    call uvchksum("visc_rem_[uv]", visc_rem_u, visc_rem_v, G%HI, haloshift=0, &
+                  scalar_pair=.true.)
   endif
 
 end subroutine vertvisc_remnant
@@ -1008,10 +1009,13 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   enddo ! end of v-point j loop
 
   if (CS%debug) then
-    call uvchksum("vertvisc_coef h_[uv]", CS%h_u, CS%h_v, G%HI, haloshift=0, scale=GV%H_to_m)
-    call uvchksum("vertvisc_coef a_[uv]", CS%a_u, CS%a_v, G%HI, haloshift=0, scale=US%Z_to_m*US%s_to_T)
+    call uvchksum("vertvisc_coef h_[uv]", CS%h_u, CS%h_v, G%HI, haloshift=0, &
+                  scale=GV%H_to_m, scalar_pair=.true.)
+    call uvchksum("vertvisc_coef a_[uv]", CS%a_u, CS%a_v, G%HI, haloshift=0, &
+                  scale=US%Z_to_m*US%s_to_T, scalar_pair=.true.)
     if (allocated(hML_u) .and. allocated(hML_v)) &
-      call uvchksum("vertvisc_coef hML_[uv]", hML_u, hML_v, G%HI, haloshift=0, scale=GV%H_to_m)
+      call uvchksum("vertvisc_coef hML_[uv]", hML_u, hML_v, G%HI, &
+                    haloshift=0, scale=GV%H_to_m, scalar_pair=.true.)
   endif
 
 ! Offer diagnostic fields for averaging.

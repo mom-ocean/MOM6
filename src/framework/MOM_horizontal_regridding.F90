@@ -20,8 +20,9 @@ use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field
 use MOM_string_functions, only : uppercase
 use MOM_time_manager, only : time_type, get_external_field_size
-use MOM_time_manager, only : init_external_field, time_interp_external
+use MOM_time_manager, only : init_external_field
 use MOM_time_manager, only : get_external_field_axes, get_external_field_missing
+use MOM_transform_FMS, only : time_interp_external => rotated_time_interp_external
 use MOM_variables, only : thermo_var_ptrs
 use mpp_io_mod, only : axistype
 use mpp_domains_mod, only  : mpp_global_field, mpp_get_compute_domain
@@ -658,6 +659,9 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   real, dimension(SZI_(G),SZJ_(G)) :: tr_outf,tr_prev
   real, dimension(SZI_(G),SZJ_(G))  :: good2,fill2
   real, dimension(SZI_(G),SZJ_(G))  :: nlevs
+  integer :: turns
+
+  turns = G%HI%turns
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -753,7 +757,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
   if (.not.spongeDataOngrid) then
     if (is_root_pe()) &
-      call time_interp_external(fms_id, Time, data_in, verbose=.true.)
+      call time_interp_external(fms_id, Time, data_in, verbose=.true., turns=turns)
     ! loop through each data level and interpolate to model grid.
     ! after interpolating, fill in points which will be needed
     ! to define the layers
@@ -873,7 +877,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
     enddo ! kd
   else
-      call time_interp_external(fms_id, Time, data_in, verbose=.true.)
+      call time_interp_external(fms_id, Time, data_in, verbose=.true., turns=turns)
       do k=1,kd
         do j=js,je
           do i=is,ie

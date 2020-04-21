@@ -8,7 +8,7 @@ module MOM_debugging
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_checksums, only : hchksum, Bchksum, qchksum, uvchksum
+use MOM_checksums, only : hchksum, Bchksum, qchksum, uvchksum, hchksum_pair
 use MOM_checksums, only : is_NaN, chksum, MOM_checksums_init
 use MOM_coms, only : PE_here, root_PE, num_PEs, sum_across_PEs
 use MOM_coms, only : min_across_PEs, max_across_PEs, reproducing_sum
@@ -27,7 +27,7 @@ public :: MOM_debugging_init, totalStuff, totalTandS
 public :: check_column_integral, check_column_integrals
 
 ! These interfaces come from MOM_checksums.
-public :: hchksum, Bchksum, qchksum, is_NaN, chksum, uvchksum
+public :: hchksum, Bchksum, qchksum, is_NaN, chksum, uvchksum, hchksum_pair
 
 !> Check for consistency between the duplicated points of a C-grid vector
 interface check_redundant
