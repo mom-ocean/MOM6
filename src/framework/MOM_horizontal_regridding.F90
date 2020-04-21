@@ -448,7 +448,10 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   enddo
   z_edges_in(kd+1)=2.0*z_in(kd) - z_in(kd-1)
 
-  if (.not. is_ongrid) then
+  if (is_ongrid) then
+     allocate(tr_in(is:ie,js:je)) ; tr_in(:,:)=0.0
+     allocate(mask_in(is:ie,js:je)) ; mask_in(:,:)=0.0
+  else
      call horiz_interp_init()
      lon_in = lon_in*PI_180
      lat_in = lat_in*PI_180
@@ -456,11 +459,13 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
      call meshgrid(lon_in,lat_in, x_in, y_in)
      lon_out(:,:) = G%geoLonT(:,:)*PI_180
      lat_out(:,:) = G%geoLatT(:,:)*PI_180
+     allocate(tr_in(id,jd)) ; tr_in(:,:)=0.0
+     allocate(tr_inp(id,jdp)) ; tr_inp(:,:)=0.0
+     allocate(mask_in(id,jdp)) ; mask_in(:,:)=0.0
+     allocate(last_row(id))    ; last_row(:)=0.0
   endif
-  allocate(tr_in(id,jd)) ; tr_in(:,:)=0.0
-  allocate(tr_inp(id,jdp)) ; tr_inp(:,:)=0.0
-  allocate(mask_in(id,jdp)) ; mask_in(:,:)=0.0
-  allocate(last_row(id))    ; last_row(:)=0.0
+
+
 
   max_depth = maxval(G%bathyT)
   call mpp_max(max_depth)
@@ -473,50 +478,72 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   ! to define the layers
   do k=1,kd
     write(laynum,'(I8)') k ; laynum = adjustl(laynum)
+    mask_in=0.0
+    if (is_ongrid) then
+       start(1) = is+G%HI%idg_offset ; start(2) = js+G%HI%jdg_offset ; start(3) = k
+       count(1) = ie-is+1 ; count(2) = je-js+1; count(3) = 1
+       rcode = NF90_GET_VAR(ncid,varid, tr_in, start, count)
+       if (rcode /= 0) call MOM_error(FATAL,"hinterp_and_extract_from_Fie: "//&
+            "error reading level "//trim(laynum)//" of variable "//&
+            trim(varnam)//" in file "// trim(filename))
 
-    if (is_root_pe()) then
-      start = 1 ; start(3) = k ; count(:) = 1 ; count(1) = id ; count(2) = jd
-      rcode = NF90_GET_VAR(ncid,varid, tr_in, start, count)
-      if (rcode /= 0) call MOM_error(FATAL,"hinterp_and_extract_from_Fie: "//&
-           "error reading level "//trim(laynum)//" of variable "//&
-           trim(varnam)//" in file "// trim(filename))
-
-      if (add_np) then
-         last_row(:)=tr_in(:,jd); pole=0.0;npole=0.0
-         do i=1,id
-            if (abs(tr_in(i,jd)-missing_value) > abs(roundoff*missing_value)) then
-               pole = pole+last_row(i)
-               npole = npole+1.0
-            endif
+       do j=js,je
+         do i=is,ie
+           if (abs(tr_in(i,j)-missing_value) > abs(roundoff*missing_value)) then
+              mask_in(i,j) = 1.0
+              tr_in(i,j) = (tr_in(i,j)*scale_factor+add_offset) * conversion
+           else
+              tr_in(i,j) = missing_value
+           endif
          enddo
-         if (npole > 0) then
-            pole=pole/npole
-         else
-            pole=missing_value
-         endif
-         tr_inp(:,1:jd) = tr_in(:,:)
-         tr_inp(:,jdp) = pole
-      else
-         tr_inp(:,:) = tr_in(:,:)
-      endif
+       enddo
+
+    else
+       if (is_root_pe()) then
+          start = 1 ; start(3) = k ; count(:) = 1 ; count(1) = id ; count(2) = jd
+          rcode = NF90_GET_VAR(ncid,varid, tr_in, start, count)
+          if (rcode /= 0) call MOM_error(FATAL,"hinterp_and_extract_from_Fie: "//&
+               "error reading level "//trim(laynum)//" of variable "//&
+               trim(varnam)//" in file "// trim(filename))
+
+          if (add_np) then
+             last_row(:)=tr_in(:,jd); pole=0.0;npole=0.0
+             do i=1,id
+               if (abs(tr_in(i,jd)-missing_value) > abs(roundoff*missing_value)) then
+                  pole = pole+last_row(i)
+                  npole = npole+1.0
+               endif
+             enddo
+             if (npole > 0) then
+                pole=pole/npole
+             else
+                pole=missing_value
+             endif
+             tr_inp(:,1:jd) = tr_in(:,:)
+             tr_inp(:,jdp) = pole
+          else
+             tr_inp(:,:) = tr_in(:,:)
+          endif
+       endif
+
+       call mpp_sync()
+       call mpp_broadcast(tr_inp, id*jdp, root_PE())
+       call mpp_sync_self()
+
+       do j=1,jdp
+         do i=1,id
+           if (abs(tr_inp(i,j)-missing_value) > abs(roundoff*missing_value)) then
+              mask_in(i,j) = 1.0
+              tr_inp(i,j) = (tr_inp(i,j)*scale_factor+add_offset) * conversion
+           else
+              tr_inp(i,j) = missing_value
+           endif
+         enddo
+       enddo
+
     endif
 
-    call mpp_sync()
-    call mpp_broadcast(tr_inp, id*jdp, root_PE())
-    call mpp_sync_self()
 
-    mask_in=0.0
-
-    do j=1,jdp
-      do i=1,id
-         if (abs(tr_inp(i,j)-missing_value) > abs(roundoff*missing_value)) then
-           mask_in(i,j) = 1.0
-           tr_inp(i,j) = (tr_inp(i,j)*scale_factor+add_offset) * conversion
-         else
-           tr_inp(i,j) = missing_value
-         endif
-      enddo
-    enddo
 
 !   call fms routine horiz_interp to interpolate input level data to model horizontal grid
     if (.not. is_ongrid) then
@@ -529,9 +556,10 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
           call myStats(tr_inp,missing_value, is,ie,js,je,k,'Tracer from file')
        endif
     endif
+
     tr_out(:,:) = 0.0
     if (is_ongrid) then
-       tr_out(is:ie,js:je)=tr_inp(is+G%HI%idg_offset:ie+G%HI%idg_offset,js+G%HI%jdg_offset:je+G%HI%jdg_offset)
+       tr_out(is:ie,js:je)=tr_in(is:ie,js:je)
     else
        call horiz_interp(Interp,tr_inp,tr_out(is:ie,js:je), missing_value=missing_value, new_missing_handle=.true.)
     endif
