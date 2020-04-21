@@ -660,6 +660,10 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
     if (showCallTree) call callTree_enter("DT cycles (step_MOM) n=",n)
 
+    ! Update the vertically extensive diagnostic grids so that they are
+    ! referenced to the beginning timestep
+    call diag_update_remap_grids(CS%diag, update_intensive = .false., update_extensive = .true. )
+
     !===========================================================================
     ! This is the first place where the diabatic processes and remapping could occur.
     if (CS%diabatic_first .and. (CS%t_dyn_rel_adv==0.0) .and. do_thermo) then ! do thermodynamics.
