@@ -30,16 +30,15 @@ type, public :: dumbbell_surface_forcing_CS ; private
   real :: Rho0               !< The density used in the Boussinesq approximation [R ~> kg m-3].
   real :: G_Earth            !< The gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
   real :: Flux_const         !< The restoring rate at the surface [Z T-1 ~> m s-1].
-  real :: gust_const         !< A constant unresolved background gustiness
-                             !! that contributes to ustar [Pa].
-  real :: slp_amplitude      !< The amplitude of pressure loading [Pa] applied
+! real :: gust_const         !< A constant unresolved background gustiness
+!                            !! that contributes to ustar [R L Z T-2 ~> Pa].
+  real :: slp_amplitude      !< The amplitude of pressure loading [R L2 T-2 ~> Pa] applied
                              !! to the reservoirs
-  real :: slp_period         !< Period of sinusoidal pressure wave
+  real :: slp_period         !< Period of sinusoidal pressure wave [days]
   real, dimension(:,:), allocatable :: &
     forcing_mask             !< A mask regulating where forcing occurs
   real, dimension(:,:), allocatable :: &
-    S_restore                !< The surface salinity field toward which to
-                             !! restore [ppt].
+    S_restore                !< The surface salinity field toward which to restore [ppt].
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate the
                              !! timing of diagnostic output.
 end type dumbbell_surface_forcing_CS
@@ -213,10 +212,7 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "DUMBBELL_SLP_AMP", CS%slp_amplitude, &
                  "Amplitude of SLP forcing in reservoirs.", &
-                 units="kg m2 s-1", default = 10000.0)
-  call get_param(param_file, mdl, "DUMBBELL_SLP_PERIOD", CS%slp_period, &
-                 "Periodicity of SLP forcing in reservoirs.", &
-                 units="days", default = 1.0)
+                 units="Pa", default = 10000.0, scale=US%kg_m3_to_R*US%m_s_to_L_T**2)
   call get_param(param_file, mdl, "DUMBBELL_SLP_PERIOD", CS%slp_period, &
                  "Periodicity of SLP forcing in reservoirs.", &
                  units="days", default = 1.0)

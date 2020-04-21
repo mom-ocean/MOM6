@@ -19,7 +19,7 @@ type, public :: rho_CS ; private
   !> Minimum thickness allowed for layers, often in [H ~> m or kg m-2]
   real :: min_thickness = 0.
 
-  !> Reference pressure for density calculations [Pa]
+  !> Reference pressure for density calculations [R L2 T-2 ~> Pa]
   real :: ref_pressure
 
   !> If true, integrate for interface positions from the top downward.
@@ -28,9 +28,6 @@ type, public :: rho_CS ; private
 
   !> Nominal density of interfaces [R ~> kg m-3]
   real, allocatable, dimension(:) :: target_density
-
-  !> Density scaling factor [R m3 kg-1 ~> 1]
-  real :: kg_m3_to_R
 
   !> Interpolation control structure
   type(interp_CS_type) :: interp_CS
@@ -41,13 +38,12 @@ public init_coord_rho, set_rho_params, build_rho_column, old_inflate_layers_1d, 
 contains
 
 !> Initialise a rho_CS with pointers to parameters
-subroutine init_coord_rho(CS, nk, ref_pressure, target_density, interp_CS, rho_scale)
+subroutine init_coord_rho(CS, nk, ref_pressure, target_density, interp_CS)
   type(rho_CS),         pointer    :: CS !< Unassociated pointer to hold the control structure
   integer,              intent(in) :: nk !< Number of layers in the grid
-  real,                 intent(in) :: ref_pressure !< Coordinate reference pressure [Pa]
+  real,                 intent(in) :: ref_pressure !< Coordinate reference pressure [R L2 T-2 ~> Pa]
   real, dimension(:),   intent(in) :: target_density !< Nominal density of interfaces [R ~> kg m-3]
   type(interp_CS_type), intent(in) :: interp_CS !< Controls for interpolation
-  real,       optional, intent(in) :: rho_scale !< A dimensional scaling factor for target_density
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_rho: CS already associated!")
   allocate(CS)
@@ -57,7 +53,6 @@ subroutine init_coord_rho(CS, nk, ref_pressure, target_density, interp_CS, rho_s
   CS%ref_pressure      = ref_pressure
   CS%target_density(:) = target_density(:)
   CS%interp_CS         = interp_CS
-  CS%kg_m3_to_R = 1.0 ; if (present(rho_scale)) CS%kg_m3_to_R = rho_scale
 
 end subroutine init_coord_rho
 
@@ -111,7 +106,7 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
   ! Local variables
   integer :: k, count_nonzero_layers
   integer, dimension(nz) :: mapping
-  real, dimension(nz) :: pres     ! Pressures used to calculate density [Pa]
+  real, dimension(nz) :: pres     ! Pressures used to calculate density [R L2 T-2 ~> Pa]
   real, dimension(nz) :: h_nv     ! Thicknesses of non-vanishing layers [H ~> m or kg m-2]
   real, dimension(nz) :: densities ! Layer density [R ~> kg m-3]
   real, dimension(nz+1) :: xTmp   ! Temporary positions [H ~> m or kg m-2]
@@ -129,7 +124,7 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
 
     ! Compute densities on source column
     pres(:) = CS%ref_pressure
-    call calculate_density(T, S, pres, densities, 1, nz, eqn_of_state, scale=CS%kg_m3_to_R)
+    call calculate_density(T, S, pres, densities, eqn_of_state)
     do k = 1,count_nonzero_layers
       densities(k) = densities(mapping(k))
     enddo
@@ -211,7 +206,7 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
 
   ! Local variables
   real, dimension(nz+1) :: x0, x1, xTmp ! Temporary interface heights [Z ~> m]
-  real, dimension(nz) :: pres       ! The pressure used in the equation of state [Pa].
+  real, dimension(nz) :: pres       ! The pressure used in the equation of state [R L2 T-2 ~> Pa].
   real, dimension(nz) :: densities  ! Layer densities [R ~> kg m-3]
   real, dimension(nz) :: T_tmp, S_tmp ! A temporary profile of temperature [degC] and salinity [ppt].
   real, dimension(nz) :: Tmp        ! A temporary variable holding a remapped variable.
@@ -252,8 +247,7 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
     enddo
 
     ! Compute densities within current water column
-    call calculate_density( T_tmp, S_tmp, pres, densities, &
-                             1, nz, eqn_of_state, scale=CS%kg_m3_to_R)
+    call calculate_density( T_tmp, S_tmp, pres, densities, eqn_of_state)
 
     do k = 1,count_nonzero_layers
       densities(k) = densities(mapping(k))

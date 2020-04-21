@@ -74,7 +74,7 @@ use MOM_dynamics_unsplit_RK2,  only : step_MOM_dyn_unsplit_RK2, register_restart
 use MOM_dynamics_unsplit_RK2,  only : initialize_dyn_unsplit_RK2, end_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2,  only : MOM_dyn_unsplit_RK2_CS
 use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
-use MOM_EOS,                   only : EOS_init, calculate_density, calculate_TFreeze
+use MOM_EOS,                   only : EOS_init, calculate_density, calculate_TFreeze, EOS_domain
 use MOM_fixed_initialization,  only : MOM_initialize_fixed
 use MOM_forcing_type,          only : allocate_forcing_type, allocate_mech_forcing
 use MOM_forcing_type,          only : deallocate_mech_forcing, deallocate_forcing_type
@@ -278,9 +278,9 @@ type, public :: MOM_control_struct ; private
                                 !! a previous time-step or the ocean restart file.
                                 !! This is only valid when interp_p_surf is true.
   real, dimension(:,:), pointer :: &
-    p_surf_prev  => NULL(), &   !< surface pressure [Pa] at end  previous call to step_MOM
-    p_surf_begin => NULL(), &   !< surface pressure [Pa] at start of step_MOM_dyn_...
-    p_surf_end   => NULL()      !< surface pressure [Pa] at end   of step_MOM_dyn_...
+    p_surf_prev  => NULL(), &   !< surface pressure [R L2 T-2 ~> Pa] at end  previous call to step_MOM
+    p_surf_begin => NULL(), &   !< surface pressure [R L2 T-2 ~> Pa] at start of step_MOM_dyn_...
+    p_surf_end   => NULL()      !< surface pressure [R L2 T-2 ~> Pa] at end   of step_MOM_dyn_...
 
   ! Variables needed to reach between start and finish phases of initialization
   logical :: write_IC           !< If true, then the initial conditions will be written to file
@@ -488,7 +488,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     v => NULL(), & ! v : meridional velocity component [L T-1 ~> m s-1]
     h => NULL()    ! h : layer thickness [H ~> m or kg m-2]
   real, dimension(:,:), pointer :: &
-    p_surf => NULL() ! A pointer to the ocean surface pressure [Pa].
+    p_surf => NULL() ! A pointer to the ocean surface pressure [R L2 T-2 ~> Pa].
   real :: I_wt_ssh  ! The inverse of the time weights [T-1 ~> s-1]
 
   type(time_type) :: Time_local, end_time_thermo, Time_temp
@@ -659,6 +659,10 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     Time_local = Time_start + real_to_time(US%T_to_s*rel_time)
 
     if (showCallTree) call callTree_enter("DT cycles (step_MOM) n=",n)
+
+    ! Update the vertically extensive diagnostic grids so that they are
+    ! referenced to the beginning timestep
+    call diag_update_remap_grids(CS%diag, update_intensive = .false., update_extensive = .true. )
 
     !===========================================================================
     ! This is the first place where the diabatic processes and remapping could occur.
@@ -934,10 +938,10 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   type(mech_forcing), intent(in)    :: forces     !< A structure with the driving mechanical forces
   real, dimension(:,:), pointer     :: p_surf_begin !< A pointer (perhaps NULL) to the surface
                                                   !! pressure at the beginning of this dynamic
-                                                  !! step, intent in [Pa].
+                                                  !! step, intent in [R L2 T-2 ~> Pa].
   real, dimension(:,:), pointer     :: p_surf_end !< A pointer (perhaps NULL) to the surface
                                                   !! pressure at the end of this dynamic step,
-                                                  !! intent in [Pa].
+                                                  !! intent in [R L2 T-2 ~> Pa].
   real,               intent(in)    :: dt         !< time interval covered by this call [T ~> s].
   real,               intent(in)    :: dt_thermo  !< time interval covered by any updates that may
                                                   !! span multiple dynamics steps [T ~> s].
@@ -1868,7 +1872,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   endif
 
   ! This is here in case these values are used inappropriately.
-  use_frazil = .false. ; bound_salinity = .false. ; CS%tv%P_Ref = 2.0e7
+  use_frazil = .false. ; bound_salinity = .false.
+  CS%tv%P_Ref = 2.0e7*US%kg_m3_to_R*US%m_s_to_L_T**2
   if (use_temperature) then
     call get_param(param_file, "MOM", "FRAZIL", use_frazil, &
                  "If true, water freezes if it gets too cold, and the "//&
@@ -1883,8 +1888,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "drive the salinity negative otherwise.)", default=.false.)
     call get_param(param_file, "MOM", "MIN_SALINITY", CS%tv%min_salinity, &
                  "The minimum value of salinity when BOUND_SALINITY=True. "//&
-                 "The default is 0.01 for backward compatibility but ideally "//&
-                 "should be 0.", units="PPT", default=0.01, do_not_log=.not.bound_salinity)
+                 "The default is 0.01 for backward compatibility but ideally should be 0.", &
+                 units="PPT", default=0.01, do_not_log=.not.bound_salinity)
     call get_param(param_file, "MOM", "C_P", CS%tv%C_p, &
                  "The heat capacity of sea water, approximated as a "//&
                  "constant. This is only used if ENABLE_THERMODYNAMICS is "//&
@@ -1895,8 +1900,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   if (use_EOS) call get_param(param_file, "MOM", "P_REF", CS%tv%P_Ref, &
                  "The pressure that is used for calculating the coordinate "//&
                  "density.  (1 Pa = 1e4 dbar, so 2e7 is commonly used.) "//&
-                 "This is only used if USE_EOS and ENABLE_THERMODYNAMICS "//&
-                 "are true.", units="Pa", default=2.0e7)
+                 "This is only used if USE_EOS and ENABLE_THERMODYNAMICS are true.", &
+                 units="Pa", default=2.0e7, scale=US%kg_m3_to_R*US%m_s_to_L_T**2)
 
   if (bulkmixedlayer) then
     call get_param(param_file, "MOM", "NKML", nkml, &
@@ -2241,7 +2246,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! Use the Wright equation of state by default, unless otherwise specified
   ! Note: this line and the following block ought to be in a separate
   ! initialization routine for tv.
-  if (use_EOS) call EOS_init(param_file, CS%tv%eqn_of_state)
+  if (use_EOS) call EOS_init(param_file, CS%tv%eqn_of_state, US)
   if (use_temperature) then
     allocate(CS%tv%TempxPmE(isd:ied,jsd:jed)) ; CS%tv%TempxPmE(:,:) = 0.0
     if (use_geothermal) then
@@ -2654,8 +2659,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   endif
 
   if (CS%interp_p_surf) then
-    CS%p_surf_prev_set = &
-      query_initialized(CS%p_surf_prev,"p_surf_prev",restart_CSp)
+    CS%p_surf_prev_set = query_initialized(CS%p_surf_prev,"p_surf_prev",restart_CSp)
 
     if (CS%p_surf_prev_set) call pass_var(CS%p_surf_prev, G%domain)
   endif
@@ -2887,32 +2891,37 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
   type(verticalGrid_type),           intent(in)    :: GV  !< ocean vertical grid structure
   type(unit_scale_type),             intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: ssh !< time mean surface height [m]
-  real, dimension(:,:),    optional, pointer       :: p_atm !< atmospheric pressure [Pa]
+  real, dimension(:,:),    optional, pointer       :: p_atm !< Ocean surface pressure [R L2 T-2 ~> Pa]
   logical,                 optional, intent(in)    :: use_EOS !< If true, calculate the density for
                                                        !! the SSH correction using the equation of state.
 
-  real :: Rho_conv    ! The density used to convert surface pressure to
+  real :: Rho_conv(SZI_(G))  ! The density used to convert surface pressure to
                       ! a corrected effective SSH [R ~> kg m-3].
-  real :: IgR0        ! The SSH conversion factor from Pa to m [m Pa-1].
+  real :: IgR0        ! The SSH conversion factor from R L2 T-2 to m [m T2 R-1 L-2 ~> m Pa-1].
   logical :: calc_rho
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, is, ie, js, je
 
-  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  EOSdom(:) = EOS_domain(G%HI)
   if (present(p_atm)) then ; if (associated(p_atm)) then
     calc_rho = associated(tv%eqn_of_state)
     if (present(use_EOS) .and. calc_rho) calc_rho = use_EOS
-    ! Correct the output sea surface height for the contribution from the
-    ! atmospheric pressure
-    do j=js,je ; do i=is,ie
+    ! Correct the output sea surface height for the contribution from the ice pressure.
+    do j=js,je
       if (calc_rho) then
-        call calculate_density(tv%T(i,j,1), tv%S(i,j,1), p_atm(i,j)/2.0, &
-                               Rho_conv, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density(tv%T(:,j,1), tv%S(:,j,1), 0.5*p_atm(:,j), Rho_conv, &
+                               tv%eqn_of_state, EOSdom)
+        do i=is,ie
+          IgR0 = US%Z_to_m / (Rho_conv(i) * GV%g_Earth)
+          ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0
+        enddo
       else
-        Rho_conv = GV%Rho0
+        do i=is,ie
+          ssh(i,j) = ssh(i,j) + p_atm(i,j) * (US%Z_to_m / (GV%Rho0 * GV%g_Earth))
+        enddo
       endif
-      IgR0 = 1.0 / (Rho_conv * US%R_to_kg_m3*GV%mks_g_Earth)
-      ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0
-    enddo ; enddo
+    enddo
   endif ; endif
 
 end subroutine adjust_ssh_for_p_atm
@@ -3206,13 +3215,13 @@ subroutine extract_surface_state(CS, sfc_state_in)
   if (allocated(sfc_state%taux_shelf) .and. associated(CS%visc%taux_shelf)) then
     !$OMP parallel do default(shared)
     do j=js,je ; do I=is-1,ie
-      sfc_state%taux_shelf(I,j) = US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*CS%visc%taux_shelf(I,j)
+      sfc_state%taux_shelf(I,j) = US%RZ_T_to_kg_m2s*US%L_T_to_m_s*CS%visc%taux_shelf(I,j)
     enddo ; enddo
   endif
   if (allocated(sfc_state%tauy_shelf) .and. associated(CS%visc%tauy_shelf)) then
     !$OMP parallel do default(shared)
     do J=js-1,je ; do i=is,ie
-      sfc_state%tauy_shelf(i,J) = US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*CS%visc%tauy_shelf(i,J)
+      sfc_state%tauy_shelf(i,J) = US%RZ_T_to_kg_m2s*US%L_T_to_m_s*CS%visc%tauy_shelf(i,J)
     enddo ; enddo
   endif
 
