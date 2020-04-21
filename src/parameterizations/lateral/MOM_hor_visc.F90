@@ -348,6 +348,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                     ! calculation gives the same value as if f were 0 [nondim].
   real :: H0_GME    ! Depth used to scale down GME coefficient in shallow areas [Z ~> m]
   real :: KE        ! Local kinetic energy [L2 T-2 ~> m2 s-2]
+  real, parameter :: KH_min = 1.E-30 ! This is the minimun horizontal Laplacian viscosity used to estimate the
+                    ! grid Raynolds number [L2 T-1 ~> m2 s-1]
+  real, parameter :: AH_min = 1.E-30 ! This is the minimun horizontal Biharmonic viscosity used to estimate the
+                    ! grid Raynolds number [L4 T-1 ~> m4 s-1]
+
   logical :: rescale_Kh, legacy_bound
   logical :: find_FrictWork
   logical :: apply_OBC = .false.
@@ -849,7 +854,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
         if (CS%id_grid_Re_Kh>0) then
           KE = 0.125*((u(I,j,k)+u(I-1,j,k))**2 + (v(i,J,k)+v(i,J-1,k))**2)
-          grid_Re_Kh(i,j,k) = (sqrt(KE) * sqrt(CS%grid_sp_h2(i,j)))/Kh
+          grid_Re_Kh(i,j,k) = (sqrt(KE) * sqrt(CS%grid_sp_h2(i,j)))/MAX(Kh,KH_min)
         endif
 
         if (CS%id_div_xx_h>0) div_xx_h(i,j,k) = div_xx(i,j)
@@ -902,7 +907,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
         if (CS%id_grid_Re_Ah>0) then
            KE = 0.125*((u(I,j,k)+u(I-1,j,k))**2 + (v(i,J,k)+v(i,J-1,k))**2)
-           grid_Re_Ah(i,j,k) = (sqrt(KE) * CS%grid_sp_h3(i,j))/Ah
+           grid_Re_Ah(i,j,k) = (sqrt(KE) * CS%grid_sp_h3(i,j))/MAX(Ah,AH_min)
         endif
 
         str_xx(i,j) = str_xx(i,j) + Ah * &
@@ -1728,7 +1733,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     ALLOC_(CS%Idxdy2v(isd:ied,JsdB:JedB))  ; CS%Idxdy2v(:,:)  = 0.0
     ALLOC_(CS%Ah_bg_xx(isd:ied,jsd:jed))     ; CS%Ah_bg_xx(:,:) = 0.0
     ALLOC_(CS%Ah_bg_xy(IsdB:IedB,JsdB:JedB)) ; CS%Ah_bg_xy(:,:) = 0.0
-    ALLOC_(CS%grid_sp_h3(IsdB:IedB,JsdB:JedB)); CS%grid_sp_h3(:,:) = 0.0
+    ALLOC_(CS%grid_sp_h3(isd:ied,jsd:jed))   ; CS%grid_sp_h3(:,:) = 0.0
     if (CS%bound_Ah .or. CS%better_bound_Ah) then
       ALLOC_(CS%Ah_Max_xx(isd:ied,jsd:jed))     ; CS%Ah_Max_xx(:,:) = 0.0
       ALLOC_(CS%Ah_Max_xy(IsdB:IedB,JsdB:JedB)) ; CS%Ah_Max_xy(:,:) = 0.0
