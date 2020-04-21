@@ -478,12 +478,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   !$OMP   is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, &
   !$OMP   apply_OBC, rescale_Kh, legacy_bound, find_FrictWork, &
   !$OMP   use_MEKE_Ku, use_MEKE_Au, boundary_mask_h, boundary_mask_q, &
-  !$OMP   backscat_subround, GME_coeff_limiter, &
+  !$OMP   backscat_subround, GME_coeff_limiter, KH_min, AH_min, &
   !$OMP   h_neglect, h_neglect3, FWfrac, inv_PI3, inv_PI5, H0_GME, &
   !$OMP   diffu, diffv, max_diss_rate_h, max_diss_rate_q, &
   !$OMP   Kh_h, Kh_q, Ah_h, Ah_q, FrictWork, FrictWork_GME, &
   !$OMP   div_xx_h, vort_xy_q, GME_coeff_h, GME_coeff_q, &
-  !$OMP   TD, KH_u_GME, KH_v_GME &
+  !$OMP   TD, KH_u_GME, KH_v_GME, grid_Re_Kh, grid_Re_Ah, &
   !$OMP ) &
   !$OMP private( &
   !$OMP   i, j, k, n, &
@@ -497,7 +497,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   !$OMP   grad_vel_mag_bt_h, grad_vel_mag_bt_q, grad_d2vel_mag_h, &
   !$OMP   meke_res_fn, Shear_mag, vert_vort_mag, hrat_min, visc_bound_rem, &
   !$OMP   Kh, Ah, AhSm, AhLth, local_strain, Sh_F_pow, &
-  !$OMP   dDel2vdx, dDel2udy, &
+  !$OMP   dDel2vdx, dDel2udy, KE, &
   !$OMP   h2uq, h2vq, hu, hv, hq, FatH, RoScl, GME_coeff &
   !$OMP )
   do k=1,nz
