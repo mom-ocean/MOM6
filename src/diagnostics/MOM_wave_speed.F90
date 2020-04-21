@@ -40,6 +40,9 @@ type, public :: wave_speed_CS ; private
                                        !! can be overridden by optional arguments.
   type(remapping_CS) :: remapping_CS   !< Used for vertical remapping when calculating equivalent barotropic
                                        !! mode structure.
+  logical :: remap_answers_2018 = .true.  !< If true, use the order of arithmetic and expressions that
+                                       !! recover the remapping answers from 2018.  If false, use more
+                                       !! robust forms of the same remapping expressions.
   type(diag_ctrl), pointer :: diag     !< Diagnostics control structure
 end type wave_speed_CS
 
@@ -73,7 +76,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
   real, dimension(SZK_(G)+1) :: &
     dRho_dT, &    ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
     dRho_dS, &    ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
-    pres, &       ! Interface pressure [Pa]
+    pres, &       ! Interface pressure [R L2 T-2 ~> Pa]
     T_int, &      ! Temperature interpolated to interfaces [degC]
     S_int, &      ! Salinity interpolated to interfaces [ppt]
     gprime        ! The reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
@@ -97,7 +100,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
   real :: dlam    ! The change in estimates of the eigenvalue [T2 L-2 ~> s m-1]
   real :: lam0    ! The first guess of the eigenvalue [T2 L-2 ~> s m-1]
   real :: min_h_frac ! [nondim]
-  real :: Z_to_Pa  ! A conversion factor from thicknesses (in Z) to pressure (in Pa)
+  real :: Z_to_pres  ! A conversion factor from thicknesses to pressure [R L2 T-2 Z-1 ~> Pa m-1]
   real, dimension(SZI_(G)) :: &
     htot, hmin, &  ! Thicknesses [Z ~> m]
     H_here, &      ! A thickness [Z ~> m]
@@ -155,7 +158,8 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
 
   S => tv%S ; T => tv%T
   g_Rho0 = GV%g_Earth / GV%Rho0
-  Z_to_Pa = GV%Z_to_H * GV%H_to_Pa
+  ! Simplifying the following could change answers at roundoff.
+  Z_to_pres = GV%Z_to_H * (GV%H_to_RZ * GV%g_Earth)
   use_EOS = associated(tv%eqn_of_state)
 
   rescale = 1024.0**4 ; I_rescale = 1.0/rescale
@@ -167,7 +171,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,G,GV,US,min_h_frac,use_EOS,T,S,tv,&
 !$OMP                                  calc_modal_structure,l_use_ebt_mode,modal_structure, &
 !$OMP                                  l_mono_N2_column_fraction,l_mono_N2_depth,CS,   &
-!$OMP                                  Z_to_Pa,cg1,g_Rho0,rescale,I_rescale,L2_to_Z2,c2_scale)  &
+!$OMP                                  Z_to_pres,cg1,g_Rho0,rescale,I_rescale,L2_to_Z2,c2_scale) &
 !$OMP                          private(htot,hmin,kf,H_here,HxT_here,HxS_here,HxR_here, &
 !$OMP                                  Hf,Tf,Sf,Rf,pres,T_int,S_int,drho_dT,           &
 !$OMP                                  drho_dS,drxh_sum,kc,Hc,Hc_H,Tc,Sc,I_Hnew,gprime,&
@@ -234,12 +238,12 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
       if (use_EOS) then
         pres(1) = 0.0
         do k=2,kf(i)
-          pres(k) = pres(k-1) + Z_to_Pa*Hf(k-1,i)
+          pres(k) = pres(k-1) + Z_to_pres*Hf(k-1,i)
           T_int(k) = 0.5*(Tf(k,i)+Tf(k-1,i))
           S_int(k) = 0.5*(Sf(k,i)+Sf(k-1,i))
         enddo
-        call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, 2, &
-                                      kf(i)-1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, &
+                                      tv%eqn_of_state, (/2,kf(i)/) )
 
         ! Sum the reduced gravities to find out how small a density difference
         ! is negligibly small.
@@ -492,9 +496,15 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
             do k = 1,kc
               Hc_H(k) = GV%Z_to_H * Hc(k)
             enddo
-            call remapping_core_h(CS%remapping_CS, kc, Hc_H(:), mode_struct, &
-                                  nz, h(i,j,:), modal_structure(i,j,:), &
-                                  1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
+            if (CS%remap_answers_2018) then
+              call remapping_core_h(CS%remapping_CS, kc, Hc_H(:), mode_struct, &
+                                    nz, h(i,j,:), modal_structure(i,j,:), &
+                                    1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
+            else
+              call remapping_core_h(CS%remapping_CS, kc, Hc_H(:), mode_struct, &
+                                    nz, h(i,j,:), modal_structure(i,j,:), &
+                                    GV%H_subroundoff, GV%H_subroundoff)
+            endif
           endif
         else
           cg1(i,j) = 0.0
@@ -558,10 +568,10 @@ end subroutine tdma6
 
 !> Calculates the wave speeds for the first few barolinic modes.
 subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
-  type(ocean_grid_type),                    intent(in)  :: G !< Ocean grid structure
+  type(ocean_grid_type),                    intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),                    intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                    intent(in)  :: tv !< Thermodynamic variables
   integer,                                  intent(in)  :: nmodes !< Number of modes
   real, dimension(G%isd:G%ied,G%jsd:G%jed,nmodes), intent(out) :: cn !< Waves speeds [L T-1 ~> m s-1]
@@ -572,7 +582,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   real, dimension(SZK_(G)+1) :: &
     dRho_dT, &    ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
     dRho_dS, &    ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
-    pres, &       ! Interface pressure [Pa]
+    pres, &       ! Interface pressure [R L2 T-2 ~> Pa]
     T_int, &      ! Temperature interpolated to interfaces [degC]
     S_int, &      ! Salinity interpolated to interfaces [ppt]
     gprime        ! The reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
@@ -612,7 +622,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   integer :: numint       ! number of widows (intervals) in root searching range
   integer :: nrootsfound  ! number of extra roots found (not including 1st root)
   real :: min_h_frac
-  real :: Z_to_Pa  ! A conversion factor from thicknesses (in Z) to pressure (in Pa)
+  real :: Z_to_pres ! A conversion factor from thicknesses to pressure [R L2 T-2 Z-1 ~> Pa m-1]
   real, dimension(SZI_(G)) :: &
     htot, hmin, &  ! Thicknesses [Z ~> m]
     H_here, &      ! A thickness [Z ~> m]
@@ -656,12 +666,13 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   S => tv%S ; T => tv%T
   g_Rho0 = GV%g_Earth / GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
-  Z_to_Pa = GV%Z_to_H * GV%H_to_Pa
+  ! Simplifying the following could change answers at roundoff.
+  Z_to_pres = GV%Z_to_H * (GV%H_to_RZ * GV%g_Earth)
   c1_thresh = 0.01*US%m_s_to_L_T
 
   min_h_frac = tol1 / real(nz)
   !$OMP parallel do default(private) shared(is,ie,js,je,nz,h,G,GV,US,min_h_frac,use_EOS,T,S, &
-  !$OMP                                     Z_to_Pa,tv,cn,g_Rho0,nmodes)
+  !$OMP                                     Z_to_pres,tv,cn,g_Rho0,nmodes)
   do j=js,je
     !   First merge very thin layers with the one above (or below if they are
     ! at the top).  This also transposes the row order so that columns can
@@ -722,12 +733,12 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
         if (use_EOS) then
           pres(1) = 0.0
           do k=2,kf(i)
-            pres(k) = pres(k-1) + Z_to_Pa*Hf(k-1,i)
+            pres(k) = pres(k-1) + Z_to_pres*Hf(k-1,i)
             T_int(k) = 0.5*(Tf(k,i)+Tf(k-1,i))
             S_int(k) = 0.5*(Sf(k,i)+Sf(k-1,i))
           enddo
-          call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, 2, &
-                                        kf(i)-1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+          call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, &
+                                        tv%eqn_of_state, (/2,kf(i)/) )
 
           ! Sum the reduced gravities to find out how small a density difference
           ! is negligibly small.
@@ -870,7 +881,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
             ! Under estimate the first eigenvalue to start with.
             lam_1 = 1.0 / speed2_tot
 
-            ! Find the first eigen value
+            ! Find the first eigenvalue
             do itt=1,max_itt
               ! calculate the determinant of (A-lam_1*I)
               call tridiag_det(a_diag(1:nrows),b_diag(1:nrows),c_diag(1:nrows), &
@@ -893,10 +904,10 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
               endif
             enddo
 
-            ! Find other eigen values if c1 is of significant magnitude, > cn_thresh
+            ! Find other eigenvalues if c1 is of significant magnitude, > cn_thresh
             nrootsfound = 0    ! number of extra roots found (not including 1st root)
             if (nmodes>1 .and. kc>=nmodes+1 .and. cn(i,j,1)>c1_thresh) then
-              ! Set the the range to look for the other desired eigen values
+              ! Set the the range to look for the other desired eigenvalues
               ! set min value just greater than the 1st root (found above)
               lamMin = lam_1*(1.0 + tol2)
               ! set max value based on a low guess at wavespeed for highest mode
@@ -1057,7 +1068,7 @@ subroutine tridiag_det(a, b, c, nrows, lam, det_out, ddet_out, row_scale)
 end subroutine tridiag_det
 
 !> Initialize control structure for MOM_wave_speed
-subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_depth)
+subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_depth, remap_answers_2018)
   type(wave_speed_CS), pointer :: CS !< Control structure for MOM_wave_speed
   logical, optional, intent(in) :: use_ebt_mode  !< If true, use the equivalent
                                      !! barotropic mode instead of the first baroclinic mode.
@@ -1067,8 +1078,13 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
   real,    optional, intent(in) :: mono_N2_depth !< The depth below which N2 is limited
                                      !! as monotonic for the purposes of calculating the
                                      !! vertical modal structure [Z ~> m].
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  logical, optional, intent(in) :: remap_answers_2018 !< If true, use the order of arithmetic and expressions
+                                      !! that recover the remapping answers from 2018.  Otherwise
+                                      !! use more robust but mathematically equivalent expressions.
+
+
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_wave_speed"  ! This module's name.
 
   if (associated(CS)) then
@@ -1082,12 +1098,13 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
 
   call wave_speed_set_param(CS, use_ebt_mode=use_ebt_mode, mono_N2_column_fraction=mono_N2_column_fraction)
 
-  call initialize_remapping(CS%remapping_CS, 'PLM', boundary_extrapolation=.false.)
+  call initialize_remapping(CS%remapping_CS, 'PLM', boundary_extrapolation=.false., &
+                            answers_2018=CS%remap_answers_2018)
 
 end subroutine wave_speed_init
 
 !> Sets internal parameters for MOM_wave_speed
-subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_depth)
+subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_depth, remap_answers_2018)
   type(wave_speed_CS), pointer  :: CS !< Control structure for MOM_wave_speed
   logical, optional, intent(in) :: use_ebt_mode  !< If true, use the equivalent
                                       !! barotropic mode instead of the first baroclinic mode.
@@ -1097,6 +1114,9 @@ subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_
   real,    optional, intent(in) :: mono_N2_depth !< The depth below which N2 is limited
                                       !! as monotonic for the purposes of calculating the
                                       !! vertical modal structure [Z ~> m].
+  logical, optional, intent(in) :: remap_answers_2018 !< If true, use the order of arithmetic and expressions
+                                      !! that recover the remapping answers from 2018.  Otherwise
+                                      !! use more robust but mathematically equivalent expressions.
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
      "wave_speed_set_param called with an associated control structure.")
@@ -1104,10 +1124,12 @@ subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_
   if (present(use_ebt_mode)) CS%use_ebt_mode = use_ebt_mode
   if (present(mono_N2_column_fraction)) CS%mono_N2_column_fraction = mono_N2_column_fraction
   if (present(mono_N2_depth)) CS%mono_N2_depth = mono_N2_depth
+  if (present(remap_answers_2018)) CS%remap_answers_2018 = remap_answers_2018
 
 end subroutine wave_speed_set_param
 
 !> \namespace mom_wave_speed
+
 !!
 !! Subroutine wave_speed() solves for the first baroclinic mode wave speed.  (It could
 !! solve for all the wave speeds, but the iterative approach taken here means

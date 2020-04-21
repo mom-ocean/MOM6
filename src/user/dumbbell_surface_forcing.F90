@@ -30,16 +30,15 @@ type, public :: dumbbell_surface_forcing_CS ; private
   real :: Rho0               !< The density used in the Boussinesq approximation [R ~> kg m-3].
   real :: G_Earth            !< The gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
   real :: Flux_const         !< The restoring rate at the surface [Z T-1 ~> m s-1].
-  real :: gust_const         !< A constant unresolved background gustiness
-                             !! that contributes to ustar [Pa].
-  real :: slp_amplitude      !< The amplitude of pressure loading [Pa] applied
+! real :: gust_const         !< A constant unresolved background gustiness
+!                            !! that contributes to ustar [R L Z T-2 ~> Pa].
+  real :: slp_amplitude      !< The amplitude of pressure loading [R L2 T-2 ~> Pa] applied
                              !! to the reservoirs
-  real :: slp_period         !< Period of sinusoidal pressure wave
+  real :: slp_period         !< Period of sinusoidal pressure wave [days]
   real, dimension(:,:), allocatable :: &
     forcing_mask             !< A mask regulating where forcing occurs
   real, dimension(:,:), allocatable :: &
-    S_restore                !< The surface salinity field toward which to
-                             !! restore [ppt].
+    S_restore                !< The surface salinity field toward which to restore [ppt].
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate the
                              !! timing of diagnostic output.
 end type dumbbell_surface_forcing_CS
@@ -63,9 +62,6 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
   ! Local variables
   real :: Temp_restore   ! The temperature that is being restored toward [degC].
   real :: Salin_restore  ! The salinity that is being restored toward [ppt].
-  real :: density_restore  ! The potential density that is being restored
-                         ! toward [kg m-3].
-  real :: rhoXcp ! The mean density times the heat capacity [J m-3 degC-1].
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
 
@@ -97,7 +93,7 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
     ! Set whichever fluxes are to be used here.  Any fluxes that
     ! are always zero do not need to be changed here.
     do j=js,je ; do i=is,ie
-      ! Fluxes of fresh water through the surface are in units of [kg m-2 s-1]
+      ! Fluxes of fresh water through the surface are in units of [R Z T-1 ~> kg m-2 s-1]
       ! and are positive downward - i.e. evaporation should be negative.
       fluxes%evap(i,j) = -0.0 * G%mask2dT(i,j)
       fluxes%lprec(i,j) = 0.0 * G%mask2dT(i,j)
@@ -105,7 +101,7 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
       ! vprec will be set later, if it is needed for salinity restoring.
       fluxes%vprec(i,j) = 0.0
 
-      ! Heat fluxes are in units of [W m-2] and are positive into the ocean.
+      ! Heat fluxes are in units of [Q R Z T-1 ~> W m-2] and are positive into the ocean.
       fluxes%lw(i,j) = 0.0 * G%mask2dT(i,j)
       fluxes%latent(i,j) = 0.0 * G%mask2dT(i,j)
       fluxes%sens(i,j) = 0.0 * G%mask2dT(i,j)
@@ -121,8 +117,6 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
 
   if (CS%use_temperature .and. CS%restorebuoy) then
     do j=js,je ; do i=is,ie
-      !   Set density_restore to an expression for the surface potential
-      ! density [kg m-3] that is being restored toward.
       if (CS%forcing_mask(i,j)>0.) then
         fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
                 ((CS%S_restore(i,j) - state%SSS(i,j)) /  (0.5 * (CS%S_restore(i,j) + state%SSS(i,j))))
@@ -189,6 +183,7 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
   real :: S_surf, S_range
   real :: x, y
   integer :: i, j
+  logical :: dbrotate    ! If true, rotate the domain.
 #include "version_variable.h"
   character(len=40)  :: mdl = "dumbbell_surface_forcing" ! This module's name.
 
@@ -217,13 +212,13 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "DUMBBELL_SLP_AMP", CS%slp_amplitude, &
                  "Amplitude of SLP forcing in reservoirs.", &
-                 units="kg m2 s-1", default = 10000.0)
+                 units="Pa", default = 10000.0, scale=US%kg_m3_to_R*US%m_s_to_L_T**2)
   call get_param(param_file, mdl, "DUMBBELL_SLP_PERIOD", CS%slp_period, &
                  "Periodicity of SLP forcing in reservoirs.", &
                  units="days", default = 1.0)
-  call get_param(param_file, mdl, "DUMBBELL_SLP_PERIOD", CS%slp_period, &
-                 "Periodicity of SLP forcing in reservoirs.", &
-                 units="days", default = 1.0)
+  call get_param(param_file, mdl, "DUMBBELL_ROTATION", dbrotate, &
+                'Logical for rotation of dumbbell domain.',&
+                 units='nondim', default=.false., do_not_log=.true.)
   call get_param(param_file, mdl,"INITIAL_SSS", S_surf, &
                  "Initial surface salinity", units="1e-3", default=34.0, do_not_log=.true.)
   call get_param(param_file, mdl,"INITIAL_S_RANGE", S_range, &
@@ -250,8 +245,14 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
     do j=G%jsc,G%jec
       do i=G%isc,G%iec
         ! Compute normalized zonal coordinates (x,y=0 at center of domain)
-        x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon - 0.5
-        y = ( G%geoLatT(i,j) - G%south_lat ) / G%len_lat - 0.5
+!       x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon - 0.5
+!       y = ( G%geoLatT(i,j) - G%south_lat ) / G%len_lat - 0.5
+        if (dbrotate) then
+          ! This is really y in the rotated case
+          x = ( G%geoLatT(i,j) - G%south_lat ) / G%len_lat - 0.5
+        else
+          x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon - 0.5
+        endif
         CS%forcing_mask(i,j)=0
         CS%S_restore(i,j) = S_surf
         if ((x>0.25)) then

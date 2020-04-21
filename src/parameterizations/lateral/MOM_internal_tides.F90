@@ -134,7 +134,7 @@ type, public :: int_tide_CS ; private
   integer, allocatable, dimension(:,:) :: &
              id_En_ang_mode, &
              id_itidal_loss_ang_mode
-  !!@}
+  !>@}
 
 end type int_tide_CS
 
@@ -142,7 +142,7 @@ end type int_tide_CS
 type :: loop_bounds_type ; private
   !>@{ The active loop bounds
   integer :: ish, ieh, jsh, jeh
-  !!@}
+  !>@}
 end type loop_bounds_type
 
 contains
@@ -441,7 +441,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
           ! Dissipate energy if Fr>1; done here with an arbitrary time scale
           if (Fr2_max > 1.0) then
             En_initial = sum(CS%En(i,j,:,fr,m)) ! for debugging
-            ! Calculate effective decay rate [s-1] if breaking occurs over a time step
+            ! Calculate effective decay rate [T-1 ~> s-1] if breaking occurs over a time step
             loss_rate = (1.0 - Fr2_max) / (Fr2_max * dt)
             do a=1,CS%nAngle
               ! Determine effective dissipation rate (Wm-2)
@@ -2427,7 +2427,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   ! Register 2-D energy density (summed over angles, freq, modes)
   CS%id_tot_En = register_diag_field('ocean_model', 'ITide_tot_En', diag%axesT1, &
                  Time, 'Internal tide total energy density', &
-                 'J m-2', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**2)
+                 'J m-2', conversion=US%RZ3_T3_to_W_m2*US%T_to_s)
   ! Register 2-D drag scale used for quadratic bottom drag
   CS%id_itide_drag = register_diag_field('ocean_model', 'ITide_drag', diag%axesT1, &
                  Time, 'Interior and bottom drag internal tide decay timescale', 's-1', conversion=US%s_to_T)
@@ -2435,23 +2435,23 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   CS%id_TKE_itidal_input = register_diag_field('ocean_model', 'TKE_itidal_input', diag%axesT1, &
                  Time, 'Conversion from barotropic to baroclinic tide, '//&
                  'a fraction of which goes into rays', &
-                 'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+                 'W m-2', conversion=US%RZ3_T3_to_W_m2)
   ! Register 2-D energy losses (summed over angles, freq, modes)
   CS%id_tot_leak_loss = register_diag_field('ocean_model', 'ITide_tot_leak_loss', diag%axesT1, &
                 Time, 'Internal tide energy loss to background drag', &
-                'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+                'W m-2', conversion=US%RZ3_T3_to_W_m2)
   CS%id_tot_quad_loss = register_diag_field('ocean_model', 'ITide_tot_quad_loss', diag%axesT1, &
                 Time, 'Internal tide energy loss to bottom drag', &
-                'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+                'W m-2', conversion=US%RZ3_T3_to_W_m2)
   CS%id_tot_itidal_loss = register_diag_field('ocean_model', 'ITide_tot_itidal_loss', diag%axesT1, &
                 Time, 'Internal tide energy loss to wave drag', &
-                'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+                'W m-2', conversion=US%RZ3_T3_to_W_m2)
   CS%id_tot_Froude_loss = register_diag_field('ocean_model', 'ITide_tot_Froude_loss', diag%axesT1, &
                 Time, 'Internal tide energy loss to wave breaking', &
-                'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+                'W m-2', conversion=US%RZ3_T3_to_W_m2)
   CS%id_tot_allprocesses_loss = register_diag_field('ocean_model', 'ITide_tot_allprocesses_loss', diag%axesT1, &
                 Time, 'Internal tide energy loss summed over all processes', &
-                'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+                'W m-2', conversion=US%RZ3_T3_to_W_m2)
 
   allocate(CS%id_En_mode(CS%nFreq,CS%nMode)) ; CS%id_En_mode(:,:) = -1
   allocate(CS%id_En_ang_mode(CS%nFreq,CS%nMode)) ; CS%id_En_ang_mode(:,:) = -1
@@ -2474,14 +2474,14 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
     write(var_name, '("Itide_En_freq",i1,"_mode",i1)') fr, m
     write(var_descript, '("Internal tide energy density in frequency ",i1," mode ",i1)') fr, m
     CS%id_En_mode(fr,m) = register_diag_field('ocean_model', var_name, &
-                 diag%axesT1, Time, var_descript, 'J m-2', conversion=US%R_to_kg_m3*US%Z_to_m**2*US%s_to_T**3)
+                 diag%axesT1, Time, var_descript, 'J m-2', conversion=US%RZ3_T3_to_W_m2*US%T_to_s)
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
 
     ! Register 3-D (i,j,a) energy density for each freq and mode
     write(var_name, '("Itide_En_ang_freq",i1,"_mode",i1)') fr, m
     write(var_descript, '("Internal tide angular energy density in frequency ",i1," mode ",i1)') fr, m
     CS%id_En_ang_mode(fr,m) = register_diag_field('ocean_model', var_name, &
-                 axes_ang, Time, var_descript, 'J m-2 band-1', conversion=US%R_to_kg_m3*US%Z_to_m**2*US%s_to_T**3)
+                 axes_ang, Time, var_descript, 'J m-2 band-1', conversion=US%RZ3_T3_to_W_m2*US%T_to_s)
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
 
     ! Register 2-D energy loss (summed over angles) for each freq and mode
@@ -2489,13 +2489,13 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
     write(var_name, '("Itide_wavedrag_loss_freq",i1,"_mode",i1)') fr, m
     write(var_descript, '("Internal tide energy loss due to wave-drag from frequency ",i1," mode ",i1)') fr, m
     CS%id_itidal_loss_mode(fr,m) = register_diag_field('ocean_model', var_name, &
-                 diag%axesT1, Time, var_descript, 'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+                 diag%axesT1, Time, var_descript, 'W m-2', conversion=US%RZ3_T3_to_W_m2)
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
     ! all loss processes
     write(var_name, '("Itide_allprocesses_loss_freq",i1,"_mode",i1)') fr, m
     write(var_descript, '("Internal tide energy loss due to all processes from frequency ",i1," mode ",i1)') fr, m
     CS%id_allprocesses_loss_mode(fr,m) = register_diag_field('ocean_model', var_name, &
-                 diag%axesT1, Time, var_descript, 'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+                 diag%axesT1, Time, var_descript, 'W m-2', conversion=US%RZ3_T3_to_W_m2)
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
 
     ! Register 3-D (i,j,a) energy loss for each freq and mode
@@ -2503,7 +2503,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
     write(var_name, '("Itide_wavedrag_loss_ang_freq",i1,"_mode",i1)') fr, m
     write(var_descript, '("Internal tide energy loss due to wave-drag from frequency ",i1," mode ",i1)') fr, m
     CS%id_itidal_loss_ang_mode(fr,m) = register_diag_field('ocean_model', var_name, &
-                 axes_ang, Time, var_descript, 'W m-2 band-1', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+                 axes_ang, Time, var_descript, 'W m-2 band-1', conversion=US%RZ3_T3_to_W_m2)
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
 
     ! Register 2-D period-averaged near-bottom horizonal velocity for each freq and mode

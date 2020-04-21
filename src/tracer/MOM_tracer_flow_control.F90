@@ -102,7 +102,7 @@ type, public :: tracer_flow_control_CS ; private
   type(pseudo_salt_tracer_CS), pointer :: pseudo_salt_tracer_CSp => NULL()
   type(boundary_impulse_tracer_CS), pointer :: boundary_impulse_tracer_CSp => NULL()
   type(dyed_obc_tracer_CS), pointer :: dyed_obc_tracer_CSp => NULL()
-  !!@}
+  !>@}
 end type tracer_flow_control_CS
 
 contains
@@ -489,11 +489,15 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, 
                                      evap_CFL_limit=evap_CFL_limit, &
                                      minimum_forcing_depth=minimum_forcing_depth)
 #ifdef _USE_GENERIC_TRACER
-    if (CS%use_MOM_generic_tracer) &
+    if (CS%use_MOM_generic_tracer) then
+      if (US%QRZ_T_to_W_m2 /= 1.0) call MOM_error(FATAL, "MOM_generic_tracer_column_physics "//&
+            "has not been written to permit dimensionsal rescaling.  Set all 4 of the "//&
+            "[QRZT]_RESCALE_POWER parameters to 0.")
       call MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, Hml, US%T_to_s*dt, &
                                              G, GV, CS%MOM_generic_tracer_CSp, tv, optics, &
                                              evap_CFL_limit=evap_CFL_limit, &
                                              minimum_forcing_depth=minimum_forcing_depth)
+    endif
 #endif
     if (CS%use_pseudo_salt_tracer) &
       call pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
@@ -541,9 +545,13 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, 
       call OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
                                      G, GV, US, CS%OCMIP2_CFC_CSp)
 #ifdef _USE_GENERIC_TRACER
-    if (CS%use_MOM_generic_tracer) &
+    if (CS%use_MOM_generic_tracer) then
+      if (US%QRZ_T_to_W_m2 /= 1.0) call MOM_error(FATAL, "MOM_generic_tracer_column_physics "//&
+            "has not been written to permit dimensionsal rescaling.  Set all 4 of the "//&
+            "[QRZT]_RESCALE_POWER parameters to 0.")
       call MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, Hml, US%T_to_s*dt, &
                                      G, GV, CS%MOM_generic_tracer_CSp, tv, optics)
+    endif
 #endif
     if (CS%use_pseudo_salt_tracer) &
       call pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &

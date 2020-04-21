@@ -90,6 +90,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
   real :: missing_value
   integer :: nPoints
   integer :: id_clock_routine, id_clock_ALE
+  logical :: answers_2018, default_2018_answers, hor_regrid_answers_2018
   logical :: reentrant_x, tripolar_n
 
   id_clock_routine = cpu_clock_id('(Initialize tracer from Z)', grain=CLOCK_ROUTINE)
@@ -111,6 +112,19 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
   call get_param(PF, mdl, "Z_INIT_REMAPPING_SCHEME", remapScheme, &
                  "The remapping scheme to use if using Z_INIT_ALE_REMAPPING is True.", &
                  default="PLM")
+  call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
+  if (useALE) then
+    call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=default_2018_answers)
+  endif
+  call get_param(PF, mdl, "HOR_REGRID_2018_ANSWERS", hor_regrid_answers_2018, &
+                 "If true, use the order of arithmetic for horizonal regridding that recovers "//&
+                 "the answers from the end of 2018.  Otherwise, use rotationally symmetric "//&
+                 "forms of the same expressions.", default=default_2018_answers)
 
   ! These are model grid properties, but being applied to the data grid for now.
   ! need to revisit this (mjh)
@@ -127,7 +141,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
 
   call horiz_interp_and_extrap_tracer(src_file, src_var_nam, convert, recnum, &
        G, tr_z, mask_z, z_in, z_edges_in, missing_value, reentrant_x, tripolar_n, &
-       homog, m_to_Z=US%m_to_Z)
+       homog, m_to_Z=US%m_to_Z, answers_2018=hor_regrid_answers_2018)
 
   kd = size(z_edges_in,1)-1
   call pass_var(tr_z,G%Domain)
@@ -140,7 +154,8 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
     ! First we reserve a work space for reconstructions of the source data
     allocate( h1(kd) )
     allocate( hSrc(isd:ied,jsd:jed,kd) )
-    call initialize_remapping( remapCS, remapScheme, boundary_extrapolation=.false. ) ! Data for reconstructions
+    ! Set parameters for reconstructions
+    call initialize_remapping( remapCS, remapScheme, boundary_extrapolation=.false., answers_2018=answers_2018 )
     ! Next we initialize the regridding package so that it knows about the target grid
 
     do j = js, je ; do i = is, ie
@@ -165,7 +180,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
       hSrc(i,j,:) = GV%Z_to_H * h1(:)
     enddo ; enddo
 
-    call ALE_remap_scalar(remapCS, G, GV, kd, hSrc, tr_z, h, tr, all_cells=.false. )
+    call ALE_remap_scalar(remapCS, G, GV, kd, hSrc, tr_z, h, tr, all_cells=.false., answers_2018=answers_2018 )
 
     deallocate( hSrc )
     deallocate( h1 )

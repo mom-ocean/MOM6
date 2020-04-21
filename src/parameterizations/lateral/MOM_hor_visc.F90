@@ -67,6 +67,8 @@ type, public :: hor_visc_CS ; private
                              !! viscosity is modified to include a term that
                              !! scales quadratically with the velocity shears.
   logical :: use_Kh_bg_2d    !< Read 2d background viscosity from a file.
+  logical :: Kh_bg_2d_bug    !< If true, retain an answer-changing horizontal indexing bug
+                             !! in setting the corner-point viscosities when USE_KH_BG_2D=True.
   real    :: Kh_bg_min       !< The minimum value allowed for Laplacian horizontal
                              !! viscosity [L2 T-1 ~> m2 s-1]. The default is 0.0.
   logical :: use_land_mask   !< Use the land mask for the computation of thicknesses
@@ -183,7 +185,7 @@ type, public :: hor_visc_CS ; private
   integer :: id_vort_xy_q = -1, id_div_xx_h      = -1
   integer :: id_FrictWork = -1, id_FrictWorkIntz = -1
   integer :: id_FrictWork_GME = -1
-  !!@}
+  !>@}
 
 
 end type hor_visc_CS
@@ -1620,6 +1622,11 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
                  "If true, read a file containing 2-d background harmonic "//&
                  "viscosities. The final viscosity is the maximum of the other "//&
                  "terms and this background value.", default=.false.)
+  if (CS%use_Kh_bg_2d) then
+    call get_param(param_file, mdl, "KH_BG_2D_BUG", CS%Kh_bg_2d_bug, &
+                 "If true, retain an answer-changing horizontal indexing bug in setting "//&
+                 "the corner-point viscosities when USE_KH_BG_2D=True.", default=.true.)
+  endif
 
   call get_param(param_file, mdl, "USE_GME", CS%use_GME, &
                  "If true, use the GM+E backscatter scheme in association \n"//&
@@ -1833,8 +1840,14 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
       CS%Kh_bg_xy(I,J) = MAX(Kh, Kh_vel_scale * sqrt(grid_sp_q2))
 
       ! Use the larger of the above and values read from a file
-      !### This expression uses inconsistent staggering
-      if (CS%use_Kh_bg_2d) CS%Kh_bg_xy(I,J) = MAX(CS%Kh_bg_2d(i,j), CS%Kh_bg_xy(I,J))
+      if (CS%use_Kh_bg_2d) then ; if (CS%Kh_bg_2d_bug) then
+        ! This option is unambiguously wrong, and should be obsoleted as soon as possible.
+        CS%Kh_bg_xy(I,J) = MAX(CS%Kh_bg_2d(i,j), CS%Kh_bg_xy(I,J))
+      else
+        CS%Kh_bg_xy(I,J) = MAX(CS%Kh_bg_xy(I,J), &
+            0.25*((CS%Kh_bg_2d(i,j) + CS%Kh_bg_2d(i+1,j+1)) + &
+                  (CS%Kh_bg_2d(i+1,j) + CS%Kh_bg_2d(i,j+1))) )
+      endif ; endif
 
       ! Use the larger of the above and a function of sin(latitude)
       if (Kh_sin_lat>0.) then
@@ -2055,16 +2068,16 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
 
       CS%id_FrictWork_GME = register_diag_field('ocean_model','FrictWork_GME',diag%axesTL,Time,&
       'Integral work done by lateral friction terms in GME (excluding diffusion of energy)', &
-      'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T**3*US%L_to_m**2)
+      'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
   endif
 
   CS%id_FrictWork = register_diag_field('ocean_model','FrictWork',diag%axesTL,Time,&
       'Integral work done by lateral friction terms', &
-      'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T**3*US%L_to_m**2)
+      'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
 
   CS%id_FrictWorkIntz = register_diag_field('ocean_model','FrictWorkIntz',diag%axesT1,Time,      &
       'Depth integrated work done by lateral friction', &
-      'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T**3*US%L_to_m**2, &
+      'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2, &
       cmor_field_name='dispkexyfo',                                                              &
       cmor_long_name='Depth integrated ocean kinetic energy dissipation due to lateral friction',&
       cmor_standard_name='ocean_kinetic_energy_dissipation_per_unit_area_due_to_xy_friction')

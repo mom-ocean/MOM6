@@ -24,6 +24,8 @@ use MOM_CVMix_KPP,             only : KPP_get_BLD, KPP_CS
 use MOM_energetic_PBL,         only : energetic_PBL_get_MLD, energetic_PBL_CS
 use MOM_diabatic_driver,       only : diabatic_CS, extract_diabatic_member
 
+use iso_fortran_env, only : stdout=>output_unit, stderr=>error_unit
+
 implicit none ; private
 
 public near_boundary_unit_tests, lateral_boundary_diffusion, lateral_boundary_diffusion_init
@@ -1019,14 +1021,18 @@ logical function test_layer_fluxes(verbose, nk, test_name, F_calc, F_ans)
   real, dimension(nk),        intent(in) :: F_ans     !< Fluxes of the unitless tracer calculated by hand [s^-1]
   ! Local variables
   integer :: k
-  integer, parameter :: stdunit = 6
+  integer, parameter :: stdunit = stdout
 
   test_layer_fluxes = .false.
   do k=1,nk
     if ( F_calc(k) /= F_ans(k) ) then
       test_layer_fluxes = .true.
-      write(stdunit,*) "UNIT TEST FAILED: ", test_name
+      write(stdunit,*) "MOM_lateral_boundary_diffusion, UNIT TEST FAILED: ", test_name
       write(stdunit,10) k, F_calc(k), F_ans(k)
+      ! ### Once these unit tests are passing, and failures are caught properly,
+      ! we will post failure notifications to both stdout and stderr.
+      !write(stderr,*) "MOM_lateral_boundary_diffusion, UNIT TEST FAILED: ", test_name
+      !write(stderr,10) k, F_calc(k), F_ans(k)
     elseif (verbose) then
       write(stdunit,10) k, F_calc(k), F_ans(k)
     endif
@@ -1049,7 +1055,7 @@ logical function test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, k_top_a
   character(len=80) :: test_name !< Name of the unit test
   logical :: verbose             !< If true always print output
 
-  integer, parameter :: stdunit = 6
+  integer, parameter :: stdunit = stdout
 
   test_boundary_k_range = k_top .ne. k_top_ans
   test_boundary_k_range = test_boundary_k_range .or. (zeta_top .ne. zeta_top_ans)

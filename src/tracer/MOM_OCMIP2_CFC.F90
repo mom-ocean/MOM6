@@ -61,7 +61,7 @@ type, public :: OCMIP2_CFC_CS ; private
   real :: e1_11, e1_12   ! Coefficients for calculating CFC11 and CFC12 solubilities [PSU-1]
   real :: e2_11, e2_12   ! Coefficients for calculating CFC11 and CFC12 solubilities [PSU-1 hectoKelvin-1]
   real :: e3_11, e3_12   ! Coefficients for calculating CFC11 and CFC12 solubilities [PSU-2 hectoKelvin-2]
-  !!@}
+  !>@}
   real :: CFC11_IC_val = 0.0    !< The initial value assigned to CFC11 [mol m-3].
   real :: CFC12_IC_val = 0.0    !< The initial value assigned to CFC12 [mol m-3].
   real :: CFC11_land_val = -1.0 !< The value of CFC11 used where land is masked out [mol m-3].
@@ -76,9 +76,9 @@ type, public :: OCMIP2_CFC_CS ; private
   integer :: ind_cfc_12_flux  !< Index returned by aof_set_coupler_flux that is used to
                               !! pack and unpack surface boundary condition arrays.
 
-  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
-                                   ! regulate the timing of diagnostic output.
-  type(MOM_restart_CS), pointer :: restart_CSp => NULL()
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate
+                                             !! the timing of diagnostic output.
+  type(MOM_restart_CS), pointer :: restart_CSp => NULL()  !< Model restart control structure
 
   ! The following vardesc types contain a package of metadata about each tracer.
   type(vardesc) :: CFC11_desc !< A set of metadata for the CFC11 tracer

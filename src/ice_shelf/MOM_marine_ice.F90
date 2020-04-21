@@ -30,7 +30,7 @@ type, public :: marine_ice_CS ; private
   real :: berg_area_threshold !< Fraction of grid cell which iceberg must occupy
                               !! so that fluxes below are set to zero. (0.5 is a
                               !! good value to use.) Not applied for negative values.
-  real :: latent_heat_fusion  !< Latent heat of fusion [J kg-1]
+  real :: latent_heat_fusion  !< Latent heat of fusion [Q ~> J kg-1]
   real :: density_iceberg     !< A typical density of icebergs [kg m-3] (for ice rigidity)
 
   type(time_type), pointer :: Time !< A pointer to the ocean model's clock.
@@ -42,8 +42,7 @@ contains
 !> add_berg_flux_to_shelf adds rigidity and ice-area coverage due to icebergs
 !! to the forces type fields, and adds ice-areal coverage and modifies various
 !! thermodynamic fluxes due to the presence of icebergs.
-subroutine iceberg_forces(G, forces, use_ice_shelf, sfc_state, &
-                                  time_step, CS)
+subroutine iceberg_forces(G, forces, use_ice_shelf, sfc_state, time_step, CS)
   type(ocean_grid_type), intent(inout) :: G       !< The ocean's grid structure
   type(mech_forcing),    intent(inout) :: forces  !< A structure with the driving mechanical forces
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
@@ -81,30 +80,25 @@ subroutine iceberg_forces(G, forces, use_ice_shelf, sfc_state, &
   do j=js,je ; do I=is-1,ie
     if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%dxdy_u(I,j) > 0.0)) &
       forces%frac_shelf_u(I,j) = forces%frac_shelf_u(I,j) + &
-          (((forces%area_berg(i,j)*G%US%L_to_m**2*G%areaT(i,j)) + &
-            (forces%area_berg(i+1,j)*G%US%L_to_m**2*G%areaT(i+1,j))) / &
-           (G%US%L_to_m**2*G%areaT(i,j) + G%US%L_to_m**2*G%areaT(i+1,j)) )
+           (forces%area_berg(i,j)*G%areaT(i,j) + forces%area_berg(i+1,j)*G%areaT(i+1,j)) / &
+           (G%areaT(i,j) + G%areaT(i+1,j))
     forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) + kv_rho_ice * &
                          min(forces%mass_berg(i,j), forces%mass_berg(i+1,j))
   enddo ; enddo
   do J=js-1,je ; do i=is,ie
     if ((G%areaT(i,j) + G%areaT(i,j+1) > 0.0)) & ! .and. (G%dxdy_v(i,J) > 0.0)) &
       forces%frac_shelf_v(i,J) = forces%frac_shelf_v(i,J) + &
-          (((forces%area_berg(i,j)*G%US%L_to_m**2*G%areaT(i,j)) + &
-            (forces%area_berg(i,j+1)*G%US%L_to_m**2*G%areaT(i,j+1))) / &
-           (G%US%L_to_m**2*G%areaT(i,j) + G%US%L_to_m**2*G%areaT(i,j+1)) )
+           (forces%area_berg(i,j)*G%areaT(i,j) + forces%area_berg(i,j+1)*G%areaT(i,j+1)) / &
+           (G%areaT(i,j) + G%areaT(i,j+1))
     forces%rigidity_ice_v(i,J) = forces%rigidity_ice_v(i,J) + kv_rho_ice * &
                          min(forces%mass_berg(i,j), forces%mass_berg(i,j+1))
   enddo ; enddo
-  !### This halo update may be unnecessary. Test it.  -RWH
-  call pass_vector(forces%frac_shelf_u, forces%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
 
 end subroutine iceberg_forces
 
 !> iceberg_fluxes adds ice-area-coverage and modifies various
 !! thermodynamic fluxes due to the presence of icebergs.
-subroutine iceberg_fluxes(G, US, fluxes, use_ice_shelf, sfc_state, &
-                          time_step, CS)
+subroutine iceberg_fluxes(G, US, fluxes, use_ice_shelf, sfc_state, time_step, CS)
   type(ocean_grid_type), intent(inout) :: G       !< The ocean's grid structure
   type(unit_scale_type), intent(in)    :: US      !< A dimensional unit scaling type
   type(forcing),         intent(inout) :: fluxes  !< A structure with pointers to themodynamic,
@@ -116,7 +110,8 @@ subroutine iceberg_fluxes(G, US, fluxes, use_ice_shelf, sfc_state, &
   type(marine_ice_CS),   pointer       :: CS !< Pointer to the control structure for MOM_marine_ice
 
   real :: fraz      ! refreezing rate [R Z T-1 ~> kg m-2 s-1]
-  real :: I_dt_LHF  ! The inverse of the timestep times the latent heat of fusion [kg J-1 T-1 ~> kg J-1 s-1].
+  real :: I_dt_LHF  ! The inverse of the timestep times the latent heat of fusion times unit conversion
+                    ! factors because sfc_state is in MKS units [R Z m2 J-1 T-1 ~> kg J-1 s-1].
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
@@ -144,7 +139,7 @@ subroutine iceberg_fluxes(G, US, fluxes, use_ice_shelf, sfc_state, &
 
   !Zero'ing out other fluxes under the tabular icebergs
   if (CS%berg_area_threshold >= 0.) then
-    I_dt_LHF = 1.0 / (US%s_to_T*time_step * CS%latent_heat_fusion)
+    I_dt_LHF = US%W_m2_to_QRZ_T / (time_step * CS%latent_heat_fusion)
     do j=jsd,jed ; do i=isd,ied
       if (fluxes%frac_shelf_h(i,j) > CS%berg_area_threshold) then
         ! Only applying for ice shelf covering most of cell.
@@ -158,11 +153,10 @@ subroutine iceberg_fluxes(G, US, fluxes, use_ice_shelf, sfc_state, &
         ! form of surface layer evaporation [R Z T-1 ~> kg m-2 s-1]. Update lprec in the
         ! control structure for diagnostic purposes.
 
-        if (associated(sfc_state%frazil)) then
-          fraz = US%kg_m3_to_R*US%m_to_Z*sfc_state%frazil(i,j) * I_dt_LHF
-          if (associated(fluxes%evap)) &
-            fluxes%evap(i,j) = fluxes%evap(i,j) - fraz
-          ! fluxes%lprec(i,j) = fluxes%lprec(i,j) - fraz
+        if (allocated(sfc_state%frazil)) then
+          fraz = sfc_state%frazil(i,j) * I_dt_LHF
+          if (associated(fluxes%evap))  fluxes%evap(i,j)  = fluxes%evap(i,j)  - fraz
+        ! if (associated(fluxes%lprec)) fluxes%lprec(i,j) = fluxes%lprec(i,j) - fraz
           sfc_state%frazil(i,j) = 0.0
         endif
 
@@ -196,11 +190,11 @@ subroutine marine_ice_init(Time, G, param_file, diag, CS)
   call log_version(mdl, version)
 
   call get_param(param_file, mdl, "KV_ICEBERG",  CS%kv_iceberg, &
-                 "The viscosity of the icebergs",  units="m2 s-1",default=1.0e10)
+                 "The viscosity of the icebergs",  units="m2 s-1", default=1.0e10)
   call get_param(param_file, mdl, "DENSITY_ICEBERGS",  CS%density_iceberg, &
                  "A typical density of icebergs.", units="kg m-3", default=917.0)
   call get_param(param_file, mdl, "LATENT_HEAT_FUSION", CS%latent_heat_fusion, &
-                 "The latent heat of fusion.", units="J/kg", default=hlf)
+                 "The latent heat of fusion.", units="J/kg", default=hlf, scale=G%US%J_kg_to_Q)
   call get_param(param_file, mdl, "BERG_AREA_THRESHOLD", CS%berg_area_threshold, &
                  "Fraction of grid cell which iceberg must occupy, so that fluxes "//&
                  "below berg are set to zero. Not applied for negative "//&
