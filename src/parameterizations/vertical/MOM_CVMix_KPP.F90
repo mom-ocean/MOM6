@@ -973,7 +973,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
   endif
 #endif
 
-  !call cpu_clock_begin(id_clock_KPP_compute_BLD)
+  call cpu_clock_begin(id_clock_KPP_compute_BLD)
 
   ! some constants
   GoRho = GV%mks_g_Earth / (US%R_to_kg_m3*GV%Rho0)
@@ -1340,7 +1340,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
     enddo
   enddo
 
-  !call cpu_clock_end(id_clock_KPP_compute_BLD)
+  call cpu_clock_end(id_clock_KPP_compute_BLD)
 
   ! send diagnostics to post_data
   if (CS%id_BulkRi   > 0) call post_data(CS%id_BulkRi,   CS%BulkRi,          CS%diag)
@@ -1382,7 +1382,7 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
   real :: pref
   integer :: i, j, k, s
 
-  !call cpu_clock_begin(id_clock_KPP_smoothing)
+  call cpu_clock_begin(id_clock_KPP_smoothing)
 
   ! Update halos
   call pass_var(CS%OBLdepth, G%Domain, halo=CS%n_smooth)
@@ -1440,7 +1440,7 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
 
   enddo ! s-loop
 
-  !call cpu_clock_end(id_clock_KPP_smoothing)
+  call cpu_clock_end(id_clock_KPP_smoothing)
 
 end subroutine KPP_smooth_BLD
 
