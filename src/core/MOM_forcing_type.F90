@@ -155,7 +155,7 @@ type, public :: forcing
   real, pointer, dimension(:,:) :: &
     ustar_berg => NULL(), &   !< iceberg contribution to top ustar [Z T-1 ~> m s-1].
     area_berg  => NULL(), &   !< area of ocean surface covered by icebergs [m2 m-2]
-    mass_berg  => NULL()      !< mass of icebergs [kg m-2]
+    mass_berg  => NULL()      !< mass of icebergs [R Z ~> kg m-2]
 
   ! land ice-shelf related inputs
   real, pointer, dimension(:,:) :: ustar_shelf => NULL()  !< Friction velocity under ice-shelves [Z T-1 ~> m s-1].
@@ -182,7 +182,7 @@ type, public :: forcing
                                   !! type variable has not yet been inialized.
   logical :: gustless_accum_bug = .true. !< If true, use an incorrect expression in the time
                                   !! average of the gustless wind stress.
-  real :: C_p                !< heat capacity of seawater [J kg-1 degC-1].
+  real :: C_p                !< heat capacity of seawater [Q degC-1 ~> J kg-1 degC-1].
                              !! C_p is is the same value as in thermovar_ptrs_type.
 
   ! passive tracer surface fluxes
@@ -224,7 +224,7 @@ type, public :: mech_forcing
   ! iceberg related inputs
   real, pointer, dimension(:,:) :: &
     area_berg  => NULL(), &    !< fractional area of ocean surface covered by icebergs [m2 m-2]
-    mass_berg  => NULL()       !< mass of icebergs per unit ocean area [kg m-2]
+    mass_berg  => NULL()       !< mass of icebergs per unit ocean area [R Z ~> kg m-2]
 
   ! land ice-shelf related inputs
   real, pointer, dimension(:,:) :: frac_shelf_u  => NULL() !< Fractional ice shelf coverage of u-cells,
@@ -234,8 +234,10 @@ type, public :: mech_forcing
                 !! nondimensional from 0 to 1 [nondim]. This is only associated if ice shelves are enabled,
                 !! and is exactly 0 away from shelves or on land.
   real, pointer, dimension(:,:) :: &
-    rigidity_ice_u => NULL(), & !< Depth-integrated lateral viscosity of ice shelves or sea ice at u-points [m3 s-1]
-    rigidity_ice_v => NULL()    !< Depth-integrated lateral viscosity of ice shelves or sea ice at v-points [m3 s-1]
+    rigidity_ice_u => NULL(), & !< Depth-integrated lateral viscosity of ice shelves or sea ice at
+                                !! u-points [L4 Z-1 T-1 ~> m3 s-1]
+    rigidity_ice_v => NULL()    !< Depth-integrated lateral viscosity of ice shelves or sea ice at
+                                !! v-points [L4 Z-1 T-1 ~> m3 s-1]
   real :: dt_force_accum = -1.0 !< The amount of time over which the mechanical forcing fluxes
                                 !! have been averaged [s].
   logical :: net_mass_src_set = .false. !< If true, an estimate of net_mass_src has been provided.
@@ -1131,10 +1133,10 @@ subroutine MOM_mech_forcing_chksum(mesg, forces, G, US, haloshift)
   if (associated(forces%p_surf)) &
     call hchksum(forces%p_surf, mesg//" forces%p_surf", G%HI, haloshift=hshift, scale=US%RL2_T2_to_Pa)
   if (associated(forces%ustar)) &
-    call hchksum(forces%ustar, mesg//" forces%ustar",G%HI,haloshift=hshift, scale=US%Z_to_m*US%s_to_T)
+    call hchksum(forces%ustar, mesg//" forces%ustar", G%HI, haloshift=hshift, scale=US%Z_to_m*US%s_to_T)
   if (associated(forces%rigidity_ice_u) .and. associated(forces%rigidity_ice_v)) &
-    call uvchksum(mesg//" forces%rigidity_ice_[uv]", forces%rigidity_ice_u, &
-                  forces%rigidity_ice_v, G%HI, haloshift=hshift, symmetric=.true.)
+    call uvchksum(mesg//" forces%rigidity_ice_[uv]", forces%rigidity_ice_u, forces%rigidity_ice_v, &
+                  G%HI, haloshift=hshift, symmetric=.true., scale=US%L_to_m**3*US%L_to_Z*US%s_to_T)
 
 end subroutine MOM_mech_forcing_chksum
 
@@ -1266,7 +1268,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
           'Area of grid cell covered by iceberg ', 'm2 m-2')
 
       handles%id_mass_berg = register_diag_field('ocean_model', 'mass_berg', diag%axesT1, Time, &
-          'Mass of icebergs ', 'kg m-2')
+          'Mass of icebergs ', 'kg m-2', conversion=US%RZ_to_kg_m2)
 
       handles%id_ustar_ice_cover = register_diag_field('ocean_model', 'ustar_ice_cover', diag%axesT1, Time, &
           'Friction velocity below iceberg and ice shelf together', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
