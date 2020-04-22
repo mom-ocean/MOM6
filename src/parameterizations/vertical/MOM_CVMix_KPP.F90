@@ -1371,7 +1371,7 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer/level thicknesses [H ~> m or kg m-2]
 
   ! local
-  real, dimension(SZI_(G),SZJ_(G)) :: OBLdepth_original ! Original OBL depths computed by CVMix
+  real, dimension(SZI_(G),SZJ_(G)) :: OBLdepth_prev     ! OBLdepth before s.th smoothing iteration
   real, dimension( G%ke )          :: cellHeight        ! Cell center heights referenced to surface [m]
                                                         ! (negative in the ocean)
   real, dimension( G%ke+1 )        :: iFaceHeight       ! Interface heights referenced to surface [m]
@@ -1387,14 +1387,14 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
   ! Update halos
   call pass_var(CS%OBLdepth, G%Domain, halo=CS%n_smooth)
 
+  if (CS%id_OBLdepth_original > 0) CS%OBLdepth_original = CS%OBLdepth
 
   do s=1,CS%n_smooth
 
-    OBLdepth_original = CS%OBLdepth
-    if (CS%id_OBLdepth_original > 0) CS%OBLdepth_original = OBLdepth_original
+    OBLdepth_prev = CS%OBLdepth
 
     ! apply smoothing on OBL depth
-    !$OMP parallel do default(none) shared(G, GV, CS, h, OBLdepth_original) &
+    !$OMP parallel do default(none) shared(G, GV, CS, h, OBLdepth_prev) &
     !$OMP                           private(wc, ww, we, wn, ws, dh, hcorr, pref, cellHeight, iFaceHeight)
     do j = G%jsc, G%jec
       do i = G%isc, G%iec
@@ -1423,14 +1423,14 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
         wn = 0.125 * G%mask2dT(i,j+1)
         wc = 1.0 - (ww+we+wn+ws)
 
-        CS%OBLdepth(i,j) =  wc * OBLdepth_original(i,j)   &
-                          + ww * OBLdepth_original(i-1,j) &
-                          + we * OBLdepth_original(i+1,j) &
-                          + ws * OBLdepth_original(i,j-1) &
-                          + wn * OBLdepth_original(i,j+1)
+        CS%OBLdepth(i,j) =  wc * OBLdepth_prev(i,j)   &
+                          + ww * OBLdepth_prev(i-1,j) &
+                          + we * OBLdepth_prev(i+1,j) &
+                          + ws * OBLdepth_prev(i,j-1) &
+                          + wn * OBLdepth_prev(i,j+1)
 
         ! Apply OBLdepth smoothing at a cell only if the OBLdepth gets deeper via smoothing.
-        if (CS%deepen_only) CS%OBLdepth(i,j) = max(CS%OBLdepth(i,j),CS%OBLdepth_original(i,j))
+        if (CS%deepen_only) CS%OBLdepth(i,j) = max(CS%OBLdepth(i,j), OBLdepth_prev(i,j))
 
         ! prevent OBL depths deeper than the bathymetric depth
         CS%OBLdepth(i,j) = min( CS%OBLdepth(i,j), -iFaceHeight(G%ke+1) ) ! no deeper than bottom
