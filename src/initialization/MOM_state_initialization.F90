@@ -2117,7 +2117,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
                  default=.true.)
   call get_param(PF, mdl, "TEMP_SALT_INIT_VERTICAL_REMAP_ONLY", pre_gridded, &
-                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 "If true, initial conditions are on the model horizontal grid. " //&
+                 "Extrapolation over missing ocean values is done using an ICE-9 "//&
+                 "procedure with vertical ALE remapping .", &
                  default=.false.)
   if (useALEremapping) then
     call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
