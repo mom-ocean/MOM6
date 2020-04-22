@@ -241,7 +241,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
                    'If true, apply OBLdepth smoothing at a cell only if the OBLdepth '// &
                    'gets deeper via smoothing.',   &
                    default=.false.)
-    id_clock_KPP_smoothing = cpu_clock_id('Ocean KPP BLD smoothing)', grain=CLOCK_ROUTINE)
+    id_clock_KPP_smoothing = cpu_clock_id('(Ocean KPP BLD smoothing)', grain=CLOCK_ROUTINE)
   endif
   call get_param(paramFile, mdl, 'RI_CRIT', CS%Ri_crit,                            &
                  'Critical bulk Richardson number used to define depth of the '// &
@@ -590,7 +590,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
   if (CS%id_EnhK > 0)    CS%EnhK(:,:,:) = 0.
 
   id_clock_KPP_calc = cpu_clock_id('Ocean KPP calculate)', grain=CLOCK_MODULE)
-  id_clock_KPP_compute_BLD = cpu_clock_id('Ocean KPP comp BLD)', grain=CLOCK_ROUTINE)
+  id_clock_KPP_compute_BLD = cpu_clock_id('(Ocean KPP comp BLD)', grain=CLOCK_ROUTINE)
 
 end function KPP_init
 
