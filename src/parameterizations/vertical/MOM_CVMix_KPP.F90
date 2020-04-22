@@ -16,6 +16,8 @@ use MOM_unit_scaling, only : unit_scale_type
 use MOM_verticalGrid,   only : verticalGrid_type
 use MOM_wave_interface, only : wave_parameters_CS, Get_Langmuir_Number
 use MOM_domains,        only : pass_var
+use MOM_cpu_clock,      only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
+use MOM_cpu_clock,      only : CLOCK_MODULE, CLOCK_ROUTINE
 
 use CVMix_kpp, only : CVMix_init_kpp, CVMix_put_kpp, CVMix_get_kpp_real
 use CVMix_kpp, only : CVMix_coeffs_kpp
@@ -168,6 +170,10 @@ type, public :: KPP_CS ; private
 
 end type KPP_CS
 
+!>@{ CPU time clocks
+integer :: id_clock_KPP_calc, id_clock_KPP_compute_BLD, id_clock_KPP_smoothing
+!!@}
+
 #define __DO_SAFETY_CHECKS__
 
 contains
@@ -225,9 +231,9 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
                  'The number of times the 1-1-4-1-1 Laplacian filter is applied on '//  &
                  'OBL depth.',   &
                  default=0)
-  if ((CS%n_smooth > G%domain%nihalo) then
+  if (CS%n_smooth > G%domain%nihalo) then
     call MOM_error(FATAL,'KPP smoothing number (N_SMOOTH) cannot be greater than NIHALO.')
-  elseif ((CS%n_smooth > G%domain%njhalo) then
+  elseif (CS%n_smooth > G%domain%njhalo) then
     call MOM_error(FATAL,'KPP smoothing number (N_SMOOTH) cannot be greater than NJHALO.')
   endif
   if (CS%n_smooth > 0) then
@@ -235,6 +241,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
                    'If true, apply OBLdepth smoothing at a cell only if the OBLdepth '// &
                    'gets deeper via smoothing.',   &
                    default=.false.)
+    id_clock_KPP_smoothing = cpu_clock_id('Ocean KPP BLD smoothing)', grain=CLOCK_ROUTINE)
   endif
   call get_param(paramFile, mdl, 'RI_CRIT', CS%Ri_crit,                            &
                  'Critical bulk Richardson number used to define depth of the '// &
@@ -582,6 +589,8 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
   if (CS%id_EnhK > 0)    allocate( CS%EnhK( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
   if (CS%id_EnhK > 0)    CS%EnhK(:,:,:) = 0.
 
+  id_clock_KPP_calc = cpu_clock_id('Ocean KPP calculate)', grain=CLOCK_MODULE)
+  id_clock_KPP_compute_BLD = cpu_clock_id('Ocean KPP comp BLD)', grain=CLOCK_ROUTINE)
 
 end function KPP_init
 
@@ -643,6 +652,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
 
   if (CS%id_Kd_in > 0) call post_data(CS%id_Kd_in, Kt, CS%diag)
 
+  call cpu_clock_begin(id_clock_KPP_calc)
   buoy_scale = US%L_to_m**2*US%s_to_T**3
 
   !$OMP parallel do default(none) firstprivate(nonLocalTrans)                               &
@@ -863,6 +873,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
     enddo ! i
   enddo ! j
 
+  call cpu_clock_end(id_clock_KPP_calc)
 
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
@@ -961,6 +972,8 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
     call hchksum(v, "KPP in: v",G%HI,haloshift=0)
   endif
 #endif
+
+  !call cpu_clock_begin(id_clock_KPP_compute_BLD)
 
   ! some constants
   GoRho = GV%mks_g_Earth / (US%R_to_kg_m3*GV%Rho0)
@@ -1327,6 +1340,8 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
     enddo
   enddo
 
+  !call cpu_clock_end(id_clock_KPP_compute_BLD)
+
   ! send diagnostics to post_data
   if (CS%id_BulkRi   > 0) call post_data(CS%id_BulkRi,   CS%BulkRi,          CS%diag)
   if (CS%id_N        > 0) call post_data(CS%id_N,        CS%N,               CS%diag)
@@ -1367,8 +1382,11 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
   real :: pref
   integer :: i, j, k, s
 
+  !call cpu_clock_begin(id_clock_KPP_smoothing)
+
   ! Update halos
   call pass_var(CS%OBLdepth, G%Domain, halo=CS%n_smooth)
+
 
   do s=1,CS%n_smooth
 
@@ -1376,6 +1394,8 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
     if (CS%id_OBLdepth_original > 0) CS%OBLdepth_original = OBLdepth_original
 
     ! apply smoothing on OBL depth
+    !$OMP parallel do default(none) shared(G, GV, CS, h, OBLdepth_original) &
+    !$OMP                           private(wc, ww, we, wn, ws, dh, hcorr, pref, cellHeight, iFaceHeight)
     do j = G%jsc, G%jec
       do i = G%isc, G%iec
 
@@ -1420,6 +1440,8 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
 
   enddo ! s-loop
 
+  !call cpu_clock_end(id_clock_KPP_smoothing)
+
 end subroutine KPP_smooth_BLD
 
 
@@ -1432,6 +1454,7 @@ subroutine KPP_get_BLD(CS, BLD, G)
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: BLD!< bnd. layer depth [m]
   ! Local variables
   integer :: i,j
+  !$OMP parallel do default(none) shared(BLD, CS, G)
   do j = G%jsc, G%jec ; do i = G%isc, G%iec
     BLD(i,j) = CS%OBLdepth(i,j)
   enddo ; enddo
@@ -1469,6 +1492,7 @@ subroutine KPP_NonLocalTransport_temp(CS, G, GV, h, nonLocalTrans, surfFlux, &
 
   !  Update tracer due to non-local redistribution of surface flux
   if (CS%applyNonLocalTrans) then
+    !$OMP parallel do default(none) shared(dt, scalar, dtracer, G)
     do k = 1, G%ke
       do j = G%jsc, G%jec
         do i = G%isc, G%iec
@@ -1483,6 +1507,7 @@ subroutine KPP_NonLocalTransport_temp(CS, G, GV, h, nonLocalTrans, surfFlux, &
   if (CS%id_NLT_dTdt        > 0) call post_data(CS%id_NLT_dTdt, dtracer,  CS%diag)
   if (CS%id_NLT_temp_budget > 0) then
     dtracer(:,:,:) = 0.0
+    !$OMP parallel do default(none) shared(dtracer, nonLocalTrans, surfFlux, C_p, G, GV)
     do k = 1, G%ke
       do j = G%jsc, G%jec
         do i = G%isc, G%iec
@@ -1528,6 +1553,7 @@ subroutine KPP_NonLocalTransport_saln(CS, G, GV, h, nonLocalTrans, surfFlux, dt,
 
   !  Update tracer due to non-local redistribution of surface flux
   if (CS%applyNonLocalTrans) then
+    !$OMP parallel do default(none) shared(G, dt, scalar, dtracer)
     do k = 1, G%ke
       do j = G%jsc, G%jec
         do i = G%isc, G%iec
@@ -1542,6 +1568,7 @@ subroutine KPP_NonLocalTransport_saln(CS, G, GV, h, nonLocalTrans, surfFlux, dt,
   if (CS%id_NLT_dSdt        > 0) call post_data(CS%id_NLT_dSdt, dtracer,  CS%diag)
   if (CS%id_NLT_saln_budget > 0) then
     dtracer(:,:,:) = 0.0
+    !$OMP parallel do default(none) shared(G, GV, dtracer, nonLocalTrans, surfFlux)
     do k = 1, G%ke
       do j = G%jsc, G%jec
         do i = G%isc, G%iec
