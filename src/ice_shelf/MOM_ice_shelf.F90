@@ -100,7 +100,7 @@ type, public :: ice_shelf_CS ; private
                        !< 2-equation formulation [Z T-1 ~> m s-1].
   real :: Salin_ice    !< The salinity of shelf ice [ppt].
   real :: Temp_ice     !< The core temperature of shelf ice [degC].
-  real :: kv_ice       !< The viscosity of ice [Z2 T-1 ~> m2 s-1].
+  real :: kv_ice       !< The viscosity of ice [L4 Z-2 T-1 ~> m2 s-1].
   real :: density_ice  !< A typical density of ice [R ~> kg m-3].
   real :: kv_molec     !< The molecular kinematic viscosity of sea water [Z2 T-1 ~> m2 s-1].
   real :: kd_molec_salt!< The molecular diffusivity of salt [Z2 T-1 ~> m2 s-1].
@@ -780,7 +780,7 @@ subroutine add_shelf_forces(G, US, CS, forces, do_shelf_area)
   type(mech_forcing),    intent(inout) :: forces !< A structure with the driving mechanical forces
   logical, optional,     intent(in)    :: do_shelf_area !< If true find the shelf-covered areas.
 
-  real :: kv_rho_ice ! The viscosity of ice divided by its density [m3 s-1 R-1 Z-1 ~> m5 kg-1 s-1].
+  real :: kv_rho_ice ! The viscosity of ice divided by its density [L4 T-1 R-1 Z-2 ~> m5 kg-1 s-1].
   real :: press_ice  ! The pressure of the ice shelf per unit area of ocean (not ice) [R L2 T-2 ~> Pa].
   logical :: find_area ! If true find the shelf areas at u & v points.
   type(ice_shelf_state), pointer :: ISS => NULL() ! A structure with elements that describe
@@ -831,7 +831,7 @@ subroutine add_shelf_forces(G, US, CS, forces, do_shelf_area)
   ! that it may have been zeroed out where IOB is translated to forces and
   ! contributions from icebergs and the sea-ice pack added subsequently.
   !### THE RIGIDITY SHOULD ALSO INCORPORATE AREAL-COVERAGE INFORMATION.
-  kv_rho_ice = US%Z_to_m*US%Z2_T_to_m2_s*CS%kv_ice / CS%density_ice
+  kv_rho_ice = CS%kv_ice / CS%density_ice
   do j=js,je ; do I=is-1,ie
     if (.not.forces%accumulate_rigidity) forces%rigidity_ice_u(I,j) = 0.0
     forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) + &
@@ -845,7 +845,7 @@ subroutine add_shelf_forces(G, US, CS, forces, do_shelf_area)
 
   if (CS%debug) then
     call uvchksum("rigidity_ice_[uv]", forces%rigidity_ice_u, forces%rigidity_ice_v, &
-                  G%HI, symmetric=.true.)
+                  G%HI, symmetric=.true., scale=US%L_to_m**3*US%L_to_Z*US%s_to_T)
     call uvchksum("frac_shelf_[uv]", forces%frac_shelf_u, forces%frac_shelf_v, &
                   G%HI, symmetric=.true.)
   endif
@@ -1307,7 +1307,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  "fluxes.", units="none", default=1.0)
 
   call get_param(param_file, mdl, "KV_ICE", CS%kv_ice, &
-                 "The viscosity of the ice.", units="m2 s-1", default=1.0e10, scale=US%m2_s_to_Z2_T)
+                 "The viscosity of the ice.", &
+                 units="m2 s-1", default=1.0e10, scale=US%Z_to_L**2*US%m_to_L**2*US%T_to_s)
   call get_param(param_file, mdl, "KV_MOLECULAR", CS%kv_molec, &
                  "The molecular kinimatic viscosity of sea water at the "//&
                  "freezing temperature.", units="m2 s-1", default=1.95e-6, scale=US%m2_s_to_Z2_T)
