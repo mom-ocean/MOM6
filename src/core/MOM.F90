@@ -252,6 +252,8 @@ type, public :: MOM_control_struct ; private
   logical :: mixedlayer_restrat      !< If true, use submesoscale mixed layer restratifying scheme.
   logical :: useMEKE                 !< If true, call the MEKE parameterization.
   logical :: useWaves                !< If true, update Stokes drift
+  logical :: use_p_surf_in_EOS       !< If true, always include the surface pressure contributions
+                                     !! in equation of state calculations.
   real :: dtbt_reset_period          !< The time interval between dynamic recalculation of the
                                      !! barotropic time step [s]. If this is negative dtbt is never
                                      !! calculated, and if it is 0, dtbt is calculated every step.
@@ -566,6 +568,8 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
     if (associated(forces%p_surf)) p_surf => forces%p_surf
     if (.not.associated(forces%p_surf)) CS%interp_p_surf = .false.
+    CS%tv%p_surf => NULL()
+    if (CS%use_p_surf_in_EOS .and. associated(forces%p_surf)) CS%tv%p_surf => forces%p_surf
 
     !---------- Initiate group halo pass of the forcing fields
     call cpu_clock_begin(id_clock_pass)
@@ -589,6 +593,8 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     dt = time_interval / real(n_max)
     dt_therm = dt ; ntstep = 1
     if (associated(fluxes%p_surf)) p_surf => fluxes%p_surf
+    CS%tv%p_surf => NULL()
+    if (CS%use_p_surf_in_EOS .and. associated(forces%p_surf)) CS%tv%p_surf => fluxes%p_surf
 
     if (CS%UseWaves) call pass_var(fluxes%ustar, G%Domain, clock=id_clock_pass)
   endif
@@ -1896,6 +1902,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "true. The default value is from the TEOS-10 definition "//&
                  "of conservative temperature.", units="J kg-1 K-1", &
                  default=3991.86795711963, scale=US%J_kg_to_Q)
+    call get_param(param_file, "MOM", "USE_PSURF_IN_EOS", CS%use_p_surf_in_EOS, &
+                 "If true, always include the surface pressure contributions "//&
+                 "in equation of state calculations.", default=.false.) !### Change the default.
   endif
   if (use_EOS) call get_param(param_file, "MOM", "P_REF", CS%tv%P_Ref, &
                  "The pressure that is used for calculating the coordinate "//&
