@@ -1271,7 +1271,11 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   ! 1. Compute vertical integrals
   ! =============================
 
-  !$OMP parallel do default(shared) private(jin,iin,dz,p5,S5,T5,r5,rho_anom)
+  !$OMP parallel default(shared) private(jin,iin,dz,p5,S5,T5,r5,rho_anom,hWght,hL,hR,iDenom,Ttl,Ttr,    &
+  !$OMP                                  Tbl,Tbr,Stl,Str,Sbl,Sbr,w_left,w_right,dz_x,dz_y,pos,T15,S15,  &
+  !$OMP                                  p15,r15,weight_t,weight_b,intz)
+
+  !$OMP do
   do j=Jsq,Jeq+1
     jin = j+joff
     do i = Isq,Ieq+1 ; iin = i+ioff
@@ -1303,8 +1307,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   ! 2. Compute horizontal integrals in the x direction
   ! ==================================================
   if (present(intx_dpa)) then
-    !$OMP parallel do default(shared) private(jin,iin,hWght,hL,hR,iDenom,Ttl,Ttr,Tbl,Tbr,Stl,Str,Sbl,Sbr, &
-    !$OMP                                     w_left,w_right,dz_x,pos,T15,S15,p15,r15,weight_t,weight_b,intz)
+    !$OMP do
     do j=HIO%jsc,HIO%jec ; jin = j+joff
       do I=Isq,Ieq ; iin = i+ioff
         ! Corner values of T and S
@@ -1388,8 +1391,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   ! 3. Compute horizontal integrals in the y direction
   ! ==================================================
   if (present(inty_dpa)) then
-    !$OMP parallel do default(shared) private(jin,iin,hWght,hL,hR,iDenom,Ttl,Ttr,Tbl,Tbr,Stl,Str,Sbl,Sbr, &
-    !$OMP                                     w_left,w_right,dz_y,pos,T15,S15,p15,r15,weight_t,weight_b,intz)
+    !$OMP do
     do J=Jsq,Jeq ; jin = j+joff
       do i=HIO%isc,HIO%iec ; iin = i+ioff
       ! Corner values of T and S
@@ -1467,6 +1469,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
       enddo
     enddo
   endif
+  !$OMP end parallel
 
 end subroutine int_density_dz_generic_plm
 ! ==========================================================================
