@@ -567,10 +567,13 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
     endif ! Not linear_drag
 
     if (use_BBL_EOS) then
-      do i=is,ie
-        press(i) = 0.0 ! or = forces%p_surf(i) !###
-        if (.not.do_i(i)) then ; T_EOS(i) = 0.0 ; S_EOS(i) = 0.0 ; endif
-      enddo
+      if (associated(tv%p_surf)) then
+        if (m==1) then ; do i=is,ie ; press(I) = 0.5*(tv%p_surf(i,j) + tv%p_surf(i+1,j)) ; enddo
+        else ; do i=is,ie ; press(i) = 0.5*(tv%p_surf(i,j) + tv%p_surf(i,j+1)) ; enddo ; endif
+      else
+        do i=is,ie ; press(i) = 0.0 ; enddo
+      endif
+      do i=is,ie ; if (.not.do_i(i)) then ; T_EOS(i) = 0.0 ; S_EOS(i) = 0.0 ; endif ; enddo
       do k=1,nz ; do i=is,ie
         press(i) = press(i) + (GV%H_to_RZ*GV%g_Earth) * h_vel(i,k)
       enddo ; enddo
@@ -1273,6 +1276,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
             ! Find dRho/dT and dRho_dS.
             do I=Isq,Ieq
               press(I) = (GV%H_to_RZ*GV%g_Earth) * htot(I)
+              if (associated(tv%p_surf)) press(I) = press(I) + 0.5*(tv%p_surf(i,j)+tv%p_surf(i+1,j))
               k2 = max(1,nkml)
               I_2hlay = 1.0 / (h(i,j,k2) + h(i+1,j,k2) + h_neglect)
               T_EOS(I) = (h(i,j,k2)*tv%T(i,j,k2) + h(i+1,j,k2)*tv%T(i+1,j,k2)) * I_2hlay
@@ -1510,6 +1514,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
             ! Find dRho/dT and dRho_dS.
             do i=is,ie
               press(i) = (GV%H_to_RZ * GV%g_Earth) * htot(i)
+              if (associated(tv%p_surf)) press(i) = press(i) + 0.5*(tv%p_surf(i,j)+tv%p_surf(i,j+1))
               k2 = max(1,nkml)
               I_2hlay = 1.0 / (h(i,j,k2) + h(i,j+1,k2) + h_neglect)
               T_EOS(i) = (h(i,j,k2)*tv%T(i,j,k2) + h(i,j+1,k2)*tv%T(i,j+1,k2)) * I_2hlay

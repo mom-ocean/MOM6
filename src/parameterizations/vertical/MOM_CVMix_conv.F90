@@ -195,7 +195,7 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl)
       ! skip calling at land points
       !if (G%mask2dT(i,j) == 0.) cycle
 
-      pRef = 0.
+      pRef = 0. ; if (associated(tv%p_surf)) pRef = tv%p_surf(i,j)
       ! Compute Brunt-Vaisala frequency (static stability) on interfaces
       do k=2,G%ke
 

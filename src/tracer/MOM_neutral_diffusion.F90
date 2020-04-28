@@ -280,7 +280,7 @@ end function neutral_diffusion_init
 
 !> Calculate remapping factors for u/v columns used to map adjoining columns to
 !! a shared coordinate space.
-subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS)
+subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
   type(ocean_grid_type),                    intent(in) :: G   !< Ocean grid structure
   type(verticalGrid_type),                  intent(in) :: GV  !< ocean vertical grid structure
   type(unit_scale_type),                    intent(in) :: US  !< A dimensional unit scaling type
@@ -288,6 +288,8 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: T   !< Potential temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: S   !< Salinity [ppt]
   type(neutral_diffusion_CS),               pointer    :: CS  !< Neutral diffusion control structure
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: p_surf !< Surface pressure to include in pressures used
+                                                              !! for equation of state calculations [R L2 T-2 ~> Pa]
 
   ! Local variables
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
@@ -350,21 +352,33 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS)
     CS%stable_cell(:,:,:) = .true.
   endif
 
-  ! ### Consider adding the surface pressures to both Pint and P_i.
   ! Calculate pressure at interfaces and layer averaged alpha/beta
-  CS%Pint(:,:,1) = 0.
-  do k=1,G%ke ; do j=G%jsc-1, G%jec+1 ; do i=G%isc-1,G%iec+1
+  if (present(p_surf)) then
+     do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
+       CS%Pint(i,j,1) = p_surf(i,j)
+     enddo ; enddo
+  else
+    CS%Pint(:,:,1) = 0.
+  endif
+  do k=1,G%ke ; do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
     CS%Pint(i,j,k+1) = CS%Pint(i,j,k) + h(i,j,k)*(GV%g_Earth*GV%H_to_RZ)
   enddo ; enddo ; enddo
 
-  ! Pressures at the interfaces, this is redundant as P_i(k,1) = P_i(k-1,2) however retain tis
-  ! for now ensure consitency of indexing for diiscontinuous reconstructions
+  ! Pressures at the interfaces, this is redundant as P_i(k,1) = P_i(k-1,2) however retain this
+  ! for now to ensure consitency of indexing for diiscontinuous reconstructions
   if (.not. CS%continuous_reconstruction) then
-    do j=G%jsc-1, G%jec+1 ; do i=G%isc-1,G%iec+1
-      CS%P_i(i,j,1,1) = 0.
-      CS%P_i(i,j,1,2) = h(i,j,1)*(GV%H_to_RZ*GV%g_Earth)
-    enddo ; enddo
-    do k=2,G%ke ; do j=G%jsc-1, G%jec+1 ; do i=G%isc-1,G%iec+1
+    if (present(p_surf)) then
+      do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
+        CS%P_i(i,j,1,1) = p_surf(i,j)
+        CS%P_i(i,j,1,2) = p_surf(i,j) + h(i,j,1)*(GV%H_to_RZ*GV%g_Earth)
+      enddo ; enddo
+    else
+      do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
+        CS%P_i(i,j,1,1) = 0.
+        CS%P_i(i,j,1,2) = h(i,j,1)*(GV%H_to_RZ*GV%g_Earth)
+      enddo ; enddo
+    endif
+    do k=2,G%ke ; do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
       CS%P_i(i,j,k,1) = CS%P_i(i,j,k-1,2)
       CS%P_i(i,j,k,2) = CS%P_i(i,j,k-1,2) + h(i,j,k)*(GV%H_to_RZ*GV%g_Earth)
     enddo ; enddo ; enddo

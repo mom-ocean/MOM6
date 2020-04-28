@@ -81,6 +81,8 @@ type, public :: thermo_var_ptrs
   ! If allocated, the following variables have nz layers.
   real, pointer :: T(:,:,:) => NULL() !< Potential temperature [degC].
   real, pointer :: S(:,:,:) => NULL() !< Salnity [PSU] or [gSalt/kg], generically [ppt].
+  real, pointer :: p_surf(:,:) => NULL() !< Ocean surface pressure used in equation of state
+                         !! calculations [R L2 T-2 ~> Pa]
   type(EOS_type), pointer :: eqn_of_state => NULL() !< Type that indicates the
                          !! equation of state to use.
   real :: P_Ref          !<   The coordinate-density reference pressure [R L2 T-2 ~> Pa].

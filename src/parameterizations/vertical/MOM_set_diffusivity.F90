@@ -1058,10 +1058,11 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
   is = G%isc ; ie = G%iec ; nz = G%ke
 
   if (associated(tv%eqn_of_state)) then
-    do i=is,ie !### Add surface pressure.
+    do i=is,ie
       pres(i) = 0.0 ; Kd_T_dd(i,1) = 0.0 ; Kd_S_dd(i,1) = 0.0
       Kd_T_dd(i,nz+1) = 0.0 ; Kd_S_dd(i,nz+1) = 0.0
     enddo
+    if (associated(tv%p_surf)) then ; do i=is,ie ; pres(i) = tv%p_surf(i,j) ; enddo ; endif
     EOSdom(:) = EOS_domain(G%HI)
     do K=2,nz
       do i=is,ie
@@ -1408,7 +1409,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
     ustar2 = ustar**2
     ! In add_drag_diffusivity(), fluxes%ustar_tidal is added in. This might be double counting
     ! since ustar_BBL should already include all contributions to u*? -AJA
-    !### Examine this question of whether there is double counting of fluxes%ustar_tidal.
+    !### Examine the question of whether there is double counting of fluxes%ustar_tidal.
     if (associated(fluxes%ustar_tidal)) ustar = ustar + fluxes%ustar_tidal(i,j)
 
     ! The maximum decay scale should be something of order 200 m. We use the smaller of u*/f and

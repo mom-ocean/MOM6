@@ -421,7 +421,11 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
     ! lateral diffusion iterations. Otherwise the call to neutral_diffusion_calc_coeffs()
     ! would be inside the itt-loop. -AJA
 
-    call neutral_diffusion_calc_coeffs(G, GV, US, h, tv%T, tv%S, CS%neutral_diffusion_CSp)
+    if (associated(tv%p_surf)) then
+      call neutral_diffusion_calc_coeffs(G, GV, US, h, tv%T, tv%S, CS%neutral_diffusion_CSp, p_surf=tv%p_surf)
+    else
+      call neutral_diffusion_calc_coeffs(G, GV, US, h, tv%T, tv%S, CS%neutral_diffusion_CSp)
+    endif
     do J=js-1,je ; do i=is,ie
       Coef_y(i,J) = I_numitts * khdt_y(i,J)
     enddo ; enddo
@@ -436,7 +440,11 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
       if (itt>1) then ! Update halos for subsequent iterations
         call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
         if (CS%recalc_neutral_surf) then
-          call neutral_diffusion_calc_coeffs(G, GV, US, h, tv%T, tv%S, CS%neutral_diffusion_CSp)
+          if (associated(tv%p_surf)) then
+            call neutral_diffusion_calc_coeffs(G, GV, US, h, tv%T, tv%S, CS%neutral_diffusion_CSp, p_surf=tv%p_surf)
+          else
+            call neutral_diffusion_calc_coeffs(G, GV, US, h, tv%T, tv%S, CS%neutral_diffusion_CSp)
+          endif
         endif
       endif
       call neutral_diffusion(G, GV,  h, Coef_x, Coef_y, I_numitts*dt, Reg, US, CS%neutral_diffusion_CSp)

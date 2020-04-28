@@ -219,19 +219,19 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS)
     ! skip calling at land points
     if (G%mask2dT(i,j) == 0.) cycle
 
-    pres_int(1) = 0.
+    pres_int(1) = 0. ;  if (associated(tv%p_surf)) pres_int(1) = tv%p_surf(i,j)
     ! we don't have SST and SSS, so let's use values at top-most layer
-    temp_int(1) = TV%T(i,j,1); salt_int(1) = TV%S(i,j,1)
+    temp_int(1) = tv%T(i,j,1); salt_int(1) = tv%S(i,j,1)
     do K=2,G%ke
       ! pressure at interface
       pres_int(K) = pres_int(K-1) + (GV%g_Earth * GV%H_to_RZ) * h(i,j,k-1)
       ! temp and salt at interface
       ! for temp: (t1*h1 + t2*h2)/(h1+h2)
-      temp_int(K) = (TV%T(i,j,k-1)*h(i,j,k-1) + TV%T(i,j,k)*h(i,j,k))/(h(i,j,k-1)+h(i,j,k))
-      salt_int(K) = (TV%S(i,j,k-1)*h(i,j,k-1) + TV%S(i,j,k)*h(i,j,k))/(h(i,j,k-1)+h(i,j,k))
+      temp_int(K) = (tv%T(i,j,k-1)*h(i,j,k-1) + tv%T(i,j,k)*h(i,j,k)) / (h(i,j,k-1)+h(i,j,k))
+      salt_int(K) = (tv%S(i,j,k-1)*h(i,j,k-1) + tv%S(i,j,k)*h(i,j,k)) / (h(i,j,k-1)+h(i,j,k))
       ! dT and dS
-      dT(K) = (TV%T(i,j,k-1)-TV%T(i,j,k))
-      dS(K) = (TV%S(i,j,k-1)-TV%S(i,j,k))
+      dT(K) = (tv%T(i,j,k-1)-tv%T(i,j,k))
+      dS(K) = (tv%S(i,j,k-1)-tv%S(i,j,k))
     enddo ! k-loop finishes
 
     call calculate_density_derivs(temp_int, salt_int, pres_int, drho_dT, drho_dS, tv%eqn_of_state)
