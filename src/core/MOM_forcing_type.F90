@@ -926,13 +926,15 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   real    :: GoRho ! The gravitational acceleration divided by mean density times some
                    ! unit conversion factors [L2 H-1 s R-1 T-3 ~> m4 kg-1 s-2 or m7 kg-2 s-2]
   real    :: H_limit_fluxes            ! Another depth scale [H ~> m or kg m-2]
+  integer :: i
 
   !  smg: what do we do when have heat fluxes from calving and river?
   useRiverHeatContent   = .False.
   useCalvingHeatContent = .False.
 
   depthBeforeScalingFluxes = max( GV%Angstrom_H, 1.e-30*GV%m_to_H )
-  pressure(:) = 0. ! Ignores atmospheric pressure ###
+  pressure(:) = 0.
+  if (associated(tv%p_surf)) then ; do i=G%isc,G%iec ; pressure(i) = tv%p_surf(i,j) ; enddo ; endif
   GoRho       = (GV%g_Earth * GV%H_to_Z*US%T_to_s) / GV%Rho0
 
   H_limit_fluxes = depthBeforeScalingFluxes

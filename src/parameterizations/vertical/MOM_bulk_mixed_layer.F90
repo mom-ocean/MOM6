@@ -464,7 +464,11 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
 
     if (id_clock_EOS>0) call cpu_clock_begin(id_clock_EOS)
     ! Calculate an estimate of the mid-mixed layer pressure [R L2 T-2 ~> Pa]
-    do i=is,ie ; p_ref(i) = 0.0 ; enddo
+    if (associated(tv%p_surf)) then
+      do i=is,ie ; p_ref(i) = tv%p_surf(i,j) ; enddo
+    else
+      do i=is,ie ; p_ref(i) = 0.0 ; enddo
+    endif
     do k=1,CS%nkml ; do i=is,ie
       p_ref(i) = p_ref(i) + 0.5*(GV%H_to_RZ*GV%g_Earth)*h(i,k)
     enddo ; enddo

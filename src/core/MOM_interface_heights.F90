@@ -97,8 +97,11 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
     if (associated(tv%eqn_of_state)) then
 !$OMP do
       do j=jsv,jev
-        ! ### THIS SHOULD BE P_SURF, IF AVAILABLE.
-        do i=isv,iev ; p(i,j,1) = 0.0 ; enddo
+        if (associated(tv%p_surf)) then
+          do i=isv,iev ; p(i,j,1) = tv%p_surf(i,j) ; enddo
+        else
+          do i=isv,iev ; p(i,j,1) = 0.0 ; enddo
+        endif
         do k=1,nz ; do i=isv,iev
           p(i,j,K+1) = p(i,j,K) + GV%g_Earth*GV%H_to_RZ*h(i,j,k)
         enddo ; enddo
@@ -198,8 +201,11 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
     if (associated(tv%eqn_of_state)) then
 !$OMP do
       do j=js,je
-        ! ### THIS SHOULD BE P_SURF, IF AVAILABLE.
-        do i=is,ie ; p(i,j,1) = 0.0 ; enddo
+        if (associated(tv%p_surf)) then
+          do i=is,ie ; p(i,j,1) = tv%p_surf(i,j) ; enddo
+        else
+          do i=is,ie ; p(i,j,1) = 0.0 ; enddo
+        endif
 
         do k=1,nz ; do i=is,ie
           p(i,j,k+1) = p(i,j,k) + GV%g_Earth*GV%H_to_RZ*h(i,j,k)

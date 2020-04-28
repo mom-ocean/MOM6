@@ -12,7 +12,8 @@ use MOM_EOS,            only : EOS_type, calculate_density
 use MOM_file_parser,    only : get_param, log_param, log_version, param_file_type
 use MOM_file_parser,    only : openParameterBlock, closeParameterBlock
 use MOM_grid,           only : ocean_grid_type, isPointInCell
-use MOM_unit_scaling, only : unit_scale_type
+use MOM_unit_scaling,   only : unit_scale_type
+use MOM_variables,      only : thermo_var_ptrs
 use MOM_verticalGrid,   only : verticalGrid_type
 use MOM_wave_interface, only : wave_parameters_CS, Get_Langmuir_Number
 use MOM_domains,        only : pass_var
@@ -886,7 +887,7 @@ end subroutine KPP_calculate
 
 
 !> Compute OBL depth
-subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Waves)
+subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFlux, Waves)
 
   ! Arguments
   type(KPP_CS),                               pointer       :: CS    !< Control structure
@@ -898,7 +899,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Salt  !< Salinity [ppt]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  intent(in)    :: u     !< Velocity i-component [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)    :: v     !< Velocity j-component [L T-1 ~> m s-1]
-  type(EOS_type),                             pointer       :: EOS   !< Equation of state
+  type(thermo_var_ptrs),                      intent(in)    :: tv    !< Thermodynamics structure.
   real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: uStar !< Surface friction velocity [Z T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux [L2 T-3 ~> m2 s-3]
   type(wave_parameters_CS),         optional, pointer       :: Waves !< Wave CS
@@ -973,7 +974,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
   !GOMP                           deltarho, N2_1d, ws_1d, LangEnhVT2, enhvt2, wst,          &
   !GOMP                           BulkRi_1d, zBottomMinusOffset) &
   !GOMP                           shared(G, GV, CS, US, uStar, h, buoy_scale, buoyFlux,     &
-  !GOMP                           Temp, Salt, waves, EOS, GoRho)
+  !GOMP                           Temp, Salt, waves, tv, GoRho)
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
 
@@ -997,7 +998,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
       ! on the OBLdepth calculation. It follows that used in MOM5
       ! and POP.
       iFaceHeight(1) = 0.0 ! BBL is all relative to the surface
-      pRef = 0.
+      pRef = 0. ; if (associated(tv%p_surf)) pRef = tv%p_surf(i,j)
       hcorr = 0.
       do k=1,G%ke
 
@@ -1104,7 +1105,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
 
 
       ! compute in-situ density
-      call calculate_density(Temp_1D, Salt_1D, pres_1D, rho_1D, EOS)
+      call calculate_density(Temp_1D, Salt_1D, pres_1D, rho_1D, tv%eqn_of_state)
 
       ! N2 (can be negative) and N (non-negative) on interfaces.
       ! deltaRho is non-local rho difference used for bulk Richardson number.
@@ -1281,7 +1282,6 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
   real :: wc, ww, we, wn, ws ! averaging weights for smoothing
   real :: dh                 ! The local thickness used for calculating interface positions [m]
   real :: hcorr              ! A cumulative correction arising from inflation of vanished layers [m]
-!###  real :: pref
   integer :: i, j, k, s
 
   do s=1,CS%n_smooth
@@ -1300,7 +1300,6 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
         if (G%mask2dT(i,j)==0.) cycle
 
         iFaceHeight(1) = 0.0 ! BBL is all relative to the surface
-!###        pRef = 0.
         hcorr = 0.
         do k=1,G%ke
 
