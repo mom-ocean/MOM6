@@ -395,7 +395,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
                             ! calculation [kg T2 R-1 Z-1 L-2 s-2 ~> nondim]
   integer :: num_nc_fields  ! The number of fields that will actually go into
                             ! the NetCDF file.
-  integer :: i, j, k, is, ie, js, je, ns, nz, m, Isq, Ieq, Jsq, Jeq
+  integer :: i, j, k, is, ie, js, je, ns, nz, m, Isq, Ieq, Jsq, Jeq, isr, ier, jsr, jer
   integer :: l, lbelow, labove   ! indices of deep_area_vol, used to find Z_0APE.
                                  ! lbelow & labove are lower & upper limits for l
                                  ! in the search for the entry in lH to use.
@@ -483,6 +483,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+  isr = is - (G%isd-1) ; ier = ie - (G%isd-1) ; jsr = js - (G%jsd-1) ; jer = je - (G%jsd-1)
+
 
   HL2_to_kg = GV%H_to_kg_m2*US%L_to_m**2
 
@@ -527,7 +529,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
       enddo
     endif
 
-    mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
+    mass_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=mass_lay, EFP_sum=mass_EFP)
     do k=1,nz ; vol_lay(k) = (US%m_to_L**2*GV%H_to_Z/GV%H_to_kg_m2)*mass_lay(k) ; enddo
   else
     tmp1(:,:,:) = 0.0
@@ -535,19 +537,19 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
       do k=1,nz ; do j=js,je ; do i=is,ie
         tmp1(i,j,k) = HL2_to_kg * h(i,j,k) * areaTm(i,j)
       enddo ; enddo ; enddo
-      mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
+      mass_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=mass_lay, EFP_sum=mass_EFP)
 
       call find_eta(h, tv, G, GV, US, eta)
       do k=1,nz ; do j=js,je ; do i=is,ie
         tmp1(i,j,k) = US%Z_to_m*US%L_to_m**2*(eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
       enddo ; enddo ; enddo
-      vol_tot = reproducing_sum(tmp1, sums=vol_lay)
+      vol_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=vol_lay)
       do k=1,nz ; vol_lay(k) = US%m_to_Z*US%m_to_L**2 * vol_lay(k) ; enddo
     else
       do k=1,nz ; do j=js,je ; do i=is,ie
         tmp1(i,j,k) = HL2_to_kg * h(i,j,k) * areaTm(i,j)
       enddo ; enddo ; enddo
-      mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
+      mass_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=mass_lay, EFP_sum=mass_EFP)
       do k=1,nz ; vol_lay(k) = US%m_to_Z*US%m_to_L**2*US%kg_m3_to_R * (mass_lay(k) / GV%Rho0) ; enddo
     endif
   endif ! Boussinesq
@@ -689,7 +691,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
       enddo ; enddo
     endif
 
-    PE_tot = reproducing_sum(PE_pt, sums=PE)
+    PE_tot = reproducing_sum(PE_pt, isr, ier, jsr, jer, sums=PE)
     do k=1,nz+1 ; H_0APE(K) = US%Z_to_m*Z_0APE(K) ; enddo
   else
     PE_tot = 0.0
@@ -703,7 +705,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     tmp1(i,j,k) = (0.25 * KE_scale_factor * (areaTm(i,j) * h(i,j,k))) * &
             (u(I-1,j,k)**2 + u(I,j,k)**2 + v(i,J-1,k)**2 + v(i,J,k)**2)
   enddo ; enddo ; enddo
-  KE_tot = reproducing_sum(tmp1, sums=KE)
+  KE_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=KE)
 
   toten = KE_tot + PE_tot
 
@@ -716,8 +718,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
       Temp_int(i,j) = Temp_int(i,j) + (US%Q_to_J_kg*tv%C_p * tv%T(i,j,k)) * &
                       (h(i,j,k)*(HL2_to_kg * areaTm(i,j)))
     enddo ; enddo ; enddo
-    salt_EFP = reproducing_sum_EFP(Salt_int, only_on_PE=.true.)
-    heat_EFP = reproducing_sum_EFP(Temp_int, only_on_PE=.true.)
+    salt_EFP = reproducing_sum_EFP(Salt_int, isr, ier, jsr, jer, only_on_PE=.true.)
+    heat_EFP = reproducing_sum_EFP(Temp_int, isr, ier, jsr, jer, only_on_PE=.true.)
 
     ! Combining the sums avoids multiple blocking all-PE updates.
     EFP_list(1) = salt_EFP ;  EFP_list(2) = heat_EFP ; EFP_list(3) = CS%fresh_water_in_EFP
@@ -983,7 +985,7 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
                      ! over a time step and summed over space [J].
 
   real :: inputs(3)   ! A mixed array for combining the sums
-  integer :: i, j, is, ie, js, je
+  integer :: i, j, is, ie, js, je, isr, ier, jsr, jer
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
@@ -1068,11 +1070,12 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
 
   if ((CS%use_temperature) .or. associated(fluxes%lprec) .or. &
       associated(fluxes%evap)) then
-    !### The on-PE sums should be stored here, but the sum across PEs should be deferred to
+    ! The on-PE sums are stored here, but the sums across PEs are deferred to
     ! the next call to write_energy to avoid extra barriers.
-    FW_in_EFP   = reproducing_sum_EFP(FW_in,   only_on_PE=.true.)
-    heat_in_EFP = reproducing_sum_EFP(heat_in, only_on_PE=.true.)
-    salt_in_EFP = reproducing_sum_EFP(salt_in, only_on_PE=.true.)
+    isr = is - (G%isd-1) ; ier = ie - (G%isd-1) ; jsr = js - (G%jsd-1) ; jer = je - (G%jsd-1)
+    FW_in_EFP   = reproducing_sum_EFP(FW_in,   isr, ier, jsr, jer, only_on_PE=.true.)
+    heat_in_EFP = reproducing_sum_EFP(heat_in, isr, ier, jsr, jer, only_on_PE=.true.)
+    salt_in_EFP = reproducing_sum_EFP(salt_in, isr, ier, jsr, jer, only_on_PE=.true.)
 
     CS%fresh_water_in_EFP = CS%fresh_water_in_EFP + FW_in_EFP
     CS%net_salt_in_EFP    = CS%net_salt_in_EFP    + salt_in_EFP
