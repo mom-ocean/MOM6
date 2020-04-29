@@ -5,8 +5,8 @@ module MOM_sum_output
 
 use iso_fortran_env, only : int64
 use MOM_coms, only : sum_across_PEs, PE_here, root_PE, num_PEs, max_across_PEs
-use MOM_coms, only : reproducing_sum, EFP_to_real, real_to_EFP
-use MOM_coms, only : EFP_type, operator(+), operator(-), assignment(=)
+use MOM_coms, only : reproducing_sum, reproducing_sum_EFP, EFP_to_real, real_to_EFP
+use MOM_coms, only : EFP_type, operator(+), operator(-), assignment(=), EFP_sum_across_PEs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe, MOM_mesg
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -80,24 +80,18 @@ type, public :: sum_output_CS ; private
                                 !< Automatically update the Depth_list.nc file if the
                                 !! checksums are missing or do not match current values.
   logical :: use_temperature    !<   If true, temperature and salinity are state variables.
-  real    :: fresh_water_input  !<   The total mass of fresh water added by surface fluxes
-                                !! since the last time that write_energy was called [kg].
-  real    :: mass_prev          !<   The total ocean mass the last time that
-                                !! write_energy was called [kg].
-  real    :: salt_prev          !<   The total amount of salt in the ocean the last
-                                !! time that write_energy was called [ppt kg].
-  real    :: net_salt_input     !<   The total salt added by surface fluxes since the last
-                                !! time that write_energy was called [ppt kg].
-  real    :: heat_prev          !<  The total amount of heat in the ocean the last
-                                !! time that write_energy was called [J].
-  real    :: net_heat_input     !<  The total heat added by surface fluxes since the last
-                                !! the last time that write_energy was called [J].
-  type(EFP_type) :: fresh_water_in_EFP !< An extended fixed point version of fresh_water_input
-  type(EFP_type) :: net_salt_in_EFP !< An extended fixed point version of net_salt_input
-  type(EFP_type) :: net_heat_in_EFP !< An extended fixed point version of net_heat_input
-  type(EFP_type) :: heat_prev_EFP !< An extended fixed point version of heat_prev
-  type(EFP_type) :: salt_prev_EFP !< An extended fixed point version of salt_prev
-  type(EFP_type) :: mass_prev_EFP !< An extended fixed point version of mass_prev
+  type(EFP_type) :: fresh_water_in_EFP !< The total mass of fresh water added by surface fluxes on
+                                  !! this PE since the last time that write_energy was called [kg].
+  type(EFP_type) :: net_salt_in_EFP !< The total salt added by surface fluxes on this PE since
+                                  !! the last time that write_energy was called [ppt kg].
+  type(EFP_type) :: net_heat_in_EFP !<  The total heat added by surface fluxes on this PE since
+                                  !! the last time that write_energy was called [J].
+  type(EFP_type) :: heat_prev_EFP !<  The total amount of heat in the ocean the last
+                                  !! time that write_energy was called [J].
+  type(EFP_type) :: salt_prev_EFP !< The total amount of salt in the ocean the last
+                                  !! time that write_energy was called [ppt kg].
+  type(EFP_type) :: mass_prev_EFP !< The total ocean mass the last time that
+                                  !! write_energy was called [kg].
   real    :: dt_in_T            !< The baroclinic dynamics time step [T ~> s].
 
   type(time_type) :: energysavedays            !< The interval between writing the energies
@@ -355,12 +349,9 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
                        ! to this subroutine divided by total mass [ppt].
   real :: salin_anom   ! The change in total salt that cannot be accounted for by
                        ! the surface fluxes divided by total mass [ppt].
-  real :: salin_mass_in ! The mass of salt input since the last call [kg].
   real :: Heat         ! The total amount of Heat in the ocean [J].
-  real :: Heat_chg     ! The change in total ocean heat since the last call
-                       ! to this subroutine [J].
-  real :: Heat_anom    ! The change in heat that cannot be accounted for by
-                       ! the surface fluxes [J].
+  real :: Heat_chg     ! The change in total ocean heat since the last call to this subroutine [J].
+  real :: Heat_anom    ! The change in heat that cannot be accounted for by the surface fluxes [J].
   real :: temp         ! The mean potential temperature of the ocean [degC].
   real :: temp_chg     ! The change in total heat divided by total heat capacity
                        ! of the ocean since the last call to this subroutine, degC.
@@ -373,9 +364,19 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
                        ! This makes PE only include real fluid.
   real :: hbelow       ! The depth of fluid in all layers beneath an interface [Z ~> m].
   type(EFP_type) :: &
-    mass_EFP, &        ! Extended fixed point sums of total mass, etc.
-    salt_EFP, heat_EFP, salt_chg_EFP, heat_chg_EFP, mass_chg_EFP, &
-    mass_anom_EFP, salt_anom_EFP, heat_anom_EFP
+    mass_EFP, &        ! The total mass of the ocean in extended fixed point form [kg].
+    salt_EFP, &        ! The total amount of salt in the ocean in extended fixed point form [ppt kg].
+    heat_EFP, &        ! The total amount of heat in the ocean in extended fixed point form [J].
+    salt_chg_EFP, &    ! The change in total ocean salt since the last call to this subroutine [ppt kg].
+    heat_chg_EFP, &    ! The change in total ocean heat since the last call to this subroutine [J].
+    mass_chg_EFP, &    ! The change in total ocean mass of fresh water since
+                       ! the last call to this subroutine [kg].
+    salt_anom_EFP, &   ! The change in salt that cannot be accounted for by the surface
+                       ! fluxes [ppt kg].
+    heat_anom_EFP, &   ! The change in heat that cannot be accounted for by the surface fluxes [J].
+    mass_anom_EFP      ! The change in fresh water that cannot be accounted for by the surface
+                       ! fluxes [kg].
+  type(EFP_type), dimension(5) :: EFP_list ! An array of EFP types for joint global sums.
   real :: CFL_Iarea    ! Direction-based inverse area used in CFL test [L-2].
   real :: CFL_trans    ! A transport-based definition of the CFL number [nondim].
   real :: CFL_lin      ! A simpler definition of the CFL number [nondim].
@@ -568,10 +569,12 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   endif
 
   if (CS%previous_calls == 0) then
-    CS%mass_prev = mass_tot ; CS%fresh_water_input = 0.0
 
     CS%mass_prev_EFP = mass_EFP
     CS%fresh_water_in_EFP = real_to_EFP(0.0)
+    if (CS%use_temperature) then
+      CS%net_salt_in_EFP = real_to_EFP(0.0)  ; CS%net_heat_in_EFP = real_to_EFP(0.0)
+    endif
 
     !  Reopen or create a text output file, with an explanatory header line.
     if (is_root_pe()) then
@@ -713,8 +716,21 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
       Temp_int(i,j) = Temp_int(i,j) + (US%Q_to_J_kg*tv%C_p * tv%T(i,j,k)) * &
                       (h(i,j,k)*(HL2_to_kg * areaTm(i,j)))
     enddo ; enddo ; enddo
-    Salt = reproducing_sum(Salt_int, EFP_sum=salt_EFP)
-    Heat = reproducing_sum(Temp_int, EFP_sum=heat_EFP)
+    salt_EFP = reproducing_sum_EFP(Salt_int, only_on_PE=.true.)
+    heat_EFP = reproducing_sum_EFP(Temp_int, only_on_PE=.true.)
+
+    ! Combining the sums avoids multiple blocking all-PE updates.
+    EFP_list(1) = salt_EFP ;  EFP_list(2) = heat_EFP ; EFP_list(3) = CS%fresh_water_in_EFP
+    EFP_list(4) = CS%net_salt_in_EFP ; EFP_list(5) = CS%net_heat_in_EFP
+    call EFP_sum_across_PEs(EFP_list, 5)
+    ! Return the globally summed values to the original variables.
+    salt_EFP = EFP_list(1) ; heat_EFP = EFP_list(2) ; CS%fresh_water_in_EFP = EFP_list(3)
+    CS%net_salt_in_EFP = EFP_list(4) ; CS%net_heat_in_EFP = EFP_list(5)
+
+    Salt = EFP_to_real(salt_EFP)
+    Heat = EFP_to_real(heat_EFP)
+  else
+    call EFP_sum_across_PEs(CS%fresh_water_in_EFP)
   endif
 
 ! Calculate the maximum CFL numbers.
@@ -746,38 +762,31 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   !   The sum of Tr_stocks should be reimplemented using the reproducing sums.
   if (nTr_stocks > 0) call sum_across_PEs(Tr_stocks,nTr_stocks)
 
-  call max_across_PEs(max_CFL(1))
-  call max_across_PEs(max_CFL(2))
-  if (CS%use_temperature .and. CS%previous_calls == 0) then
-    CS%salt_prev = Salt ; CS%net_salt_input = 0.0
-    CS%heat_prev = Heat ; CS%net_heat_input = 0.0
-
-    CS%salt_prev_EFP = salt_EFP ; CS%net_salt_in_EFP = real_to_EFP(0.0)
-    CS%heat_prev_EFP = heat_EFP ; CS%net_heat_in_EFP = real_to_EFP(0.0)
-  endif
+  call max_across_PEs(max_CFL, 2)
   Irho0 = 1.0 / (US%R_to_kg_m3*GV%Rho0)
 
   if (CS%use_temperature) then
+    if (CS%previous_calls == 0) then
+      CS%salt_prev_EFP = salt_EFP ; CS%heat_prev_EFP = heat_EFP
+    endif
     Salt_chg_EFP = Salt_EFP - CS%salt_prev_EFP
+    Salt_chg = EFP_to_real(Salt_chg_EFP)
     Salt_anom_EFP = Salt_chg_EFP - CS%net_salt_in_EFP
-    Salt_chg = EFP_to_real(Salt_chg_EFP) ; Salt_anom = EFP_to_real(Salt_anom_EFP)
+    Salt_anom = EFP_to_real(Salt_anom_EFP)
     Heat_chg_EFP = Heat_EFP - CS%heat_prev_EFP
+    Heat_chg = EFP_to_real(Heat_chg_EFP)
     Heat_anom_EFP = Heat_chg_EFP - CS%net_heat_in_EFP
-    Heat_chg = EFP_to_real(Heat_chg_EFP) ; Heat_anom = EFP_to_real(Heat_anom_EFP)
+    Heat_anom = EFP_to_real(Heat_anom_EFP)
   endif
 
   mass_chg_EFP = mass_EFP - CS%mass_prev_EFP
-  salin_mass_in = 0.0
-  if (GV%Boussinesq) then
-    mass_anom_EFP = mass_chg_EFP - CS%fresh_water_in_EFP
-  else
+  mass_anom_EFP = mass_chg_EFP - CS%fresh_water_in_EFP
+  mass_anom = EFP_to_real(mass_anom_EFP)
+  if (CS%use_temperature .and. .not.GV%Boussinesq) then
     ! net_salt_input needs to be converted from ppt m s-1 to kg m-2 s-1.
-    mass_anom_EFP = mass_chg_EFP - CS%fresh_water_in_EFP
-    if (CS%use_temperature) &
-      salin_mass_in = 0.001*EFP_to_real(CS%net_salt_in_EFP)
+    mass_anom = mass_anom - 0.001*EFP_to_real(CS%net_salt_in_EFP)
   endif
   mass_chg = EFP_to_real(mass_chg_EFP)
-  mass_anom = EFP_to_real(mass_anom_EFP) - salin_mass_in
 
   if (CS%use_temperature) then
     salin = Salt / mass_tot ; salin_anom = Salt_anom / mass_tot
@@ -894,7 +903,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   call write_field(CS%fileenergy_nc, CS%fields(8), mass_chg, reday)
   call write_field(CS%fileenergy_nc, CS%fields(9), mass_anom, reday)
   call write_field(CS%fileenergy_nc, CS%fields(10), max_CFL(1), reday)
-  call write_field(CS%fileenergy_nc, CS%fields(11), max_CFL(1), reday)
+  call write_field(CS%fileenergy_nc, CS%fields(11), max_CFL(2), reday)
   if (CS%use_temperature) then
     call write_field(CS%fileenergy_nc, CS%fields(12), 0.001*Salt, reday)
     call write_field(CS%fileenergy_nc, CS%fields(13), 0.001*salt_chg, reday)
@@ -926,17 +935,13 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   endif
   CS%ntrunc = 0
   CS%previous_calls = CS%previous_calls + 1
-  CS%mass_prev = mass_tot ; CS%fresh_water_input = 0.0
-  if (CS%use_temperature) then
-    CS%salt_prev = Salt ; CS%net_salt_input = 0.0
-    CS%heat_prev = Heat ; CS%net_heat_input = 0.0
-  endif
 
   CS%mass_prev_EFP = mass_EFP ; CS%fresh_water_in_EFP = real_to_EFP(0.0)
   if (CS%use_temperature) then
     CS%salt_prev_EFP = Salt_EFP ; CS%net_salt_in_EFP = real_to_EFP(0.0)
     CS%heat_prev_EFP = Heat_EFP ; CS%net_heat_in_EFP = real_to_EFP(0.0)
   endif
+
 end subroutine write_energy
 
 !> This subroutine accumates the net input of volume, salt and heat, through
@@ -970,9 +975,12 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
   real :: QRZL2_to_J ! A combination of scaling factors for heat [J Q-1 R-1 Z-1 L-2 ~> 1]
 
   type(EFP_type) :: &
-    FW_in_EFP,   & ! Extended fixed point version of FW_input [kg]
-    salt_in_EFP, & ! Extended fixed point version of salt_input [ppt kg]
-    heat_in_EFP    ! Extended fixed point version of heat_input [J]
+    FW_in_EFP,   &   ! The net fresh water input, integrated over a timestep
+                     ! and summed over space [kg].
+    salt_in_EFP, &   ! The total salt added by surface fluxes, integrated
+                     ! over a time step and summed over space [ppt kg].
+    heat_in_EFP      ! The total heat added by boundary fluxes, integrated
+                     ! over a time step and summed over space [J].
 
   real :: inputs(3)   ! A mixed array for combining the sums
   integer :: i, j, is, ie, js, je
@@ -982,7 +990,7 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
   RZL2_to_kg = US%L_to_m**2*US%RZ_to_kg_m2
   QRZL2_to_J = RZL2_to_kg*US%Q_to_J_kg
 
-  FW_in(:,:) = 0.0 ; FW_input = 0.0
+  FW_in(:,:) = 0.0
   if (associated(fluxes%evap)) then
     if (associated(fluxes%lprec) .and. associated(fluxes%fprec)) then
       do j=js,je ; do i=is,ie
@@ -1060,13 +1068,11 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
 
   if ((CS%use_temperature) .or. associated(fluxes%lprec) .or. &
       associated(fluxes%evap)) then
-    FW_input   = reproducing_sum(FW_in,   EFP_sum=FW_in_EFP)
-    heat_input = reproducing_sum(heat_in, EFP_sum=heat_in_EFP)
-    salt_input = reproducing_sum(salt_in, EFP_sum=salt_in_EFP)
-
-    CS%fresh_water_input = CS%fresh_water_input + FW_input
-    CS%net_salt_input    = CS%net_salt_input    + salt_input
-    CS%net_heat_input    = CS%net_heat_input    + heat_input
+    !### The on-PE sums should be stored here, but the sum across PEs should be deferred to
+    ! the next call to write_energy to avoid extra barriers.
+    FW_in_EFP   = reproducing_sum_EFP(FW_in,   only_on_PE=.true.)
+    heat_in_EFP = reproducing_sum_EFP(heat_in, only_on_PE=.true.)
+    salt_in_EFP = reproducing_sum_EFP(salt_in, only_on_PE=.true.)
 
     CS%fresh_water_in_EFP = CS%fresh_water_in_EFP + FW_in_EFP
     CS%net_salt_in_EFP    = CS%net_salt_in_EFP    + salt_in_EFP
