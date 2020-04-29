@@ -320,7 +320,7 @@ end function reproducing_sum_2d
 !! order-invariant sum of distributed 3-D arrays that reproduces across domain decomposition.
 !! This technique is described in Hallberg & Adcroft, 2014, Parallel Computing,
 !! doi:10.1016/j.parco.2014.04.007.
-function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, err, only_on_PE) &
+function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, EFP_lay_sums, err, only_on_PE) &
                             result(sum)
   real, dimension(:,:,:),       intent(in)  :: array   !< The array to be summed
   integer,            optional, intent(in)  :: isr     !< The starting i-index of the sum, noting
@@ -333,6 +333,8 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, err, only_
                                                        !! that the array indices starts at 1
   real, dimension(:), optional, intent(out) :: sums    !< The sums by vertical layer
   type(EFP_type),     optional, intent(out) :: EFP_sum !< The result in extended fixed point format
+  type(EFP_type), dimension(:), &
+                      optional, intent(out) :: EFP_lay_sums !< The sums by vertical layer in EFP format
   integer,            optional, intent(out) :: err  !< If present, return an error code instead of
                                                     !! triggering any fatal errors directly from
                                                     !! this routine.
@@ -344,7 +346,7 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, err, only_
   ! of real numbers to give order-invariant sums that will reproduce
   ! across PE count.  This idea comes from R. Hallberg and A. Adcroft.
 
-  real    :: max_mag_term
+  real    :: val, max_mag_term
   integer(kind=8), dimension(ni)  :: ints_sum
   integer(kind=8), dimension(ni,size(array,3))  :: ints_sums
   integer(kind=8) :: prec_error
@@ -380,9 +382,13 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, err, only_
 
   do_sum_across_PEs = .true. ; if (present(only_on_PE)) do_sum_across_PEs = .not.only_on_PE
 
-  if (present(sums)) then
-    if (size(sums) > ke) call MOM_error(FATAL, "Sums is smaller than "//&
-      "the vertical extent of array in reproducing_sum(_3d).")
+  if (present(sums) .or. present(EFP_lay_sums)) then
+    if (present(sums)) then ; if (size(sums) < ke) then
+      call MOM_error(FATAL, "Sums is smaller than the vertical extent of array in reproducing_sum(_3d).")
+    endif ; endif
+    if (present(EFP_lay_sums)) then ; if (size(EFP_lay_sums) < ke) then
+      call MOM_error(FATAL, "Sums is smaller than the vertical extent of array in reproducing_sum(_3d).")
+    endif ; endif
     ints_sums(:,:) = 0
     overflow_error = .false. ; NaN_error = .false. ; max_mag_term = 0.0
     if (jsz*isz < max_count_prec) then
@@ -425,9 +431,13 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, err, only_
     sum = 0.0
     do k=1,ke
       call regularize_ints(ints_sums(:,k))
-      sums(k) = ints_to_real(ints_sums(:,k))
-      sum = sum + sums(k)
+      val = ints_to_real(ints_sums(:,k))
+      if (present(sums)) sums(k) = val
+      sum = sum + val
     enddo
+    if (present(EFP_lay_sums)) then ; do k=1,ke
+      EFP_lay_sums(k)%v(:) = ints_sums(:,k)
+    enddo ; endif
 
     if (present(EFP_sum)) then
       EFP_sum%v(:) = 0
