@@ -2028,7 +2028,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   ! Grid rotation test
   call get_param(param_file, "MOM", "ROTATE_INDEX", CS%rotate_index, &
-      "Enable rotation of the horizontal indices.", default=.false.)
+      "Enable rotation of the horizontal indices.", default=.false., &
+      debuggingParam=.true.)
   if (CS%rotate_index) then
     ! TODO: Index rotation currently only works when index rotation does not
     !   change the MPI rank of each domain.  Resolving this will require a
@@ -2039,7 +2040,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       call MOM_error(FATAL, "Index rotation is only supported on one PE.")
 
     call get_param(param_file, "MOM", "INDEX_TURNS", turns, &
-        "Number of counterclockwise quarter-turn index rotations.", default=1)
+        "Number of counterclockwise quarter-turn index rotations.", &
+        default=1, debuggingParam=.true.)
   endif
 
   ! Set up the model domain and grids.
