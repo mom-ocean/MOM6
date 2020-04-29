@@ -145,10 +145,17 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   endif
 
   ! Find the maximum and minimum permitted streamfunction.
-  !$OMP parallel do default(shared)
-  do j=js-1,je+1 ; do i=is-1,ie+1
-    pres(i,j,1) = 0.0  ! ### This should be atmospheric pressure.
-  enddo ; enddo
+  if (associated(tv%p_surf)) then
+    !$OMP parallel do default(shared)
+    do j=js-1,je+1 ; do i=is-1,ie+1
+      pres(i,j,1) = tv%p_surf(i,j)
+    enddo ; enddo
+  else
+    !$OMP parallel do default(shared)
+    do j=js-1,je+1 ; do i=is-1,ie+1
+      pres(i,j,1) = 0.0
+    enddo ; enddo
+  endif
   !$OMP parallel do default(shared)
   do j=js-1,je+1
     do k=1,nz ; do i=is-1,ie+1
