@@ -960,8 +960,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
 
   if (present(cTKE)) cTKE(:,:,:) = 0.0
   if (calculate_buoyancy) then
-    SurfPressure(:) = 0.0 !### Add fluxes%p_surf_full?
-    GoRho       = US%L_to_Z**2*GV%g_Earth / GV%Rho0
+    SurfPressure(:) = 0.0
+    GoRho = US%L_to_Z**2*GV%g_Earth / GV%Rho0
   endif
 
   ! H_limit_fluxes is used by extractFluxes1d to scale down fluxes if the total
@@ -1004,7 +1004,11 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
       ! The partial derivatives of specific volume with temperature and
       ! salinity need to be precalculated to avoid having heating of
       ! tiny layers give nonsensical values.
-      do i=is,ie ; pres(i) = 0.0 ; enddo ! ###Add surface pressure?
+      if (associated(tv%p_surf)) then
+        do i=is,ie ; pres(i) = tv%p_surf(i,j) ; enddo
+      else
+        do i=is,ie ; pres(i) = 0.0 ; enddo
+      endif
       do k=1,nz
         do i=is,ie
           d_pres(i) = (GV%g_Earth * GV%H_to_RZ) * h2d(i,k)
@@ -1353,6 +1357,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
       do i=is,ie ; do nb=1,nsw ; netPen_rate(i) = netPen_rate(i) + pen_SW_bnd_rate(nb,i) ; enddo ; enddo
 
       ! Density derivatives
+      if (associated(tv%p_surf)) then ; do i=is,ie ; SurfPressure(i) = tv%p_surf(i,j) ; enddo ; endif
       call calculate_density_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, dRhodT, dRhodS, &
                                     tv%eqn_of_state, EOSdom)
       ! 1. Adjust netSalt to reflect dilution effect of FW flux
