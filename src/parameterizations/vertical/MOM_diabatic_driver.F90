@@ -663,9 +663,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
                        Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves)
 
     if (associated(Hml)) then
-      !$OMP parallel default(shared)
-      call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G)
-      !$OMP end parallel
+      call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G, US, m_to_BLD_units=1.0)
       call pass_var(Hml, G%domain, halo=1)
       ! If visc%MLD exists, copy KPP's BLD into it
       if (associated(visc%MLD)) visc%MLD(:,:) = Hml(:,:)
@@ -842,12 +840,12 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
                        CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
 
     if (associated(Hml)) then
-      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, Hml(:,:), G, US)
+      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, Hml(:,:), G, US, m_to_MLD_units=1.0)
       call pass_var(Hml, G%domain, halo=1)
       ! If visc%MLD exists, copy ePBL's MLD into it
       if (associated(visc%MLD)) visc%MLD(:,:) = Hml(:,:)
     elseif (associated(visc%MLD)) then
-      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, visc%MLD, G, US)
+      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, visc%MLD, G, US, m_to_MLD_units=1.0)
       call pass_var(visc%MLD, G%domain, halo=1)
     endif
 
@@ -1448,9 +1446,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
                        Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves)
 
     if (associated(Hml)) then
-      !$OMP parallel default(shared)
-      call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G)
-      !$OMP end parallel
+      call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G, US, m_to_BLD_units=1.0)
       call pass_var(Hml, G%domain, halo=1)
       ! If visc%MLD exists, copy KPP's BLD into it
       if (associated(visc%MLD)) visc%MLD(:,:) = Hml(:,:)
@@ -1573,12 +1569,12 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
                        CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
 
     if (associated(Hml)) then
-      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, Hml(:,:), G, US)
+      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, Hml(:,:), G, US, m_to_MLD_units=1.0)
       call pass_var(Hml, G%domain, halo=1)
       ! If visc%MLD exists, copy ePBL's MLD into it
       if (associated(visc%MLD)) visc%MLD(:,:) = Hml(:,:)
     elseif (associated(visc%MLD)) then
-      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, visc%MLD, G, US)
+      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, visc%MLD, G, US, m_to_MLD_units=1.0)
       call pass_var(visc%MLD, G%domain, halo=1)
     endif
 
@@ -2183,7 +2179,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
                        Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves)
 
     if (associated(Hml)) then
-      call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G)
+      call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G, US, m_to_BLD_units=1.0)
       call pass_var(Hml, G%domain, halo=1)
       ! If visc%MLD exists, copy KPP's BLD into it
       if (associated(visc%MLD)) visc%MLD(:,:) = Hml(:,:)

@@ -134,15 +134,15 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   type(unit_scale_type),                intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                         intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(SZIB_(G),SZJ_(G)),    intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points [m2]
-  real, dimension(SZI_(G),SZJB_(G)),    intent(in)    :: Coef_y !< dt * Kh * dx / dy at v-points [m2]
+  real, dimension(SZIB_(G),SZJ_(G)),    intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points [L2 ~> m2]
+  real, dimension(SZI_(G),SZJB_(G)),    intent(in)    :: Coef_y !< dt * Kh * dx / dy at v-points [L2 ~> m2]
   real,                                 intent(in)    :: dt     !< Tracer time step * I_numitts
                                                                 !! (I_numitts in tracer_hordiff)
   type(tracer_registry_type),           pointer       :: Reg    !< Tracer registry
   type(lateral_boundary_diffusion_CS),  intent(in)    :: CS     !< Control structure for this module
 
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G)) :: hbl                           !< bnd. layer depth [m]
+  real, dimension(SZI_(G),SZJ_(G)) :: hbl                           !< bnd. layer depth [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G),CS%deg+1) :: ppoly0_coefs !< Coefficients of polynomial
   real, dimension(SZI_(G),SZJ_(G),SZK_(G),2)        :: ppoly0_E     !< Edge values from reconstructions
   real, dimension(SZK_(G),CS%deg+1)                 :: ppoly_S      !< Slopes from reconstruction (placeholder)
@@ -161,8 +161,9 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
 
   Idt = 1./dt
   hbl(:,:) = 0.
-  if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G)
-  if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US)
+  if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G, US, m_to_BLD_units=GV%m_to_H)
+  if (ASSOCIATED(CS%energetic_PBL_CSp)) &
+    call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US, m_to_MLD_units=GV%m_to_H)
 
   call pass_var(hbl,G%Domain)
   do m = 1,Reg%ntr
@@ -284,7 +285,7 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
 
     ! post tendency of tracer concentration; this step must be
     ! done after posting tracer content tendency, since we alter
-    ! the tendency array.
+    ! the tendency array and its units.
     if (tracer%id_lbdxy_conc > 0) then
       do k = 1, GV%ke ; do j = G%jsc,G%jec ; do i = G%isc,G%iec
         tendency(i,j,k) =  tendency(i,j,k) / ( h(i,j,k) + GV%H_subroundoff )
@@ -302,8 +303,8 @@ real function bulk_average(boundary, nk, deg, h, hBLT, phi, ppoly0_E, ppoly0_coe
   integer             :: boundary          !< SURFACE or BOTTOM                                         [nondim]
   integer             :: nk                !< Number of layers                                          [nondim]
   integer             :: deg               !< Degree of polynomial                                      [nondim]
-  real, dimension(nk) :: h                 !< Layer thicknesses                                         [m]
-  real                :: hBLT              !< Depth of the boundary layer                               [m]
+  real, dimension(nk) :: h                 !< Layer thicknesses                               [H ~> m or kg m-2]
+  real                :: hBLT              !< Depth of the boundary layer                     [H ~> m or kg m-2]
   real, dimension(nk) :: phi               !< Scalar quantity
   real, dimension(nk,2)    :: ppoly0_E(:,:)      !< Edge value of polynomial
   real, dimension(nk,deg+1) :: ppoly0_coefs(:,:) !< Coefficients of polynomial
@@ -318,7 +319,7 @@ real function bulk_average(boundary, nk, deg, h, hBLT, phi, ppoly0_E, ppoly0_coe
                                            !! (0 if none, 1. if all). For the bottom boundary layer, this is always 1.
                                            !! because integration starts at the bottom                  [nondim]
   ! Local variables
-  real    :: htot !< Running sum of the thicknesses (top to bottom)
+  real    :: htot !< Running sum of the thicknesses (top to bottom) [H ~> m or kg m-2]
   integer :: k    !< k indice
 
 
@@ -364,8 +365,8 @@ end function harmonic_mean
 subroutine boundary_k_range(boundary, nk, h, hbl, k_top, zeta_top, k_bot, zeta_bot)
   integer,             intent(in   ) :: boundary !< SURFACE or BOTTOM                       [nondim]
   integer,             intent(in   ) :: nk       !< Number of layers                        [nondim]
-  real, dimension(nk), intent(in   ) :: h        !< Layer thicknesses of the column         [m]
-  real,                intent(in   ) :: hbl      !< Thickness of the boundary layer         [m]
+  real, dimension(nk), intent(in   ) :: h        !< Layer thicknesses of the column         [H ~> m or kg m-2]
+  real,                intent(in   ) :: hbl      !< Thickness of the boundary layer         [H ~> m or kg m-2]
                                                  !! If surface, with respect to zbl_ref = 0.
                                                  !! If bottom, with respect to zbl_ref = SUM(h)
   integer,             intent(  out) :: k_top    !< Index of the first layer within the boundary
@@ -375,7 +376,7 @@ subroutine boundary_k_range(boundary, nk, h, hbl, k_top, zeta_top, k_bot, zeta_b
   real,                intent(  out) :: zeta_bot !< Distance of the lower layer to the boundary layer depth
                                                  !! (0 at top, 1 at bottom)  [nondim]
   ! Local variables
-  real :: htot
+  real :: htot ! Summed thickness [H ~> m or kg m-2]
   integer :: k
   ! Surface boundary layer
   if ( boundary == SURFACE ) then
@@ -434,14 +435,14 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L
   integer,                   intent(in   )       :: boundary !< Which boundary layer SURFACE or BOTTOM  [nondim]
   integer,                   intent(in   )       :: nk       !< Number of layers                        [nondim]
   integer,                   intent(in   )       :: deg      !< order of the polynomial reconstruction  [nondim]
-  real, dimension(nk),       intent(in   )       :: h_L      !< Layer thickness (left)                  [m]
-  real, dimension(nk),       intent(in   )       :: h_R      !< Layer thickness (right)                 [m]
+  real, dimension(nk),       intent(in   )       :: h_L      !< Layer thickness (left)        [H ~> m or kg m-2]
+  real, dimension(nk),       intent(in   )       :: h_R      !< Layer thickness (right)       [H ~> m or kg m-2]
   real,                      intent(in   )       :: hbl_L    !< Thickness of the boundary boundary
-                                                                       !! layer (left)                  [m]
+                                                                       !! layer (left)        [H ~> m or kg m-2]
   real,                      intent(in   )       :: hbl_R    !< Thickness of the boundary boundary
-                                                             !! layer (right)                           [m]
-  real,                      intent(in   )       :: area_L   !< Area of the horizontal grid (left)      [m^2]
-  real,                      intent(in   )       :: area_R   !< Area of the horizontal grid (right)     [m^2]
+                                                             !! layer (right)                 [H ~> m or kg m-2]
+  real,                      intent(in   )       :: area_L   !< Area of the horizontal grid (left)    [L2 ~> m2]
+  real,                      intent(in   )       :: area_R   !< Area of the horizontal grid (right)   [L2 ~> m2]
   real, dimension(nk),       intent(in   )       :: phi_L    !< Tracer values (left)                    [conc]
   real, dimension(nk),       intent(in   )       :: phi_R    !< Tracer values (right)                   [conc]
   real, dimension(nk,deg+1), intent(in   )       :: ppoly0_coefs_L !< Tracer reconstruction (left)      [conc]
@@ -449,19 +450,22 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L
   real, dimension(nk,2),     intent(in   )       :: ppoly0_E_L !< Polynomial edge values (left)         [ nondim ]
   real, dimension(nk,2),     intent(in   )       :: ppoly0_E_R !< Polynomial edge values (right)        [ nondim ]
   integer,                   intent(in   )       :: method   !< Method of polynomial integration        [ nondim ]
-  real,                      intent(in   )       :: khtr_u   !< Horizontal diffusivities times delta t at U-point [m^2]
-  real, dimension(nk),       intent(  out)       :: F_layer  !< Layerwise diffusive flux at U- or V-point [m^3 conc]
+  real,                      intent(in   )       :: khtr_u   !< Horizontal diffusivities times delta t
+                                                             !! at a velocity point [L2 ~> m2]
+  real, dimension(nk),       intent(  out)       :: F_layer  !< Layerwise diffusive flux at U- or V-point
+                                                             !! [H L2 conc ~> m3 conc]
 
   ! Local variables
-  real, dimension(nk) :: h_means              !< Calculate the layer-wise harmonic means           [m]
-  real                :: khtr_avg             !< Thickness-weighted diffusivity at the u-point     [m^2 s^-1]
+  real, dimension(nk) :: h_means              !< Calculate the layer-wise harmonic means      [H ~> m or kg m-2]
+  real                :: khtr_avg             !< Thickness-weighted diffusivity at the u-point        [m^2 s^-1]
                                               !! This is just to remind developers that khtr_avg should be
                                               !! computed once khtr is 3D.
-  real                :: heff                 !< Harmonic mean of layer thicknesses                [m]
-  real                :: inv_heff             !< Inverse of the harmonic mean of layer thicknesses [m^[-1]
+  real                :: heff                 !< Harmonic mean of layer thicknesses           [H ~> m or kg m-2]
+  real                :: inv_heff             !< Inverse of the harmonic mean of layer thicknesses
+                                              !!  [H-1 ~> m-1 or m2 kg-1]
   real                :: phi_L_avg, phi_R_avg !< Bulk, thickness-weighted tracer averages (left and right column)
-                                              !!                                                   [conc m^-3 ]
-  real    :: htot    !< Total column thickness [m]
+                                              !!                                                    [conc m^-3 ]
+  real    :: htot                      !< Total column thickness [H ~> m or kg m-2]
   integer :: k, k_bot_min, k_top_max   !< k-indices, min and max for top and bottom, respectively
   integer :: k_top_L, k_bot_L          !< k-indices left
   integer :: k_top_R, k_bot_R          !< k-indices right
@@ -547,14 +551,14 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
   integer,                   intent(in   )       :: boundary !< Which boundary layer SURFACE or BOTTOM  [nondim]
   integer,                   intent(in   )       :: nk       !< Number of layers                        [nondim]
   integer,                   intent(in   )       :: deg      !< order of the polynomial reconstruction  [nondim]
-  real, dimension(nk),       intent(in   )       :: h_L      !< Layer thickness (left)                  [m]
-  real, dimension(nk),       intent(in   )       :: h_R      !< Layer thickness (right)                 [m]
+  real, dimension(nk),       intent(in   )       :: h_L      !< Layer thickness (left)          [H ~> m or kg m-2]
+  real, dimension(nk),       intent(in   )       :: h_R      !< Layer thickness (right)         [H ~> m or kg m-2]
   real,                      intent(in   )       :: hbl_L    !< Thickness of the boundary boundary
-                                                                       !! layer (left)                  [m]
+                                                                       !! layer (left)          [H ~> m or kg m-2]
   real,                      intent(in   )       :: hbl_R    !< Thickness of the boundary boundary
-                                                             !! layer (left)                            [m]
-  real,                      intent(in   )       :: area_L   !< Area of the horizontal grid (left)      [m^2]
-  real,                      intent(in   )       :: area_R   !< Area of the horizontal grid (right)     [m^2]
+                                                             !! layer (left)                    [H ~> m or kg m-2]
+  real,                      intent(in   )       :: area_L   !< Area of the horizontal grid (left)      [L2 ~> m2]
+  real,                      intent(in   )       :: area_R   !< Area of the horizontal grid (right)     [L2 ~> m2]
   real, dimension(nk),       intent(in   )       :: phi_L    !< Tracer values (left)                    [conc]
   real, dimension(nk),       intent(in   )       :: phi_R    !< Tracer values (right)                   [conc]
   real, dimension(nk,deg+1), intent(in   )       :: ppoly0_coefs_L !< Tracer reconstruction (left)      [conc]
@@ -562,21 +566,25 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
   real, dimension(nk,2),     intent(in   )       :: ppoly0_E_L !< Polynomial edge values (left)         [nondim]
   real, dimension(nk,2),     intent(in   )       :: ppoly0_E_R !< Polynomial edge values (right)        [nondim]
   integer,                   intent(in   )       :: method   !< Method of polynomial integration        [nondim]
-  real,                      intent(in   )       :: khtr_u   !< Horizontal diffusivities times delta t at U-point [m^2]
-  real,                      intent(  out)       :: F_bulk   !< The bulk mixed layer lateral flux       [m^3 conc]
-  real, dimension(nk),       intent(  out)       :: F_layer  !< Layerwise diffusive flux at U-point     [m^3 conc]
+  real,                      intent(in   )       :: khtr_u   !< Horizontal diffusivities times delta t
+                                                             !! at a velocity point [L2 ~> m2]
+  real,                      intent(  out)       :: F_bulk   !< The bulk mixed layer lateral flux
+                                                             !! [H L2 conc ~> m3 conc]
+  real, dimension(nk),       intent(  out)       :: F_layer  !< Layerwise diffusive flux at U- or V-point
+                                                             !! [H L2 conc ~> m3 conc]
   logical, optional,         intent(in   )       :: F_limit  !< If True, apply a limiter
 
   ! Local variables
-  real, dimension(nk) :: h_means              !< Calculate the layer-wise harmonic means           [m]
+  real, dimension(nk) :: h_means              !< Calculate the layer-wise harmonic means           [H ~> m or kg m-2]
   real                :: khtr_avg             !< Thickness-weighted diffusivity at the u-point     [m^2 s^-1]
                                               !! This is just to remind developers that khtr_avg should be
                                               !! computed once khtr is 3D.
-  real                :: heff                 !< Harmonic mean of layer thicknesses                [m]
-  real                :: inv_heff             !< Inverse of the harmonic mean of layer thicknesses [m^[-1]
+  real                :: heff                 !< Harmonic mean of layer thicknesses                [H ~> m or kg m-2]
+  real                :: inv_heff             !< Inverse of the harmonic mean of layer thicknesses
+                                              !! [H-1 ~> m-1 or m2 kg-1]
   real                :: phi_L_avg, phi_R_avg !< Bulk, thickness-weighted tracer averages (left and right column)
                                               !!                                                   [conc m^-3 ]
-  real    :: htot                             ! Total column thickness [m]
+  real    :: htot                             !< Total column thickness [H ~> m or kg m-2]
   integer :: k, k_min, k_max                  !< k-indices, min and max for top and bottom, respectively
   integer :: k_top_L, k_bot_L                 !< k-indices left
   integer :: k_top_R, k_bot_R                 !< k-indices right
@@ -728,7 +736,7 @@ logical function near_boundary_unit_tests( verbose )
   real, dimension(nk,2) :: ppoly0_E_L, ppoly0_E_R! Polynomial edge values (left and right)          [concentration]
   real, dimension(nk)   :: h_L, h_R             ! Layer thickness (left and right)                  [m]
   real                  :: khtr_u               ! Horizontal diffusivities at U-point               [m^2 s^-1]
-  real                  :: hbl_L, hbl_R       ! Depth of the boundary layer (left and right)      [m]
+  real                  :: hbl_L, hbl_R         ! Depth of the boundary layer (left and right)      [m]
   real                  :: F_bulk               ! Total diffusive flux across the U point           [nondim s^-1]
   real, dimension(nk)   :: F_layer              ! Diffusive flux within each layer at U-point       [nondim s^-1]
   real                  :: h_u, hblt_u          ! Thickness at the u-point                          [m]

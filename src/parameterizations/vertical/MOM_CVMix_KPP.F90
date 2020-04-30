@@ -1365,17 +1365,25 @@ end subroutine KPP_smooth_BLD
 
 
 
-!> Copies KPP surface boundary layer depth into BLD
-subroutine KPP_get_BLD(CS, BLD, G)
+!> Copies KPP surface boundary layer depth into BLD, in units of [Z ~> m] unless other units are specified.
+subroutine KPP_get_BLD(CS, BLD, G, US, m_to_BLD_units)
   type(KPP_CS),                     pointer     :: CS  !< Control structure for
                                                        !! this module
   type(ocean_grid_type),            intent(in)  :: G   !< Grid structure
-  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: BLD!< bnd. layer depth [m]
+  type(unit_scale_type),            intent(in)  :: US  !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: BLD !< Boundary layer depth [Z ~> m] or other units
+  real,                   optional, intent(in)  :: m_to_BLD_units !< A conversion factor from meters
+                                                       !! to the desired units for BLD
   ! Local variables
+  real :: scale  ! A dimensional rescaling factor
   integer :: i,j
+
+  scale = US%m_to_Z ; if (present(m_to_BLD_units)) scale = m_to_BLD_units
+
   do j = G%jsc, G%jec ; do i = G%isc, G%iec
-    BLD(i,j) = CS%OBLdepth(i,j)
+    BLD(i,j) = scale * CS%OBLdepth(i,j)
   enddo ; enddo
+
 end subroutine KPP_get_BLD
 
 !> Apply KPP non-local transport of surface fluxes for temperature.
