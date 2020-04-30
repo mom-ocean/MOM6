@@ -325,19 +325,18 @@ end subroutine calculate_compress_linear
 !>   This subroutine calculates analytical and nearly-analytical integrals of
 !! pressure anomalies across layers, which are required for calculating the
 !! finite-volume form pressure accelerations in a Boussinesq model.
-subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, HIO, &
+subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
                  Rho_T0_S0, dRho_dT, dRho_dS, dpa, intz_dpa, intx_dpa, inty_dpa, &
                  bathyT, dz_neglect, useMassWghtInterp)
-  type(hor_index_type), intent(in)  :: HII       !< The horizontal index type for the input arrays.
-  type(hor_index_type), intent(in)  :: HIO       !< The horizontal index type for the output arrays.
-  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+  type(hor_index_type), intent(in)  :: HI        !< The horizontal index type for the arrays.
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T         !< Potential temperature relative to the surface
                                                  !! [degC].
-  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: S         !< Salinity [PSU].
-  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: z_t       !< Height at the top of the layer in depth units [Z ~> m].
-  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: z_b       !< Height at the top of the layer [Z ~> m].
   real,                 intent(in)  :: rho_ref   !< A mean density [R ~> kg m-3] or [kg m-3], that
                                                  !! is subtracted out to reduce the magnitude of
@@ -352,22 +351,22 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
                                                  !! [R degC-1 ~> kg m-3 degC-1] or [kg m-3 degC-1].
   real,                 intent(in)  :: dRho_dS   !< The derivative of density with salinity,
                                                  !! in [R ppt-1 ~> kg m-3 ppt-1] or [kg m-3 ppt-1].
-  real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(out) :: dpa       !< The change in the pressure anomaly across the
                                                  !! layer [R L2 T-2 ~> Pa] or [Pa].
-  real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(out) :: intz_dpa  !< The integral through the thickness of the layer
                                                  !! of the pressure anomaly relative to the anomaly
                                                  !! at the top of the layer [R L2 Z T-2 ~> Pa Z] or [Pa Z].
-  real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed),  &
+  real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed),  &
               optional, intent(out) :: intx_dpa  !< The integral in x of the difference between the
                                                  !! pressure anomaly at the top and bottom of the
                                                  !! layer divided by the x grid spacing [R L2 T-2 ~> Pa] or [Pa].
-  real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB),  &
+  real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB),  &
               optional, intent(out) :: inty_dpa  !< The integral in y of the difference between the
                                                  !! pressure anomaly at the top and bottom of the
                                                  !! layer divided by the y grid spacing [R L2 T-2 ~> Pa] or [Pa].
-  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(in)  :: bathyT    !< The depth of the bathymetry [Z ~> m].
   real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m].
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
@@ -388,17 +387,14 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
                      ! 5 sub-column locations [R L2 T-2 ~> Pa] or [Pa].
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   real, parameter :: C1_6 = 1.0/6.0, C1_90 = 1.0/90.0  ! Rational constants.
-  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j, ioff, joff, m
-
-  ioff = HIO%idg_offset - HII%idg_offset
-  joff = HIO%jdg_offset - HII%jdg_offset
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j, m
 
   ! These array bounds work for the indexing convention of the input arrays, but
   ! on the computational domain defined for the output arrays.
-  Isq = HIO%IscB + ioff ; Ieq = HIO%IecB + ioff
-  Jsq = HIO%JscB + joff ; Jeq = HIO%JecB + joff
-  is = HIO%isc + ioff ; ie = HIO%iec + ioff
-  js = HIO%jsc + joff ; je = HIO%jec + joff
+  Isq = HI%IscB ; Ieq = HI%IecB
+  Jsq = HI%JscB ; Jeq = HI%JecB
+  is = HI%isc ; ie = HI%iec
+  js = HI%jsc ; je = HI%jec
 
   do_massWeight = .false.
   if (present(useMassWghtInterp)) then ; if (useMassWghtInterp) then
@@ -412,8 +408,8 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
     dz = z_t(i,j) - z_b(i,j)
     rho_anom = (Rho_T0_S0 - rho_ref) + dRho_dT*T(i,j) + dRho_dS*S(i,j)
-    dpa(i-ioff,j-joff) = G_e*rho_anom*dz
-    if (present(intz_dpa)) intz_dpa(i-ioff,j-joff) = 0.5*G_e*rho_anom*dz**2
+    dpa(i,j) = G_e*rho_anom*dz
+    if (present(intz_dpa)) intz_dpa(i,j) = 0.5*G_e*rho_anom*dz**2
   enddo ; enddo
 
   if (present(intx_dpa)) then ; do j=js,je ; do I=Isq,Ieq
@@ -429,7 +425,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
       raL = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i,j) + dRho_dS*S(i,j))
       raR = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i+1,j) + dRho_dS*S(i+1,j))
 
-      intx_dpa(i-ioff,j-joff) = G_e*C1_6 * (dzL*(2.0*raL + raR) + dzR*(2.0*raR + raL))
+      intx_dpa(i,j) = G_e*C1_6 * (dzL*(2.0*raL + raR) + dzR*(2.0*raR + raL))
     else
       hL = (z_t(i,j) - z_b(i,j)) + dz_neglect
       hR = (z_t(i+1,j) - z_b(i+1,j)) + dz_neglect
@@ -438,7 +434,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
       hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
       hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
 
-      intz(1) = dpa(i-ioff,j-joff) ; intz(5) = dpa(i+1-ioff,j-joff)
+      intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
       do m=2,4
         wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
         wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
@@ -450,7 +446,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
         intz(m) = G_e*rho_anom*dz
       enddo
       ! Use Bode's rule to integrate the values.
-      intx_dpa(i-ioff,j-joff) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
+      intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
                              12.0*intz(3))
     endif
   enddo ; enddo ; endif
@@ -468,7 +464,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
       raL = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i,j) + dRho_dS*S(i,j))
       raR = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i,j+1) + dRho_dS*S(i,j+1))
 
-      inty_dpa(i-ioff,j-joff) = G_e*C1_6 * (dzL*(2.0*raL + raR) + dzR*(2.0*raR + raL))
+      inty_dpa(i,j) = G_e*C1_6 * (dzL*(2.0*raL + raR) + dzR*(2.0*raR + raL))
     else
       hL = (z_t(i,j) - z_b(i,j)) + dz_neglect
       hR = (z_t(i,j+1) - z_b(i,j+1)) + dz_neglect
@@ -477,7 +473,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
       hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
       hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
 
-      intz(1) = dpa(i-ioff,j-joff) ; intz(5) = dpa(i+1-ioff,j-joff)
+      intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
       do m=2,4
         wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
         wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
@@ -489,7 +485,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
         intz(m) = G_e*rho_anom*dz
       enddo
       ! Use Bode's rule to integrate the values.
-      inty_dpa(i-ioff,j-joff) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
+      inty_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
                              12.0*intz(3))
     endif
 
