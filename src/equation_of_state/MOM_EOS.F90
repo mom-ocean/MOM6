@@ -60,6 +60,8 @@ public extract_member_EOS
 !> Calculates density of sea water from T, S and P
 interface calculate_density
   module procedure calculate_density_scalar, calculate_density_array, calculate_density_1d
+  module procedure calculate_stanley_density_scalar, calculate_stanley_density_array
+  module procedure calculate_stanley_density_1d
 end interface calculate_density
 
 !> Calculates specific volume of sea water from T, S and P
@@ -193,6 +195,43 @@ subroutine calculate_density_scalar(T, S, pressure, rho, EOS, rho_ref, scale)
 
 end subroutine calculate_density_scalar
 
+!> Calls the appropriate subroutine to calculate density of sea water for scalar inputs
+!! including the variance of T, S and covariance of T-S.
+!! The calculation uses only the second order correction in a series as discussed
+!! in Stanley et al., 2020.
+!! If rho_ref is present, the anomaly with respect to rho_ref is returned. The
+!! density can be rescaled using rho_ref.
+subroutine calculate_stanley_density_scalar(T, S, pressure, Tvar, TScov, Svar, rho, EOS, rho_ref, scale)
+  real,           intent(in)  :: T        !< Potential temperature referenced to the surface [degC]
+  real,           intent(in)  :: S        !< Salinity [ppt]
+  real,           intent(in)  :: Tvar     !< Variance of potential temperature referenced to the surface [degC2]
+  real,           intent(in)  :: TScov    !< Covariance of potential temperature and salinity [degC ppt]
+  real,           intent(in)  :: Svar     !< Variance of salinity [ppt2]
+  real,           intent(in)  :: pressure !< Pressure [Pa]
+  real,           intent(out) :: rho      !< Density (in-situ if pressure is local) [kg m-3] or [R ~> kg m-3]
+  type(EOS_type), pointer     :: EOS      !< Equation of state structure
+  real, optional, intent(in)  :: rho_ref  !< A reference density [kg m-3].
+  real, optional, intent(in)  :: scale    !< A multiplicative factor by which to scale density
+                                          !! from kg m-3 to the desired units [R m3 kg-1]
+  ! Local variables
+  real :: d2RdTT, d2RdST, d2RdSS, d2RdSp, d2RdTp ! Second derivatives of density wrt T,S,p
+
+  if (.not.associated(EOS)) call MOM_error(FATAL, &
+    "calculate_density_scalar called with an unassociated EOS_type EOS.")
+
+  ! Branching to the correct EOS happens within each of these calls
+  ! and will appropriately error if the second derivatives are not available.
+  call calculate_density_second_derivs_scalar(T, S, pressure, d2RdSS, d2RdST, d2RdTT, &
+                                              d2RdSp, d2RdTp, EOS)
+  call calculate_density_scalar(T, S, pressure, rho, EOS, rho_ref)
+
+  ! Equation 25 of Stanley et al., 2020.
+  rho = rho + ( 0.5 * d2RdTT * Tvar + ( d2RdST * TScov + 0.5 * d2RdSS * Svar ) )
+
+  if (present(scale)) rho = scale * rho
+
+end subroutine calculate_stanley_density_scalar
+
 !> Calls the appropriate subroutine to calculate the density of sea water for 1-D array inputs.
 !! If rho_ref is present, the anomaly with respect to rho_ref is returned.
 subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_ref, scale)
@@ -233,6 +272,49 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_re
   enddo ; endif ; endif
 
 end subroutine calculate_density_array
+
+!> Calls the appropriate subroutine to calculate the density of sea water for 1-D array inputs
+!! including the variance of T, S and covariance of T-S.
+!! The calculation uses only the second order correction in a series as discussed
+!! in Stanley et al., 2020.
+!! If rho_ref is present, the anomaly with respect to rho_ref is returned.
+subroutine calculate_stanley_density_array(T, S, pressure, Tvar, TScov, Svar, rho, start, npts, EOS, rho_ref, scale)
+  real, dimension(:), intent(in)    :: T        !< Potential temperature referenced to the surface [degC]
+  real, dimension(:), intent(in)    :: S        !< Salinity [ppt]
+  real, dimension(:), intent(in)    :: pressure !< Pressure [Pa]
+  real, dimension(:), intent(in)    :: Tvar     !< Variance of potential temperature referenced to the surface [degC2]
+  real, dimension(:), intent(in)    :: TScov    !< Covariance of potential temperature and salinity [degC ppt]
+  real, dimension(:), intent(in)    :: Svar     !< Variance of salinity [ppt2]
+  real, dimension(:), intent(inout) :: rho      !< Density (in-situ if pressure is local) [kg m-3] or [R ~> kg m-3]
+  integer,            intent(in)    :: start    !< Start index for computation
+  integer,            intent(in)    :: npts     !< Number of point to compute
+  type(EOS_type),     pointer       :: EOS      !< Equation of state structure
+  real,     optional, intent(in)    :: rho_ref  !< A reference density [kg m-3].
+  real,     optional, intent(in)    :: scale    !< A multiplicative factor by which to scale density
+                                                !! from kg m-3 to the desired units [R m3 kg-1]
+  ! Local variables
+  real, dimension(size(T)) :: d2RdTT, d2RdST, d2RdSS, d2RdSp, d2RdTp ! Second derivatives of density wrt T,S,p
+  integer :: j
+
+  if (.not.associated(EOS)) call MOM_error(FATAL, &
+    "calculate_density_array called with an unassociated EOS_type EOS.")
+
+  ! Branching to the correct EOS happens within each of these calls
+  ! and will appropriately error if the second derivatives are not available.
+  call calculate_density_second_derivs_array(T, S, pressure, d2RdSS, d2RdST, d2RdTT, &
+                                             d2RdSp, d2RdTp, start, npts, EOS)
+  call calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_ref)
+
+  ! Equation 25 of Stanley et al., 2020.
+  do j=start,start+npts-1
+    rho(j) = rho(j) + ( 0.5 * d2RdTT(j) * Tvar(j) + ( d2RdST(j) * TScov(j) + 0.5 * d2RdSS(j) * Svar(j) ) )
+  enddo
+
+  if (present(scale)) then ; if (scale /= 1.0) then ; do j=start,start+npts-1
+    rho(j) = scale * rho(j)
+  enddo ; endif ; endif
+
+end subroutine calculate_stanley_density_array
 
 !> Calls the appropriate subroutine to calculate the density of sea water for 1-D array inputs,
 !! potentially limiting the domain of indices that are worked on.
@@ -287,6 +369,75 @@ subroutine calculate_density_1d(T, S, pressure, rho, EOS, dom, rho_ref, scale)
   enddo ; endif
 
 end subroutine calculate_density_1d
+
+!> Calls the appropriate subroutine to calculate the density of sea water for 1-D array inputs
+!! including the variance of T, S and covariance of T-S,
+!! potentially limiting the domain of indices that are worked on.
+!! The calculation uses only the second order correction in a series as discussed
+!! in Stanley et al., 2020.
+!! If rho_ref is present, the anomaly with respect to rho_ref is returned.
+subroutine calculate_stanley_density_1d(T, S, pressure, Tvar, TScov, Svar, rho, EOS, dom, rho_ref, scale)
+  real, dimension(:),    intent(in)    :: T        !< Potential temperature referenced to the surface [degC]
+  real, dimension(:),    intent(in)    :: S        !< Salinity [ppt]
+  real, dimension(:),    intent(in)    :: pressure !< Pressure [R L2 T-2 ~> Pa]
+  real, dimension(:),    intent(in)    :: Tvar     !< Variance of potential temperature referenced to the surface [degC2]
+  real, dimension(:),    intent(in)    :: TScov    !< Covariance of potential temperature and salinity [degC ppt]
+  real, dimension(:),    intent(in)    :: Svar     !< Variance of salinity [ppt2]
+  real, dimension(:),    intent(inout) :: rho      !< Density (in-situ if pressure is local) [R ~> kg m-3]
+  type(EOS_type),        pointer       :: EOS      !< Equation of state structure
+  integer, dimension(2), optional, intent(in) :: dom   !< The domain of indices to work on, taking
+                                                       !! into account that arrays start at 1.
+  real,                  optional, intent(in) :: rho_ref !< A reference density [kg m-3]
+  real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale density
+                                                   !! in combination with scaling given by US [various]
+  ! Local variables
+  real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
+  real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
+  real :: rho_unscale ! A factor to convert density from R to kg m-3 [kg m-3 R-1 ~> 1]
+  real :: rho_reference ! rho_ref converted to [kg m-3]
+  real, dimension(size(rho)) :: pres  ! Pressure converted to [Pa]
+  real, dimension(size(T)) :: d2RdTT, d2RdST, d2RdSS, d2RdSp, d2RdTp ! Second derivatives of density wrt T,S,p
+  integer :: i, is, ie, npts
+
+  if (.not.associated(EOS)) call MOM_error(FATAL, &
+    "calculate_density_1d called with an unassociated EOS_type EOS.")
+
+  if (present(dom)) then
+    is = dom(1) ; ie = dom(2) ; npts = 1 + ie - is
+  else
+    is = 1 ; ie = size(rho) ; npts = 1 + ie - is
+  endif
+
+  p_scale = EOS%RL2_T2_to_Pa
+  rho_unscale = EOS%R_to_kg_m3
+
+  if ((p_scale == 1.0) .and. (rho_unscale == 1.0)) then
+    call calculate_density_array(T, S, pressure, rho, is, npts, EOS, rho_ref=rho_ref)
+    call calculate_density_second_derivs_array(T, S, pressure, d2RdSS, d2RdST, d2RdTT, &
+                                               d2RdSp, d2RdTp, is, npts, EOS)
+  else ! This is the same as above, but with some extra work to rescale variables.
+    do i=is,ie ; pres(i) = p_scale * pressure(i) ; enddo
+    call calculate_density_second_derivs_array(T, S, pres, d2RdSS, d2RdST, d2RdTT, &
+                                               d2RdSp, d2RdTp, is, npts, EOS)
+    if (present(rho_ref)) then ! This is the same as above, but with some extra work to rescale variables.
+      rho_reference = rho_unscale*rho_ref
+      call calculate_density_array(T, S, pres, rho, is, npts, EOS, rho_ref=rho_reference)
+    else  ! There is rescaling of variables, but rho_ref is not present. Passing a 0 value of rho_ref
+        ! changes answers at roundoff for some equations of state, like Wright and UNESCO.
+      call calculate_density_array(T, S, pres, rho, is, npts, EOS)
+    endif
+  endif
+  do i=is,ie
+    rho(i) = rho(i) + ( d2RdTT(i) * Tvar(i) + ( d2RdST(i) * TScov(i) + d2RdSS(i) * Svar(i) ) )
+  enddo
+
+  rho_scale = EOS%kg_m3_to_R
+  if (present(scale)) rho_scale = rho_scale * scale
+  if (rho_scale /= 1.0) then ; do i=is,ie
+    rho(i) = rho_scale * rho(i)
+  enddo ; endif
+
+end subroutine calculate_stanley_density_1d
 
 !> Calls the appropriate subroutine to calculate the specific volume of sea water
 !! for 1-D array inputs.
@@ -2166,6 +2317,7 @@ subroutine int_density_dz_generic_ppm(T, T_t, T_b, S, S_t, S_b, &
         T5(n) = t0 + t1 * xi + t2 * xi**2
       enddo
 
+stop
       if (rho_scale /= 1.0) then
         call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
       else
