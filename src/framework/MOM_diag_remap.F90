@@ -57,7 +57,8 @@ module MOM_diag_remap
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_coms,             only : reproducing_sum
+use MOM_coms,             only : reproducing_sum_EFP, EFP_to_real
+use MOM_coms,             only : EFP_type, assignment(=), EFP_sum_across_PEs
 use MOM_error_handler,    only : MOM_error, FATAL, assert, WARNING
 use MOM_diag_vkernels,    only : interpolate_column, reintegrate_column
 use MOM_file_parser,      only : get_param, log_param, param_file_type
@@ -667,6 +668,7 @@ subroutine horizontally_average_diag_field(G, GV, h, staggered_in_x, staggered_i
   ! Local variables
   real, dimension(G%isc:G%iec, G%jsc:G%jec, size(field,3)) :: volume, stuff
   real, dimension(size(field, 3)) :: vol_sum, stuff_sum ! nz+1 is needed for interface averages
+  type(EFP_type), dimension(2*size(field,3)) :: sums_EFP ! Sums of volume or stuff by layer
   real :: height
   integer :: i, j, k, nz
   integer :: i1, j1                 !< 1-based index
@@ -771,9 +773,16 @@ subroutine horizontally_average_diag_field(G, GV, h, staggered_in_x, staggered_i
     call assert(.false., 'horizontally_average_diag_field: Q point averaging is not coded yet.')
   endif
 
-  do k = 1,nz
-    vol_sum(k) = reproducing_sum(volume(:,:,k))
-    stuff_sum(k) = reproducing_sum(stuff(:,:,k))
+  ! Packing the sums into a single array with a single call to sum across PEs saves reduces
+  ! the costs of communication.
+  do k=1,nz
+    sums_EFP(2*k-1) = reproducing_sum_EFP(volume(:,:,k), only_on_PE=.true.)
+    sums_EFP(2*k)   = reproducing_sum_EFP(stuff(:,:,k), only_on_PE=.true.)
+  enddo
+  call EFP_sum_across_PEs(sums_EFP, 2*nz)
+  do k=1,nz
+    vol_sum(k) = EFP_to_real(sums_EFP(2*k-1))
+    stuff_sum(k) = EFP_to_real(sums_EFP(2*k))
   enddo
 
   averaged_mask(:) = .true.
