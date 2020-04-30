@@ -1670,6 +1670,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   integer :: dynamics_stencil  ! The computational stencil for the calculations
                                ! in the dynamic core.
   real :: conv2watt, conv2salt
+  real :: RL2_T2_rescale, Z_rescale, QRZ_rescale ! Unit conversion factors
   character(len=48) :: flux_units, S_flux_units
 
   type(vardesc) :: vd_T, vd_S  ! Structures describing temperature and salinity variables.
@@ -2665,14 +2666,39 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call register_obsolete_diagnostics(param_file, CS%diag)
 
   if (use_frazil) then
-    if (.not.query_initialized(CS%tv%frazil,"frazil",restart_CSp)) &
+    if (.not.query_initialized(CS%tv%frazil,"frazil",restart_CSp)) then
+      ! Test whether the dimensional rescaling has changed for heat content.
+      if ((US%kg_m3_to_R_restart*US%m_to_Z_restart*US%J_kg_to_Q_restart /= 0.0) .and. &
+          ((US%J_kg_to_Q*US%kg_m3_to_R*US%m_to_Z) /= &
+           (US%J_kg_to_Q_restart*US%kg_m3_to_R_restart*US%m_to_Z_restart)) ) then
+        QRZ_rescale = (US%J_kg_to_Q*US%kg_m3_to_R*US%m_to_Z) / &
+                      (US%J_kg_to_Q_restart*US%kg_m3_to_R_restart*US%m_to_Z_restart)
+        do j=js,je ; do i=is,ie
+          CS%tv%frazil(i,j) = QRZ_rescale * CS%tv%frazil(i,j)
+        enddo ; enddo
+      endif
+    else
       CS%tv%frazil(:,:) = 0.0
+    endif
   endif
 
   if (CS%interp_p_surf) then
     CS%p_surf_prev_set = query_initialized(CS%p_surf_prev,"p_surf_prev",restart_CSp)
 
-    if (CS%p_surf_prev_set) call pass_var(CS%p_surf_prev, G%domain)
+    if (CS%p_surf_prev_set) then
+      ! Test whether the dimensional rescaling has changed for pressure.
+      if ((US%kg_m3_to_R_restart*US%s_to_T_restart*US%m_to_L_restart /= 0.0) .and. &
+          ((US%kg_m3_to_R*(US%m_to_L*US%s_to_T_restart)**2) /= &
+           (US%kg_m3_to_R_restart*(US%m_to_L_restart*US%s_to_T)**2)) ) then
+        RL2_T2_rescale = (US%kg_m3_to_R*(US%m_to_L*US%s_to_T_restart)**2) / &
+                         (US%kg_m3_to_R_restart*(US%m_to_L_restart*US%s_to_T)**2)
+        do j=js,je ; do i=is,ie
+          CS%p_surf_prev(i,j) = RL2_T2_rescale * CS%p_surf_prev(i,j)
+        enddo ; enddo
+      endif
+
+      call pass_var(CS%p_surf_prev, G%domain)
+    endif
   endif
 
   if (.not.query_initialized(CS%ave_ssh_ibc,"ave_ssh",restart_CSp)) then
@@ -2891,6 +2917,8 @@ subroutine set_restart_fields(GV, US, param_file, CS, restart_CSp)
                               "Time unit conversion factor", "T second-1")
   call register_restart_field(US%kg_m3_to_R_restart, "kg_m3_to_R", .false., restart_CSp, &
                               "Density unit conversion factor", "R m3 kg-1")
+  call register_restart_field(US%J_kg_to_Q_restart, "J_kg_to_Q", .false., restart_CSp, &
+                              "Heat content unit conversion factor.", units="Q kg J-1")
 
 end subroutine set_restart_fields
 
