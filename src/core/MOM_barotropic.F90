@@ -294,6 +294,7 @@ type, public :: barotropic_CS ; private
   integer :: id_visc_rem_u = -1, id_visc_rem_v = -1, id_eta_cor = -1
   integer :: id_ubt = -1, id_vbt = -1, id_eta_bt = -1, id_ubtav = -1, id_vbtav = -1
   integer :: id_ubt_st = -1, id_vbt_st = -1, id_eta_st = -1
+  integer :: id_ubtdt = -1, id_vbtdt = -1
   integer :: id_ubt_hifreq = -1, id_vbt_hifreq = -1, id_eta_hifreq = -1
   integer :: id_uhbt_hifreq = -1, id_vhbt_hifreq = -1, id_eta_pred_hifreq = -1
   integer :: id_gtotn = -1, id_gtots = -1, id_gtote = -1, id_gtotw = -1
@@ -479,6 +480,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real :: q(SZIBW_(CS),SZJBW_(CS))  ! A pseudo potential vorticity [T-1 Z-1 ~> s-1 m-1].
   real, dimension(SZIBW_(CS),SZJW_(CS)) :: &
     ubt, &        ! The zonal barotropic velocity [L T-1 ~> m s-1].
+    ubt_st, &     ! The zonal barotropic velocity at the start of timestep [L T-1 ~> m s-1].
+    ubt_dt, &     ! The zonal barotropic velocity tendency [L T-2 ~> m s-2].
     bt_rem_u, &   ! The fraction of the barotropic zonal velocity that remains
                   ! after a time step, the remainder being lost to bottom drag.
                   ! bt_rem_u is a nondimensional number between 0 and 1.
@@ -512,6 +515,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                   ! spacing [H L ~> m2 or kg m-1].
   real, dimension(SZIW_(CS),SZJBW_(CS)) :: &
     vbt, &        ! The meridional barotropic velocity [L T-1 ~> m s-1].
+    vbt_st, &     ! The meridional barotropic velocity at the start of timestep [L T-1 ~> m s-1].
+    vbt_dt, &      ! The meridional barotropic velocity tendency [L T-2 ~> m s-2].
     bt_rem_v, &   ! The fraction of the barotropic meridional velocity that
                   ! remains after a time step, the rest being lost to bottom
                   ! drag.  bt_rem_v is a nondimensional number between 0 and 1.
@@ -1479,6 +1484,14 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     call uvchksum("BT visc_rem_[uv]", visc_rem_u, visc_rem_v, G%HI, haloshift=1)
   endif
 
+  if (CS%id_ubtdt > 0) then
+    ubt_st(:,:) = ubt(:,:)
+  endif
+
+  if (CS%id_vbtdt > 0) then
+    vbt_st(:,:) = vbt(:,:)
+  endif
+
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_eta_st > 0) call post_data(CS%id_eta_st, eta(isd:ied,jsd:jed), CS%diag)
     if (CS%id_ubt_st > 0) call post_data(CS%id_ubt_st, ubt(IsdB:IedB,jsd:jed), CS%diag)
@@ -2201,6 +2214,19 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       enddo ; enddo
       call post_data(CS%id_Corv_bt, Corv_bt_sum(isd:ied,JsdB:JedB), CS%diag)
     endif
+    if (CS%id_ubtdt > 0) then
+      do j=js,je ; do I=is-1,ie
+        ubt_dt(I,j) = (ubt_wtd(I,j) - ubt_st(I,j))/dt
+      enddo ; enddo
+      call post_data(CS%id_ubtdt, ubt_dt(IsdB:IedB,jsd:jed), CS%diag)
+    endif
+    if (CS%id_vbtdt > 0) then
+      do J=js-1,je ; do i=is,ie
+        vbt_dt(i,J) = (vbt_wtd(i,J) - vbt_st(i,J))/dt
+      enddo ; enddo
+      call post_data(CS%id_vbtdt, vbt_dt(isd:ied,JsdB:JedB), CS%diag)
+    endif
+
     if (CS%id_ubtforce > 0) call post_data(CS%id_ubtforce, BT_force_u(IsdB:IedB,jsd:jed), CS%diag)
     if (CS%id_vbtforce > 0) call post_data(CS%id_vbtforce, BT_force_v(isd:ied,JsdB:JedB), CS%diag)
     if (CS%id_uaccel > 0) call post_data(CS%id_uaccel, u_accel_bt(IsdB:IedB,jsd:jed), CS%diag)
@@ -4203,6 +4229,10 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
       'Barotropic zonal acceleration from baroclinic terms', 'm s-2', conversion=US%L_T2_to_m_s2)
   CS%id_vbtforce = register_diag_field('ocean_model', 'vbtforce', diag%axesCv1, Time, &
       'Barotropic meridional acceleration from baroclinic terms', 'm s-2', conversion=US%L_T2_to_m_s2)
+  CS%id_ubtdt = register_diag_field('ocean_model', 'ubt_dt', diag%axesCu1, Time, &
+      'Barotropic zonal acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
+  CS%id_vbtdt = register_diag_field('ocean_model', 'vbt_dt', diag%axesCv1, Time, &
+      'Barotropic meridional acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
 
   CS%id_eta_bt = register_diag_field('ocean_model', 'eta_bt', diag%axesT1, Time, &
       'Barotropic end SSH', thickness_units, conversion=GV%H_to_m)
