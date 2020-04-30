@@ -397,7 +397,7 @@ subroutine shelf_calc_flux(sfc_state, fluxes, Time, time_step, CS, forces)
           ! reported ocean mixed layer thickness and the neutral Ekman depth.
           absf = 0.25*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
                                  (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
-          if (absf*US%m_to_Z*sfc_state%Hml(i,j) <= VK*ustar_h) then ; hBL_neut = US%m_to_Z*sfc_state%Hml(i,j)
+          if (absf*sfc_state%Hml(i,j) <= VK*ustar_h) then ; hBL_neut = sfc_state%Hml(i,j)
           else ; hBL_neut = (VK*ustar_h) / absf ; endif
           hBL_neut_h_molec = ZETA_N * ((hBL_neut * ustar_h) / (5.0 * CS%kv_molec))
 

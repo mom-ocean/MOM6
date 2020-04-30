@@ -164,7 +164,7 @@ subroutine BFB_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
         density_restore = Temp_restore*CS%drho_dt + CS%Rho0
 
         fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &
-                          (density_restore - US%kg_m3_to_R*sfc_state%sfc_density(i,j))
+                          (density_restore - sfc_state%sfc_density(i,j))
       enddo ; enddo
     endif
   endif                                             ! end RESTOREBUOY

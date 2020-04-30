@@ -3019,7 +3019,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
   ! copy Hml into sfc_state, so that caps can access it
   if (associated(CS%Hml)) then
     do j=js,je ; do i=is,ie
-      sfc_state%Hml(i,j) = CS%Hml(i,j)
+      sfc_state%Hml(i,j) = US%m_to_Z*CS%Hml(i,j)
     enddo ; enddo
   endif
 
@@ -3064,7 +3064,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
           sfc_state%SST(i,j) = sfc_state%SST(i,j) + dh * CS%tv%T(i,j,k)
           sfc_state%SSS(i,j) = sfc_state%SSS(i,j) + dh * CS%tv%S(i,j,k)
         else
-          sfc_state%sfc_density(i,j) = sfc_state%sfc_density(i,j) + dh * US%R_to_kg_m3*GV%Rlay(k)
+          sfc_state%sfc_density(i,j) = sfc_state%sfc_density(i,j) + dh * GV%Rlay(k)
         endif
         depth(i) = depth(i) + dh
       enddo ; enddo
@@ -3088,7 +3088,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
               sfc_state%SSS(i,j) = (sfc_state%SSS(i,j) + missing_depth*CS%tv%S(i,j,1)) * I_depth
             else
               sfc_state%sfc_density(i,j) = (sfc_state%sfc_density(i,j) + &
-                                            missing_depth*US%R_to_kg_m3*GV%Rlay(1)) * I_depth
+                                            missing_depth*GV%Rlay(1)) * I_depth
             endif
           else
             I_depth = 1.0 / depth(i)

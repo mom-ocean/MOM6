@@ -42,8 +42,8 @@ type, public :: surface
   real, allocatable, dimension(:,:) :: &
     SST, &         !< The sea surface temperature [degC].
     SSS, &         !< The sea surface salinity [ppt ~> psu or gSalt/kg].
-    sfc_density, & !< The mixed layer density [kg m-3].
-    Hml, &         !< The mixed layer depth [m].
+    sfc_density, & !< The mixed layer density [R ~> kg m-3].
+    Hml, &         !< The mixed layer depth [Z ~> m].
     u, &           !< The mixed layer zonal velocity [L T-1 ~> m s-1].
     v, &           !< The mixed layer meridional velocity [L T-1 ~> m s-1].
     sea_lev, &     !< The sea level [m].  If a reduced surface gravity is

@@ -918,7 +918,7 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, US, patm, press_
 
   if (allocated(sfc_state%Hml)) then
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-      Ocean_sfc%OBLD(i,j) = sfc_state%Hml(i+i0,j+j0)
+      Ocean_sfc%OBLD(i,j) = US%Z_to_m*sfc_state%Hml(i+i0,j+j0)
     enddo ; enddo
   endif
 
