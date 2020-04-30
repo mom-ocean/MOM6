@@ -24,8 +24,7 @@ public dumbbell_dynamic_forcing, dumbbell_buoyancy_forcing, dumbbell_surface_for
 
 !> Control structure for the dumbbell test case forcing
 type, public :: dumbbell_surface_forcing_CS ; private
-  logical :: use_temperature !< If true, temperature and salinity are used as
-                             !! state variables.
+  logical :: use_temperature !< If true, temperature and salinity are used as state variables.
   logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
   real :: Rho0               !< The density used in the Boussinesq approximation [R ~> kg m-3].
   real :: G_Earth            !< The gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
@@ -46,8 +45,8 @@ end type dumbbell_surface_forcing_CS
 contains
 
 !> Surface buoyancy (heat and fresh water) fluxes for the dumbbell test case
-subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
-  type(surface),                 intent(inout) :: state  !< A structure containing fields that
+subroutine dumbbell_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
+  type(surface),                 intent(inout) :: sfc_state  !< A structure containing fields that
                                                          !! describe the surface state of the ocean.
   type(forcing),                 intent(inout) :: fluxes !< A structure containing pointers to any
                                                          !! possible forcing fields. Unused fields
@@ -119,7 +118,7 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
     do j=js,je ; do i=is,ie
       if (CS%forcing_mask(i,j)>0.) then
         fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
-                ((CS%S_restore(i,j) - state%SSS(i,j)) /  (0.5 * (CS%S_restore(i,j) + state%SSS(i,j))))
+                ((CS%S_restore(i,j) - sfc_state%SSS(i,j)) /  (0.5 * (CS%S_restore(i,j) + sfc_state%SSS(i,j))))
 
       endif
     enddo ; enddo
@@ -128,8 +127,8 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
 end subroutine dumbbell_buoyancy_forcing
 
 !> Dynamic forcing for the dumbbell test case
-subroutine dumbbell_dynamic_forcing(state, fluxes, day, dt, G, CS)
-  type(surface),                 intent(inout) :: state  !< A structure containing fields that
+subroutine dumbbell_dynamic_forcing(sfc_state, fluxes, day, dt, G, CS)
+  type(surface),                 intent(inout) :: sfc_state  !< A structure containing fields that
                                                        !! describe the surface state of the ocean.
   type(forcing),                 intent(inout) :: fluxes !< A structure containing pointers to any
                                                        !! possible forcing fields. Unused fields
@@ -198,8 +197,7 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
-                 "If true, Temperature and salinity are used as state "//&
-                 "variables.", default=.true.)
+                 "If true, Temperature and salinity are used as state variables.", default=.true.)
 
   call get_param(param_file, mdl, "G_EARTH", CS%G_Earth, &
                  "The gravitational acceleration of the Earth.", &

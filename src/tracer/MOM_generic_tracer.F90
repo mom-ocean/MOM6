@@ -706,9 +706,9 @@ contains
   !!
   !! This subroutine sets up the fields that the coupler needs to calculate the
   !! CFC fluxes between the ocean and atmosphere.
-  subroutine MOM_generic_tracer_surface_state(state, h, G, CS)
+  subroutine MOM_generic_tracer_surface_state(sfc_state, h, G, CS)
     type(ocean_grid_type),                 intent(in)    :: G    !< The ocean's grid structure
-    type(surface),                         intent(inout) :: state !< A structure containing fields that
+    type(surface),                         intent(inout) :: sfc_state !< A structure containing fields that
                                                                  !! describe the surface state of the ocean.
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
     type(MOM_generic_tracer_CS),           pointer       :: CS   !< Pointer to the control structure for this module.
@@ -727,11 +727,11 @@ contains
 
     dzt(:,:,:) = CS%H_to_m * h(:,:,:)
 
-    sosga = global_area_mean(state%SSS, G)
+    sosga = global_area_mean(sfc_state%SSS, G)
 
-    call generic_tracer_coupler_set(state%tr_fields,&
-         ST=state%SST,&
-         SS=state%SSS,&
+    call generic_tracer_coupler_set(sfc_state%tr_fields,&
+         ST=sfc_state%SST,&
+         SS=sfc_state%SSS,&
          rho=rho0,& !nnz: required for MOM5 and previous versions.
          ilb=G%isd, jlb=G%jsd,&
          dzt=dzt,& !This is needed for the Mocsy method of carbonate system vars

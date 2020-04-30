@@ -200,8 +200,8 @@ subroutine SCM_CVMix_tests_surface_forcing_init(Time, G, param_file, CS)
 
 end subroutine SCM_CVMix_tests_surface_forcing_init
 
-subroutine SCM_CVMix_tests_wind_forcing(state, forces, day, G, US, CS)
-  type(surface),            intent(in)    :: state  !< Surface state structure
+subroutine SCM_CVMix_tests_wind_forcing(sfc_state, forces, day, G, US, CS)
+  type(surface),            intent(in)    :: sfc_state  !< Surface state structure
   type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),          intent(in)    :: day    !< Time in days
   type(ocean_grid_type),    intent(inout) :: G      !< Grid structure
@@ -233,8 +233,8 @@ subroutine SCM_CVMix_tests_wind_forcing(state, forces, day, G, US, CS)
 end subroutine SCM_CVMix_tests_wind_forcing
 
 
-subroutine SCM_CVMix_tests_buoyancy_forcing(state, fluxes, day, G, US, CS)
-  type(surface),            intent(in)    :: state  !< Surface state structure
+subroutine SCM_CVMix_tests_buoyancy_forcing(sfc_state, fluxes, day, G, US, CS)
+  type(surface),            intent(in)    :: sfc_state  !< Surface state structure
   type(forcing),            intent(inout) :: fluxes !< Surface fluxes structure
   type(time_type),          intent(in)    :: day    !< Current model time
   type(ocean_grid_type),    intent(inout) :: G      !< Grid structure
