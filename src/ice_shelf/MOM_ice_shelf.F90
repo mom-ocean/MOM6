@@ -334,8 +334,8 @@ subroutine shelf_calc_flux(sfc_state, fluxes, Time, time_step, CS, forces)
     call hchksum(fluxes%frac_shelf_h, "frac_shelf_h before apply melting", G%HI, haloshift=0)
     call hchksum(sfc_state%sst, "sst before apply melting", G%HI, haloshift=0)
     call hchksum(sfc_state%sss, "sss before apply melting", G%HI, haloshift=0)
-    call hchksum(sfc_state%u, "u_ml before apply melting", G%HI, haloshift=0)
-    call hchksum(sfc_state%v, "v_ml before apply melting", G%HI, haloshift=0)
+    call hchksum(sfc_state%u, "u_ml before apply melting", G%HI, haloshift=0, scale=US%L_T_to_m_s)
+    call hchksum(sfc_state%v, "v_ml before apply melting", G%HI, haloshift=0, scale=US%L_T_to_m_s)
     call hchksum(sfc_state%ocean_mass, "ocean_mass before apply melting", G%HI, haloshift=0)
   endif
 
@@ -356,8 +356,8 @@ subroutine shelf_calc_flux(sfc_state, fluxes, Time, time_step, CS, forces)
       taux2 = (asu1 * sfc_state%taux_shelf(I-1,j)**2 + asu2 * sfc_state%taux_shelf(I,j)**2  ) * I_au
       tauy2 = (asv1 * sfc_state%tauy_shelf(i,J-1)**2 + asv2 * sfc_state%tauy_shelf(i,J)**2  ) * I_av
     endif
-    u2_av = US%m_s_to_L_T**2*(asu1 * sfc_state%u(I-1,j)**2 + asu2 * sfc_state%u(I,j)**2) * I_au
-    v2_av = US%m_s_to_L_T**2*(asv1 * sfc_state%v(i,J-1)**2 + asu2 * sfc_state%v(i,J)**2) * I_av
+    u2_av = (asu1 * sfc_state%u(I-1,j)**2 + asu2 * sfc_state%u(I,j)**2) * I_au
+    v2_av = (asv1 * sfc_state%v(i,J-1)**2 + asu2 * sfc_state%v(i,J)**2) * I_av
 
     if (taux2 + tauy2 > 0.0) then
       fluxes%ustar_shelf(i,j) = MAX(CS%ustar_bg, US%L_to_Z * &
@@ -1617,9 +1617,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   CS%id_Sbdry = register_diag_field('ocean_model', 'sbdry', CS%diag%axesT1, CS%Time, &
      'salinity at the ice-ocean interface.', 'psu')
   CS%id_u_ml = register_diag_field('ocean_model', 'u_ml', CS%diag%axesCu1, CS%Time, &
-     'Eastward vel. in the boundary layer (used to compute ustar)', 'm s-1')
+     'Eastward vel. in the boundary layer (used to compute ustar)', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_v_ml = register_diag_field('ocean_model', 'v_ml', CS%diag%axesCv1, CS%Time, &
-     'Northward vel. in the boundary layer (used to compute ustar)', 'm s-1')
+     'Northward vel. in the boundary layer (used to compute ustar)', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_exch_vel_s = register_diag_field('ocean_model', 'exch_vel_s', CS%diag%axesT1, CS%Time, &
      'Sub-shelf salinity exchange velocity', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
   CS%id_exch_vel_t = register_diag_field('ocean_model', 'exch_vel_t', CS%diag%axesT1, CS%Time, &

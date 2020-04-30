@@ -3029,10 +3029,10 @@ subroutine extract_surface_state(CS, sfc_state_in)
       sfc_state%SSS(i,j) = CS%tv%S(i,j,1)
     enddo ; enddo ; endif
     do j=js,je ; do I=is-1,ie
-      sfc_state%u(I,j) = US%L_T_to_m_s * CS%u(I,j,1)
+      sfc_state%u(I,j) = CS%u(I,j,1)
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
-      sfc_state%v(i,J) = US%L_T_to_m_s * CS%v(i,J,1)
+      sfc_state%v(i,J) = CS%v(i,J,1)
     enddo ; enddo
 
   else  ! (CS%Hmix >= 0.0)
@@ -3125,7 +3125,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
           else
             dh = 0.0
           endif
-          sfc_state%v(i,J) = sfc_state%v(i,J) + dh * US%L_T_to_m_s * CS%v(i,J,k)
+          sfc_state%v(i,J) = sfc_state%v(i,J) + dh * CS%v(i,J,k)
           depth(i) = depth(i) + dh
         enddo ; enddo
         ! Calculate the average properties of the mixed layer depth.
@@ -3149,7 +3149,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
           else
             dh = 0.0
           endif
-          sfc_state%u(I,j) = sfc_state%u(I,j) + dh * US%L_T_to_m_s * CS%u(I,j,k)
+          sfc_state%u(I,j) = sfc_state%u(I,j) + dh * CS%u(I,j,k)
           depth(I) = depth(I) + dh
         enddo ; enddo
         ! Calculate the average properties of the mixed layer depth.
@@ -3159,10 +3159,10 @@ subroutine extract_surface_state(CS, sfc_state_in)
       enddo ! end of j loop
     else ! Hmix_UV<=0.
       do j=js,je ; do I=is-1,ie
-        sfc_state%u(I,j) = US%L_T_to_m_s * CS%u(I,j,1)
+        sfc_state%u(I,j) = CS%u(I,j,1)
       enddo ; enddo
       do J=js-1,je ; do i=is,ie
-        sfc_state%v(i,J) = US%L_T_to_m_s * CS%v(i,J,1)
+        sfc_state%v(i,J) = CS%v(i,J,1)
       enddo ; enddo
     endif
   endif  ! (CS%Hmix >= 0.0)
@@ -3311,16 +3311,16 @@ subroutine extract_surface_state(CS, sfc_state_in)
                 'x=',G%gridLonT(ig), 'y=',G%gridLatT(jg), &
                 'D=',bathy_m,  'SSH=',sfc_state%sea_lev(i,j), &
                 'SST=',sfc_state%SST(i,j), 'SSS=',sfc_state%SSS(i,j), &
-                'U-=',sfc_state%u(I-1,j), 'U+=',sfc_state%u(I,j), &
-                'V-=',sfc_state%v(i,J-1), 'V+=',sfc_state%v(i,J)
+                'U-=',US%L_T_to_m_s*sfc_state%u(I-1,j), 'U+=',US%L_T_to_m_s*sfc_state%u(I,j), &
+                'V-=',US%L_T_to_m_s*sfc_state%v(i,J-1), 'V+=',US%L_T_to_m_s*sfc_state%v(i,J)
             else
               write(msg(1:240),'(2(a,i4,x),4(a,f8.3,x),6(a,es11.4))') &
                 'Extreme surface sfc_state detected: i=',ig,'j=',jg, &
                 'lon=',G%geoLonT(i,j), 'lat=',G%geoLatT(i,j), &
                 'x=',G%gridLonT(i), 'y=',G%gridLatT(j), &
                 'D=',bathy_m,  'SSH=',sfc_state%sea_lev(i,j), &
-                'U-=',sfc_state%u(I-1,j), 'U+=',sfc_state%u(I,j), &
-                'V-=',sfc_state%v(i,J-1), 'V+=',sfc_state%v(i,J)
+                'U-=',US%L_T_to_m_s*sfc_state%u(I-1,j), 'U+=',US%L_T_to_m_s*sfc_state%u(I,j), &
+                'V-=',US%L_T_to_m_s*sfc_state%v(i,J-1), 'V+=',US%L_T_to_m_s*sfc_state%v(i,J)
             endif
             call MOM_error(WARNING, trim(msg), all_print=.true.)
           elseif (numberOfErrors==9) then ! Indicate once that there are more errors

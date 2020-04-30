@@ -263,13 +263,13 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
   !> Computes taux
   do j=js,je
     do I=is-1,Ieq
-      Uocn = US%m_s_to_L_T * sfc_state%u(I,j)*REL_TAU_FAC
+      Uocn = sfc_state%u(I,j) * REL_TAU_FAC
       if (CS%answers_2018) then
-        Vocn = US%m_s_to_L_T * 0.25*(sfc_state%v(i,J)+sfc_state%v(i+1,J-1)&
-               +sfc_state%v(i+1,J)+sfc_state%v(i,J-1))*REL_TAU_FAC
+        Vocn = 0.25*(sfc_state%v(i,J)+sfc_state%v(i+1,J-1)&
+                    +sfc_state%v(i+1,J)+sfc_state%v(i,J-1))*REL_TAU_FAC
       else
-        Vocn = US%m_s_to_L_T * 0.25*((sfc_state%v(i,J)+sfc_state%v(i+1,J-1)) +&
-                                     (sfc_state%v(i+1,J)+sfc_state%v(i,J-1))) * REL_TAU_FAC
+        Vocn =0.25*((sfc_state%v(i,J)+sfc_state%v(i+1,J-1)) +&
+                    (sfc_state%v(i+1,J)+sfc_state%v(i,J-1))) * REL_TAU_FAC
       endif
       f_local = abs(0.5*(G%CoriolisBu(I,J)+G%CoriolisBu(I,J-1)))*fbench_fac + fbench
       ! Calculate position as a function of time.
@@ -288,13 +288,13 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
   do J=js-1,Jeq
     do i=is,ie
       if (CS%answers_2018) then
-        Uocn = US%m_s_to_L_T * 0.25*(sfc_state%u(I,j)+sfc_state%u(I-1,j+1) + &
-                                     sfc_state%u(I-1,j)+sfc_state%u(I,j+1))*REL_TAU_FAC
+        Uocn = 0.25*(sfc_state%u(I,j)+sfc_state%u(I-1,j+1) + &
+                     sfc_state%u(I-1,j)+sfc_state%u(I,j+1))*REL_TAU_FAC
       else
-        Uocn = US%m_s_to_L_T * 0.25*((sfc_state%u(I,j)+sfc_state%u(I-1,j+1)) + &
-                                     (sfc_state%u(I-1,j)+sfc_state%u(I,j+1))) * REL_TAU_FAC
+        Uocn = 0.25*((sfc_state%u(I,j)+sfc_state%u(I-1,j+1)) + &
+                     (sfc_state%u(I-1,j)+sfc_state%u(I,j+1))) * REL_TAU_FAC
       endif
-      Vocn = US%m_s_to_L_T * sfc_state%v(i,J)*REL_TAU_FAC
+      Vocn = sfc_state%v(i,J) * REL_TAU_FAC
       f_local = abs(0.5*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)))*fbench_fac + fbench
       ! Calculate position as a function of time.
       if (CS%SCM_mode) then

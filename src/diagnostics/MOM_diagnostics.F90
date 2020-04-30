@@ -1169,7 +1169,7 @@ subroutine post_surface_dyn_diags(IDs, G, diag, sfc_state, ssh)
                             intent(in) :: ssh !< Time mean surface height without corrections for ice displacement [m]
 
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G)) :: work_2d  ! A 2-d work array
+  real, dimension(SZI_(G),SZJ_(G)) :: speed  ! The surface speed [L T-1 ~> m s-1]
   integer :: i, j, is, ie, js, je
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -1185,10 +1185,10 @@ subroutine post_surface_dyn_diags(IDs, G, diag, sfc_state, ssh)
 
   if (IDs%id_speed > 0) then
     do j=js,je ; do i=is,ie
-      work_2d(i,j) = sqrt(0.5*(sfc_state%u(I-1,j)**2 + sfc_state%u(I,j)**2) + &
-                            0.5*(sfc_state%v(i,J-1)**2 + sfc_state%v(i,J)**2))
+      speed(i,j) = sqrt(0.5*(sfc_state%u(I-1,j)**2 + sfc_state%u(I,j)**2) + &
+                        0.5*(sfc_state%v(i,J-1)**2 + sfc_state%v(i,J)**2))
     enddo ; enddo
-    call post_data(IDs%id_speed, work_2d, diag, mask=G%mask2dT)
+    call post_data(IDs%id_speed, speed, diag, mask=G%mask2dT)
   endif
 
 end subroutine post_surface_dyn_diags
@@ -1784,11 +1784,11 @@ subroutine register_surface_diags(Time, G, US, IDs, diag, tv)
       long_name='Area averaged sea surface height', units='m',            &
       standard_name='area_averaged_sea_surface_height')
   IDs%id_ssu = register_diag_field('ocean_model', 'SSU', diag%axesCu1, Time, &
-      'Sea Surface Zonal Velocity', 'm s-1')
+      'Sea Surface Zonal Velocity', 'm s-1', conversion=US%L_T_to_m_s)
   IDs%id_ssv = register_diag_field('ocean_model', 'SSV', diag%axesCv1, Time, &
-      'Sea Surface Meridional Velocity', 'm s-1')
+      'Sea Surface Meridional Velocity', 'm s-1', conversion=US%L_T_to_m_s)
   IDs%id_speed = register_diag_field('ocean_model', 'speed', diag%axesT1, Time, &
-      'Sea Surface Speed', 'm s-1')
+      'Sea Surface Speed', 'm s-1', conversion=US%L_T_to_m_s)
 
   if (associated(tv%T)) then
     IDs%id_sst = register_diag_field('ocean_model', 'SST', diag%axesT1, Time,     &

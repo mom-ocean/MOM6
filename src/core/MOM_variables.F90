@@ -44,8 +44,8 @@ type, public :: surface
     SSS, &         !< The sea surface salinity [ppt ~> psu or gSalt/kg].
     sfc_density, & !< The mixed layer density [kg m-3].
     Hml, &         !< The mixed layer depth [m].
-    u, &           !< The mixed layer zonal velocity [m s-1].
-    v, &           !< The mixed layer meridional velocity [m s-1].
+    u, &           !< The mixed layer zonal velocity [L T-1 ~> m s-1].
+    v, &           !< The mixed layer meridional velocity [L T-1 ~> m s-1].
     sea_lev, &     !< The sea level [m].  If a reduced surface gravity is
                    !! used, that is compensated for in sea_lev.
     frazil, &      !< The energy needed to heat the ocean column to the freezing point during
