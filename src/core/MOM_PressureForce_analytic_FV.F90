@@ -18,13 +18,13 @@ use MOM_EOS, only : int_density_dz, int_specific_vol_dp
 use MOM_EOS, only : int_density_dz_generic_plm, int_density_dz_generic_ppm
 use MOM_EOS, only : int_spec_vol_dp_generic_plm
 use MOM_EOS, only : int_density_dz_generic, int_spec_vol_dp_generic
-use MOM_ALE, only : pressure_gradient_plm, pressure_gradient_ppm, ALE_CS
+use MOM_ALE, only : TS_PLM_edge_values, TS_PPM_edge_values, ALE_CS
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
-public PressureForce_AFV, PressureForce_AFV_init, PressureForce_AFV_end
+public PressureForce_AFV_init, PressureForce_AFV_end
 public PressureForce_AFV_Bouss, PressureForce_AFV_nonBouss
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
@@ -60,35 +60,6 @@ type, public :: PressureForce_AFV_CS ; private
 end type PressureForce_AFV_CS
 
 contains
-
-!> Thin interface between the model and the Boussinesq and non-Boussinesq
-!! pressure force routines.
-subroutine PressureForce_AFV(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, eta)
-  type(ocean_grid_type),                     intent(in)    :: G   !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV  !< Vertical grid structure
-  type(unit_scale_type),                     intent(in)    :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h   !< Layer thickness [H ~> m or kg m-2]
-  type(thermo_var_ptrs),                     intent(inout) :: tv  !< Thermodynamic variables
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: PFu !< Zonal acceleration [L T-2 ~> m s-2]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: PFv !< Meridional acceleration [L T-2 ~> m s-2]
-  type(PressureForce_AFV_CS),                pointer       :: CS  !< Finite volume PGF control structure
-  type(ALE_CS),                              pointer       :: ALE_CSp !< ALE control structure
-  real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
-                                                           !! or atmosphere-ocean interface [R L2 T-2 ~> Pa].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(out) :: pbce !< The baroclinic pressure
-                                                           !! anomaly in each layer due to eta anomalies
-                                                           !! [L2 T-2 H-1 ~> m s-2 or m4 s-2 kg-1].
-  real, dimension(SZI_(G),SZJ_(G)),          optional, intent(out) :: eta !< The bottom mass used to
-                                                           !! calculate PFu and PFv [H ~> m or kg m-2], with any tidal
-                                                           !! contributions or compressibility compensation.
-
-  if (GV%Boussinesq) then
-    call PressureForce_AFV_bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, eta)
-  else
-    call PressureForce_AFV_nonbouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, eta)
-  endif
-
-end subroutine PressureForce_AFV
 
 !> \brief Non-Boussinesq analytically-integrated finite volume form of pressure gradient
 !!
@@ -251,9 +222,9 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
   ! of freedeom needed to know the linear profile).
   if ( use_ALE ) then
     if ( CS%Recon_Scheme == 1 ) then
-      call pressure_gradient_plm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
+      call TS_PLM_edge_values(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
     elseif ( CS%Recon_Scheme == 2) then
-      call pressure_gradient_ppm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
+      call TS_PPM_edge_values(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
     endif
   endif
 
@@ -628,9 +599,9 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
   ! of freedeom needed to know the linear profile).
   if ( use_ALE ) then
     if ( CS%Recon_Scheme == 1 ) then
-      call pressure_gradient_plm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
+      call TS_PLM_edge_values(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
     elseif ( CS%Recon_Scheme == 2 ) then
-      call pressure_gradient_ppm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
+      call TS_PPM_edge_values(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
     endif
   endif
 

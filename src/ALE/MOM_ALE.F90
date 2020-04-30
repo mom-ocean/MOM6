@@ -110,8 +110,8 @@ public ALE_offline_tracer_final
 public ALE_build_grid
 public ALE_regrid_accelerated
 public ALE_remap_scalar
-public pressure_gradient_plm
-public pressure_gradient_ppm
+public TS_PLM_edge_values
+public TS_PPM_edge_values
 public adjustGridForIntegrity
 public ALE_initRegridding
 public ALE_getCoordinate
@@ -1006,12 +1006,9 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
 end subroutine ALE_remap_scalar
 
 
-!> Use plm reconstruction for pressure gradient (determine edge values)
-!! By using a PLM (limited piecewise linear method) reconstruction, this
-!! routine determines the edge values for the salinity and temperature
-!! within each layer. These edge values are returned and are used to compute
-!! the pressure gradient (by computing the densities).
-subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_extrap )
+!> Calculate edge values (top and bottom of layer) for T and S consistent with a PLM reconstruction
+!! in the vertical direction. Boundary reconstructions are PCM unless bdry_extrap is true.
+subroutine TS_PLM_edge_values( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_extrap )
   type(ocean_grid_type),   intent(in)    :: G    !< ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< Ocean vertical grid structure
   type(ALE_CS),            intent(inout) :: CS   !< module control structure
@@ -1078,15 +1075,11 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_ext
 
   enddo ; enddo
 
-end subroutine pressure_gradient_plm
+end subroutine TS_PLM_edge_values
 
-
-!> Use ppm reconstruction for pressure gradient (determine edge values)
-!> By using a PPM (limited piecewise linear method) reconstruction, this
-!> routine determines the edge values for the salinity and temperature
-!> within each layer. These edge values are returned and are used to compute
-!> the pressure gradient (by computing the densities).
-subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_extrap )
+!> Calculate edge values (top and bottom of layer) for T and S consistent with a PPM reconstruction
+!! in the vertical direction. Boundary reconstructions are PCM unless bdry_extrap is true.
+subroutine TS_PPM_edge_values( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_extrap )
   type(ocean_grid_type),   intent(in)    :: G    !< ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< Ocean vertical grid structure
   type(ALE_CS),            intent(inout) :: CS   !< module control structure
@@ -1168,7 +1161,7 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_ext
 
   enddo ; enddo
 
-end subroutine pressure_gradient_ppm
+end subroutine TS_PPM_edge_values
 
 
 !> Initializes regridding for the main ALE algorithm
