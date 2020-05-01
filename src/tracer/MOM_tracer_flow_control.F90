@@ -417,7 +417,7 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, 
   type(forcing),                         intent(in) :: fluxes !< A structure containing pointers to
                                                               !! any possible forcing fields.
                                                               !! Unused fields have NULL ptrs.
-  real, dimension(NIMEM_,NJMEM_),        intent(in) :: Hml    !< Mixed layer depth [H ~> m or kg m-2]
+  real, dimension(NIMEM_,NJMEM_),        intent(in) :: Hml    !< Mixed layer depth [Z ~> m]
   real,                                  intent(in) :: dt     !< The amount of time covered by this
                                                               !! call [T ~> s]
   type(ocean_grid_type),                 intent(in) :: G      !< The ocean's grid structure.
