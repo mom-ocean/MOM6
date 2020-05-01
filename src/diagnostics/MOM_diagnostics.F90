@@ -846,7 +846,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
             z_bot(i,j) = z_top(i,j) - GV%H_to_Z*h(i,j,k)
           enddo ; enddo
           call int_density_dz(tv%T(:,:,k), tv%S(:,:,k), z_top, z_bot, 0.0, GV%Rho0, GV%g_Earth, &
-                              G%HI, G%HI, tv%eqn_of_state, dpress)
+                              G%HI, tv%eqn_of_state, dpress)
           do j=js,je ; do i=is,ie
             mass(i,j) = mass(i,j) + dpress(i,j) * IG_Earth
           enddo ; enddo
@@ -1451,6 +1451,10 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_diagnostics" ! This module's name.
   character(len=48) :: thickness_units, flux_units
+  real :: wave_speed_min      ! A floor in the first mode speed below which 0 is returned [L T-1 ~> m s-1]
+  real :: wave_speed_tol      ! The fractional tolerance for finding the wave speeds [nondim]
+  logical :: better_speed_est ! If true, use a more robust estimate of the first
+                              ! mode wave speed as the starting point for iterations.
   logical :: use_temperature, adiabatic
   logical :: default_2018_answers, remap_answers_2018
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, nkml, nkbl
@@ -1483,6 +1487,16 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
                  "The depth below which N2 is limited as monotonic for the "// &
                  "purposes of calculating the equivalent barotropic wave speed.", &
                  units='m', scale=US%m_to_Z, default=-1.)
+  call get_param(param_file, mdl, "INTERNAL_WAVE_SPEED_TOL", wave_speed_tol, &
+                 "The fractional tolerance for finding the wave speeds.", &
+                 units="nondim", default=0.001)
+  !### Set defaults so that wave_speed_min*wave_speed_tol >= 1e-9 m s-1
+  call get_param(param_file, mdl, "INTERNAL_WAVE_SPEED_MIN", wave_speed_min, &
+                 "A floor in the first mode speed below which 0 used instead.", &
+                 units="m s-1", default=0.0, scale=US%m_s_to_L_T)
+  call get_param(param_file, mdl, "INTERNAL_WAVE_SPEED_BETTER_EST", better_speed_est, &
+                 "If true, use a more robust estimate of the first mode wave speed as the "//&
+                 "starting point for iterations.", default=.false.) !### Change the default.
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
                  default=.true.)
@@ -1701,6 +1715,9 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   if ((CS%id_cg1>0) .or. (CS%id_Rd1>0) .or. (CS%id_cfl_cg1>0) .or. &
       (CS%id_cfl_cg1_x>0) .or. (CS%id_cfl_cg1_y>0) .or. &
       (CS%id_cg_ebt>0) .or. (CS%id_Rd_ebt>0) .or. (CS%id_p_ebt>0)) then
+    call wave_speed_init(CS%wave_speed_CSp, remap_answers_2018=remap_answers_2018, &
+                         better_speed_est=better_speed_est, min_speed=wave_speed_min, &
+                         wave_speed_tol=wave_speed_tol)
     call wave_speed_init(CS%wave_speed_CSp, remap_answers_2018=remap_answers_2018)
     call safe_alloc_ptr(CS%cg1,isd,ied,jsd,jed)
     if (CS%id_Rd1>0)       call safe_alloc_ptr(CS%Rd1,isd,ied,jsd,jed)

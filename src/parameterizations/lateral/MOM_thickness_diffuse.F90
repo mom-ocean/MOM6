@@ -714,13 +714,14 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
        "cg1 must be associated when using FGNV streamfunction.")
 
 !$OMP parallel default(none) shared(is,ie,js,je,h_avail_rsum,pres,h_avail,I4dt, &
-!$OMP                               G,GV,h,h_frac,nz,uhtot,Work_u,vhtot,Work_v, &
+!$OMP                               G,GV,tv,h,h_frac,nz,uhtot,Work_u,vhtot,Work_v, &
 !$OMP                               diag_sfn_x, diag_sfn_y, diag_sfn_unlim_x, diag_sfn_unlim_y )
   ! Find the maximum and minimum permitted streamfunction.
 !$OMP do
   do j=js-1,je+1 ; do i=is-1,ie+1
     h_avail_rsum(i,j,1) = 0.0
-    pres(i,j,1) = 0.0  ! ### This should be atmospheric pressure.
+    pres(i,j,1) = 0.0
+    if (associated(tv%p_surf)) then ; pres(i,j,1) = tv%p_surf(i,j) ; endif
 
     h_avail(i,j,1) = max(I4dt*G%areaT(i,j)*(h(i,j,1)-GV%Angstrom_H),0.0)
     h_avail_rsum(i,j,2) = h_avail(i,j,1)

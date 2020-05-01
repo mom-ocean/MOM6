@@ -6,8 +6,8 @@ module MOM_checksum_packages
 !   This module provides several routines that do check-sums of groups
 ! of variables in the various dynamic solver routines.
 
+use MOM_coms, only : min_across_PEs, max_across_PEs, reproducing_sum
 use MOM_debugging, only : hchksum, uvchksum
-use MOM_domains, only : sum_across_PEs, min_across_PEs, max_across_PEs
 use MOM_error_handler, only : MOM_mesg, is_root_pe
 use MOM_grid, only : ocean_grid_type
 use MOM_unit_scaling, only : unit_scale_type
@@ -251,6 +251,11 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
                                                            !! extrema are diminishing.
 
   ! Local variables
+  real, dimension(G%isc:G%iec, G%jsc:G%jec) :: &
+    tmp_A, &  ! The area per cell [m2] (unscaled to permit reproducing sum).
+    tmp_V, &  ! The column-integrated volume [m3] (unscaled to permit reproducing sum)
+    tmp_T, &  ! The column-integrated temperature [degC m3]
+    tmp_S     ! The column-integrated salinity [ppt m3]
   real :: Vol, dV    ! The total ocean volume and its change [m3] (unscaled to permit reproducing sum).
   real :: Area       ! The total ocean surface area [m2] (unscaled to permit reproducing sum).
   real :: h_minimum  ! The minimum layer thicknesses [H ~> m or kg m-2]
@@ -269,17 +274,22 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   do_TS = associated(Temp) .and. associated(Salt)
 
+  tmp_A(:,:) = 0.0
+  tmp_V(:,:) = 0.0
+  tmp_T(:,:) = 0.0
+  tmp_S(:,:) = 0.0
+
   ! First collect local stats
-  Area = 0. ; Vol = 0.
-  do j = js, je ; do i = is, ie
-    Area = Area + US%L_to_m**2*G%areaT(i,j)
+  do j=js,je ; do i=is,ie
+    tmp_A(i,j) = tmp_A(i,j) + US%L_to_m**2*G%areaT(i,j)
   enddo ; enddo
   T%minimum = 1.E34 ; T%maximum = -1.E34 ; T%average = 0.
   S%minimum = 1.E34 ; S%maximum = -1.E34 ; S%average = 0.
   h_minimum = 1.E34*GV%m_to_H
-  do k = 1, nz ; do j = js, je ; do i = is, ie
+  do k=1,nz ; do j=js,je ; do i=is,ie
     if (G%mask2dT(i,j)>0.) then
-      dV = US%L_to_m**2*G%areaT(i,j)*GV%H_to_m*h(i,j,k) ; Vol = Vol + dV
+      dV = US%L_to_m**2*G%areaT(i,j)*GV%H_to_m*h(i,j,k)
+      tmp_V(i,j) = tmp_V(i,j) + dV
       if (do_TS .and. h(i,j,k)>0.) then
         T%minimum = min( T%minimum, Temp(i,j,k) ) ; T%maximum = max( T%maximum, Temp(i,j,k) )
         T%average = T%average + dV*Temp(i,j,k)
@@ -289,10 +299,11 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
       if (h_minimum > h(i,j,k)) h_minimum = h(i,j,k)
     endif
   enddo ; enddo ; enddo
-  call sum_across_PEs( Area ) ; call sum_across_PEs( Vol )
+  Area = reproducing_sum( tmp_A ) ; Vol = reproducing_sum( tmp_V )
   if (do_TS) then
-    call min_across_PEs( T%minimum ) ; call max_across_PEs( T%maximum ) ; call sum_across_PEs( T%average )
-    call min_across_PEs( S%minimum ) ; call max_across_PEs( S%maximum ) ; call sum_across_PEs( S%average )
+    call min_across_PEs( T%minimum ) ; call max_across_PEs( T%maximum )
+    call min_across_PEs( S%minimum ) ; call max_across_PEs( S%maximum )
+    T%average = reproducing_sum( tmp_T ) ; S%average = reproducing_sum( tmp_S )
     T%average = T%average / Vol ; S%average = S%average / Vol
   endif
   if (is_root_pe()) then
@@ -330,7 +341,7 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
   oldS%minimum = S%minimum ; oldS%maximum = S%maximum ; oldS%average = S%average
 
   if (do_TS .and. T%minimum<-5.0) then
-    do j = js, je ; do i = is, ie
+    do j=js,je ; do i=is,ie
       if (minval(Temp(i,j,:)) == T%minimum) then
         write(0,'(a,2f12.5)') 'x,y=', G%geoLonT(i,j), G%geoLatT(i,j)
         write(0,'(a3,3a12)') 'k','h','Temp','Salt'
@@ -343,7 +354,7 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
   endif
 
   if (h_minimum<0.0) then
-    do j = js, je ; do i = is, ie
+    do j=js,je ; do i=is,ie
       if (minval(h(i,j,:)) == h_minimum) then
         write(0,'(a,2f12.5)') 'x,y=',G%geoLonT(i,j),G%geoLatT(i,j)
         write(0,'(a3,3a12)') 'k','h','Temp','Salt'

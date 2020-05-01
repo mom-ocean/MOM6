@@ -100,7 +100,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
       if (G%mask2dT(i,j)==0.) cycle
 
       ! Richardson number computed for each cell in a column.
-      pRef = 0.
+      pRef = 0. ; if (associated(tv%p_surf)) pRef = tv%p_surf(i,j)
       Ri_Grad(:)=1.e8 !Initialize w/ large Richardson value
       do k=1,G%ke
         ! pressure, temp, and saln for EOS
@@ -110,10 +110,10 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
         kk   = 2*(k-1)
         pres_1D(kk+1) = pRef
         pres_1D(kk+2) = pRef
-        Temp_1D(kk+1) = TV%T(i,j,k)
-        Temp_1D(kk+2) = TV%T(i,j,km1)
-        Salt_1D(kk+1) = TV%S(i,j,k)
-        Salt_1D(kk+2) = TV%S(i,j,km1)
+        Temp_1D(kk+1) = tv%T(i,j,k)
+        Temp_1D(kk+2) = tv%T(i,j,km1)
+        Salt_1D(kk+1) = tv%S(i,j,k)
+        Salt_1D(kk+2) = tv%S(i,j,km1)
 
         ! pRef is pressure at interface between k and km1.
         ! iterate pRef for next pass through k-loop.
