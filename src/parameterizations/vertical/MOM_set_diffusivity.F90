@@ -8,7 +8,7 @@ use MOM_cpu_clock,           only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROU
 use MOM_diag_mediator,       only : diag_ctrl, time_type
 use MOM_diag_mediator,       only : post_data, register_diag_field
 use MOM_debugging,           only : hchksum, uvchksum, Bchksum, hchksum_pair
-use MOM_EOS,                 only : calculate_density, calculate_density_derivs
+use MOM_EOS,                 only : calculate_density, calculate_density_derivs, EOS_domain
 use MOM_error_handler,       only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_error_handler,       only : callTree_showQuery
 use MOM_error_handler,       only : callTree_enter, callTree_leave, callTree_waypoint
@@ -662,11 +662,10 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   real, dimension(SZI_(G)) :: &
     htot,    &    ! total thickness above or below a layer, or the
                   ! integrated thickness in the BBL [Z ~> m].
-    mFkb,    &    ! total thickness in the mixed and buffer layers
-                  ! times ds_dsp1 [Z ~> m].
-    p_ref,   &    ! array of tv%P_Ref pressures
+    mFkb,    &    ! total thickness in the mixed and buffer layers times ds_dsp1 [Z ~> m].
+    p_ref,   &    ! array of tv%P_Ref pressures [R L2 T-2 ~> Pa]
     Rcv_kmb, &    ! coordinate density in the lowest buffer layer [R ~> kg m-3]
-    p_0           ! An array of 0 pressures
+    p_0           ! An array of 0 pressures [R L2 T-2 ~> Pa]
 
   real :: dh_max      ! maximum amount of entrainment a layer could
                       ! undergo before entraining all fluid in the layers
@@ -681,6 +680,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   real :: hN2pO2      ! h (N^2 + Omega^2), in [Z T-2 ~> m s-2].
   logical :: do_i(SZI_(G))
 
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, k, is, ie, nz, i_rem, kmb, kb_min
   is = G%isc ; ie = G%iec ; nz = G%ke
 
@@ -714,12 +714,11 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   if (CS%bulkmixedlayer) then
     kmb = GV%nk_rho_varies
     do i=is,ie ; p_0(i) = 0.0 ; p_ref(i) = tv%P_Ref ; enddo
+    EOSdom(:) = EOS_domain(G%HI)
     do k=1,nz
-      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_0, rho_0(:,k), &
-                             is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_0, rho_0(:,k), tv%eqn_of_state, EOSdom)
     enddo
-    call calculate_density(tv%T(:,j,kmb), tv%S(:,j,kmb), p_ref, Rcv_kmb, &
-                           is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+    call calculate_density(tv%T(:,j,kmb), tv%S(:,j,kmb), p_ref, Rcv_kmb, tv%eqn_of_state, EOSdom)
 
     kb_min = kmb+1
     do i=is,ie
@@ -869,7 +868,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
     dRho_dS            ! partial derivative of density wrt saln [R ppt-1 ~> kg m-3 ppt-1]
 
   real, dimension(SZI_(G)) :: &
-    pres,      &  ! pressure at each interface [Pa]
+    pres,      &  ! pressure at each interface [R L2 T-2 ~> Pa]
     Temp_int,  &  ! temperature at each interface [degC]
     Salin_int, &  ! salinity at each interface [ppt]
     drho_bot,  &  ! A density difference [R ~> kg m-3]
@@ -884,6 +883,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
   real :: H_neglect ! negligibly small thickness, in the same units as h.
 
   logical :: do_i(SZI_(G)), do_any
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, k, is, ie, nz
 
   is = G%isc ; ie = G%iec ; nz = G%ke
@@ -901,14 +901,15 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
     else
       do i=is,ie ; pres(i) = 0.0 ; enddo
     endif
+    EOSdom(:) = EOS_domain(G%HI)
     do K=2,nz
       do i=is,ie
-        pres(i) = pres(i) + GV%H_to_Pa*h(i,j,k-1)
+        pres(i) = pres(i) + (GV%g_Earth*GV%H_to_RZ)*h(i,j,k-1)
         Temp_Int(i) = 0.5 * (T_f(i,j,k) + T_f(i,j,k-1))
         Salin_Int(i) = 0.5 * (S_f(i,j,k) + S_f(i,j,k-1))
       enddo
-      call calculate_density_derivs(Temp_int, Salin_int, pres, &
-               dRho_dT(:,K), dRho_dS(:,K), is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density_derivs(Temp_int, Salin_int, pres, dRho_dT(:,K), dRho_dS(:,K), &
+                                    tv%eqn_of_state, EOSdom)
       do i=is,ie
         dRho_int(i,K) = max(dRho_dT(i,K)*(T_f(i,j,k) - T_f(i,j,k-1)) + &
                             dRho_dS(i,K)*(S_f(i,j,k) - S_f(i,j,k-1)), 0.0)
@@ -1038,7 +1039,7 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
   real, dimension(SZI_(G)) :: &
     dRho_dT,  &    ! partial derivatives of density wrt temp [R degC-1 ~> kg m-3 degC-1]
     dRho_dS,  &    ! partial derivatives of density wrt saln [R ppt-1 ~> kg m-3 ppt-1]
-    pres,     &    ! pressure at each interface [Pa]
+    pres,     &    ! pressure at each interface [R L2 T-2 ~> Pa]
     Temp_int, &    ! temperature at interfaces [degC]
     Salin_int      ! Salinity at interfaces [ppt]
 
@@ -1052,6 +1053,7 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
 
   real, parameter :: Rrho0  = 1.9 ! limit for double-diffusive density ratio [nondim]
 
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, k, is, ie, nz
   is = G%isc ; ie = G%iec ; nz = G%ke
 
@@ -1060,14 +1062,16 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
       pres(i) = 0.0 ; Kd_T_dd(i,1) = 0.0 ; Kd_S_dd(i,1) = 0.0
       Kd_T_dd(i,nz+1) = 0.0 ; Kd_S_dd(i,nz+1) = 0.0
     enddo
+    if (associated(tv%p_surf)) then ; do i=is,ie ; pres(i) = tv%p_surf(i,j) ; enddo ; endif
+    EOSdom(:) = EOS_domain(G%HI)
     do K=2,nz
       do i=is,ie
-        pres(i) = pres(i) + GV%H_to_Pa*h(i,j,k-1)
+        pres(i) = pres(i) + (GV%g_Earth*GV%H_to_RZ)*h(i,j,k-1)
         Temp_Int(i) = 0.5 * (T_f(i,j,k-1) + T_f(i,j,k))
         Salin_Int(i) = 0.5 * (S_f(i,j,k-1) + S_f(i,j,k))
       enddo
-      call calculate_density_derivs(Temp_int, Salin_int, pres, &
-             dRho_dT(:), dRho_dS(:), is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density_derivs(Temp_int, Salin_int, pres, dRho_dT, dRho_dS, &
+                                    tv%eqn_of_state, EOSdom)
 
       do i=is,ie
         alpha_dT = -1.0*dRho_dT(i) * (T_f(i,j,k-1) - T_f(i,j,k))
@@ -1405,7 +1409,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
     ustar2 = ustar**2
     ! In add_drag_diffusivity(), fluxes%ustar_tidal is added in. This might be double counting
     ! since ustar_BBL should already include all contributions to u*? -AJA
-    !### Examine this question of whether there is double counting of fluxes%ustar_tidal.
+    !### Examine the question of whether there is double counting of fluxes%ustar_tidal.
     if (associated(fluxes%ustar_tidal)) ustar = ustar + fluxes%ustar_tidal(i,j)
 
     ! The maximum decay scale should be something of order 200 m. We use the smaller of u*/f and
@@ -1795,10 +1799,11 @@ subroutine set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1, rho_0)
   real :: g_R0                     ! g_R0 is a rescaled version of g/Rho [L2 Z-1 R-1 T-2 ~> m4 kg-1 s-2]
   real :: eps, tmp                 ! nondimensional temproray variables
   real :: a(SZK_(G)), a_0(SZK_(G)) ! nondimensional temporary variables
-  real :: p_ref(SZI_(G))           ! an array of tv%P_Ref pressures
+  real :: p_ref(SZI_(G))           ! an array of tv%P_Ref pressures [R L2 T-2 ~> Pa]
   real :: Rcv(SZI_(G),SZK_(G))     ! coordinate density in the mixed and buffer layers [R ~> kg m-3]
   real :: I_Drho                   ! temporary variable [R-1 ~> m3 kg-1]
 
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, k, k3, is, ie, nz, kmb
   is = G%isc ; ie = G%iec ; nz = G%ke
 
@@ -1819,9 +1824,9 @@ subroutine set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1, rho_0)
     kmb = GV%nk_rho_varies
     eps = 0.1
     do i=is,ie ; p_ref(i) = tv%P_Ref ; enddo
+    EOSdom(:) = EOS_domain(G%HI)
     do k=1,kmb
-      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, Rcv(:,k), &
-                             is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, Rcv(:,k), tv%eqn_of_state, EOSdom)
     enddo
     do i=is,ie
       if (kb(i) <= nz-1) then
@@ -2076,7 +2081,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   call get_param(param_file, mdl, "KD_SMOOTH", CS%Kd_smooth, &
                  "A diapycnal diffusivity that is used to interpolate "//&
                  "more sensible values of T & S into thin layers.", &
-                 units="m2 s-1", default=1.0e-6, scale=US%m_to_Z**2*US%T_to_s)
+                 units="m2 s-1", default=1.0e-6, scale=US%m2_s_to_Z2_T)
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", &
@@ -2087,18 +2092,18 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
 
   call get_param(param_file, mdl, "DISSIPATION_MIN", CS%dissip_min, &
                  "The minimum dissipation by which to determine a lower "//&
-                 "bound of Kd (a floor).", units="W m-3", default=0.0, &
-                 scale=US%kg_m3_to_R*US%m2_s_to_Z2_T*(US%T_to_s**2))
+                 "bound of Kd (a floor).", &
+                 units="W m-3", default=0.0, scale=US%W_m2_to_RZ3_T3*US%Z_to_m)
   call get_param(param_file, mdl, "DISSIPATION_N0", CS%dissip_N0, &
                  "The intercept when N=0 of the N-dependent expression "//&
                  "used to set a minimum dissipation by which to determine "//&
                  "a lower bound of Kd (a floor): A in eps_min = A + B*N.", &
-                 units="W m-3", default=0.0, scale=US%kg_m3_to_R*US%m2_s_to_Z2_T*(US%T_to_s**2))
+                 units="W m-3", default=0.0, scale=US%W_m2_to_RZ3_T3*US%Z_to_m)
   call get_param(param_file, mdl, "DISSIPATION_N1", CS%dissip_N1, &
                  "The coefficient multiplying N, following Gargett, used to "//&
                  "set a minimum dissipation by which to determine a lower "//&
                  "bound of Kd (a floor): B in eps_min = A + B*N", &
-                 units="J m-3", default=0.0, scale=US%kg_m3_to_R*US%m2_s_to_Z2_T*US%T_to_s)
+                 units="J m-3", default=0.0, scale=US%W_m2_to_RZ3_T3*US%Z_to_m*US%s_to_T)
   call get_param(param_file, mdl, "DISSIPATION_KD_MIN", CS%dissip_Kd_min, &
                  "The minimum vertical diffusivity applied as a floor.", &
                  units="m2 s-1", default=0.0, scale=US%m2_s_to_Z2_T)

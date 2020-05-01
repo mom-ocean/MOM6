@@ -406,54 +406,61 @@ end subroutine calculate_compress_wright
 !> This subroutine calculates analytical and nearly-analytical integrals of
 !! pressure anomalies across layers, which are required for calculating the
 !! finite-volume form pressure accelerations in a Boussinesq model.
-subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, &
+subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                  dpa, intz_dpa, intx_dpa, inty_dpa, &
-                                 bathyT, dz_neglect, useMassWghtInterp)
-  type(hor_index_type), intent(in)  :: HII      !< The horizontal index type for the input arrays.
-  type(hor_index_type), intent(in)  :: HIO      !< The horizontal index type for the output arrays.
-  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+                                 bathyT, dz_neglect, useMassWghtInterp, rho_scale, pres_scale)
+  type(hor_index_type), intent(in)  :: HI       !< The horizontal index type for the arrays.
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T        !< Potential temperature relative to the surface
                                                 !! [degC].
-  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: S        !< Salinity [PSU].
-  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: z_t      !< Height at the top of the layer in depth units [Z ~> m].
-  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: z_b      !< Height at the top of the layer [Z ~> m].
-  real,                 intent(in)  :: rho_ref  !< A mean density [kg m-3], that is subtracted out
-                                                !! to reduce the magnitude of each of the integrals.
+  real,                 intent(in)  :: rho_ref  !< A mean density [R ~> kg m-3] or [kg m-3], that is subtracted
+                                                !! out to reduce the magnitude of each of the integrals.
                                                 !! (The pressure is calucated as p~=-z*rho_0*G_e.)
-  real,                 intent(in)  :: rho_0    !< Density [kg m-3], that is used to calculate the
-                                                !! pressure (as p~=-z*rho_0*G_e) used in the
-                                                !! equation of state.
-  real,                 intent(in)  :: G_e      !< The Earth's gravitational acceleration [m2 Z-1 s-2 ~> m s-2].
-  real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
+  real,                 intent(in)  :: rho_0    !< Density [R ~> kg m-3] or [kg m-3], that is used
+                                                !! to calculate the pressure (as p~=-z*rho_0*G_e)
+                                                !! used in the equation of state.
+  real,                 intent(in)  :: G_e      !< The Earth's gravitational acceleration
+                                                !! [L2 Z-1 T-2 ~> m s-2] or [m2 Z-1 s-2 ~> m s-2].
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(inout) :: dpa    !< The change in the pressure anomaly across the
-                                                !! layer [Pa].
-  real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
+                                                !! layer [R L2 T-2 ~> Pa] or [Pa].
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(inout) :: intz_dpa !< The integral through the thickness of the layer
                                                 !! of the pressure anomaly relative to the anomaly
-                                                !! at the top of the layer [Pa Z ~> Pa m].
-  real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed), &
+                                                !! at the top of the layer [R Z L2 T-2 ~> Pa m].
+  real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
               optional, intent(inout) :: intx_dpa !< The integral in x of the difference between the
                                                 !! pressure anomaly at the top and bottom of the
-                                                !! layer divided by the x grid spacing [Pa].
-  real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB), &
+                                                !! layer divided by the x grid spacing [R L2 T-2 ~> Pa].
+  real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
               optional, intent(inout) :: inty_dpa !< The integral in y of the difference between the
                                                 !! pressure anomaly at the top and bottom of the
-                                                !! layer divided by the y grid spacing [Pa].
-  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+                                                !! layer divided by the y grid spacing [R L2 T-2 ~> Pa].
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(in)  :: bathyT   !< The depth of the bathymetry [Z ~> m].
   real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m].
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
                                                 !! interpolate T/S for top and bottom integrals.
+  real,       optional, intent(in)  :: rho_scale !< A multiplicative factor by which to scale density
+                                                 !! from kg m-3 to the desired units [R m3 kg-1 ~> 1]
+  real,       optional, intent(in)  :: pres_scale !< A multiplicative factor to convert pressure
+                                                 !! into Pa [Pa T2 R-1 L-2 ~> 1].
 
   ! Local variables
-  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed) :: al0_2d, p0_2d, lambda_2d
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed) :: al0_2d, p0_2d, lambda_2d
   real :: al0, p0, lambda
   real :: rho_anom   ! The density anomaly from rho_ref [kg m-3].
   real :: eps, eps2, rem
-  real :: GxRho, I_Rho
+  real :: GxRho      ! The gravitational acceleration times density and unit conversion factors [Pa Z-1 ~> kg m-2 s-2]
+  real :: g_Earth    ! The gravitational acceleration [m2 Z-1 s-2 ~> m s-2]
+  real :: I_Rho      ! The inverse of the Boussinesq density [m3 kg-1]
+  real :: rho_ref_mks ! The reference density in MKS units, never rescaled from kg m-3 [kg m-3]
   real :: p_ave, I_al0, I_Lzz
   real :: dz         ! The layer thickness [Z ~> m].
   real :: hWght      ! A pressure-thickness below topography [Z ~> m].
@@ -464,24 +471,34 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
   real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
   real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
   real :: intz(5)    ! The integrals of density with height at the
-                     ! 5 sub-column locations [Pa].
+                     ! 5 sub-column locations [R L2 T-2 ~> Pa].
+  real :: Pa_to_RL2_T2 ! A conversion factor of pressures from Pa to the output units indicated by
+                       ! pres_scale [R L2 T-2 Pa-1 ~> 1] or [1].
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   real, parameter :: C1_3 = 1.0/3.0, C1_7 = 1.0/7.0    ! Rational constants.
   real, parameter :: C1_9 = 1.0/9.0, C1_90 = 1.0/90.0  ! Rational constants.
-  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j, ioff, joff, m
-
-  ioff = HIO%idg_offset - HII%idg_offset
-  joff = HIO%jdg_offset - HII%jdg_offset
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j, m
 
   ! These array bounds work for the indexing convention of the input arrays, but
   ! on the computational domain defined for the output arrays.
-  Isq = HIO%IscB + ioff ; Ieq = HIO%IecB + ioff
-  Jsq = HIO%JscB + joff ; Jeq = HIO%JecB + joff
-  is = HIO%isc + ioff ; ie = HIO%iec + ioff
-  js = HIO%jsc + joff ; je = HIO%jec + joff
+  Isq = HI%IscB ; Ieq = HI%IecB
+  Jsq = HI%JscB ; Jeq = HI%JecB
+  is = HI%isc ; ie = HI%iec
+  js = HI%jsc ; je = HI%jec
 
-  GxRho = G_e * rho_0
-  I_Rho = 1.0 / rho_0
+  if (present(pres_scale)) then
+    GxRho = pres_scale * G_e * rho_0 ; g_Earth = pres_scale * G_e
+    Pa_to_RL2_T2 = 1.0 / pres_scale
+  else
+    GxRho = G_e * rho_0 ; g_Earth = G_e
+    Pa_to_RL2_T2 = 1.0
+  endif
+  if (present(rho_scale)) then
+    g_Earth = g_Earth * rho_scale
+    rho_ref_mks = rho_ref / rho_scale ; I_Rho = rho_scale / rho_0
+  else
+    rho_ref_mks = rho_ref ; I_Rho = 1.0 / rho_0
+  endif
 
   do_massWeight = .false.
   if (present(useMassWghtInterp)) then ; if (useMassWghtInterp) then
@@ -508,12 +525,12 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
 
 !     rho(j) = (pressure(j) + p0) / (lambda + al0*(pressure(j) + p0))
 
-    rho_anom = (p0 + p_ave)*(I_Lzz*I_al0) - rho_ref
+    rho_anom = (p0 + p_ave)*(I_Lzz*I_al0) - rho_ref_mks
     rem = I_Rho * (lambda * I_al0**2) * eps2 * &
           (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
-    dpa(i-ioff,j-joff) = G_e*rho_anom*dz - 2.0*eps*rem
+    dpa(i,j) = Pa_to_RL2_T2 * (g_Earth*rho_anom*dz - 2.0*eps*rem)
     if (present(intz_dpa)) &
-      intz_dpa(i-ioff,j-joff) = 0.5*G_e*rho_anom*dz**2 - dz*(1.0+eps)*rem
+      intz_dpa(i,j) = Pa_to_RL2_T2 * (0.5*g_Earth*rho_anom*dz**2 - dz*(1.0+eps)*rem)
   enddo ; enddo
 
   if (present(intx_dpa)) then ; do j=js,je ; do I=Isq,Ieq
@@ -534,7 +551,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
       hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
     endif
 
-    intz(1) = dpa(i-ioff,j-joff) ; intz(5) = dpa(i+1-ioff,j-joff)
+    intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
     do m=2,4
       wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
       wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
@@ -551,13 +568,11 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
       I_Lzz = 1.0 / (p0 + (lambda * I_al0) + p_ave)
       eps = 0.5*GxRho*dz*I_Lzz ; eps2 = eps*eps
 
-      intz(m) = G_e*dz*((p0 + p_ave)*(I_Lzz*I_al0) - rho_ref) - 2.0*eps * &
-               I_Rho * (lambda * I_al0**2) * eps2 * &
-               (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
+      intz(m) = Pa_to_RL2_T2 * ( g_Earth*dz*((p0 + p_ave)*(I_Lzz*I_al0) - rho_ref_mks) - 2.0*eps * &
+                I_Rho * (lambda * I_al0**2) * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2))) )
     enddo
     ! Use Bode's rule to integrate the values.
-    intx_dpa(i-ioff,j-joff) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
-                           12.0*intz(3))
+    intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + 12.0*intz(3))
   enddo ; enddo ; endif
 
   if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=is,ie
@@ -578,7 +593,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
       hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
     endif
 
-    intz(1) = dpa(i-ioff,j-joff) ; intz(5) = dpa(i-ioff,j+1-joff)
+    intz(1) = dpa(i,j) ; intz(5) = dpa(i,j+1)
     do m=2,4
       wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
       wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
@@ -595,14 +610,13 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
       I_Lzz = 1.0 / (p0 + (lambda * I_al0) + p_ave)
       eps = 0.5*GxRho*dz*I_Lzz ; eps2 = eps*eps
 
-      intz(m) = G_e*dz*((p0 + p_ave)*(I_Lzz*I_al0) - rho_ref) - 2.0*eps * &
-               I_Rho * (lambda * I_al0**2) * eps2 * &
-               (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
+      intz(m) = Pa_to_RL2_T2 * ( g_Earth*dz*((p0 + p_ave)*(I_Lzz*I_al0) - rho_ref_mks) - 2.0*eps * &
+                I_Rho * (lambda * I_al0**2) * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2))) )
     enddo
     ! Use Bode's rule to integrate the values.
-    inty_dpa(i-ioff,j-joff) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
-                           12.0*intz(3))
+    inty_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + 12.0*intz(3))
   enddo ; enddo ; endif
+
 end subroutine int_density_dz_wright
 
 !>   This subroutine calculates analytical and nearly-analytical integrals in
@@ -613,7 +627,7 @@ end subroutine int_density_dz_wright
 !! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
 subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
                                   intp_dza, intx_dza, inty_dza, halo_size, &
-                                  bathyP, dP_neglect, useMassWghtInterp)
+                                  bathyP, dP_neglect, useMassWghtInterp, SV_scale, pres_scale)
   type(hor_index_type), intent(in)  :: HI        !< The ocean's horizontal index type.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T         !< Potential temperature relative to the surface
@@ -621,53 +635,66 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: S         !< Salinity [PSU].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: p_t       !< Pressure at the top of the layer [Pa].
+                        intent(in)  :: p_t       !< Pressure at the top of the layer [R L2 T-2 ~> Pa] or [Pa].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: p_b       !< Pressure at the top of the layer [Pa].
+                        intent(in)  :: p_b       !< Pressure at the top of the layer [R L2 T-2 ~> Pa] or [Pa].
   real,                 intent(in)  :: spv_ref   !< A mean specific volume that is subtracted out
-           !! to reduce the magnitude of each of the integrals [m3 kg-1]. The calculation is
-           !! mathematically identical with different values of spv_ref, but this reduces the
-           !! effects of roundoff.
+                            !! to reduce the magnitude of each of the integrals [R-1 ~> m3 kg-1].
+                            !! The calculation is mathematically identical with different values of
+                            !! spv_ref, but this reduces the effects of roundoff.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(inout) :: dza     !< The change in the geopotential anomaly across
-                                                 !! the layer [m2 s-2].
+                                                 !! the layer [T-2 ~> m2 s-2] or [m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(inout) :: intp_dza !< The integral in pressure through the layer of
                                                  !! the geopotential anomaly relative to the anomaly
-                                                 !! at the bottom of the layer [Pa m2 s-2].
+                                                 !! at the bottom of the layer [R L4 T-4 ~> Pa m2 s-2]
+                                                 !! or [Pa m2 s-2].
   real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
               optional, intent(inout) :: intx_dza !< The integral in x of the difference between the
                                                  !! geopotential anomaly at the top and bottom of
-                                                 !! the layer divided by the x grid spacing [m2 s-2].
+                                                 !! the layer divided by the x grid spacing
+                                                 !! [L2 T-2 ~> m2 s-2] or [m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
               optional, intent(inout) :: inty_dza !< The integral in y of the difference between the
                                                  !! geopotential anomaly at the top and bottom of
-                                                 !! the layer divided by the y grid spacing [m2 s-2].
+                                                 !! the layer divided by the y grid spacing
+                                                 !! [L2 T-2 ~> m2 s-2] or [m2 s-2].
   integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate
                                                  !! dza.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(in)  :: bathyP    !< The pressure at the bathymetry [Pa]
+              optional, intent(in)  :: bathyP    !< The pressure at the bathymetry [R L2 T-2 ~> Pa] or [Pa]
   real,       optional, intent(in)  :: dP_neglect !< A miniscule pressure change with
-                                                 !! the same units as p_t [Pa]
+                                                 !! the same units as p_t [R L2 T-2 ~> Pa] or [Pa]
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
                             !! to interpolate T/S for top and bottom integrals.
+  real,       optional, intent(in)  :: SV_scale  !< A multiplicative factor by which to scale specific
+                            !! volume from m3 kg-1 to the desired units [kg m-3 R-1 ~> 1]
+  real,       optional, intent(in)  :: pres_scale !< A multiplicative factor to convert pressure
+                            !! into Pa [Pa T2 R-1 L-2 ~> 1].
 
   ! Local variables
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed) :: al0_2d, p0_2d, lambda_2d
-  real :: al0, p0, lambda
-  real :: p_ave
-  real :: rem, eps, eps2
-  real :: alpha_anom ! The depth averaged specific volume anomaly [m3 kg-1].
-  real :: dp         ! The pressure change through a layer [Pa].
-  real :: hWght      ! A pressure-thickness below topography [Pa].
-  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Pa].
-  real :: iDenom     ! The inverse of the denominator in the weights [Pa-2].
+  real :: al0        ! A term in the Wright EOS [R-1 ~> m3 kg-1]
+  real :: p0         ! A term in the Wright EOS [R L2 T-2 ~> Pa]
+  real :: lambda     ! A term in the Wright EOS [L2 T-2 ~> m2 s-2]
+  real :: al0_scale  ! Scaling factor to convert al0 from MKS units [R-1 kg m-3 ~> 1]
+  real :: p0_scale   ! Scaling factor to convert p0 from MKS units [R L2 T-2 Pa-1 ~> 1]
+  real :: lam_scale  ! Scaling factor to convert lambda from MKS units [L2 s2 T-2 m-2 ~> 1]
+  real :: p_ave      ! The layer average pressure [R L2 T-2 ~> Pa]
+  real :: rem        ! [L2 T-2 ~> m2 s-2]
+  real :: eps, eps2  ! A nondimensional ratio and its square [nondim]
+  real :: alpha_anom ! The depth averaged specific volume anomaly [R-1 ~> m3 kg-1].
+  real :: dp         ! The pressure change through a layer [R L2 T-2 ~> Pa].
+  real :: hWght      ! A pressure-thickness below topography [R L2 T-2 ~> Pa].
+  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [R L2 T-2 ~> Pa].
+  real :: iDenom     ! The inverse of the denominator in the weights [T4 R-2 L-4 ~> Pa-2].
   real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim].
   real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim].
   real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
   real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
   real :: intp(5)    ! The integrals of specific volume with pressure at the
-                     ! 5 sub-column locations [m2 s-2].
+                     ! 5 sub-column locations [L2 T-2 ~> m2 s-2].
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   real, parameter :: C1_3 = 1.0/3.0, C1_7 = 1.0/7.0    ! Rational constants.
   real, parameter :: C1_9 = 1.0/9.0, C1_90 = 1.0/90.0  ! Rational constants.
@@ -679,6 +706,14 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
   if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh); endif
   if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh); endif
 
+
+  al0_scale = 1.0 ; if (present(SV_scale)) al0_scale = SV_scale
+  p0_scale = 1.0
+  if (present(pres_scale)) then ; if (pres_scale /= 1.0) then
+    p0_scale = 1.0 / pres_scale
+  endif ; endif
+  lam_scale = al0_scale * p0_scale
+
   do_massWeight = .false.
   if (present(useMassWghtInterp)) then ; if (useMassWghtInterp) then
     do_massWeight = .true.
@@ -688,10 +723,11 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
 !        "dP_neglect must be present if useMassWghtInterp is present and true.")
   endif ; endif
 
+  !  alpha(j) = (lambda + al0*(pressure(j) + p0)) / (pressure(j) + p0)
   do j=jsh,jeh ; do i=ish,ieh
-    al0_2d(i,j) = (a0 + a1*T(i,j)) + a2*S(i,j)
-    p0_2d(i,j) = (b0 + b4*S(i,j)) + T(i,j) * (b1 + T(i,j)*((b2 + b3*T(i,j))) + b5*S(i,j))
-    lambda_2d(i,j) = (c0 +c4*S(i,j)) + T(i,j) * (c1 + T(i,j)*((c2 + c3*T(i,j))) + c5*S(i,j))
+    al0_2d(i,j) = al0_scale * ( (a0 + a1*T(i,j)) + a2*S(i,j) )
+    p0_2d(i,j) = p0_scale * ( (b0 + b4*S(i,j)) + T(i,j) * (b1 + T(i,j)*((b2 + b3*T(i,j))) + b5*S(i,j)) )
+    lambda_2d(i,j) = lam_scale * ( (c0 + c4*S(i,j)) + T(i,j) * (c1 + T(i,j)*((c2 + c3*T(i,j))) + c5*S(i,j)) )
 
     al0 = al0_2d(i,j) ; p0 = p0_2d(i,j) ; lambda = lambda_2d(i,j)
     dp = p_b(i,j) - p_t(i,j)

@@ -60,7 +60,7 @@ type, public :: surface_forcing_CS ; private
                                 !! from MOM_domains) to indicate the staggering of
                                 !! the winds that are being provided in calls to
                                 !! update_ocean_model.
-  logical :: use_temperature    !! If true, temp and saln used as state variables
+  logical :: use_temperature    !< If true, temp and saln used as state variables
   real :: wind_stress_multiplier!< A multiplier applied to incoming wind stress (nondim).
 
   real :: Rho0                  !< Boussinesq reference density [R ~> kg m-3]
@@ -68,9 +68,9 @@ type, public :: surface_forcing_CS ; private
   real :: latent_heat_fusion    !< latent heat of fusion [J kg-1]
   real :: latent_heat_vapor     !< latent heat of vaporization [J kg-1]
 
-  real :: max_p_surf            !< maximum surface pressure that can be
-                                !! exerted by the atmosphere and floating sea-ice,
-                                !! [Pa].  This is needed because the FMS coupling
+  real :: max_p_surf            !< The maximum surface pressure that can be exerted by
+                                !! the atmosphere and floating sea-ice [R L2 T-2 ~> Pa].
+                                !! This is needed because the FMS coupling
                                 !! structure does not limit the water that can be
                                 !! frozen out of the ocean and the ice-ocean heat
                                 !! fluxes are treated explicitly.
@@ -95,14 +95,14 @@ type, public :: surface_forcing_CS ; private
   logical :: rigid_sea_ice    !< If true, sea-ice exerts a rigidity that acts
                               !! to damp surface deflections (especially surface
                               !! gravity waves).  The default is false.
-  real    :: G_Earth            !< Gravitational acceleration [m s-2]
-  real    :: Kv_sea_ice         !! viscosity in sea-ice that resists sheared vertical motions [m2 s-1]
-  real    :: density_sea_ice    !< typical density of sea-ice [kg m-3]. The value is
+  real    :: g_Earth            !< Gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
+  real    :: Kv_sea_ice         !< Viscosity in sea-ice that resists sheared vertical motions [L4 Z-2 T-1 ~> m2 s-1]
+  real    :: density_sea_ice    !< Typical density of sea-ice [R ~> kg m-3]. The value is
                                 !! only used to convert the ice pressure into
                                 !! appropriate units for use with Kv_sea_ice.
   real    :: rigid_sea_ice_mass !< A mass per unit area of sea-ice beyond which
-                                !! sea-ice viscosity becomes effective, in kg m-2,
-                                !! typically of order 1000 [kg m-2].
+                                !! sea-ice viscosity becomes effective [R Z ~> kg m-2],
+                                !! typically of order 1000 kg m-2.
   logical :: allow_flux_adjustments !< If true, use data_override to obtain flux adjustments
   real    :: Flux_const                     !< piston velocity for surface restoring [Z T-1 ~> m s-1]
   logical :: salt_restore_as_sflux          !< If true, SSS restore as salt flux instead of water flux
@@ -112,7 +112,7 @@ type, public :: surface_forcing_CS ; private
   logical :: use_net_FW_adjustment_sign_bug !< use the wrong sign when adjusting net FW
   logical :: adjust_net_fresh_water_by_scaling !< adjust net surface fresh-water  w/o moving zero contour
   logical :: mask_srestore_under_ice        !< If true, use an ice mask defined by frazil
-                                            !< criteria for salinity restoring.
+
   real    :: ice_salt_concentration         !< salt concentration for sea ice [kg/kg]
   logical :: mask_srestore_marginal_seas    !< if true, then mask SSS restoring in marginal seas
   real    :: max_delta_srestore             !< maximum delta salinity used for restoring
@@ -125,8 +125,8 @@ type, public :: surface_forcing_CS ; private
   character(len=200)       :: salt_restore_file !< filename for salt restoring data
   character(len=30)        :: salt_restore_var_name !< name of surface salinity in salt_restore_file
   logical                  :: mask_srestore         !< if true, apply a 2-dimensional mask to the surface
-                                                    !< salinity restoring fluxes. The masking file should be
-                                                    !< in inputdir/salt_restore_mask.nc and the field should
+                                                    !! salinity restoring fluxes. The masking file should be
+                                                    !! in inputdir/salt_restore_mask.nc and the field should
                                                     !! be named 'mask'
   real, pointer, dimension(:,:) :: srestore_mask => NULL() !< mask for SSS restoring
   character(len=200)       :: temp_restore_file     !< filename for sst restoring data
@@ -456,7 +456,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
          fluxes%area_berg(i,j) = IOB%area_berg(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (associated(IOB%mass_berg)) &
-         fluxes%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
+         fluxes%mass_berg(i,j) = US%m_to_Z*US%kg_m3_to_R * IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
 
     ! GMM, cime does not not have an equivalent for heat_content_lrunoff and
     ! heat_content_frunoff. I am setting these to zero for now.
@@ -527,12 +527,12 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   if (associated(IOB%p)) then
      if (CS%max_p_surf >= 0.0) then
         do j=js,je ; do i=is,ie
-           fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
+           fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * US%kg_m3_to_R*US%m_s_to_L_T**2*IOB%p(i-i0,j-j0)
            fluxes%p_surf(i,j) = MIN(fluxes%p_surf_full(i,j),CS%max_p_surf)
         enddo; enddo
      else
         do j=js,je ; do i=is,ie
-           fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
+           fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * US%kg_m3_to_R*US%m_s_to_L_T**2*IOB%p(i-i0,j-j0)
            fluxes%p_surf(i,j) = fluxes%p_surf_full(i,j)
         enddo; enddo
      endif
@@ -611,7 +611,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
     tauy_at_q    !< Meridional wind stresses at q points [R Z L T-2 ~> Pa]
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    rigidity_at_h, & !< Ice rigidity at tracer points [m3 s-1]
+    rigidity_at_h, & !< Ice rigidity at tracer points [L4 Z-1 T-1 ~> m3 s-1]
     taux_at_h, & !< Zonal wind stresses at h points [R Z L T-2 ~> Pa]
     tauy_at_h    !< Meridional wind stresses at h points [R Z L T-2 ~> Pa]
 
@@ -621,10 +621,10 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
   real :: tau_mag       !< magnitude of the wind stress [R Z L T-2 ~> Pa]
   real :: Pa_conversion ! A unit conversion factor from Pa to the internal wind stress units [R Z L T-2 Pa-1 ~> 1]
   real :: stress_conversion ! A unit conversion factor from Pa times any stress multiplier [R Z L T-2 Pa-1 ~> 1]
-  real :: I_GEarth      !< 1.0 / G%G_Earth  [s2 m-1]
-  real :: Kv_rho_ice    !< (CS%kv_sea_ice / CS%density_sea_ice) [m5 s-1 kg-1]
-  real :: mass_ice      !< mass of sea ice at a face [kg m-2]
-  real :: mass_eff      !< effective mass of sea ice for rigidity [kg m-2]
+  real :: I_GEarth      !< The inverse of the gravitational acceleration [T2 Z L-2 ~> s2 m-1]
+  real :: Kv_rho_ice    !< (CS%Kv_sea_ice / CS%density_sea_ice) [L4 Z-2 T-1 R-1 ~> m5 s-1 kg-1]
+  real :: mass_ice      !< mass of sea ice at a face [R Z ~> kg m-2]
+  real :: mass_eff      !< effective mass of sea ice for rigidity [R Z ~> kg m-2]
 
   integer :: wind_stagger  !< AGRID, BGRID_NE, or CGRID_NE (integers from MOM_domains)
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
@@ -686,12 +686,12 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
   if (associated(IOB%p)) then
     if (CS%max_p_surf >= 0.0) then
       do j=js,je ; do i=is,ie
-        forces%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
+        forces%p_surf_full(i,j) = G%mask2dT(i,j) * US%kg_m3_to_R*US%m_s_to_L_T**2*IOB%p(i-i0,j-j0)
         forces%p_surf(i,j) = MIN(forces%p_surf_full(i,j),CS%max_p_surf)
       enddo ; enddo
     else
       do j=js,je ; do i=is,ie
-        forces%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
+        forces%p_surf_full(i,j) = G%mask2dT(i,j) * US%kg_m3_to_R*US%m_s_to_L_T**2*IOB%p(i-i0,j-j0)
         forces%p_surf(i,j) = forces%p_surf_full(i,j)
       enddo ; enddo
     endif
@@ -721,10 +721,10 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
       forces%area_berg(i,j) = IOB%area_berg(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (associated(IOB%mass_berg)) &
-      forces%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
+      forces%mass_berg(i,j) = US%m_to_Z*US%kg_m3_to_R * IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (associated(IOB%ice_rigidity)) &
-      rigidity_at_h(i,j) = IOB%ice_rigidity(i-i0,j-j0) * G%mask2dT(i,j)
+      rigidity_at_h(i,j) = US%m_to_L**3*US%Z_to_L*US%T_to_s * IOB%ice_rigidity(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (wind_stagger == BGRID_NE) then
       if (associated(IOB%u_flux)) taux_at_q(I,J) = IOB%u_flux(i-i0,j-j0) * stress_conversion
@@ -845,14 +845,13 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
 
   if (CS%rigid_sea_ice) then
     call pass_var(forces%p_surf_full, G%Domain, halo=1)
-    I_GEarth = 1.0 / CS%G_Earth
-    Kv_rho_ice = (CS%kv_sea_ice / CS%density_sea_ice)
+    I_GEarth = 1.0 / CS%g_Earth
+    Kv_rho_ice = (CS%Kv_sea_ice / CS%density_sea_ice)
     do I=is-1,ie ; do j=js,je
       mass_ice = min(forces%p_surf_full(i,j), forces%p_surf_full(i+1,j)) * I_GEarth
       mass_eff = 0.0
       if (mass_ice > CS%rigid_sea_ice_mass) then
-        mass_eff = (mass_ice - CS%rigid_sea_ice_mass) **2 / &
-                   (mass_ice + CS%rigid_sea_ice_mass)
+        mass_eff = (mass_ice - CS%rigid_sea_ice_mass)**2 / (mass_ice + CS%rigid_sea_ice_mass)
       endif
       forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) + Kv_rho_ice * mass_eff
     enddo ; enddo
@@ -860,8 +859,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
       mass_ice = min(forces%p_surf_full(i,j), forces%p_surf_full(i,j+1)) * I_GEarth
       mass_eff = 0.0
       if (mass_ice > CS%rigid_sea_ice_mass) then
-        mass_eff = (mass_ice - CS%rigid_sea_ice_mass) **2 / &
-                   (mass_ice + CS%rigid_sea_ice_mass)
+        mass_eff = (mass_ice - CS%rigid_sea_ice_mass)**2 / (mass_ice + CS%rigid_sea_ice_mass)
       endif
       forces%rigidity_ice_v(i,J) = forces%rigidity_ice_v(i,J) + Kv_rho_ice * mass_eff
     enddo ; enddo
@@ -1077,8 +1075,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
                  "needed because the FMS coupling structure does not "//&
                  "limit the water that can be frozen out of the ocean and "//&
                  "the ice-ocean heat fluxes are treated explicitly.  No "//&
-                 "limit is applied if a negative value is used.", units="Pa", &
-                 default=-1.0)
+                 "limit is applied if a negative value is used.", &
+                 units="Pa", default=-1.0, scale=US%kg_m3_to_R*US%m_s_to_L_T**2)
   call get_param(param_file, mdl, "ADJUST_NET_SRESTORE_TO_ZERO", &
                  CS%adjust_net_srestore_to_zero, &
                  "If true, adjusts the salinity restoring seen to zero "//&
@@ -1271,18 +1269,19 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
   if (CS%rigid_sea_ice) then
     call get_param(param_file, mdl, "G_EARTH", CS%g_Earth, &
                  "The gravitational acceleration of the Earth.", &
-                 units="m s-2", default = 9.80)
+                 units="m s-2", default = 9.80, scale=US%Z_to_m*US%m_s_to_L_T**2)
     call get_param(param_file, mdl, "SEA_ICE_MEAN_DENSITY", CS%density_sea_ice, &
                  "A typical density of sea ice, used with the kinematic "//&
-                 "viscosity, when USE_RIGID_SEA_ICE is true.", units="kg m-3", &
-                 default=900.0)
+                 "viscosity, when USE_RIGID_SEA_ICE is true.", &
+                 units="kg m-3", default=900.0, scale=US%kg_m3_to_R)
     call get_param(param_file, mdl, "SEA_ICE_VISCOSITY", CS%Kv_sea_ice, &
                  "The kinematic viscosity of sufficiently thick sea ice "//&
                  "for use in calculating the rigidity of sea ice.", &
-                 units="m2 s-1", default=1.0e9)
+                 units="m2 s-1", default=1.0e9, scale=US%Z_to_L**2*US%m_to_L**2*US%T_to_s)
     call get_param(param_file, mdl, "SEA_ICE_RIGID_MASS", CS%rigid_sea_ice_mass, &
                  "The mass of sea-ice per unit area at which the sea-ice "//&
-                 "starts to exhibit rigidity", units="kg m-2", default=1000.0)
+                 "starts to exhibit rigidity", &
+                 units="kg m-2", default=1000.0, scale=US%kg_m3_to_R*US%m_to_Z)
   endif
 
   call get_param(param_file, mdl, "ALLOW_ICEBERG_FLUX_DIAGNOSTICS", iceberg_flux_diags, &

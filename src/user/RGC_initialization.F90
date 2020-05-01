@@ -35,7 +35,7 @@ use MOM_sponge, only : set_up_sponge_ML_density
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
+use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type, EOS_domain
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -77,7 +77,7 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, PF, use_ALE, CSp, ACSp)
   real :: h(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for thickness at h points
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate at h points [T-1 ~> s-1].
   real :: TNUDG                     ! Nudging time scale [T ~> s]
-  real :: pres(SZI_(G))             ! An array of the reference pressure, in Pa
+  real :: pres(SZI_(G))             ! An array of the reference pressure [R L2 T-2 ~> Pa]
   real :: e0(SZK_(G)+1)               ! The resting interface heights, in m, usually !
                                     ! negative because it is positive upward.      !
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta.
@@ -90,6 +90,7 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, PF, use_ALE, CSp, ACSp)
   character(len=40) :: temp_var, salt_var, eta_var, inputdir, h_var
 
   character(len=40)  :: mod = "RGC_initialize_sponges" ! This subroutine's name.
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, iscB, iecB, jscB, jecB
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -211,10 +212,9 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, PF, use_ALE, CSp, ACSp)
     ! mixed layer density, which is used in determining which layers can be
     ! inflated without causing static instabilities.
       do i=is-1,ie ; pres(i) = tv%P_Ref ; enddo
-
+      EOSdom(:) = EOS_domain(G%HI)
       do j=js,je
-        call calculate_density(T(:,j,1), S(:,j,1), pres, tmp(:,j), &
-                          is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density(T(:,j,1), S(:,j,1), pres, tmp(:,j), tv%eqn_of_state, EOSdom)
       enddo
 
       call set_up_sponge_ML_density(tmp, G, CSp)

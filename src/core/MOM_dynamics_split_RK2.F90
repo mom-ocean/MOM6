@@ -250,10 +250,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   type(time_type),                   intent(in)    :: Time_local   !< model time at end of time step
   real,                              intent(in)    :: dt           !< time step [T ~> s]
   type(mech_forcing),                intent(in)    :: forces       !< A structure with the driving mechanical forces
-  real, dimension(:,:),              pointer       :: p_surf_begin !< surf pressure at start of this dynamic
-                                                                   !! time step [Pa]
-  real, dimension(:,:),              pointer       :: p_surf_end   !< surf pressure at end   of this dynamic
-                                                                   !! time step [Pa]
+  real, dimension(:,:),              pointer       :: p_surf_begin !< surf pressure at the start of this dynamic
+                                                                   !! time step [R L2 T-2 ~> Pa]
+  real, dimension(:,:),              pointer       :: p_surf_end   !< surf pressure at the end of this dynamic
+                                                                   !! time step [R L2 T-2 ~> Pa]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                              target, intent(inout) :: uh           !< zonal volume/mass transport
                                                                    !! [H L2 T-1 ~> m3 s-1 or kg s-1]
@@ -306,7 +306,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     ! u_old_rad_OBC and v_old_rad_OBC are the starting velocities, which are
     ! saved for use in the Flather open boundary condition code [L T-1 ~> m s-1].
 
-  real :: Pa_to_eta ! A factor that converts pressures to the units of eta.
+  real :: pres_to_eta ! A factor that converts pressures to the units of eta
+                      ! [H T2 R-1 L-2 ~> m Pa-1 or kg m-2 Pa-1]
   real, pointer, dimension(:,:) :: &
     p_surf => NULL(), eta_PF_start => NULL(), &
     taux_bot => NULL(), tauy_bot => NULL(), &
@@ -413,11 +414,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   call PressureForce(h, tv, CS%PFu, CS%PFv, G, GV, US, CS%PressureForce_CSp, &
                      CS%ALE_CSp, p_surf, CS%pbce, CS%eta_PF)
   if (dyn_p_surf) then
-    Pa_to_eta = 1.0 / GV%H_to_Pa
+    pres_to_eta = 1.0 / (GV%g_Earth * GV%H_to_RZ)
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      eta_PF_start(i,j) = CS%eta_PF(i,j) - Pa_to_eta * &
-                          (p_surf_begin(i,j) - p_surf_end(i,j))
+      eta_PF_start(i,j) = CS%eta_PF(i,j) - pres_to_eta * (p_surf_begin(i,j) - p_surf_end(i,j))
     enddo ; enddo
   endif
   call cpu_clock_end(id_clock_pres)

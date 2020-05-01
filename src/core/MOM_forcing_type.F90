@@ -10,7 +10,7 @@ use MOM_diag_mediator, only : post_data, register_diag_field, register_scalar_fi
 use MOM_diag_mediator, only : time_type, diag_ctrl, safe_alloc_alloc, query_averaging_enabled
 use MOM_diag_mediator, only : enable_averages, enable_averaging, disable_averaging
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_EOS,           only : calculate_density_derivs
+use MOM_EOS,           only : calculate_density_derivs, EOS_domain
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_opacity,       only : sumSWoverBands, optics_type, extract_optics_slice, optics_nbands
@@ -132,13 +132,13 @@ type, public :: forcing
 
   ! applied surface pressure from other component models (e.g., atmos, sea ice, land ice)
   real, pointer, dimension(:,:) :: p_surf_full => NULL()
-                !< Pressure at the top ocean interface [Pa].
+                !< Pressure at the top ocean interface [R L2 T-2 ~> Pa].
                 !! if there is sea-ice, then p_surf_flux is at ice-ocean interface
   real, pointer, dimension(:,:) :: p_surf => NULL()
-                !< Pressure at the top ocean interface [Pa] as used to drive the ocean model.
+                !< Pressure at the top ocean interface [R L2 T-2 ~> Pa] as used to drive the ocean model.
                 !! If p_surf is limited, p_surf may be smaller than p_surf_full, otherwise they are the same.
   real, pointer, dimension(:,:) :: p_surf_SSH => NULL()
-                !< Pressure at the top ocean interface [Pa] that is used in corrections to the sea surface
+                !< Pressure at the top ocean interface [R L2 T-2 ~> Pa] that is used in corrections to the sea surface
                 !! height field that is passed back to the calling routines.
                 !! p_surf_SSH may point to p_surf or to p_surf_full.
   logical :: accumulate_p_surf = .false. !< If true, the surface pressure due to the atmosphere
@@ -155,7 +155,7 @@ type, public :: forcing
   real, pointer, dimension(:,:) :: &
     ustar_berg => NULL(), &   !< iceberg contribution to top ustar [Z T-1 ~> m s-1].
     area_berg  => NULL(), &   !< area of ocean surface covered by icebergs [m2 m-2]
-    mass_berg  => NULL()      !< mass of icebergs [kg m-2]
+    mass_berg  => NULL()      !< mass of icebergs [R Z ~> kg m-2]
 
   ! land ice-shelf related inputs
   real, pointer, dimension(:,:) :: ustar_shelf => NULL()  !< Friction velocity under ice-shelves [Z T-1 ~> m s-1].
@@ -182,7 +182,7 @@ type, public :: forcing
                                   !! type variable has not yet been inialized.
   logical :: gustless_accum_bug = .true. !< If true, use an incorrect expression in the time
                                   !! average of the gustless wind stress.
-  real :: C_p                !< heat capacity of seawater [J kg-1 degC-1].
+  real :: C_p                !< heat capacity of seawater [Q degC-1 ~> J kg-1 degC-1].
                              !! C_p is is the same value as in thermovar_ptrs_type.
 
   ! passive tracer surface fluxes
@@ -211,20 +211,20 @@ type, public :: mech_forcing
 
   ! applied surface pressure from other component models (e.g., atmos, sea ice, land ice)
   real, pointer, dimension(:,:) :: p_surf_full => NULL()
-                !< Pressure at the top ocean interface [Pa].
+                !< Pressure at the top ocean interface [R L2 T-2 ~> Pa].
                 !! if there is sea-ice, then p_surf_flux is at ice-ocean interface
   real, pointer, dimension(:,:) :: p_surf => NULL()
-                !< Pressure at the top ocean interface [Pa] as used to drive the ocean model.
+                !< Pressure at the top ocean interface [R L2 T-2 ~> Pa] as used to drive the ocean model.
                 !! If p_surf is limited, p_surf may be smaller than p_surf_full, otherwise they are the same.
   real, pointer, dimension(:,:) :: p_surf_SSH => NULL()
-                !< Pressure at the top ocean interface that is used in corrections to the sea surface
-                !! height field that is passed back to the calling routines.
+                !< Pressure at the top ocean interface [R L2 T-2 ~> Pa] that is used in corrections
+                !! to the sea surface height field that is passed back to the calling routines.
                 !! p_surf_SSH may point to p_surf or to p_surf_full.
 
   ! iceberg related inputs
   real, pointer, dimension(:,:) :: &
     area_berg  => NULL(), &    !< fractional area of ocean surface covered by icebergs [m2 m-2]
-    mass_berg  => NULL()       !< mass of icebergs per unit ocean area [kg m-2]
+    mass_berg  => NULL()       !< mass of icebergs per unit ocean area [R Z ~> kg m-2]
 
   ! land ice-shelf related inputs
   real, pointer, dimension(:,:) :: frac_shelf_u  => NULL() !< Fractional ice shelf coverage of u-cells,
@@ -234,8 +234,10 @@ type, public :: mech_forcing
                 !! nondimensional from 0 to 1 [nondim]. This is only associated if ice shelves are enabled,
                 !! and is exactly 0 away from shelves or on land.
   real, pointer, dimension(:,:) :: &
-    rigidity_ice_u => NULL(), & !< Depth-integrated lateral viscosity of ice shelves or sea ice at u-points [m3 s-1]
-    rigidity_ice_v => NULL()    !< Depth-integrated lateral viscosity of ice shelves or sea ice at v-points [m3 s-1]
+    rigidity_ice_u => NULL(), & !< Depth-integrated lateral viscosity of ice shelves or sea ice at
+                                !! u-points [L4 Z-1 T-1 ~> m3 s-1]
+    rigidity_ice_v => NULL()    !< Depth-integrated lateral viscosity of ice shelves or sea ice at
+                                !! v-points [L4 Z-1 T-1 ~> m3 s-1]
   real :: dt_force_accum = -1.0 !< The amount of time over which the mechanical forcing fluxes
                                 !! have been averaged [s].
   logical :: net_mass_src_set = .false. !< If true, an estimate of net_mass_src has been provided.
@@ -867,10 +869,7 @@ subroutine extractFluxes2d(G, GV, US, fluxes, optics, nsw, dt, FluxRescaleDepth,
   logical,                          intent(in)    :: aggregate_FW   !< For determining how to aggregate the forcing.
 
   integer :: j
-!$OMP parallel do default(none) shared(G, GV, US, fluxes, optics, nsw, dt, FluxRescaleDepth, &
-!$OMP                                  useRiverHeatContent, useCalvingHeatContent,             &
-!$OMP                                  h,T,netMassInOut,netMassOut,Net_heat,Net_salt,Pen_SW_bnd,tv, &
-!$OMP                                  aggregate_FW)
+  !$OMP parallel do default(shared)
   do j=G%jsc, G%jec
     call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
             FluxRescaleDepth, useRiverHeatContent, useCalvingHeatContent,&
@@ -907,7 +906,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   logical,                        optional, intent(in)    :: skip_diags     !< If present and true, skip calculating
                                                                             !! diagnostics inside extractFluxes1d()
   ! local variables
-  integer                               :: start, npts, k
+  integer                               :: k
   real, parameter                       :: dt = 1.    ! to return a rate from extractFluxes1d
   real, dimension(SZI_(G))              :: netH       ! net FW flux [H s-1 ~> m s-1 or kg m-2 s-1]
   real, dimension(SZI_(G))              :: netEvap    ! net FW flux leaving ocean via evaporation
@@ -915,7 +914,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   real, dimension(SZI_(G))              :: netHeat    ! net temp flux [degC H s-1 ~> degC m s-2 or degC kg m-2 s-1]
   real, dimension(max(nsw,1), SZI_(G))  :: penSWbnd   ! penetrating SW radiation by band
                                                       ! [degC H ~> degC m or degC kg m-2]
-  real, dimension(SZI_(G))              :: pressure   ! pressurea the surface [Pa]
+  real, dimension(SZI_(G))              :: pressure   ! pressure at the surface [R L2 T-2 ~> Pa]
   real, dimension(SZI_(G))              :: dRhodT     ! density partial derivative wrt temp [R degC-1 ~> kg m-3 degC-1]
   real, dimension(SZI_(G))              :: dRhodS     ! density partial derivative wrt saln [R ppt-1 ~> kg m-3 ppt-1]
   real, dimension(SZI_(G),SZK_(G)+1)    :: netPen     ! The net penetrating shortwave radiation at each level
@@ -927,16 +926,16 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   real    :: GoRho ! The gravitational acceleration divided by mean density times some
                    ! unit conversion factors [L2 H-1 s R-1 T-3 ~> m4 kg-1 s-2 or m7 kg-2 s-2]
   real    :: H_limit_fluxes            ! Another depth scale [H ~> m or kg m-2]
+  integer :: i
 
   !  smg: what do we do when have heat fluxes from calving and river?
   useRiverHeatContent   = .False.
   useCalvingHeatContent = .False.
 
   depthBeforeScalingFluxes = max( GV%Angstrom_H, 1.e-30*GV%m_to_H )
-  pressure(:) = 0. ! Ignore atmospheric pressure
+  pressure(:) = 0.
+  if (associated(tv%p_surf)) then ; do i=G%isc,G%iec ; pressure(i) = tv%p_surf(i,j) ; enddo ; endif
   GoRho       = (GV%g_Earth * GV%H_to_Z*US%T_to_s) / GV%Rho0
-  start       = 1 + G%isc - G%isd
-  npts        = 1 + G%iec - G%isc
 
   H_limit_fluxes = depthBeforeScalingFluxes
 
@@ -947,7 +946,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   ! netSalt    = salt via surface fluxes [ppt H s-1 ~> ppt m s-1 or gSalt m-2 s-1]
   ! Note that unlike other calls to extractFLuxes1d() that return the time-integrated flux
   ! this call returns the rate because dt=1
-  call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt*US%s_to_T,                         &
+  call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt*US%s_to_T,               &
                 depthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
                 h(:,j,:), Temp(:,j,:), netH, netEvap, netHeatMinusSW,                 &
                 netSalt, penSWbnd, tv, .false., skip_diags=skip_diags)
@@ -958,8 +957,8 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
                       H_limit_fluxes, .true., penSWbnd, netPen)
 
   ! Density derivatives
-  call calculate_density_derivs(Temp(:,j,1), Salt(:,j,1), pressure, &
-                                dRhodT, dRhodS, start, npts, tv%eqn_of_state, scale=US%kg_m3_to_R)
+  call calculate_density_derivs(Temp(:,j,1), Salt(:,j,1), pressure, dRhodT, dRhodS, &
+                                tv%eqn_of_state, EOS_domain(G%HI))
 
   ! Adjust netSalt to reflect dilution effect of FW flux
   netSalt(G%isc:G%iec) = netSalt(G%isc:G%iec) - Salt(G%isc:G%iec,j,1) * netH(G%isc:G%iec) ! ppt H/s
@@ -1079,9 +1078,9 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, US, haloshift)
     call hchksum(fluxes%seaice_melt_heat, mesg//" fluxes%seaice_melt_heat", G%HI, &
                  haloshift=hshift, scale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%p_surf)) &
-    call hchksum(fluxes%p_surf, mesg//" fluxes%p_surf",G%HI,haloshift=hshift)
+    call hchksum(fluxes%p_surf, mesg//" fluxes%p_surf", G%HI, haloshift=hshift , scale=US%RL2_T2_to_Pa)
   if (associated(fluxes%salt_flux)) &
-    call hchksum(fluxes%salt_flux, mesg//" fluxes%salt_flux",G%HI,haloshift=hshift, scale=RZ_T_conversion)
+    call hchksum(fluxes%salt_flux, mesg//" fluxes%salt_flux", G%HI, haloshift=hshift, scale=RZ_T_conversion)
   if (associated(fluxes%TKE_tidal)) &
     call hchksum(fluxes%TKE_tidal, mesg//" fluxes%TKE_tidal", G%HI, haloshift=hshift, &
                  scale=US%RZ3_T3_to_W_m2)
@@ -1132,14 +1131,14 @@ subroutine MOM_mech_forcing_chksum(mesg, forces, G, US, haloshift)
   ! and js...je as their extent.
   if (associated(forces%taux) .and. associated(forces%tauy)) &
     call uvchksum(mesg//" forces%tau[xy]", forces%taux, forces%tauy, G%HI, &
-                  haloshift=hshift, symmetric=.true., scale=US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L)
+                  haloshift=hshift, symmetric=.true., scale=US%RZ_T_to_kg_m2s*US%L_T_to_m_s)
   if (associated(forces%p_surf)) &
-    call hchksum(forces%p_surf, mesg//" forces%p_surf",G%HI,haloshift=hshift)
+    call hchksum(forces%p_surf, mesg//" forces%p_surf", G%HI, haloshift=hshift, scale=US%RL2_T2_to_Pa)
   if (associated(forces%ustar)) &
-    call hchksum(forces%ustar, mesg//" forces%ustar",G%HI,haloshift=hshift, scale=US%Z_to_m*US%s_to_T)
+    call hchksum(forces%ustar, mesg//" forces%ustar", G%HI, haloshift=hshift, scale=US%Z_to_m*US%s_to_T)
   if (associated(forces%rigidity_ice_u) .and. associated(forces%rigidity_ice_v)) &
-    call uvchksum(mesg//" forces%rigidity_ice_[uv]", forces%rigidity_ice_u, &
-                  forces%rigidity_ice_v, G%HI, haloshift=hshift, symmetric=.true.)
+    call uvchksum(mesg//" forces%rigidity_ice_[uv]", forces%rigidity_ice_u, forces%rigidity_ice_v, &
+                  G%HI, haloshift=hshift, symmetric=.true., scale=US%L_to_m**3*US%L_to_Z*US%s_to_T)
 
 end subroutine MOM_mech_forcing_chksum
 
@@ -1246,17 +1245,17 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
   handles%id_taux = register_diag_field('ocean_model', 'taux', diag%axesCu1, Time,  &
         'Zonal surface stress from ocean interactions with atmos and ice', &
-        'Pa', conversion=US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L, &
+        'Pa', conversion=US%RZ_T_to_kg_m2s*US%L_T_to_m_s, &
         standard_name='surface_downward_x_stress', cmor_field_name='tauuo',         &
         cmor_units='N m-2', cmor_long_name='Surface Downward X Stress',             &
         cmor_standard_name='surface_downward_x_stress')
 
   handles%id_tauy = register_diag_field('ocean_model', 'tauy', diag%axesCv1, Time,  &
         'Meridional surface stress ocean interactions with atmos and ice', &
-        'Pa',  conversion=US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L, &
-         standard_name='surface_downward_y_stress', cmor_field_name='tauvo',        &
-         cmor_units='N m-2', cmor_long_name='Surface Downward Y Stress',            &
-         cmor_standard_name='surface_downward_y_stress')
+        'Pa',  conversion=US%RZ_T_to_kg_m2s*US%L_T_to_m_s, &
+        standard_name='surface_downward_y_stress', cmor_field_name='tauvo',        &
+        cmor_units='N m-2', cmor_long_name='Surface Downward Y Stress',            &
+        cmor_standard_name='surface_downward_y_stress')
 
   handles%id_ustar = register_diag_field('ocean_model', 'ustar', diag%axesT1, Time, &
       'Surface friction velocity = [(gustiness + tau_magnitude)/rho0]^(1/2)', &
@@ -1271,7 +1270,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
           'Area of grid cell covered by iceberg ', 'm2 m-2')
 
       handles%id_mass_berg = register_diag_field('ocean_model', 'mass_berg', diag%axesT1, Time, &
-          'Mass of icebergs ', 'kg m-2')
+          'Mass of icebergs ', 'kg m-2', conversion=US%RZ_to_kg_m2)
 
       handles%id_ustar_ice_cover = register_diag_field('ocean_model', 'ustar_ice_cover', diag%axesT1, Time, &
           'Friction velocity below iceberg and ice shelf together', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
@@ -1281,9 +1280,10 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
     endif
   endif
 
-  handles%id_psurf = register_diag_field('ocean_model', 'p_surf', diag%axesT1, Time,           &
-        'Pressure at ice-ocean or atmosphere-ocean interface', 'Pa', cmor_field_name='pso',    &
-        cmor_long_name='Sea Water Pressure at Sea Water Surface',                              &
+  handles%id_psurf = register_diag_field('ocean_model', 'p_surf', diag%axesT1, Time, &
+        'Pressure at ice-ocean or atmosphere-ocean interface', &
+        'Pa', conversion=US%RL2_T2_to_Pa, cmor_field_name='pso', &
+        cmor_long_name='Sea Water Pressure at Sea Water Surface', &
         cmor_standard_name='sea_water_pressure_at_sea_water_surface')
 
   handles%id_TKE_tidal = register_diag_field('ocean_model', 'TKE_tidal', diag%axesT1, Time, &
