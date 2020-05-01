@@ -142,7 +142,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
     dM, &       ! The barotropic adjustment to the Montgomery potential to
                 ! account for a reduced gravity model [L2 T-2 ~> m2 s-2].
     za          ! The geopotential anomaly (i.e. g*e + alpha_0*pressure) at the
-                ! interface atop a layer [m2 s-2].
+                ! interface atop a layer [L2 T-2 ~> m2 s-2].
 
   real, dimension(SZI_(G)) :: Rho_cv_BL !  The coordinate potential density in the deepest variable
                 ! density near-surface layer [R ~> kg m-3].

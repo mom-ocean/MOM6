@@ -862,19 +862,19 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, US, patm, press_
 
   if (present(patm)) then
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-      Ocean_sfc%sea_lev(i,j) = sfc_state%sea_lev(i+i0,j+j0) + patm(i,j) * press_to_z
-      Ocean_sfc%area(i,j) = US%L_to_m**2*G%areaT(i+i0,j+j0)
+      Ocean_sfc%sea_lev(i,j) = US%Z_to_m * sfc_state%sea_lev(i+i0,j+j0) + patm(i,j) * press_to_z
+      Ocean_sfc%area(i,j) = US%L_to_m**2 * G%areaT(i+i0,j+j0)
     enddo ; enddo
   else
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-      Ocean_sfc%sea_lev(i,j) = sfc_state%sea_lev(i+i0,j+j0)
-      Ocean_sfc%area(i,j) = US%L_to_m**2*G%areaT(i+i0,j+j0)
+      Ocean_sfc%sea_lev(i,j) = US%Z_to_m * sfc_state%sea_lev(i+i0,j+j0)
+      Ocean_sfc%area(i,j) = US%L_to_m**2 * G%areaT(i+i0,j+j0)
     enddo ; enddo
   endif
 
   if (allocated(sfc_state%frazil)) then
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-      Ocean_sfc%frazil(i,j) = sfc_state%frazil(i+i0,j+j0)
+      Ocean_sfc%frazil(i,j) = US%Q_to_J_kg*US%RZ_to_kg_m2 * sfc_state%frazil(i+i0,j+j0)
     enddo ; enddo
   endif
 

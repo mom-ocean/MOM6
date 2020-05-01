@@ -46,23 +46,23 @@ type, public :: surface
     Hml, &         !< The mixed layer depth [Z ~> m].
     u, &           !< The mixed layer zonal velocity [L T-1 ~> m s-1].
     v, &           !< The mixed layer meridional velocity [L T-1 ~> m s-1].
-    sea_lev, &     !< The sea level [m].  If a reduced surface gravity is
+    sea_lev, &     !< The sea level [Z ~> m].  If a reduced surface gravity is
                    !! used, that is compensated for in sea_lev.
     frazil, &      !< The energy needed to heat the ocean column to the freezing point during
-                   !! the call to step_MOM [J m-2].
-    melt_potential, & !< Instantaneous amount of heat that can be used to melt sea ice [J m-2].
+                   !! the call to step_MOM [Q R Z ~> J m-2].
+    melt_potential, & !< Instantaneous amount of heat that can be used to melt sea ice [Q R Z ~> J m-2].
                       !! This is computed w.r.t. surface freezing temperature.
-    ocean_mass, &  !< The total mass of the ocean [kg m-2].
-    ocean_heat, &  !< The total heat content of the ocean in [degC kg m-2].
-    ocean_salt, &  !< The total salt content of the ocean in [kgSalt m-2].
-    taux_shelf, &  !< The zonal stresses on the ocean under shelves [Pa].
-    tauy_shelf, &  !< The meridional stresses on the ocean under shelves [Pa].
+    ocean_mass, &  !< The total mass of the ocean [R Z ~> kg m-2].
+    ocean_heat, &  !< The total heat content of the ocean in [degC R Z ~> degC kg m-2].
+    ocean_salt, &  !< The total salt content of the ocean in [kgSalt kg-1 R Z ~> kgSalt m-2].
+    taux_shelf, &  !< The zonal stresses on the ocean under shelves [R L Z T-2 ~> Pa].
+    tauy_shelf, &  !< The meridional stresses on the ocean under shelves [R L Z T-2 ~> Pa].
     TempxPmE, &    !< The net inflow of water into the ocean times the temperature at which this
-                   !! inflow occurs during the call to step_MOM [degC kg m-2].
-    salt_deficit, & !< The salt needed to maintain the ocean column at a minimum
-                   !! salinity of 0.01 PSU over the call to step_MOM [kgSalt m-2].
+                   !! inflow occurs during the call to step_MOM [degC R Z ~> degC kg m-2].
+    salt_deficit, & !< The salt needed to maintain the ocean column above a minimum
+                   !! salinity over the call to step_MOM [kgSalt kg-1 R Z ~> kgSalt m-2].
     internal_heat  !< Any internal or geothermal heat sources that are applied to the ocean
-                   !! integrated over the call to step_MOM [degC kg m-2].
+                   !! integrated over the call to step_MOM [degC R Z ~> degC kg m-2].
   logical :: T_is_conT = .false. !< If true, the temperature variable SST is actually the
                    !! conservative temperature in [degC].
   logical :: S_is_absS = .false. !< If true, the salinity variable SSS is actually the
