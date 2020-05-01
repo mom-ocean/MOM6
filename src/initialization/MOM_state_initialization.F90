@@ -4,6 +4,7 @@ module MOM_state_initialization
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_debugging, only : hchksum, qchksum, uvchksum
+use MOM_density_integrals, only : int_specific_vol_dp
 use MOM_coms, only : max_across_PEs, min_across_PEs, reproducing_sum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only :  CLOCK_ROUTINE, CLOCK_LOOP
@@ -41,7 +42,7 @@ use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : setVerticalGridAxes, verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type, EOS_domain
-use MOM_EOS, only : int_specific_vol_dp, convert_temp_salt_for_TEOS10
+use MOM_EOS, only : convert_temp_salt_for_TEOS10
 use user_initialization, only : user_initialize_thickness, user_initialize_velocity
 use user_initialization, only : user_init_temperature_salinity
 use user_initialization, only : user_set_OBC_data
@@ -970,7 +971,7 @@ subroutine convert_thickness(h, G, GV, US, tv)
 
         do itt=1,max_itt
           call int_specific_vol_dp(tv%T(:,:,k), tv%S(:,:,k), p_top, p_bot, 0.0, G%HI, &
-                                   tv%eqn_of_state, dz_geo)
+                                   tv%eqn_of_state, US, dz_geo)
           if (itt < max_itt) then ; do j=js,je
             call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_bot(:,j), rho, &
                                    tv%eqn_of_state, EOSdom)
