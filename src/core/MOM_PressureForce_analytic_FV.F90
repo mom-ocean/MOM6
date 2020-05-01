@@ -671,17 +671,17 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
         if ( CS%Recon_Scheme == 1 ) then
           call int_density_dz_generic_plm( T_t(:,:,k), T_b(:,:,k), S_t(:,:,k), S_b(:,:,k),&
                     e(:,:,K), e(:,:,K+1), rho_ref, CS%Rho0, GV%g_Earth, dz_neglect, G%bathyT, &
-                    G%HI, G%HI, tv%eqn_of_state, dpa, intz_dpa, intx_dpa, inty_dpa, &
+                    G%HI, tv%eqn_of_state, dpa, intz_dpa, intx_dpa, inty_dpa, &
                     useMassWghtInterp=CS%useMassWghtInterp)
         elseif ( CS%Recon_Scheme == 2 ) then
           call int_density_dz_generic_ppm( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
                     tv%S(:,:,k), S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
-                    rho_ref, CS%Rho0, GV%g_Earth, G%HI, G%HI, tv%eqn_of_state, dpa, &
+                    rho_ref, CS%Rho0, GV%g_Earth, G%HI, tv%eqn_of_state, dpa, &
                     intz_dpa, intx_dpa, inty_dpa)
         endif
       else
         call int_density_dz(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), e(:,:,K), e(:,:,K+1), &
-                  rho_ref, CS%Rho0, GV%g_Earth, G%HI, G%HI, tv%eqn_of_state, dpa, &
+                  rho_ref, CS%Rho0, GV%g_Earth, G%HI, tv%eqn_of_state, dpa, &
                   intz_dpa, intx_dpa, inty_dpa, G%bathyT, dz_neglect, CS%useMassWghtInterp)
       endif
       !$OMP parallel do default(shared)

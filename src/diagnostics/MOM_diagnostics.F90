@@ -846,7 +846,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
             z_bot(i,j) = z_top(i,j) - GV%H_to_Z*h(i,j,k)
           enddo ; enddo
           call int_density_dz(tv%T(:,:,k), tv%S(:,:,k), z_top, z_bot, 0.0, GV%Rho0, GV%g_Earth, &
-                              G%HI, G%HI, tv%eqn_of_state, dpress)
+                              G%HI, tv%eqn_of_state, dpress)
           do j=js,je ; do i=is,ie
             mass(i,j) = mass(i,j) + dpress(i,j) * IG_Earth
           enddo ; enddo
