@@ -420,9 +420,9 @@ end function ideal_age_stock
 !> This subroutine extracts the surface fields from this tracer package that
 !! are to be shared with the atmosphere in coupled configurations.
 !! This particular tracer package does not report anything back to the coupler.
-subroutine ideal_age_tracer_surface_state(state, h, G, CS)
+subroutine ideal_age_tracer_surface_state(sfc_state, h, G, CS)
   type(ocean_grid_type),  intent(in)    :: G  !< The ocean's grid structure.
-  type(surface),          intent(inout) :: state !< A structure containing fields that
+  type(surface),          intent(inout) :: sfc_state !< A structure containing fields that
                                               !! describe the surface state of the ocean.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                           intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2].
@@ -443,7 +443,7 @@ subroutine ideal_age_tracer_surface_state(state, h, G, CS)
       !   This call loads the surface values into the appropriate array in the
       ! coupler-type structure.
       call coupler_type_set_data(CS%tr(:,:,1,m), CS%ind_tr(m), ind_csurf, &
-                   state%tr_fields, idim=(/isd, is, ie, ied/), &
+                   sfc_state%tr_fields, idim=(/isd, is, ie, ied/), &
                    jdim=(/jsd, js, je, jed/) )
     enddo
   endif

@@ -132,7 +132,7 @@ subroutine MOM_thermo_chksum(mesg, tv, G, US, haloshift)
   if (associated(tv%T)) call hchksum(tv%T, mesg//" T", G%HI, haloshift=hs)
   if (associated(tv%S)) call hchksum(tv%S, mesg//" S", G%HI, haloshift=hs)
   if (associated(tv%frazil)) call hchksum(tv%frazil, mesg//" frazil", G%HI, haloshift=hs, &
-                                          scale=G%US%Q_to_J_kg*G%US%R_to_kg_m3*G%US%Z_to_m)
+                                          scale=US%Q_to_J_kg*US%R_to_kg_m3*US%Z_to_m)
   if (associated(tv%salt_deficit)) &
     call hchksum(tv%salt_deficit, mesg//" salt deficit", G%HI, haloshift=hs, scale=US%RZ_to_kg_m2)
 
@@ -141,15 +141,16 @@ end subroutine MOM_thermo_chksum
 ! =============================================================================
 
 !> Write out chksums for the ocean surface variables.
-subroutine MOM_surface_chksum(mesg, sfc, G, haloshift, symmetric)
-  character(len=*),      intent(in) :: mesg !< A message that appears on the chksum lines.
-  type(surface),         intent(inout) :: sfc !< transparent ocean surface state
-                                              !! structure shared with the calling routine
-                                              !! data in this structure is intent out.
-  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
-  integer,     optional, intent(in) :: haloshift !< The width of halos to check (default 0).
-  logical,     optional, intent(in) :: symmetric !< If true, do checksums on the fully symmetric
-                                                 !! computational domain.
+subroutine MOM_surface_chksum(mesg, sfc_state, G, US, haloshift, symmetric)
+  character(len=*),      intent(in)    :: mesg !< A message that appears on the chksum lines.
+  type(surface),         intent(inout) :: sfc_state !< transparent ocean surface state structure
+                                               !! shared with the calling routine data in this
+                                               !! structure is intent out.
+  type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure.
+  type(unit_scale_type), intent(in)    :: US    !< A dimensional unit scaling type
+  integer,     optional, intent(in)    :: haloshift !< The width of halos to check (default 0).
+  logical,     optional, intent(in)    :: symmetric !< If true, do checksums on the fully symmetric
+                                               !! computational domain.
 
   integer :: hs
   logical :: sym
@@ -157,14 +158,19 @@ subroutine MOM_surface_chksum(mesg, sfc, G, haloshift, symmetric)
   sym = .false. ; if (present(symmetric)) sym = symmetric
   hs = 1 ; if (present(haloshift)) hs = haloshift
 
-  if (allocated(sfc%SST)) call hchksum(sfc%SST, mesg//" SST",G%HI,haloshift=hs)
-  if (allocated(sfc%SSS)) call hchksum(sfc%SSS, mesg//" SSS",G%HI,haloshift=hs)
-  if (allocated(sfc%sea_lev)) call hchksum(sfc%sea_lev, mesg//" sea_lev",G%HI,haloshift=hs)
-  if (allocated(sfc%Hml)) call hchksum(sfc%Hml, mesg//" Hml",G%HI,haloshift=hs)
-  if (allocated(sfc%u) .and. allocated(sfc%v)) &
-    call uvchksum(mesg//" SSU", sfc%u, sfc%v, G%HI, haloshift=hs, symmetric=sym)
-!  if (allocated(sfc%salt_deficit)) call hchksum(sfc%salt_deficit, mesg//" salt deficit",G%HI,haloshift=hs)
-  if (allocated(sfc%frazil)) call hchksum(sfc%frazil, mesg//" frazil", G%HI, haloshift=hs)
+  if (allocated(sfc_state%SST)) call hchksum(sfc_state%SST, mesg//" SST", G%HI, haloshift=hs)
+  if (allocated(sfc_state%SSS)) call hchksum(sfc_state%SSS, mesg//" SSS", G%HI, haloshift=hs)
+  if (allocated(sfc_state%sea_lev)) call hchksum(sfc_state%sea_lev, mesg//" sea_lev", G%HI, &
+                                                 haloshift=hs, scale=US%Z_to_m)
+  if (allocated(sfc_state%Hml)) call hchksum(sfc_state%Hml, mesg//" Hml", G%HI, haloshift=hs, &
+                                             scale=US%Z_to_m)
+  if (allocated(sfc_state%u) .and. allocated(sfc_state%v)) &
+    call uvchksum(mesg//" SSU", sfc_state%u, sfc_state%v, G%HI, haloshift=hs, symmetric=sym, &
+                  scale=US%L_T_to_m_s)
+!  if (allocated(sfc_state%salt_deficit)) &
+!    call hchksum(sfc_state%salt_deficit, mesg//" salt deficit", G%HI, haloshift=hs, scale=US%RZ_to_kg_m2)
+  if (allocated(sfc_state%frazil)) call hchksum(sfc_state%frazil, mesg//" frazil", G%HI, &
+                                                haloshift=hs, scale=US%Q_to_J_kg*US%RZ_to_kg_m2)
 
 end subroutine MOM_surface_chksum
 

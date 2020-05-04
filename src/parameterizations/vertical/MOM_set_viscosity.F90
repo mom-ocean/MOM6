@@ -1844,7 +1844,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   integer :: i, j, k, is, ie, js, je, n
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   logical :: default_2018_answers
-  logical :: use_kappa_shear, adiabatic, use_omega
+  logical :: use_kappa_shear, adiabatic, use_omega, MLE_use_PBL_MLD
   logical :: use_CVMix_ddiff, differential_diffusion, use_KPP
   character(len=200) :: filename, tideamp_file
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to OBC segment type
@@ -2047,6 +2047,9 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     if (CS%c_Smag < 0.0) CS%c_Smag = 0.15
   endif
 
+  call get_param(param_file, mdl, "MLE_USE_PBL_MLD", MLE_use_PBL_MLD, &
+                 default=.false., do_not_log=.true.)
+
   if (CS%RiNo_mix .and. kappa_shear_at_vertex(param_file)) then
     ! This is necessary for reproduciblity across restarts in non-symmetric mode.
     call pass_var(visc%Kv_shear_Bu, G%Domain, position=CORNER, complete=.true.)
@@ -2140,7 +2143,14 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
         visc%Kv_shear_Bu(I,J,k) = Z2_T_rescale * visc%Kv_shear_Bu(I,J,k)
       enddo ; enddo ; enddo
     endif ; endif
+  endif
 
+  if (MLE_use_PBL_MLD .and. (Z_rescale /= 1.0)) then
+    if (associated(visc%MLD)) then ; if (query_initialized(visc%MLD, "MLD", restart_CS)) then
+      do j=js,je ; do i=is,ie
+        visc%MLD(i,j) = Z_rescale * visc%MLD(i,j)
+      enddo ; enddo
+    endif ; endif
   endif
 
 end subroutine set_visc_init

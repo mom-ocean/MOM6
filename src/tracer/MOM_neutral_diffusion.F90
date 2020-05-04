@@ -297,7 +297,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
   ! Variables used for reconstructions
   real, dimension(SZK_(G),2) :: ppoly_r_S       ! Reconstruction slopes
   real, dimension(SZI_(G), SZJ_(G)) :: hEff_sum ! Summed effective face thicknesses [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G))  :: hbl      ! Boundary layer depth [m]
+  real, dimension(SZI_(G),SZJ_(G))  :: hbl      ! Boundary layer depth [H ~> m or kg m-2]
   integer :: iMethod
   real, dimension(SZI_(G)) :: ref_pres ! Reference pressure used to calculate alpha/beta [R L2 T-2 ~> Pa]
   real, dimension(SZI_(G)) :: rho_tmp  ! Routine to calculate drho_dp, returns density which is not used
@@ -317,8 +317,9 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
   ! Check if hbl needs to be extracted
   if (CS%interior_only) then
     hbl(:,:) = 0.
-    if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G)
-    if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US)
+    if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G, US, m_to_BLD_units=GV%m_to_H)
+    if (ASSOCIATED(CS%energetic_PBL_CSp)) &
+      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US, m_to_MLD_units=GV%m_to_H)
     call pass_var(hbl, G%Domain)
     ! get k-indices and zeta
     do j=G%jsc-1, G%jec+1 ; do i=G%isc-1,G%iec+1

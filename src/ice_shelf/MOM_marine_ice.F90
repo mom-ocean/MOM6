@@ -48,8 +48,8 @@ subroutine iceberg_forces(G, forces, use_ice_shelf, sfc_state, time_step, CS)
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   logical,               intent(in)    :: use_ice_shelf  !< If true, this configuration uses ice shelves.
-  real,                  intent(in)    :: time_step   !< The coupling time step [s].
-  type(marine_ice_CS),   pointer       :: CS !< Pointer to the control structure for MOM_marine_ice
+  real,                  intent(in)    :: time_step  !< The coupling time step [s].
+  type(marine_ice_CS),   pointer       :: CS      !< Pointer to the control structure for MOM_marine_ice
 
   real :: kv_rho_ice ! The viscosity of ice divided by its density [L4 Z-2 T-1 R-1 ~> m5 kg-1 s-1].
   integer :: i, j, is, ie, js, je
@@ -107,18 +107,17 @@ subroutine iceberg_fluxes(G, US, fluxes, use_ice_shelf, sfc_state, time_step, CS
                                                     !! describe the surface state of the ocean.
   logical,               intent(in)    :: use_ice_shelf  !< If true, this configuration uses ice shelves.
   real,                  intent(in)    :: time_step   !< The coupling time step [s].
-  type(marine_ice_CS),   pointer       :: CS !< Pointer to the control structure for MOM_marine_ice
+  type(marine_ice_CS),   pointer       :: CS      !< Pointer to the control structure for MOM_marine_ice
 
   real :: fraz      ! refreezing rate [R Z T-1 ~> kg m-2 s-1]
-  real :: I_dt_LHF  ! The inverse of the timestep times the latent heat of fusion times unit conversion
-                    ! factors because sfc_state is in MKS units [R Z m2 J-1 T-1 ~> kg J-1 s-1].
+  real :: I_dt_LHF  ! The inverse of the timestep times the latent heat of fusion times [Q-1 T-1 ~> kg J-1 s-1].
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
-  !This routine adds iceberg data to the ice shelf data (if ice shelf is used)
-  !which can then be used to change the top of ocean boundary condition used in
-  !the ocean model. This routine is taken from the add_shelf_flux subroutine
-  !within the ice shelf model.
+  ! This routine adds iceberg data to the ice shelf data (if ice shelf is used)
+  ! which can then be used to change the top of ocean boundary condition used in
+  ! the ocean model. This routine is taken from the add_shelf_flux subroutine
+  ! within the ice shelf model.
 
   if (.not.associated(CS)) return
   if (.not.(associated(fluxes%area_berg) .and. associated(fluxes%ustar_berg) .and. &
@@ -139,7 +138,7 @@ subroutine iceberg_fluxes(G, US, fluxes, use_ice_shelf, sfc_state, time_step, CS
 
   !Zero'ing out other fluxes under the tabular icebergs
   if (CS%berg_area_threshold >= 0.) then
-    I_dt_LHF = US%W_m2_to_QRZ_T / (time_step * CS%latent_heat_fusion)
+    I_dt_LHF = 1.0 / (US%s_to_T*time_step * CS%latent_heat_fusion)
     do j=jsd,jed ; do i=isd,ied
       if (fluxes%frac_shelf_h(i,j) > CS%berg_area_threshold) then
         ! Only applying for ice shelf covering most of cell.
@@ -149,7 +148,7 @@ subroutine iceberg_fluxes(G, US, fluxes, use_ice_shelf, sfc_state, time_step, CS
         if (associated(fluxes%latent)) fluxes%latent(i,j) = 0.0
         if (associated(fluxes%evap)) fluxes%evap(i,j) = 0.0
 
-        ! Add frazil formation diagnosed by the ocean model [J m-2] in the
+        ! Add frazil formation diagnosed by the ocean model [Q R Z ~> J m-2] in the
         ! form of surface layer evaporation [R Z T-1 ~> kg m-2 s-1]. Update lprec in the
         ! control structure for diagnostic purposes.
 

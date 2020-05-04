@@ -388,8 +388,8 @@ contains
   !! flux as a source.
   subroutine MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, CS, tv, optics, &
         evap_CFL_limit, minimum_forcing_depth)
-    type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
-    type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
+    type(ocean_grid_type),   intent(in) :: G     !< The ocean's grid structure
+    type(verticalGrid_type), intent(in) :: GV    !< The ocean's vertical grid structure
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                              intent(in) :: h_old !< Layer thickness before entrainment [H ~> m or kg m-2].
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -402,16 +402,16 @@ contains
                                                  !! below during this call [H ~> m or kg m-2].
     type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
                                                  !! and tracer forcing fields.
-    real, dimension(SZI_(G),SZJ_(G)),      intent(in) :: Hml  !< Mixed layer depth [H ~> m or kg m-2]
-    real,                    intent(in) :: dt   !< The amount of time covered by this call [s]
+    real, dimension(SZI_(G),SZJ_(G)), intent(in) :: Hml  !< Mixed layer depth [Z ~> m]
+    real,                    intent(in) :: dt    !< The amount of time covered by this call [s]
     type(MOM_generic_tracer_CS), pointer :: CS   !< Pointer to the control structure for this module.
-    type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic variables
+    type(thermo_var_ptrs),   intent(in) :: tv    !< A structure pointing to various thermodynamic variables
     type(optics_type),       intent(in) :: optics !< The structure containing optical properties.
     real,          optional, intent(in) :: evap_CFL_limit !< Limits how much water can be fluxed out of
-                                                !! the top layer Stored previously in diabatic CS.
+                                                 !! the top layer Stored previously in diabatic CS.
     real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which fluxes
-                                                !!  can be applied [H ~> m or kg m-2]
-                                                !   Stored previously in diabatic CS.
+                                                 !!  can be applied [H ~> m or kg m-2]
+                                                 !   Stored previously in diabatic CS.
     ! The arguments to this subroutine are redundant in that
     !     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
 
@@ -423,6 +423,7 @@ contains
     real, dimension(:,:), pointer :: stf_array,trunoff_array,runoff_tracer_flux_array
 
     real :: surface_field(SZI_(G),SZJ_(G))
+    real :: dz_ml(SZI_(G),SZJ_(G))  ! The mixed layer depth in the MKS units used for generic tracers [m]
     real :: sosga
 
     real, dimension(G%isd:G%ied,G%jsd:G%jed,G%ke) :: rho_dzt, dzt
@@ -483,9 +484,10 @@ contains
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
       dzt(i,j,k) = GV%H_to_m * h_old(i,j,k)
     enddo ; enddo ; enddo !}
-
+    dz_ml(:,:) = 0.0
     do j=jsc,jec ; do i=isc,iec
-       surface_field(i,j) = tv%S(i,j,1)
+      surface_field(i,j) = tv%S(i,j,1)
+      dz_ml(i,j) = G%US%Z_to_m * Hml
     enddo ; enddo
     sosga = global_area_mean(surface_field, G)
 
@@ -494,12 +496,12 @@ contains
     !
     if ((G%US%L_to_m == 1.0) .and. (G%US%RZ_to_kg_m2 == 1.0) .and. (G%US%s_to_T == 1.0)) then
       ! Avoid unnecessary copies when no unit conversion is needed.
-      call generic_tracer_source(tv%T, tv%S, rho_dzt, dzt, Hml, G%isd, G%jsd, 1, dt, &
+      call generic_tracer_source(tv%T, tv%S, rho_dzt, dzt, dz_ml, G%isd, G%jsd, 1, dt, &
                G%areaT, get_diag_time_end(CS%diag), &
                optics%nbands, optics%max_wavelength_band, optics%sw_pen_band, optics%opacity_band, &
                internal_heat=tv%internal_heat, frunoff=fluxes%frunoff, sosga=sosga)
     else
-      call generic_tracer_source(tv%T, tv%S, rho_dzt, dzt, Hml, G%isd, G%jsd, 1, dt, &
+      call generic_tracer_source(tv%T, tv%S, rho_dzt, dzt, dz_ml, G%isd, G%jsd, 1, dt, &
                G%US%L_to_m**2*G%areaT(:,:), get_diag_time_end(CS%diag), &
                optics%nbands, optics%max_wavelength_band, optics%sw_pen_band, optics%opacity_band, &
                internal_heat=G%US%RZ_to_kg_m2*tv%internal_heat(:,:), &
@@ -706,9 +708,9 @@ contains
   !!
   !! This subroutine sets up the fields that the coupler needs to calculate the
   !! CFC fluxes between the ocean and atmosphere.
-  subroutine MOM_generic_tracer_surface_state(state, h, G, CS)
+  subroutine MOM_generic_tracer_surface_state(sfc_state, h, G, CS)
     type(ocean_grid_type),                 intent(in)    :: G    !< The ocean's grid structure
-    type(surface),                         intent(inout) :: state !< A structure containing fields that
+    type(surface),                         intent(inout) :: sfc_state !< A structure containing fields that
                                                                  !! describe the surface state of the ocean.
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
     type(MOM_generic_tracer_CS),           pointer       :: CS   !< Pointer to the control structure for this module.
@@ -727,11 +729,11 @@ contains
 
     dzt(:,:,:) = CS%H_to_m * h(:,:,:)
 
-    sosga = global_area_mean(state%SSS, G)
+    sosga = global_area_mean(sfc_state%SSS, G)
 
-    call generic_tracer_coupler_set(state%tr_fields,&
-         ST=state%SST,&
-         SS=state%SSS,&
+    call generic_tracer_coupler_set(sfc_state%tr_fields,&
+         ST=sfc_state%SST,&
+         SS=sfc_state%SSS,&
          rho=rho0,& !nnz: required for MOM5 and previous versions.
          ilb=G%isd, jlb=G%jsd,&
          dzt=dzt,& !This is needed for the Mocsy method of carbonate system vars

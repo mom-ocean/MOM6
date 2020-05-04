@@ -95,7 +95,7 @@ type, public :: surface_forcing_CS ; private
 
   real, pointer :: T_Restore(:,:)    => NULL()  !< temperature to damp (restore) the SST to [degC]
   real, pointer :: S_Restore(:,:)    => NULL()  !< salinity to damp (restore) the SSS [ppt]
-  real, pointer :: Dens_Restore(:,:) => NULL()  !< density to damp (restore) surface density [kg m-3]
+  real, pointer :: Dens_Restore(:,:) => NULL()  !< density to damp (restore) surface density [R ~> kg m-3]
 
   integer :: buoy_last_lev_read = -1 !< The last time level read from buoyancy input files
 
@@ -1000,7 +1000,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
     else
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
-          fluxes%buoy(i,j) = US%kg_m3_to_R * (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
+          fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
                              (CS%G_Earth * CS%Flux_const / CS%Rho0)
         else
           fluxes%buoy(i,j) = 0.0
@@ -1161,7 +1161,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
     else
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
-          fluxes%buoy(i,j) = US%kg_m3_to_R * (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
+          fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
                              (CS%G_Earth * CS%Flux_const / CS%Rho0)
         else
           fluxes%buoy(i,j) = 0.0
@@ -1362,7 +1362,7 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, US, CS)
                      "RESTOREBUOY to linear not written yet.")
      !do j=js,je ; do i=is,ie
      !  if (G%mask2dT(i,j) > 0) then
-     !    fluxes%buoy(i,j) = US%kg_m3_to_R * (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
+     !    fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
      !                       (CS%G_Earth * CS%Flux_const / CS%Rho0)
      !  else
      !    fluxes%buoy(i,j) = 0.0

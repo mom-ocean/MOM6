@@ -101,7 +101,7 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, forces, dt, MLD, VarMix, G, GV,
   type(mech_forcing),                        intent(in)    :: forces !< A structure with the driving mechanical forces
   real,                                      intent(in)    :: dt     !< Time increment [T ~> s]
   real, dimension(:,:),                      pointer       :: MLD    !< Mixed layer depth provided by the
-                                                                     !! PBL scheme [H ~> m or kg m-2]
+                                                                     !! PBL scheme [Z ~> m]
   type(VarMix_CS),                           pointer       :: VarMix !< Container for derived fields
   type(mixedlayer_restrat_CS),               pointer       :: CS     !< Module control structure
 
@@ -131,7 +131,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   type(mech_forcing),                        intent(in)    :: forces !< A structure with the driving mechanical forces
   real,                                      intent(in)    :: dt     !< Time increment [T ~> s]
   real, dimension(:,:),                      pointer       :: MLD_in !< Mixed layer depth provided by the
-                                                                     !! PBL scheme [m] (not H)
+                                                                     !! PBL scheme [Z ~> m] (not H)
   type(VarMix_CS),                           pointer       :: VarMix !< Container for derived fields
   type(mixedlayer_restrat_CS),               pointer       :: CS     !< Module control structure
   ! Local variables
@@ -240,7 +240,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
     if (.not. associated(MLD_in)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "Argument MLD_in was not associated!")
     do j = js-1, je+1 ; do i = is-1, ie+1
-      MLD_fast(i,j) = (CS%MLE_MLD_stretch * GV%m_to_H) * MLD_in(i,j)
+      MLD_fast(i,j) = (CS%MLE_MLD_stretch * GV%Z_to_H) * MLD_in(i,j)
     enddo ; enddo
   else
     call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
@@ -250,8 +250,8 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   ! Apply time filter (to remove diurnal cycle)
   if (CS%MLE_MLD_decay_time>0.) then
     if (CS%debug) then
-      call hchksum(CS%MLD_filtered,'mixed_layer_restrat: MLD_filtered',G%HI,haloshift=1,scale=GV%H_to_m)
-      call hchksum(MLD_in,'mixed_layer_restrat: MLD in',G%HI,haloshift=1)
+      call hchksum(CS%MLD_filtered, 'mixed_layer_restrat: MLD_filtered', G%HI, haloshift=1, scale=GV%H_to_m)
+      call hchksum(MLD_in, 'mixed_layer_restrat: MLD in', G%HI, haloshift=1, scale=US%Z_to_m)
     endif
     aFac = CS%MLE_MLD_decay_time / ( dt + CS%MLE_MLD_decay_time )
     bFac = dt / ( dt + CS%MLE_MLD_decay_time )
