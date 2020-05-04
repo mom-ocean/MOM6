@@ -1,4 +1,5 @@
 SHELL = bash
+.SUFFIXES:
 
 # User-defined configuration
 -include config.mk
@@ -30,9 +31,9 @@ MKMF_CPP = "-Duse_libMPI -Duse_netCDF -DSPMD"
 
 # Environment
 # TODO: This info ought to be determined by CMake, automake, etc.
-#MKMF_TEMPLATE ?= .testing/linux-ubuntu-xenial-gnu.mk
-MKMF_TEMPLATE ?= build/mkmf/templates/ncrc-gnu.mk
-#MKMF_TEMPLATE ?= build/mkmf/templates/ncrc-intel.mk
+#MKMF_TEMPLATE ?= linux-ubuntu-xenial-gnu.mk
+MKMF_TEMPLATE ?= deps/mkmf/templates/ncrc-gnu.mk
+#MKMF_TEMPLATE ?= deps/mkmf/templates/ncrc-intel.mk
 
 #---
 # Test configuration
@@ -41,6 +42,7 @@ MKMF_TEMPLATE ?= build/mkmf/templates/ncrc-gnu.mk
 BUILDS = symmetric asymmetric repro openmp
 CONFIGS := $(wildcard tc*)
 TESTS = grids layouts restarts nans dims openmps rotations
+DIMS = t l h z q r
 
 # REPRO tests enable reproducibility with optimization, and often do not match
 # the DEBUG results in older GCCs and vendor compilers, so we can optionally
@@ -199,7 +201,7 @@ test.restarts: $(foreach c,$(CONFIGS),$(c).restart)
 test.repros: $(foreach c,$(CONFIGS),$(c).repro $(c).repro.diag)
 test.openmps: $(foreach c,$(CONFIGS),$(c).openmp $(c).openmp.diag)
 test.nans: $(foreach c,$(CONFIGS),$(c).nan $(c).nan.diag)
-test.dims: $(foreach c,$(CONFIGS),$(foreach d,t l h z,$(c).dim.$(d) $(c).dim.$(d).diag))
+test.dims: $(foreach c,$(CONFIGS),$(foreach d,$(DIMS),$(c).dim.$(d) $(c).dim.$(d).diag))
 
 test.regressions: $(foreach c,$(CONFIGS),$(c).regression $(c).regression.diag)
 	! ls -1 results/*/*.reg
@@ -220,7 +222,7 @@ $(eval $(call CMP_RULE,rotate,symmetric rotate))
 $(eval $(call CMP_RULE,repro,symmetric repro))
 $(eval $(call CMP_RULE,openmp,symmetric openmp))
 $(eval $(call CMP_RULE,nan,symmetric nan))
-$(foreach d,t l h z,$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
+$(foreach d,$(DIMS),$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 
 # Custom comparison rules
 
@@ -295,6 +297,8 @@ $(eval $(call STAT_RULE,dim.t,symmetric,,T_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.l,symmetric,,L_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.h,symmetric,,H_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.z,symmetric,,Z_RESCALE_POWER=11,,1))
+$(eval $(call STAT_RULE,dim.q,symmetric,,Q_RESCALE_POWER=11,,1))
+$(eval $(call STAT_RULE,dim.r,symmetric,,R_RESCALE_POWER=11,,1))
 
 # Restart tests require significant preprocessing, and are handled separately.
 results/%/ocean.stats.restart: build/symmetric/MOM6
