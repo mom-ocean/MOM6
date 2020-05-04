@@ -1212,6 +1212,7 @@ subroutine post_data_0d(diag_field_id, field, diag_cs, is_static)
   logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
 
   ! Local variables
+  real :: locfield
   logical :: used, is_stat
   type(diag_type), pointer :: diag => null()
 
@@ -1223,13 +1224,18 @@ subroutine post_data_0d(diag_field_id, field, diag_cs, is_static)
   call assert(diag_field_id < diag_cs%next_free_diag_id, &
               'post_data_0d: Unregistered diagnostic id')
   diag => diag_cs%diags(diag_field_id)
+
   do while (associated(diag))
+    locfield = field
+    if (diag%conversion_factor /= 0.) &
+      locfield = locfield * diag%conversion_factor
+
     if (diag_cs%diag_as_chksum) then
-      call chksum0(field, diag%debug_str, logunit=diag_cs%chksum_iounit)
+      call chksum0(locfield, diag%debug_str, logunit=diag_cs%chksum_iounit)
     else if (is_stat) then
-      used = send_data(diag%fms_diag_id, field)
+      used = send_data(diag%fms_diag_id, locfield)
     elseif (diag_cs%ave_enabled) then
-      used = send_data(diag%fms_diag_id, field, diag_cs%time_end)
+      used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end)
     endif
     diag => diag%next
   enddo
