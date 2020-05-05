@@ -556,9 +556,9 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
   real, dimension(SZI_(G)), optional, intent(inout) :: Ttot !< Depth integrated mixed layer
                                                            !! temperature [degC H ~> degC m or degC kg m-2]
   real, dimension(SZI_(G),SZK_(GV)), optional, intent(in) :: dSV_dT !< The partial derivative of specific
-                                                           !! volume with temperature [m3 kg-1 degC-1].
+                                                           !! volume with temperature [R-1 degC-1].
   real, dimension(SZI_(G),SZK_(GV)), optional, intent(inout) :: TKE !< The TKE sink from mixing the heating
-                                                           !! throughout a layer [kg m-3 Z3 T-2 ~> J m-2].
+                                                           !! throughout a layer [R Z3 T-2 ~> J m-2].
 
   ! Local variables
   real, dimension(SZI_(G),SZK_(GV)) :: &
@@ -599,7 +599,7 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
   real :: epsilon           ! A small thickness that must remain in each
                             ! layer, and which will not be subject to heating [H ~> m or kg m-2]
   real :: g_Hconv2          ! A conversion factor for use in the TKE calculation
-                            ! in units of [Z3 kg2 m-6 T-2 H-2 ~> kg2 m-5 s-2 or m s-2].
+                            ! in units of [Z3 R2 T-2 H-2 ~> kg2 m-5 s-2 or m s-2].
   logical :: SW_Remains     ! If true, some column has shortwave radiation that
                             ! was not entirely absorbed.
   logical :: TKE_calc       ! If true, calculate the implications to the
@@ -618,9 +618,9 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
   TKE_calc = (present(TKE) .and. present(dSV_dT))
 
   if (optics%answers_2018) then
-    g_Hconv2 = (US%m_to_Z**2 * US%L_to_Z**2*GV%g_Earth * GV%H_to_kg_m2) * GV%H_to_kg_m2
+    g_Hconv2 = (US%L_to_Z**2*GV%g_Earth * GV%H_to_RZ) * GV%H_to_RZ
   else
-    g_Hconv2 = US%m_to_Z**2 * US%L_to_Z**2*GV%g_Earth * GV%H_to_kg_m2**2
+    g_Hconv2 = US%L_to_Z**2*GV%g_Earth * GV%H_to_RZ**2
   endif
 
   h_heat(:) = 0.0
@@ -841,7 +841,12 @@ subroutine sumSWoverBands(G, GV, US, h, nsw, optics, j, dt, &
 
   pen_SW_bnd(:,:) = iPen_SW_bnd(:,:)
   do i=is,ie ; h_heat(i) = 0.0 ; enddo
-  netPen(:,1) = sum( pen_SW_bnd(:,:), dim=1 ) ! Surface interface
+  do i=is,ie
+    netPen(i,1) = 0.
+    do n=1,max(nsw,1)
+      netPen(i,1) = netPen(i,1) + pen_SW_bnd(n,i)   ! Surface interface
+    enddo
+  enddo
 
   ! Apply penetrating SW radiation to remaining parts of layers.
   ! Excessively thin layers are not heated to avoid runaway temps.

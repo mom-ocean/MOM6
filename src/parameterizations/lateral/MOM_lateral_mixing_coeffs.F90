@@ -29,6 +29,8 @@ type, public :: VarMix_CS
                                   !! when the deformation radius is well resolved.
   logical :: Resoln_scaled_KhTh   !< If true, scale away the thickness diffusivity
                                   !! when the deformation radius is well resolved.
+  logical :: Depth_scaled_KhTh    !< If true, KHTH is scaled away when the depth is
+                                  !! shallower than a reference depth.
   logical :: Resoln_scaled_KhTr   !< If true, scale away the tracer diffusivity
                                   !! when the deformation radius is well resolved.
   logical :: interpolate_Res_fn   !< If true, interpolate the resolution function
@@ -48,6 +50,8 @@ type, public :: VarMix_CS
                                   !! This parameter is set depending on other parameters.
   logical :: calculate_res_fns    !< If true, calculate all the resolution factors.
                                   !! This parameter is set depending on other parameters.
+  logical :: calculate_depth_fns !< If true, calculate all the depth factors.
+                                  !! This parameter is set depending on other parameters.
   logical :: calculate_Eady_growth_rate !< If true, calculate all the Eady growth rate.
                                   !! This parameter is set depending on other parameters.
   real, dimension(:,:), pointer :: &
@@ -64,6 +68,10 @@ type, public :: VarMix_CS
                           !! deformation radius to the grid spacing at u points [nondim].
     Res_fn_v => NULL(), & !< Non-dimensional function of the ratio the first baroclinic
                           !! deformation radius to the grid spacing at v points [nondim].
+    Depth_fn_u => NULL(), & !< Non-dimensional function of the ratio of the depth to
+                            !! a reference depth (maximum 1) at u points [nondim]
+    Depth_fn_v => NULL(), & !< Non-dimensional function of the ratio of the depth to
+                            !! a reference depth (maximum 1) at v points [nondim]
     beta_dx2_h => NULL(), & !< The magnitude of the gradient of the Coriolis parameter
                             !! times the grid spacing squared at h points [L T-1 ~> m s-1].
     beta_dx2_q => NULL(), & !< The magnitude of the gradient of the Coriolis parameter
@@ -111,6 +119,8 @@ type, public :: VarMix_CS
   real :: Res_coef_visc   !< A non-dimensional number that determines the function
                           !! of resolution, used for lateral viscosity, as:
                           !!  F = 1 / (1 + (Res_coef_visc*Ld/dx)^Res_fn_power)
+  real :: depth_scaled_khth_h0 !< The depth above which KHTH is linearly scaled away [Z ~> m]
+  real :: depth_scaled_khth_exp !< The exponent used in the depth dependent scaling function for KHTH [nondim]
   real :: kappa_smooth    !< A diffusivity for smoothing T/S in vanished layers [Z2 T-1 ~> m2 s-1]
   integer :: Res_fn_power_khth !< The power of dx/Ld in the KhTh resolution function.  Any
                                !! positive integer power may be used, but even powers
@@ -140,9 +150,43 @@ type, public :: VarMix_CS
 end type VarMix_CS
 
 public VarMix_init, calc_slope_functions, calc_resoln_function
-public calc_QG_Leith_viscosity
+public calc_QG_Leith_viscosity, calc_depth_function
 
 contains
+
+!> Calculates the non-dimensional depth functions.
+subroutine calc_depth_function(G, CS)
+  type(ocean_grid_type),                    intent(in) :: G  !< Ocean grid structure
+  type(VarMix_CS),                          pointer       :: CS !< Variable mixing coefficients
+
+  ! Local variables
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq
+  integer :: i, j
+  real    :: H0 ! local variable for reference depth
+  real    :: expo ! exponent used in the depth dependent scaling
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+
+  if (.not. associated(CS)) call MOM_error(FATAL, "calc_depth_function:"// &
+         "Module must be initialized before it is used.")
+  if (.not. CS%calculate_depth_fns) return
+  if (.not. associated(CS%Depth_fn_u)) call MOM_error(FATAL, &
+    "calc_depth_function: %Depth_fn_u is not associated with Depth_scaled_KhTh.")
+  if (.not. associated(CS%Depth_fn_v)) call MOM_error(FATAL, &
+    "calc_depth_function: %Depth_fn_v is not associated with Depth_scaled_KhTh.")
+
+  H0 = CS%depth_scaled_khth_h0
+  expo = CS%depth_scaled_khth_exp
+!$OMP do
+  do j=js,je ; do I=is-1,Ieq
+    CS%Depth_fn_u(I,j) = (MIN(1.0, 0.5*(G%bathyT(i,j) + G%bathyT(i+1,j))/H0))**expo
+  enddo ; enddo
+!$OMP do
+  do J=js-1,Jeq ; do i=is,ie
+    CS%Depth_fn_v(i,J) = (MIN(1.0, 0.5*(G%bathyT(i,j) + G%bathyT(i,j+1))/H0))**expo
+  enddo ; enddo
+
+end subroutine calc_depth_function
 
 !> Calculates and stores the non-dimensional resolution functions
 subroutine calc_resoln_function(h, tv, G, GV, US, CS)
@@ -187,10 +231,6 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
     else
       call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp)
     endif
-
-    do j=js,je ; do i=is,ie
-      CS%cg1(i,j) = US%m_s_to_L_T*CS%cg1(i,j)
-    enddo ; enddo
 
     call create_group_pass(CS%pass_cg1, CS%cg1, G%Domain)
     call do_group_pass(CS%pass_cg1, G%Domain)
@@ -241,7 +281,7 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
   !   Do this calculation on the extent used in MOM_hor_visc.F90, and
   ! MOM_tracer.F90 so that no halo update is needed.
 
-!$OMP parallel default(none) shared(is,ie,js,je,Ieq,Jeq,CS) &
+!$OMP parallel default(none) shared(is,ie,js,je,Ieq,Jeq,CS,US) &
 !$OMP                       private(dx_term,cg1_q,power_2,cg1_u,cg1_v)
   if (CS%Res_fn_power_visc >= 100) then
 !$OMP do
@@ -401,13 +441,13 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
   type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                    intent(in)    :: tv !< Thermodynamic variables
-  real,                                     intent(in)    :: dt !< Time increment [s]
+  real,                                     intent(in)    :: dt !< Time increment [T ~> s]
   type(VarMix_CS),                          pointer       :: CS !< Variable mixing coefficients
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
     e             ! The interface heights relative to mean sea level [Z ~> m].
   real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: N2_u ! Square of Brunt-Vaisala freq at u-points [T-2 ~> s-2]
-  real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: N2_v ! Square of Brunt-Vaisala freq at v-points [s-2]
+  real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: N2_v ! Square of Brunt-Vaisala freq at v-points [T-2 ~> s-2]
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_slope_functions:"//&
          "Module must be initialized before it is used.")
@@ -415,7 +455,7 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
   if (CS%calculate_Eady_growth_rate) then
     call find_eta(h, tv, G, GV, US, e, halo_size=2)
     if (CS%use_stored_slopes) then
-      call calc_isoneutral_slopes(G, GV, US, h, e, tv, US%s_to_T*dt*CS%kappa_smooth, &
+      call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, &
                                   CS%slope_x, CS%slope_y, N2_u, N2_v, 1)
       call calc_Visbeck_coeffs(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, US, CS)
 !     call calc_slope_functions_using_just_e(h, G, CS, e, .false.)
@@ -712,8 +752,8 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
   type(ocean_grid_type),                     intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),                     intent(in)  :: US   !< A dimensional unit scaling type
-! real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u  !< Zonal flow [m s-1]
-! real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v  !< Meridional flow [m s-1]
+! real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u  !< Zonal flow [L T-1 ~> m s-1]
+! real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v  !< Meridional flow [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h !< Layer thickness [H ~> m or kg m-2]
   integer,                                   intent(in)  :: k  !< Layer for which to calculate vorticity magnitude
   real, dimension(SZIB_(G),SZJ_(G)),         intent(in)  :: div_xx_dx  !< x-derivative of horizontal divergence
@@ -725,21 +765,16 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
   real, dimension(SZIB_(G),SZJ_(G)),         intent(inout) :: vort_xy_dy !< y-derivative of vertical vorticity
                                                                  !! (d/dy(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
 !  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Kh_h !< Leith Laplacian viscosity
-                                                                 !! at h-points [m2 s-1]
+                                                                 !! at h-points [L2 T-1 ~> m2 s-1]
 !  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: Leith_Kh_q !< Leith Laplacian viscosity
-                                                                 !! at q-points [m2 s-1]
+                                                                 !! at q-points [L2 T-1 ~> m2 s-1]
 !  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Ah_h !< Leith bi-harmonic viscosity
-                                                                 !! at h-points [m4 s-1]
+                                                                 !! at h-points [L4 T-1 ~> m4 s-1]
 !  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: Leith_Ah_q !< Leith bi-harmonic viscosity
-                                                                 !! at q-points [m4 s-1]
+                                                                 !! at q-points [L4 T-1 ~> m4 s-1]
 
   ! Local variables
-!  real, dimension(SZIB_(G),SZJB_(G)) :: vort_xy, & ! Vertical vorticity (dv/dx - du/dy) [s-1]
-!                                        dudy, & ! Meridional shear of zonal velocity [s-1]
-!                                        dvdx    ! Zonal shear of meridional velocity [s-1]
   real, dimension(SZI_(G),SZJB_(G)) :: &
-!    vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
-!    div_xx_dy, &  ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) [L-1 T-1 ~> m-1 s-1]
     dslopey_dz, & ! z-derivative of y-slope at v-points [Z-1 ~> m-1]
     h_at_v,     & ! Thickness at v-points [H ~> m or kg m-2]
     beta_v,     & ! Beta at v-points [T-1 L-1 ~> s-1 m-1]
@@ -747,16 +782,14 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
     grad_div_mag_v     ! Magnitude of divergence gradient at v-points [T-1 L-1 ~> s-1 m-1]
 
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-!    vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
-!    div_xx_dx, &  ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) [L-1 T-1 ~> m-1 s-1]
     dslopex_dz, & ! z-derivative of x-slope at u-points [Z-1 ~> m-1]
     h_at_u,     & ! Thickness at u-points [H ~> m or kg m-2]
     beta_u,     & ! Beta at u-points [T-1 L-1 ~> s-1 m-1]
     grad_vort_mag_u, & ! Magnitude of vorticity gradient at u-points [T-1 L-1 ~> s-1 m-1]
     grad_div_mag_u     ! Magnitude of divergence gradient at u-points [T-1 L-1 ~> s-1 m-1]
-!  real, dimension(SZI_(G),SZJ_(G)) :: div_xx ! Estimate of horizontal divergence at h-points [s-1]
-!  real :: mod_Leith, DY_dxBu, DX_dyBu, vert_vort_mag
-  real :: h_at_slope_above, h_at_slope_below, Ih
+  real :: h_at_slope_above ! The thickness above [H ~> m or kg m-2]
+  real :: h_at_slope_below ! The thickness below [H ~> m or kg m-2]
+  real :: Ih ! The inverse of a combination of thicknesses [H-1 ~> m-1 or m2 kg-1]
   real :: f  ! A copy of the Coriolis parameter [T-1 ~> s-1]
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq,nz
   real :: inv_PI3
@@ -881,7 +914,9 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(VarMix_CS),               pointer :: CS   !< Variable mixing coefficients
   ! Local variables
-  real :: KhTr_Slope_Cff, KhTh_Slope_Cff, oneOrTwo, N2_filter_depth
+  real :: KhTr_Slope_Cff, KhTh_Slope_Cff, oneOrTwo
+  real :: N2_filter_depth  ! A depth below which stratification is treated as monotonic when
+                           ! calculating the first-mode wave speed [Z ~> m]
   real :: KhTr_passivity_coeff
   real :: absurdly_small_freq  ! A miniscule frequency that is used to avoid division by 0 [T-1 ~> s-1].  The
              ! default value is roughly (pi / (the age of the universe)).
@@ -913,7 +948,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   CS%calculate_Rd_dx = .false.
   CS%calculate_res_fns = .false.
   CS%calculate_Eady_growth_rate = .false.
-
+  CS%calculate_depth_fns = .false.
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "USE_VARIABLE_MIXING", CS%use_variable_mixing,&
@@ -929,6 +964,12 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  "If true, the Laplacian lateral viscosity is scaled away "//&
                  "when the first baroclinic deformation radius is well "//&
                  "resolved.", default=.false.)
+  call get_param(param_file, mdl, "DEPTH_SCALED_KHTH", CS%Depth_scaled_KhTh, &
+                 "If true, KHTH is scaled away when the depth is shallower"//&
+                 "than a reference depth: KHTH = MIN(1,H/H0)**N * KHTH, "//&
+                 "where H0 is a reference depth, controlled via DEPTH_SCALED_KHTH_H0, "//&
+                 "and the exponent (N) is controlled via DEPTH_SCALED_KHTH_EXP.",&
+                 default=.false.)
   call get_param(param_file, mdl, "RESOLN_SCALED_KHTH", CS%Resoln_scaled_KhTh, &
                  "If true, the interface depth diffusivity is scaled away "//&
                  "when the first baroclinic deformation radius is well "//&
@@ -978,12 +1019,13 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
 
+
   if (CS%Resoln_use_ebt .or. CS%khth_use_ebt_struct) then
     in_use = .true.
     call get_param(param_file, mdl, "RESOLN_N2_FILTER_DEPTH", N2_filter_depth, &
                  "The depth below which N2 is monotonized to avoid stratification "//&
                  "artifacts from altering the equivalent barotropic mode structure.",&
-                 units="m", default=2000.)
+                 units="m", default=2000., scale=US%m_to_Z)
     allocate(CS%ebt_struct(isd:ied,jsd:jed,G%ke)) ; CS%ebt_struct(:,:,:) = 0.0
   endif
 
@@ -1054,6 +1096,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
          'Square of Brunt-Vaisala frequency, N^2, at u-points, as used in Visbeck et al.', 's-2')
     CS%id_N2_v = register_diag_field('ocean_model', 'N2_v', diag%axesCvi, Time, &
          'Square of Brunt-Vaisala frequency, N^2, at v-points, as used in Visbeck et al.', 's-2')
+    !### The units of the next two diagnostics should be 'nondim'.
     CS%id_S2_u = register_diag_field('ocean_model', 'S2_u', diag%axesCu1, Time, &
          'Depth average square of slope magnitude, S^2, at u-points, as used in Visbeck et al.', 's-2')
     CS%id_S2_v = register_diag_field('ocean_model', 'S2_v', diag%axesCv1, Time, &
@@ -1158,6 +1201,18 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                   ((G%CoriolisBu(I-1,J)-G%CoriolisBu(I-1,J-1)) * G%IdyCu(I-1,j))**2) ) ))
     enddo ; enddo
 
+  endif
+
+  if (CS%Depth_scaled_KhTh) then
+    CS%calculate_depth_fns = .true.
+    allocate(CS%Depth_fn_u(IsdB:IedB,jsd:jed))     ; CS%Depth_fn_u(:,:) = 0.0
+    allocate(CS%Depth_fn_v(isd:ied,JsdB:JedB))     ; CS%Depth_fn_v(:,:) = 0.0
+    call get_param(param_file, mdl, "DEPTH_SCALED_KHTH_H0", CS%depth_scaled_khth_h0, &
+    "The depth above which KHTH is scaled away.",&
+    units="m", default=1000.)
+    call get_param(param_file, mdl, "DEPTH_SCALED_KHTH_EXP", CS%depth_scaled_khth_exp, &
+    "The exponent used in the depth dependent scaling function for KHTH.",&
+    units="nondim", default=3.0)
   endif
 
   ! Resolution %Rd_dx_h

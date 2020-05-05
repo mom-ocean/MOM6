@@ -34,6 +34,9 @@ public esmf2fms_time
 public fms2esmf_time
 public string_to_date
 
+character(len=*),parameter :: u_FILE_u = &
+     __FILE__
+
 contains
 
 !> Sets fms2esmf_cal_c to the corresponding ESMF calendar type
@@ -90,10 +93,7 @@ function esmf2fms_time_t(time)
 
   call ESMF_TimeGet(time, yy=yy, mm=mm, dd=dd, h=h, m=m, s=s, &
       calkindflag=calkind, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    line=__LINE__, &
-    file=__FILE__)) &
-    return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   esmf2fms_time_t = set_date(yy, mm, dd, h, m, s)
 
@@ -111,10 +111,7 @@ function esmf2fms_timestep(timestep)
   integer                            :: rc
 
   call ESMF_TimeIntervalGet(timestep, s=s, calkindflag=calkind, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    line=__LINE__, &
-    file=__FILE__)) &
-    return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   esmf2fms_timestep = set_time(s, 0)
 
@@ -142,10 +139,7 @@ function fms2esmf_time(time, calkind)
 
   call ESMF_TimeSet(fms2esmf_time, yy=yy, mm=mm, d=d, h=h, m=m, s=s, &
       calkindflag=l_calkind, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    line=__LINE__, &
-    file=__FILE__)) &
-    return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
 end function fms2esmf_time
 
@@ -165,5 +159,17 @@ function string_to_date(string, rc)
   string_to_date = set_date(yr, mon, day, hr, min, sec)
 
 end function string_to_date
+
+logical function chkerr(rc, line, file)
+  integer, intent(in) :: rc
+  integer, intent(in) :: line
+  character(len=*), intent(in) :: file
+  integer :: lrc
+  chkerr = .false.
+  lrc = rc
+  if (ESMF_LogFoundError(rcToCheck=lrc, msg=ESMF_LOGERR_PASSTHRU, line=line, file=file)) then
+     chkerr = .true.
+  endif
+end function chkerr
 
 end module time_utils_mod
