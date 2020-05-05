@@ -36,15 +36,18 @@ integer, public, parameter :: BOTTOM  = 1  !< Set a value that corresponds to th
 
 !> Sets parameters for lateral boundary mixing module.
 type, public :: lateral_boundary_diffusion_CS ; private
-  integer :: method                                               !< Determine which of the three methods calculate
-                                                                  !! and apply near boundary layer fluxes
-                                                                  !! 1. Bulk-layer approach
-                                                                  !! 2. Along layer
-  integer :: deg                                                  !< Degree of polynomial reconstruction
-  integer :: surface_boundary_scheme                              !< Which boundary layer scheme to use
-                                                                  !! 1. ePBL; 2. KPP
-  logical :: limiter                                              !< Controls wether a flux limiter is applied.
-                                                                  !! Only valid when method = 1.
+  integer :: method                          !< Determine which of the three methods calculate
+                                             !! and apply near boundary layer fluxes
+                                             !! 1. Bulk-layer approach
+                                             !! 2. Along layer
+  integer :: deg                             !< Degree of polynomial reconstruction
+  integer :: surface_boundary_scheme         !< Which boundary layer scheme to use
+                                             !! 1. ePBL; 2. KPP
+  logical :: limiter                         !< Controls wether a flux limiter is applied.
+                                             !! Only valid when method = 1.
+  logical :: linear                          !< If True, apply a linear transition at the base/top of the boundary.
+                                             !! The flux will be fully applied at k=k_min and zero at k=k_max.
+
   type(remapping_CS)              :: remap_CS                     !< Control structure to hold remapping configuration
   type(KPP_CS),           pointer :: KPP_CSp => NULL()            !< KPP control structure needed to get BLD
   type(energetic_PBL_CS), pointer :: energetic_PBL_CSp => NULL()  !< ePBL control structure needed to get BLD
@@ -94,6 +97,7 @@ logical function lateral_boundary_diffusion_init(Time, G, param_file, diag, diab
   call extract_diabatic_member(diabatic_CSp, energetic_PBL_CSp=CS%energetic_PBL_CSp)
 
   CS%surface_boundary_scheme = -1
+  !GMM, uncomment below
 !  if ( .not. ASSOCIATED(CS%energetic_PBL_CSp) .and. .not. ASSOCIATED(CS%KPP_CSp) ) then
 !    call MOM_error(FATAL,"Lateral boundary diffusion is true, but no valid boundary layer scheme was found")
 !  endif
@@ -108,6 +112,9 @@ logical function lateral_boundary_diffusion_init(Time, G, param_file, diag, diab
                    "If True, apply a flux limiter in the LBD. This is only available \n"//&
                    "when LATERAL_BOUNDARY_METHOD=1.", default=.false.)
   endif
+  call get_param(param_file, mdl, "LBD_LINEAR_TRANSITION", CS%linear, &
+                 "If True, apply a linear transition at the base/top of the boundary. \n"//&
+                 "The flux will be fully applied at k=k_min and zero at k=k_max.", default=.false.)
   call get_param(param_file, mdl, "LBD_BOUNDARY_EXTRAP", boundary_extrap, &
                  "Use boundary extrapolation in LBD code", &
                  default=.false.)
@@ -193,7 +200,8 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
             call fluxes_bulk_method(SURFACE, GV%ke, CS%deg, h(I,j,:), h(I+1,j,:), hbl(I,j), hbl(I+1,j), &
               G%areaT(I,j), G%areaT(I+1,j), tracer%t(I,j,:), tracer%t(I+1,j,:),                         &
               ppoly0_coefs(I,j,:,:), ppoly0_coefs(I+1,j,:,:), ppoly0_E(I,j,:,:),                        &
-              ppoly0_E(I+1,j,:,:), remap_method, Coef_x(I,j), uFlx_bulk(I,j), uFlx(I,j,:), CS%limiter)
+              ppoly0_E(I+1,j,:,:), remap_method, Coef_x(I,j), uFlx_bulk(I,j), uFlx(I,j,:), CS%limiter,  &
+              CS%linear)
           endif
         enddo
       enddo
@@ -203,7 +211,8 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
             call fluxes_bulk_method(SURFACE, GV%ke, CS%deg, h(i,J,:), h(i,J+1,:), hbl(i,J), hbl(i,J+1), &
               G%areaT(i,J), G%areaT(i,J+1), tracer%t(i,J,:), tracer%t(i,J+1,:),                         &
               ppoly0_coefs(i,J,:,:), ppoly0_coefs(i,J+1,:,:), ppoly0_E(i,J,:,:),                        &
-              ppoly0_E(i,J+1,:,:), remap_method, Coef_y(i,J), vFlx_bulk(i,J), vFlx(i,J,:), CS%limiter)
+              ppoly0_E(i,J+1,:,:), remap_method, Coef_y(i,J), vFlx_bulk(i,J), vFlx(i,J,:), CS%limiter,  &
+              CS%linear)
           endif
         enddo
       enddo
@@ -216,18 +225,20 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       do j=G%jsc,G%jec
         do i=G%isc-1,G%iec
           if (G%mask2dCu(I,j)>0.) then
-            call fluxes_layer_method(SURFACE, GV%ke, CS%deg, h(I,j,:), h(I+1,j,:), hbl(I,j), hbl(I+1,j), &
-              G%areaT(I,j), G%areaT(I+1,j), tracer%t(I,j,:), tracer%t(I+1,j,:), ppoly0_coefs(I,j,:,:), &
-              ppoly0_coefs(I+1,j,:,:), ppoly0_E(I,j,:,:), ppoly0_E(I+1,j,:,:), remap_method, Coef_x(I,j), uFlx(I,j,:))
+            call fluxes_layer_method(SURFACE, GV%ke, CS%deg, h(I,j,:), h(I+1,j,:), hbl(I,j), hbl(I+1,j),  &
+              G%areaT(I,j), G%areaT(I+1,j), tracer%t(I,j,:), tracer%t(I+1,j,:), ppoly0_coefs(I,j,:,:),    &
+              ppoly0_coefs(I+1,j,:,:), ppoly0_E(I,j,:,:), ppoly0_E(I+1,j,:,:), remap_method, Coef_x(I,j), &
+              uFlx(I,j,:), CS%linear)
           endif
         enddo
       enddo
       do J=G%jsc-1,G%jec
         do i=G%isc,G%iec
           if (G%mask2dCv(i,J)>0.) then
-            call fluxes_layer_method(SURFACE, GV%ke, CS%deg, h(i,J,:), h(i,J+1,:), hbl(i,J), hbl(i,J+1), &
-              G%areaT(i,J), G%areaT(i,J+1), tracer%t(i,J,:), tracer%t(i,J+1,:), ppoly0_coefs(i,J,:,:), &
-              ppoly0_coefs(i,J+1,:,:), ppoly0_E(i,J,:,:), ppoly0_E(i,J+1,:,:), remap_method, Coef_y(i,J), vFlx(i,J,:))
+            call fluxes_layer_method(SURFACE, GV%ke, CS%deg, h(i,J,:), h(i,J+1,:), hbl(i,J), hbl(i,J+1),  &
+              G%areaT(i,J), G%areaT(i,J+1), tracer%t(i,J,:), tracer%t(i,J+1,:), ppoly0_coefs(i,J,:,:),    &
+              ppoly0_coefs(i,J+1,:,:), ppoly0_E(i,J,:,:), ppoly0_E(i,J+1,:,:), remap_method, Coef_y(i,J), &
+              vFlx(i,J,:), CS%linear)
           endif
         enddo
       enddo
@@ -428,7 +439,8 @@ end subroutine boundary_k_range
 !> Calculate the lateral boundary diffusive fluxes using the layer by layer method.
 !! See \ref section_method2
 subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L, area_R, phi_L, phi_R, &
-                              ppoly0_coefs_L, ppoly0_coefs_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
+                              ppoly0_coefs_L, ppoly0_coefs_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, &
+                              F_layer, linear_decay)
 
   integer,                   intent(in   )       :: boundary !< Which boundary layer SURFACE or BOTTOM  [nondim]
   integer,                   intent(in   )       :: nk       !< Number of layers                        [nondim]
@@ -450,7 +462,8 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L
   integer,                   intent(in   )       :: method   !< Method of polynomial integration        [ nondim ]
   real,                      intent(in   )       :: khtr_u   !< Horizontal diffusivities times delta t at U-point [m^2]
   real, dimension(nk),       intent(  out)       :: F_layer  !< Layerwise diffusive flux at U- or V-point [m^3 conc]
-
+  logical, optional,         intent(in   )       :: linear_decay !< If True, apply a linear transition at the base of
+                                                             !! the boundary layer
   ! Local variables
   real, dimension(nk) :: h_means              !< Calculate the layer-wise harmonic means           [m]
   real                :: khtr_avg             !< Thickness-weighted diffusivity at the u-point     [m^2 s^-1]
@@ -474,9 +487,16 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L
   real    :: hbl_min             !< minimum BLD (left and right)                          [m]
   real    :: wgt                 !< weight to be used in the linear transition to the interior [nondim]
   real    :: a                   !< coefficient to be used in the linear transition to the interior [nondim]
+  logical :: linear              !< True if apply a linear transition
+
   F_layer(:) = 0.0
   if (hbl_L == 0. .or. hbl_R == 0.) then
     return
+  endif
+
+  linear = .false.
+  if (PRESENT(linear_decay)) then
+    linear = linear_decay
   endif
 
   ! Calculate vertical indices containing the boundary layer
@@ -506,24 +526,30 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L
     heff = harmonic_mean(h_work_L, h_work_R)
     ! tracer flux where the minimum BLD intersets layer
     ! GMM, khtr_avg should be computed once khtr is 3D
-    !F_layer(k_bot_min) = -(heff * khtr_u) * (phi_R_avg - phi_L_avg)
+    if ((linear) .and. (k_bot_diff .gt. 1)) then
+      ! apply linear decay at the base of hbl
+      do k = k_bot_min,1,-1
+        heff = harmonic_mean(h_L(k), h_R(k))
+        F_layer(k) = -(heff * khtr_u) * (phi_R(k) - phi_L(k))
+      enddo
 
-    do k = k_bot_min,1,-1
-      heff = harmonic_mean(h_L(k), h_R(k))
-      F_layer(k) = -(heff * khtr_u) * (phi_R(k) - phi_L(k))
-    enddo
-
-    if (k_bot_diff .gt. 1) then
       a = -1.0/k_bot_diff
       do k = k_bot_min+1,k_bot_max-1, 1
         wgt = (a*(k-k_bot_min)) + 1.0
         heff = harmonic_mean(h_L(k), h_R(k))
         F_layer(k) = -(heff * khtr_u) * (phi_R(k) - phi_L(k)) * wgt
       enddo
+    else
+      F_layer(k_bot_min) = -(heff * khtr_u) * (phi_R_avg - phi_L_avg)
+      do k = k_bot_min-1,1,-1
+        heff = harmonic_mean(h_L(k), h_R(k))
+        F_layer(k) = -(heff * khtr_u) * (phi_R(k) - phi_L(k))
+      enddo
     endif
   endif
 
   if (boundary == BOTTOM) then
+    ! TODO: GMM add option to apply linear decay
     k_top_max = MAX(k_top_L, k_top_R)
     ! make sure left and right k indices span same range
     if (k_top_max .ne. k_top_L) then
@@ -556,7 +582,7 @@ end subroutine fluxes_layer_method
 !> Apply the lateral boundary diffusive fluxes calculated from a 'bulk model'
 !! See \ref section_method1
 subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L, area_R, phi_L, phi_R, ppoly0_coefs_L, &
-                                   ppoly0_coefs_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer, F_limit)
+                              ppoly0_coefs_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer, F_limit, linear_decay)
 
   integer,                   intent(in   )       :: boundary !< Which boundary layer SURFACE or BOTTOM  [nondim]
   integer,                   intent(in   )       :: nk       !< Number of layers                        [nondim]
@@ -580,7 +606,8 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
   real,                      intent(  out)       :: F_bulk   !< The bulk mixed layer lateral flux       [m^3 conc]
   real, dimension(nk),       intent(  out)       :: F_layer  !< Layerwise diffusive flux at U-point     [m^3 conc]
   logical, optional,         intent(in   )       :: F_limit  !< If True, apply a limiter
-  logical, optional,         intent(in   )       :: linear  !< If True, apply a limiter
+  logical, optional,         intent(in   )       :: linear_decay !< If True, apply a linear transition at the base of
+                                                             !! the boundary layer
 
   ! Local variables
   real, dimension(nk) :: h_means              !< Calculate the layer-wise harmonic means           [m]
@@ -604,10 +631,13 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
   real    :: F_max                            !< The maximum amount of flux that can leave a
                                               !! cell  [m^3 conc]
   logical :: limiter                          !< True if flux limiter should be applied
+  logical :: linear                           !< True if apply a linear transition
   real    :: hfrac                            !< Layer fraction wrt sum of all layers [nondim]
   real    :: dphi                             !< tracer gradient                      [conc m^-3]
-  real    :: wgt, a
-
+  real    :: wgt                              !< weight to be used in the linear transition to the
+                                              !! interior [nondim]
+  real    :: a                                !< coefficient to be used in the linear transition to the
+                                              !! interior [nondim]
   if (hbl_L == 0. .or. hbl_R == 0.) then
     F_bulk = 0.
     F_layer(:) = 0.
@@ -617,6 +647,10 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
   limiter = .false.
   if (PRESENT(F_limit)) then
     limiter = F_limit
+  endif
+  linear = .false.
+  if (PRESENT(linear_decay)) then
+    linear = linear_decay
   endif
 
   ! Calculate vertical indices containing the boundary layer
@@ -642,35 +676,40 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
     k_max = MAX(k_bot_L, k_bot_R)
     k_diff = (k_max - k_min)
 
-!    ! left hand side
-!    if (k_bot_L == k_min) then
-!      h_work_L = h_L(k_min) * zeta_bot_L
-!    else
-!      h_work_L = h_L(k_min)
-!    endif
-!
-!    ! right hand side
-!    if (k_bot_R == k_min) then
-!      h_work_R = h_R(k_min) * zeta_bot_R
-!    else
-!      h_work_R = h_R(k_min)
-!    endif
-
-!    h_means(k_min) = harmonic_mean(h_work_L,h_work_R)
-
-    do k=1,k_min
-      h_means(k) = harmonic_mean(h_L(k),h_R(k))
-    enddo
-
-    if (k_diff .gt. 1) then
+    if ((linear) .and. (k_diff .gt. 1)) then
+      do k=1,k_min
+        h_means(k) = harmonic_mean(h_L(k),h_R(k))
+      enddo
+      ! fluxes will decay linearly at base of hbl
       a = -1.0/k_diff
       do k = k_min+1,k_max-1, 1
         wgt = (a*(k-k_min)) + 1.0
         h_means(k) = harmonic_mean(h_L(k), h_R(k)) * wgt
       enddo
+    else
+      ! left hand side
+      if (k_bot_L == k_min) then
+        h_work_L = h_L(k_min) * zeta_bot_L
+      else
+        h_work_L = h_L(k_min)
+      endif
+
+      ! right hand side
+      if (k_bot_R == k_min) then
+        h_work_R = h_R(k_min) * zeta_bot_R
+      else
+        h_work_R = h_R(k_min)
+      endif
+
+      h_means(k_min) = harmonic_mean(h_work_L,h_work_R)
+
+      do k=1,k_min-1
+        h_means(k) = harmonic_mean(h_L(k),h_R(k))
+      enddo
     endif
 
   elseif (boundary == BOTTOM) then
+    !TODO, GMM linear decay is not implemented here
     k_max = MAX(k_top_L, k_top_R)
     ! left hand side
     if (k_top_L == k_max) then
