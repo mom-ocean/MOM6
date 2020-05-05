@@ -401,7 +401,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
       do K=1,nz+1 ; Kd(K) = 0.0 ; enddo
 
       ! Make local copies of surface forcing and process them.
-      u_star = fluxes%ustar(i,j)
+      u_star = fluxes%ustar(i,j)*(fluxes%t_rp(i,j))
       u_star_Mean = fluxes%ustar_gustless(i,j)
       B_flux = buoy_flux(i,j)
       if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then

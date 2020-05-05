@@ -139,7 +139,9 @@ type, public :: surface_diag_IDs ; private
   integer :: id_salt_deficit = -1
   integer :: id_Heat_PmE     = -1
   integer :: id_intern_heat  = -1
-  !>@}
+!  stochastic pattern
+  integer :: id_t_rp         = -1
+  !!@}
 end type surface_diag_IDs
 
 
@@ -1277,7 +1279,7 @@ end subroutine post_surface_dyn_diags
 !> This routine posts diagnostics of various ocean surface and integrated
 !! quantities at the time the ocean state is reported back to the caller
 subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv, &
-                                    ssh, ssh_ibc)
+                                    ssh, t_rp, ssh_ibc)
   type(surface_diag_IDs),   intent(in) :: IDs !< A structure with the diagnostic IDs.
   type(ocean_grid_type),    intent(in) :: G   !< ocean grid structure
   type(verticalGrid_type),  intent(in) :: GV  !< ocean vertical grid structure
@@ -1286,8 +1288,10 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
   real,                     intent(in) :: dt_int !< total time step associated with these diagnostics [T ~> s].
   type(surface),            intent(in) :: sfc_state !< structure describing the ocean surface state
   type(thermo_var_ptrs),    intent(in) :: tv  !< A structure pointing to various thermodynamic variables
-  real, dimension(SZI_(G),SZJ_(G)), intent(in) :: ssh !< Time mean surface height without corrections
-                                              !! for ice displacement [Z ~> m]
+  real, dimension(SZI_(G),SZJ_(G)), &
+                            intent(in) :: ssh !< Time mean surface height without corrections for ice displacement [m]
+  real, dimension(SZI_(G),SZJ_(G)), &
+                            intent(in) :: t_rp!< random pattern for stochastic proceeses
   real, dimension(SZI_(G),SZJ_(G)), intent(in) :: ssh_ibc !< Time mean surface height with corrections
                                               !! for ice displacement and the inverse barometer [Z ~> m]
 
@@ -1412,6 +1416,11 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
       work_2d(i,j) = sfc_state%SSS(i,j)*sfc_state%SSS(i,j)
     enddo ; enddo
     call post_data(IDs%id_sss_sq, work_2d, diag, mask=G%mask2dT)
+  endif
+
+  if (IDs%id_t_rp > 0) then
+     !call post_data(IDs%id_t_rp, t_rp, diag, mask=G%mask2dT)
+     call post_data(IDs%id_t_rp, t_rp, diag)
   endif
 
   call coupler_type_send_data(sfc_state%tr_fields, get_diag_time_end(diag))
@@ -1901,8 +1910,9 @@ subroutine register_surface_diags(Time, G, US, IDs, diag, tv)
          'Heat flux into ocean from mass flux into ocean', &
          'W m-2', conversion=US%QRZ_T_to_W_m2)
   IDs%id_intern_heat = register_diag_field('ocean_model', 'internal_heat', diag%axesT1, Time,&
-         'Heat flux into ocean from geothermal or other internal sources', &
-         'W m-2', conversion=US%QRZ_T_to_W_m2)
+         'Heat flux into ocean from geothermal or other internal sources', 'W m-2')
+  IDs%id_t_rp = register_diag_field('ocean_model', 'random_pattern', diag%axesT1, Time, &
+      'random pattern for stochastics', 'None')
 
 end subroutine register_surface_diags
 

@@ -315,6 +315,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
     call safe_alloc_ptr(fluxes%p_surf     ,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%p_surf_full,isd,ied,jsd,jed)
+    print*,'allocate fluxes%t_rp'
+    call safe_alloc_ptr(fluxes%t_rp,isd,ied,jsd,jed)
     if (CS%use_limited_P_SSH) then
        fluxes%p_surf_SSH => fluxes%p_surf
     else
