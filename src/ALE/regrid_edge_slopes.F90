@@ -46,35 +46,39 @@ contains
 !!
 !! There are N+1 unknowns and we are able to write N-1 equations. The
 !! boundary conditions close the system.
-subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect )
+subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_2018 )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
-  real, dimension(:,:), intent(inout) :: edge_slopes !< Returned edge slopes, with the
-                                           !! same units as u divided by the units of h.
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N) in arbitrary units [A]
+  real, dimension(:,:), intent(inout) :: edge_slopes !< Returned edge slopes [A H-1]
   real, optional,       intent(in)    :: h_neglect !< A negligibly small width
+  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
   ! Local variables
   integer               :: i, j                 ! loop indexes
-  real                  :: h0, h1               ! cell widths
-  real                  :: h0_2, h1_2, h0h1
-  real                  :: h0_3, h1_3
-  real                  :: d
-  real                  :: alpha, beta          ! stencil coefficients
-  real                  :: a, b
-  real, dimension(5)    :: x                    ! system used to enforce
-  real, dimension(4,4)  :: Asys                 ! boundary conditions
+  real                  :: h0, h1               ! cell widths [H]
+  real                  :: h0_2, h1_2, h0h1     ! products of cell widths [H2]
+  real                  :: h0_3, h1_3           ! products of three cell widths [H3]
+  real                  :: d                    ! A demporary variable [H3]
+  real                  :: alpha, beta          ! stencil coefficients [nondim]
+  real                  :: a, b                 ! weights of cells [H-1]
+  real, parameter       :: C1_12 = 1.0 / 12.0
+  real, dimension(5)    :: x          ! Coordinate system with 0 at edges [H]
+  real                  :: dx, xavg   ! Differences and averages of successive values of x [H]
+  real, dimension(4,4)  :: Asys       ! matrix used to find boundary conditions
   real, dimension(4)    :: Bsys, Csys
   real, dimension(3)    :: Dsys
-  real, dimension(N+1)  :: tri_l, &             ! trid. system (lower diagonal)
-                           tri_d, &             ! trid. system (middle diagonal)
-                           tri_u, &             ! trid. system (upper diagonal)
-                           tri_b, &             ! trid. system (unknowns vector)
-                           tri_x                ! trid. system (rhs)
-  real      :: hNeglect ! A negligible thicness in the same units as h.
-  real      :: hNeglect3 ! hNeglect^3 in the same units as h^3.
+  real, dimension(N+1)  :: tri_l, &             ! trid. system (lower diagonal)  [nondim]
+                           tri_d, &             ! trid. system (middle diagonal) [nondim]
+                           tri_u, &             ! trid. system (upper diagonal)  [nondim]
+                           tri_b, &             ! trid. system (unknowns vector) [A H-1]
+                           tri_x                ! trid. system (rhs) [A H-1]
+  real      :: hNeglect  ! A negligible thickness [H].
+  real      :: hNeglect3 ! hNeglect^3 [H3].
+  logical   :: use_2018_answers  ! If true use older, less acccurate expressions.
 
   hNeglect = hNeglect_dflt ; if (present(h_neglect))  hNeglect = h_neglect
   hNeglect3 = hNeglect**3
+  use_2018_answers = .true. ; if (present(answers_2018)) use_2018_answers = answers_2018
 
   ! Loop on cells (except last one)
   do i = 1,N-1
@@ -113,12 +117,18 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect )
   enddo
 
   do i = 1,4
+    dx = h(i)
+    if (use_2018_answers) then
+      do j = 1,4 ; Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j ; enddo
+    else  ! Use expressions with less sensitivity to roundoff
+      xavg = 0.5 * (x(i+1) + x(i))
+      Asys(i,1) = dx
+      Asys(i,2) = dx * xavg
+      Asys(i,3) = dx * (xavg**2 + C1_12*dx**2)
+      Asys(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
+    endif
 
-    do j = 1,4
-      Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
-    enddo
-
-    Bsys(i) = u(i) * ( h(i) )
+    Bsys(i) = u(i) * dx
 
   enddo
 
@@ -139,12 +149,17 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect )
   enddo
 
   do i = 1,4
-
-    do j = 1,4
-      Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
-    enddo
-
-    Bsys(i) = u(N-4+i) * ( h(N-4+i) )
+    dx = h(N-4+i)
+    if (use_2018_answers) then
+      do j = 1,4 ; Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j ; enddo
+    else  ! Use expressions with less sensitivity to roundoff
+      xavg = 0.5 * (x(i+1) + x(i))
+      Asys(i,1) = dx
+      Asys(i,2) = dx * xavg
+      Asys(i,3) = dx * (xavg**2 + C1_12*dx**2)
+      Asys(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
+    endif
+    Bsys(i) = u(N-4+i) * dx
 
   enddo
 
@@ -173,14 +188,13 @@ end subroutine edge_slopes_implicit_h3
 
 !------------------------------------------------------------------------------
 !> Compute ih5 edge values (implicit fifth order accurate)
-subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect )
+subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_2018 )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
-  real, dimension(:,:), intent(inout) :: edge_slopes !< Returned edge slopes, with the
-                                           !! same units as u divided by the units of h.
-  real, optional,       intent(in)    :: h_neglect !< A negligibly small width
-                                           !! in the same units as h.
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N) in arbitrary units [A]
+  real, dimension(:,:), intent(inout) :: edge_slopes !< Returned edge slopes [A H-1]
+  real, optional,       intent(in)    :: h_neglect !< A negligibly small width [H]
+  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
 ! -----------------------------------------------------------------------------
 ! Fifth-order implicit estimates of edge values are based on a four-cell,
 ! three-edge stencil. A tridiagonal system is set up and is based on
@@ -232,8 +246,11 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect )
   real                  :: h2ph3_3, h2ph3_4     ! ...
   real                  :: alpha, beta          ! stencil coefficients
   real                  :: a, b, c, d           ! "
-  real, dimension(7)    :: x                    ! system used to enforce
-  real, dimension(6,6)  :: Asys                 ! boundary conditions
+  real, dimension(7)    :: x                    ! Coordinate system with 0 at edges [same units as h]
+  real, parameter       :: C1_12 = 1.0 / 12.0
+  real, parameter       :: C5_6 = 5.0 / 6.0
+  real                  :: dx, xavg             ! Differences and averages of successive values of x [same units as h]
+  real, dimension(6,6)  :: Asys                 ! matrix used to find  boundary conditions
   real, dimension(6)    :: Bsys, Csys           ! ...
   real, dimension(5)    :: Dsys                 ! derivative
   real, dimension(N+1)  :: tri_l, &             ! trid. system (lower diagonal)
@@ -241,9 +258,11 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect )
                            tri_u, &             ! trid. system (upper diagonal)
                            tri_b, &             ! trid. system (unknowns vector)
                            tri_x                ! trid. system (rhs)
-  real      :: hNeglect ! A negligible thicness in the same units as h.
+  real      :: hNeglect ! A negligible thickness in the same units as h.
+  logical   :: use_2018_answers ! If true use older, less acccurate expressions.
 
   hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
+  use_2018_answers = .true. ; if (present(answers_2018)) use_2018_answers = answers_2018
 
   ! Loop on cells (except last one)
   do k = 2,N-2
@@ -473,11 +492,20 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect )
 
   do i = 1,6
 
-    do j = 1,6
-      Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
-    enddo
+    dx = h(i)
+    if (use_2018_answers) then
+      do j = 1,6 ; Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j ; enddo
+    else  ! Use expressions with less sensitivity to roundoff
+      xavg = 0.5 * (x(i+1) + x(i))
+      Asys(i,1) = dx
+      Asys(i,2) = dx * xavg
+      Asys(i,3) = dx * (xavg**2 + C1_12*dx**2)
+      Asys(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
+      Asys(i,5) = dx * (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
+      Asys(i,6) = dx * xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
+    endif
 
-    Bsys(i) = u(i) * h(i)
+    Bsys(i) = u(i) * dx
 
   enddo
 
@@ -612,13 +640,19 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect )
   enddo
 
   do i = 1,6
-
-    do j = 1,6
-      Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
-    enddo
-
-    Bsys(i) = u(N-6+i) * h(N-6+i)
-
+    dx = h(N-6+i)
+    if (use_2018_answers) then
+      do j = 1,6 ; Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j ; enddo
+    else  ! Use expressions with less sensitivity to roundoff
+      xavg = 0.5 * (x(i+1) + x(i))
+      Asys(i,1) = dx
+      Asys(i,2) = dx * xavg
+      Asys(i,3) = dx * (xavg**2 + C1_12*dx**2)
+      Asys(i,4) = dx * xavg * (xavg**2 + 0.25*dx**2)
+      Asys(i,5) = dx * (xavg**4 + 0.5*xavg**2*dx**2 + 0.0125*dx**4)
+      Asys(i,6) = dx * xavg * (xavg**4 + C5_6*xavg**2*dx**2 + 0.0625*dx**4)
+    endif
+    Bsys(i) = u(N-6+i) * dx
   enddo
 
   call solve_linear_system( Asys, Bsys, Csys, 6 )

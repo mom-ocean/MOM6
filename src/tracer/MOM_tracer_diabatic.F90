@@ -18,10 +18,10 @@ public applyTracerBoundaryFluxesInOut
 
 contains
 
-!> This subroutine solves a tridiagonal equation for the final tracer
-!! concentrations after the dual-entrainments, and possibly sinking or surface
-!! and bottom sources, are applied.  The sinking is implemented with an
-!! fully implicit upwind advection scheme.
+!> This subroutine solves a tridiagonal equation for the final tracer concentrations after the
+!! dual-entrainments, and possibly sinking or surface and bottom sources, are applied.  The sinking
+!! is implemented with an fully implicit upwind advection scheme.  Alternate time units can be
+!! used for the timestep, surface and bottom fluxes and sink_rate provided they are all consistent.
 subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
                            sfc_flux, btm_flux, btm_reservoir, sink_rate, convert_flux_in)
   type(ocean_grid_type),                     intent(in)    :: G      !< ocean grid structure
@@ -33,13 +33,18 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: eb     !< amount of fluid entrained from the layer
                                                                      !! below [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: tr     !< tracer concentration in concentration units [CU]
-  real,                                      intent(in)    :: dt     !< amount of time covered by this call [s]
-  real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: sfc_flux !< surface flux of the tracer [CU kg m-2 s-1]
+  real,                                      intent(in)    :: dt     !< amount of time covered by this call [T ~> s]
+  real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: sfc_flux !< surface flux of the tracer in units of
+                                                                     !! [CU kg m-2 T-1 ~> CU kg m-2 s-1] or
+                                                                     !! [CU H ~> CU m or CU kg m-2] if
+                                                                     !! convert_flux_in is .false.
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: btm_flux !< The (negative upward) bottom flux of the
-                                                                     !! tracer [CU kg m-2 s-1]
+                                                                     !! tracer in [CU kg m-2 T-1 ~> CU kg m-2 s-1] or
+                                                                     !! [CU H ~> CU m or CU kg m-2] if
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(inout) :: btm_reservoir !< amount of tracer in a bottom reservoir
                                                                      !! [CU kg m-2]; formerly [CU m]
-  real,                             optional,intent(in)    :: sink_rate !< rate at which the tracer sinks [m s-1]
+  real,                             optional,intent(in)    :: sink_rate !< rate at which the tracer sinks
+                                                                     !! [m T-1 ~> m s-1]
   logical,                          optional,intent(in)    :: convert_flux_in !< True if the specified sfc_flux needs
                                                                      !! to be integrated in time
 
@@ -226,14 +231,14 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
   type(ocean_grid_type),                      intent(in   ) :: G  !< Grid structure
   type(verticalGrid_type),                    intent(in   ) :: GV !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: Tr !< Tracer concentration on T-cell
-  real,                                       intent(in   ) :: dt !< Time-step over which forcing is applied [s]
+  real,                                       intent(in   ) :: dt !< Time-step over which forcing is applied [T ~> s]
   type(forcing),                              intent(in   ) :: fluxes !< Surface fluxes container
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   real,                                       intent(in   ) :: evap_CFL_limit !< Limit on the fraction of the
                                                                   !! water that can be fluxed out of the top
                                                                   !! layer in a timestep [nondim]
   real,                                       intent(in   ) :: minimum_forcing_depth !< The smallest depth over
-                                                                  !! which fluxes can be applied [m]
+                                                                  !! which fluxes can be applied [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in   ) :: in_flux_optional !< The total time-integrated
                                                                   !! amount of tracer that enters with freshwater
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: out_flux_optional !< The total time-integrated
@@ -243,7 +248,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
 
   integer, parameter :: maxGroundings = 5
   integer :: numberOfGroundings, iGround(maxGroundings), jGround(maxGroundings)
-  real :: H_limit_fluxes, IforcingDepthScale, Idt
+  real :: H_limit_fluxes, IforcingDepthScale
   real :: dThickness, dTracer
   real :: fractionOfForcing, hOld, Ithickness
   real :: RivermixConst  ! A constant used in implementing river mixing [Pa s].
@@ -287,13 +292,12 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
     update_h = .true.
   endif
 
-  Idt = 1.0/dt
   numberOfGroundings = 0
 
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,Tr,G,GV,fluxes,dt,    &
 !$OMP                                  IforcingDepthScale,minimum_forcing_depth, &
 !$OMP                                  numberOfGroundings,iGround,jGround,update_h, &
-!$OMP                                  in_flux,out_flux,hGrounding,Idt,evap_CFL_limit) &
+!$OMP                                  in_flux,out_flux,hGrounding,evap_CFL_limit) &
 !$OMP                          private(h2d,Tr2d,netMassInOut,netMassOut,      &
 !$OMP                                  in_flux_1d,out_flux_1d,fractionOfForcing,     &
 !$OMP                                  dThickness,dTracer,hOld,Ithickness,           &
@@ -362,7 +366,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
           ! Place forcing into this layer if this layer has nontrivial thickness.
           ! For layers thin relative to 1/IforcingDepthScale, then distribute
           ! forcing into deeper layers.
-          IforcingDepthScale = 1. / max(GV%H_subroundoff, minimum_forcing_depth*GV%m_to_H - netMassOut(i) )
+          IforcingDepthScale = 1. / max(GV%H_subroundoff, minimum_forcing_depth - netMassOut(i) )
           ! fractionOfForcing = 1.0, unless h2d is less than IforcingDepthScale.
           fractionOfForcing = min(1.0, h2d(i,k)*IforcingDepthScale)
 

@@ -43,6 +43,9 @@ integer                  :: import_cnt = 0!< used to skip using the import state
 type(ESMF_GeomType_Flag) :: geomtype      !< SMF type describing type of
                                           !! geometry (mesh or grid)
 
+character(len=*),parameter :: u_FILE_u = &
+     __FILE__
+
 contains
 
 !> Sets module variable geometry type
@@ -86,60 +89,42 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   !----
   call state_getimport(importState, 'inst_pres_height_surface', &
        isc, iec, jsc, jec, ice_ocean_boundary%p, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   !----
   ! near-IR, direct shortwave  (W/m2)
   !----
   call state_getimport(importState, 'mean_net_sw_ir_dir_flx', &
        isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_nir_dir, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   !----
   ! near-IR, diffuse shortwave  (W/m2)
   !----
   call state_getimport(importState, 'mean_net_sw_ir_dif_flx', &
        isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_nir_dif, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   !----
   ! visible, direct shortwave  (W/m2)
   !----
   call state_getimport(importState, 'mean_net_sw_vis_dir_flx', &
        isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_vis_dir, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   !----
   ! visible, diffuse shortwave (W/m2)
   !----
   call state_getimport(importState, 'mean_net_sw_vis_dif_flx', &
        isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_vis_dif, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   ! -------
   ! Net longwave radiation (W/m2)
   ! -------
   call state_getimport(importState, 'mean_net_lw_flx',  &
        isc, iec, jsc, jec, ice_ocean_boundary%lw_flux, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   !----
   ! zonal and meridional surface stress
@@ -148,15 +133,9 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   allocate (tauy(isc:iec,jsc:jec))
 
   call state_getimport(importState, 'mean_zonal_moment_flx', isc, iec, jsc, jec, taux, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
   call state_getimport(importState, 'mean_merid_moment_flx', isc, iec, jsc, jec, tauy, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
 
   ! rotate taux and tauy from true zonal/meridional to local coordinates
@@ -178,40 +157,28 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   !----
   call state_getimport(importState, 'mean_sensi_heat_flx', &
        isc, iec, jsc, jec, ice_ocean_boundary%t_flux, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   !----
   ! evaporation flux (W/m2)
   !----
   call state_getimport(importState, 'mean_evap_rate', &
        isc, iec, jsc, jec, ice_ocean_boundary%q_flux, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   !----
   ! liquid precipitation (rain)
   !----
   call state_getimport(importState, 'mean_prec_rate', &
        isc, iec, jsc, jec, ice_ocean_boundary%lprec, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   !----
   ! frozen precipitation (snow)
   !----
   call state_getimport(importState, 'mean_fprec_rate', &
        isc, iec, jsc, jec, ice_ocean_boundary%fprec, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   !----
   ! mass and heat content of liquid and frozen runoff
@@ -223,37 +190,25 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   ice_ocean_boundary%lrunoff (:,:) = 0._ESMF_KIND_R8
   call state_getimport(importState, 'Foxx_rofl',  &
        isc, iec, jsc, jec, ice_ocean_boundary%lrunoff,rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   ! ice runoff
   ice_ocean_boundary%frunoff (:,:) = 0._ESMF_KIND_R8
   call state_getimport(importState, 'Foxx_rofi',  &
        isc, iec, jsc, jec, ice_ocean_boundary%frunoff,rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   ! heat content of lrunoff
   ice_ocean_boundary%lrunoff_hflx(:,:) = 0._ESMF_KIND_R8
   call state_getimport(importState, 'mean_runoff_heat_flx',  &
        isc, iec, jsc, jec, ice_ocean_boundary%lrunoff_hflx, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   ! heat content of frunoff
   ice_ocean_boundary%frunoff_hflx(:,:) = 0._ESMF_KIND_R8
   call state_getimport(importState, 'mean_calving_heat_flx',  &
        isc, iec, jsc, jec, ice_ocean_boundary%frunoff_hflx, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   !----
   ! salt flux from ice
@@ -261,10 +216,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   ice_ocean_boundary%salt_flux(:,:) = 0._ESMF_KIND_R8
   call state_getimport(importState, 'mean_salt_rate',  &
        isc, iec, jsc, jec, ice_ocean_boundary%salt_flux,rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   ! !----
   ! ! snow&ice melt heat flux  (W/m^2)
@@ -272,10 +224,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   ice_ocean_boundary%seaice_melt_heat(:,:) = 0._ESMF_KIND_R8
   call state_getimport(importState, 'net_heat_flx_to_ocn',  &
        isc, iec, jsc, jec, ice_ocean_boundary%seaice_melt_heat,rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   ! !----
   ! ! snow&ice melt water flux  (W/m^2)
@@ -283,10 +232,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   ice_ocean_boundary%seaice_melt(:,:) = 0._ESMF_KIND_R8
   call state_getimport(importState, 'mean_fresh_water_to_ocean_rate',  &
        isc, iec, jsc, jec, ice_ocean_boundary%seaice_melt,rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   !----
   ! mass of overlying ice
@@ -297,10 +243,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   ice_ocean_boundary%mi(:,:) = 0._ESMF_KIND_R8
   call state_getimport(importState, 'mass_of_overlying_ice',  &
        isc, iec, jsc, jec, ice_ocean_boundary%mi, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
 end subroutine mom_import
 
@@ -339,16 +282,10 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   rc = ESMF_SUCCESS
 
   call ESMF_ClockGet( clock, timeStep=timeStep, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    line=__LINE__, &
-    file=__FILE__)) &
-    return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   call ESMF_TimeIntervalGet( timeStep, s=dt_int, rc=rc )
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    line=__LINE__, &
-    file=__FILE__)) &
-    return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   ! Use Adcroft's rule of reciprocals; it does the right thing here.
   if (real(dt_int) > 0.0) then
@@ -378,10 +315,7 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
 
   call State_SetExport(exportState, 'ocean_mask', &
        isc, iec, jsc, jec, omask, ocean_grid, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   deallocate(omask)
 
@@ -390,20 +324,14 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   ! -------
   call State_SetExport(exportState, 'sea_surface_temperature', &
        isc, iec, jsc, jec, ocean_public%t_surf, ocean_grid, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   ! -------
   ! Sea surface salinity
   ! -------
   call State_SetExport(exportState, 's_surf', &
        isc, iec, jsc, jec, ocean_public%s_surf, ocean_grid, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   ! -------
   ! zonal and meridional currents
@@ -430,17 +358,11 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
 
   call State_SetExport(exportState, 'ocn_current_zonal', &
        isc, iec, jsc, jec, ocz_rot, ocean_grid, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   call State_SetExport(exportState, 'ocn_current_merid', &
        isc, iec, jsc, jec, ocm_rot, ocean_grid, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   deallocate(ocz, ocm, ocz_rot, ocm_rot)
 
@@ -451,10 +373,7 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
      call State_SetExport(exportState, 'So_bldepth', &
           isc, iec, jsc, jec, ocean_public%obld, ocean_grid, rc=rc)
-     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, &
-          file=__FILE__)) &
-          return  ! bail out
+     if (ChkErr(rc,__LINE__,u_FILE_u)) return
   endif
 
   ! -------
@@ -478,10 +397,7 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
 
   call State_SetExport(exportState, 'freezing_melting_potential', &
        isc, iec, jsc, jec, melt_potential, ocean_grid, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   deallocate(melt_potential)
 
@@ -492,10 +408,7 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
      call State_SetExport(exportState, 'sea_level', &
           isc, iec, jsc, jec, ocean_public%sea_lev, ocean_grid, rc=rc)
-     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, &
-          file=__FILE__)) &
-          return  ! bail out
+     if (ChkErr(rc,__LINE__,u_FILE_u)) return
   endif
 
   !----------------
@@ -598,17 +511,11 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
 
   call State_SetExport(exportState, 'sea_surface_slope_zonal', &
        isc, iec, jsc, jec, dhdx_rot, ocean_grid, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   call State_SetExport(exportState, 'sea_surface_slope_merid', &
        isc, iec, jsc, jec, dhdy_rot, ocean_grid, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   deallocate(ssh, dhdx, dhdy, dhdx_rot, dhdy_rot)
 
@@ -627,15 +534,9 @@ subroutine State_GetFldPtr_1d(State, fldname, fldptr, rc)
   character(len=*),parameter :: subname='(MOM_cap:State_GetFldPtr)'
 
   call ESMF_StateGet(State, itemName=trim(fldname), field=lfield, rc=lrc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    line=__LINE__, &
-    file=__FILE__)) &
-    return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
   call ESMF_FieldGet(lfield, farrayPtr=fldptr, rc=lrc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    line=__LINE__, &
-    file=__FILE__)) &
-    return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   if (present(rc)) rc = lrc
 
@@ -654,15 +555,9 @@ subroutine State_GetFldPtr_2d(State, fldname, fldptr, rc)
   character(len=*),parameter :: subname='(MOM_cap:State_GetFldPtr)'
 
   call ESMF_StateGet(State, itemName=trim(fldname), field=lfield, rc=lrc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    line=__LINE__, &
-    file=__FILE__)) &
-    return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
   call ESMF_FieldGet(lfield, farrayPtr=fldptr, rc=lrc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    line=__LINE__, &
-    file=__FILE__)) &
-    return  ! bail out
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   if (present(rc)) rc = lrc
 
@@ -702,10 +597,7 @@ subroutine State_GetImport(state, fldname, isc, iec, jsc, jec, output, do_sum, r
 
         ! get field pointer
         call state_getfldptr(state, trim(fldname), dataptr1d, rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-             line=__LINE__, &
-             file=__FILE__)) &
-             return  ! bail out
+        if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
         ! determine output array
         n = 0
@@ -723,10 +615,7 @@ subroutine State_GetImport(state, fldname, isc, iec, jsc, jec, output, do_sum, r
      else if (geomtype == ESMF_GEOMTYPE_GRID) then
 
         call state_getfldptr(state, trim(fldname), dataptr2d, rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-             line=__LINE__, &
-             file=__FILE__)) &
-             return  ! bail out
+        if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
         lbnd1 = lbound(dataPtr2d,1)
         lbnd2 = lbound(dataPtr2d,2)
@@ -786,16 +675,13 @@ subroutine State_SetExport(state, fldname, isc, iec, jsc, jec, input, ocean_grid
      if (geomtype == ESMF_GEOMTYPE_MESH) then
 
         call state_getfldptr(state, trim(fldname), dataptr1d, rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-             line=__LINE__, &
-             file=__FILE__)) &
-             return  ! bail out
+        if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
         n = 0
         do j = jsc, jec
            jg = j + ocean_grid%jsc - jsc
            do i = isc, iec
-              ig = i + ocean_grid%isc - isc
+             ig = i + ocean_grid%isc - isc
               n = n+1
               dataPtr1d(n) = input(i,j) * ocean_grid%mask2dT(ig,jg)
            enddo
@@ -804,10 +690,7 @@ subroutine State_SetExport(state, fldname, isc, iec, jsc, jec, input, ocean_grid
      else if (geomtype == ESMF_GEOMTYPE_GRID) then
 
         call state_getfldptr(state, trim(fldname), dataptr2d, rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-             line=__LINE__, &
-             file=__FILE__)) &
-             return  ! bail out
+        if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
         lbnd1 = lbound(dataPtr2d,1)
         lbnd2 = lbound(dataPtr2d,2)
@@ -827,5 +710,17 @@ subroutine State_SetExport(state, fldname, isc, iec, jsc, jec, input, ocean_grid
   endif
 
 end subroutine State_SetExport
+
+logical function chkerr(rc, line, file)
+  integer, intent(in) :: rc
+  integer, intent(in) :: line
+  character(len=*), intent(in) :: file
+  integer :: lrc
+  chkerr = .false.
+  lrc = rc
+  if (ESMF_LogFoundError(rcToCheck=lrc, msg=ESMF_LOGERR_PASSTHRU, line=line, file=file)) then
+     chkerr = .true.
+  endif
+end function chkerr
 
 end module MOM_cap_methods
