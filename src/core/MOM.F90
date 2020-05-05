@@ -27,6 +27,7 @@ use MOM_domains,              only : To_North, To_East, To_South, To_West
 use MOM_domains,              only : To_All, Omit_corners, CGRID_NE, SCALAR_PAIR
 use MOM_domains,              only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,              only : start_group_pass, complete_group_pass, Omit_Corners
+use MOM_domains,              only : root_PE,PE_here,Get_PElist,num_PEs
 use MOM_error_handler,        only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler,        only : MOM_set_verbosity, callTree_showQuery
 use MOM_error_handler,        only : callTree_enter, callTree_leave, callTree_waypoint
@@ -130,6 +131,7 @@ use MOM_offline_main,          only : offline_redistribute_residual, offline_dia
 use MOM_offline_main,          only : offline_fw_fluxes_into_ocean, offline_fw_fluxes_out_ocean
 use MOM_offline_main,          only : offline_advection_layer, offline_transport_end
 use MOM_ALE,                   only : ale_offline_tracer_final, ALE_main_offline
+use stochastic_physics,        only : init_stochastic_physics_ocn,run_stochastic_physics_ocn
 
 implicit none ; private
 
@@ -212,6 +214,8 @@ type, public :: MOM_control_struct ; private
   logical :: offline_tracer_mode = .false.
                     !< If true, step_offline() is called instead of step_MOM().
                     !! This is intended for running MOM6 in offline tracer mode
+  logical :: do_stochy = .false.
+                    !< If true, call stochastic physics pattern generator
 
   type(time_type), pointer :: Time   !< pointer to the ocean clock
   real    :: dt                      !< (baroclinic) dynamics time step [s]
@@ -703,6 +707,9 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
         enddo ; enddo
       endif
 
+      print*,'calling run_stochastic_physics_ocn',CS%do_stochy
+      if (CS%do_stochy) call run_stochastic_physics_ocn(forces%t_rp)
+
       call step_MOM_dynamics(forces, CS%p_surf_begin, CS%p_surf_end, dt, &
                              dt_therm_here, bbl_time_int, CS, &
                              Time_local, Waves=Waves)
@@ -843,7 +850,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
     if (CS%time_in_thermo_cycle > 0.0) then
       call enable_averaging(CS%time_in_thermo_cycle, Time_local, CS%diag)
       call post_surface_thermo_diags(CS%sfc_IDs, G, GV, US, CS%diag, CS%time_in_thermo_cycle, &
-                                    sfc_state, CS%tv, ssh, CS%ave_ssh_ibc)
+                                    sfc_state, CS%tv, ssh, fluxes%t_rp, CS%ave_ssh_ibc)
     endif
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_diagnostics)
@@ -1580,6 +1587,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   integer :: nkml, nkbl, verbosity, write_geom
   integer :: dynamics_stencil  ! The computational stencil for the calculations
                                ! in the dynamic core.
+  integer,allocatable :: pelist(:) ! list of pes for this instance of the ocean
+  integer             :: num_procs
+!  model
+  integer :: me                !  my pe
+  integer :: master            !  root pe
   real :: conv2watt, conv2salt
   character(len=48) :: flux_units, S_flux_units
 
@@ -2145,6 +2157,17 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call MOM_grid_init(G, param_file, US, HI, bathymetry_at_vel=bathy_at_vel)
   call copy_dyngrid_to_MOM_grid(dG, G, US)
   call destroy_dyn_horgrid(dG)
+
+  num_procs=num_PEs()
+  allocate(pelist(num_procs))
+  call Get_PElist(pelist)
+  me=PE_here()
+  master=root_PE()
+
+  !call init_stochastic_physics_ocn(CS%dt_therm,G,me,master,pelist,CS%do_stochy)
+  print*,'callling init_stochastic_physics_ocn',maxval(G%geoLatT)
+  call init_stochastic_physics_ocn(CS%dt_therm,G%geoLonT,G%geoLatT,G%ied-G%isd+1,G%jed-G%jsd+1,nz,CS%do_stochy)
+  print*,'back from init_stochastic_physics_ocn',CS%do_stochy
 
   ! Set a few remaining fields that are specific to the ocean grid type.
   call set_first_direction(G, first_direction)

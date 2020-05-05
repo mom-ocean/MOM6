@@ -3,7 +3,7 @@ module MOM_domains
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_coms, only : PE_here, root_PE, num_PEs, MOM_infra_init, MOM_infra_end
+use MOM_coms, only : PE_here, root_PE, num_PEs, MOM_infra_init, MOM_infra_end, Get_PElist
 use MOM_coms, only : broadcast, sum_across_PEs, min_across_PEs, max_across_PEs
 use MOM_cpu_clock, only : cpu_clock_begin, cpu_clock_end
 use MOM_error_handler, only : MOM_error, MOM_mesg, NOTE, WARNING, FATAL, is_root_pe
@@ -34,7 +34,7 @@ implicit none ; private
 
 public :: MOM_domains_init, MOM_infra_init, MOM_infra_end, get_domain_extent, get_domain_extent_dsamp2
 public :: MOM_define_domain, MOM_define_io_domain, clone_MOM_domain
-public :: pass_var, pass_vector, PE_here, root_PE, num_PEs
+public :: pass_var, pass_vector, PE_here, root_PE, num_PEs, Get_PElist
 public :: pass_var_start, pass_var_complete, fill_symmetric_edges, broadcast
 public :: pass_vector_start, pass_vector_complete
 public :: global_field_sum, sum_across_PEs, min_across_PEs, max_across_PEs
