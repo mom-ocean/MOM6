@@ -1186,9 +1186,11 @@ subroutine analytic_int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "int_specific_vol_dp called with an unassociated EOS_type EOS.")
 
-  if (EOS%EOS_quadrature) then
-    call MOM_error(FATAL, "EOS_quadrature is set!")
-  else ; select case (EOS%form_of_EOS)
+  ! We should never reach this point with quadrature. EOS_quadrature indicates that numerical
+  ! integration be used instead of analytic. This is a safety check.
+  if (EOS%EOS_quadrature) call MOM_error(FATAL, "EOS_quadrature is set!")
+
+  select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
       call int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, EOS%kg_m3_to_R*EOS%Rho_T0_S0, &
                                 EOS%kg_m3_to_R*EOS%dRho_dT, EOS%kg_m3_to_R*EOS%dRho_dS, dza, &
@@ -1199,8 +1201,8 @@ subroutine analytic_int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                   inty_dza, halo_size, bathyP, dP_tiny, useMassWghtInterp, &
                                   SV_scale=EOS%R_to_kg_m3, pres_scale=EOS%RL2_T2_to_Pa)
     case default
-      call MOM_error(FATAL, "Set EOS_QUADRATURE!")
-  end select ; endif
+      call MOM_error(FATAL, "No analytic integration option is available with this EOS!")
+  end select
 
 end subroutine analytic_int_specific_vol_dp
 
@@ -1255,9 +1257,11 @@ subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS,
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "int_density_dz called with an unassociated EOS_type EOS.")
 
-  if (EOS%EOS_quadrature) then
-    call MOM_error(FATAL, "EOS_quadrature is set!")
-  else ; select case (EOS%form_of_EOS)
+  ! We should never reach this point with quadrature. EOS_quadrature indicates that numerical
+  ! integration be used instead of analytic. This is a safety check.
+  if (EOS%EOS_quadrature) call MOM_error(FATAL, "EOS_quadrature is set!")
+
+  select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
       rho_scale = EOS%kg_m3_to_R
       if (rho_scale /= 1.0) then
@@ -1282,8 +1286,8 @@ subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS,
                                    dz_neglect, useMassWghtInterp)
       endif
     case default
-      call MOM_error(FATAL, "Use EOS_QUADRATURE!")
-  end select ; endif
+      call MOM_error(FATAL, "No analytic integration option is available with this EOS!")
+  end select
 
 end subroutine analytic_int_density_dz
 
