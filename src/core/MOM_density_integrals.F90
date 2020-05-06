@@ -33,68 +33,9 @@ public find_depth_of_pressure_in_cell
 contains
 
 !> Calls the appropriate subroutine to calculate analytical and nearly-analytical
-!! integrals in pressure across layers of geopotential anomalies, which are
+!! integrals in z across layers of pressure anomalies, which are
 !! required for calculating the finite-volume form pressure accelerations in a
-!! non-Boussinesq model.  There are essentially no free assumptions, apart from the
-!! use of Boole's rule to do the horizontal integrals, and from a truncation in the
-!! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
-subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, US, &
-                               dza, intp_dza, intx_dza, inty_dza, halo_size, &
-                               bathyP, dP_tiny, useMassWghtInterp)
-  type(hor_index_type), intent(in)  :: HI  !< The horizontal index structure
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: T   !< Potential temperature referenced to the surface [degC]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: S   !< Salinity [ppt]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: p_t !< Pressure at the top of the layer [R L2 T-2 ~> Pa] or [Pa]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: p_b !< Pressure at the bottom of the layer [R L2 T-2 ~> Pa] or [Pa]
-  real,                 intent(in)  :: alpha_ref !< A mean specific volume that is subtracted out
-                            !! to reduce the magnitude of each of the integrals [R-1 ~> m3 kg-1]
-                            !! The calculation is mathematically identical with different values of
-                            !! alpha_ref, but this reduces the effects of roundoff.
-  type(EOS_type),       pointer     :: EOS !< Equation of state structure
-  type(unit_scale_type), intent(in) :: US  !< A dimensional unit scaling type
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(inout) :: dza !< The change in the geopotential anomaly across
-                            !! the layer [L2 T-2 ~> m2 s-2] or [m2 s-2]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(inout) :: intp_dza !< The integral in pressure through the layer of the
-                            !! geopotential anomaly relative to the anomaly at the bottom of the
-                            !! layer [R L4 T-4 ~> Pa m2 s-2] or [Pa m2 s-2]
-  real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
-              optional, intent(inout) :: intx_dza !< The integral in x of the difference between the
-                            !! geopotential anomaly at the top and bottom of the layer divided by
-                            !! the x grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2]
-  real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
-              optional, intent(inout) :: inty_dza !< The integral in y of the difference between the
-                            !! geopotential anomaly at the top and bottom of the layer divided by
-                            !! the y grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2]
-  integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate dza.
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(in)  :: bathyP  !< The pressure at the bathymetry [R L2 T-2 ~> Pa] or [Pa]
-  real,       optional, intent(in)  :: dP_tiny !< A minuscule pressure change with
-                            !! the same units as p_t [R L2 T-2 ~> Pa] or [Pa]
-  logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
-                            !! to interpolate T/S for top and bottom integrals.
-
-  if (EOS_quadrature(EOS)) then
-    call int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, &
-                                     dza, intp_dza, intx_dza, inty_dza, halo_size, &
-                                     bathyP, dP_tiny, useMassWghtInterp)
-  else
-    call analytic_int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
-                                      dza, intp_dza, intx_dza, inty_dza, halo_size, &
-                                      bathyP, dP_tiny, useMassWghtInterp)
-  endif
-
-end subroutine int_specific_vol_dp
-
-
-!> This subroutine calculates analytical and nearly-analytical integrals of
-!! pressure anomalies across layers, which are required for calculating the
-!! finite-volume form pressure accelerations in a Boussinesq model.
+!! Boussinesq model.
 subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, US, dpa, &
                           intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, useMassWghtInterp)
   type(hor_index_type), intent(in)  :: HI  !< Ocean horizontal index structures for the arrays
@@ -148,9 +89,8 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, US, dpa,
 end subroutine int_density_dz
 
 
-!>   This subroutine calculates (by numerical quadrature) integrals of
-!! pressure anomalies across layers, which are required for calculating the
-!! finite-volume form pressure accelerations in a Boussinesq model.
+!> Calculates (by numerical quadrature) integrals of pressure anomalies across layers, which
+!! are required for calculating the finite-volume form pressure accelerations in a Boussinesq model.
 subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                       EOS, US, dpa, intz_dpa, intx_dpa, inty_dpa, &
                                       bathyT, dz_neglect, useMassWghtInterp)
@@ -659,132 +599,6 @@ subroutine int_density_dz_generic_plm(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
 end subroutine int_density_dz_generic_plm
 
 
-!> Find the depth at which the reconstructed pressure matches P_tgt
-subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_tgt, &
-                       rho_ref, G_e, EOS, US, P_b, z_out, z_tol)
-  real,                  intent(in)  :: T_t !< Potential temperature at the cell top [degC]
-  real,                  intent(in)  :: T_b !< Potential temperature at the cell bottom [degC]
-  real,                  intent(in)  :: S_t !< Salinity at the cell top [ppt]
-  real,                  intent(in)  :: S_b !< Salinity at the cell bottom [ppt]
-  real,                  intent(in)  :: z_t !< Absolute height of top of cell [Z ~> m]   (Boussinesq ????)
-  real,                  intent(in)  :: z_b !< Absolute height of bottom of cell [Z ~> m]
-  real,                  intent(in)  :: P_t !< Anomalous pressure of top of cell, relative to g*rho_ref*z_t [R L2 T-2 ~> Pa]
-  real,                  intent(in)  :: P_tgt !< Target pressure at height z_out, relative to g*rho_ref*z_out [R L2 T-2 ~> Pa]
-  real,                  intent(in)  :: rho_ref !< Reference density with which calculation are anomalous to [R ~> kg m-3]
-  real,                  intent(in)  :: G_e !< Gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
-  type(EOS_type),        pointer     :: EOS !< Equation of state structure
-  type(unit_scale_type), intent(in)  :: US !< A dimensional unit scaling type
-  real,                  intent(out) :: P_b !< Pressure at the bottom of the cell [R L2 T-2 ~> Pa]
-  real,                  intent(out) :: z_out !< Absolute depth at which anomalous pressure = p_tgt [Z ~> m]
-  real, optional,        intent(in)  :: z_tol !< The tolerance in finding z_out [Z ~> m]
-
-  ! Local variables
-  real :: dp    ! Pressure thickness of the layer [R L2 T-2 ~> Pa]
-  real :: F_guess, F_l, F_r  ! Fractional positions [nondim]
-  real :: GxRho ! The product of the gravitational acceleration and reference density [R L2 Z-1 T-2 ~> Pa m-1]
-  real :: Pa, Pa_left, Pa_right, Pa_tol ! Pressure anomalies, P = integral of g*(rho-rho_ref) dz [R L2 T-2 ~> Pa]
-  character(len=240) :: msg
-
-  GxRho = G_e * rho_ref
-
-  ! Anomalous pressure difference across whole cell
-  dp = frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, 1.0, EOS)
-
-  P_b = P_t + dp ! Anomalous pressure at bottom of cell
-
-  if (P_tgt <= P_t ) then
-    z_out = z_t
-    return
-  endif
-
-  if (P_tgt >= P_b) then
-    z_out = z_b
-    return
-  endif
-
-  F_l = 0.
-  Pa_left = P_t - P_tgt ! Pa_left < 0
-  F_r = 1.
-  Pa_right = P_b - P_tgt ! Pa_right > 0
-  Pa_tol = GxRho * 1.0e-5*US%m_to_Z
-  if (present(z_tol)) Pa_tol = GxRho * z_tol
-
-  F_guess = F_l - Pa_left / (Pa_right - Pa_left) * (F_r - F_l)
-  Pa = Pa_right - Pa_left ! To get into iterative loop
-  do while ( abs(Pa) > Pa_tol )
-
-    z_out = z_t + ( z_b - z_t ) * F_guess
-    Pa = frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, F_guess, EOS) - ( P_tgt - P_t )
-
-    if (Pa<Pa_left) then
-      write(msg,*) Pa_left,Pa,Pa_right,P_t-P_tgt,P_b-P_tgt
-      call MOM_error(FATAL, 'find_depth_of_pressure_in_cell out of bounds negative: /n'//msg)
-    elseif (Pa<0.) then
-      Pa_left = Pa
-      F_l = F_guess
-    elseif (Pa>Pa_right) then
-      write(msg,*) Pa_left,Pa,Pa_right,P_t-P_tgt,P_b-P_tgt
-      call MOM_error(FATAL, 'find_depth_of_pressure_in_cell out of bounds positive: /n'//msg)
-    elseif (Pa>0.) then
-      Pa_right = Pa
-      F_r = F_guess
-    else ! Pa == 0
-      return
-    endif
-    F_guess = F_l - Pa_left / (Pa_right - Pa_left) * (F_r - F_l)
-
-  enddo
-
-end subroutine find_depth_of_pressure_in_cell
-
-
-!> Returns change in anomalous pressure change from top to non-dimensional
-!! position pos between z_t and z_b
-real function frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, pos, EOS)
-  real,           intent(in)  :: T_t !< Potential temperature at the cell top [degC]
-  real,           intent(in)  :: T_b !< Potential temperature at the cell bottom [degC]
-  real,           intent(in)  :: S_t !< Salinity at the cell top [ppt]
-  real,           intent(in)  :: S_b !< Salinity at the cell bottom [ppt]
-  real,           intent(in)  :: z_t !< The geometric height at the top of the layer [Z ~> m]
-  real,           intent(in)  :: z_b !< The geometric height at the bottom of the layer [Z ~> m]
-  real,           intent(in)  :: rho_ref !< A mean density [R ~> kg m-3], that is subtracted out to
-                                     !! reduce the magnitude of each of the integrals.
-  real,           intent(in)  :: G_e !< The Earth's gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
-  real,           intent(in)  :: pos !< The fractional vertical position, 0 to 1 [nondim]
-  type(EOS_type), pointer     :: EOS !< Equation of state structure
-  real                        :: fract_dp_at_pos !< The change in pressure from the layer top to
-                                     !! fractional position pos [R L2 T-2 ~> Pa]
-  ! Local variables
-  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
-  real :: dz                 ! Distance from the layer top [Z ~> m]
-  real :: top_weight, bottom_weight ! Fractional weights at quadrature points [nondim]
-  real :: rho_ave            ! Average density [R ~> kg m-3]
-  real, dimension(5) :: T5   ! Temperatures at quadrature points [degC]
-  real, dimension(5) :: S5   ! Salinities at quadrature points [ppt]
-  real, dimension(5) :: p5   ! Pressures at quadrature points [R L2 T-2 ~> Pa]
-  real, dimension(5) :: rho5 ! Densities at quadrature points [R ~> kg m-3]
-  integer :: n
-
-  do n=1,5
-    ! Evaluate density at five quadrature points
-    bottom_weight = 0.25*real(n-1) * pos
-    top_weight = 1.0 - bottom_weight
-    ! Salinity and temperature points are linearly interpolated
-    S5(n) = top_weight * S_t + bottom_weight * S_b
-    T5(n) = top_weight * T_t + bottom_weight * T_b
-    p5(n) = ( top_weight * z_t + bottom_weight * z_b ) * ( G_e * rho_ref )
-  enddo
-  call calculate_density(T5, S5, p5, rho5, EOS)
-  rho5(:) = rho5(:) !- rho_ref ! Work with anomalies relative to rho_ref
-
-  ! Use Boole's rule to estimate the average density
-  rho_ave = C1_90*(7.0*(rho5(1)+rho5(5)) + 32.0*(rho5(2)+rho5(4)) + 12.0*rho5(3))
-
-  dz = ( z_t - z_b ) * pos
-  frac_dp_at_pos = G_e * dz * rho_ave
-end function frac_dp_at_pos
-
-
 !> Compute pressure gradient force integrals for the case where T and S
 !! are parabolic profiles
 subroutine int_density_dz_generic_ppm(T, T_t, T_b, S, S_t, S_b, &
@@ -1225,6 +1039,66 @@ subroutine evaluate_shape_quadratic ( xi, eta, phi, dphidxi, dphideta )
   !dphideta(9) = - 2 * ( 1 - xi ) * ( 1 + xi ) * eta
 
 end subroutine evaluate_shape_quadratic
+
+
+!> Calls the appropriate subroutine to calculate analytical and nearly-analytical
+!! integrals in pressure across layers of geopotential anomalies, which are
+!! required for calculating the finite-volume form pressure accelerations in a
+!! non-Boussinesq model.  There are essentially no free assumptions, apart from the
+!! use of Boole's rule to do the horizontal integrals, and from a truncation in the
+!! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
+subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, US, &
+                               dza, intp_dza, intx_dza, inty_dza, halo_size, &
+                               bathyP, dP_tiny, useMassWghtInterp)
+  type(hor_index_type), intent(in)  :: HI  !< The horizontal index structure
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+                        intent(in)  :: T   !< Potential temperature referenced to the surface [degC]
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+                        intent(in)  :: S   !< Salinity [ppt]
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+                        intent(in)  :: p_t !< Pressure at the top of the layer [R L2 T-2 ~> Pa] or [Pa]
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+                        intent(in)  :: p_b !< Pressure at the bottom of the layer [R L2 T-2 ~> Pa] or [Pa]
+  real,                 intent(in)  :: alpha_ref !< A mean specific volume that is subtracted out
+                            !! to reduce the magnitude of each of the integrals [R-1 ~> m3 kg-1]
+                            !! The calculation is mathematically identical with different values of
+                            !! alpha_ref, but this reduces the effects of roundoff.
+  type(EOS_type),       pointer     :: EOS !< Equation of state structure
+  type(unit_scale_type), intent(in) :: US  !< A dimensional unit scaling type
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+                        intent(inout) :: dza !< The change in the geopotential anomaly across
+                            !! the layer [L2 T-2 ~> m2 s-2] or [m2 s-2]
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+              optional, intent(inout) :: intp_dza !< The integral in pressure through the layer of the
+                            !! geopotential anomaly relative to the anomaly at the bottom of the
+                            !! layer [R L4 T-4 ~> Pa m2 s-2] or [Pa m2 s-2]
+  real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
+              optional, intent(inout) :: intx_dza !< The integral in x of the difference between the
+                            !! geopotential anomaly at the top and bottom of the layer divided by
+                            !! the x grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2]
+  real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
+              optional, intent(inout) :: inty_dza !< The integral in y of the difference between the
+                            !! geopotential anomaly at the top and bottom of the layer divided by
+                            !! the y grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2]
+  integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate dza.
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+              optional, intent(in)  :: bathyP  !< The pressure at the bathymetry [R L2 T-2 ~> Pa] or [Pa]
+  real,       optional, intent(in)  :: dP_tiny !< A minuscule pressure change with
+                            !! the same units as p_t [R L2 T-2 ~> Pa] or [Pa]
+  logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
+                            !! to interpolate T/S for top and bottom integrals.
+
+  if (EOS_quadrature(EOS)) then
+    call int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, &
+                                     dza, intp_dza, intx_dza, inty_dza, halo_size, &
+                                     bathyP, dP_tiny, useMassWghtInterp)
+  else
+    call analytic_int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
+                                      dza, intp_dza, intx_dza, inty_dza, halo_size, &
+                                      bathyP, dP_tiny, useMassWghtInterp)
+  endif
+
+end subroutine int_specific_vol_dp
 
 
 !>   This subroutine calculates integrals of specific volume anomalies in
@@ -1691,6 +1565,132 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
   enddo ; enddo ; endif
 
 end subroutine int_spec_vol_dp_generic_plm
+
+
+!> Find the depth at which the reconstructed pressure matches P_tgt
+subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_tgt, &
+                       rho_ref, G_e, EOS, US, P_b, z_out, z_tol)
+  real,                  intent(in)  :: T_t !< Potential temperature at the cell top [degC]
+  real,                  intent(in)  :: T_b !< Potential temperature at the cell bottom [degC]
+  real,                  intent(in)  :: S_t !< Salinity at the cell top [ppt]
+  real,                  intent(in)  :: S_b !< Salinity at the cell bottom [ppt]
+  real,                  intent(in)  :: z_t !< Absolute height of top of cell [Z ~> m]   (Boussinesq ????)
+  real,                  intent(in)  :: z_b !< Absolute height of bottom of cell [Z ~> m]
+  real,                  intent(in)  :: P_t !< Anomalous pressure of top of cell, relative to g*rho_ref*z_t [R L2 T-2 ~> Pa]
+  real,                  intent(in)  :: P_tgt !< Target pressure at height z_out, relative to g*rho_ref*z_out [R L2 T-2 ~> Pa]
+  real,                  intent(in)  :: rho_ref !< Reference density with which calculation are anomalous to [R ~> kg m-3]
+  real,                  intent(in)  :: G_e !< Gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
+  type(EOS_type),        pointer     :: EOS !< Equation of state structure
+  type(unit_scale_type), intent(in)  :: US !< A dimensional unit scaling type
+  real,                  intent(out) :: P_b !< Pressure at the bottom of the cell [R L2 T-2 ~> Pa]
+  real,                  intent(out) :: z_out !< Absolute depth at which anomalous pressure = p_tgt [Z ~> m]
+  real, optional,        intent(in)  :: z_tol !< The tolerance in finding z_out [Z ~> m]
+
+  ! Local variables
+  real :: dp    ! Pressure thickness of the layer [R L2 T-2 ~> Pa]
+  real :: F_guess, F_l, F_r  ! Fractional positions [nondim]
+  real :: GxRho ! The product of the gravitational acceleration and reference density [R L2 Z-1 T-2 ~> Pa m-1]
+  real :: Pa, Pa_left, Pa_right, Pa_tol ! Pressure anomalies, P = integral of g*(rho-rho_ref) dz [R L2 T-2 ~> Pa]
+  character(len=240) :: msg
+
+  GxRho = G_e * rho_ref
+
+  ! Anomalous pressure difference across whole cell
+  dp = frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, 1.0, EOS)
+
+  P_b = P_t + dp ! Anomalous pressure at bottom of cell
+
+  if (P_tgt <= P_t ) then
+    z_out = z_t
+    return
+  endif
+
+  if (P_tgt >= P_b) then
+    z_out = z_b
+    return
+  endif
+
+  F_l = 0.
+  Pa_left = P_t - P_tgt ! Pa_left < 0
+  F_r = 1.
+  Pa_right = P_b - P_tgt ! Pa_right > 0
+  Pa_tol = GxRho * 1.0e-5*US%m_to_Z
+  if (present(z_tol)) Pa_tol = GxRho * z_tol
+
+  F_guess = F_l - Pa_left / (Pa_right - Pa_left) * (F_r - F_l)
+  Pa = Pa_right - Pa_left ! To get into iterative loop
+  do while ( abs(Pa) > Pa_tol )
+
+    z_out = z_t + ( z_b - z_t ) * F_guess
+    Pa = frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, F_guess, EOS) - ( P_tgt - P_t )
+
+    if (Pa<Pa_left) then
+      write(msg,*) Pa_left,Pa,Pa_right,P_t-P_tgt,P_b-P_tgt
+      call MOM_error(FATAL, 'find_depth_of_pressure_in_cell out of bounds negative: /n'//msg)
+    elseif (Pa<0.) then
+      Pa_left = Pa
+      F_l = F_guess
+    elseif (Pa>Pa_right) then
+      write(msg,*) Pa_left,Pa,Pa_right,P_t-P_tgt,P_b-P_tgt
+      call MOM_error(FATAL, 'find_depth_of_pressure_in_cell out of bounds positive: /n'//msg)
+    elseif (Pa>0.) then
+      Pa_right = Pa
+      F_r = F_guess
+    else ! Pa == 0
+      return
+    endif
+    F_guess = F_l - Pa_left / (Pa_right - Pa_left) * (F_r - F_l)
+
+  enddo
+
+end subroutine find_depth_of_pressure_in_cell
+
+
+!> Returns change in anomalous pressure change from top to non-dimensional
+!! position pos between z_t and z_b
+real function frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, pos, EOS)
+  real,           intent(in)  :: T_t !< Potential temperature at the cell top [degC]
+  real,           intent(in)  :: T_b !< Potential temperature at the cell bottom [degC]
+  real,           intent(in)  :: S_t !< Salinity at the cell top [ppt]
+  real,           intent(in)  :: S_b !< Salinity at the cell bottom [ppt]
+  real,           intent(in)  :: z_t !< The geometric height at the top of the layer [Z ~> m]
+  real,           intent(in)  :: z_b !< The geometric height at the bottom of the layer [Z ~> m]
+  real,           intent(in)  :: rho_ref !< A mean density [R ~> kg m-3], that is subtracted out to
+                                     !! reduce the magnitude of each of the integrals.
+  real,           intent(in)  :: G_e !< The Earth's gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
+  real,           intent(in)  :: pos !< The fractional vertical position, 0 to 1 [nondim]
+  type(EOS_type), pointer     :: EOS !< Equation of state structure
+  real                        :: fract_dp_at_pos !< The change in pressure from the layer top to
+                                     !! fractional position pos [R L2 T-2 ~> Pa]
+  ! Local variables
+  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
+  real :: dz                 ! Distance from the layer top [Z ~> m]
+  real :: top_weight, bottom_weight ! Fractional weights at quadrature points [nondim]
+  real :: rho_ave            ! Average density [R ~> kg m-3]
+  real, dimension(5) :: T5   ! Temperatures at quadrature points [degC]
+  real, dimension(5) :: S5   ! Salinities at quadrature points [ppt]
+  real, dimension(5) :: p5   ! Pressures at quadrature points [R L2 T-2 ~> Pa]
+  real, dimension(5) :: rho5 ! Densities at quadrature points [R ~> kg m-3]
+  integer :: n
+
+  do n=1,5
+    ! Evaluate density at five quadrature points
+    bottom_weight = 0.25*real(n-1) * pos
+    top_weight = 1.0 - bottom_weight
+    ! Salinity and temperature points are linearly interpolated
+    S5(n) = top_weight * S_t + bottom_weight * S_b
+    T5(n) = top_weight * T_t + bottom_weight * T_b
+    p5(n) = ( top_weight * z_t + bottom_weight * z_b ) * ( G_e * rho_ref )
+  enddo
+  call calculate_density(T5, S5, p5, rho5, EOS)
+  rho5(:) = rho5(:) !- rho_ref ! Work with anomalies relative to rho_ref
+
+  ! Use Boole's rule to estimate the average density
+  rho_ave = C1_90*(7.0*(rho5(1)+rho5(5)) + 32.0*(rho5(2)+rho5(4)) + 12.0*rho5(3))
+
+  dz = ( z_t - z_b ) * pos
+  frac_dp_at_pos = G_e * dz * rho_ave
+end function frac_dp_at_pos
 
 end module MOM_density_integrals
 
