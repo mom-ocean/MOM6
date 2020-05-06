@@ -349,13 +349,13 @@ end subroutine build_and_interpolate_grid
 !!
 !! It is assumed that the number of cells defining 'grid' and 'ppoly' are the
 !! same.
-function get_polynomial_coordinate( N, h, x_g, ppoly_E, ppoly_coefs, &
+function get_polynomial_coordinate( N, h, x_g, edge_values, ppoly_coefs, &
                                     target_value, degree, answers_2018 ) result ( x_tgt )
   ! Arguments
   integer,              intent(in) :: N            !< Number of grid cells
   real, dimension(N),   intent(in) :: h            !< Grid cell thicknesses [H]
   real, dimension(N+1), intent(in) :: x_g          !< Grid interface locations [H]
-  real, dimension(N,2), intent(in) :: ppoly_E      !< Edge values of interpolating polynomials [A]
+  real, dimension(N,2), intent(in) :: edge_values  !< Edge values of interpolating polynomials [A]
   real, dimension(N,DEGREE_MAX+1), intent(in) :: ppoly_coefs  !< Coefficients of interpolating polynomials [A]
   real,                 intent(in) :: target_value !< Target value to find position for [A]
   integer,              intent(in) :: degree       !< Degree of the interpolating polynomials
@@ -383,7 +383,7 @@ function get_polynomial_coordinate( N, h, x_g, ppoly_E, ppoly_coefs, &
   ! If the target value is outside the range of all values, we
   ! force the target coordinate to be equal to the lowest or
   ! largest value, depending on which bound is overtaken
-  if ( target_value <= ppoly_E(1,1) ) then
+  if ( target_value <= edge_values(1,1) ) then
     x_tgt = x_g(1)
     return  ! return because there is no need to look further
   endif
@@ -391,7 +391,7 @@ function get_polynomial_coordinate( N, h, x_g, ppoly_E, ppoly_coefs, &
   ! Since discontinuous edge values are allowed, we check whether the target
   ! value lies between two discontinuous edge values at interior interfaces
   do k = 2,N
-    if ( ( target_value >= ppoly_E(k-1,2) ) .AND. ( target_value <= ppoly_E(k,1) ) ) then
+    if ( ( target_value >= edge_values(k-1,2) ) .AND. ( target_value <= edge_values(k,1) ) ) then
       x_tgt = x_g(k)
       return   ! return because there is no need to look further
     endif
@@ -400,7 +400,7 @@ function get_polynomial_coordinate( N, h, x_g, ppoly_E, ppoly_coefs, &
   ! If the target value is outside the range of all values, we
   ! force the target coordinate to be equal to the lowest or
   ! largest value, depending on which bound is overtaken
-  if ( target_value >= ppoly_E(N,2) ) then
+  if ( target_value >= edge_values(N,2) ) then
     x_tgt = x_g(N+1)
     return  ! return because there is no need to look further
   endif
@@ -411,7 +411,7 @@ function get_polynomial_coordinate( N, h, x_g, ppoly_E, ppoly_coefs, &
   ! contains the target value. The variable k_found holds the index value
   ! of the cell where the taregt value lies.
   do k = 1,N
-    if ( ( target_value > ppoly_E(k,1) ) .AND. ( target_value < ppoly_E(k,2) ) ) then
+    if ( ( target_value > edge_values(k,1) ) .AND. ( target_value < edge_values(k,2) ) ) then
       k_found = k
       exit
     endif
@@ -425,7 +425,7 @@ function get_polynomial_coordinate( N, h, x_g, ppoly_E, ppoly_coefs, &
   if ( k_found == -1 ) then
     write(mesg,*) 'Could not find target coordinate', target_value, 'in get_polynomial_coordinate. This is '//&
                   'caused by an inconsistent interpolant (perhaps not monotonically increasing):', &
-                  target_value, ppoly_E(1,1), ppoly_E(N,2)
+                  target_value, edge_values(1,1), edge_values(N,2)
     call MOM_error( FATAL, mesg )
   endif
 

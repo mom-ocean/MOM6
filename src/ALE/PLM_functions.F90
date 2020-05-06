@@ -15,11 +15,11 @@ contains
 !!
 !! It is assumed that the size of the array 'u' is equal to the number of cells
 !! defining 'grid' and 'ppoly'. No consistency check is performed here.
-subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coef, h_neglect )
+subroutine PLM_reconstruction( N, h, u, edge_values, ppoly_coef, h_neglect )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N)
   real, dimension(:),   intent(in)    :: u !< cell averages (size N)
-  real, dimension(:,:), intent(inout) :: ppoly_E !< edge values of piecewise polynomials,
+  real, dimension(:,:), intent(inout) :: edge_values !< edge values of piecewise polynomials,
                                            !! with the same units as u.
   real, dimension(:,:), intent(inout) :: ppoly_coef !< coefficients of piecewise polynomials, mainly
                                            !! with the same units as u.
@@ -106,22 +106,22 @@ subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coef, h_neglect )
 !   endif
 
     slp(k) = slope
-    ppoly_E(k,1) = u_c - 0.5 * slope
-    ppoly_E(k,2) = u_c + 0.5 * slope
+    edge_values(k,1) = u_c - 0.5 * slope
+    edge_values(k,2) = u_c + 0.5 * slope
 
   enddo ! end loop on interior cells
 
   ! Boundary cells use PCM. Extrapolation is handled in a later routine.
   slp(1) = 0.
-  ppoly_E(1,2) = u(1)
+  edge_values(1,2) = u(1)
   slp(N) = 0.
-  ppoly_E(N,1) = u(N)
+  edge_values(N,1) = u(N)
 
   ! This loop adjusts the slope so that edge values are monotonic.
   do K = 2, N-1
     u_l = u(k-1) ; u_c = u(k) ; u_r = u(k+1)
-    e_r = ppoly_E(k-1,2) ! Right edge from cell k-1
-    e_l = ppoly_E(k+1,1) ! Left edge from cell k
+    e_r = edge_values(k-1,2) ! Right edge from cell k-1
+    e_l = edge_values(k+1,1) ! Left edge from cell k
     mslp(k) = abs(slp(k))
     u_min = min(e_r, u_c)
     u_max = max(e_r, u_c)
@@ -149,8 +149,8 @@ subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coef, h_neglect )
 ! enddo ! end loop on interior cells
 
   ! Store and return edge values and polynomial coefficients.
-  ppoly_E(1,1) = u(1)
-  ppoly_E(1,2) = u(1)
+  edge_values(1,1) = u(1)
+  edge_values(1,2) = u(1)
   ppoly_coef(1,1) = u(1)
   ppoly_coef(1,2) = 0.
   do k = 2, N-1
@@ -172,8 +172,8 @@ subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coef, h_neglect )
       stop 'Right edge out of bounds'
     endif
 
-    ppoly_E(k,1) = u_l
-    ppoly_E(k,2) = u_r
+    edge_values(k,1) = u_l
+    edge_values(k,2) = u_r
     ppoly_coef(k,1) = u_l
     ppoly_coef(k,2) = ( u_r - u_l )
     ! Check to see if this evaluation of the polynomial at x=1 would be
@@ -184,8 +184,8 @@ subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coef, h_neglect )
       ppoly_coef(k,2) = ppoly_coef(k,2) * almost_one
     endif
   enddo
-  ppoly_E(N,1) = u(N)
-  ppoly_E(N,2) = u(N)
+  edge_values(N,1) = u(N)
+  edge_values(N,2) = u(N)
   ppoly_coef(N,1) = u(N)
   ppoly_coef(N,2) = 0.
 
@@ -202,11 +202,11 @@ end subroutine PLM_reconstruction
 !! It is assumed that the size of the array 'u' is equal to the number of cells
 !! defining 'grid' and 'ppoly'. No consistency check is performed here.
 
-subroutine PLM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef, h_neglect )
+subroutine PLM_boundary_extrapolation( N, h, u, edge_values, ppoly_coef, h_neglect )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N)
   real, dimension(:),   intent(in)    :: u !< cell averages (size N)
-  real, dimension(:,:), intent(inout) :: ppoly_E !< edge values of piecewise polynomials,
+  real, dimension(:,:), intent(inout) :: edge_values !< edge values of piecewise polynomials,
                                            !! with the same units as u.
   real, dimension(:,:), intent(inout) :: ppoly_coef !< coefficients of piecewise polynomials, mainly
                                            !! with the same units as u.
@@ -232,17 +232,17 @@ subroutine PLM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef, h_neglect )
   u1 = u(2)
 
   ! The h2 scheme is used to compute the right edge value
-  ppoly_E(1,2) = (u0*h1 + u1*h0) / (h0 + h1)
+  edge_values(1,2) = (u0*h1 + u1*h0) / (h0 + h1)
 
   ! The standard PLM slope is computed as a first estimate for the
   ! reconstruction within the cell
-  slope = 2.0 * ( ppoly_E(1,2) - u0 )
+  slope = 2.0 * ( edge_values(1,2) - u0 )
 
-  ppoly_E(1,1) = u0 - 0.5 * slope
-  ppoly_E(1,2) = u0 + 0.5 * slope
+  edge_values(1,1) = u0 - 0.5 * slope
+  edge_values(1,2) = u0 + 0.5 * slope
 
-  ppoly_coef(1,1) = ppoly_E(1,1)
-  ppoly_coef(1,2) = ppoly_E(1,2) - ppoly_E(1,1)
+  ppoly_coef(1,1) = edge_values(1,1)
+  ppoly_coef(1,2) = edge_values(1,2) - edge_values(1,1)
 
   ! ------------------------------------------
   ! Right edge value in the left boundary cell
@@ -254,17 +254,17 @@ subroutine PLM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef, h_neglect )
   u1 = u(N)
 
   ! The h2 scheme is used to compute the right edge value
-  ppoly_E(N,1) = (u0*h1 + u1*h0) / (h0 + h1)
+  edge_values(N,1) = (u0*h1 + u1*h0) / (h0 + h1)
 
   ! The standard PLM slope is computed as a first estimate for the
   ! reconstruction within the cell
-  slope = 2.0 * ( u1 - ppoly_E(N,1) )
+  slope = 2.0 * ( u1 - edge_values(N,1) )
 
-  ppoly_E(N,1) = u1 - 0.5 * slope
-  ppoly_E(N,2) = u1 + 0.5 * slope
+  edge_values(N,1) = u1 - 0.5 * slope
+  edge_values(N,2) = u1 + 0.5 * slope
 
-  ppoly_coef(N,1) = ppoly_E(N,1)
-  ppoly_coef(N,2) = ppoly_E(N,2) - ppoly_E(N,1)
+  ppoly_coef(N,1) = edge_values(N,1)
+  ppoly_coef(N,2) = edge_values(N,2) - edge_values(N,1)
 
 end subroutine PLM_boundary_extrapolation
 
