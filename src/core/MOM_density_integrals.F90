@@ -3,46 +3,19 @@ module MOM_density_integrals
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_EOS, only : EOS_type
-use MOM_EOS, only : EOS_quadrature
-use MOM_EOS, only : analytic_int_density_dz
-use MOM_EOS, only : analytic_int_specific_vol_dp
-use MOM_EOS, only : calculate_density
-use MOM_EOS, only : calculate_spec_vol
-use MOM_EOS, only : calculate_specific_vol_derivs
-use MOM_EOS, only : calculate_density_second_derivs
-
-use MOM_EOS_linear, only : calculate_density_linear, calculate_spec_vol_linear
-use MOM_EOS_linear, only : calculate_density_derivs_linear
-use MOM_EOS_linear, only : calculate_specvol_derivs_linear, int_density_dz_linear
-use MOM_EOS_linear, only : calculate_density_second_derivs_linear
-use MOM_EOS_linear, only : calculate_compress_linear, int_spec_vol_dp_linear
-use MOM_EOS_Wright, only : calculate_density_wright, calculate_spec_vol_wright
-use MOM_EOS_Wright, only : calculate_density_derivs_wright
-use MOM_EOS_Wright, only : calculate_specvol_derivs_wright, int_density_dz_wright
-use MOM_EOS_Wright, only : calculate_compress_wright, int_spec_vol_dp_wright
-use MOM_EOS_Wright, only : calculate_density_second_derivs_wright
-use MOM_EOS_UNESCO, only : calculate_density_unesco, calculate_spec_vol_unesco
-use MOM_EOS_UNESCO, only : calculate_density_derivs_unesco, calculate_density_unesco
-use MOM_EOS_UNESCO, only : calculate_compress_unesco
-use MOM_EOS_NEMO,   only : calculate_density_nemo
-use MOM_EOS_NEMO,   only : calculate_density_derivs_nemo, calculate_density_nemo
-use MOM_EOS_NEMO,   only : calculate_compress_nemo
-use MOM_EOS_TEOS10, only : calculate_density_teos10, calculate_spec_vol_teos10
-use MOM_EOS_TEOS10, only : calculate_density_derivs_teos10
-use MOM_EOS_TEOS10, only : calculate_specvol_derivs_teos10
-use MOM_EOS_TEOS10, only : calculate_density_second_derivs_teos10
-use MOM_EOS_TEOS10, only : calculate_compress_teos10
-use MOM_EOS_TEOS10, only : gsw_sp_from_sr, gsw_pt_from_ct
-use MOM_TFreeze,    only : calculate_TFreeze_linear, calculate_TFreeze_Millero
-use MOM_TFreeze,    only : calculate_TFreeze_teos10
-use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
-use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_hor_index,   only : hor_index_type
+use MOM_EOS,              only : EOS_type
+use MOM_EOS,              only : EOS_quadrature
+use MOM_EOS,              only : analytic_int_density_dz
+use MOM_EOS,              only : analytic_int_specific_vol_dp
+use MOM_EOS,              only : calculate_density
+use MOM_EOS,              only : calculate_spec_vol
+use MOM_EOS,              only : calculate_specific_vol_derivs
+use MOM_EOS,              only : calculate_density_second_derivs
+use MOM_error_handler,    only : MOM_error, FATAL, WARNING, MOM_mesg
+use MOM_file_parser,      only : get_param, log_version, param_file_type
+use MOM_hor_index,        only : hor_index_type
 use MOM_string_functions, only : uppercase
-use MOM_unit_scaling, only : unit_scale_type
-
-use MOM_EOS, only : EOS_LINEAR, EOS_UNESCO, EOS_WRIGHT, EOS_TEOS10, EOS_NEMO
+use MOM_unit_scaling,     only : unit_scale_type
 
 implicit none ; private
 
