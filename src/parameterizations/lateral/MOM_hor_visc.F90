@@ -46,6 +46,8 @@ type, public :: hor_visc_CS ; private
                              !! limited to guarantee stability.
   logical :: better_bound_Ah !< If true, use a more careful bounding of the
                              !! biharmonic viscosity to guarantee stability.
+  real    :: Re_Ah           !! If nonzero, the biharmonic coefficient is scaled
+                             !< so that the biharmonic Reynolds number is equal to this.
   real    :: bound_coef      !< The nondimensional coefficient of the ratio of
                              !! the viscosity bounds to the theoretical maximum
                              !! for stability without considering other terms [nondim].
@@ -110,8 +112,9 @@ type, public :: hor_visc_CS ; private
     Kh_Max_xx,      & !< The maximum permitted Laplacian viscosity [L2 T-1 ~> m2 s-1].
     Ah_Max_xx,      & !< The maximum permitted biharmonic viscosity [L4 T-1 ~> m4 s-1].
     n1n2_h,         & !< Factor n1*n2 in the anisotropic direction tensor at h-points
-    n1n1_m_n2n2_h     !< Factor n1**2-n2**2 in the anisotropic direction tensor at h-points
-
+    n1n1_m_n2n2_h,  & !< Factor n1**2-n2**2 in the anisotropic direction tensor at h-points
+    grid_sp_h2,     & !< Harmonic mean of the squares of the grid [L2 ~> m2]
+    grid_sp_h3        !< Harmonic mean of the squares of the grid^(3/2) [L3 ~> m3]
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Kh_bg_xy
                       !< The background Laplacian viscosity at q points [L2 T-1 ~> m2 s-1].
                       !! The actual viscosity may be the larger of this
@@ -153,19 +156,22 @@ type, public :: hor_visc_CS ; private
     Biharm6_const_xx, & !< Biharmonic metric-dependent constants [L6 ~> m6]
     Laplac3_const_xx, & !< Laplacian  metric-dependent constants [L3 ~> m3]
     Biharm_const_xx,  & !< Biharmonic metric-dependent constants [L4 ~> m4]
-    Biharm_const2_xx    !< Biharmonic metric-dependent constants [T L4 ~> s m4]
+    Biharm_const2_xx, & !< Biharmonic metric-dependent constants [T L4 ~> s m4]
+    Re_Ah_const_xx      !< Biharmonic metric-dependent constants [L3 ~> m3]
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     Laplac2_const_xy, & !< Laplacian  metric-dependent constants [L2 ~> m2]
     Biharm6_const_xy, & !< Biharmonic metric-dependent constants [L6 ~> m6]
     Laplac3_const_xy, & !< Laplacian  metric-dependent constants [L3 ~> m3]
     Biharm_const_xy,  & !< Biharmonic metric-dependent constants [L4 ~> m4]
-    Biharm_const2_xy    !< Biharmonic metric-dependent constants [T L4 ~> s m4]
+    Biharm_const2_xy, & !< Biharmonic metric-dependent constants [T L4 ~> s m4]
+    Re_Ah_const_xy      !< Biharmonic metric-dependent constants [L3 ~> m3]
 
   type(diag_ctrl), pointer :: diag => NULL() !< structure to regulate diagnostics
 
   !>@{
   !! Diagnostic id
+  integer :: id_grid_Re_Ah = -1, id_grid_Re_Kh   = -1
   integer :: id_diffu     = -1, id_diffv         = -1
   integer :: id_Ah_h      = -1, id_Ah_q          = -1
   integer :: id_Kh_h      = -1, id_Kh_q          = -1
@@ -292,9 +298,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     Kh_h, &          ! Laplacian viscosity at thickness points [L2 T-1 ~> m2 s-1]
     max_diss_rate_h, & ! maximum possible energy dissipated by lateral friction [L2 T-3 ~> m2 s-3]
     FrictWork, &     ! work done by MKE dissipation mechanisms [R L2 T-3 ~> W m-2]
-    FrictWork_GME, &  ! work done by GME [R L2 T-3 ~> W m-2]
+    FrictWork_GME, & ! work done by GME [R L2 T-3 ~> W m-2]
     div_xx_h         ! horizontal divergence [T-1 ~> s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+    grid_Re_Kh, &    !< Grid Reynolds number for Laplacian horizontal viscosity at h points [nondim]
+    grid_Re_Ah, &    !< Grid Reynolds number for Biharmonic horizontal viscosity at h points [nondim]
     GME_coeff_h      !< GME coeff. at h-points [L2 T-1 ~> m2 s-1]
   real :: Ah         ! biharmonic viscosity [L4 T-1 ~> m4 s-1]
   real :: Kh         ! Laplacian  viscosity [L2 T-1 ~> m2 s-1]
@@ -333,6 +341,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   real :: backscat_subround ! The ratio of f over Shear_mag that is so small that the backscatter
                     ! calculation gives the same value as if f were 0 [nondim].
   real :: H0_GME    ! Depth used to scale down GME coefficient in shallow areas [Z ~> m]
+  real :: KE        ! Local kinetic energy [L2 T-2 ~> m2 s-2]
+  real, parameter :: KH_min = 1.E-30 ! This is the minimun horizontal Laplacian viscosity used to estimate the
+                    ! grid Raynolds number [L2 T-1 ~> m2 s-1]
+  real, parameter :: AH_min = 1.E-30 ! This is the minimun horizontal Biharmonic viscosity used to estimate the
+                    ! grid Raynolds number [L4 T-1 ~> m4 s-1]
+
   logical :: rescale_Kh, legacy_bound
   logical :: find_FrictWork
   logical :: apply_OBC = .false.
@@ -463,7 +477,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   !$OMP   diffu, diffv, max_diss_rate_h, max_diss_rate_q, &
   !$OMP   Kh_h, Kh_q, Ah_h, Ah_q, FrictWork, FrictWork_GME, &
   !$OMP   div_xx_h, vort_xy_q, GME_coeff_h, GME_coeff_q, &
-  !$OMP   TD, KH_u_GME, KH_v_GME &
+  !$OMP   TD, KH_u_GME, KH_v_GME, grid_Re_Kh, grid_Re_Ah &
   !$OMP ) &
   !$OMP private( &
   !$OMP   i, j, k, n, &
@@ -477,7 +491,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   !$OMP   grad_vel_mag_bt_h, grad_vel_mag_bt_q, grad_d2vel_mag_h, &
   !$OMP   meke_res_fn, Shear_mag, vert_vort_mag, hrat_min, visc_bound_rem, &
   !$OMP   Kh, Ah, AhSm, AhLth, local_strain, Sh_F_pow, &
-  !$OMP   dDel2vdx, dDel2udy, DY_dxCv, DX_dyCu, Del2vort_q, Del2vort_h, &
+  !$OMP   dDel2vdx, dDel2udy, DY_dxCv, DX_dyCu, Del2vort_q, Del2vort_h, KE, &
   !$OMP   h2uq, h2vq, hu, hv, hq, FatH, RoScl, GME_coeff &
   !$OMP )
   do k=1,nz
@@ -842,6 +856,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         endif
 
         if ((CS%id_Kh_h>0) .or. find_FrictWork .or. CS%debug) Kh_h(i,j,k) = Kh
+
+        if (CS%id_grid_Re_Kh>0) then
+          KE = 0.125*((u(I,j,k)+u(I-1,j,k))**2 + (v(i,J,k)+v(i,J-1,k))**2)
+          grid_Re_Kh(i,j,k) = (sqrt(KE) * sqrt(CS%grid_sp_h2(i,j)))/MAX(Kh,KH_min)
+        endif
+
         if (CS%id_div_xx_h>0) div_xx_h(i,j,k) = div_xx(i,j)
 
         str_xx(i,j) = -Kh * sh_xx(i,j)
@@ -879,11 +899,21 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
         if (use_MEKE_Au) Ah = Ah + MEKE%Au(i,j) ! *Add* the MEKE contribution
 
+        if (CS%Re_Ah > 0.0) then
+          KE = 0.125*((u(I,j,k)+u(I-1,j,k))**2 + (v(i,J,k)+v(i,J-1,k))**2)
+          Ah = sqrt(KE) * CS%Re_Ah_const_xx(i,j)
+        endif
+
         if (CS%better_bound_Ah) then
           Ah = MIN(Ah, visc_bound_rem*hrat_min*CS%Ah_Max_xx(i,j))
         endif
 
         if ((CS%id_Ah_h>0) .or. find_FrictWork .or. CS%debug) Ah_h(i,j,k) = Ah
+
+        if (CS%id_grid_Re_Ah>0) then
+           KE = 0.125*((u(I,j,k)+u(I-1,j,k))**2 + (v(i,J,k)+v(i,J-1,k))**2)
+           grid_Re_Ah(i,j,k) = (sqrt(KE) * CS%grid_sp_h3(i,j))/MAX(Ah,AH_min)
+        endif
 
         str_xx(i,j) = str_xx(i,j) + Ah * &
           (CS%DY_dxT(i,j) * (G%IdyCu(I,j)*Del2u(I,j) - G%IdyCu(I-1,j)*Del2u(I-1,j)) - &
@@ -1050,6 +1080,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         if (use_MEKE_Au) then ! *Add* the MEKE contribution
           Ah = Ah + 0.25*( (MEKE%Au(I,J) + MEKE%Au(I+1,J+1)) +  &
                            (MEKE%Au(I+1,J) + MEKE%Au(I,J+1)) )
+        endif
+
+        if (CS%Re_Ah > 0.0) then
+          KE = 0.125*((u(I,j,k)+u(I-1,j,k))**2 + (v(i,J,k)+v(i,J-1,k))**2)
+          Ah = sqrt(KE) * CS%Re_Ah_const_xy(i,j)
         endif
 
         if (CS%better_bound_Ah) then
@@ -1285,10 +1320,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   if (CS%id_FrictWork>0) call post_data(CS%id_FrictWork, FrictWork, CS%diag)
   if (CS%id_FrictWork_GME>0) call post_data(CS%id_FrictWork_GME, FrictWork_GME, CS%diag)
   if (CS%id_Ah_h>0)      call post_data(CS%id_Ah_h, Ah_h, CS%diag)
+  if (CS%id_grid_Re_Ah>0) call post_data(CS%id_grid_Re_Ah, grid_Re_Ah, CS%diag)
   if (CS%id_div_xx_h>0)  call post_data(CS%id_div_xx_h, div_xx_h, CS%diag)
   if (CS%id_vort_xy_q>0) call post_data(CS%id_vort_xy_q, vort_xy_q, CS%diag)
   if (CS%id_Ah_q>0)      call post_data(CS%id_Ah_q, Ah_q, CS%diag)
   if (CS%id_Kh_h>0)      call post_data(CS%id_Kh_h, Kh_h, CS%diag)
+  if (CS%id_grid_Re_Kh>0) call post_data(CS%id_grid_Re_Kh, grid_Re_Kh, CS%diag)
   if (CS%id_Kh_q>0)      call post_data(CS%id_Kh_q, Kh_q, CS%diag)
   if (CS%id_GME_coeff_h > 0)  call post_data(CS%id_GME_coeff_h, GME_coeff_h, CS%diag)
   if (CS%id_GME_coeff_q > 0)  call post_data(CS%id_GME_coeff_q, GME_coeff_q, CS%diag)
@@ -1368,7 +1405,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
   logical :: split         ! If true, use the split time stepping scheme.
                            ! If false and USE_GME = True, issue a FATAL error.
   logical :: default_2018_answers
-
   character(len=64) :: inputdir, filename
   real    :: deg2rad       ! Converts degrees to radians
   real    :: slat_fn       ! sin(lat)**Kh_pwr_of_sine
@@ -1377,28 +1413,22 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: i, j
-
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_hor_visc"  ! module name
-
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
   if (associated(CS)) then
     call MOM_error(WARNING, "hor_visc_init called with an associated "// &
                             "control structure.")
     return
   endif
   allocate(CS)
-
   CS%diag => diag
-
   ! Read parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
-
   !   It is not clear whether these initialization lines are needed for the
   ! cases where the corresponding parameters are not read.
   CS%bound_Kh = .false. ; CS%better_bound_Kh = .false. ; CS%Smagorinsky_Kh = .false. ; CS%Leith_Kh = .false.
@@ -1408,13 +1438,10 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
   CS%Modified_Leith = .false.
   CS%anisotropic = .false.
   CS%dynamic_aniso = .false.
-
   Kh = 0.0 ; Ah = 0.0
-
   !   If GET_ALL_PARAMS is true, all parameters are read in all cases to enable
   ! parameter spelling checks.
   call get_param(param_file, mdl, "GET_ALL_PARAMS", get_all, default=.false.)
-
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
                  default=.true.)
@@ -1422,9 +1449,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
-
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
-
   call get_param(param_file, mdl, "LAPLACIAN", CS%Laplacian, &
                  "If true, use a Laplacian horizontal viscosity.", &
                  default=.false.)
@@ -1450,7 +1475,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
                  "The power used to raise SIN(LAT) when using a latitudinally "//&
                  "dependent background viscosity.", &
                  units = "nondim",  default=4.0)
-
     call get_param(param_file, mdl, "SMAGORINSKY_KH", CS%Smagorinsky_Kh, &
                  "If true, use a Smagorinsky nonlinear eddy viscosity.", &
                  default=.false.)
@@ -1459,11 +1483,9 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
                  "The nondimensional Laplacian Smagorinsky constant, "//&
                  "often 0.15.", units="nondim", default=0.0, &
                   fail_if_missing = CS%Smagorinsky_Kh)
-
     call get_param(param_file, mdl, "LEITH_KH", CS%Leith_Kh, &
                  "If true, use a Leith nonlinear eddy viscosity.", &
                  default=.false.)
-
     call get_param(param_file, mdl, "MODIFIED_LEITH", CS%Modified_Leith, &
                  "If true, add a term to Leith viscosity which is "//&
                  "proportional to the gradient of divergence.", &
@@ -1471,7 +1493,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     call get_param(param_file, mdl, "RES_SCALE_MEKE_VISC", CS%res_scale_MEKE, &
                  "If true, the viscosity contribution from MEKE is scaled by "//&
                  "the resolution function.", default=.false.)
-
     if (CS%Leith_Kh .or. get_all) then
       call get_param(param_file, mdl, "LEITH_LAP_CONST", Leith_Lap_const, &
                  "The nondimensional Laplacian Leith constant, "//&
@@ -1530,7 +1551,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
                  "to the spherical coordinates.", units = "nondim", fail_if_missing=.true.)
     end select
   endif
-
   call get_param(param_file, mdl, "BIHARMONIC", CS%biharmonic, &
                  "If true, use a biharmonic horizontal viscosity. "//&
                  "BIHARMONIC may be used with LAPLACIAN.", &
@@ -1557,7 +1577,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     call get_param(param_file, mdl, "LEITH_AH", CS%Leith_Ah, &
                  "If true, use a biharmonic Leith nonlinear eddy "//&
                  "viscosity.", default=.false.)
-
     call get_param(param_file, mdl, "BOUND_AH", CS%bound_Ah, &
                  "If true, the biharmonic coefficient is locally limited "//&
                  "to be stable.", default=.true.)
@@ -1565,13 +1584,16 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
                  "If true, the biharmonic coefficient is locally limited "//&
                  "to be stable with a better bounding than just BOUND_AH.", &
                  default=CS%bound_Ah)
+    call get_param(param_file, mdl, "RE_AH", CS%Re_Ah, &
+                 "If nonzero, the biharmonic coefficient is scaled "//&
+                 "so that the biharmonic Reynolds number is equal to this.", &
+                 units="nondim", default=0.0)
 
     if (CS%Smagorinsky_Ah .or. get_all) then
       call get_param(param_file, mdl, "SMAG_BI_CONST",Smag_bi_const, &
                  "The nondimensional biharmonic Smagorinsky constant, "//&
                  "typically 0.015 - 0.06.", units="nondim", default=0.0, &
                  fail_if_missing = CS%Smagorinsky_Ah)
-
       call get_param(param_file, mdl, "BOUND_CORIOLIS", bound_Cor_def, default=.false.)
       call get_param(param_file, mdl, "BOUND_CORIOLIS_BIHARM", CS%bound_Coriolis, &
                  "If true use a viscosity that increases with the square "//&
@@ -1590,29 +1612,24 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
                  units="m s-1", default=maxvel, scale=US%m_s_to_L_T)
       endif
     endif
-
     if (CS%Leith_Ah .or. get_all) &
       call get_param(param_file, mdl, "LEITH_BI_CONST", Leith_bi_const, &
                  "The nondimensional biharmonic Leith constant, "//&
                  "typical values are thus far undetermined.", units="nondim", default=0.0, &
                  fail_if_missing = CS%Leith_Ah)
-
   endif
-
   call get_param(param_file, mdl, "USE_LAND_MASK_FOR_HVISC", CS%use_land_mask, &
                  "If true, use Use the land mask for the computation of thicknesses "//&
                  "at velocity locations. This eliminates the dependence on arbitrary "//&
                  "values over land or outside of the domain. Default is False in order to "//&
                  "maintain answers with legacy experiments but should be changed to True "//&
                  "for new experiments.", default=.false.)
-
   if (CS%better_bound_Ah .or. CS%better_bound_Kh .or. get_all) &
     call get_param(param_file, mdl, "HORVISC_BOUND_COEF", CS%bound_coef, &
                  "The nondimensional coefficient of the ratio of the "//&
                  "viscosity bounds to the theoretical maximum for "//&
                  "stability without considering other terms.", units="nondim", &
                  default=0.8)
-
   call get_param(param_file, mdl, "NOSLIP", CS%no_slip, &
                  "If true, no slip boundary conditions are used; otherwise "//&
                  "free slip boundary conditions are assumed. The "//&
@@ -1620,47 +1637,37 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
                  "cleaner than the no slip BCs. The use of free slip BCs "//&
                  "is strongly encouraged, and no slip BCs are not used with "//&
                  "the biharmonic viscosity.", default=.false.)
-
   call get_param(param_file, mdl, "USE_KH_BG_2D", CS%use_Kh_bg_2d, &
                  "If true, read a file containing 2-d background harmonic "//&
                  "viscosities. The final viscosity is the maximum of the other "//&
                  "terms and this background value.", default=.false.)
-
   call get_param(param_file, mdl, "USE_GME", CS%use_GME, &
                  "If true, use the GM+E backscatter scheme in association \n"//&
                  "with the Gent and McWilliams parameterization.", default=.false.)
-
   if (CS%use_GME) then
     call get_param(param_file, mdl, "SPLIT", split, &
                  "Use the split time stepping if true.", default=.true., &
                   do_not_log=.true.)
     if (.not. split) call MOM_error(FATAL,"ERROR: Currently, USE_GME = True "// &
                                            "cannot be used with SPLIT=False.")
-
     call get_param(param_file, mdl, "GME_H0", CS%GME_h0, &
                  "The strength of GME tapers quadratically to zero when the bathymetric "//&
                  "depth is shallower than GME_H0.", units="m", scale=US%m_to_Z, &
                  default=1000.0)
-
     call get_param(param_file, mdl, "GME_EFFICIENCY", CS%GME_efficiency, &
                  "The nondimensional prefactor multiplying the GME coefficient.", &
                  units="nondim", default=1.0)
-
     call get_param(param_file, mdl, "GME_LIMITER", CS%GME_limiter, &
                  "The absolute maximum value the GME coefficient is allowed to take.", &
                  units="m2 s-1", scale=US%m_to_L**2*US%T_to_s, default=1.0e7)
-
   endif
-
   if (CS%bound_Kh .or. CS%bound_Ah .or. CS%better_bound_Kh .or. CS%better_bound_Ah) &
     call get_param(param_file, mdl, "DT", dt, &
                  "The (baroclinic) dynamics time step.", units="s", scale=US%s_to_T, &
                  fail_if_missing=.true.)
-
   if (CS%no_slip .and. CS%biharmonic) &
     call MOM_error(FATAL,"ERROR: NOSLIP and BIHARMONIC cannot be defined "// &
                          "at the same time in MOM.")
-
   if (.not.(CS%Laplacian .or. CS%biharmonic)) then
     ! Only issue inviscid warning if not in single column mode (usually 2x2 domain)
     if ( max(G%domain%niglobal, G%domain%njglobal)>2 ) call MOM_error(WARNING, &
@@ -1668,9 +1675,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
       "LAPLACIAN or BIHARMONIC viscosity.")
     return ! We are not using either Laplacian or Bi-harmonic lateral viscosity
   endif
-
   deg2rad = atan(1.0) / 45.
-
   ALLOC_(CS%dx2h(isd:ied,jsd:jed))        ; CS%dx2h(:,:)    = 0.0
   ALLOC_(CS%dy2h(isd:ied,jsd:jed))        ; CS%dy2h(:,:)    = 0.0
   ALLOC_(CS%dx2q(IsdB:IedB,JsdB:JedB))    ; CS%dx2q(:,:)    = 0.0
@@ -1679,8 +1684,8 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
   ALLOC_(CS%dy_dxT(isd:ied,jsd:jed))      ; CS%dy_dxT(:,:)  = 0.0
   ALLOC_(CS%dx_dyBu(IsdB:IedB,JsdB:JedB)) ; CS%dx_dyBu(:,:) = 0.0
   ALLOC_(CS%dy_dxBu(IsdB:IedB,JsdB:JedB)) ; CS%dy_dxBu(:,:) = 0.0
-
   if (CS%Laplacian) then
+    ALLOC_(CS%grid_sp_h2(isd:ied,jsd:jed))   ; CS%grid_sp_h2(:,:) = 0.0
     ALLOC_(CS%Kh_bg_xx(isd:ied,jsd:jed))     ; CS%Kh_bg_xx(:,:) = 0.0
     ALLOC_(CS%Kh_bg_xy(IsdB:IedB,JsdB:JedB)) ; CS%Kh_bg_xy(:,:) = 0.0
     if (CS%bound_Kh .or. CS%better_bound_Kh) then
@@ -1698,7 +1703,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
   endif
   ALLOC_(CS%reduction_xx(isd:ied,jsd:jed))     ; CS%reduction_xx(:,:) = 0.0
   ALLOC_(CS%reduction_xy(IsdB:IedB,JsdB:JedB)) ; CS%reduction_xy(:,:) = 0.0
-
   if (CS%anisotropic) then
     ALLOC_(CS%n1n2_h(isd:ied,jsd:jed)) ; CS%n1n2_h(:,:) = 0.0
     ALLOC_(CS%n1n1_m_n2n2_h(isd:ied,jsd:jed)) ; CS%n1n1_m_n2n2_h(:,:) = 0.0
@@ -1716,7 +1720,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
              "Runtime parameter ANISOTROPIC_MODE is out of range.")
     end select
   endif
-
   if (CS%use_Kh_bg_2d) then
     ALLOC_(CS%Kh_bg_2d(isd:ied,jsd:jed))     ; CS%Kh_bg_2d(:,:) = 0.0
     call get_param(param_file, mdl, "KH_BG_2D_FILENAME", filename, &
@@ -1728,15 +1731,14 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
                        G%domain, timelevel=1, scale=US%m_to_L**2*US%T_to_s)
     call pass_var(CS%Kh_bg_2d, G%domain)
   endif
-
   if (CS%biharmonic) then
     ALLOC_(CS%Idx2dyCu(IsdB:IedB,jsd:jed)) ; CS%Idx2dyCu(:,:) = 0.0
     ALLOC_(CS%Idx2dyCv(isd:ied,JsdB:JedB)) ; CS%Idx2dyCv(:,:) = 0.0
     ALLOC_(CS%Idxdy2u(IsdB:IedB,jsd:jed))  ; CS%Idxdy2u(:,:)  = 0.0
     ALLOC_(CS%Idxdy2v(isd:ied,JsdB:JedB))  ; CS%Idxdy2v(:,:)  = 0.0
-
     ALLOC_(CS%Ah_bg_xx(isd:ied,jsd:jed))     ; CS%Ah_bg_xx(:,:) = 0.0
     ALLOC_(CS%Ah_bg_xy(IsdB:IedB,JsdB:JedB)) ; CS%Ah_bg_xy(:,:) = 0.0
+    ALLOC_(CS%grid_sp_h3(isd:ied,jsd:jed))   ; CS%grid_sp_h3(:,:) = 0.0
     if (CS%bound_Ah .or. CS%better_bound_Ah) then
       ALLOC_(CS%Ah_Max_xx(isd:ied,jsd:jed))     ; CS%Ah_Max_xx(:,:) = 0.0
       ALLOC_(CS%Ah_Max_xy(IsdB:IedB,JsdB:JedB)) ; CS%Ah_Max_xy(:,:) = 0.0
@@ -1753,8 +1755,11 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
         ALLOC_(CS%biharm6_const_xx(isd:ied,jsd:jed)) ; CS%biharm6_const_xx(:,:) = 0.0
         ALLOC_(CS%biharm6_const_xy(IsdB:IedB,JsdB:JedB)) ; CS%biharm6_const_xy(:,:) = 0.0
     endif
+    if (CS%Re_Ah > 0.0) then
+      ALLOC_(CS%Re_Ah_const_xx(isd:ied,jsd:jed)); CS%Re_Ah_const_xx(:,:) = 0.0
+      ALLOC_(CS%Re_Ah_const_xy(IsdB:IedB,JsdB:JedB)); CS%Re_Ah_const_xy(:,:) = 0.0
+    endif
   endif
-
   do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
     CS%dx2q(I,J) = G%dxBu(I,J)*G%dxBu(I,J) ; CS%dy2q(I,J) = G%dyBu(I,J)*G%dyBu(I,J)
     CS%DX_dyBu(I,J) = G%dxBu(I,J)*G%IdyBu(I,J) ; CS%DY_dxBu(I,J) = G%dyBu(I,J)*G%IdxBu(I,J)
@@ -1763,7 +1768,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     CS%dx2h(i,j) = G%dxT(i,j)*G%dxT(i,j) ; CS%dy2h(i,j) = G%dyT(i,j)*G%dyT(i,j)
     CS%DX_dyT(i,j) = G%dxT(i,j)*G%IdyT(i,j) ; CS%DY_dxT(i,j) = G%dyT(i,j)*G%IdxT(i,j)
   enddo ; enddo
-
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
     CS%reduction_xx(i,j) = 1.0
     if ((G%dy_Cu(I,j) > 0.0) .and. (G%dy_Cu(I,j) < G%dyCu(I,j)) .and. &
@@ -1779,7 +1783,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
         (G%dx_Cv(i,J-1) < G%dxCv(i,J-1) * CS%reduction_xx(i,j))) &
       CS%reduction_xx(i,j) = G%dx_Cv(i,J-1) / (G%dxCv(i,J-1))
   enddo ; enddo
-
   do J=js-1,Jeq ; do I=is-1,Ieq
     CS%reduction_xy(I,J) = 1.0
     if ((G%dy_Cu(I,j) > 0.0) .and. (G%dy_Cu(I,j) < G%dyCu(I,j)) .and. &
@@ -1795,38 +1798,33 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
         (G%dx_Cv(i+1,J) < G%dxCv(i+1,J) * CS%reduction_xy(I,J))) &
       CS%reduction_xy(I,J) = G%dx_Cv(i+1,J) / (G%dxCv(i+1,J))
   enddo ; enddo
-
   if (CS%Laplacian) then
    ! The 0.3 below was 0.4 in MOM1.10.  The change in hq requires
    ! this to be less than 1/3, rather than 1/2 as before.
     if (CS%bound_Kh .or. CS%bound_Ah) Kh_Limit = 0.3 / (dt*4.0)
-
     ! Calculate and store the background viscosity at h-points
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       ! Static factors in the Smagorinsky and Leith schemes
       grid_sp_h2 = (2.0*CS%dx2h(i,j)*CS%dy2h(i,j)) / (CS%dx2h(i,j) + CS%dy2h(i,j))
+      CS%grid_sp_h2(i,j) = grid_sp_h2
       grid_sp_h3 = grid_sp_h2*sqrt(grid_sp_h2)
       if (CS%Smagorinsky_Kh) CS%Laplac2_const_xx(i,j) = Smag_Lap_const * grid_sp_h2
       if (CS%Leith_Kh)       CS%Laplac3_const_xx(i,j) = Leith_Lap_const * grid_sp_h3
       ! Maximum of constant background and MICOM viscosity
       CS%Kh_bg_xx(i,j) = MAX(Kh, Kh_vel_scale * sqrt(grid_sp_h2))
-
       ! Use the larger of the above and values read from a file
       if (CS%use_Kh_bg_2d) CS%Kh_bg_xx(i,j) = MAX(CS%Kh_bg_2d(i,j), CS%Kh_bg_xx(i,j))
-
       ! Use the larger of the above and a function of sin(latitude)
       if (Kh_sin_lat>0.) then
         slat_fn = abs( sin( deg2rad * G%geoLatT(i,j) ) ) ** Kh_pwr_of_sine
         CS%Kh_bg_xx(i,j) = MAX(Kh_sin_lat * slat_fn, CS%Kh_bg_xx(i,j))
       endif
-
       if (CS%bound_Kh .and. .not.CS%better_bound_Kh) then
         ! Limit the background viscosity to be numerically stable
         CS%Kh_Max_xx(i,j) = Kh_Limit * grid_sp_h2
         CS%Kh_bg_xx(i,j) = MIN(CS%Kh_bg_xx(i,j), CS%Kh_Max_xx(i,j))
       endif
     enddo ; enddo
-
     ! Calculate and store the background viscosity at q-points
     do J=js-1,Jeq ; do I=is-1,Ieq
       ! Static factors in the Smagorinsky and Leith schemes
@@ -1836,17 +1834,14 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
       if (CS%Leith_Kh)       CS%Laplac3_const_xy(I,J) = Leith_Lap_const * grid_sp_q3
       ! Maximum of constant background and MICOM viscosity
       CS%Kh_bg_xy(I,J) = MAX(Kh, Kh_vel_scale * sqrt(grid_sp_q2))
-
       ! Use the larger of the above and values read from a file
       !### This expression uses inconsistent staggering
       if (CS%use_Kh_bg_2d) CS%Kh_bg_xy(I,J) = MAX(CS%Kh_bg_2d(i,j), CS%Kh_bg_xy(I,J))
-
       ! Use the larger of the above and a function of sin(latitude)
       if (Kh_sin_lat>0.) then
         slat_fn = abs( sin( deg2rad * G%geoLatBu(I,J) ) ) ** Kh_pwr_of_sine
         CS%Kh_bg_xy(I,J) = MAX(Kh_sin_lat * slat_fn, CS%Kh_bg_xy(I,J))
       endif
-
       if (CS%bound_Kh .and. .not.CS%better_bound_Kh) then
         ! Limit the background viscosity to be numerically stable
         CS%Kh_Max_xy(I,J) = Kh_Limit * grid_sp_q2
@@ -1854,9 +1849,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
       endif
     enddo ; enddo
   endif
-
   if (CS%biharmonic) then
-
     do j=js-1,Jeq+1 ; do I=Isq-1,Ieq+1
       CS%Idx2dyCu(I,j) = (G%IdxCu(I,j)*G%IdxCu(I,j)) * G%IdyCu(I,j)
       CS%Idxdy2u(I,j) = G%IdxCu(I,j) * (G%IdyCu(I,j)*G%IdyCu(I,j))
@@ -1865,7 +1858,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
       CS%Idx2dyCv(i,J) = (G%IdxCv(i,J)*G%IdxCv(i,J)) * G%IdyCv(i,J)
       CS%Idxdy2v(i,J) = G%IdxCv(i,J) * (G%IdyCv(i,J)*G%IdyCv(i,J))
     enddo ; enddo
-
     CS%Ah_bg_xy(:,:) = 0.0
    ! The 0.3 below was 0.4 in MOM1.10.  The change in hq requires
    ! this to be less than 1/3, rather than 1/2 as before.
@@ -1875,6 +1867,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       grid_sp_h2 = (2.0*CS%dx2h(i,j)*CS%dy2h(i,j)) / (CS%dx2h(i,j)+CS%dy2h(i,j))
       grid_sp_h3 = grid_sp_h2*sqrt(grid_sp_h2)
+      CS%grid_sp_h3(i,j) = grid_sp_h3
       if (CS%Smagorinsky_Ah) then
         CS%Biharm_const_xx(i,j) = Smag_bi_const * (grid_sp_h2 * grid_sp_h2)
         if (CS%bound_Coriolis) then
@@ -1888,6 +1881,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
          CS%biharm6_const_xx(i,j) = Leith_bi_const * (grid_sp_h3 * grid_sp_h3)
       endif
       CS%Ah_bg_xx(i,j) = MAX(Ah, Ah_vel_scale * grid_sp_h2 * sqrt(grid_sp_h2))
+      if (CS%Re_Ah > 0.0) CS%Re_Ah_const_xx(i,j) = grid_sp_h3 / CS%Re_Ah
       if (Ah_time_scale > 0.) CS%Ah_bg_xx(i,j) = &
             MAX(CS%Ah_bg_xx(i,j), (grid_sp_h2 * grid_sp_h2) / Ah_time_scale)
       if (CS%bound_Ah .and. .not.CS%better_bound_Ah) then
@@ -1898,7 +1892,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     do J=js-1,Jeq ; do I=is-1,Ieq
       grid_sp_q2 = (2.0*CS%dx2q(I,J)*CS%dy2q(I,J)) / (CS%dx2q(I,J)+CS%dy2q(I,J))
       grid_sp_q3 = grid_sp_q2*sqrt(grid_sp_q2)
-
       if (CS%Smagorinsky_Ah) then
         CS%Biharm_const_xy(I,J) = Smag_bi_const * (grid_sp_q2 * grid_sp_q2)
         if (CS%bound_Coriolis) then
@@ -1909,8 +1902,8 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
       if (CS%Leith_Ah) then
          CS%biharm6_const_xy(i,j) = Leith_bi_const * (grid_sp_q3 * grid_sp_q3)
       endif
-
       CS%Ah_bg_xy(I,J) = MAX(Ah, Ah_vel_scale * grid_sp_q2 * sqrt(grid_sp_q2))
+      if (CS%Re_Ah > 0.0) CS%Re_Ah_const_xy(i,j) = grid_sp_q3 / CS%Re_Ah
       if (Ah_time_scale > 0.) CS%Ah_bg_xy(i,j) = &
            MAX(CS%Ah_bg_xy(i,j), (grid_sp_q2 * grid_sp_q2) / Ah_time_scale)
       if (CS%bound_Ah .and. .not.CS%better_bound_Ah) then
@@ -1919,7 +1912,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
       endif
     enddo ; enddo
   endif
-
   ! The Laplacian bounds should avoid overshoots when CS%bound_coef < 1.
   if (CS%Laplacian .and. CS%better_bound_Kh) then
     Idt = 1.0 / dt
@@ -1948,7 +1940,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
       call Bchksum(CS%Kh_Max_xy, "Kh_Max_xy", G%HI, haloshift=0, scale=US%L_to_m**2*US%s_to_T)
     endif
   endif
-
   ! The biharmonic bounds should avoid overshoots when CS%bound_coef < 0.5, but
   ! empirically work for CS%bound_coef <~ 1.0
   if (CS%biharmonic .and. CS%better_bound_Ah) then
@@ -1958,7 +1949,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
                                    CS%dy2h(i,j) * CS%DY_dxT(i,j) * (G%IdyCu(I,j) + G%IdyCu(I-1,j)) ) + &
                  CS%Idx2dyCu(I,j)*(CS%dx2q(I,J) * CS%DX_dyBu(I,J) * (G%IdxCu(I,j+1) + G%IdxCu(I,j)) + &
                                    CS%dx2q(I,J-1)*CS%DX_dyBu(I,J-1)*(G%IdxCu(I,j) + G%IdxCu(I,j-1)) ) )
-
       u0v(I,j) = (CS%Idxdy2u(I,j)*(CS%dy2h(i+1,j)*CS%DX_dyT(i+1,j)*(G%IdxCv(i+1,J) + G%IdxCv(i+1,J-1)) + &
                                    CS%dy2h(i,j) * CS%DX_dyT(i,j) * (G%IdxCv(i,J) + G%IdxCv(i,J-1)) )   + &
                  CS%Idx2dyCu(I,j)*(CS%dx2q(I,J) * CS%DY_dxBu(I,J) * (G%IdyCv(i+1,J) + G%IdyCv(i,J))   + &
@@ -1969,13 +1959,11 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
                                    CS%dy2q(I-1,J)*CS%DX_dyBu(I-1,J)*(G%IdxCu(I-1,j+1) + G%IdxCu(I-1,j)) ) + &
                  CS%Idx2dyCv(i,J)*(CS%dx2h(i,j+1)*CS%DY_dxT(i,j+1)*(G%IdyCu(I,j+1) + G%IdyCu(I-1,j+1))   + &
                                    CS%dx2h(i,j) * CS%DY_dxT(i,j) * (G%IdyCu(I,j) + G%IdyCu(I-1,j)) ) )
-
       v0v(i,J) = (CS%Idxdy2v(i,J)*(CS%dy2q(I,J) * CS%DY_dxBu(I,J) * (G%IdyCv(i+1,J) + G%IdyCv(i,J))   + &
                                    CS%dy2q(I-1,J)*CS%DY_dxBu(I-1,J)*(G%IdyCv(i,J) + G%IdyCv(i-1,J)) ) + &
                  CS%Idx2dyCv(i,J)*(CS%dx2h(i,j+1)*CS%DX_dyT(i,j+1)*(G%IdxCv(i,J+1) + G%IdxCv(i,J))   + &
                                    CS%dx2h(i,j) * CS%DX_dyT(i,j) * (G%IdxCv(i,J) + G%IdxCv(i,J-1)) ) )
     enddo ; enddo
-
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       denom = max( &
          (CS%dy2h(i,j) * &
@@ -1990,7 +1978,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
       if (denom > 0.0) &
         CS%Ah_Max_xx(I,J) = CS%bound_coef * 0.5 * Idt / denom
     enddo ; enddo
-
     do J=js-1,Jeq ; do I=is-1,Ieq
       denom = max( &
          (CS%dx2q(I,J) * &
@@ -2010,73 +1997,60 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
       call Bchksum(CS%Ah_Max_xy, "Ah_Max_xy", G%HI, haloshift=0, scale=US%L_to_m**4*US%s_to_T)
     endif
   endif
-
   ! Register fields for output from this module.
-
   CS%id_diffu = register_diag_field('ocean_model', 'diffu', diag%axesCuL, Time, &
       'Zonal Acceleration from Horizontal Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
-
   CS%id_diffv = register_diag_field('ocean_model', 'diffv', diag%axesCvL, Time, &
       'Meridional Acceleration from Horizontal Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
-
   if (CS%biharmonic) then
     CS%id_Ah_h = register_diag_field('ocean_model', 'Ahh', diag%axesTL, Time,    &
         'Biharmonic Horizontal Viscosity at h Points', 'm4 s-1', conversion=US%L_to_m**4*US%s_to_T, &
         cmor_field_name='difmxybo',                                             &
         cmor_long_name='Ocean lateral biharmonic viscosity',                     &
         cmor_standard_name='ocean_momentum_xy_biharmonic_diffusivity')
-
     CS%id_Ah_q = register_diag_field('ocean_model', 'Ahq', diag%axesBL, Time, &
         'Biharmonic Horizontal Viscosity at q Points', 'm4 s-1', conversion=US%L_to_m**4*US%s_to_T)
+    CS%id_grid_Re_Ah = register_diag_field('ocean_model', 'grid_Re_Ah', diag%axesTL, Time, &
+        'Grid Reynolds number for the Biharmonic horizontal viscosity at h points', 'nondim')
   endif
-
   if (CS%Laplacian) then
     CS%id_Kh_h = register_diag_field('ocean_model', 'Khh', diag%axesTL, Time,   &
         'Laplacian Horizontal Viscosity at h Points', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T, &
         cmor_field_name='difmxylo',                                             &
         cmor_long_name='Ocean lateral Laplacian viscosity',                     &
         cmor_standard_name='ocean_momentum_xy_laplacian_diffusivity')
-
     CS%id_Kh_q = register_diag_field('ocean_model', 'Khq', diag%axesBL, Time, &
         'Laplacian Horizontal Viscosity at q Points', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
+    CS%id_grid_Re_Kh = register_diag_field('ocean_model', 'grid_Re_Kh', diag%axesTL, Time, &
+        'Grid Reynolds number for the Laplacian horizontal viscosity at h points', 'nondim')
     if (CS%Leith_Kh) then
       CS%id_vort_xy_q = register_diag_field('ocean_model', 'vort_xy_q', diag%axesBL, Time, &
         'Vertical vorticity at q Points', 's-1', conversion=US%s_to_T)
-
       CS%id_div_xx_h = register_diag_field('ocean_model', 'div_xx_h', diag%axesTL, Time, &
         'Horizontal divergence at h Points', 's-1', conversion=US%s_to_T)
     endif
-
   endif
-
   if (CS%use_GME) then
       CS%id_GME_coeff_h = register_diag_field('ocean_model', 'GME_coeff_h', diag%axesTL, Time, &
         'GME coefficient at h Points', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
-
       CS%id_GME_coeff_q = register_diag_field('ocean_model', 'GME_coeff_q', diag%axesBL, Time, &
         'GME coefficient at q Points', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
-
       CS%id_FrictWork_GME = register_diag_field('ocean_model','FrictWork_GME',diag%axesTL,Time,&
       'Integral work done by lateral friction terms in GME (excluding diffusion of energy)', &
       'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T**3*US%L_to_m**2)
   endif
-
   CS%id_FrictWork = register_diag_field('ocean_model','FrictWork',diag%axesTL,Time,&
       'Integral work done by lateral friction terms', &
       'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T**3*US%L_to_m**2)
-
   CS%id_FrictWorkIntz = register_diag_field('ocean_model','FrictWorkIntz',diag%axesT1,Time,      &
       'Depth integrated work done by lateral friction', &
       'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T**3*US%L_to_m**2, &
       cmor_field_name='dispkexyfo',                                                              &
       cmor_long_name='Depth integrated ocean kinetic energy dissipation due to lateral friction',&
       cmor_standard_name='ocean_kinetic_energy_dissipation_per_unit_area_due_to_xy_friction')
-
   if (CS%Laplacian .or. get_all) then
   endif
-
 end subroutine hor_visc_init
-
 !> Calculates factors in the anisotropic orientation tensor to be align with the grid.
 !! With n1=1 and n2=0, this recovers the approach of Large et al, 2001.
 subroutine align_aniso_tensor_to_grid(CS, n1, n2)
@@ -2085,18 +2059,14 @@ subroutine align_aniso_tensor_to_grid(CS, n1, n2)
   real,              intent(in) :: n2 !< j-component of direction vector [nondim]
   ! Local variables
   real :: recip_n2_norm
-
   ! For normalizing n=(n1,n2) in case arguments are not a unit vector
   recip_n2_norm = n1**2 + n2**2
   if (recip_n2_norm > 0.) recip_n2_norm = 1./recip_n2_norm
-
   CS%n1n2_h(:,:) = 2. * ( n1 * n2 ) * recip_n2_norm
   CS%n1n2_q(:,:) = 2. * ( n1 * n2 ) * recip_n2_norm
   CS%n1n1_m_n2n2_h(:,:) = ( n1 * n1 - n2 * n2 ) * recip_n2_norm
   CS%n1n1_m_n2n2_q(:,:) = ( n1 * n1 - n2 * n2 ) * recip_n2_norm
-
 end subroutine align_aniso_tensor_to_grid
-
 !> Apply a 1-1-4-1-1 Laplacian filter one time on GME diffusive flux to reduce any
 !! horizontal two-grid-point noise
 subroutine smooth_GME(CS,G,GME_flux_h,GME_flux_q)
@@ -2107,15 +2077,12 @@ subroutine smooth_GME(CS,G,GME_flux_h,GME_flux_q)
                                                               !! at h points
   real, dimension(SZIB_(G),SZJB_(G)), optional, intent(inout) :: GME_flux_q!< GME diffusive flux
                                                               !! at q points
-
   ! local variables
   real, dimension(SZI_(G),SZJ_(G)) :: GME_flux_h_original
   real, dimension(SZIB_(G),SZJB_(G)) :: GME_flux_q_original
   real :: wc, ww, we, wn, ws ! averaging weights for smoothing
   integer :: i, j, k, s
-
   do s=1,1
-
     ! Update halos
     if (present(GME_flux_h)) then
       call pass_var(GME_flux_h, G%Domain)
@@ -2125,14 +2092,12 @@ subroutine smooth_GME(CS,G,GME_flux_h,GME_flux_q)
         do i = G%isc, G%iec
           ! skip land points
           if (G%mask2dT(i,j)==0.) cycle
-
           ! compute weights
           ww = 0.125 * G%mask2dT(i-1,j)
           we = 0.125 * G%mask2dT(i+1,j)
           ws = 0.125 * G%mask2dT(i,j-1)
           wn = 0.125 * G%mask2dT(i,j+1)
           wc = 1.0 - (ww+we+wn+ws)
-
           GME_flux_h(i,j) =  wc * GME_flux_h_original(i,j)   &
                            + ww * GME_flux_h_original(i-1,j) &
                            + we * GME_flux_h_original(i+1,j) &
@@ -2140,7 +2105,6 @@ subroutine smooth_GME(CS,G,GME_flux_h,GME_flux_q)
                            + wn * GME_flux_h_original(i,j+1)
       enddo; enddo
     endif
-
     ! Update halos
     if (present(GME_flux_q)) then
       call pass_var(GME_flux_q, G%Domain, position=CORNER, complete=.true.)
@@ -2150,14 +2114,12 @@ subroutine smooth_GME(CS,G,GME_flux_h,GME_flux_q)
         do I = G%IscB, G%IecB
           ! skip land points
           if (G%mask2dBu(I,J)==0.) cycle
-
           ! compute weights
           ww = 0.125 * G%mask2dBu(I-1,J)
           we = 0.125 * G%mask2dBu(I+1,J)
           ws = 0.125 * G%mask2dBu(I,J-1)
           wn = 0.125 * G%mask2dBu(I,J+1)
           wc = 1.0 - (ww+we+wn+ws)
-
           GME_flux_q(I,J) =  wc * GME_flux_q_original(I,J)   &
                            + ww * GME_flux_q_original(I-1,J) &
                            + we * GME_flux_q_original(I+1,J) &
@@ -2165,24 +2127,20 @@ subroutine smooth_GME(CS,G,GME_flux_h,GME_flux_q)
                            + wn * GME_flux_q_original(I,J+1)
       enddo; enddo
     endif
-
   enddo ! s-loop
-
 end subroutine smooth_GME
-
 !> Deallocates any variables allocated in hor_visc_init.
 subroutine hor_visc_end(CS)
   type(hor_visc_CS), pointer :: CS !< The control structure returned by a
                                    !! previous call to hor_visc_init.
-
   if (CS%Laplacian .or. CS%biharmonic) then
     DEALLOC_(CS%dx2h) ; DEALLOC_(CS%dx2q) ; DEALLOC_(CS%dy2h) ; DEALLOC_(CS%dy2q)
     DEALLOC_(CS%dx_dyT) ; DEALLOC_(CS%dy_dxT) ; DEALLOC_(CS%dx_dyBu) ; DEALLOC_(CS%dy_dxBu)
     DEALLOC_(CS%reduction_xx) ; DEALLOC_(CS%reduction_xy)
   endif
-
   if (CS%Laplacian) then
     DEALLOC_(CS%Kh_bg_xx) ; DEALLOC_(CS%Kh_bg_xy)
+    DEALLOC_(CS%grid_sp_h2)
     if (CS%bound_Kh) then
       DEALLOC_(CS%Kh_Max_xx) ; DEALLOC_(CS%Kh_Max_xy)
     endif
@@ -2193,8 +2151,8 @@ subroutine hor_visc_end(CS)
       DEALLOC_(CS%Laplac3_const_xx) ; DEALLOC_(CS%Laplac3_const_xy)
     endif
   endif
-
   if (CS%biharmonic) then
+    DEALLOC_(CS%grid_sp_h3)
     DEALLOC_(CS%Idx2dyCu) ; DEALLOC_(CS%Idx2dyCv)
     DEALLOC_(CS%Idxdy2u) ; DEALLOC_(CS%Idxdy2v)
     DEALLOC_(CS%Ah_bg_xx) ; DEALLOC_(CS%Ah_bg_xy)
@@ -2207,6 +2165,9 @@ subroutine hor_visc_end(CS)
     if (CS%Leith_Ah) then
       DEALLOC_(CS%Biharm_const_xx) ; DEALLOC_(CS%Biharm_const_xy)
     endif
+    if (CS%Re_Ah > 0.0) then
+      DEALLOC_(CS%Re_Ah_const_xx) ; DEALLOC_(CS%Re_Ah_const_xy)
+    endif
   endif
   if (CS%anisotropic) then
     DEALLOC_(CS%n1n2_h)
@@ -2215,10 +2176,7 @@ subroutine hor_visc_end(CS)
     DEALLOC_(CS%n1n1_m_n2n2_q)
   endif
   deallocate(CS)
-
 end subroutine hor_visc_end
-
-
 !> \namespace mom_hor_visc
 !!
 !! This module contains the subroutine horizontal_viscosity() that calculates the
@@ -2519,5 +2477,4 @@ end subroutine hor_visc_end
 !! Smith, R.D., and McWilliams, J.C., 2003: Anisotropic horizontal viscosity for
 !! ocean models. Ocean Modelling, 5(2), 129-156.
 !! https://doi.org/10.1016/S1463-5003(02)00016-1
-
 end module MOM_hor_visc
