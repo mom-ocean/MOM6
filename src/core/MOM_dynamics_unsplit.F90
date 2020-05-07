@@ -120,10 +120,10 @@ type, public :: MOM_dyn_unsplit_CS ; private
   real, pointer, dimension(:,:) :: tauy_bot => NULL() !< frictional y-bottom stress from the ocean
                                                       !! to the seafloor [R L Z T-2 ~> Pa]
 
-  logical :: use_correct_dt_visc ! If true, use the correct timestep in the viscous terms applied
-                                 ! in the first predictor step with the unsplit time stepping scheme,
-                                 ! and in the calculation of the turbulent mixed layer properties
-                                 ! for viscosity.  The default should be true, but it is false.
+  logical :: use_correct_dt_visc !< If true, use the correct timestep in the viscous terms applied
+                                 !! in the first predictor step with the unsplit time stepping scheme,
+                                 !! and in the calculation of the turbulent mixed layer properties
+                                 !! for viscosity.  The default should be true, but it is false.
   logical :: debug           !< If true, write verbose checksums for debugging purposes.
 
   logical :: module_is_initialized = .false. !< Record whether this mouled has been initialzed.
