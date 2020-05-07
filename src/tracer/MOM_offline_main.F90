@@ -176,7 +176,7 @@ type, public :: offline_transport_CS ; private
 
   real, allocatable, dimension(:,:) :: netMassIn  !< Freshwater fluxes into the ocean
   real, allocatable, dimension(:,:) :: netMassOut !< Freshwater fluxes out of the ocean
-  real, allocatable, dimension(:,:) :: mld        !< Mixed layer depths at thickness points [H ~> m or kg m-2].
+  real, allocatable, dimension(:,:) :: mld        !< Mixed layer depths at thickness points [Z ~> m].
 
   ! Allocatable arrays to read in entire fields during initialization
   real, allocatable, dimension(:,:,:,:) :: uhtr_all !< Entire field of zonal transport

@@ -154,9 +154,9 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl)
   type(unit_scale_type),                      intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2].
   type(thermo_var_ptrs),                      intent(in)  :: tv !< Thermodynamics structure.
-  type(CVMix_conv_cs),                            pointer :: CS !< The control structure returned
+  type(CVMix_conv_cs),                        pointer     :: CS !< The control structure returned
                                                                 !! by a previous call to CVMix_conv_init.
-  real, dimension(:,:),                 optional, pointer :: hbl!< Depth of ocean boundary layer [m]
+  real, dimension(SZI_(G),SZJ_(G)),           intent(in)  :: hbl !< Depth of ocean boundary layer [Z ~> m]
   ! local variables
   real, dimension(SZK_(G)) :: rho_lwr !< Adiabatic Water Density, this is a dummy
                                       !! variable since here convection is always
@@ -172,18 +172,15 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl)
                     ! [Z s-2 R-1 ~> m4 s-2 kg-1]
   real :: pref      ! Interface pressures [R L2 T-2 ~> Pa]
   real :: rhok, rhokm1 ! In situ densities of the layers above and below at the interface pressure [R ~> kg m-3]
-  real :: dz, dh, hcorr
+  real :: hbl_KPP   ! The depth of the ocean boundary as used by KPP [m]
+  real :: dz        ! A thickness [Z ~> m]
+  real :: dh, hcorr ! Two thicknesses [m]
   integer :: i, j, k
 
   g_o_rho0 = US%L_to_Z**2*US%s_to_T**2 * GV%g_Earth / GV%Rho0
 
   ! initialize dummy variables
   rho_lwr(:) = 0.0; rho_1d(:) = 0.0
-
-  if (.not. associated(hbl)) then
-    allocate(hbl(SZI_(G), SZJ_(G)))
-    hbl(:,:) = 0.0
-  endif
 
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
@@ -213,7 +210,7 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl)
       hcorr = 0.0
       ! compute heights at cell center and interfaces
       do k=1,G%ke
-        dh = h(i,j,k) * GV%H_to_m ! Nominal thickness to use for increment
+        dh = h(i,j,k) * GV%H_to_m ! Nominal thickness to use for increment, in the units used by CVMix.
         dh = dh + hcorr ! Take away the accumulated error (could temporarily make dh<0)
         hcorr = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
         dh = max( dh, CS%min_thickness ) ! Limit increment dh>=min_thickness
@@ -222,7 +219,8 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl)
       enddo
 
       ! gets index of the level and interface above hbl
-      kOBL = CVMix_kpp_compute_kOBL_depth(iFaceHeight, cellHeight,hbl(i,j))
+      hbl_KPP = US%Z_to_m*hbl(i,j)  ! Convert to the units used by CVMix.
+      kOBL = CVMix_kpp_compute_kOBL_depth(iFaceHeight, cellHeight, hbl_KPP)
 
       kv_col(:) = 0.0 ; kd_col(:) = 0.0
       call CVMix_coeffs_conv(Mdiff_out=kv_col(:), &

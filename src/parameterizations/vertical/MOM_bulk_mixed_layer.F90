@@ -219,7 +219,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
   type(optics_type),          pointer       :: optics !< The structure containing the inverse of the
                                                       !! vertical absorption decay scale for
                                                       !! penetrating shortwave radiation [m-1].
-  real, dimension(:,:),       pointer       :: Hml    !< Active mixed layer depth [m].
+  real, dimension(:,:),       pointer       :: Hml    !< Active mixed layer depth [Z ~> m].
   logical,                    intent(in)    :: aggregate_FW_forcing !< If true, the net incoming and
                                                      !! outgoing surface freshwater fluxes are
                                                      !! combined before being applied, instead of
@@ -592,7 +592,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
       CS%ML_depth(i,j) = h(i,0) * GV%H_to_m  ! Rescale the diagnostic.
     enddo ; endif
     if (associated(Hml)) then ; do i=is,ie
-      Hml(i,j) = G%mask2dT(i,j) * (h(i,0) * GV%H_to_m) ! Rescale the diagnostic for output.
+      Hml(i,j) = G%mask2dT(i,j) * (h(i,0) * GV%H_to_Z) ! Rescale the diagnostic for output.
     enddo ; endif
 
 ! At this point, return water to the original layers, but constrained to

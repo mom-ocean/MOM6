@@ -263,7 +263,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h         !< thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                     intent(inout) :: tv        !< points to thermodynamic fields
                                                                         !! unused have NULL ptrs
-  real, dimension(:,:),                      pointer       :: Hml       !< Active mixed layer depth [m]
+  real, dimension(:,:),                      pointer       :: Hml       !< Active mixed layer depth [Z ~> m]
   type(forcing),                             intent(inout) :: fluxes    !< points to forcing fields
                                                                         !! unused fields have NULL ptrs
   type(vertvisc_type),                       intent(inout) :: visc      !< vertical viscosities, BBL properies, and
@@ -451,7 +451,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h         !< thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                     intent(inout) :: tv        !< points to thermodynamic fields
                                                                         !! unused have NULL ptrs
-  real, dimension(:,:),                      pointer       :: Hml       !< Active mixed layer depth [m]
+  real, dimension(:,:),                      pointer       :: Hml       !< Active mixed layer depth [Z ~> m]
   type(forcing),                             intent(inout) :: fluxes    !< points to forcing fields
                                                                         !! unused fields have NULL ptrs
   type(vertvisc_type),                       intent(inout) :: visc      !< vertical viscosities, BBL properies, and
@@ -663,9 +663,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
                        Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves)
 
     if (associated(Hml)) then
-      !$OMP parallel default(shared)
-      call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G)
-      !$OMP end parallel
+      call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G, US)
       call pass_var(Hml, G%domain, halo=1)
       ! If visc%MLD exists, copy KPP's BLD into it
       if (associated(visc%MLD)) visc%MLD(:,:) = Hml(:,:)
@@ -1234,7 +1232,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h         !< thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                     intent(inout) :: tv        !< points to thermodynamic fields
                                                                         !! unused have NULL ptrs
-  real, dimension(:,:),                      pointer       :: Hml       !< Active mixed layer depth [m]
+  real, dimension(:,:),                      pointer       :: Hml       !< Active mixed layer depth [Z ~> m]
   type(forcing),                             intent(inout) :: fluxes    !< points to forcing fields
                                                                         !! unused fields have NULL ptrs
   type(vertvisc_type),                       intent(inout) :: visc      !< vertical viscosities, BBL properies, and
@@ -1448,9 +1446,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
                        Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves)
 
     if (associated(Hml)) then
-      !$OMP parallel default(shared)
-      call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G)
-      !$OMP end parallel
+      call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G, US)
       call pass_var(Hml, G%domain, halo=1)
       ! If visc%MLD exists, copy KPP's BLD into it
       if (associated(visc%MLD)) visc%MLD(:,:) = Hml(:,:)
@@ -1914,7 +1910,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h         !< thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                     intent(inout) :: tv        !< points to thermodynamic fields
                                                                         !! unused have NULL ptrs
-  real, dimension(:,:),                      pointer       :: Hml       !< Active mixed layer depth [m]
+  real, dimension(:,:),                      pointer       :: Hml       !< Active mixed layer depth [Z ~> m]
   type(forcing),                             intent(inout) :: fluxes    !< points to forcing fields
                                                                         !! unused fields have NULL ptrs
   type(vertvisc_type),                       intent(inout) :: visc      !< vertical viscosities, BBL properies, and
@@ -2183,7 +2179,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
                        Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves)
 
     if (associated(Hml)) then
-      call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G)
+      call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G, US)
       call pass_var(Hml, G%domain, halo=1)
       ! If visc%MLD exists, copy KPP's BLD into it
       if (associated(visc%MLD)) visc%MLD(:,:) = Hml(:,:)

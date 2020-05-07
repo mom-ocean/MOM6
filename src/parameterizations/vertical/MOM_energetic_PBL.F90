@@ -1908,19 +1908,19 @@ subroutine Mstar_Langmuir(CS, US, Abs_Coriolis, Buoyancy_Flux, UStar, BLD, Langm
 end subroutine Mstar_Langmuir
 
 
-!> Copies the ePBL active mixed layer depth into MLD
+!> Copies the ePBL active mixed layer depth into MLD, in units of [Z ~> m] unless other units are specified.
 subroutine energetic_PBL_get_MLD(CS, MLD, G, US, m_to_MLD_units)
   type(energetic_PBL_CS),           pointer     :: CS  !< Control structure for ePBL
   type(ocean_grid_type),            intent(in)  :: G   !< Grid structure
   type(unit_scale_type),            intent(in)  :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: MLD !< Depth of ePBL active mixing layer [m or other units]
-  real,                   optional, intent(in)  :: m_to_MLD_units !< A conversion factor to the
-                                                       !! desired units for MLD
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: MLD !< Depth of ePBL active mixing layer [Z ~> m] or other units
+  real,                   optional, intent(in)  :: m_to_MLD_units !< A conversion factor from meters
+                                                       !! to the desired units for MLD
   ! Local variables
   real :: scale  ! A dimensional rescaling factor
   integer :: i,j
 
-  scale = US%Z_to_m ; if (present(m_to_MLD_units)) scale = scale * m_to_MLD_units
+  scale = 1.0 ; if (present(m_to_MLD_units)) scale = US%Z_to_m * m_to_MLD_units
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     MLD(i,j) = scale*CS%ML_Depth(i,j)

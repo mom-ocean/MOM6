@@ -141,14 +141,14 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     khdt_x, &     ! The value of Khtr*dt times the open face width divided by
                   ! the distance between adjacent tracer points [L2 ~> m2].
-    Coef_x, &     ! The coefficients relating zonal tracer differences
-                  ! to time-integrated fluxes [H L2 ~> m3 or kg].
+    Coef_x, &     ! The coefficients relating zonal tracer differences to time-integrated
+                  ! fluxes, in [L2 ~> m2] for some schemes and [H L2 ~> m3 or kg] for others.
     Kh_u          ! Tracer mixing coefficient at u-points [L2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJB_(G)) :: &
     khdt_y, &     ! The value of Khtr*dt times the open face width divided by
                   ! the distance between adjacent tracer points [L2 ~> m2].
-    Coef_y, &     ! The coefficients relating meridional tracer differences
-                  ! to time-integrated fluxes [H L2 ~> m3 or kg].
+    Coef_y, &     ! The coefficients relating meridional tracer differences to time-integrated
+                  ! fluxes, in [L2 ~> m2] for some schemes and [H L2 ~> m3 or kg] for others.
     Kh_v          ! Tracer mixing coefficient at u-points [L2 T-1 ~> m2 s-1].
 
   real :: khdt_max ! The local limiting value of khdt_x or khdt_y [L2 ~> m2].
