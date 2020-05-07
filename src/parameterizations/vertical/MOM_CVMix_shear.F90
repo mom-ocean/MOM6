@@ -88,10 +88,11 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
   real, dimension(G%ke+1) :: Ri_Grad !< Gradient Richardson number [nondim]
   real, dimension(G%ke+1) :: Kvisc   !< Vertical viscosity at interfaces [m2 s-1]
   real, dimension(G%ke+1) :: Kdiff   !< Diapycnal diffusivity at interfaces [m2 s-1]
-  real, parameter         :: epsln = 1.e-10 !< Threshold to identify vanished layers [m]
+  real :: epsln  !< Threshold to identify vanished layers [H ~> m or kg m-2]
 
   ! some constants
   GoRho = US%L_to_Z**2 * GV%g_Earth / GV%Rho0
+  epsln = 1.e-10 * GV%m_to_H
 
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
@@ -148,7 +149,6 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
 
       if (CS%smooth_ri) then
         ! 1) fill Ri_grad in vanished layers with adjacent value
-        !### For dimensional consistency, epsln needs to be epsln*GV%m_to_H.
         do k = 2, G%ke
           if (h(i,j,k) <= epsln) Ri_grad(k) = Ri_grad(k-1)
         enddo
