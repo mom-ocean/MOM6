@@ -1353,7 +1353,7 @@ subroutine build_rho_grid( G, GV, US, h, tv, dzInterface, remapCS, CS )
   integer :: nz
   integer :: i, j, k
   real    :: nominalDepth   ! Depth of the bottom of the ocean, positive downward [H ~> m or kg m-2]
-  real, dimension(SZK_(GV)+1) :: zOld, zNew
+  real, dimension(SZK_(GV)+1) :: zOld, zNew ! Old and new interface heights [H ~> m or kg m-2]
   real :: h_neglect, h_neglect_edge ! Negligible thicknesses [H ~> m or kg m-2]
 #ifdef __DO_SAFETY_CHECKS__
   real    :: totalThickness
