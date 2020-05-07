@@ -590,7 +590,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
 
     if (CS%use_CVMix_tidal) then
       CS%id_N2_int = register_diag_field('ocean_model','N2_int',diag%axesTi,Time, &
-          'Bouyancy frequency squared, at interfaces', 's-2') !###, conversion=US%s_to_T**2)
+          'Bouyancy frequency squared, at interfaces', 's-2', conversion=US%s_to_T**2)
       !> TODO: add units
       CS%id_Simmons_coeff = register_diag_field('ocean_model','Simmons_coeff',diag%axesT1,Time, &
            'time-invariant portion of the tidal mixing coefficient using the Simmons', '')
