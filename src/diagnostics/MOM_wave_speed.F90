@@ -1246,7 +1246,7 @@ subroutine tridiag_det(a, b, c, nrows, lam, det_out, ddet_out, row_scale)
   rscl = 1.0 ; if (present(row_scale)) rscl = row_scale
 
   det(1) = 1.0      ; ddet(1) = 0.0
-  det(2) = b(2)-lam ; ddet(2) = -1.0
+  if (nrows > 1) then ; det(2) = b(2)-lam ; ddet(2) = -1.0 ; endif
   do n=3,nrows
     det(n)  = rscl*(b(n)-lam)*det(n-1)  - rscl*(a(n)*c(n-1))*det(n-2)
     ddet(n) = rscl*(b(n)-lam)*ddet(n-1) - rscl*(a(n)*c(n-1))*ddet(n-2) - det(n-1)
