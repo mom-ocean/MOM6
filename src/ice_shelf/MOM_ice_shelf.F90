@@ -1051,10 +1051,10 @@ subroutine add_shelf_flux(G, US, CS, sfc_state, fluxes)
     enddo ; enddo
 
     balancing_area = global_area_integral(bal_frac, G)
-    if (balancing_area > 0.0) then !### Examine whether the rescaling should be inside the parenthesis.
-      balancing_flux = US%kg_m2s_to_RZ_T*(global_area_integral(ISS%water_flux, G, scale=US%RZ_T_to_kg_m2s, &
-                                                               area=ISS%area_shelf_h) + &
-                                          delta_mass_shelf ) / balancing_area
+    if (balancing_area > 0.0) then
+      balancing_flux = ( US%kg_m2s_to_RZ_T*global_area_integral(ISS%water_flux, G, scale=US%RZ_T_to_kg_m2s, &
+                                                                area=ISS%area_shelf_h) + &
+                         delta_mass_shelf ) / balancing_area
     else
       balancing_flux = 0.0
     endif
@@ -1166,7 +1166,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
     write(0,*) 'IG: ', G%isd, G%isc, G%iec, G%ied, G%jsd, G%jsc, G%jsd, G%jed
   endif
 
-  CS%Time = Time ! ### This might not be in the right place?
   CS%diag => diag
 
   ! Are we being called from the solo ice-sheet driver? When called by the ocean
