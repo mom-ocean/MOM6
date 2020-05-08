@@ -629,16 +629,16 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
 
   CS%diag => diag
 
+  call get_param(param_file, mdl, "FIX_UNSPLIT_DT_VISC_BUG", CS%use_correct_dt_visc, &
+                 "If true, use the correct timestep in the viscous terms applied in the first "//&
+                 "predictor step with the unsplit time stepping scheme, and in the calculation "//&
+                 "of the turbulent mixed layer properties for viscosity with unsplit or "//&
+                 "unsplit_RK2. The default should be true.", default=.false.)
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", &
                  default=.false., debuggingParam=.true.)
   call get_param(param_file, mdl, "TIDES", use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
-  call get_param(param_file, mdl, "FIX_UNSPLIT_DT_VISC_BUG", CS%use_correct_dt_visc, &
-                 "If true, use the correct timestep in the viscous terms applied in the first "//&
-                 "predictor step with the unsplit time stepping scheme, and in the calculation "//&
-                 "of the turbulent mixed layer properties for viscosity. "//&
-                 "The default should be true.", default=.false.)
 
   allocate(CS%taux_bot(IsdB:IedB,jsd:jed)) ; CS%taux_bot(:,:) = 0.0
   allocate(CS%tauy_bot(isd:ied,JsdB:JedB)) ; CS%tauy_bot(:,:) = 0.0

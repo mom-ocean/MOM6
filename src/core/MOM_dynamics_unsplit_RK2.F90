@@ -123,6 +123,9 @@ type, public :: MOM_dyn_unsplit_RK2_CS ; private
                      !! the extent to which the treatment of gravity waves
                      !! is forward-backward (0) or simulated backward
                      !! Euler (1).  0 is almost always used.
+  logical :: use_correct_dt_visc !< If true, use the correct timestep in the calculation of the
+                                 !! turbulent mixed layer properties for viscosity.
+                                 !! The default should be true, but it is false.
   logical :: debug   !< If true, write verbose checksums for debugging purposes.
 
   logical :: module_is_initialized = .false. !< Record whether this mouled has been initialzed.
@@ -238,8 +241,8 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up ! Predicted zonal velocities [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vp ! Predicted meridional velocities [L T-1 ~> m s-1]
   real, dimension(:,:), pointer :: p_surf => NULL()
-  real :: dt_pred   ! The time step for the predictor part of the baroclinic
-                    ! time stepping [T ~> s].
+  real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping [T ~> s]
+  real :: dt_visc   ! The time step for a part of the update due to viscosity [T ~> s]
   logical :: dyn_p_surf
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -280,17 +283,15 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   call cpu_clock_begin(id_clock_continuity)
   ! This is a duplicate calculation of the last continuity from the previous step
   ! and could/should be optimized out. -AJA
-  call continuity(u_in, v_in, h_in, hp, uh, vh, dt_pred, G, GV, US, &
-                  CS%continuity_CSp, OBC=CS%OBC)
+  call continuity(u_in, v_in, h_in, hp, uh, vh, dt_pred, G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call pass_var(hp, G%Domain, clock=id_clock_pass)
   call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
 
 ! h_av = (h + hp)/2  (used in PV denominator)
   call cpu_clock_begin(id_clock_mom_update)
-  do k=1,nz
-    do j=js-2,je+2 ; do i=is-2,ie+2
-      h_av(i,j,k) = (h_in(i,j,k) + hp(i,j,k)) * 0.5
+  do k=1,nz ; do j=js-2,je+2 ; do i=is-2,ie+2
+    h_av(i,j,k) = (h_in(i,j,k) + hp(i,j,k)) * 0.5
   enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_mom_update)
 
@@ -305,8 +306,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   if (dyn_p_surf) then ; do j=js-2,je+2 ; do i=is-2,ie+2
     p_surf(i,j) = 0.5*p_surf_begin(i,j) + 0.5*p_surf_end(i,j)
   enddo ; enddo ; endif
-  call PressureForce(h_in, tv, CS%PFu, CS%PFv, G, GV, US, &
-                     CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
+  call PressureForce(h_in, tv, CS%PFu, CS%PFv, G, GV, US, CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
   call cpu_clock_end(id_clock_pres)
   call pass_vector(CS%PFu, CS%PFv, G%Domain, clock=id_clock_pass)
   call pass_vector(CS%CAu, CS%CAv, G%Domain, clock=id_clock_pass)
@@ -339,12 +339,11 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
  ! up[n-1/2] <- up*[n-1/2] + dt/2 d/dz visc d/dz up[n-1/2]
   call cpu_clock_begin(id_clock_vertvisc)
   call enable_averages(dt, Time_local, CS%diag)
-  call set_viscous_ML(up, vp, h_av, tv, forces, visc, dt, G, GV, US, &
-                      CS%set_visc_CSp)
+  dt_visc = dt_pred ; if (CS%use_correct_dt_visc) dt_visc = dt
+  call set_viscous_ML(up, vp, h_av, tv, forces, visc, dt_visc, G, GV, US, CS%set_visc_CSp)
   call disable_averaging(CS%diag)
 
-  call vertvisc_coef(up, vp, h_av, forces, visc, dt_pred, G, GV, US, &
-                     CS%vertvisc_CSp, CS%OBC)
+  call vertvisc_coef(up, vp, h_av, forces, visc, dt_pred, G, GV, US, CS%vertvisc_CSp, CS%OBC)
   call vertvisc(up, vp, h_av, forces, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, US, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
@@ -395,12 +394,10 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! up[n] <- up* + dt d/dz visc d/dz up
 ! u[n] <- u*[n] + dt d/dz visc d/dz u[n]
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(up, vp, h_av, forces, visc, dt, G, GV, US, &
-                     CS%vertvisc_CSp, CS%OBC)
+  call vertvisc_coef(up, vp, h_av, forces, visc, dt, G, GV, US, CS%vertvisc_CSp, CS%OBC)
   call vertvisc(up, vp, h_av, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, US, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
-  call vertvisc_coef(u_in, v_in, h_av, forces, visc, dt, G, GV, US, &
-                     CS%vertvisc_CSp, CS%OBC)
+  call vertvisc_coef(u_in, v_in, h_av, forces, visc, dt, G, GV, US, CS%vertvisc_CSp, CS%OBC)
   call vertvisc(u_in, v_in, h_av, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp,&
                 G, GV, US, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
   call cpu_clock_end(id_clock_vertvisc)
@@ -594,6 +591,11 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag
                  "If SPLIT is false and USE_RK2 is true, BEGW can be "//&
                  "between 0 and 0.5 to damp gravity waves.", &
                  units="nondim", default=0.0)
+  call get_param(param_file, mdl, "FIX_UNSPLIT_DT_VISC_BUG", CS%use_correct_dt_visc, &
+                 "If true, use the correct timestep in the viscous terms applied in the first "//&
+                 "predictor step with the unsplit time stepping scheme, and in the calculation "//&
+                 "of the turbulent mixed layer properties for viscosity with unsplit or "//&
+                 "unsplit_RK2. The default should be true.", default=.false.)
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", &
                  default=.false., debuggingParam=.true.)
