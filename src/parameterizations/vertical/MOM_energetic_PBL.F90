@@ -52,7 +52,7 @@ type, public :: energetic_PBL_CS ; private
                              !! surface boundary layer to constrain the mixing lengths.
   logical :: MLD_iteration_guess !< False to default to guessing half the
                              !! ocean depth for the first iteration.
-  logical :: MLD_bisection   !! If true, use bisection with the iterative determination of the
+  logical :: MLD_bisection   !< If true, use bisection with the iterative determination of the
                              !! self-consistent mixed layer depth.  Otherwise use the false position
                              !! after a maximum and minimum bound have been evaluated and the
                              !! returned value from the previous guess or bisection before this.
@@ -223,7 +223,7 @@ character*(20), parameter :: RESCALED_STRING = "RESCALE"
 character*(20), parameter :: ADDITIVE_STRING = "ADDITIVE"
 !>@}
 
-logical :: report_avg_its = .false.  ! Report the average number of ePBL iterations for debugging.
+logical :: report_avg_its = .false.  !< Report the average number of ePBL iterations for debugging.
 
 !> A type for conveniently passing around ePBL diagnostics for a column.
 type, public :: ePBL_column_diags ; private
