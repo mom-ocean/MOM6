@@ -42,7 +42,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
                                                                      !! interfaces between u-points [T-2 ~> s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), &
                                      optional, intent(inout) :: N2_v !< Brunt-Vaisala frequency squared at
-                                                                     !! interfaces between u-points [[T-2 ~> s-2]
+                                                                     !! interfaces between u-points [T-2 ~> s-2]
   integer,                           optional, intent(in)    :: halo !< Halo width over which to compute
 
   ! real,                              optional, intent(in)    :: eta_to_m !< The conversion factor from the units
@@ -51,39 +51,39 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: &
     T, &          ! The temperature [degC], with the values in
                   ! in massless layers filled vertically by diffusion.
-    S, &          ! The filled salinity [ppt], with the values in
+    S !, &          ! The filled salinity [ppt], with the values in
                   ! in massless layers filled vertically by diffusion.
-    Rho           ! Density itself, when a nonlinear equation of state is not in use [kg m-3].
+!    Rho           ! Density itself, when a nonlinear equation of state is not in use [R ~> kg m-3].
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
-    pres          ! The pressure at an interface [Pa].
+    pres          ! The pressure at an interface [R L2 T-2 ~> Pa].
   real, dimension(SZIB_(G)) :: &
-    drho_dT_u, &  ! The derivative of density with temperature at u points [kg m-3 degC-1].
-    drho_dS_u     ! The derivative of density with salinity at u points [kg m-3 ppt-1].
+    drho_dT_u, &  ! The derivative of density with temperature at u points [R degC-1 ~> kg m-3 degC-1].
+    drho_dS_u     ! The derivative of density with salinity at u points [R ppt-1 ~> kg m-3 ppt-1].
   real, dimension(SZI_(G)) :: &
-    drho_dT_v, &  ! The derivative of density with temperature at v points [kg m-3 degC-1].
-    drho_dS_v     ! The derivative of density with salinity at v points [kg m-3 ppt-1].
+    drho_dT_v, &  ! The derivative of density with temperature at v points [R degC-1 ~> kg m-3 degC-1].
+    drho_dS_v     ! The derivative of density with salinity at v points [R ppt-1 ~> kg m-3 ppt-1].
   real, dimension(SZIB_(G)) :: &
     T_u, &        ! Temperature on the interface at the u-point [degC].
     S_u, &        ! Salinity on the interface at the u-point [ppt].
-    pres_u        ! Pressure on the interface at the u-point [Pa].
+    pres_u        ! Pressure on the interface at the u-point [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G)) :: &
     T_v, &        ! Temperature on the interface at the v-point [degC].
     S_v, &        ! Salinity on the interface at the v-point [ppt].
-    pres_v        ! Pressure on the interface at the v-point [Pa].
+    pres_v        ! Pressure on the interface at the v-point [R L2 T-2 ~> Pa].
   real :: drdiA, drdiB  ! Along layer zonal- and meridional- potential density
-  real :: drdjA, drdjB  ! gradients in the layers above (A) and below(B) the
-                        ! interface times the grid spacing [kg m-3].
-  real :: drdkL, drdkR  ! Vertical density differences across an interface [kg m-3].
+  real :: drdjA, drdjB  ! gradients in the layers above (A) and below (B) the
+                        ! interface times the grid spacing [R ~> kg m-3].
+  real :: drdkL, drdkR  ! Vertical density differences across an interface [R ~> kg m-3].
   real :: hg2A, hg2B    ! Squares of geometric mean thicknesses [H2 ~> m2 or kg2 m-4].
   real :: hg2L, hg2R    ! Squares of geometric mean thicknesses [H2 ~> m2 or kg2 m-4].
   real :: haA, haB, haL, haR  ! Arithmetic mean thicknesses [H ~> m or kg m-2].
   real :: dzaL, dzaR    ! Temporary thicknesses in eta units [Z ~> m].
   real :: wtA, wtB, wtL, wtR  ! Unscaled weights, with various units.
-  real :: drdx, drdy    ! Zonal and meridional density gradients [kg m-3 L-1 ~> kg m-4].
-  real :: drdz          ! Vertical density gradient [kg m-3 Z-1 ~> kg m-4].
+  real :: drdx, drdy    ! Zonal and meridional density gradients [R L-1 ~> kg m-4].
+  real :: drdz          ! Vertical density gradient [R Z-1 ~> kg m-4].
   real :: Slope         ! The slope of density surfaces, calculated in a way
                         ! that is always between -1 and 1.
-  real :: mag_grad2     ! The squared magnitude of the 3-d density gradient [kg2 m-6 L-2 ~> kg2 m-8].
+  real :: mag_grad2     ! The squared magnitude of the 3-d density gradient [R2 L-2 ~> kg2 m-8].
   real :: slope2_Ratio  ! The ratio of the slope squared to slope_max squared.
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
@@ -91,7 +91,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   real :: dz_neglect    ! A change in interface heighs that is so small it is usually lost
                         ! in roundoff and can be neglected [Z ~> m].
   logical :: use_EOS    ! If true, density is calculated from T & S using an equation of state.
-  real :: G_Rho0, N2, dzN2,  H_x(SZIB_(G)), H_y(SZI_(G))
+  real :: G_Rho0        ! The gravitational acceleration divided by density [Z2 T-2 R-1 ~> m5 kg-2 s-2]
   real :: Z_to_L        ! A conversion factor between from units for e to the
                         ! units for lateral distances.
   real :: L_to_Z        ! A conversion factor between from units for lateral distances
@@ -99,6 +99,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   real :: H_to_Z        ! A conversion factor from thickness units to the units of e.
 
   logical :: present_N2_u, present_N2_v
+  integer, dimension(2) :: EOSdom_u, EOSdom_v ! Domains for the equation of state calculations at u and v points
   integer :: is, ie, js, je, nz, IsdB
   integer :: i, j, k
 
@@ -144,21 +145,29 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   endif
 
   ! Find the maximum and minimum permitted streamfunction.
-  !$OMP parallel do default(shared)
-  do j=js-1,je+1 ; do i=is-1,ie+1
-    pres(i,j,1) = 0.0  ! ### This should be atmospheric pressure.
-    pres(i,j,2) = pres(i,j,1) + GV%H_to_Pa*h(i,j,1)
-  enddo ; enddo
+  if (associated(tv%p_surf)) then
+    !$OMP parallel do default(shared)
+    do j=js-1,je+1 ; do i=is-1,ie+1
+      pres(i,j,1) = tv%p_surf(i,j)
+    enddo ; enddo
+  else
+    !$OMP parallel do default(shared)
+    do j=js-1,je+1 ; do i=is-1,ie+1
+      pres(i,j,1) = 0.0
+    enddo ; enddo
+  endif
   !$OMP parallel do default(shared)
   do j=js-1,je+1
-    do k=2,nz ; do i=is-1,ie+1
-      pres(i,j,K+1) = pres(i,j,K) + GV%H_to_Pa*h(i,j,k)
+    do k=1,nz ; do i=is-1,ie+1
+      pres(i,j,K+1) = pres(i,j,K) + GV%g_Earth * GV%H_to_RZ * h(i,j,k)
     enddo ; enddo
   enddo
 
-  !$OMP parallel do default(none) shared(nz,is,ie,js,je,IsdB,use_EOS,G,GV,US,pres,T,S,tv, &
-  !$OMP                                  h,h_neglect,e,dz_neglect,Z_to_L,L_to_Z,H_to_Z, &
-  !$OMP                                  h_neglect2,present_N2_u,G_Rho0,N2_u,slope_x) &
+  EOSdom_u(1) = is-1 - (G%IsdB-1) ; EOSdom_u(2) = ie - (G%IsdB-1)
+
+  !$OMP parallel do default(none) shared(nz,is,ie,js,je,IsdB,use_EOS,G,GV,US,pres,T,S,tv,h,e, &
+  !$OMP                                  h_neglect,dz_neglect,Z_to_L,L_to_Z,H_to_Z,h_neglect2, &
+  !$OMP                                  present_N2_u,G_Rho0,N2_u,slope_x,EOSdom_u) &
   !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
   !$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
   !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
@@ -176,8 +185,8 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
         T_u(I) = 0.25*((T(i,j,k) + T(i+1,j,k)) + (T(i,j,k-1) + T(i+1,j,k-1)))
         S_u(I) = 0.25*((S(i,j,k) + S(i+1,j,k)) + (S(i,j,k-1) + S(i+1,j,k-1)))
       enddo
-      call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u, &
-                   drho_dS_u, (is-IsdB+1)-1, ie-is+2, tv%eqn_of_state)
+      call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u, drho_dS_u, &
+                                    tv%eqn_of_state, EOSdom_u)
     endif
 
     do I=is-1,ie
@@ -242,10 +251,12 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
     enddo ! I
   enddo ; enddo ! end of j-loop
 
+  EOSdom_v(1) = is - (G%isd-1) ; EOSdom_v(2) = ie - (G%isd-1)
+
   ! Calculate the meridional isopycnal slope.
-  !$OMP parallel do default(none) shared(nz,is,ie,js,je,IsdB,use_EOS,G,GV,pres,T,S,tv, &
+  !$OMP parallel do default(none) shared(nz,is,ie,js,je,IsdB,use_EOS,G,GV,US,pres,T,S,tv, &
   !$OMP                                  h,h_neglect,e,dz_neglect,Z_to_L,L_to_Z,H_to_Z, &
-  !$OMP                                  h_neglect2,present_N2_v,G_Rho0,N2_v,slope_y) &
+  !$OMP                                  h_neglect2,present_N2_v,G_Rho0,N2_v,slope_y,EOSdom_v) &
   !$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
   !$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
   !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
@@ -262,8 +273,8 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
         T_v(i) = 0.25*((T(i,j,k) + T(i,j+1,k)) + (T(i,j,k-1) + T(i,j+1,k-1)))
         S_v(i) = 0.25*((S(i,j,k) + S(i,j+1,k)) + (S(i,j,k-1) + S(i,j+1,k-1)))
       enddo
-      call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, &
-                   drho_dS_v, is, ie-is+1, tv%eqn_of_state)
+      call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, drho_dS_v, tv%eqn_of_state, &
+                                    EOSdom_v)
     endif
     do i=is,ie
       if (use_EOS) then

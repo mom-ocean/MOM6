@@ -243,7 +243,7 @@ end subroutine initialize_dye_tracer
 !! This is a simple example of a set of advected passive tracers.
 !! The arguments to this subroutine are redundant in that
 !!     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
-subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, &
+subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, CS, &
               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
@@ -261,13 +261,14 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
                                               !! added [H ~> m or kg m-2].
   type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
                                               !! and tracer forcing fields.  Unused fields have NULL ptrs.
-  real,                    intent(in) :: dt   !< The amount of time covered by this call [s]
+  real,                    intent(in) :: dt   !< The amount of time covered by this call [T ~> s]
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
   type(dye_tracer_CS),     pointer    :: CS   !< The control structure returned by a previous
                                               !! call to register_dye_tracer.
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
                                               !! be fluxed out of the top layer in a timestep [nondim]
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
-                                              !! fluxes can be applied [m]
+                                              !! fluxes can be applied [H ~> m or kg m-2]
 
 ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
@@ -288,8 +289,8 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
       do k=1,nz ;do j=js,je ; do i=is,ie
         h_work(i,j,k) = h_old(i,j,k)
       enddo ; enddo ; enddo
-      call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m) , dt, fluxes, h_work, &
-          evap_CFL_limit, minimum_forcing_depth)
+      call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m), dt, fluxes, h_work, &
+                                          evap_CFL_limit, minimum_forcing_depth)
       call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
     enddo
   else
@@ -371,9 +372,9 @@ end function dye_stock
 !> This subroutine extracts the surface fields from this tracer package that
 !! are to be shared with the atmosphere in coupled configurations.
 !! This particular tracer package does not report anything back to the coupler.
-subroutine dye_tracer_surface_state(state, h, G, CS)
+subroutine dye_tracer_surface_state(sfc_state, h, G, CS)
   type(ocean_grid_type),  intent(in)    :: G  !< The ocean's grid structure.
-  type(surface),          intent(inout) :: state !< A structure containing fields that
+  type(surface),          intent(inout) :: sfc_state !< A structure containing fields that
                                               !! describe the surface state of the ocean.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                           intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2].
@@ -394,7 +395,7 @@ subroutine dye_tracer_surface_state(state, h, G, CS)
       !   This call loads the surface values into the appropriate array in the
       ! coupler-type structure.
       call coupler_type_set_data(CS%tr(:,:,1,m), CS%ind_tr(m), ind_csurf, &
-                   state%tr_fields, idim=(/isd, is, ie, ied/), &
+                   sfc_state%tr_fields, idim=(/isd, is, ie, ied/), &
                    jdim=(/jsd, js, je, jed/) )
     enddo
   endif

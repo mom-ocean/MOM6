@@ -41,7 +41,7 @@ use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : setVerticalGridAxes, verticalGrid_type
 use MOM_ALE, only : pressure_gradient_plm
-use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
+use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type, EOS_domain
 use MOM_EOS, only : int_specific_vol_dp, convert_temp_salt_for_TEOS10
 use user_initialization, only : user_initialize_thickness, user_initialize_velocity
 use user_initialization, only : user_init_temperature_salinity
@@ -88,10 +88,7 @@ use BFB_initialization, only : BFB_initialize_sponges_southonly
 use dense_water_initialization, only : dense_water_initialize_TS
 use dense_water_initialization, only : dense_water_initialize_sponges
 use dumbbell_initialization, only : dumbbell_initialize_sponges
-
-use midas_vertmap, only : find_interfaces, tracer_Z_init
-use midas_vertmap, only : determine_temperature
-
+use MOM_tracer_Z_init, only : find_interfaces, tracer_Z_init_array, determine_temperature
 use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
 use MOM_ALE, only : ALE_remap_scalar, ALE_build_grid, ALE_regrid_accelerated
 use MOM_regridding, only : regridding_CS, set_regrid_params, getCoordinateResolution
@@ -99,7 +96,6 @@ use MOM_regridding, only : regridding_main
 use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_remapping, only : remapping_core_h
 use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
-
 use fms_io_mod, only : field_size
 
 implicit none ; private
@@ -158,7 +154,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                       ! a restart file to the internal representation in this run.
   real :: vel_rescale ! A rescaling factor for velocities from the representation in
                       ! a restart file to the internal representation in this run.
-  real :: dt          ! The baroclinic dynamics timestep for this run [s].
+  real :: dt          ! The baroclinic dynamics timestep for this run [T ~> s].
   logical :: from_Z_file, useALE
   logical :: new_sim
   integer :: write_geom
@@ -318,7 +314,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
        case ("soliton"); call soliton_initialize_thickness(h, G, GV, US)
        case ("phillips"); call Phillips_initialize_thickness(h, G, GV, US, PF, &
                                    just_read_params=just_read)
-       case ("rossby_front"); call Rossby_front_initialize_thickness(h, G, GV, &
+       case ("rossby_front"); call Rossby_front_initialize_thickness(h, G, GV, US, &
                                        PF, just_read_params=just_read)
        case ("USER"); call user_initialize_thickness(h, G, GV, PF, &
                                just_read_params=just_read)
@@ -351,12 +347,12 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
              fail_if_missing=new_sim, do_not_log=just_read)
 !            " \t baroclinic_zone - an analytic baroclinic zone. \n"//&
       select case (trim(config))
-        case ("fit"); call initialize_temp_salt_fit(tv%T, tv%S, G, GV, PF, &
+        case ("fit"); call initialize_temp_salt_fit(tv%T, tv%S, G, GV, US, PF, &
                                eos, tv%P_Ref, just_read_params=just_read)
         case ("file"); call initialize_temp_salt_from_file(tv%T, tv%S, G, &
                                 PF, just_read_params=just_read)
         case ("benchmark"); call benchmark_init_temperature_salinity(tv%T, tv%S, &
-                                     G, GV, PF, eos, tv%P_Ref, just_read_params=just_read)
+                                     G, GV, US, PF, eos, tv%P_Ref, just_read_params=just_read)
         case ("TS_profile") ; call initialize_temp_salt_from_profile(tv%T, tv%S, &
                                        G, PF, just_read_params=just_read)
         case ("linear"); call initialize_temp_salt_linear(tv%T, tv%S, G, PF, &
@@ -364,7 +360,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
         case ("DOME2D"); call DOME2d_initialize_temperature_salinity ( tv%T, &
                                   tv%S, h, G, GV, PF, eos, just_read_params=just_read)
         case ("ISOMIP"); call ISOMIP_initialize_temperature_salinity ( tv%T, &
-                                  tv%S, h, G, GV, PF, eos, just_read_params=just_read)
+                                  tv%S, h, G, GV, US, PF, eos, just_read_params=just_read)
         case ("adjustment2d"); call adjustment_initialize_temperature_salinity ( tv%T, &
                                         tv%S, h, G, GV, PF, eos, just_read_params=just_read)
         case ("baroclinic_zone"); call baroclinic_zone_init_temperature_salinity( tv%T, &
@@ -475,7 +471,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
            "an initial grid that is consistent with the initial conditions.", &
            default=1, do_not_log=just_read)
 
-      call get_param(PF, mdl, "DT", dt, "Timestep", fail_if_missing=.true.)
+      call get_param(PF, mdl, "DT", dt, "Timestep", fail_if_missing=.true., scale=US%s_to_T)
 
       if (new_sim .and. debug) &
         call hchksum(h, "Pre-ALE_regrid: h ", G%HI, haloshift=1, scale=GV%H_to_m)
@@ -540,11 +536,11 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                  " \t USER - call a user modified routine.", default="file")
     select case (trim(config))
       case ("DOME"); call DOME_initialize_sponges(G, GV, US, tv, PF, sponge_CSp)
-      case ("DOME2D"); call DOME2d_initialize_sponges(G, GV, tv, PF, useALE, &
+      case ("DOME2D"); call DOME2d_initialize_sponges(G, GV, US, tv, PF, useALE, &
                                                       sponge_CSp, ALE_sponge_CSp)
       case ("ISOMIP"); call ISOMIP_initialize_sponges(G, GV, US, tv, PF, useALE, &
                                                       sponge_CSp, ALE_sponge_CSp)
-      case("RGC"); call RGC_initialize_sponges(G, GV, tv, u, v, PF, useALE, &
+      case("RGC"); call RGC_initialize_sponges(G, GV, US, tv, u, v, PF, useALE, &
                                                      sponge_CSp, ALE_sponge_CSp)
       case ("USER"); call user_initialize_sponges(G, GV, use_temperature, tv, PF, sponge_CSp, h)
       case ("BFB"); call BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, PF, &
@@ -552,7 +548,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
       case ("DUMBBELL"); call dumbbell_initialize_sponges(G, GV, US, tv, PF, useALE, &
                                                           sponge_CSp, ALE_sponge_CSp)
       case ("phillips"); call Phillips_initialize_sponges(G, GV, US, tv, PF, sponge_CSp, h)
-      case ("dense"); call dense_water_initialize_sponges(G, GV, tv, PF, useALE, &
+      case ("dense"); call dense_water_initialize_sponges(G, GV, US, tv, PF, useALE, &
                                                           sponge_CSp, ALE_sponge_CSp)
       case ("file"); call initialize_sponges_file(G, GV, US, use_temperature, tv, PF, &
                                                   sponge_CSp, ALE_sponge_CSp, Time)
@@ -562,7 +558,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   endif
 
   ! Reads OBC parameters not pertaining to the location of the boundaries
-  call open_boundary_init(G, PF, OBC)
+  call open_boundary_init(G, GV, US, PF, OBC, restart_CS)
 
   ! This controls user code for setting open boundary data
   if (associated(OBC)) then
@@ -616,7 +612,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     call qchksum(G%mask2dBu, 'MOM_initialize_state: mask2dBu ', G%HI)
   endif
 
-  if (debug_OBC) call open_boundary_test_extern_h(G, OBC, h)
+  if (debug_OBC) call open_boundary_test_extern_h(G, GV, OBC, h)
   call callTree_leave('MOM_initialize_state()')
 
 end subroutine MOM_initialize_state
@@ -936,66 +932,63 @@ subroutine convert_thickness(h, G, GV, US, tv)
                                                !! thermodynamic variables
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    p_top, p_bot
-  real :: dz_geo(SZI_(G),SZJ_(G))      ! The change in geopotential height
-                                       ! across a layer [m2 s-2].
-  real :: rho(SZI_(G))
-  real :: I_gEarth
-  real :: Hm_rho_to_Pa  ! A conversion factor from the input geometric thicknesses times the
-                        ! layer densities into Pa [Pa m3 H-1 kg-1 ~> s-2 m2 or s-2 m5 kg-1].
-  logical :: Boussinesq
+    p_top, p_bot                  ! Pressure at the interfaces above and below a layer [R L2 T-2 ~> Pa]
+  real :: dz_geo(SZI_(G),SZJ_(G)) ! The change in geopotential height across a layer [L2 T-2 ~> m2 s-2]
+  real :: rho(SZI_(G))            ! The in situ density [R ~> kg m-3]
+  real :: I_gEarth      ! Unit conversion factors divided by the gravitational acceleration
+                        ! [H T2 R-1 L-2 ~> s2 m2 kg-1 or s2 m-1]
+  real :: HR_to_pres    ! A conversion factor from the input geometric thicknesses times the layer
+                        ! densities into pressure units [L2 T-2 H-1 ~> m s-2 or m4 kg-1 s-2].
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: itt, max_itt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   max_itt = 10
-  Boussinesq = GV%Boussinesq
-  I_gEarth = 1.0 / (GV%mks_g_Earth)
-  Hm_rho_to_Pa = GV%mks_g_Earth * GV%H_to_m ! = GV%H_to_Pa / GV%Rho0
 
-  if (Boussinesq) then
+  if (GV%Boussinesq) then
     call MOM_error(FATAL,"Not yet converting thickness with Boussinesq approx.")
   else
+    I_gEarth = GV%RZ_to_H / GV%g_Earth
+    HR_to_pres = GV%g_Earth * GV%H_to_Z
+
     if (associated(tv%eqn_of_state)) then
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         p_bot(i,j) = 0.0 ; p_top(i,j) = 0.0
       enddo ; enddo
+      EOSdom(:) = EOS_domain(G%HI)
       do k=1,nz
         do j=js,je
           do i=is,ie ; p_top(i,j) = p_bot(i,j) ; enddo
           call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_top(:,j), rho, &
-                                 is, ie-is+1, tv%eqn_of_state)
+                                 tv%eqn_of_state, EOSdom)
           do i=is,ie
-            p_bot(i,j) = p_top(i,j) + Hm_rho_to_Pa * (h(i,j,k) * rho(i))
+            p_bot(i,j) = p_top(i,j) + HR_to_pres * (h(i,j,k) * rho(i))
           enddo
         enddo
 
         do itt=1,max_itt
-          call int_specific_vol_dp(tv%T(:,:,k), tv%S(:,:,k), p_top, p_bot, &
-                                   0.0, G%HI, tv%eqn_of_state, dz_geo)
+          call int_specific_vol_dp(tv%T(:,:,k), tv%S(:,:,k), p_top, p_bot, 0.0, G%HI, &
+                                   tv%eqn_of_state, dz_geo)
           if (itt < max_itt) then ; do j=js,je
             call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_bot(:,j), rho, &
-                                   is, ie-is+1, tv%eqn_of_state)
+                                   tv%eqn_of_state, EOSdom)
             ! Use Newton's method to correct the bottom value.
-            !   The hydrostatic equation is linear to such a
-            ! high degree that no bounds-checking is needed.
+            ! The hydrostatic equation is sufficiently linear that no bounds-checking is needed.
             do i=is,ie
-              p_bot(i,j) = p_bot(i,j) + rho(i) * &
-                (Hm_rho_to_Pa*h(i,j,k) - dz_geo(i,j))
+              p_bot(i,j) = p_bot(i,j) + rho(i) * (HR_to_pres*h(i,j,k) - dz_geo(i,j))
             enddo
           enddo ; endif
         enddo
 
         do j=js,je ; do i=is,ie
-          h(i,j,k) = (p_bot(i,j) - p_top(i,j)) * GV%kg_m2_to_H * I_gEarth
+          h(i,j,k) = (p_bot(i,j) - p_top(i,j)) * I_gEarth
         enddo ; enddo
       enddo
     else
       do k=1,nz ; do j=js,je ; do i=is,ie
-        h(i,j,k) = (h(i,j,k) * GV%Rlay(k)) * Hm_rho_to_Pa * GV%kg_m2_to_H**2
-        ! This is mathematically equivalent to
-        !  h(i,j,k) = h(i,j,k) * (GV%Rlay(k) / GV%Rho0)
+        h(i,j,k) = h(i,j,k) * (GV%Rlay(k) / GV%Rho0)
       enddo ; enddo ; enddo
     endif
   endif
@@ -1015,9 +1008,9 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
                                                       !! only read parameters without changing h.
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    eta_sfc  ! The free surface height that the model should use [m].
+    eta_sfc  ! The free surface height that the model should use [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
-    eta  ! The free surface height that the model should use [m].
+    eta  ! The free surface height that the model should use [Z ~> m].
   real :: dilate  ! A ratio by which layers are dilated [nondim].
   real :: scale_factor ! A scaling factor for the eta_sfc values that are read
                        ! in, which can be used to change units, for example.
@@ -1045,15 +1038,15 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
     call log_param(param_file,  mdl, "INPUTDIR/SURFACE_HEIGHT_IC_FILE", filename)
 
   call get_param(param_file, mdl, "SURFACE_HEIGHT_IC_SCALE", scale_factor, &
-                 "A scaling factor to convert SURFACE_HEIGHT_IC_VAR into "//&
-                 "units of m", units="variable", default=1.0, do_not_log=just_read)
+                 "A scaling factor to convert SURFACE_HEIGHT_IC_VAR into units of m", &
+                 units="variable", default=1.0, scale=US%m_to_Z, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
   call MOM_read_data(filename, eta_srf_var, eta_sfc, G%Domain, scale=scale_factor)
 
   ! Convert thicknesses to interface heights.
-  call find_eta(h, tv, G, GV, US, eta, eta_to_m=1.0)
+  call find_eta(h, tv, G, GV, US, eta)
 
   do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
 !    if (eta_sfc(i,j) < eta(i,j,nz+1)) then
@@ -1100,13 +1093,14 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
                                                       !! only read parameters without changing h.
   ! Local variables
   character(len=200) :: mdl = "trim_for_ice"
-  real, dimension(SZI_(G),SZJ_(G)) :: p_surf ! Imposed pressure on ocean at surface [Pa]
+  real, dimension(SZI_(G),SZJ_(G)) :: p_surf ! Imposed pressure on ocean at surface [R L2 T-2 ~> Pa]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: S_t, S_b ! Top and bottom edge values for reconstructions
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: T_t, T_b ! of salinity and temperature within each layer.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: T_t, T_b ! of salinity [ppt] and temperature [degC] within each layer.
   character(len=200) :: inputdir, filename, p_surf_file, p_surf_var ! Strings for file/path
-  real :: scale_factor   ! A file-dependent scaling vactor for the input pressurs.
-  real :: min_thickness  ! The minimum layer thickness, recast into Z units.
+  real :: scale_factor   ! A file-dependent scaling factor for the input pressure.
+  real :: min_thickness  ! The minimum layer thickness, recast into Z units [Z ~> m].
   integer :: i, j, k
+  logical :: default_2018_answers, remap_answers_2018
   logical :: just_read    ! If true, just read parameters but set nothing.
   logical :: use_remapping ! If true, remap the initial conditions.
   type(remapping_CS), pointer :: remap_CS => NULL()
@@ -1118,7 +1112,7 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
                  fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(PF, mdl, "SURFACE_PRESSURE_VAR", p_surf_var, &
                  "The initial condition variable for the surface height.", &
-                 units="kg m-2", default="", do_not_log=just_read)
+                 units="kg m-2", default="", do_not_log=just_read) !### The units here should be Pa?
   call get_param(PF, mdl, "INPUTDIR", inputdir, default=".", do_not_log=.true.)
   filename = trim(slasher(inputdir))//trim(p_surf_file)
   if (.not.just_read) call log_param(PF,  mdl, "!INPUTDIR/SURFACE_HEIGHT_IC_FILE", filename)
@@ -1132,10 +1126,21 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
   call get_param(PF, mdl, "TRIMMING_USES_REMAPPING", use_remapping, &
                  'When trimming the column, also remap T and S.', &
                  default=.false., do_not_log=just_read)
+  remap_answers_2018 = .true.
+  if (use_remapping) then
+    call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
+    call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=default_2018_answers)
+  endif
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
-  call MOM_read_data(filename, p_surf_var, p_surf, G%Domain, scale=scale_factor)
+  call MOM_read_data(filename, p_surf_var, p_surf, G%Domain, &
+                     scale=scale_factor*US%kg_m3_to_R*US%m_s_to_L_T**2)
 
   if (use_remapping) then
     allocate(remap_CS)
@@ -1154,10 +1159,10 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
   endif
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    call cut_off_column_top(GV%ke, tv, GV, GV%mks_g_Earth*US%Z_to_m, G%bathyT(i,j), &
+    call cut_off_column_top(GV%ke, tv, GV, US, GV%g_Earth, G%bathyT(i,j), &
                min_thickness, tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), &
                tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), p_surf(i,j), h(i,j,:), remap_CS, &
-               z_tol=1.0e-5*US%m_to_Z)
+               z_tol=1.0e-5*US%m_to_Z, remap_answers_2018=remap_answers_2018)
   enddo ; enddo
 
 end subroutine trim_for_ice
@@ -1165,12 +1170,13 @@ end subroutine trim_for_ice
 
 !> Adjust the layer thicknesses by removing the top of the water column above the
 !! depth where the hydrostatic pressure matches p_surf
-subroutine cut_off_column_top(nk, tv, GV, G_earth, depth, min_thickness, &
-                              T, T_t, T_b, S, S_t, S_b, p_surf, h, remap_CS, z_tol)
+subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, T, T_t, T_b, &
+                              S, S_t, S_b, p_surf, h, remap_CS, z_tol, remap_answers_2018)
   integer,               intent(in)    :: nk  !< Number of layers
   type(thermo_var_ptrs), intent(in)    :: tv  !< Thermodynamics structure
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
-  real,                  intent(in)    :: G_earth !< Gravitational acceleration [m2 Z-1 s-2 ~> m s-2]
+  type(unit_scale_type),   intent(in)  :: US  !< A dimensional unit scaling type
+  real,                  intent(in)    :: G_earth !< Gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
   real,                  intent(in)    :: depth !< Depth of ocean column [Z ~> m].
   real,                  intent(in)    :: min_thickness !< Smallest thickness allowed [Z ~> m].
   real, dimension(nk),   intent(inout) :: T   !< Layer mean temperature [degC]
@@ -1179,18 +1185,26 @@ subroutine cut_off_column_top(nk, tv, GV, G_earth, depth, min_thickness, &
   real, dimension(nk),   intent(inout) :: S   !< Layer mean salinity [ppt]
   real, dimension(nk),   intent(in)    :: S_t !< Salinity at top of layer [ppt]
   real, dimension(nk),   intent(in)    :: S_b !< Salinity at bottom of layer [ppt]
-  real,                  intent(in)    :: p_surf !< Imposed pressure on ocean at surface [Pa]
+  real,                  intent(in)    :: p_surf !< Imposed pressure on ocean at surface [R L2 T-2 ~> Pa]
   real, dimension(nk),   intent(inout) :: h   !< Layer thickness [H ~> m or kg m-2]
   type(remapping_CS),    pointer       :: remap_CS !< Remapping structure for remapping T and S,
                                                    !! if associated
   real,        optional, intent(in)    :: z_tol !< The tolerance with which to find the depth
                                                 !! matching the specified pressure [Z ~> m].
+  logical,     optional, intent(in)    :: remap_answers_2018 !< If true, use the order of arithmetic
+                                                !! and expressions that recover the answers for remapping
+                                                !! from the end of 2018. Otherwise, use more robust
+                                                !! forms of the same expressions.
 
   ! Local variables
-  real, dimension(nk+1) :: e ! Top and bottom edge values for reconstructions
+  real, dimension(nk+1) :: e ! Top and bottom edge values for reconstructions [Z ~> m]
   real, dimension(nk) :: h0, S0, T0, h1, S1, T1
-  real :: P_t, P_b, z_out, e_top
+  real :: P_t, P_b  ! Top and bottom pressures [R L2 T-2 ~> Pa]
+  real :: z_out, e_top
+  logical :: answers_2018
   integer :: k
+
+  answers_2018 = .true. ; if (present(remap_answers_2018)) answers_2018 = remap_answers_2018
 
   ! Calculate original interface positions
   e(nk+1) = -depth
@@ -1240,8 +1254,13 @@ subroutine cut_off_column_top(nk, tv, GV, G_earth, depth, min_thickness, &
       T0(k) = T(nk+1-k)
       h1(k) = h(nk+1-k)
     enddo
-    call remapping_core_h(remap_CS, nk, h0, T0, nk, h1, T1, 1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
-    call remapping_core_h(remap_CS, nk, h0, S0, nk, h1, S1, 1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
+    if (answers_2018) then
+      call remapping_core_h(remap_CS, nk, h0, T0, nk, h1, T1, 1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
+      call remapping_core_h(remap_CS, nk, h0, S0, nk, h1, S1, 1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
+    else
+      call remapping_core_h(remap_CS, nk, h0, T0, nk, h1, T1, GV%H_subroundoff, GV%H_subroundoff)
+      call remapping_core_h(remap_CS, nk, h0, S0, nk, h1, S1, GV%H_subroundoff, GV%H_subroundoff)
+    endif
     do k=1,nk
       S(k) = S1(nk+1-k)
       T(k) = T1(nk+1-k)
@@ -1380,8 +1399,9 @@ subroutine initialize_velocity_circular(u, v, G, US, param_file, just_read_param
                                                       !! only read parameters without changing h.
   ! Local variables
   character(len=200) :: mdl = "initialize_velocity_circular"
-  real :: circular_max_u
-  real :: dpi, psi1, psi2
+  real :: circular_max_u ! The amplitude of the zonal flow [L T-1 ~> m s-1]
+  real :: dpi        ! A local variable storing pi = 3.14159265358979...
+  real :: psi1, psi2 ! Values of the streamfunction at two points [L2 T-1 ~> m2 s-1]
   logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -1392,7 +1412,7 @@ subroutine initialize_velocity_circular(u, v, G, US, param_file, just_read_param
   call get_param(param_file, mdl, "CIRCULAR_MAX_U", circular_max_u, &
                  "The amplitude of zonal flow from which to scale the "// &
                  "circular stream function [m s-1].", &
-                 units="m s-1", default=0., scale=US%L_T_to_m_s, do_not_log=just_read)
+                 units="m s-1", default=0., scale=US%m_s_to_L_T, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -1401,29 +1421,29 @@ subroutine initialize_velocity_circular(u, v, G, US, param_file, just_read_param
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     psi1 = my_psi(I,j)
     psi2 = my_psi(I,j-1)
-    u(I,j,k) = (psi1-psi2) / (G%US%L_to_m*G%dy_Cu(I,j)) ! *(circular_max_u*G%len_lon/(2.0*dpi))
+    u(I,j,k) = (psi1 - psi2) / G%dy_Cu(I,j) ! *(circular_max_u*G%len_lon/(2.0*dpi))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     psi1 = my_psi(i,J)
     psi2 = my_psi(i-1,J)
-    v(i,J,k) = (psi2-psi1) / (G%US%L_to_m*G%dx_Cv(i,J)) ! *(circular_max_u*G%len_lon/(2.0*dpi))
+    v(i,J,k) = (psi2 - psi1) / G%dx_Cv(i,J) ! *(circular_max_u*G%len_lon/(2.0*dpi))
   enddo ; enddo ; enddo
 
   contains
 
-  !> Returns the value of a circular stream function at (ig,jg)
+  !> Returns the value of a circular stream function at (ig,jg) in [L2 T-1 ~> m2 s-1]
   real function my_psi(ig,jg)
     integer :: ig !< Global i-index
     integer :: jg !< Global j-index
     ! Local variables
-    real :: x, y, r
+    real :: x, y, r ! [nondim]
 
     x = 2.0*(G%geoLonBu(ig,jg)-G%west_lon) / G%len_lon - 1.0  ! -1<x<1
     y = 2.0*(G%geoLatBu(ig,jg)-G%south_lat) / G%len_lat - 1.0 ! -1<y<1
     r = sqrt( x**2 + y**2 ) ! Circular stream function is a function of radius only
     r = min(1.0, r) ! Flatten stream function in corners of box
     my_psi = 0.5*(1.0 - cos(dpi*r))
-    my_psi = my_psi * (circular_max_u*G%len_lon*1e3 / dpi) ! len_lon is in km
+    my_psi = my_psi * (circular_max_u * G%US%m_to_L*G%len_lon*1e3 / dpi) ! len_lon is in km
   end function my_psi
 
 end subroutine initialize_velocity_circular
@@ -1530,18 +1550,19 @@ subroutine initialize_temp_salt_from_profile(T, S, G, param_file, just_read_para
 end subroutine initialize_temp_salt_from_profile
 
 !> Initializes temperature and salinity by fitting to density
-subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref, just_read_params)
+subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P_Ref, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G            !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV           !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T !< The potential temperature that is
                                                        !! being initialized [degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S !< The salinity that is being
                                                        !! initialized [ppt].
+  type(unit_scale_type),   intent(in)  :: US           !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file   !< A structure to parse for run-time
                                                        !! parameters.
   type(EOS_type),          pointer     :: eqn_of_state !< Integer that selects the equatio of state.
   real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure
-                                                       !! [Pa].
+                                                       !! [R L2 T-2 ~> Pa].
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                        !! only read parameters without changing h.
   ! Local variables
@@ -1549,10 +1570,10 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref
   real :: S0(SZK_(G))   ! Layer salinities [degC]
   real :: T_Ref         ! Reference Temperature [degC]
   real :: S_Ref         ! Reference Salinity [ppt]
-  real :: pres(SZK_(G))      ! An array of the reference pressure [Pa].
-  real :: drho_dT(SZK_(G))   ! Derivative of density with temperature [kg m-3 degC-1].
-  real :: drho_dS(SZK_(G))   ! Derivative of density with salinity [kg m-3 ppt-1].
-  real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 [kg m-3].
+  real :: pres(SZK_(G))      ! An array of the reference pressure [R L2 T-2 ~> Pa].
+  real :: drho_dT(SZK_(G))   ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
+  real :: drho_dS(SZK_(G))   ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
+  real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 [R ~> kg m-3].
   logical :: fit_salin       ! If true, accept the prescribed temperature and fit the salinity.
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40)  :: mdl = "initialize_temp_salt_fit" ! This subroutine's name.
@@ -1581,8 +1602,8 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref
     T0(k) = T_Ref
   enddo
 
-  call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),eqn_of_state)
-  call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,eqn_of_state)
+  call calculate_density(T0(1), S0(1), pres(1), rho_guess(1), eqn_of_state)
+  call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, eqn_of_state, (/1,1/) )
 
   if (fit_salin) then
     ! A first guess of the layers' temperatures.
@@ -1591,8 +1612,8 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref
     enddo
     ! Refine the guesses for each layer.
     do itt=1,6
-      call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
-      call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
+      call calculate_density(T0, S0, pres, rho_guess, eqn_of_state)
+      call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, eqn_of_state)
       do k=1,nz
         S0(k) = max(0.0, S0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dS(k))
       enddo
@@ -1603,8 +1624,8 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref
       T0(k) = T0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dT(1)
     enddo
     do itt=1,6
-      call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
-      call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
+      call calculate_density(T0, S0, pres, rho_guess, eqn_of_state)
+      call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, eqn_of_state)
       do k=1,nz
         T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
       enddo
@@ -1713,9 +1734,10 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   real, dimension (SZI_(G),SZJ_(G)) :: &
     tmp_2d ! A temporary array for tracers.
 
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [s-1].
-  real :: pres(SZI_(G))     ! An array of the reference pressure [Pa].
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
+  real :: pres(SZI_(G))     ! An array of the reference pressure [R L2 T-2 ~> Pa].
 
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz
   integer :: isd, ied, jsd, jed
   integer, dimension(4) :: siz
@@ -1775,7 +1797,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   if (new_sponges .and. .not. use_ALE) &
     call MOM_error(FATAL, " initialize_sponges: Newer sponges are currently unavailable in layered mode ")
 
-  call MOM_read_data(filename, "Idamp", Idamp(:,:), G%Domain)
+  call MOM_read_data(filename, "Idamp", Idamp(:,:), G%Domain, scale=US%T_to_s)
 
   ! Now register all of the fields which are damped in the sponge.
   ! By default, momentum is advected vertically within the sponge, but
@@ -1845,13 +1867,13 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
     ! mixed layer density, which is used in determining which layers can be
     ! inflated without causing static instabilities.
     do i=is-1,ie ; pres(i) = tv%P_Ref ; enddo
+    EOSdom(:) = EOS_domain(G%HI)
 
     call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain)
     call MOM_read_data(filename, salin_var, tmp2(:,:,:), G%Domain)
 
     do j=js,je
-      call calculate_density(tmp(:,j,1), tmp2(:,j,1), pres, tmp_2d(:,j), &
-                             is, ie-is+1, tv%eqn_of_state)
+      call calculate_density(tmp(:,j,1), tmp2(:,j,1), pres, tmp_2d(:,j), tv%eqn_of_state, EOSdom)
     enddo
 
     call set_up_sponge_ML_density(tmp_2d, G, CSp)
@@ -1864,8 +1886,8 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
     call MOM_read_data(filename, salin_var, tmp(:,:,:), G%Domain)
     call set_up_sponge_field(tmp, tv%S, G, nz, CSp)
   elseif (use_temperature) then
-    call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, tv%T, ALE_CSp)
-    call set_up_ALE_sponge_field(filename, salin_var, Time, G, GV, tv%S, ALE_CSp)
+    call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, US, tv%T, ALE_CSp)
+    call set_up_ALE_sponge_field(filename, salin_var, Time, G, GV, US, tv%S, ALE_CSp)
   endif
 
 end subroutine initialize_sponges_file
@@ -1889,16 +1911,19 @@ end subroutine set_velocity_depth_max
 
 !> Subroutine to pre-compute global integrals of grid quantities for
 !! later use in reporting diagnostics
-subroutine compute_global_grid_integrals(G)
+subroutine compute_global_grid_integrals(G, US)
   type(ocean_grid_type), intent(inout) :: G !< The ocean's grid structure
+  type(unit_scale_type), intent(in)    :: US !< A dimensional unit scaling type
   ! Local variables
   real, dimension(G%isc:G%iec, G%jsc:G%jec) :: tmpForSumming
+  real :: area_scale
   integer :: i,j
 
+  area_scale = US%L_to_m**2
   tmpForSumming(:,:) = 0.
   G%areaT_global = 0.0 ; G%IareaT_global = 0.0
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    tmpForSumming(i,j) = G%US%L_to_m**2*G%areaT(i,j) * G%mask2dT(i,j)
+    tmpForSumming(i,j) = area_scale*G%areaT(i,j) * G%mask2dT(i,j)
   enddo ; enddo
   G%areaT_global = reproducing_sum(tmpForSumming)
   G%IareaT_global = 1. / (G%areaT_global)
@@ -1955,6 +1980,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_initialize_layers_from_Z" ! This module's name.
 
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: is, ie, js, je, nz ! compute domain indices
   integer :: isc,iec,jsc,jec    ! global compute domain indices
   integer :: isg, ieg, jsg, jeg ! global extent
@@ -1967,6 +1993,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   integer :: kd, inconsistent
   integer :: nkd      ! number of levels to use for regridding input arrays
   real    :: eps_Z    ! A negligibly thin layer thickness [Z ~> m].
+  real    :: eps_rho  ! A negligibly small density difference [R ~> kg m-3].
   real    :: PI_180             ! for conversion from degrees to radians
 
   real, dimension(:,:), pointer :: shelf_area => NULL()
@@ -1986,17 +2013,18 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   logical :: debug = .false.  ! manually set this to true for verbose output
 
   ! data arrays
-  real, dimension(:), allocatable :: z_edges_in, z_in, Rb
+  real, dimension(:), allocatable :: z_edges_in, z_in ! Interface heights [Z ~> m]
+  real, dimension(:), allocatable :: Rb  ! Interface densities [R ~> kg m-3]
   real, dimension(:,:,:), allocatable, target :: temp_z, salt_z, mask_z
-  real, dimension(:,:,:), allocatable :: rho_z
+  real, dimension(:,:,:), allocatable :: rho_z ! Densities in Z-space [R ~> kg m-3]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: zi   ! Interface heights [Z ~> m].
-  real, dimension(SZI_(G),SZJ_(G))  :: nlevs
-  real, dimension(SZI_(G))   :: press  ! Pressures [Pa].
+  integer, dimension(SZI_(G),SZJ_(G))  :: nlevs
+  real, dimension(SZI_(G))   :: press  ! Pressures [R L2 T-2 ~> Pa].
 
   ! Local variables for ALE remapping
   real, dimension(:), allocatable :: hTarget ! Target thicknesses [Z ~> m].
-  real, dimension(:,:), allocatable :: area_shelf_h
-  real, dimension(:,:), allocatable, target :: frac_shelf_h
+  real, dimension(:,:), allocatable :: area_shelf_h ! Shelf-covered area per grid cell [L2 ~> m2]
+  real, dimension(:,:), allocatable, target :: frac_shelf_h ! Fractional shelf area per grid cell [nondim]
   real, dimension(:,:,:), allocatable, target :: tmpT1dIn, tmpS1dIn
   real, dimension(:,:,:), allocatable :: tmp_mask_in
   real, dimension(:,:,:), allocatable :: h1 ! Thicknesses [H ~> m or kg m-2].
@@ -2006,7 +2034,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
   logical :: homogenize, useALEremapping, remap_full_column, remap_general, remap_old_alg
+  logical :: answers_2018, default_2018_answers, hor_regrid_answers_2018
   logical :: use_ice_shelf
+  logical :: pre_gridded
   character(len=10) :: remappingScheme
   real :: tempAvg, saltAvg
   integer :: nPoints, ans
@@ -2035,7 +2065,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
 ! call mpp_get_compute_domain(G%domain%mpp_domain,isc,iec,jsc,jec)
 
-  reentrant_x = .false. ; call get_param(PF, mdl, "REENTRANT_X", reentrant_x,default=.true.)
+  reentrant_x = .false. ; call get_param(PF, mdl, "REENTRANT_X", reentrant_x, default=.true.)
   tripolar_n = .false. ;  call get_param(PF, mdl, "TRIPOLAR_N", tripolar_n, default=.false.)
   call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, default=0.0, scale=US%m_to_Z)
 
@@ -2083,6 +2113,24 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
                  "If false, uses the preferred remapping algorithm for initialization. "//&
                  "If true, use an older, less robust algorithm for remapping.", &
                  default=.true., do_not_log=just_read)
+  call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
+  call get_param(PF, mdl, "TEMP_SALT_INIT_VERTICAL_REMAP_ONLY", pre_gridded, &
+                 "If true, initial conditions are on the model horizontal grid. " //&
+                 "Extrapolation over missing ocean values is done using an ICE-9 "//&
+                 "procedure with vertical ALE remapping .", &
+                 default=.false.)
+  if (useALEremapping) then
+    call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=default_2018_answers)
+  endif
+  call get_param(PF, mdl, "HOR_REGRID_2018_ANSWERS", hor_regrid_answers_2018, &
+                 "If true, use the order of arithmetic for horizonal regridding that recovers "//&
+                 "the answers from the end of 2018.  Otherwise, use rotationally symmetric "//&
+                 "forms of the same expressions.", default=default_2018_answers)
   call get_param(PF, mdl, "ICE_SHELF", use_ice_shelf, default=.false.)
   if (use_ice_shelf) then
     call get_param(PF, mdl, "ICE_THICKNESS_FILE", ice_shelf_file, &
@@ -2111,8 +2159,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
     return ! All run-time parameters have been read, so return.
   endif
 
-  !### Change this to GV%Angstrom_Z
-  eps_z = 1.0e-10*US%m_to_Z
+  eps_z = GV%Angstrom_Z
+  eps_rho = 1.0e-10*US%kg_m3_to_R
 
   ! Read input grid coordinates for temperature and salinity field
   ! in z-coordinate dataset. The file is REQUIRED to contain the
@@ -2129,13 +2177,14 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   ! to the North/South Pole past the limits of the input data, they are extrapolated using the average
   ! value at the northernmost/southernmost latitude.
 
+
   call horiz_interp_and_extrap_tracer(tfilename, potemp_var, 1.0, 1, &
        G, temp_z, mask_z, z_in, z_edges_in, missing_value_temp, reentrant_x, &
-       tripolar_n, homogenize, m_to_Z=US%m_to_Z)
+       tripolar_n, homogenize, m_to_Z=US%m_to_Z, answers_2018=hor_regrid_answers_2018,ongrid=pre_gridded)
 
   call horiz_interp_and_extrap_tracer(sfilename, salin_var, 1.0, 1, &
        G, salt_z, mask_z, z_in, z_edges_in, missing_value_salt, reentrant_x, &
-       tripolar_n, homogenize, m_to_Z=US%m_to_Z)
+       tripolar_n, homogenize, m_to_Z=US%m_to_Z, answers_2018=hor_regrid_answers_2018,ongrid=pre_gridded)
 
   kd = size(z_in,1)
 
@@ -2146,13 +2195,13 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   allocate(area_shelf_h(isd:ied,jsd:jed))
   allocate(frac_shelf_h(isd:ied,jsd:jed))
 
-  press(:) = tv%p_ref
-
   ! Convert T&S to Absolute Salinity and Conservative Temperature if using TEOS10 or NEMO
-  call convert_temp_salt_for_TEOS10(temp_z, salt_z, press, G, kd, mask_z, eos)
+  call convert_temp_salt_for_TEOS10(temp_z, salt_z, G%HI, kd, mask_z, eos)
 
+  press(:) = tv%P_Ref
+  EOSdom(:) = EOS_domain(G%HI)
   do k=1,kd ; do j=js,je
-    call calculate_density(temp_z(:,j,k), salt_z(:,j,k), press, rho_z(:,j,k), is, ie, eos)
+    call calculate_density(temp_z(:,j,k), salt_z(:,j,k), press, rho_z(:,j,k), eos, EOSdom)
   enddo ; enddo
 
   call pass_var(temp_z,G%Domain)
@@ -2165,14 +2214,14 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
     if (.not.file_exists(shelf_file, G%Domain)) call MOM_error(FATAL, &
       "MOM_temp_salt_initialize_from_Z: Unable to open shelf file "//trim(shelf_file))
 
-    call MOM_read_data(shelf_file, trim(area_varname), area_shelf_h, G%Domain)
+    call MOM_read_data(shelf_file, trim(area_varname), area_shelf_h, G%Domain, scale=US%m_to_L**2)
 
     ! Initialize frac_shelf_h with zeros (open water everywhere)
     frac_shelf_h(:,:) = 0.0
     ! Compute fractional ice shelf coverage of h
     do j=jsd,jed ; do i=isd,ied
       if (G%areaT(i,j) > 0.0) &
-        frac_shelf_h(i,j) = area_shelf_h(i,j) / (US%L_to_m**2*G%areaT(i,j))
+        frac_shelf_h(i,j) = area_shelf_h(i,j) / G%areaT(i,j)
     enddo ; enddo
     ! Pass to the pointer for use as an argument to regridding_main
     shelf_area => frac_shelf_h
@@ -2249,8 +2298,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
       deallocate( hTarget )
     endif
 
-    ! Now remap from source grid to target grid
-    call initialize_remapping( remapCS, remappingScheme, boundary_extrapolation=.false. ) ! Reconstruction parameters
+    ! Now remap from source grid to target grid, first setting reconstruction parameters
+    call initialize_remapping( remapCS, remappingScheme, boundary_extrapolation=.false., answers_2018=answers_2018 )
     if (remap_general) then
       call set_regrid_params( regridCS, min_thickness=0. )
       tv_loc = tv
@@ -2267,9 +2316,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
       deallocate( dz_interface )
     endif
     call ALE_remap_scalar(remapCS, G, GV, nkd, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column, &
-                          old_remap=remap_old_alg )
+                          old_remap=remap_old_alg, answers_2018=answers_2018 )
     call ALE_remap_scalar(remapCS, G, GV, nkd, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column, &
-                          old_remap=remap_old_alg )
+                          old_remap=remap_old_alg, answers_2018=answers_2018 )
     deallocate( h1 )
     deallocate( tmpT1dIn )
     deallocate( tmpS1dIn )
@@ -2280,15 +2329,15 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
     ! Next find interface positions using local arrays
     ! nlevs contains the number of valid data points in each column
-    nlevs = sum(mask_z,dim=3)
+    nlevs = int(sum(mask_z,dim=3))
 
     ! Rb contains the layer interface densities
     allocate(Rb(nz+1))
-    do k=2,nz ; Rb(k)=0.5*(GV%Rlay(k-1)+GV%Rlay(k)) ; enddo
+    do k=2,nz ; Rb(k) = 0.5*(GV%Rlay(k-1)+GV%Rlay(k)) ; enddo
     Rb(1) = 0.0 ;  Rb(nz+1) = 2.0*GV%Rlay(nz) - GV%Rlay(nz-1)
 
-    zi(is:ie,js:je,:) = find_interfaces(rho_z(is:ie,js:je,:), z_in, Rb, G%bathyT(is:ie,js:je), &
-                                        nlevs(is:ie,js:je), nkml, nkbl, min_depth, eps_z=eps_z)
+    call find_interfaces(rho_z, z_in, kd, Rb, G%bathyT, zi, G, US, &
+                         nlevs, nkml, nkbl, min_depth, eps_z=eps_z, eps_rho=eps_rho)
 
     if (correct_thickness) then
       call adjustEtaToFitBathymetry(G, GV, US, zi, h)
@@ -2315,12 +2364,12 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
       endif
     endif
 
-    tv%T(is:ie,js:je,:) = tracer_z_init(temp_z(is:ie,js:je,:), z_edges_in, zi(is:ie,js:je,:), &
-                                        nkml, nkbl, missing_value, G%mask2dT(is:ie,js:je), nz, &
-                                        nlevs(is:ie,js:je),dbg,idbg,jdbg, eps_z=eps_z)
-    tv%S(is:ie,js:je,:) = tracer_z_init(salt_z(is:ie,js:je,:), z_edges_in, zi(is:ie,js:je,:), &
-                                        nkml, nkbl, missing_value, G%mask2dT(is:ie,js:je), nz, &
-                                        nlevs(is:ie,js:je), eps_z=eps_z)
+    call tracer_z_init_array(temp_z(is:ie,js:je,:), z_edges_in, zi(is:ie,js:je,:), &
+         nkml, nkbl, missing_value, G%mask2dT(is:ie,js:je), nz, &
+         nlevs(is:ie,js:je), eps_z, tv%T(is:ie,js:je,:))
+    call tracer_z_init_array(salt_z(is:ie,js:je,:), z_edges_in, zi(is:ie,js:je,:), &
+         nkml, nkbl, missing_value, G%mask2dT(is:ie,js:je), nz, &
+         nlevs(is:ie,js:je), eps_z, tv%S(is:ie,js:je,:))
 
     do k=1,nz
       nPoints = 0 ; tempAvg = 0. ; saltAvg = 0.
@@ -2359,8 +2408,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
   if (adjust_temperature .and. .not. useALEremapping) then
     call determine_temperature(tv%T(is:ie,js:je,:), tv%S(is:ie,js:je,:), &
-            GV%Rlay(1:nz), tv%p_ref, niter, missing_value, h(is:ie,js:je,:), ks, eos)
-
+            GV%Rlay(1:nz), tv%P_Ref, niter, missing_value, h(is:ie,js:je,:), ks, US, eos)
   endif
 
   deallocate(z_in, z_edges_in, temp_z, salt_z, mask_z)
@@ -2381,51 +2429,60 @@ subroutine MOM_state_init_tests(G, GV, US, tv)
   type(verticalGrid_type),   intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),     intent(in)    :: US   !< A dimensional unit scaling type
   type(thermo_var_ptrs),     intent(in)    :: tv   !< Thermodynamics structure.
+
   ! Local variables
   integer, parameter :: nk=5
-  real, dimension(nk) :: T, T_t, T_b, S, S_t, S_b, rho, h, z
-  real, dimension(nk+1) :: e
+  real, dimension(nk) :: T, T_t, T_b ! Temperatures [degC]
+  real, dimension(nk) :: S, S_t, S_b ! Salinities [ppt]
+  real, dimension(nk) :: rho ! Layer density [R ~> kg m-3]
+  real, dimension(nk) :: h   ! Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(nk) :: z   ! Height of layer center [Z ~> m]
+  real, dimension(nk+1) :: e ! Interface heights [Z ~> m]
   integer :: k
-  real :: P_tot, P_t, P_b, z_out
+  real :: P_tot, P_t, P_b    ! Pressures [R L2 T-2 ~> Pa]
+  real :: z_out              ! Output height [Z ~> m]
+  real :: I_z_scale          ! The inverse of the height scale for prescribed gradients [Z-1 ~> m-1]
   type(remapping_CS), pointer :: remap_CS => NULL()
 
+  I_z_scale = 1.0 / (500.0*US%m_to_Z)
   do k = 1, nk
-    h(k) = 100.
+    h(k) = 100.0*GV%m_to_H
   enddo
   e(1) = 0.
   do K = 1, nk
-    e(K+1) = e(K) - h(k)
+    e(K+1) = e(K) - GV%H_to_Z * h(k)
   enddo
   P_tot = 0.
   do k = 1, nk
     z(k) = 0.5 * ( e(K) + e(K+1) )
-    T_t(k) = 20.+(0./500.)*e(k)
-    T(k)   = 20.+(0./500.)*z(k)
-    T_b(k) = 20.+(0./500.)*e(k+1)
-    S_t(k) = 35.-(0./500.)*e(k)
-    S(k)   = 35.+(0./500.)*z(k)
-    S_b(k) = 35.-(0./500.)*e(k+1)
-    call calculate_density(0.5*(T_t(k)+T_b(k)), 0.5*(S_t(k)+S_b(k)), -GV%Rho0*GV%mks_g_Earth*z(k), &
+    T_t(k) = 20. + (0. * I_z_scale) * e(k)
+    T(k)   = 20. + (0. * I_z_scale)*z(k)
+    T_b(k) = 20. + (0. * I_z_scale)*e(k+1)
+    S_t(k) = 35. - (0. * I_z_scale)*e(k)
+    S(k)   = 35. + (0. * I_z_scale)*z(k)
+    S_b(k) = 35. - (0. * I_z_scale)*e(k+1)
+    call calculate_density(0.5*(T_t(k)+T_b(k)), 0.5*(S_t(k)+S_b(k)), -GV%Rho0*GV%g_Earth*US%m_to_Z*z(k), &
                            rho(k), tv%eqn_of_state)
-    P_tot = P_tot + GV%mks_g_Earth * rho(k) * h(k)
+    P_tot = P_tot + GV%g_Earth * rho(k) * GV%H_to_Z*h(k)
   enddo
 
   P_t = 0.
   do k = 1, nk
-    call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), &
-                                        P_t, 0.5*P_tot, GV%Rho0, GV%mks_g_Earth, tv%eqn_of_state, P_b, z_out)
-    write(0,*) k,P_t,P_b,0.5*P_tot,e(K),e(K+1),z_out
+    call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), P_t, 0.5*P_tot, &
+                                        GV%Rho0, GV%g_Earth, tv%eqn_of_state, P_b, z_out)
+    write(0,*) k, US%RL2_T2_to_Pa*P_t, US%RL2_T2_to_Pa*P_b, 0.5*US%RL2_T2_to_Pa*P_tot, &
+               US%Z_to_m*e(K), US%Z_to_m*e(K+1), US%Z_to_m*z_out
     P_t = P_b
   enddo
-  write(0,*) P_b,P_tot
+  write(0,*) US%RL2_T2_to_Pa*P_b, US%RL2_T2_to_Pa*P_tot
 
   write(0,*) ''
   write(0,*) ' ==================================================================== '
   write(0,*) ''
-  write(0,*) h
-  call cut_off_column_top(nk, tv, GV, GV%mks_g_Earth, -e(nk+1), GV%Angstrom_H, &
-               T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h, remap_CS)
-  write(0,*) h
+  write(0,*) GV%H_to_m*h
+  call cut_off_column_top(nk, tv, GV, US, GV%g_Earth, -e(nk+1), GV%Angstrom_Z, &
+                          T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h, remap_CS)
+  write(0,*) GV%H_to_m*h
 
 end subroutine MOM_state_init_tests
 

@@ -50,7 +50,7 @@ program SHELF_main
   use MOM_write_cputime, only : write_cputime_start_clock, write_cputime_CS
 
   use MOM_ice_shelf, only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
-  use MOM_ice_shelf, only : ice_shelf_save_restart, solo_time_step
+  use MOM_ice_shelf, only : ice_shelf_save_restart, solo_step_ice_shelf
 ! , add_shelf_flux_forcing, add_shelf_flux_IOB
   implicit none
 
@@ -330,7 +330,7 @@ program SHELF_main
 
     ! This call steps the model over a time time_step.
     Time1 = Master_Time ; Time = Master_Time
-    call solo_time_step (ice_shelf_CSp, time_step, m, Time)
+    call solo_step_ice_shelf(ice_shelf_CSp, Time_step_shelf, m, Time)
 
 !    Time = Time + Time_step_ocean
 !  This is here to enable fractional-second time steps.

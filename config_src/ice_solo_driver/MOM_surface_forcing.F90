@@ -46,6 +46,8 @@ module MOM_surface_forcing
 !*  The boundaries always run through q grid points (x).               *
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
+
+use MOM_constants,           only : hlv, hlf
 use MOM_cpu_clock,           only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,           only : CLOCK_MODULE
 use MOM_diag_mediator,       only : post_data, query_averaging_enabled
@@ -89,72 +91,89 @@ public forcing_save_restart
 ! which may be used to drive MOM.  All fluxes are positive into the ocean.
 type, public :: surface_forcing_CS ; private
 
-  logical :: use_temperature    ! if true, temp & salinity used as state variables
-  logical :: restorebuoy        ! if true, use restoring surface buoyancy forcing
-  logical :: adiabatic          ! if true, no diapycnal mass fluxes or surface buoyancy forcing
-  logical :: variable_winds     ! if true, wind stresses vary with time
-  logical :: variable_buoyforce ! if true, buoyancy forcing varies with time.
-  real    :: south_lat          ! southern latitude of the domain
-  real    :: len_lat            ! domain length in latitude
+  logical :: use_temperature    !< if true, temp & salinity used as state variables
+  logical :: restorebuoy        !< if true, use restoring surface buoyancy forcing
+  logical :: adiabatic          !< if true, no diapycnal mass fluxes or surface buoyancy forcing
+  logical :: variable_winds     !< if true, wind stresses vary with time
+  logical :: variable_buoyforce !< if true, buoyancy forcing varies with time.
+  real    :: south_lat          !< southern latitude of the domain
+  real    :: len_lat            !< domain length in latitude
 
-  real :: Rho0                  ! Boussinesq reference density [kg m-3]
-  real :: G_Earth               ! gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
-  real :: Flux_const            ! piston velocity for surface restoring [m s-1]
+  real :: Rho0                  !< Boussinesq reference density [R ~> kg m-3]
+  real :: G_Earth               !< gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
+  real :: Flux_const            !< piston velocity for surface restoring [Z T-1 ~> m s-1]
+  real :: latent_heat_fusion    !< latent heat of fusion times [Q ~> J kg-1]
+  real :: latent_heat_vapor     !< latent heat of vaporization [Q ~> J kg-1]
 
-  real    :: gust_const                 ! constant unresolved background gustiness for ustar [Pa]
-  logical :: read_gust_2d               ! if true, use 2-dimensional gustiness supplied from a file
-  real, pointer :: gust(:,:) => NULL()  ! spatially varying unresolved background gustiness [Pa]
-                                        ! gust is used when read_gust_2d is true.
+  real    :: gust_const                 !< constant unresolved background gustiness for ustar [R L Z T-1 ~> Pa]
+  logical :: read_gust_2d               !< if true, use 2-dimensional gustiness supplied from a file
+  real, pointer :: gust(:,:) => NULL()  !< spatially varying unresolved background gustiness [R L Z T-1 ~> Pa]
+                                        !< gust is used when read_gust_2d is true.
 
-  real, pointer :: T_Restore(:,:)    => NULL()  ! temperature to damp (restore) the SST to [degC]
-  real, pointer :: S_Restore(:,:)    => NULL()  ! salinity to damp (restore) the SSS [ppt]
-  real, pointer :: Dens_Restore(:,:) => NULL()  ! density to damp (restore) surface density [kg m-3]
+  real, pointer :: T_Restore(:,:)    => NULL()  !< temperature to damp (restore) the SST to [degC]
+  real, pointer :: S_Restore(:,:)    => NULL()  !< salinity to damp (restore) the SSS [ppt]
+  real, pointer :: Dens_Restore(:,:) => NULL()  !< density to damp (restore) surface density [R ~> kg m-3]
 
-  integer :: wind_last_lev_read = -1 ! The last time level read from the wind input files
-  integer :: buoy_last_lev_read = -1 ! The last time level read from buoyancy input files
+  integer :: wind_last_lev_read = -1 !< The last time level read from the wind input files
+  integer :: buoy_last_lev_read = -1 !< The last time level read from buoyancy input files
 
-  real :: gyres_taux_const, gyres_taux_sin_amp, gyres_taux_cos_amp, gyres_taux_n_pis
-                             ! if WIND_CONFIG=='gyres' then use
-                             ! = A, B, C and n respectively for
-                             ! taux = A + B*sin(n*pi*y/L) + C*cos(n*pi*y/L)
+  ! if WIND_CONFIG=='gyres' then use the following as  = A, B, C and n respectively for
+  ! taux = A + B*sin(n*pi*y/L) + C*cos(n*pi*y/L)
+  real :: gyres_taux_const   !< A constant wind stress [Pa].
+  real :: gyres_taux_sin_amp !< The amplitude of cosine wind stress gyres [Pa], if WIND_CONFIG=='gyres'.
+  real :: gyres_taux_cos_amp !< The amplitude of cosine wind stress gyres [Pa], if WIND_CONFIG=='gyres'.
+  real :: gyres_taux_n_pis   !< The number of sine lobes in the basin if  if WIND_CONFIG=='gyres'
 
-  real :: T_north, T_south   ! target temperatures at north and south used in
-                             ! buoyancy_forcing_linear
-  real :: S_north, S_south   ! target salinity at north and south used in
-                             ! buoyancy_forcing_linear
+  real :: T_north   !< target temperatures at north used in buoyancy_forcing_linear
+  real :: T_south   !< target temperatures at south used in buoyancy_forcing_linear
+  real :: S_north   !< target salinity at north used in buoyancy_forcing_linear
+  real :: S_south   !< target salinity at south used in buoyancy_forcing_linear
 
-  logical          :: first_call_set_forcing = .true.
-  real             :: wind_scale    ! value by which wind-stresses are scaled (nondimensional)
-  character(len=8) :: wind_stagger
+  logical :: first_call_set_forcing = .true. !< True until after the first call to set_forcing
 
-  type(tracer_flow_control_CS), pointer :: tracer_flow_CSp  => NULL()
-  type(MOM_restart_CS), pointer         :: restart_CSp      => NULL()
+  real :: wind_scale          !< value by which wind-stresses are scaled, ND.
+  character(len=8)   :: wind_stagger !< A character indicating how the wind stress components
+                              !! are staggered in WIND_FILE.  Valid values are A or C for now.
 
-  type(diag_ctrl), pointer :: diag ! structure used to regulate timing of diagnostic output
+  type(tracer_flow_control_CS), pointer :: tracer_flow_CSp => NULL() !< A pointer to the structure
+                              !! that is used to orchestrate the calling of tracer packages
+  type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< A pointer to the restart control structure
 
-  character(len=200) :: inputdir     ! The directory where NetCDF input files are.
-  character(len=200) :: wind_config  ! Indicator for wind forcing type (2gyre, USER, FILE..)
-  character(len=200) :: wind_file    ! If wind_config is "file", file to use
-  character(len=200) :: buoy_config  ! Indicator for buoyancy forcing type
-  character(len=200) :: longwavedown_file
-  character(len=200) :: longwaveup_file
-  character(len=200) :: evaporation_file
-  character(len=200) :: sensibleheat_file
-  character(len=200) :: shortwaveup_file
-  character(len=200) :: shortwavedown_file
-  character(len=200) :: snow_file
-  character(len=200) :: precip_file
-  character(len=200) :: freshdischarge_file
-  character(len=200) :: SSTrestore_file
-  character(len=200) :: salinityrestore_file
-  character(len=80)  :: stress_x_var, stress_y_var
+  type(diag_ctrl), pointer :: diag !< structure used to regulate timing of diagnostic output
 
-  ! Diagnostics handles
-  type(forcing_diags), public :: handles
+  character(len=200) :: inputdir    !< directory where NetCDF input files are.
+  character(len=200) :: wind_config !< indicator for wind forcing type (2gyre, USER, FILE..)
+  character(len=200) :: wind_file   !< if wind_config is "file", file to use
+  character(len=200) :: buoy_config !< indicator for buoyancy forcing type
 
-  type(user_revise_forcing_CS),   pointer :: urf_CS           => NULL()
-  type(user_surface_forcing_CS),  pointer :: user_forcing_CSp => NULL()
-!  type(MESO_surface_forcing_CS), pointer :: MESO_forcing_CSp => NULL()
+  character(len=200) :: longwavedown_file  = '' !< The file from which the downward longwave heat flux is read
+  character(len=200) :: shortwavedown_file = '' !< The file from which the downward shortwave heat flux is read
+  character(len=200) :: evaporation_file  = '' !< The file from which the evaporation is read
+  character(len=200) :: sensibleheat_file = '' !< The file from which the sensible heat flux is read
+  character(len=200) :: latentheat_file   = '' !< The file from which the latent heat flux is read
+
+  character(len=200) :: precip_file   = '' !< The file from which the rainfall is read
+  character(len=200) :: snow_file   = '' !< The file from which the snowfall is read
+  character(len=200) :: freshdischarge_file = '' !< The file from which the runoff and calving are read
+
+  character(len=200) :: longwaveup_file  = '' !< The file from which the upward longwave heat flux is read
+  character(len=200) :: shortwaveup_file = '' !< The file from which the upward shorwave heat flux is read
+
+  character(len=200) :: SSTrestore_file      = '' !< The file from which to read the sea surface
+                                                  !! temperature to restore toward
+  character(len=200) :: salinityrestore_file = '' !< The file from which to read the sea surface
+                                                  !! salinity to restore toward
+
+  character(len=80)  :: stress_x_var  = '' !< X-windstress variable name in the input file
+  character(len=80)  :: stress_y_var  = '' !< Y-windstress variable name in the input file
+
+  type(forcing_diags), public :: handles !< A structure with diagnostics handles
+
+  !>@{ Control structures for named forcing packages
+  type(user_revise_forcing_CS),  pointer :: urf_CS => NULL()
+  type(user_surface_forcing_CS), pointer :: user_forcing_CSp => NULL()
+  ! type(MESO_surface_forcing_CS), pointer :: MESO_forcing_CSp => NULL()
+  !!@}
 end type surface_forcing_CS
 
 integer :: id_clock_forcing
@@ -238,11 +257,11 @@ subroutine set_forcing(sfc_state, forcing, fluxes, day_start, day_interval, G, U
   if ((CS%variable_buoyforce .or. CS%first_call_set_forcing) .and. &
       (.not.CS%adiabatic)) then
     if (trim(CS%buoy_config) == "file") then
-      call buoyancy_forcing_from_files(sfc_state, fluxes, day_center, dt, G, CS)
+      call buoyancy_forcing_from_files(sfc_state, fluxes, day_center, dt, G, US, CS)
     elseif (trim(CS%buoy_config) == "zero") then
       call buoyancy_forcing_zero(sfc_state, fluxes, day_center, dt, G, CS)
     elseif (trim(CS%buoy_config) == "linear") then
-      call buoyancy_forcing_linear(sfc_state, fluxes, day_center, dt, G, CS)
+      call buoyancy_forcing_linear(sfc_state, fluxes, day_center, dt, G, US, CS)
     elseif (trim(CS%buoy_config) == "MESO") then
       call MOM_error(FATAL, "MESO forcing is not available with the ice-shelf"//&
                "version of MOM_surface_forcing.")
@@ -275,7 +294,7 @@ subroutine set_forcing(sfc_state, forcing, fluxes, day_start, day_interval, G, U
 
   if ((CS%variable_buoyforce .or. CS%first_call_set_forcing) .and. &
       (.not.CS%adiabatic)) then
-    call set_net_mass_forcing(fluxes, forces, G)
+    call set_net_mass_forcing(fluxes, forces, G, US)
   endif
 
   CS%first_call_set_forcing = .false.
@@ -352,11 +371,11 @@ subroutine wind_forcing_zero(sfc_state, forces, day, G, US, CS)
 
   if (CS%read_gust_2d) then
     if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
-      forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(CS%gust(i,j)/CS%Rho0)
+      forces%ustar(i,j) = sqrt(US%L_to_Z*CS%gust(i,j)/CS%Rho0)
     enddo ; enddo ; endif
   else
     if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
-      forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(CS%gust_const/CS%Rho0)
+      forces%ustar(i,j) = sqrt(US%L_to_Z*CS%gust_const/CS%Rho0)
     enddo ; enddo ; endif
   endif
 
@@ -389,8 +408,8 @@ subroutine wind_forcing_2gyre(sfc_state, forces, day, G, CS)
   PI = 4.0*atan(1.0)
 
   do j=js,je ; do I=Isq,Ieq
-    forces%taux(I,j) = 0.1*(1.0 - cos(2.0*PI*(G%geoLatCu(I,j)-CS%South_lat) / &
-                                      CS%len_lat))
+    forces%taux(I,j) = 0.1*US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * &
+                       (1.0 - cos(2.0*PI*(G%geoLatCu(I,j)-CS%South_lat) / CS%len_lat))
   enddo ; enddo
 
   do J=Jsq,Jeq ; do i=is,ie
@@ -426,7 +445,8 @@ subroutine wind_forcing_1gyre(sfc_state, forces, day, G, CS)
   PI = 4.0*atan(1.0)
 
   do j=js,je ; do I=Isq,Ieq
-    forces%taux(I,j) =-0.2*cos(PI*(G%geoLatCu(I,j)-CS%South_lat)/CS%len_lat)
+    forces%taux(I,j) = -0.2*US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * &
+                       cos(PI*(G%geoLatCu(I,j)-CS%South_lat)/CS%len_lat)
   enddo ; enddo
 
   do J=Jsq,Jeq ; do i=is,ie
@@ -464,9 +484,9 @@ subroutine wind_forcing_gyres(sfc_state, forces, day, G, US, CS)
 
   do j=jsd,jed ; do I=IsdB,IedB
     y = (G%geoLatCu(I,j)-CS%South_lat)/CS%len_lat
-    forces%taux(I,j) = CS%gyres_taux_const +                            &
+    forces%taux(I,j) = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * (CS%gyres_taux_const + &
              (   CS%gyres_taux_sin_amp*sin(CS%gyres_taux_n_pis*PI*y)    &
-               + CS%gyres_taux_cos_amp*cos(CS%gyres_taux_n_pis*PI*y) )
+               + CS%gyres_taux_cos_amp*cos(CS%gyres_taux_n_pis*PI*y) ))
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
@@ -475,9 +495,9 @@ subroutine wind_forcing_gyres(sfc_state, forces, day, G, US, CS)
 
   ! set the friction velocity
   do j=js,je ; do i=is,ie
-    forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(sqrt(0.5*(forces%tauy(i,j-1)*forces%tauy(i,j-1) + &
-      forces%tauy(i,j)*forces%tauy(i,j) + forces%taux(i-1,j)*forces%taux(i-1,j) + &
-      forces%taux(i,j)*forces%taux(i,j)))/CS%Rho0 + (CS%gust_const/CS%Rho0))
+    forces%ustar(i,j) = sqrt(US%L_to_S * (CS%gust_const/CS%Rho0 + &
+            sqrt(0.5*(forces%tauy(i,j-1)*forces%tauy(i,j-1) + forces%tauy(i,j)*forces%tauy(i,j) + &
+                      forces%taux(i-1,j)*forces%taux(i-1,j) + forces%taux(i,j)*forces%taux(i,j)))/CS%Rho0) )
   enddo ; enddo
 
   call callTree_leave("wind_forcing_gyres")
@@ -502,6 +522,8 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
   character(len=200) :: filename  ! The name of the input file.
   real :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal and psuedo-meridional
   real :: temp_y(SZI_(G),SZJ_(G)) ! wind stresses at h-points [Pa].
+  real    :: Pa_conversion           ! A unit conversion factor from Pa to the internal wind stress
+                                     ! units [R Z L T-2 Pa-1 ~> 1]
   integer :: days, seconds
 
   call callTree_enter("wind_forcing_from_file, MOM_surface_forcing.F90")
@@ -510,6 +532,7 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+  Pa_conversion = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z
 
   call get_time(day,seconds,days)
   time_lev = days - 365*floor(real(days) / 365.0) +1
@@ -524,7 +547,7 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
       temp_x(:,:) = 0.0 ; temp_y(:,:) = 0.0
       call MOM_read_vector(filename, CS%stress_x_var, CS%stress_y_var, &
                            temp_x(:,:), temp_y(:,:), G%Domain, stagger=AGRID, &
-                           timelevel=time_lev)
+                           timelevel=time_lev, scale=Pa_conversion)
 
       call pass_vector(temp_x, temp_y, G%Domain, To_All, AGRID)
       do j=js,je ; do I=Isq,Ieq
@@ -536,19 +559,20 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
 
       if (CS%read_gust_2d) then
         do j=js,je ; do i=is,ie
-          forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt((sqrt(temp_x(i,j)*temp_x(i,j) + &
-              temp_y(i,j)*temp_y(i,j)) + CS%gust(i,j)) / CS%Rho0)
+          forces%ustar(i,j) = sqrt(US%L_to_Z * (CS%gust(i,j) + &
+                  sqrt(temp_x(i,j)*temp_x(i,j) + temp_y(i,j)*temp_y(i,j)) ) / CS%Rho0)
         enddo ; enddo
       else
         do j=js,je ; do i=is,ie
-          forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(sqrt(temp_x(i,j)*temp_x(i,j) + &
-              temp_y(i,j)*temp_y(i,j))/CS%Rho0 + (CS%gust_const/CS%Rho0))
+          forces%ustar(i,j) = sqrt(US%L_to_Z * (CS%gust_const/CS%Rho0 + &
+                  sqrt(temp_x(i,j)*temp_x(i,j) + temp_y(i,j)*temp_y(i,j)) / CS%Rho0) )
         enddo ; enddo
       endif
     case ("C")
       call MOM_read_vector(filename,CS%stress_x_var, CS%stress_y_var, &
                      forces%taux(:,:), forces%tauy(:,:), &
-                     G%Domain, timelevel=time_lev)
+                     G%Domain, timelevel=time_lev, &
+                     scale=Pa_conversion)
       if (CS%wind_scale /= 1.0) then
         do j=js,je ; do I=Isq,Ieq
           forces%taux(I,j) = CS%wind_scale * forces%taux(I,j)
@@ -561,15 +585,15 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
       call pass_vector(forces%taux, forces%tauy, G%Domain, To_All)
       if (CS%read_gust_2d) then
         do j=js, je ; do i=is, ie
-          forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt((sqrt(0.5*((forces%tauy(i,j-1)**2 + &
-            forces%tauy(i,j)**2) + (forces%taux(i-1,j)**2 + &
-            forces%taux(i,j)**2))) + CS%gust(i,j)) / CS%Rho0 )
+          forces%ustar(i,j) = sqrt( (CS%gust(i,j) + &
+                  sqrt(0.5*((forces%tauy(i,j-1)**2 + forces%tauy(i,j)**2) + &
+                            (forces%taux(i-1,j)**2 +  forces%taux(i,j)**2)))) * US%L_to_Z / CS%Rho0 )
         enddo ; enddo
       else
         do j=js, je ; do i=is, ie
-          forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(sqrt(0.5*((forces%tauy(i,j-1)**2 + &
-            forces%tauy(i,j)**2) + (forces%taux(i-1,j)**2 + &
-            forces%taux(i,j)**2)))/CS%Rho0 + (CS%gust_const/CS%Rho0))
+          forces%ustar(i,j) = sqrt(US%L_to_Z * (CS%gust_const/CS%Rho0 + &
+                 sqrt(0.5*((forces%tauy(i,j-1)**2 + forces%tauy(i,j)**2) + &
+                           (forces%taux(i-1,j)**2 + forces%taux(i,j)**2))) / CS%Rho0) )
         enddo ; enddo
       endif
     case default
@@ -585,7 +609,7 @@ end subroutine wind_forcing_from_file
 
 !> This subroutine specifies the current surface fluxes of buoyancy, temperature and fresh water
 !! by reading a file. It may also be modified to add surface fluxes of user provided tracers.
-subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
+subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(forcing),         intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
@@ -593,10 +617,11 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
   real,                  intent(in)    :: dt   !< The amount of time over which
                                                !! the fluxes apply [s]
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
+  type(unit_scale_type), intent(in)    :: US     !< A dimensional unit scaling type
   type(surface_forcing_CS), pointer    :: CS   !< A pointer to the control structure returned by a
                                                !! previous surface_forcing_init call
 
-  real :: rhoXcp ! mean density times the heat capacity [J m-3 degC-1].
+  real :: rhoXcp ! mean density times the heat capacity [Q R degC-1 ~> J m-3 degC-1].
   real :: Irho0  ! inverse Boussinesq reference density [m3 kg-1].
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
 
@@ -624,7 +649,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
   call buoyancy_forcing_allocate(fluxes, G, CS)
 
   if (CS%use_temperature) rhoXcp = CS%Rho0 * fluxes%C_p
-  Irho0 = 1.0/CS%Rho0
+  Irho0 = 1.0/(US%R_to_kg_m3*CS%Rho0)
 
   ! Read the file containing the buoyancy forcing.
   call get_time(day,seconds,days)
@@ -656,47 +681,44 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
 
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%longwavedown_file), "lwdn_sfc", &
-             fluxes%LW(:,:), G%Domain, timelevel=time_lev)
+             fluxes%LW(:,:), G%Domain, timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
     call MOM_read_data(trim(CS%inputdir)//trim(CS%longwaveup_file), "lwup_sfc", &
-             temp(:,:), G%Domain, timelevel=time_lev)
+             temp(:,:), G%Domain, timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
     do j=js,je ; do i=is,ie ; fluxes%LW(i,j) = fluxes%LW(i,j) - temp(i,j) ; enddo ; enddo
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%evaporation_file), "evap", &
-             temp(:,:), G%Domain, timelevel=time_lev)
+             fluxes%evap(:,:), G%Domain, timelevel=time_lev, scale=-US%kg_m2s_to_RZ_T)
     do j=js,je ; do i=is,ie
-      fluxes%latent(i,j)           = -hlv*temp(i,j)
-      fluxes%evap(i,j)             = -temp(i,j)
+      fluxes%latent(i,j)           = CS%latent_heat_vapor*fluxes%evap(i,j)
       fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
-
     enddo ; enddo
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%sensibleheat_file), "shflx", &
-             temp(:,:), G%Domain, timelevel=time_lev)
-    do j=js,je ; do i=is,ie ; fluxes%sens(i,j) = -temp(i,j) ; enddo ; enddo
+             fluxes%sens(:,:), G%Domain, timelevel=time_lev, scale=-US%W_m2_to_QRZ_T)
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%shortwavedown_file), "swdn_sfc", &
-             fluxes%sw(:,:), G%Domain, timelevel=time_lev)
+             fluxes%sw(:,:), G%Domain, timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
     call MOM_read_data(trim(CS%inputdir)//trim(CS%shortwaveup_file), "swup_sfc", &
-             temp(:,:), G%Domain, timelevel=time_lev)
+             temp(:,:), G%Domain, timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
     do j=js,je ; do i=is,ie
       fluxes%sw(i,j) = fluxes%sw(i,j) - temp(i,j)
     enddo ; enddo
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%snow_file), "snow", &
-             fluxes%fprec(:,:), G%Domain, timelevel=time_lev)
+             fluxes%fprec(:,:), G%Domain, timelevel=time_lev, scale=US%kg_m2s_to_RZ_T)
     call MOM_read_data(trim(CS%inputdir)//trim(CS%precip_file), "precip", &
-             fluxes%lprec(:,:), G%Domain, timelevel=time_lev)
+             fluxes%lprec(:,:), G%Domain, timelevel=time_lev, scale=US%kg_m2s_to_RZ_T)
     do j=js,je ; do i=is,ie
       fluxes%lprec(i,j) = fluxes%lprec(i,j) - fluxes%fprec(i,j)
     enddo ; enddo
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%freshdischarge_file), "disch_w", &
-             temp(:,:), G%Domain, timelevel=time_lev_monthly)
+             temp(:,:), G%Domain, timelevel=time_lev_monthly, scale=US%kg_m2s_to_RZ_T)
     do j=js,je ; do i=is,ie
       fluxes%lrunoff(i,j) = temp(i,j)*US%m_to_L**2*G%IareaT(i,j)
     enddo ; enddo
     call MOM_read_data(trim(CS%inputdir)//trim(CS%freshdischarge_file), "disch_s", &
-              temp(:,:), G%Domain, timelevel=time_lev_monthly)
+              temp(:,:), G%Domain, timelevel=time_lev_monthly, scale=US%kg_m2s_to_RZ_T)
     do j=js,je ; do i=is,ie
       fluxes%frunoff(i,j) = temp(i,j)*US%m_to_L**2*G%IareaT(i,j)
     enddo ; enddo
@@ -726,10 +748,10 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
       fluxes%sw(i,j)                   = fluxes%sw(i,j)               * G%mask2dT(i,j)
       fluxes%latent(i,j)               = fluxes%latent(i,j)           * G%mask2dT(i,j)
 
-      fluxes%heat_content_lrunoff(i,j) = fluxes%C_p*fluxes%lrunoff(i,j)*sfc_state%SST(i,j)
+      fluxes%heat_content_lrunoff(i,j) = fluxes%C_p * fluxes%lrunoff(i,j)*sfc_state%SST(i,j)
       fluxes%latent_evap_diag(i,j)     = fluxes%latent_evap_diag(i,j) * G%mask2dT(i,j)
-      fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*hlf
-      fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*hlf
+      fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*CS%latent_heat_fusion
+      fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*CS%latent_heat_fusion
     enddo ; enddo
 
   endif ! time_lev /= CS%buoy_last_lev_read
@@ -738,13 +760,13 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
     if (CS%use_temperature) then
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
-          fluxes%heat_restore(i,j) = G%mask2dT(i,j) * &
+          fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
               ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const)
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
               (CS%S_Restore(i,j) - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j)))
         else
-          fluxes%heat_restore(i,j) = 0.0
+          fluxes%heat_added(i,j) = 0.0
           fluxes%vprec(i,j) = 0.0
         endif
       enddo ; enddo
@@ -752,7 +774,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
           fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
-                             (CS%G_Earth * US%m_to_Z*US%T_to_s*CS%Flux_const/CS%Rho0)
+                             (CS%G_Earth * CS%Flux_const / CS%Rho0)
         else
           fluxes%buoy(i,j) = 0.0
         endif
@@ -819,7 +841,7 @@ end subroutine buoyancy_forcing_zero
 
 !> This subroutine specifies the current surface fluxes of buoyancy, temperature and fresh water.
 !! It may also be modified to add surface fluxes of user provided tracers.
-subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, CS)
+subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, US, CS)
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(forcing),         intent(inout) :: fluxes !< A structure with pointers to thermodynamic forcing fields
@@ -827,6 +849,7 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, CS)
   real,                  intent(in)    :: dt   !< The amount of time over which
                                                !! the fluxes apply, in s
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
+  type(unit_scale_type), intent(in)    :: US     !< A dimensional unit scaling type
   type(surface_forcing_CS), pointer    :: CS   !< A pointer to the control structure returned by a
                                                !! previous surface_forcing_init call
 
@@ -871,13 +894,13 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, CS)
         T_restore = CS%T_south + (CS%T_north-CS%T_south)*y
         S_restore = CS%S_south + (CS%S_north-CS%S_south)*y
         if (G%mask2dT(i,j) > 0) then
-          fluxes%heat_restore(i,j) = G%mask2dT(i,j) * &
+          fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
               ((T_Restore - sfc_state%SST(i,j)) * ((CS%Rho0 * fluxes%C_p) * CS%Flux_const))
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
               (S_Restore - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + S_Restore))
         else
-          fluxes%heat_restore(i,j) = 0.0
+          fluxes%heat_added(i,j) = 0.0
           fluxes%vprec(i,j) = 0.0
         endif
       enddo ; enddo
@@ -887,7 +910,7 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, CS)
      !do j=js,je ; do i=is,ie
      !  if (G%mask2dT(i,j) > 0) then
      !   fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
-     !                       (CS%G_Earth * US%m_to_Z*US%T_to_s*CS%Flux_const/CS%Rho0)
+     !                      (CS%G_Earth * CS%Flux_const / CS%Rho0)
      !  else
      !    fluxes%buoy(i,j) = 0.0
      !  endif
@@ -1075,19 +1098,22 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
                  "calculate accelerations and the mass for conservation "//&
                  "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
-                 units="kg m-3", default=1035.0)
+                 units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
                  "If true, the buoyancy fluxes drive the model back "//&
                  "toward some specified surface state with a rate "//&
                  "given by FLUXCONST.", default= .false.)
+  call get_param(param_file, mdl, "LATENT_HEAT_FUSION", CS%latent_heat_fusion, &
+                 "The latent heat of fusion.", default=hlf, &
+                 units="J/kg", scale=US%J_kg_to_Q)
+  call get_param(param_file, mdl, "LATENT_HEAT_VAPORIZATION", CS%latent_heat_vapor, &
+                 "The latent heat of fusion.", default=hlv, units="J/kg", scale=US%J_kg_to_Q)
   if (CS%restorebuoy) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
                  "The constant that relates the restoring surface fluxes "//&
                  "to the relative surface anomalies (akin to a piston "//&
-                 "velocity).  Note the non-MKS units.", units="m day-1", &
-                 fail_if_missing=.true.)
-    ! Convert CS%Flux_const from m day-1 to m s-1.
-    CS%Flux_const = CS%Flux_const / 86400.0
+                 "velocity).  Note the non-MKS units.", &
+                 units="m day-1", scale=US%m_to_Z*US%T_to_s/86400.0, fail_if_missing=.true.)
     if (trim(CS%buoy_config) == "linear") then
       call get_param(param_file, mdl, "SST_NORTH", CS%T_north, &
                  "With buoy_config linear, the sea surface temperature "//&
@@ -1112,8 +1138,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
                  units="m s-2", default = 9.80, scale=US%m_to_L**2*US%Z_to_m*US%T_to_s**2)
 
   call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
-                 "The background gustiness in the winds.", units="Pa", &
-                 default=0.02)
+                 "The background gustiness in the winds.", &
+                 units="Pa", default=0.02, scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z)
   call get_param(param_file, mdl, "READ_GUST_2D", CS%read_gust_2d, &
                  "If true, use a 2-dimensional gustiness supplied from "//&
                  "an input file", default=.false.)
@@ -1123,8 +1149,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
                  "variable gustiness.", fail_if_missing=.true.)
     call safe_alloc_ptr(CS%gust,G%isd,G%ied,G%jsd,G%jed) ; CS%gust(:,:) = 0.0
     filename = trim(CS%inputdir) // trim(gust_file)
-    call MOM_read_data(filename,'gustiness',CS%gust,G%domain, &
-                   timelevel=1) ! units should be Pa
+    call MOM_read_data(filename,'gustiness',CS%gust,G%domain, timelevel=1, &
+                 scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z) ! units in file should be Pa
   endif
   call get_param(param_file, mdl, "AXIS_UNITS", axis_units, default="degrees")
 

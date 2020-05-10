@@ -138,7 +138,8 @@ type, public :: ocean_grid_type
     y_axis_units        !< The units that are used in labeling the y coordinate axes.
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    bathyT        !< Ocean bottom depth at tracer points, in depth units [Z ~> m].
+    bathyT           !< Ocean bottom depth at tracer points, in depth units [Z ~> m].
+  real    :: Z_ref   !< A reference value for all geometric height fields, such as bathyT [Z ~> m].
 
   logical :: bathymetry_at_vel  !< If true, there are separate values for the
                   !! basin depths at velocity points.  Otherwise the effects of
@@ -154,7 +155,6 @@ type, public :: ocean_grid_type
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     df_dx, &      !< Derivative d/dx f (Coriolis parameter) at h-points [T-1 L-1 ~> s-1 m-1].
     df_dy         !< Derivative d/dy f (Coriolis parameter) at h-points [T-1 L-1 ~> s-1 m-1].
-  real :: g_Earth !< The gravitational acceleration [m2 Z-1 s-2 ~> m s-2].
 
   ! These variables are global sums that are useful for 1-d diagnostics and should not be rescaled.
   real :: areaT_global  !< Global sum of h-cell area [m2]
@@ -194,14 +194,16 @@ subroutine MOM_grid_init(G, param_file, US, HI, global_indexing, bathymetry_at_v
                              !! velocity points.  Otherwise the effects of topography
                              !! are entirely determined from thickness points.
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! Local variables
+  real :: mean_SeaLev_scale
   integer :: isd, ied, jsd, jed, nk
   integer :: IsdB, IedB, JsdB, JedB
   integer :: ied_max, jed_max
   integer :: niblock, njblock, nihalo, njhalo, nblocks, n, i, j
   logical :: local_indexing  ! If false use global index values instead of having
                              ! the data domain on each processor start at 1.
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
 
   integer, allocatable, dimension(:) :: ibegin, iend, jbegin, jend
   character(len=40)  :: mod_nm  = "MOM_grid" ! This module's name.
@@ -218,8 +220,12 @@ subroutine MOM_grid_init(G, param_file, US, HI, global_indexing, bathymetry_at_v
   call get_param(param_file, mod_nm, "NJBLOCK", njblock, "The number of blocks "// &
                  "in the y-direction on each processor (for openmp).", default=1, &
                  layoutParam=.true.)
-
   if (present(US)) then ; if (associated(US)) G%US => US ; endif
+
+  mean_SeaLev_scale = 1.0 ;  if (associated(G%US)) mean_SeaLev_scale = G%US%m_to_Z
+  call get_param(param_file, mod_nm, "REFERENCE_HEIGHT", G%Z_ref, &
+                 "A reference value for geometric height fields, such as bathyT.", &
+                 units="m", default=0.0, scale=mean_SeaLev_scale)
 
   if (present(HI)) then
     G%HI = HI

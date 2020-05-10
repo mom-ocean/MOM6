@@ -17,29 +17,26 @@ contains
 !!
 !! It is assumed that the dimension of 'u' is equal to the number of cells
 !! defining 'grid' and 'ppoly'. No consistency check is performed.
-subroutine PQM_reconstruction( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect )
+subroutine PQM_reconstruction( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect, answers_2018 )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
-  real, dimension(:),   intent(in)    :: u !< cell averages (size N)
-  real, dimension(:,:), intent(inout) :: ppoly_E    !< Edge value of polynomial,
-                                           !! with the same units as u.
-  real, dimension(:,:), intent(inout) :: ppoly_S    !< Edge slope of polynomial,
-                                           !! in the units of u over the units of h.
-  real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial, mainly
-                                           !! with the same units as u.
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
+  real, dimension(:),   intent(in)    :: u !< cell averages (size N) [A]
+  real, dimension(:,:), intent(inout) :: ppoly_E    !< Edge value of polynomial [A]
+  real, dimension(:,:), intent(inout) :: ppoly_S    !< Edge slope of polynomial [A H-1]
+  real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial, mainly [A]
   real,       optional, intent(in)    :: h_neglect  !< A negligibly small width for
-                                           !! the purpose of cell reconstructions
-                                           !! in the same units as h
+                                           !! the purpose of cell reconstructions [H]
+  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
 
   ! Local variables
   integer   :: k                ! loop index
   real      :: h_c              ! cell width
-  real      :: u0_l, u0_r       ! edge values (left and right)
-  real      :: u1_l, u1_r       ! edge slopes (left and right)
+  real      :: u0_l, u0_r       ! edge values (left and right) [A]
+  real      :: u1_l, u1_r       ! edge slopes (left and right) [A H-1]
   real      :: a, b, c, d, e    ! parabola coefficients
 
   ! PQM limiter
-  call PQM_limiter( N, h, u, ppoly_E, ppoly_S, h_neglect )
+  call PQM_limiter( N, h, u, ppoly_E, ppoly_S, h_neglect, answers_2018 )
 
   ! Loop on cells to construct the cubic within each cell
   do k = 1,N
@@ -75,25 +72,24 @@ end subroutine PQM_reconstruction
 !!
 !! It is assumed that the dimension of 'u' is equal to the number of cells
 !! defining 'grid' and 'ppoly'. No consistency check is performed.
-subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S, h_neglect )
+subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S, h_neglect, answers_2018 )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
-  real, dimension(:,:), intent(inout) :: ppoly_E !< Potentially modified edge values,
-                                           !! with the same units as u.
-  real, dimension(:,:), intent(inout) :: ppoly_S !< Potentially modified edge slopes,
-                                           !! with the same units as u.
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N) [A]
+  real, dimension(:,:), intent(inout) :: ppoly_E !< Potentially modified edge values [A]
+  real, dimension(:,:), intent(inout) :: ppoly_S !< Potentially modified edge slopes [A H-1]
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width for
-                                           !! the purpose of cell reconstructions
-                                           !! in the same units as h
+                                           !! the purpose of cell reconstructions [H]
+  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+
   ! Local variables
   integer :: k            ! loop index
   integer :: inflexion_l
   integer :: inflexion_r
-  real    :: u0_l, u0_r     ! edge values
-  real    :: u1_l, u1_r     ! edge slopes
-  real    :: u_l, u_c, u_r  ! left, center and right cell averages
-  real    :: h_l, h_c, h_r  ! left, center and right cell widths
+  real    :: u0_l, u0_r     ! edge values [A]
+  real    :: u1_l, u1_r     ! edge slopes [A H-1]
+  real    :: u_l, u_c, u_r  ! left, center and right cell averages [A]
+  real    :: h_l, h_c, h_r  ! left, center and right cell widths [H]
   real    :: sigma_l, sigma_c, sigma_r ! left, center and right van Leer slopes
   real    :: slope          ! retained PLM slope
   real    :: a, b, c, d, e
@@ -106,7 +102,7 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S, h_neglect )
   hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   ! Bound edge values
-  call bound_edge_values( N, h, u, ppoly_E, hNeglect )
+  call bound_edge_values( N, h, u, ppoly_E, hNeglect, answers_2018 )
 
   ! Make discontinuous edge values monotonic (thru averaging)
   call check_discontinuous_edge_values( N, u, ppoly_E )
@@ -357,12 +353,10 @@ end subroutine PQM_limiter
 !! defining 'grid' and 'ppoly'. No consistency check is performed here.
 subroutine PQM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
-  real, dimension(:),   intent(in)    :: u !< cell averages (size N)
-  real, dimension(:,:), intent(inout) :: ppoly_E    !< Edge value of polynomial,
-                                           !! with the same units as u.
-  real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial, mainly
-                                           !! with the same units as u.
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
+  real, dimension(:),   intent(in)    :: u !< cell averages (size N) [A]
+  real, dimension(:,:), intent(inout) :: ppoly_E    !< Edge value of polynomial [A]
+  real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial, mainly [A]
   ! Local variables
   integer       :: i0, i1
   real          :: u0, u1
@@ -506,17 +500,13 @@ end subroutine PQM_boundary_extrapolation
 !! defining 'grid' and 'ppoly'. No consistency check is performed here.
 subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
-  real, dimension(:),   intent(in)    :: u !< cell averages (size N)
-  real, dimension(:,:), intent(inout) :: ppoly_E    !< Edge value of polynomial,
-                                           !! with the same units as u.
-  real, dimension(:,:), intent(inout) :: ppoly_S    !< Edge slope of polynomial,
-                                           !! in the units of u over the units of h.
-  real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial, mainly
-                                           !! with the same units as u.
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
+  real, dimension(:),   intent(in)    :: u !< cell averages (size N) [A]
+  real, dimension(:,:), intent(inout) :: ppoly_E    !< Edge value of polynomial [A]
+  real, dimension(:,:), intent(inout) :: ppoly_S    !< Edge slope of polynomial [A H-1]
+  real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial, mainly [A]
   real,       optional, intent(in)    :: h_neglect  !< A negligibly small width for
-                                           !! the purpose of cell reconstructions
-                                           !! in the same units as h.
+                                           !! the purpose of cell reconstructions [H]
   ! Local variables
   integer :: i0, i1
   integer :: inflexion_l

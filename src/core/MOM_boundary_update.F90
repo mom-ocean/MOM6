@@ -46,7 +46,7 @@ type, public :: update_OBC_CS ; private
   type(tidal_bay_OBC_CS), pointer :: tidal_bay_OBC_CSp => NULL()
   type(shelfwave_OBC_CS), pointer :: shelfwave_OBC_CSp => NULL()
   type(dyed_channel_OBC_CS), pointer :: dyed_channel_OBC_CSp => NULL()
-  !!@}
+  !>@}
 end type update_OBC_CS
 
 integer :: id_clock_pass !< A CPU time clock ID

@@ -22,8 +22,7 @@ module RGC_initialization
 
 use MOM_ALE_sponge, only : ALE_sponge_CS, set_up_ALE_sponge_field, initialize_ALE_sponge
 use MOM_ALE_sponge, only : set_up_ALE_sponge_vel_field
-use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
-use MOM_sponge, only : set_up_sponge_ML_density
+use MOM_domains, only : pass_var
 use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -31,10 +30,12 @@ use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : file_exists, read_data
 use MOM_io, only : slasher
+use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
+use MOM_sponge, only : set_up_sponge_ML_density
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
-use MOM_domains, only: pass_var
+use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type, EOS_domain
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -46,9 +47,10 @@ contains
 
 !> Sets up the the inverse restoration time, and the values towards which the interface heights,
 !! velocities and tracers should be restored within the sponges for the RGC test case.
-subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
+subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, PF, use_ALE, CSp, ACSp)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in) :: US  !< A dimensional unit scaling type
   type(thermo_var_ptrs), intent(in) :: tv   !< A structure containing pointers
                                             !! to any available thermodynamic
                                             !! fields, potential temperature and
@@ -73,21 +75,22 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
   real :: RHO(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for RHO
   real :: tmp(SZI_(G),SZJ_(G))        ! A temporary array for tracers.
   real :: h(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for thickness at h points
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate at h points [s-1].
-  real :: TNUDG                     ! Nudging time scale, days
-  real :: pres(SZI_(G))             ! An array of the reference pressure, in Pa
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate at h points [T-1 ~> s-1].
+  real :: TNUDG                     ! Nudging time scale [T ~> s]
+  real :: pres(SZI_(G))             ! An array of the reference pressure [R L2 T-2 ~> Pa]
   real :: e0(SZK_(G)+1)               ! The resting interface heights, in m, usually !
                                     ! negative because it is positive upward.      !
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta.
                                     ! positive upward, in m.
   logical :: sponge_uv              ! Nudge velocities (u and v) towards zero
   real :: min_depth, dummy1, z, delta_h
-  real :: damp, rho_dummy, min_thickness, rho_tmp, xi0
+  real :: rho_dummy, min_thickness, rho_tmp, xi0
   real :: lenlat, lenlon, lensponge
   character(len=40) :: filename, state_file
   character(len=40) :: temp_var, salt_var, eta_var, inputdir, h_var
 
   character(len=40)  :: mod = "RGC_initialize_sponges" ! This subroutine's name.
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, iscB, iecB, jscB, jecB
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -96,7 +99,8 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
 
   call get_param(PF,mod,"MIN_THICKNESS",min_thickness,'Minimum layer thickness',units='m',default=1.e-3)
 
-  call get_param(PF, mod, "RGC_TNUDG", TNUDG, 'Nudging time scale for sponge layers (days)',  default=0.0)
+  call get_param(PF, mod, "RGC_TNUDG", TNUDG, 'Nudging time scale for sponge layers (days)', &
+                 default=0.0, scale=86400.0*US%s_to_T)
 
   call get_param(PF, mod, "LENLAT", lenlat, &
                   "The latitudinal or y-direction length of the domain", &
@@ -124,31 +128,20 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
   if (associated(ACSp)) call MOM_error(FATAL, &
           "RGC_initialize_sponges called with an associated ALE-sponge control structure.")
 
-  !  Here the inverse damping time, in s-1, is set. Set Idamp to 0     !
-  !  wherever there is no sponge, and the subroutines that are called  !
-  !  will automatically set up the sponges only where Idamp is positive!
+  !  Here the inverse damping time [T-1 ~> s-1], is set. Set Idamp to 0
+  !  wherever there is no sponge, and the subroutines that are called
+  !  will automatically set up the sponges only where Idamp is positive
   !  and mask2dT is 1.
 
   do i=is,ie ; do j=js,je
-    if (G%geoLonT(i,j) <= lensponge) then
-      dummy1 = -(G%geoLonT(i,j))/lensponge + 1.0
-      !damp = 1.0/TNUDG * max(0.0,dummy1)
-      damp = 0.0
-      !write(*,*)'1st, G%geoLonT(i,j), damp',G%geoLonT(i,j), damp
-
+    if ((G%bathyT(i,j) <= min_depth) .or. (G%geoLonT(i,j) <= lensponge)) then
+      Idamp(i,j) = 0.0
     elseif (G%geoLonT(i,j) >= (lenlon - lensponge) .AND. G%geoLonT(i,j) <= lenlon) then
-
-! 1 / day
-      dummy1=(G%geoLonT(i,j)-(lenlon - lensponge))/(lensponge)
-      damp = (1.0/TNUDG) * max(0.0,dummy1)
-
-    else ; damp=0.0
+      dummy1 = (G%geoLonT(i,j)-(lenlon - lensponge))/(lensponge)
+      Idamp(i,j) = (1.0/TNUDG) * max(0.0,dummy1)
+    else
+      Idamp(i,j) = 0.0
     endif
-
-! convert to 1 / seconds
-    if (G%bathyT(i,j) > min_depth) then
-        Idamp(i,j) = damp/86400.0
-    else ; Idamp(i,j) = 0.0 ; endif
   enddo ; enddo
 
 
@@ -219,10 +212,9 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
     ! mixed layer density, which is used in determining which layers can be
     ! inflated without causing static instabilities.
       do i=is-1,ie ; pres(i) = tv%P_Ref ; enddo
-
+      EOSdom(:) = EOS_domain(G%HI)
       do j=js,je
-        call calculate_density(T(:,j,1), S(:,j,1), pres, tmp(:,j), &
-                          is, ie-is+1, tv%eqn_of_state)
+        call calculate_density(T(:,j,1), S(:,j,1), pres, tmp(:,j), tv%eqn_of_state, EOSdom)
       enddo
 
       call set_up_sponge_ML_density(tmp, G, CSp)

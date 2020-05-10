@@ -10,6 +10,7 @@ module ISOMIP_tracer
 ! Original sample tracer package by Robert Hallberg, 2002
 ! Adapted to the ISOMIP test case by Gustavo Marques, May 2016
 
+use MOM_coms, only : max_across_PEs
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
@@ -17,15 +18,15 @@ use MOM_forcing_type, only : forcing
 use MOM_hor_index, only : hor_index_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : MOM_restart_CS
 use MOM_ALE_sponge, only : set_up_ALE_sponge_field, ALE_sponge_CS
 use MOM_time_manager, only : time_type
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface
-use MOM_open_boundary, only : ocean_OBC_type
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_coms, only : max_across_PEs
 
 use coupler_types_mod, only : coupler_type_set_data, ind_csurf
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
@@ -176,9 +177,6 @@ subroutine initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   character(len=48) :: flux_units ! The units for tracer fluxes, usually
                             ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
   real, pointer :: tr_ptr(:,:,:) => NULL()
-  real :: PI     ! 3.1415926... calculated as 4*atan(1)
-  real :: tr_y   ! Initial zonally uniform tracer concentrations.
-  real :: dist2  ! The distance squared from a line [m2].
   real :: h_neglect         ! A thickness that is so small it is usually lost
                             ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: e(SZK_(G)+1), e_top, e_bot, d_tr
@@ -247,7 +245,7 @@ end subroutine initialize_ISOMIP_tracer
 
 !> This subroutine applies diapycnal diffusion, including the surface boundary
 !! conditions and any other column tracer physics or chemistry to the tracers from this file.
-subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS, &
+subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, US, CS, &
                                         evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
@@ -265,24 +263,24 @@ subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, G
                                               !! added [H ~> m or kg m-2].
   type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
                                               !! and tracer forcing fields.  Unused fields have NULL ptrs.
-  real,                    intent(in) :: dt   !< The amount of time covered by this call [s]
+  real,                    intent(in) :: dt   !< The amount of time covered by this call [T ~> s]
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
   type(ISOMIP_tracer_CS),  pointer    :: CS !< The control structure returned by a previous
                                               !! call to ISOMIP_register_tracer.
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
                                               !! be fluxed out of the top layer in a timestep [nondim]
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
-                                              !! fluxes can be applied [m]
+                                              !! fluxes can be applied [H ~> m or kg m-2]
 
 ! The arguments to this subroutine are redundant in that
 !     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
 
   ! Local variables
-  real :: mmax
   real :: b1(SZI_(G))          ! b1 and c1 are variables used by the
   real :: c1(SZI_(G),SZK_(G))  ! tridiagonal solver.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
-  real :: melt(SZI_(G),SZJ_(G))  ! melt water (positive for melting
-                                 ! negative for freezing)
+  real :: melt(SZI_(G),SZJ_(G)) ! melt water (positive for melting, negative for freezing) [R Z T-1 ~> kg m-2 s-1]
+  real :: mmax                ! The global maximum melting rate [R Z T-1 ~> kg m-2 s-1]
   character(len=256) :: mesg  ! The text of an error message
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -312,8 +310,8 @@ subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, G
       do k=1,nz ;do j=js,je ; do i=is,ie
         h_work(i,j,k) = h_old(i,j,k)
       enddo ; enddo ; enddo
-      call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m) , dt, fluxes, h_work, &
-               evap_CFL_limit, minimum_forcing_depth)
+      call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m), dt, fluxes, h_work, &
+                                          evap_CFL_limit, minimum_forcing_depth)
       call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
     enddo
   else
@@ -327,9 +325,9 @@ end subroutine ISOMIP_tracer_column_physics
 !> This subroutine extracts the surface fields from this tracer package that
 !! are to be shared with the atmosphere in coupled configurations.
 !! This particular tracer package does not report anything back to the coupler.
-subroutine ISOMIP_tracer_surface_state(state, h, G, CS)
+subroutine ISOMIP_tracer_surface_state(sfc_state, h, G, CS)
   type(ocean_grid_type),  intent(in)    :: G  !< The ocean's grid structure.
-  type(surface),          intent(inout) :: state !< A structure containing fields that
+  type(surface),          intent(inout) :: sfc_state !< A structure containing fields that
                                               !! describe the surface state of the ocean.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                           intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2].
@@ -350,7 +348,7 @@ subroutine ISOMIP_tracer_surface_state(state, h, G, CS)
       !   This call loads the surface values into the appropriate array in the
       ! coupler-type structure.
       call coupler_type_set_data(CS%tr(:,:,1,m), CS%ind_tr(m), ind_csurf, &
-                   state%tr_fields, idim=(/isd, is, ie, ied/), &
+                   sfc_state%tr_fields, idim=(/isd, is, ie, ied/), &
                    jdim=(/jsd, js, je, jed/) )
     enddo
   endif
