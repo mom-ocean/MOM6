@@ -2315,13 +2315,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     endif
     if (CS%id_ubtdt > 0) then
       do j=js,je ; do I=is-1,ie
-        ubt_dt(I,j) = (ubt_wtd(I,j) - ubt_st(I,j))/dt
+        ubt_dt(I,j) = (ubt_wtd(I,j) - ubt_st(I,j))*Idt
       enddo ; enddo
       call post_data(CS%id_ubtdt, ubt_dt(IsdB:IedB,jsd:jed), CS%diag)
     endif
     if (CS%id_vbtdt > 0) then
       do J=js-1,je ; do i=is,ie
-        vbt_dt(i,J) = (vbt_wtd(i,J) - vbt_st(i,J))/dt
+        vbt_dt(i,J) = (vbt_wtd(i,J) - vbt_st(i,J))*Idt
       enddo ; enddo
       call post_data(CS%id_vbtdt, vbt_dt(isd:ied,JsdB:JedB), CS%diag)
     endif
