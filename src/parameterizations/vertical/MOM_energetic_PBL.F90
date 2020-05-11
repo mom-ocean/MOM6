@@ -839,10 +839,10 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   !/The following lines are for the iteration over MLD
   ! max_MLD will initialized as ocean bottom depth
   max_MLD = 0.0 ; do k=1,nz ; max_MLD = max_MLD + h(k)*GV%H_to_Z ; enddo
-  !min_MLD will initialize as 0.
+  ! min_MLD will be initialized to 0.
   min_MLD = 0.0
   ! Set values of the wrong signs to indicate that these changes are not based on valid estimates
-    ! dMLD_min = -1.0*US%m_to_Z ; dMLD_max = 1.0*US%m_to_Z
+  dMLD_min = -1.0*US%m_to_Z ; dMLD_max = 1.0*US%m_to_Z
 
   ! If no first guess is provided for MLD, try the middle of the water column
   if (MLD_guess <= min_MLD) MLD_guess = 0.5 * (min_MLD + max_MLD)
@@ -1434,7 +1434,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
         ! For the next pass, guess the average of the minimum and maximum values.
         MLD_guess = 0.5*(min_MLD + max_MLD)
       else ! Try using the false position method or the returned value instead of simple bisection.
-        ! Taking the occasional step with MLD_output empirically step helps to converge faster.
+        ! Taking the occasional step with MLD_output empirically helps to converge faster.
         if ((dMLD_min > 0.0) .and. (dMLD_max < 0.0) .and. (OBL_it > 2) .and. (mod(OBL_it-1,4)>0)) then
           ! Both bounds have valid change estimates and are probably in the range of possible outputs.
           MLD_Guess = (dMLD_min*max_MLD - dMLD_max*min_MLD) / (dMLD_min - dMLD_max)
