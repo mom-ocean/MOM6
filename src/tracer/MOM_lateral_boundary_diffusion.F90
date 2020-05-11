@@ -171,16 +171,14 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
 
     ! for diagnostics
     if (tracer%id_lbdxy_conc > 0 .or. tracer%id_lbdxy_cont > 0 .or. tracer%id_lbdxy_cont_2d > 0) then
-      tendency(:,:,:)  = 0.0
+      tendency(:,:,:) = 0.0
     endif
 
-    do j = G%jsc-1, G%jec+1
-      ! Interpolate state to interface
-      do i = G%isc-1, G%iec+1
-          call build_reconstructions_1d( CS%remap_CS, G%ke, h(i,j,:), tracer%t(i,j,:), ppoly0_coefs(i,j,:,:), &
-                                         ppoly0_E(i,j,:,:), ppoly_S, remap_method, GV%H_subroundoff, GV%H_subroundoff)
-      enddo
-    enddo
+    ! Interpolate state to interface
+    do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
+      call build_reconstructions_1d( CS%remap_CS, G%ke, h(i,j,:), tracer%t(i,j,:), ppoly0_coefs(i,j,:,:), &
+                                     ppoly0_E(i,j,:,:), ppoly_S, remap_method, GV%H_subroundoff, GV%H_subroundoff)
+    enddo ; enddo
     ! Diffusive fluxes in the i-direction
     uFlx(:,:,:) = 0.
     vFlx(:,:,:) = 0.
@@ -253,41 +251,41 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     if (tracer%id_lbd_dfy>0)      call post_data(tracer%id_lbd_dfy, vFlx*Idt, CS%diag)
     if (tracer%id_lbd_dfx_2d>0) then
       uwork_2d(:,:) = 0.
-      do k=1,GV%ke; do j=G%jsc,G%jec; do I=G%isc-1,G%iec
+      do k=1,GV%ke ; do j=G%jsc,G%jec ; do I=G%isc-1,G%iec
         uwork_2d(I,j) = uwork_2d(I,j) + (uFlx(I,j,k) * Idt)
-      enddo; enddo; enddo
+      enddo ; enddo ; enddo
       call post_data(tracer%id_lbd_dfx_2d, uwork_2d, CS%diag)
     endif
 
     if (tracer%id_lbd_dfy_2d>0) then
       vwork_2d(:,:) = 0.
-      do k=1,GV%ke; do J=G%jsc-1,G%jec; do i=G%isc,G%iec
+      do k=1,GV%ke ; do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
         vwork_2d(i,J) = vwork_2d(i,J) + (vFlx(i,J,k) * Idt)
-      enddo; enddo; enddo
+      enddo ; enddo ; enddo
       call post_data(tracer%id_lbd_dfy_2d, vwork_2d, CS%diag)
     endif
 
     ! post tendency of tracer content
     if (tracer%id_lbdxy_cont > 0) then
-      call post_data(tracer%id_lbdxy_cont, tendency(:,:,:), CS%diag)
+      call post_data(tracer%id_lbdxy_cont, tendency, CS%diag)
     endif
 
     ! post depth summed tendency for tracer content
     if (tracer%id_lbdxy_cont_2d > 0) then
       tendency_2d(:,:) = 0.
-      do j = G%jsc,G%jec ; do i = G%isc,G%iec
-        do k = 1, GV%ke
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        do k=1,GV%ke
           tendency_2d(i,j) = tendency_2d(i,j) + tendency(i,j,k)
         enddo
       enddo ; enddo
-      call post_data(tracer%id_lbdxy_cont_2d, tendency_2d(:,:), CS%diag)
+      call post_data(tracer%id_lbdxy_cont_2d, tendency_2d, CS%diag)
     endif
 
     ! post tendency of tracer concentration; this step must be
     ! done after posting tracer content tendency, since we alter
     ! the tendency array and its units.
     if (tracer%id_lbdxy_conc > 0) then
-      do k = 1, GV%ke ; do j = G%jsc,G%jec ; do i = G%isc,G%iec
+      do k=1,GV%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
         tendency(i,j,k) =  tendency(i,j,k) / ( h(i,j,k) + GV%H_subroundoff )
       enddo ; enddo ; enddo
       call post_data(tracer%id_lbdxy_conc, tendency, CS%diag)
@@ -306,9 +304,9 @@ real function bulk_average(boundary, nk, deg, h, hBLT, phi, ppoly0_E, ppoly0_coe
   real, dimension(nk) :: h                 !< Layer thicknesses                               [H ~> m or kg m-2]
   real                :: hBLT              !< Depth of the boundary layer                     [H ~> m or kg m-2]
   real, dimension(nk) :: phi               !< Scalar quantity
-  real, dimension(nk,2)    :: ppoly0_E(:,:)      !< Edge value of polynomial
-  real, dimension(nk,deg+1) :: ppoly0_coefs(:,:) !< Coefficients of polynomial
-  integer                   :: method            !< Remapping scheme to use
+  real, dimension(nk,2)     :: ppoly0_E     !< Edge value of polynomial
+  real, dimension(nk,deg+1) :: ppoly0_coefs !< Coefficients of polynomial
+  integer                   :: method       !< Remapping scheme to use
 
   integer             :: k_top             !< Index of the first layer within the boundary
   real                :: zeta_top          !< Fraction of the layer encompassed by the bottom boundary layer
