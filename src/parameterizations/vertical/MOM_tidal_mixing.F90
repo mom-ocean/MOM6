@@ -509,8 +509,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
                    filename)
     call safe_alloc_ptr(CS%TKE_Niku,is,ie,js,je) ; CS%TKE_Niku(:,:) = 0.0
     call MOM_read_data(filename, 'TKE_input', CS%TKE_Niku, G%domain, timelevel=1, &  ! ??? timelevel -aja
-                       scale=US%W_m2_to_RZ3_T3)
-    CS%TKE_Niku(:,:) = Niku_scale * CS%TKE_Niku(:,:)
+                       scale=Niku_scale*US%W_m2_to_RZ3_T3)
 
     call get_param(param_file, mdl, "GAMMA_NIKURASHIN",CS%Gamma_lee, &
                  "The fraction of the lee wave energy that is dissipated "//&
@@ -781,7 +780,7 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kv)
 
 
       ! XXX: Temporary de-scaling of N2_int(i,:) into a temporary variable
-      do k = 1,G%ke+1
+      do k=1,G%ke+1
         N2_int_i(k) = US%s_to_T**2 * N2_int(i,k)
       enddo
 
@@ -876,7 +875,7 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kv)
                                           CVmix_tidal_params_user = CS%CVMix_tidal_params)
 
       ! XXX: Temporary de-scaling of N2_int(i,:) into a temporary variable
-      do k = 1,G%ke+1
+      do k=1,G%ke+1
         N2_int_i(k) = US%s_to_T**2 * N2_int(i,k)
       enddo
 

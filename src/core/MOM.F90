@@ -1013,7 +1013,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
               Time_local + real_to_time(US%T_to_s*(bbl_time_int-dt)), CS%diag)
     ! Calculate the BBL properties and store them inside visc (u,h).
     call cpu_clock_begin(id_clock_BBL_visc)
-    call set_viscous_BBL(CS%u(:,:,:), CS%v(:,:,:), CS%h, CS%tv, CS%visc, G, GV, US, &
+    call set_viscous_BBL(CS%u, CS%v, CS%h, CS%tv, CS%visc, G, GV, US, &
                          CS%set_visc_CSp, symmetrize=.true.)
     call cpu_clock_end(id_clock_BBL_visc)
     if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM)")
@@ -2204,7 +2204,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     allocate(CS%tv%frazil(isd:ied,jsd:jed)) ; CS%tv%frazil(:,:) = 0.0
   endif
   if (bound_salinity) then
-    allocate(CS%tv%salt_deficit(isd:ied,jsd:jed)) ; CS%tv%salt_deficit(:,:)=0.0
+    allocate(CS%tv%salt_deficit(isd:ied,jsd:jed)) ; CS%tv%salt_deficit(:,:) = 0.0
   endif
 
   if (bulkmixedlayer .or. use_temperature) then
@@ -2369,20 +2369,17 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
     if (associated(sponge_in_CSp)) then
       ! TODO: Implementation and testing of non-ALE spong rotation
-      call MOM_error(FATAL, "Index rotation of non-ALE sponge is not yet " &
-          // "implemented.")
+      call MOM_error(FATAL, "Index rotation of non-ALE sponge is not yet implemented.")
     endif
 
     if (associated(ALE_sponge_in_CSp)) then
-      call rotate_ALE_sponge(ALE_sponge_in_CSp, G_in, CS%ALE_sponge_CSp, G, &
-                             turns, param_file)
-      call update_ALE_sponge_field(CS%ALE_sponge_CSp, T_in, CS%T)
-      call update_ALE_sponge_field(CS%ALE_sponge_CSp, S_in, CS%S)
+      call rotate_ALE_sponge(ALE_sponge_in_CSp, G_in, CS%ALE_sponge_CSp, G, turns, param_file)
+      call update_ALE_sponge_field(CS%ALE_sponge_CSp, T_in, G, GV, CS%T)
+      call update_ALE_sponge_field(CS%ALE_sponge_CSp, S_in, G, GV, CS%S)
     endif
 
     if (associated(OBC_in)) &
-      call rotate_OBC_init(OBC_in, G, GV, US, param_file, CS%tv, restart_CSp, &
-                           CS%OBC)
+      call rotate_OBC_init(OBC_in, G, GV, US, param_file, CS%tv, restart_CSp, CS%OBC)
 
     deallocate(u_in)
     deallocate(v_in)
@@ -2427,7 +2424,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     G => CS%G
     if (CS%debug .or. CS%G%symmetric) then
       call clone_MOM_domain(CS%G%Domain, CS%G%Domain_aux, symmetric=.false.)
-    else ; CS%G%Domain_aux => CS%G%Domain ;endif
+    else ; CS%G%Domain_aux => CS%G%Domain ; endif
     G%ke = GV%ke
   endif
 
