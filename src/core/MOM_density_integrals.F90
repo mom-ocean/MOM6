@@ -39,13 +39,13 @@ contains
 subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, US, dpa, &
                           intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, useMassWghtInterp)
   type(hor_index_type), intent(in)  :: HI  !< Ocean horizontal index structures for the arrays
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: T   !< Potential temperature referenced to the surface [degC]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: S   !< Salinity [ppt]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: z_t !< Height at the top of the layer in depth units [Z ~> m]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: z_b !< Height at the bottom of the layer [Z ~> m]
   real,                 intent(in)  :: rho_ref !< A mean density [R ~> kg m-3] or [kg m-3], that is
                                            !! subtracted out to reduce the magnitude of each of the
@@ -57,22 +57,22 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, US, dpa,
                                            !! [L2 Z-1 T-2 ~> m s-2] or [m2 Z-1 s-2 ~> m s-2]
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   type(unit_scale_type), intent(in) :: US  !< A dimensional unit scaling type
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                       intent(inout) :: dpa !< The change in the pressure anomaly
                                            !! across the layer [R L2 T-2 ~> Pa] or [Pa]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
             optional, intent(inout) :: intz_dpa !< The integral through the thickness of the
                                            !! layer of the pressure anomaly relative to the
                                            !! anomaly at the top of the layer [R L2 Z T-2 ~> Pa m]
-  real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
+  real, dimension(SZIB_(HI),SZJ_(HI)), &
             optional, intent(inout) :: intx_dpa !< The integral in x of the difference between
                                           !! the pressure anomaly at the top and bottom of the
                                           !! layer divided by the x grid spacing [R L2 T-2 ~> Pa]
-  real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
+  real, dimension(SZI_(HI),SZJB_(HI)), &
             optional, intent(inout) :: inty_dpa !< The integral in y of the difference between
                                           !! the pressure anomaly at the top and bottom of the
                                           !! layer divided by the y grid spacing [R L2 T-2 ~> Pa]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
               optional, intent(in)  :: bathyT !< The depth of the bathymetry [Z ~> m]
   real,       optional, intent(in)  :: dz_neglect !< A minuscule thickness change [Z ~> m]
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
@@ -95,13 +95,13 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                       EOS, US, dpa, intz_dpa, intx_dpa, inty_dpa, &
                                       bathyT, dz_neglect, useMassWghtInterp)
   type(hor_index_type), intent(in)  :: HI  !< Horizontal index type for input variables.
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: T  !< Potential temperature of the layer [degC]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: S  !< Salinity of the layer [ppt]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: z_t !< Height at the top of the layer in depth units [Z ~> m]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: z_b !< Height at the bottom of the layer [Z ~> m]
   real,                 intent(in)  :: rho_ref !< A mean density [R ~> kg m-3] or [kg m-3], that is
                                           !! subtracted out to reduce the magnitude
@@ -113,22 +113,22 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                           !! [L2 Z-1 T-2 ~> m s-2] or [m2 Z-1 s-2 ~> m s-2]
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                       intent(inout) :: dpa !< The change in the pressure anomaly
                                           !! across the layer [R L2 T-2 ~> Pa] or [Pa]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
             optional, intent(inout) :: intz_dpa !< The integral through the thickness of the
                                           !! layer of the pressure anomaly relative to the
                                           !! anomaly at the top of the layer [R L2 Z T-2 ~> Pa m]
-  real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
+  real, dimension(SZIB_(HI),SZJ_(HI)), &
             optional, intent(inout) :: intx_dpa !< The integral in x of the difference between
                                           !! the pressure anomaly at the top and bottom of the
                                           !! layer divided by the x grid spacing [R L2 T-2 ~> Pa]
-  real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
+  real, dimension(SZI_(HI),SZJB_(HI)), &
             optional, intent(inout) :: inty_dpa !< The integral in y of the difference between
                                           !! the pressure anomaly at the top and bottom of the
                                           !! layer divided by the y grid spacing [R L2 T-2 ~> Pa]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
               optional, intent(in)  :: bathyT !< The depth of the bathymetry [Z ~> m]
   real,       optional, intent(in)  :: dz_neglect !< A minuscule thickness change [Z ~> m]
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
@@ -298,17 +298,17 @@ subroutine int_density_dz_generic_plm(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
                                       rho_0, G_e, dz_subroundoff, bathyT, HI, EOS, US, dpa, &
                                       intz_dpa, intx_dpa, inty_dpa, useMassWghtInterp)
   type(hor_index_type), intent(in)  :: HI  !< Ocean horizontal index structures for the input arrays
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: T_t !< Potential temperature at the cell top [degC]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: T_b !< Potential temperature at the cell bottom [degC]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: S_t !< Salinity at the cell top [ppt]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: S_b !< Salinity at the cell bottom [ppt]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: z_t !< The geometric height at the top of the layer [Z ~> m]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: z_b !< The geometric height at the bottom of the layer [Z ~> m]
   real,                 intent(in)  :: rho_ref !< A mean density [R ~> kg m-3] or [kg m-3], that is subtracted
                                            !! out to reduce the magnitude of each of the integrals.
@@ -316,21 +316,21 @@ subroutine int_density_dz_generic_plm(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
                                            !! the pressure (as p~=-z*rho_0*G_e) used in the equation of state.
   real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
   real,                 intent(in)  :: dz_subroundoff !< A minuscule thickness change [Z ~> m]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: bathyT !< The depth of the bathymetry [Z ~> m]
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(inout) :: dpa !< The change in the pressure anomaly across the layer [R L2 T-2 ~> Pa]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
               optional, intent(inout) :: intz_dpa !< The integral through the thickness of the layer of
                                            !! the pressure anomaly relative to the anomaly at the
                                            !! top of the layer [R L2 Z T-2 ~> Pa Z]
-  real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
+  real, dimension(SZIB_(HI),SZJ_(HI)), &
               optional, intent(inout) :: intx_dpa !< The integral in x of the difference between the
                                            !! pressure anomaly at the top and bottom of the layer
                                            !! divided by the x grid spacing [R L2 T-2 ~> Pa]
-  real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
+  real, dimension(SZI_(HI),SZJB_(HI)), &
               optional, intent(inout) :: inty_dpa !< The integral in y of the difference between the
                                            !! pressure anomaly at the top and bottom of the layer
                                            !! divided by the y grid spacing [R L2 T-2 ~> Pa]
@@ -605,21 +605,21 @@ subroutine int_density_dz_generic_ppm(T, T_t, T_b, S, S_t, S_b, &
                                       z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                       EOS, US, dpa, intz_dpa, intx_dpa, inty_dpa)
   type(hor_index_type), intent(in)  :: HI  !< Ocean horizontal index structures for the input arrays
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: T   !< Potential temperature referenced to the surface [degC]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: T_t !< Potential temperature at the cell top [degC]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: T_b !< Potential temperature at the cell bottom [degC]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: S   !< Salinity [ppt]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: S_t !< Salinity at the cell top [ppt]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: S_b !< Salinity at the cell bottom [ppt]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: z_t !< Height at the top of the layer [Z ~> m]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: z_b !< Height at the bottom of the layer [Z ~> m]
   real,                 intent(in)  :: rho_ref !< A mean density [R ~> kg m-3] or [kg m-3], that is
                                            !! subtracted out to reduce the magnitude of each of the integrals.
@@ -628,17 +628,17 @@ subroutine int_density_dz_generic_ppm(T, T_t, T_b, S, S_t, S_b, &
   real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration [m s-2]
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   type(unit_scale_type), intent(in) :: US  !< A dimensional unit scaling type
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(inout) :: dpa !< The change in the pressure anomaly across the layer [R L2 T-2 ~> Pa]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
               optional, intent(inout) :: intz_dpa !< The integral through the thickness of the layer of
                                            !! the pressure anomaly relative to the anomaly at the
                                            !! top of the layer [R L2 Z T-2 ~> Pa m]
-  real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
+  real, dimension(SZIB_(HI),SZJ_(HI)), &
               optional, intent(inout) :: intx_dpa !< The integral in x of the difference between the
                                            !! pressure anomaly at the top and bottom of the layer
                                            !! divided by the x grid spacing [R L2 T-2 ~> Pa]
-  real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
+  real, dimension(SZI_(HI),SZJB_(HI)), &
               optional, intent(inout) :: inty_dpa !< The integral in y of the difference between the
                                            !! pressure anomaly at the top and bottom of the layer
                                            !! divided by the y grid spacing [R L2 T-2 ~> Pa]
@@ -1051,13 +1051,13 @@ subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, US, &
                                dza, intp_dza, intx_dza, inty_dza, halo_size, &
                                bathyP, dP_tiny, useMassWghtInterp)
   type(hor_index_type), intent(in)  :: HI  !< The horizontal index structure
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: T   !< Potential temperature referenced to the surface [degC]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: S   !< Salinity [ppt]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: p_t !< Pressure at the top of the layer [R L2 T-2 ~> Pa] or [Pa]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: p_b !< Pressure at the bottom of the layer [R L2 T-2 ~> Pa] or [Pa]
   real,                 intent(in)  :: alpha_ref !< A mean specific volume that is subtracted out
                             !! to reduce the magnitude of each of the integrals [R-1 ~> m3 kg-1]
@@ -1065,23 +1065,23 @@ subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, US, &
                             !! alpha_ref, but this reduces the effects of roundoff.
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   type(unit_scale_type), intent(in) :: US  !< A dimensional unit scaling type
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(inout) :: dza !< The change in the geopotential anomaly across
                             !! the layer [L2 T-2 ~> m2 s-2] or [m2 s-2]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
               optional, intent(inout) :: intp_dza !< The integral in pressure through the layer of the
                             !! geopotential anomaly relative to the anomaly at the bottom of the
                             !! layer [R L4 T-4 ~> Pa m2 s-2] or [Pa m2 s-2]
-  real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
+  real, dimension(SZIB_(HI),SZJ_(HI)), &
               optional, intent(inout) :: intx_dza !< The integral in x of the difference between the
                             !! geopotential anomaly at the top and bottom of the layer divided by
                             !! the x grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2]
-  real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
+  real, dimension(SZI_(HI),SZJB_(HI)), &
               optional, intent(inout) :: inty_dza !< The integral in y of the difference between the
                             !! geopotential anomaly at the top and bottom of the layer divided by
                             !! the y grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2]
   integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate dza.
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
               optional, intent(in)  :: bathyP  !< The pressure at the bathymetry [R L2 T-2 ~> Pa] or [Pa]
   real,       optional, intent(in)  :: dP_tiny !< A minuscule pressure change with
                             !! the same units as p_t [R L2 T-2 ~> Pa] or [Pa]
@@ -1109,13 +1109,13 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
                                        intp_dza, intx_dza, inty_dza, halo_size, &
                                        bathyP, dP_neglect, useMassWghtInterp)
   type(hor_index_type), intent(in)  :: HI !< A horizontal index type structure.
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: T  !< Potential temperature of the layer [degC]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: S  !< Salinity of the layer [ppt]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: p_t !< Pressure atop the layer [R L2 T-2 ~> Pa] or [Pa]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: p_b !< Pressure below the layer [R L2 T-2 ~> Pa] or [Pa]
   real,                 intent(in)  :: alpha_ref !< A mean specific volume that is subtracted out
                             !! to reduce the magnitude of each of the integrals [R-1 ~> m3 kg-1]
@@ -1124,23 +1124,23 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
                             !! answers do change.
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(inout) :: dza !< The change in the geopotential anomaly
                             !! across the layer [L2 T-2 ~> m2 s-2] or [m2 s-2]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
               optional, intent(inout) :: intp_dza !< The integral in pressure through the layer of
                             !! the geopotential anomaly relative to the anomaly at the bottom of the
                             !! layer [R L4 T-4 ~> Pa m2 s-2] or [Pa m2 s-2]
-  real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
+  real, dimension(SZIB_(HI),SZJ_(HI)), &
               optional, intent(inout) :: intx_dza  !< The integral in x of the difference between
                             !! the geopotential anomaly at the top and bottom of the layer divided
                             !! by the x grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2]
-  real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
+  real, dimension(SZI_(HI),SZJB_(HI)), &
               optional, intent(inout) :: inty_dza  !< The integral in y of the difference between
                             !! the geopotential anomaly at the top and bottom of the layer divided
                             !! by the y grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2]
   integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate dza.
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
               optional, intent(in)  :: bathyP !< The pressure at the bathymetry [R L2 T-2 ~> Pa] or [Pa]
   real,       optional, intent(in)  :: dP_neglect !< A minuscule pressure change with
                                              !! the same units as p_t [R L2 T-2 ~> Pa] or [Pa]
@@ -1324,17 +1324,17 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
                              dP_neglect, bathyP, HI, EOS, US, dza, &
                              intp_dza, intx_dza, inty_dza, useMassWghtInterp)
   type(hor_index_type), intent(in)  :: HI !< A horizontal index type structure.
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: T_t  !< Potential temperature at the top of the layer [degC]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: T_b  !< Potential temperature at the bottom of the layer [degC]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: S_t  !< Salinity at the top the layer [ppt]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: S_b  !< Salinity at the bottom the layer [ppt]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: p_t !< Pressure atop the layer [R L2 T-2 ~> Pa] or [Pa]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: p_b !< Pressure below the layer [R L2 T-2 ~> Pa] or [Pa]
   real,                 intent(in)  :: alpha_ref !< A mean specific volume that is subtracted out
                             !! to reduce the magnitude of each of the integrals [R-1 ~> m3 kg-1]
@@ -1343,22 +1343,22 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
                             !! answers do change.
   real,                 intent(in)  :: dP_neglect !<!< A miniscule pressure change with
                                              !! the same units as p_t [R L2 T-2 ~> Pa] or [Pa]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: bathyP !< The pressure at the bathymetry [R L2 T-2 ~> Pa] or [Pa]
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(inout) :: dza !< The change in the geopotential anomaly
                             !! across the layer [L2 T-2 ~> m2 s-2]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+  real, dimension(SZI_(HI),SZJ_(HI)), &
               optional, intent(inout) :: intp_dza !< The integral in pressure through the layer of
                             !! the geopotential anomaly relative to the anomaly at the bottom of the
                             !! layer [R L4 T-4 ~> Pa m2 s-2] or [Pa m2 s-2]
-  real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
+  real, dimension(SZIB_(HI),SZJ_(HI)), &
               optional, intent(inout) :: intx_dza  !< The integral in x of the difference between
                             !! the geopotential anomaly at the top and bottom of the layer divided
                             !! by the x grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2]
-  real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
+  real, dimension(SZI_(HI),SZJB_(HI)), &
               optional, intent(inout) :: inty_dza  !< The integral in y of the difference between
                             !! the geopotential anomaly at the top and bottom of the layer divided
                             !! by the y grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2]
