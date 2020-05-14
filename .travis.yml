@@ -39,10 +39,8 @@ jobs:
         - echo 'Build executables...' && echo -en 'travis_fold:start:script.1\\r'
         - make all
         - echo -en 'travis_fold:end:script.1\\r'
-        - echo 'Running tests...' && echo -en 'travis_fold:start:script.2\\r'
         - make -k -s test
         - make test.summary
-        - echo -en 'travis_fold:end:script.2\\r'
 
     # NOTE: Code coverage upload is here to reduce load imbalance
     - if: type = pull_request
@@ -58,6 +56,5 @@ jobs:
         - echo 'Build executables...' && echo -en 'travis_fold:start:script.1\\r'
         - make build.regressions
         - echo -en 'travis_fold:end:script.1\\r'
-        - echo 'Running tests...' && echo -en 'travis_fold:start:script.2\\r'
         - make -k -s test.regressions
-        - echo -en 'travis_fold:end:script.2\\r'
+        - make test.summary
