@@ -722,9 +722,9 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, e
 
   ! Add diurnal cycle for shortwave radiation (only used if run in ocean-only mode)
   if (CS%diurnal_SW .and. CS%read_sw) then
-    sw(:,:) = fluxes%sw
-    sw_vis(:,:) = fluxes%sw_vis_dir
-    sw_nir(:,:) = fluxes%sw_nir_dir
+    sw(:,:) = fluxes%sw(:,:)
+    sw_vis(:,:) = fluxes%sw_vis_dir(:,:)
+    sw_nir(:,:) = fluxes%sw_nir_dir(:,:)
     call offline_add_diurnal_SW(fluxes, CS%G, Time_start, Time_end)
   endif
 
@@ -738,9 +738,9 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, e
                               CS%G, CS%GV, CS%US, CS%tv, CS%optics, CS%tracer_flow_CSp, CS%debug)
 
   if (CS%diurnal_SW .and. CS%read_sw) then
-    fluxes%sw(:,:) = sw
-    fluxes%sw_vis_dir(:,:) = sw_vis
-    fluxes%sw_nir_dir(:,:) = sw_nir
+    fluxes%sw(:,:) = sw(:,:)
+    fluxes%sw_vis_dir(:,:) = sw_vis(:,:)
+    fluxes%sw_nir_dir(:,:) = sw_nir(:,:)
   endif
 
   if (CS%debug) then
