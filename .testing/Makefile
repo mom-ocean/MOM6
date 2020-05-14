@@ -304,7 +304,12 @@ work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6
 		echo -e "${FAIL}: $$*.$(1) failed at runtime." \
 	  )
 	@echo -e "${DONE}: $$*.$(1); no runtime errors."
-	if [ $(3) ]; then cd .. && bash <(curl -s https://codecov.io/bash) -n $$@; fi
+	if [ $(3) ]; then \
+	  mkdir -p results/$$* ; \
+	  bash <(curl -s https://codecov.io/bash) -n $$@ \
+	    > results/$$*/codecov.$(1).out \
+		2> results/$$*/codecov.$(1).err ; \
+	fi
 endef
 
 
