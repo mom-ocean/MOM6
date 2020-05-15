@@ -894,7 +894,8 @@ subroutine PPM_angular_advect(En2d, CFL_ang, Flux_En, NAngle, dt, halo_ang)
   real :: dMx, dMn
   real :: Ep, Ec, Em   ! Mean angular energy density for three successive wedges in angular
                        ! orientation [R Z3 T-2 rad-1 ~> J m-2 rad-1]
-  real :: dA, mA, a6   ! Difference, mean, and curvature of energy density [R Z3 T-2 rad-1 ~> J m-2 rad-1]
+  real :: dA, curv_3   ! Difference and curvature of energy density [R Z3 T-2 rad-1 ~> J m-2 rad-1]
+  real, parameter :: oneSixth = 1.0/6.0  ! One sixth [nondim]
   integer :: a
 
   I_dt = 1 / dt
@@ -912,23 +913,21 @@ subroutine PPM_angular_advect(En2d, CFL_ang, Flux_En, NAngle, dt, halo_ang)
       Ec = En2d(a)  *I_Angle_size
       Em = En2d(a-1)*I_Angle_size
       ! Calculate and bound edge values of energy density.
-      aL = ( 5.*Ec + ( 2.*Em - Ep ) )/6. ! H3 estimate
+      aL = ( 5.*Ec + ( 2.*Em - Ep ) ) * oneSixth ! H3 estimate
       aL = max( min(Ec,Em), aL) ; aL = min( max(Ec,Em), aL) ! Bound
-      aR = ( 5.*Ec + ( 2.*Ep - Em ) )/6. ! H3 estimate
+      aR = ( 5.*Ec + ( 2.*Ep - Em ) ) * oneSixth ! H3 estimate
       aR = max( min(Ec,Ep), aR) ; aR = min( max(Ec,Ep), aR) ! Bound
-      dA = aR - aL ; mA = 0.5*( aR + aL )
+      dA = aR - aL
       if ((Ep-Ec)*(Ec-Em) <= 0.) then
-        aL = Ec ; aR = Ec ! PCM for local extremum
-      elseif ( dA*(Ec-mA) > (dA*dA)/6. ) then
-        aL = 3.*Ec - 2.*aR !?
-      elseif ( dA*(Ec-mA) < - (dA*dA)/6. ) then
-        aR = 3.*Ec - 2.*aL !?
+        aL = Ec ; aR = Ec    ! use PCM for local extremum
+      elseif ( 3.0*dA*(2.*Ec - (aR + aL)) > (dA*dA) ) then
+        aL = 3.*Ec - 2.*aR   ! Flatten the profile to move the extremum to the left edge
+      elseif ( 3.0*dA*(2.*Ec - (aR + aL)) < - (dA*dA) ) then
+        aR = 3.*Ec - 2.*aL   ! Flatten the profile to move the extremum to the right edge
       endif
-      a6 = 6.*Ec - 3. * (aR + aL) ! Curvature
+      curv_3 = (aR + aL) - 2.0*Ec ! Curvature
       ! Calculate angular flux rate [R Z3 T-3 ~> W m-2]
-      flux = u_ang*( aR + 0.5 * CFL_ang(A) * ( ( aL - aR ) + a6 * ( 1. - 2./3. * CFL_ang(A) ) ) )
-      ! The following expression copied from tracer_advect is equivalent.
-      ! flux = u_ang*( aR - 0.5 * CFL_ang(A) * ( ( aR - aL ) - a6 * ( 1. - 2./3. * CFL_ang(A) ) ) )
+      flux = u_ang*( aR + CFL_ang(A) * ( 0.5*(aL - aR) + curv_3 * (CFL_ang(A) - 1.5) ) )
       ! Calculate amount of energy fluxed between wedges [R Z3 T-2 ~> J m-2]
       Flux_En(A) = dt * flux
       !Flux_En(A) = (dt * I_Angle_size) * flux
@@ -940,24 +939,22 @@ subroutine PPM_angular_advect(En2d, CFL_ang, Flux_En, NAngle, dt, halo_ang)
       Ec = En2d(a+1)*I_Angle_size
       Em = En2d(a)  *I_Angle_size
       ! Calculate and bound edge values of energy density.
-      aL = ( 5.*Ec + ( 2.*Em - Ep ) )/6. ! H3 estimate
+      aL = ( 5.*Ec + ( 2.*Em - Ep ) ) * oneSixth ! H3 estimate
       aL = max( min(Ec,Em), aL) ; aL = min( max(Ec,Em), aL) ! Bound
-      aR = ( 5.*Ec + ( 2.*Ep - Em ) )/6. ! H3 estimate
+      aR = ( 5.*Ec + ( 2.*Ep - Em ) ) * oneSixth ! H3 estimate
       aR = max( min(Ec,Ep), aR) ; aR = min( max(Ec,Ep), aR) ! Bound
-      dA = aR - aL ; mA = 0.5*( aR + aL )
+      dA = aR - aL
       if ((Ep-Ec)*(Ec-Em) <= 0.) then
-        aL = Ec ; aR = Ec ! PCM for local extremum
-      elseif ( dA*(Ec-mA) > (dA*dA)/6. ) then
-        aL = 3.*Ec - 2.*aR
-      elseif ( dA*(Ec-mA) < - (dA*dA)/6. ) then
-        aR = 3.*Ec - 2.*aL
+        aL = Ec ; aR = Ec    ! use PCM for local extremum
+      elseif ( 3.0*dA*(2.*Ec - (aR + aL)) > (dA*dA) ) then
+        aL = 3.*Ec - 2.*aR   ! Flatten the profile to move the extremum to the left edge
+      elseif ( 3.0*dA*(2.*Ec - (aR + aL)) < - (dA*dA) ) then
+        aR = 3.*Ec - 2.*aL   ! Flatten the profile to move the extremum to the right edge
       endif
-      a6 = 6.*Ec - 3. * (aR + aL) ! Curvature
+      curv_3 = (aR + aL) - 2.0*Ec ! Curvature
       ! Calculate angular flux rate [R Z3 T-3 ~> W m-2]
-      !### This expression is wrong, because it was just copied from above.  The correct one is below
-      flux = u_ang*( aR + 0.5 * CFL_ang(A) * ( ( aL - aR ) + a6 * ( 1. - 2./3. * CFL_ang(A) ) ) )
-      ! This is the correct expression; note that CFL_ang is negative here, so it looks a bit odd.
-      !flux = u_ang*( aL - 0.5 * CFL_ang(A) * ( ( aR - aL ) + a6 * ( 1. + 2./3. * CFL_ang(A) ) ) )
+      ! Note that CFL_ang is negative here, so it looks odd compared with equivalent expressions.
+      flux = u_ang*( aL - CFL_ang(A) * ( 0.5*(aR - aL) + curv_3 * (-CFL_ang(A) - 1.5) ) )
       ! Calculate amount of energy fluxed between wedges [R Z3 T-2 ~> J m-2]
       Flux_En(A) = dt * flux
       !Flux_En(A) = (dt * I_Angle_size) * flux
