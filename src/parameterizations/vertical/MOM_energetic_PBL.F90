@@ -4,6 +4,7 @@ module MOM_energetic_PBL
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
+use MOM_coms, only : EFP_type, real_to_EFP, EFP_to_real, operator(+), assignment(=), EFP_sum_across_PEs
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_alloc
 use MOM_diag_mediator, only : time_type, diag_ctrl
 use MOM_domains,       only : create_group_pass, do_group_pass, group_pass_type
@@ -33,12 +34,12 @@ public energetic_PBL_get_MLD
 type, public :: energetic_PBL_CS ; private
 
   !/ Constants
-  real    :: VonKar = 0.41   !<   The von Karman coefficient.  This should be runtime, but because
-                             !!  it is runtime in KPP and set to 0.4 it might change answers.
-  real    :: omega           !<   The Earth's rotation rate [T-1 ~> s-1].
-  real    :: omega_frac      !<   When setting the decay scale for turbulence, use this fraction of
-                             !!  the absolute rotation rate blended with the local value of f, as
-                             !!  sqrt((1-of)*f^2 + of*4*omega^2) [nondim].
+  real    :: VonKar = 0.41   !< The von Karman coefficient.  This should be a runtime parameter,
+                             !! but because it is set to 0.4 at runtime in KPP it might change answers.
+  real    :: omega           !< The Earth's rotation rate [T-1 ~> s-1].
+  real    :: omega_frac      !< When setting the decay scale for turbulence, use this fraction of
+                             !! the absolute rotation rate blended with the local value of f, as
+                             !! sqrt((1-omega_frac)*f^2 + omega_frac*4*omega^2) [nondim].
 
   !/ Convection related terms
   real    :: nstar           !< The fraction of the TKE input to the mixed layer available to drive
@@ -47,9 +48,14 @@ type, public :: energetic_PBL_CS ; private
                              !! TKE produced by buoyancy.
 
   !/ Mixing Length terms
-  logical :: Use_MLD_iteration=.false. !< False to use old ePBL method.
-  logical :: MLD_iteration_guess=.false. !< False to default to guessing half the
-                             !! ocean depth for the iteration.
+  logical :: Use_MLD_iteration !< If true, use the proximity to the bottom of the actively turbulent
+                             !! surface boundary layer to constrain the mixing lengths.
+  logical :: MLD_iteration_guess !< False to default to guessing half the
+                             !! ocean depth for the first iteration.
+  logical :: MLD_bisection   !< If true, use bisection with the iterative determination of the
+                             !! self-consistent mixed layer depth.  Otherwise use the false position
+                             !! after a maximum and minimum bound have been evaluated and the
+                             !! returned value from the previous guess or bisection before this.
   integer :: max_MLD_its     !< The maximum number of iterations that can be used to find a
                              !! self-consistent mixed layer depth with Use_MLD_iteration.
   real    :: MixLenExponent  !< Exponent in the mixing length shape-function.
@@ -179,6 +185,8 @@ type, public :: energetic_PBL_CS ; private
     LA, &              !< Langmuir number [nondim]
     LA_MOD             !< Modified Langmuir number [nondim]
 
+  type(EFP_type), dimension(2) :: sum_its !< The total number of iterations and columns worked on
+
   real, allocatable, dimension(:,:,:) :: &
     Velocity_Scale, & !< The velocity scale used in getting Kd [Z T-1 ~> m s-1]
     Mixing_Length     !< The length scale used in getting Kd [Z ~> m]
@@ -214,6 +222,8 @@ character*(20), parameter :: NONE_STRING = "NONE"
 character*(20), parameter :: RESCALED_STRING = "RESCALE"
 character*(20), parameter :: ADDITIVE_STRING = "ADDITIVE"
 !>@}
+
+logical :: report_avg_its = .false.  !< Report the average number of ePBL iterations for debugging.
 
 !> A type for conveniently passing around ePBL diagnostics for a column.
 type, public :: ePBL_column_diags ; private
@@ -755,6 +765,8 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
                     !    manner giving a usable guess. When it does fail, it is due to convection
                     !    within the boundary layer.  Likely, a new method e.g. surface_disconnect,
                     !    can improve this.
+  real :: dMLD_min  ! The change in diagnosed mixed layer depth when the guess is min_MLD [Z ~> m]
+  real :: dMLD_max  ! The change in diagnosed mixed layer depth when the guess is max_MLD [Z ~> m]
   logical :: FIRST_OBL     ! Flag for computing "found" Mixing layer depth
   logical :: OBL_converged ! Flag for convergence of MLD
   integer :: OBL_it        ! Iteration counter
@@ -827,8 +839,10 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   !/The following lines are for the iteration over MLD
   ! max_MLD will initialized as ocean bottom depth
   max_MLD = 0.0 ; do k=1,nz ; max_MLD = max_MLD + h(k)*GV%H_to_Z ; enddo
-  !min_MLD will initialize as 0.
+  ! min_MLD will be initialized to 0.
   min_MLD = 0.0
+  ! Set values of the wrong signs to indicate that these changes are not based on valid estimates
+  dMLD_min = -1.0*US%m_to_Z ; dMLD_max = 1.0*US%m_to_Z
 
   ! If no first guess is provided for MLD, try the middle of the water column
   if (MLD_guess <= min_MLD) MLD_guess = 0.5 * (min_MLD + max_MLD)
@@ -1408,17 +1422,37 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
 
       !New method uses ML_DEPTH as computed in ePBL routine
       MLD_found = MLD_output
-      if (MLD_found - CS%MLD_tol > MLD_guess) then
-        min_MLD = MLD_guess
-      elseif (abs(MLD_guess - MLD_found) < CS%MLD_tol) then
+      if (MLD_found - MLD_guess > CS%MLD_tol) then
+        min_MLD = MLD_guess ; dMLD_min = MLD_found - MLD_guess
+      elseif (abs(MLD_found - MLD_guess) < CS%MLD_tol) then
         OBL_converged = .true. ! Break convergence loop
-      else
-        max_MLD = MLD_guess ! We know this guess was too deep
+      else ! We know this guess was too deep
+        max_MLD = MLD_guess ; dMLD_max = MLD_found - MLD_guess ! < -CS%MLD_tol
       endif
 
-      ! For next pass, guess average of minimum and maximum values.
-      !### We should try using the false position method instead of simple bisection.
-      MLD_guess = 0.5*(min_MLD + max_MLD)
+      if (.not.OBL_converged) then ; if (CS%MLD_bisection) then
+        ! For the next pass, guess the average of the minimum and maximum values.
+        MLD_guess = 0.5*(min_MLD + max_MLD)
+      else ! Try using the false position method or the returned value instead of simple bisection.
+        ! Taking the occasional step with MLD_output empirically helps to converge faster.
+        if ((dMLD_min > 0.0) .and. (dMLD_max < 0.0) .and. (OBL_it > 2) .and. (mod(OBL_it-1,4)>0)) then
+          ! Both bounds have valid change estimates and are probably in the range of possible outputs.
+          MLD_Guess = (dMLD_min*max_MLD - dMLD_max*min_MLD) / (dMLD_min - dMLD_max)
+        elseif ((MLD_found > min_MLD) .and. (MLD_found < max_MLD)) then
+          ! The output MLD_found is an interesting guess, as it likely to bracket the true solution
+          ! along with the previous value of MLD_guess and to be close to the solution.
+          MLD_guess = MLD_found
+        else ! Bisect if the other guesses would be out-of-bounds.  This does not happen much.
+          MLD_guess = 0.5*(min_MLD + max_MLD)
+        endif
+      endif ; endif
+    endif
+    if ((OBL_converged) .or. (OBL_it==CS%Max_MLD_Its)) then
+      if (report_avg_its) then
+        CS%sum_its(1) = CS%sum_its(1) + real_to_EFP(real(OBL_it))
+        CS%sum_its(2) = CS%sum_its(2) + real_to_EFP(1.0)
+      endif
+      exit
     endif
   enddo ! Iteration loop for converged boundary layer thickness.
   if (CS%Use_LT) then
@@ -2131,16 +2165,22 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   endif
 
   call get_param(param_file, mdl, "MLD_ITERATION_GUESS", CS%MLD_ITERATION_GUESS, &
-                 "A logical that specifies whether or not to use the "//&
-                 "previous timestep MLD as a first guess in the MLD iteration. "//&
-                 "The default is false to facilitate reproducibility.", default=.false.)
+                 "If true, use the previous timestep MLD as a first guess in the MLD iteration, "//&
+                 "otherwise use half the ocean depth as the first guess of the boundary layer "//&
+                 "depth.  The default is false to facilitate reproducibility.", &
+                 default=.false., do_not_log=.not.CS%Use_MLD_iteration)
   call get_param(param_file, mdl, "EPBL_MLD_TOLERANCE", CS%MLD_tol, &
                  "The tolerance for the iteratively determined mixed "//&
                  "layer depth.  This is only used with USE_MLD_ITERATION.", &
-                 units="meter", default=1.0, scale=US%m_to_Z)
+                 units="meter", default=1.0, scale=US%m_to_Z, do_not_log=.not.CS%Use_MLD_iteration)
+  call get_param(param_file, mdl, "EPBL_MLD_BISECTION", CS%MLD_bisection, &
+                 "If true, use bisection with the iterative determination of the self-consistent "//&
+                 "mixed layer depth.  Otherwise use the false position after a maximum and minimum "//&
+                 "bound have been evaluated and the returned value or bisection before this.", &
+                 default=.true., do_not_log=.not.CS%Use_MLD_iteration) !### The default should become false.
   call get_param(param_file, mdl, "EPBL_MLD_MAX_ITS", CS%max_MLD_its, &
                  "The maximum number of iterations that can be used to find a self-consistent "//&
-                 "mixed layer depth.  For now, due to the use of bisection, the maximum number "//&
+                 "mixed layer depth.  If EPBL_MLD_BISECTION is true, the maximum number "//&
                  "iteractions needed is set by Depth/2^MAX_ITS < EPBL_MLD_TOLERANCE.", &
                  default=20, do_not_log=.not.CS%Use_MLD_iteration)
   if (.not.CS%Use_MLD_iteration) CS%Max_MLD_Its = 1
@@ -2339,6 +2379,10 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  "If true, temperature and salinity are used as state "//&
                  "variables.", default=.true.)
 
+  if (report_avg_its) then
+    CS%sum_its(1) = real_to_EFP(0.0) ; CS%sum_its(2) = real_to_EFP(0.0)
+  endif
+
   if (max(CS%id_TKE_wind, CS%id_TKE_MKE, CS%id_TKE_conv, &
           CS%id_TKE_mixing, CS%id_TKE_mech_decay, CS%id_TKE_forcing, &
           CS%id_TKE_conv_decay) > 0) then
@@ -2370,6 +2414,9 @@ subroutine energetic_PBL_end(CS)
   type(energetic_PBL_CS), pointer :: CS !< Energetic_PBL control structure that
                                         !! will be deallocated in this subroutine.
 
+  character(len=256) :: mesg
+  real :: avg_its
+
   if (.not.associated(CS)) return
 
   if (allocated(CS%ML_depth))            deallocate(CS%ML_depth)
@@ -2386,6 +2433,14 @@ subroutine energetic_PBL_end(CS)
   if (allocated(CS%diag_TKE_conv_decay)) deallocate(CS%diag_TKE_conv_decay)
   if (allocated(CS%Mixing_Length))       deallocate(CS%Mixing_Length)
   if (allocated(CS%Velocity_Scale))      deallocate(CS%Velocity_Scale)
+
+  if (report_avg_its) then
+    call EFP_sum_across_PEs(CS%sum_its, 2)
+
+    avg_its = EFP_to_real(CS%sum_its(1)) / EFP_to_real(CS%sum_its(2))
+    write (mesg,*) "Average ePBL iterations = ", avg_its
+    call MOM_mesg(mesg)
+  endif
 
   deallocate(CS)
 
