@@ -120,6 +120,10 @@ type, public :: MOM_dyn_unsplit_CS ; private
   real, pointer, dimension(:,:) :: tauy_bot => NULL() !< frictional y-bottom stress from the ocean
                                                       !! to the seafloor [R L Z T-2 ~> Pa]
 
+  logical :: use_correct_dt_visc !< If true, use the correct timestep in the viscous terms applied
+                                 !! in the first predictor step with the unsplit time stepping scheme,
+                                 !! and in the calculation of the turbulent mixed layer properties
+                                 !! for viscosity.  The default should be true, but it is false.
   logical :: debug           !< If true, write verbose checksums for debugging purposes.
 
   logical :: module_is_initialized = .false. !< Record whether this mouled has been initialzed.
@@ -228,6 +232,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vp, vpp ! Predicted meridional velocities [L T-1 ~> m s-1]
   real, dimension(:,:), pointer :: p_surf => NULL()
   real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping [T ~> s].
+  real :: dt_visc   ! The time step for a part of the update due to viscosity [T ~> s].
   logical :: dyn_p_surf
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -255,8 +260,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! diffu = horizontal viscosity terms (u,h)
   call enable_averages(dt, Time_local, CS%diag)
   call cpu_clock_begin(id_clock_horvisc)
-  call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, MEKE, Varmix, &
-                            G, GV, US, CS%hor_visc_CSp)
+  call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, MEKE, Varmix, G, GV, US, CS%hor_visc_CSp)
   call cpu_clock_end(id_clock_horvisc)
   call disable_averaging(CS%diag)
 
@@ -323,31 +327,29 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! up = u + dt_pred * (PFu + CAu)
   call cpu_clock_begin(id_clock_mom_update)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    up(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt_pred * &
-                               (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
+    up(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt_pred * (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    vp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt_pred * &
-                               (CS%PFv(i,J,k) + CS%CAv(i,J,k)))
+    vp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt_pred * (CS%PFv(i,J,k) + CS%CAv(i,J,k)))
   enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
     call MOM_state_chksum("Predictor 1", up, vp, h_av, uh, vh, G, GV, US)
-    call MOM_accel_chksum("Predictor 1 accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv,&
+    call MOM_accel_chksum("Predictor 1 accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
                           CS%diffu, CS%diffv, G, GV, US)
   endif
 
  ! up <- up + dt/2 d/dz visc d/dz up
   call cpu_clock_begin(id_clock_vertvisc)
   call enable_averages(dt, Time_local, CS%diag)
-  call set_viscous_ML(u, v, h_av, tv, forces, visc, dt*0.5, G, GV, US, &
-                      CS%set_visc_CSp)
+  dt_visc = 0.5*dt ; if (CS%use_correct_dt_visc) dt_visc = dt
+  call set_viscous_ML(u, v, h_av, tv, forces, visc, dt_visc, G, GV, US, CS%set_visc_CSp)
   call disable_averaging(CS%diag)
-  !### I think that the time steps in the next two calls should be dt_pred.
-  call vertvisc_coef(up, vp, h_av, forces, visc, dt*0.5, G, GV, US, &
-                     CS%vertvisc_CSp, CS%OBC)
-  call vertvisc(up, vp, h_av, forces, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
+
+  dt_visc = 0.5*dt ; if (CS%use_correct_dt_visc) dt_visc = dt_pred
+  call vertvisc_coef(up, vp, h_av, forces, visc, dt_visc, G, GV, US, CS%vertvisc_CSp, CS%OBC)
+  call vertvisc(up, vp, h_av, forces, visc, dt_visc, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, US, CS%vertvisc_CSp, Waves=Waves)
   call cpu_clock_end(id_clock_vertvisc)
   call pass_vector(up, vp, G%Domain, clock=id_clock_pass)
@@ -355,8 +357,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! uh = up * hp
 ! h_av = hp + dt/2 div . uh
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(up, vp, hp, h_av, uh, vh, (0.5*dt), G, GV, US, &
-                  CS%continuity_CSp, OBC=CS%OBC)
+  call continuity(up, vp, hp, h_av, uh, vh, (0.5*dt), G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call pass_var(h_av, G%Domain, clock=id_clock_pass)
   call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
@@ -392,25 +393,22 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! upp = u + dt/2 * ( PFu + CAu )
   call cpu_clock_begin(id_clock_mom_update)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    upp(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt * 0.5 * &
-                (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
+    upp(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt * 0.5 * (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    vpp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt * 0.5 * &
-                 (CS%PFv(i,J,k) + CS%CAv(i,J,k)))
+    vpp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt * 0.5 * (CS%PFv(i,J,k) + CS%CAv(i,J,k)))
   enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
     call MOM_state_chksum("Predictor 2", upp, vpp, h_av, uh, vh, G, GV, US)
-    call MOM_accel_chksum("Predictor 2 accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv,&
+    call MOM_accel_chksum("Predictor 2 accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
                           CS%diffu, CS%diffv, G, GV, US)
   endif
 
 ! upp <- upp + dt/2 d/dz visc d/dz upp
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(upp, vpp, hp, forces, visc, dt*0.5, G, GV, US, &
-                     CS%vertvisc_CSp, CS%OBC)
+  call vertvisc_coef(upp, vpp, hp, forces, visc, dt*0.5, G, GV, US, CS%vertvisc_CSp, CS%OBC)
   call vertvisc(upp, vpp, hp, forces, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, US, CS%vertvisc_CSp, Waves=Waves)
   call cpu_clock_end(id_clock_vertvisc)
@@ -419,8 +417,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! uh = upp * hp
 ! h = hp + dt/2 div . uh
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(upp, vpp, hp, h, uh, vh, (dt*0.5), G, GV, US, &
-                  CS%continuity_CSp, OBC=CS%OBC)
+  call continuity(upp, vpp, hp, h, uh, vh, (dt*0.5), G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call pass_var(h, G%Domain, clock=id_clock_pass)
   call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
@@ -470,12 +467,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
     call open_boundary_zero_normal_flow(CS%OBC, G, CS%CAu, CS%CAv)
   endif
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    u(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt * &
-               (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
+    u(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt * (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    v(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt * &
-               (CS%PFv(i,J,k) + CS%CAv(i,J,k)))
+    v(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt * (CS%PFv(i,J,k) + CS%CAv(i,J,k)))
   enddo ; enddo ; enddo
 
 ! u <- u + dt d/dz visc d/dz u
@@ -634,6 +629,11 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
 
   CS%diag => diag
 
+  call get_param(param_file, mdl, "FIX_UNSPLIT_DT_VISC_BUG", CS%use_correct_dt_visc, &
+                 "If true, use the correct timestep in the viscous terms applied in the first "//&
+                 "predictor step with the unsplit time stepping scheme, and in the calculation "//&
+                 "of the turbulent mixed layer properties for viscosity with unsplit or "//&
+                 "unsplit_RK2. The default should be true.", default=.false.)
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", &
                  default=.false., debuggingParam=.true.)

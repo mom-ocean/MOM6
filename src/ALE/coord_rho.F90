@@ -91,7 +91,7 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
                             h_neglect, h_neglect_edge)
   type(rho_CS),        intent(in)    :: CS !< coord_rho control structure
   integer,             intent(in)    :: nz !< Number of levels on source grid (i.e. length of  h, T, S)
-  real,                intent(in)    :: depth !< Depth of ocean bottom (positive in m)
+  real,                intent(in)    :: depth !< Depth of ocean bottom (positive downward) [H ~> m or kg m-2]
   real, dimension(nz), intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(nz), intent(in)    :: T  !< Temperature for source column [degC]
   real, dimension(nz), intent(in)    :: S  !< Salinity for source column [ppt]
@@ -111,7 +111,7 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
   real, dimension(nz) :: densities ! Layer density [R ~> kg m-3]
   real, dimension(nz+1) :: xTmp   ! Temporary positions [H ~> m or kg m-2]
   real, dimension(CS%nk) :: h_new ! New thicknesses [H ~> m or kg m-2]
-  real, dimension(CS%nk+1) :: x1
+  real, dimension(CS%nk+1) :: x1  ! Interface heights [H ~> m or kg m-2]
 
   ! Construct source column with vanished layers removed (stored in h_nv)
   call copy_finite_thicknesses(nz, h, CS%min_thickness, count_nonzero_layers, h_nv, mapping)
