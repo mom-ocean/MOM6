@@ -1108,11 +1108,11 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   call get_param(PF, mdl, "SURFACE_PRESSURE_FILE", p_surf_file, &
-                 "The initial condition file for the surface height.", &
+                 "The initial condition file for the surface pressure exerted by ice.", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(PF, mdl, "SURFACE_PRESSURE_VAR", p_surf_var, &
-                 "The initial condition variable for the surface height.", &
-                 units="kg m-2", default="", do_not_log=just_read) !### The units here should be Pa?
+                 "The initial condition variable for the surface pressure exerted by ice.", &
+                 units="Pa", default="", do_not_log=just_read)
   call get_param(PF, mdl, "INPUTDIR", inputdir, default=".", do_not_log=.true.)
   filename = trim(slasher(inputdir))//trim(p_surf_file)
   if (.not.just_read) call log_param(PF,  mdl, "!INPUTDIR/SURFACE_HEIGHT_IC_FILE", filename)
@@ -2177,14 +2177,13 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   ! to the North/South Pole past the limits of the input data, they are extrapolated using the average
   ! value at the northernmost/southernmost latitude.
 
-
   call horiz_interp_and_extrap_tracer(tfilename, potemp_var, 1.0, 1, &
        G, temp_z, mask_z, z_in, z_edges_in, missing_value_temp, reentrant_x, &
-       tripolar_n, homogenize, m_to_Z=US%m_to_Z, answers_2018=hor_regrid_answers_2018,ongrid=pre_gridded)
+       tripolar_n, homogenize, m_to_Z=US%m_to_Z, answers_2018=hor_regrid_answers_2018, ongrid=pre_gridded)
 
   call horiz_interp_and_extrap_tracer(sfilename, salin_var, 1.0, 1, &
        G, salt_z, mask_z, z_in, z_edges_in, missing_value_salt, reentrant_x, &
-       tripolar_n, homogenize, m_to_Z=US%m_to_Z, answers_2018=hor_regrid_answers_2018,ongrid=pre_gridded)
+       tripolar_n, homogenize, m_to_Z=US%m_to_Z, answers_2018=hor_regrid_answers_2018, ongrid=pre_gridded)
 
   kd = size(z_in,1)
 

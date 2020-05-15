@@ -45,7 +45,7 @@ use MOM_restart,              only : restart_init, is_new_run, MOM_restart_CS
 use MOM_spatial_means,        only : global_mass_integral
 use MOM_time_manager,         only : time_type, real_to_time, time_type_to_real, operator(+)
 use MOM_time_manager,         only : operator(-), operator(>), operator(*), operator(/)
-use MOM_time_manager,         only : operator(>=), increment_date
+use MOM_time_manager,         only : operator(>=), operator(==), increment_date
 use MOM_unit_tests,           only : unit_tests
 use coupler_types_mod,        only : coupler_type_send_data, coupler_1d_bc_type, coupler_type_spawn
 
@@ -1404,7 +1404,8 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
   logical :: skip_diffusion
   integer :: id_eta_diff_end
 
-  integer, pointer :: accumulated_time => NULL()
+  type(time_type), pointer :: accumulated_time => NULL()
+  type(time_type), pointer :: vertical_time => NULL()
   integer :: i,j,k
   integer :: is, ie, js, je, isd, ied, jsd, jed
 
@@ -1426,32 +1427,30 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
 
   call cpu_clock_begin(id_clock_offline_tracer)
   call extract_offline_main(CS%offline_CSp, uhtr, vhtr, eatr, ebtr, h_end, accumulated_time, &
-                            dt_offline, dt_offline_vertical, skip_diffusion)
+                            vertical_time, dt_offline, dt_offline_vertical, skip_diffusion)
   Time_end = increment_date(Time_start, seconds=floor(time_interval+0.001))
 
   call enable_averaging(time_interval, Time_end, CS%diag)
 
   ! Check to see if this is the first iteration of the offline interval
-  if (accumulated_time==0) then
+  if (accumulated_time == real_to_time(0.0)) then
     first_iter = .true.
   else ! This is probably unnecessary but is used to guard against unwanted behavior
     first_iter = .false.
   endif
 
-  ! Check to see if vertical tracer functions should  be done
-  if ( mod(accumulated_time, floor(US%T_to_s*dt_offline_vertical + 1e-6)) == 0 ) then
+  ! Check to see if vertical tracer functions should be done
+  if (first_iter .or. (accumulated_time >= vertical_time)) then
     do_vertical = .true.
+    vertical_time = accumulated_time + real_to_time(US%T_to_s*dt_offline_vertical)
   else
     do_vertical = .false.
   endif
 
   ! Increment the amount of time elapsed since last read and check if it's time to roll around
-  accumulated_time = mod(accumulated_time + int(time_interval), floor(US%T_to_s*dt_offline+1e-6))
-  if (accumulated_time==0) then
-    last_iter = .true.
-  else
-    last_iter = .false.
-  endif
+  accumulated_time = accumulated_time + real_to_time(time_interval)
+
+  last_iter = (accumulated_time >= real_to_time(US%T_to_s*dt_offline))
 
   if (CS%use_ALE_algorithm) then
     ! If this is the first iteration in the offline timestep, then we need to read in fields and
@@ -1565,6 +1564,10 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
   call pass_var(CS%h, G%Domain)
 
   fluxes%fluxes_used = .true.
+
+  if (last_iter) then
+    accumulated_time = real_to_time(0.0)
+  endif
 
   call cpu_clock_end(id_clock_offline_tracer)
 
