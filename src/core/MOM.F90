@@ -406,6 +406,7 @@ integer :: id_clock_pass_init  ! also in dynamics d/r
 integer :: id_clock_ALE
 integer :: id_clock_other
 integer :: id_clock_offline_tracer
+integer :: id_clock_unit_tests
 !>@}
 
 contains
@@ -1720,7 +1721,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "If True, exercises unit tests at model start up.", &
                  default=.false., debuggingParam=.true.)
   if (do_unit_tests) then
+    id_clock_unit_tests = cpu_clock_id('(Ocean unit tests)', grain=CLOCK_MODULE)
+    call cpu_clock_begin(id_clock_unit_tests)
     call unit_tests(verbosity)
+    call cpu_clock_end(id_clock_unit_tests)
   endif
 
   call get_param(param_file, "MOM", "SPLIT", CS%split, &
