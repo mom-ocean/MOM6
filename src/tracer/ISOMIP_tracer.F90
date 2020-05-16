@@ -287,7 +287,7 @@ subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, G
 
   if (.not.associated(CS)) return
 
-  melt(:,:) = fluxes%iceshelf_melt
+  melt(:,:) = fluxes%iceshelf_melt(:,:)
 
   ! max. melt
   mmax = MAXVAL(melt(is:ie,js:je))

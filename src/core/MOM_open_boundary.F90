@@ -265,10 +265,8 @@ type, public :: ocean_OBC_type
                    !! velocities (or speed of characteristics) at the
                    !! new time level (1) or the running mean (0) for velocities.
                    !! Valid values range from 0 to 1, with a default of 0.3.
-  real :: rx_max   !< The maximum magnitude of the baroclinic radiation
-                   !! velocity (or speed of characteristics) [m s-1].  The
-                   !! default value is 10 m s-1.
-                   !### The description above seems inconsistent with the code, and the units should be [nondim].
+  real :: rx_max   !< The maximum magnitude of the baroclinic radiation velocity (or speed of
+                   !! characteristics) in units of grid points per timestep [nondim].
   logical :: OBC_pe !< Is there an open boundary on this tile?
   type(remapping_CS),      pointer :: remap_CS   !< ALE remapping control structure for segments only
   type(OBC_registry_type), pointer :: OBC_Reg => NULL()  !< Registry type for boundaries
@@ -500,13 +498,11 @@ subroutine open_boundary_config(G, US, param_file, OBC)
     call initialize_segment_data(G, OBC, param_file)
 
     if (open_boundary_query(OBC, apply_open_OBC=.true.)) then
-      !### I think that OBC%rx_max as used is actually nondimensional, with effective
-      !    units of grid points per time step.
       call get_param(param_file, mdl, "OBC_RADIATION_MAX", OBC%rx_max, &
-                   "The maximum magnitude of the baroclinic radiation "//&
-                   "velocity (or speed of characteristics).  This is only "//&
+                   "The maximum magnitude of the baroclinic radiation velocity (or speed of "//&
+                   "characteristics), in gridpoints per timestep.  This is only "//&
                    "used if one of the open boundary segments is using Orlanski.", &
-                   units="m s-1", default=10.0) !### Should the units here be "nondim"?
+                   units="nondim", default=10.0) !### Should the default be changed to 1.0?
       call get_param(param_file, mdl, "OBC_RAD_VEL_WT", OBC%gamma_uv, &
                    "The relative weighting for the baroclinic radiation "//&
                    "velocities (or speed of characteristics) at the new "//&
@@ -1804,9 +1800,9 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv, US)
       I=segment%HI%IsdB
       do j=segment%HI%jsd,segment%HI%jed
         if (segment%direction == OBC_DIRECTION_E) then
-          areaCu(I,j) = G%areaT(i,j)   ! Both of these are in [L2]
+          areaCu(I,j) = G%areaT(i,j)   ! Both of these are in [L2 ~> m2]
         else   ! West
-          areaCu(I,j) = G%areaT(i+1,j) ! Both of these are in [L2]
+          areaCu(I,j) = G%areaT(i+1,j) ! Both of these are in [L2 ~> m2]
         endif
       enddo
     else
@@ -1814,9 +1810,9 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv, US)
       J=segment%HI%JsdB
       do i=segment%HI%isd,segment%HI%ied
         if (segment%direction == OBC_DIRECTION_S) then
-          areaCv(i,J) = G%areaT(i,j+1) ! Both of these are in [L2]
+          areaCv(i,J) = G%areaT(i,j+1) ! Both of these are in [L2 ~> m2]
         else      ! North
-          areaCu(i,J) = G%areaT(i,j)   ! Both of these are in [L2]
+          areaCu(i,J) = G%areaT(i,j)   ! Both of these are in [L2 ~> m2]
         endif
       enddo
     endif
@@ -1906,7 +1902,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
   real :: dhdt, dhdx, dhdy  ! One-point differences in time or space [L T-1 ~> m s-1]
   real :: gamma_u, gamma_2  ! Fractional weightings of new values [nondim]
   real :: tau            ! A local nudging timescale [T ~> s]
-  real :: rx_max, ry_max ! coefficients for radiation [nondim] or [L2 T-2 ~> m2 s-2]
+  real :: rx_max, ry_max ! coefficients for radiation [nondim]
   real :: rx_new, rx_avg ! coefficients for radiation [nondim] or [L2 T-2 ~> m2 s-2]
   real :: ry_new, ry_avg ! coefficients for radiation [nondim] or [L2 T-2 ~> m2 s-2]
   real :: cff_new, cff_avg ! denominator in oblique [L2 T-2 ~> m2 s-2]

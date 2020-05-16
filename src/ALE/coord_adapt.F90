@@ -209,7 +209,7 @@ subroutine build_adapt_column(CS, G, GV, US, tv, i, j, zInt, tInt, sInt, h, zNex
   ! a positive curvature means we're too light relative to adjacent columns,
   ! so del2sigma needs to be positive too (push the interface deeper)
   call calculate_density_derivs(tInt(i,j,:), sInt(i,j,:), zInt(i,j,:) * (GV%H_to_RZ * GV%g_Earth), &
-       alpha, beta, tv%eqn_of_state, (/1,nz/) ) !### This should be (/1,nz+1/) - see 25 lines below.
+       alpha, beta, tv%eqn_of_state, (/1,nz+1/) )
   do K = 2, nz
     ! TODO make lower bound here configurable
     dh_d2s(K) = del2sigma(K) * (0.5 * (h(i,j,k-1) + h(i,j,k))) / &
