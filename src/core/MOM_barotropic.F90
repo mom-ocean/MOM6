@@ -495,8 +495,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                   ! or [T-1 H-1 ~> s-1 m-1 or m2 s-1 kg-1]
   real, dimension(SZIBW_(CS),SZJW_(CS)) :: &
     ubt, &        ! The zonal barotropic velocity [L T-1 ~> m s-1].
-  !  ubt_st, &     ! The zonal barotropic velocity at the start of timestep [L T-1 ~> m s-1].
-  !  ubt_dt, &     ! The zonal barotropic velocity tendency [L T-2 ~> m s-2].
     bt_rem_u, &   ! The fraction of the barotropic zonal velocity that remains
                   ! after a time step, the remainder being lost to bottom drag.
                   ! bt_rem_u is a nondimensional number between 0 and 1.
@@ -530,8 +528,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                   ! spacing [H L ~> m2 or kg m-1].
   real, dimension(SZIW_(CS),SZJBW_(CS)) :: &
     vbt, &        ! The meridional barotropic velocity [L T-1 ~> m s-1].
-!    vbt_st, &     ! The meridional barotropic velocity at the start of timestep [L T-1 ~> m s-1].
-!    vbt_dt, &      ! The meridional barotropic velocity tendency [L T-2 ~> m s-2].
     bt_rem_v, &   ! The fraction of the barotropic meridional velocity that
                   ! remains after a time step, the rest being lost to bottom
                   ! drag.  bt_rem_v is a nondimensional number between 0 and 1.
