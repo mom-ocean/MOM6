@@ -1557,7 +1557,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       ubt_st(I,j) = ubt(I,j) 
     enddo ; enddo
   endif
-
   if (CS%id_vbtdt > 0) then
     do J=js-1,je ; do i=is-1,ie+1
       vbt_st(i,J) = vbt(i,J)
