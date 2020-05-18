@@ -73,7 +73,8 @@ type, public :: CoriolisAdv_CS ; private
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the timing of diagnostic output.
   !>@{ Diagnostic IDs
   integer :: id_rv = -1, id_PV = -1, id_gKEu = -1, id_gKEv = -1
-  integer :: id_rvxu = -1, id_rvxv = -1   !!@}
+  integer :: id_rvxu = -1, id_rvxv = -1
+  !>@}
 end type CoriolisAdv_CS
 
 !>@{ Enumeration values for Coriolis_Scheme
@@ -89,7 +90,7 @@ character*(20), parameter :: ROBUST_ENSTRO_STRING = "ROBUST_ENSTRO"
 character*(20), parameter :: SADOURNY75_ENSTRO_STRING = "SADOURNY75_ENSTRO"
 character*(20), parameter :: ARAKAWA_LAMB_STRING = "ARAKAWA_LAMB81"
 character*(20), parameter :: AL_BLEND_STRING = "ARAKAWA_LAMB_BLEND"
-!!@}
+!>@}
 !>@{ Enumeration values for KE_Scheme
 integer, parameter :: KE_ARAKAWA        = 10
 integer, parameter :: KE_SIMPLE_GUDONOV = 11
@@ -97,13 +98,13 @@ integer, parameter :: KE_GUDONOV        = 12
 character*(20), parameter :: KE_ARAKAWA_STRING = "KE_ARAKAWA"
 character*(20), parameter :: KE_SIMPLE_GUDONOV_STRING = "KE_SIMPLE_GUDONOV"
 character*(20), parameter :: KE_GUDONOV_STRING = "KE_GUDONOV"
-!!@}
+!>@}
 !>@{ Enumeration values for PV_Adv_Scheme
 integer, parameter :: PV_ADV_CENTERED   = 21
 integer, parameter :: PV_ADV_UPWIND1    = 22
 character*(20), parameter :: PV_ADV_CENTERED_STRING = "PV_ADV_CENTERED"
 character*(20), parameter :: PV_ADV_UPWIND1_STRING = "PV_ADV_UPWIND1"
-!!@}
+!>@}
 
 contains
 

@@ -1202,6 +1202,8 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   real, dimension(G%IsdB:G%IedB,G%jsd :G%jed ) :: out_u
   real, dimension(G%isd :G%ied ,G%JsdB:G%JedB) :: out_v
 
+  call callTree_enter('write_ocean_geometry_file()')
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -1331,6 +1333,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
 
   call close_file(unit)
 
+  call callTree_leave('write_ocean_geometry_file()')
 end subroutine write_ocean_geometry_file
 
 end module MOM_shared_initialization

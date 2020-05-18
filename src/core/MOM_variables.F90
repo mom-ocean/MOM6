@@ -3,6 +3,7 @@ module MOM_variables
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_array_transform, only : rotate_array, rotate_vector
 use MOM_domains, only : MOM_domain_type, get_domain_extent, group_pass_type
 use MOM_debugging, only : hchksum
 use MOM_error_handler, only : MOM_error, FATAL
@@ -11,6 +12,7 @@ use MOM_EOS, only : EOS_type
 
 use coupler_types_mod, only : coupler_1d_bc_type, coupler_2d_bc_type
 use coupler_types_mod, only : coupler_type_spawn, coupler_type_destructor
+use coupler_types_mod, only : coupler_type_initialized
 
 implicit none ; private
 
@@ -18,6 +20,7 @@ implicit none ; private
 
 public allocate_surface_state, deallocate_surface_state, MOM_thermovar_chksum
 public ocean_grid_type, alloc_BT_cont_type, dealloc_BT_cont_type
+public rotate_surface_state
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -39,32 +42,31 @@ type, public :: surface
   real, allocatable, dimension(:,:) :: &
     SST, &         !< The sea surface temperature [degC].
     SSS, &         !< The sea surface salinity [ppt ~> psu or gSalt/kg].
-    sfc_density, & !< The mixed layer density [kg m-3].
-    Hml, &      !< The mixed layer depth [m].
-    u, &        !< The mixed layer zonal velocity [m s-1].
-    v, &        !< The mixed layer meridional velocity [m s-1].
-    sea_lev, &  !< The sea level [m].  If a reduced surface gravity is
-                !! used, that is compensated for in sea_lev.
-    melt_potential, & !< Instantaneous amount of heat that can be used to melt sea ice [J m-2].
+    sfc_density, & !< The mixed layer density [R ~> kg m-3].
+    Hml, &         !< The mixed layer depth [Z ~> m].
+    u, &           !< The mixed layer zonal velocity [L T-1 ~> m s-1].
+    v, &           !< The mixed layer meridional velocity [L T-1 ~> m s-1].
+    sea_lev, &     !< The sea level [Z ~> m].  If a reduced surface gravity is
+                   !! used, that is compensated for in sea_lev.
+    frazil, &      !< The energy needed to heat the ocean column to the freezing point during
+                   !! the call to step_MOM [Q R Z ~> J m-2].
+    melt_potential, & !< Instantaneous amount of heat that can be used to melt sea ice [Q R Z ~> J m-2].
                       !! This is computed w.r.t. surface freezing temperature.
-    ocean_mass, &  !< The total mass of the ocean [kg m-2].
-    ocean_heat, &  !< The total heat content of the ocean in [degC kg m-2].
-    ocean_salt, &  !< The total salt content of the ocean in [kgSalt m-2].
-    taux_shelf, &  !< The zonal stresses on the ocean under shelves [Pa].
-    tauy_shelf, &  !< The meridional stresses on the ocean under shelves [Pa].
+    ocean_mass, &  !< The total mass of the ocean [R Z ~> kg m-2].
+    ocean_heat, &  !< The total heat content of the ocean in [degC R Z ~> degC kg m-2].
+    ocean_salt, &  !< The total salt content of the ocean in [kgSalt kg-1 R Z ~> kgSalt m-2].
+    taux_shelf, &  !< The zonal stresses on the ocean under shelves [R L Z T-2 ~> Pa].
+    tauy_shelf, &  !< The meridional stresses on the ocean under shelves [R L Z T-2 ~> Pa].
     TempxPmE, &    !< The net inflow of water into the ocean times the temperature at which this
-                   !! inflow occurs during the call to step_MOM [degC kg m-2].
-    salt_deficit, & !< The salt needed to maintain the ocean column at a minimum
-                   !! salinity of 0.01 PSU over the call to step_MOM [kgSalt m-2].
+                   !! inflow occurs during the call to step_MOM [degC R Z ~> degC kg m-2].
+    salt_deficit, & !< The salt needed to maintain the ocean column above a minimum
+                   !! salinity over the call to step_MOM [kgSalt kg-1 R Z ~> kgSalt m-2].
     internal_heat  !< Any internal or geothermal heat sources that are applied to the ocean
-                   !! integrated over the call to step_MOM [degC kg m-2].
+                   !! integrated over the call to step_MOM [degC R Z ~> degC kg m-2].
   logical :: T_is_conT = .false. !< If true, the temperature variable SST is actually the
                    !! conservative temperature in [degC].
   logical :: S_is_absS = .false. !< If true, the salinity variable SSS is actually the
                    !! absolute salinity in [g/kg].
-  real, pointer, dimension(:,:) :: frazil => NULL()
-                !< The energy needed to heat the ocean column to the freezing point during the call
-                !! to step_MOM [J m-2].
   type(coupler_2d_bc_type) :: tr_fields !< A structure that may contain an
                 !! array of named fields describing tracer-related quantities.
        !### NOTE: ALL OF THE ARRAYS IN TR_FIELDS USE THE COUPLER'S INDEXING CONVENTION AND HAVE NO
@@ -79,12 +81,14 @@ type, public :: thermo_var_ptrs
   ! If allocated, the following variables have nz layers.
   real, pointer :: T(:,:,:) => NULL() !< Potential temperature [degC].
   real, pointer :: S(:,:,:) => NULL() !< Salnity [PSU] or [gSalt/kg], generically [ppt].
+  real, pointer :: p_surf(:,:) => NULL() !< Ocean surface pressure used in equation of state
+                         !! calculations [R L2 T-2 ~> Pa]
   type(EOS_type), pointer :: eqn_of_state => NULL() !< Type that indicates the
                          !! equation of state to use.
-  real :: P_Ref          !<   The coordinate-density reference pressure [Pa].
+  real :: P_Ref          !<   The coordinate-density reference pressure [R L2 T-2 ~> Pa].
                          !! This is the pressure used to calculate Rml from
                          !! T and S when eqn_of_state is associated.
-  real :: C_p            !<   The heat capacity of seawater [J degC-1 kg-1].
+  real :: C_p            !<   The heat capacity of seawater [Q degC-1 ~> J degC-1 kg-1].
                          !! When conservative temperature is used, this is
                          !! constant and exactly 3991.86795711963 J degC-1 kg-1.
   logical :: T_is_conT = .false. !< If true, the temperature variable tv%T is
@@ -97,7 +101,7 @@ type, public :: thermo_var_ptrs
   real, dimension(:,:), pointer :: frazil => NULL()
                          !< The energy needed to heat the ocean column to the
                          !! freezing point since calculate_surface_state was2
-                         !! last called [J m-2].
+                         !! last called [Q Z R ~> J m-2].
   real, dimension(:,:), pointer :: salt_deficit => NULL()
                          !<   The salt needed to maintain the ocean column
                          !! at a minimum salinity of MIN_SALINITY since the last time
@@ -111,7 +115,7 @@ type, public :: thermo_var_ptrs
   real, dimension(:,:), pointer :: internal_heat => NULL()
                          !< Any internal or geothermal heat sources that
                          !! have been applied to the ocean since the last call to
-                         !! calculate_surface_state [degC kg m-2].
+                         !! calculate_surface_state [degC R Z ~> degC kg m-2].
 end type thermo_var_ptrs
 
 !> Pointers to all of the prognostic variables allocated in MOM_variables.F90 and MOM.F90.
@@ -205,7 +209,7 @@ type, public :: vertvisc_type
   real, pointer, dimension(:,:) :: TKE_BBL => NULL()
                              !< A term related to the bottom boundary layer source of turbulent kinetic
                              !! energy, currently in [Z3 T-3 ~> m3 s-3], but may at some time be changed
-                             !! to [kg Z3 m-3 T-3 ~> W m-2].
+                             !! to [R Z3 T-3 ~> W m-2].
   real, pointer, dimension(:,:) :: &
     taux_shelf => NULL(), &  !< The zonal stresses on the ocean under shelves [R Z L T-2 ~> Pa].
     tauy_shelf => NULL()     !< The meridional stresses on the ocean under shelves [R Z L T-2 ~> Pa].
@@ -225,7 +229,7 @@ type, public :: vertvisc_type
   real, pointer, dimension(:,:) :: nkml_visc_v => NULL()
                 !< The number of layers in the viscous surface mixed layer at v-points [nondim].
   real, pointer, dimension(:,:) :: &
-    MLD => NULL()      !< Instantaneous active mixing layer depth [H ~> m or kg m-2].
+    MLD => NULL()      !< Instantaneous active mixing layer depth [Z ~> m].
   real, pointer, dimension(:,:,:) :: &
     Ray_u => NULL(), & !< The Rayleigh drag velocity to be applied to each layer at u-points [Z T-1 ~> m s-1].
     Ray_v => NULL()    !< The Rayleigh drag velocity to be applied to each layer at v-points [Z T-1 ~> m s-1].
@@ -293,7 +297,7 @@ contains
 !> Allocates the fields for the surface (return) properties of
 !! the ocean model. Unused fields are unallocated.
 subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
-                                  gas_fields_ocn, use_meltpot, use_iceshelves)
+                                  gas_fields_ocn, use_meltpot, use_iceshelves, omit_frazil)
   type(ocean_grid_type), intent(in)    :: G                !< ocean grid structure
   type(surface),         intent(inout) :: sfc_state        !< ocean surface state type to be allocated.
   logical,     optional, intent(in)    :: use_temperature  !< If true, allocate the space for thermodynamic variables.
@@ -308,9 +312,11 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
   logical,     optional, intent(in)    :: use_meltpot      !< If true, allocate the space for melt potential
   logical,     optional, intent(in)    :: use_iceshelves   !< If true, allocate the space for the stresses
                                                            !! under ice shelves.
+  logical,     optional, intent(in)    :: omit_frazil      !< If present and false, do not allocate the space to
+                                                           !! pass frazil fluxes to the coupler
 
   ! local variables
-  logical :: use_temp, alloc_integ, use_melt_potential, alloc_iceshelves
+  logical :: use_temp, alloc_integ, use_melt_potential, alloc_iceshelves, alloc_frazil
   integer :: is, ie, js, je, isd, ied, jsd, jed
   integer :: isdB, iedB, jsdB, jedB
 
@@ -322,6 +328,7 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
   alloc_integ = .true. ; if (present(do_integrals)) alloc_integ = do_integrals
   use_melt_potential = .false. ; if (present(use_meltpot)) use_melt_potential = use_meltpot
   alloc_iceshelves = .false. ; if (present(use_iceshelves)) alloc_iceshelves = use_iceshelves
+  alloc_frazil = .true. ; if (present(omit_frazil)) alloc_frazil = .not.omit_frazil
 
   if (sfc_state%arrays_allocated) return
 
@@ -330,6 +337,9 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
     allocate(sfc_state%SSS(isd:ied,jsd:jed)) ; sfc_state%SSS(:,:) = 0.0
   else
     allocate(sfc_state%sfc_density(isd:ied,jsd:jed)) ; sfc_state%sfc_density(:,:) = 0.0
+  endif
+  if (use_temp .and. alloc_frazil) then
+    allocate(sfc_state%frazil(isd:ied,jsd:jed)) ; sfc_state%frazil(:,:) = 0.0
   endif
   allocate(sfc_state%sea_lev(isd:ied,jsd:jed)) ; sfc_state%sea_lev(:,:) = 0.0
   allocate(sfc_state%Hml(isd:ied,jsd:jed)) ; sfc_state%Hml(:,:) = 0.0
@@ -389,6 +399,79 @@ subroutine deallocate_surface_state(sfc_state)
   sfc_state%arrays_allocated = .false.
 
 end subroutine deallocate_surface_state
+
+!> Rotate the surface state fields from the input to the model indices.
+subroutine rotate_surface_state(sfc_state_in, G_in, sfc_state, G, turns)
+  type(surface), intent(in) :: sfc_state_in
+  type(ocean_grid_type), intent(in) :: G_in
+  type(surface), intent(inout) :: sfc_state
+  type(ocean_grid_type), intent(in) :: G
+  integer, intent(in) :: turns
+
+  logical :: use_temperature, do_integrals, use_melt_potential, use_iceshelves
+
+  ! NOTE: Many of these are weak tests, since only one is checked
+  use_temperature = allocated(sfc_state_in%SST) &
+      .and. allocated(sfc_state_in%SSS)
+  use_melt_potential = allocated(sfc_state_in%melt_potential)
+  do_integrals = allocated(sfc_state_in%ocean_mass)
+  use_iceshelves = allocated(sfc_state_in%taux_shelf) &
+      .and. allocated(sfc_state_in%tauy_shelf)
+
+  if (.not. sfc_state%arrays_allocated) then
+    call allocate_surface_state(sfc_state, G, &
+        use_temperature=use_temperature, &
+        do_integrals=do_integrals, &
+        use_meltpot=use_melt_potential, &
+        use_iceshelves=use_iceshelves &
+    )
+    sfc_state%arrays_allocated = .true.
+  endif
+
+  if (use_temperature) then
+    call rotate_array(sfc_state_in%SST, turns, sfc_state%SST)
+    call rotate_array(sfc_state_in%SSS, turns, sfc_state%SSS)
+  else
+    call rotate_array(sfc_state_in%sfc_density, turns, sfc_state%sfc_density)
+  endif
+
+  call rotate_array(sfc_state_in%Hml, turns, sfc_state%Hml)
+  call rotate_vector(sfc_state_in%u, sfc_state_in%v, turns, &
+      sfc_state%u, sfc_state%v)
+  call rotate_array(sfc_state_in%sea_lev, turns, sfc_state%sea_lev)
+
+  if (use_melt_potential) then
+    call rotate_array(sfc_state_in%melt_potential, turns, sfc_state%melt_potential)
+  endif
+
+  if (do_integrals) then
+    call rotate_array(sfc_state_in%ocean_mass, turns, sfc_state%ocean_mass)
+    if (use_temperature) then
+      call rotate_array(sfc_state_in%ocean_heat, turns, sfc_state%ocean_heat)
+      call rotate_array(sfc_state_in%ocean_salt, turns, sfc_state%ocean_salt)
+      call rotate_array(sfc_state_in%SSS, turns, sfc_state%TempxPmE)
+      call rotate_array(sfc_state_in%salt_deficit, turns, sfc_state%salt_deficit)
+      call rotate_array(sfc_state_in%internal_heat, turns, sfc_state%internal_heat)
+    endif
+  endif
+
+  if (use_iceshelves) then
+    call rotate_vector(sfc_state_in%taux_shelf, sfc_state_in%tauy_shelf, turns, &
+        sfc_state%taux_shelf, sfc_state%tauy_shelf)
+  endif
+
+  if (use_temperature .and. allocated(sfc_state_in%frazil)) &
+    call rotate_array(sfc_state_in%frazil, turns, sfc_state%frazil)
+
+  ! Scalar transfers
+  sfc_state%T_is_conT = sfc_state_in%T_is_conT
+  sfc_state%S_is_absS = sfc_state_in%S_is_absS
+
+  ! TODO: tracer field rotation
+  if (coupler_type_initialized(sfc_state_in%tr_fields)) &
+    call MOM_error(FATAL, "Rotation of surface state tracers is not yet " &
+        // "implemented.")
+end subroutine rotate_surface_state
 
 !> Allocates the arrays contained within a BT_cont_type and initializes them to 0.
 subroutine alloc_BT_cont_type(BT_cont, G, alloc_faces)
@@ -461,11 +544,11 @@ subroutine MOM_thermovar_chksum(mesg, tv, G)
   if (associated(tv%S)) &
     call hchksum(tv%S, mesg//" tv%S", G%HI)
   if (associated(tv%frazil)) &
-    call hchksum(tv%frazil, mesg//" tv%frazil", G%HI)
+    call hchksum(tv%frazil, mesg//" tv%frazil", G%HI, scale=G%US%Q_to_J_kg*G%US%RZ_to_kg_m2)
   if (associated(tv%salt_deficit)) &
-    call hchksum(tv%salt_deficit, mesg//" tv%salt_deficit", G%HI, scale=G%US%R_to_kg_m3*G%US%Z_to_m)
+    call hchksum(tv%salt_deficit, mesg//" tv%salt_deficit", G%HI, scale=G%US%RZ_to_kg_m2)
   if (associated(tv%TempxPmE)) &
-    call hchksum(tv%TempxPmE, mesg//" tv%TempxPmE", G%HI, scale=G%US%R_to_kg_m3*G%US%Z_to_m)
+    call hchksum(tv%TempxPmE, mesg//" tv%TempxPmE", G%HI, scale=G%US%RZ_to_kg_m2)
 end subroutine MOM_thermovar_chksum
 
 end module MOM_variables

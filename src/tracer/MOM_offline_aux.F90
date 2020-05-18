@@ -733,15 +733,15 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     ! Need to double check, but set_opacity seems to only need the sum of the diffuse and
     ! direct fluxes in the visible and near-infrared bands. For convenience, we store the
     ! sum of the direct and diffuse fluxes in the 'dir' field and set the 'dif' fields to zero
-    call MOM_read_data(mean_file,'sw_vis',fluxes%sw_vis_dir, G%Domain, &
-        timelevel=ridx_sum)
-    call MOM_read_data(mean_file,'sw_nir',fluxes%sw_nir_dir, G%Domain, &
-        timelevel=ridx_sum)
+    call MOM_read_data(mean_file,'sw_vis', fluxes%sw_vis_dir, G%Domain, &
+                       timelevel=ridx_sum, scale=G%US%W_m2_to_QRZ_T)
+    call MOM_read_data(mean_file,'sw_nir', fluxes%sw_nir_dir, G%Domain, &
+                       timelevel=ridx_sum, scale=G%US%W_m2_to_QRZ_T)
     fluxes%sw_vis_dir(:,:) = fluxes%sw_vis_dir(:,:)*0.5
-    fluxes%sw_vis_dif(:,:) = fluxes%sw_vis_dir
+    fluxes%sw_vis_dif(:,:) = fluxes%sw_vis_dir(:,:)
     fluxes%sw_nir_dir(:,:) = fluxes%sw_nir_dir(:,:)*0.5
-    fluxes%sw_nir_dif(:,:) = fluxes%sw_nir_dir
-    fluxes%sw = fluxes%sw_vis_dir + fluxes%sw_vis_dif + fluxes%sw_nir_dir + fluxes%sw_nir_dif
+    fluxes%sw_nir_dif(:,:) = fluxes%sw_nir_dir(:,:)
+    fluxes%sw = (fluxes%sw_vis_dir + fluxes%sw_vis_dif) + (fluxes%sw_nir_dir + fluxes%sw_nir_dif)
     do j=js,je ; do i=is,ie
       if (G%mask2dT(i,j)<1.0) then
         fluxes%sw(i,j) = 0.0

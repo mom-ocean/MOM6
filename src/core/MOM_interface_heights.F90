@@ -47,12 +47,13 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
              !! the units of eta to m; by default this is US%Z_to_m.
 
   ! Local variables
-  real :: p(SZI_(G),SZJ_(G),SZK_(G)+1)
+  real :: p(SZI_(G),SZJ_(G),SZK_(G)+1)    ! Hydrostatic pressure at each interface [R L2 T-2 ~> Pa]
   real :: dz_geo(SZI_(G),SZJ_(G),SZK_(G)) ! The change in geopotential height
-                                          ! across a layer [m2 s-2].
+                                          ! across a layer [L2 T-2 ~> m2 s-2].
   real :: dilate(SZI_(G))                 ! non-dimensional dilation factor
-  real :: htot(SZI_(G))                   ! total thickness H
-  real :: I_gEarth
+  real :: htot(SZI_(G))                   ! total thickness [H ~> m or kg m-2]
+  real :: I_gEarth          ! The inverse of the gravitational acceleration times the
+                            ! rescaling factor derived from eta_to_m [T2 Z L-2 ~> s2 m-1]
   real :: Z_to_eta, H_to_eta, H_to_rho_eta ! Unit conversion factors with obvious names.
   integer i, j, k, isv, iev, jsv, jev, nz, halo
 
@@ -67,7 +68,7 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   Z_to_eta = 1.0 ; if (present(eta_to_m)) Z_to_eta = US%Z_to_m / eta_to_m
   H_to_eta = GV%H_to_Z * Z_to_eta
   H_to_rho_eta =  GV%H_to_RZ * Z_to_eta
-  I_gEarth = Z_to_eta /  (US%Z_to_m * GV%mks_g_Earth)
+  I_gEarth = Z_to_eta / GV%g_Earth
 
 !$OMP parallel default(shared) private(dilate,htot)
 !$OMP do
@@ -96,10 +97,13 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
     if (associated(tv%eqn_of_state)) then
 !$OMP do
       do j=jsv,jev
-        ! ### THIS SHOULD BE P_SURF, IF AVAILABLE.
-        do i=isv,iev ; p(i,j,1) = 0.0 ; enddo
+        if (associated(tv%p_surf)) then
+          do i=isv,iev ; p(i,j,1) = tv%p_surf(i,j) ; enddo
+        else
+          do i=isv,iev ; p(i,j,1) = 0.0 ; enddo
+        endif
         do k=1,nz ; do i=isv,iev
-          p(i,j,K+1) = p(i,j,K) + GV%H_to_Pa*h(i,j,k)
+          p(i,j,K+1) = p(i,j,K) + GV%g_Earth*GV%H_to_RZ*h(i,j,k)
         enddo ; enddo
       enddo
 !$OMP do
@@ -159,11 +163,12 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
              !! the units of eta to m; by default this is US%Z_to_m.
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
-    p     ! The pressure at interfaces [Pa].
+    p          ! Hydrostatic pressure at each interface [R L2 T-2 ~> Pa]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    dz_geo     ! The change in geopotential height across a layer [m2 s-2].
+    dz_geo     ! The change in geopotential height across a layer [L2 T-2 ~> m2 s-2].
   real :: htot(SZI_(G))  ! The sum of all layers' thicknesses [H ~> m or kg m-2].
-  real :: I_gEarth
+  real :: I_gEarth          ! The inverse of the gravitational acceleration times the
+                            ! rescaling factor derived from eta_to_m [T2 Z L-2 ~> s2 m-1]
   real :: Z_to_eta, H_to_eta, H_to_rho_eta ! Unit conversion factors with obvious names.
   integer i, j, k, is, ie, js, je, nz, halo
 
@@ -174,7 +179,7 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   Z_to_eta = 1.0 ; if (present(eta_to_m)) Z_to_eta = US%Z_to_m / eta_to_m
   H_to_eta = GV%H_to_Z * Z_to_eta
   H_to_rho_eta =  GV%H_to_RZ * Z_to_eta
-  I_gEarth = Z_to_eta / (US%Z_to_m * GV%mks_g_Earth)
+  I_gEarth = Z_to_eta / GV%g_Earth
 
 !$OMP parallel default(shared) private(htot)
 !$OMP do
@@ -196,10 +201,14 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
     if (associated(tv%eqn_of_state)) then
 !$OMP do
       do j=js,je
-        do i=is,ie ; p(i,j,1) = 0.0 ; enddo
+        if (associated(tv%p_surf)) then
+          do i=is,ie ; p(i,j,1) = tv%p_surf(i,j) ; enddo
+        else
+          do i=is,ie ; p(i,j,1) = 0.0 ; enddo
+        endif
 
         do k=1,nz ; do i=is,ie
-          p(i,j,k+1) = p(i,j,k) + GV%H_to_Pa*h(i,j,k)
+          p(i,j,k+1) = p(i,j,k) + GV%g_Earth*GV%H_to_RZ*h(i,j,k)
         enddo ; enddo
       enddo
 !$OMP do

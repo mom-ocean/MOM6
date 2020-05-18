@@ -464,8 +464,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kv, j, G, GV, US, CS)
     do i=is,ie
       bckgrnd_vdc_psis = CS%bckgrnd_vdc_psim * exp(-(0.4*(G%geoLatT(i,j)+28.9))**2)
       bckgrnd_vdc_psin = CS%bckgrnd_vdc_psim * exp(-(0.4*(G%geoLatT(i,j)-28.9))**2)
-      !### Add parentheses.
-      CS%Kd_bkgnd(i,j,:) = CS%bckgrnd_vdc_eq + bckgrnd_vdc_psin + bckgrnd_vdc_psis
+      CS%Kd_bkgnd(i,j,:) = (CS%bckgrnd_vdc_eq + bckgrnd_vdc_psin) + bckgrnd_vdc_psis
 
       if (G%geoLatT(i,j) < -10.0) then
         CS%Kd_bkgnd(i,j,:) = CS%Kd_bkgnd(i,j,:) + CS%bckgrnd_vdc1
