@@ -992,7 +992,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   !$OMP                           deltarho, N2_1d, ws_1d, LangEnhVT2, enhvt2, wst,          &
   !$OMP                           BulkRi_1d, zBottomMinusOffset) &
   !$OMP                           shared(G, GV, CS, US, uStar, h, buoy_scale, buoyFlux,     &
-  !$OMP                           Temp, Salt, waves, EOS, GoRho, u, v)
+  !$OMP                           Temp, Salt, waves, tv, EOS, GoRho, u, v)
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
 
