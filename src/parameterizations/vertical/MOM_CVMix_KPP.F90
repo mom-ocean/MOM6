@@ -992,7 +992,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   !$OMP                           deltarho, N2_1d, ws_1d, LangEnhVT2, enhvt2, wst,          &
   !$OMP                           BulkRi_1d, zBottomMinusOffset) &
   !$OMP                           shared(G, GV, CS, US, uStar, h, buoy_scale, buoyFlux,     &
-  !$OMP                           Temp, Salt, waves, tv, EOS, GoRho, u, v)
+  !$OMP                           Temp, Salt, waves, tv, GoRho, u, v)
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
 
@@ -1317,7 +1317,7 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
 
     ! apply smoothing on OBL depth
     !$OMP parallel do default(none) shared(G, GV, CS, h, OBLdepth_prev) &
-    !$OMP                           private(wc, ww, we, wn, ws, dh, hcorr, pref, cellHeight, iFaceHeight)
+    !$OMP                           private(wc, ww, we, wn, ws, dh, hcorr, cellHeight, iFaceHeight)
     do j = G%jsc, G%jec
       do i = G%isc, G%iec
 
@@ -1382,7 +1382,7 @@ subroutine KPP_get_BLD(CS, BLD, G, US, m_to_BLD_units)
 
   scale = US%m_to_Z ; if (present(m_to_BLD_units)) scale = m_to_BLD_units
 
-  !$OMP parallel do default(none) shared(BLD, CS, G)
+  !$OMP parallel do default(none) shared(BLD, CS, G, scale)
   do j = G%jsc, G%jec ; do i = G%isc, G%iec
     BLD(i,j) = scale * CS%OBLdepth(i,j)
   enddo ; enddo
