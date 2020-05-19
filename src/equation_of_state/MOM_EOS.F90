@@ -1757,15 +1757,15 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
     do I=Isq,Ieq
       intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
 
-      ! Use Bode's rule to estimate the pressure anomaly change.
-      do m = 2,4
-        pos = i*15+(m-2)*5
-        intz(m) = G_e*dz_x(m,i)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + 32.0*(r15(pos+2)+r15(pos+4)) + &
-                          12.0*r15(pos+3)))
-      enddo
-      ! Use Bode's rule to integrate the bottom pressure anomaly values in x.
-      intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
-                             12.0*intz(3))
+        ! Use Bode's rule to estimate the pressure anomaly change.
+        do m = 2,4
+          pos = i*15+(m-2)*5
+          intz(m) = G_e*dz_x(m,i)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + 32.0*(r15(pos+2)+r15(pos+4)) + &
+                            12.0*r15(pos+3)))
+        enddo
+        ! Use Bode's rule to integrate the bottom pressure anomaly values in x.
+        intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
+                               12.0*intz(3))
       enddo
     enddo
   endif
