@@ -22,6 +22,8 @@ def parseCommandLine():
       help='''Exclude directories from search that end in DIR.''')
   parser.add_argument('-l','--line_length', type=int, default=512,
       help='''Maximum allowed length of a line.''')
+  parser.add_argument('-s','--source_line_length', type=int, default=132,
+      help='''Maximum allowed length of a source line excluding comments.''')
   parser.add_argument('-d','--debug', action='store_true',
       help='turn on debugging information.')
   args = parser.parse_args()
@@ -57,11 +59,11 @@ def main(args):
   # For each file, check for trailing white space
   fail = False
   for filename in all_files:
-    this = scan_file(filename, line_length=args.line_length)
+    this = scan_file(filename, line_length=args.line_length, source_line_length=args.source_line_length)
     fail = fail or this
   if fail: sys.exit(1)
 
-def scan_file(filename, line_length=120):
+def scan_file(filename, line_length=512, source_line_length=132):
   '''Scans file for trailing white space'''
   def msg(filename,lineno,mesg,line=None):
     if line is None: print('%s, line %i: %s'%(filename,lineno,mesg))
@@ -76,6 +78,7 @@ def scan_file(filename, line_length=120):
     for line in file.readlines():
       lineno += 1
       line = line.replace('\n','')
+      srcline = line.split('!', 1)[0] # Discard comments
       if trailing_space.match(line) is not None:
         if debug: print(filename,lineno,line,trailing_space.match(line))
         if len(line.strip())>0: msg(filename,lineno,'Trailing space detected',line)
@@ -89,6 +92,8 @@ def scan_file(filename, line_length=120):
         if len(line.strip())>0: msg(filename,lineno,'Line length exceeded',line)
         else: msg(filename,lineno,'Blank line exceeds line length limit')
         long_line_detected = True
+      if len(srcline)>source_line_length:
+        msg(filename,lineno,'Non-comment line length exceeded',line)
   return white_space_detected or tabs_space_detected or long_line_detected
 
 # Invoke parseCommandLine(), the top-level procedure

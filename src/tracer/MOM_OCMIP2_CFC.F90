@@ -61,7 +61,7 @@ type, public :: OCMIP2_CFC_CS ; private
   real :: e1_11, e1_12   ! Coefficients for calculating CFC11 and CFC12 solubilities [PSU-1]
   real :: e2_11, e2_12   ! Coefficients for calculating CFC11 and CFC12 solubilities [PSU-1 hectoKelvin-1]
   real :: e3_11, e3_12   ! Coefficients for calculating CFC11 and CFC12 solubilities [PSU-2 hectoKelvin-2]
-  !!@}
+  !>@}
   real :: CFC11_IC_val = 0.0    !< The initial value assigned to CFC11 [mol m-3].
   real :: CFC12_IC_val = 0.0    !< The initial value assigned to CFC12 [mol m-3].
   real :: CFC11_land_val = -1.0 !< The value of CFC11 used where land is masked out [mol m-3].
@@ -76,9 +76,9 @@ type, public :: OCMIP2_CFC_CS ; private
   integer :: ind_cfc_12_flux  !< Index returned by aof_set_coupler_flux that is used to
                               !! pack and unpack surface boundary condition arrays.
 
-  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
-                                   ! regulate the timing of diagnostic output.
-  type(MOM_restart_CS), pointer :: restart_CSp => NULL()
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate
+                                             !! the timing of diagnostic output.
+  type(MOM_restart_CS), pointer :: restart_CSp => NULL()  !< Model restart control structure
 
   ! The following vardesc types contain a package of metadata about each tracer.
   type(vardesc) :: CFC11_desc !< A set of metadata for the CFC11 tracer
@@ -542,9 +542,9 @@ end function OCMIP2_CFC_stock
 
 !> This subroutine extracts the surface CFC concentrations and other fields that
 !! are shared with the atmosphere to calculate CFC fluxes.
-subroutine OCMIP2_CFC_surface_state(state, h, G, CS)
+subroutine OCMIP2_CFC_surface_state(sfc_state, h, G, CS)
   type(ocean_grid_type),  intent(in)    :: G  !< The ocean's grid structure.
-  type(surface),          intent(inout) :: state !< A structure containing fields that
+  type(surface),          intent(inout) :: sfc_state !< A structure containing fields that
                                               !! describe the surface state of the ocean.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                           intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2].
@@ -572,8 +572,8 @@ subroutine OCMIP2_CFC_surface_state(state, h, G, CS)
   if (.not.associated(CS)) return
 
   do j=js,je ; do i=is,ie
-    ta = max(0.01, (state%SST(i,j) + 273.15) * 0.01) ! Why is this in hectoKelvin?
-    sal = state%SSS(i,j) ; SST = state%SST(i,j)
+    ta = max(0.01, (sfc_state%SST(i,j) + 273.15) * 0.01) ! Why is this in hectoKelvin?
+    sal = sfc_state%SSS(i,j) ; SST = sfc_state%SST(i,j)
     !    Calculate solubilities using Warner and Weiss (1985) DSR, vol 32.
     ! The final result is in mol/cm3/pptv (1 part per trillion 1e-12)
     ! Use Bullister and Wisegavger for CCl4.
@@ -603,13 +603,13 @@ subroutine OCMIP2_CFC_surface_state(state, h, G, CS)
   !   These calls load these values into the appropriate arrays in the
   ! coupler-type structure.
   call coupler_type_set_data(CFC11_alpha, CS%ind_cfc_11_flux, ind_alpha, &
-                             state%tr_fields, idim=idim, jdim=jdim)
+                             sfc_state%tr_fields, idim=idim, jdim=jdim)
   call coupler_type_set_data(CFC11_Csurf, CS%ind_cfc_11_flux, ind_csurf, &
-                             state%tr_fields, idim=idim, jdim=jdim)
+                             sfc_state%tr_fields, idim=idim, jdim=jdim)
   call coupler_type_set_data(CFC12_alpha, CS%ind_cfc_12_flux, ind_alpha, &
-                             state%tr_fields, idim=idim, jdim=jdim)
+                             sfc_state%tr_fields, idim=idim, jdim=jdim)
   call coupler_type_set_data(CFC12_Csurf, CS%ind_cfc_12_flux, ind_csurf, &
-                             state%tr_fields, idim=idim, jdim=jdim)
+                             sfc_state%tr_fields, idim=idim, jdim=jdim)
 
 end subroutine OCMIP2_CFC_surface_state
 
