@@ -1649,12 +1649,6 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   ! =============================
   ! 1. Compute vertical integrals
   ! =============================
-
-  !$OMP parallel default(shared) private(jin,iin,dz,p5,S5,T5,r5,rho_anom,hWght,hL,hR,iDenom,Ttl,Ttr,    &
-  !$OMP                                  Tbl,Tbr,Stl,Str,Sbl,Sbr,w_left,w_right,dz_x,dz_y,pos,T15,S15,  &
-  !$OMP                                  p15,r15,weight_t,weight_b,intz)
-
-  !$OMP do
   do j=Jsq,Jeq+1
     do i = Isq,Ieq+1
       dz(i) = z_t(i,j) - z_b(i,j)
@@ -1747,6 +1741,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
           T15(pos+n) = weight_t * T15(pos+1) + weight_b * T15(pos+5)
         enddo
       enddo
+    enddo
 
     if (rho_scale /= 1.0) then
       call calculate_density(T15, S15, p15, r15, 1, 15*(ieq-isq+1), EOS, rho_ref=rho_ref_mks, scale=rho_scale)
@@ -1757,18 +1752,17 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
     do I=Isq,Ieq
       intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
 
-        ! Use Bode's rule to estimate the pressure anomaly change.
-        do m = 2,4
-          pos = i*15+(m-2)*5
-          intz(m) = G_e*dz_x(m,i)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + 32.0*(r15(pos+2)+r15(pos+4)) + &
-                            12.0*r15(pos+3)))
-        enddo
-        ! Use Bode's rule to integrate the bottom pressure anomaly values in x.
-        intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
-                               12.0*intz(3))
+      ! Use Bode's rule to estimate the pressure anomaly change.
+      do m = 2,4
+        pos = i*15+(m-2)*5
+        intz(m) = G_e*dz_x(m,i)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + 32.0*(r15(pos+2)+r15(pos+4)) + &
+                          12.0*r15(pos+3)))
       enddo
+      ! Use Bode's rule to integrate the bottom pressure anomaly values in x.
+      intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
+                             12.0*intz(3))
     enddo
-  endif
+  enddo ; endif
 
   ! ==================================================
   ! 3. Compute horizontal integrals in the y direction
@@ -1830,6 +1824,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
           T15(pos+n) = weight_t * T15(pos+1) + weight_b * T15(pos+5)
         enddo
       enddo
+    enddo
 
     if (rho_scale /= 1.0) then
       call calculate_density_array(T15(15*HI%isc+1:), S15(15*HI%isc+1:), p15(15*HI%isc+1:), &
@@ -1849,9 +1844,11 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
                                          32.0*(r15(pos+2)+r15(pos+4)) + &
                                          12.0*r15(pos+3)))
       enddo
+      ! Use Bode's rule to integrate the values.
+      inty_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
+                             12.0*intz(3))
     enddo
-  endif
-  !$OMP end parallel
+  enddo ; endif
 
 end subroutine int_density_dz_generic_plm
 ! ==========================================================================
