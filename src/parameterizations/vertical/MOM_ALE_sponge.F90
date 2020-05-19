@@ -1048,7 +1048,7 @@ subroutine rotate_ALE_sponge(sponge_in, G_in, sponge, G, turns, param_file)
     c_j = sponge_in%col_j(c)
     Iresttime_in(c_i, c_j) = sponge_in%Iresttime_col(c)
     if (fixed_sponge) then
-      do k=1,nz_data
+      do k = 1, nz_data
         data_h(c_i, c_j, k) = sponge_in%Ref_h%p(k,c)
       enddo
     endif
@@ -1084,10 +1084,10 @@ subroutine rotate_ALE_sponge(sponge_in, G_in, sponge, G, turns, param_file)
     sp_ptr => sponge_in%var(n)%p
     if (fixed_sponge) then
       sp_val_in(:,:,:) = 0.0
-      do c=1,sponge_in%num_col
+      do c = 1, sponge_in%num_col
         c_i = sponge_in%col_i(c)
         c_j = sponge_in%col_j(c)
-        do k=1,nz_data
+        do k = 1, nz_data
           sp_val_in(c_i, c_j, k) = sponge_in%Ref_val(n)%p(k,c)
         enddo
       enddo
