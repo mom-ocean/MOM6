@@ -1047,9 +1047,11 @@ subroutine rotate_ALE_sponge(sponge_in, G_in, sponge, G, turns, param_file)
     c_i = sponge_in%col_i(c)
     c_j = sponge_in%col_j(c)
     Iresttime_in(c_i, c_j) = sponge_in%Iresttime_col(c)
-    if (fixed_sponge) then ; do k=1,nz_data
-      data_h(c_i, c_j, k) = sponge_in%Ref_h%p(k,c)
-    enddo ; endif
+    if (fixed_sponge) then
+      do k=1,nz_data
+        data_h(c_i, c_j, k) = sponge_in%Ref_h%p(k,c)
+      enddo
+    endif
   enddo
 
   call rotate_array(Iresttime_in, turns, Iresttime)
@@ -1080,15 +1082,22 @@ subroutine rotate_ALE_sponge(sponge_in, G_in, sponge, G, turns, param_file)
   do n=1,sponge_in%fldno
     ! Assume that tracers are pointers and are remapped in other functions(?)
     sp_ptr => sponge_in%var(n)%p
-    sp_val_in(:,:,:) = 0.0
-    if (fixed_sponge) then ; do c=1,sponge_in%num_col ; do k=1,nz_data
-      sp_val_in(sponge_in%col_i(c), sponge_in%col_j(c), k) = sponge_in%Ref_val(n)%p(k,c)
-    enddo ; enddo ; endif
-
-    call rotate_array(sp_val_in, turns, sp_val)
     if (fixed_sponge) then
+      sp_val_in(:,:,:) = 0.0
+      do c=1,sponge_in%num_col
+        c_i = sponge_in%col_i(c)
+        c_j = sponge_in%col_j(c)
+        do k=1,nz_data
+          sp_val_in(c_i, c_j, k) = sponge_in%Ref_val(n)%p(k,c)
+        enddo
+      enddo
+
+      call rotate_array(sp_val_in, turns, sp_val)
+
       ! NOTE: This points sp_val with the unrotated field.  See note below.
       call set_up_ALE_sponge_field(sp_val, G, sp_ptr, sponge)
+
+      deallocate(sp_val_in)
     else
       ! We don't want to repeat FMS init in set_up_ALE_sponge_field_varying()
       ! (time_interp_external_init, init_external_field, etc), so we manually
@@ -1117,11 +1126,6 @@ subroutine rotate_ALE_sponge(sponge_in, G_in, sponge, G, turns, param_file)
       sponge%var(n)%p => sp_ptr
     endif
   enddo
-
-  if (fixed_sponge) then
-    deallocate(sp_val_in)
-    deallocate(sp_val)
-  endif
 
   ! TODO: var_u and var_v sponge dampling is not yet supported.
   if (associated(sponge_in%var_u%p) .or. associated(sponge_in%var_v%p)) &
