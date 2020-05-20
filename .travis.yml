@@ -5,19 +5,16 @@
 language: c
 dist: bionic
 
-# --depth flag is breaking our merge, try disabling it
-# NOTE: We may be able to go back to depth=50 in production
-git:
-    depth: false
-
 addons:
   apt:
     sources:
     - ubuntu-toolchain-r-test
     packages:
-    - tcsh pkg-config netcdf-bin libnetcdf-dev libnetcdff-dev openmpi-bin libopenmpi-dev gfortran
+    - tcsh pkg-config netcdf-bin libnetcdf-dev libnetcdff-dev gfortran
+    - mpich libmpich-dev
     - doxygen graphviz flex bison cmake
     - python-numpy python-netcdf4
+    - bc
 
 jobs:
   include:
@@ -57,4 +54,18 @@ jobs:
         - make build.regressions
         - echo -en 'travis_fold:end:script.1\\r'
         - make -k -s test.regressions
+        - make test.summary
+
+    - arch: arm64
+      env:
+        - JOB="Configuration testing"
+        - DO_REGRESSION_TESTS=false
+        - DO_REPRO_TESTS=false
+        - MKMF_TEMPLATE=linux-ubuntu-xenial-gnu.mk
+      script:
+        - cd .testing
+        - echo 'Build executables...' && echo -en 'travis_fold:start:script.1\\r'
+        - make all
+        - echo -en 'travis_fold:end:script.1\\r'
+        - make -k -s test
         - make test.summary
