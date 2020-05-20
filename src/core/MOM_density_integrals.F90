@@ -416,7 +416,7 @@ subroutine int_density_dz_generic_plm(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
       call calculate_density(T5, S5, p5, r5, 1, (ieq-isq+2)*5, EOS, rho_ref=rho_ref_mks)
     endif
 
-    do i=isq,ieq+1
+    do i=Isq,Ieq+1
     ! Use Boole's rule to estimate the pressure anomaly change.
       rho_anom = C1_90*(7.0*(r5(i*5+1)+r5(i*5+5)) + 32.0*(r5(i*5+2)+r5(i*5+4)) + 12.0*r5(i*5+3))
       dpa(i,j) = G_e*dz(i)*rho_anom
@@ -507,7 +507,7 @@ subroutine int_density_dz_generic_plm(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
                           12.0*r15(pos+3)))
       enddo
       ! Use Boole's rule to integrate the bottom pressure anomaly values in x.
-      intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
+      intx_dpa(I,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
                              12.0*intz(3))
     enddo
   enddo ; endif
@@ -591,7 +591,7 @@ subroutine int_density_dz_generic_plm(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
                                          12.0*r15(pos+3)))
       enddo
       ! Use Boole's rule to integrate the values.
-      inty_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
+      inty_dpa(i,J) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
                              12.0*intz(3))
     enddo
   enddo ; endif
