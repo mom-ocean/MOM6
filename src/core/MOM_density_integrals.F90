@@ -373,7 +373,6 @@ subroutine int_density_dz_generic_plm(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   real :: dz(HI%iscB:HI%iecB+1)   ! Layer thicknesses at tracer points [Z ~> m]
   real :: dz_x(5,HI%iscB:HI%iecB) ! Layer thicknesses along an x-line of subrid locations [Z ~> m]
   real :: dz_y(5,HI%isc:HI%iec)   ! Layer thicknesses along a y-line of subrid locations [Z ~> m]
-  real :: weight_t, weight_b        ! Non-dimensional weights of the top and bottom [nondim]
   real :: massWeightToggle          ! A non-dimensional toggle factor (0 or 1) [nondim]
   real :: Ttl, Tbl, Ttr, Tbr        ! Temperatures at the velocity cell corners [degC]
   real :: Stl, Sbl, Str, Sbr        ! Salinities at the velocity cell corners [ppt]
@@ -460,7 +459,7 @@ subroutine int_density_dz_generic_plm(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
       endif
 
       do m=2,4
-        w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
+        w_left = wt_t(m) ; w_right = wt_b(m)
         dz_x(m,i) = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i+1,j) - z_b(i+1,j))
 
         ! Salinity and temperature points are linearly interpolated in
@@ -483,10 +482,8 @@ subroutine int_density_dz_generic_plm(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
 
         ! Salinity and temperature (linear interpolation in the vertical)
         do n=2,4
-          weight_t = 0.25 * real(5-n)
-          weight_b = 1.0 - weight_t
-          S15(pos+n) = weight_t * S15(pos+1) + weight_b * S15(pos+5)
-          T15(pos+n) = weight_t * T15(pos+1) + weight_b * T15(pos+5)
+          S15(pos+n) = wt_t(n) * S15(pos+1) + wt_b(n) * S15(pos+5)
+          T15(pos+n) = wt_t(n) * T15(pos+1) + wt_b(n) * T15(pos+5)
         enddo
       enddo
     enddo
@@ -543,7 +540,7 @@ subroutine int_density_dz_generic_plm(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
       endif
 
       do m=2,4
-        w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
+        w_left = wt_t(m) ; w_right = wt_b(m)
         dz_y(m,i) = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i,j+1) - z_b(i,j+1))
 
         ! Salinity and temperature points are linearly interpolated in
@@ -564,10 +561,8 @@ subroutine int_density_dz_generic_plm(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
 
         ! Salinity and temperature (linear interpolation in the vertical)
         do n=2,4
-          weight_t = 0.25 * real(5-n)
-          weight_b = 1.0 - weight_t
-          S15(pos+n) = weight_t * S15(pos+1) + weight_b * S15(pos+5)
-          T15(pos+n) = weight_t * T15(pos+1) + weight_b * T15(pos+5)
+          S15(pos+n) = wt_t(n) * S15(pos+1) + wt_b(n) * S15(pos+5)
+          T15(pos+n) = wt_t(n) * T15(pos+1) + wt_b(n) * T15(pos+5)
         enddo
       enddo
     enddo
