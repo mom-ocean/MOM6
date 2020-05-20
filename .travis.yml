@@ -28,7 +28,7 @@ jobs:
         - test ! -s  doxy_errors
 
     - env:
-        - JOB="Configuration testing"
+        - JOB="x86 Configuration testing"
         - DO_REGRESSION_TESTS=false
         - MKMF_TEMPLATE=linux-ubuntu-xenial-gnu.mk
       script:
@@ -42,7 +42,7 @@ jobs:
     # NOTE: Code coverage upload is here to reduce load imbalance
     - if: type = pull_request
       env:
-        - JOB="Regression testing"
+        - JOB="x86 Regression testing"
         - DO_REGRESSION_TESTS=true
         - REPORT_COVERAGE=true
         - MKMF_TEMPLATE=linux-ubuntu-xenial-gnu.mk
@@ -58,7 +58,7 @@ jobs:
 
     - arch: arm64
       env:
-        - JOB="Configuration testing"
+        - JOB="ARM64 Configuration testing"
         - DO_REGRESSION_TESTS=false
         - DO_REPRO_TESTS=false
         - MKMF_TEMPLATE=linux-ubuntu-xenial-gnu.mk
