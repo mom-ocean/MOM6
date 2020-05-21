@@ -378,17 +378,17 @@ test.summary:
 	  if ls results/*/std.*.err &> /dev/null; then \
 	    echo "The following tests failed to complete:" ; \
 	    ls results/*/std.*.out \
-	      | awk '{split($$0,a,"/"); split(a[3],t,"."); print "  ",a[2],":",t[2]}' ; \
+	      | awk '{split($$0,a,"/"); split(a[3],t,"."); v=t[2]; if(length(t)>3) v=v"."t[3]; print a[2],":",v}'; \
 	  fi; \
 	  if ls results/*/ocean.stats.*.diff &> /dev/null; then \
 	    echo "The following tests report solution regressions:" ; \
 	    ls results/*/ocean.stats.*.diff \
-	      | awk '{split($$0,a,"/"); split(a[3],t,"."); print "  ",a[2],":",t[3]}' ; \
+	      | awk '{split($$0,a,"/"); split(a[3],t,"."); v=t[3]; if(length(t)>4) v=v"."t[4]; print a[2],":",v}'; \
 	  fi; \
 	  if ls results/*/chksum_diag.*.diff &> /dev/null; then \
 	    echo "The following tests report diagnostic regressions:" ; \
 	    ls results/*/chksum_diag.*.diff \
-	      | awk '{split($$0,a,"/"); split(a[3],t,"."); print "  ",a[2],":",t[2]}' ; \
+	      | awk '{split($$0,a,"/"); split(a[3],t,"."); v=t[2]; if(length(t)>3) v=v"."t[3]; print a[2],":",v}'; \
 	  fi; \
 	  false ; \
 	else \
