@@ -32,13 +32,11 @@ setup:
     - git clone --recursive http://gitlab.gfdl.noaa.gov/ogrp/Gaea-stats-MOM6-examples.git tests && cd tests
     # Install / update testing scripts
     - git clone https://github.com/adcroft/MRS.git MRS
-    - (cd MRS ; git checkout xanadu-fms)
     # Update MOM6-examples and submodules
     - (cd MOM6-examples && git checkout . && git checkout dev/gfdl && git pull && git submodule init && git submodule update)
     - (cd MOM6-examples/src/MOM6 && git submodule update)
     - test -d MOM6-examples/src/LM3 || make -f MRS/Makefile.clone clone_gfdl -s
     - make -f MRS/Makefile.clone MOM6-examples/.datasets -s
-    #- (cd MOM6-examples/src/mkmf && git pull https://github.com/adcroft/mkmf.git add_coverage_mode)
     - env > gitlab_session.log
     # Cache everything under tests to unpack for each subsequent stage
     - cd ../ ; time tar zcf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz tests
