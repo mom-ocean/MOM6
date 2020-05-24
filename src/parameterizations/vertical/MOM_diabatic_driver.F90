@@ -2273,11 +2273,8 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
   endif
 
-  ! This block sets ea, eb from Kd or Kd_int.
-  ! Otherwise, call entrainment_diffusive() which sets ea and eb
-  ! based on KD and target densities (ie. does remapping as well).
-  ! When not using ALE, calculate layer entrainments/detrainments from
-  ! diffusivities and differences between layer and target densities
+  ! Calculate layer entrainments and detrainments from diffusivities and differences between
+  ! layer and target densities (i.e. do remapping as well as diffusion).
   call cpu_clock_begin(id_clock_entrain)
   ! Calculate appropriately limited diapycnal mass fluxes to account
   ! for diapycnal diffusion and advection.  Sets: ea, eb. Changes: kb
@@ -3688,7 +3685,8 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   ! False.
   CS%use_CVMix_conv = CVMix_conv_init(Time, G, GV, US, param_file, diag, CS%CVMix_conv_csp)
 
-  call entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS%entrain_diffusive_CSp)
+  call entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS%entrain_diffusive_CSp, &
+                              just_read_params=CS%useALEalgorithm)
 
   ! initialize the geothermal heating module
   if (CS%use_geothermal) &
@@ -3763,12 +3761,10 @@ subroutine diabatic_driver_end(CS)
   call entrain_diffusive_end(CS%entrain_diffusive_CSp)
   call set_diffusivity_end(CS%set_diff_CSp)
 
- if (CS%useKPP) then
+  if (CS%useKPP) then
     deallocate( CS%KPP_buoy_flux )
     deallocate( CS%KPP_temp_flux )
     deallocate( CS%KPP_salt_flux )
- endif
-  if (CS%useKPP) then
     deallocate( CS%KPP_NLTheat )
     deallocate( CS%KPP_NLTscalar )
     call KPP_end(CS%KPP_CSp)
