@@ -294,7 +294,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS)
   ! check if hbl needs to be extracted
   if (CS%interior_only) then
     hbl(:,:) = 100.
-    hbl(4:6,:) = 50.
+    hbl(4:6,:) = 500.
     if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G)
     if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US)
     call pass_var(hbl,G%Domain)
@@ -425,7 +425,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS)
                 CS%Pint(i,j,:), CS%Tint(i,j,:), CS%Sint(i,j,:), CS%dRdT(i,j,:), CS%dRdS(i,j,:),            &
                 CS%Pint(i+1,j,:), CS%Tint(i+1,j,:), CS%Sint(i+1,j,:), CS%dRdT(i+1,j,:), CS%dRdS(i+1,j,:),  &
                 CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:),           &
-                k_bot(I,j), k_bot(I+1,j), 1.-zeta_bot(I,j), 1.-zeta_bot(I+1,j))
+                k_bot(I,j), k_bot(I+1,j), zeta_bot(I,j), zeta_bot(I+1,j))
       else
         call find_neutral_surface_positions_discontinuous(CS, G%ke,                                            &
             CS%P_i(i,j,:,:), h(i,j,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:), CS%ppoly_coeffs_T(i,j,:,:),           &
@@ -446,7 +446,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS)
                 CS%Pint(i,j,:), CS%Tint(i,j,:), CS%Sint(i,j,:), CS%dRdT(i,j,:), CS%dRdS(i,j,:),           &
                 CS%Pint(i,j+1,:), CS%Tint(i,j+1,:), CS%Sint(i,j+1,:), CS%dRdT(i,j+1,:), CS%dRdS(i,j+1,:), &
                 CS%vPoL(i,J,:), CS%vPoR(i,J,:), CS%vKoL(i,J,:), CS%vKoR(i,J,:), CS%vhEff(i,J,:),          &
-                k_bot(i,J), k_bot(i,J+1), 1.-zeta_bot(i,J), 1.-zeta_bot(i,J+1))
+                k_bot(i,J), k_bot(i,J+1), zeta_bot(i,J), zeta_bot(i,J+1))
       else
         call find_neutral_surface_positions_discontinuous(CS, G%ke,                                            &
             CS%P_i(i,j,:,:), h(i,j,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:), CS%ppoly_coeffs_T(i,j,:,:),           &
