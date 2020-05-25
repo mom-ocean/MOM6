@@ -166,7 +166,7 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
 
   Idt = 1./dt
   hbl(:,:) = 100.
-  hbl(4:6,:) = 50.
+  hbl(4:6,:) = 500.
   if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G)
   if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US)
 
@@ -638,9 +638,10 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
                                               !! interior [nondim]
   real    :: a                                !< coefficient to be used in the linear transition to the
                                               !! interior [nondim]
+
+  F_bulk = 0.
+  F_layer(:) = 0.
   if (hbl_L == 0. .or. hbl_R == 0.) then
-    F_bulk = 0.
-    F_layer(:) = 0.
     return
   endif
 
@@ -662,7 +663,6 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
                             zeta_top_L, k_bot_L, zeta_bot_L)
   phi_R_avg  = bulk_average(boundary, nk, deg, h_R, hbl_R, phi_R, ppoly0_E_R, ppoly0_coefs_R, method, k_top_R, &
                             zeta_top_R, k_bot_R, zeta_bot_R)
-
   ! Calculate the 'bulk' diffusive flux from the bulk averaged quantities
   ! GMM, khtr_avg should be computed once khtr is 3D
   heff = harmonic_mean(hbl_L, hbl_R)
@@ -670,12 +670,10 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
   ! Calculate the layerwise sum of the vertical effective thickness. This is different than the heff calculated
   ! above, but is used as a way to decompose the fluxes onto the individual layers
   h_means(:) = 0.
-
   if (boundary == SURFACE) then
     k_min = MIN(k_bot_L, k_bot_R)
     k_max = MAX(k_bot_L, k_bot_R)
     k_diff = (k_max - k_min)
-
     if ((linear) .and. (k_diff .gt. 1)) then
       do k=1,k_min
         h_means(k) = harmonic_mean(h_L(k),h_R(k))
@@ -732,14 +730,14 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
     enddo
   endif
 
-  if ( SUM(h_means) == 0. ) then
+  if ( SUM(h_means) == 0. .or. F_bulk == 0.) then
     return
- ! Decompose the bulk flux onto the individual layers
+  ! Decompose the bulk flux onto the individual layers
   else
     ! Initialize remaining thickness
     inv_heff = 1./SUM(h_means)
     do k=1,nk
-      if (h_means(k) > 0.) then
+      if ((h_means(k) > 0.) .and. (phi_L(k) /= phi_R(k))) then
         hfrac = h_means(k)*inv_heff
         F_layer(k) = F_bulk * hfrac
 
