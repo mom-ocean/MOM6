@@ -607,15 +607,16 @@ subroutine shelf_calc_flux(sfc_state, fluxes, Time, time_step, CS, forces)
         ISS%tflux_ocn(i,j) = 0.0
       endif
 
-!      haline_driving(:,:) = sfc_state%sss(i,j) - Sbdry(i,j)
+!      haline_driving(i,j) = sfc_state%sss(i,j) - Sbdry(i,j)
 
     enddo ! i-loop
   enddo ! j-loop
 
-  ! ISS%water_flux = net liquid water into the ocean [R Z T-1 ~> kg m-2 s-1]
-  fluxes%iceshelf_melt(:,:) = ISS%water_flux(:,:) * CS%flux_factor
 
   do j=js,je ; do i=is,ie
+    ! ISS%water_flux = net liquid water into the ocean [R Z T-1 ~> kg m-2 s-1]
+    fluxes%iceshelf_melt(i,j) = ISS%water_flux(i,j) * CS%flux_factor
+
     if ((sfc_state%ocean_mass(i,j) > CS%col_mass_melt_threshold) .and. &
         (ISS%area_shelf_h(i,j) > 0.0) .and.  (CS%isthermo)) then
 
@@ -653,11 +654,10 @@ subroutine shelf_calc_flux(sfc_state, fluxes, Time, time_step, CS, forces)
       ISS%water_flux(i,j) = 0.0
       fluxes%iceshelf_melt(i,j) = 0.0
     endif ! area_shelf_h
-  enddo ; enddo ! i- and j-loops
 
-  ! mass flux [R Z L2 T-1 ~> kg s-1], part of ISOMIP diags.
-  mass_flux(:,:) = 0.0
-  mass_flux(:,:) = ISS%water_flux(:,:) * ISS%area_shelf_h(:,:)
+    ! mass flux [R Z L2 T-1 ~> kg s-1], part of ISOMIP diags.
+    mass_flux(i,j) = ISS%water_flux(i,j) * ISS%area_shelf_h(i,j)
+  enddo ; enddo ! i- and j-loops
 
   if (CS%active_shelf_dynamics .or. CS%override_shelf_movement) then
     call cpu_clock_begin(id_clock_pass)
@@ -690,7 +690,7 @@ subroutine shelf_calc_flux(sfc_state, fluxes, Time, time_step, CS, forces)
     ! advect the ice shelf, and advance the front. Calving will be in here somewhere as well..
     ! when we decide on how to do it
     call update_ice_shelf(CS%dCS, ISS, G, US, US%s_to_T*time_step, Time, &
-                          sfc_state%ocean_mass(:,:), coupled_GL)
+                          sfc_state%ocean_mass, coupled_GL)
 
   endif
 
@@ -1051,10 +1051,10 @@ subroutine add_shelf_flux(G, US, CS, sfc_state, fluxes)
     enddo ; enddo
 
     balancing_area = global_area_integral(bal_frac, G)
-    if (balancing_area > 0.0) then !### Examine whether the rescaling should be inside the parenthesis.
-      balancing_flux = US%kg_m2s_to_RZ_T*(global_area_integral(ISS%water_flux, G, scale=US%RZ_T_to_kg_m2s, &
-                                                               area=ISS%area_shelf_h) + &
-                                          delta_mass_shelf ) / balancing_area
+    if (balancing_area > 0.0) then
+      balancing_flux = ( US%kg_m2s_to_RZ_T*global_area_integral(ISS%water_flux, G, scale=US%RZ_T_to_kg_m2s, &
+                                                                area=ISS%area_shelf_h) + &
+                         delta_mass_shelf ) / balancing_area
     else
       balancing_flux = 0.0
     endif
@@ -1166,7 +1166,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
     write(0,*) 'IG: ', G%isd, G%isc, G%iec, G%ied, G%jsd, G%jsc, G%jsd, G%jed
   endif
 
-  CS%Time = Time ! ### This might not be in the right place?
   CS%diag => diag
 
   ! Are we being called from the solo ice-sheet driver? When called by the ocean
@@ -1735,7 +1734,9 @@ subroutine update_shelf_mass(G, US, CS, ISS, Time)
 
   call time_interp_external(CS%id_read_mass, Time, ISS%mass_shelf)
   ! This should only be done if time_interp_external did an update.
-  ISS%mass_shelf(:,:) = US%kg_m3_to_R*US%m_to_Z * ISS%mass_shelf(:,:) ! Rescale after time_interp
+  do j=js,je ; do i=is,ie
+    ISS%mass_shelf(i,j) = US%kg_m3_to_R*US%m_to_Z * ISS%mass_shelf(i,j) ! Rescale after time_interp
+  enddo ; enddo
 
   do j=js,je ; do i=is,ie
     ISS%area_shelf_h(i,j) = 0.0

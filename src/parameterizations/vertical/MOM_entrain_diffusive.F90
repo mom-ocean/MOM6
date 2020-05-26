@@ -2081,7 +2081,7 @@ end subroutine find_maxF_kb
 
 !> This subroutine initializes the parameters and memory associated with the
 !! entrain_diffusive module.
-subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS)
+subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS, just_read_params)
   type(time_type),         intent(in)    :: Time !< The current model time.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
@@ -2092,18 +2092,15 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS)
                                                  !! output.
   type(entrain_diffusive_CS), pointer    :: CS   !< A pointer that is set to point to the control
                                                  !! structure.
-!                 for this module
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
+  logical,       optional, intent(in)    :: just_read_params !< If present and true, this call will
+                                                 !! only read parameters logging them or registering
+                                                 !! any diagnostics
+
+  ! Local variables
   real :: decay_length, dt, Kd
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  logical :: just_read    ! If true, just read parameters but do nothing else.
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_entrain_diffusive" ! This module's name.
 
   if (associated(CS)) then
@@ -2113,37 +2110,43 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS)
   endif
   allocate(CS)
 
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
   CS%diag => diag
 
   CS%bulkmixedlayer = (GV%nkml > 0)
 
 ! Set default, read and log parameters
-  call log_version(param_file, mdl, version, "")
+  if (.not.just_read) call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "CORRECT_DENSITY", CS%correct_density, &
                  "If true, and USE_EOS is true, the layer densities are "//&
                  "restored toward their target values by the diapycnal "//&
                  "mixing, as described in Hallberg (MWR, 2000).", &
-                 default=.true.)
+                 default=.true., do_not_log=just_read)
   call get_param(param_file, mdl, "MAX_ENT_IT", CS%max_ent_it, &
                  "The maximum number of iterations that may be used to "//&
-                 "calculate the interior diapycnal entrainment.", default=5)
+                 "calculate the interior diapycnal entrainment.", default=5, do_not_log=just_read)
 ! In this module, KD is only used to set the default for TOLERANCE_ENT. [m2 s-1]
   call get_param(param_file, mdl, "KD", Kd, fail_if_missing=.true.)
   call get_param(param_file, mdl, "DT", dt, &
                  "The (baroclinic) dynamics time step.", units = "s", &
-                 fail_if_missing=.true.)
+                 fail_if_missing=.true., do_not_log=just_read)
 ! CS%Tolerance_Ent = MAX(100.0*GV%Angstrom_H,1.0e-4*sqrt(dt*Kd)) !
   call get_param(param_file, mdl, "TOLERANCE_ENT", CS%Tolerance_Ent, &
                  "The tolerance with which to solve for entrainment values.", &
-                 units="m", default=MAX(100.0*GV%Angstrom_m,1.0e-4*sqrt(dt*Kd)), scale=GV%m_to_H)
+                 units="m", default=MAX(100.0*GV%Angstrom_m,1.0e-4*sqrt(dt*Kd)), scale=GV%m_to_H, do_not_log=just_read)
 
   CS%Rho_sig_off = 1000.0*US%kg_m3_to_R
 
-  CS%id_Kd = register_diag_field('ocean_model', 'Kd_effective', diag%axesTL, Time, &
-      'Diapycnal diffusivity as applied', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
-  CS%id_diff_work = register_diag_field('ocean_model', 'diff_work', diag%axesTi, Time, &
-      'Work actually done by diapycnal diffusion across each interface', &
-      'W m-2', conversion=US%RZ3_T3_to_W_m2)
+  if (.not.just_read) then
+    CS%id_Kd = register_diag_field('ocean_model', 'Kd_effective', diag%axesTL, Time, &
+        'Diapycnal diffusivity as applied', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
+    CS%id_diff_work = register_diag_field('ocean_model', 'diff_work', diag%axesTi, Time, &
+        'Work actually done by diapycnal diffusion across each interface', &
+        'W m-2', conversion=US%RZ3_T3_to_W_m2)
+  endif
+
+  if (just_read) deallocate(CS)
 
 end subroutine entrain_diffusive_init
 

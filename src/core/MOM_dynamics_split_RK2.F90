@@ -388,10 +388,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   !--- begin set up for group halo pass
 
   cont_stencil = continuity_stencil(CS%continuity_CSp)
-  !### Apart from circle_OBCs halo for eta could be 1, but halo>=3 is required
-  !### to match circle_OBCs solutions. Why?
   call cpu_clock_begin(id_clock_pass)
-  call create_group_pass(CS%pass_eta, eta, G%Domain) !### , halo=1)
+  call create_group_pass(CS%pass_eta, eta, G%Domain, halo=1)
   call create_group_pass(CS%pass_visc_rem, CS%visc_rem_u, CS%visc_rem_v, G%Domain, &
                          To_All+SCALAR_PAIR, CGRID_NE, halo=max(1,cont_stencil))
   call create_group_pass(CS%pass_uvp, up, vp, G%Domain, halo=max(1,cont_stencil))

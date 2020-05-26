@@ -119,28 +119,28 @@ build/%/MOM6: build/%/Makefile $(FMS)/lib/libfms.a
 build/%/Makefile: build/%/path_names
 	cp $(MKMF_TEMPLATE) $(@D)
 	cd $(@D) && $(MKMF) \
-		-t $(notdir $(MKMF_TEMPLATE)) \
-		-o '-I ../../$(DEPS)/fms/build' \
-		-p MOM6 \
-		-l '../../$(DEPS)/fms/lib/libfms.a' \
-		-c $(MKMF_CPP) \
-		path_names
+	  -t $(notdir $(MKMF_TEMPLATE)) \
+	  -o '-I ../../$(DEPS)/fms/build' \
+	  -p MOM6 \
+	  -l '../../$(DEPS)/fms/lib/libfms.a' \
+	  -c $(MKMF_CPP) \
+	  path_names
 
 # NOTE: These path_names rules could be merged
 
 build/target/path_names: $(LIST_PATHS) $(TARGET_CODEBASE) $(TARGET_SOURCE)
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l \
-		../../$(TARGET_CODEBASE)/src \
-		../../$(TARGET_CODEBASE)/config_src/solo_driver \
-		../../$(TARGET_CODEBASE)/$(GRID_SRC)
+	  ../../$(TARGET_CODEBASE)/src \
+	  ../../$(TARGET_CODEBASE)/config_src/solo_driver \
+	  ../../$(TARGET_CODEBASE)/$(GRID_SRC)
 
 build/%/path_names: $(LIST_PATHS) $(MOM_SOURCE)
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l \
-		../../../src \
-		../../../config_src/solo_driver \
-		../../../$(GRID_SRC)
+	  ../../../src \
+	  ../../../config_src/solo_driver \
+	  ../../../$(GRID_SRC)
 
 # Target repository for regression tests
 $(TARGET_CODEBASE):
@@ -158,10 +158,10 @@ $(FMS)/lib/libfms.a: $(FMS)/build/Makefile
 $(FMS)/build/Makefile: $(FMS)/build/path_names
 	cp $(MKMF_TEMPLATE) $(@D)
 	cd $(@D) && $(MKMF) \
-		-t $(notdir $(MKMF_TEMPLATE)) \
-		-p ../lib/libfms.a \
-		-c $(MKMF_CPP) \
-		path_names
+	  -t $(notdir $(MKMF_TEMPLATE)) \
+	  -p ../lib/libfms.a \
+	  -c $(MKMF_CPP) \
+	  path_names
 
 $(FMS)/build/path_names: $(LIST_PATHS) $(FMS)/src $(FMS_SOURCE)
 	mkdir -p $(@D)
@@ -202,18 +202,38 @@ test.repros: $(foreach c,$(CONFIGS),$(c).repro $(c).repro.diag)
 test.openmps: $(foreach c,$(CONFIGS),$(c).openmp $(c).openmp.diag)
 test.nans: $(foreach c,$(CONFIGS),$(c).nan $(c).nan.diag)
 test.dims: $(foreach c,$(CONFIGS),$(foreach d,$(DIMS),$(c).dim.$(d) $(c).dim.$(d).diag))
-
 test.regressions: $(foreach c,$(CONFIGS),$(c).regression $(c).regression.diag)
-	! ls -1 results/*/*.reg
 
+# Color highlights for test results
+RED=\033[0;31m
+GREEN=\033[0;32m
+RESET=\033[0m
+
+DONE=${GREEN}DONE${RESET}
+PASS=${GREEN}PASS${RESET}
+FAIL=${RED}FAIL${RESET}
+
+# Comparison rules
+# $(1): Test type (grid, layout, &c.)
+# $(2): Comparison targets (symmetric asymmetric, symmetric layout, &c.)
 define CMP_RULE
-.PRECIOUS: $(foreach b,$(2),results/%/ocean.stats.$(b))
-%.$(1): $(foreach b,$(2),results/%/ocean.stats.$(b))
-	cmp $$^ || diff $$^
+.PRECIOUS: $(foreach b,$(2),work/%/$(b)/ocean.stats)
+%.$(1): $(foreach b,$(2),work/%/$(b)/ocean.stats)
+	@cmp $$^ || !( \
+	  mkdir -p results/$$*; \
+	  (diff $$^ | tee results/$$*/ocean.stats.$(1).diff | head) ; \
+	  echo -e "${FAIL}: Solutions $$*.$(1) have changed." \
+	)
+	@echo -e "${PASS}: Solutions $$*.$(1) agree."
 
-.PRECIOUS: $(foreach b,$(2),results/%/chksum_diag.$(b))
-%.$(1).diag: $(foreach b,$(2),results/%/chksum_diag.$(b))
-	cmp $$^ || diff $$^
+.PRECIOUS: $(foreach b,$(2),work/%/$(b)/chksum_diag)
+%.$(1).diag: $(foreach b,$(2),work/%/$(b)/chksum_diag)
+	@cmp $$^ || !( \
+	  mkdir -p results/$$*; \
+	  (diff $$^ | tee results/$$*/chksum_diag.$(1).diff | head) ; \
+	  echo -e "${FAIL}: Diagnostics $$*.$(1).diag have changed." \
+	)
+	@echo -e "${PASS}: Diagnostics $$*.$(1).diag agree."
 endef
 
 $(eval $(call CMP_RULE,grid,symmetric asymmetric))
@@ -223,29 +243,31 @@ $(eval $(call CMP_RULE,repro,symmetric repro))
 $(eval $(call CMP_RULE,openmp,symmetric openmp))
 $(eval $(call CMP_RULE,nan,symmetric nan))
 $(foreach d,$(DIMS),$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
+$(eval $(call CMP_RULE,regression,symmetric target))
 
 # Custom comparison rules
 
-.PRECIOUS: $(foreach b,symmetric restart target,results/%/ocean.stats.$(b))
-
 # Restart tests only compare the final stat record
-%.restart: $(foreach b,symmetric restart,results/%/ocean.stats.$(b))
-	cmp $(foreach f,$^,<(tr -s ' ' < $(f) | cut -d ' ' -f3- | tail -n 1)) \
-		|| diff $^
+.PRECIOUS: $(foreach b,symmetric restart target,work/%/$(b)/ocean.stats)
+%.restart: $(foreach b,symmetric restart,work/%/$(b)/ocean.stats)
+	#cmp $(foreach f,$^,<(tr -s ' ' < $(f) | cut -d ' ' -f3- | tail -n 1)) \
+	#  || diff $^
+	@cmp $(foreach f,$^,<(tr -s ' ' < $(f) | cut -d ' ' -f3- | tail -n 1)) \
+	  || !( \
+	    mkdir -p results/$*; \
+	    (diff $$^ | tee results/$*/chksum_diag.restart.diff | head) ; \
+	    echo -e "${FAIL}: Diagnostics $*.restart.diag have changed." \
+	  )
+	@echo -e "${PASS}: Diagnostics $*.restart.diag agree."
 
 # TODO: chksum_diag parsing of restart files
 
-# All regression tests must be completed when considering answer changes
-%.regression: $(foreach b,symmetric target,results/%/ocean.stats.$(b))
-	cmp $^ || (diff $^ > $<.reg || true)
-
-%.regression.diag: $(foreach b,symmetric target,results/%/chksum_diag.$(b))
-	cmp $^ || (diff $^ > $<.reg || true)
 
 #---
 # Test run output files
 
 # Generalized MPI environment variable support
+# XXX: Using `-env` in the MPICH test can erroneously producing an `nv` file.
 # $(1): Environment variables
 ifeq ($(shell $(MPIRUN) -x tmp=1 true 2> /dev/null ; echo $$?), 0)
   MPIRUN_CMD=$(MPIRUN) $(if $(1),-x $(1),)
@@ -255,7 +277,8 @@ else
   MPIRUN_CMD=$(1) $(MPIRUN)
 endif
 
-# Rule to build results/<tc>/{ocean.stats,chksum_diag}.<tag>
+
+# Rule to build work/<tc>/{ocean.stats,chksum_diag}.<tag>
 # $(1): Test configuration name <tag>
 # $(2): Executable type
 # $(3): Enable coverage flag
@@ -263,24 +286,32 @@ endif
 # $(5): Environment variables
 # $(6): Number of MPI ranks
 define STAT_RULE
-results/%/ocean.stats.$(1): build/$(2)/MOM6
+work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6
+	@echo "Running test $$*.$(1)..."
 	if [ $(3) ]; then find build/$(2) -name *.gcda -exec rm -f '{}' \; ; fi
-	mkdir -p work/$$*/$(1)
-	cp -rL $$*/* work/$$*/$(1)
-	cd work/$$*/$(1) && if [ -f Makefile ]; then make; fi
-	mkdir -p work/$$*/$(1)/RESTART
-	echo -e "$(4)" > work/$$*/$(1)/MOM_override
-	cd work/$$*/$(1) && $$(call MPIRUN_CMD,$(5)) -n $(6) ../../../$$< 2> debug.out > std.out \
-		|| ! sed 's/^/$$*.$(1): /' std.out debug.out \
-		&& sed 's/^/$$*.$(1): /' std.out
 	mkdir -p $$(@D)
-	cp work/$$*/$(1)/ocean.stats $$@
-	if [ $(3) ]; then cd .. && bash <(curl -s https://codecov.io/bash) -n $$@; fi
-
-results/%/chksum_diag.$(1): results/%/ocean.stats.$(1)
-	mkdir -p $$(@D)
-	cp work/$$*/$(1)/chksum_diag $$@
+	cp -rL $$*/* $$(@D)
+	cd $$(@D) && if [ -f Makefile ]; then make; fi
+	mkdir -p $$(@D)/RESTART
+	echo -e "$(4)" > $$(@D)/MOM_override
+	cd $$(@D) \
+	  && $$(call MPIRUN_CMD,$(5)) -n $(6) ../../../$$< 2> std.err > std.out \
+	  || !( \
+	    mkdir -p ../../../results/$$*/ ; \
+	    cat std.out | tee ../../../results/$$*/std.$(1).out | tail ; \
+		cat std.err | tee ../../../results/$$*/std.$(1).err | tail ; \
+		rm ocean.stats chksum_diag ; \
+		echo -e "${FAIL}: $$*.$(1) failed at runtime." \
+	  )
+	@echo -e "${DONE}: $$*.$(1); no runtime errors."
+	if [ $(3) ]; then \
+	  mkdir -p results/$$* ; \
+	  bash <(curl -s https://codecov.io/bash) -n $$@ \
+	    > work/$$*/codecov.$(1).out \
+		2> work/$$*/codecov.$(1).err ; \
+	fi
 endef
+
 
 # Define $(,) as comma escape character
 , := ,
@@ -300,50 +331,80 @@ $(eval $(call STAT_RULE,dim.z,symmetric,,Z_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.q,symmetric,,Q_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.r,symmetric,,R_RESCALE_POWER=11,,1))
 
+
 # Restart tests require significant preprocessing, and are handled separately.
-results/%/ocean.stats.restart: build/symmetric/MOM6
-	rm -rf work/$*/restart
-	mkdir -p work/$*/restart
-	cp -rL $*/* work/$*/restart
-	cd work/$*/restart && if [ -f Makefile ]; then make; fi
-	mkdir -p work/$*/restart/RESTART
-	# Generate the half-period input namelist
-	# TODO: Assumes runtime set by DAYMAX, will fail if set by input.nml
-	cd work/$*/restart \
-		&& daymax=$$(grep DAYMAX MOM_input | cut -d '!' -f 1 | cut -d '=' -f 2 | xargs) \
-		&& timeunit=$$(grep TIMEUNIT MOM_input | cut -d '!' -f 1 | cut -d '=' -f 2 | xargs) \
-		&& if [ -z "$${timeunit}" ]; then timeunit="8.64e4"; fi \
-		&& printf -v timeunit_int "%.f" "$${timeunit}" \
-		&& halfperiod=$$(printf "%.f" $$(bc <<< "scale=10; 0.5 * $${daymax} * $${timeunit_int}")) \
-		&& printf "\n&ocean_solo_nml\n    seconds = $${halfperiod}\n/\n" >> input.nml
-	# Run the first half-period
-	cd work/$*/restart && $(MPIRUN) -n 1 ../../../$< 2> debug1.out > std1.out \
-		|| ! sed 's/^/$*.restart1: /' std1.out debug1.out \
-		&& sed 's/^/$*.restart1: /' std1.out
-	# Setup the next inputs
-	cd work/$*/restart && rm -rf INPUT && mv RESTART INPUT
-	mkdir work/$*/restart/RESTART
-	cd work/$*/restart && sed -i -e "s/input_filename *= *'n'/input_filename = 'r'/g" input.nml
-	# Run the second half-period
-	cd work/$*/restart && $(MPIRUN) -n 1 ../../../$< 2> debug2.out > std2.out \
-		|| ! sed 's/^/$*.restart2: /' std2.out debug2.out \
-		&& sed 's/^/$*.restart2: /' std2.out
-	# Archive the results and cleanup
+work/%/restart/ocean.stats: build/symmetric/MOM6
+	rm -rf $(@D)
 	mkdir -p $(@D)
-	cp work/$*/restart/ocean.stats $@
+	cp -rL $*/* $(@D)
+	cd work/$*/restart && if [ -f Makefile ]; then make; fi
+	mkdir -p $(@D)/RESTART
+	# Generate the half-period input namelist
+	# TODO: Assumes that runtime set by DAYMAX, will fail if set by input.nml
+	cd $(@D) \
+	  && daymax=$$(grep DAYMAX MOM_input | cut -d '!' -f 1 | cut -d '=' -f 2 | xargs) \
+	  && timeunit=$$(grep TIMEUNIT MOM_input | cut -d '!' -f 1 | cut -d '=' -f 2 | xargs) \
+	  && if [ -z "$${timeunit}" ]; then timeunit="8.64e4"; fi \
+	  && printf -v timeunit_int "%.f" "$${timeunit}" \
+	  && halfperiod=$$(printf "%.f" $$(bc <<< "scale=10; 0.5 * $${daymax} * $${timeunit_int}")) \
+	  && printf "\n&ocean_solo_nml\n    seconds = $${halfperiod}\n/\n" >> input.nml
+	# Run the first half-period
+	cd $(@D) && $(MPIRUN) -n 1 ../../../$< 2> std1.err > std1.out \
+	  || !( \
+	    cat std1.out | tee ../../../results/$*/std.restart1.out | tail ; \
+		cat std1.err | tee ../../../results/$*/std.restart1.err | tail ; \
+		echo -e "${FAIL}: $*.restart failed at runtime." \
+	  )
+	# Setup the next inputs
+	cd $(@D) && rm -rf INPUT && mv RESTART INPUT
+	mkdir $(@D)/RESTART
+	cd $(@D) && sed -i -e "s/input_filename *= *'n'/input_filename = 'r'/g" input.nml
+	# Run the second half-period
+	cd $(@D) && $(MPIRUN) -n 1 ../../../$< 2> std2.err > std2.out \
+	  || !( \
+	    cat std2.out | tee ../../../results/$*/std.restart2.out | tail ; \
+		cat std2.err | tee ../../../results/$*/std.restart2.err | tail ; \
+		echo -e "${FAIL}: $*.restart failed at runtime." \
+	  )
 
 # TODO: Restart checksum diagnostics
 
 
+#---
+# Not a true rule; only call this after `make test` to summarize test results.
+.PHONY: test.summary
+test.summary:
+	@if ls results/*/* &> /dev/null; then \
+	  if ls results/*/std.*.err &> /dev/null; then \
+	    echo "The following tests failed to complete:" ; \
+	    ls results/*/std.*.out \
+	      | awk '{split($$0,a,"/"); split(a[3],t,"."); v=t[2]; if(length(t)>3) v=v"."t[3]; print a[2],":",v}'; \
+	  fi; \
+	  if ls results/*/ocean.stats.*.diff &> /dev/null; then \
+	    echo "The following tests report solution regressions:" ; \
+	    ls results/*/ocean.stats.*.diff \
+	      | awk '{split($$0,a,"/"); split(a[3],t,"."); v=t[3]; if(length(t)>4) v=v"."t[4]; print a[2],":",v}'; \
+	  fi; \
+	  if ls results/*/chksum_diag.*.diff &> /dev/null; then \
+	    echo "The following tests report diagnostic regressions:" ; \
+	    ls results/*/chksum_diag.*.diff \
+	      | awk '{split($$0,a,"/"); split(a[3],t,"."); v=t[2]; if(length(t)>3) v=v"."t[3]; print a[2],":",v}'; \
+	  fi; \
+	  false ; \
+	else \
+	  echo -e "${PASS}: All tests passed!"; \
+	fi
+
+
 #----
+# NOTE: These tests assert that we are in the .testing directory.
+
 .PHONY: clean
 clean: clean.stats
-	@# Assert that we are in .testing for recursive delete
 	@[ $$(basename $$(pwd)) = .testing ]
 	rm -rf build
 
 .PHONY: clean.stats
 clean.stats:
-	@# Assert that we are in .testing for recursive delete
 	@[ $$(basename $$(pwd)) = .testing ]
 	rm -rf work results
