@@ -4775,12 +4775,14 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
         else
           ishift = 0 ; idir = 1
         endif
+        ! Can keep this or take it out, either way
         if (G%mask2dT(I+ishift,j) == 0.0) cycle
         ! Update the reservoir tracer concentration implicitly using a Backward-Euler timestep
         do m=1,ntr ; if (associated(segment%tr_Reg%Tr(m)%tres)) then ; do k=1,nz
-          if (h(i+ishift,j,k) == 0.0) cycle
-          u_L_out = max(0.0, (idir*uhr(I,j,k))*segment%Tr_InvLscale_out / (h(i+ishift,j,k)*G%dyCu(I,j)))
-          u_L_in  = min(0.0, (idir*uhr(I,j,k))*segment%Tr_InvLscale_in  / (h(i+ishift,j,k)*G%dyCu(I,j)))
+          u_L_out = max(0.0, (idir*uhr(I,j,k))*segment%Tr_InvLscale_out / &
+                    ((h(i+ishift,j,k) + GV%H_subroundoff)*G%dyCu(I,j)))
+          u_L_in  = min(0.0, (idir*uhr(I,j,k))*segment%Tr_InvLscale_in  / &
+                    ((h(i+ishift,j,k) + GV%H_subroundoff)*G%dyCu(I,j)))
           fac1 = 1.0 + (u_L_out-u_L_in)
           segment%tr_Reg%Tr(m)%tres(I,j,k) = (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(I,j,k) + &
                             (u_L_out*Reg%Tr(m)%t(I+ishift,j,k) - &
@@ -4798,12 +4800,14 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
         else
           jshift = 0 ; jdir = 1
         endif
+        ! Can keep this or take it out, either way
         if (G%mask2dT(i,j+jshift) == 0.0) cycle
         ! Update the reservoir tracer concentration implicitly using a Backward-Euler timestep
         do m=1,ntr ; if (associated(segment%tr_Reg%Tr(m)%tres)) then ; do k=1,nz
-          if (h(i,j+jshift,k) == 0.0) cycle
-          v_L_out = max(0.0, (jdir*vhr(i,J,k))*segment%Tr_InvLscale_out / (h(i,j+jshift,k)*G%dxCv(i,J)))
-          v_L_in  = min(0.0, (jdir*vhr(i,J,k))*segment%Tr_InvLscale_in  / (h(i,j+jshift,k)*G%dxCv(i,J)))
+          v_L_out = max(0.0, (jdir*vhr(i,J,k))*segment%Tr_InvLscale_out / &
+                    ((h(i,j+jshift,k) + GV%H_subroundoff)*G%dxCv(i,J)))
+          v_L_in  = min(0.0, (jdir*vhr(i,J,k))*segment%Tr_InvLscale_in  / &
+                    ((h(i,j+jshift,k) + GV%H_subroundoff)*G%dxCv(i,J)))
           fac1 = 1.0 + (v_L_out-v_L_in)
           segment%tr_Reg%Tr(m)%tres(i,J,k) = (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(i,J,k) + &
                             (v_L_out*Reg%Tr(m)%t(i,J+jshift,k) - &
