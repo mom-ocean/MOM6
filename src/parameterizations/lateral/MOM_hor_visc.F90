@@ -179,6 +179,7 @@ type, public :: hor_visc_CS ; private
   integer :: id_Kh_h      = -1, id_Kh_q          = -1
   integer :: id_GME_coeff_h = -1, id_GME_coeff_q = -1
   integer :: id_vort_xy_q = -1, id_div_xx_h      = -1
+  integer :: id_sh_xy_q = -1,    id_sh_xx_h      = -1
   integer :: id_FrictWork = -1, id_FrictWorkIntz = -1
   integer :: id_FrictWork_GME = -1
   !>@}
@@ -288,6 +289,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     Ah_q, &      ! biharmonic viscosity at corner points [L4 T-1 ~> m4 s-1]
     Kh_q, &      ! Laplacian viscosity at corner points [L2 T-1 ~> m2 s-1]
     vort_xy_q, & ! vertical vorticity at corner points [T-1 ~> s-1]
+    sh_xy_q,   & ! horizontal shearing strain at corner points [T-1 ~> s-1]
     GME_coeff_q, &  !< GME coeff. at q-points [L2 T-1 ~> m2 s-1]
     max_diss_rate_q ! maximum possible energy dissipated by lateral friction [L2 T-3 ~> m2 s-3]
 
@@ -301,7 +303,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     max_diss_rate_h, & ! maximum possible energy dissipated by lateral friction [L2 T-3 ~> m2 s-3]
     FrictWork, &     ! work done by MKE dissipation mechanisms [R L2 T-3 ~> W m-2]
     FrictWork_GME, & ! work done by GME [R L2 T-3 ~> W m-2]
-    div_xx_h         ! horizontal divergence [T-1 ~> s-1]
+    div_xx_h,      & ! horizontal divergence [T-1 ~> s-1]
+    sh_xx_h          ! horizontal tension (du/dx - dv/dy) including metric terms [T-1 ~> s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     grid_Re_Kh, &    !< Grid Reynolds number for Laplacian horizontal viscosity at h points [nondim]
     grid_Re_Ah, &    !< Grid Reynolds number for Biharmonic horizontal viscosity at h points [nondim]
@@ -478,7 +481,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   !$OMP   h_neglect, h_neglect3, FWfrac, inv_PI3, inv_PI6, H0_GME, &
   !$OMP   diffu, diffv, max_diss_rate_h, max_diss_rate_q, &
   !$OMP   Kh_h, Kh_q, Ah_h, Ah_q, FrictWork, FrictWork_GME, &
-  !$OMP   div_xx_h, vort_xy_q, GME_coeff_h, GME_coeff_q, &
+  !$OMP   div_xx_h, sh_xx_h, vort_xy_q, sh_xy_q, GME_coeff_h, GME_coeff_q, &
   !$OMP   TD, KH_u_GME, KH_v_GME, grid_Re_Kh, grid_Re_Ah &
   !$OMP ) &
   !$OMP private( &
@@ -689,18 +692,23 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       endif; endif
     endif
 
-    if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
+    ! Vorticity
+    if (CS%no_slip) then
+      do J=js-2,Jeq+2 ; do I=is-2,Ieq+2
+        vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
+      enddo ; enddo
+    else
+      do J=js-2,Jeq+2 ; do I=is-2,Ieq+2
+        vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
+      enddo ; enddo
+    endif
 
-      ! Vorticity
-      if (CS%no_slip) then
-        do J=js-2,Jeq+2 ; do I=is-2,Ieq+2
-          vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
-        enddo ; enddo
-      else
-        do J=js-2,Jeq+2 ; do I=is-2,Ieq+2
-          vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
-        enddo ; enddo
-      endif
+    ! Divergence
+    do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
+      div_xx(i,j) = dudx(i,j) + dvdy(i,j)
+    enddo ; enddo
+
+    if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
 
       ! Vorticity gradient
       do J=js-2,Jeq+2 ; do i=is-1,Ieq+2
@@ -725,10 +733,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       enddo ; enddo
 
       if (CS%modified_Leith) then
-        ! Divergence
-        do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-          div_xx(i,j) = dudx(i,j) + dvdy(i,j)
-        enddo ; enddo
 
         ! Divergence gradient
         do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+1
@@ -865,6 +869,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         endif
 
         if (CS%id_div_xx_h>0) div_xx_h(i,j,k) = div_xx(i,j)
+        if (CS%id_sh_xx_h>0) sh_xx_h(i,j,k) = sh_xx(i,j)
 
         str_xx(i,j) = -Kh * sh_xx(i,j)
       else   ! not Laplacian
@@ -1045,6 +1050,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
         if (CS%id_Kh_q>0 .or. CS%debug) Kh_q(I,J,k) = Kh
         if (CS%id_vort_xy_q>0) vort_xy_q(I,J,k) = vort_xy(I,J)
+        if (CS%id_sh_xy_q>0) sh_xy_q(I,J,k) = sh_xy(I,J)
 
         str_xy(I,J) = -Kh * sh_xy(I,J)
       else   ! not Laplacian
@@ -1325,6 +1331,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   if (CS%id_grid_Re_Ah>0) call post_data(CS%id_grid_Re_Ah, grid_Re_Ah, CS%diag)
   if (CS%id_div_xx_h>0)  call post_data(CS%id_div_xx_h, div_xx_h, CS%diag)
   if (CS%id_vort_xy_q>0) call post_data(CS%id_vort_xy_q, vort_xy_q, CS%diag)
+  if (CS%id_sh_xx_h>0)  call post_data(CS%id_sh_xx_h, sh_xx_h, CS%diag)
+  if (CS%id_sh_xy_q>0) call post_data(CS%id_sh_xy_q, sh_xy_q, CS%diag)
   if (CS%id_Ah_q>0)      call post_data(CS%id_Ah_q, Ah_q, CS%diag)
   if (CS%id_Kh_h>0)      call post_data(CS%id_Kh_h, Kh_h, CS%diag)
   if (CS%id_grid_Re_Kh>0) call post_data(CS%id_grid_Re_Kh, grid_Re_Kh, CS%diag)
@@ -2037,12 +2045,14 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
         'Laplacian Horizontal Viscosity at q Points', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
     CS%id_grid_Re_Kh = register_diag_field('ocean_model', 'grid_Re_Kh', diag%axesTL, Time, &
         'Grid Reynolds number for the Laplacian horizontal viscosity at h points', 'nondim')
-    if (CS%Leith_Kh) then
-      CS%id_vort_xy_q = register_diag_field('ocean_model', 'vort_xy_q', diag%axesBL, Time, &
-        'Vertical vorticity at q Points', 's-1', conversion=US%s_to_T)
-      CS%id_div_xx_h = register_diag_field('ocean_model', 'div_xx_h', diag%axesTL, Time, &
-        'Horizontal divergence at h Points', 's-1', conversion=US%s_to_T)
-    endif
+    CS%id_vort_xy_q = register_diag_field('ocean_model', 'vort_xy_q', diag%axesBL, Time, &
+      'Vertical vorticity at q Points', 's-1', conversion=US%s_to_T)
+    CS%id_div_xx_h = register_diag_field('ocean_model', 'div_xx_h', diag%axesTL, Time, &
+      'Horizontal divergence at h Points', 's-1', conversion=US%s_to_T)
+    CS%id_sh_xy_q = register_diag_field('ocean_model', 'sh_xy_q', diag%axesBL, Time, &
+      'Shearing strain at q Points', 's-1', conversion=US%s_to_T)
+    CS%id_sh_xx_h = register_diag_field('ocean_model', 'sh_xx_h', diag%axesTL, Time, &
+      'Horizontal tension at h Points', 's-1', conversion=US%s_to_T)
   endif
   if (CS%use_GME) then
       CS%id_GME_coeff_h = register_diag_field('ocean_model', 'GME_coeff_h', diag%axesTL, Time, &
