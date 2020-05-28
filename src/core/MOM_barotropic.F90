@@ -394,7 +394,7 @@ contains
 subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, &
                   eta_PF_in, U_Cor, V_Cor, accel_layer_u, accel_layer_v, &
                   eta_out, uhbtav, vhbtav, G, GV, US, CS, &
-                  visc_rem_u, visc_rem_v, etaav, OBC, BT_cont, eta_PF_start, &
+                  visc_rem_u, visc_rem_v, etaav, hfrac_u, hfrac_v, OBC, BT_cont, eta_PF_start, &
                   taux_bot, tauy_bot, uh0, vh0, u_uh0, v_vh0)
   type(ocean_grid_type),                   intent(inout) :: G       !< The ocean's grid structure.
   type(verticalGrid_type),                   intent(in)  :: GV      !< The ocean's vertical grid structure.
@@ -447,6 +447,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: visc_rem_v    !< Ditto for meridional direction [nondim].
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(out) :: etaav        !< The free surface height or column mass
                                                          !! averaged over the barotropic integration [H ~> m or kg m-2].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: hfrac_u ! Fractional layer thickness at u points 
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), optional, intent(out) :: hfrac_v ! Fractional layer thickness at v points
   type(ocean_OBC_type),                optional, pointer :: OBC          !< The open boundary condition structure.
   type(BT_cont_type),                  optional, pointer :: BT_cont      !< A structure with elements that describe
                                                          !! the effective open face areas as a function of barotropic
@@ -625,7 +627,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real :: Htot_avg    ! The average total thickness of the tracer columns adjacent to a
                       ! velocity point [H ~> m or kg m-2]
   logical :: do_hifreq_output  ! If true, output occurs every barotropic step.
-  logical :: use_BT_cont, do_ave, find_etaav, find_PF, find_Cor
+  logical :: use_BT_cont, do_ave, find_etaav, find_hfrac_u, find_hfrac_v, find_PF, find_Cor
   logical :: ice_is_rigid, nonblock_setup, interp_eta_PF
   logical :: project_velocity, add_uh0
 
@@ -691,6 +693,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   do_ave = query_averaging_enabled(CS%diag)
   find_etaav = present(etaav)
+  find_hfrac_u = present(hfrac_u)
+  find_hfrac_v = present(hfrac_v)
   find_PF = (do_ave .and. ((CS%id_PFu_bt > 0) .or. (CS%id_PFv_bt > 0)))
   find_Cor = (do_ave .and. ((CS%id_Coru_bt > 0) .or. (CS%id_Corv_bt > 0)))
 
@@ -2374,6 +2378,17 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   else
     if (CS%id_frhatu1 > 0) CS%frhatu1(:,:,:) = CS%frhatu(:,:,:)
     if (CS%id_frhatv1 > 0) CS%frhatv1(:,:,:) = CS%frhatv(:,:,:)
+  endif
+
+  if (find_hfrac_u) then
+    do k=1,nz ; do j=js,je ; do I=is-1,ie
+      hfrac_u(I,j,k) = CS%frhatu(I,j,k)
+    enddo ; enddo ; enddo
+  endif
+  if (find_hfrac_v) then
+    do k=1,nz ; do J=js-1,je ; do i=is,ie
+      hfrac_v(i,J,k) = CS%frhatv(i,J,k) 
+    enddo ; enddo ; enddo
   endif
 
   if (G%nonblocking_updates) then
