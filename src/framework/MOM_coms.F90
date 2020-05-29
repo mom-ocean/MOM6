@@ -10,20 +10,19 @@ use memutils_mod, only : print_memuse_stats
 use mpp_mod, only : PE_here => mpp_pe, root_PE => mpp_root_pe, num_PEs => mpp_npes
 use mpp_mod, only : Set_PElist => mpp_set_current_pelist, Get_PElist => mpp_get_current_pelist
 use mpp_mod, only : broadcast => mpp_broadcast
-use mpp_mod, only : sum_across_PEs => mpp_sum, min_across_PEs => mpp_min
-use mpp_mod, only : max_across_PEs => mpp_max
+use mpp_mod, only : sum_across_PEs => mpp_sum, max_across_PEs => mpp_max, min_across_PEs => mpp_min
 
 implicit none ; private
 
 public :: PE_here, root_PE, num_PEs, MOM_infra_init, MOM_infra_end
 public :: broadcast, sum_across_PEs, min_across_PEs, max_across_PEs
-public :: reproducing_sum, EFP_list_sum_across_PEs
+public :: reproducing_sum, reproducing_sum_EFP, EFP_sum_across_PEs, EFP_list_sum_across_PEs
 public :: EFP_plus, EFP_minus, EFP_to_real, real_to_EFP, EFP_real_diff
 public :: operator(+), operator(-), assignment(=)
 public :: query_EFP_overflow_error, reset_EFP_overflow_error
 public :: Set_PElist, Get_PElist
-!   This module provides interfaces to the non-domain-oriented communication
-! subroutines.
+
+! This module provides interfaces to the non-domain-oriented communication subroutines.
 
 integer(kind=8), parameter :: prec=2_8**46 !< The precision of each integer.
 real, parameter :: r_prec=2.0**46  !< A real version of prec.
@@ -50,10 +49,21 @@ logical :: overflow_error = .false. !< This becomes true if an overflow is encou
 logical :: NaN_error = .false.      !< This becomes true if a NaN is encountered.
 logical :: debug = .false.          !< Making this true enables debugging output.
 
-!> Find an accurate and order-invariant sum of distributed 2d or 3d fields
+!> Find an accurate and order-invariant sum of a distributed 2d or 3d field
 interface reproducing_sum
   module procedure reproducing_sum_2d, reproducing_sum_3d
 end interface reproducing_sum
+
+!> Find an accurate and order-invariant sum of a distributed 2d field, returning the result
+!! in the form of an extended fixed point value that can be converted back with EFP_to_real.
+interface reproducing_sum_EFP
+  module procedure reproducing_EFP_sum_2d
+end interface reproducing_sum_EFP
+
+!> Sum a value or 1-d array of values across processors, returning the sums in place
+interface EFP_sum_across_PEs
+  module procedure EFP_list_sum_across_PEs, EFP_val_sum_across_PEs
+end interface EFP_sum_across_PEs
 
 !> The Extended Fixed Point (EFP) type provides a public interface for doing sums
 !! and taking differences with this type.
@@ -75,12 +85,139 @@ interface assignment(=); module procedure EFP_assign ; end interface
 contains
 
 !> This subroutine uses a conversion to an integer representation of real numbers to give an
+!! order-invariant sum of distributed 2-D arrays that reproduces across domain decomposition, with
+!! the result returned as an extended fixed point type that can be converted back to a real number
+!! using EFP_to_real.  This technique is described in Hallberg & Adcroft, 2014, Parallel Computing,
+!! doi:10.1016/j.parco.2014.04.007.
+function reproducing_EFP_sum_2d(array, isr, ier, jsr, jer, overflow_check, err, only_on_PE) result(EFP_sum)
+  real, dimension(:,:),     intent(in)  :: array   !< The array to be summed
+  integer,        optional, intent(in)  :: isr     !< The starting i-index of the sum, noting
+                                                   !! that the array indices starts at 1
+  integer,        optional, intent(in)  :: ier     !< The ending i-index of the sum, noting
+                                                   !! that the array indices starts at 1
+  integer,        optional, intent(in)  :: jsr     !< The starting j-index of the sum, noting
+                                                   !! that the array indices starts at 1
+  integer,        optional, intent(in)  :: jer     !< The ending j-index of the sum, noting
+                                                   !! that the array indices starts at 1
+  logical,        optional, intent(in)  :: overflow_check !< If present and false, disable
+                                                !! checking for overflows in incremental results.
+                                                !! This can speed up calculations if the number
+                                                !! of values being summed is small enough
+  integer,        optional, intent(out) :: err  !< If present, return an error code instead of
+                                                !! triggering any fatal errors directly from
+                                                !! this routine.
+  logical,        optional, intent(in)  :: only_on_PE !< If present and true, do not do the sum
+                                                !! across processors, only reporting the local sum
+  type(EFP_type)                        :: EFP_sum  !< The result in extended fixed point format
+
+  !   This subroutine uses a conversion to an integer representation
+  ! of real numbers to give order-invariant sums that will reproduce
+  ! across PE count.  This idea comes from R. Hallberg and A. Adcroft.
+
+  integer(kind=8), dimension(ni)  :: ints_sum
+  integer(kind=8) :: ival, prec_error
+  real    :: rs
+  real    :: max_mag_term
+  logical :: over_check, do_sum_across_PEs
+  character(len=256) :: mesg
+  integer :: i, j, n, is, ie, js, je, sgn
+
+  if (num_PEs() > max_count_prec) call MOM_error(FATAL, &
+    "reproducing_sum: Too many processors are being used for the value of "//&
+    "prec.  Reduce prec to (2^63-1)/num_PEs.")
+
+  prec_error = (2_8**62 + (2_8**62 - 1)) / num_PEs()
+
+  is = 1 ; ie = size(array,1) ; js = 1 ; je = size(array,2 )
+  if (present(isr)) then
+    if (isr < is) call MOM_error(FATAL, "Value of isr too small in reproducing_EFP_sum_2d.")
+    is = isr
+  endif
+  if (present(ier)) then
+    if (ier > ie) call MOM_error(FATAL, "Value of ier too large in reproducing_EFP_sum_2d.")
+    ie = ier
+  endif
+  if (present(jsr)) then
+    if (jsr < js) call MOM_error(FATAL, "Value of jsr too small in reproducing_EFP_sum_2d.")
+    js = jsr
+  endif
+  if (present(jer)) then
+    if (jer > je) call MOM_error(FATAL, "Value of jer too large in reproducing_EFP_sum_2d.")
+    je = jer
+  endif
+
+  over_check = .true. ; if (present(overflow_check)) over_check = overflow_check
+  do_sum_across_PEs = .true. ; if (present(only_on_PE)) do_sum_across_PEs = .not.only_on_PE
+
+  overflow_error = .false. ; NaN_error = .false. ; max_mag_term = 0.0
+  ints_sum(:) = 0
+  if (over_check) then
+    if ((je+1-js)*(ie+1-is) < max_count_prec) then
+      do j=js,je ; do i=is,ie
+        call increment_ints_faster(ints_sum, array(i,j), max_mag_term)
+      enddo ; enddo
+      call carry_overflow(ints_sum, prec_error)
+    elseif ((ie+1-is) < max_count_prec) then
+      do j=js,je
+        do i=is,ie
+          call increment_ints_faster(ints_sum, array(i,j), max_mag_term)
+        enddo
+        call carry_overflow(ints_sum, prec_error)
+      enddo
+    else
+      do j=js,je ; do i=is,ie
+        call increment_ints(ints_sum, real_to_ints(array(i,j), prec_error), &
+                            prec_error)
+      enddo ; enddo
+    endif
+  else
+    do j=js,je ; do i=is,ie
+      sgn = 1 ; if (array(i,j)<0.0) sgn = -1
+      rs = abs(array(i,j))
+      do n=1,ni
+        ival = int(rs*I_pr(n), 8)
+        rs = rs - ival*pr(n)
+        ints_sum(n) = ints_sum(n) + sgn*ival
+      enddo
+    enddo ; enddo
+    call carry_overflow(ints_sum, prec_error)
+  endif
+
+  if (present(err)) then
+    err = 0
+    if (overflow_error) &
+      err = err+2
+    if (NaN_error) &
+      err = err+4
+    if (err > 0) then ; do n=1,ni ; ints_sum(n) = 0 ; enddo ; endif
+  else
+    if (NaN_error) then
+      call MOM_error(FATAL, "NaN in input field of reproducing_EFP_sum(_2d).")
+    endif
+    if (abs(max_mag_term) >= prec_error*pr(1)) then
+      write(mesg, '(ES13.5)') max_mag_term
+      call MOM_error(FATAL,"Overflow in reproducing_EFP_sum(_2d) conversion of "//trim(mesg))
+    endif
+    if (overflow_error) then
+      call MOM_error(FATAL, "Overflow in reproducing_EFP_sum(_2d).")
+    endif
+  endif
+
+  if (do_sum_across_PEs) call sum_across_PEs(ints_sum, ni)
+
+  call regularize_ints(ints_sum)
+
+  EFP_sum%v(:) = ints_sum(:)
+
+end function reproducing_EFP_sum_2d
+
+!> This subroutine uses a conversion to an integer representation of real numbers to give an
 !! order-invariant sum of distributed 2-D arrays that reproduces across domain decomposition.
 !! This technique is described in Hallberg & Adcroft, 2014, Parallel Computing,
 !! doi:10.1016/j.parco.2014.04.007.
 function reproducing_sum_2d(array, isr, ier, jsr, jer, EFP_sum, reproducing, &
-                            overflow_check, err) result(sum)
-  real, dimension(:,:),     intent(in)  :: array    !< The array to be summed
+                            overflow_check, err, only_on_PE) result(sum)
+  real, dimension(:,:),     intent(in)  :: array   !< The array to be summed
   integer,        optional, intent(in)  :: isr     !< The starting i-index of the sum, noting
                                                    !! that the array indices starts at 1
   integer,        optional, intent(in)  :: ier     !< The ending i-index of the sum, noting
@@ -99,6 +236,8 @@ function reproducing_sum_2d(array, isr, ier, jsr, jer, EFP_sum, reproducing, &
   integer,        optional, intent(out) :: err  !< If present, return an error code instead of
                                                 !! triggering any fatal errors directly from
                                                 !! this routine.
+  logical,        optional, intent(in)  :: only_on_PE !< If present and true, do not do the sum
+                                                !! across processors, only reporting the local sum
   real                                  :: sum  !< Result
 
   !   This subroutine uses a conversion to an integer representation
@@ -106,12 +245,12 @@ function reproducing_sum_2d(array, isr, ier, jsr, jer, EFP_sum, reproducing, &
   ! across PE count.  This idea comes from R. Hallberg and A. Adcroft.
 
   integer(kind=8), dimension(ni)  :: ints_sum
-  integer(kind=8) :: ival, prec_error
+  integer(kind=8) :: prec_error
   real    :: rsum(1), rs
-  real    :: max_mag_term
-  logical :: repro, over_check
+  logical :: repro, do_sum_across_PEs
   character(len=256) :: mesg
-  integer :: i, j, n, is, ie, js, je, sgn
+  type(EFP_type) :: EFP_val ! An extended fixed point version of the sum
+  integer :: i, j, n, is, ie, js, je
 
   if (num_PEs() > max_count_prec) call MOM_error(FATAL, &
     "reproducing_sum: Too many processors are being used for the value of "//&
@@ -121,94 +260,36 @@ function reproducing_sum_2d(array, isr, ier, jsr, jer, EFP_sum, reproducing, &
 
   is = 1 ; ie = size(array,1) ; js = 1 ; je = size(array,2 )
   if (present(isr)) then
-    if (isr < is) call MOM_error(FATAL, &
-      "Value of isr too small in reproducing_sum_2d.")
+    if (isr < is) call MOM_error(FATAL, "Value of isr too small in reproducing_sum_2d.")
     is = isr
   endif
   if (present(ier)) then
-    if (ier > ie) call MOM_error(FATAL, &
-      "Value of ier too large in reproducing_sum_2d.")
+    if (ier > ie) call MOM_error(FATAL, "Value of ier too large in reproducing_sum_2d.")
     ie = ier
   endif
   if (present(jsr)) then
-    if (jsr < js) call MOM_error(FATAL, &
-      "Value of jsr too small in reproducing_sum_2d.")
+    if (jsr < js) call MOM_error(FATAL, "Value of jsr too small in reproducing_sum_2d.")
     js = jsr
   endif
   if (present(jer)) then
-    if (jer > je) call MOM_error(FATAL, &
-      "Value of jer too large in reproducing_sum_2d.")
+    if (jer > je) call MOM_error(FATAL, "Value of jer too large in reproducing_sum_2d.")
     je = jer
   endif
 
   repro = .true. ; if (present(reproducing)) repro = reproducing
-  over_check = .true. ; if (present(overflow_check)) over_check = overflow_check
+  do_sum_across_PEs = .true. ; if (present(only_on_PE)) do_sum_across_PEs = .not.only_on_PE
 
   if (repro) then
-    overflow_error = .false. ; NaN_error = .false. ; max_mag_term = 0.0
-    ints_sum(:) = 0
-    if (over_check) then
-      if ((je+1-js)*(ie+1-is) < max_count_prec) then
-        do j=js,je ; do i=is,ie
-          call increment_ints_faster(ints_sum, array(i,j), max_mag_term)
-        enddo ; enddo
-        call carry_overflow(ints_sum, prec_error)
-      elseif ((ie+1-is) < max_count_prec) then
-        do j=js,je
-          do i=is,ie
-            call increment_ints_faster(ints_sum, array(i,j), max_mag_term)
-          enddo
-          call carry_overflow(ints_sum, prec_error)
-        enddo
-      else
-        do j=js,je ; do i=is,ie
-          call increment_ints(ints_sum, real_to_ints(array(i,j), prec_error), &
-                              prec_error)
-        enddo ; enddo
-      endif
-    else
-      do j=js,je ; do i=is,ie
-        sgn = 1 ; if (array(i,j)<0.0) sgn = -1
-        rs = abs(array(i,j))
-        do n=1,ni
-          ival = int(rs*I_pr(n), 8)
-          rs = rs - ival*pr(n)
-          ints_sum(n) = ints_sum(n) + sgn*ival
-        enddo
-      enddo ; enddo
-      call carry_overflow(ints_sum, prec_error)
-    endif
-
-    if (present(err)) then
-      err = 0
-      if (overflow_error) &
-        err = err+2
-      if (NaN_error) &
-        err = err+4
-      if (err > 0) then ; do n=1,ni ; ints_sum(n) = 0 ; enddo ; endif
-    else
-      if (NaN_error) then
-        call MOM_error(FATAL, "NaN in input field of reproducing_sum(_2d).")
-      endif
-      if (abs(max_mag_term) >= prec_error*pr(1)) then
-        write(mesg, '(ES13.5)') max_mag_term
-        call MOM_error(FATAL,"Overflow in reproducing_sum(_2d) conversion of "//trim(mesg))
-      endif
-      if (overflow_error) then
-        call MOM_error(FATAL, "Overflow in reproducing_sum(_2d).")
-      endif
-    endif
-
-    call sum_across_PEs(ints_sum, ni)
-
-    call regularize_ints(ints_sum)
-    sum = ints_to_real(ints_sum)
+    EFP_val = reproducing_EFP_sum_2d(array, isr, ier, jsr, jer, overflow_check, err, only_on_PE)
+    sum = ints_to_real(EFP_val%v)
+    if (present(EFP_sum)) EFP_sum = EFP_val
+    if (debug) ints_sum(:) = EFP_sum%v(:)
   else
     rsum(1) = 0.0
     do j=js,je ; do i=is,ie
       rsum(1) = rsum(1) + array(i,j)
     enddo ; enddo
-    call sum_across_PEs(rsum,1)
+    if (do_sum_across_PEs) call sum_across_PEs(rsum,1)
     sum = rsum(1)
 
     if (present(err)) then ; err = 0 ; endif
@@ -225,9 +306,8 @@ function reproducing_sum_2d(array, isr, ier, jsr, jer, EFP_sum, reproducing, &
         endif
       endif
     endif
+    if (present(EFP_sum)) EFP_sum%v(:) = ints_sum(:)
   endif
-
-  if (present(EFP_sum)) EFP_sum%v(:) = ints_sum(:)
 
   if (debug) then
     write(mesg,'("2d RS: ", ES24.16, 6 Z17.16)') sum, ints_sum(1:ni)
@@ -240,7 +320,7 @@ end function reproducing_sum_2d
 !! order-invariant sum of distributed 3-D arrays that reproduces across domain decomposition.
 !! This technique is described in Hallberg & Adcroft, 2014, Parallel Computing,
 !! doi:10.1016/j.parco.2014.04.007.
-function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, err) &
+function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, EFP_lay_sums, err, only_on_PE) &
                             result(sum)
   real, dimension(:,:,:),       intent(in)  :: array   !< The array to be summed
   integer,            optional, intent(in)  :: isr     !< The starting i-index of the sum, noting
@@ -253,20 +333,25 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, err) &
                                                        !! that the array indices starts at 1
   real, dimension(:), optional, intent(out) :: sums    !< The sums by vertical layer
   type(EFP_type),     optional, intent(out) :: EFP_sum !< The result in extended fixed point format
+  type(EFP_type), dimension(:), &
+                      optional, intent(out) :: EFP_lay_sums !< The sums by vertical layer in EFP format
   integer,            optional, intent(out) :: err  !< If present, return an error code instead of
                                                     !! triggering any fatal errors directly from
                                                     !! this routine.
+  logical,            optional, intent(in)  :: only_on_PE !< If present and true, do not do the sum
+                                                    !! across processors, only reporting the local sum
   real                                      :: sum  !< Result
 
   !   This subroutine uses a conversion to an integer representation
   ! of real numbers to give order-invariant sums that will reproduce
   ! across PE count.  This idea comes from R. Hallberg and A. Adcroft.
 
-  real    :: max_mag_term
+  real    :: val, max_mag_term
   integer(kind=8), dimension(ni)  :: ints_sum
   integer(kind=8), dimension(ni,size(array,3))  :: ints_sums
   integer(kind=8) :: prec_error
   character(len=256) :: mesg
+  logical :: do_sum_across_PEs
   integer :: i, j, k, is, ie, js, je, ke, isz, jsz, n
 
   if (num_PEs() > max_count_prec) call MOM_error(FATAL, &
@@ -278,30 +363,32 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, err) &
 
   is = 1 ; ie = size(array,1) ; js = 1 ; je = size(array,2) ; ke = size(array,3)
   if (present(isr)) then
-    if (isr < is) call MOM_error(FATAL, &
-      "Value of isr too small in reproducing_sum(_3d).")
+    if (isr < is) call MOM_error(FATAL, "Value of isr too small in reproducing_sum(_3d).")
     is = isr
   endif
   if (present(ier)) then
-    if (ier > ie) call MOM_error(FATAL, &
-      "Value of ier too large in reproducing_sum(_3d).")
+    if (ier > ie) call MOM_error(FATAL, "Value of ier too large in reproducing_sum(_3d).")
     ie = ier
   endif
   if (present(jsr)) then
-    if (jsr < js) call MOM_error(FATAL, &
-      "Value of jsr too small in reproducing_sum(_3d).")
+    if (jsr < js) call MOM_error(FATAL, "Value of jsr too small in reproducing_sum(_3d).")
     js = jsr
   endif
   if (present(jer)) then
-    if (jer > je) call MOM_error(FATAL, &
-      "Value of jer too large in reproducing_sum(_3d).")
+    if (jer > je) call MOM_error(FATAL, "Value of jer too large in reproducing_sum(_3d).")
     je = jer
   endif
   jsz = je+1-js; isz = ie+1-is
 
-  if (present(sums)) then
-    if (size(sums) > ke) call MOM_error(FATAL, "Sums is smaller than "//&
-      "the vertical extent of array in reproducing_sum(_3d).")
+  do_sum_across_PEs = .true. ; if (present(only_on_PE)) do_sum_across_PEs = .not.only_on_PE
+
+  if (present(sums) .or. present(EFP_lay_sums)) then
+    if (present(sums)) then ; if (size(sums) < ke) then
+      call MOM_error(FATAL, "Sums is smaller than the vertical extent of array in reproducing_sum(_3d).")
+    endif ; endif
+    if (present(EFP_lay_sums)) then ; if (size(EFP_lay_sums) < ke) then
+      call MOM_error(FATAL, "Sums is smaller than the vertical extent of array in reproducing_sum(_3d).")
+    endif ; endif
     ints_sums(:,:) = 0
     overflow_error = .false. ; NaN_error = .false. ; max_mag_term = 0.0
     if (jsz*isz < max_count_prec) then
@@ -339,14 +426,18 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, err) &
       if (overflow_error) call MOM_error(FATAL, "Overflow in reproducing_sum(_3d).")
     endif
 
-    call sum_across_PEs(ints_sums(:,1:ke), ni*ke)
+    if (do_sum_across_PEs) call sum_across_PEs(ints_sums(:,1:ke), ni*ke)
 
     sum = 0.0
     do k=1,ke
       call regularize_ints(ints_sums(:,k))
-      sums(k) = ints_to_real(ints_sums(:,k))
-      sum = sum + sums(k)
+      val = ints_to_real(ints_sums(:,k))
+      if (present(sums)) sums(k) = val
+      sum = sum + val
     enddo
+    if (present(EFP_lay_sums)) then ; do k=1,ke
+      EFP_lay_sums(k)%v(:) = ints_sums(:,k)
+    enddo ; endif
 
     if (present(EFP_sum)) then
       EFP_sum%v(:) = 0
@@ -397,7 +488,7 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, err) &
       if (overflow_error) call MOM_error(FATAL, "Overflow in reproducing_sum(_3d).")
     endif
 
-    call sum_across_PEs(ints_sum, ni)
+    if (do_sum_across_PEs) call sum_across_PEs(ints_sum, ni)
 
     call regularize_ints(ints_sum)
     sum = ints_to_real(ints_sum)
@@ -700,7 +791,7 @@ subroutine EFP_list_sum_across_PEs(EFPs, nval, errors)
                                       !! being summed across PEs.
   integer,    intent(in)    :: nval   !< The number of values being summed.
   logical, dimension(:), &
-    optional, intent(out)   :: errors !< A list of error flags for each sum
+           optional, intent(out)   :: errors !< A list of error flags for each sum
 
   !   This subroutine does a sum across PEs of a list of EFP variables,
   ! returning the sums in place, with all overflows carried.
@@ -741,6 +832,54 @@ subroutine EFP_list_sum_across_PEs(EFPs, nval, errors)
   endif
 
 end subroutine EFP_list_sum_across_PEs
+
+!>   This subroutine does a sum across PEs of an EFP variable,
+!! returning the sums in place, with all overflows carried.
+subroutine EFP_val_sum_across_PEs(EFP, error)
+  type(EFP_type),  intent(inout) :: EFP   !< The extended fixed point numbers
+                                          !! being summed across PEs.
+  logical, optional, intent(out) :: error !< An error flag for this sum
+
+  !   This subroutine does a sum across PEs of a list of EFP variables,
+  ! returning the sums in place, with all overflows carried.
+
+  integer(kind=8), dimension(ni) :: ints
+  integer(kind=8) :: prec_error
+  logical :: error_found
+  character(len=256) :: mesg
+  integer :: n
+
+  if (num_PEs() > max_count_prec) call MOM_error(FATAL, &
+    "reproducing_sum: Too many processors are being used for the value of "//&
+    "prec.  Reduce prec to (2^63-1)/num_PEs.")
+
+  prec_error = (2_8**62 + (2_8**62 - 1)) / num_PEs()
+  ! overflow_error is an overflow error flag for the whole module.
+  overflow_error = .false. ; error_found = .false.
+
+  do n=1,ni ; ints(n) = EFP%v(n) ; enddo
+
+  call sum_across_PEs(ints(:), ni)
+
+  if (present(error)) error = .false.
+
+  overflow_error = .false.
+  call carry_overflow(ints(:), prec_error)
+  do n=1,ni ; EFP%v(n) = ints(n) ; enddo
+  if (present(error)) error = overflow_error
+  if (overflow_error) then
+    write (mesg,'("EFP_val_sum_across_PEs error val was ",ES12.6, ", prec_error = ",ES12.6)') &
+           EFP_to_real(EFP), real(prec_error)
+    call MOM_error(WARNING, mesg)
+  endif
+  error_found = error_found .or. overflow_error
+
+  if (error_found .and. .not.(present(error))) then
+    call MOM_error(FATAL, "Overflow in EFP_val_sum_across_PEs.")
+  endif
+
+end subroutine EFP_val_sum_across_PEs
+
 
 !> This subroutine carries out all of the calls required to close out the infrastructure cleanly.
 !! This should only be called in ocean-only runs, as the coupler takes care of this in coupled runs.

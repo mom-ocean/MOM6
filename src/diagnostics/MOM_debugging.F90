@@ -8,9 +8,9 @@ module MOM_debugging
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_checksums, only : hchksum, Bchksum, qchksum, uvchksum
+use MOM_checksums, only : hchksum, Bchksum, qchksum, uvchksum, hchksum_pair
 use MOM_checksums, only : is_NaN, chksum, MOM_checksums_init
-use MOM_coms, only : PE_here, root_PE, num_PEs, sum_across_PEs
+use MOM_coms, only : PE_here, root_PE, num_PEs
 use MOM_coms, only : min_across_PEs, max_across_PEs, reproducing_sum
 use MOM_domains, only : pass_vector, pass_var, pe_here
 use MOM_domains, only : BGRID_NE, AGRID, To_All, Scalar_Pair
@@ -27,7 +27,7 @@ public :: MOM_debugging_init, totalStuff, totalTandS
 public :: check_column_integral, check_column_integrals
 
 ! These interfaces come from MOM_checksums.
-public :: hchksum, Bchksum, qchksum, is_NaN, chksum, uvchksum
+public :: hchksum, Bchksum, qchksum, is_NaN, chksum, uvchksum, hchksum_pair
 
 !> Check for consistency between the duplicated points of a C-grid vector
 interface check_redundant
@@ -730,14 +730,15 @@ function totalStuff(HI, hThick, areaT, stuff)
   real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: stuff  !< The array of stuff to be summed
   real                                         :: totalStuff !< the globally integrated amoutn of stuff
   ! Local variables
+  real, dimension(HI%isc:HI%iec, HI%jsc:HI%jec) :: tmp_for_sum
   integer :: i, j, k, nz
 
   nz = size(hThick,3)
-  totalStuff = 0.
-  do k = 1, nz ; do j = HI%jsc, HI%jec ; do i = HI%isc, HI%iec
-    totalStuff = totalStuff + hThick(i,j,k) * stuff(i,j,k) * areaT(i,j)
+  tmp_for_sum(:,:) = 0.0
+  do k=1,nz ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
+    tmp_for_sum(i,j) = tmp_for_sum(i,j) + hThick(i,j,k) * stuff(i,j,k) * areaT(i,j)
   enddo ; enddo ; enddo
-  call sum_across_PEs(totalStuff)
+  totalStuff = reproducing_sum(tmp_for_sum)
 
 end function totalStuff
 
@@ -755,15 +756,16 @@ subroutine totalTandS(HI, hThick, areaT, temperature, salinity, mesg)
   real, save :: totalH = 0., totalT = 0., totalS = 0.
   ! Local variables
   logical, save :: firstCall = .true.
+  real, dimension(HI%isc:HI%iec, HI%jsc:HI%jec) :: tmp_for_sum
   real :: thisH, thisT, thisS, delH, delT, delS
   integer :: i, j, k, nz
 
   nz = size(hThick,3)
-  thisH = 0.
-  do k = 1, nz ; do j = HI%jsc, HI%jec ; do i = HI%isc, HI%iec
-    thisH = thisH + hThick(i,j,k) * areaT(i,j)
+  tmp_for_sum(:,:) = 0.0
+  do k=1,nz ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
+    tmp_for_sum(i,j) = tmp_for_sum(i,j) + hThick(i,j,k) * areaT(i,j)
   enddo ; enddo ; enddo
-  call sum_across_PEs(thisH)
+  thisH = reproducing_sum(tmp_for_sum)
   thisT = totalStuff(HI, hThick, areaT, temperature)
   thisS = totalStuff(HI, hThick, areaT, salinity)
 
