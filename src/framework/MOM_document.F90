@@ -500,6 +500,7 @@ subroutine writeMessageAndDesc(doc, vmesg, desc, valueWasDefault, indent, &
 
     substr_start = start_ind
     do ! Adjust the available line length for anomalies in the size of tabs
+      if (len_trim(desc) <= start_ind+len_cor) exit  ! This line will not span another line.
       tab_ind = index(desc(substr_start:start_ind+len_cor), "\t") ! Count \t as 2 spaces.
       if (tab_ind == 0) exit
       substr_start = substr_start + tab_ind
@@ -510,11 +511,11 @@ subroutine writeMessageAndDesc(doc, vmesg, desc, valueWasDefault, indent, &
     end_ind = 0
     if ((nl_ind > 0) .and. (len_trim(desc(start_ind:start_ind+nl_ind-2)) > len_cor)) then
       ! This line is too long despite the new-line character.  Look for an earlier space to break.
-      end_ind = scan(desc(start_ind:start_ind+(len_cor)), " ", back=.true.) - 1
+      end_ind = scan(desc(start_ind:start_ind+len_cor), " ", back=.true.) - 1
       if (end_ind > 0) nl_ind = 0
     elseif ((nl_ind == 0) .and. (len_trim(desc(start_ind:)) > len_cor)) then
       ! This line is too long and does not have a new-line character.  Look for a space to break.
-      end_ind = scan(desc(start_ind:start_ind+(len_cor)), " ", back=.true.) - 1
+      end_ind = scan(desc(start_ind:start_ind+len_cor), " ", back=.true.) - 1
     endif
 
     reset_msg_pad = .false.
