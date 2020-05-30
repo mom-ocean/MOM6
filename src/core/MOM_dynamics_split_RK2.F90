@@ -310,8 +310,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: hf_PFu ! Zonal Pressure force accel. x fract. thickness [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: hf_PFv ! Merdional Pressure force accel. x fract. thickness [L T-2 ~> m s-2].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: hf_CFu ! Zonal Coriolis force accel. x fract. thickness [L T-2 ~> m s-2].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: hf_CFv ! Merdional Coriolis force accel. x fract. thickness [L T-2 ~> m s-2].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: hf_CAu ! Zonal Coriolis force accel. x fract. thickness [L T-2 ~> m s-2].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: hf_CAv ! Merdional Coriolis force accel. x fract. thickness [L T-2 ~> m s-2].
 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: hfrac_u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: hfrac_v
@@ -763,7 +763,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   !    hfrac_u(I,j,k) = CS%barotropic_CSp%frhatu(I,j,k)
   !  enddo ; enddo
   !  do J=Jsq,Jeq ; do i=is,ie
-  !    hfrac_v(i,J,k) = CS%barotropic_CSp%frhatv(i,J,k) 
+  !    hfrac_v(i,J,k) = CS%barotropic_CSp%frhatv(i,J,k)
   !  enddo ; enddo
   !enddo
 
@@ -894,7 +894,19 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     enddo ; enddo ; enddo
     call post_data(CS%id_hfPFv, hf_PFv, CS%diag)
   endif
- 
+  if (CS%id_hfCAu > 0) then
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      hf_CAu(I,j,k) = CS%CAu(I,j,k) * hfrac_u(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_hfCAu, hf_CAu, CS%diag)
+  endif
+  if (CS%id_hfCAv > 0) then
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      hf_CAv(i,J,k) = CS%CAv(i,J,k) * hfrac_v(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_hfCAv, hf_CAv, CS%diag)
+  endif
+
   if (CS%debug) then
     call MOM_state_chksum("Corrector ", u, v, h, uh, vh, G, GV, US, symmetric=sym)
     call uvchksum("Corrector avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym, scale=US%L_T_to_m_s)
@@ -1267,6 +1279,10 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
       'Thickness weighted Zonal Pressure Force Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
   CS%id_hfPFv = register_diag_field('ocean_model', 'hf_PFv', diag%axesCvL, Time, &
       'Thickness weighted Meridional Pressure Force Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
+  CS%id_hfCAu = register_diag_field('ocean_model', 'hf_CAu', diag%axesCuL, Time, &
+      'Thickness weighted Zonal Coriolis and Advective Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
+  CS%id_hfCAv = register_diag_field('ocean_model', 'hf_CAv', diag%axesCvL, Time, &
+      'Thickness weighted Meridional Coriolis and Advective Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
 
   CS%id_uav = register_diag_field('ocean_model', 'uav', diag%axesCuL, Time, &
       'Barotropic-step Averaged Zonal Velocity', 'm s-1', conversion=US%L_T_to_m_s)

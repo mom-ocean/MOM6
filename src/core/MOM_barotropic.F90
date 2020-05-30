@@ -447,7 +447,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: visc_rem_v    !< Ditto for meridional direction [nondim].
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(out) :: etaav        !< The free surface height or column mass
                                                          !! averaged over the barotropic integration [H ~> m or kg m-2].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: hfrac_u ! Fractional layer thickness at u points 
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: hfrac_u ! Fractional layer thickness at u points
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), optional, intent(out) :: hfrac_v ! Fractional layer thickness at v points
   type(ocean_OBC_type),                optional, pointer :: OBC          !< The open boundary condition structure.
   type(BT_cont_type),                  optional, pointer :: BT_cont      !< A structure with elements that describe
@@ -2387,7 +2387,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   endif
   if (find_hfrac_v) then
     do k=1,nz ; do J=js-1,je ; do i=is,ie
-      hfrac_v(i,J,k) = CS%frhatv(i,J,k) 
+      hfrac_v(i,J,k) = CS%frhatv(i,J,k)
     enddo ; enddo ; enddo
   endif
 
