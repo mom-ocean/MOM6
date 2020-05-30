@@ -445,7 +445,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kv, j, G, GV, US, CS)
 
   elseif ((.not. CS%Bryan_Lewis_diffusivity) .and. (.not.CS%bulkmixedlayer) .and. &
           (.not. CS%horiz_varying_background) .and. (CS%Kd /= CS%Kdml)) then
-    I_Hmix = 1.0 / CS%Hmix
+    I_Hmix = 1.0 / (CS%Hmix + GV%H_subroundoff*GV%H_to_Z)
     do i=is,ie ; depth(i) = 0.0 ; enddo
     do k=1,nz ; do i=is,ie
       depth_c = depth(i) + 0.5*GV%H_to_Z*h(i,j,k)
