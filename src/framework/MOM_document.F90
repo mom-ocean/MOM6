@@ -469,6 +469,7 @@ subroutine writeMessageAndDesc(doc, vmesg, desc, valueWasDefault, indent, &
   integer :: nl_ind, tab_ind, end_ind  ! The indices of new-lines, tabs, and the end of a line.
   integer :: len_text, len_tab, len_nl ! The lengths of the text string, tabs and new-lines.
   integer :: len_cor                   ! The permitted length corrected for tab sizes in a line.
+  integer :: len_desc                  ! The non-whitespace length of the description.
   integer :: substr_start              ! The starting index of a substring to search for tabs.
   integer :: indnt, msg_pad            ! Space counts used to format a message.
   logical :: msg_done, reset_msg_pad   ! Logicals used to format messages.
@@ -499,9 +500,10 @@ subroutine writeMessageAndDesc(doc, vmesg, desc, valueWasDefault, indent, &
     len_cor = len_text - msg_pad
 
     substr_start = start_ind
-    do ! Adjust the available line length for anomalies in the size of tabs
-      if (len_trim(desc) <= start_ind+len_cor) exit  ! This line will not span another line.
-      tab_ind = index(desc(substr_start:start_ind+len_cor), "\t") ! Count \t as 2 spaces.
+    len_desc = len_trim(desc)
+    do ! Adjust the available line length for anomalies in the size of tabs, counting \t as 2 spaces.
+      if (substr_start >= start_ind+len_cor) exit
+      tab_ind = index(desc(substr_start:min(len_desc,start_ind+len_cor)), "\t")
       if (tab_ind == 0) exit
       substr_start = substr_start + tab_ind
       len_cor = len_cor + (len_tab - 2)
