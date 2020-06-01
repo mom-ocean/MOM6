@@ -313,8 +313,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: hf_CAu ! Zonal Coriolis force accel. x fract. thickness [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: hf_CAv ! Merdional Coriolis force accel. x fract. thickness [L T-2 ~> m s-2].
 
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: hfrac_u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: hfrac_v
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: diag_hfrac_u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: diag_hfrac_v
     ! Fractional layer thicknesses at u and v points
 
   real :: pres_to_eta ! A factor that converts pressures to the units of eta
@@ -744,7 +744,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   call btstep(u, v, eta, dt, u_bc_accel, v_bc_accel, forces, CS%pbce, &
               CS%eta_PF, u_av, v_av, CS%u_accel_bt, CS%v_accel_bt, &
               eta_pred, CS%uhbt, CS%vhbt, G, GV, US, CS%barotropic_CSp, &
-              CS%visc_rem_u, CS%visc_rem_v, etaav=eta_av, hfrac_u=hfrac_u, hfrac_v=hfrac_v, &
+              CS%visc_rem_u, CS%visc_rem_v, etaav=eta_av, hfrac_u=diag_hfrac_u, hfrac_v=diag_hfrac_v, &
               OBC=CS%OBC, BT_cont = CS%BT_cont, eta_PF_start=eta_PF_start, &
               taux_bot=taux_bot, tauy_bot=tauy_bot, &
               uh0=uh_ptr, vh0=vh_ptr, u_uh0=u_ptr, v_vh0=v_ptr)
@@ -756,16 +756,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   if (CS%debug) then
     call check_redundant("u_accel_bt ", CS%u_accel_bt, CS%v_accel_bt, G)
   endif
-
-  ! save fractional thickness in local variables
-  !do k=1,nz
-  !  do j=js,je ; do I=Isq,Ieq
-  !    hfrac_u(I,j,k) = CS%barotropic_CSp%frhatu(I,j,k)
-  !  enddo ; enddo
-  !  do J=Jsq,Jeq ; do i=is,ie
-  !    hfrac_v(i,J,k) = CS%barotropic_CSp%frhatv(i,J,k)
-  !  enddo ; enddo
-  !enddo
 
   ! u = u + dt*( u_bc_accel + u_accel_bt )
   call cpu_clock_begin(id_clock_mom_update)
@@ -881,28 +871,28 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   if (CS%id_u_BT_accel > 0) call post_data(CS%id_u_BT_accel, CS%u_accel_bt, CS%diag)
   if (CS%id_v_BT_accel > 0) call post_data(CS%id_v_BT_accel, CS%v_accel_bt, CS%diag)
 
-  ! Diagnostics for terms mutiplied by fractional thicknesses
+  ! Diagnostics for terms multiplied by fractional thicknesses
   if (CS%id_hfPFu > 0) then
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      hf_PFu(I,j,k) = CS%PFu(I,j,k) * hfrac_u(I,j,k)
+      hf_PFu(I,j,k) = CS%PFu(I,j,k) * diag_hfrac_u(I,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hfPFu, hf_PFu, CS%diag)
   endif
   if (CS%id_hfPFv > 0) then
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      hf_PFv(i,J,k) = CS%PFv(i,J,k) * hfrac_v(i,J,k)
+      hf_PFv(i,J,k) = CS%PFv(i,J,k) * diag_hfrac_v(i,J,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hfPFv, hf_PFv, CS%diag)
   endif
   if (CS%id_hfCAu > 0) then
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      hf_CAu(I,j,k) = CS%CAu(I,j,k) * hfrac_u(I,j,k)
+      hf_CAu(I,j,k) = CS%CAu(I,j,k) * diag_hfrac_u(I,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hfCAu, hf_CAu, CS%diag)
   endif
   if (CS%id_hfCAv > 0) then
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      hf_CAv(i,J,k) = CS%CAv(i,J,k) * hfrac_v(i,J,k)
+      hf_CAv(i,J,k) = CS%CAv(i,J,k) * diag_hfrac_v(i,J,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hfCAv, hf_CAv, CS%diag)
   endif
@@ -1276,13 +1266,14 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   CS%id_PFv = register_diag_field('ocean_model', 'PFv', diag%axesCvL, Time, &
       'Meridional Pressure Force Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
   CS%id_hfPFu = register_diag_field('ocean_model', 'hf_PFu', diag%axesCuL, Time, &
-      'Thickness weighted Zonal Pressure Force Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
+      'Thickness-weighted Zonal Pressure Force Acceleration', 'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   CS%id_hfPFv = register_diag_field('ocean_model', 'hf_PFv', diag%axesCvL, Time, &
-      'Thickness weighted Meridional Pressure Force Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
+      'Thickness-weighted Meridional Pressure Force Acceleration', 'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   CS%id_hfCAu = register_diag_field('ocean_model', 'hf_CAu', diag%axesCuL, Time, &
-      'Thickness weighted Zonal Coriolis and Advective Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
+      'Thickness-weighted Zonal Coriolis and Advective Acceleration', 'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   CS%id_hfCAv = register_diag_field('ocean_model', 'hf_CAv', diag%axesCvL, Time, &
-      'Thickness weighted Meridional Coriolis and Advective Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
+      'Thickness-weighted Meridional Coriolis and Advective Acceleration', 'm s-2', v_extensive=.true., &
+      conversion=US%L_T2_to_m_s2)
 
   CS%id_uav = register_diag_field('ocean_model', 'uav', diag%axesCuL, Time, &
       'Barotropic-step Averaged Zonal Velocity', 'm s-1', conversion=US%L_T_to_m_s)
