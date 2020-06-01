@@ -143,8 +143,9 @@ integer function seed_from_time(Time)
   call get_date(Time,yr,mo,dy,hr,mn,sc)
   s1 = sc + 61*(mn + 61*hr) + 379 ! Range 379 .. 89620
   ! Fun fact: 2147483647 is the eighth Mersenne prime.
-  ! This is not the reason for using 2147483647+1 here.
-  s2 = mod(dy + 32*(mo + 13*yr), 2147483648) ! Range 0 .. 2147483647
+  ! This is not the reason for using 2147483647 here. It is the
+  ! largest integer of kind=4.
+  s2 = modulo(dy + 32*(mo + 13*yr), 2147483647_4) ! Range 0 .. 2147483646
   seed_from_time = ieor(s1*4111, s2)
 
 end function seed_from_time
