@@ -1,5 +1,5 @@
-!> Initialization for the "Neverland" configuration
-module Neverland_initialization
+!> Initialization for the "Neverworld" configuration
+module Neverworld_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -21,8 +21,8 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public Neverland_initialize_topography
-public Neverland_initialize_thickness
+public Neverworld_initialize_topography
+public Neverworld_initialize_thickness
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -31,8 +31,8 @@ public Neverland_initialize_thickness
 
 contains
 
-!> This subroutine sets up the Neverland test case topography.
-subroutine Neverland_initialize_topography(D, G, param_file, max_depth)
+!> This subroutine sets up the Neverworld test case topography.
+subroutine Neverworld_initialize_topography(D, G, param_file, max_depth)
   type(dyn_horgrid_type),  intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
                            intent(out) :: D !< Ocean bottom depth in the units of depth_max
@@ -46,13 +46,13 @@ subroutine Neverland_initialize_topography(D, G, param_file, max_depth)
   real :: x, y
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
-  character(len=40)  :: mdl = "Neverland_initialize_topography" ! This subroutine's name.
+  character(len=40)  :: mdl = "Neverworld_initialize_topography" ! This subroutine's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   real :: nl_roughness_amp, nl_top_amp
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  call MOM_mesg("  Neverland_initialization.F90, Neverland_initialize_topography: setting topography", 5)
+  call MOM_mesg("  Neverworld_initialization.F90, Neverworld_initialize_topography: setting topography", 5)
 
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "NL_ROUGHNESS_AMP", nl_roughness_amp, &
@@ -82,7 +82,7 @@ subroutine Neverland_initialize_topography(D, G, param_file, max_depth)
     D(i,j) = D(i,j) * max_depth
   enddo ; enddo
 
-end subroutine Neverland_initialize_topography
+end subroutine Neverworld_initialize_topography
 ! -----------------------------------------------------------------------------
 
 !> Returns the value of a cosine-bell function evaluated at x/L
@@ -106,11 +106,11 @@ real function spike(x, L)
   spike = (1 - sin(PI*MIN(ABS(x/L),0.5)))
 end function spike
 
-!> This subroutine initializes layer thicknesses for the Neverland test case,
+!> This subroutine initializes layer thicknesses for the Neverworld test case,
 !! by finding the depths of interfaces in a specified latitude-dependent
 !! temperature profile with an exponentially decaying thermocline on top of a
 !! linear stratification.
-subroutine Neverland_initialize_thickness(h, G, GV, US, param_file, eqn_of_state, P_ref)
+subroutine Neverworld_initialize_thickness(h, G, GV, US, param_file, eqn_of_state, P_ref)
   type(ocean_grid_type),   intent(in) :: G                    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV                   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in) :: US                   !< A dimensional unit scaling type
@@ -133,12 +133,12 @@ subroutine Neverland_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
   real :: h_noise ! Amplitude of noise to scale h by
   real :: noise ! Noise
   type(randomNumberStream) :: rns ! Random numbers for stochastic tidal parameterization
-  character(len=40)  :: mdl = "Neverland_initialize_thickness" ! This subroutine's name.
+  character(len=40)  :: mdl = "Neverworld_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, k1, is, ie, js, je, nz, itt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  call MOM_mesg("  Neverland_initialization.F90, Neverland_initialize_thickness: setting thickness", 5)
+  call MOM_mesg("  Neverworld_initialization.F90, Neverworld_initialize_thickness: setting thickness", 5)
   call get_param(param_file, mdl, "INIT_THICKNESS_PROFILE", h_profile, &
                  "Profile of initial layer thicknesses.", units="m", scale=US%m_to_Z, &
                  fail_if_missing=.true.)
@@ -177,6 +177,6 @@ subroutine Neverland_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
     h(i,j,1) = max( GV%Angstrom_H, h(i,j,1) ) ! Limit to non-negative
   enddo ; enddo
 
-end subroutine Neverland_initialize_thickness
+end subroutine Neverworld_initialize_thickness
 
-end module Neverland_initialization
+end module Neverworld_initialization

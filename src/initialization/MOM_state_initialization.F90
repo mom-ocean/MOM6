@@ -57,7 +57,7 @@ use RGC_initialization, only : RGC_initialize_sponges
 use baroclinic_zone_initialization, only : baroclinic_zone_init_temperature_salinity
 use benchmark_initialization, only : benchmark_initialize_thickness
 use benchmark_initialization, only : benchmark_init_temperature_salinity
-use Neverland_initialization, only : Neverland_initialize_thickness
+use Neverworld_initialization, only : Neverworld_initialize_thickness
 use circle_obcs_initialization, only : circle_obcs_initialize_thickness
 use lock_exchange_initialization, only : lock_exchange_initialize_thickness
 use external_gwave_initialization, only : external_gwave_initialize_thickness
@@ -257,7 +257,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
              " \t ISOMIP - use a configuration for the \n"//&
              " \t\t ISOMIP test case. \n"//&
              " \t benchmark - use the benchmark test case thicknesses. \n"//&
-             " \t Neverland - use the Neverland test case thicknesses. \n"//&
+             " \t Neverworld - use the Neverworld test case thicknesses. \n"//&
              " \t search - search a density profile for the interface \n"//&
              " \t\t densities. This is not yet implemented. \n"//&
              " \t circle_obcs - the circle_obcs test case is used. \n"//&
@@ -292,7 +292,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                                  just_read_params=just_read)
        case ("benchmark"); call benchmark_initialize_thickness(h, G, GV, US, PF, &
                                     tv%eqn_of_state, tv%P_Ref, just_read_params=just_read)
-       case ("Neverland"); call Neverland_initialize_thickness(h, G, GV, US, PF, &
+       case ("Neverwoorld","Neverland"); call Neverworld_initialize_thickness(h, G, GV, US, PF, &
                                  tv%eqn_of_state, tv%P_Ref)
        case ("search"); call initialize_thickness_search
        case ("circle_obcs"); call circle_obcs_initialize_thickness(h, G, GV, PF, &

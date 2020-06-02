@@ -39,8 +39,8 @@ use MOM_unit_scaling,        only : unit_scale_type
 use MOM_variables,           only : surface
 use MESO_surface_forcing,    only : MESO_buoyancy_forcing
 use MESO_surface_forcing,    only : MESO_surface_forcing_init, MESO_surface_forcing_CS
-use Neverland_surface_forcing, only : Neverland_wind_forcing, Neverland_buoyancy_forcing
-use Neverland_surface_forcing, only : Neverland_surface_forcing_init, Neverland_surface_forcing_CS
+use Neverworld_surface_forcing, only : Neverworld_wind_forcing, Neverworld_buoyancy_forcing
+use Neverworld_surface_forcing, only : Neverworld_surface_forcing_init, Neverworld_surface_forcing_CS
 use user_surface_forcing,    only : USER_wind_forcing, USER_buoyancy_forcing
 use user_surface_forcing,    only : USER_surface_forcing_init, user_surface_forcing_CS
 use user_revise_forcing,     only : user_alter_forcing, user_revise_forcing_init
@@ -204,7 +204,7 @@ type, public :: surface_forcing_CS ; private
   type(BFB_surface_forcing_CS), pointer :: BFB_forcing_CSp => NULL()
   type(dumbbell_surface_forcing_CS), pointer :: dumbbell_forcing_CSp => NULL()
   type(MESO_surface_forcing_CS), pointer :: MESO_forcing_CSp => NULL()
-  type(Neverland_surface_forcing_CS), pointer :: Neverland_forcing_CSp => NULL()
+  type(Neverworld_surface_forcing_CS), pointer :: Neverworld_forcing_CSp => NULL()
   type(idealized_hurricane_CS), pointer :: idealized_hurricane_CSp => NULL()
   type(SCM_CVmix_tests_CS),      pointer :: SCM_CVmix_tests_CSp => NULL()
   !>@}
@@ -280,8 +280,8 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
       call wind_forcing_const(sfc_state, forces, 0., 0., day_center, G, US, CS)
     elseif (trim(CS%wind_config) == "const") then
       call wind_forcing_const(sfc_state, forces, CS%tau_x0, CS%tau_y0, day_center, G, US, CS)
-    elseif (trim(CS%wind_config) == "Neverland") then
-      call Neverland_wind_forcing(sfc_state, forces, day_center, G, US, CS%Neverland_forcing_CSp)
+    elseif (trim(CS%wind_config) == "Neverworld" .or. trim(CS%wind_config) == "Neverland") then
+      call Neverworld_wind_forcing(sfc_state, forces, day_center, G, US, CS%Neverworld_forcing_CSp)
     elseif (trim(CS%wind_config) == "ideal_hurr") then
       call idealized_hurricane_wind_forcing(sfc_state, forces, day_center, G, US, CS%idealized_hurricane_CSp)
     elseif (trim(CS%wind_config) == "SCM_ideal_hurr") then
@@ -314,8 +314,8 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
       call buoyancy_forcing_linear(sfc_state, fluxes, day_center, dt, G, US, CS)
     elseif (trim(CS%buoy_config) == "MESO") then
       call MESO_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, US, CS%MESO_forcing_CSp)
-    elseif (trim(CS%buoy_config) == "Neverland") then
-      call Neverland_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, US, CS%Neverland_forcing_CSp)
+    elseif (trim(CS%buoy_config) == "Neverworld" .or. trim(CS%buoy_config) == "Neverland") then
+      call Neverworld_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, US, CS%Neverworld_forcing_CSp)
     elseif (trim(CS%buoy_config) == "SCM_CVmix_tests") then
       call SCM_CVmix_tests_buoyancy_forcing(sfc_state, fluxes, day_center, G, US, CS%SCM_CVmix_tests_CSp)
     elseif (trim(CS%buoy_config) == "USER") then
@@ -1756,8 +1756,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
     call dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS%dumbbell_forcing_CSp)
   elseif (trim(CS%wind_config) == "MESO" .or. trim(CS%buoy_config) == "MESO" ) then
     call MESO_surface_forcing_init(Time, G, US, param_file, diag, CS%MESO_forcing_CSp)
-  elseif (trim(CS%wind_config) == "Neverland") then
-    call Neverland_surface_forcing_init(Time, G, US, param_file, diag, CS%Neverland_forcing_CSp)
+  elseif (trim(CS%wind_config) == "Neverworld" .or. trim(CS%wind_config) == "Neverland") then
+    call Neverworld_surface_forcing_init(Time, G, US, param_file, diag, CS%Neverworld_forcing_CSp)
   elseif (trim(CS%wind_config) == "ideal_hurr" .or.&
           trim(CS%wind_config) == "SCM_ideal_hurr") then
     call idealized_hurricane_wind_init(Time, G, US, param_file, CS%idealized_hurricane_CSp)

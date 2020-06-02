@@ -1,5 +1,5 @@
-!> Wind and buoyancy forcing for the Neverland configurations
-module Neverland_surface_forcing
+!> Wind and buoyancy forcing for the Neverworld configurations
+module Neverworld_surface_forcing
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -18,16 +18,16 @@ use MOM_variables, only : surface
 
 implicit none ; private
 
-public Neverland_wind_forcing
-public Neverland_buoyancy_forcing
-public Neverland_surface_forcing_init
+public Neverworld_wind_forcing
+public Neverworld_buoyancy_forcing
+public Neverworld_surface_forcing_init
 
 !> This control structure should be used to store any run-time variables
-!! associated with the Neverland forcing.
+!! associated with the Neverworld forcing.
 !!
 !! It can be readily modified for a specific case, and because it is private there
 !! will be no changes needed in other code (although they will have to be recompiled).
-type, public :: Neverland_surface_forcing_CS ; private
+type, public :: Neverworld_surface_forcing_CS ; private
 
   logical :: use_temperature !< If true, use temperature and salinity.
   logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
@@ -39,21 +39,21 @@ type, public :: Neverland_surface_forcing_CS ; private
   character(len=200) :: inputdir !< The directory where NetCDF input files are.
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !! timing of diagnostic output.
-  logical :: first_call = .true. !< True until Neverland_buoyancy_forcing has been called
-end type Neverland_surface_forcing_CS
+  logical :: first_call = .true. !< True until Neverworld_buoyancy_forcing has been called
+end type Neverworld_surface_forcing_CS
 
 contains
 
 !> Sets the surface wind stresses, forces%taux and forces%tauy for the
-!! Neverland forcing configuration.
-subroutine Neverland_wind_forcing(sfc_state, forces, day, G, US, CS)
+!! Neverworld forcing configuration.
+subroutine Neverworld_wind_forcing(sfc_state, forces, day, G, US, CS)
   type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
                                                          !! describe the surface state of the ocean.
   type(mech_forcing),            intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),               intent(in)    :: day    !< Time used for determining the fluxes.
   type(ocean_grid_type),         intent(inout) :: G      !< Grid structure.
   type(unit_scale_type),         intent(in)    :: US     !< A dimensional unit scaling type
-  type(Neverland_surface_forcing_CS), pointer  :: CS     !< Control structure for this module.
+  type(Neverworld_surface_forcing_CS), pointer  :: CS     !< Control structure for this module.
 
   ! Local variables
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
@@ -110,7 +110,7 @@ subroutine Neverland_wind_forcing(sfc_state, forces, day, G, US, CS)
 !            (US%L_to_Z / CS%Rho0) )
 ! enddo ; enddo ; endif
 
-end subroutine Neverland_wind_forcing
+end subroutine Neverworld_wind_forcing
 
 !> Returns the value of a cosine-bell function evaluated at x/L
 real function cosbell(x,L)
@@ -135,8 +135,8 @@ real function spike(x,L)
 end function spike
 
 
-!> Surface fluxes of buoyancy for the Neverland configurations.
-subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
+!> Surface fluxes of buoyancy for the Neverworld configurations.
+subroutine Neverworld_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
   type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(forcing),                 intent(inout) :: fluxes !< Forcing fields.
@@ -144,7 +144,7 @@ subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
   real,                          intent(in)    :: dt !< Forcing time step (s).
   type(ocean_grid_type),         intent(inout) :: G  !< Grid structure.
   type(unit_scale_type),         intent(in)    :: US !< A dimensional unit scaling type
-  type(Neverland_surface_forcing_CS), pointer  :: CS !< Control structure for this module.
+  type(Neverworld_surface_forcing_CS), pointer  :: CS !< Control structure for this module.
   ! Local variables
   real :: buoy_rest_const  ! A constant relating density anomalies to the
                            ! restoring buoyancy flux [L2 T-3 R-1 ~> m5 s-3 kg-1].
@@ -161,7 +161,7 @@ subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
   ! Allocate and zero out the forcing arrays, as necessary.  This portion is
   ! usually not changed.
   if (CS%use_temperature) then
-    call MOM_error(FATAL, "Neverland_buoyancy_forcing: " // &
+    call MOM_error(FATAL, "Neverworld_buoyancy_forcing: " // &
         "Temperature and salinity mode not coded!" )
   else
     ! This is the buoyancy only mode.
@@ -177,7 +177,7 @@ subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
   endif
 
   if ( CS%use_temperature ) then
-    call MOM_error(FATAL, "Neverland_buoyancy_surface_forcing: " // &
+    call MOM_error(FATAL, "Neverworld_buoyancy_surface_forcing: " // &
       "Temperature/salinity restoring not coded!" )
   else ! This is the buoyancy only mode.
     do j=js,je ; do i=is,ie
@@ -189,7 +189,7 @@ subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
 
   if (CS%restorebuoy) then
     if (CS%use_temperature) then
-      call MOM_error(FATAL, "Neverland_buoyancy_surface_forcing: " // &
+      call MOM_error(FATAL, "Neverworld_buoyancy_surface_forcing: " // &
         "Temperature/salinity restoring not coded!" )
     else
       !   When modifying the code, comment out this error message.  It is here
@@ -208,25 +208,25 @@ subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
     endif
   endif                                             ! end RESTOREBUOY
 
-end subroutine Neverland_buoyancy_forcing
+end subroutine Neverworld_buoyancy_forcing
 
-!> Initializes the Neverland control structure.
-subroutine Neverland_surface_forcing_init(Time, G, US, param_file, diag, CS)
+!> Initializes the Neverworld control structure.
+subroutine Neverworld_surface_forcing_init(Time, G, US, param_file, diag, CS)
   type(time_type),         intent(in) :: Time       !< The current model time.
   type(ocean_grid_type),   intent(in) :: G          !< The ocean's grid structure.
   type(unit_scale_type),   intent(in) :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in) :: param_file !< A structure indicating the open file to parse for
                                                     !! model parameter values.
   type(diag_ctrl), target, intent(in) :: diag       !< A structure that is used to regulate diagnostic output.
-  type(Neverland_surface_forcing_CS), pointer :: CS !< A pointer that is set to point to the control structure
+  type(Neverworld_surface_forcing_CS), pointer :: CS !< A pointer that is set to point to the control structure
                                                     !! for this module
   ! This include declares and sets the variable "version".
 #include "version_variable.h"
   ! Local variables
-  character(len=40) :: mdl = "Neverland_surface_forcing" ! This module's name.
+  character(len=40) :: mdl = "Neverworld_surface_forcing" ! This module's name.
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "Neverland_surface_forcing_init called with an associated "// &
+    call MOM_error(WARNING, "Neverworld_surface_forcing_init called with an associated "// &
                              "control structure.")
     return
   endif
@@ -267,6 +267,6 @@ subroutine Neverland_surface_forcing_init(Time, G, US, param_file, diag, CS)
     CS%flux_const = CS%flux_const / 86400.0
   endif
 
-end subroutine Neverland_surface_forcing_init
+end subroutine Neverworld_surface_forcing_init
 
-end module Neverland_surface_forcing
+end module Neverworld_surface_forcing
