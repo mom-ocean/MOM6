@@ -4790,7 +4790,7 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
           if (associated(OBC%tres_x)) OBC%tres_x(I,j,k,m) = segment%tr_Reg%Tr(m)%tres(I,j,k)
         enddo ; endif ; enddo
       enddo
-    else
+    elseif (segment%is_N_or_S) then
       J = segment%HI%JsdB
       do i=segment%HI%isd,segment%HI%ied
         ! jshift+J corresponds to the nearest interior tracer cell index
