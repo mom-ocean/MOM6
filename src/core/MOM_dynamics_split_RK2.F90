@@ -166,6 +166,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   ! Split scheme only.
   integer :: id_uav        = -1, id_vav        = -1
   integer :: id_u_BT_accel = -1, id_v_BT_accel = -1
+  integer :: id_hfu_BT_accel = -1, id_hfv_BT_accel = -1
   !>@}
 
   type(diag_ctrl), pointer       :: diag !< A structure that is used to regulate the
@@ -312,6 +313,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: hf_PFv ! Merdional Pressure force accel. x fract. thickness [L T-2 ~> m s-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: hf_CAu ! Zonal Coriolis force accel. x fract. thickness [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: hf_CAv ! Merdional Coriolis force accel. x fract. thickness [L T-2 ~> m s-2].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: hf_uBT_accel ! Zonal barotropic accel. x fract. thickness [L T-2 ~> m s-2].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: hf_vBT_accel ! Merdional barotropic accel. x fract. thickness [L T-2 ~> m s-2].
 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: diag_hfrac_u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: diag_hfrac_v
@@ -896,6 +899,18 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     enddo ; enddo ; enddo
     call post_data(CS%id_hfCAv, hf_CAv, CS%diag)
   endif
+  if (CS%id_hfu_BT_accel > 0) then
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      hf_uBT_accel(I,j,k) = CS%u_accel_bt(I,j,k) * diag_hfrac_u(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_hfu_BT_accel, hf_uBT_accel, CS%diag)
+  endif
+  if (CS%id_hfv_BT_accel > 0) then
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      hf_vBT_accel(i,J,k) = CS%v_accel_bt(i,J,k) * diag_hfrac_v(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_hfv_BT_accel, hf_vBT_accel, CS%diag)
+  endif
 
   if (CS%debug) then
     call MOM_state_chksum("Corrector ", u, v, h, uh, vh, G, GV, US, symmetric=sym)
@@ -1284,6 +1299,11 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
     'Barotropic Anomaly Zonal Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
   CS%id_v_BT_accel = register_diag_field('ocean_model', 'v_BT_accel', diag%axesCvL, Time, &
     'Barotropic Anomaly Meridional Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
+  CS%id_hfu_BT_accel = register_diag_field('ocean_model', 'hf_uBT_accel', diag%axesCuL, Time, &
+      'Thickness-weighted Barotropic Anomaly Zonal Acceleration', 'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  CS%id_hfv_BT_accel = register_diag_field('ocean_model', 'hf_vBT_accel', diag%axesCvL, Time, &
+      'Thickness-weighted Barotropic Anomaly Meridional Acceleration', 'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+
 
   id_clock_Cor        = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)
   id_clock_continuity = cpu_clock_id('(Ocean continuity equation)',      grain=CLOCK_MODULE)
