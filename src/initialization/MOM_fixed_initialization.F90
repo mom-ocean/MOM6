@@ -30,6 +30,7 @@ use MOM_unit_scaling, only : unit_scale_type
 use user_initialization, only : user_initialize_topography
 use DOME_initialization, only : DOME_initialize_topography
 use ISOMIP_initialization, only : ISOMIP_initialize_topography
+use basin_builder, only : basin_builder_topography
 use benchmark_initialization, only : benchmark_initialize_topography
 use Neverworld_initialization, only : Neverworld_initialize_topography
 use Neverworld_initialization, only : Neverworld2_initialize_topography
@@ -202,6 +203,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF, US)
                  " \t\t wall at the southern face. \n"//&
                  " \t halfpipe - a zonally uniform channel with a half-sine \n"//&
                  " \t\t profile in the meridional direction. \n"//&
+                 " \t bbuilder - build topography from list of functions. \n"//&
                  " \t benchmark - use the benchmark test case topography. \n"//&
                  " \t Neverworld - use the Neverworld test case topography. \n"//&
                  " \t DOME - use a slope and channel configuration for the \n"//&
@@ -227,6 +229,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF, US)
     case ("halfpipe");  call initialize_topography_named(D, G, PF, config, max_depth, US)
     case ("DOME");      call DOME_initialize_topography(D, G, PF, max_depth, US)
     case ("ISOMIP");    call ISOMIP_initialize_topography(D, G, PF, max_depth, US)
+    case ("bbuilder");  call basin_builder_topography(D, G, PF, max_depth)
     case ("benchmark"); call benchmark_initialize_topography(D, G, PF, max_depth, US)
     case ("Neverworld","Neverland"); call Neverworld2_initialize_topography(D, G, PF, max_depth)
     case ("Neverworld2"); call Neverworld2_initialize_topography(D, G, PF, max_depth)
