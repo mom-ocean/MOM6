@@ -502,7 +502,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
                    "The maximum magnitude of the baroclinic radiation velocity (or speed of "//&
                    "characteristics), in gridpoints per timestep.  This is only "//&
                    "used if one of the open boundary segments is using Orlanski.", &
-                   units="nondim", default=10.0) !### Should the default be changed to 1.0?
+                   units="nondim", default=1.0)
       call get_param(param_file, mdl, "OBC_RAD_VEL_WT", OBC%gamma_uv, &
                    "The relative weighting for the baroclinic radiation "//&
                    "velocities (or speed of characteristics) at the new "//&
