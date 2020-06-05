@@ -23,7 +23,6 @@ implicit none ; private
 
 public Neverworld_initialize_topography
 public Neverworld_initialize_thickness
-public Neverworld2_initialize_topography
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -105,48 +104,6 @@ real function spike(x, L)
   PI    = 4.0*atan(1.0)
   spike = (1 - sin(PI*MIN(ABS(x/L),0.5)))
 end function spike
-
-!> Sets up the Neverworld2 topography.
-subroutine Neverworld2_initialize_topography(D, G, param_file, max_depth)
-  type(dyn_horgrid_type),  intent(in)  :: G !< The dynamic horizontal grid type
-  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                           intent(out) :: D !< Ocean bottom depth in the units of depth_max
-  type(param_file_type),   intent(in)  :: param_file !< Parameter file structure
-  real,                    intent(in)  :: max_depth !< Maximum ocean depth in arbitrary units
-  ! Local variables
-  real :: lon, lat
-  ! This include declares and sets the variable "version".
-# include "version_variable.h"
-  character(len=40)  :: mdl = "Neverworld_initialize_topography" ! This subroutine's name.
-  integer :: i, j
-  real, parameter :: sdf = 0.05 ! Shelf depth as fraction of maximum depth
-
-  call MOM_mesg("  Neverworld_initialization.F90, Neverworld2_initialize_topography: setting topography", 5)
-  call log_version(param_file, mdl, version, "")
-
-  do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    lon = (G%geoLonT(i,j)-G%west_lon)
-    lat = G%geoLatT(i,j)
-    D(i,j) = 1.0
-    ! Box Atlantic with re-entrant channel between 60S nad 40S
-    D(i,j) = min( D(i,j), NS_coast(lon, lat, 0., -40., 90., 5., sdf) ) ! America
-    D(i,j) = min( D(i,j), NS_coast(lon, lat, G%len_lon, -40., 90., 5., sdf) )
-    D(i,j) = min( D(i,j), NS_coast(lon, lat, 0., -90., -60., 5., sdf) ) ! Antarctic Peninsula
-    D(i,j) = min( D(i,j), NS_coast(lon, lat, G%len_lon, -90., -60., 5., sdf) )
-    D(i,j) = min( D(i,j), EW_coast(lon, lat, 0., G%len_lon, G%south_lat, 5., sdf) ) ! Antarctica
-    D(i,j) = min( D(i,j), EW_coast(lon, lat, 0., G%len_lon, G%south_lat+G%len_lat, 5., sdf) ) ! Greenland "wall"
-
-    ! Ridge around Drake passage
-    D(i,j) = min( D(i,j), circ_ridge(lon, lat, 0., -50., 10., 2., 0.5) )
-
-    ! Mid-Atlantic ridge
-    D(i,j) = min( D(i,j), NS_ridge(lon, lat, 0.5*G%len_lon, -90., 90., 30., 0.5) )
-
-    ! Dimensionalize by scaling 1 to max_depth
-    D(i,j) = D(i,j) * max_depth
-  enddo ; enddo
-
-end subroutine Neverworld2_initialize_topography
 
 !> Returns the value of a triangular function centered at x=x0 with value 1
 !! and linearly decreasing to 0 at x=x0+/-L, and 0 otherwise.
