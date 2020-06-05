@@ -7,7 +7,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 ! use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : MOM_read_data
-use MOM_EOS, only : EOS_type, calculate_density, calculate_density_derivs
+use MOM_EOS, only : EOS_type, calculate_density, calculate_density_derivs, EOS_domain
 use MOM_unit_scaling, only : unit_scale_type
 
 use netcdf
@@ -275,51 +275,49 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
 
 end function tracer_Z_init
 
-!> Layer model routine for remapping tracers
-!! from pseudo-z coordinates into layers defined
+!> Layer model routine for remapping tracers from pseudo-z coordinates into layers defined
 !! by target interface positions.
-subroutine tracer_z_init_array(tr_in, z_edges, e, nkml, nkbl, land_fill, wet, nlay, nlevs, &
-                       eps_z, tr)
-  real, dimension(:,:,:),           intent(in) :: tr_in !< The z-space array of tracer concentrations that is read in.
-  real, dimension(size(tr_in,3)+1), intent(in) :: z_edges !< The depths of the cell edges in the input z* data
+subroutine tracer_z_init_array(tr_in, z_edges, nk_data, e, land_fill, G, nlay, nlevs, &
+                               eps_z, tr)
+  type(ocean_grid_type),      intent(in)  :: G     !< The ocean's grid structure
+  integer,                    intent(in)  :: nk_data !< The number of levels in the input data
+  real, dimension(SZI_(G),SZJ_(G),nk_data), &
+                              intent(in)  :: tr_in !< The z-space array of tracer concentrations that is read in.
+  real, dimension(nk_data+1), intent(in)  :: z_edges !< The depths of the cell edges in the input z* data
                                                           !! [Z ~> m or m]
-  integer,                          intent(in) :: nlay !< The number of vertical layers in the target grid
-  real, dimension(size(tr_in,1),size(tr_in,2),nlay+1), &
-                                    intent(in) :: e !< The depths of the target layer interfaces [Z ~> m or m]
-  integer,                          intent(in) :: nkml !< The number of mixed layers
-  integer,                          intent(in) :: nkbl !< The number of buffer layers
-  real,                             intent(in) :: land_fill !< fill in data over land (1)
-  real, dimension(size(tr_in,1),size(tr_in,2)), &
-                                    intent(in) :: wet !< The wet mask for the source data (valid points)
-  integer, dimension(size(tr_in,1),size(tr_in,2)), &
-                                    intent(in) :: nlevs !< The number of input levels with valid data
-  real,                             intent(in) :: eps_z !< A negligibly thin layer thickness [Z ~> m].
-  real, dimension(size(tr_in,1),size(tr_in,2),nlay), intent(out) :: tr !< tracers in layer space
+  integer,                    intent(in)  :: nlay !< The number of vertical layers in the target grid
+  real, dimension(SZI_(G),SZJ_(G),nlay+1), &
+                              intent(in)  :: e !< The depths of the target layer interfaces [Z ~> m or m]
+  real,                       intent(in)  :: land_fill !< fill in data over land (1)
+  integer, dimension(SZI_(G),SZJ_(G)), &
+                              intent(in)  :: nlevs !< The number of input levels with valid data
+  real,                       intent(in)  :: eps_z !< A negligibly thin layer thickness [Z ~> m].
+  real, dimension(SZI_(G),SZJ_(G),nlay), &
+                              intent(out) :: tr !< tracers in layer space
 
   ! Local variables
-  real, dimension(size(tr_in,3)) :: tr_1d !< a copy of the input tracer concentrations in a column.
-  real, dimension(nlay+1) :: e_1d ! A 1-d column of intreface heights, in the same units as e.
-  real, dimension(nlay) :: tr_    ! A 1-d column of tracer concentrations
-  integer :: n,i,j,k,l,nx,ny,nz,nt,kz
-  integer :: k_top,k_bot,k_bot_prev,kk,kstart
+  real, dimension(nk_data) :: tr_1d !< a copy of the input tracer concentrations in a column.
+  real, dimension(nlay+1)  :: e_1d  ! A 1-d column of intreface heights, in the same units as e.
+  real, dimension(nlay)    :: tr_   ! A 1-d column of output tracer concentrations
+  integer :: k_top, k_bot, k_bot_prev, kstart
   real    :: sl_tr    ! The tracer concentration slope times the layer thickness, in tracer units.
-  real, dimension(size(tr_in,3)) :: wt !< The fractional weight for each layer in the range between z1 and z2
-  real, dimension(size(tr_in,3)) :: z1, z2 ! z1 and z2 are the fractional depths of the top and bottom
+  real, dimension(nk_data) :: wt !< The fractional weight for each layer in the range between z1 and z2
+  real, dimension(nk_data) :: z1, z2 ! z1 and z2 are the fractional depths of the top and bottom
                                   ! limits of the part of a z-cell that contributes to a layer, relative
                                   ! to the cell center and normalized by the cell thickness [nondim].
                                   ! Note that -1/2 <= z1 <= z2 <= 1/2.
+  integer :: i, j, k, kz, is, ie, js, je
 
-  nx = size(tr_in,1); ny=size(tr_in,2); nz = size(tr_in,3)
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-
-  do j=1,ny
-    i_loop: do i=1,nx
-      if (nlevs(i,j) == 0 .or. wet(i,j) == 0.) then
+  do j=js,je
+    i_loop: do i=is,ie
+      if (nlevs(i,j) == 0 .or. G%mask2dT(i,j) == 0.) then
         tr(i,j,:) = land_fill
         cycle i_loop
       endif
 
-      do k=1,nz
+      do k=1,nk_data
         tr_1d(k) = tr_in(i,j,k)
       enddo
 
@@ -334,11 +332,11 @@ subroutine tracer_z_init_array(tr_in, z_edges, e, nkml, nkbl, land_fill, wet, nl
           tr(i,j,k) = tr_1d(nlevs(i,j))
 
         else
-          kstart=k_bot
+          kstart = k_bot
           call find_overlap(z_edges, e_1d(k), e_1d(k+1), nlevs(i,j), &
                             kstart, k_top, k_bot, wt, z1, z2)
           kz = k_top
-          sl_tr=0.0; ! cur_tr=0.0
+          sl_tr = 0.0 ! ; cur_tr=0.0
           if (kz /= k_bot_prev) then
             ! Calculate the intra-cell profile.
             if ((kz < nlevs(i,j)) .and. (kz > 1)) then
@@ -362,8 +360,7 @@ subroutine tracer_z_init_array(tr_in, z_edges, e, nkml, nkbl, land_fill, wet, nl
               sl_tr = find_limited_slope(tr_1d, z_edges, kz)
             endif
             ! This is the piecewise linear form.
-            tr(i,j,k) = tr(i,j,k) + wt(kz) * &
-                 (tr_1d(kz) + 0.5*sl_tr*(z2(kz) + z1(kz)))
+            tr(i,j,k) = tr(i,j,k) + wt(kz) * (tr_1d(kz) + 0.5*sl_tr*(z2(kz) + z1(kz)))
             ! For the piecewise parabolic form add the following...
             !     + C1_3*cur_tr*(z2(kz)**2 + z2(kz)*z1(kz) + z1(kz)**2))
           endif
@@ -373,7 +370,7 @@ subroutine tracer_z_init_array(tr_in, z_edges, e, nkml, nkbl, land_fill, wet, nl
       enddo ! k-loop
 
       do k=2,nlay  ! simply fill vanished layers with adjacent value
-        if (e_1d(k)-e_1d(k+1) <= eps_z) tr(i,j,k)=tr(i,j,k-1)
+        if (e_1d(k)-e_1d(k+1) <= eps_z) tr(i,j,k) = tr(i,j,k-1)
       enddo
 
     enddo i_loop
@@ -612,9 +609,10 @@ function find_limited_slope(val, e, k) result(slope)
 end function find_limited_slope
 
 !> Find interface positions corresponding to density profile
-subroutine find_interfaces(rho, zin, nk_data, Rb, depth, zi, G, US, nlevs, nkml, nkbl, hml, debug, eps_z, eps_rho)
+subroutine find_interfaces(rho, zin, nk_data, Rb, depth, zi, G, US, nlevs, nkml, hml, debug, &
+                           eps_z, eps_rho)
   type(ocean_grid_type),      intent(in) :: G     !< The ocean's grid structure
-  integer,                    intent(in) :: nk_data !<  The number of levels in the input data
+  integer,                    intent(in) :: nk_data !< The number of levels in the input data
   real, dimension(SZI_(G),SZJ_(G),nk_data), &
                               intent(in) :: rho   !< Potential density in z-space [R ~> kg m-3]
   real, dimension(nk_data),   intent(in) :: zin   !< Input data levels [Z ~> m].
@@ -627,8 +625,8 @@ subroutine find_interfaces(rho, zin, nk_data, Rb, depth, zi, G, US, nlevs, nkml,
   integer, dimension(SZI_(G),SZJ_(G)), &
                     optional, intent(in) :: nlevs !< number of valid points in each column
   logical,          optional, intent(in) :: debug !< optional debug flag
-  integer,          optional, intent(in) :: nkml  !< number of mixed layer pieces
-  integer,          optional, intent(in) :: nkbl  !< number of buffer layer pieces
+  integer,          optional, intent(in) :: nkml  !< number of mixed layer pieces to distribute over
+                                                  !! a depth of hml.
   real,             optional, intent(in) :: hml   !< mixed layer depth [Z ~> m].
   real,             optional, intent(in) :: eps_z !< A negligibly small layer thickness [Z ~> m].
   real,             optional, intent(in) :: eps_rho !< A negligibly small density difference [R ~> kg m-3].
@@ -638,14 +636,16 @@ subroutine find_interfaces(rho, zin, nk_data, Rb, depth, zi, G, US, nlevs, nkml,
   logical :: unstable
   integer :: dir
   integer, dimension(SZI_(G),SZK_(G)+1) :: ki_
-  real, dimension(SZI_(G),SZK_(G)+1) :: zi_
+  real, dimension(SZI_(G),SZK_(G)+1) :: zi_ ! A slice of interface heights (negative downward) [Z ~> m].
   integer, dimension(SZI_(G),SZJ_(G)) :: nlevs_data
   integer, dimension(SZI_(G)) :: lo, hi
-  real :: slope,rsm,drhodz,hml_
+  real :: slope         ! The rate of change of height with density [Z R-1 ~> m4 kg-1]
+  real :: drhodz        ! A local vertical density gradient [R Z-1 ~> kg m-4]
+  real :: hml_          ! The depth of the mixed layer to use for the topmost nkml_ layers [Z ~> m].
   real    :: epsln_Z    ! A negligibly thin layer thickness [m or Z ~> m].
-  real    :: epsln_rho  ! A negligibly small density change [kg m-3 or R ~> kg m-3].
+  real    :: epsln_rho  ! A negligibly small density change [R ~> kg m-3].
   real, parameter :: zoff=0.999
-  integer :: kk,nkml_,nkbl_
+  integer :: nkml_
   logical :: debug_ = .false.
   integer :: i, j, k, m, n, is, ie, js, je, nz
 
@@ -658,7 +658,6 @@ subroutine find_interfaces(rho, zin, nk_data, Rb, depth, zi, G, US, nlevs, nkml,
   nlevs_data(:,:) = nz
 
   nkml_ = 0 ;  if (PRESENT(nkml)) nkml_ = max(0, nkml)
-  nkbl_ = 0 ;  if (PRESENT(nkbl)) nkbl_ = max(0, nkbl)
   hml_ = 0.0 ; if (PRESENT(hml)) hml_ = hml
   epsln_Z = 1.0e-10*US%m_to_Z ; if (PRESENT(eps_z)) epsln_Z = eps_z
   epsln_rho = 1.0e-10*US%kg_m3_to_R ; if (PRESENT(eps_rho)) epsln_rho = eps_rho
@@ -740,15 +739,19 @@ end subroutine find_interfaces
 
 !> This subroutine determines the potential temperature and salinity that
 !! is consistent with the target density using provided initial guess
-subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, k_start, US, eos, h_massless)
-  real, dimension(:,:,:),        intent(inout) :: temp !< potential temperature [degC]
-  real, dimension(:,:,:),        intent(inout) :: salt !< salinity [PSU]
-  real, dimension(size(temp,3)), intent(in)    :: R_tgt !< desired potential density [R ~> kg m-3].
+subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, k_start, G, US, eos, h_massless)
+  type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                 intent(inout) :: temp !< potential temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                 intent(inout) :: salt !< salinity [PSU]
+  real, dimension(SZK_(G)),      intent(in)    :: R_tgt !< desired potential density [R ~> kg m-3].
   real,                          intent(in)    :: p_ref !< reference pressure [R L2 T-2 ~> Pa].
   integer,                       intent(in)    :: niter !< maximum number of iterations
   integer,                       intent(in)    :: k_start !< starting index (i.e. below the buffer layer)
   real,                          intent(in)    :: land_fill !< land fill value
-  real, dimension(:,:,:),        intent(in)    :: h   !< layer thickness, used only to avoid working on
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                 intent(in)    :: h   !< layer thickness, used only to avoid working on
                                                       !! massless layers [H ~> m or kg m-2]
   type(unit_scale_type),         intent(in)    :: US  !< A dimensional unit scaling type
   type(eos_type),                pointer       :: eos !< seawater equation of state control structure
@@ -757,14 +760,13 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
 
   real, parameter :: T_max = 31.0, T_min = -2.0
   ! Local variables (All of which need documentation!)
-  real, dimension(size(temp,1),size(temp,3)) :: &
+  real, dimension(SZI_(G),SZK_(G)) :: &
     T, S, dT, dS, &
     rho, & ! Layer densities [R ~> kg m-3]
     hin, & ! Input layer thicknesses [H ~> m or kg m-2]
     drho_dT, & ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
     drho_dS    ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
-  real, dimension(size(temp,1)) :: press ! Reference pressures [R L2 T-2 ~> Pa]
-  integer :: nx, ny, nz, nt, i, j, k, n, itt
+  real, dimension(SZI_(G)) :: press ! Reference pressures [R L2 T-2 ~> Pa]
   real    :: dT_dS_gauge  ! The relative penalizing of temperature to salinity changes when
                           ! minimizing property changes while correcting density [degC ppt-1].
   real    :: I_denom      ! The inverse of the magnitude squared of the density gradient in
@@ -775,6 +777,10 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
   real :: tol_S    ! The tolerance for salinity matches [ppt]
   real :: tol_rho  ! The tolerance for density matches [R ~> kg m-3]
   real :: max_t_adj, max_s_adj
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
+  integer :: i, j, k, kz, is, ie, js, je, nz, itt
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   ! These hard coded parameters need to be set properly.
   S_min = 0.5 ; S_max = 65.0
@@ -788,11 +794,10 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
   ! We will switch to the newer method which simultaneously adjusts
   ! temp and salt based on the ratio of the thermal and haline coefficients, once it is tested.
 
-  nx=size(temp,1) ; ny=size(temp,2) ; nz=size(temp,3)
-
   press(:) = p_ref
+  EOSdom(:) = EOS_domain(G%HI)
 
-  do j=1,ny
+  do j=js,je
     dS(:,:) = 0. ! Needs to be zero everywhere since there is a maxval(abs(dS)) later...
     T(:,:) = temp(:,j,:)
     S(:,:) = salt(:,j,:)
@@ -800,13 +805,12 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
     dT(:,:) = 0.0
     adjust_salt = .true.
     iter_loop: do itt = 1,niter
-      do k=1, nz
-        call calculate_density(T(:,k), S(:,k), press, rho(:,k), eos, (/1,nx/) )
+      do k=1,nz
+        call calculate_density(T(:,k), S(:,k), press, rho(:,k), eos, EOSdom )
         call calculate_density_derivs(T(:,k), S(:,k), press, drho_dT(:,k), drho_dS(:,k), &
-                                      eos, (/1,nx/) )
+                                      eos, EOSdom )
       enddo
-      do k=k_start,nz ; do i=1,nx
-
+      do k=k_start,nz ; do i=is,ie
 !       if (abs(rho(i,k)-R_tgt(k))>tol_rho .and. hin(i,k)>h_massless .and. abs(T(i,k)-land_fill) < epsln) then
         if (abs(rho(i,k)-R_tgt(k))>tol_rho) then
           if (old_fit) then
@@ -824,18 +828,18 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
         endif
       enddo ; enddo
       if (maxval(abs(dT)) < tol_T) then
-         adjust_salt = .false.
-         exit iter_loop
+        adjust_salt = .false.
+        exit iter_loop
       endif
     enddo iter_loop
 
     if (adjust_salt .and. old_fit) then ; do itt = 1,niter
-      do k=1, nz
-        call calculate_density(T(:,k), S(:,k), press, rho(:,k), eos, (/1,nx/) )
+      do k=1,nz
+        call calculate_density(T(:,k), S(:,k), press, rho(:,k), eos, EOSdom )
         call calculate_density_derivs(T(:,k), S(:,k), press, drho_dT(:,k), drho_dS(:,k), &
-                                      eos, (/1,nx/) )
+                                      eos, EOSdom )
       enddo
-      do k=k_start,nz ; do i=1,nx
+      do k=k_start,nz ; do i=is,ie
 !       if (abs(rho(i,k)-R_tgt(k))>tol_rho .and. hin(i,k)>h_massless .and. abs(T(i,k)-land_fill) < epsln ) then
         if (abs(rho(i,k)-R_tgt(k)) > tol_rho) then
           dS(i,k) = max(min((R_tgt(k)-rho(i,k)) / drho_dS(i,k), max_s_adj), -max_s_adj)
