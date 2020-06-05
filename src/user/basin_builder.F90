@@ -36,7 +36,6 @@ subroutine basin_builder_topography(D, G, param_file, max_depth)
   real, dimension(20) :: pars ! Parameters for each function
   real :: lon ! Longitude [degrees_E}
   real :: lat ! Latitude [degrees_N]
-  real :: dfrac ! Fraction of depth [nondim]
   integer :: i, j, n, n_funcs
 
   call MOM_mesg("  basin_builder.F90, basin_builder_topography: setting topography", 5)
@@ -55,7 +54,8 @@ subroutine basin_builder_topography(D, G, param_file, max_depth)
     call get_param(param_file, mdl, pname1, funcs, &
                    "The basin builder function to apply with parameters "//&
                    trim(pname2)//". Choices are: NS_COAST, EW_COAST, "//&
-                   "CIRC_CONIC_RIDGE, NS_CONIC_RIDGE.", &
+                   "CIRC_CONIC_RIDGE, NS_CONIC_RIDGE, CIRC_SCURVE_RIDGE, "//&
+                   "NS_SCURVE_RIDGE.", &
                    fail_if_missing=.true.)
     pars(:) = 0.
     if (trim(lowercase(funcs)) == 'ns_coast') then
@@ -64,6 +64,7 @@ subroutine basin_builder_topography(D, G, param_file, max_depth)
                      "ending latitude, footprint radius, shelf depth.", &
                      units="degrees_E,degrees_N,degrees_N,degrees,m", &
                      fail_if_missing=.true.)
+      pars(5) = pars(5) / max_depth
       do j=G%jsc,G%jec ; do i=G%isc,G%iec
         lon = G%geoLonT(i,j)
         lat = G%geoLatT(i,j)
@@ -75,10 +76,23 @@ subroutine basin_builder_topography(D, G, param_file, max_depth)
                      "ending latitude, footprint radius, ridge height.", &
                      units="degrees_E,degrees_N,degrees_N,degrees,m", &
                      fail_if_missing=.true.)
+      pars(5) = pars(5) / max_depth
       do j=G%jsc,G%jec ; do i=G%isc,G%iec
         lon = G%geoLonT(i,j)
         lat = G%geoLatT(i,j)
         D(i,j) = min( D(i,j), NS_conic_ridge(lon, lat, pars(1), pars(2), pars(3), pars(4), pars(5)) )
+      enddo ; enddo
+    elseif (trim(lowercase(funcs)) == 'ns_scurve_ridge') then
+      call get_param(param_file, mdl, pname2, pars(1:5), &
+                     "NS_SCURVE_RIDGE parameters: longitude, starting latitude, "//&
+                     "ending latitude, footprint radius, ridge height.", &
+                     units="degrees_E,degrees_N,degrees_N,degrees,m", &
+                     fail_if_missing=.true.)
+      pars(5) = pars(5) / max_depth
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        lon = G%geoLonT(i,j)
+        lat = G%geoLatT(i,j)
+        D(i,j) = min( D(i,j), NS_scurve_ridge(lon, lat, pars(1), pars(2), pars(3), pars(4), pars(5)) )
       enddo ; enddo
     elseif (trim(lowercase(funcs)) == 'ew_coast') then
       call get_param(param_file, mdl, pname2, pars(1:5), &
@@ -86,6 +100,7 @@ subroutine basin_builder_topography(D, G, param_file, max_depth)
                      "ending longitude, footprint radius, shelf depth.", &
                      units="degrees_N,degrees_E,degrees_E,degrees,m", &
                      fail_if_missing=.true.)
+      pars(5) = pars(5) / max_depth
       do j=G%jsc,G%jec ; do i=G%isc,G%iec
         lon = G%geoLonT(i,j)
         lat = G%geoLatT(i,j)
@@ -97,10 +112,23 @@ subroutine basin_builder_topography(D, G, param_file, max_depth)
                      "ring radius, footprint radius, ridge height.", &
                      units="degrees_E,degrees_N,degrees,degrees,m", &
                      fail_if_missing=.true.)
+      pars(5) = pars(5) / max_depth
       do j=G%jsc,G%jec ; do i=G%isc,G%iec
         lon = G%geoLonT(i,j)
         lat = G%geoLatT(i,j)
         D(i,j) = min( D(i,j), circ_conic_ridge(lon, lat, pars(1), pars(2), pars(3), pars(4), pars(5)) )
+      enddo ; enddo
+    elseif (trim(lowercase(funcs)) == 'circ_scurve_ridge') then
+      call get_param(param_file, mdl, pname2, pars(1:5), &
+                     "CIRC_SCURVe_RIDGE parameters: center longitude, center latitude, "//&
+                     "ring radius, footprint radius, ridge height.", &
+                     units="degrees_E,degrees_N,degrees,degrees,m", &
+                     fail_if_missing=.true.)
+      pars(5) = pars(5) / max_depth
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        lon = G%geoLonT(i,j)
+        lat = G%geoLatT(i,j)
+        D(i,j) = min( D(i,j), circ_scurve_ridge(lon, lat, pars(1), pars(2), pars(3), pars(4), pars(5)) )
       enddo ; enddo
     else
       call MOM_error(FATAL, "basin_builder.F90, basin_builer_topography:\n"//&
@@ -213,7 +241,7 @@ real function EW_coast(lon, lat, latC, lon0, lon1, dlat, sh)
   EW_coast = cstprof(r, 0., dlat, 0.125, 0.125, 0.5, sh)
 end function EW_coast
 
-!> A NS ridge
+!> A NS ridge with a cone profile
 real function NS_conic_ridge(lon, lat, lonC, lat0, lat1, dlon, rh)
   real, intent(in) :: lon     !< Longitude [degrees_E]
   real, intent(in) :: lat     !< Latitude [degrees_N]
@@ -228,7 +256,22 @@ real function NS_conic_ridge(lon, lat, lonC, lat0, lat1, dlon, rh)
   NS_conic_ridge = 1. - rh * cone(r, 0., dlon)
 end function NS_conic_ridge
 
-!> A circular ridge
+!> A NS ridge with an scurve profile
+real function NS_scurve_ridge(lon, lat, lonC, lat0, lat1, dlon, rh)
+  real, intent(in) :: lon     !< Longitude [degrees_E]
+  real, intent(in) :: lat     !< Latitude [degrees_N]
+  real, intent(in) :: lonC    !< Longitude of ridge center [degrees_E]
+  real, intent(in) :: lat0    !< Latitude of ridge end [degrees_N]
+  real, intent(in) :: lat1    !< Latitude of ridge end [degrees_N]
+  real, intent(in) :: dlon    !< "Radius" of ridge profile [degrees]
+  real, intent(in) :: rh      !< depth of ridge as fraction of full depth [nondim]
+  real :: r
+
+  r = dist_line_fixed_x( lon, lat, lonC, lat0, lat1 )
+  NS_scurve_ridge = 1. - rh * (1. - scurve(r, 0., dlon) )
+end function NS_scurve_ridge
+
+!> A circular ridge with cutoff conic profile
 real function circ_conic_ridge(lon, lat, lon0, lat0, ring_radius, ring_thickness, ridge_height)
   real, intent(in) :: lon            !< Longitude [degrees_E]
   real, intent(in) :: lat            !< Latitude [degrees_N]
@@ -244,5 +287,23 @@ real function circ_conic_ridge(lon, lat, lon0, lat0, ring_radius, ring_thickness
   r = cone(r, 0., ring_thickness, ridge_height) ! 0 .. frac_ridge_height
   circ_conic_ridge = 1. - r ! nondim depths (1-frac_ridge_height) .. 1
 end function circ_conic_ridge
+
+!> A circular ridge with cutoff scurve profile
+real function circ_scurve_ridge(lon, lat, lon0, lat0, ring_radius, ring_thickness, ridge_height)
+  real, intent(in) :: lon            !< Longitude [degrees_E]
+  real, intent(in) :: lat            !< Latitude [degrees_N]
+  real, intent(in) :: lon0           !< Longitude of center of ring [degrees_E]
+  real, intent(in) :: lat0           !< Latitude of center of ring [degrees_N]
+  real, intent(in) :: ring_radius    !< Radius of ring [degrees]
+  real, intent(in) :: ring_thickness !< Radial thickness of ring [degrees]
+  real, intent(in) :: ridge_height   !< Ridge height as fraction of full depth [nondim]
+  real :: r
+
+  r = sqrt( (lon - lon0)**2 + (lat - lat0)**2 ) ! Pseudo-distance from a point
+  r = abs( r - ring_radius) ! Pseudo-distance from a circle
+  r = 1. - scurve(r, 0., ring_thickness) ! 0 .. 1
+  r = r * ridge_height ! 0 .. frac_ridge_height
+  circ_scurve_ridge = 1. - r ! nondim depths (1-frac_ridge_height) .. 1
+end function circ_scurve_ridge
 
 end module basin_builder
