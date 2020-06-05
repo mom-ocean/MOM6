@@ -39,8 +39,6 @@ use MOM_unit_scaling,        only : unit_scale_type
 use MOM_variables,           only : surface
 use MESO_surface_forcing,    only : MESO_buoyancy_forcing
 use MESO_surface_forcing,    only : MESO_surface_forcing_init, MESO_surface_forcing_CS
-use Neverworld_surface_forcing, only : Neverworld_wind_forcing, Neverworld_buoyancy_forcing
-use Neverworld_surface_forcing, only : Neverworld_surface_forcing_init, Neverworld_surface_forcing_CS
 use user_surface_forcing,    only : USER_wind_forcing, USER_buoyancy_forcing
 use user_surface_forcing,    only : USER_surface_forcing_init, user_surface_forcing_CS
 use user_revise_forcing,     only : user_alter_forcing, user_revise_forcing_init
@@ -204,7 +202,6 @@ type, public :: surface_forcing_CS ; private
   type(BFB_surface_forcing_CS), pointer :: BFB_forcing_CSp => NULL()
   type(dumbbell_surface_forcing_CS), pointer :: dumbbell_forcing_CSp => NULL()
   type(MESO_surface_forcing_CS), pointer :: MESO_forcing_CSp => NULL()
-  type(Neverworld_surface_forcing_CS), pointer :: Neverworld_forcing_CSp => NULL()
   type(idealized_hurricane_CS), pointer :: idealized_hurricane_CSp => NULL()
   type(SCM_CVmix_tests_CS),      pointer :: SCM_CVmix_tests_CSp => NULL()
   !>@}
@@ -281,7 +278,7 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
     elseif (trim(CS%wind_config) == "const") then
       call wind_forcing_const(sfc_state, forces, CS%tau_x0, CS%tau_y0, day_center, G, US, CS)
     elseif (trim(CS%wind_config) == "Neverworld" .or. trim(CS%wind_config) == "Neverland") then
-      call Neverworld_wind_forcing(sfc_state, forces, day_center, G, US, CS%Neverworld_forcing_CSp)
+      call Neverworld_wind_forcing(sfc_state, forces, day_center, G, US, CS)
     elseif (trim(CS%wind_config) == "ideal_hurr") then
       call idealized_hurricane_wind_forcing(sfc_state, forces, day_center, G, US, CS%idealized_hurricane_CSp)
     elseif (trim(CS%wind_config) == "SCM_ideal_hurr") then
@@ -314,8 +311,6 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
       call buoyancy_forcing_linear(sfc_state, fluxes, day_center, dt, G, US, CS)
     elseif (trim(CS%buoy_config) == "MESO") then
       call MESO_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, US, CS%MESO_forcing_CSp)
-    elseif (trim(CS%buoy_config) == "Neverworld" .or. trim(CS%buoy_config) == "Neverland") then
-      call Neverworld_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, US, CS%Neverworld_forcing_CSp)
     elseif (trim(CS%buoy_config) == "SCM_CVmix_tests") then
       call SCM_CVmix_tests_buoyancy_forcing(sfc_state, fluxes, day_center, G, US, CS%SCM_CVmix_tests_CSp)
     elseif (trim(CS%buoy_config) == "USER") then
@@ -526,6 +521,71 @@ subroutine wind_forcing_gyres(sfc_state, forces, day, G, US, CS)
   call callTree_leave("wind_forcing_gyres")
 end subroutine wind_forcing_gyres
 
+!> Sets the surface wind stresses, forces%taux and forces%tauy for the
+!! Neverworld forcing configuration.
+subroutine Neverworld_wind_forcing(sfc_state, forces, day, G, US, CS)
+  type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
+  type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
+  type(time_type),          intent(in)    :: day    !< Time used for determining the fluxes.
+  type(ocean_grid_type),    intent(inout) :: G      !< Grid structure.
+  type(unit_scale_type),    intent(in)    :: US     !< A dimensional unit scaling type
+  type(surface_forcing_CS), pointer       :: CS     !< pointer to control struct returned by
+                                                    !! a previous surface_forcing_init call
+  ! Local variables
+  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+  real :: PI, I_rho, y
+  real :: tau_max  ! The magnitude of the wind stress [R Z L T-2 ~> Pa]
+  real :: off
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  ! Allocate the forcing arrays, if necessary.
+  call allocate_mech_forcing(G, forces, stress=.true.)
+
+  !  Set the surface wind stresses, in units of Pa.  A positive taux
+  !  accelerates the ocean to the (pseudo-)east.
+
+  !  The i-loop extends to is-1 so that taux can be used later in the
+  ! calculation of ustar - otherwise the lower bound would be Isq.
+  PI = 4.0*atan(1.0)
+  forces%taux(:,:) = 0.0
+  tau_max = 0.2 * US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z
+  off = 0.02
+  do j=js,je ; do I=is-1,Ieq
+    y = (G%geoLatT(i,j)-G%south_lat)/G%len_lat
+
+    if (y <= 0.29) then
+      forces%taux(I,j) = forces%taux(I,j) + tau_max * ( (1/0.29)*y - ( 1/(2*PI) )*sin( (2*PI*y) / 0.29 ) )
+    endif
+    if ((y > 0.29) .and. (y <= (0.8-off))) then
+      forces%taux(I,j) = forces%taux(I,j) + tau_max *(0.35+0.65*cos(PI*(y-0.29)/(0.51-off))  )
+    endif
+    if ((y > (0.8-off)) .and. (y <= (1-off))) then
+      forces%taux(I,j) = forces%taux(I,j) + tau_max *( 1.5*( (y-1+off) - (0.1/PI)*sin(10.0*PI*(y-0.8+off)) ) )
+    endif
+    forces%taux(I,j) = G%mask2dCu(I,j) * forces%taux(I,j)
+  enddo ; enddo
+
+  do J=js-1,Jeq ; do i=is,ie
+    forces%tauy(i,J) = G%mask2dCv(i,J) * 0.0
+  enddo ; enddo
+
+  ! Set the surface friction velocity, in units of m s-1.  ustar is always positive.
+  if (associated(forces%ustar)) then
+    I_rho = US%L_to_Z / CS%Rho0
+    do j=js,je ; do i=is,ie
+      forces%ustar(i,j) = sqrt( (CS%gust_const + &
+            sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
+                      (forces%taux(I-1,j)**2 + forces%taux(I,j)**2))) ) * I_rho )
+    enddo ; enddo
+  endif
+
+end subroutine Neverworld_wind_forcing
 
 ! Sets the surface wind stresses from input files.
 subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
@@ -1756,8 +1816,6 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
     call dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS%dumbbell_forcing_CSp)
   elseif (trim(CS%wind_config) == "MESO" .or. trim(CS%buoy_config) == "MESO" ) then
     call MESO_surface_forcing_init(Time, G, US, param_file, diag, CS%MESO_forcing_CSp)
-  elseif (trim(CS%wind_config) == "Neverworld" .or. trim(CS%wind_config) == "Neverland") then
-    call Neverworld_surface_forcing_init(Time, G, US, param_file, diag, CS%Neverworld_forcing_CSp)
   elseif (trim(CS%wind_config) == "ideal_hurr" .or.&
           trim(CS%wind_config) == "SCM_ideal_hurr") then
     call idealized_hurricane_wind_init(Time, G, US, param_file, CS%idealized_hurricane_CSp)
