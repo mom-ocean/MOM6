@@ -109,6 +109,9 @@ type, public :: surface_forcing_CS ; private
                              !! the same between compilers.
   logical :: fix_ustar_gustless_bug         !< If true correct a bug in the time-averaging of the
                                             !! gustless wind friction velocity.
+  ! if WIND_CONFIG=='scurves' then use the following to define a piecwise scurve profile
+  real :: scurves_ydata(20) = 90. !< Latitudes of scurve nodes [degreesN]
+  real :: scurves_taux(20) = 0.   !< Zonal wind stress values at scurve nodes [Pa]
 
   real :: T_north   !< target temperatures at north used in buoyancy_forcing_linear
   real :: T_south   !< target temperatures at south used in buoyancy_forcing_linear
@@ -279,6 +282,8 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
       call wind_forcing_const(sfc_state, forces, CS%tau_x0, CS%tau_y0, day_center, G, US, CS)
     elseif (trim(CS%wind_config) == "Neverworld" .or. trim(CS%wind_config) == "Neverland") then
       call Neverworld_wind_forcing(sfc_state, forces, day_center, G, US, CS)
+    elseif (trim(CS%wind_config) == "scurves") then
+      call scurve_wind_forcing(sfc_state, forces, day_center, G, US, CS)
     elseif (trim(CS%wind_config) == "ideal_hurr") then
       call idealized_hurricane_wind_forcing(sfc_state, forces, day_center, G, US, CS%idealized_hurricane_CSp)
     elseif (trim(CS%wind_config) == "SCM_ideal_hurr") then
@@ -586,6 +591,71 @@ subroutine Neverworld_wind_forcing(sfc_state, forces, day, G, US, CS)
   endif
 
 end subroutine Neverworld_wind_forcing
+
+!> Sets the zonal wind stresses to a piecewise series of s-curves.
+subroutine scurve_wind_forcing(sfc_state, forces, day, G, US, CS)
+  type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
+  type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
+  type(time_type),          intent(in)    :: day    !< Time used for determining the fluxes.
+  type(ocean_grid_type),    intent(inout) :: G      !< Grid structure.
+  type(unit_scale_type),    intent(in)    :: US     !< A dimensional unit scaling type
+  type(surface_forcing_CS), pointer       :: CS     !< pointer to control struct returned by
+                                                    !! a previous surface_forcing_init call
+  ! Local variables
+  integer :: i, j, kseg
+  real :: lon, lat, I_rho, y, L
+! real :: ydata(7) = (/ -70., -45., -15., 0., 15., 45., 70. /)
+! real :: taudt(7) = (/ 0., 0.2, -0.1, -0.02, -0.1, 0.1, 0. /)
+
+  ! Allocate the forcing arrays, if necessary.
+  call allocate_mech_forcing(G, forces, stress=.true.)
+
+  kseg = 1
+  do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+    lon = G%geoLonCu(I,j)
+    lat = G%geoLatCu(I,j)
+
+    ! Find segment k s.t. ydata(k)<= lat < ydata(k+1)
+    do while (lat>=CS%scurves_ydata(kseg+1) .and. kseg<6)
+      kseg = kseg+1
+    enddo
+    do while (lat<CS%scurves_ydata(kseg) .and. kseg>1)
+      kseg = kseg-1
+    enddo
+
+    y = lat - CS%scurves_ydata(kseg)
+    L = CS%scurves_ydata(kseg+1) - CS%scurves_ydata(kseg)
+    forces%taux(I,j) = CS%scurves_taux(kseg) +  &
+                       ( CS%scurves_taux(kseg+1) - CS%scurves_taux(kseg) ) * scurve(y, L)
+    forces%taux(I,j) = G%mask2dCu(I,j) * forces%taux(I,j)
+  enddo ; enddo
+
+  do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+    forces%tauy(i,J) = G%mask2dCv(i,J) * 0.0
+  enddo ; enddo
+
+  ! Set the surface friction velocity, in units of m s-1.  ustar is always positive.
+  if (associated(forces%ustar)) then
+    I_rho = US%L_to_Z / CS%Rho0
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      forces%ustar(i,j) = sqrt( (CS%gust_const + &
+            sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
+                      (forces%taux(I-1,j)**2 + forces%taux(I,j)**2))) ) * I_rho )
+    enddo ; enddo
+  endif
+
+end subroutine scurve_wind_forcing
+
+!> Returns the value of a cosine-bell function evaluated at x/L
+real function scurve(x,L)
+  real , intent(in) :: x       !< non-dimensional position
+  real , intent(in) :: L       !< non-dimensional width
+  real :: s
+
+  s = x/L
+  scurve = (3. - 2.*s) * (s*s)
+end function scurve
 
 ! Sets the surface wind stresses from input files.
 subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
@@ -1716,6 +1786,16 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
                  default=default_2018_answers)
   else
     CS%answers_2018 = .false.
+  endif
+  if (trim(CS%wind_config) == "scurves") then
+    call get_param(param_file, mdl, "WIND_SCURVES_LATS", CS%scurves_ydata, &
+                 "A list of latitudes defining a piecewise scurve profile "//&
+                 "for zonal wind stress.", &
+                 units="degrees N", fail_if_missing=.true.)
+    call get_param(param_file, mdl, "WIND_SCURVES_TAUX", CS%scurves_taux, &
+                 "A list of zonal wind stress values at latitudes "//&
+                 "WIND_SCURVES_LATS defining a piecewise scurve profile.", &
+                 units="Pa", fail_if_missing=.true.)
   endif
   if ((trim(CS%wind_config) == "2gyre") .or. &
       (trim(CS%wind_config) == "1gyre") .or. &
