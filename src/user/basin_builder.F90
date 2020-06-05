@@ -19,7 +19,7 @@ public basin_builder_topography
 
 ! This include declares and sets the variable "version".
 # include "version_variable.h"
-character(len=40) :: mdl = "basin_builder" ! This module's name.
+character(len=40) :: mdl = "basin_builder" !< This module's name.
 
 contains
 
