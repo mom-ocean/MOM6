@@ -1163,13 +1163,12 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
            "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
            "When INTERPOLATE_RES_FN=True, VISC_RES_FN_POWER must equal KH_RES_FN_POWER.")
     endif
-    !### Change the default of GILL_EQUATORIAL_LD to True.
     call get_param(param_file, mdl, "GILL_EQUATORIAL_LD", Gill_equatorial_Ld, &
                  "If true, uses Gill's definition of the baroclinic "//&
                  "equatorial deformation radius, otherwise, if false, use "//&
                  "Pedlosky's definition. These definitions differ by a factor "//&
                  "of 2 in front of the beta term in the denominator. Gill's "//&
-                 "is the more appropriate definition.", default=.false.)
+                 "is the more appropriate definition.", default=.true.)
     if (Gill_equatorial_Ld) then
       oneOrTwo = 2.0
     endif
