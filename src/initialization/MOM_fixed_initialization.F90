@@ -32,6 +32,7 @@ use DOME_initialization, only : DOME_initialize_topography
 use ISOMIP_initialization, only : ISOMIP_initialize_topography
 use benchmark_initialization, only : benchmark_initialize_topography
 use Neverworld_initialization, only : Neverworld_initialize_topography
+use Neverworld_initialization, only : Neverworld2_initialize_topography
 use DOME2d_initialization, only : DOME2d_initialize_topography
 use Kelvin_initialization, only : Kelvin_initialize_topography
 use sloshing_initialization, only : sloshing_initialize_topography
@@ -227,7 +228,8 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF, US)
     case ("DOME");      call DOME_initialize_topography(D, G, PF, max_depth, US)
     case ("ISOMIP");    call ISOMIP_initialize_topography(D, G, PF, max_depth, US)
     case ("benchmark"); call benchmark_initialize_topography(D, G, PF, max_depth, US)
-    case ("Neverword","Neverland"); call Neverworld_initialize_topography(D, G, PF, max_depth)
+    case ("Neverworld","Neverland"); call Neverworld2_initialize_topography(D, G, PF, max_depth)
+    case ("Neverworld2"); call Neverworld2_initialize_topography(D, G, PF, max_depth)
     case ("DOME2D");    call DOME2d_initialize_topography(D, G, PF, max_depth)
     case ("Kelvin");    call Kelvin_initialize_topography(D, G, PF, max_depth, US)
     case ("sloshing");  call sloshing_initialize_topography(D, G, PF, max_depth)
