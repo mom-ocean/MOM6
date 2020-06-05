@@ -1987,18 +1987,18 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   integer :: isd, ied, jsd, jed ! data domain indices
 
   integer :: i, j, k, ks, np, ni, nj
-  integer :: idbg, jdbg
-  integer :: nkml, nkbl         ! number of mixed and buffer layers
+  integer :: nkml     ! The number of layers in the mixed layer.
 
   integer :: kd, inconsistent
   integer :: nkd      ! number of levels to use for regridding input arrays
   real    :: eps_Z    ! A negligibly thin layer thickness [Z ~> m].
   real    :: eps_rho  ! A negligibly small density difference [R ~> kg m-3].
-  real    :: PI_180             ! for conversion from degrees to radians
+  real    :: PI_180   ! for conversion from degrees to radians
 
   real, dimension(:,:), pointer :: shelf_area => NULL()
-  real    :: min_depth ! The minimum depth [Z ~> m].
-  real    :: dilate
+  real    :: Hmix_default ! The default initial mixed layer depth [m].
+  real    :: Hmix_depth   ! The mixed layer depth in the initial condition [Z ~> m].
+  real    :: dilate       ! A dilation factor to match topography [nondim]
   real    :: missing_value_temp, missing_value_salt
   logical :: correct_thickness
   character(len=40) :: potemp_var, salin_var
@@ -2037,6 +2037,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   logical :: answers_2018, default_2018_answers, hor_regrid_answers_2018
   logical :: use_ice_shelf
   logical :: pre_gridded
+  logical :: separate_mixed_layer  ! If true, handle the mixed layers differently.
   character(len=10) :: remappingScheme
   real :: tempAvg, saltAvg
   integer :: nPoints, ans
@@ -2063,14 +2064,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
   eos => tv%eqn_of_state
 
-! call mpp_get_compute_domain(G%domain%mpp_domain,isc,iec,jsc,jec)
-
   reentrant_x = .false. ; call get_param(PF, mdl, "REENTRANT_X", reentrant_x, default=.true.)
   tripolar_n = .false. ;  call get_param(PF, mdl, "TRIPOLAR_N", tripolar_n, default=.false.)
-  call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, default=0.0, scale=US%m_to_Z)
-
-  call get_param(PF, mdl, "NKML",nkml,default=0)
-  call get_param(PF, mdl, "NKBL",nkbl,default=0)
 
   call get_param(PF, mdl, "TEMP_SALT_Z_INIT_FILE",filename, &
                  "The name of the z-space input file used to initialize "//&
@@ -2153,6 +2148,19 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
                  "their target densities using mostly temperature "//&
                  "This approach can be problematic, particularly in the "//&
                  "high latitudes.", default=.true., do_not_log=just_read)
+    call get_param(PF, mdl, "Z_INIT_SEPARATE_MIXED_LAYER", separate_mixed_layer, &
+                 "If true, distribute the topmost Z_INIT_HMIX_DEPTH of water over NKML layers, "//&
+                 "and do not correct the density of the topmost NKML+NKBL layers.  Otherwise "//&
+                 "all layers are initialized based on the depths of their target densities.", &
+                 default=.false., do_not_log=just_read.or.(GV%nkml==0))
+    if (GV%nkml == 0) separate_mixed_layer = .false.
+    call get_param(PF, mdl, "MINIMUM_DEPTH", Hmix_default, default=0.0)
+    call get_param(PF, mdl, "Z_INIT_HMIX_DEPTH", Hmix_depth, &
+                 "The mixed layer depth in the initial conditions when Z_INIT_SEPARATE_MIXED_LAYER "//&
+                 "is set to true.", default=Hmix_default, units="m", scale=US%m_to_Z, &
+                 do_not_log=(just_read .or. .not.separate_mixed_layer))
+    ! Reusing MINIMUM_DEPTH for the default mixed layer depth may be a strange choice, but
+    ! it reproduces previous answers.
   endif
   if (just_read) then
     call cpu_clock_end(id_clock_routine)
@@ -2232,11 +2240,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   if (useALEremapping) then
     call cpu_clock_begin(id_clock_ALE)
     nkd = max(GV%ke, kd)
-    ! The regridding tools (grid generation) are coded to work on model arrays of the same
-    ! vertical shape. We need to re-write the regridding if the model has fewer layers
-    ! than the data. -AJA
-!   if (kd>nz) call MOM_error(FATAL,"MOM_initialize_state, MOM_temp_salt_initialize_from_Z(): "//&
-!        "Data has more levels than the model - this has not been coded yet!")
+
     ! Build the source grid and copy data onto model-shaped arrays with vanished layers
     allocate( tmp_mask_in(isd:ied,jsd:jed,nkd) ) ; tmp_mask_in(:,:,:) = 0.
     allocate( h1(isd:ied,jsd:jed,nkd) ) ; h1(:,:,:) = 0.
@@ -2335,8 +2339,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
     do k=2,nz ; Rb(k) = 0.5*(GV%Rlay(k-1)+GV%Rlay(k)) ; enddo
     Rb(1) = 0.0 ;  Rb(nz+1) = 2.0*GV%Rlay(nz) - GV%Rlay(nz-1)
 
+    nkml = 0 ; if (separate_mixed_layer) nkml = GV%nkml
+
     call find_interfaces(rho_z, z_in, kd, Rb, G%bathyT, zi, G, US, &
-                         nlevs, nkml, nkbl, min_depth, eps_z=eps_z, eps_rho=eps_rho)
+                         nlevs, nkml, hml=Hmix_depth, eps_z=eps_z, eps_rho=eps_rho)
 
     if (correct_thickness) then
       call adjustEtaToFitBathymetry(G, GV, US, zi, h)
@@ -2363,12 +2369,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
       endif
     endif
 
-    call tracer_z_init_array(temp_z(is:ie,js:je,:), z_edges_in, zi(is:ie,js:je,:), &
-         nkml, nkbl, missing_value, G%mask2dT(is:ie,js:je), nz, &
-         nlevs(is:ie,js:je), eps_z, tv%T(is:ie,js:je,:))
-    call tracer_z_init_array(salt_z(is:ie,js:je,:), z_edges_in, zi(is:ie,js:je,:), &
-         nkml, nkbl, missing_value, G%mask2dT(is:ie,js:je), nz, &
-         nlevs(is:ie,js:je), eps_z, tv%S(is:ie,js:je,:))
+    call tracer_z_init_array(temp_z, z_edges_in, kd, zi, missing_value, G, nz, nlevs, eps_z, tv%T)
+    call tracer_z_init_array(salt_z, z_edges_in, kd, zi, missing_value, G, nz, nlevs, eps_z, tv%S)
 
     do k=1,nz
       nPoints = 0 ; tempAvg = 0. ; saltAvg = 0.
@@ -2402,12 +2404,12 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
     endif
   enddo ; enddo ; enddo
 
-  ! Finally adjust to target density
-  ks = max(0,nkml)+max(0,nkbl)+1
 
   if (adjust_temperature .and. .not. useALEremapping) then
-    call determine_temperature(tv%T(is:ie,js:je,:), tv%S(is:ie,js:je,:), &
-            GV%Rlay(1:nz), tv%P_Ref, niter, missing_value, h(is:ie,js:je,:), ks, US, eos)
+    ! Finally adjust to target density
+    ks = 1 ; if (separate_mixed_layer) ks = GV%nk_rho_varies + 1
+    call determine_temperature(tv%T, tv%S, GV%Rlay(1:nz), tv%P_Ref, niter, &
+                               missing_value, h, ks, G, US, eos)
   endif
 
   deallocate(z_in, z_edges_in, temp_z, salt_z, mask_z)
