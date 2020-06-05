@@ -772,7 +772,8 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   integer :: OBL_it        ! Iteration counter
 
   real :: Surface_Scale ! Surface decay scale for vstar
-
+  logical :: calc_dT_expect ! If true calculate the expected changes in temperature and salinity.
+  logical :: calc_Te        ! If true calculate the expected final temperature and salinity values.
   logical :: debug=.false.  ! Change this hard-coded value for debugging.
 
   !  The following arrays are used only for debugging purposes.
@@ -788,7 +789,8 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   if (.not. associated(CS)) call MOM_error(FATAL, "energetic_PBL: "//&
          "Module must be initialized before it is used.")
 
-  debug = .false. ; if (allocated(eCD%dT_expect) .or. allocated(eCD%dS_expect)) debug = .true.
+  calc_dT_expect = debug ; if (allocated(eCD%dT_expect) .or. allocated(eCD%dS_expect)) calc_dT_expect = .true.
+  calc_Te = (calc_dT_expect .or. (.not.CS%orig_PE_calc))
 
   h_neglect = GV%H_subroundoff
 
@@ -1285,7 +1287,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
                          dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), dT_to_dPE(k), dS_to_dPE(k), &
                          pres_Z(K), dT_to_dColHt_a(k-1), dS_to_dColHt_a(k-1), &
                          dT_to_dColHt(k), dS_to_dColHt(k), &
-                         PE_chg=dPE_conv)
+                         PE_chg=dPE_conv, dPEc_dKd=dPEc_dKd)
               endif
               MKE_src = dMKE_max * (1.0 - exp(-MKE2_Hharm * Kddt_h_guess))
               dMKE_src_dK = dMKE_max * MKE2_Hharm * exp(-MKE2_Hharm * Kddt_h_guess)
@@ -1381,7 +1383,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
           htot  = htot + h(k)
         endif
 
-        if (debug) then
+        if (calc_Te) then
           if (k==2) then
             Te(1) = b1*(h(1)*T0(1))
             Se(1) = b1*(h(1)*S0(1))
@@ -1393,7 +1395,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
       enddo
       Kd(nz+1) = 0.0
 
-      if (debug) then
+      if (calc_dT_expect) then
         ! Complete the tridiagonal solve for Te.
         b1 = 1.0 / hp_a
         Te(nz) = b1 * (h(nz) * T0(nz) + Kddt_h(nz) * Te(nz-1))
@@ -1404,7 +1406,9 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
           Se(k) = Se(k) + c1(K+1)*Se(k+1)
           eCD%dT_expect(k) = Te(k) - T0(k) ; eCD%dS_expect(k) = Se(k) - S0(k)
         enddo
+      endif
 
+      if (debug) then
         dPE_debug = 0.0
         do k=1,nz
           dPE_debug = dPE_debug + (dT_to_dPE(k) * (Te(k) - T0(k)) + &
