@@ -67,8 +67,6 @@ type, public :: hor_visc_CS ; private
                              !! viscosity is modified to include a term that
                              !! scales quadratically with the velocity shears.
   logical :: use_Kh_bg_2d    !< Read 2d background viscosity from a file.
-  logical :: Kh_bg_2d_bug    !< If true, retain an answer-changing horizontal indexing bug
-                             !! in setting the corner-point viscosities when USE_KH_BG_2D=True.
   real    :: Kh_bg_min       !< The minimum value allowed for Laplacian horizontal
                              !! viscosity [L2 T-1 ~> m2 s-1]. The default is 0.0.
   logical :: use_land_mask   !< Use the land mask for the computation of thicknesses
@@ -1622,11 +1620,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
                  "If true, read a file containing 2-d background harmonic "//&
                  "viscosities. The final viscosity is the maximum of the other "//&
                  "terms and this background value.", default=.false.)
-  if (CS%use_Kh_bg_2d) then
-    call get_param(param_file, mdl, "KH_BG_2D_BUG", CS%Kh_bg_2d_bug, &
-                 "If true, retain an answer-changing horizontal indexing bug in setting "//&
-                 "the corner-point viscosities when USE_KH_BG_2D=True.", default=.true.)
-  endif
 
   call get_param(param_file, mdl, "USE_GME", CS%use_GME, &
                  "If true, use the GM+E backscatter scheme in association \n"//&
@@ -1840,14 +1833,11 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
       CS%Kh_bg_xy(I,J) = MAX(Kh, Kh_vel_scale * sqrt(grid_sp_q2))
 
       ! Use the larger of the above and values read from a file
-      if (CS%use_Kh_bg_2d) then ; if (CS%Kh_bg_2d_bug) then
-        ! This option is unambiguously wrong, and should be obsoleted as soon as possible.
-        CS%Kh_bg_xy(I,J) = MAX(CS%Kh_bg_2d(i,j), CS%Kh_bg_xy(I,J))
-      else
+      if (CS%use_Kh_bg_2d) then
         CS%Kh_bg_xy(I,J) = MAX(CS%Kh_bg_xy(I,J), &
             0.25*((CS%Kh_bg_2d(i,j) + CS%Kh_bg_2d(i+1,j+1)) + &
                   (CS%Kh_bg_2d(i+1,j) + CS%Kh_bg_2d(i,j+1))) )
-      endif ; endif
+      endif
 
       ! Use the larger of the above and a function of sin(latitude)
       if (Kh_sin_lat>0.) then

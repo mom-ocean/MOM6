@@ -110,7 +110,6 @@ type, public :: bulkmixedlayer_CS ; private
                              !! to set the heat carried by runoff, instead of
                              !! using SST for temperature of liq_runoff
   logical :: use_calving_heat_content !< Use SST for temperature of froz_runoff
-  logical :: salt_reject_below_ML !< It true, add salt below mixed layer (layer mode only)
   logical :: convect_mom_bug !< If true, use code with a bug that causes a loss of momentum
                              !! conservation during mixedlayer convection.
 
