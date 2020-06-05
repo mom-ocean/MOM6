@@ -170,7 +170,7 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
                  "wind profile.", units='m', default=50.e3, scale=US%m_to_L)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(param_file, mdl, "IDL_HURR_2018_ANSWERS", CS%answers_2018, &
                  "If true, use expressions driving the idealized hurricane test case that recover "//&
                  "the answers from the end of 2018.  Otherwise use expressions that are rescalable "//&

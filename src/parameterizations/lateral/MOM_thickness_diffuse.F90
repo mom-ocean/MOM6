@@ -1911,7 +1911,7 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
 
     call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
     call get_param(param_file, mdl, "MEKE_GEOMETRIC_2018_ANSWERS", CS%MEKE_GEOM_answers_2018, &
                  "If true, use expressions in the MEKE_GEOMETRIC calculation that recover the "//&
                  "answers from the original implementation.  Otherwise, use expressions that "//&
