@@ -1154,7 +1154,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  "If true, interpolate the resolution function to the "//&
                  "velocity points from the thickness points; otherwise "//&
                  "interpolate the wave speed and calculate the resolution "//&
-                 "function independently at each point.", default=.true.)
+                 "function independently at each point.", default=.false.)
     if (CS%interpolate_Res_fn) then
       if (CS%Res_coef_visc /= CS%Res_coef_khth) call MOM_error(FATAL, &
            "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
