@@ -126,7 +126,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
   type(bkgnd_mixing_cs),    pointer      :: CS         !< This module's control structure.
 
   ! Local variables
-  real :: Kv                    ! The interior vertical viscosity [Z2 T-1 ~> m2 s-1] - read to set prandtl
+  real :: Kv                    ! The interior vertical viscosity [Z2 T-1 ~> m2 s-1] - read to set Prandtl
                                 ! number unless it is provided as a parameter
   real :: prandtl_bkgnd_comp    ! Kv/CS%Kd. Gets compared with user-specified prandtl_bkgnd.
 
@@ -147,7 +147,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "KD", CS%Kd, &
                  "The background diapycnal diffusivity of density in the "//&
                  "interior. Zero or the molecular value, ~1e-7 m2 s-1, "//&
-                 "may be used.", units="m2 s-1", scale=US%m2_s_to_Z2_T, fail_if_missing=.true.)
+                 "may be used.", default=0.0, units="m2 s-1", scale=US%m2_s_to_Z2_T)
 
   call get_param(param_file, mdl, "KV", Kv, &
                  "The background kinematic viscosity in the interior. "//&

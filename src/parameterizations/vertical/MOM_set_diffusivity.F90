@@ -2060,8 +2060,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   call get_param(param_file, mdl, "KD", CS%Kd, &
                  "The background diapycnal diffusivity of density in the "//&
                  "interior. Zero or the molecular value, ~1e-7 m2 s-1, "//&
-                 "may be used.", units="m2 s-1", scale=US%m2_s_to_Z2_T, &
-                 fail_if_missing=.true.)
+                 "may be used.", default=0.0, units="m2 s-1", scale=US%m2_s_to_Z2_T)
   call get_param(param_file, mdl, "KD_MIN", CS%Kd_min, &
                  "The minimum diapycnal diffusivity.", &
                  units="m2 s-1", default=0.01*CS%Kd*US%Z2_T_to_m2_s, scale=US%m2_s_to_Z2_T)

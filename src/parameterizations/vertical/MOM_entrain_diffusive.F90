@@ -2093,7 +2093,8 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS, just_re
                                                  !! any diagnostics
 
   ! Local variables
-  real :: decay_length, dt, Kd
+  real :: dt  ! The dynamics timestep, used here in the default for TOLERANCE_ENT, in MKS units [s]
+  real :: Kd  ! A diffusivity used in the default for TOLERANCE_ENT, in MKS units [m2 s-1]
   logical :: just_read    ! If true, just read parameters but do nothing else.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -2117,15 +2118,15 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS, just_re
   call get_param(param_file, mdl, "MAX_ENT_IT", CS%max_ent_it, &
                  "The maximum number of iterations that may be used to "//&
                  "calculate the interior diapycnal entrainment.", default=5, do_not_log=just_read)
-! In this module, KD is only used to set the default for TOLERANCE_ENT. [m2 s-1]
-  call get_param(param_file, mdl, "KD", Kd, fail_if_missing=.true.)
+  ! In this module, KD is only used to set the default for TOLERANCE_ENT. [m2 s-1]
+  call get_param(param_file, mdl, "KD", Kd, default=0.0)
   call get_param(param_file, mdl, "DT", dt, &
                  "The (baroclinic) dynamics time step.", units = "s", &
                  fail_if_missing=.true., do_not_log=just_read)
-! CS%Tolerance_Ent = MAX(100.0*GV%Angstrom_H,1.0e-4*sqrt(dt*Kd)) !
   call get_param(param_file, mdl, "TOLERANCE_ENT", CS%Tolerance_Ent, &
                  "The tolerance with which to solve for entrainment values.", &
-                 units="m", default=MAX(100.0*GV%Angstrom_m,1.0e-4*sqrt(dt*Kd)), scale=GV%m_to_H, do_not_log=just_read)
+                 units="m", default=MAX(100.0*GV%Angstrom_m,1.0e-4*sqrt(dt*Kd)), scale=GV%m_to_H, &
+                 do_not_log=just_read)
 
   CS%Rho_sig_off = 1000.0*US%kg_m3_to_R
 

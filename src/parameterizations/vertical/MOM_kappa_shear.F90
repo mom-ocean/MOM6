@@ -2019,12 +2019,12 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
                  "The maximum number of iterations that may be used to "//&
                  "estimate the Richardson number driven mixing.", &
                  units="nondim", default=50)
-  call get_param(param_file, mdl, "KD", KD_normal, default=1.0e-7, do_not_log=.true.)
+  call get_param(param_file, mdl, "KD", KD_normal, default=0.0, do_not_log=.true.)
   call get_param(param_file, mdl, "KD_KAPPA_SHEAR_0", CS%kappa_0, &
                  "The background diffusivity that is used to smooth the "//&
                  "density and shear profiles before solving for the "//&
-                 "diffusivities. Defaults to value of KD.", &
-                 units="m2 s-1", default=KD_normal, scale=US%m2_s_to_Z2_T, unscaled=kappa_0_unscaled)
+                 "diffusivities.  The default is the greater of KD and 1e-7 m2 s-1.", &
+                 units="m2 s-1", default=max(KD_normal, 1.0e-7), scale=US%m2_s_to_Z2_T, unscaled=kappa_0_unscaled)
   call get_param(param_file, mdl, "KD_TRUNC_KAPPA_SHEAR", CS%kappa_trunc, &
                  "The value of shear-driven diffusivity that is considered negligible "//&
                  "and is rounded down to 0. The default is 1% of KD_KAPPA_SHEAR_0.", &
