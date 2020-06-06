@@ -269,7 +269,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
              " \t soliton - Equatorial Rossby soliton. \n"//&
              " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
              " \t USER - call a user modified routine.", &
-             fail_if_missing=new_sim, do_not_log=just_read)
+             default="uniform", do_not_log=just_read)
     select case (trim(config))
        case ("file")
          call initialize_thickness_from_file(h, G, GV, US, PF, .false., just_read_params=just_read)
@@ -1368,10 +1368,10 @@ subroutine initialize_velocity_uniform(u, v, G, US, param_file, just_read_params
 
   call get_param(param_file, mdl, "INITIAL_U_CONST", initial_u_const, &
                  "A initial uniform value for the zonal flow.", &
-                 units="m s-1", scale=US%m_s_to_L_T, fail_if_missing=.not.just_read, do_not_log=just_read)
+                 default=0.0, units="m s-1", scale=US%m_s_to_L_T, do_not_log=just_read)
   call get_param(param_file, mdl, "INITIAL_V_CONST", initial_v_const, &
                  "A initial uniform value for the meridional flow.", &
-                 units="m s-1", scale=US%m_s_to_L_T, fail_if_missing=.not.just_read, do_not_log=just_read)
+                 default=0.0, units="m s-1", scale=US%m_s_to_L_T, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
