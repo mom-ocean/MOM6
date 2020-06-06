@@ -1612,10 +1612,10 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
     call get_param(param_file, mdl, "WINDSTRESS_Y_VAR", CS%stress_y_var, &
                  "The name of the y-wind stress variable in WIND_FILE.", &
                  default="STRESS_Y")
-    call get_param(param_file, mdl, "WINDSTRESS_STAGGER",CS%wind_stagger, &
+    call get_param(param_file, mdl, "WIND_STAGGER",CS%wind_stagger, &
                  "A character indicating how the wind stress components "//&
                  "are staggered in WIND_FILE.  This may be A or C for now.", &
-                 default="A")
+                 default="C")
     call get_param(param_file, mdl, "WINDSTRESS_SCALE", CS%wind_scale, &
                  "A value by which the wind stresses in WIND_FILE are rescaled.", &
                  default=1.0, units="nondim")

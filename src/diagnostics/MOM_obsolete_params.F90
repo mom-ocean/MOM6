@@ -62,8 +62,11 @@ subroutine find_obsolete_params(param_file)
   call obsolete_logical(param_file, "MLE_USE_MLD_AVE_BUG", .false.)
   call obsolete_logical(param_file, "KG_BG_2D_BUG", .false.)
   call obsolete_logical(param_file, "CORRECT_DENSITY", .true.)
+  call obsolete_char(param_file, "WINDSTRESS_STAGGER", warning_val="C", &
+                     hint="Use WIND_STAGGER instead.")
 
-  call obsolete_char(param_file, "DIAG_REMAP_Z_GRID_DEF", "Use NUM_DIAG_COORDS, DIAG_COORDS and DIAG_COORD_DEF_Z")
+  call obsolete_char(param_file, "DIAG_REMAP_Z_GRID_DEF", &
+                     hint="Use NUM_DIAG_COORDS, DIAG_COORDS and DIAG_COORD_DEF_Z")
 
   call obsolete_real(param_file, "VSTAR_SCALE_FACTOR", hint="Use EPBL_VEL_SCALE_FACTOR instead.")
   call obsolete_logical(param_file, "ORIG_MLD_ITERATION", .false.)
@@ -138,21 +141,36 @@ subroutine obsolete_logical(param_file, varname, warning_val, hint)
 end subroutine obsolete_logical
 
 !> Test for presence of obsolete STRING in parameter file.
-subroutine obsolete_char(param_file, varname, hint)
+subroutine obsolete_char(param_file, varname, warning_val, hint)
   type(param_file_type), intent(in) :: param_file !< Structure containing parameter file data.
   character(len=*),      intent(in) :: varname    !< Name of obsolete STRING parameter.
+  character(len=*), optional, intent(in) :: warning_val !< An allowed value that causes a warning instead of an error.
   character(len=*), optional, intent(in) :: hint  !< A hint to the user about what to do.
   ! Local variables
   character(len=200) :: test_string, hint_msg
+  logical :: only_warn
 
   test_string = ''; call read_param(param_file, varname, test_string)
   hint_msg = " " ; if (present(hint)) hint_msg = hint
 
-  if (len_trim(test_string) > 0) call MOM_ERROR(FATAL,                 &
-           "MOM_obsolete_params: "//trim(varname)//                    &
-           " is an obsolete run-time flag, and should not be used. "// &
-           trim(hint_msg))
+  if (len_trim(test_string) > 0) then
+    only_warn = .false.
+    if (present(warning_val)) then ! Check if test_string and warning_val are the same.
+      if (len_trim(warning_val) == len_trim(test_string)) then
+        if (index(trim(test_string), trim(warning_val)) == 1) only_warn = .true.
+      endif
+    endif
 
+    if (only_warn) then
+      call MOM_ERROR(WARNING, &
+             "MOM_obsolete_params: "//trim(varname)// &
+             " is an obsolete run-time flag. "//trim(hint_msg))
+    else
+      call MOM_ERROR(FATAL, &
+             "MOM_obsolete_params: "//trim(varname)// &
+             " is an obsolete run-time flag, and should not be used. "//trim(hint_msg))
+    endif
+  endif
 end subroutine obsolete_char
 
 !> Test for presence of obsolete REAL in parameter file.
