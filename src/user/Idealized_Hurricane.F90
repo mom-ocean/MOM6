@@ -189,7 +189,6 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
                  "The background gustiness in the winds.", units="Pa", &
                  default=0.0, scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z, do_not_log=.true.)
 
-
   if (CS%BR_BENCH) then
     CS%rho_a = 1.2*US%kg_m3_to_R
   endif
