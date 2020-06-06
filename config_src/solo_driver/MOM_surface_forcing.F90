@@ -1683,11 +1683,10 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   if (CS%restorebuoy) then
     ! These three variables use non-standard time units, but are rescaled as they are read.
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
-                 "The constant that relates the restoring surface fluxes "//&
-                 "to the relative surface anomalies (akin to a piston "//&
-                 "velocity).  Note the non-MKS units.", &
-                 units="m day-1", scale=US%m_to_Z*US%T_to_s/86400.0, &
-                 fail_if_missing=.true., unscaled=flux_const_default)
+                 "The constant that relates the restoring surface fluxes to the relative "//&
+                 "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
+                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s/86400.0, &
+                 unscaled=flux_const_default)
 
     if (CS%use_temperature) then
       call get_param(param_file, mdl, "FLUXCONST_T", CS%Flux_const_T, &

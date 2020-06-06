@@ -257,11 +257,10 @@ subroutine Neverland_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "given by FLUXCONST.", default= .false.)
 
   if (CS%restorebuoy) then
-    call get_param(param_file, mdl, "FLUXCONST", CS%flux_const, &
-                 "The constant that relates the restoring surface fluxes "//&
-                 "to the relative surface anomalies (akin to a piston "//&
-                 "velocity).  Note the non-MKS units.", &
-                 units="m day-1", scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
+    call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
+                 "The constant that relates the restoring surface fluxes to the relative "//&
+                 "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
+                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s)
     ! Convert CS%flux_const from m day-1 to m s-1.
     CS%flux_const = CS%flux_const / 86400.0
   endif

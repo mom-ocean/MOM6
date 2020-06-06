@@ -1127,10 +1127,9 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
 
   if (restore_salt) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
-                 "The constant that relates the restoring surface fluxes "//&
-                 "to the relative surface anomalies (akin to a piston "//&
-                 "velocity).  Note the non-MKS units.", units="m day-1", scale=US%m_to_Z*US%T_to_s/86400.0, &
-                 fail_if_missing=.true.)
+                 "The constant that relates the restoring surface fluxes to the relative "//&
+                 "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
+                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s/86400.0)
     call get_param(param_file, mdl, "SALT_RESTORE_FILE", CS%salt_restore_file, &
                  "A file in which to find the surface salinity to use for restoring.", &
                  default="salt_restore.nc")
@@ -1173,10 +1172,9 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
 
   if (restore_temp) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
-                 "The constant that relates the restoring surface fluxes "//&
-                 "to the relative surface anomalies (akin to a piston "//&
-                 "velocity).  Note the non-MKS units.", units="m day-1", scale=US%m_to_Z*US%T_to_s/86400.0, &
-                 fail_if_missing=.true.)
+                 "The constant that relates the restoring surface fluxes to the relative "//&
+                 "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
+                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s/86400.0)
     call get_param(param_file, mdl, "SST_RESTORE_FILE", CS%temp_restore_file, &
                  "A file in which to find the surface temperature to use for restoring.", &
                  default="temp_restore.nc")
