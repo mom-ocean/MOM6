@@ -1929,7 +1929,7 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
   call get_param(param_file, mdl, "USE_GM_WORK_BUG", CS%use_GM_work_bug, &
                  "If true, compute the top-layer work tendency on the u-grid "//&
                  "with the incorrect sign, for legacy reproducibility.", &
-                 default=.true.)
+                 default=.false.)
 
   if (CS%use_GME_thickness_diffuse) then
     call safe_alloc_ptr(CS%KH_u_GME,G%IsdB,G%IedB,G%jsd,G%jed,G%ke+1)
