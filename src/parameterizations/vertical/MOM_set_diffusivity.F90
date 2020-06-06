@@ -1965,7 +1965,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
     call get_param(param_file, mdl, "ML_RAD_BUG", CS%ML_rad_bug, &
                  "If true use code with a bug that reduces the energy available "//&
                  "in the transition layer by a factor of the inverse of the energy "//&
-                 "deposition lenthscale (in m).", default=.true.)
+                 "deposition lenthscale (in m).", default=.false.)
     call get_param(param_file, mdl, "ML_RAD_KD_MAX", CS%ML_rad_kd_max, &
                  "The maximum diapycnal diffusivity due to turbulence "//&
                  "radiated from the base of the mixed layer. "//&
