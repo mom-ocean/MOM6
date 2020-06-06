@@ -61,6 +61,7 @@ subroutine find_obsolete_params(param_file)
   call obsolete_logical(param_file, "SALT_REJECT_BELOW_ML", .false.)
   call obsolete_logical(param_file, "MLE_USE_MLD_AVE_BUG", .false.)
   call obsolete_logical(param_file, "KG_BG_2D_BUG", .false.)
+  call obsolete_logical(param_file, "CORRECT_DENSITY", .true.)
 
   call obsolete_char(param_file, "DIAG_REMAP_Z_GRID_DEF", "Use NUM_DIAG_COORDS, DIAG_COORDS and DIAG_COORD_DEF_Z")
 
