@@ -1897,9 +1897,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "model may ask for more salt than is available and "//&
                  "drive the salinity negative otherwise.)", default=.false.)
     call get_param(param_file, "MOM", "MIN_SALINITY", CS%tv%min_salinity, &
-                 "The minimum value of salinity when BOUND_SALINITY=True. "//&
-                 "The default is 0.01 for backward compatibility but ideally should be 0.", &
-                 units="PPT", default=0.01, do_not_log=.not.bound_salinity)
+                 "The minimum value of salinity when BOUND_SALINITY=True.", &
+                 units="PPT", default=0.0, do_not_log=.not.bound_salinity)
     call get_param(param_file, "MOM", "C_P", CS%tv%C_p, &
                  "The heat capacity of sea water, approximated as a "//&
                  "constant. This is only used if ENABLE_THERMODYNAMICS is "//&
