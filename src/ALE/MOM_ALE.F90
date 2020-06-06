@@ -163,12 +163,11 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   CS%show_call_tree = callTree_showQuery()
   if (CS%show_call_tree) call callTree_enter("ALE_init(), MOM_ALE.F90")
 
-  call get_param(param_file, mdl, "REMAP_UV_USING_OLD_ALG", &
-                 CS%remap_uv_using_old_alg, &
+  call get_param(param_file, mdl, "REMAP_UV_USING_OLD_ALG", CS%remap_uv_using_old_alg, &
                  "If true, uses the old remapping-via-a-delta-z method for "//&
                  "remapping u and v. If false, uses the new method that remaps "//&
                  "between grids described by an old and new thickness.", &
-                 default=.true.)
+                 default=.false.)
 
   ! Initialize and configure regridding
   call ALE_initRegridding(GV, US, max_depth, param_file, mdl, CS%regridCS)
