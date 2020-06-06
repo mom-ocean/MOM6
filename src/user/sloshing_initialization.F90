@@ -89,7 +89,7 @@ subroutine sloshing_initialize_thickness ( h, G, GV, US, param_file, just_read_p
                  units='m', default=75.0, scale=US%m_to_Z, do_not_log=just_read)
   call get_param(param_file, mdl, "SLOSHING_IC_BUG", use_IC_bug, &
                  "If true, use code with a bug to set the sloshing initial conditions.", &
-                 default=.true., do_not_log=just_read)
+                 default=.false., do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
