@@ -1597,9 +1597,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
   call get_param(param_file, mdl, "USE_LAND_MASK_FOR_HVISC", CS%use_land_mask, &
                  "If true, use Use the land mask for the computation of thicknesses "//&
                  "at velocity locations. This eliminates the dependence on arbitrary "//&
-                 "values over land or outside of the domain. Default is False in order to "//&
-                 "maintain answers with legacy experiments but should be changed to True "//&
-                 "for new experiments.", default=.false.)
+                 "values over land or outside of the domain.", default=.true.)
 
   if (CS%better_bound_Ah .or. CS%better_bound_Kh .or. get_all) &
     call get_param(param_file, mdl, "HORVISC_BOUND_COEF", CS%bound_coef, &
