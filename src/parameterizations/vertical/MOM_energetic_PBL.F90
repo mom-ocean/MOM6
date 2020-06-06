@@ -2154,11 +2154,10 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  units="nondim", default=0.0)
 
 !/ Mixing Length Options
-  !### THIS DEFAULT SHOULD BECOME TRUE.
   call get_param(param_file, mdl, "USE_MLD_ITERATION", CS%Use_MLD_iteration, &
                  "A logical that specifies whether or not to use the "//&
                  "distance to the bottom of the actively turbulent boundary "//&
-                 "layer to help set the EPBL length scale.", default=.false.)
+                 "layer to help set the EPBL length scale.", default=.true.)
   call get_param(param_file, mdl, "EPBL_TRANSITION_SCALE", CS%transLay_scale, &
                  "A scale for the mixing length in the transition layer "//&
                  "at the edge of the boundary layer as a fraction of the "//&
