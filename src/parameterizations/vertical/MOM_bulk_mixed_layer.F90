@@ -3578,7 +3578,7 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
                  default=.false.)
   call get_param(param_file, mdl, "BULKML_CONV_MOMENTUM_BUG", CS%convect_mom_bug, &
                  "If true, use code with a bug that causes a loss of momentum conservation "//&
-                 "during mixedlayer convection.", default=.true.)
+                 "during mixedlayer convection.", default=.false.)
 
   call get_param(param_file, mdl, "ALLOW_CLOCKS_IN_OMP_LOOPS", &
                  CS%allow_clocks_in_omp_loops, &
