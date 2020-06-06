@@ -1007,7 +1007,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   call get_param(param_file, mdl, "BUOY_CONFIG", CS%buoy_config, &
                  "The character string that indicates how buoyancy forcing "//&
                  "is specified. Valid options include (file), (zero), "//&
-                 "(linear), (USER), and (NONE).", fail_if_missing=.true.)
+                 "(linear), (USER), and (NONE).", default="zero")
   if (trim(CS%buoy_config) == "file") then
     call get_param(param_file, mdl, "LONGWAVEDOWN_FILE", CS%longwavedown_file, &
                  "The file with the downward longwave heat flux, in "//&
@@ -1046,7 +1046,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   call get_param(param_file, mdl, "WIND_CONFIG", CS%wind_config, &
                  "The character string that indicates how wind forcing "//&
                  "is specified. Valid options include (file), (2gyre), "//&
-                 "(1gyre), (gyres), (zero), and (USER).", fail_if_missing=.true.)
+                 "(1gyre), (gyres), (zero), and (USER).", default="zero")
   if (trim(CS%wind_config) == "file") then
     call get_param(param_file, mdl, "WIND_FILE", CS%wind_file, &
                  "The file in which the wind stresses are found in "//&

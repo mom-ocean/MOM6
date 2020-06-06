@@ -1459,7 +1459,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   call get_param(param_file, mdl, "BUOY_CONFIG", CS%buoy_config, &
                  "The character string that indicates how buoyancy forcing "//&
                  "is specified. Valid options include (file), (zero), "//&
-                 "(linear), (USER), (BFB) and (NONE).", fail_if_missing=.true.)
+                 "(linear), (USER), (BFB) and (NONE).", default="zero")
   if (trim(CS%buoy_config) == "file") then
     call get_param(param_file, mdl, "ARCHAIC_OMIP_FORCING_FILE", CS%archaic_OMIP_file, &
                  "If true, use the forcing variable decomposition from "//&
@@ -1601,7 +1601,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   call get_param(param_file, mdl, "WIND_CONFIG", CS%wind_config, &
                  "The character string that indicates how wind forcing "//&
                  "is specified. Valid options include (file), (2gyre), "//&
-                 "(1gyre), (gyres), (zero), and (USER).", fail_if_missing=.true.)
+                 "(1gyre), (gyres), (zero), and (USER).", default="zero")
   if (trim(CS%wind_config) == "file") then
     call get_param(param_file, mdl, "WIND_FILE", CS%wind_file, &
                  "The file in which the wind stresses are found in "//&
