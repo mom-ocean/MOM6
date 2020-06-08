@@ -85,9 +85,11 @@ endif
 SOURCE = \
   $(foreach ext,F90 inc c h,$(wildcard $(1)/*/*.$(ext) $(1)/*/*/*.$(ext)))
 
-MOM_SOURCE = $(call SOURCE,../src) $(wildcard ../config_src/solo_driver/*.F90)
+MOM_SOURCE = $(call SOURCE,../src) $(wildcard ../config_src/solo_driver/*.F90) \
+             $(wildcard ../config_src/external_APIs/*/*.F90)
 TARGET_SOURCE = $(call SOURCE,build/target_codebase/src) \
-  $(wildcard build/target_codebase/config_src/solo_driver/*.F90)
+  $(wildcard build/target_codebase/config_src/solo_driver/*.F90) \
+  $(wildcard build/target_codebase/config_src/external_APIs/*.F90)
 FMS_SOURCE = $(call SOURCE,$(DEPS)/fms/src)
 
 #---
@@ -133,6 +135,7 @@ build/target/path_names: $(LIST_PATHS) $(TARGET_CODEBASE) $(TARGET_SOURCE)
 	cd $(@D) && $(LIST_PATHS) -l \
 	  ../../$(TARGET_CODEBASE)/src \
 	  ../../$(TARGET_CODEBASE)/config_src/solo_driver \
+	  ../../$(TARGET_CODEBASE)/config_src/external_APIs \
 	  ../../$(TARGET_CODEBASE)/$(GRID_SRC)
 
 build/%/path_names: $(LIST_PATHS) $(MOM_SOURCE)
@@ -140,6 +143,7 @@ build/%/path_names: $(LIST_PATHS) $(MOM_SOURCE)
 	cd $(@D) && $(LIST_PATHS) -l \
 	  ../../../src \
 	  ../../../config_src/solo_driver \
+	  ../../../config_src/external_APIs \
 	  ../../../$(GRID_SRC)
 
 # Target repository for regression tests
