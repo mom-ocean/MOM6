@@ -4,7 +4,6 @@ module MOM_generic_tracer
 
 #include <MOM_memory.h>
 
-#ifdef _USE_GENERIC_TRACER
 #include <fms_platform.h>
 
   use mpp_mod,        only: stdout, mpp_error, FATAL,WARNING,NOTE
@@ -820,7 +819,6 @@ contains
     endif
   end subroutine end_MOM_generic_tracer
 
-#endif /* _USE_GENERIC_TRACER */
 !----------------------------------------------------------------
 ! <CONTACT EMAIL="Niki.Zadeh@noaa.gov"> Niki Zadeh
 ! </CONTACT>
