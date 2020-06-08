@@ -555,9 +555,11 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag
   !   This subroutine initializes all of the variables that are used by this
   ! dynamic core, including diagnostics and the cpu clocks.
 
-  ! Local varaibles
+  ! Local variables
   character(len=40) :: mdl = "MOM_dynamics_unsplit_RK2" ! This module's name.
   character(len=48) :: thickness_units, flux_units
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   real :: H_convert
   logical :: use_tides
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
@@ -575,6 +577,7 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag
 
   CS%diag => diag
 
+  call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "BE", CS%be, &
                  "If SPLIT is true, BE determines the relative weighting "//&
                  "of a  2nd-order Runga-Kutta baroclinic time stepping "//&
@@ -595,7 +598,7 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag
                  "If true, use the correct timestep in the viscous terms applied in the first "//&
                  "predictor step with the unsplit time stepping scheme, and in the calculation "//&
                  "of the turbulent mixed layer properties for viscosity with unsplit or "//&
-                 "unsplit_RK2. The default should be true.", default=.false.)
+                 "unsplit_RK2.", default=.true.)
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", &
                  default=.false., debuggingParam=.true.)

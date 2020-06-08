@@ -113,8 +113,9 @@ subroutine continuity_init(Time, G, GV, US, param_file, diag, CS)
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handles.
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics control structure.
   type(continuity_CS),     pointer       :: CS         !< Control structure for mom_continuity.
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_continuity" ! This module's name.
   character(len=20)  :: tmpstr
 
