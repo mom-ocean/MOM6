@@ -340,7 +340,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   call cpu_clock_begin(id_clock_vertvisc)
   call enable_averages(dt, Time_local, CS%diag)
   dt_visc = dt_pred ; if (CS%use_correct_dt_visc) dt_visc = dt
-  call set_viscous_ML(up, vp, h_av, tv, forces, visc, dt_visc, G, GV, US, CS%set_visc_CSp)
+  call set_viscous_ML(u_in, v_in, h_av, tv, forces, visc, dt_visc, G, GV, US, CS%set_visc_CSp)
   call disable_averaging(CS%diag)
 
   call vertvisc_coef(up, vp, h_av, forces, visc, dt_pred, G, GV, US, CS%vertvisc_CSp, CS%OBC)
