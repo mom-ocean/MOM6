@@ -24,7 +24,7 @@ logical :: all_PEs_read = .false. !< If true, all PEs read the input files
                                   !! TODO: Eliminate this parameter
 
 !>@{ Default values for parameters
-logical, parameter :: report_unused_default = .false.
+logical, parameter :: report_unused_default = .true.
 logical, parameter :: unused_params_fatal_default = .false.
 logical, parameter :: log_to_stdout_default = .false.
 logical, parameter :: complete_doc_default = .true.

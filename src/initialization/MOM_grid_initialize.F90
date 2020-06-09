@@ -205,7 +205,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   call get_param(param_file, mdl, "USE_TRIPOLAR_GEOLONB_BUG", lon_bug, &
                  "If true, use older code that incorrectly sets the longitude "//&
                  "in some points along the tripolar fold to be off by 360 degrees.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(param_file,  mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
   filename = trim(adjustl(inputdir)) // trim(adjustl(grid_file))
