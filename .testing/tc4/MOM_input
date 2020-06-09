@@ -320,9 +320,6 @@ DTBT = 10.0                     !   [s or nondim] default = -0.98
 ! Parameterization of enhanced mixing due to convection via CVMix
 
 ! === module MOM_entrain_diffusive ===
-CORRECT_DENSITY = False         !   [Boolean] default = True
-                                ! If true, and USE_EOS is true, the layer densities are restored toward their
-                                ! target values by the diapycnal mixing, as described in Hallberg (MWR, 2000).
 
 ! === module MOM_set_diffusivity ===
 BBL_EFFIC = 0.0                 !   [nondim] default = 0.2
