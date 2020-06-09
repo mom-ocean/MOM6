@@ -487,7 +487,7 @@ contains
     dz_ml(:,:) = 0.0
     do j=jsc,jec ; do i=isc,iec
       surface_field(i,j) = tv%S(i,j,1)
-      dz_ml(i,j) = G%US%Z_to_m * Hml
+      dz_ml(i,j) = G%US%Z_to_m * Hml(i,j)
     enddo ; enddo
     sosga = global_area_mean(surface_field, G)
 
