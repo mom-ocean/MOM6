@@ -169,7 +169,7 @@ real, parameter :: BET002 = -6.1618945251e-02
 real, parameter :: BET102 = 6.2255521644e-02
 real, parameter :: BET012 = -2.6514181169e-03
 real, parameter :: BET003 = -2.3025968587e-04
-!!@}
+!>@}
 
 contains
 

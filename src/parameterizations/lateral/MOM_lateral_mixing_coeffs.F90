@@ -93,9 +93,6 @@ type, public :: VarMix_CS
   real, dimension(:,:,:), pointer :: &
     slope_x => NULL(), &  !< Zonal isopycnal slope [nondim]
     slope_y => NULL(), &  !< Meridional isopycnal slope [nondim]
-    !### These are posted as diagnostics but are never set.
-    N2_u => NULL(), &     !< Brunt-Vaisala frequency at u-points [s-2]
-    N2_v => NULL(), &     !< Brunt-Vaisala frequency at v-points [s-2]
     ebt_struct => NULL()  !< Vertical structure function to scale diffusivities with [nondim]
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
     Laplac3_const_u       !< Laplacian metric-dependent constants [L3 ~> m3]
@@ -466,14 +463,14 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
   endif
 
   if (query_averaging_enabled(CS%diag)) then
-    if (CS%id_SN_u > 0)     call post_data(CS%id_SN_u, CS%SN_u, CS%diag)
-    if (CS%id_SN_v > 0)     call post_data(CS%id_SN_v, CS%SN_v, CS%diag)
-    if (CS%id_L2u > 0)      call post_data(CS%id_L2u, CS%L2u, CS%diag)
-    if (CS%id_L2v > 0)      call post_data(CS%id_L2v, CS%L2v, CS%diag)
-    !### I do not believe that CS%N2_u and CS%N2_v are ever set, but because the contents
-    !    of CS are public, they might be set somewhere outside of this module.
-    if (CS%id_N2_u > 0)     call post_data(CS%id_N2_u, CS%N2_u, CS%diag)
-    if (CS%id_N2_v > 0)     call post_data(CS%id_N2_v, CS%N2_v, CS%diag)
+    if (CS%id_SN_u > 0) call post_data(CS%id_SN_u, CS%SN_u, CS%diag)
+    if (CS%id_SN_v > 0) call post_data(CS%id_SN_v, CS%SN_v, CS%diag)
+    if (CS%id_L2u > 0)  call post_data(CS%id_L2u, CS%L2u, CS%diag)
+    if (CS%id_L2v > 0)  call post_data(CS%id_L2v, CS%L2v, CS%diag)
+    if (CS%calculate_Eady_growth_rate .and. CS%use_stored_slopes) then
+      if (CS%id_N2_u > 0) call post_data(CS%id_N2_u, N2_u, CS%diag)
+      if (CS%id_N2_v > 0) call post_data(CS%id_N2_v, N2_v, CS%diag)
+    endif
   endif
 
 end subroutine calc_slope_functions
@@ -606,8 +603,10 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS)
 
   if (CS%debug) then
     call uvchksum("calc_Visbeck_coeffs slope_[xy]", slope_x, slope_y, G%HI, haloshift=1)
-    call uvchksum("calc_Visbeck_coeffs N2_u, N2_v", N2_u, N2_v, G%HI, scale=US%s_to_T**2)
-    call uvchksum("calc_Visbeck_coeffs SN_[uv]", CS%SN_u, CS%SN_v, G%HI, scale=US%s_to_T)
+    call uvchksum("calc_Visbeck_coeffs N2_u, N2_v", N2_u, N2_v, G%HI, &
+                  scale=US%s_to_T**2, scalar_pair=.true.)
+    call uvchksum("calc_Visbeck_coeffs SN_[uv]", CS%SN_u, CS%SN_v, G%HI, &
+                  scale=US%s_to_T, scalar_pair=.true.)
   endif
 
 end subroutine calc_Visbeck_coeffs
@@ -752,8 +751,6 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
   type(ocean_grid_type),                     intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),                     intent(in)  :: US   !< A dimensional unit scaling type
-! real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u  !< Zonal flow [L T-1 ~> m s-1]
-! real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v  !< Meridional flow [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h !< Layer thickness [H ~> m or kg m-2]
   integer,                                   intent(in)  :: k  !< Layer for which to calculate vorticity magnitude
   real, dimension(SZIB_(G),SZJ_(G)),         intent(in)  :: div_xx_dx  !< x-derivative of horizontal divergence
@@ -764,15 +761,6 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
                                                                  !! (d/dx(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
   real, dimension(SZIB_(G),SZJ_(G)),         intent(inout) :: vort_xy_dy !< y-derivative of vertical vorticity
                                                                  !! (d/dy(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
-!  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Kh_h !< Leith Laplacian viscosity
-                                                                 !! at h-points [L2 T-1 ~> m2 s-1]
-!  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: Leith_Kh_q !< Leith Laplacian viscosity
-                                                                 !! at q-points [L2 T-1 ~> m2 s-1]
-!  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Ah_h !< Leith bi-harmonic viscosity
-                                                                 !! at h-points [L4 T-1 ~> m4 s-1]
-!  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: Leith_Ah_q !< Leith bi-harmonic viscosity
-                                                                 !! at q-points [L4 T-1 ~> m4 s-1]
-
   ! Local variables
   real, dimension(SZI_(G),SZJB_(G)) :: &
     dslopey_dz, & ! z-derivative of y-slope at v-points [Z-1 ~> m-1]
@@ -800,16 +788,9 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
 
   inv_PI3 = 1.0/((4.0*atan(1.0))**3)
 
-  !### I believe this halo update to be unnecessary. -RWH
-  call pass_var(h, G%Domain)
-
   if ((k > 1) .and. (k < nz)) then
 
-  ! Add in stretching term for the QG Leith vsicosity
-!  if (CS%use_QG_Leith) then
-
-    !### do j=js-1,je+1 ; do I=is-2,Ieq+1
-    do j=js-2,Jeq+2 ; do I=is-2,Ieq+1
+    do j=js-1,je+1 ; do I=is-2,Ieq+1
       h_at_slope_above = 2. * ( h(i,j,k-1) * h(i+1,j,k-1) ) * ( h(i,j,k) * h(i+1,j,k) ) / &
                          ( ( h(i,j,k-1) * h(i+1,j,k-1) ) * ( h(i,j,k) + h(i+1,j,k) ) &
                          + ( h(i,j,k) * h(i+1,j,k) ) * ( h(i,j,k-1) + h(i+1,j,k-1) ) + GV%H_subroundoff )
@@ -821,8 +802,7 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
       h_at_u(I,j) = 2. * ( h_at_slope_above * h_at_slope_below ) * Ih
     enddo ; enddo
 
-    !### do J=js-2,Jeq+1 ; do i=is-1,ie+1
-    do J=js-2,Jeq+1 ; do i=is-2,Ieq+2
+    do J=js-2,Jeq+1 ; do i=is-1,ie+1
       h_at_slope_above = 2. * ( h(i,j,k-1) * h(i,j+1,k-1) ) * ( h(i,j,k) * h(i,j+1,k) ) / &
                          ( ( h(i,j,k-1) * h(i,j+1,k-1) ) * ( h(i,j,k) + h(i,j+1,k) ) &
                          + ( h(i,j,k) * h(i,j+1,k) ) * ( h(i,j,k-1) + h(i,j+1,k-1) ) + GV%H_subroundoff )
@@ -834,8 +814,7 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
       h_at_v(i,J) = 2. * ( h_at_slope_above * h_at_slope_below ) * Ih
     enddo ; enddo
 
-    !### do J=js-1,je ; do i=is-1,Ieq+1
-    do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
+    do J=js-1,je ; do i=is-1,Ieq+1
       f = 0.5 * ( G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J) )
       vort_xy_dx(i,J) = vort_xy_dx(i,J) - f * US%L_to_Z * &
             ( ( h_at_u(I,j) * dslopex_dz(I,j) + h_at_u(I-1,j+1) * dslopex_dz(I-1,j+1) ) &
@@ -843,33 +822,25 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
               ( ( h_at_u(I,j) + h_at_u(I-1,j+1) ) + ( h_at_u(I-1,j) + h_at_u(I,j+1) ) + GV%H_subroundoff)
     enddo ; enddo
 
-    !### do j=js-1,Jeq+1 ; do I=is-1,ie
-    do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
+    do j=js-1,Jeq+1 ; do I=is-1,ie
       f = 0.5 * ( G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1) )
-      !### I think that this should be vort_xy_dy(I,j) = vort_xy_dy(I,j) - f * &
-      vort_xy_dy(I,j) = vort_xy_dx(I,j) - f * US%L_to_Z * &
+      vort_xy_dy(I,j) = vort_xy_dy(I,j) - f * US%L_to_Z * &
             ( ( h_at_v(i,J) * dslopey_dz(i,J) + h_at_v(i+1,J-1) * dslopey_dz(i+1,J-1) ) &
             + ( h_at_v(i,J-1) * dslopey_dz(i,J-1) + h_at_v(i+1,J) * dslopey_dz(i+1,J) ) ) / &
               ( ( h_at_v(i,J) + h_at_v(i+1,J-1) ) + ( h_at_v(i,J-1) + h_at_v(i+1,J) ) + GV%H_subroundoff)
     enddo ; enddo
   endif ! k > 1
 
-  !### I believe this halo update to be unnecessary. -RWH
-  call pass_vector(vort_xy_dy,vort_xy_dx,G%Domain)
-
   if (CS%use_QG_Leith_GM) then
 
     do j=js,je ; do I=is-1,Ieq
-      !### These expressions are not rotationally symmetric.  Add parentheses and regroup, as in:
-    ! grad_vort_mag_u(I,j) = SQRT(vort_xy_dy(I,j)**2 + (0.25*((vort_xy_dx(i,J) + vort_xy_dx(i+1,J-1)) +
-    !                                                         (vort_xy_dx(i+1,J) + vort_xy_dx(i,J-1))))**2 )
-      grad_vort_mag_u(I,j) = SQRT(vort_xy_dy(I,j)**2  + (0.25*(vort_xy_dx(i,J) + vort_xy_dx(i+1,J) &
-                                                             + vort_xy_dx(i,J-1) + vort_xy_dx(i+1,J-1)))**2)
-      grad_div_mag_u(I,j) = SQRT(div_xx_dx(I,j)**2  + (0.25*(div_xx_dy(i,J) + div_xx_dy(i+1,J) &
-                                                           + div_xx_dy(i,J-1) + div_xx_dy(i+1,J-1)))**2)
+      grad_vort_mag_u(I,j) = SQRT(vort_xy_dy(I,j)**2  + (0.25*((vort_xy_dx(i,J) + vort_xy_dx(i+1,J-1)) &
+                                                             + (vort_xy_dx(i+1,J) + vort_xy_dx(i,J-1))))**2)
+      grad_div_mag_u(I,j) = SQRT(div_xx_dx(I,j)**2  + (0.25*((div_xx_dy(i,J) + div_xx_dy(i+1,J-1)) &
+                                                           + (div_xx_dy(i+1,J) + div_xx_dy(i,J-1))))**2)
       if (CS%use_beta_in_QG_Leith) then
-        beta_u(I,j) = sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i+1,j))**2) + &
-                                      (0.5*(G%dF_dy(i,j)+G%dF_dy(i+1,j))**2) )
+        beta_u(I,j) = sqrt((0.5*(G%dF_dx(i,j)+G%dF_dx(i+1,j))**2) + &
+                          (0.5*(G%dF_dy(i,j)+G%dF_dy(i+1,j))**2))
         CS%KH_u_QG(I,j,k) = MIN(grad_vort_mag_u(I,j) + grad_div_mag_u(I,j), 3.0*beta_u(I,j)) * &
                             CS%Laplac3_const_u(I,j) * inv_PI3
       else
@@ -879,14 +850,13 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
     enddo ; enddo
 
     do J=js-1,Jeq ; do i=is,ie
-      !### These expressions are not rotationally symmetric.  Add parentheses and regroup.
-      grad_vort_mag_v(i,J) = SQRT(vort_xy_dx(i,J)**2  + (0.25*(vort_xy_dy(I,j) + vort_xy_dy(I-1,j) &
-                                                             + vort_xy_dy(I,j+1) + vort_xy_dy(I-1,j+1)))**2)
-      grad_div_mag_v(i,J) = SQRT(div_xx_dy(i,J)**2  + (0.25*(div_xx_dx(I,j) + div_xx_dx(I-1,j) &
-                                                           + div_xx_dx(I,j+1) + div_xx_dx(I-1,j+1)))**2)
+      grad_vort_mag_v(i,J) = SQRT(vort_xy_dx(i,J)**2  + (0.25*((vort_xy_dy(I,j) + vort_xy_dy(I-1,j+1)) &
+                                                             + (vort_xy_dy(I,j+1) + vort_xy_dy(I-1,j))))**2)
+      grad_div_mag_v(i,J) = SQRT(div_xx_dy(i,J)**2  + (0.25*((div_xx_dx(I,j) + div_xx_dx(I-1,j+1)) &
+                                                           + (div_xx_dx(I,j+1) + div_xx_dx(I-1,j))))**2)
       if (CS%use_beta_in_QG_Leith) then
-        beta_v(i,J) = sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i,j+1))**2) + &
-                            (0.5*(G%dF_dy(i,j)+G%dF_dy(i,j+1))**2) )
+        beta_v(i,J) = sqrt((0.5*(G%dF_dx(i,j)+G%dF_dx(i,j+1))**2) + &
+                          (0.5*(G%dF_dy(i,j)+G%dF_dy(i,j+1))**2))
         CS%KH_v_QG(i,J,k) = MIN(grad_vort_mag_v(i,J) + grad_div_mag_v(i,J), 3.0*beta_v(i,J)) * &
                             CS%Laplac3_const_v(i,J) * inv_PI3
       else
@@ -921,12 +891,17 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   real :: absurdly_small_freq  ! A miniscule frequency that is used to avoid division by 0 [T-1 ~> s-1].  The
              ! default value is roughly (pi / (the age of the universe)).
   logical :: Gill_equatorial_Ld, use_FGNV_streamfn, use_MEKE, in_use
+  logical :: default_2018_answers, remap_answers_2018
   real :: MLE_front_length
   real :: Leith_Lap_const      ! The non-dimensional coefficient in the Leith viscosity
   real :: grid_sp_u2, grid_sp_v2 ! Intermediate quantities for Leith metrics [L2 ~> m2]
   real :: grid_sp_u3, grid_sp_v3 ! Intermediate quantities for Leith metrics [L3 ~> m3]
+  real :: wave_speed_min      ! A floor in the first mode speed below which 0 is returned [L T-1 ~> m s-1]
+  real :: wave_speed_tol      ! The fractional tolerance for finding the wave speeds [nondim]
+  logical :: better_speed_est ! If true, use a more robust estimate of the first
+                              ! mode wave speed as the starting point for iterations.
 ! This include declares and sets the variable "version".
-#include "version_variable.h"
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_lateral_mixing_coeffs" ! This module's name.
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -1042,8 +1017,6 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     in_use = .true.
     allocate(CS%slope_x(IsdB:IedB,jsd:jed,G%ke+1)) ; CS%slope_x(:,:,:) = 0.0
     allocate(CS%slope_y(isd:ied,JsdB:JedB,G%ke+1)) ; CS%slope_y(:,:,:) = 0.0
-    allocate(CS%N2_u(IsdB:IedB,jsd:jed,G%ke+1)) ; CS%N2_u(:,:,:) = 0.0
-    allocate(CS%N2_v(isd:ied,JsdB:JedB,G%ke+1)) ; CS%N2_v(:,:,:) = 0.0
     call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_smooth, &
                  "A diapycnal diffusivity that is used to interpolate "//&
                  "more sensible values of T & S into thin layers.", &
@@ -1091,16 +1064,19 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
        'm2', conversion=US%L_to_m**2)
   endif
 
-  if (CS%use_stored_slopes) then
+  if (CS%calculate_Eady_growth_rate .and. CS%use_stored_slopes) then
     CS%id_N2_u = register_diag_field('ocean_model', 'N2_u', diag%axesCui, Time, &
-         'Square of Brunt-Vaisala frequency, N^2, at u-points, as used in Visbeck et al.', 's-2')
+         'Square of Brunt-Vaisala frequency, N^2, at u-points, as used in Visbeck et al.', &
+         's-2', conversion=US%s_to_T**2)
     CS%id_N2_v = register_diag_field('ocean_model', 'N2_v', diag%axesCvi, Time, &
-         'Square of Brunt-Vaisala frequency, N^2, at v-points, as used in Visbeck et al.', 's-2')
-    !### The units of the next two diagnostics should be 'nondim'.
+         'Square of Brunt-Vaisala frequency, N^2, at v-points, as used in Visbeck et al.', &
+         's-2', conversion=US%s_to_T**2)
+  endif
+  if (CS%use_stored_slopes) then
     CS%id_S2_u = register_diag_field('ocean_model', 'S2_u', diag%axesCu1, Time, &
-         'Depth average square of slope magnitude, S^2, at u-points, as used in Visbeck et al.', 's-2')
+         'Depth average square of slope magnitude, S^2, at u-points, as used in Visbeck et al.', 'nondim')
     CS%id_S2_v = register_diag_field('ocean_model', 'S2_v', diag%axesCv1, Time, &
-         'Depth average square of slope magnitude, S^2, at v-points, as used in Visbeck et al.', 's-2')
+         'Depth average square of slope magnitude, S^2, at v-points, as used in Visbeck et al.', 'nondim')
   endif
 
   oneOrTwo = 1.0
@@ -1241,7 +1217,27 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   if (CS%calculate_cg1) then
     in_use = .true.
     allocate(CS%cg1(isd:ied,jsd:jed)) ; CS%cg1(:,:) = 0.0
-    call wave_speed_init(CS%wave_speed_CSp, use_ebt_mode=CS%Resoln_use_ebt, mono_N2_depth=N2_filter_depth)
+    call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
+    call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=default_2018_answers)
+    call get_param(param_file, mdl, "INTERNAL_WAVE_SPEED_TOL", wave_speed_tol, &
+                 "The fractional tolerance for finding the wave speeds.", &
+                 units="nondim", default=0.001)
+    !### Set defaults so that wave_speed_min*wave_speed_tol >= 1e-9 m s-1
+    call get_param(param_file, mdl, "INTERNAL_WAVE_SPEED_MIN", wave_speed_min, &
+                 "A floor in the first mode speed below which 0 used instead.", &
+                 units="m s-1", default=0.0, scale=US%m_s_to_L_T)
+    call get_param(param_file, mdl, "INTERNAL_WAVE_SPEED_BETTER_EST", better_speed_est, &
+                 "If true, use a more robust estimate of the first mode wave speed as the "//&
+                 "starting point for iterations.", default=.false.) !### Change the default.
+    call wave_speed_init(CS%wave_speed_CSp, use_ebt_mode=CS%Resoln_use_ebt, &
+                         mono_N2_depth=N2_filter_depth, remap_answers_2018=remap_answers_2018, &
+                         better_speed_est=better_speed_est, min_speed=wave_speed_min, &
+                         wave_speed_tol=wave_speed_tol)
   endif
 
   ! Leith parameters
@@ -1272,13 +1268,12 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     do j=Jsq,Jeq+1 ; do I=is-1,Ieq
       ! Static factors in the Leith schemes
       grid_sp_u2 = G%dyCu(I,j)*G%dxCu(I,j)
-      grid_sp_u3 = sqrt(grid_sp_u2)
+      grid_sp_u3 = grid_sp_u2*sqrt(grid_sp_u2)
       CS%Laplac3_const_u(I,j) = Leith_Lap_const * grid_sp_u3
     enddo ; enddo
     do j=js-1,Jeq ; do I=Isq,Ieq+1
       ! Static factors in the Leith schemes
-      !### The second factor here is wrong.  It should be G%dxCv(i,J).
-      grid_sp_v2 = G%dyCv(i,J)*G%dxCu(i,J)
+      grid_sp_v2 = G%dyCv(i,J)*G%dxCv(i,J)
       grid_sp_v3 = grid_sp_v2*sqrt(grid_sp_v2)
       CS%Laplac3_const_v(i,J) = Leith_Lap_const * grid_sp_v3
     enddo ; enddo

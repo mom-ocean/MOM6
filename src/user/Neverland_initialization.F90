@@ -122,7 +122,7 @@ subroutine Neverland_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
   type(EOS_type),          pointer    :: eqn_of_state         !< integer that selects the
                                                               !! equation of state.
   real,                    intent(in) :: P_Ref                !< The coordinate-density
-                                                              !! reference pressure [Pa].
+                                                              !! reference pressure [R L2 T-2 ~> Pa].
   ! Local variables
   real :: e0(SZK_(G)+1)     ! The resting interface heights, in depth units [Z ~> m],
                             ! usually negative because it is positive upward.

@@ -106,7 +106,7 @@ end type ptr_mpp_domain
 
 !>@{  DA parameters
 integer, parameter :: NO_ASSIM = 0, OI_ASSIM=1, EAKF_ASSIM=2
-!!@}
+!>@}
 
 contains
 

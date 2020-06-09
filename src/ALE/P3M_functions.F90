@@ -25,7 +25,7 @@ contains
 !!
 !! It is assumed that the size of the array 'u' is equal to the number of cells
 !! defining 'grid' and 'ppoly'. No consistency check is performed here.
-subroutine P3M_interpolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect )
+subroutine P3M_interpolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect, answers_2018 )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
   real, dimension(:),   intent(in)    :: u !< cell averages (size N) in arbitrary units [A]
@@ -34,13 +34,14 @@ subroutine P3M_interpolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect )
   real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial [A]
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width for the
                                           !! purpose of cell reconstructions [H]
+  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
 
   ! Call the limiter for p3m, which takes care of everything from
   ! computing the coefficients of the cubic to monotonizing it.
   ! This routine could be called directly instead of having to call
   ! 'P3M_interpolation' first but we do that to provide an homogeneous
   ! interface.
-  call P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect )
+  call P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect, answers_2018 )
 
 end subroutine P3M_interpolation
 
@@ -57,7 +58,7 @@ end subroutine P3M_interpolation
 !!    c. If not, monotonize cubic curve and rebuild it
 !!
 !! Step 3 of the monotonization process leaves all edge values unchanged.
-subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect )
+subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect, answers_2018 )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
   real, dimension(:),   intent(in)    :: u !< cell averages (size N) in arbitrary units [A]
@@ -66,6 +67,8 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect )
   real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial [A]
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width for
                                            !! the purpose of cell reconstructions [H]
+  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+
   ! Local variables
   integer :: k            ! loop index
   logical :: monotonic    ! boolean indicating whether the cubic is monotonic
@@ -83,7 +86,7 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect )
   eps = 1e-10
 
   ! 1. Bound edge values (boundary cells are assumed to be local extrema)
-  call bound_edge_values( N, h, u, ppoly_E, hNeglect )
+  call bound_edge_values( N, h, u, ppoly_E, hNeglect, answers_2018 )
 
   ! 2. Systematically average discontinuous edge values
   call average_discontinuous_edge_values( N, ppoly_E )
@@ -209,8 +212,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, &
   real    :: hNeglect, hNeglect_edge ! Negligibly small thickness [H]
 
   hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
-  hNeglect_edge = hNeglect_edge_dflt
-  if (present(h_neglect_edge)) hNeglect_edge = h_neglect_edge
+  hNeglect_edge = hNeglect_edge_dflt ; if (present(h_neglect_edge)) hNeglect_edge = h_neglect_edge
 
   ! ----- Left boundary -----
   i0 = 1

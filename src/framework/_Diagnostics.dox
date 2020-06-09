@@ -180,8 +180,8 @@ To obtain a diagnostic of monthly-averaged potential temperature in both these c
 ```
 "ocean_month_z", 1, "months", 1, "days", "time"
 "ocean_month_abc", 1, "months", 1, "days", "time"
-"ocean_model", "temp", "temp", "ocean_month_z", "all", "mean", "none",2
-"ocean_model", "temp", "temp", "ocean_month_abc", "all", "mean", "none",2
+"ocean_model_z", "temp", "temp", "ocean_month_z", "all", "mean", "none",2
+"ocean_model_abc", "temp", "temp", "ocean_month_abc", "all", "mean", "none",2
 ```
 
 
