@@ -80,7 +80,7 @@ subroutine MOM_initialize_coord(GV, US, PF, write_geom, output_dir, tv, max_dept
                  " \t ts_profile - use temperature and salinity profiles \n"//&
                  " \t\t (read from COORD_FILE) to set layer densities. \n"//&
                  " \t USER - call a user modified routine.", &
-                 fail_if_missing=.true.)
+                 default="none")
   select case ( trim(config) )
     case ("gprime")
       call set_coord_from_gprime(GV%Rlay, GV%g_prime, GV, US, PF)

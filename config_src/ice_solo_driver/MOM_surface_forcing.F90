@@ -1007,7 +1007,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   call get_param(param_file, mdl, "BUOY_CONFIG", CS%buoy_config, &
                  "The character string that indicates how buoyancy forcing "//&
                  "is specified. Valid options include (file), (zero), "//&
-                 "(linear), (USER), and (NONE).", fail_if_missing=.true.)
+                 "(linear), (USER), and (NONE).", default="zero")
   if (trim(CS%buoy_config) == "file") then
     call get_param(param_file, mdl, "LONGWAVEDOWN_FILE", CS%longwavedown_file, &
                  "The file with the downward longwave heat flux, in "//&
@@ -1046,7 +1046,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   call get_param(param_file, mdl, "WIND_CONFIG", CS%wind_config, &
                  "The character string that indicates how wind forcing "//&
                  "is specified. Valid options include (file), (2gyre), "//&
-                 "(1gyre), (gyres), (zero), and (USER).", fail_if_missing=.true.)
+                 "(1gyre), (gyres), (zero), and (USER).", default="zero")
   if (trim(CS%wind_config) == "file") then
     call get_param(param_file, mdl, "WIND_FILE", CS%wind_file, &
                  "The file in which the wind stresses are found in "//&
@@ -1057,10 +1057,10 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
     call get_param(param_file, mdl, "WINDSTRESS_Y_VAR", CS%stress_y_var, &
                  "The name of the y-wind stress variable in WIND_FILE.", &
                  default="STRESS_Y")
-    call get_param(param_file, mdl, "WINDSTRESS_STAGGER",CS%wind_stagger, &
+    call get_param(param_file, mdl, "WIND_STAGGER",CS%wind_stagger, &
                  "A character indicating how the wind stress components "//&
                  "are staggered in WIND_FILE.  This may be A or C for now.", &
-                 default="A")
+                 default="C")
     call get_param(param_file, mdl, "WINDSTRESS_SCALE", CS%wind_scale, &
                  "A value by which the wind stresses in WIND_FILE are rescaled.", &
                  default=1.0, units="nondim")
@@ -1110,10 +1110,9 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
                  "The latent heat of fusion.", default=hlv, units="J/kg", scale=US%J_kg_to_Q)
   if (CS%restorebuoy) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
-                 "The constant that relates the restoring surface fluxes "//&
-                 "to the relative surface anomalies (akin to a piston "//&
-                 "velocity).  Note the non-MKS units.", &
-                 units="m day-1", scale=US%m_to_Z*US%T_to_s/86400.0, fail_if_missing=.true.)
+                 "The constant that relates the restoring surface fluxes to the relative "//&
+                 "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
+                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s/86400.0)
     if (trim(CS%buoy_config) == "linear") then
       call get_param(param_file, mdl, "SST_NORTH", CS%T_north, &
                  "With buoy_config linear, the sea surface temperature "//&
@@ -1139,7 +1138,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
 
   call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
                  "The background gustiness in the winds.", &
-                 units="Pa", default=0.02, scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z)
+                 units="Pa", default=0.0, scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z)
   call get_param(param_file, mdl, "READ_GUST_2D", CS%read_gust_2d, &
                  "If true, use a 2-dimensional gustiness supplied from "//&
                  "an input file", default=.false.)
