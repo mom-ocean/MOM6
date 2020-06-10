@@ -72,7 +72,7 @@ use ESMF,  only: ESMF_TimePrint, ESMF_AlarmSet, ESMF_FieldGet, ESMF_Array
 use ESMF,  only: ESMF_ArrayCreate
 use ESMF,  only: ESMF_RC_FILE_OPEN, ESMF_RC_FILE_READ, ESMF_RC_FILE_WRITE
 use ESMF,  only: ESMF_VMBroadcast
-use ESMF,  only: ESMF_AlarmCreate, ESMF_ClockGetAlarmList, ESMF_AlarmList_Flag 
+use ESMF,  only: ESMF_AlarmCreate, ESMF_ClockGetAlarmList, ESMF_AlarmList_Flag
 use ESMF,  only: ESMF_AlarmGet, ESMF_AlarmIsCreated, ESMF_ALARMLIST_ALL, ESMF_AlarmIsEnabled
 use ESMF,  only: ESMF_STATEITEM_NOTFOUND, ESMF_FieldWrite
 use ESMF,  only: operator(==), operator(/=), operator(+), operator(-)
@@ -2063,7 +2063,7 @@ subroutine ModelSetRunClock(gcomp, rc)
      call ESMF_LogWrite(subname//" Create Stop alarm", ESMF_LOGMSG_INFO, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, file=__FILE__)) return
- 
+
      call ESMF_TimeGet(dstoptime, timestring=timestr, rc=rc)
      call ESMF_LogWrite("Stop Alarm will ring at : "//trim(timestr), ESMF_LOGMSG_INFO, rc=rc)
 
