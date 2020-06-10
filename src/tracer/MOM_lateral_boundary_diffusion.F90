@@ -39,13 +39,13 @@ integer, public, parameter :: BOTTOM  = 1  !< Set a value that corresponds to th
 type, public :: lateral_boundary_diffusion_CS ; private
   integer :: method                          !< Determine which of the three methods calculate
                                              !! and apply near boundary layer fluxes
-                                             !! 1. Bulk-layer approach
-                                             !! 2. Along layer
+                                             !! 1. Along layer
+                                             !! 2. Bulk-layer approach (not recommended)
   integer :: deg                             !< Degree of polynomial reconstruction
   integer :: surface_boundary_scheme         !< Which boundary layer scheme to use
                                              !! 1. ePBL; 2. KPP
   logical :: limiter                         !< Controls wether a flux limiter is applied.
-                                             !! Only valid when method = 1.
+                                             !! Only valid when method = 2.
   logical :: linear                          !< If True, apply a linear transition at the base/top of the boundary.
                                              !! The flux will be fully applied at k=k_min and zero at k=k_max.
 
@@ -105,12 +105,12 @@ logical function lateral_boundary_diffusion_init(Time, G, param_file, diag, diab
   ! Read all relevant parameters and write them to the model log.
   call get_param(param_file, mdl, "LATERAL_BOUNDARY_METHOD", CS%method, &
                  "Determine how to apply boundary lateral diffusion of tracers: \n"//&
-                 "1. Bulk layer approach  \n"//&
-                 "2. Along layer approach", default=1)
-  if (CS%method == 1) then
+                 "1. Along layer approach \n"//&
+                 "2. Bulk layer approach (this option is not recommended)", default=1)
+  if (CS%method == 2) then
     call get_param(param_file, mdl, "APPLY_LIMITER", CS%limiter, &
                    "If True, apply a flux limiter in the LBD. This is only available \n"//&
-                   "when LATERAL_BOUNDARY_METHOD=1.", default=.false.)
+                   "when LATERAL_BOUNDARY_METHOD=2.", default=.false.)
   endif
   call get_param(param_file, mdl, "LBD_LINEAR_TRANSITION", CS%linear, &
                  "If True, apply a linear transition at the base/top of the boundary. \n"//&
@@ -191,8 +191,31 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     uFlx_bulk(:,:) = 0.
     vFlx_bulk(:,:) = 0.
 
-    ! Method #1
-    if ( CS%method == 1 ) then
+    ! Method #1 (layer by layer)
+    if (CS%method == 1) then
+      do j=G%jsc,G%jec
+        do i=G%isc-1,G%iec
+          if (G%mask2dCu(I,j)>0.) then
+            call fluxes_layer_method(SURFACE, GV%ke, CS%deg, h(I,j,:), h(I+1,j,:), hbl(I,j), hbl(I+1,j),  &
+              G%areaT(I,j), G%areaT(I+1,j), tracer%t(I,j,:), tracer%t(I+1,j,:), ppoly0_coefs(I,j,:,:),    &
+              ppoly0_coefs(I+1,j,:,:), ppoly0_E(I,j,:,:), ppoly0_E(I+1,j,:,:), remap_method, Coef_x(I,j), &
+              uFlx(I,j,:), CS%linear)
+          endif
+        enddo
+      enddo
+      do J=G%jsc-1,G%jec
+        do i=G%isc,G%iec
+          if (G%mask2dCv(i,J)>0.) then
+            call fluxes_layer_method(SURFACE, GV%ke, CS%deg, h(i,J,:), h(i,J+1,:), hbl(i,J), hbl(i,J+1),  &
+              G%areaT(i,J), G%areaT(i,J+1), tracer%t(i,J,:), tracer%t(i,J+1,:), ppoly0_coefs(i,J,:,:),    &
+              ppoly0_coefs(i,J+1,:,:), ppoly0_E(i,J,:,:), ppoly0_E(i,J+1,:,:), remap_method, Coef_y(i,J), &
+              vFlx(i,J,:), CS%linear)
+          endif
+        enddo
+      enddo
+
+    ! Method #2 (bulk approach)
+    elseif (CS%method == 2) then
       do j=G%jsc,G%jec
         do i=G%isc-1,G%iec
           if (G%mask2dCu(I,j)>0.) then
@@ -218,29 +241,6 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       ! Post tracer bulk diags
       if (tracer%id_lbd_bulk_dfx>0) call post_data(tracer%id_lbd_bulk_dfx, uFlx_bulk*Idt, CS%diag)
       if (tracer%id_lbd_bulk_dfy>0) call post_data(tracer%id_lbd_bulk_dfy, vFlx_bulk*Idt, CS%diag)
-
-    ! Method #2
-    elseif (CS%method == 2) then
-      do j=G%jsc,G%jec
-        do i=G%isc-1,G%iec
-          if (G%mask2dCu(I,j)>0.) then
-            call fluxes_layer_method(SURFACE, GV%ke, CS%deg, h(I,j,:), h(I+1,j,:), hbl(I,j), hbl(I+1,j),  &
-              G%areaT(I,j), G%areaT(I+1,j), tracer%t(I,j,:), tracer%t(I+1,j,:), ppoly0_coefs(I,j,:,:),    &
-              ppoly0_coefs(I+1,j,:,:), ppoly0_E(I,j,:,:), ppoly0_E(I+1,j,:,:), remap_method, Coef_x(I,j), &
-              uFlx(I,j,:), CS%linear)
-          endif
-        enddo
-      enddo
-      do J=G%jsc-1,G%jec
-        do i=G%isc,G%iec
-          if (G%mask2dCv(i,J)>0.) then
-            call fluxes_layer_method(SURFACE, GV%ke, CS%deg, h(i,J,:), h(i,J+1,:), hbl(i,J), hbl(i,J+1),  &
-              G%areaT(i,J), G%areaT(i,J+1), tracer%t(i,J,:), tracer%t(i,J+1,:), ppoly0_coefs(i,J,:,:),    &
-              ppoly0_coefs(i,J+1,:,:), ppoly0_E(i,J,:,:), ppoly0_E(i,J+1,:,:), remap_method, Coef_y(i,J), &
-              vFlx(i,J,:), CS%linear)
-          endif
-        enddo
-      enddo
     endif
 
     ! Update the tracer fluxes
@@ -436,7 +436,7 @@ end subroutine boundary_k_range
 
 
 !> Calculate the lateral boundary diffusive fluxes using the layer by layer method.
-!! See \ref section_method2
+!! See \ref section_method1
 subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L, area_R, phi_L, phi_R, &
                               ppoly0_coefs_L, ppoly0_coefs_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, &
                               F_layer, linear_decay)
@@ -590,7 +590,7 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L
 end subroutine fluxes_layer_method
 
 !> Apply the lateral boundary diffusive fluxes calculated from a 'bulk model'
-!! See \ref section_method1
+!! See \ref section_method2
 subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L, area_R, phi_L, phi_R, ppoly0_coefs_L, &
                               ppoly0_coefs_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer, F_limit, &
                               linear_decay)
@@ -1175,12 +1175,37 @@ end function test_boundary_k_range
 !!
 !! Boundary lateral diffusion can be applied using one of the three methods:
 !!
-!! * [Method #1: Bulk layer](@ref section_method1) (default);
-!! * [Method #2: Along layer](@ref section_method2);
+!! * [Method #1: Along layer](@ref section_method2) (default);
+!! * [Method #2: Bulk layer](@ref section_method1);
 !!
 !! A brief summary of these methods is provided below.
 !!
-!! \subsection section_method1 Bulk layer approach (Method #1)
+!! \subsection section_method1 Along layer approach (Method #1)
+!!
+!! This is the recommended and more straight forward method where diffusion is
+!! applied layer by layer using only information from neighboring cells.
+!!
+!! Step #1: compute vertical indices containing boundary layer (boundary_k_range).
+!! For the TOP boundary layer, these are:
+!!
+!! k_top, k_bot, zeta_top, zeta_bot
+!!
+!! Step #2: calculate the diffusive flux at each layer:
+!!
+!! \f[ F_{k} = -KHTR \times h_{eff}(k) \times (\phi_R(k) - \phi_L(k)),  \f]
+!! where h_eff is the [harmonic mean](@ref section_harmonic_mean) of the layer thickness
+!! in the left and right columns. This method does not require a limiter since KHTR
+!! is already limted based on a diffusive CFL condition prior to the call of this
+!! module.
+!!
+!! Step #3: option to linearly decay the flux from k_bot_min to k_bot_max:
+!!
+!! If LBD_LINEAR_TRANSITION = True and k_bot_diff > 1, the diffusive flux will decay
+!! linearly between the top interface of the layer containing the minimum boundary
+!! layer depth (k_bot_min) and the lower interface of the layer containing the
+!! maximum layer depth (k_bot_max).
+!!
+!! \subsection section_method2 Bulk layer approach (Method #2)
 !!
 !! Apply the lateral boundary diffusive fluxes calculated from a 'bulk model'.This
 !! is a lower order representation (Kraus-Turner like approach) which assumes that
@@ -1210,7 +1235,14 @@ end function test_boundary_k_range
 !! h_u is the [harmonic mean](@ref section_harmonic_mean) of thicknesses at each layer.
 !! Special care (layer reconstruction) must be taken at k_min = min(k_botL, k_bot_R).
 !!
-!! Step #4: limit the tracer flux so that 1) only down-gradient fluxes are applied,
+!! Step #4: option to linearly decay the flux from k_bot_min to k_bot_max:
+!!
+!! If LBD_LINEAR_TRANSITION = True and k_bot_diff > 1, the diffusive flux will decay
+!! linearly between the top interface of the layer containing the minimum boundary
+!! layer depth (k_bot_min) and the lower interface of the layer containing the
+!! maximum layer depth (k_bot_max).
+!!
+!! Step #5: limit the tracer flux so that 1) only down-gradient fluxes are applied,
 !! and 2) the flux cannot be larger than F_max, which is defined using the tracer
 !! gradient:
 !!
@@ -1220,25 +1252,6 @@ end function test_boundary_k_range
 !!           0           .2
 !!         0 1 0       .2.2.2
 !!           0           .2
-!!
-!! \subsection section_method2 Along layer approach (Method #2)
-!!
-!! This is a more straight forward method where diffusion is applied layer by layer using
-!! only information from neighboring cells.
-!!
-!! Step #1: compute vertical indices containing boundary layer (boundary_k_range).
-!! For the TOP boundary layer, these are:
-!!
-!! k_top, k_bot, zeta_top, zeta_bot
-!!
-!! Step #2: calculate the diffusive flux at each layer:
-!!
-!! \f[ F_{k} = -KHTR \times h_{eff}(k) \times (\phi_R(k) - \phi_L(k)),  \f]
-!! where h_eff is the [harmonic mean](@ref section_harmonic_mean) of the layer thickness
-!! in the left and right columns. Special care (layer reconstruction) must be taken at
-!! k_min = min(k_botL, k_bot_R). This method does not require a limiter since KHTR
-!! is already limted based on a diffusive CFL condition prior to the call of this
-!! module.
 !!
 !! \subsection section_harmonic_mean Harmonic Mean
 !!
