@@ -1897,9 +1897,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "model may ask for more salt than is available and "//&
                  "drive the salinity negative otherwise.)", default=.false.)
     call get_param(param_file, "MOM", "MIN_SALINITY", CS%tv%min_salinity, &
-                 "The minimum value of salinity when BOUND_SALINITY=True. "//&
-                 "The default is 0.01 for backward compatibility but ideally should be 0.", &
-                 units="PPT", default=0.01, do_not_log=.not.bound_salinity)
+                 "The minimum value of salinity when BOUND_SALINITY=True.", &
+                 units="PPT", default=0.0, do_not_log=.not.bound_salinity)
     call get_param(param_file, "MOM", "C_P", CS%tv%C_p, &
                  "The heat capacity of sea water, approximated as a "//&
                  "constant. This is only used if ENABLE_THERMODYNAMICS is "//&
@@ -1908,7 +1907,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  default=3991.86795711963, scale=US%J_kg_to_Q)
     call get_param(param_file, "MOM", "USE_PSURF_IN_EOS", CS%use_p_surf_in_EOS, &
                  "If true, always include the surface pressure contributions "//&
-                 "in equation of state calculations.", default=.false.) !### Change the default.
+                 "in equation of state calculations.", default=.true.)
   endif
   if (use_EOS) call get_param(param_file, "MOM", "P_REF", CS%tv%P_Ref, &
                  "The pressure that is used for calculating the coordinate "//&
@@ -1968,7 +1967,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   endif
   call get_param(param_file, "MOM", "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(param_file, "MOM", "SURFACE_2018_ANSWERS", CS%answers_2018, &
                  "If true, use expressions for the surface properties that recover the answers "//&
                  "from the end of 2018. Otherwise, use more appropriate expressions that differ "//&
