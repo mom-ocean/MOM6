@@ -886,7 +886,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
 
   ! Diagnostics for terms multiplied by fractional thicknesses
   do j=js,je ; do I=Isq,Ieq
-    hf_PFu_2d(I,j) = 0.0 
+    hf_PFu_2d(I,j) = 0.0
     hf_CAu_2d(I,j) = 0.0
     hf_uBT_accel_2d(I,j) = 0.0
   enddo ; enddo
@@ -894,7 +894,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     hf_PFv_2d(i,J) = 0.0
     hf_CAv_2d(i,J) = 0.0
     hf_vBT_accel_2d(i,J) = 0.0
-  enddo ; enddo 
+  enddo ; enddo
 
   if (CS%id_hfPFu > 0) then
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
