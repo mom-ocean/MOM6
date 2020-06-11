@@ -163,12 +163,11 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   CS%show_call_tree = callTree_showQuery()
   if (CS%show_call_tree) call callTree_enter("ALE_init(), MOM_ALE.F90")
 
-  call get_param(param_file, mdl, "REMAP_UV_USING_OLD_ALG", &
-                 CS%remap_uv_using_old_alg, &
+  call get_param(param_file, mdl, "REMAP_UV_USING_OLD_ALG", CS%remap_uv_using_old_alg, &
                  "If true, uses the old remapping-via-a-delta-z method for "//&
                  "remapping u and v. If false, uses the new method that remaps "//&
                  "between grids described by an old and new thickness.", &
-                 default=.true.)
+                 default=.false.)
 
   ! Initialize and configure regridding
   call ALE_initRegridding(GV, US, max_depth, param_file, mdl, CS%regridCS)
@@ -196,7 +195,7 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
                  "extrapolated instead of piecewise constant", default=.false.)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", CS%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&

@@ -42,9 +42,6 @@ type, public :: Kelvin_OBC_CS ; private
   real    :: F_0               !< Coriolis parameter
   real    :: rho_range         !< Density range
   real    :: rho_0             !< Mean density
-  logical :: answers_2018    !< If true, use the order of arithmetic and expressions that recover the
-                             !! answers from the end of 2018.  Otherwise, use expressions that give
-                             !! rotational symmetry and eliminate apparent bugs.
 end type Kelvin_OBC_CS
 
 ! This include declares and sets the variable "version".
@@ -60,7 +57,6 @@ function register_Kelvin_OBC(param_file, CS, OBC_Reg)
 
   ! Local variables
   logical :: register_Kelvin_OBC
-  logical :: default_2018_answers
   character(len=40)  :: mdl = "register_Kelvin_OBC"  !< This subroutine's name.
   character(len=32)  :: casename = "Kelvin wave"     !< This case's name.
   character(len=200) :: config
@@ -95,13 +91,6 @@ function register_Kelvin_OBC(param_file, CS, OBC_Reg)
     CS%coast_offset1 = CS%coast_offset1 * 1.e3          ! Convert to m
     CS%coast_offset2 = CS%coast_offset2 * 1.e3          ! Convert to m
   endif
-  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
-                 "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
-  call get_param(param_file, mdl, "KELVIN_WAVE_2018_ANSWERS", CS%answers_2018, &
-                 "If true, use the order of arithmetic and expressions that recover the "//&
-                 "answers from the end of 2018.  Otherwise, use expressions that give rotational "//&
-                 "symmetry and eliminate apparent bugs.", default=default_2018_answers)
   if (CS%mode /= 0) then
     call get_param(param_file, mdl, "DENSITY_RANGE", CS%rho_range, &
                    default=2.0, do_not_log=.true.)

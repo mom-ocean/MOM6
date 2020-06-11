@@ -997,6 +997,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   ! local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_tmp
   character(len=40) :: mdl = "MOM_dynamics_split_RK2" ! This module's name.
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=48) :: thickness_units, flux_units, eta_rest_name
   real :: H_rescale  ! A rescaling factor for thicknesses from the representation in
                      ! a restart file to the internal representation in this run.
@@ -1027,6 +1029,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
 
   CS%diag => diag
 
+  call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "TIDES", use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
   call get_param(param_file, mdl, "BE", CS%be, &
