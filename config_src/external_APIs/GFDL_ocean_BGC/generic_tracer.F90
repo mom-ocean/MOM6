@@ -1,3 +1,4 @@
+!> A non-functioning template of the GFDL ocean BGC
 module generic_tracer
 
   use time_manager_mod, only : time_type
@@ -24,106 +25,137 @@ module generic_tracer
   public generic_tracer_get_diag_list
   public generic_tracer_coupler_accumulate
 
+  !> Turn on generic tracers
   logical :: do_generic_tracer = .false.
 
 contains
 
+  !> Unknown
   subroutine generic_tracer_register
   end subroutine generic_tracer_register
 
+  !> Initialize generic tracers
   subroutine generic_tracer_init(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes,grid_tmask,grid_kmt,init_time)
-    integer,                       intent(in) :: isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes(3)
-    type(time_type),               intent(in) :: init_time
-    real, dimension(:,:,:),target, intent(in) :: grid_tmask
-    integer, dimension(:,:)      , intent(in) :: grid_kmt
+    integer,                       intent(in) :: isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes(3) !< Domain boundaries and axes
+    type(time_type),               intent(in) :: init_time !< Time
+    real, dimension(:,:,:),target, intent(in) :: grid_tmask !< Mask
+    integer, dimension(:,:)      , intent(in) :: grid_kmt !< Number of wet cells in column
   end subroutine generic_tracer_init
 
+  !> Unknown
   subroutine generic_tracer_register_diag
   end subroutine generic_tracer_register_diag
 
+  !> Get coupler values
   subroutine generic_tracer_coupler_get(IOB_struc)
-    type(coupler_2d_bc_type), intent(in)    :: IOB_struc
+    type(coupler_2d_bc_type), intent(in) :: IOB_struc !< Ice Ocean Boundary flux structure
   end subroutine generic_tracer_coupler_get
 
+  !> Unknown
   subroutine  generic_tracer_coupler_accumulate(IOB_struc, weight, model_time)
-    type(coupler_2d_bc_type), intent(in)    :: IOB_struc
-    real,                     intent(in)    :: weight
-    type(time_type), optional,intent(in)    :: model_time
+    type(coupler_2d_bc_type), intent(in) :: IOB_struc !< Ice Ocean Boundary flux structure
+    real,                     intent(in) :: weight !< Unknown
+    type(time_type), optional,intent(in) :: model_time !< Time
   end subroutine generic_tracer_coupler_accumulate
 
+  !> Do things which must be done after all transports and sources have been calculated
   subroutine generic_tracer_diag(ilb, jlb, tau, taup1, dtts, model_time, dzt, rho_dzt_tau, rho_dzt_taup1)
-    integer,                        intent(in) :: ilb
-    integer,                        intent(in) :: jlb
-    integer,                        intent(in) :: tau
-    integer,                        intent(in) :: taup1
-    real,                           intent(in) :: dtts
-    type(time_type),                intent(in) :: model_time
-    real, dimension(ilb:,jlb:,:),   intent(in) :: dzt
-    real, dimension(ilb:,jlb:,:),   intent(in) :: rho_dzt_tau
-    real, dimension(ilb:,jlb:,:),   intent(in) :: rho_dzt_taup1
+    integer,                      intent(in) :: ilb !< Lower bounds of x extent of input arrays on data domain
+    integer,                      intent(in) :: jlb !< Lower bounds of y extent of input arrays on data domain
+    integer,                      intent(in) :: tau !< Time step index of %field
+    integer,                      intent(in) :: taup1 !< Unknown
+    real,                         intent(in) :: dtts !< Unknown
+    type(time_type),              intent(in) :: model_time !< Time
+    real, dimension(ilb:,jlb:,:), intent(in) :: dzt !< Ocean layer thickness [m]
+    real, dimension(ilb:,jlb:,:), intent(in) :: rho_dzt_tau !< Unknown
+    real, dimension(ilb:,jlb:,:), intent(in) :: rho_dzt_taup1 !< Unknown
   end subroutine generic_tracer_diag
 
+  !> Calls the corresponding generic_X_update_from_source routine for each package X
   subroutine generic_tracer_source(Temp,Salt,rho_dzt,dzt,hblt_depth,ilb,jlb,tau,dtts,&
        grid_dat,model_time,nbands,max_wavelength_band,sw_pen_band,opacity_band,internal_heat,&
        frunoff,grid_ht, current_wave_stress, sosga)
-    real, dimension(ilb:,jlb:,:),   intent(in) :: Temp,Salt,rho_dzt,dzt
-    real, dimension(ilb:,jlb:),     intent(in) :: hblt_depth
-    integer,                        intent(in) :: ilb,jlb,tau
-    real,                           intent(in) :: dtts
-    real, dimension(ilb:,jlb:),     intent(in) :: grid_dat
-    type(time_type),                intent(in) :: model_time
-    integer,                        intent(in) :: nbands
+    real, dimension(ilb:,jlb:,:),   intent(in) :: Temp !< Potential temperature [deg C]
+    real, dimension(ilb:,jlb:,:),   intent(in) :: Salt !< Salinity [psu]
+    real, dimension(ilb:,jlb:,:),   intent(in) :: rho_dzt
+    real, dimension(ilb:,jlb:,:),   intent(in) :: dzt !< Ocean layer thickness [m]
+    real, dimension(ilb:,jlb:),     intent(in) :: hblt_depth !< Boundary layer depth
+    integer,                        intent(in) :: ilb !< Lower bounds of x extent of input arrays on data domain
+    integer,                        intent(in) :: jlb !< Lower bounds of y extent of input arrays on data domain
+    integer,                        intent(in) :: tau !< Time step index of %field
+    real,                           intent(in) :: dtts !< Unknown
+    real, dimension(ilb:,jlb:),     intent(in) :: grid_dat !< Unknown
+    type(time_type),                intent(in) :: model_time !< Time
+    integer,                        intent(in) :: nbands !< Unknown
     real, dimension(:),             intent(in) :: max_wavelength_band
-    real, dimension(:,ilb:,jlb:),   intent(in) :: sw_pen_band
-    real, dimension(:,ilb:,jlb:,:), intent(in) :: opacity_band
-    real, dimension(ilb:,jlb:),optional,  intent(in) :: internal_heat
-    real, dimension(ilb:,jlb:),optional,  intent(in) :: frunoff
-    real, dimension(ilb:,jlb:),optional,  intent(in) :: grid_ht
-    real, dimension(ilb:,jlb:),optional , intent(in) :: current_wave_stress
+    real, dimension(:,ilb:,jlb:),   intent(in) :: sw_pen_band !< Shortwave penetration
+    real, dimension(:,ilb:,jlb:,:), intent(in) :: opacity_band !< Unknown
+    real, dimension(ilb:,jlb:),optional,  intent(in) :: internal_heat !< Unknown
+    real, dimension(ilb:,jlb:),optional,  intent(in) :: frunoff !< Unknown
+    real, dimension(ilb:,jlb:),optional,  intent(in) :: grid_ht !< Unknown
+    real, dimension(ilb:,jlb:),optional , intent(in) :: current_wave_stress !< Unknown
     real,                      optional , intent(in) :: sosga ! global avg. sea surface salinity
   end subroutine generic_tracer_source
 
+  !> Update the tracers from bottom fluxes
   subroutine generic_tracer_update_from_bottom(dt, tau, model_time)
-    real,    intent(in) :: dt
-    integer, intent(in) ::tau
-    type(time_type),                intent(in) :: model_time
+    real,            intent(in) :: dt !< Time step increment
+    integer,         intent(in) :: tau !< Time step index used for the concentration field
+    type(time_type), intent(in) :: model_time !< Time
   end subroutine generic_tracer_update_from_bottom
 
+  !> Vertically diffuse all generic tracers for GOLD ocean
   subroutine generic_tracer_vertdiff_G(h_old, ea, eb, dt, kg_m2_to_H, m_to_H, tau)
-    real, dimension(:,:,:), intent(in) :: h_old, ea, eb
-    real,                   intent(in) :: dt, kg_m2_to_H, m_to_H
-    integer,                intent(in) :: tau
+    real, dimension(:,:,:), intent(in) :: h_old !< Unknown
+    real, dimension(:,:,:), intent(in) :: ea !< Unknown
+    real, dimension(:,:,:), intent(in) :: eb !< Unknown
+    real,                   intent(in) :: dt !< Unknown
+    real,                   intent(in) :: kg_m2_to_H !< Unknown
+    real,                   intent(in) :: m_to_H !< Unknown
+    integer,                intent(in) :: tau !< Unknown
   end subroutine generic_tracer_vertdiff_G
 
+  !> Set the coupler values for each generic tracer
   subroutine generic_tracer_vertdiff_M(dh, dhw, diff_cbt, dt, Rho_0,tau)
-    real, dimension(:,:,:), intent(in) :: dh, dhw, diff_cbt
-    real,                   intent(in) :: dt,Rho_0
-    integer,                intent(in) :: tau
+    real, dimension(:,:,:), intent(in) :: dh !< Unknown
+    real, dimension(:,:,:), intent(in) :: dhw !< Unknown
+    real, dimension(:,:,:), intent(in) :: diff_cbt !< Unknown
+    real,                   intent(in) :: dt !< Unknown
+    real,                   intent(in) :: Rho_0 !< Unknown
+    integer,                intent(in) :: tau !< Unknown
   end subroutine generic_tracer_vertdiff_M
 
+  !> Set the coupler values for each generic tracer
   subroutine generic_tracer_coupler_set(IOB_struc, ST,SS,rho,ilb,jlb,tau, dzt, sosga,model_time)
-    type(coupler_2d_bc_type), intent(inout) :: IOB_struc
-    integer, intent(in) :: ilb,jlb,tau
-    real, dimension(ilb:,jlb:),  intent(in) :: ST,SS
-    real, dimension(ilb:,jlb:,:,:), intent(in) :: rho
-    real, dimension(ilb:,jlb:,:), optional, intent(in) :: dzt
-    real,           optional, intent(in) :: sosga
-    type(time_type),optional, intent(in) :: model_time
+    type(coupler_2d_bc_type), intent(inout) :: IOB_struc !< Ice Ocean Boundary flux structure
+    integer,                     intent(in) :: ilb !< Lower bounds of x extent of input arrays on data domain
+    integer,                     intent(in) :: jlb !< Lower bounds of y extent of input arrays on data domain
+    integer,                     intent(in) :: tau !< Time step index of %field
+    real, dimension(ilb:,jlb:),  intent(in) :: ST !< Sea surface temperature [deg C]
+    real, dimension(ilb:,jlb:),  intent(in) :: SS !< Sea surface salinity [psu]
+    real, dimension(ilb:,jlb:,:,:), intent(in) :: rho !< Ocean density [kg m-3]
+    real, dimension(ilb:,jlb:,:), optional, intent(in) :: dzt !< Layer thickness [m]
+    real,           optional, intent(in) :: sosga !< Unknown
+    type(time_type),optional, intent(in) :: model_time !< Time
   end subroutine generic_tracer_coupler_set
 
+  !> Zero out the coupler values for each tracer
   subroutine generic_tracer_coupler_zero(IOB_struc)
-    type(coupler_2d_bc_type), intent(inout) :: IOB_struc
+    type(coupler_2d_bc_type), intent(inout) :: IOB_struc !< Ice Ocean Boundary flux structure
   end subroutine generic_tracer_coupler_zero
 
+  !> End this module by calling the corresponding generic_X_end for each package X
   subroutine generic_tracer_end
   end subroutine generic_tracer_end
 
+  !> Get a pointer to the head of the generic tracers list
   subroutine generic_tracer_get_list(list)
-    type(g_tracer_type),    pointer    :: list
+    type(g_tracer_type),    pointer    :: list !< Pointer to head of the linked list
   end subroutine generic_tracer_get_list
 
+  !> Unknown
   subroutine generic_tracer_get_diag_list(list)
-    type(g_diag_type),    pointer    :: list
+    type(g_diag_type),    pointer    :: list !< Pointer to head of the linked list
   end subroutine generic_tracer_get_diag_list
 
 end module generic_tracer
