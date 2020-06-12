@@ -47,6 +47,9 @@ module MOM_generic_tracer
 
 
   implicit none ; private
+
+  !> An state hidden in module data that is very much not allowed in MOM6
+  ! ### This needs to be fixed
   logical :: g_registered = .false.
 
   public register_MOM_generic_tracer, initialize_MOM_generic_tracer
