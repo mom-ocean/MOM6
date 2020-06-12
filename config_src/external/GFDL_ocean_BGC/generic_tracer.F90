@@ -33,7 +33,7 @@ contains
 
   !> Initialize generic tracers
   subroutine generic_tracer_init(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes,grid_tmask,grid_kmt,init_time)
-    integer,                       intent(in) :: isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes(3) !< Domain boundaries and axes
+    integer, intent(in) :: isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes(3) !< Domain boundaries and axes
     type(time_type),               intent(in) :: init_time !< Time
     real, dimension(:,:,:),target, intent(in) :: grid_tmask !< Mask
     integer, dimension(:,:)      , intent(in) :: grid_kmt !< Number of wet cells in column
