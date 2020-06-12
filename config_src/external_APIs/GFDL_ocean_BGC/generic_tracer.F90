@@ -12,16 +12,13 @@ module generic_tracer
   public generic_tracer_init
   public generic_tracer_register_diag
   public generic_tracer_source
-! public generic_tracer_diag
   public generic_tracer_update_from_bottom
   public generic_tracer_coupler_get
   public generic_tracer_coupler_set
-! public generic_tracer_coupler_zero
   public generic_tracer_end
   public generic_tracer_get_list
   public do_generic_tracer
   public generic_tracer_vertdiff_G
-! public generic_tracer_vertdiff_M
   public generic_tracer_get_diag_list
   public generic_tracer_coupler_accumulate
 
@@ -57,19 +54,6 @@ contains
     real,                     intent(in) :: weight !< Unknown
     type(time_type), optional,intent(in) :: model_time !< Time
   end subroutine generic_tracer_coupler_accumulate
-
-! !> Do things which must be done after all transports and sources have been calculated
-! subroutine generic_tracer_diag(ilb, jlb, tau, taup1, dtts, model_time, dzt, rho_dzt_tau, rho_dzt_taup1)
-!   integer,                      intent(in) :: ilb !< Lower bounds of x extent of input arrays on data domain
-!   integer,                      intent(in) :: jlb !< Lower bounds of y extent of input arrays on data domain
-!   integer,                      intent(in) :: tau !< Time step index of %field
-!   integer,                      intent(in) :: taup1 !< Unknown
-!   real,                         intent(in) :: dtts !< Unknown
-!   type(time_type),              intent(in) :: model_time !< Time
-!   real, dimension(ilb:,jlb:,:), intent(in) :: dzt !< Ocean layer thickness [m]
-!   real, dimension(ilb:,jlb:,:), intent(in) :: rho_dzt_tau !< Unknown
-!   real, dimension(ilb:,jlb:,:), intent(in) :: rho_dzt_taup1 !< Unknown
-! end subroutine generic_tracer_diag
 
   !> Calls the corresponding generic_X_update_from_source routine for each package X
   subroutine generic_tracer_source(Temp,Salt,rho_dzt,dzt,hblt_depth,ilb,jlb,tau,dtts,&
@@ -115,16 +99,6 @@ contains
     integer,                intent(in) :: tau !< Unknown
   end subroutine generic_tracer_vertdiff_G
 
-! !> Set the coupler values for each generic tracer
-! subroutine generic_tracer_vertdiff_M(dh, dhw, diff_cbt, dt, Rho_0,tau)
-!   real, dimension(:,:,:), intent(in) :: dh !< Unknown
-!   real, dimension(:,:,:), intent(in) :: dhw !< Unknown
-!   real, dimension(:,:,:), intent(in) :: diff_cbt !< Unknown
-!   real,                   intent(in) :: dt !< Unknown
-!   real,                   intent(in) :: Rho_0 !< Unknown
-!   integer,                intent(in) :: tau !< Unknown
-! end subroutine generic_tracer_vertdiff_M
-
   !> Set the coupler values for each generic tracer
   subroutine generic_tracer_coupler_set(IOB_struc, ST,SS,rho,ilb,jlb,tau, dzt, sosga,model_time)
     type(coupler_2d_bc_type), intent(inout) :: IOB_struc !< Ice Ocean Boundary flux structure
@@ -138,11 +112,6 @@ contains
     real,           optional, intent(in) :: sosga !< Unknown
     type(time_type),optional, intent(in) :: model_time !< Time
   end subroutine generic_tracer_coupler_set
-
-! !> Zero out the coupler values for each tracer
-! subroutine generic_tracer_coupler_zero(IOB_struc)
-!   type(coupler_2d_bc_type), intent(inout) :: IOB_struc !< Ice Ocean Boundary flux structure
-! end subroutine generic_tracer_coupler_zero
 
   !> End this module by calling the corresponding generic_X_end for each package X
   subroutine generic_tracer_end
