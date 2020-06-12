@@ -1,5 +1,5 @@
-config_src/external_APIs
-========================
+config_src/external
+===================
 
 Subdirectories in here provide null versions of external packages that
 can be called by, or used with, MOM6 but that are not needed in all
