@@ -261,10 +261,10 @@ contains
 
   !>Vertical Diffusion of a tracer node
   !!
-  !! This subroutine solves a tridiagonal equation to find and set values of vertically diffused field for a tracer node.
-  !! This is ported from GOLD (vertdiff) and simplified
-  !! Since the surface flux from the atmosphere (%stf) has the units of mol/m^2/sec the resulting tracer concentration
-  !! has units of mol/Kg
+  !! This subroutine solves a tridiagonal equation to find and set values of vertically diffused field
+  !!  for a tracer node.This is ported from GOLD (vertdiff) and simplified
+  !! Since the surface flux from the atmosphere (%stf) has the units of mol/m^2/sec the resulting
+  !!  tracer concentrationhas units of mol/Kg
   subroutine g_tracer_vertdiff_G(g_tracer, h_old, ea, eb, dt, kg_m2_to_H, m_to_H, tau, mom)
     type(g_tracer_type),    pointer  :: g_tracer
     !> Layer thickness before entrainment, in m or kg m-2.
