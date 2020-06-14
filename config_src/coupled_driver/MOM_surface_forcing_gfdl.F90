@@ -1359,7 +1359,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
                    "The staggering of the input wind stress field "//&
                    "from the coupler that is actually used.")
     CS%wind_stagger = wind_stagger
-  else 
+  else
     call get_param(param_file, mdl, "WIND_STAGGER", stagger, &
                    "A case-insensitive character string to indicate the "//&
                    "staggering of the input wind stress field.  Valid "//&
