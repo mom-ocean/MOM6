@@ -387,7 +387,7 @@ subroutine calculate_stanley_density_1d(T, S, pressure, Tvar, TScov, Svar, rho, 
   real, dimension(:),    intent(in)    :: T        !< Potential temperature referenced to the surface [degC]
   real, dimension(:),    intent(in)    :: S        !< Salinity [ppt]
   real, dimension(:),    intent(in)    :: pressure !< Pressure [R L2 T-2 ~> Pa]
-  real, dimension(:),    intent(in)    :: Tvar     !< Variance of potential temperature referenced to the surface [degC2]
+  real, dimension(:),    intent(in)    :: Tvar     !< Variance of potential temperature [degC2]
   real, dimension(:),    intent(in)    :: TScov    !< Covariance of potential temperature and salinity [degC ppt]
   real, dimension(:),    intent(in)    :: Svar     !< Variance of salinity [ppt2]
   real, dimension(:),    intent(inout) :: rho      !< Density (in-situ if pressure is local) [R ~> kg m-3]

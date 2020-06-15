@@ -1441,9 +1441,12 @@ subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_t
   real,                  intent(in)  :: S_b !< Salinity at the cell bottom [ppt]
   real,                  intent(in)  :: z_t !< Absolute height of top of cell [Z ~> m]   (Boussinesq ????)
   real,                  intent(in)  :: z_b !< Absolute height of bottom of cell [Z ~> m]
-  real,                  intent(in)  :: P_t !< Anomalous pressure of top of cell, relative to g*rho_ref*z_t [R L2 T-2 ~> Pa]
-  real,                  intent(in)  :: P_tgt !< Target pressure at height z_out, relative to g*rho_ref*z_out [R L2 T-2 ~> Pa]
-  real,                  intent(in)  :: rho_ref !< Reference density with which calculation are anomalous to [R ~> kg m-3]
+  real,                  intent(in)  :: P_t !< Anomalous pressure of top of cell, relative
+                                            !! to g*rho_ref*z_t [R L2 T-2 ~> Pa]
+  real,                  intent(in)  :: P_tgt !< Target pressure at height z_out, relative
+                                            !! to g*rho_ref*z_out [R L2 T-2 ~> Pa]
+  real,                  intent(in)  :: rho_ref !< Reference density with which calculation
+                                            !! are anomalous to [R ~> kg m-3]
   real,                  intent(in)  :: G_e !< Gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
   type(EOS_type),        pointer     :: EOS !< Equation of state structure
   type(unit_scale_type), intent(in)  :: US !< A dimensional unit scaling type
