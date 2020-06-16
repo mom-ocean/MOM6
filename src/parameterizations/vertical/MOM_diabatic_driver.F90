@@ -3223,7 +3223,8 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 
   ! Set default, read and log parameters
   call log_version(param_file, mdl, version, &
-                   "The following parameters are used for diabatic processes.")
+                   "The following parameters are used for diabatic processes.", &
+                   log_to_all=.true., debugging=.true.)
   call get_param(param_file, mdl, "USE_LEGACY_DIABATIC_DRIVER", CS%use_legacy_diabatic, &
                  "If true, use a legacy version of the diabatic subroutine. "//&
                  "This is temporary and is needed to avoid change in answers.", &

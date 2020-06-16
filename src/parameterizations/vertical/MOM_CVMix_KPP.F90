@@ -199,8 +199,9 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
            'Control structure has already been initialized')
 
   ! Read parameters
+  call get_param(paramFile, mdl, "USE_KPP", KPP_init, default=.false., do_not_log=.true.)
   call log_version(paramFile, mdl, version, 'This is the MOM wrapper to CVMix:KPP\n' // &
-            'See http://cvmix.github.io/')
+            'See http://cvmix.github.io/', all_default=.not.KPP_init)
   call get_param(paramFile, mdl, "USE_KPP", KPP_init, &
                  "If true, turns on the [CVMix] KPP scheme of Large et al., 1994, "// &
                  "to calculate diffusivities and non-local transport in the OBL.",     &
