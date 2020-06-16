@@ -1705,8 +1705,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   call find_obsolete_params(param_file)
 
+  ! Determining the internal unit scaling factors for this run.
+  call unit_scaling_init(param_file, CS%US)
+  US => CS%US
+
   ! Read relevant parameters and write them to the model log.
-  call log_version(param_file, "MOM", version, "")
+  call log_version(param_file, "MOM", version, "", log_to_all=.true., layout=.true., debugging=.true.)
   call get_param(param_file, "MOM", "VERBOSITY", verbosity,  &
                  "Integer controlling level of messaging\n" // &
                  "\t0 = Only FATAL messages\n" // &
@@ -1718,11 +1722,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   if (do_unit_tests) then
     call unit_tests(verbosity)
   endif
-
-  ! Determining the internal unit scaling factors for this run.
-  call unit_scaling_init(param_file, CS%US)
-
-  US => CS%US
 
   call get_param(param_file, "MOM", "SPLIT", CS%split, &
                  "Use the split time stepping if true.", default=.true.)

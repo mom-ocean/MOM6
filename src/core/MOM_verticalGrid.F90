@@ -92,7 +92,8 @@ subroutine verticalGridInit( param_file, GV, US )
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, &
-                   "Parameters providing information about the vertical grid.")
+                   "Parameters providing information about the vertical grid.", &
+                   log_to_all=.true., debugging=.true.)
   call get_param(param_file, mdl, "G_EARTH", GV%g_Earth, &
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default = 9.80, scale=US%Z_to_m*US%m_s_to_L_T**2)
