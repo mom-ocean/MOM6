@@ -656,6 +656,9 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
   ! Local variables
   real :: T5(5) ! Temperatures along a line of subgrid locations [degC]
   real :: S5(5) ! Salinities along a line of subgrid locations [ppt]
+  real :: T25(5) ! SGS temperature variance along a line of subgrid locations [degC2]
+  real :: TS5(5) ! SGS temperature-salinity covariance along a line of subgrid locations [degC ppt]
+  real :: S25(5) ! SGS salinity variance along a line of subgrid locations [ppt2]
   real :: p5(5) ! Pressures at five quadrature points, never rescaled from Pa [Pa]
   real :: r5(5) ! Density anomalies from rho_ref at quadrature points [R ~> kg m-3] or [kg m-3]
   real :: wt_t(5), wt_b(5) ! Top and bottom weights [nondim]
@@ -680,7 +683,9 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
   real :: hL, hR ! Thicknesses to the left and right [Z ~> m]
   real :: iDenom ! The denominator of the thickness weight expressions [Z-2 ~> m-2]
   integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n
-  logical :: use_PPM
+  logical :: use_PPM ! If false, assume zero curvature in reconstruction, i.e. PLM
+  logical :: use_stanley_eos ! True is SGS variance fields exist in tv.
+  logical :: use_varT, use_varS, use_covarTS
 
   Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
 
@@ -697,6 +702,14 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
   s6 = 0.
   t6 = 0.
   use_PPM = .true. ! This is a place-holder to allow later re-use of this function
+
+  use_varT = allocated(tv%varT)
+  use_covarTS = allocated(tv%covarTS)
+  use_varS = allocated(tv%varS)
+  use_stanley_eos = use_varT .or. use_covarTS .or. use_varS
+  T25(:) = 0.
+  TS5(:) = 0.
+  S25(:) = 0.
 
   do n = 1, 5
     wt_t(n) = 0.25 * real(5-n)
@@ -717,7 +730,15 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
       S5(n) = wt_t(n) * S_t(i,j,k) + wt_b(n) * ( S_b(i,j,k) + s6 * wt_t(n) )
       T5(n) = wt_t(n) * T_t(i,j,k) + wt_b(n) * ( T_b(i,j,k) + t6 * wt_t(n) )
     enddo
-    call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
+    if (use_stanley_eos) then
+      if (use_varT) T25(:) = tv%varT(i,j,k)
+      if (use_covarTS) TS5(:) = tv%covarTS(i,j,k)
+      if (use_varT) S25(:) = tv%varS(i,j,k)
+      call calculate_density(T5, S5, p5, T25, TS5, S25, r5, &
+                             1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
+    else
+      call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
+    endif
 
     ! Use Boole's rule to estimate the pressure anomaly change.
     rho_anom = C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3))
@@ -798,7 +819,15 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
         T5(n) = wt_t(n) * T_top + wt_b(n) * ( T_bot + t6 * wt_t(n) )
       enddo
 
-      call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
+      if (use_stanley_eos) then
+        if (use_varT) T25(:) = w_left*tv%varT(i,j,k) + w_right*tv%varT(i+1,j,k)
+        if (use_covarTS) TS5(:) = w_left*tv%covarTS(i,j,k) + w_right*tv%covarTS(i+1,j,k)
+        if (use_varT) S25(:) = w_left*tv%varS(i,j,k) + w_right*tv%varS(i+1,j,k)
+        call calculate_density(T5, S5, p5, T25, TS5, S25, r5, &
+                               1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
+      else
+        call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
+      endif
 
       ! Use Boole's rule to estimate the pressure anomaly change.
       intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3)) )
@@ -878,7 +907,15 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
         T5(n) = wt_t(n) * T_top + wt_b(n) * ( T_bot + t6 * wt_t(n) )
       enddo
 
-      call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
+      if (use_stanley_eos) then
+        if (use_varT) T25(:) = w_left*tv%varT(i,j,k) + w_right*tv%varT(i,j+1,k)
+        if (use_covarTS) TS5(:) = w_left*tv%covarTS(i,j,k) + w_right*tv%covarTS(i,j+1,k)
+        if (use_varT) S25(:) = w_left*tv%varS(i,j,k) + w_right*tv%varS(i,j+1,k)
+        call calculate_density(T5, S5, p5, T25, TS5, S25, r5, &
+                               1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
+      else
+        call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
+      endif
 
       ! Use Boole's rule to estimate the pressure anomaly change.
       intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3)) )
