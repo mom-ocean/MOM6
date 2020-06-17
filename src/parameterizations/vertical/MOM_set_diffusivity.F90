@@ -30,6 +30,8 @@ use MOM_CVMix_ddiff,         only : CVMix_ddiff_init, CVMix_ddiff_end, CVMix_ddi
 use MOM_CVMix_ddiff,         only : compute_ddiff_coeffs
 use MOM_bkgnd_mixing,        only : calculate_bkgnd_mixing, bkgnd_mixing_init, bkgnd_mixing_cs
 use MOM_bkgnd_mixing,        only : bkgnd_mixing_end, sfc_bkgnd_mixing
+use MOM_open_boundary,       only : ocean_OBC_type, OBC_segment_type, OBC_NONE
+use MOM_open_boundary,       only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_string_functions,    only : uppercase
 use MOM_unit_scaling,        only : unit_scale_type
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, p3d
@@ -1636,7 +1638,7 @@ end subroutine add_MLrad_diffusivity
 
 !> This subroutine calculates several properties related to bottom
 !! boundary layer turbulence.
-subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
+subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS, OBC)
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
@@ -1650,6 +1652,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
   type(vertvisc_type),      intent(in)    :: visc !< Structure containing vertical viscosities, bottom
                                                   !! boundary layer properies, and related fields.
   type(set_diffusivity_CS), pointer       :: CS   !< Diffusivity control structure
+  type(ocean_OBC_type), optional, pointer :: OBC  !< Open boundaries control structure.
 
   ! This subroutine calculates several properties related to bottom
   ! boundary layer turbulence.
@@ -1674,6 +1677,15 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
 
   logical :: domore, do_i(SZI_(G))
   integer :: i, j, k, is, ie, js, je, nz
+  logical :: local_open_u_BC, local_open_v_BC
+
+  local_open_u_BC = .false.
+  local_open_v_BC = .false.
+  if (present(OBC)) then ; if (associated(OBC)) then
+    local_open_u_BC = OBC%open_u_BCs_exist_globally
+    local_open_v_BC = OBC%open_v_BCs_exist_globally
+  endif ; endif
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.not.associated(CS)) call MOM_error(FATAL,"set_BBL_TKE: "//&
@@ -1708,7 +1720,20 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
     do k=nz,1,-1
       domore = .false.
       do i=is,ie ; if (do_i(i)) then
-        hvel = 0.5*GV%H_to_Z*(h(i,j,k) + h(i,j+1,k))
+        if (local_open_v_BC) then
+          if (OBC%segment(OBC%segnum_v(i,J))%open) then
+            if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+              hvel = GV%H_to_Z*h(i,j,k)
+            else
+              hvel = GV%H_to_Z*h(i,j+1,k)
+            endif
+          else
+            hvel = 0.5*GV%H_to_Z*(h(i,j,k) + h(i,j+1,k))
+          endif
+        else
+          hvel = 0.5*GV%H_to_Z*(h(i,j,k) + h(i,j+1,k))
+        endif
+
         if ((htot(i) + hvel) >= visc%bbl_thick_v(i,J)) then
           vhtot(i) = vhtot(i) + (visc%bbl_thick_v(i,J) - htot(i))*v(i,J,k)
           htot(i) = visc%bbl_thick_v(i,J)
@@ -1737,7 +1762,20 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
     endif ; enddo
     do k=nz,1,-1 ; domore = .false.
       do I=is-1,ie ; if (do_i(I)) then
-        hvel = 0.5*GV%H_to_Z*(h(i,j,k) + h(i+1,j,k))
+        if (local_open_u_BC) then
+          if (OBC%segment(OBC%segnum_u(I,j))%open) then
+            if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+              hvel = GV%H_to_Z*h(i,j,k)
+            else
+              hvel = GV%H_to_Z*h(i+1,j,k)
+            endif
+          else
+            hvel = 0.5*GV%H_to_Z*(h(i,j,k) + h(i+1,j,k))
+          endif
+        else
+          hvel = 0.5*GV%H_to_Z*(h(i,j,k) + h(i+1,j,k))
+        endif
+
         if ((htot(I) + hvel) >= visc%bbl_thick_u(I,j)) then
           uhtot(I) = uhtot(I) + (visc%bbl_thick_u(I,j) - htot(I))*u(I,j,k)
           htot(I) = visc%bbl_thick_u(I,j)

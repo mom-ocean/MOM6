@@ -53,6 +53,7 @@ use MOM_CVMix_KPP,           only : KPP_end, KPP_get_BLD
 use MOM_CVMix_KPP,           only : KPP_NonLocalTransport_temp, KPP_NonLocalTransport_saln
 use MOM_opacity,             only : opacity_init, opacity_end, opacity_CS
 use MOM_opacity,             only : absorbRemainingSW, optics_type, optics_nbands
+use MOM_open_boundary,       only : ocean_OBC_type
 use MOM_regularize_layers,   only : regularize_layers, regularize_layers_init, regularize_layers_CS
 use MOM_set_diffusivity,     only : set_diffusivity, set_BBL_TKE
 use MOM_set_diffusivity,     only : set_diffusivity_init, set_diffusivity_end
@@ -255,7 +256,7 @@ contains
 !>  This subroutine imposes the diapycnal mass fluxes and the
 !!  accompanying diapycnal advection of momentum and tracers.
 subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
-                    G, GV, US, CS, WAVES)
+                    G, GV, US, CS, OBC, WAVES)
   type(ocean_grid_type),                     intent(inout) :: G         !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV        !< ocean vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u         !< zonal velocity [L T-1 ~> m s-1]
@@ -275,6 +276,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   type(time_type),                           intent(in)    :: Time_end  !< Time at the end of the interval
   type(unit_scale_type),                     intent(in)    :: US        !< A dimensional unit scaling type
   type(diabatic_CS),                         pointer       :: CS        !< module control structure
+  type(ocean_OBC_type),            optional, pointer       :: OBC       !< Open boundaries control structure.
   type(Wave_parameters_CS),        optional, pointer       :: Waves     !< Surface gravity waves
 
   ! local variables
@@ -321,7 +323,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     call diapyc_energy_req_test(h, dt, tv, G, GV, US, CS%diapyc_en_rec_CSp)
 
   call cpu_clock_begin(id_clock_set_diffusivity)
-  call set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS%set_diff_CSp)
+  call set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS%set_diff_CSp, OBC=OBC)
   call cpu_clock_end(id_clock_set_diffusivity)
 
   ! Frazil formation keeps the temperature above the freezing point.
