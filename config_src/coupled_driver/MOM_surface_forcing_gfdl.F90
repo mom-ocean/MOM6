@@ -1478,7 +1478,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
     do j=jsd, jed; do i=isd, ied
       utide = CS%TKE_tidal(i,j)
       CS%TKE_tidal(i,j) = G%mask2dT(i,j)*CS%Rho0*CS%cd_tides*(utide*utide*utide)
-      CS%ustar_tidal(i,j)=sqrt(CS%cd_tides)*utide
+      CS%ustar_tidal(i,j) = sqrt(CS%cd_tides)*utide
     enddo ; enddo
   else
     do j=jsd,jed; do i=isd,ied

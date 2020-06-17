@@ -1084,9 +1084,9 @@ subroutine ocean_model_data1D_get(OS, Ocean, name, value)
 
   select case(name)
   case('c_p')
-     value = OS%C_p
+    value = OS%C_p
   case default
-     call MOM_error(FATAL,'get_ocean_grid_data1D: unknown argument name='//name)
+    call MOM_error(FATAL,'get_ocean_grid_data1D: unknown argument name='//name)
   end select
 
 end subroutine ocean_model_data1D_get
@@ -1118,8 +1118,9 @@ end subroutine ocean_public_type_chksum
 !> This subroutine gives a handle to the grid from ocean state
 subroutine get_ocean_grid(OS, Gridp)
   ! Obtain the ocean grid.
-  type(ocean_state_type) :: OS
-  type(ocean_grid_type) , pointer :: Gridp
+  type(ocean_state_type) :: OS              !< A structure containing the
+                                            !! internal ocean state
+  type(ocean_grid_type) , pointer :: Gridp  !< The ocean's grid structure 
 
   Gridp => OS%grid
   return
