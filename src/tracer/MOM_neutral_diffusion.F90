@@ -312,7 +312,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
   pa_to_H = 1. / (GV%H_to_RZ * GV%g_Earth)
 
   k_top(:,:) = 1     ; k_bot(:,:) = 1
-  zeta_top(:,:) = 0. ; zeta_bot(:,:) = 1.
+  zeta_top(:,:) = 0. ; zeta_bot(:,:) = 0.
 
   ! Check if hbl needs to be extracted
   if (CS%interior_only) then
