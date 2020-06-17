@@ -260,7 +260,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
 
     call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
     call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&

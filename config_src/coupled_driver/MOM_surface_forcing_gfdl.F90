@@ -1325,7 +1325,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
     call get_param(param_file, mdl, "USE_NET_FW_ADJUSTMENT_SIGN_BUG", &
                  CS%use_net_FW_adjustment_sign_bug, &
                    "If true, use the wrong sign for the adjustment to "//&
-                   "the net fresh-water.", default=.true.)
+                   "the net fresh-water.", default=.false.)
   call get_param(param_file, mdl, "ADJUST_NET_FRESH_WATER_BY_SCALING", &
                  CS%adjust_net_fresh_water_by_scaling, &
                  "If true, adjustments to net fresh water to achieve zero net are "//&
@@ -1363,10 +1363,11 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
 
   if (CS%restore_salt) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
-                 "The constant that relates the restoring surface fluxes "//&
-                 "to the relative surface anomalies (akin to a piston "//&
-                 "velocity).  Note the non-MKS units.", &
-                 units="m day-1", scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
+                 "The constant that relates the restoring surface fluxes to the relative "//&
+                 "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
+                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s)
+    ! Convert CS%Flux_const from m day-1 to m s-1.
+    CS%Flux_const = CS%Flux_const / 86400.0
     call get_param(param_file, mdl, "SALT_RESTORE_FILE", CS%salt_restore_file, &
                  "A file in which to find the surface salinity to use for restoring.", &
                  default="salt_restore.nc")
@@ -1374,8 +1375,6 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "The name of the surface salinity variable to read from "//&
                  "SALT_RESTORE_FILE for restoring salinity.", &
                  default="salt")
-! Convert CS%Flux_const from m day-1 to m s-1.
-    CS%Flux_const = CS%Flux_const / 86400.0
 
     call get_param(param_file, mdl, "SRESTORE_AS_SFLUX", CS%salt_restore_as_sflux, &
                  "If true, the restoring of salinity is applied as a salt "//&
@@ -1411,10 +1410,11 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
 
   if (CS%restore_temp) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
-                 "The constant that relates the restoring surface fluxes "//&
-                 "to the relative surface anomalies (akin to a piston "//&
-                 "velocity).  Note the non-MKS units.", &
-                 units="m day-1", scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
+                 "The constant that relates the restoring surface fluxes to the relative "//&
+                 "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
+                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s)
+    ! Convert CS%Flux_const from m day-1 to m s-1.
+    CS%Flux_const = CS%Flux_const / 86400.0
     call get_param(param_file, mdl, "SST_RESTORE_FILE", CS%temp_restore_file, &
                  "A file in which to find the surface temperature to use for restoring.", &
                  default="temp_restore.nc")
@@ -1422,8 +1422,6 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "The name of the surface temperature variable to read from "//&
                  "SST_RESTORE_FILE for restoring sst.", &
                  default="temp")
-  ! Convert CS%Flux_const from m day-1 to m s-1.
-    CS%Flux_const = CS%Flux_const / 86400.0
 
     call get_param(param_file, mdl, "MAX_DELTA_TRESTORE", CS%max_delta_trestore, &
                  "The maximum sst difference used in restoring terms.", &
@@ -1483,7 +1481,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "an input file", default=.false.)
   call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
                "The background gustiness in the winds.", &
-               units="Pa", default=0.02, scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z)
+               units="Pa", default=0.0, scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z)
   if (CS%read_gust_2d) then
     call get_param(param_file, mdl, "GUST_2D_FILE", gust_file, &
                  "The file in which the wind gustiness is found in "//&
@@ -1496,14 +1494,14 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
   endif
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(param_file, mdl, "SURFACE_FORCING_2018_ANSWERS", CS%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the answers "//&
                  "from the end of 2018.  Otherwise, use a simpler expression to calculate gustiness.", &
                  default=default_2018_answers)
   call get_param(param_file, mdl, "FIX_USTAR_GUSTLESS_BUG", CS%fix_ustar_gustless_bug, &
                  "If true correct a bug in the time-averaging of the gustless wind friction velocity", &
-                 default=.false.)
+                 default=.true.)
 
 ! See whether sufficiently thick sea ice should be treated as rigid.
   call get_param(param_file, mdl, "USE_RIGID_SEA_ICE", CS%rigid_sea_ice, &
