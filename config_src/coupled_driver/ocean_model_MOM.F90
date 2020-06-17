@@ -1120,7 +1120,7 @@ subroutine get_ocean_grid(OS, Gridp)
   ! Obtain the ocean grid.
   type(ocean_state_type) :: OS              !< A structure containing the
                                             !! internal ocean state
-  type(ocean_grid_type) , pointer :: Gridp  !< The ocean's grid structure 
+  type(ocean_grid_type) , pointer :: Gridp  !< The ocean's grid structure
 
   Gridp => OS%grid
   return
