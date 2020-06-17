@@ -1,5 +1,5 @@
-!> Analytically integrated finite volume pressure gradient
-module MOM_PressureForce_AFV
+!> Finite volume pressure gradient (integrated by quadrature or analytically)
+module MOM_PressureForce_FV
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -24,8 +24,8 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public PressureForce_AFV_init, PressureForce_AFV_end
-public PressureForce_AFV_Bouss, PressureForce_AFV_nonBouss
+public PressureForce_FV_init, PressureForce_FV_end
+public PressureForce_FV_Bouss, PressureForce_FV_nonBouss
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -33,7 +33,7 @@ public PressureForce_AFV_Bouss, PressureForce_AFV_nonBouss
 ! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
 !> Finite volume pressure gradient control structure
-type, public :: PressureForce_AFV_CS ; private
+type, public :: PressureForce_FV_CS ; private
   logical :: tides          !< If true, apply tidal momentum forcing.
   real    :: Rho0           !< The density used in the Boussinesq
                             !! approximation [R ~> kg m-3].
@@ -57,7 +57,7 @@ type, public :: PressureForce_AFV_CS ; private
 
   integer :: id_e_tidal = -1 !< Diagnostic identifier
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL() !< Tides control structure
-end type PressureForce_AFV_CS
+end type PressureForce_FV_CS
 
 contains
 
@@ -70,7 +70,7 @@ contains
 !! To work, the following fields must be set outside of the usual (is:ie,js:je)
 !! range before this subroutine is called:
 !!   h(isB:ie+1,jsB:je+1), T(isB:ie+1,jsB:je+1), and S(isB:ie+1,jsB:je+1).
-subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, eta)
+subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, eta)
   type(ocean_grid_type),                     intent(in)  :: G   !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV  !< Vertical grid structure
   type(unit_scale_type),                     intent(in)  :: US  !< A dimensional unit scaling type
@@ -78,7 +78,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
   type(thermo_var_ptrs),                     intent(in)  :: tv  !< Thermodynamic variables
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration [L T-2 ~> m s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv !< Meridional acceleration [L T-2 ~> m s-2]
-  type(PressureForce_AFV_CS),                pointer     :: CS  !< Finite volume PGF control structure
+  type(PressureForce_FV_CS),                 pointer     :: CS  !< Finite volume PGF control structure
   type(ALE_CS),                              pointer     :: ALE_CSp !< ALE control structure
   real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
                                                            !! or atmosphere-ocean interface [R L2 T-2 ~> Pa].
@@ -157,7 +157,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
   EOSdom(1) = Isq - (G%isd-1) ;  EOSdom(2) = G%iec+1 - (G%isd-1)
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
-       "MOM_PressureForce_AFV_nonBouss: Module must be initialized before it is used.")
+       "MOM_PressureForce_FV_nonBouss: Module must be initialized before it is used.")
 
   use_p_atm = .false.
   if (present(p_atm)) then ; if (associated(p_atm)) use_p_atm = .true. ; endif
@@ -240,7 +240,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
                     tv%eqn_of_state, US, dza(:,:,k), intp_dza(:,:,k), intx_dza(:,:,k), inty_dza(:,:,k), &
                     useMassWghtInterp=CS%useMassWghtInterp)
         elseif ( CS%Recon_Scheme == 2 ) then
-          call MOM_error(FATAL, "PressureForce_AFV_nonBouss: "//&
+          call MOM_error(FATAL, "PressureForce_FV_nonBouss: "//&
                          "int_spec_vol_dp_generic_ppm does not exist yet.")
         !  call int_spec_vol_dp_generic_ppm ( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
         !            tv%S(:,:,k), S_t(:,:,k), S_b(:,:,k), p(:,:,K), p(:,:,K+1), &
@@ -397,7 +397,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
 
   if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, e_tidal, CS%diag)
 
-end subroutine PressureForce_AFV_nonBouss
+end subroutine PressureForce_FV_nonBouss
 
 !> \brief Boussinesq analytically-integrated finite volume form of pressure gradient
 !!
@@ -407,7 +407,7 @@ end subroutine PressureForce_AFV_nonBouss
 !! To work, the following fields must be set outside of the usual (is:ie,js:je)
 !! range before this subroutine is called:
 !!   h(isB:ie+1,jsB:je+1), T(isB:ie+1,jsB:je+1), and S(isB:ie+1,jsB:je+1).
-subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, eta)
+subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, eta)
   type(ocean_grid_type),                     intent(in)  :: G   !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV  !< Vertical grid structure
   type(unit_scale_type),                     intent(in)  :: US  !< A dimensional unit scaling type
@@ -415,7 +415,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
   type(thermo_var_ptrs),                     intent(in)  :: tv  !< Thermodynamic variables
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration [L T-2 ~> m s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv !< Meridional acceleration [L T-2 ~> m s-2]
-  type(PressureForce_AFV_CS),                pointer     :: CS  !< Finite volume PGF control structure
+  type(PressureForce_FV_CS),                 pointer     :: CS  !< Finite volume PGF control structure
   type(ALE_CS),                              pointer     :: ALE_CSp !< ALE control structure
   real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
                                                          !! or atmosphere-ocean interface [R L2 T-2 ~> Pa].
@@ -486,7 +486,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
   EOSdom(1) = Isq - (G%isd-1) ;  EOSdom(2) = G%iec+1 - (G%isd-1)
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
-       "MOM_PressureForce_AFV_Bouss: Module must be initialized before it is used.")
+       "MOM_PressureForce_FV_Bouss: Module must be initialized before it is used.")
 
   use_p_atm = .false.
   if (present(p_atm)) then ; if (associated(p_atm)) use_p_atm = .true. ; endif
@@ -739,17 +739,17 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
 
   if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, e_tidal, CS%diag)
 
-end subroutine PressureForce_AFV_Bouss
+end subroutine PressureForce_FV_Bouss
 
 !> Initializes the finite volume pressure gradient control structure
-subroutine PressureForce_AFV_init(Time, G, GV, US, param_file, diag, CS, tides_CSp)
+subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, tides_CSp)
   type(time_type), target,    intent(in)    :: Time !< Current model time
   type(ocean_grid_type),      intent(in)    :: G  !< Ocean grid structure
   type(verticalGrid_type),    intent(in)    :: GV !< Vertical grid structure
   type(unit_scale_type),      intent(in)    :: US !< A dimensional unit scaling type
   type(param_file_type),      intent(in)    :: param_file !< Parameter file handles
   type(diag_ctrl), target,    intent(inout) :: diag !< Diagnostics control structure
-  type(PressureForce_AFV_CS), pointer       :: CS !< Finite volume PGF control structure
+  type(PressureForce_FV_CS),  pointer       :: CS !< Finite volume PGF control structure
   type(tidal_forcing_CS), optional, pointer :: tides_CSp !< Tides control structure
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -767,7 +767,7 @@ subroutine PressureForce_AFV_init(Time, G, GV, US, param_file, diag, CS, tides_C
     if (associated(tides_CSp)) CS%tides_CSp => tides_CSp
   endif
 
-  mdl = "MOM_PressureForce_AFV"
+  mdl = "MOM_PressureForce_FV"
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
@@ -782,7 +782,7 @@ subroutine PressureForce_AFV_init(Time, G, GV, US, param_file, diag, CS, tides_C
                  "If False, use the layered isopycnal algorithm.", default=.false. )
   call get_param(param_file, mdl, "MASS_WEIGHT_IN_PRESSURE_GRADIENT", CS%useMassWghtInterp, &
                  "If true, use mass weighting when interpolating T/S for "//&
-                 "integrals near the bathymetry in AFV pressure gradient "//&
+                 "integrals near the bathymetry in FV pressure gradient "//&
                  "calculations.", default=.false.)
   call get_param(param_file, mdl, "RECONSTRUCT_FOR_PRESSURE", CS%reconstruct, &
                  "If True, use vertical reconstruction of T & S within "//&
@@ -812,20 +812,21 @@ subroutine PressureForce_AFV_init(Time, G, GV, US, param_file, diag, CS, tides_C
 
   call log_param(param_file, mdl, "GFS / G_EARTH", CS%GFS_scale)
 
-end subroutine PressureForce_AFV_init
+end subroutine PressureForce_FV_init
 
 !> Deallocates the finite volume pressure gradient control structure
-subroutine PressureForce_AFV_end(CS)
-  type(PressureForce_AFV_CS), pointer :: CS !< Finite volume pressure control structure that
+subroutine PressureForce_FV_end(CS)
+  type(PressureForce_FV_CS), pointer :: CS !< Finite volume pressure control structure that
                                             !! will be deallocated in this subroutine.
   if (associated(CS)) deallocate(CS)
-end subroutine PressureForce_AFV_end
+end subroutine PressureForce_FV_end
 
-!> \namespace mom_pressureforce_afv
+!> \namespace mom_pressureforce_fv
 !!
 !! Provides the Boussinesq and non-Boussinesq forms of horizontal accelerations
-!! due to pressure gradients using a 2nd-order analytically vertically integrated
-!! finite volume form, as described by Adcroft et al., 2008.
+!! due to pressure gradients using a vertically integrated finite volume form,
+!! as described by Adcroft et al., 2008. Integration in the vertical is made
+!! either by quadrature or analytically.
 !!
 !! This form eliminates the thermobaric instabilities that had been a problem with
 !! previous forms of the pressure gradient force calculation, as described by
@@ -839,4 +840,4 @@ end subroutine PressureForce_AFV_end
 !! ocean models. Ocean Modelling, 8, 279-300.
 !! http://dx.doi.org/10.1016/j.ocemod.2004.01.001
 
-end module MOM_PressureForce_AFV
+end module MOM_PressureForce_FV
