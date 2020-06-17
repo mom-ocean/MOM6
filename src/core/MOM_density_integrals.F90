@@ -15,7 +15,9 @@ use MOM_error_handler,    only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_file_parser,      only : get_param, log_version, param_file_type
 use MOM_hor_index,        only : hor_index_type
 use MOM_string_functions, only : uppercase
+use MOM_variables,        only : thermo_var_ptrs
 use MOM_unit_scaling,     only : unit_scale_type
+use MOM_verticalGrid,     only : verticalGrid_type
 
 implicit none ; private
 
@@ -594,28 +596,25 @@ subroutine int_density_dz_generic_plm(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
 end subroutine int_density_dz_generic_plm
 
 
-!> Compute pressure gradient force integrals for the case where T and S
+!> Compute pressure gradient force integrals for layer "k" and the case where T and S
 !! are parabolic profiles
-subroutine int_density_dz_generic_ppm(T, T_t, T_b, S, S_t, S_b, z_t, z_b, &
-                                      rho_ref, rho_0, G_e, dz_subroundoff, bathyT, HI, EOS, US, &
+subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
+                                      rho_ref, rho_0, G_e, dz_subroundoff, bathyT, HI, GV, EOS, US, &
                                       dpa, intz_dpa, intx_dpa, inty_dpa, useMassWghtInterp)
+  integer,              intent(in)  :: k   !< Layer index to calculate integrals for
   type(hor_index_type), intent(in)  :: HI  !< Ocean horizontal index structures for the input arrays
-  real, dimension(SZI_(HI),SZJ_(HI)), &
-                        intent(in)  :: T   !< Potential temperature referenced to the surface [degC]
-  real, dimension(SZI_(HI),SZJ_(HI)), &
+  type(verticalGrid_type), intent(in) :: GV !< Vertical grid structure
+  type(thermo_var_ptrs), intent(in) :: tv  !< Thermodynamic variables
+  real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)), &
                         intent(in)  :: T_t !< Potential temperature at the cell top [degC]
-  real, dimension(SZI_(HI),SZJ_(HI)), &
+  real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)), &
                         intent(in)  :: T_b !< Potential temperature at the cell bottom [degC]
-  real, dimension(SZI_(HI),SZJ_(HI)), &
-                        intent(in)  :: S   !< Salinity [ppt]
-  real, dimension(SZI_(HI),SZJ_(HI)), &
+  real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)), &
                         intent(in)  :: S_t !< Salinity at the cell top [ppt]
-  real, dimension(SZI_(HI),SZJ_(HI)), &
+  real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)), &
                         intent(in)  :: S_b !< Salinity at the cell bottom [ppt]
-  real, dimension(SZI_(HI),SZJ_(HI)), &
-                        intent(in)  :: z_t !< Height at the top of the layer [Z ~> m]
-  real, dimension(SZI_(HI),SZJ_(HI)), &
-                        intent(in)  :: z_b !< Height at the bottom of the layer [Z ~> m]
+  real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)+1), &
+                        intent(in)  :: e   !< Height of interfaces [Z ~> m]
   real,                 intent(in)  :: rho_ref !< A mean density [R ~> kg m-3] or [kg m-3], that is
                                            !! subtracted out to reduce the magnitude of each of the integrals.
   real,                 intent(in)  :: rho_0 !< A density [R ~> kg m-3] or [kg m-3], that is used to calculate
@@ -708,15 +707,15 @@ subroutine int_density_dz_generic_ppm(T, T_t, T_b, S, S_t, S_b, z_t, z_b, &
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
     if (use_PPM) then
       ! Curvature coefficient of the parabolas
-      s6 = 3.0 * ( 2.0*S(i,j) - ( S_t(i,j) + S_b(i,j) ) )
-      t6 = 3.0 * ( 2.0*T(i,j) - ( T_t(i,j) + T_b(i,j) ) )
+      s6 = 3.0 * ( 2.0*tv%S(i,j,k) - ( S_t(i,j,k) + S_b(i,j,k) ) )
+      t6 = 3.0 * ( 2.0*tv%T(i,j,k) - ( T_t(i,j,k) + T_b(i,j,k) ) )
     endif
-    dz = z_t(i,j) - z_b(i,j)
+    dz = e(i,j,K) - e(i,j,K+1)
     do n=1,5
-      p5(n) = -GxRho*(z_t(i,j) - 0.25*real(n-1)*dz)
+      p5(n) = -GxRho*(e(i,j,K) - 0.25*real(n-1)*dz)
       ! Salinity and temperature points are reconstructed with PPM
-      S5(n) = wt_t(n) * S_t(i,j) + wt_b(n) * ( S_b(i,j) + s6 * wt_t(n) )
-      T5(n) = wt_t(n) * T_t(i,j) + wt_b(n) * ( T_b(i,j) + t6 * wt_t(n) )
+      S5(n) = wt_t(n) * S_t(i,j,k) + wt_b(n) * ( S_b(i,j,k) + s6 * wt_t(n) )
+      T5(n) = wt_t(n) * T_t(i,j,k) + wt_b(n) * ( T_b(i,j,k) + t6 * wt_t(n) )
     enddo
     if (rho_scale /= 1.0) then
       call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
@@ -745,29 +744,29 @@ subroutine int_density_dz_generic_ppm(T, T_t, T_b, S, S_t, S_b, z_t, z_b, &
     ! Note: To work in terrain following coordinates we could offset
     ! this distance by the layer thickness to replicate other models.
     hWght = massWeightToggle * &
-            max(0., -bathyT(i,j)-z_t(i+1,j), -bathyT(i+1,j)-z_t(i,j))
+            max(0., -bathyT(i,j)-e(i+1,j,K), -bathyT(i+1,j)-e(i,j,K))
     if (hWght > 0.) then
-      hL = (z_t(i,j) - z_b(i,j)) + dz_subroundoff
-      hR = (z_t(i+1,j) - z_b(i+1,j)) + dz_subroundoff
+      hL = (e(i,j,K) - e(i,j,K+1)) + dz_subroundoff
+      hR = (e(i+1,j,K) - e(i+1,j,K+1)) + dz_subroundoff
       hWght = hWght * ( (hL-hR)/(hL+hR) )**2
       iDenom = 1./( hWght*(hR + hL) + hL*hR )
-      Ttl = ( (hWght*hR)*T_t(i+1,j) + (hWght*hL + hR*hL)*T_t(i,j) ) * iDenom
-      Tbl = ( (hWght*hR)*T_b(i+1,j) + (hWght*hL + hR*hL)*T_b(i,j) ) * iDenom
-      Tml = ( (hWght*hR)*T(i+1,j)   + (hWght*hL + hR*hL)*T(i,j) ) * iDenom
-      Ttr = ( (hWght*hL)*T_t(i,j) + (hWght*hR + hR*hL)*T_t(i+1,j) ) * iDenom
-      Tbr = ( (hWght*hL)*T_b(i,j) + (hWght*hR + hR*hL)*T_b(i+1,j) ) * iDenom
-      Tmr = ( (hWght*hL)*T(i,j)   + (hWght*hR + hR*hL)*T(i+1,j) ) * iDenom
-      Stl = ( (hWght*hR)*S_t(i+1,j) + (hWght*hL + hR*hL)*S_t(i,j) ) * iDenom
-      Sbl = ( (hWght*hR)*S_b(i+1,j) + (hWght*hL + hR*hL)*S_b(i,j) ) * iDenom
-      Sml = ( (hWght*hR)*S(i+1,j)   + (hWght*hL + hR*hL)*S(i,j) ) * iDenom
-      Str = ( (hWght*hL)*S_t(i,j) + (hWght*hR + hR*hL)*S_t(i+1,j) ) * iDenom
-      Sbr = ( (hWght*hL)*S_b(i,j) + (hWght*hR + hR*hL)*S_b(i+1,j) ) * iDenom
-      Smr = ( (hWght*hL)*S(i,j)   + (hWght*hR + hR*hL)*S(i+1,j) ) * iDenom
+      Ttl = ( (hWght*hR)*T_t(i+1,j,k) + (hWght*hL + hR*hL)*T_t(i,j,k) ) * iDenom
+      Tbl = ( (hWght*hR)*T_b(i+1,j,k) + (hWght*hL + hR*hL)*T_b(i,j,k) ) * iDenom
+      Tml = ( (hWght*hR)*tv%T(i+1,j,k)+ (hWght*hL + hR*hL)*tv%T(i,j,k) ) * iDenom
+      Ttr = ( (hWght*hL)*T_t(i,j,k) + (hWght*hR + hR*hL)*T_t(i+1,j,k) ) * iDenom
+      Tbr = ( (hWght*hL)*T_b(i,j,k) + (hWght*hR + hR*hL)*T_b(i+1,j,k) ) * iDenom
+      Tmr = ( (hWght*hL)*tv%T(i,j,k) + (hWght*hR + hR*hL)*tv%T(i+1,j,k) ) * iDenom
+      Stl = ( (hWght*hR)*S_t(i+1,j,k) + (hWght*hL + hR*hL)*S_t(i,j,k) ) * iDenom
+      Sbl = ( (hWght*hR)*S_b(i+1,j,k) + (hWght*hL + hR*hL)*S_b(i,j,k) ) * iDenom
+      Sml = ( (hWght*hR)*tv%S(i+1,j,k) + (hWght*hL + hR*hL)*tv%S(i,j,k) ) * iDenom
+      Str = ( (hWght*hL)*S_t(i,j,k) + (hWght*hR + hR*hL)*S_t(i+1,j,k) ) * iDenom
+      Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + hR*hL)*S_b(i+1,j,k) ) * iDenom
+      Smr = ( (hWght*hL)*tv%S(i,j,k) + (hWght*hR + hR*hL)*tv%S(i+1,j,k) ) * iDenom
     else
-      Ttl = T_t(i,j); Tbl = T_b(i,j); Ttr = T_t(i+1,j); Tbr = T_b(i+1,j)
-      Tml = T(i,j); Tmr = T(i+1,j)
-      Stl = S_t(i,j); Sbl = S_b(i,j); Str = S_t(i+1,j); Sbr = S_b(i+1,j)
-      Sml = S(i,j); Smr = S(i+1,j)
+      Ttl = T_t(i,j,k); Tbl = T_b(i,j,k); Ttr = T_t(i+1,j,k); Tbr = T_b(i+1,j,k)
+      Tml = tv%T(i,j,k); Tmr = tv%T(i+1,j,k)
+      Stl = S_t(i,j,k); Sbl = S_b(i,j,k); Str = S_t(i+1,j,k); Sbr = S_b(i+1,j,k)
+      Sml = tv%S(i,j,k); Smr = tv%S(i+1,j,k)
     endif
 
     do m=2,4
@@ -786,8 +785,8 @@ subroutine int_density_dz_generic_ppm(T, T_t, T_b, S, S_t, S_b, z_t, z_b, &
       S_bot = w_left*Sbl + w_right*Sbr
 
       ! Pressure
-      dz = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i+1,j) - z_b(i+1,j))
-      p5(1) = -GxRho*(w_left*z_t(i,j) + w_right*z_t(i+1,j))
+      dz = w_left*(e(i,j,K) - e(i,j,K+1)) + w_right*(e(i+1,j,K) - e(i+1,j,K+1))
+      p5(1) = -GxRho*(w_left*e(i,j,K) + w_right*e(i+1,j,K))
       do n=2,5
         p5(n) = p5(n-1) + GxRho*0.25*dz
       enddo
@@ -795,8 +794,8 @@ subroutine int_density_dz_generic_ppm(T, T_t, T_b, S, S_t, S_b, z_t, z_b, &
       ! Parabolic reconstructions in the vertical for T and S
       if (use_PPM) then
         ! Coefficients of the parabolas
-        s6 = 3.0 * ( 2.0*S(i,j) - ( S_t(i,j) + S_b(i,j) ) )
-        t6 = 3.0 * ( 2.0*T(i,j) - ( T_t(i,j) + T_b(i,j) ) )
+        s6 = 3.0 * ( 2.0*S_mn - ( S_top + S_bot ) )
+        t6 = 3.0 * ( 2.0*T_mn - ( T_top + T_bot ) )
       endif
       do n=1,5
         S5(n) = wt_t(n) * S_top + wt_b(n) * ( S_bot + s6 * wt_t(n) )
@@ -829,29 +828,29 @@ subroutine int_density_dz_generic_ppm(T, T_t, T_b, S, S_t, S_b, z_t, z_b, &
     ! Note: To work in terrain following coordinates we could offset
     ! this distance by the layer thickness to replicate other models.
     hWght = massWeightToggle * &
-            max(0., -bathyT(i,j)-z_t(i,j+1), -bathyT(i,j+1)-z_t(i,j))
+            max(0., -bathyT(i,j)-e(i,j+1,K), -bathyT(i,j+1)-e(i,j,K))
     if (hWght > 0.) then
-      hL = (z_t(i,j) - z_b(i,j)) + dz_subroundoff
-      hR = (z_t(i,j+1) - z_b(i,j+1)) + dz_subroundoff
+      hL = (e(i,j,K) - e(i,j,K+1)) + dz_subroundoff
+      hR = (e(i,j+1,K) - e(i,j+1,K+1)) + dz_subroundoff
       hWght = hWght * ( (hL-hR)/(hL+hR) )**2
       iDenom = 1./( hWght*(hR + hL) + hL*hR )
-      Ttl = ( (hWght*hR)*T_t(i,j+1) + (hWght*hL + hR*hL)*T_t(i,j) ) * iDenom
-      Tbl = ( (hWght*hR)*T_b(i,j+1) + (hWght*hL + hR*hL)*T_b(i,j) ) * iDenom
-      Tml = ( (hWght*hR)*T(i,j+1)   + (hWght*hL + hR*hL)*T(i,j) ) * iDenom
-      Ttr = ( (hWght*hL)*T_t(i,j) + (hWght*hR + hR*hL)*T_t(i,j+1) ) * iDenom
-      Tbr = ( (hWght*hL)*T_b(i,j) + (hWght*hR + hR*hL)*T_b(i,j+1) ) * iDenom
-      Tmr = ( (hWght*hL)*T(i,j)   + (hWght*hR + hR*hL)*T(i,j+1) ) * iDenom
-      Stl = ( (hWght*hR)*S_t(i,j+1) + (hWght*hL + hR*hL)*S_t(i,j) ) * iDenom
-      Sbl = ( (hWght*hR)*S_b(i,j+1) + (hWght*hL + hR*hL)*S_b(i,j) ) * iDenom
-      Sml = ( (hWght*hR)*S(i,j+1)   + (hWght*hL + hR*hL)*S(i,j) ) * iDenom
-      Str = ( (hWght*hL)*S_t(i,j) + (hWght*hR + hR*hL)*S_t(i,j+1) ) * iDenom
-      Sbr = ( (hWght*hL)*S_b(i,j) + (hWght*hR + hR*hL)*S_b(i,j+1) ) * iDenom
-      Smr = ( (hWght*hL)*S(i,j)   + (hWght*hR + hR*hL)*S(i,j+1) ) * iDenom
+      Ttl = ( (hWght*hR)*T_t(i,j+1,k) + (hWght*hL + hR*hL)*T_t(i,j,k) ) * iDenom
+      Tbl = ( (hWght*hR)*T_b(i,j+1,k) + (hWght*hL + hR*hL)*T_b(i,j,k) ) * iDenom
+      Tml = ( (hWght*hR)*tv%T(i,j+1,k)+ (hWght*hL + hR*hL)*tv%T(i,j,k) ) * iDenom
+      Ttr = ( (hWght*hL)*T_t(i,j,k) + (hWght*hR + hR*hL)*T_t(i,j+1,k) ) * iDenom
+      Tbr = ( (hWght*hL)*T_b(i,j,k) + (hWght*hR + hR*hL)*T_b(i,j+1,k) ) * iDenom
+      Tmr = ( (hWght*hL)*tv%T(i,j,k) + (hWght*hR + hR*hL)*tv%T(i,j+1,k) ) * iDenom
+      Stl = ( (hWght*hR)*S_t(i,j+1,k) + (hWght*hL + hR*hL)*S_t(i,j,k) ) * iDenom
+      Sbl = ( (hWght*hR)*S_b(i,j+1,k) + (hWght*hL + hR*hL)*S_b(i,j,k) ) * iDenom
+      Sml = ( (hWght*hR)*tv%S(i,j+1,k)+ (hWght*hL + hR*hL)*tv%S(i,j,k) ) * iDenom
+      Str = ( (hWght*hL)*S_t(i,j,k) + (hWght*hR + hR*hL)*S_t(i,j+1,k) ) * iDenom
+      Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + hR*hL)*S_b(i,j+1,k) ) * iDenom
+      Smr = ( (hWght*hL)*tv%S(i,j,k) + (hWght*hR + hR*hL)*tv%S(i,j+1,k) ) * iDenom
     else
-      Ttl = T_t(i,j); Tbl = T_b(i,j); Ttr = T_t(i,j+1); Tbr = T_b(i,j+1)
-      Tml = T(i,j); Tmr = T(i,j+1)
-      Stl = S_t(i,j); Sbl = S_b(i,j); Str = S_t(i,j+1); Sbr = S_b(i,j+1)
-      Sml = S(i,j); Smr = S(i,j+1)
+      Ttl = T_t(i,j,k); Tbl = T_b(i,j,k); Ttr = T_t(i,j+1,k); Tbr = T_b(i,j+1,k)
+      Tml = tv%T(i,j,k); Tmr = tv%T(i,j+1,k)
+      Stl = S_t(i,j,k); Sbl = S_b(i,j,k); Str = S_t(i,j+1,k); Sbr = S_b(i,j+1,k)
+      Sml = tv%S(i,j,k); Smr = tv%S(i,j+1,k)
     endif
 
     do m=2,4
@@ -870,19 +869,18 @@ subroutine int_density_dz_generic_ppm(T, T_t, T_b, S, S_t, S_b, z_t, z_b, &
       S_bot = w_left*Sbl + w_right*Sbr
 
       ! Pressure
-      dz = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i,j+1) - z_b(i,j+1))
-      p5(1) = -GxRho*(w_left*z_t(i,j) + w_right*z_t(i,j+1))
+      dz = w_left*(e(i,j,K) - e(i,j,K+1)) + w_right*(e(i,j+1,K) - e(i,j+1,K+1))
+      p5(1) = -GxRho*(w_left*e(i,j,K) + w_right*e(i,j+1,K))
       do n=2,5
         p5(n) = p5(n-1) + GxRho*0.25*dz
       enddo
 
+      ! Parabolic reconstructions in the vertical for T and S
       if (use_PPM) then
         ! Coefficients of the parabolas
-        s6 = 3.0 * ( 2.0*S(i,j) - ( S_t(i,j) + S_b(i,j) ) )
-        t6 = 3.0 * ( 2.0*T(i,j) - ( T_t(i,j) + T_b(i,j) ) )
+        s6 = 3.0 * ( 2.0*S_mn - ( S_top + S_bot ) )
+        t6 = 3.0 * ( 2.0*T_mn - ( T_top + T_bot ) )
       endif
-
-      ! Parabolic reconstructions in the vertical for T and S
       do n=1,5
         S5(n) = wt_t(n) * S_top + wt_b(n) * ( S_bot + s6 * wt_t(n) )
         T5(n) = wt_t(n) * T_top + wt_b(n) * ( T_bot + t6 * wt_t(n) )
