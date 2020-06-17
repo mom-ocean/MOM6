@@ -10,7 +10,6 @@ the former being diagnostics in the actual model coordinate space, and the latte
 \section diag_table The "diag_table"
 
 At run-time, diagnostics are controlled by the input file `diag_table` which is interpreted but the FMS package diag_manager.
-The diag_table syntax is documented at http://data1.gfdl.noaa.gov/~nnz/MOM/mom5_pubrel_August2012/src/shared/diag_manager/diag_table.html.
 
 The diag_table file has three kinds of section: Title, File and Field. The title section is mandatory and always the first.
 There can be multiple file and field sections, typically either in pairs or grouped in to all files and all fields,
