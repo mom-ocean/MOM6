@@ -717,11 +717,7 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
       S5(n) = wt_t(n) * S_t(i,j,k) + wt_b(n) * ( S_b(i,j,k) + s6 * wt_t(n) )
       T5(n) = wt_t(n) * T_t(i,j,k) + wt_b(n) * ( T_b(i,j,k) + t6 * wt_t(n) )
     enddo
-    if (rho_scale /= 1.0) then
-      call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
-    else
-      call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks)
-    endif
+    call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
 
     ! Use Boole's rule to estimate the pressure anomaly change.
     rho_anom = C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3))
@@ -802,11 +798,7 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
         T5(n) = wt_t(n) * T_top + wt_b(n) * ( T_bot + t6 * wt_t(n) )
       enddo
 
-      if (rho_scale /= 1.0) then
-        call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
-      else
-        call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks)
-      endif
+      call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
 
       ! Use Boole's rule to estimate the pressure anomaly change.
       intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3)) )
@@ -886,11 +878,7 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
         T5(n) = wt_t(n) * T_top + wt_b(n) * ( T_bot + t6 * wt_t(n) )
       enddo
 
-      if (rho_scale /= 1.0) then
-        call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
-      else
-        call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks)
-      endif
+      call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
 
       ! Use Boole's rule to estimate the pressure anomaly change.
       intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3)) )
