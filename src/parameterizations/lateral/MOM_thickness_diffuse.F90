@@ -1945,7 +1945,7 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
                  "streamfunction formulation, expressed as a fraction of planetary "//&
                  "rotation, OMEGA. This should be tiny but non-zero to avoid degeneracy.", &
                  default=1.e-15, units="nondim", do_not_log=.not.CS%use_FGNV_streamfn)
-  call get_param(param_file, mdl, "STANLEY_DET_COEFF", CS%Stanley_det_coeff, &
+  call get_param(param_file, mdl, "STANLEY_PRM_DET_COEFF", CS%Stanley_det_coeff, &
                  "The coefficient correlating SGS temperature variance with the mean "//&
                  "temperature gradient in the deterministic part of the Stanley parameterization. "//&
                  "Negative values disable the scheme.", units="nondim", default=-1.0)
