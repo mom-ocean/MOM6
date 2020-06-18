@@ -116,7 +116,7 @@ build/asymmetric/path_names: GRID_SRC=config_src/dynamic
 build/%/path_names: GRID_SRC=config_src/dynamic_symmetric
 
 build/%/MOM6: build/%/Makefile $(FMS)/lib/libfms.a
-	make -C $(@D) $(MOMFLAGS) $(@F)
+	$(MAKE) -C $(@D) $(MOMFLAGS) $(@F)
 
 build/%/Makefile: build/%/path_names
 	cp $(MKMF_TEMPLATE) $(@D)
@@ -157,7 +157,7 @@ $(TARGET_CODEBASE):
 
 $(FMS)/lib/libfms.a: $(FMS)/build/Makefile
 	mkdir -p $(FMS)/lib
-	cd $(FMS)/build && make NETCDF=3 DEBUG=1 ../lib/libfms.a
+	cd $(FMS)/build && $(MAKE) NETCDF=3 DEBUG=1 ../lib/libfms.a
 
 $(FMS)/build/Makefile: $(FMS)/build/path_names
 	cp $(MKMF_TEMPLATE) $(@D)
@@ -254,8 +254,6 @@ $(eval $(call CMP_RULE,regression,symmetric target))
 # Restart tests only compare the final stat record
 .PRECIOUS: $(foreach b,symmetric restart target,work/%/$(b)/ocean.stats)
 %.restart: $(foreach b,symmetric restart,work/%/$(b)/ocean.stats)
-	#cmp $(foreach f,$^,<(tr -s ' ' < $(f) | cut -d ' ' -f3- | tail -n 1)) \
-	#  || diff $^
 	@cmp $(foreach f,$^,<(tr -s ' ' < $(f) | cut -d ' ' -f3- | tail -n 1)) \
 	  || !( \
 	    mkdir -p results/$*; \
@@ -275,7 +273,7 @@ $(eval $(call CMP_RULE,regression,symmetric target))
 # $(1): Environment variables
 ifeq ($(shell $(MPIRUN) -x tmp=1 true 2> /dev/null ; echo $$?), 0)
   MPIRUN_CMD=$(MPIRUN) $(if $(1),-x $(1),)
-else ifeq ($(shell $(MPIRUN) -env tmp=1 true 2> /dev/null ; echo $$?), 0)
+else ifeq ($(shell $(MPIRUN) -env tmp=1 true 2> /dev/null ; echo $$? ; rm -f nv), 0)
   MPIRUN_CMD=$(MPIRUN) $(if $(1),-env $(1),)
 else
   MPIRUN_CMD=$(1) $(MPIRUN)
@@ -295,15 +293,15 @@ work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6
 	if [ $(3) ]; then find build/$(2) -name *.gcda -exec rm -f '{}' \; ; fi
 	mkdir -p $$(@D)
 	cp -rL $$*/* $$(@D)
-	cd $$(@D) && if [ -f Makefile ]; then make; fi
+	cd $$(@D) && if [ -f Makefile ]; then $(MAKE); fi
 	mkdir -p $$(@D)/RESTART
 	echo -e "$(4)" > $$(@D)/MOM_override
 	cd $$(@D) \
 	  && $$(call MPIRUN_CMD,$(5)) -n $(6) ../../../$$< 2> std.err > std.out \
 	  || !( \
 	    mkdir -p ../../../results/$$*/ ; \
-	    cat std.out | tee ../../../results/$$*/std.$(1).out | tail ; \
-		cat std.err | tee ../../../results/$$*/std.$(1).err | tail ; \
+	    cat std.out | tee ../../../results/$$*/std.$(1).out | tail -20 ; \
+		cat std.err | tee ../../../results/$$*/std.$(1).err | tail -20 ; \
 		rm ocean.stats chksum_diag ; \
 		echo -e "${FAIL}: $$*.$(1) failed at runtime." \
 	  )
@@ -341,7 +339,7 @@ work/%/restart/ocean.stats: build/symmetric/MOM6
 	rm -rf $(@D)
 	mkdir -p $(@D)
 	cp -rL $*/* $(@D)
-	cd work/$*/restart && if [ -f Makefile ]; then make; fi
+	cd work/$*/restart && if [ -f Makefile ]; then $(MAKE); fi
 	mkdir -p $(@D)/RESTART
 	# Generate the half-period input namelist
 	# TODO: Assumes that runtime set by DAYMAX, will fail if set by input.nml
