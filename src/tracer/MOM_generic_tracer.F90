@@ -5,7 +5,14 @@ module MOM_generic_tracer
 
 #include <MOM_memory.h>
 
-#include <fms_platform.h>
+! The following macro is usually defined in <fms_platform.h> but since MOM6 should not directly
+! include files from FMS we replicate the macro lines here:
+#ifdef NO_F2000
+#define _ALLOCATED associated
+#else
+#define _ALLOCATED allocated
+#endif
+
 
   ! ### These imports should not reach into FMS directly ###
   use mpp_mod,        only: stdout, mpp_error, FATAL,WARNING,NOTE

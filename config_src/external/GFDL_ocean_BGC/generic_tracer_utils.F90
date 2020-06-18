@@ -3,7 +3,6 @@
 !! for adding, allocating memory, and record keeping of individual generic
 !! tracers irrespective of their physical/chemical nature.
 module g_tracer_utils
-#include <fms_platform.h>
 
   use coupler_types_mod, only: coupler_2d_bc_type
   use time_manager_mod, only : time_type
@@ -20,7 +19,7 @@ implicit none ; private
     !! MOM keeps the prognostic tracer fields at 3 time levels, hence 4D.
     real, pointer, dimension(:,:,:,:) :: field  => NULL()
     !> Tracer concentration in river runoff
-    real, _ALLOCATABLE, dimension(:,:) :: trunoff _NULL
+    real, allocatable, dimension(:,:) :: trunoff
     logical :: requires_restart = .true. !< Unknown
     !> Tracer source: filename, type, var name, units, record, gridfile
     character(len=fm_string_len) :: src_file, src_var_name, src_var_unit, src_var_gridspec
@@ -264,7 +263,7 @@ contains
   !! This subroutine solves a tridiagonal equation to find and set values of vertically diffused field
   !!  for a tracer node.This is ported from GOLD (vertdiff) and simplified
   !! Since the surface flux from the atmosphere (%stf) has the units of mol/m^2/sec the resulting
-  !!  tracer concentrationhas units of mol/Kg
+  !!  tracer concentration has units of mol/Kg
   subroutine g_tracer_vertdiff_G(g_tracer, h_old, ea, eb, dt, kg_m2_to_H, m_to_H, tau, mom)
     type(g_tracer_type),    pointer  :: g_tracer
     !> Layer thickness before entrainment, in m or kg m-2.
