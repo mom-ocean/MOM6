@@ -16,7 +16,7 @@ use MOM_domains,          only : global_field_sum, BITWISE_EXACT_SUM
 use MOM_domains,          only : AGRID, BGRID_NE, CGRID_NE, To_All
 use MOM_domains,          only : To_North, To_East, Omit_Corners
 use MOM_error_handler,    only : MOM_error, WARNING, FATAL, is_root_pe, MOM_mesg
-use MOM_file_parser,      only : get_param, log_version, param_file_type
+use MOM_file_parser,      only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,     only : forcing, mech_forcing
 use MOM_forcing_type,     only : forcing_diags, mech_forcing_diags, register_forcing_type_diags
 use MOM_forcing_type,     only : allocate_forcing_type, deallocate_forcing_type
@@ -1231,7 +1231,7 @@ subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
 end subroutine forcing_save_restart
 
 !> Initialize the surface forcing, including setting parameters and allocating permanent memory.
-subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
+subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   type(time_type),          intent(in)    :: Time !< The current model time
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
@@ -1240,6 +1240,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
                                                   !! diagnostic output
   type(surface_forcing_CS), pointer       :: CS   !< A pointer that is set to point to the control
                                                   !! structure for this module
+  integer, optional,        intent(in)   :: wind_stagger !< If present, the staggering of the winds that are
+                                                          !! being provided in calls to update_ocean_model
 
   ! Local variables
   real :: utide  ! The RMS tidal velocity [Z T-1 ~> m s-1].
@@ -1347,15 +1349,28 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "the ocean dynamics.  The actual net mass source may differ "//&
                  "due to internal corrections.", default=.false.)
 
-  call get_param(param_file, mdl, "WIND_STAGGER", stagger, &
-                 "A case-insensitive character string to indicate the "//&
-                 "staggering of the input wind stress field.  Valid "//&
-                 "values are 'A', 'B', or 'C'.", default="C")
-  if (uppercase(stagger(1:1)) == 'A') then ; CS%wind_stagger = AGRID
-  elseif (uppercase(stagger(1:1)) == 'B') then ; CS%wind_stagger = BGRID_NE
-  elseif (uppercase(stagger(1:1)) == 'C') then ; CS%wind_stagger = CGRID_NE
-  else ; call MOM_error(FATAL,"surface_forcing_init: WIND_STAGGER = "// &
-                        trim(stagger)//" is invalid.") ; endif
+  if (present(wind_stagger)) then
+        if (wind_stagger == AGRID)    then ; stagger = 'AGRID'
+    elseif (wind_stagger == BGRID_NE) then ; stagger = 'BGRID_NE'
+    elseif (wind_stagger == CGRID_NE) then ; stagger = 'CGRID_NE'
+    else ; stagger = 'UNKNOWN' ; call MOM_error(FATAL,"surface_forcing_init: WIND_STAGGER = "// &
+                      trim(stagger)// "is invalid."); endif
+    call log_param(param_file, mdl, "WIND_STAGGER", stagger, &
+                   "The staggering of the input wind stress field "//&
+                   "from the coupler that is actually used.")
+    CS%wind_stagger = wind_stagger
+  else
+    call get_param(param_file, mdl, "WIND_STAGGER", stagger, &
+                   "A case-insensitive character string to indicate the "//&
+                   "staggering of the input wind stress field.  Valid "//&
+                   "values are 'A', 'B', or 'C'.", default="C")
+        if (uppercase(stagger(1:1)) == 'A') then ; CS%wind_stagger = AGRID
+    elseif (uppercase(stagger(1:1)) == 'B') then ; CS%wind_stagger = BGRID_NE
+    elseif (uppercase(stagger(1:1)) == 'C') then ; CS%wind_stagger = CGRID_NE
+    else ; call MOM_error(FATAL,"surface_forcing_init: WIND_STAGGER = "// &
+                          trim(stagger)//" is invalid.") ; endif
+  endif
+
   call get_param(param_file, mdl, "WIND_STRESS_MULTIPLIER", CS%wind_stress_multiplier, &
                  "A factor multiplying the wind-stress given to the ocean by the "//&
                  "coupler. This is used for testing and should be =1.0 for any "//&
