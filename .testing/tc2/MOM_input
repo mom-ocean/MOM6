@@ -430,6 +430,7 @@ STANLEY_PRM_DET_COEFF = 0.5     !   [nondim] default = -1.0
                                 ! The coefficient correlating SGS temperature variance with the mean temperature
                                 ! gradient in the deterministic part of the Stanley parameterization. Negative
                                 ! values disable the scheme.
+PGF_STANLEY_T2_DET_COEFF = 0.5
 
 ! === module MOM_mixed_layer_restrat ===
 FOX_KEMPER_ML_RESTRAT_COEF = 5.0 !   [nondim] default = 0.0

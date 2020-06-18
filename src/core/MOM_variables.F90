@@ -118,10 +118,10 @@ type, public :: thermo_var_ptrs
                          !! calculate_surface_state [degC R Z ~> degC kg m-2].
   ! The following variables are most normally not used but when they are they
   ! will be either set by parameterizations or prognostic.
-  real, allocatable :: varT(:,:,:)    !< SGS variance of potential temperature [degC2].
-  real, allocatable :: varS(:,:,:)    !< SGS variance of salinity [ppt2].
-  real, allocatable :: covarTS(:,:,:) !< SGS covariance of salinity and potential temperauter
-                                      !! [degC ppt].
+  real, pointer :: varT(:,:,:)    !< SGS variance of potential temperature [degC2].
+  real, pointer :: varS(:,:,:)    !< SGS variance of salinity [ppt2].
+  real, pointer :: covarTS(:,:,:) !< SGS covariance of salinity and potential temperauter
+                                  !! [degC ppt].
 end type thermo_var_ptrs
 
 !> Pointers to all of the prognostic variables allocated in MOM_variables.F90 and MOM.F90.

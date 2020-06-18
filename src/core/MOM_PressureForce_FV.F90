@@ -54,7 +54,9 @@ type, public :: PressureForce_FV_CS ; private
   integer :: Recon_Scheme   !< Order of the polynomial of the reconstruction of T & S
                             !! for the finite volume pressure gradient calculation.
                             !! By the default (1) is for a piecewise linear method
-
+  real :: Stanley_T2_det_coeff !< The coefficient correlating SGS temperature variance with
+                            !! the mean temperature gradient in the deterministic part of
+                            !! the Stanley form of the Brankart correction.
   integer :: id_e_tidal = -1 !< Diagnostic identifier
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL() !< Tides control structure
 end type PressureForce_FV_CS
@@ -474,7 +476,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   logical :: use_ALE         ! If true, use an ALE pressure reconstruction.
   logical :: use_EOS         ! If true, density is calculated from T & S using an equation of state.
   type(thermo_var_ptrs) :: tv_tmp! A structure of temporary T & S.
-
+  real :: dTdi2, dTdj2       ! Differences in T variance [degC2]
   real, parameter :: C1_6 = 1.0/6.0
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
@@ -494,6 +496,21 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   do i=Isq,Ieq+1 ; p0(i) = 0.0 ; enddo
   use_ALE = .false.
   if (associated(ALE_CSp)) use_ALE = CS%reconstruct .and. use_EOS
+
+  if (CS%Stanley_T2_det_coeff>=0.) then
+    if (.not. associated(tv%varT)) call safe_alloc_ptr(tv%varT, G%isd, G%ied, G%jsd, G%jed, GV%ke)
+    do k=1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
+      ! SGS variance in i-direction [degC2]
+      dTdi2 = ( ( G%mask2dCu(I  ,j) * G%IdxCu(I  ,j) * ( tv%T(i+1,j,k) - tv%T(i,j,k) ) &
+                + G%mask2dCu(I-1,j) * G%IdxCu(I-1,j) * ( tv%T(i,j,k) - tv%T(i-1,j,k) ) &
+                ) * G%dxT(i,j) * 0.5 )**2
+      ! SGS variance in j-direction [degC2]
+      dTdj2 = ( ( G%mask2dCv(i,J  ) * G%IdyCv(i,J  ) * ( tv%T(i,j+1,k) - tv%T(i,j,k) ) &
+                + G%mask2dCv(i,J-1) * G%IdyCv(i,J-1) * ( tv%T(i,j,k) - tv%T(i,j-1,k) ) &
+                ) * G%dyT(i,j) * 0.5 )**2
+      tv%varT(i,j,k) = CS%Stanley_T2_det_coeff * 0.5 * ( dTdi2 + dTdj2 )
+    enddo ; enddo ; enddo
+  endif
 
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff * GV%H_to_Z
@@ -801,7 +818,11 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, tides_CS
                  "boundary cells is extrapolated, rather than using PCM "//&
                  "in these cells. If true, the same order polynomial is "//&
                  "used as is used for the interior cells.", default=.true.)
-
+  call get_param(param_file, mdl, "PGF_STANLEY_T2_DET_COEFF", CS%Stanley_T2_det_coeff, &
+                 "The coefficient correlating SGS temperature variance with "// &
+                 "the mean temperature gradient in the deterministic part of "// &
+                 "the Stanley form of the Brankart correction. "// &
+                 "Negative values disable the scheme.", units="nondim", default=-1.0)
   if (CS%tides) then
     CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', diag%axesT1, &
         Time, 'Tidal Forcing Astronomical and SAL Height Anomaly', 'meter', conversion=US%Z_to_m)

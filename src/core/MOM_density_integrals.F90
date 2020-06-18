@@ -703,9 +703,9 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
   t6 = 0.
   use_PPM = .true. ! This is a place-holder to allow later re-use of this function
 
-  use_varT = allocated(tv%varT)
-  use_covarTS = allocated(tv%covarTS)
-  use_varS = allocated(tv%varS)
+  use_varT = associated(tv%varT)
+  use_covarTS = associated(tv%covarTS)
+  use_varS = associated(tv%varS)
   use_stanley_eos = use_varT .or. use_covarTS .or. use_varS
   T25(:) = 0.
   TS5(:) = 0.
@@ -733,7 +733,7 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
     if (use_stanley_eos) then
       if (use_varT) T25(:) = tv%varT(i,j,k)
       if (use_covarTS) TS5(:) = tv%covarTS(i,j,k)
-      if (use_varT) S25(:) = tv%varS(i,j,k)
+      if (use_varS) S25(:) = tv%varS(i,j,k)
       call calculate_density(T5, S5, p5, T25, TS5, S25, r5, &
                              1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
     else
@@ -822,7 +822,7 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
       if (use_stanley_eos) then
         if (use_varT) T25(:) = w_left*tv%varT(i,j,k) + w_right*tv%varT(i+1,j,k)
         if (use_covarTS) TS5(:) = w_left*tv%covarTS(i,j,k) + w_right*tv%covarTS(i+1,j,k)
-        if (use_varT) S25(:) = w_left*tv%varS(i,j,k) + w_right*tv%varS(i+1,j,k)
+        if (use_varS) S25(:) = w_left*tv%varS(i,j,k) + w_right*tv%varS(i+1,j,k)
         call calculate_density(T5, S5, p5, T25, TS5, S25, r5, &
                                1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
       else
@@ -910,7 +910,7 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
       if (use_stanley_eos) then
         if (use_varT) T25(:) = w_left*tv%varT(i,j,k) + w_right*tv%varT(i,j+1,k)
         if (use_covarTS) TS5(:) = w_left*tv%covarTS(i,j,k) + w_right*tv%covarTS(i,j+1,k)
-        if (use_varT) S25(:) = w_left*tv%varS(i,j,k) + w_right*tv%varS(i,j+1,k)
+        if (use_varS) S25(:) = w_left*tv%varS(i,j,k) + w_right*tv%varS(i,j+1,k)
         call calculate_density(T5, S5, p5, T25, TS5, S25, r5, &
                                1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
       else
