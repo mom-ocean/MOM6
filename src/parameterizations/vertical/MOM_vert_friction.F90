@@ -1571,7 +1571,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   CS%diag => diag ; CS%ntrunc => ntrunc ; ntrunc = 0
 
 ! Default, read and log parameters
-  call log_version(param_file, mdl, version, "")
+  call log_version(param_file, mdl, version, "", log_to_all=.true., debugging=.true.)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
                  default=.false.)

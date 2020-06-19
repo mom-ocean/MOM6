@@ -1272,7 +1272,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
 
   call write_version_number(version)
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mdl, version, "")
+  call log_version(param_file, mdl, version, "", log_to_all=.true., debugging=.true.)
 
   call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, &
                  "The directory in which all input files are found.", &
