@@ -85,9 +85,11 @@ endif
 SOURCE = \
   $(foreach ext,F90 inc c h,$(wildcard $(1)/*/*.$(ext) $(1)/*/*/*.$(ext)))
 
-MOM_SOURCE = $(call SOURCE,../src) $(wildcard ../config_src/solo_driver/*.F90)
+MOM_SOURCE = $(call SOURCE,../src) $(wildcard ../config_src/solo_driver/*.F90) \
+             $(wildcard ../config_src/ext*/*/*.F90)
 TARGET_SOURCE = $(call SOURCE,build/target_codebase/src) \
-  $(wildcard build/target_codebase/config_src/solo_driver/*.F90)
+  $(wildcard build/target_codebase/config_src/solo_driver/*.F90) \
+  $(wildcard build/target_codebase/config_src/ext*/*.F90)
 FMS_SOURCE = $(call SOURCE,$(DEPS)/fms/src)
 
 #---
@@ -114,7 +116,7 @@ build/asymmetric/path_names: GRID_SRC=config_src/dynamic
 build/%/path_names: GRID_SRC=config_src/dynamic_symmetric
 
 build/%/MOM6: build/%/Makefile $(FMS)/lib/libfms.a
-	make -C $(@D) $(MOMFLAGS) $(@F)
+	$(MAKE) -C $(@D) $(MOMFLAGS) $(@F)
 
 build/%/Makefile: build/%/path_names
 	cp $(MKMF_TEMPLATE) $(@D)
@@ -133,6 +135,7 @@ build/target/path_names: $(LIST_PATHS) $(TARGET_CODEBASE) $(TARGET_SOURCE)
 	cd $(@D) && $(LIST_PATHS) -l \
 	  ../../$(TARGET_CODEBASE)/src \
 	  ../../$(TARGET_CODEBASE)/config_src/solo_driver \
+	  ../../$(TARGET_CODEBASE)/config_src/ext* \
 	  ../../$(TARGET_CODEBASE)/$(GRID_SRC)
 
 build/%/path_names: $(LIST_PATHS) $(MOM_SOURCE)
@@ -140,6 +143,7 @@ build/%/path_names: $(LIST_PATHS) $(MOM_SOURCE)
 	cd $(@D) && $(LIST_PATHS) -l \
 	  ../../../src \
 	  ../../../config_src/solo_driver \
+	  ../../../config_src/ext* \
 	  ../../../$(GRID_SRC)
 
 # Target repository for regression tests
@@ -153,7 +157,7 @@ $(TARGET_CODEBASE):
 
 $(FMS)/lib/libfms.a: $(FMS)/build/Makefile
 	mkdir -p $(FMS)/lib
-	cd $(FMS)/build && make NETCDF=3 DEBUG=1 ../lib/libfms.a
+	cd $(FMS)/build && $(MAKE) NETCDF=3 DEBUG=1 ../lib/libfms.a
 
 $(FMS)/build/Makefile: $(FMS)/build/path_names
 	cp $(MKMF_TEMPLATE) $(@D)
@@ -250,8 +254,6 @@ $(eval $(call CMP_RULE,regression,symmetric target))
 # Restart tests only compare the final stat record
 .PRECIOUS: $(foreach b,symmetric restart target,work/%/$(b)/ocean.stats)
 %.restart: $(foreach b,symmetric restart,work/%/$(b)/ocean.stats)
-	#cmp $(foreach f,$^,<(tr -s ' ' < $(f) | cut -d ' ' -f3- | tail -n 1)) \
-	#  || diff $^
 	@cmp $(foreach f,$^,<(tr -s ' ' < $(f) | cut -d ' ' -f3- | tail -n 1)) \
 	  || !( \
 	    mkdir -p results/$*; \
@@ -271,7 +273,7 @@ $(eval $(call CMP_RULE,regression,symmetric target))
 # $(1): Environment variables
 ifeq ($(shell $(MPIRUN) -x tmp=1 true 2> /dev/null ; echo $$?), 0)
   MPIRUN_CMD=$(MPIRUN) $(if $(1),-x $(1),)
-else ifeq ($(shell $(MPIRUN) -env tmp=1 true 2> /dev/null ; echo $$?), 0)
+else ifeq ($(shell $(MPIRUN) -env tmp=1 true 2> /dev/null ; echo $$? ; rm -f nv), 0)
   MPIRUN_CMD=$(MPIRUN) $(if $(1),-env $(1),)
 else
   MPIRUN_CMD=$(1) $(MPIRUN)
@@ -291,15 +293,15 @@ work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6
 	if [ $(3) ]; then find build/$(2) -name *.gcda -exec rm -f '{}' \; ; fi
 	mkdir -p $$(@D)
 	cp -rL $$*/* $$(@D)
-	cd $$(@D) && if [ -f Makefile ]; then make; fi
+	cd $$(@D) && if [ -f Makefile ]; then $(MAKE); fi
 	mkdir -p $$(@D)/RESTART
 	echo -e "$(4)" > $$(@D)/MOM_override
 	cd $$(@D) \
 	  && $$(call MPIRUN_CMD,$(5)) -n $(6) ../../../$$< 2> std.err > std.out \
 	  || !( \
 	    mkdir -p ../../../results/$$*/ ; \
-	    cat std.out | tee ../../../results/$$*/std.$(1).out | tail ; \
-		cat std.err | tee ../../../results/$$*/std.$(1).err | tail ; \
+	    cat std.out | tee ../../../results/$$*/std.$(1).out | tail -20 ; \
+		cat std.err | tee ../../../results/$$*/std.$(1).err | tail -20 ; \
 		rm ocean.stats chksum_diag ; \
 		echo -e "${FAIL}: $$*.$(1) failed at runtime." \
 	  )
@@ -337,7 +339,7 @@ work/%/restart/ocean.stats: build/symmetric/MOM6
 	rm -rf $(@D)
 	mkdir -p $(@D)
 	cp -rL $*/* $(@D)
-	cd work/$*/restart && if [ -f Makefile ]; then make; fi
+	cd work/$*/restart && if [ -f Makefile ]; then $(MAKE); fi
 	mkdir -p $(@D)/RESTART
 	# Generate the half-period input namelist
 	# TODO: Assumes that runtime set by DAYMAX, will fail if set by input.nml

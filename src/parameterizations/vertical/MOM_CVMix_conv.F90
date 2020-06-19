@@ -76,8 +76,10 @@ logical function CVMix_conv_init(Time, G, GV, US, param_file, diag, CS)
   allocate(CS)
 
   ! Read parameters
+  call get_param(param_file, mdl, "USE_CVMix_CONVECTION", CVMix_conv_init, default=.false., do_not_log=.true.)
   call log_version(param_file, mdl, version, &
-    "Parameterization of enhanced mixing due to convection via CVMix")
+           "Parameterization of enhanced mixing due to convection via CVMix", &
+           all_default=.not.CVMix_conv_init)
   call get_param(param_file, mdl, "USE_CVMix_CONVECTION", CVMix_conv_init, &
                  "If true, turns on the enhanced mixing due to convection "//&
                  "via CVMix. This scheme increases diapycnal diffs./viscs. "//&

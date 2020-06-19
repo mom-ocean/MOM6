@@ -1261,7 +1261,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mdl, version, "")
+  call log_version(param_file, mdl, version, "", log_to_all=.true., layout=.true.)
   call get_param(param_file, mdl, "REENTRANT_X", reentrant_x, &
                  "If true, the domain is zonally reentrant.", default=.true.)
   call get_param(param_file, mdl, "REENTRANT_Y", reentrant_y, &
@@ -1336,26 +1336,6 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "at run time.  This can only be set at compile time.",&
                  layoutParam=.true.)
 
-  call get_param(param_file, mdl, trim(nihalo_nm), MOM_dom%nihalo, &
-                 "The number of halo points on each side in the "//&
-                 "x-direction.  With STATIC_MEMORY_ this is set as NIHALO_ "//&
-                 "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ "//&
-                 "the default is NIHALO_ in "//trim(inc_nm)//" (if defined) or 2.", &
-                 default=4, static_value=nihalo_dflt, layoutParam=.true.)
-  call get_param(param_file, mdl, trim(njhalo_nm), MOM_dom%njhalo, &
-                 "The number of halo points on each side in the "//&
-                 "y-direction.  With STATIC_MEMORY_ this is set as NJHALO_ "//&
-                 "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ "//&
-                 "the default is NJHALO_ in "//trim(inc_nm)//" (if defined) or 2.", &
-                 default=4, static_value=njhalo_dflt, layoutParam=.true.)
-  if (present(min_halo)) then
-    MOM_dom%nihalo = max(MOM_dom%nihalo, min_halo(1))
-    min_halo(1) = MOM_dom%nihalo
-    MOM_dom%njhalo = max(MOM_dom%njhalo, min_halo(2))
-    min_halo(2) = MOM_dom%njhalo
-    call log_param(param_file, mdl, "!NIHALO min_halo", MOM_dom%nihalo, layoutParam=.true.)
-    call log_param(param_file, mdl, "!NJHALO min_halo", MOM_dom%nihalo, layoutParam=.true.)
-  endif
   if (is_static) then
     call get_param(param_file, mdl, "NIGLOBAL", MOM_dom%niglobal, &
                  "The total number of thickness grid points in the "//&
@@ -1372,12 +1352,6 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
     if (MOM_dom%njglobal /= NJGLOBAL) call MOM_error(FATAL,"MOM_domains_init: " // &
      "static mismatch for NJGLOBAL_ domain size. Header file does not match input namelist")
 
-    if (.not.present(min_halo)) then
-      if (MOM_dom%nihalo /= NIHALO) call MOM_error(FATAL,"MOM_domains_init: " // &
-             "static mismatch for "//trim(nihalo_nm)//" domain size")
-      if (MOM_dom%njhalo /= NJHALO) call MOM_error(FATAL,"MOM_domains_init: " // &
-             "static mismatch for "//trim(njhalo_nm)//" domain size")
-    endif
   else
     call get_param(param_file, mdl, "NIGLOBAL", MOM_dom%niglobal, &
                  "The total number of thickness grid points in the "//&
@@ -1389,6 +1363,30 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "y-direction in the physical domain. With STATIC_MEMORY_ "//&
                  "this is set in "//trim(inc_nm)//" at compile time.", &
                  fail_if_missing=.true.)
+  endif
+
+  call get_param(param_file, mdl, trim(nihalo_nm), MOM_dom%nihalo, &
+                 "The number of halo points on each side in the x-direction.  How this is set "//&
+                 "varies with the calling component and static or dynamic memory configuration.", &
+                 default=nihalo_dflt, static_value=nihalo_dflt)
+  call get_param(param_file, mdl, trim(njhalo_nm), MOM_dom%njhalo, &
+                 "The number of halo points on each side in the y-direction.  How this is set "//&
+                 "varies with the calling component and static or dynamic memory configuration.", &
+                 default=njhalo_dflt, static_value=njhalo_dflt)
+  if (present(min_halo)) then
+    MOM_dom%nihalo = max(MOM_dom%nihalo, min_halo(1))
+    min_halo(1) = MOM_dom%nihalo
+    MOM_dom%njhalo = max(MOM_dom%njhalo, min_halo(2))
+    min_halo(2) = MOM_dom%njhalo
+    ! These are generally used only with static memory, so they are considerd layout params.
+    call log_param(param_file, mdl, "!NIHALO min_halo", MOM_dom%nihalo, layoutParam=.true.)
+    call log_param(param_file, mdl, "!NJHALO min_halo", MOM_dom%nihalo, layoutParam=.true.)
+  endif
+  if (is_static .and. .not.present(min_halo)) then
+    if (MOM_dom%nihalo /= NIHALO) call MOM_error(FATAL,"MOM_domains_init: " // &
+           "static mismatch for "//trim(nihalo_nm)//" domain size")
+    if (MOM_dom%njhalo /= NJHALO) call MOM_error(FATAL,"MOM_domains_init: " // &
+           "static mismatch for "//trim(njhalo_nm)//" domain size")
   endif
 
   global_indices(1) = 1 ; global_indices(2) = MOM_dom%niglobal

@@ -217,3 +217,10 @@ use `srun` (such as on GFDL's gaea HPC):
 ```
 make MPIRUN=srun test
 ```
+
+For convenience you can provide some macro in the file `config.mk`. For example, on
+gaea, to be able to run `make test -s -j` you will find putting the line
+```
+MPIRUN = srun -mblock --exclusive
+```
+in `config.mk` very useful.
