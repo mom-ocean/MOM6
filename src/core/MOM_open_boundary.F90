@@ -343,9 +343,12 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   real               :: Lscale_in, Lscale_out ! parameters controlling tracer values at the boundaries [L ~> m]
   allocate(OBC)
 
+  call get_param(param_file, mdl, "OBC_NUMBER_OF_SEGMENTS", OBC%number_of_segments, &
+                 default=0, do_not_log=.true.)
   call log_version(param_file, mdl, version, &
                  "Controls where open boundaries are located, what kind of boundary condition "//&
-                 "to impose, and what data to apply, if any.")
+                 "to impose, and what data to apply, if any.", &
+                 all_default=(OBC%number_of_segments<=0))
   call get_param(param_file, mdl, "OBC_NUMBER_OF_SEGMENTS", OBC%number_of_segments, &
                  "The number of open boundary segments.", &
                  default=0)
@@ -502,7 +505,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
                    "The maximum magnitude of the baroclinic radiation velocity (or speed of "//&
                    "characteristics), in gridpoints per timestep.  This is only "//&
                    "used if one of the open boundary segments is using Orlanski.", &
-                   units="nondim", default=10.0) !### Should the default be changed to 1.0?
+                   units="nondim", default=1.0)
       call get_param(param_file, mdl, "OBC_RAD_VEL_WT", OBC%gamma_uv, &
                    "The relative weighting for the baroclinic radiation "//&
                    "velocities (or speed of characteristics) at the new "//&
@@ -619,7 +622,7 @@ subroutine initialize_segment_data(G, OBC, PF)
          default=.false.)
   call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&

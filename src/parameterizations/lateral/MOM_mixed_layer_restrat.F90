@@ -56,7 +56,6 @@ type, public :: mixedlayer_restrat_CS ; private
                                    !! the mixed-layer [nondim].
   real    :: MLE_MLD_stretch       !< A scaling coefficient for stretching/shrinking the MLD used in
                                    !! the MLE scheme [nondim]. This simply multiplies MLD wherever used.
-  logical :: MLE_use_MLD_ave_bug   !< If true, do not account for MLD mismatch to interface positions.
   logical :: debug = .false.       !< If true, calculate checksums of fields for debugging.
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !! timing of diagnostic output.
@@ -182,7 +181,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   real :: ddRho    ! A density difference [R ~> kg m-3]
   real :: hAtVel, zpa, zpb, dh, res_scaling_fac
   real :: I_LFront ! The inverse of the frontal length scale [L-1 ~> m-1]
-  logical :: proper_averaging, line_is_empty, keep_going, res_upscale
+  logical :: line_is_empty, keep_going, res_upscale
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
 
@@ -291,7 +290,6 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   g_Rho0 = GV%g_Earth / GV%Rho0
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff*GV%H_to_Z
-  proper_averaging = .not. CS%MLE_use_MLD_ave_bug
   if (CS%front_length>0.) then
     res_upscale = .true.
     I_LFront = 1. / CS%front_length
@@ -305,8 +303,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
 !$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,EOSdom,   &
 !$OMP                               utimescale_diag,vtimescale_diag,forces,dz_neglect, &
 !$OMP                               htot_slow,MLD_slow,Rml_av_slow,VarMix,I_LFront,    &
-!$OMP                               res_upscale,                                       &
-!$OMP                               nz,MLD_fast,uDml_diag,vDml_diag,proper_averaging)  &
+!$OMP                               res_upscale, nz,MLD_fast,uDml_diag,vDml_diag)      &
 !$OMP                       private(rho_ml,h_vel,u_star,absf,mom_mixrate,timescale,    &
 !$OMP                               line_is_empty, keep_going,res_scaling_fac,         &
 !$OMP                               a,IhTot,b,Ihtot_slow,zpb,hAtVel,zpa,dh)            &
@@ -327,8 +324,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
         line_is_empty = .true.
         do i=is-1,ie+1
           if (htot_fast(i,j) < MLD_fast(i,j)) then
-            dh = h(i,j,k)
-            if (proper_averaging) dh = min( h(i,j,k), MLD_fast(i,j)-htot_fast(i,j) )
+            dh = min( h(i,j,k), MLD_fast(i,j)-htot_fast(i,j) )
             Rml_av_fast(i,j) = Rml_av_fast(i,j) + dh*rho_ml(i)
             htot_fast(i,j) = htot_fast(i,j) + dh
             line_is_empty = .false.
@@ -816,7 +812,9 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
   integer :: i, j
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "MIXEDLAYER_RESTRAT", mixedlayer_restrat_init, &
+             default=.false., do_not_log=.true.)
+  call log_version(param_file, mdl, version, "", all_default=.not.mixedlayer_restrat_init)
   call get_param(param_file, mdl, "MIXEDLAYER_RESTRAT", mixedlayer_restrat_init, &
              "If true, a density-gradient dependent re-stratifying "//&
              "flow is imposed in the mixed layer. Can be used in ALE mode "//&
@@ -886,9 +884,6 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
              "A scaling coefficient for stretching/shrinking the MLD "//&
              "used in the MLE scheme. This simply multiplies MLD wherever used.",&
              units="nondim", default=1.0)
-    call get_param(param_file, mdl, "MLE_USE_MLD_AVE_BUG", CS%MLE_use_MLD_ave_bug, &
-             "If true, do not account for MLD mismatch to interface positions.",&
-             default=.false.)
   endif
 
   CS%diag => diag

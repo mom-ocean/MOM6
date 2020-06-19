@@ -211,7 +211,8 @@ subroutine MOM_grid_init(G, param_file, US, HI, global_indexing, bathymetry_at_v
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mod_nm, version, &
-                   "Parameters providing information about the lateral grid.")
+                   "Parameters providing information about the lateral grid.", &
+                   log_to_all=.true., layout=.true.)
 
 
   call get_param(param_file, mod_nm, "NIBLOCK", niblock, "The number of blocks "// &

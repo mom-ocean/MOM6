@@ -1007,7 +1007,8 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   ! Determine whether this module will be used
-  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "USE_MEKE", MEKE_init, default=.false., do_not_log=.true.)
+  call log_version(param_file, mdl, version, "", all_default=.not.MEKE_init)
   call get_param(param_file, mdl, "USE_MEKE", MEKE_init, &
                  "If true, turns on the MEKE scheme which calculates "// &
                  "a sub-grid mesoscale eddy kinetic energy budget.", &
@@ -1154,11 +1155,11 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   call get_param(param_file, mdl, "MEKE_ALPHA_RHINES", CS%aRhines, &
                  "If positive, is a coefficient weighting the Rhines scale "//&
                  "in the expression for mixing length used in MEKE-derived diffusivity.", &
-                 units="nondim", default=0.05)
+                 units="nondim", default=0.0)
   call get_param(param_file, mdl, "MEKE_ALPHA_EADY", CS%aEady, &
                  "If positive, is a coefficient weighting the Eady length scale "//&
                  "in the expression for mixing length used in MEKE-derived diffusivity.", &
-                 units="nondim", default=0.05)
+                 units="nondim", default=0.0)
   call get_param(param_file, mdl, "MEKE_ALPHA_FRICT", CS%aFrict, &
                  "If positive, is a coefficient weighting the frictional arrest scale "//&
                  "in the expression for mixing length used in MEKE-derived diffusivity.", &

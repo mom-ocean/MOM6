@@ -249,8 +249,13 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
   CS%diag => diag
 
   ! Read parameters
+  call get_param(param_file, mdl, "USE_CVMix_TIDAL", CS%use_CVMix_tidal, &
+                 default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "INT_TIDE_DISSIPATION", CS%int_tide_dissipation, &
+                 default=CS%use_CVMix_tidal, do_not_log=.true.)
   call log_version(param_file, mdl, version, &
-    "Vertical Tidal Mixing Parameterization")
+                 "Vertical Tidal Mixing Parameterization", &
+                 all_default=.not.(CS%use_CVMix_tidal .or. CS%int_tide_dissipation))
   call get_param(param_file, mdl, "USE_CVMix_TIDAL", CS%use_CVMix_tidal, &
                  "If true, turns on tidal mixing via CVMix", &
                  default=.false.)
@@ -268,7 +273,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
 
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(param_file, mdl, "TIDAL_MIXING_2018_ANSWERS", CS%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&

@@ -109,10 +109,8 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, US, CS)
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_regularize_layers: "//&
          "Module must be initialized before it is used.")
 
-  if (CS%regularize_surface_layers) &
-    call pass_var(h, G%Domain, clock=id_clock_pass)
-
   if (CS%regularize_surface_layers) then
+    call pass_var(h, G%Domain, clock=id_clock_pass)
     call regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   endif
 
@@ -891,6 +889,7 @@ subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
   character(len=40)  :: mdl = "MOM_regularize_layers"  ! This module's name.
   logical :: use_temperature
   logical :: default_2018_answers
+  logical :: just_read
   integer :: isd, ied, jsd, jed
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
@@ -904,38 +903,42 @@ subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
   CS%Time => Time
 
 ! Set default, read and log parameters
-  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "REGULARIZE_SURFACE_LAYERS", CS%regularize_surface_layers, &
+                 default=.false., do_not_log=.true.)
+  call log_version(param_file, mdl, version, "", all_default=.not.CS%regularize_surface_layers)
   call get_param(param_file, mdl, "REGULARIZE_SURFACE_LAYERS", CS%regularize_surface_layers, &
                  "If defined, vertically restructure the near-surface "//&
                  "layers when they have too much lateral variations to "//&
                  "allow for sensible lateral barotropic transports.", &
                  default=.false.)
+  just_read = .not.CS%regularize_surface_layers
   if (CS%regularize_surface_layers) then
     call get_param(param_file, mdl, "REGULARIZE_SURFACE_DETRAIN", CS%reg_sfc_detrain, &
                  "If true, allow the buffer layers to detrain into the "//&
                  "interior as a part of the restructuring when "//&
-                 "REGULARIZE_SURFACE_LAYERS is true.", default=.true.)
-  call get_param(param_file, mdl, "REG_SFC_DENSE_MATCH_TOLERANCE", CS%density_match_tol, &
+                 "REGULARIZE_SURFACE_LAYERS is true.", default=.true., do_not_log=just_read)
+    call get_param(param_file, mdl, "REG_SFC_DENSE_MATCH_TOLERANCE", CS%density_match_tol, &
                  "A relative tolerance for how well the densities must match with the target "//&
                  "densities during detrainment when regularizing the near-surface layers.  The "//&
-                 "default of 0.6 gives 20% overlaps in density", units="nondim", default=0.6)
+                 "default of 0.6 gives 20% overlaps in density", &
+                 units="nondim", default=0.6, do_not_log=just_read)
     call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false., do_not_log=just_read)
     call get_param(param_file, mdl, "REGULARIZE_LAYERS_2018_ANSWERS", CS%answers_2018, &
-                 "If true, use the order of arithmetic and expressions that recover the "//&
-                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
-                 "forms of the same expressions.", default=default_2018_answers)
+                 "If true, use the order of arithmetic and expressions that recover the answers "//&
+                 "from the end of 2018.  Otherwise, use updated and more robust forms of the "//&
+                 "same expressions.", default=default_2018_answers, do_not_log=just_read)
   endif
 
   call get_param(param_file, mdl, "HMIX_MIN", CS%Hmix_min, &
-                 "The minimum mixed layer depth if the mixed layer depth "//&
-                 "is determined dynamically.", units="m", default=0.0, scale=GV%m_to_H)
+                 "The minimum mixed layer depth if the mixed layer depth is determined "//&
+                 "dynamically.", units="m", default=0.0, scale=GV%m_to_H, do_not_log=just_read)
   call get_param(param_file, mdl, "REG_SFC_DEFICIT_TOLERANCE", CS%h_def_tol1, &
                  "The value of the relative thickness deficit at which "//&
                  "to start modifying the layer structure when "//&
                  "REGULARIZE_SURFACE_LAYERS is true.", units="nondim", &
-                 default=0.5)
+                 default=0.5, do_not_log=just_read)
   CS%h_def_tol2 = 0.2 + 0.8*CS%h_def_tol1
   CS%h_def_tol3 = 0.3 + 0.7*CS%h_def_tol1
   CS%h_def_tol4 = 0.5 + 0.5*CS%h_def_tol1
@@ -943,12 +946,14 @@ subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
 !  if (.not. CS%debug) &
 !    call get_param(param_file, mdl, "DEBUG_CONSERVATION", CS%debug, &
-!                 "If true, monitor conservation and extrema.", default=.false.)
+!                 "If true, monitor conservation and extrema.", default=.false., do_not_log=just_read)
 
   call get_param(param_file, mdl, "ALLOW_CLOCKS_IN_OMP_LOOPS", CS%allow_clocks_in_omp_loops, &
                  "If true, clocks can be called from inside loops that can "//&
                  "be threaded. To run with multiple threads, set to False.", &
-                 default=.true.)
+                 default=.true., do_not_log=just_read)
+
+  if (.not.CS%regularize_surface_layers) return
 
   CS%id_def_rat = register_diag_field('ocean_model', 'deficit_ratio', diag%axesT1, &
       Time, 'Max face thickness deficit ratio', 'nondim')
