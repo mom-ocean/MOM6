@@ -124,6 +124,7 @@ type, public :: vertvisc_CS ; private
   integer :: id_h_u = -1, id_h_v = -1, id_hML_u = -1 , id_hML_v = -1
   integer :: id_Ray_u = -1, id_Ray_v = -1, id_taux_bot = -1, id_tauy_bot = -1
   integer :: id_Kv_slow = -1, id_Kv_u = -1, id_Kv_v = -1
+  integer :: id_hf_du_dt_visc = -1, id_hf_dv_dt_visc = -1, id_hf_du_dt_visc_2d = -1, id_hf_dv_dt_visc_2d = -1
   !>@}
 
   type(PointAccel_CS), pointer :: PointAccel_CSp => NULL() !< A pointer to the control structure
@@ -147,7 +148,7 @@ contains
 !! if DIRECT_STRESS is true, applied to the surface layer.
 
 subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
-                    taux_bot, tauy_bot, Waves)
+                    taux_bot, tauy_bot, Waves, hfrac_u, hfrac_v)
   type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
@@ -173,6 +174,9 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
                                                      !! rock [R L Z T-2 ~> Pa]
   type(wave_parameters_CS), &
                    optional, pointer     :: Waves !< Container for wave/Stokes information
+
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), optional, intent(in) :: hfrac_u ! Fractional layer thickness at u points
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), optional, intent(in) :: hfrac_v ! Fractional layer thickness at v points
 
   ! Fields from forces used in this subroutine:
   !   taux: Zonal wind stress [R L Z T-2 ~> Pa].
@@ -202,11 +206,16 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   real :: surface_stress(SZIB_(G))! The same as stress, unless the wind stress
                            ! stress is applied as a body force [H L T-1 ~> m2 s-1 or kg m-1 s-1].
 
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: hf_du_dt_visc ! du_dt_visc x fract. thickness [L T-2 ~> m s-2].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: hf_dv_dt_visc ! dv_dt_visc. x fract. thickness [L T-2 ~> m s-2].
+  real, dimension(SZIB_(G),SZJ_(G)) :: hf_du_dt_visc_2d ! Depth integeral of hf_du_dt_visc [L T-2 ~> m s-2].
+  real, dimension(SZI_(G),SZJB_(G)) :: hf_dv_dt_visc_2d ! Depth integeral of hf_dv_dt_visc [L T-2 ~> m s-2].
+
   logical :: do_i(SZIB_(G))
   logical :: DoStokesMixing
 
-  integer :: i, j, k, is, ie, Isq, Ieq, Jsq, Jeq, nz, n
-  is = G%isc ; ie = G%iec
+  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, n
+  is = G%isc ; ie = G%iec; js = G%jsc; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
@@ -452,6 +461,39 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     call post_data(CS%id_taux_bot, taux_bot, CS%diag)
   if (present(tauy_bot) .and. (CS%id_tauy_bot > 0)) &
     call post_data(CS%id_tauy_bot, tauy_bot, CS%diag)
+
+  ! Diagnostics for terms multiplied by fractional thicknesses
+  do j=js,je ; do I=Isq,Ieq
+    hf_du_dt_visc_2d(I,j) = 0.0
+  enddo ; enddo
+  do J=Jsq,Jeq ; do i=is,ie
+    hf_dv_dt_visc_2d(i,J) = 0.0
+  enddo ; enddo
+
+  if (present(hfrac_u) .and. (CS%id_hf_du_dt_visc > 0)) then
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      hf_du_dt_visc(I,j,k) = ADp%du_dt_visc(I,j,k) * hfrac_u(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_hf_du_dt_visc, hf_du_dt_visc, CS%diag)
+  endif
+  if (present(hfrac_v) .and. (CS%id_hf_dv_dt_visc > 0)) then
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      hf_dv_dt_visc(i,J,k) = ADp%dv_dt_visc(i,J,k) * hfrac_v(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_hf_dv_dt_visc, hf_dv_dt_visc, CS%diag)
+  endif
+  if (present(hfrac_u) .and. (CS%id_hf_du_dt_visc_2d > 0)) then
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      hf_du_dt_visc_2d(I,j) = hf_du_dt_visc_2d(I,j) + ADp%du_dt_visc(I,j,k) * hfrac_u(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_hf_du_dt_visc_2d, hf_du_dt_visc_2d, CS%diag)
+  endif
+  if (present(hfrac_v) .and. (CS%id_hf_dv_dt_visc_2d > 0)) then
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      hf_dv_dt_visc_2d(i,J) = hf_dv_dt_visc_2d(i,J) + ADp%dv_dt_visc(i,J,k) * hfrac_v(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_hf_dv_dt_visc_2d, hf_dv_dt_visc_2d, CS%diag)
+  endif
 
 end subroutine vertvisc
 
@@ -1756,6 +1798,15 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   CS%id_tauy_bot = register_diag_field('ocean_model', 'tauy_bot', diag%axesCv1, &
      Time, 'Meridional Bottom Stress from Ocean to Earth', 'Pa', &
      conversion=US%RZ_to_kg_m2*US%L_T2_to_m_s2)
+
+  CS%id_hf_du_dt_visc = register_diag_field('ocean_model', 'hf_du_dt_visc', diag%axesCuL, Time, &
+      'Thickness-weighted Zonal Acceleration from Vertical Viscosity', 'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  CS%id_hf_dv_dt_visc = register_diag_field('ocean_model', 'hf_dv_dt_visc', diag%axesCvL, Time, &
+      'Thickness-weighted Meridional Acceleration from Vertical Viscosity', 'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  CS%id_hf_du_dt_visc_2d = register_diag_field('ocean_model', 'hf_du_dt_visc_2d', diag%axesCu1, Time, &
+      'Barotropic Thickness-weighted Zonal Acceleration from Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
+  CS%id_hf_dv_dt_visc_2d = register_diag_field('ocean_model', 'hf_dv_dt_visc_2d', diag%axesCv1, Time, &
+      'Barotropic Thickness-weighted Meridional Acceleration from Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
 
   if ((len_trim(CS%u_trunc_file) > 0) .or. (len_trim(CS%v_trunc_file) > 0)) &
     call PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS%PointAccel_CSp)

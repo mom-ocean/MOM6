@@ -72,12 +72,14 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
     CAu, &    !< CAu = f*v - u.grad(u) [L T-2 ~> m s-2]
     PFu, &    !< PFu = -dM/dx [L T-2 ~> m s-2]
-    diffu     !< Zonal acceleration due to convergence of the along-isopycnal stress tensor [L T-2 ~> m s-2]
+    diffu, &  !< Zonal acceleration due to convergence of the along-isopycnal stress tensor [L T-2 ~> m s-2]
+    diag_hfrac_u !< Fractional thickness at u points
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
     CAv, &    !< CAv = -f*u - u.grad(v) [L T-2 ~> m s-2]
     PFv, &    !< PFv = -dM/dy [L T-2 ~> m s-2]
-    diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor [L T-2 ~> m s-2]
+    diffv, &  !< Meridional acceleration due to convergence of the along-isopycnal stress tensor [L T-2 ~> m s-2]
+    diag_hfrac_v !< Fractional thickness at v points
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: visc_rem_u
               !< Both the fraction of the zonal momentum originally in a
@@ -326,8 +328,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   real, dimension(SZIB_(G),SZJ_(G)) :: hf_uBT_accel_2d ! Depth integeral of hf_uBT_accel [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJB_(G)) :: hf_vBT_accel_2d ! Depth integeral of hf_vBT_accel [L T-2 ~> m s-2].
 
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: diag_hfrac_u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: diag_hfrac_v
+!  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: diag_hfrac_u
+!  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: diag_hfrac_v
     ! Fractional layer thicknesses at u and v points
 
   real :: pres_to_eta ! A factor that converts pressures to the units of eta
@@ -557,6 +559,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   call btstep(u, v, eta, dt, u_bc_accel, v_bc_accel, forces, CS%pbce, CS%eta_PF, &
               u_av, v_av, CS%u_accel_bt, CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, &
               G, GV, US, CS%barotropic_CSp, CS%visc_rem_u, CS%visc_rem_v, &
+              hfrac_u=CS%diag_hfrac_u, hfrac_v=CS%diag_hfrac_v, &
               OBC=CS%OBC, BT_cont=CS%BT_cont, eta_PF_start=eta_PF_start, &
               taux_bot=taux_bot, tauy_bot=tauy_bot, &
               uh0=uh_ptr, vh0=vh_ptr, u_uh0=u_ptr, v_vh0=v_ptr)
@@ -706,7 +709,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   call cpu_clock_begin(id_clock_horvisc)
   call horizontal_viscosity(u_av, v_av, h_av, CS%diffu, CS%diffv, &
                             MEKE, Varmix, G, GV, US, CS%hor_visc_CSp, &
-                            OBC=CS%OBC, BT=CS%barotropic_CSp, TD=thickness_diffuse_CSp)
+                            OBC=CS%OBC, BT=CS%barotropic_CSp, TD=thickness_diffuse_CSp, &
+                            hfrac_u=CS%diag_hfrac_u, hfrac_v=CS%diag_hfrac_v)
   call cpu_clock_end(id_clock_horvisc)
   if (showCallTree) call callTree_wayPoint("done with horizontal_viscosity (step_MOM_dyn_split_RK2)")
 
@@ -757,7 +761,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   call btstep(u, v, eta, dt, u_bc_accel, v_bc_accel, forces, CS%pbce, &
               CS%eta_PF, u_av, v_av, CS%u_accel_bt, CS%v_accel_bt, &
               eta_pred, CS%uhbt, CS%vhbt, G, GV, US, CS%barotropic_CSp, &
-              CS%visc_rem_u, CS%visc_rem_v, etaav=eta_av, hfrac_u=diag_hfrac_u, hfrac_v=diag_hfrac_v, &
+              CS%visc_rem_u, CS%visc_rem_v, etaav=eta_av, hfrac_u=CS%diag_hfrac_u, hfrac_v=CS%diag_hfrac_v, &
               OBC=CS%OBC, BT_cont = CS%BT_cont, eta_PF_start=eta_PF_start, &
               taux_bot=taux_bot, tauy_bot=tauy_bot, &
               uh0=uh_ptr, vh0=vh_ptr, u_uh0=u_ptr, v_vh0=v_ptr)
@@ -801,7 +805,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   call cpu_clock_begin(id_clock_vertvisc)
   call vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS%vertvisc_CSp, CS%OBC)
   call vertvisc(u, v, h, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp, G, GV, US, &
-                CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot,waves=waves)
+                CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot,waves=waves, hfrac_u=CS%diag_hfrac_u, hfrac_v=CS%diag_hfrac_v)
   if (G%nonblocking_updates) then
     call cpu_clock_end(id_clock_vertvisc)
     call start_group_pass(CS%pass_uv, G%Domain, clock=id_clock_pass)
@@ -898,75 +902,75 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
 
   if (CS%id_hfPFu > 0) then
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      hf_PFu(I,j,k) = CS%PFu(I,j,k) * diag_hfrac_u(I,j,k)
+      hf_PFu(I,j,k) = CS%PFu(I,j,k) * CS%diag_hfrac_u(I,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hfPFu, hf_PFu, CS%diag)
   endif
   if (CS%id_hfPFv > 0) then
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      hf_PFv(i,J,k) = CS%PFv(i,J,k) * diag_hfrac_v(i,J,k)
+      hf_PFv(i,J,k) = CS%PFv(i,J,k) * CS%diag_hfrac_v(i,J,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hfPFv, hf_PFv, CS%diag)
   endif
   if (CS%id_hfPFu_2d > 0) then
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      hf_PFu_2d(I,j) = hf_PFu_2d(I,j) + CS%PFu(I,j,k) * diag_hfrac_u(I,j,k)
+      hf_PFu_2d(I,j) = hf_PFu_2d(I,j) + CS%PFu(I,j,k) * CS%diag_hfrac_u(I,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hfPFu_2d, hf_PFu_2d, CS%diag)
   endif
   if (CS%id_hfPFv_2d > 0) then
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      hf_PFv_2d(i,J) = hf_PFv_2d(i,J) + CS%PFv(i,J,k) * diag_hfrac_v(i,J,k)
+      hf_PFv_2d(i,J) = hf_PFv_2d(i,J) + CS%PFv(i,J,k) * CS%diag_hfrac_v(i,J,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hfPFv_2d, hf_PFv_2d, CS%diag)
   endif
 
   if (CS%id_hfCAu > 0) then
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      hf_CAu(I,j,k) = CS%CAu(I,j,k) * diag_hfrac_u(I,j,k)
+      hf_CAu(I,j,k) = CS%CAu(I,j,k) * CS%diag_hfrac_u(I,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hfCAu, hf_CAu, CS%diag)
   endif
   if (CS%id_hfCAv > 0) then
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      hf_CAv(i,J,k) = CS%CAv(i,J,k) * diag_hfrac_v(i,J,k)
+      hf_CAv(i,J,k) = CS%CAv(i,J,k) * CS%diag_hfrac_v(i,J,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hfCAv, hf_CAv, CS%diag)
   endif
   if (CS%id_hfCAu_2d > 0) then
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      hf_CAu_2d(I,j) = hf_CAu_2d(I,j) + CS%CAu(I,j,k) * diag_hfrac_u(I,j,k)
+      hf_CAu_2d(I,j) = hf_CAu_2d(I,j) + CS%CAu(I,j,k) * CS%diag_hfrac_u(I,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hfCAu_2d, hf_CAu_2d, CS%diag)
   endif
   if (CS%id_hfCAv_2d > 0) then
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      hf_CAv_2d(i,J) = hf_CAv_2d(i,J) + CS%CAv(i,J,k) * diag_hfrac_v(i,J,k)
+      hf_CAv_2d(i,J) = hf_CAv_2d(i,J) + CS%CAv(i,J,k) * CS%diag_hfrac_v(i,J,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hfCAv_2d, hf_CAv_2d, CS%diag)
   endif
 
   if (CS%id_hfu_BT_accel > 0) then
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      hf_uBT_accel(I,j,k) = CS%u_accel_bt(I,j,k) * diag_hfrac_u(I,j,k)
+      hf_uBT_accel(I,j,k) = CS%u_accel_bt(I,j,k) * CS%diag_hfrac_u(I,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hfu_BT_accel, hf_uBT_accel, CS%diag)
   endif
   if (CS%id_hfv_BT_accel > 0) then
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      hf_vBT_accel(i,J,k) = CS%v_accel_bt(i,J,k) * diag_hfrac_v(i,J,k)
+      hf_vBT_accel(i,J,k) = CS%v_accel_bt(i,J,k) * CS%diag_hfrac_v(i,J,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hfv_BT_accel, hf_vBT_accel, CS%diag)
   endif
   if (CS%id_hfu_BT_accel_2d > 0) then
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      hf_uBT_accel_2d(I,j) = hf_uBT_accel_2d(I,j) + CS%u_accel_bt(I,j,k) * diag_hfrac_u(I,j,k)
+      hf_uBT_accel_2d(I,j) = hf_uBT_accel_2d(I,j) + CS%u_accel_bt(I,j,k) * CS%diag_hfrac_u(I,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hfu_BT_accel_2d, hf_uBT_accel_2d, CS%diag)
   endif
   if (CS%id_hfv_BT_accel_2d > 0) then
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      hf_vBT_accel_2d(i,J) = hf_vBT_accel_2d(i,J) + CS%v_accel_bt(i,J,k) * diag_hfrac_v(i,J,k)
+      hf_vBT_accel_2d(i,J) = hf_vBT_accel_2d(i,J) + CS%v_accel_bt(i,J,k) * CS%diag_hfrac_v(i,J,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hfv_BT_accel_2d, hf_vBT_accel_2d, CS%diag)
   endif
@@ -1184,6 +1188,9 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   ALLOC_(CS%u_accel_bt(IsdB:IedB,jsd:jed,nz)) ; CS%u_accel_bt(:,:,:) = 0.0
   ALLOC_(CS%v_accel_bt(isd:ied,JsdB:JedB,nz)) ; CS%v_accel_bt(:,:,:) = 0.0
 
+  ALLOC_(CS%diag_hfrac_u(IsdB:IedB,jsd:jed,nz)) ; CS%diag_hfrac_u(:,:,:) = 0.0
+  ALLOC_(CS%diag_hfrac_v(isd:ied,JsdB:JedB,nz)) ; CS%diag_hfrac_v(:,:,:) = 0.0
+
   MIS%diffu      => CS%diffu
   MIS%diffv      => CS%diffv
   MIS%PFu        => CS%PFu
@@ -1195,6 +1202,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   MIS%v_accel_bt => CS%v_accel_bt
   MIS%u_av       => CS%u_av
   MIS%v_av       => CS%v_av
+  MIS%diag_hfrac_u => CS%diag_hfrac_u
+  MIS%diag_hfrac_v => CS%diag_hfrac_v
 
   CS%ADp           => Accel_diag
   CS%CDp           => Cont_diag
@@ -1204,6 +1213,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   Accel_diag%PFv   => CS%PFv
   Accel_diag%CAu   => CS%CAu
   Accel_diag%CAv   => CS%CAv
+  Accel_diag%diag_hfrac_u => CS%diag_hfrac_u
+  Accel_diag%diag_hfrac_v => CS%diag_hfrac_v
 
 !  Accel_diag%pbce => CS%pbce
 !  Accel_diag%u_accel_bt => CS%u_accel_bt ; Accel_diag%v_accel_bt => CS%v_accel_bt
@@ -1348,15 +1359,14 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   CS%id_hfCAv = register_diag_field('ocean_model', 'hf_CAv', diag%axesCvL, Time, &
       'Thickness-weighted Meridional Coriolis and Advective Acceleration', 'm s-2', v_extensive=.true., &
       conversion=US%L_T2_to_m_s2)
-  CS%id_hfPFu_2d = register_diag_field('ocean_model', 'hf_PFu_2d', diag%axesCuL, Time, &
+  CS%id_hfPFu_2d = register_diag_field('ocean_model', 'hf_PFu_2d', diag%axesCu1, Time, &
       'Barotropic Thickness-weighted Zonal Pressure Force Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
-  CS%id_hfPFv_2d = register_diag_field('ocean_model', 'hf_PFv_2d', diag%axesCvL, Time, &
+  CS%id_hfPFv_2d = register_diag_field('ocean_model', 'hf_PFv_2d', diag%axesCv1, Time, &
       'Barotropic Thickness-weighted Meridional Pressure Force Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
-  CS%id_hfCAu_2d = register_diag_field('ocean_model', 'hf_CAu_2d', diag%axesCuL, Time, &
+  CS%id_hfCAu_2d = register_diag_field('ocean_model', 'hf_CAu_2d', diag%axesCu1, Time, &
       'Barotropic Thickness-weighted Zonal Coriolis and Advective Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
-  CS%id_hfCAv_2d = register_diag_field('ocean_model', 'hf_CAv_2d', diag%axesCvL, Time, &
+  CS%id_hfCAv_2d = register_diag_field('ocean_model', 'hf_CAv_2d', diag%axesCv1, Time, &
       'Barotropic Thickness-weighted Meridional Coriolis and Advective Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
-
 
   CS%id_uav = register_diag_field('ocean_model', 'uav', diag%axesCuL, Time, &
       'Barotropic-step Averaged Zonal Velocity', 'm s-1', conversion=US%L_T_to_m_s)
@@ -1367,13 +1377,13 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
     'Barotropic Anomaly Zonal Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
   CS%id_v_BT_accel = register_diag_field('ocean_model', 'v_BT_accel', diag%axesCvL, Time, &
     'Barotropic Anomaly Meridional Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
-  CS%id_hfu_BT_accel = register_diag_field('ocean_model', 'hf_uBT_accel', diag%axesCuL, Time, &
+  CS%id_hfu_BT_accel = register_diag_field('ocean_model', 'hf_u_BT_accel', diag%axesCuL, Time, &
       'Thickness-weighted Barotropic Anomaly Zonal Acceleration', 'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  CS%id_hfv_BT_accel = register_diag_field('ocean_model', 'hf_vBT_accel', diag%axesCvL, Time, &
+  CS%id_hfv_BT_accel = register_diag_field('ocean_model', 'hf_v_BT_accel', diag%axesCvL, Time, &
       'Thickness-weighted Barotropic Anomaly Meridional Acceleration', 'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  CS%id_hfu_BT_accel_2d = register_diag_field('ocean_model', 'hf_uBT_accel_2d', diag%axesCuL, Time, &
+  CS%id_hfu_BT_accel_2d = register_diag_field('ocean_model', 'hf_u_BT_accel_2d', diag%axesCu1, Time, &
       'Barotropic Thickness-weighted Barotropic Anomaly Zonal Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
-  CS%id_hfv_BT_accel_2d = register_diag_field('ocean_model', 'hf_vBT_accel_2d', diag%axesCvL, Time, &
+  CS%id_hfv_BT_accel_2d = register_diag_field('ocean_model', 'hf_v_BT_accel_2d', diag%axesCv1, Time, &
       'Barotropic Thickness-weighted Barotropic Anomaly Meridional Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
 
   id_clock_Cor        = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)
@@ -1406,6 +1416,8 @@ subroutine end_dyn_split_RK2(CS)
 
   DEALLOC_(CS%eta) ; DEALLOC_(CS%eta_PF) ; DEALLOC_(CS%pbce)
   DEALLOC_(CS%h_av) ; DEALLOC_(CS%u_av) ; DEALLOC_(CS%v_av)
+
+  DEALLOC_(CS%diag_hfrac_u) ; DEALLOC_(CS%diag_hfrac_v)
 
   call dealloc_BT_cont_type(CS%BT_cont)
 

@@ -109,6 +109,8 @@ type, public :: diagnostics_CS ; private
   integer :: id_u = -1,   id_v = -1, id_h = -1
   integer :: id_e              = -1, id_e_D            = -1
   integer :: id_du_dt          = -1, id_dv_dt          = -1
+  integer :: id_hf_du_dt       = -1, id_hf_dv_dt       = -1
+  integer :: id_hf_du_dt_2d    = -1, id_hf_dv_dt_2d    = -1
   integer :: id_col_ht         = -1, id_dh_dt          = -1
   integer :: id_KE             = -1, id_dKEdt          = -1
   integer :: id_PE_to_KE       = -1, id_KE_Coradv      = -1
@@ -231,6 +233,11 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   real :: work_2d(SZI_(G),SZJ_(G))         ! A 2-d temporary work array.
   real :: rho_in_situ(SZI_(G))             ! In situ density [R ~> kg m-3]
 
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: hf_du_dt ! du_dt x fract. thickness [L T-2 ~> m s-2].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: hf_dv_dt ! dv_dt x fract. thickness [L T-2 ~> m s-2].
+  real, dimension(SZIB_(G),SZJ_(G)) :: hf_du_dt_2d ! Depth integeral of hf_du_dt [L T-2 ~> m s-2].
+  real, dimension(SZI_(G),SZJB_(G)) :: hf_dv_dt_2d ! Depth integeral of hf_dv_dt [L T-2 ~> m s-2].
+
   ! tmp array for surface properties
   real :: surface_field(SZI_(G),SZJ_(G))
   real :: pressure_1d(SZI_(G)) ! Temporary array for pressure when calling EOS [R L2 T-2 ~> Pa]
@@ -257,6 +264,14 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
 
   call calculate_derivs(dt, G, CS)
 
+  ! Diagnostics for terms multiplied by fractional thicknesses
+  do j=js,je ; do I=Isq,Ieq
+    hf_du_dt_2d(I,j) = 0.0
+  enddo ; enddo
+  do J=Jsq,Jeq ; do i=is,ie
+    hf_dv_dt_2d(i,J) = 0.0
+  enddo ; enddo
+
   if (dt > 0.0) then
     call diag_save_grids(CS%diag)
     call diag_copy_storage_to_diag(CS%diag, diag_pre_sync)
@@ -269,6 +284,32 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     if (CS%id_dv_dt>0) call post_data(CS%id_dv_dt, CS%dv_dt, CS%diag, alt_h = diag_pre_sync%h_state)
 
     if (CS%id_dh_dt>0) call post_data(CS%id_dh_dt, CS%dh_dt, CS%diag, alt_h = diag_pre_sync%h_state)
+
+    ! Diagnostics for terms multiplied by fractional thicknesses
+    if (CS%id_hf_du_dt > 0) then
+      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+        hf_du_dt(I,j,k) = CS%du_dt(I,j,k) * ADp%diag_hfrac_u(I,j,k)
+      enddo ; enddo ; enddo
+      call post_data(CS%id_hf_du_dt, hf_du_dt, CS%diag, alt_h = diag_pre_sync%h_state)
+    endif
+    if (CS%id_hf_dv_dt > 0) then
+      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+        hf_dv_dt(i,J,k) = CS%dv_dt(i,J,k) * ADp%diag_hfrac_v(i,J,k)
+      enddo ; enddo ; enddo
+      call post_data(CS%id_hf_dv_dt, hf_dv_dt, CS%diag, alt_h = diag_pre_sync%h_state)
+    endif
+    if (CS%id_hf_du_dt_2d > 0) then
+      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+        hf_du_dt_2d(I,j) = hf_du_dt_2d(I,j) + CS%du_dt(I,j,k) * ADp%diag_hfrac_u(I,j,k)
+      enddo ; enddo ; enddo
+      call post_data(CS%id_hf_du_dt_2d, hf_du_dt_2d, CS%diag)
+    endif
+    if (CS%id_hf_dv_dt_2d > 0) then
+      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+        hf_dv_dt_2d(i,J) = hf_dv_dt_2d(i,J) + CS%dv_dt(i,J,k) * ADp%diag_hfrac_v(i,J,k)
+      enddo ; enddo ; enddo
+      call post_data(CS%id_hf_dv_dt_2d, hf_dv_dt_2d, CS%diag)
+    endif
 
     call diag_restore_grids(CS%diag)
 
@@ -1621,6 +1662,16 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
     call safe_alloc_ptr(CS%dh_dt,isd,ied,jsd,jed,nz)
     call register_time_deriv(lbound(MIS%h), MIS%h, CS%dh_dt, CS)
   endif
+
+  CS%id_hf_du_dt = register_diag_field('ocean_model', 'hf_dudt', diag%axesCuL, Time, &
+      'Thickness-weighted Zonal Acceleration', 'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  CS%id_hf_dv_dt = register_diag_field('ocean_model', 'hf_dvdt', diag%axesCvL, Time, &
+      'Thickness-weighted Meridional Acceleration', 'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  CS%id_hf_du_dt_2d = register_diag_field('ocean_model', 'hf_dudt_2d', diag%axesCu1, Time, &
+      'Barotropic Thickness-weighted Zonal Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
+  CS%id_hf_dv_dt_2d = register_diag_field('ocean_model', 'hf_dvdt_2d', diag%axesCv1, Time, &
+      'Barotropic Thickness-weighted Meridional Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
+
 
   ! layer thickness variables
   !if (GV%nk_rho_varies > 0) then
