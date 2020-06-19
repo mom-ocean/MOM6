@@ -1478,7 +1478,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
                  do_not_log=.true.)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mdl, version)
+  call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "DIAG_EBT_MONO_N2_COLUMN_FRACTION", CS%mono_N2_column_fraction, &
                  "The lower fraction of water column over which N2 is limited as monotonic "// &
                  "for the purposes of calculating the equivalent barotropic wave speed.", &
