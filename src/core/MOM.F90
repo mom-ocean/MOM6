@@ -1265,8 +1265,8 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
 
     call cpu_clock_begin(id_clock_diabatic)
 
-    call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                  dtdia, Time_end_thermo, G, GV, US, CS%diabatic_CSp, Waves=Waves)
+    call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, dtdia, &
+                  Time_end_thermo, G, GV, US, CS%diabatic_CSp, OBC=CS%OBC, Waves=Waves)
     fluxes%fluxes_used = .true.
 
     if (showCallTree) call callTree_waypoint("finished diabatic (step_MOM_thermo)")
