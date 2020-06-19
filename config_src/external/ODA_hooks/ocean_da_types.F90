@@ -51,15 +51,16 @@ module ocean_da_types_mod
      real, pointer, dimension(:,:,:,:) :: S=>NULL() !<layer salinity (psu or g kg-1) across ensembles
      real, pointer, dimension(:,:,:,:) :: U=>NULL() !<layer zonal velocity (m s-1) across ensembles
      real, pointer, dimension(:,:,:,:) :: V=>NULL() !<layer meridional velocity (m s-1) across ensembles
-     integer, dimension(:), pointer :: id_t=>NULL(), id_s=>NULL()  !< diagnostic IDs for temperature and salinity
-     integer, dimension(:), pointer :: id_u=>NULL(), id_v=>NULL()     !< diagnostic IDs for zonal and meridional velocity
+     integer, dimension(:), pointer :: id_t=>NULL(), id_s=>NULL() !< diagnostic IDs for temperature and salinity
+     integer, dimension(:), pointer :: id_u=>NULL(), id_v=>NULL() !< diagnostic IDs for zonal and meridional velocity
      integer, dimension(:), pointer :: id_ssh=>NULL()  !< diagnostic IDs for SSH
   end type OCEAN_CONTROL_STRUCT
 
   !> Profile
   type, public :: ocean_profile_type
      integer :: variable !< variable ids are defined by the ocean_types module (e.g. TEMP_ID, SALT_ID)
-     integer :: inst_type !< instrument types are defined by platform class (e.g. MOORING, DROP, etc.) and instrument type (XBT, CDT, etc.)
+     integer :: inst_type !< instrument types are defined by platform class
+                          !! (e.g. MOORING, DROP, etc.) and instrument type (XBT, CDT, etc.)
      integer :: nvar !< number of observations types associated with the current profile
      real    :: project !< e.g. FGGE, COARE, ACCE, ...
      real    :: probe !< MBT, XBT, drifting buoy
@@ -99,7 +100,8 @@ module ocean_da_types_mod
      type(time_type) :: time
      integer         :: yyyy
      integer         :: mmdd
-     !type(time_type), pointer :: Model_time ! each profile can be associated with a first-guess field with an associated time and grid
+     !type(time_type), pointer :: Model_time ! each profile can be associated
+                                             ! with a first-guess field with an associated time and grid
      !type(grid_type), pointer :: Model_grid
      real :: i_index, j_index ! model longitude and latitude indices respectively
      real, dimension(:), pointer :: k_index ! model depth indices

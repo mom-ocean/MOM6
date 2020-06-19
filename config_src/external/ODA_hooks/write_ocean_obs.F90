@@ -31,7 +31,7 @@ integer function open_profile_file(name, nvar, grid_lon, grid_lat,thread,fset)
   real, dimension(:), optional, intent(in) :: grid_lon !< Longitude [degreeE]
   real, dimension(:), optional, intent(in) :: grid_lat !< Latitude [degreeN]
   integer, intent(in), optional :: thread !< Thread
-  integer, intent(in), optional :: fset !< File set 
+  integer, intent(in), optional :: fset !< File set
 
   open_profile_file=-1
 end function open_profile_file
