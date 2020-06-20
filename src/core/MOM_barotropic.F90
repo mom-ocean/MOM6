@@ -3966,7 +3966,9 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "SPLIT", CS%split, default=.true., do_not_log=.true.)
+  call log_version(param_file, mdl, version, "", log_to_all=.true., layout=CS%split, &
+                   debugging=CS%split, all_default=.not.CS%split)
   call get_param(param_file, mdl, "SPLIT", CS%split, &
                  "Use the split time stepping if true.", default=.true.)
   if (.not.CS%split) return

@@ -1007,7 +1007,8 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   ! Determine whether this module will be used
-  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "USE_MEKE", MEKE_init, default=.false., do_not_log=.true.)
+  call log_version(param_file, mdl, version, "", all_default=.not.MEKE_init)
   call get_param(param_file, mdl, "USE_MEKE", MEKE_init, &
                  "If true, turns on the MEKE scheme which calculates "// &
                  "a sub-grid mesoscale eddy kinetic energy budget.", &

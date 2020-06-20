@@ -756,13 +756,21 @@ end function undef_string
 ! ----------------------------------------------------------------------
 
 !> This subroutine handles the module documentation
-subroutine doc_module(doc, modname, desc)
+subroutine doc_module(doc, modname, desc, log_to_all, all_default, layoutMod, debuggingMod)
   type(doc_type),   pointer    :: doc     !< A pointer to a structure that controls where the
                                           !! documentation occurs and its formatting
   character(len=*), intent(in) :: modname !< The name of the module being documented
   character(len=*), intent(in) :: desc    !< A description of the module being documented
-! This subroutine handles the module documentation
+  logical, optional, intent(in) :: log_to_all !< If present and true, log this parameter to the
+                                          !! ..._doc.all files, even if this module also has layout
+                                          !! or debugging parameters.
+  logical, optional, intent(in) :: all_default  !< If true, all parameters take their default values.
+  logical, optional, intent(in) :: layoutMod    !< If present and true, this module has layout parameters.
+  logical, optional, intent(in) :: debuggingMod !< If present and true, this module has debugging parameters.
+
+  ! This subroutine handles the module documentation
   character(len=mLen) :: mesg
+  logical :: repeat_doc
 
   if (.not. (is_root_pe() .and. associated(doc))) return
   call open_doc_file(doc)
@@ -770,7 +778,17 @@ subroutine doc_module(doc, modname, desc)
   if (doc%filesAreOpen) then
     call writeMessageAndDesc(doc, '', '') ! Blank line for delineation
     mesg = "! === module "//trim(modname)//" ==="
-    call writeMessageAndDesc(doc, mesg, desc, indent=0)
+    call writeMessageAndDesc(doc, mesg, desc, valueWasDefault=all_default, indent=0, &
+                             layoutParam=layoutMod, debuggingParam=debuggingMod)
+    if (present(log_to_all)) then ; if (log_to_all) then
+      ! Log the module version again if the previous call was intercepted for use to document
+      ! a layout or debugging module.
+      repeat_doc = .false.
+      if (present(layoutMod)) then ; if (layoutMod) repeat_doc = .true. ; endif
+      if (present(debuggingMod)) then ; if (debuggingMod) repeat_doc = .true. ; endif
+      if (repeat_doc) &
+        call writeMessageAndDesc(doc, mesg, desc, valueWasDefault=all_default, indent=0)
+    endif ; endif
   endif
 end subroutine doc_module
 

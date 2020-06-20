@@ -134,17 +134,17 @@ logical function neutral_diffusion_init(Time, G, US, param_file, diag, EOS, diab
     return
   endif
 
-
   ! Log this module and master switch for turning it on/off
+  call get_param(param_file, mdl, "USE_NEUTRAL_DIFFUSION", neutral_diffusion_init, &
+                 default=.false., do_not_log=.true.)
   call log_version(param_file, mdl, version, &
-       "This module implements neutral diffusion of tracers")
+           "This module implements neutral diffusion of tracers", &
+           all_default=.not.neutral_diffusion_init)
   call get_param(param_file, mdl, "USE_NEUTRAL_DIFFUSION", neutral_diffusion_init, &
                  "If true, enables the neutral diffusion module.", &
                  default=.false.)
 
-  if (.not.neutral_diffusion_init) then
-    return
-  endif
+  if (.not.neutral_diffusion_init) return
 
   allocate(CS)
   CS%diag => diag
