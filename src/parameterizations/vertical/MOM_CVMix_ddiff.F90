@@ -79,8 +79,10 @@ logical function CVMix_ddiff_init(Time, G, GV, US, param_file, diag, CS)
   allocate(CS)
 
   ! Read parameters
+  call get_param(param_file, mdl, "USE_CVMIX_DDIFF", CVMix_ddiff_init, default=.false., do_not_log=.true.)
   call log_version(param_file, mdl, version, &
-    "Parameterization of mixing due to double diffusion processes via CVMix")
+           "Parameterization of mixing due to double diffusion processes via CVMix", &
+           all_default=.not.CVMix_ddiff_init)
   call get_param(param_file, mdl, "USE_CVMIX_DDIFF", CVMix_ddiff_init, &
                  "If true, turns on double diffusive processes via CVMix. "//&
                  "Note that double diffusive processes on viscosity are ignored "//&

@@ -320,9 +320,6 @@ DTBT = 10.0                     !   [s or nondim] default = -0.98
 ! Parameterization of enhanced mixing due to convection via CVMix
 
 ! === module MOM_entrain_diffusive ===
-CORRECT_DENSITY = False         !   [Boolean] default = True
-                                ! If true, and USE_EOS is true, the layer densities are restored toward their
-                                ! target values by the diapycnal mixing, as described in Hallberg (MWR, 2000).
 
 ! === module MOM_set_diffusivity ===
 BBL_EFFIC = 0.0                 !   [nondim] default = 0.2
@@ -410,3 +407,20 @@ MAXCPU = 2.88E+04               !   [wall-clock seconds] default = -1.0
 
 DIAG_AS_CHKSUM = True
 DEBUG = True
+
+USE_PSURF_IN_EOS = False        !   [Boolean] default = False
+DEFAULT_2018_ANSWERS = True     !   [Boolean] default = True
+GRID_ROTATION_ANGLE_BUGS = True !   [Boolean] default = True
+INTERPOLATE_RES_FN = True       !   [Boolean] default = True
+GILL_EQUATORIAL_LD = False      !   [Boolean] default = False
+USE_GM_WORK_BUG = True          !   [Boolean] default = True
+FIX_UNSPLIT_DT_VISC_BUG = False !   [Boolean] default = False
+REMAP_UV_USING_OLD_ALG = True   !   [Boolean] default = True
+USE_LAND_MASK_FOR_HVISC = False !   [Boolean] default = False
+KAPPA_SHEAR_ITER_BUG = True     !   [Boolean] default = True
+KAPPA_SHEAR_ALL_LAYER_TKE_BUG = True !   [Boolean] default = True
+USE_MLD_ITERATION = False       !   [Boolean] default = False
+PEN_SW_ABSORB_MINTHICK = 0.001  !   [m] default = 0.001
+GUST_CONST = 0.02               !   [Pa] default = 0.02
+FIX_USTAR_GUSTLESS_BUG = False  !   [Boolean] default = False
+

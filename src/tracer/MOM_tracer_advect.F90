@@ -382,7 +382,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   real, dimension(SZIB_(G)) :: &
     hlst, &             ! Work variable [H L2 ~> m3 or kg].
     Ihnew, &            ! Work variable [H-1 L-2 ~> m-3 or kg-1].
-    CFL                 ! A nondimensional work variable [nondim].
+    CFL                 ! The absolute value of the advective upwind-cell CFL number [nondim].
   real :: min_h         ! The minimum thickness that can be realized during
                         ! any of the passes [H ~> m or kg m-2].
   real :: h_neglect     ! A thickness that is so small it is usually lost
@@ -757,7 +757,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   real, dimension(SZIB_(G)) :: &
     hlst, &             ! Work variable [H L2 ~> m3 or kg].
     Ihnew, &            ! Work variable [H-1 L-2 ~> m-3 or kg-1].
-    CFL                 ! A nondimensional work variable.
+    CFL                 ! The absolute value of the advective upwind-cell CFL number [nondim].
   real :: min_h         ! The minimum thickness that can be realized during
                         ! any of the passes [H ~> m or kg m-2].
   real :: h_neglect     ! A thickness that is so small it is usually lost

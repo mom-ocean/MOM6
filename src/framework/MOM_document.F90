@@ -468,6 +468,9 @@ subroutine writeMessageAndDesc(doc, vmesg, desc, valueWasDefault, indent, &
   integer :: start_ind = 1             ! The starting index in the description for the next line.
   integer :: nl_ind, tab_ind, end_ind  ! The indices of new-lines, tabs, and the end of a line.
   integer :: len_text, len_tab, len_nl ! The lengths of the text string, tabs and new-lines.
+  integer :: len_cor                   ! The permitted length corrected for tab sizes in a line.
+  integer :: len_desc                  ! The non-whitespace length of the description.
+  integer :: substr_start              ! The starting index of a substring to search for tabs.
   integer :: indnt, msg_pad            ! Space counts used to format a message.
   logical :: msg_done, reset_msg_pad   ! Logicals used to format messages.
   logical :: all, short, layout, debug ! Flags indicating which files to write into.
@@ -494,16 +497,27 @@ subroutine writeMessageAndDesc(doc, vmesg, desc, valueWasDefault, indent, &
   do
     if (len_trim(desc(start_ind:)) < 1) exit
 
-    nl_ind = index(desc(start_ind:), "\n")
+    len_cor = len_text - msg_pad
 
+    substr_start = start_ind
+    len_desc = len_trim(desc)
+    do ! Adjust the available line length for anomalies in the size of tabs, counting \t as 2 spaces.
+      if (substr_start >= start_ind+len_cor) exit
+      tab_ind = index(desc(substr_start:min(len_desc,start_ind+len_cor)), "\t")
+      if (tab_ind == 0) exit
+      substr_start = substr_start + tab_ind
+      len_cor = len_cor + (len_tab - 2)
+    enddo
+
+    nl_ind = index(desc(start_ind:), "\n")
     end_ind = 0
-    if ((nl_ind > 0) .and. (len_trim(desc(start_ind:start_ind+nl_ind-2)) > len_text-msg_pad)) then
+    if ((nl_ind > 0) .and. (len_trim(desc(start_ind:start_ind+nl_ind-2)) > len_cor)) then
       ! This line is too long despite the new-line character.  Look for an earlier space to break.
-      end_ind = scan(desc(start_ind:start_ind+(len_text-msg_pad)), " ", back=.true.) - 1
+      end_ind = scan(desc(start_ind:start_ind+len_cor), " ", back=.true.) - 1
       if (end_ind > 0) nl_ind = 0
-    elseif ((nl_ind == 0) .and. (len_trim(desc(start_ind:)) > len_text-msg_pad)) then
+    elseif ((nl_ind == 0) .and. (len_trim(desc(start_ind:)) > len_cor)) then
       ! This line is too long and does not have a new-line character.  Look for a space to break.
-      end_ind = scan(desc(start_ind:start_ind+(len_text-msg_pad)), " ", back=.true.) - 1
+      end_ind = scan(desc(start_ind:start_ind+len_cor), " ", back=.true.) - 1
     endif
 
     reset_msg_pad = .false.
@@ -742,13 +756,21 @@ end function undef_string
 ! ----------------------------------------------------------------------
 
 !> This subroutine handles the module documentation
-subroutine doc_module(doc, modname, desc)
+subroutine doc_module(doc, modname, desc, log_to_all, all_default, layoutMod, debuggingMod)
   type(doc_type),   pointer    :: doc     !< A pointer to a structure that controls where the
                                           !! documentation occurs and its formatting
   character(len=*), intent(in) :: modname !< The name of the module being documented
   character(len=*), intent(in) :: desc    !< A description of the module being documented
-! This subroutine handles the module documentation
+  logical, optional, intent(in) :: log_to_all !< If present and true, log this parameter to the
+                                          !! ..._doc.all files, even if this module also has layout
+                                          !! or debugging parameters.
+  logical, optional, intent(in) :: all_default  !< If true, all parameters take their default values.
+  logical, optional, intent(in) :: layoutMod    !< If present and true, this module has layout parameters.
+  logical, optional, intent(in) :: debuggingMod !< If present and true, this module has debugging parameters.
+
+  ! This subroutine handles the module documentation
   character(len=mLen) :: mesg
+  logical :: repeat_doc
 
   if (.not. (is_root_pe() .and. associated(doc))) return
   call open_doc_file(doc)
@@ -756,7 +778,17 @@ subroutine doc_module(doc, modname, desc)
   if (doc%filesAreOpen) then
     call writeMessageAndDesc(doc, '', '') ! Blank line for delineation
     mesg = "! === module "//trim(modname)//" ==="
-    call writeMessageAndDesc(doc, mesg, desc, indent=0)
+    call writeMessageAndDesc(doc, mesg, desc, valueWasDefault=all_default, indent=0, &
+                             layoutParam=layoutMod, debuggingParam=debuggingMod)
+    if (present(log_to_all)) then ; if (log_to_all) then
+      ! Log the module version again if the previous call was intercepted for use to document
+      ! a layout or debugging module.
+      repeat_doc = .false.
+      if (present(layoutMod)) then ; if (layoutMod) repeat_doc = .true. ; endif
+      if (present(debuggingMod)) then ; if (debuggingMod) repeat_doc = .true. ; endif
+      if (repeat_doc) &
+        call writeMessageAndDesc(doc, mesg, desc, valueWasDefault=all_default, indent=0)
+    endif ; endif
   endif
 end subroutine doc_module
 

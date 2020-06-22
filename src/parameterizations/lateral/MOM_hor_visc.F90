@@ -67,8 +67,6 @@ type, public :: hor_visc_CS ; private
                              !! viscosity is modified to include a term that
                              !! scales quadratically with the velocity shears.
   logical :: use_Kh_bg_2d    !< Read 2d background viscosity from a file.
-  logical :: Kh_bg_2d_bug    !< If true, retain an answer-changing horizontal indexing bug
-                             !! in setting the corner-point viscosities when USE_KH_BG_2D=True.
   real    :: Kh_bg_min       !< The minimum value allowed for Laplacian horizontal
                              !! viscosity [L2 T-1 ~> m2 s-1]. The default is 0.0.
   logical :: use_land_mask   !< Use the land mask for the computation of thicknesses
@@ -1462,7 +1460,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
 
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(param_file, mdl, "HOR_VISC_2018_ANSWERS", CS%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
@@ -1647,9 +1645,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
   call get_param(param_file, mdl, "USE_LAND_MASK_FOR_HVISC", CS%use_land_mask, &
                  "If true, use Use the land mask for the computation of thicknesses "//&
                  "at velocity locations. This eliminates the dependence on arbitrary "//&
-                 "values over land or outside of the domain. Default is False in order to "//&
-                 "maintain answers with legacy experiments but should be changed to True "//&
-                 "for new experiments.", default=.false.)
+                 "values over land or outside of the domain.", default=.true.)
 
   if (CS%better_bound_Ah .or. CS%better_bound_Kh .or. get_all) &
     call get_param(param_file, mdl, "HORVISC_BOUND_COEF", CS%bound_coef, &
@@ -1670,11 +1666,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
                  "If true, read a file containing 2-d background harmonic "//&
                  "viscosities. The final viscosity is the maximum of the other "//&
                  "terms and this background value.", default=.false.)
-  if (CS%use_Kh_bg_2d) then
-    call get_param(param_file, mdl, "KH_BG_2D_BUG", CS%Kh_bg_2d_bug, &
-                 "If true, retain an answer-changing horizontal indexing bug in setting "//&
-                 "the corner-point viscosities when USE_KH_BG_2D=True.", default=.true.)
-  endif
 
   call get_param(param_file, mdl, "USE_GME", CS%use_GME, &
                  "If true, use the GM+E backscatter scheme in association \n"//&
@@ -1888,14 +1879,11 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
       CS%Kh_bg_xy(I,J) = MAX(Kh, Kh_vel_scale * sqrt(grid_sp_q2))
 
       ! Use the larger of the above and values read from a file
-      if (CS%use_Kh_bg_2d) then ; if (CS%Kh_bg_2d_bug) then
-        ! This option is unambiguously wrong, and should be obsoleted as soon as possible.
-        CS%Kh_bg_xy(I,J) = MAX(CS%Kh_bg_2d(i,j), CS%Kh_bg_xy(I,J))
-      else
+      if (CS%use_Kh_bg_2d) then
         CS%Kh_bg_xy(I,J) = MAX(CS%Kh_bg_xy(I,J), &
             0.25*((CS%Kh_bg_2d(i,j) + CS%Kh_bg_2d(i+1,j+1)) + &
                   (CS%Kh_bg_2d(i+1,j) + CS%Kh_bg_2d(i,j+1))) )
-      endif ; endif
+      endif
 
       ! Use the larger of the above and a function of sin(latitude)
       if (Kh_sin_lat>0.) then

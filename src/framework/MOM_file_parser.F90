@@ -24,7 +24,7 @@ logical :: all_PEs_read = .false. !< If true, all PEs read the input files
                                   !! TODO: Eliminate this parameter
 
 !>@{ Default values for parameters
-logical, parameter :: report_unused_default = .false.
+logical, parameter :: report_unused_default = .true.
 logical, parameter :: unused_params_fatal_default = .false.
 logical, parameter :: log_to_stdout_default = .false.
 logical, parameter :: complete_doc_default = .true.
@@ -246,6 +246,7 @@ subroutine close_param_file(CS, quiet_close, component)
   character(len=*), optional, intent(in) :: component   !< If present, this component name is used
                                          !! to generate parameter documentation file names
   ! Local variables
+  logical :: all_default
   character(len=128) :: docfile_default
   character(len=40)  :: mdl   ! This module's name.
   ! This include declares and sets the variable "version".
@@ -269,8 +270,18 @@ subroutine close_param_file(CS, quiet_close, component)
   endif ; endif
 
   ! Log the parameters for the parser.
+  docfile_default = "MOM_parameter_doc"
+  if (present(component)) docfile_default = trim(component)//"_parameter_doc"
+
+  all_default = (CS%log_to_stdout .eqv. log_to_stdout_default)
+  all_default = all_default .and. (trim(CS%doc_file) == trim(docfile_default))
+  if (len_trim(CS%doc_file) > 0) then
+    all_default = all_default .and. (CS%complete_doc .eqv. complete_doc_default)
+    all_default = all_default .and. (CS%minimal_doc .eqv. minimal_doc_default)
+  endif
+
   mdl = "MOM_file_parser"
-  call log_version(CS, mdl, version, "")
+  call log_version(CS, mdl, version, "", debugging=.true., log_to_all=.true., all_default=all_default)
   call log_param(CS, mdl, "SEND_LOG_TO_STDOUT", CS%log_to_stdout, &
                  "If true, all log messages are also sent to stdout.", &
                  default=log_to_stdout_default)
@@ -282,8 +293,6 @@ subroutine close_param_file(CS, quiet_close, component)
                  "If true, kill the run if there are any unused "//&
                  "parameters.", default=unused_params_fatal_default, &
                  debuggingParam=.true.)
-  docfile_default = "MOM_parameter_doc"
-  if (present(component)) docfile_default = trim(component)//"_parameter_doc"
   call log_param(CS, mdl, "DOCUMENT_FILE", CS%doc_file, &
                  "The basename for files where run-time parameters, their "//&
                  "settings, units and defaults are documented. Blank will "//&
@@ -1240,11 +1249,17 @@ end function overrideWarningHasBeenIssued
 
 !> Log the version of a module to a log file and/or stdout, and/or to the
 !! parameter documentation file.
-subroutine log_version_cs(CS, modulename, version, desc)
+subroutine log_version_cs(CS, modulename, version, desc, log_to_all, all_default, layout, debugging)
   type(param_file_type),      intent(in) :: CS         !< File parser type
   character(len=*),           intent(in) :: modulename !< Name of calling module
   character(len=*),           intent(in) :: version    !< Version string of module
   character(len=*), optional, intent(in) :: desc       !< Module description
+  logical,          optional, intent(in) :: log_to_all !< If present and true, log this parameter to the
+                                                       !! ..._doc.all files, even if this module also has layout
+                                                       !! or debugging parameters.
+  logical,          optional, intent(in) :: all_default !< If true, all parameters take their default values.
+  logical,          optional, intent(in) :: layout     !< If present and true, this module has layout parameters.
+  logical,          optional, intent(in) :: debugging  !< If present and true, this module has debugging parameters.
   ! Local variables
   character(len=240) :: mesg
 
@@ -1254,7 +1269,7 @@ subroutine log_version_cs(CS, modulename, version, desc)
     if (CS%log_to_stdout) write(CS%stdout,'(a)') trim(mesg)
   endif
 
-  if (present(desc)) call doc_module(CS%doc, modulename, desc)
+  if (present(desc)) call doc_module(CS%doc, modulename, desc, log_to_all, all_default, layout, debugging)
 
 end subroutine log_version_cs
 

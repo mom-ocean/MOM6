@@ -70,9 +70,10 @@ subroutine adjustment_initialize_thickness ( h, G, GV, US, param_file, just_read
 
   ! Parameters used by main model initialization
   if (.not.just_read) call log_version(param_file, mdl, version, "")
-  call get_param(param_file, mdl,"S_REF",S_ref,fail_if_missing=.true.,do_not_log=.true.)
+  call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', &
+                 default=35.0, units='1e-3', do_not_log=just_read)
   call get_param(param_file, mdl,"MIN_THICKNESS",min_thickness,'Minimum layer thickness', &
-         units='m', default=1.0e-3, do_not_log=just_read, scale=US%m_to_Z)
+                 default=1.0e-3, units='m', scale=US%m_to_Z, do_not_log=just_read)
 
   ! Parameters specific to this experiment configuration
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &
@@ -219,8 +220,8 @@ subroutine adjustment_initialize_temperature_salinity(T, S, h, G, GV, param_file
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   ! Parameters used by main model initialization
-  call get_param(param_file, mdl,"S_REF",S_ref,'Reference salinity', units='1e-3', &
-                 fail_if_missing=.not.just_read, do_not_log=just_read)
+  call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', &
+                 default=35.0, units='1e-3', do_not_log=just_read)
   call get_param(param_file, mdl,"T_REF",T_ref,'Reference temperature', units='C', &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl,"S_RANGE",S_range,'Initial salinity range', units='1e-3', &

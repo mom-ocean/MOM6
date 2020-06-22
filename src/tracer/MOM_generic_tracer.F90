@@ -1,12 +1,20 @@
+!> Drives the generic version of tracers TOPAZ and CFC and other GFDL BGC components
 module MOM_generic_tracer
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 #include <MOM_memory.h>
 
-#ifdef _USE_GENERIC_TRACER
-#include <fms_platform.h>
+! The following macro is usually defined in <fms_platform.h> but since MOM6 should not directly
+! include files from FMS we replicate the macro lines here:
+#ifdef NO_F2000
+#define _ALLOCATED associated
+#else
+#define _ALLOCATED allocated
+#endif
 
+
+  ! ### These imports should not reach into FMS directly ###
   use mpp_mod,        only: stdout, mpp_error, FATAL,WARNING,NOTE
   use field_manager_mod, only: fm_get_index,fm_string_len
 
@@ -46,6 +54,9 @@ module MOM_generic_tracer
 
 
   implicit none ; private
+
+  !> An state hidden in module data that is very much not allowed in MOM6
+  ! ### This needs to be fixed
   logical :: g_registered = .false.
 
   public register_MOM_generic_tracer, initialize_MOM_generic_tracer
@@ -56,25 +67,24 @@ module MOM_generic_tracer
   public MOM_generic_tracer_min_max
   public MOM_generic_tracer_fluxes_accumulate
 
+  !> Control structure for generic tracers
   type, public :: MOM_generic_tracer_CS ; private
-     character(len = 200) :: IC_file ! The file in which the generic tracer initial values can
-                       ! be found, or an empty string for internal initialization.
-     logical :: Z_IC_file ! If true, the generic_tracer IC_file is in Z-space.  The default is false.
-     real :: tracer_IC_val = 0.0    ! The initial value assigned to tracers.
-     real :: tracer_land_val = -1.0 ! The values of tracers used where  land is masked out.
-     logical :: tracers_may_reinit  ! If true, tracers may go through the
-                              ! initialization code if they are not found in the
-                              ! restart files.
+     character(len = 200) :: IC_file !< The file in which the generic tracer initial values can
+                                     !! be found, or an empty string for internal initialization.
+     logical :: Z_IC_file !< If true, the generic_tracer IC_file is in Z-space.  The default is false.
+     real :: tracer_IC_val = 0.0    !< The initial value assigned to tracers.
+     real :: tracer_land_val = -1.0 !< The values of tracers used where  land is masked out.
+     logical :: tracers_may_reinit  !< If true, tracers may go through the
+                                    !! initialization code if they are not found in the restart files.
 
-     type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
-                                   ! regulate the timing of diagnostic output.
-     type(MOM_restart_CS), pointer :: restart_CSp => NULL()
+     type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                                                !! regulate the timing of diagnostic output.
+     type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< Restart control structure
 
-     !   The following pointer will be directed to the first element of the
-     ! linked list of generic tracers.
+     !> Pointer to the first element of the linked list of generic tracers.
      type(g_tracer_type), pointer :: g_tracer_list => NULL()
 
-     integer :: H_to_m !Auxiliary to access GV%H_to_m in routines that do not have access to GV
+     integer :: H_to_m !< Auxiliary to access GV%H_to_m in routines that do not have access to GV
 
   end type MOM_generic_tracer_CS
 
@@ -487,7 +497,7 @@ contains
     dz_ml(:,:) = 0.0
     do j=jsc,jec ; do i=isc,iec
       surface_field(i,j) = tv%S(i,j,1)
-      dz_ml(i,j) = G%US%Z_to_m * Hml
+      dz_ml(i,j) = G%US%Z_to_m * Hml(i,j)
     enddo ; enddo
     sosga = global_area_mean(surface_field, G)
 
@@ -820,7 +830,6 @@ contains
     endif
   end subroutine end_MOM_generic_tracer
 
-#endif /* _USE_GENERIC_TRACER */
 !----------------------------------------------------------------
 ! <CONTACT EMAIL="Niki.Zadeh@noaa.gov"> Niki Zadeh
 ! </CONTACT>

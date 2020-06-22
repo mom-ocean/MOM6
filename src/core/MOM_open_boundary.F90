@@ -343,9 +343,12 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   real               :: Lscale_in, Lscale_out ! parameters controlling tracer values at the boundaries [L ~> m]
   allocate(OBC)
 
+  call get_param(param_file, mdl, "OBC_NUMBER_OF_SEGMENTS", OBC%number_of_segments, &
+                 default=0, do_not_log=.true.)
   call log_version(param_file, mdl, version, &
                  "Controls where open boundaries are located, what kind of boundary condition "//&
-                 "to impose, and what data to apply, if any.")
+                 "to impose, and what data to apply, if any.", &
+                 all_default=(OBC%number_of_segments<=0))
   call get_param(param_file, mdl, "OBC_NUMBER_OF_SEGMENTS", OBC%number_of_segments, &
                  "The number of open boundary segments.", &
                  default=0)
@@ -502,7 +505,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
                    "The maximum magnitude of the baroclinic radiation velocity (or speed of "//&
                    "characteristics), in gridpoints per timestep.  This is only "//&
                    "used if one of the open boundary segments is using Orlanski.", &
-                   units="nondim", default=10.0) !### Should the default be changed to 1.0?
+                   units="nondim", default=1.0)
       call get_param(param_file, mdl, "OBC_RAD_VEL_WT", OBC%gamma_uv, &
                    "The relative weighting for the baroclinic radiation "//&
                    "velocities (or speed of characteristics) at the new "//&
@@ -619,7 +622,7 @@ subroutine initialize_segment_data(G, OBC, PF)
          default=.false.)
   call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
@@ -4766,8 +4769,8 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
     segment=>OBC%segment(n)
     if (.not. associated(segment%tr_Reg)) cycle
     if (segment%is_E_or_W) then
+      I = segment%HI%IsdB
       do j=segment%HI%jsd,segment%HI%jed
-        I = segment%HI%IsdB
         ! ishift+I corresponds to the nearest interior tracer cell index
         ! idir switches the sign of the flow so that positive is into the reservoir
         if (segment%direction == OBC_DIRECTION_W) then
@@ -4775,10 +4778,14 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
         else
           ishift = 0 ; idir = 1
         endif
+        ! Can keep this or take it out, either way
+        if (G%mask2dT(I+ishift,j) == 0.0) cycle
         ! Update the reservoir tracer concentration implicitly using a Backward-Euler timestep
         do m=1,ntr ; if (associated(segment%tr_Reg%Tr(m)%tres)) then ; do k=1,nz
-          u_L_out = max(0.0, (idir*uhr(I,j,k))*segment%Tr_InvLscale_out / (h(i+ishift,j,k)*G%dyCu(I,j)))
-          u_L_in  = min(0.0, (idir*uhr(I,j,k))*segment%Tr_InvLscale_in  / (h(i+ishift,j,k)*G%dyCu(I,j)))
+          u_L_out = max(0.0, (idir*uhr(I,j,k))*segment%Tr_InvLscale_out / &
+                    ((h(i+ishift,j,k) + GV%H_subroundoff)*G%dyCu(I,j)))
+          u_L_in  = min(0.0, (idir*uhr(I,j,k))*segment%Tr_InvLscale_in  / &
+                    ((h(i+ishift,j,k) + GV%H_subroundoff)*G%dyCu(I,j)))
           fac1 = 1.0 + (u_L_out-u_L_in)
           segment%tr_Reg%Tr(m)%tres(I,j,k) = (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(I,j,k) + &
                             (u_L_out*Reg%Tr(m)%t(I+ishift,j,k) - &
@@ -4786,9 +4793,9 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
           if (associated(OBC%tres_x)) OBC%tres_x(I,j,k,m) = segment%tr_Reg%Tr(m)%tres(I,j,k)
         enddo ; endif ; enddo
       enddo
-    else
+    elseif (segment%is_N_or_S) then
+      J = segment%HI%JsdB
       do i=segment%HI%isd,segment%HI%ied
-        J = segment%HI%JsdB
         ! jshift+J corresponds to the nearest interior tracer cell index
         ! jdir switches the sign of the flow so that positive is into the reservoir
         if (segment%direction == OBC_DIRECTION_S) then
@@ -4796,10 +4803,14 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
         else
           jshift = 0 ; jdir = 1
         endif
+        ! Can keep this or take it out, either way
+        if (G%mask2dT(i,j+jshift) == 0.0) cycle
         ! Update the reservoir tracer concentration implicitly using a Backward-Euler timestep
         do m=1,ntr ; if (associated(segment%tr_Reg%Tr(m)%tres)) then ; do k=1,nz
-          v_L_out = max(0.0, (jdir*vhr(i,J,k))*segment%Tr_InvLscale_out / (h(i,j+jshift,k)*G%dxCv(i,J)))
-          v_L_in  = min(0.0, (jdir*vhr(i,J,k))*segment%Tr_InvLscale_in  / (h(i,j+jshift,k)*G%dxCv(i,J)))
+          v_L_out = max(0.0, (jdir*vhr(i,J,k))*segment%Tr_InvLscale_out / &
+                    ((h(i,j+jshift,k) + GV%H_subroundoff)*G%dxCv(i,J)))
+          v_L_in  = min(0.0, (jdir*vhr(i,J,k))*segment%Tr_InvLscale_in  / &
+                    ((h(i,j+jshift,k) + GV%H_subroundoff)*G%dxCv(i,J)))
           fac1 = 1.0 + (v_L_out-v_L_in)
           segment%tr_Reg%Tr(m)%tres(i,J,k) = (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(i,J,k) + &
                             (v_L_out*Reg%Tr(m)%t(i,J+jshift,k) - &
