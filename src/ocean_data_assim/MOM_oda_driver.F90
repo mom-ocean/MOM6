@@ -1,9 +1,8 @@
 !> Interfaces for MOM6 ensembles and data assimilation.
 module MOM_oda_driver_mod
 
-! This file is part of MOM6. see LICENSE.md for the license.
-use fms_mod, only : open_namelist_file, close_file, check_nml_error
-use fms_mod, only : error_mesg, FATAL
+  ! This file is part of MOM6. see LICENSE.md for the license.
+
 use mpp_mod, only : stdout, stdlog, mpp_error, npes=>mpp_npes,pe=>mpp_pe
 use mpp_mod, only : set_current_pelist => mpp_set_current_pelist
 use mpp_mod, only : set_root_pe => mpp_set_root_pe
@@ -250,20 +249,6 @@ subroutine init_oda(Time, G, GV, CS)
   allocate(CS%tv%S(isd:ied,jsd:jed,CS%GV%ke)); CS%tv%S(:,:,:)=0.0
 
   call set_axes_info(CS%Grid, CS%GV, CS%US, PF, CS%diag_cs, set_vertical=.true.)
-  do n=1,CS%ensemble_size
-    write(fldnam,'(a,i2.2)') 'temp_prior_',n
-    CS%Ocean_prior%id_t(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time, &
-                                               'ocean potential temperature','degC')
-    write(fldnam,'(a,i2.2)') 'salt_prior_',n
-    CS%Ocean_prior%id_s(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time, &
-                                               'ocean salinity','psu')
-    write(fldnam,'(a,i2.2)') 'temp_posterior_',n
-    CS%Ocean_posterior%id_t(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time, &
-                                               'ocean potential temperature','degC')
-    write(fldnam,'(a,i2.2)') 'salt_posterior_',n
-    CS%Ocean_posterior%id_s(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time, &
-                                               'ocean salinity','psu')
-  enddo
 
   call mpp_get_data_domain(CS%mpp_domain,isd,ied,jsd,jed)
   allocate(CS%oda_grid)
@@ -364,10 +349,6 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
          CS%mpp_domain, CS%Ocean_prior%T(:,:,:,m), complete=.true.)
     call mpp_redistribute(CS%domains(m)%mpp_domain, S,&
          CS%mpp_domain, CS%Ocean_prior%S(:,:,:,m), complete=.true.)
-    if (CS%Ocean_prior%id_t(m)>0) &
-      used=send_data(CS%Ocean_prior%id_t(m), CS%Ocean_prior%T(isc:iec,jsc:jec,:,m), CS%Time)
-    if (CS%Ocean_prior%id_s(m)>0) &
-      used=send_data(CS%Ocean_prior%id_s(m), CS%Ocean_prior%S(isc:iec,jsc:jec,:,m), CS%Time)
   enddo
   deallocate(T,S)
 
@@ -478,13 +459,13 @@ subroutine init_ocean_ensemble(CS,Grid,GV,ens_size)
   allocate(CS%T(is:ie,js:je,nk,ens_size))
   allocate(CS%S(is:ie,js:je,nk,ens_size))
   allocate(CS%SSH(is:ie,js:je,ens_size))
-  allocate(CS%id_t(ens_size));CS%id_t(:)=-1
-  allocate(CS%id_s(ens_size));CS%id_s(:)=-1
+!  allocate(CS%id_t(ens_size));CS%id_t(:)=-1
+!  allocate(CS%id_s(ens_size));CS%id_s(:)=-1
 !  allocate(CS%U(is:ie,js:je,nk,ens_size))
 !  allocate(CS%V(is:ie,js:je,nk,ens_size))
 !  allocate(CS%id_u(ens_size));CS%id_u(:)=-1
 !  allocate(CS%id_v(ens_size));CS%id_v(:)=-1
-  allocate(CS%id_ssh(ens_size));CS%id_ssh(:)=-1
+!  allocate(CS%id_ssh(ens_size));CS%id_ssh(:)=-1
 
   return
 end subroutine init_ocean_ensemble

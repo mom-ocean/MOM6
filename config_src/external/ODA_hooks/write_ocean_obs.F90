@@ -1,26 +1,16 @@
 !> Dummy interfaces for writing ODA data
 module write_ocean_obs_mod
 
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!
-! This module contains a set of dummy interfaces for compiling the MOM6 DA
-! driver code. These interfaces are not finalized and will be replaced by supported
-! interfaces at some later date.
-!
-! 3/22/18
-! matthew.harrison@noaa.gov
-!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
  use ocean_da_types_mod, only : ocean_profile_type
- use time_manager_mod, only : time_type, get_time, set_date, operator ( - )
+ use MOM_time_manager, only : time_type, get_time, set_date
 
  implicit none
 
  private
 
  public :: open_profile_file, write_profile, close_profile_file, &
-      write_ocean_obs_init
+            write_ocean_obs_init
 
 contains
 
