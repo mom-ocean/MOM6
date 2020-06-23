@@ -129,6 +129,12 @@ type, public :: vertvisc_CS ; private
 
   type(PointAccel_CS), pointer :: PointAccel_CSp => NULL() !< A pointer to the control structure
                               !! for recording accelerations leading to velocity truncations
+
+  real, pointer :: hf_du_dt_visc_2d(:,:) => NULL()
+  real, pointer :: hf_dv_dt_visc_2d(:,:) => NULL()
+  real, pointer :: hf_du_dt_visc(:,:,:)  => NULL() ! Zonal friction accel. x fract. thickness [L T-2 ~> m s-2].
+  real, pointer :: hf_dv_dt_visc(:,:,:)  => NULL() ! Merdional friction accel. x fract. thickness [L T-2 ~> m s-2].
+
 end type vertvisc_CS
 
 contains
@@ -206,10 +212,10 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   real :: surface_stress(SZIB_(G))! The same as stress, unless the wind stress
                            ! stress is applied as a body force [H L T-1 ~> m2 s-1 or kg m-1 s-1].
 
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: hf_du_dt_visc ! du_dt_visc x fract. thickness [L T-2 ~> m s-2].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: hf_dv_dt_visc ! dv_dt_visc. x fract. thickness [L T-2 ~> m s-2].
-  real, dimension(SZIB_(G),SZJ_(G)) :: hf_du_dt_visc_2d ! Depth integeral of hf_du_dt_visc [L T-2 ~> m s-2].
-  real, dimension(SZI_(G),SZJB_(G)) :: hf_dv_dt_visc_2d ! Depth integeral of hf_dv_dt_visc [L T-2 ~> m s-2].
+!  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: hf_du_dt_visc ! du_dt_visc x fract. thickness [L T-2 ~> m s-2].
+!  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: hf_dv_dt_visc ! dv_dt_visc. x fract. thickness [L T-2 ~> m s-2].
+!  real, dimension(SZIB_(G),SZJ_(G)) :: hf_du_dt_visc_2d ! Depth integeral of hf_du_dt_visc [L T-2 ~> m s-2].
+!  real, dimension(SZI_(G),SZJB_(G)) :: hf_dv_dt_visc_2d ! Depth integeral of hf_dv_dt_visc [L T-2 ~> m s-2].
 
   logical :: do_i(SZIB_(G))
   logical :: DoStokesMixing
@@ -463,36 +469,32 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     call post_data(CS%id_tauy_bot, tauy_bot, CS%diag)
 
   ! Diagnostics for terms multiplied by fractional thicknesses
-  do j=js,je ; do I=Isq,Ieq
-    hf_du_dt_visc_2d(I,j) = 0.0
-  enddo ; enddo
-  do J=Jsq,Jeq ; do i=is,ie
-    hf_dv_dt_visc_2d(i,J) = 0.0
-  enddo ; enddo
+  if(CS%id_hf_du_dt_visc_2d > 0) CS%hf_du_dt_visc_2d(:,:) = 0.0
+  if(CS%id_hf_dv_dt_visc_2d > 0) CS%hf_dv_dt_visc_2d(:,:) = 0.0
 
   if (present(hfrac_u) .and. (CS%id_hf_du_dt_visc > 0)) then
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      hf_du_dt_visc(I,j,k) = ADp%du_dt_visc(I,j,k) * hfrac_u(I,j,k)
+      CS%hf_du_dt_visc(I,j,k) = ADp%du_dt_visc(I,j,k) * hfrac_u(I,j,k)
     enddo ; enddo ; enddo
-    call post_data(CS%id_hf_du_dt_visc, hf_du_dt_visc, CS%diag)
+    call post_data(CS%id_hf_du_dt_visc, CS%hf_du_dt_visc, CS%diag)
   endif
   if (present(hfrac_v) .and. (CS%id_hf_dv_dt_visc > 0)) then
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      hf_dv_dt_visc(i,J,k) = ADp%dv_dt_visc(i,J,k) * hfrac_v(i,J,k)
+      CS%hf_dv_dt_visc(i,J,k) = ADp%dv_dt_visc(i,J,k) * hfrac_v(i,J,k)
     enddo ; enddo ; enddo
-    call post_data(CS%id_hf_dv_dt_visc, hf_dv_dt_visc, CS%diag)
+    call post_data(CS%id_hf_dv_dt_visc, CS%hf_dv_dt_visc, CS%diag)
   endif
   if (present(hfrac_u) .and. (CS%id_hf_du_dt_visc_2d > 0)) then
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      hf_du_dt_visc_2d(I,j) = hf_du_dt_visc_2d(I,j) + ADp%du_dt_visc(I,j,k) * hfrac_u(I,j,k)
+      CS%hf_du_dt_visc_2d(I,j) = CS%hf_du_dt_visc_2d(I,j) + ADp%du_dt_visc(I,j,k) * hfrac_u(I,j,k)
     enddo ; enddo ; enddo
-    call post_data(CS%id_hf_du_dt_visc_2d, hf_du_dt_visc_2d, CS%diag)
+    call post_data(CS%id_hf_du_dt_visc_2d, CS%hf_du_dt_visc_2d, CS%diag)
   endif
   if (present(hfrac_v) .and. (CS%id_hf_dv_dt_visc_2d > 0)) then
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      hf_dv_dt_visc_2d(i,J) = hf_dv_dt_visc_2d(i,J) + ADp%dv_dt_visc(i,J,k) * hfrac_v(i,J,k)
+      CS%hf_dv_dt_visc_2d(i,J) = CS%hf_dv_dt_visc_2d(i,J) + ADp%dv_dt_visc(i,J,k) * hfrac_v(i,J,k)
     enddo ; enddo ; enddo
-    call post_data(CS%id_hf_dv_dt_visc_2d, hf_dv_dt_visc_2d, CS%diag)
+    call post_data(CS%id_hf_dv_dt_visc_2d, CS%hf_dv_dt_visc_2d, CS%diag)
   endif
 
 end subroutine vertvisc
@@ -1787,10 +1789,14 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
 
   CS%id_du_dt_visc = register_diag_field('ocean_model', 'du_dt_visc', diag%axesCuL, &
      Time, 'Zonal Acceleration from Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_du_dt_visc > 0) call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
+  if ((CS%id_du_dt_visc > 0) .or. (CS%id_hf_du_dt_visc > 0) .or. (CS%id_hf_du_dt_visc_2d > 0)) then 
+    call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
+  endif
   CS%id_dv_dt_visc = register_diag_field('ocean_model', 'dv_dt_visc', diag%axesCvL, &
      Time, 'Meridional Acceleration from Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_dv_dt_visc > 0) call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
+  if ((CS%id_dv_dt_visc > 0) .or. (CS%id_hf_dv_dt_visc > 0) .or. (CS%id_hf_dv_dt_visc_2d > 0)) then 
+    call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
+  endif
 
   CS%id_taux_bot = register_diag_field('ocean_model', 'taux_bot', diag%axesCu1, &
      Time, 'Zonal Bottom Stress from Ocean to Earth', 'Pa', &
@@ -1800,13 +1806,24 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
      conversion=US%RZ_to_kg_m2*US%L_T2_to_m_s2)
 
   CS%id_hf_du_dt_visc = register_diag_field('ocean_model', 'hf_du_dt_visc', diag%axesCuL, Time, &
-      'Thickness-weighted Zonal Acceleration from Vertical Viscosity', 'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+      'Thickness-weighted Zonal Acceleration from Vertical Viscosity', 'm s-2', v_extensive=.true., &
+      conversion=US%L_T2_to_m_s2)
+  if (CS%id_hf_du_dt_visc > 0) call safe_alloc_ptr(CS%hf_du_dt_visc,IsdB,IedB,jsd,jed,nz)
+  
   CS%id_hf_dv_dt_visc = register_diag_field('ocean_model', 'hf_dv_dt_visc', diag%axesCvL, Time, &
-      'Thickness-weighted Meridional Acceleration from Vertical Viscosity', 'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+      'Thickness-weighted Meridional Acceleration from Vertical Viscosity', 'm s-2', v_extensive=.true., &
+      conversion=US%L_T2_to_m_s2)
+  if (CS%id_hf_dv_dt_visc > 0) call safe_alloc_ptr(CS%hf_dv_dt_visc,isd,ied,JsdB,JedB,nz)
+  
   CS%id_hf_du_dt_visc_2d = register_diag_field('ocean_model', 'hf_du_dt_visc_2d', diag%axesCu1, Time, &
-      'Barotropic Thickness-weighted Zonal Acceleration from Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
+      'Barotropic Thickness-weighted Zonal Acceleration from Vertical Viscosity', 'm s-2', &
+      conversion=US%L_T2_to_m_s2)
+  if (CS%id_hf_du_dt_visc_2d > 0) call safe_alloc_ptr(CS%hf_du_dt_visc_2d,IsdB,IedB,jsd,jed)
+
   CS%id_hf_dv_dt_visc_2d = register_diag_field('ocean_model', 'hf_dv_dt_visc_2d', diag%axesCv1, Time, &
-      'Barotropic Thickness-weighted Meridional Acceleration from Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
+      'Barotropic Thickness-weighted Meridional Acceleration from Vertical Viscosity', 'm s-2', &
+      conversion=US%L_T2_to_m_s2)
+  if (CS%id_hf_dv_dt_visc_2d > 0) call safe_alloc_ptr(CS%hf_dv_dt_visc_2d,isd,ied,JsdB,JedB)
 
   if ((len_trim(CS%u_trunc_file) > 0) .or. (len_trim(CS%v_trunc_file) > 0)) &
     call PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS%PointAccel_CSp)
