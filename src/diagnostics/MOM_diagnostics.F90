@@ -69,7 +69,8 @@ type, public :: diagnostics_CS ; private
     du_dt => NULL(), & !< net i-acceleration [L T-2 ~> m s-2]
     dv_dt => NULL(), & !< net j-acceleration [L T-2 ~> m s-2]
     dh_dt => NULL(), & !< thickness rate of change [H T-1 ~> m s-1 or kg m-2 s-1]
-    p_ebt => NULL()    !< Equivalent barotropic modal structure [nondim]
+    p_ebt => NULL(), & !< Equivalent barotropic modal structure [nondim]
+    hf_du_dt => NULL(), hf_dv_dt => NULL() ! du_dt, dv_dt x fract. thickness [L T-2 ~> m s-2].
 
   real, pointer, dimension(:,:,:) :: h_Rlay => NULL() !< Layer thicknesses in potential density
                                               !! coordinates [H ~> m or kg m-2]
@@ -88,7 +89,8 @@ type, public :: diagnostics_CS ; private
     Rd1 => NULL(),       & !< First baroclinic deformation radius [L ~> m]
     cfl_cg1 => NULL(),   & !< CFL for first baroclinic gravity wave speed [nondim]
     cfl_cg1_x => NULL(), & !< i-component of CFL for first baroclinic gravity wave speed [nondim]
-    cfl_cg1_y => NULL()    !< j-component of CFL for first baroclinic gravity wave speed [nondim]
+    cfl_cg1_y => NULL(), & !< j-component of CFL for first baroclinic gravity wave speed [nondim]
+    hf_du_dt_2d => NULL(), hf_dv_dt_2d => NULL() ! z integeral of hf_du_dt, hf_dv_dt [L T-2 ~> m s-2].
 
   ! The following arrays hold diagnostics in the layer-integrated energy budget.
   real, pointer, dimension(:,:,:) :: &
@@ -233,10 +235,10 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   real :: work_2d(SZI_(G),SZJ_(G))         ! A 2-d temporary work array.
   real :: rho_in_situ(SZI_(G))             ! In situ density [R ~> kg m-3]
 
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: hf_du_dt ! du_dt x fract. thickness [L T-2 ~> m s-2].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: hf_dv_dt ! dv_dt x fract. thickness [L T-2 ~> m s-2].
-  real, dimension(SZIB_(G),SZJ_(G)) :: hf_du_dt_2d ! Depth integeral of hf_du_dt [L T-2 ~> m s-2].
-  real, dimension(SZI_(G),SZJB_(G)) :: hf_dv_dt_2d ! Depth integeral of hf_dv_dt [L T-2 ~> m s-2].
+!  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: hf_du_dt ! du_dt x fract. thickness [L T-2 ~> m s-2].
+!  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: hf_dv_dt ! dv_dt x fract. thickness [L T-2 ~> m s-2].
+!  real, dimension(SZIB_(G),SZJ_(G)) :: hf_du_dt_2d ! Depth integeral of hf_du_dt [L T-2 ~> m s-2].
+!  real, dimension(SZI_(G),SZJB_(G)) :: hf_dv_dt_2d ! Depth integeral of hf_dv_dt [L T-2 ~> m s-2].
 
   ! tmp array for surface properties
   real :: surface_field(SZI_(G),SZJ_(G))
@@ -264,14 +266,6 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
 
   call calculate_derivs(dt, G, CS)
 
-  ! Diagnostics for terms multiplied by fractional thicknesses
-  do j=js,je ; do I=Isq,Ieq
-    hf_du_dt_2d(I,j) = 0.0
-  enddo ; enddo
-  do J=Jsq,Jeq ; do i=is,ie
-    hf_dv_dt_2d(i,J) = 0.0
-  enddo ; enddo
-
   if (dt > 0.0) then
     call diag_save_grids(CS%diag)
     call diag_copy_storage_to_diag(CS%diag, diag_pre_sync)
@@ -288,27 +282,32 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     ! Diagnostics for terms multiplied by fractional thicknesses
     if (CS%id_hf_du_dt > 0) then
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-        hf_du_dt(I,j,k) = CS%du_dt(I,j,k) * ADp%diag_hfrac_u(I,j,k)
+        CS%hf_du_dt(I,j,k) = CS%du_dt(I,j,k) * ADp%diag_hfrac_u(I,j,k)
       enddo ; enddo ; enddo
-      call post_data(CS%id_hf_du_dt, hf_du_dt, CS%diag, alt_h = diag_pre_sync%h_state)
+      call post_data(CS%id_hf_du_dt, CS%hf_du_dt, CS%diag, alt_h = diag_pre_sync%h_state)
     endif
+
     if (CS%id_hf_dv_dt > 0) then
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        hf_dv_dt(i,J,k) = CS%dv_dt(i,J,k) * ADp%diag_hfrac_v(i,J,k)
+        CS%hf_dv_dt(i,J,k) = CS%dv_dt(i,J,k) * ADp%diag_hfrac_v(i,J,k)
       enddo ; enddo ; enddo
-      call post_data(CS%id_hf_dv_dt, hf_dv_dt, CS%diag, alt_h = diag_pre_sync%h_state)
+      call post_data(CS%id_hf_dv_dt, CS%hf_dv_dt, CS%diag, alt_h = diag_pre_sync%h_state)
     endif
+
     if (CS%id_hf_du_dt_2d > 0) then
+      CS%hf_du_dt_2d(:,:) = 0.0
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-        hf_du_dt_2d(I,j) = hf_du_dt_2d(I,j) + CS%du_dt(I,j,k) * ADp%diag_hfrac_u(I,j,k)
+        CS%hf_du_dt_2d(I,j) = CS%hf_du_dt_2d(I,j) + CS%du_dt(I,j,k) * ADp%diag_hfrac_u(I,j,k)
       enddo ; enddo ; enddo
-      call post_data(CS%id_hf_du_dt_2d, hf_du_dt_2d, CS%diag)
+      call post_data(CS%id_hf_du_dt_2d, CS%hf_du_dt_2d, CS%diag)
     endif
+
     if (CS%id_hf_dv_dt_2d > 0) then
+      CS%hf_dv_dt_2d(:,:) = 0.0
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        hf_dv_dt_2d(i,J) = hf_dv_dt_2d(i,J) + CS%dv_dt(i,J,k) * ADp%diag_hfrac_v(i,J,k)
+        CS%hf_dv_dt_2d(i,J) = CS%hf_dv_dt_2d(i,J) + CS%dv_dt(i,J,k) * ADp%diag_hfrac_v(i,J,k)
       enddo ; enddo ; enddo
-      call post_data(CS%id_hf_dv_dt_2d, hf_dv_dt_2d, CS%diag)
+      call post_data(CS%id_hf_dv_dt_2d, CS%hf_dv_dt_2d, CS%diag)
     endif
 
     call diag_restore_grids(CS%diag)
@@ -1665,13 +1664,47 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
 
   CS%id_hf_du_dt = register_diag_field('ocean_model', 'hf_dudt', diag%axesCuL, Time, &
       'Thickness-weighted Zonal Acceleration', 'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  if (CS%id_hf_du_dt > 0) then
+    call safe_alloc_ptr(CS%hf_du_dt,IsdB,IedB,jsd,jed,nz)
+    if (.not.associated(CS%du_dt)) then
+      call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
+      call register_time_deriv(lbound(MIS%u), MIS%u, CS%du_dt, CS)
+    endif
+    if (.not.associated(ADp%diag_hfrac_u)) call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+  endif
+
   CS%id_hf_dv_dt = register_diag_field('ocean_model', 'hf_dvdt', diag%axesCvL, Time, &
       'Thickness-weighted Meridional Acceleration', 'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  if (CS%id_hf_dv_dt > 0) then
+    call safe_alloc_ptr(CS%hf_dv_dt,isd,ied,JsdB,JedB,nz)
+    if (.not.associated(CS%dv_dt)) then
+      call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
+      call register_time_deriv(lbound(MIS%v), MIS%v, CS%dv_dt, CS)
+    endif
+    if (.not.associated(ADp%diag_hfrac_v)) call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+  endif
+ 
   CS%id_hf_du_dt_2d = register_diag_field('ocean_model', 'hf_dudt_2d', diag%axesCu1, Time, &
       'Barotropic Thickness-weighted Zonal Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
+  if (CS%id_hf_du_dt_2d > 0) then
+    call safe_alloc_ptr(CS%hf_du_dt_2d,IsdB,IedB,jsd,jed)
+    if (.not.associated(CS%du_dt)) then
+      call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
+      call register_time_deriv(lbound(MIS%u), MIS%u, CS%du_dt, CS)
+    endif
+    if (.not.associated(ADp%diag_hfrac_u)) call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+  endif
+
   CS%id_hf_dv_dt_2d = register_diag_field('ocean_model', 'hf_dvdt_2d', diag%axesCv1, Time, &
       'Barotropic Thickness-weighted Meridional Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
-
+  if (CS%id_hf_du_dt_2d > 0) then      
+    call safe_alloc_ptr(CS%hf_dv_dt_2d,isd,ied,JsdB,JedB)
+    if (.not.associated(CS%dv_dt)) then
+      call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
+      call register_time_deriv(lbound(MIS%v), MIS%v, CS%dv_dt, CS)
+    endif
+    if (.not.associated(ADp%diag_hfrac_v)) call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+  endif
 
   ! layer thickness variables
   !if (GV%nk_rho_varies > 0) then
@@ -2206,6 +2239,9 @@ subroutine MOM_diagnostics_end(CS, ADp)
   if (associated(ADp%dv_dt_dia))  deallocate(ADp%dv_dt_dia)
   if (associated(ADp%du_other))   deallocate(ADp%du_other)
   if (associated(ADp%dv_other))   deallocate(ADp%dv_other)
+
+  if (associated(ADp%diag_hfrac_u)) deallocate(ADp%diag_hfrac_u)
+  if (associated(ADp%diag_hfrac_v)) deallocate(ADp%diag_hfrac_v)
 
   do m=1,CS%num_time_deriv ; deallocate(CS%prev_val(m)%p) ; enddo
 

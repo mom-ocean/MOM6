@@ -469,9 +469,6 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     call post_data(CS%id_tauy_bot, tauy_bot, CS%diag)
 
   ! Diagnostics for terms multiplied by fractional thicknesses
-  if(CS%id_hf_du_dt_visc_2d > 0) CS%hf_du_dt_visc_2d(:,:) = 0.0
-  if(CS%id_hf_dv_dt_visc_2d > 0) CS%hf_dv_dt_visc_2d(:,:) = 0.0
-
   if (present(hfrac_u) .and. (CS%id_hf_du_dt_visc > 0)) then
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       CS%hf_du_dt_visc(I,j,k) = ADp%du_dt_visc(I,j,k) * hfrac_u(I,j,k)
@@ -485,12 +482,14 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     call post_data(CS%id_hf_dv_dt_visc, CS%hf_dv_dt_visc, CS%diag)
   endif
   if (present(hfrac_u) .and. (CS%id_hf_du_dt_visc_2d > 0)) then
+    CS%hf_du_dt_visc_2d(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       CS%hf_du_dt_visc_2d(I,j) = CS%hf_du_dt_visc_2d(I,j) + ADp%du_dt_visc(I,j,k) * hfrac_u(I,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hf_du_dt_visc_2d, CS%hf_du_dt_visc_2d, CS%diag)
   endif
   if (present(hfrac_v) .and. (CS%id_hf_dv_dt_visc_2d > 0)) then
+    CS%hf_dv_dt_visc_2d(:,:) = 0.0
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       CS%hf_dv_dt_visc_2d(i,J) = CS%hf_dv_dt_visc_2d(i,J) + ADp%dv_dt_visc(i,J,k) * hfrac_v(i,J,k)
     enddo ; enddo ; enddo
