@@ -23,11 +23,13 @@ module ocean_da_types_mod
   type, public :: ocean_profile_type
      integer :: inst_type !< A numeric code indicating the type of instrument (e.g. ARGO drifter, CTD, ...)
      logical :: initialized !< a True value indicates that this profile has been allocated for use
-     logical :: colocated !< a True value indicated that the measurements of (num_variables) data are colocated in space-time
+     logical :: colocated !< a True value indicated that the measurements of (num_variables) data are
+                          !! co-located in space-time
      integer :: ensemble_size !< size of the ensemble of model states used in association with this profile
      integer :: num_variables !< number of measurement types associated with this profile.
      integer, pointer, dimension(:) :: var_id !< variable ids are defined by the ocean_types module
-     integer :: platform !< platform types are defined by platform class (e.g. MOORING, DROP, etc.) and instrument type (XBT, CDT, etc.)
+     integer :: platform !< platform types are defined by platform class (e.g. MOORING, DROP, etc.)
+                         !! and instrument type (XBT, CDT, etc.)
      integer :: levels !< number of levels in the current profile
      integer :: basin_mask !< 1:Southern Ocean, 2:Atlantic Ocean, 3:Pacific Ocean,
                            !! 4:Arctic Ocean, 5:Indian Ocean, 6:Mediterranean Sea, 7:Black Sea,
