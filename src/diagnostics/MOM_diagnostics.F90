@@ -15,7 +15,7 @@ use MOM_diag_mediator,     only : diag_grid_storage
 use MOM_diag_mediator,     only : diag_save_grids, diag_restore_grids, diag_copy_storage_to_diag
 use MOM_domains,           only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,           only : To_North, To_East
-use MOM_EOS,               only : calculate_density, int_density_dz, EOS_domain
+use MOM_EOS,               only : calculate_density, calculate_density_derivs, int_density_dz, EOS_domain
 use MOM_EOS,               only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_error_handler,     only : MOM_error, FATAL, WARNING
 use MOM_file_parser,       only : get_param, log_version, param_file_type
