@@ -45,6 +45,7 @@ public :: create_group_pass, do_group_pass, group_pass_type
 public :: start_group_pass, complete_group_pass
 public :: compute_block_extent, get_global_shape
 public :: get_simple_array_i_ind, get_simple_array_j_ind
+public :: domain2D
 
 !> Do a halo update on an array
 interface pass_var
