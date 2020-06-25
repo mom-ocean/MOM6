@@ -268,18 +268,6 @@ $(eval $(call CMP_RULE,regression,symmetric target))
 #---
 # Test run output files
 
-# Generalized MPI environment variable support
-# XXX: Using `-env` in the MPICH test can erroneously producing an `nv` file.
-# $(1): Environment variables
-ifeq ($(shell $(MPIRUN) -x tmp=1 true 2> /dev/null ; echo $$?), 0)
-  MPIRUN_CMD=$(MPIRUN) $(if $(1),-x $(1),)
-else ifeq ($(shell $(MPIRUN) -env tmp=1 true 2> /dev/null ; echo $$? ; rm -f nv), 0)
-  MPIRUN_CMD=$(MPIRUN) $(if $(1),-env $(1),)
-else
-  MPIRUN_CMD=$(1) $(MPIRUN)
-endif
-
-
 # Rule to build work/<tc>/{ocean.stats,chksum_diag}.<tag>
 # $(1): Test configuration name <tag>
 # $(2): Executable type
@@ -297,20 +285,20 @@ work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6
 	mkdir -p $$(@D)/RESTART
 	echo -e "$(4)" > $$(@D)/MOM_override
 	cd $$(@D) \
-	  && $$(call MPIRUN_CMD,$(5)) -n $(6) ../../../$$< 2> std.err > std.out \
+	  && $(5) $(MPIRUN) -n $(6) ../../../$$< 2> std.err > std.out \
 	  || !( \
 	    mkdir -p ../../../results/$$*/ ; \
 	    cat std.out | tee ../../../results/$$*/std.$(1).out | tail -20 ; \
-		cat std.err | tee ../../../results/$$*/std.$(1).err | tail -20 ; \
-		rm ocean.stats chksum_diag ; \
-		echo -e "${FAIL}: $$*.$(1) failed at runtime." \
+	    cat std.err | tee ../../../results/$$*/std.$(1).err | tail -20 ; \
+	    rm ocean.stats chksum_diag ; \
+	    echo -e "${FAIL}: $$*.$(1) failed at runtime." \
 	  )
 	@echo -e "${DONE}: $$*.$(1); no runtime errors."
 	if [ $(3) ]; then \
 	  mkdir -p results/$$* ; \
 	  bash <(curl -s https://codecov.io/bash) -n $$@ \
 	    > work/$$*/codecov.$(1).out \
-		2> work/$$*/codecov.$(1).err ; \
+	    2> work/$$*/codecov.$(1).err ; \
 	fi
 endef
 
@@ -354,8 +342,8 @@ work/%/restart/ocean.stats: build/symmetric/MOM6
 	cd $(@D) && $(MPIRUN) -n 1 ../../../$< 2> std1.err > std1.out \
 	  || !( \
 	    cat std1.out | tee ../../../results/$*/std.restart1.out | tail ; \
-		cat std1.err | tee ../../../results/$*/std.restart1.err | tail ; \
-		echo -e "${FAIL}: $*.restart failed at runtime." \
+	    cat std1.err | tee ../../../results/$*/std.restart1.err | tail ; \
+	    echo -e "${FAIL}: $*.restart failed at runtime." \
 	  )
 	# Setup the next inputs
 	cd $(@D) && rm -rf INPUT && mv RESTART INPUT
@@ -365,8 +353,8 @@ work/%/restart/ocean.stats: build/symmetric/MOM6
 	cd $(@D) && $(MPIRUN) -n 1 ../../../$< 2> std2.err > std2.out \
 	  || !( \
 	    cat std2.out | tee ../../../results/$*/std.restart2.out | tail ; \
-		cat std2.err | tee ../../../results/$*/std.restart2.err | tail ; \
-		echo -e "${FAIL}: $*.restart failed at runtime." \
+	    cat std2.err | tee ../../../results/$*/std.restart2.err | tail ; \
+	    echo -e "${FAIL}: $*.restart failed at runtime." \
 	  )
 
 # TODO: Restart checksum diagnostics
