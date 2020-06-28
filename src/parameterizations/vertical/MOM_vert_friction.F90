@@ -1788,7 +1788,11 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
 
   CS%id_du_dt_visc = register_diag_field('ocean_model', 'du_dt_visc', diag%axesCuL, &
      Time, 'Zonal Acceleration from Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
-  if ((CS%id_du_dt_visc > 0) .or. (CS%id_hf_du_dt_visc > 0) .or. (CS%id_hf_du_dt_visc_2d > 0)) then 
+  if (CS%id_du_dt_visc > 0) then
+    call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz) 
+  elseif (CS%id_hf_du_dt_visc > 0) then
+    call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
+  elseif (CS%id_hf_du_dt_visc_2d > 0) then 
     call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
   endif
   CS%id_dv_dt_visc = register_diag_field('ocean_model', 'dv_dt_visc', diag%axesCvL, &
