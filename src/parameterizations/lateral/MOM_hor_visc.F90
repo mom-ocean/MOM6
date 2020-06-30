@@ -173,7 +173,7 @@ type, public :: hor_visc_CS ; private
     Biharm_const2_xy    !< Biharmonic metric-dependent constants [T L4 ~> s m4]
 
   type(diag_ctrl), pointer :: diag => NULL() !< structure to regulate diagnostics
-  
+
   real, pointer :: hf_diffu_2d(:,:)  => NULL()
   real, pointer :: hf_diffv_2d(:,:)  => NULL()
   real, pointer :: hf_diffu(:,:,:)   => NULL() ! Zonal hor. visc. accel. x fract. thickness [L T-2 ~> m s-2].
@@ -182,7 +182,7 @@ type, public :: hor_visc_CS ; private
   !>@{
   !! Diagnostic id
   integer :: id_diffu     = -1, id_diffv         = -1
-  integer :: id_hf_diffu  = -1, id_hf_diffv      = -1 
+  integer :: id_hf_diffu  = -1, id_hf_diffv      = -1
   integer :: id_hf_diffu_2d = -1, id_hf_diffv_2d = -1
   integer :: id_Ah_h      = -1, id_Ah_q          = -1
   integer :: id_Kh_h      = -1, id_Kh_q          = -1
@@ -247,14 +247,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
     div_xx_dx, &  ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) [L-1 T-1 ~> m-1 s-1]
     ubtav         ! zonal barotropic vel. ave. over baroclinic time-step [L T-1 ~> m s-1]
-!    hf_diffu_2d   ! Depth integeral of hf_diffu [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJB_(G)) :: &
     Del2v, &      ! The v-compontent of the Laplacian of velocity [L-1 T-1 ~> m-1 s-1]
     h_v, &        ! Thickness interpolated to v points [H ~> m or kg m-2].
     vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
     div_xx_dy, &  ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) [L-1 T-1 ~> m-1 s-1]
     vbtav         ! meridional barotropic vel. ave. over baroclinic time-step [L T-1 ~> m s-1]
-!    hf_diffv_2d   ! Depth integeral of hf_diffv [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJ_(G)) :: &
     dudx_bt, dvdy_bt, & ! components in the barotropic horizontal tension [T-1 ~> s-1]
     div_xx, &     ! Estimate of horizontal divergence at h-points [T-1 ~> s-1]
@@ -295,9 +293,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
            ! This form guarantees that hq/hu < 4.
     grad_vel_mag_bt_q, &  ! Magnitude of the barotropic velocity gradient tensor squared at q-points [T-2 ~> s-2]
     boundary_mask_q ! A mask that zeroes out cells with at least one land edge [nondim]
-
-!  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: hf_diffu ! Zonal hor. visc. accel. x fract. thickness [L T-2 ~> m s-2].
-!  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: hf_diffv ! Merdional hor. visc. accel. x fract. thickness [L T-2 ~> m s-2].
 
   real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
     Ah_q, &      ! biharmonic viscosity at corner points [L4 T-1 ~> m4 s-1]
@@ -1323,9 +1318,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   endif
 
   ! Diagnostics for terms multiplied by fractional thicknesses
-  if(CS%id_hf_diffu_2d > 0) CS%hf_diffu_2d(:,:) = 0.0
-  if(CS%id_hf_diffv_2d > 0) CS%hf_diffv_2d(:,:) = 0.0
-
   if (present(hfrac_u) .and. (CS%id_hf_diffu > 0)) then
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       CS%hf_diffu(I,j,k) = diffu(I,j,k) * hfrac_u(I,j,k)
@@ -1339,12 +1331,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     call post_data(CS%id_hf_diffv, CS%hf_diffv, CS%diag)
   endif
   if (present(hfrac_u) .and. (CS%id_hf_diffu_2d > 0)) then
+    CS%hf_diffu_2d(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       CS%hf_diffu_2d(I,j) = CS%hf_diffu_2d(I,j) + diffu(I,j,k) * hfrac_u(I,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hf_diffu_2d, CS%hf_diffu_2d, CS%diag)
   endif
   if (present(hfrac_v) .and. (CS%id_hf_diffv_2d > 0)) then
+    CS%hf_diffv_2d(:,:) = 0.0
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       CS%hf_diffv_2d(i,J) = CS%hf_diffv_2d(i,J) + diffv(i,J,k) * hfrac_v(i,J,k)
     enddo ; enddo ; enddo
@@ -2069,12 +2063,12 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
       'Thickness-weighted Meridional Acceleration from Horizontal Viscosity', 'm s-2', v_extensive=.true., &
       conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_diffv > 0) call safe_alloc_ptr(CS%hf_diffv,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
-  
+
   CS%id_hf_diffu_2d = register_diag_field('ocean_model', 'hf_diffu_2d', diag%axesCu1, Time, &
       'Barotropic Thickness-weighted Zonal Acceleration from Horizontal Viscosity', 'm s-2', &
       conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_diffu_2d > 0) call safe_alloc_ptr(CS%hf_diffu_2d,G%IsdB,G%IedB,G%jsd,G%jed)
-  
+
   CS%id_hf_diffv_2d = register_diag_field('ocean_model', 'hf_diffv_2d', diag%axesCv1, Time, &
       'Barotropic Thickness-weighted Meridional Acceleration from Horizontal Viscosity', 'm s-2', &
       conversion=US%L_T2_to_m_s2)

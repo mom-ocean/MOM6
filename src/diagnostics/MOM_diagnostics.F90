@@ -235,11 +235,6 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   real :: work_2d(SZI_(G),SZJ_(G))         ! A 2-d temporary work array.
   real :: rho_in_situ(SZI_(G))             ! In situ density [R ~> kg m-3]
 
-!  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: hf_du_dt ! du_dt x fract. thickness [L T-2 ~> m s-2].
-!  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: hf_dv_dt ! dv_dt x fract. thickness [L T-2 ~> m s-2].
-!  real, dimension(SZIB_(G),SZJ_(G)) :: hf_du_dt_2d ! Depth integeral of hf_du_dt [L T-2 ~> m s-2].
-!  real, dimension(SZI_(G),SZJB_(G)) :: hf_dv_dt_2d ! Depth integeral of hf_dv_dt [L T-2 ~> m s-2].
-
   ! tmp array for surface properties
   real :: surface_field(SZI_(G),SZJ_(G))
   real :: pressure_1d(SZI_(G)) ! Temporary array for pressure when calling EOS [R L2 T-2 ~> Pa]
@@ -1683,7 +1678,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
     endif
     if (.not.associated(ADp%diag_hfrac_v)) call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
   endif
- 
+
   CS%id_hf_du_dt_2d = register_diag_field('ocean_model', 'hf_dudt_2d', diag%axesCu1, Time, &
       'Barotropic Thickness-weighted Zonal Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_du_dt_2d > 0) then
@@ -1697,7 +1692,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
 
   CS%id_hf_dv_dt_2d = register_diag_field('ocean_model', 'hf_dvdt_2d', diag%axesCv1, Time, &
       'Barotropic Thickness-weighted Meridional Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_du_dt_2d > 0) then      
+  if (CS%id_hf_du_dt_2d > 0) then
     call safe_alloc_ptr(CS%hf_dv_dt_2d,isd,ied,JsdB,JedB)
     if (.not.associated(CS%dv_dt)) then
       call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)

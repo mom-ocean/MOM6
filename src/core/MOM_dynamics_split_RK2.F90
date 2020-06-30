@@ -314,20 +314,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     ! u_old_rad_OBC and v_old_rad_OBC are the starting velocities, which are
     ! saved for use in the Flather open boundary condition code [L T-1 ~> m s-1].
 
-!  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: hf_PFu ! Zonal Pressure force accel. x fract. thickness [L T-2 ~> m s-2].
-!  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: hf_PFv ! Merdional Pressure force accel. x fract. thickness [L T-2 ~> m s-2].
-!  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: hf_CAu ! Zonal Coriolis force accel. x fract. thickness [L T-2 ~> m s-2].
-!  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: hf_CAv ! Merdional Coriolis force accel. x fract. thickness [L T-2 ~> m s-2].
-!  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: hf_uBT_accel ! Zonal barotropic accel. x fract. thickness [L T-2 ~> m s-2].
-!  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: hf_vBT_accel ! Merdional barotropic accel. x fract. thickness [L T-2 ~> m s-2].
-
-!  real, dimension(SZIB_(G),SZJ_(G)) :: hf_PFu_2d ! Depth integeral of hf_PFu [L T-2 ~> m s-2].
-!  real, dimension(SZI_(G),SZJB_(G)) :: hf_PFv_2d ! Depth integeral of hf_PFv [L T-2 ~> m s-2].
-!  real, dimension(SZIB_(G),SZJ_(G)) :: hf_CAu_2d ! Depth integeral of hf_CAu [L T-2 ~> m s-2].
-!  real, dimension(SZI_(G),SZJB_(G)) :: hf_CAv_2d ! Depth integeral of hf_CAv [L T-2 ~> m s-2].
-!  real, dimension(SZIB_(G),SZJ_(G)) :: hf_uBT_accel_2d ! Depth integeral of hf_uBT_accel [L T-2 ~> m s-2].
-!  real, dimension(SZI_(G),SZJB_(G)) :: hf_vBT_accel_2d ! Depth integeral of hf_vBT_accel [L T-2 ~> m s-2].
-
   real :: pres_to_eta ! A factor that converts pressures to the units of eta
                       ! [H T2 R-1 L-2 ~> m Pa-1 or kg m-2 Pa-1]
   real, pointer, dimension(:,:) :: &
@@ -892,17 +878,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   if (CS%id_v_BT_accel > 0) call post_data(CS%id_v_BT_accel, CS%v_accel_bt, CS%diag)
 
   ! Diagnostics for terms multiplied by fractional thicknesses
-!  do j=js,je ; do I=Isq,Ieq
-!    hf_PFu_2d(I,j) = 0.0
-!    hf_CAu_2d(I,j) = 0.0
-!    hf_uBT_accel_2d(I,j) = 0.0
-!  enddo ; enddo
-!  do J=Jsq,Jeq ; do i=is,ie
-!    hf_PFv_2d(i,J) = 0.0
-!    hf_CAv_2d(i,J) = 0.0
-!    hf_vBT_accel_2d(i,J) = 0.0
-!  enddo ; enddo
-
   if (CS%id_hf_PFu > 0) then
     call safe_alloc_ptr(hf_PFu,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
