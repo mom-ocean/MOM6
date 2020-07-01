@@ -3,20 +3,21 @@ module MOM_lateral_mixing_coeffs
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_debugging,     only : hchksum, uvchksum
-use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
-use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, post_data
-use MOM_diag_mediator, only : diag_ctrl, time_type, query_averaging_enabled
-use MOM_domains,       only : create_group_pass, do_group_pass
-use MOM_domains,       only : group_pass_type, pass_var, pass_vector
-use MOM_file_parser, only : get_param, log_version, param_file_type
+use MOM_debugging,         only : hchksum, uvchksum
+use MOM_error_handler,     only : MOM_error, FATAL, WARNING, MOM_mesg
+use MOM_diag_mediator,     only : register_diag_field, safe_alloc_ptr, post_data
+use MOM_diag_mediator,     only : diag_ctrl, time_type, query_averaging_enabled
+use MOM_domains,           only : create_group_pass, do_group_pass
+use MOM_domains,           only : group_pass_type, pass_var, pass_vector
+use MOM_file_parser,       only : get_param, log_version, param_file_type
 use MOM_interface_heights, only : find_eta
-use MOM_isopycnal_slopes, only : calc_isoneutral_slopes
-use MOM_grid, only : ocean_grid_type
-use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : thermo_var_ptrs
-use MOM_verticalGrid, only : verticalGrid_type
-use MOM_wave_speed, only : wave_speed, wave_speed_CS, wave_speed_init
+use MOM_isopycnal_slopes,  only : calc_isoneutral_slopes
+use MOM_grid,              only : ocean_grid_type
+use MOM_unit_scaling,      only : unit_scale_type
+use MOM_variables,         only : thermo_var_ptrs
+use MOM_verticalGrid,      only : verticalGrid_type
+use MOM_wave_speed,        only : wave_speed, wave_speed_CS, wave_speed_init
+use MOM_open_boundary,     only : ocean_OBC_type
 
 implicit none ; private
 
@@ -432,7 +433,7 @@ end subroutine calc_resoln_function
 
 !> Calculates and stores functions of isopycnal slopes, e.g. Sx, Sy, S*N, mostly used in the Visbeck et al.
 !! style scaling of diffusivity
-subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
+subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS, OBC)
   type(ocean_grid_type),                    intent(inout) :: G  !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)    :: GV !< Vertical grid structure
   type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
@@ -440,6 +441,7 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
   type(thermo_var_ptrs),                    intent(in)    :: tv !< Thermodynamic variables
   real,                                     intent(in)    :: dt !< Time increment [T ~> s]
   type(VarMix_CS),                          pointer       :: CS !< Variable mixing coefficients
+  type(ocean_OBC_type),           optional, pointer       :: OBC !< Open boundaries control structure.
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
     e             ! The interface heights relative to mean sea level [Z ~> m].
@@ -453,12 +455,12 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
     call find_eta(h, tv, G, GV, US, e, halo_size=2)
     if (CS%use_stored_slopes) then
       call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, &
-                                  CS%slope_x, CS%slope_y, N2_u, N2_v, 1)
-      call calc_Visbeck_coeffs(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, US, CS)
+                                  CS%slope_x, CS%slope_y, N2_u, N2_v, 1, OBC=OBC)
+      call calc_Visbeck_coeffs(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, US, CS, OBC=OBC)
 !     call calc_slope_functions_using_just_e(h, G, CS, e, .false.)
     else
       !call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, CS%slope_x, CS%slope_y)
-      call calc_slope_functions_using_just_e(h, G, GV, US, CS, e, .true.)
+      call calc_slope_functions_using_just_e(h, G, GV, US, CS, e, .true., OBC=OBC)
     endif
   endif
 
@@ -476,7 +478,7 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
 end subroutine calc_slope_functions
 
 !> Calculates factors used when setting diffusivity coefficients similar to Visbeck et al.
-subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS)
+subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS, OBC)
   type(ocean_grid_type),                       intent(inout) :: G  !< Ocean grid structure
   type(verticalGrid_type),                     intent(in)    :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
@@ -488,6 +490,7 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS)
                                                                         !! at v-points [T-2 ~> s-2]
   type(unit_scale_type),                       intent(in)    :: US !< A dimensional unit scaling type
   type(VarMix_CS),                             pointer       :: CS !< Variable mixing coefficients
+  type(ocean_OBC_type),              optional, pointer       :: OBC !< Open boundaries control structure.
 
   ! Local variables
   real :: S2            ! Interface slope squared [nondim]
@@ -500,6 +503,7 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS)
   real :: H_u(SZIB_(G)), H_v(SZI_(G))
   real :: S2_u(SZIB_(G), SZJ_(G))
   real :: S2_v(SZI_(G), SZJB_(G))
+  logical :: local_open_u_BC, local_open_v_BC
 
   if (.not. associated(CS)) call MOM_error(FATAL, "calc_slope_function:"// &
          "Module must be initialized before it is used.")
@@ -510,6 +514,13 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS)
          "%SN_v is not associated with use_variable_mixing.")
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  local_open_u_BC = .false.
+  local_open_v_BC = .false.
+  if (present(OBC)) then ; if (associated(OBC)) then
+    local_open_u_BC = OBC%open_u_BCs_exist_globally
+    local_open_v_BC = OBC%open_v_BCs_exist_globally
+  endif ; endif
 
   S2max = CS%Visbeck_S_max**2
 
@@ -523,7 +534,8 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS)
   ! calculate the first-mode gravity wave speed and then blend the equatorial
   ! and midlatitude deformation radii, using calc_resoln_function as a template.
 
-  !$OMP parallel do default(shared) private(S2,H_u,Hdn,Hup,H_geom,N2,wNE,wSE,wSW,wNW)
+  !$OMP parallel do default(shared) private(S2,H_u,Hdn,Hup,H_geom,N2,wNE,wSE,wSW,wNW, &
+  !$OMP                                     local_open_u_BC)
   do j = js,je
     do I=is-1,ie
       CS%SN_u(I,j) = 0. ; H_u(I) = 0. ; S2_u(I,j) = 0.
@@ -556,10 +568,16 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS)
       else
         CS%SN_u(I,j) = 0.
       endif
+      if (local_open_u_BC) then
+        if (OBC%segment(OBC%segnum_u(I,j))%open) then
+          CS%SN_u(i,J) = 0.
+        endif
+      endif
     enddo
   enddo
 
-  !$OMP parallel do default(shared) private(S2,H_v,Hdn,Hup,H_geom,N2,wNE,wSE,wSW,wNW)
+  !$OMP parallel do default(shared) private(S2,H_v,Hdn,Hup,H_geom,N2,wNE,wSE,wSW,wNW, &
+  !$OMP                                     local_open_u_BC)
   do J = js-1,je
     do i=is,ie
       CS%SN_v(i,J) = 0. ; H_v(i) = 0. ; S2_v(i,J) = 0.
@@ -592,6 +610,11 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS)
       else
         CS%SN_v(i,J) = 0.
       endif
+      if (local_open_v_BC) then
+        if (OBC%segment(OBC%segnum_v(i,J))%open) then
+          CS%SN_v(i,J) = 0.
+        endif
+      endif
     enddo
   enddo
 
@@ -613,7 +636,7 @@ end subroutine calc_Visbeck_coeffs
 
 !> The original calc_slope_function() that calculated slopes using
 !! interface positions only, not accounting for density variations.
-subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slopes)
+subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slopes, OBC)
   type(ocean_grid_type),                      intent(inout) :: G  !< Ocean grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   type(verticalGrid_type),                    intent(in)    :: GV !< Vertical grid structure
@@ -622,6 +645,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: e  !< Interface position [Z ~> m]
   logical,                                    intent(in)    :: calculate_slopes !< If true, calculate slopes internally
                                                                   !! otherwise use slopes stored in CS
+  type(ocean_OBC_type),             optional, pointer       :: OBC !< Open boundaries control structure.
   ! Local variables
   real :: E_x(SZIB_(G), SZJ_(G))  ! X-slope of interface at u points [nondim] (for diagnostics)
   real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at v points [nondim] (for diagnostics)
@@ -637,6 +661,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   integer :: i, j, k, kb_max
   real    :: S2N2_u_local(SZIB_(G), SZJ_(G),SZK_(G))
   real    :: S2N2_v_local(SZI_(G), SZJB_(G),SZK_(G))
+  logical :: local_open_u_BC, local_open_v_BC
 
   if (.not. associated(CS)) call MOM_error(FATAL, "calc_slope_function:"// &
          "Module must be initialized before it is used.")
@@ -647,6 +672,13 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
          "%SN_v is not associated with use_variable_mixing.")
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  local_open_u_BC = .false.
+  local_open_v_BC = .false.
+  if (present(OBC)) then ; if (associated(OBC)) then
+    local_open_u_BC = OBC%open_u_BCs_exist_globally
+    local_open_v_BC = OBC%open_v_BCs_exist_globally
+  endif ; endif
 
   one_meter = 1.0 * GV%m_to_H
   h_neglect = GV%H_subroundoff
@@ -723,6 +755,11 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
       else
         CS%SN_u(I,j) = 0.0
       endif
+      if (local_open_u_BC) then
+        if (OBC%segment(OBC%segnum_u(I,j))%open) then
+          CS%SN_u(I,j) = 0.
+        endif
+      endif
     enddo
   enddo
   !$OMP parallel do default(shared)
@@ -739,6 +776,11 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
                                                (max(G%bathyT(i,J), G%bathyT(i,J+1))) )
       else
         CS%SN_v(I,j) = 0.0
+      endif
+      if (local_open_v_BC) then
+        if (OBC%segment(OBC%segnum_v(I,j))%open) then
+          CS%SN_v(I,j) = 0.
+        endif
       endif
     enddo
   enddo
