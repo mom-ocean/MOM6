@@ -750,7 +750,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   call btstep(u, v, eta, dt, u_bc_accel, v_bc_accel, forces, CS%pbce, &
               CS%eta_PF, u_av, v_av, CS%u_accel_bt, CS%v_accel_bt, &
               eta_pred, CS%uhbt, CS%vhbt, G, GV, US, CS%barotropic_CSp, &
-              CS%visc_rem_u, CS%visc_rem_v, etaav=eta_av, hfrac_u=CS%diag_hfrac_u, hfrac_v=CS%diag_hfrac_v, &
+              CS%visc_rem_u, CS%visc_rem_v, etaav=eta_av, &
               OBC=CS%OBC, BT_cont = CS%BT_cont, eta_PF_start=eta_PF_start, &
               taux_bot=taux_bot, tauy_bot=tauy_bot, &
               uh0=uh_ptr, vh0=vh_ptr, u_uh0=u_ptr, v_vh0=v_ptr)
@@ -1201,8 +1201,6 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   MIS%v_accel_bt => CS%v_accel_bt
   MIS%u_av       => CS%u_av
   MIS%v_av       => CS%v_av
-  MIS%diag_hfrac_u => CS%diag_hfrac_u
-  MIS%diag_hfrac_v => CS%diag_hfrac_v
 
   CS%ADp           => Accel_diag
   CS%CDp           => Cont_diag
@@ -1350,28 +1348,28 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   CS%id_PFv = register_diag_field('ocean_model', 'PFv', diag%axesCvL, Time, &
       'Meridional Pressure Force Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
   CS%id_hf_PFu = register_diag_field('ocean_model', 'hf_PFu', diag%axesCuL, Time, &
-      'Thickness-weighted Zonal Pressure Force Acceleration', 'm s-2', &
+      'Fractional Thickness-weighted Zonal Pressure Force Acceleration', 'm s-2', &
       v_extensive=.true., conversion=US%L_T2_to_m_s2)
   CS%id_hf_PFv = register_diag_field('ocean_model', 'hf_PFv', diag%axesCvL, Time, &
-      'Thickness-weighted Meridional Pressure Force Acceleration', 'm s-2', &
+      'Fractional Thickness-weighted Meridional Pressure Force Acceleration', 'm s-2', &
       v_extensive=.true., conversion=US%L_T2_to_m_s2)
   CS%id_hf_CAu = register_diag_field('ocean_model', 'hf_CAu', diag%axesCuL, Time, &
-      'Thickness-weighted Zonal Coriolis and Advective Acceleration', 'm s-2', &
+      'Fractional Thickness-weighted Zonal Coriolis and Advective Acceleration', 'm s-2', &
       v_extensive=.true., conversion=US%L_T2_to_m_s2)
   CS%id_hf_CAv = register_diag_field('ocean_model', 'hf_CAv', diag%axesCvL, Time, &
-      'Thickness-weighted Meridional Coriolis and Advective Acceleration', 'm s-2', &
+      'Fractional Thickness-weighted Meridional Coriolis and Advective Acceleration', 'm s-2', &
       v_extensive=.true., conversion=US%L_T2_to_m_s2)
   CS%id_hf_PFu_2d = register_diag_field('ocean_model', 'hf_PFu_2d', diag%axesCu1, Time, &
-      'Barotropic Thickness-weighted Zonal Pressure Force Acceleration', 'm s-2', &
+      'Depth-sum Fractional Thickness-weighted Zonal Pressure Force Acceleration', 'm s-2', &
       conversion=US%L_T2_to_m_s2)
   CS%id_hf_PFv_2d = register_diag_field('ocean_model', 'hf_PFv_2d', diag%axesCv1, Time, &
-      'Barotropic Thickness-weighted Meridional Pressure Force Acceleration', 'm s-2', &
+      'Depth-sum Fractional Thickness-weighted Meridional Pressure Force Acceleration', 'm s-2', &
       conversion=US%L_T2_to_m_s2)
   CS%id_hf_CAu_2d = register_diag_field('ocean_model', 'hf_CAu_2d', diag%axesCu1, Time, &
-      'Barotropic Thickness-weighted Zonal Coriolis and Advective Acceleration', 'm s-2', &
+      'Depth-sum Fractional Thickness-weighted Zonal Coriolis and Advective Acceleration', 'm s-2', &
       conversion=US%L_T2_to_m_s2)
   CS%id_hf_CAv_2d = register_diag_field('ocean_model', 'hf_CAv_2d', diag%axesCv1, Time, &
-      'Barotropic Thickness-weighted Meridional Coriolis and Advective Acceleration', 'm s-2', &
+      'Depth-sum Fractional Thickness-weighted Meridional Coriolis and Advective Acceleration', 'm s-2', &
       conversion=US%L_T2_to_m_s2)
 
   CS%id_uav = register_diag_field('ocean_model', 'uav', diag%axesCuL, Time, &
@@ -1384,16 +1382,16 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   CS%id_v_BT_accel = register_diag_field('ocean_model', 'v_BT_accel', diag%axesCvL, Time, &
     'Barotropic Anomaly Meridional Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
   CS%id_hf_u_BT_accel = register_diag_field('ocean_model', 'hf_u_BT_accel', diag%axesCuL, Time, &
-      'Thickness-weighted Barotropic Anomaly Zonal Acceleration', 'm s-2', &
+      'Fractional Thickness-weighted Barotropic Anomaly Zonal Acceleration', 'm s-2', &
       v_extensive=.true., conversion=US%L_T2_to_m_s2)
   CS%id_hf_v_BT_accel = register_diag_field('ocean_model', 'hf_v_BT_accel', diag%axesCvL, Time, &
-      'Thickness-weighted Barotropic Anomaly Meridional Acceleration', 'm s-2', &
+      'Fractional Thickness-weighted Barotropic Anomaly Meridional Acceleration', 'm s-2', &
       v_extensive=.true., conversion=US%L_T2_to_m_s2)
   CS%id_hf_u_BT_accel_2d = register_diag_field('ocean_model', 'hf_u_BT_accel_2d', diag%axesCu1, Time, &
-      'Barotropic Thickness-weighted Barotropic Anomaly Zonal Acceleration', 'm s-2', &
+      'Depth-sum Fractional Thickness-weighted Barotropic Anomaly Zonal Acceleration', 'm s-2', &
       conversion=US%L_T2_to_m_s2)
   CS%id_hf_v_BT_accel_2d = register_diag_field('ocean_model', 'hf_v_BT_accel_2d', diag%axesCv1, Time, &
-      'Barotropic Thickness-weighted Barotropic Anomaly Meridional Acceleration', 'm s-2', &
+      'Depth-sum Fractional Thickness-weighted Barotropic Anomaly Meridional Acceleration', 'm s-2', &
       conversion=US%L_T2_to_m_s2)
 
   id_clock_Cor        = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)

@@ -2055,22 +2055,22 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
       'Meridional Acceleration from Horizontal Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
 
   CS%id_hf_diffu = register_diag_field('ocean_model', 'hf_diffu', diag%axesCuL, Time, &
-      'Thickness-weighted Zonal Acceleration from Horizontal Viscosity', 'm s-2', v_extensive=.true., &
-      conversion=US%L_T2_to_m_s2)
+      'Fractional Thickness-weighted Zonal Acceleration from Horizontal Viscosity', 'm s-2', &
+      v_extensive=.true., conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_diffu > 0) call safe_alloc_ptr(CS%hf_diffu,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
 
   CS%id_hf_diffv = register_diag_field('ocean_model', 'hf_diffv', diag%axesCvL, Time, &
-      'Thickness-weighted Meridional Acceleration from Horizontal Viscosity', 'm s-2', v_extensive=.true., &
-      conversion=US%L_T2_to_m_s2)
+      'Fractional Thickness-weighted Meridional Acceleration from Horizontal Viscosity', 'm s-2', &
+      v_extensive=.true., conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_diffv > 0) call safe_alloc_ptr(CS%hf_diffv,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
 
   CS%id_hf_diffu_2d = register_diag_field('ocean_model', 'hf_diffu_2d', diag%axesCu1, Time, &
-      'Barotropic Thickness-weighted Zonal Acceleration from Horizontal Viscosity', 'm s-2', &
+      'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Horizontal Viscosity', 'm s-2', &
       conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_diffu_2d > 0) call safe_alloc_ptr(CS%hf_diffu_2d,G%IsdB,G%IedB,G%jsd,G%jed)
 
   CS%id_hf_diffv_2d = register_diag_field('ocean_model', 'hf_diffv_2d', diag%axesCv1, Time, &
-      'Barotropic Thickness-weighted Meridional Acceleration from Horizontal Viscosity', 'm s-2', &
+      'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Horizontal Viscosity', 'm s-2', &
       conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_diffv_2d > 0) call safe_alloc_ptr(CS%hf_diffv_2d,G%isd,G%ied,G%JsdB,G%JedB)
 
