@@ -32,7 +32,7 @@ use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, determine_is_new_run, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, set_up_sponge_ML_density
 use MOM_sponge, only : initialize_sponge, sponge_CS
-use MOM_ALE_sponge, only : set_up_ALE_sponge_field, initialize_ALE_sponge
+use MOM_ALE_sponge, only : set_up_ALE_sponge_field, set_up_ALE_sponge_vel_field, initialize_ALE_sponge
 use MOM_ALE_sponge, only : ALE_sponge_CS
 use MOM_string_functions, only : uppercase, lowercase
 use MOM_time_manager, only : time_type
@@ -550,7 +550,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
       case ("phillips"); call Phillips_initialize_sponges(G, GV, US, tv, PF, sponge_CSp, h)
       case ("dense"); call dense_water_initialize_sponges(G, GV, US, tv, PF, useALE, &
                                                           sponge_CSp, ALE_sponge_CSp)
-      case ("file"); call initialize_sponges_file(G, GV, US, use_temperature, tv, PF, &
+      case ("file"); call initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, PF, &
                                                   sponge_CSp, ALE_sponge_CSp, Time)
       case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
              "Unrecognized sponge configuration "//trim(config))
@@ -1711,13 +1711,19 @@ end subroutine initialize_temp_salt_linear
 !! number of tracers should be restored within each sponge. The
 !! interface height is always subject to damping, and must always be
 !! the first registered field.
-subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, CSp, ALE_CSp, Time)
-  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
+subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_file, CSp, ALE_CSp, Time)
+  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in) :: US  !< A dimensional unit scaling type
   logical,                 intent(in) :: use_temperature !< If true, T & S are state variables.
   type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic
                                               !! variables.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                              intent(out)   :: u    !< The zonal velocity that is being
+                                                    !! initialized [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                              intent(out)   :: v    !< The meridional velocity that is being
+                                                    !! initialized [L T-1 ~> m s-1]
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters.
   type(sponge_CS),         pointer    :: CSp  !< A pointer that is set to point to the control
                                               !! structure for this module (in layered mode).
@@ -1742,7 +1748,8 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   integer :: isd, ied, jsd, jed
   integer, dimension(4) :: siz
   integer :: nz_data  ! The size of the sponge source grid
-  character(len=40) :: potemp_var, salin_var, Idamp_var, eta_var
+  logical :: sponge_uv ! Apply sponges in u and v, in addition to tracers.
+  character(len=40) :: potemp_var, salin_var, u_var, v_var, Idamp_var, eta_var
   character(len=40) :: mdl = "initialize_sponges_file"
   character(len=200) :: damping_file, state_file  ! Strings for filenames
   character(len=200) :: filename, inputdir ! Strings for file/path and path.
@@ -1770,6 +1777,17 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   call get_param(param_file, mdl, "SPONGE_SALT_VAR", salin_var, &
                  "The name of the salinity variable in "//&
                  "SPONGE_STATE_FILE.", default="SALT")
+  call get_param(param_file, mdl, "SPONGE_UV", sponge_uv, &
+                 "Apply sponges in u and v, in addition to tracers.", &
+                 default=.false.)
+  if (sponge_uv) then
+    call get_param(param_file, mdl, "SPONGE_U_VAR", u_var, &
+                 "The name of the zonal velocity variable in "//&
+                 "SPONGE_STATE_FILE.", default="UVEL")
+    call get_param(param_file, mdl, "SPONGE_V_VAR", v_var, &
+                 "The name of the vertical velocity variable in "//&
+                 "SPONGE_STATE_FILE.", default="VVEL")
+  endif
   call get_param(param_file, mdl, "SPONGE_ETA_VAR", eta_var, &
                  "The name of the interface height variable in "//&
                  "SPONGE_STATE_FILE.", default="ETA")
@@ -1888,6 +1906,8 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   elseif (use_temperature) then
     call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, US, tv%T, ALE_CSp)
     call set_up_ALE_sponge_field(filename, salin_var, Time, G, GV, US, tv%S, ALE_CSp)
+    if (sponge_uv) &
+      call set_up_ALE_sponge_vel_field(filename, u_var, filename, v_var, Time, G, US, ALE_CSp, u, v)
   endif
 
 end subroutine initialize_sponges_file
@@ -2062,8 +2082,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   inputdir = slasher(inputdir)
 
   eos => tv%eqn_of_state
-
-! call mpp_get_compute_domain(G%domain%mpp_domain,isc,iec,jsc,jec)
 
   reentrant_x = .false. ; call get_param(PF, mdl, "REENTRANT_X", reentrant_x, default=.true.)
   tripolar_n = .false. ;  call get_param(PF, mdl, "TRIPOLAR_N", tripolar_n, default=.false.)
