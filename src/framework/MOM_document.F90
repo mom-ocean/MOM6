@@ -776,7 +776,9 @@ subroutine doc_module(doc, modname, desc, log_to_all, all_default, layoutMod, de
   call open_doc_file(doc)
 
   if (doc%filesAreOpen) then
-    call writeMessageAndDesc(doc, '', '') ! Blank line for delineation
+    ! Add a blank line for delineation
+    call writeMessageAndDesc(doc, '', '', valueWasDefault=all_default, &
+                             layoutParam=layoutMod, debuggingParam=debuggingMod)
     mesg = "! === module "//trim(modname)//" ==="
     call writeMessageAndDesc(doc, mesg, desc, valueWasDefault=all_default, indent=0, &
                              layoutParam=layoutMod, debuggingParam=debuggingMod)
@@ -786,8 +788,10 @@ subroutine doc_module(doc, modname, desc, log_to_all, all_default, layoutMod, de
       repeat_doc = .false.
       if (present(layoutMod)) then ; if (layoutMod) repeat_doc = .true. ; endif
       if (present(debuggingMod)) then ; if (debuggingMod) repeat_doc = .true. ; endif
-      if (repeat_doc) &
+      if (repeat_doc) then
+        call writeMessageAndDesc(doc, '', '', valueWasDefault=all_default)
         call writeMessageAndDesc(doc, mesg, desc, valueWasDefault=all_default, indent=0)
+      endif
     endif ; endif
   endif
 end subroutine doc_module
