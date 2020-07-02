@@ -1658,7 +1658,8 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   endif
 
   CS%id_hf_du_dt = register_diag_field('ocean_model', 'hf_dudt', diag%axesCuL, Time, &
-      'Thickness-weighted Zonal Acceleration', 'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+      'Fractional Thickness-weighted Zonal Acceleration', 'm s-2', v_extensive=.true., &
+      conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_du_dt > 0) then
     call safe_alloc_ptr(CS%hf_du_dt,IsdB,IedB,jsd,jed,nz)
     if (.not.associated(CS%du_dt)) then
@@ -1669,7 +1670,8 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   endif
 
   CS%id_hf_dv_dt = register_diag_field('ocean_model', 'hf_dvdt', diag%axesCvL, Time, &
-      'Thickness-weighted Meridional Acceleration', 'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+      'Fractional Thickness-weighted Meridional Acceleration', 'm s-2', v_extensive=.true., &
+      conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_dv_dt > 0) then
     call safe_alloc_ptr(CS%hf_dv_dt,isd,ied,JsdB,JedB,nz)
     if (.not.associated(CS%dv_dt)) then
@@ -1680,7 +1682,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   endif
 
   CS%id_hf_du_dt_2d = register_diag_field('ocean_model', 'hf_dudt_2d', diag%axesCu1, Time, &
-      'Barotropic Thickness-weighted Zonal Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
+      'Depth-sum Fractional Thickness-weighted Zonal Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_du_dt_2d > 0) then
     call safe_alloc_ptr(CS%hf_du_dt_2d,IsdB,IedB,jsd,jed)
     if (.not.associated(CS%du_dt)) then
@@ -1691,8 +1693,8 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   endif
 
   CS%id_hf_dv_dt_2d = register_diag_field('ocean_model', 'hf_dvdt_2d', diag%axesCv1, Time, &
-      'Barotropic Thickness-weighted Meridional Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_du_dt_2d > 0) then
+      'Depth-sum Fractional Thickness-weighted Meridional Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
+  if (CS%id_hf_dv_dt_2d > 0) then
     call safe_alloc_ptr(CS%hf_dv_dt_2d,isd,ied,JsdB,JedB)
     if (.not.associated(CS%dv_dt)) then
       call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
