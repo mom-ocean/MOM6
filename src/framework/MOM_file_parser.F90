@@ -1289,7 +1289,7 @@ end subroutine log_version_plain
 
 !> Log the name and value of an integer model parameter in documentation files.
 subroutine log_param_int(CS, modulename, varname, value, desc, units, &
-                         default, layoutParam, debuggingParam)
+                         default, layoutParam, debuggingParam, like_default)
   type(param_file_type),      intent(in) :: CS      !< The control structure for the file_parser module,
                                          !! it is also a structure to parse for run-time parameters
   character(len=*),           intent(in) :: modulename !< The name of the module using this parameter
@@ -1303,6 +1303,8 @@ subroutine log_param_int(CS, modulename, varname, value, desc, units, &
                                          !! logged in the layout parameter file
   logical,          optional, intent(in) :: debuggingParam !< If present and true, this parameter is
                                          !! logged in the debugging parameter file
+  logical,          optional, intent(in) :: like_default !< If present and true, log this parameter as
+                                         !! though it has the default value, even if there is no default.
 
   character(len=240) :: mesg, myunits
 
@@ -1315,13 +1317,13 @@ subroutine log_param_int(CS, modulename, varname, value, desc, units, &
   myunits=" "; if (present(units)) write(myunits(1:240),'(A)') trim(units)
   if (present(desc)) &
     call doc_param(CS%doc, varname, desc, myunits, value, default, &
-                   layoutParam=layoutParam, debuggingParam=debuggingParam)
+                   layoutParam=layoutParam, debuggingParam=debuggingParam, like_default=like_default)
 
 end subroutine log_param_int
 
 !> Log the name and values of an array of integer model parameter in documentation files.
 subroutine log_param_int_array(CS, modulename, varname, value, desc, &
-                               units, default, layoutParam, debuggingParam)
+                               units, default, layoutParam, debuggingParam, like_default)
   type(param_file_type),      intent(in) :: CS      !< The control structure for the file_parser module,
                                          !! it is also a structure to parse for run-time parameters
   character(len=*),           intent(in) :: modulename !< The name of the module using this parameter
@@ -1335,6 +1337,8 @@ subroutine log_param_int_array(CS, modulename, varname, value, desc, &
                                          !! logged in the layout parameter file
   logical,          optional, intent(in) :: debuggingParam !< If present and true, this parameter is
                                          !! logged in the debugging parameter file
+  logical,          optional, intent(in) :: like_default !< If present and true, log this parameter as
+                                         !! though it has the default value, even if there is no default.
 
   character(len=1320) :: mesg
   character(len=240) :: myunits
@@ -1348,13 +1352,13 @@ subroutine log_param_int_array(CS, modulename, varname, value, desc, &
   myunits=" "; if (present(units)) write(myunits(1:240),'(A)') trim(units)
   if (present(desc)) &
     call doc_param(CS%doc, varname, desc, myunits, value, default, &
-                   layoutParam=layoutParam, debuggingParam=debuggingParam)
+                   layoutParam=layoutParam, debuggingParam=debuggingParam, like_default=like_default)
 
 end subroutine log_param_int_array
 
 !> Log the name and value of a real model parameter in documentation files.
 subroutine log_param_real(CS, modulename, varname, value, desc, units, &
-                          default, debuggingParam)
+                          default, debuggingParam, like_default)
   type(param_file_type),      intent(in) :: CS      !< The control structure for the file_parser module,
                                          !! it is also a structure to parse for run-time parameters
   character(len=*),           intent(in) :: modulename !< The name of the calling module
@@ -1366,6 +1370,8 @@ subroutine log_param_real(CS, modulename, varname, value, desc, units, &
   real,             optional, intent(in) :: default !< The default value of the parameter
   logical,          optional, intent(in) :: debuggingParam !< If present and true, this parameter is
                                          !! logged in the debugging parameter file
+  logical,          optional, intent(in) :: like_default !< If present and true, log this parameter as
+                                         !! though it has the default value, even if there is no default.
 
   character(len=240) :: mesg, myunits
 
@@ -1379,13 +1385,13 @@ subroutine log_param_real(CS, modulename, varname, value, desc, units, &
   myunits="not defined"; if (present(units)) write(myunits(1:240),'(A)') trim(units)
   if (present(desc)) &
     call doc_param(CS%doc, varname, desc, myunits, value, default, &
-                   debuggingParam=debuggingParam)
+                   debuggingParam=debuggingParam, like_default=like_default)
 
 end subroutine log_param_real
 
 !> Log the name and values of an array of real model parameter in documentation files.
 subroutine log_param_real_array(CS, modulename, varname, value, desc, &
-                                units, default, debuggingParam)
+                                units, default, debuggingParam, like_default)
   type(param_file_type),      intent(in) :: CS      !< The control structure for the file_parser module,
                                          !! it is also a structure to parse for run-time parameters
   character(len=*),           intent(in) :: modulename !< The name of the calling module
@@ -1397,6 +1403,8 @@ subroutine log_param_real_array(CS, modulename, varname, value, desc, &
   real,             optional, intent(in) :: default !< The default value of the parameter
   logical,          optional, intent(in) :: debuggingParam !< If present and true, this parameter is
                                          !! logged in the debugging parameter file
+  logical,          optional, intent(in) :: like_default !< If present and true, log this parameter as
+                                         !! though it has the default value, even if there is no default.
 
   character(len=1320) :: mesg
   character(len=240) :: myunits
@@ -1414,13 +1422,13 @@ subroutine log_param_real_array(CS, modulename, varname, value, desc, &
   myunits="not defined"; if (present(units)) write(myunits(1:240),'(A)') trim(units)
   if (present(desc)) &
     call doc_param(CS%doc, varname, desc, myunits, value, default, &
-                   debuggingParam=debuggingParam)
+                   debuggingParam=debuggingParam, like_default=like_default)
 
 end subroutine log_param_real_array
 
 !> Log the name and value of a logical model parameter in documentation files.
 subroutine log_param_logical(CS, modulename, varname, value, desc, &
-                             units, default, layoutParam, debuggingParam)
+                             units, default, layoutParam, debuggingParam, like_default)
   type(param_file_type),      intent(in) :: CS      !< The control structure for the file_parser module,
                                          !! it is also a structure to parse for run-time parameters
   character(len=*),           intent(in) :: modulename !< The name of the calling module
@@ -1434,6 +1442,8 @@ subroutine log_param_logical(CS, modulename, varname, value, desc, &
                                          !! logged in the layout parameter file
   logical,          optional, intent(in) :: debuggingParam !< If present and true, this parameter is
                                          !! logged in the debugging parameter file
+  logical,          optional, intent(in) :: like_default !< If present and true, log this parameter as
+                                         !! though it has the default value, even if there is no default.
 
   character(len=240) :: mesg, myunits
 
@@ -1450,13 +1460,13 @@ subroutine log_param_logical(CS, modulename, varname, value, desc, &
   myunits="Boolean"; if (present(units)) write(myunits(1:240),'(A)') trim(units)
   if (present(desc)) &
     call doc_param(CS%doc, varname, desc, myunits, value, default, &
-                   layoutParam=layoutParam, debuggingParam=debuggingParam)
+                   layoutParam=layoutParam, debuggingParam=debuggingParam, like_default=like_default)
 
 end subroutine log_param_logical
 
 !> Log the name and value of a character string model parameter in documentation files.
 subroutine log_param_char(CS, modulename, varname, value, desc, units, &
-                          default, layoutParam, debuggingParam)
+                          default, layoutParam, debuggingParam, like_default)
   type(param_file_type),      intent(in) :: CS      !< The control structure for the file_parser module,
                                          !! it is also a structure to parse for run-time parameters
   character(len=*),           intent(in) :: modulename !< The name of the calling module
@@ -1470,6 +1480,8 @@ subroutine log_param_char(CS, modulename, varname, value, desc, units, &
                                          !! logged in the layout parameter file
   logical,          optional, intent(in) :: debuggingParam !< If present and true, this parameter is
                                          !! logged in the debugging parameter file
+  logical,          optional, intent(in) :: like_default !< If present and true, log this parameter as
+                                         !! though it has the default value, even if there is no default.
 
   character(len=240) :: mesg, myunits
 
@@ -1483,14 +1495,14 @@ subroutine log_param_char(CS, modulename, varname, value, desc, units, &
   myunits=" "; if (present(units)) write(myunits(1:240),'(A)') trim(units)
   if (present(desc)) &
     call doc_param(CS%doc, varname, desc, myunits, value, default, &
-                   layoutParam=layoutParam, debuggingParam=debuggingParam)
+                   layoutParam=layoutParam, debuggingParam=debuggingParam, like_default=like_default)
 
 end subroutine log_param_char
 
 !> This subroutine writes the value of a time-type parameter to a log file,
 !! along with its name and the module it came from.
 subroutine log_param_time(CS, modulename, varname, value, desc, units, &
-                          default, timeunit, layoutParam, debuggingParam, log_date)
+                          default, timeunit, layoutParam, debuggingParam, log_date, like_default)
   type(param_file_type),      intent(in) :: CS      !< The control structure for the file_parser module,
                                          !! it is also a structure to parse for run-time parameters
   character(len=*),           intent(in) :: modulename !< The name of the calling module
@@ -1508,6 +1520,8 @@ subroutine log_param_time(CS, modulename, varname, value, desc, units, &
                                          !! logged in the layout parameter file
   logical,          optional, intent(in) :: debuggingParam !< If present and true, this parameter is
                                          !! logged in the debugging parameter file
+  logical,          optional, intent(in) :: like_default !< If present and true, log this parameter as
+                                         !! though it has the default value, even if there is no default.
 
   ! Local variables
   real :: real_time, real_default
@@ -1543,10 +1557,10 @@ subroutine log_param_time(CS, modulename, varname, value, desc, units, &
         default_string = convert_date_to_string(default)
         call doc_param(CS%doc, varname, desc, myunits, date_string, &
                        default=default_string, layoutParam=layoutParam, &
-                       debuggingParam=debuggingParam)
+                       debuggingParam=debuggingParam, like_default=like_default)
       else
         call doc_param(CS%doc, varname, desc, myunits, date_string, &
-                       layoutParam=layoutParam, debuggingParam=debuggingParam)
+                       layoutParam=layoutParam, debuggingParam=debuggingParam, like_default=like_default)
       endif
     elseif (use_timeunit) then
       if (present(units)) then
@@ -1566,12 +1580,12 @@ subroutine log_param_time(CS, modulename, varname, value, desc, units, &
         real_default = (86400.0/timeunit)*days + secs/timeunit
         if (ticks > 0) real_default = real_default + &
                            real(ticks) / (timeunit*get_ticks_per_second())
-        call doc_param(CS%doc, varname, desc, myunits, real_time, real_default)
+        call doc_param(CS%doc, varname, desc, myunits, real_time, real_default, like_default=like_default)
       else
-        call doc_param(CS%doc, varname, desc, myunits, real_time)
+        call doc_param(CS%doc, varname, desc, myunits, real_time, like_default=like_default)
       endif
     else
-      call doc_param(CS%doc, varname, desc, value, default, units=units)
+      call doc_param(CS%doc, varname, desc, value, default, units=units, like_default=like_default)
     endif
   endif
 
