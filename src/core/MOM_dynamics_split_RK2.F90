@@ -162,15 +162,15 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   integer :: id_umo_2d = -1, id_vmo_2d = -1
   integer :: id_PFu    = -1, id_PFv    = -1
   integer :: id_CAu    = -1, id_CAv    = -1
-  integer :: id_hf_PFu  = -1, id_hf_PFv  = -1
+  integer :: id_hf_PFu    = -1, id_hf_PFv    = -1
   integer :: id_hf_PFu_2d = -1, id_hf_PFv_2d = -1
-  integer :: id_hf_CAu  = -1, id_hf_CAv  = -1
-  integer :: id_hf_CAu_2d  = -1, id_hf_CAv_2d  = -1
+  integer :: id_hf_CAu    = -1, id_hf_CAv    = -1
+  integer :: id_hf_CAu_2d = -1, id_hf_CAv_2d = -1
 
   ! Split scheme only.
   integer :: id_uav        = -1, id_vav        = -1
   integer :: id_u_BT_accel = -1, id_v_BT_accel = -1
-  integer :: id_hf_u_BT_accel = -1, id_hf_v_BT_accel = -1
+  integer :: id_hf_u_BT_accel    = -1, id_hf_v_BT_accel    = -1
   integer :: id_hf_u_BT_accel_2d = -1, id_hf_v_BT_accel_2d = -1
   !>@}
 
@@ -794,7 +794,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   call cpu_clock_begin(id_clock_vertvisc)
   call vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS%vertvisc_CSp, CS%OBC)
   call vertvisc(u, v, h, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp, G, GV, US, &
-                CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot,waves=waves, hfrac_u=CS%diag_hfrac_u, hfrac_v=CS%diag_hfrac_v)
+                CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot,waves=waves)
   if (G%nonblocking_updates) then
     call cpu_clock_end(id_clock_vertvisc)
     call start_group_pass(CS%pass_uv, G%Domain, clock=id_clock_pass)

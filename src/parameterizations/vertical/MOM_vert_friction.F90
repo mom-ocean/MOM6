@@ -124,7 +124,8 @@ type, public :: vertvisc_CS ; private
   integer :: id_h_u = -1, id_h_v = -1, id_hML_u = -1 , id_hML_v = -1
   integer :: id_Ray_u = -1, id_Ray_v = -1, id_taux_bot = -1, id_tauy_bot = -1
   integer :: id_Kv_slow = -1, id_Kv_u = -1, id_Kv_v = -1
-  integer :: id_hf_du_dt_visc = -1, id_hf_dv_dt_visc = -1, id_hf_du_dt_visc_2d = -1, id_hf_dv_dt_visc_2d = -1
+  integer :: id_hf_du_dt_visc    = -1, id_hf_dv_dt_visc    = -1 
+  integer :: id_hf_du_dt_visc_2d = -1, id_hf_dv_dt_visc_2d = -1
   !>@}
 
   type(PointAccel_CS), pointer :: PointAccel_CSp => NULL() !< A pointer to the control structure
@@ -154,7 +155,7 @@ contains
 !! if DIRECT_STRESS is true, applied to the surface layer.
 
 subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
-                    taux_bot, tauy_bot, Waves, hfrac_u, hfrac_v)
+                    taux_bot, tauy_bot, Waves)
   type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
@@ -180,9 +181,6 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
                                                      !! rock [R L Z T-2 ~> Pa]
   type(wave_parameters_CS), &
                    optional, pointer     :: Waves !< Container for wave/Stokes information
-
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), optional, intent(in) :: hfrac_u ! Fractional layer thickness at u points
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), optional, intent(in) :: hfrac_v ! Fractional layer thickness at v points
 
   ! Fields from forces used in this subroutine:
   !   taux: Zonal wind stress [R L Z T-2 ~> Pa].
@@ -464,29 +462,29 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     call post_data(CS%id_tauy_bot, tauy_bot, CS%diag)
 
   ! Diagnostics for terms multiplied by fractional thicknesses
-  if (present(hfrac_u) .and. (CS%id_hf_du_dt_visc > 0)) then
+  if (CS%id_hf_du_dt_visc > 0) then
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      CS%hf_du_dt_visc(I,j,k) = ADp%du_dt_visc(I,j,k) * hfrac_u(I,j,k)
+      CS%hf_du_dt_visc(I,j,k) = ADp%du_dt_visc(I,j,k) * ADp%diag_hfrac_u(I,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hf_du_dt_visc, CS%hf_du_dt_visc, CS%diag)
   endif
-  if (present(hfrac_v) .and. (CS%id_hf_dv_dt_visc > 0)) then
+  if (CS%id_hf_dv_dt_visc > 0) then
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      CS%hf_dv_dt_visc(i,J,k) = ADp%dv_dt_visc(i,J,k) * hfrac_v(i,J,k)
+      CS%hf_dv_dt_visc(i,J,k) = ADp%dv_dt_visc(i,J,k) * ADp%diag_hfrac_v(i,J,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hf_dv_dt_visc, CS%hf_dv_dt_visc, CS%diag)
   endif
-  if (present(hfrac_u) .and. (CS%id_hf_du_dt_visc_2d > 0)) then
+  if (CS%id_hf_du_dt_visc_2d > 0) then
     CS%hf_du_dt_visc_2d(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      CS%hf_du_dt_visc_2d(I,j) = CS%hf_du_dt_visc_2d(I,j) + ADp%du_dt_visc(I,j,k) * hfrac_u(I,j,k)
+      CS%hf_du_dt_visc_2d(I,j) = CS%hf_du_dt_visc_2d(I,j) + ADp%du_dt_visc(I,j,k) * ADp%diag_hfrac_u(I,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hf_du_dt_visc_2d, CS%hf_du_dt_visc_2d, CS%diag)
   endif
-  if (present(hfrac_v) .and. (CS%id_hf_dv_dt_visc_2d > 0)) then
+  if (CS%id_hf_dv_dt_visc_2d > 0) then
     CS%hf_dv_dt_visc_2d(:,:) = 0.0
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      CS%hf_dv_dt_visc_2d(i,J) = CS%hf_dv_dt_visc_2d(i,J) + ADp%dv_dt_visc(i,J,k) * hfrac_v(i,J,k)
+      CS%hf_dv_dt_visc_2d(i,J) = CS%hf_dv_dt_visc_2d(i,J) + ADp%dv_dt_visc(i,J,k) * ADp%diag_hfrac_v(i,J,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hf_dv_dt_visc_2d, CS%hf_dv_dt_visc_2d, CS%diag)
   endif
@@ -1801,6 +1799,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   if (CS%id_hf_du_dt_visc > 0) then
     call safe_alloc_ptr(CS%hf_du_dt_visc,IsdB,IedB,jsd,jed,nz)
     if (.not.associated(Adp%du_dt_visc)) call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
+    if (.not.associated(ADp%diag_hfrac_u)) call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
   endif
 
   CS%id_hf_dv_dt_visc = register_diag_field('ocean_model', 'hf_dv_dt_visc', diag%axesCvL, Time, &
@@ -1809,6 +1808,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   if (CS%id_hf_dv_dt_visc > 0) then
     call safe_alloc_ptr(CS%hf_dv_dt_visc,isd,ied,JsdB,JedB,nz)
     if (.not.associated(Adp%dv_dt_visc)) call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
+    if (.not.associated(ADp%diag_hfrac_v)) call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
   endif
 
   CS%id_hf_du_dt_visc_2d = register_diag_field('ocean_model', 'hf_du_dt_visc_2d', diag%axesCu1, Time, &
@@ -1817,6 +1817,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   if (CS%id_hf_du_dt_visc_2d > 0) then
     call safe_alloc_ptr(CS%hf_du_dt_visc_2d,IsdB,IedB,jsd,jed)
     if (.not.associated(Adp%du_dt_visc)) call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
+    if (.not.associated(ADp%diag_hfrac_u)) call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
   endif
 
   CS%id_hf_dv_dt_visc_2d = register_diag_field('ocean_model', 'hf_dv_dt_visc_2d', diag%axesCv1, Time, &
@@ -1825,6 +1826,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   if (CS%id_hf_dv_dt_visc_2d > 0) then
     call safe_alloc_ptr(CS%hf_dv_dt_visc_2d,isd,ied,JsdB,JedB)
     if (.not.associated(Adp%dv_dt_visc)) call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
+    if (.not.associated(ADp%diag_hfrac_v)) call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
   endif
 
   if ((len_trim(CS%u_trunc_file) > 0) .or. (len_trim(CS%v_trunc_file) > 0)) &
