@@ -1511,6 +1511,7 @@ subroutine restart_init(param_file, CS, restart_root)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_restart"   ! This module's name.
+  logical :: all_default   ! If true, all parameters are using their default values.
 
   if (associated(CS)) then
     call MOM_error(WARNING, "restart_init called with an associated control structure.")
@@ -1518,10 +1519,25 @@ subroutine restart_init(param_file, CS, restart_root)
   endif
   allocate(CS)
 
+  ! Determine whether all paramters are set to their default values.
+  call get_param(param_file, mdl, "PARALLEL_RESTARTFILES", CS%parallel_restartfiles, &
+                 default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "LARGE_FILE_SUPPORT", CS%large_file_support, &
+                 default=.true., do_not_log=.true.)
+  call get_param(param_file, mdl, "MAX_FIELDS", CS%max_fields, default=100, do_not_log=.true.)
+  call get_param(param_file, mdl, "RESTART_CHECKSUMS_REQUIRED", CS%checksum_required, &
+                 default=.true., do_not_log=.true.)
+  all_default = ((.not.CS%parallel_restartfiles) .and. (CS%large_file_support) .and. &
+                 (CS%max_fields == 100) .and. (CS%checksum_required))
+  if (.not.present(restart_root)) then
+    call get_param(param_file, mdl, "RESTARTFILE", CS%restartfile, &
+                   default="MOM.res", do_not_log=.true.)
+    all_default = (all_default .and. (trim(CS%restartfile) == trim("MOM.res")))
+  endif
+
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mdl, version, "")
-  call get_param(param_file, mdl, "PARALLEL_RESTARTFILES", &
-                                CS%parallel_restartfiles, &
+  call log_version(param_file, mdl, version, "", all_default=all_default)
+  call get_param(param_file, mdl, "PARALLEL_RESTARTFILES", CS%parallel_restartfiles, &
                  "If true, each processor writes its own restart file, "//&
                  "otherwise a single restart file is generated", &
                  default=.false.)
