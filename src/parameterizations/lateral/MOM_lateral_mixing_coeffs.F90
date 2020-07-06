@@ -534,8 +534,7 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS, O
   ! calculate the first-mode gravity wave speed and then blend the equatorial
   ! and midlatitude deformation radii, using calc_resoln_function as a template.
 
-  !$OMP parallel do default(shared) private(S2,H_u,Hdn,Hup,H_geom,N2,wNE,wSE,wSW,wNW, &
-  !$OMP                                     local_open_u_BC)
+  !$OMP parallel do default(shared) private(S2,H_u,Hdn,Hup,H_geom,N2,wNE,wSE,wSW,wNW)
   do j = js,je
     do I=is-1,ie
       CS%SN_u(I,j) = 0. ; H_u(I) = 0. ; S2_u(I,j) = 0.
@@ -576,8 +575,7 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS, O
     enddo
   enddo
 
-  !$OMP parallel do default(shared) private(S2,H_v,Hdn,Hup,H_geom,N2,wNE,wSE,wSW,wNW, &
-  !$OMP                                     local_open_u_BC)
+  !$OMP parallel do default(shared) private(S2,H_v,Hdn,Hup,H_geom,N2,wNE,wSE,wSW,wNW)
   do J = js-1,je
     do i=is,ie
       CS%SN_v(i,J) = 0. ; H_v(i) = 0. ; S2_v(i,J) = 0.
