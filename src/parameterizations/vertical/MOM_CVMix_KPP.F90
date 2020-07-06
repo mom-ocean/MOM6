@@ -627,7 +627,6 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
   real :: LangEnhK     ! Langmuir enhancement for mixing coefficient
 
 
-#ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
     call hchksum(h, "KPP in: h",G%HI,haloshift=0, scale=GV%H_to_m)
     call hchksum(uStar, "KPP in: uStar",G%HI,haloshift=0, scale=US%Z_to_m*US%s_to_T)
@@ -635,7 +634,6 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
     call hchksum(Kt, "KPP in: Kt",G%HI,haloshift=0, scale=US%Z2_T_to_m2_s)
     call hchksum(Ks, "KPP in: Ks",G%HI,haloshift=0, scale=US%Z2_T_to_m2_s)
   endif
-#endif
 
   nonLocalTrans(:,:) = 0.0
 
@@ -862,12 +860,10 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
   enddo ! j
 
 
-#ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
     call hchksum(Kt, "KPP out: Kt", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
     call hchksum(Ks, "KPP out: Ks", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
   endif
-#endif
 
   ! send diagnostics to post_data
   if (CS%id_OBLdepth > 0) call post_data(CS%id_OBLdepth, CS%OBLdepth,        CS%diag)
@@ -952,14 +948,12 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   real :: WST
 
 
-#ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
     call hchksum(Salt, "KPP in: S",G%HI,haloshift=0)
     call hchksum(Temp, "KPP in: T",G%HI,haloshift=0)
     call hchksum(u, "KPP in: u",G%HI,haloshift=0)
     call hchksum(v, "KPP in: v",G%HI,haloshift=0)
   endif
-#endif
 
   ! some constants
   GoRho = US%L_T_to_m_s**2*US%m_to_Z * GV%g_Earth / GV%Rho0
