@@ -459,13 +459,13 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                    if (segment%direction == OBC_DIRECTION_W) then
                       T_tmp(i,m) = segment%tr_Reg%Tr(m)%tres(i,j,k)
                    else
-                      T_tmp(I+1,m) = segment%tr_Reg%Tr(m)%tres(i,j,k)
+                      T_tmp(i+1,m) = segment%tr_Reg%Tr(m)%tres(i,j,k)
                    endif
                 else
                    if (segment%direction == OBC_DIRECTION_W) then
                       T_tmp(i,m) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
                    else
-                      T_tmp(I+1,m) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
+                      T_tmp(i+1,m) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
                    endif
                 endif
               enddo
@@ -913,7 +913,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         endif
 
         ! Implementation of PPM-H3
-        Tp = Tr(m)%t(i,j_up+1,k) ; Tc = Tr(m)%t(i,j_up,k) ; Tm = Tr(m)%t(i,j_up-1,k)
+        Tp = T_tmp(i,m,j_up+1) ; Tc = T_tmp(i,m,j_up) ; Tm = T_tmp(i,m,j_up-1)
 
         if (useHuynh) then
           aL = ( 5.*Tc + ( 2.*Tm - Tp ) )/6. ! H3 estimate
@@ -955,7 +955,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
          !aR = Tr(m)%t(i,j,k) + 0.5 * slope_y(i,m,j)
          !flux_y(i,m,J) = vhh(i,J)*(aR - 0.5 * slope_y(i,m,j)*CFL(i))
           ! Alternative implementation of PLM
-          Tc = Tr(m)%t(i,j,k)
+          Tc = T_tmp(i,m,j)
           flux_y(i,m,J) = vhh(i,J)*( Tc + 0.5 * slope_y(i,m,j) * ( 1. - CFL(i) ) )
           ! Original implementation of PLM
          !flux_y(i,m,J) = vhh(i,J)*(Tr(m)%t(i,j,k) + slope_y(i,m,j)*ts2(i))
@@ -968,7 +968,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
          !aL = Tr(m)%t(i,j+1,k) - 0.5 * slope_y(i,m,j+1)
          !flux_y(i,m,J) = vhh(i,J)*( aL + 0.5 * slope_y(i,m,j+1)*CFL(i) )
           ! Alternative implementation of PLM
-          Tc = Tr(m)%t(i,j+1,k)
+          Tc = T_tmp(i,m,j+1)
           flux_y(i,m,J) = vhh(i,J)*( Tc - 0.5 * slope_y(i,m,j+1) * ( 1. - CFL(i) ) )
           ! Original implementation of PLM
          !flux_y(i,m,J) = vhh(i,J)*(Tr(m)%t(i,j+1,k) - slope_y(i,m,j+1)*ts2(i))
