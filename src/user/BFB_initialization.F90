@@ -91,10 +91,11 @@ subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, para
 
   ! Local variables
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta, in depth units [Z ~> m].
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [s-1].
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
   real :: H0(SZK_(G))               ! Resting layer thicknesses in depth units [Z ~> m].
   real :: min_depth                 ! The minimum ocean depth in depth units [Z ~> m].
-  real :: damp, e_dense, damp_new, slat, wlon, lenlat, lenlon, nlat
+  real :: slat, wlon, lenlat, lenlon, nlat
+  real :: max_damping               ! The maximum damping rate [T-1 ~> s-1]
   character(len=40)  :: mdl = "BFB_initialize_sponges_southonly" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
@@ -103,10 +104,10 @@ subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, para
 
   eta(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
 
-!  Here the inverse damping time [s-1], is set. Set Idamp to 0     !
-!  wherever there is no sponge, and the subroutines that are called  !
-!  will automatically set up the sponges only where Idamp is positive!
-!  and mask2dT is 1.                                                   !
+!  Here the inverse damping time [T-1 ~> s-1], is set. Set Idamp to 0
+!  wherever there is no sponge, and the subroutines that are called
+!  will automatically set up the sponges only where Idamp is positive
+!  and mask2dT is 1.
 
 !   Set up sponges for DOME configuration
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
@@ -126,11 +127,14 @@ subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, para
   ! Use for meridional thickness profile initialization
 !  do k=1,nz ; H0(k) = -G%max_depth * real(k-1) / real(nz-1) ; enddo
 
+  max_damping = 1.0  / (86400.0*US%s_to_T)
+
   do i=is,ie; do j=js,je
-    if (G%geoLatT(i,j) < slat+2.0) then ; damp = 1.0
+    if (G%bathyT(i,j) <= min_depth) then ; Idamp(i,j) = 0.0
+    elseif (G%geoLatT(i,j) < slat+2.0) then ; Idamp(i,j) = max_damping
     elseif (G%geoLatT(i,j) < slat+4.0) then
-       damp_new = 1.0*(slat+4.0-G%geoLatT(i,j))/2.0
-    else ; damp = 0.0
+      Idamp(i,j) = max_damping * (slat+4.0-G%geoLatT(i,j))/2.0
+    else ; Idamp(i,j) = 0.0
     endif
 
     ! These will be streched inside of apply_sponge, so they can be in
@@ -153,9 +157,6 @@ subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, para
     ! endif
     eta(i,j,nz+1) = -G%max_depth
 
-    if (G%bathyT(i,j) > min_depth) then
-      Idamp(i,j) = damp/86400.0
-    else ; Idamp(i,j) = 0.0 ; endif
   enddo ; enddo
 
 !  This call sets up the damping rates and interface heights.

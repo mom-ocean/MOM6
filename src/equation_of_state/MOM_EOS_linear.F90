@@ -325,56 +325,56 @@ end subroutine calculate_compress_linear
 !>   This subroutine calculates analytical and nearly-analytical integrals of
 !! pressure anomalies across layers, which are required for calculating the
 !! finite-volume form pressure accelerations in a Boussinesq model.
-subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, HIO, &
+subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
                  Rho_T0_S0, dRho_dT, dRho_dS, dpa, intz_dpa, intx_dpa, inty_dpa, &
                  bathyT, dz_neglect, useMassWghtInterp)
-  type(hor_index_type), intent(in)  :: HII       !< The horizontal index type for the input arrays.
-  type(hor_index_type), intent(in)  :: HIO       !< The horizontal index type for the output arrays.
-  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+  type(hor_index_type), intent(in)  :: HI        !< The horizontal index type for the arrays.
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T         !< Potential temperature relative to the surface
                                                  !! [degC].
-  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: S         !< Salinity [PSU].
-  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: z_t       !< Height at the top of the layer in depth units [Z ~> m].
-  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: z_b       !< Height at the top of the layer [Z ~> m].
-  real,                 intent(in)  :: rho_ref   !< A mean density [kg m-3], that is subtracted
-                                                 !! out to reduce the magnitude of each of the
-                                                 !! integrals.
-  real,                 intent(in)  :: rho_0_pres !< A density [kg m-3], that is used to calculate
+  real,                 intent(in)  :: rho_ref   !< A mean density [R ~> kg m-3] or [kg m-3], that
+                                                 !! is subtracted out to reduce the magnitude of
+                                                 !! each of the integrals.
+  real,                 intent(in)  :: rho_0_pres !< A density [R ~> kg m-3], used to calculate
                                                  !! the pressure (as p~=-z*rho_0_pres*G_e) used in
-                                                 !! the equation of state. rho_0_pres is not used
-                                                 !! here.
-  real,                 intent(in)  :: G_e       !< The Earth's gravitational acceleration [m2 Z-1 s-2 ~> m s-2].
-  real,                 intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
+                                                 !! the equation of state. rho_0_pres is not used.
+  real,                 intent(in)  :: G_e       !< The Earth's gravitational acceleration
+                                                 !! [L2 Z-1 T-2 ~> m s-2] or [m2 Z-1 s-2 ~> m s-2].
+  real,                 intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0 [R ~> kg m-3] or [kg m-3].
   real,                 intent(in)  :: dRho_dT   !< The derivative of density with temperature,
-                                                 !! [kg m-3 degC-1].
+                                                 !! [R degC-1 ~> kg m-3 degC-1] or [kg m-3 degC-1].
   real,                 intent(in)  :: dRho_dS   !< The derivative of density with salinity,
-                                                 !! in [kg m-3 ppt-1].
-  real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
+                                                 !! in [R ppt-1 ~> kg m-3 ppt-1] or [kg m-3 ppt-1].
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(out) :: dpa       !< The change in the pressure anomaly across the
-                                                 !! layer [Pa].
-  real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
+                                                 !! layer [R L2 T-2 ~> Pa] or [Pa].
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(out) :: intz_dpa  !< The integral through the thickness of the layer
                                                  !! of the pressure anomaly relative to the anomaly
-                                                 !! at the top of the layer [Pa Z].
-  real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed),  &
+                                                 !! at the top of the layer [R L2 Z T-2 ~> Pa Z] or [Pa Z].
+  real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed),  &
               optional, intent(out) :: intx_dpa  !< The integral in x of the difference between the
                                                  !! pressure anomaly at the top and bottom of the
-                                                 !! layer divided by the x grid spacing [Pa].
-  real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB),  &
+                                                 !! layer divided by the x grid spacing [R L2 T-2 ~> Pa] or [Pa].
+  real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB),  &
               optional, intent(out) :: inty_dpa  !< The integral in y of the difference between the
                                                  !! pressure anomaly at the top and bottom of the
-                                                 !! layer divided by the y grid spacing [Pa].
-  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+                                                 !! layer divided by the y grid spacing [R L2 T-2 ~> Pa] or [Pa].
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(in)  :: bathyT    !< The depth of the bathymetry [Z ~> m].
   real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m].
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
                                                  !! interpolate T/S for top and bottom integrals.
+
   ! Local variables
-  real :: rho_anom      ! The density anomaly from rho_ref [kg m-3].
-  real :: raL, raR      ! rho_anom to the left and right [kg m-3].
+  real :: rho_anom      ! The density anomaly from rho_ref [R ~> kg m-3].
+  real :: raL, raR      ! rho_anom to the left and right [R ~> kg m-3].
   real :: dz, dzL, dzR  ! Layer thicknesses [Z ~> m].
   real :: hWght      ! A pressure-thickness below topography [Z ~> m].
   real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Z ~> m].
@@ -384,20 +384,17 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
   real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
   real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
   real :: intz(5)    ! The integrals of density with height at the
-                     ! 5 sub-column locations [Pa].
+                     ! 5 sub-column locations [R L2 T-2 ~> Pa] or [Pa].
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   real, parameter :: C1_6 = 1.0/6.0, C1_90 = 1.0/90.0  ! Rational constants.
-  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j, ioff, joff, m
-
-  ioff = HIO%idg_offset - HII%idg_offset
-  joff = HIO%jdg_offset - HII%jdg_offset
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j, m
 
   ! These array bounds work for the indexing convention of the input arrays, but
   ! on the computational domain defined for the output arrays.
-  Isq = HIO%IscB + ioff ; Ieq = HIO%IecB + ioff
-  Jsq = HIO%JscB + joff ; Jeq = HIO%JecB + joff
-  is = HIO%isc + ioff ; ie = HIO%iec + ioff
-  js = HIO%jsc + joff ; je = HIO%jec + joff
+  Isq = HI%IscB ; Ieq = HI%IecB
+  Jsq = HI%JscB ; Jeq = HI%JecB
+  is = HI%isc ; ie = HI%iec
+  js = HI%jsc ; je = HI%jec
 
   do_massWeight = .false.
   if (present(useMassWghtInterp)) then ; if (useMassWghtInterp) then
@@ -411,8 +408,8 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
     dz = z_t(i,j) - z_b(i,j)
     rho_anom = (Rho_T0_S0 - rho_ref) + dRho_dT*T(i,j) + dRho_dS*S(i,j)
-    dpa(i-ioff,j-joff) = G_e*rho_anom*dz
-    if (present(intz_dpa)) intz_dpa(i-ioff,j-joff) = 0.5*G_e*rho_anom*dz**2
+    dpa(i,j) = G_e*rho_anom*dz
+    if (present(intz_dpa)) intz_dpa(i,j) = 0.5*G_e*rho_anom*dz**2
   enddo ; enddo
 
   if (present(intx_dpa)) then ; do j=js,je ; do I=Isq,Ieq
@@ -428,7 +425,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
       raL = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i,j) + dRho_dS*S(i,j))
       raR = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i+1,j) + dRho_dS*S(i+1,j))
 
-      intx_dpa(i-ioff,j-joff) = G_e*C1_6 * (dzL*(2.0*raL + raR) + dzR*(2.0*raR + raL))
+      intx_dpa(i,j) = G_e*C1_6 * (dzL*(2.0*raL + raR) + dzR*(2.0*raR + raL))
     else
       hL = (z_t(i,j) - z_b(i,j)) + dz_neglect
       hR = (z_t(i+1,j) - z_b(i+1,j)) + dz_neglect
@@ -437,7 +434,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
       hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
       hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
 
-      intz(1) = dpa(i-ioff,j-joff) ; intz(5) = dpa(i+1-ioff,j-joff)
+      intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
       do m=2,4
         wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
         wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
@@ -449,7 +446,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
         intz(m) = G_e*rho_anom*dz
       enddo
       ! Use Bode's rule to integrate the values.
-      intx_dpa(i-ioff,j-joff) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
+      intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
                              12.0*intz(3))
     endif
   enddo ; enddo ; endif
@@ -467,7 +464,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
       raL = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i,j) + dRho_dS*S(i,j))
       raR = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i,j+1) + dRho_dS*S(i,j+1))
 
-      inty_dpa(i-ioff,j-joff) = G_e*C1_6 * (dzL*(2.0*raL + raR) + dzR*(2.0*raR + raL))
+      inty_dpa(i,j) = G_e*C1_6 * (dzL*(2.0*raL + raR) + dzR*(2.0*raR + raL))
     else
       hL = (z_t(i,j) - z_b(i,j)) + dz_neglect
       hR = (z_t(i,j+1) - z_b(i,j+1)) + dz_neglect
@@ -476,7 +473,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
       hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
       hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
 
-      intz(1) = dpa(i-ioff,j-joff) ; intz(5) = dpa(i+1-ioff,j-joff)
+      intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
       do m=2,4
         wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
         wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
@@ -488,7 +485,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
         intz(m) = G_e*rho_anom*dz
       enddo
       ! Use Bode's rule to integrate the values.
-      inty_dpa(i-ioff,j-joff) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
+      inty_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
                              12.0*intz(3))
     endif
 
@@ -509,56 +506,56 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  &
                         intent(in)  :: S         !< Salinity [PSU].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  &
-                        intent(in)  :: p_t       !< Pressure at the top of the layer [Pa].
+                        intent(in)  :: p_t       !< Pressure at the top of the layer [R L2 T-2 ~> Pa] or [Pa].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  &
-                        intent(in)  :: p_b       !< Pressure at the top of the layer [Pa].
-  real,                 intent(in)  :: alpha_ref !< A mean specific volume that is subtracted out
-          !! to reduce the magnitude of each of the integrals, m3 kg-1. The calculation is
-          !! mathematically identical with different values of alpha_ref, but this reduces the
-          !! effects of roundoff.
-  real,                 intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
+                        intent(in)  :: p_b       !< Pressure at the top of the layer [R L2 T-2 ~> Pa] or [Pa].
+  real,                 intent(in)  :: alpha_ref   !< A mean specific volume that is subtracted out
+                            !! to reduce the magnitude of each of the integrals [R-1 ~> m3 kg-1].
+                            !! The calculation is mathematically identical with different values of
+                            !! alpha_ref, but this reduces the effects of roundoff.
+  real,                 intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0 [R ~> kg m-3] or [kg m-3].
   real,                 intent(in)  :: dRho_dT   !< The derivative of density with temperature
-                                                 !! [kg m-3 degC-1].
+                                                 !! [R degC-1 ~> kg m-3 degC-1] or [kg m-3 degC-1].
   real,                 intent(in)  :: dRho_dS   !< The derivative of density with salinity,
-                                                 !! in [kg m-3 ppt-1].
+                                                 !! in [R ppt-1 ~> kg m-3 ppt-1] or [kg m-3 ppt-1].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(out) :: dza       !< The change in the geopotential anomaly across
-                                                 !! the layer [m2 s-2].
+                                                 !! the layer [L2 T-2 ~> m2 s-2] or [m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(out) :: intp_dza  !< The integral in pressure through the layer of
-                                                 !! the geopotential anomaly relative to the anomaly
-                                                 !! at the bottom of the layer [Pa m2 s-2].
+              optional, intent(out) :: intp_dza  !< The integral in pressure through the layer of the
+                                                 !! geopotential anomaly relative to the anomaly at the
+                                                 !! bottom of the layer [R L4 T-4 ~> Pa m2 s-2] or [Pa m2 s-2].
   real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
               optional, intent(out) :: intx_dza  !< The integral in x of the difference between the
                                                  !! geopotential anomaly at the top and bottom of
                                                  !! the layer divided by the x grid spacing
-                                                 !! [m2 s-2].
+                                                 !! [L2 T-2 ~> m2 s-2] or [m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
               optional, intent(out) :: inty_dza  !< The integral in y of the difference between the
                                                  !! geopotential anomaly at the top and bottom of
                                                  !! the layer divided by the y grid spacing
-                                                 !! [m2 s-2].
+                                                 !! [L2 T-2 ~> m2 s-2] or [m2 s-2].
   integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate dza.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(in)  :: bathyP    !< The pressure at the bathymetry [Pa]
+              optional, intent(in)  :: bathyP    !< The pressure at the bathymetry [R L2 T-2 ~> Pa] or [Pa]
   real,       optional, intent(in)  :: dP_neglect !< A miniscule pressure change with
-                                                 !! the same units as p_t [Pa]
+                                                 !! the same units as p_t [R L2 T-2 ~> Pa] or [Pa]
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
                             !! to interpolate T/S for top and bottom integrals.
   ! Local variables
-  real :: dRho_TS       ! The density anomaly due to T and S [kg m-3].
-  real :: alpha_anom    ! The specific volume anomaly from 1/rho_ref [m3 kg-1].
-  real :: aaL, aaR      ! rho_anom to the left and right [kg m-3].
-  real :: dp, dpL, dpR  ! Layer pressure thicknesses [Pa].
-  real :: hWght      ! A pressure-thickness below topography [Pa].
-  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Pa].
-  real :: iDenom     ! The inverse of the denominator in the weights [Pa-2].
+  real :: dRho_TS       ! The density anomaly due to T and S [R ~> kg m-3] or [kg m-3].
+  real :: alpha_anom    ! The specific volume anomaly from 1/rho_ref [R-1 ~> m3 kg-1] or [m3 kg-1].
+  real :: aaL, aaR      ! The specific volume anomaly to the left and right [R-1 ~> m3 kg-1] or [m3 kg-1].
+  real :: dp, dpL, dpR  ! Layer pressure thicknesses [R L2 T-2 ~> Pa] or [Pa].
+  real :: hWght      ! A pressure-thickness below topography [R L2 T-2 ~> Pa] or [Pa].
+  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [R L2 T-2 ~> Pa] or [Pa].
+  real :: iDenom     ! The inverse of the denominator in the weights [T4 R-2 L-2 ~> Pa-2] or [Pa-2].
   real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim].
   real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim].
   real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
   real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
   real :: intp(5)    ! The integrals of specific volume with pressure at the
-                     ! 5 sub-column locations [m2 s-2].
+                     ! 5 sub-column locations [L2 T-2 ~> m2 s-2] or [m2 s-2].
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   real, parameter :: C1_6 = 1.0/6.0, C1_90 = 1.0/90.0  ! Rational constants.
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, halo
