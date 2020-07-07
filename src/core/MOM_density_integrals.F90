@@ -295,22 +295,23 @@ end subroutine int_density_dz_generic_pcm
 
 !> Compute pressure gradient force integrals by quadrature for the case where
 !! T and S are linear profiles.
-subroutine int_density_dz_generic_plm(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
-                                      rho_0, G_e, dz_subroundoff, bathyT, HI, EOS, US, dpa, &
+subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
+                                      rho_0, G_e, dz_subroundoff, bathyT, HI, GV, EOS, US, dpa, &
                                       intz_dpa, intx_dpa, inty_dpa, useMassWghtInterp)
+  integer,              intent(in)  :: k   !< Layer index to calculate integrals for
   type(hor_index_type), intent(in)  :: HI  !< Ocean horizontal index structures for the input arrays
-  real, dimension(SZI_(HI),SZJ_(HI)), &
+  type(verticalGrid_type), intent(in) :: GV !< Vertical grid structure
+  type(thermo_var_ptrs), intent(in) :: tv  !< Thermodynamic variables
+  real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)), &
                         intent(in)  :: T_t !< Potential temperature at the cell top [degC]
-  real, dimension(SZI_(HI),SZJ_(HI)), &
+  real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)), &
                         intent(in)  :: T_b !< Potential temperature at the cell bottom [degC]
-  real, dimension(SZI_(HI),SZJ_(HI)), &
+  real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)), &
                         intent(in)  :: S_t !< Salinity at the cell top [ppt]
-  real, dimension(SZI_(HI),SZJ_(HI)), &
+  real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)), &
                         intent(in)  :: S_b !< Salinity at the cell bottom [ppt]
-  real, dimension(SZI_(HI),SZJ_(HI)), &
-                        intent(in)  :: z_t !< The geometric height at the top of the layer [Z ~> m]
-  real, dimension(SZI_(HI),SZJ_(HI)), &
-                        intent(in)  :: z_b !< The geometric height at the bottom of the layer [Z ~> m]
+  real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)+1), &
+                        intent(in)  :: e   !< Height of interfaces [Z ~> m]
   real,                 intent(in)  :: rho_ref !< A mean density [R ~> kg m-3] or [kg m-3], that is subtracted
                                            !! out to reduce the magnitude of each of the integrals.
   real,                 intent(in)  :: rho_0 !< A density [R ~> kg m-3] or [kg m-3], that is used to calculate
@@ -402,12 +403,12 @@ subroutine int_density_dz_generic_plm(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   ! 1. Compute vertical integrals
   do j=Jsq,Jeq+1
     do i = Isq,Ieq+1
-      dz(i) = z_t(i,j) - z_b(i,j)
+      dz(i) = e(i,j,K) - e(i,j,K+1)
       do n=1,5
-        p5(i*5+n) = -GxRho*(z_t(i,j) - 0.25*real(n-1)*dz(i))
+        p5(i*5+n) = -GxRho*(e(i,j,K) - 0.25*real(n-1)*dz(i))
         ! Salinity and temperature points are linearly interpolated
-        S5(i*5+n) = wt_t(n) * S_t(i,j) + wt_b(n) * S_b(i,j)
-        T5(i*5+n) = wt_t(n) * T_t(i,j) + wt_b(n) * T_b(i,j)
+        S5(i*5+n) = wt_t(n) * S_t(i,j,k) + wt_b(n) * S_b(i,j,k)
+        T5(i*5+n) = wt_t(n) * T_t(i,j,k) + wt_b(n) * T_b(i,j,k)
       enddo
     enddo
     if (rho_scale /= 1.0) then
@@ -440,28 +441,28 @@ subroutine int_density_dz_generic_plm(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
       ! Note: To work in terrain following coordinates we could offset
       ! this distance by the layer thickness to replicate other models.
       hWght = massWeightToggle * &
-              max(0., -bathyT(i,j)-z_t(i+1,j), -bathyT(i+1,j)-z_t(i,j))
+              max(0., -bathyT(i,j)-e(i+1,j,K), -bathyT(i+1,j)-e(i,j,K))
       if (hWght > 0.) then
-        hL = (z_t(i,j) - z_b(i,j)) + dz_subroundoff
-        hR = (z_t(i+1,j) - z_b(i+1,j)) + dz_subroundoff
+        hL = (e(i,j,K) - e(i,j,K+1)) + dz_subroundoff
+        hR = (e(i+1,j,K) - e(i+1,j,K+1)) + dz_subroundoff
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
         iDenom = 1./( hWght*(hR + hL) + hL*hR )
-        Ttl = ( (hWght*hR)*T_t(i+1,j) + (hWght*hL + hR*hL)*T_t(i,j) ) * iDenom
-        Ttr = ( (hWght*hL)*T_t(i,j) + (hWght*hR + hR*hL)*T_t(i+1,j) ) * iDenom
-        Tbl = ( (hWght*hR)*T_b(i+1,j) + (hWght*hL + hR*hL)*T_b(i,j) ) * iDenom
-        Tbr = ( (hWght*hL)*T_b(i,j) + (hWght*hR + hR*hL)*T_b(i+1,j) ) * iDenom
-        Stl = ( (hWght*hR)*S_t(i+1,j) + (hWght*hL + hR*hL)*S_t(i,j) ) * iDenom
-        Str = ( (hWght*hL)*S_t(i,j) + (hWght*hR + hR*hL)*S_t(i+1,j) ) * iDenom
-        Sbl = ( (hWght*hR)*S_b(i+1,j) + (hWght*hL + hR*hL)*S_b(i,j) ) * iDenom
-        Sbr = ( (hWght*hL)*S_b(i,j) + (hWght*hR + hR*hL)*S_b(i+1,j) ) * iDenom
+        Ttl = ( (hWght*hR)*T_t(i+1,j,k) + (hWght*hL + hR*hL)*T_t(i,j,k) ) * iDenom
+        Ttr = ( (hWght*hL)*T_t(i,j,k) + (hWght*hR + hR*hL)*T_t(i+1,j,k) ) * iDenom
+        Tbl = ( (hWght*hR)*T_b(i+1,j,k) + (hWght*hL + hR*hL)*T_b(i,j,k) ) * iDenom
+        Tbr = ( (hWght*hL)*T_b(i,j,k) + (hWght*hR + hR*hL)*T_b(i+1,j,k) ) * iDenom
+        Stl = ( (hWght*hR)*S_t(i+1,j,k) + (hWght*hL + hR*hL)*S_t(i,j,k) ) * iDenom
+        Str = ( (hWght*hL)*S_t(i,j,k) + (hWght*hR + hR*hL)*S_t(i+1,j,k) ) * iDenom
+        Sbl = ( (hWght*hR)*S_b(i+1,j,k) + (hWght*hL + hR*hL)*S_b(i,j,k) ) * iDenom
+        Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + hR*hL)*S_b(i+1,j,k) ) * iDenom
       else
-        Ttl = T_t(i,j); Tbl = T_b(i,j); Ttr = T_t(i+1,j); Tbr = T_b(i+1,j)
-        Stl = S_t(i,j); Sbl = S_b(i,j); Str = S_t(i+1,j); Sbr = S_b(i+1,j)
+        Ttl = T_t(i,j,k); Tbl = T_b(i,j,k); Ttr = T_t(i+1,j,k); Tbr = T_b(i+1,j,k)
+        Stl = S_t(i,j,k); Sbl = S_b(i,j,k); Str = S_t(i+1,j,k); Sbr = S_b(i+1,j,k)
       endif
 
       do m=2,4
         w_left = wt_t(m) ; w_right = wt_b(m)
-        dz_x(m,i) = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i+1,j) - z_b(i+1,j))
+        dz_x(m,i) = w_left*(e(i,j,K) - e(i,j,K+1)) + w_right*(e(i+1,j,K) - e(i+1,j,K+1))
 
         ! Salinity and temperature points are linearly interpolated in
         ! the horizontal. The subscript (1) refers to the top value in
@@ -474,7 +475,7 @@ subroutine int_density_dz_generic_plm(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
         S15(pos+1) = w_left*Stl + w_right*Str
         S15(pos+5) = w_left*Sbl + w_right*Sbr
 
-        p15(pos+1) = -GxRho*(w_left*z_t(i,j) + w_right*z_t(i+1,j))
+        p15(pos+1) = -GxRho*(w_left*e(i,j,K) + w_right*e(i+1,j,K))
 
         ! Pressure
         do n=2,5
@@ -521,28 +522,28 @@ subroutine int_density_dz_generic_plm(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
     ! Note: To work in terrain following coordinates we could offset
     ! this distance by the layer thickness to replicate other models.
       hWght = massWeightToggle * &
-              max(0., -bathyT(i,j)-z_t(i,j+1), -bathyT(i,j+1)-z_t(i,j))
+              max(0., -bathyT(i,j)-e(i,j+1,K), -bathyT(i,j+1)-e(i,j,K))
       if (hWght > 0.) then
-        hL = (z_t(i,j) - z_b(i,j)) + dz_subroundoff
-        hR = (z_t(i,j+1) - z_b(i,j+1)) + dz_subroundoff
+        hL = (e(i,j,K) - e(i,j,K+1)) + dz_subroundoff
+        hR = (e(i,j+1,K) - e(i,j+1,K+1)) + dz_subroundoff
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
         iDenom = 1./( hWght*(hR + hL) + hL*hR )
-        Ttl = ( (hWght*hR)*T_t(i,j+1) + (hWght*hL + hR*hL)*T_t(i,j) ) * iDenom
-        Ttr = ( (hWght*hL)*T_t(i,j) + (hWght*hR + hR*hL)*T_t(i,j+1) ) * iDenom
-        Tbl = ( (hWght*hR)*T_b(i,j+1) + (hWght*hL + hR*hL)*T_b(i,j) ) * iDenom
-        Tbr = ( (hWght*hL)*T_b(i,j) + (hWght*hR + hR*hL)*T_b(i,j+1) ) * iDenom
-        Stl = ( (hWght*hR)*S_t(i,j+1) + (hWght*hL + hR*hL)*S_t(i,j) ) * iDenom
-        Str = ( (hWght*hL)*S_t(i,j) + (hWght*hR + hR*hL)*S_t(i,j+1) ) * iDenom
-        Sbl = ( (hWght*hR)*S_b(i,j+1) + (hWght*hL + hR*hL)*S_b(i,j) ) * iDenom
-        Sbr = ( (hWght*hL)*S_b(i,j) + (hWght*hR + hR*hL)*S_b(i,j+1) ) * iDenom
+        Ttl = ( (hWght*hR)*T_t(i,j+1,k) + (hWght*hL + hR*hL)*T_t(i,j,k) ) * iDenom
+        Ttr = ( (hWght*hL)*T_t(i,j,k) + (hWght*hR + hR*hL)*T_t(i,j+1,k) ) * iDenom
+        Tbl = ( (hWght*hR)*T_b(i,j+1,k) + (hWght*hL + hR*hL)*T_b(i,j,k) ) * iDenom
+        Tbr = ( (hWght*hL)*T_b(i,j,k) + (hWght*hR + hR*hL)*T_b(i,j+1,k) ) * iDenom
+        Stl = ( (hWght*hR)*S_t(i,j+1,k) + (hWght*hL + hR*hL)*S_t(i,j,k) ) * iDenom
+        Str = ( (hWght*hL)*S_t(i,j,k) + (hWght*hR + hR*hL)*S_t(i,j+1,k) ) * iDenom
+        Sbl = ( (hWght*hR)*S_b(i,j+1,k) + (hWght*hL + hR*hL)*S_b(i,j,k) ) * iDenom
+        Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + hR*hL)*S_b(i,j+1,k) ) * iDenom
       else
-        Ttl = T_t(i,j); Tbl = T_b(i,j); Ttr = T_t(i,j+1); Tbr = T_b(i,j+1)
-        Stl = S_t(i,j); Sbl = S_b(i,j); Str = S_t(i,j+1); Sbr = S_b(i,j+1)
+        Ttl = T_t(i,j,k); Tbl = T_b(i,j,k); Ttr = T_t(i,j+1,k); Tbr = T_b(i,j+1,k)
+        Stl = S_t(i,j,k); Sbl = S_b(i,j,k); Str = S_t(i,j+1,k); Sbr = S_b(i,j+1,k)
       endif
 
       do m=2,4
         w_left = wt_t(m) ; w_right = wt_b(m)
-        dz_y(m,i) = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i,j+1) - z_b(i,j+1))
+        dz_y(m,i) = w_left*(e(i,j,K) - e(i,j,K+1)) + w_right*(e(i,j+1,K) - e(i,j+1,K+1))
 
         ! Salinity and temperature points are linearly interpolated in
         ! the horizontal. The subscript (1) refers to the top value in
@@ -555,10 +556,12 @@ subroutine int_density_dz_generic_plm(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
         S15(pos+1) = w_left*Stl + w_right*Str
         S15(pos+5) = w_left*Sbl + w_right*Sbr
 
-        p15(pos+1) = -GxRho*(w_left*z_t(i,j) + w_right*z_t(i,j+1))
+        p15(pos+1) = -GxRho*(w_left*e(i,j,K) + w_right*e(i,j+1,K))
 
         ! Pressure
-        do n=2,5 ; p15(pos+n) = p15(pos+n-1) + GxRho*0.25*dz_y(m,i) ; enddo
+        do n=2,5
+          p15(pos+n) = p15(pos+n-1) + GxRho*0.25*dz_y(m,i)
+        enddo
 
         ! Salinity and temperature (linear interpolation in the vertical)
         do n=2,4
@@ -576,6 +579,7 @@ subroutine int_density_dz_generic_plm(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
       call calculate_density(T15(15*HI%isc+1:), S15(15*HI%isc+1:), p15(15*HI%isc+1:), &
                              r15(15*HI%isc+1:), 1, 15*(HI%iec-HI%isc+1), EOS, rho_ref=rho_ref_mks)
     endif
+
     do i=HI%isc,HI%iec
       intz(1) = dpa(i,j) ; intz(5) = dpa(i,j+1)
 

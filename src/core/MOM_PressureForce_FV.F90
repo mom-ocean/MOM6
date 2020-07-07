@@ -657,12 +657,12 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
       ! where the layers are located.
       if ( use_ALE ) then
         if ( CS%Recon_Scheme == 1 ) then
-          call int_density_dz_generic_plm( T_t(:,:,k), T_b(:,:,k), S_t(:,:,k), S_b(:,:,k),&
-                    e(:,:,K), e(:,:,K+1), rho_ref, CS%Rho0, GV%g_Earth, dz_neglect, G%bathyT, &
-                    G%HI, tv%eqn_of_state, US, dpa, intz_dpa, intx_dpa, inty_dpa, &
+          call int_density_dz_generic_plm(k, tv,  T_t, T_b, S_t, S_b, e, &
+                    rho_ref, CS%Rho0, GV%g_Earth, dz_neglect, G%bathyT, &
+                    G%HI, GV, tv%eqn_of_state, US, dpa, intz_dpa, intx_dpa, inty_dpa, &
                     useMassWghtInterp=CS%useMassWghtInterp)
         elseif ( CS%Recon_Scheme == 2 ) then
-          call int_density_dz_generic_ppm( k, tv, T_t, T_b, S_t, S_b, e, &
+          call int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
                     rho_ref, CS%Rho0, GV%g_Earth, dz_neglect, G%bathyT, &
                     G%HI, GV, tv%eqn_of_state, US, dpa, intz_dpa, intx_dpa, inty_dpa, &
                     useMassWghtInterp=CS%useMassWghtInterp)
