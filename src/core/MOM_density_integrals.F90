@@ -353,12 +353,18 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
   ! Local variables
   real :: T5((5*HI%iscB+1):(5*(HI%iecB+2)))  ! Temperatures along a line of subgrid locations [degC]
   real :: S5((5*HI%iscB+1):(5*(HI%iecB+2)))  ! Salinities along a line of subgrid locations [ppt]
+  real :: T25((5*HI%iscB+1):(5*(HI%iecB+2))) ! SGS temperature variance along a line of subgrid locations [degC2]
+  real :: TS5((5*HI%iscB+1):(5*(HI%iecB+2))) ! SGS temp-salt covariance along a line of subgrid locations [degC ppt]
+  real :: S25((5*HI%iscB+1):(5*(HI%iecB+2))) ! SGS salinity variance along a line of subgrid locations [ppt2]
   real :: p5((5*HI%iscB+1):(5*(HI%iecB+2)))  ! Pressures along a line of subgrid locations, never
                                                ! rescaled from Pa [Pa]
   real :: r5((5*HI%iscB+1):(5*(HI%iecB+2)))  ! Densities anomalies along a line of subgrid
                                                ! locations [R ~> kg m-3] or [kg m-3]
   real :: T15((15*HI%iscB+1):(15*(HI%iecB+1))) ! Temperatures at an array of subgrid locations [degC]
   real :: S15((15*HI%iscB+1):(15*(HI%iecB+1))) ! Salinities at an array of subgrid locations [ppt]
+  real :: T215((15*HI%iscB+1):(15*(HI%iecB+1))) ! SGS temperature variance along a line of subgrid locations [degC2]
+  real :: TS15((15*HI%iscB+1):(15*(HI%iecB+1))) ! SGS temp-salt covariance along a line of subgrid locations [degC ppt]
+  real :: S215((15*HI%iscB+1):(15*(HI%iecB+1))) ! SGS salinity variance along a line of subgrid locations [ppt2]
   real :: p15((15*HI%iscB+1):(15*(HI%iecB+1))) ! Pressures at an array of subgrid locations [Pa]
   real :: r15((15*HI%iscB+1):(15*(HI%iecB+1))) ! Densities at an array of subgrid locations
                                                  ! [R ~> kg m-3] or [kg m-3]
@@ -381,6 +387,8 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
   real :: hWght                     ! A topographically limited thicknes weight [Z ~> m]
   real :: hL, hR                    ! Thicknesses to the left and right [Z ~> m]
   real :: iDenom                    ! The denominator of the thickness weight expressions [Z-2 ~> m-2]
+  logical :: use_stanley_eos ! True is SGS variance fields exist in tv.
+  logical :: use_varT, use_varS, use_covarTS
   integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n
   integer :: pos
 
@@ -394,6 +402,17 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
   if (present(useMassWghtInterp)) then
     if (useMassWghtInterp) massWeightToggle = 1.
   endif
+
+  use_varT = associated(tv%varT)
+  use_covarTS = associated(tv%covarTS)
+  use_varS = associated(tv%varS)
+  use_stanley_eos = use_varT .or. use_covarTS .or. use_varS
+  T25(:) = 0.
+  TS5(:) = 0.
+  S25(:) = 0.
+  T215(:) = 0.
+  TS15(:) = 0.
+  S215(:) = 0.
 
   do n = 1, 5
     wt_t(n) = 0.25 * real(5-n)
@@ -410,11 +429,25 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
         S5(i*5+n) = wt_t(n) * S_t(i,j,k) + wt_b(n) * S_b(i,j,k)
         T5(i*5+n) = wt_t(n) * T_t(i,j,k) + wt_b(n) * T_b(i,j,k)
       enddo
+      if (use_varT) T25(i*5+1:i*5+5) = tv%varT(i,j,k)
+      if (use_covarTS) TS5(i*5+1:i*5+5) = tv%covarTS(i,j,k)
+      if (use_varS) S25(i*5+1:i*5+5) = tv%varS(i,j,k)
     enddo
-    if (rho_scale /= 1.0) then
-      call calculate_density(T5, S5, p5, r5, 1, (ieq-isq+2)*5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
+    if (use_Stanley_eos) then
+      if (rho_scale /= 1.0) then
+        call calculate_density(T5, S5, p5, T25, TS5, S25, r5, 1, (ieq-isq+2)*5, EOS, &
+                               rho_ref=rho_ref_mks, scale=rho_scale)
+      else
+        call calculate_density(T5, S5, p5, T25, TS5, S25, r5, 1, (ieq-isq+2)*5, EOS, &
+                               rho_ref=rho_ref_mks)
+      endif
     else
-      call calculate_density(T5, S5, p5, r5, 1, (ieq-isq+2)*5, EOS, rho_ref=rho_ref_mks)
+      if (rho_scale /= 1.0) then
+        call calculate_density(T5, S5, p5, r5, 1, (ieq-isq+2)*5, EOS, rho_ref=rho_ref_mks, &
+                               scale=rho_scale)
+      else
+        call calculate_density(T5, S5, p5, r5, 1, (ieq-isq+2)*5, EOS, rho_ref=rho_ref_mks)
+      endif
     endif
 
     do i=Isq,Ieq+1
@@ -487,13 +520,27 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
           S15(pos+n) = wt_t(n) * S15(pos+1) + wt_b(n) * S15(pos+5)
           T15(pos+n) = wt_t(n) * T15(pos+1) + wt_b(n) * T15(pos+5)
         enddo
+        if (use_varT) T215(pos+1:pos+5) = w_left*tv%varT(i,j,k) + w_right*tv%varT(i+1,j,k)
+        if (use_covarTS) TS15(pos+1:pos+5) = w_left*tv%covarTS(i,j,k) + w_right*tv%covarTS(i+1,j,k)
+        if (use_varS) S215(pos+1:pos+5) = w_left*tv%varS(i,j,k) + w_right*tv%varS(i+1,j,k)
       enddo
     enddo
 
-    if (rho_scale /= 1.0) then
-      call calculate_density(T15, S15, p15, r15, 1, 15*(ieq-isq+1), EOS, rho_ref=rho_ref_mks, scale=rho_scale)
+    if (use_stanley_eos) then
+      if (rho_scale /= 1.0) then
+        call calculate_density(T15, S15, p15, T215, TS15, S215, r15, 1, 15*(ieq-isq+1), EOS, &
+                               rho_ref=rho_ref_mks, scale=rho_scale)
+      else
+        call calculate_density(T15, S15, p15, T215, TS15, S215, r15, 1, 15*(ieq-isq+1), EOS, &
+                               rho_ref=rho_ref_mks)
+      endif
     else
-      call calculate_density(T15, S15, p15, r15, 1, 15*(ieq-isq+1), EOS, rho_ref=rho_ref_mks)
+      if (rho_scale /= 1.0) then
+        call calculate_density(T15, S15, p15, r15, 1, 15*(ieq-isq+1), EOS, rho_ref=rho_ref_mks, &
+                               scale=rho_scale)
+      else
+        call calculate_density(T15, S15, p15, r15, 1, 15*(ieq-isq+1), EOS, rho_ref=rho_ref_mks)
+      endif
     endif
 
     do I=Isq,Ieq
@@ -568,16 +615,32 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
           S15(pos+n) = wt_t(n) * S15(pos+1) + wt_b(n) * S15(pos+5)
           T15(pos+n) = wt_t(n) * T15(pos+1) + wt_b(n) * T15(pos+5)
         enddo
+        if (use_varT) T215(pos+1:pos+5) = w_left*tv%varT(i,j,k) + w_right*tv%varT(i,j+1,k)
+        if (use_covarTS) TS15(pos+1:pos+5) = w_left*tv%covarTS(i,j,k) + w_right*tv%covarTS(i,j+1,k)
+        if (use_varS) S215(pos+1:pos+5) = w_left*tv%varS(i,j,k) + w_right*tv%varS(i,j+1,k)
       enddo
     enddo
 
-    if (rho_scale /= 1.0) then
-      call calculate_density(T15(15*HI%isc+1:), S15(15*HI%isc+1:), p15(15*HI%isc+1:), &
-                             r15(15*HI%isc+1:), 1, 15*(HI%iec-HI%isc+1), EOS, &
-                             rho_ref=rho_ref_mks, scale=rho_scale)
+    if (use_stanley_eos) then
+      if (rho_scale /= 1.0) then
+        call calculate_density(T15(15*HI%isc+1:), S15(15*HI%isc+1:), p15(15*HI%isc+1:), &
+                               T215(15*HI%isc+1:), TS15(15*HI%isc+1:), S215(15*HI%isc+1:), &
+                               r15(15*HI%isc+1:), 1, 15*(HI%iec-HI%isc+1), EOS, &
+                               rho_ref=rho_ref_mks, scale=rho_scale)
+      else
+        call calculate_density(T15(15*HI%isc+1:), S15(15*HI%isc+1:), p15(15*HI%isc+1:), &
+                               T215(15*HI%isc+1:), TS15(15*HI%isc+1:), S215(15*HI%isc+1:), &
+                               r15(15*HI%isc+1:), 1, 15*(HI%iec-HI%isc+1), EOS, rho_ref=rho_ref_mks)
+      endif
     else
-      call calculate_density(T15(15*HI%isc+1:), S15(15*HI%isc+1:), p15(15*HI%isc+1:), &
-                             r15(15*HI%isc+1:), 1, 15*(HI%iec-HI%isc+1), EOS, rho_ref=rho_ref_mks)
+      if (rho_scale /= 1.0) then
+        call calculate_density(T15(15*HI%isc+1:), S15(15*HI%isc+1:), p15(15*HI%isc+1:), &
+                               r15(15*HI%isc+1:), 1, 15*(HI%iec-HI%isc+1), EOS, &
+                               rho_ref=rho_ref_mks, scale=rho_scale)
+      else
+        call calculate_density(T15(15*HI%isc+1:), S15(15*HI%isc+1:), p15(15*HI%isc+1:), &
+                               r15(15*HI%isc+1:), 1, 15*(HI%iec-HI%isc+1), EOS, rho_ref=rho_ref_mks)
+      endif
     endif
 
     do i=HI%isc,HI%iec
