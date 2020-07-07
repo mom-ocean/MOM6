@@ -10,7 +10,6 @@ use MOM_EOS,              only : analytic_int_specific_vol_dp
 use MOM_EOS,              only : calculate_density
 use MOM_EOS,              only : calculate_spec_vol
 use MOM_EOS,              only : calculate_specific_vol_derivs
-use MOM_EOS,              only : calculate_density_second_derivs
 use MOM_error_handler,    only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_file_parser,      only : get_param, log_version, param_file_type
 use MOM_hor_index,        only : hor_index_type

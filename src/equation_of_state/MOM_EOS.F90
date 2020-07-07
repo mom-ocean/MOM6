@@ -291,7 +291,7 @@ subroutine calculate_stanley_density_array(T, S, pressure, Tvar, TScov, Svar, rh
   real, dimension(:), intent(in)    :: Tvar     !< Variance of potential temperature referenced to the surface [degC2]
   real, dimension(:), intent(in)    :: TScov    !< Covariance of potential temperature and salinity [degC ppt]
   real, dimension(:), intent(in)    :: Svar     !< Variance of salinity [ppt2]
-  real, dimension(:), intent(inout) :: rho      !< Density (in-situ if pressure is local) [kg m-3] or [R ~> kg m-3]
+  real, dimension(:), intent(inout) :: rho      !< Density (in-situ if pressure is local) [kg m-3]
   integer,            intent(in)    :: start    !< Start index for computation
   integer,            intent(in)    :: npts     !< Number of point to compute
   type(EOS_type),     pointer       :: EOS      !< Equation of state structure
@@ -305,15 +305,28 @@ subroutine calculate_stanley_density_array(T, S, pressure, Tvar, TScov, Svar, rh
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_array called with an unassociated EOS_type EOS.")
 
-  ! Branching to the correct EOS happens within each of these calls
-  ! and will appropriately error if the second derivatives are not available.
-  call calculate_density_second_derivs_array(T, S, pressure, d2RdSS, d2RdST, d2RdTT, &
-                                             d2RdSp, d2RdTp, start, npts, EOS)
-  call calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_ref)
+  select case (EOS%form_of_EOS)
+    case (EOS_LINEAR)
+      call calculate_density_linear(T, S, pressure, rho, start, npts, &
+                                    EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, rho_ref)
+      call calculate_density_second_derivs_linear(T, S, pressure, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP, start, npts)
+    case (EOS_WRIGHT)
+      call calculate_density_wright(T, S, pressure, rho, start, npts, rho_ref)
+      call calculate_density_second_derivs_wright(T, S, pressure, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP, start, npts)
+    case (EOS_TEOS10)
+      call calculate_density_teos10(T, S, pressure, rho, start, npts, rho_ref)
+      call calculate_density_second_derivs_teos10(T, S, pressure, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP, start, npts)
+    case default
+      call MOM_error(FATAL, "calculate_stanley_density_array: EOS%form_of_EOS is not valid.")
+  end select
 
   ! Equation 25 of Stanley et al., 2020.
   do j=start,start+npts-1
-    rho(j) = rho(j) + ( 0.5 * d2RdTT(j) * Tvar(j) + ( d2RdST(j) * TScov(j) + 0.5 * d2RdSS(j) * Svar(j) ) )
+    rho(j) = rho(j) &
+             + ( 0.5 * d2RdTT(j) * Tvar(j) + ( d2RdST(j) * TScov(j) + 0.5 * d2RdSS(j) * Svar(j) ) )
   enddo
 
   if (present(scale)) then ; if (scale /= 1.0) then ; do j=start,start+npts-1
