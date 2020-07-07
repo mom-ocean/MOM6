@@ -1274,7 +1274,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  default=.false.)
 
 #ifndef NOT_SET_AFFINITY
-!$  call fms_affinity_init  
+!$  call fms_affinity_init
 !$OMP PARALLEL
 !$OMP master
 !$ ocean_nthreads = omp_get_num_threads()

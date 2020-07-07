@@ -252,13 +252,13 @@ program MOM_main
     endif
   endif
 
-!$  call fms_affinity_init  
+!$  call fms_affinity_init
 !$  call fms_affinity_set('OCEAN', use_hyper_thread, ocean_nthreads)
 !$  call omp_set_num_threads(ocean_nthreads)
 !$OMP PARALLEL
 !$  write(6,*) "ocean_solo OMPthreading ", fms_affinity_get(), omp_get_thread_num(), omp_get_num_threads()
 !$  call flush(6)
-!$OMP END PARALLEL 
+!$OMP END PARALLEL
 
   ! Read ocean_solo restart, which can override settings from the namelist.
   if (file_exists(trim(dirs%restart_input_dir)//'ocean_solo.res')) then
