@@ -85,7 +85,7 @@ end subroutine doc_param_none
 
 !> This subroutine handles parameter documentation for logicals.
 subroutine doc_param_logical(doc, varname, desc, units, val, default, &
-                             layoutParam, debuggingParam)
+                             layoutParam, debuggingParam, like_default)
   type(doc_type),    pointer    :: doc     !< A pointer to a structure that controls where the
                                            !! documentation occurs and its formatting
   character(len=*),  intent(in) :: varname !< The name of the parameter being documented
@@ -95,6 +95,8 @@ subroutine doc_param_logical(doc, varname, desc, units, val, default, &
   logical, optional, intent(in) :: default !< The default value of this parameter
   logical, optional, intent(in) :: layoutParam !< If present and true, this is a layout parameter.
   logical, optional, intent(in) :: debuggingParam !< If present and true, this is a debugging parameter.
+  logical, optional, intent(in) :: like_default !< If present and true, log this parameter as though
+                                           !! it has the default value, even if there is no default.
 ! This subroutine handles parameter documentation for logicals.
   character(len=mLen) :: mesg
   logical :: equalsDefault
@@ -110,6 +112,7 @@ subroutine doc_param_logical(doc, varname, desc, units, val, default, &
     endif
 
     equalsDefault = .false.
+    if (present(like_default)) equalsDefault = like_default
     if (present(default)) then
       if (val .eqv. default) equalsDefault = .true.
       if (default) then
@@ -127,7 +130,7 @@ end subroutine doc_param_logical
 
 !> This subroutine handles parameter documentation for arrays of logicals.
 subroutine doc_param_logical_array(doc, varname, desc, units, vals, default, &
-                                   layoutParam, debuggingParam)
+                                   layoutParam, debuggingParam, like_default)
   type(doc_type),    pointer    :: doc     !< A pointer to a structure that controls where the
                                            !! documentation occurs and its formatting
   character(len=*),  intent(in) :: varname !< The name of the parameter being documented
@@ -137,6 +140,8 @@ subroutine doc_param_logical_array(doc, varname, desc, units, vals, default, &
   logical, optional, intent(in) :: default !< The default value of this parameter
   logical, optional, intent(in) :: layoutParam !< If present and true, this is a layout parameter.
   logical, optional, intent(in) :: debuggingParam !< If present and true, this is a debugging parameter.
+  logical, optional, intent(in) :: like_default !< If present and true, log this parameter as though
+                                           !! it has the default value, even if there is no default.
 ! This subroutine handles parameter documentation for arrays of logicals.
   integer :: i
   character(len=mLen) :: mesg
@@ -158,7 +163,7 @@ subroutine doc_param_logical_array(doc, varname, desc, units, vals, default, &
 
     mesg = define_string(doc, varname, valstring, units)
 
-  equalsDefault = .false.
+    equalsDefault = .false.
     if (present(default)) then
       equalsDefault = .true.
       do i=1,size(vals) ; if (vals(i) .neqv. default) equalsDefault = .false. ; enddo
@@ -168,6 +173,7 @@ subroutine doc_param_logical_array(doc, varname, desc, units, vals, default, &
         mesg = trim(mesg)//" default = "//STRING_FALSE
       endif
     endif
+    if (present(like_default)) then ; if (like_default) equalsDefault = .true. ; endif
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
     call writeMessageAndDesc(doc, mesg, desc, equalsDefault, &
@@ -177,7 +183,7 @@ end subroutine doc_param_logical_array
 
 !> This subroutine handles parameter documentation for integers.
 subroutine doc_param_int(doc, varname, desc, units, val, default, &
-                         layoutParam, debuggingParam)
+                         layoutParam, debuggingParam, like_default)
   type(doc_type),    pointer    :: doc     !< A pointer to a structure that controls where the
                                            !! documentation occurs and its formatting
   character(len=*),  intent(in) :: varname !< The name of the parameter being documented
@@ -187,6 +193,8 @@ subroutine doc_param_int(doc, varname, desc, units, val, default, &
   integer, optional, intent(in) :: default !< The default value of this parameter
   logical, optional, intent(in) :: layoutParam !< If present and true, this is a layout parameter.
   logical, optional, intent(in) :: debuggingParam !< If present and true, this is a debugging parameter.
+  logical, optional, intent(in) :: like_default !< If present and true, log this parameter as though
+                                           !! it has the default value, even if there is no default.
 ! This subroutine handles parameter documentation for integers.
   character(len=mLen) :: mesg
   character(len=doc%commentColumn)  :: valstring
@@ -200,6 +208,7 @@ subroutine doc_param_int(doc, varname, desc, units, val, default, &
     mesg = define_string(doc, varname, valstring, units)
 
     equalsDefault = .false.
+    if (present(like_default)) equalsDefault = like_default
     if (present(default)) then
       if (val == default) equalsDefault = .true.
       mesg = trim(mesg)//" default = "//(trim(int_string(default)))
@@ -213,7 +222,7 @@ end subroutine doc_param_int
 
 !> This subroutine handles parameter documentation for arrays of integers.
 subroutine doc_param_int_array(doc, varname, desc, units, vals, default, &
-                               layoutParam, debuggingParam)
+                               layoutParam, debuggingParam, like_default)
   type(doc_type),    pointer    :: doc     !< A pointer to a structure that controls where the
                                            !! documentation occurs and its formatting
   character(len=*),  intent(in) :: varname !< The name of the parameter being documented
@@ -223,6 +232,8 @@ subroutine doc_param_int_array(doc, varname, desc, units, vals, default, &
   integer, optional, intent(in) :: default !< The default value of this parameter
   logical, optional, intent(in) :: layoutParam !< If present and true, this is a layout parameter.
   logical, optional, intent(in) :: debuggingParam !< If present and true, this is a debugging parameter.
+  logical, optional, intent(in) :: like_default !< If present and true, log this parameter as though
+                                           !! it has the default value, even if there is no default.
 ! This subroutine handles parameter documentation for arrays of integers.
   integer :: i
   character(len=mLen) :: mesg
@@ -246,6 +257,7 @@ subroutine doc_param_int_array(doc, varname, desc, units, vals, default, &
       do i=1,size(vals) ; if (vals(i) /= default) equalsDefault = .false. ; enddo
       mesg = trim(mesg)//" default = "//(trim(int_string(default)))
     endif
+    if (present(like_default)) then ; if (like_default) equalsDefault = .true. ; endif
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
     call writeMessageAndDesc(doc, mesg, desc, equalsDefault, &
@@ -255,7 +267,7 @@ subroutine doc_param_int_array(doc, varname, desc, units, vals, default, &
 end subroutine doc_param_int_array
 
 !> This subroutine handles parameter documentation for reals.
-subroutine doc_param_real(doc, varname, desc, units, val, default, debuggingParam)
+subroutine doc_param_real(doc, varname, desc, units, val, default, debuggingParam, like_default)
   type(doc_type),    pointer    :: doc     !< A pointer to a structure that controls where the
                                            !! documentation occurs and its formatting
   character(len=*),  intent(in) :: varname !< The name of the parameter being documented
@@ -264,6 +276,8 @@ subroutine doc_param_real(doc, varname, desc, units, val, default, debuggingPara
   real,              intent(in) :: val     !< The value of this parameter
   real,    optional, intent(in) :: default !< The default value of this parameter
   logical, optional, intent(in) :: debuggingParam !< If present and true, this is a debugging parameter.
+  logical, optional, intent(in) :: like_default !< If present and true, log this parameter as though
+                                           !! it has the default value, even if there is no default.
 ! This subroutine handles parameter documentation for reals.
   character(len=mLen) :: mesg
   character(len=doc%commentColumn)  :: valstring
@@ -277,6 +291,7 @@ subroutine doc_param_real(doc, varname, desc, units, val, default, debuggingPara
     mesg = define_string(doc, varname, valstring, units)
 
     equalsDefault = .false.
+    if (present(like_default)) equalsDefault = like_default
     if (present(default)) then
       if (val == default) equalsDefault = .true.
       mesg = trim(mesg)//" default = "//trim(real_string(default))
@@ -288,7 +303,7 @@ subroutine doc_param_real(doc, varname, desc, units, val, default, debuggingPara
 end subroutine doc_param_real
 
 !> This subroutine handles parameter documentation for arrays of reals.
-subroutine doc_param_real_array(doc, varname, desc, units, vals, default, debuggingParam)
+subroutine doc_param_real_array(doc, varname, desc, units, vals, default, debuggingParam, like_default)
   type(doc_type),    pointer    :: doc     !< A pointer to a structure that controls where the
                                            !! documentation occurs and its formatting
   character(len=*),  intent(in) :: varname !< The name of the parameter being documented
@@ -297,6 +312,8 @@ subroutine doc_param_real_array(doc, varname, desc, units, vals, default, debugg
   real,              intent(in) :: vals(:) !< The array of values to record
   real,    optional, intent(in) :: default !< The default value of this parameter
   logical, optional, intent(in) :: debuggingParam !< If present and true, this is a debugging parameter.
+  logical, optional, intent(in) :: like_default !< If present and true, log this parameter as though
+                                           !! it has the default value, even if there is no default.
 ! This subroutine handles parameter documentation for arrays of reals.
   integer :: i
   character(len=mLen) :: mesg
@@ -317,6 +334,7 @@ subroutine doc_param_real_array(doc, varname, desc, units, vals, default, debugg
       do i=1,size(vals) ; if (vals(i) /= default) equalsDefault = .false. ; enddo
       mesg = trim(mesg)//" default = "//trim(real_string(default))
     endif
+    if (present(like_default)) then ; if (like_default) equalsDefault = .true. ; endif
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
     call writeMessageAndDesc(doc, mesg, desc, equalsDefault, debuggingParam=debuggingParam)
@@ -326,7 +344,7 @@ end subroutine doc_param_real_array
 
 !> This subroutine handles parameter documentation for character strings.
 subroutine doc_param_char(doc, varname, desc, units, val, default, &
-                          layoutParam, debuggingParam)
+                          layoutParam, debuggingParam, like_default)
   type(doc_type),    pointer    :: doc     !< A pointer to a structure that controls where the
                                            !! documentation occurs and its formatting
   character(len=*),  intent(in) :: varname !< The name of the parameter being documented
@@ -337,6 +355,8 @@ subroutine doc_param_char(doc, varname, desc, units, val, default, &
            optional, intent(in) :: default !< The default value of this parameter
   logical, optional, intent(in) :: layoutParam !< If present and true, this is a layout parameter.
   logical, optional, intent(in) :: debuggingParam !< If present and true, this is a debugging parameter.
+  logical, optional, intent(in) :: like_default !< If present and true, log this parameter as though
+                                           !! it has the default value, even if there is no default.
 ! This subroutine handles parameter documentation for character strings.
   character(len=mLen) :: mesg
   logical :: equalsDefault
@@ -348,6 +368,7 @@ subroutine doc_param_char(doc, varname, desc, units, val, default, &
     mesg = define_string(doc, varname, '"'//trim(val)//'"', units)
 
     equalsDefault = .false.
+    if (present(like_default)) equalsDefault = like_default
     if (present(default)) then
       if (trim(val) == trim(default)) equalsDefault = .true.
       mesg = trim(mesg)//' default = "'//trim(adjustl(default))//'"'
@@ -412,7 +433,7 @@ subroutine doc_closeBlock(doc, blockName)
 end subroutine doc_closeBlock
 
 !> This subroutine handles parameter documentation for time-type variables.
-subroutine doc_param_time(doc, varname, desc, val, default, units, debuggingParam)
+subroutine doc_param_time(doc, varname, desc, val, default, units, debuggingParam, like_default)
   type(doc_type),   pointer    :: doc     !< A pointer to a structure that controls where the
                                           !! documentation occurs and its formatting
   character(len=*), intent(in) :: varname !< The name of the parameter being documented
@@ -421,6 +442,8 @@ subroutine doc_param_time(doc, varname, desc, val, default, units, debuggingPara
   type(time_type),  optional, intent(in) :: default !< The default value of this parameter
   character(len=*), optional, intent(in) :: units   !< The units of the parameter being documented
   logical,          optional, intent(in) :: debuggingParam !< If present and true, this is a debugging parameter.
+  logical,          optional, intent(in) :: like_default !< If present and true, log this parameter as though
+                                             !! it has the default value, even if there is no default.
 
   ! Local varables
   character(len=mLen)              :: mesg          ! The output message
@@ -439,6 +462,7 @@ subroutine doc_param_time(doc, varname, desc, val, default, units, debuggingPara
     endif
 
     equalsDefault = .false.
+    if (present(like_default)) equalsDefault = like_default
     if (present(default)) then
       if (val == default) equalsDefault = .true.
       mesg = trim(mesg)//" default = "//trim(time_string(default))
@@ -776,7 +800,9 @@ subroutine doc_module(doc, modname, desc, log_to_all, all_default, layoutMod, de
   call open_doc_file(doc)
 
   if (doc%filesAreOpen) then
-    call writeMessageAndDesc(doc, '', '') ! Blank line for delineation
+    ! Add a blank line for delineation
+    call writeMessageAndDesc(doc, '', '', valueWasDefault=all_default, &
+                             layoutParam=layoutMod, debuggingParam=debuggingMod)
     mesg = "! === module "//trim(modname)//" ==="
     call writeMessageAndDesc(doc, mesg, desc, valueWasDefault=all_default, indent=0, &
                              layoutParam=layoutMod, debuggingParam=debuggingMod)
@@ -786,8 +812,10 @@ subroutine doc_module(doc, modname, desc, log_to_all, all_default, layoutMod, de
       repeat_doc = .false.
       if (present(layoutMod)) then ; if (layoutMod) repeat_doc = .true. ; endif
       if (present(debuggingMod)) then ; if (debuggingMod) repeat_doc = .true. ; endif
-      if (repeat_doc) &
+      if (repeat_doc) then
+        call writeMessageAndDesc(doc, '', '', valueWasDefault=all_default)
         call writeMessageAndDesc(doc, mesg, desc, valueWasDefault=all_default, indent=0)
+      endif
     endif ; endif
   endif
 end subroutine doc_module

@@ -869,7 +869,7 @@ subroutine tracer_registry_init(param_file, Reg)
   else ; return ; endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mdl, version, "")
+  call log_version(param_file, mdl, version, "", all_default=.true.)
 
   init_calls = init_calls + 1
   if (init_calls > 1) then
