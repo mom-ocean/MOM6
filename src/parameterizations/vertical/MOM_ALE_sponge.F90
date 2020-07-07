@@ -256,7 +256,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
                             answers_2018=CS%remap_answers_2018)
 
   call log_param(param_file, mdl, "!Total sponge columns at h points", total_sponge_cols, &
-                 "The total number of columns where sponges are applied at h points.")
+                 "The total number of columns where sponges are applied at h points.", like_default=.true.)
 
   if (CS%sponge_uv) then
 
@@ -300,7 +300,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
     total_sponge_cols_u = CS%num_col_u
     call sum_across_PEs(total_sponge_cols_u)
     call log_param(param_file, mdl, "!Total sponge columns at u points", total_sponge_cols_u, &
-                "The total number of columns where sponges are applied at u points.")
+                "The total number of columns where sponges are applied at u points.", like_default=.true.)
 
     ! v points
     CS%num_col_v = 0 ; !CS%fldno_v = 0
@@ -336,7 +336,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
     total_sponge_cols_v = CS%num_col_v
     call sum_across_PEs(total_sponge_cols_v)
     call log_param(param_file, mdl, "!Total sponge columns at v points", total_sponge_cols_v, &
-                 "The total number of columns where sponges are applied at v points.")
+                 "The total number of columns where sponges are applied at v points.", like_default=.true.)
   endif
 
 end subroutine initialize_ALE_sponge_fixed
@@ -484,7 +484,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
   call initialize_remapping(CS%remap_cs, remapScheme, boundary_extrapolation=bndExtrapolation, &
                             answers_2018=CS%remap_answers_2018)
   call log_param(param_file, mdl, "!Total sponge columns at h points", total_sponge_cols, &
-                 "The total number of columns where sponges are applied at h points.")
+                 "The total number of columns where sponges are applied at h points.", like_default=.true.)
   if (CS%sponge_uv) then
     allocate(Iresttime_u(G%isdB:G%iedB,G%jsd:G%jed)) ; Iresttime_u(:,:) = 0.0
     allocate(Iresttime_v(G%isd:G%ied,G%jsdB:G%jedB)) ; Iresttime_v(:,:) = 0.0
@@ -513,7 +513,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
     total_sponge_cols_u = CS%num_col_u
     call sum_across_PEs(total_sponge_cols_u)
     call log_param(param_file, mdl, "!Total sponge columns at u points", total_sponge_cols_u, &
-                "The total number of columns where sponges are applied at u points.")
+                "The total number of columns where sponges are applied at u points.", like_default=.true.)
     ! v points
     CS%num_col_v = 0 ; !CS%fldno_v = 0
     do J=CS%jscB,CS%jecB; do i=CS%isc,CS%iec
@@ -538,7 +538,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
     total_sponge_cols_v = CS%num_col_v
     call sum_across_PEs(total_sponge_cols_v)
     call log_param(param_file, mdl, "!Total sponge columns at v points", total_sponge_cols_v, &
-                "The total number of columns where sponges are applied at v points.")
+                "The total number of columns where sponges are applied at v points.", like_default=.true.)
   endif
 
 end subroutine initialize_ALE_sponge_varying

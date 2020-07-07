@@ -191,7 +191,7 @@ type, public :: energetic_PBL_CS ; private
     Velocity_Scale, & !< The velocity scale used in getting Kd [Z T-1 ~> m s-1]
     Mixing_Length     !< The length scale used in getting Kd [Z ~> m]
   !>@{ Diagnostic IDs
-  integer :: id_ML_depth = -1, id_TKE_wind = -1, id_TKE_mixing = -1
+  integer :: id_ML_depth = -1, id_hML_depth = -1, id_TKE_wind = -1, id_TKE_mixing = -1
   integer :: id_TKE_MKE = -1, id_TKE_conv = -1, id_TKE_forcing = -1
   integer :: id_TKE_mech_decay = -1, id_TKE_conv_decay = -1
   integer :: id_Mixing_Length = -1, id_Velocity_Scale = -1
@@ -515,6 +515,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
 
   if (write_diags) then
     if (CS%id_ML_depth > 0) call post_data(CS%id_ML_depth, CS%ML_depth, CS%diag)
+    if (CS%id_hML_depth > 0) call post_data(CS%id_hML_depth, CS%ML_depth, CS%diag)
     if (CS%id_TKE_wind > 0) call post_data(CS%id_TKE_wind, CS%diag_TKE_wind, CS%diag)
     if (CS%id_TKE_MKE > 0)  call post_data(CS%id_TKE_MKE, CS%diag_TKE_MKE, CS%diag)
     if (CS%id_TKE_conv > 0) call post_data(CS%id_TKE_conv, CS%diag_TKE_conv, CS%diag)
@@ -2338,15 +2339,19 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
 !/ Logging parameters
   ! This gives a minimum decay scale that is typically much less than Angstrom.
   CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_Z + GV%H_to_Z*GV%H_subroundoff)
-  call log_param(param_file, mdl, "EPBL_USTAR_MIN", CS%ustar_min*US%Z_to_m*US%s_to_T, &
+  call log_param(param_file, mdl, "!EPBL_USTAR_MIN", CS%ustar_min*US%Z_to_m*US%s_to_T, &
                  "The (tiny) minimum friction velocity used within the "//&
-                 "ePBL code, derived from OMEGA and ANGSTROM.", units="m s-1")
+                 "ePBL code, derived from OMEGA and ANGSTROM.", units="m s-1", &
+                 like_default=.true.)
 
 
 !/ Checking output flags
   CS%id_ML_depth = register_diag_field('ocean_model', 'ePBL_h_ML', diag%axesT1, &
       Time, 'Surface boundary layer depth', 'm', conversion=US%Z_to_m, &
       cmor_long_name='Ocean Mixed Layer Thickness Defined by Mixing Scheme')
+  ! This is an alias for the same variable as ePBL_h_ML
+  CS%id_hML_depth = register_diag_field('ocean_model', 'h_ML', diag%axesT1, &
+      Time, 'Surface mixed layer depth based on active turbulence', 'm', conversion=US%Z_to_m)
   CS%id_TKE_wind = register_diag_field('ocean_model', 'ePBL_TKE_wind', diag%axesT1, &
       Time, 'Wind-stirring source of mixed layer TKE', 'W m-2', conversion=US%RZ3_T3_to_W_m2)
   CS%id_TKE_MKE = register_diag_field('ocean_model', 'ePBL_TKE_MKE', diag%axesT1, &

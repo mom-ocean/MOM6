@@ -9,7 +9,7 @@ use MOM_coms,                 only : sum_across_PEs
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator,        only : diag_ctrl, time_type
 use MOM_domains,              only : pass_var, pass_vector
-use MOM_domains,              only : To_All, SCALAR_PAIR, CGRID_NE
+use MOM_domains,              only : To_All, SCALAR_PAIR, CGRID_NE, CORNER
 use MOM_error_handler,        only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler,        only : NOTE
 use MOM_file_parser,          only : get_param, log_version, param_file_type, log_param
@@ -343,9 +343,12 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   real               :: Lscale_in, Lscale_out ! parameters controlling tracer values at the boundaries [L ~> m]
   allocate(OBC)
 
+  call get_param(param_file, mdl, "OBC_NUMBER_OF_SEGMENTS", OBC%number_of_segments, &
+                 default=0, do_not_log=.true.)
   call log_version(param_file, mdl, version, &
                  "Controls where open boundaries are located, what kind of boundary condition "//&
-                 "to impose, and what data to apply, if any.")
+                 "to impose, and what data to apply, if any.", &
+                 all_default=(OBC%number_of_segments<=0))
   call get_param(param_file, mdl, "OBC_NUMBER_OF_SEGMENTS", OBC%number_of_segments, &
                  "The number of open boundary segments.", &
                  default=0)
@@ -1595,6 +1598,11 @@ subroutine open_boundary_init(G, GV, US, param_file, OBC, restart_CSp)
   if (.not.associated(OBC)) return
 
   id_clock_pass = cpu_clock_id('(Ocean OBC halo updates)', grain=CLOCK_ROUTINE)
+  if (OBC%radiation_BCs_exist_globally) call pass_vector(OBC%rx_normal, OBC%ry_normal, G%Domain, &
+                     To_All+Scalar_Pair)
+  if (OBC%oblique_BCs_exist_globally) call pass_vector(OBC%rx_oblique, OBC%ry_oblique, G%Domain, &
+                     To_All+Scalar_Pair)
+  if (associated(OBC%cff_normal)) call pass_var(OBC%cff_normal, G%Domain, position=CORNER)
 
   ! The rx_normal and ry_normal arrays used with radiation OBCs are currently in units of grid
   ! points per timestep, but if this were to be corrected to [L T-1 ~> m s-1] or [T-1 ~> s-1] to

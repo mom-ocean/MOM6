@@ -812,7 +812,9 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
   integer :: i, j
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "MIXEDLAYER_RESTRAT", mixedlayer_restrat_init, &
+             default=.false., do_not_log=.true.)
+  call log_version(param_file, mdl, version, "", all_default=.not.mixedlayer_restrat_init)
   call get_param(param_file, mdl, "MIXEDLAYER_RESTRAT", mixedlayer_restrat_init, &
              "If true, a density-gradient dependent re-stratifying "//&
              "flow is imposed in the mixed layer. Can be used in ALE mode "//&

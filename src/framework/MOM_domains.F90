@@ -30,6 +30,7 @@ use mpp_parameter_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EX
 use mpp_parameter_mod, only : To_East => WUPDATE, To_West => EUPDATE, Omit_Corners => EDGEUPDATE
 use mpp_parameter_mod, only : To_North => SUPDATE, To_South => NUPDATE, CENTER
 use fms_io_mod,        only : file_exist, parse_mask_table
+use fms_affinity_mod,  only : fms_affinity_init, fms_affinity_set,fms_affinity_get
 
 implicit none ; private
 
@@ -45,6 +46,7 @@ public :: create_group_pass, do_group_pass, group_pass_type
 public :: start_group_pass, complete_group_pass
 public :: compute_block_extent, get_global_shape
 public :: get_simple_array_i_ind, get_simple_array_j_ind
+public :: domain2D
 
 !> Do a halo update on an array
 interface pass_var
@@ -1191,7 +1193,6 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   integer, dimension(4) :: global_indices
 !$ integer :: ocean_nthreads       ! Number of Openmp threads
 !$ integer :: get_cpu_affinity, omp_get_thread_num, omp_get_num_threads
-!$ integer :: omp_cores_per_node, adder, base_cpu
 !$ logical :: ocean_omp_hyper_thread
   integer :: nihalo_dflt, njhalo_dflt
   integer :: pe, proc_used
@@ -1261,7 +1262,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mdl, version, "")
+  call log_version(param_file, mdl, version, "", log_to_all=.true., layout=.true.)
   call get_param(param_file, mdl, "REENTRANT_X", reentrant_x, &
                  "If true, the domain is zonally reentrant.", default=.true.)
   call get_param(param_file, mdl, "REENTRANT_Y", reentrant_y, &
@@ -1273,6 +1274,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  default=.false.)
 
 #ifndef NOT_SET_AFFINITY
+!$  call fms_affinity_init
 !$OMP PARALLEL
 !$OMP master
 !$ ocean_nthreads = omp_get_num_threads()
@@ -1284,27 +1286,10 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 !$              default = 1, layoutParam=.true.)
 !$   call get_param(param_file, mdl, "OCEAN_OMP_HYPER_THREAD", ocean_omp_hyper_thread, &
 !$              "If True, use hyper-threading.", default = .false., layoutParam=.true.)
-!$   if (ocean_omp_hyper_thread) then
-!$     call get_param(param_file, mdl, "OMP_CORES_PER_NODE", omp_cores_per_node, &
-!$              "Number of cores per node needed for hyper-threading.", &
-!$              fail_if_missing=.true., layoutParam=.true.)
-!$   endif
+!$   call fms_affinity_set('OCEAN', ocean_omp_hyper_thread, ocean_nthreads)
 !$   call omp_set_num_threads(ocean_nthreads)
-!$   base_cpu = get_cpu_affinity()
-!$OMP PARALLEL private(adder)
-!$   if (ocean_omp_hyper_thread) then
-!$     if (mod(omp_get_thread_num(),2) == 0) then
-!$       adder = omp_get_thread_num()/2
-!$     else
-!$       adder = omp_cores_per_node + omp_get_thread_num()/2
-!$     endif
-!$   else
-!$     adder = omp_get_thread_num()
-!$   endif
-!$   call set_cpu_affinity(base_cpu + adder)
-!!$     write(6,*) " ocean  ", base_cpu, get_cpu_affinity(), adder, omp_get_thread_num(), omp_get_num_threads()
-!!$     call flush(6)
-!$OMP END PARALLEL
+!$   write(6,*) "MOM_domains_mod OMPthreading ", fms_affinity_get(), omp_get_thread_num(), omp_get_num_threads()
+!$   call flush(6)
 !$ endif
 #endif
   call log_param(param_file, mdl, "!SYMMETRIC_MEMORY_", MOM_dom%symmetric, &
@@ -1336,26 +1321,6 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "at run time.  This can only be set at compile time.",&
                  layoutParam=.true.)
 
-  call get_param(param_file, mdl, trim(nihalo_nm), MOM_dom%nihalo, &
-                 "The number of halo points on each side in the "//&
-                 "x-direction.  With STATIC_MEMORY_ this is set as NIHALO_ "//&
-                 "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ "//&
-                 "the default is NIHALO_ in "//trim(inc_nm)//" (if defined) or 2.", &
-                 default=4, static_value=nihalo_dflt, layoutParam=.true.)
-  call get_param(param_file, mdl, trim(njhalo_nm), MOM_dom%njhalo, &
-                 "The number of halo points on each side in the "//&
-                 "y-direction.  With STATIC_MEMORY_ this is set as NJHALO_ "//&
-                 "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ "//&
-                 "the default is NJHALO_ in "//trim(inc_nm)//" (if defined) or 2.", &
-                 default=4, static_value=njhalo_dflt, layoutParam=.true.)
-  if (present(min_halo)) then
-    MOM_dom%nihalo = max(MOM_dom%nihalo, min_halo(1))
-    min_halo(1) = MOM_dom%nihalo
-    MOM_dom%njhalo = max(MOM_dom%njhalo, min_halo(2))
-    min_halo(2) = MOM_dom%njhalo
-    call log_param(param_file, mdl, "!NIHALO min_halo", MOM_dom%nihalo, layoutParam=.true.)
-    call log_param(param_file, mdl, "!NJHALO min_halo", MOM_dom%nihalo, layoutParam=.true.)
-  endif
   if (is_static) then
     call get_param(param_file, mdl, "NIGLOBAL", MOM_dom%niglobal, &
                  "The total number of thickness grid points in the "//&
@@ -1372,12 +1337,6 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
     if (MOM_dom%njglobal /= NJGLOBAL) call MOM_error(FATAL,"MOM_domains_init: " // &
      "static mismatch for NJGLOBAL_ domain size. Header file does not match input namelist")
 
-    if (.not.present(min_halo)) then
-      if (MOM_dom%nihalo /= NIHALO) call MOM_error(FATAL,"MOM_domains_init: " // &
-             "static mismatch for "//trim(nihalo_nm)//" domain size")
-      if (MOM_dom%njhalo /= NJHALO) call MOM_error(FATAL,"MOM_domains_init: " // &
-             "static mismatch for "//trim(njhalo_nm)//" domain size")
-    endif
   else
     call get_param(param_file, mdl, "NIGLOBAL", MOM_dom%niglobal, &
                  "The total number of thickness grid points in the "//&
@@ -1389,6 +1348,30 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "y-direction in the physical domain. With STATIC_MEMORY_ "//&
                  "this is set in "//trim(inc_nm)//" at compile time.", &
                  fail_if_missing=.true.)
+  endif
+
+  call get_param(param_file, mdl, trim(nihalo_nm), MOM_dom%nihalo, &
+                 "The number of halo points on each side in the x-direction.  How this is set "//&
+                 "varies with the calling component and static or dynamic memory configuration.", &
+                 default=nihalo_dflt, static_value=nihalo_dflt)
+  call get_param(param_file, mdl, trim(njhalo_nm), MOM_dom%njhalo, &
+                 "The number of halo points on each side in the y-direction.  How this is set "//&
+                 "varies with the calling component and static or dynamic memory configuration.", &
+                 default=njhalo_dflt, static_value=njhalo_dflt)
+  if (present(min_halo)) then
+    MOM_dom%nihalo = max(MOM_dom%nihalo, min_halo(1))
+    min_halo(1) = MOM_dom%nihalo
+    MOM_dom%njhalo = max(MOM_dom%njhalo, min_halo(2))
+    min_halo(2) = MOM_dom%njhalo
+    ! These are generally used only with static memory, so they are considerd layout params.
+    call log_param(param_file, mdl, "!NIHALO min_halo", MOM_dom%nihalo, layoutParam=.true.)
+    call log_param(param_file, mdl, "!NJHALO min_halo", MOM_dom%nihalo, layoutParam=.true.)
+  endif
+  if (is_static .and. .not.present(min_halo)) then
+    if (MOM_dom%nihalo /= NIHALO) call MOM_error(FATAL,"MOM_domains_init: " // &
+           "static mismatch for "//trim(nihalo_nm)//" domain size")
+    if (MOM_dom%njhalo /= NJHALO) call MOM_error(FATAL,"MOM_domains_init: " // &
+           "static mismatch for "//trim(njhalo_nm)//" domain size")
   endif
 
   global_indices(1) = 1 ; global_indices(2) = MOM_dom%niglobal

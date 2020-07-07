@@ -15,7 +15,7 @@ use MOM_diag_mediator,     only : diag_grid_storage
 use MOM_diag_mediator,     only : diag_save_grids, diag_restore_grids, diag_copy_storage_to_diag
 use MOM_domains,           only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,           only : To_North, To_East
-use MOM_EOS,               only : calculate_density, int_density_dz, EOS_domain
+use MOM_EOS,               only : calculate_density, calculate_density_derivs, int_density_dz, EOS_domain
 use MOM_EOS,               only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_error_handler,     only : MOM_error, FATAL, WARNING
 use MOM_file_parser,       only : get_param, log_version, param_file_type
@@ -134,6 +134,7 @@ type, public :: diagnostics_CS ; private
   integer :: id_pbo            = -1
   integer :: id_thkcello       = -1, id_rhoinsitu      = -1
   integer :: id_rhopot0        = -1, id_rhopot2        = -1
+  integer :: id_drho_dT        = -1, id_drho_dS        = -1
   integer :: id_h_pre_sync     = -1
   !>@}
   !> The control structure for calculating wave speed.
@@ -618,6 +619,22 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
         enddo
       enddo
       if (CS%id_rhoinsitu > 0) call post_data(CS%id_rhoinsitu, Rcv, CS%diag)
+    endif
+
+    if (CS%id_drho_dT > 0 .or. CS%id_drho_dS > 0) then
+      !$OMP parallel do default(shared) private(pressure_1d)
+      do j=js,je
+        pressure_1d(:) = 0. ! Start at p=0 Pa at surface
+        do k=1,nz
+          pressure_1d(:) =  pressure_1d(:) + 0.5 * h(:,j,k) * GV%H_to_Pa ! Pressure in middle of layer k
+          ! To avoid storing more arrays, put drho_dT into Rcv, and drho_dS into work3d
+          call calculate_density_derivs(tv%T(:,j,k),tv%S(:,j,k),pressure_1d, &
+                                 Rcv(:,j,k),work_3d(:,j,k),is,ie-is+1, tv%eqn_of_state)
+          pressure_1d(:) =  pressure_1d(:) + 0.5 * h(:,j,k) * GV%H_to_Pa ! Pressure at bottom of layer k
+        enddo
+      enddo
+      if (CS%id_drho_dT > 0) call post_data(CS%id_drho_dT, Rcv, CS%diag)
+      if (CS%id_drho_dS > 0) call post_data(CS%id_drho_dS, work_3d, CS%diag)
     endif
   endif
 
@@ -1478,7 +1495,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
                  do_not_log=.true.)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mdl, version)
+  call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "DIAG_EBT_MONO_N2_COLUMN_FRACTION", CS%mono_N2_column_fraction, &
                  "The lower fraction of water column over which N2 is limited as monotonic "// &
                  "for the purposes of calculating the equivalent barotropic wave speed.", &
@@ -1600,6 +1617,10 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       'Potential density referenced to 2000 dbar', 'kg m-3', conversion=US%R_to_kg_m3)
   CS%id_rhoinsitu = register_diag_field('ocean_model', 'rhoinsitu', diag%axesTL, Time, &
       'In situ density', 'kg m-3', conversion=US%R_to_kg_m3)
+  CS%id_drho_dT = register_diag_field('ocean_model', 'drho_dT', diag%axesTL, Time, &
+      'Partial derivative of rhoinsitu with respect to temperature (alpha)', 'kg m-3 degC-1')
+  CS%id_drho_dS = register_diag_field('ocean_model', 'drho_dS', diag%axesTL, Time, &
+      'Partial derivative of rhoinsitu with respect to salinity (beta)', 'kg^2 g-1 m-3')
 
   CS%id_du_dt = register_diag_field('ocean_model', 'dudt', diag%axesCuL, Time, &
       'Zonal Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)

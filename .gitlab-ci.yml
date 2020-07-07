@@ -60,7 +60,7 @@ gnu:ocean-only-nolibs:
     - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
     - make -f MRS/Makefile.build build/gnu/env && cd build/gnu
     # mkdir -p build/gnu/repro/symmetric_dynamic/ocean_only && cd build/gnu/repro/symmetric_dynamic/ocean_only
-    - ../../MOM6-examples/src/mkmf/bin/list_paths -l ../../../config_src/{solo_driver,dynamic_symmetric} ../../../src ../../MOM6-examples/src/FMS
+    - ../../MOM6-examples/src/mkmf/bin/list_paths -l ../../../config_src/{solo_driver,dynamic_symmetric,ext*} ../../../src ../../MOM6-examples/src/FMS
     - sed -i '/FMS\/.*\/test_/d' path_names
     - ../../MOM6-examples/src/mkmf/bin/mkmf -t ../../MOM6-examples/src/mkmf/templates/ncrc-gnu.mk -p MOM6 -c"-Duse_libMPI -Duse_netCDF" path_names
     - time (source ./env ; make NETCDF=3 REPRO=1 MOM6 -s -j)
@@ -73,7 +73,7 @@ gnu:ice-ocean-nolibs:
     - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
     - make -f MRS/Makefile.build build/gnu/env && cd build/gnu
     # mkdir -p build/gnu/repro/symmetric_dynamic/ocean_only && cd build/gnu/repro/symmetric_dynamic/ocean_only
-    - ../../MOM6-examples/src/mkmf/bin/list_paths -l ../../../config_src/{coupled_driver,dynamic} ../../../src ../../MOM6-examples/src/{FMS,coupler,SIS2,icebergs,ice_param,land_null,atmos_null}
+    - ../../MOM6-examples/src/mkmf/bin/list_paths -l ../../../config_src/{coupled_driver,dynamic,ext*} ../../../src ../../MOM6-examples/src/{FMS,coupler,SIS2,icebergs,ice_param,land_null,atmos_null}
     - sed -i '/FMS\/.*\/test_/d' path_names
     - ../../MOM6-examples/src/mkmf/bin/mkmf -t ../../MOM6-examples/src/mkmf/templates/ncrc-gnu.mk -p MOM6 -c"-Duse_libMPI -Duse_netCDF -D_USE_LEGACY_LAND_ -Duse_AM3_physics" path_names
     - time (source ./env ; make NETCDF=3 REPRO=1 MOM6 -s -j)
@@ -116,7 +116,7 @@ run:
     - time tar zxf $CACHE_DIR/build-intel-repro-$CI_PIPELINE_ID.tgz
     - time tar zxf $CACHE_DIR/build-pgi-repro-$CI_PIPELINE_ID.tgz
     # time tar zxf $CACHE_DIR/build-gnu-debug-$CI_PIPELINE_ID.tgz
-    - (echo '#!/bin/tcsh';echo 'make -f MRS/Makefile.tests all -B') > job.sh
+    - (echo '#!/bin/tcsh';echo 'make -f MRS/Makefile.tests all') > job.sh
     - sbatch --clusters=c3,c4 --nodes=29 --time=0:34:00 --account=gfdl_o --qos=debug --job-name=mom6_regressions --output=log.$CI_PIPELINE_ID --wait job.sh
     - cat log.$CI_PIPELINE_ID
     - test -f restart_results_gnu.tar.gz

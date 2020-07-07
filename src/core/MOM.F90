@@ -994,7 +994,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     call enable_averages(dt_thermo, Time_local+real_to_time(US%T_to_s*(dt_thermo-dt)), CS%diag)
     call cpu_clock_begin(id_clock_thick_diff)
     if (associated(CS%VarMix)) &
-      call calc_slope_functions(h, CS%tv, dt, G, GV, US, CS%VarMix)
+      call calc_slope_functions(h, CS%tv, dt, G, GV, US, CS%VarMix, OBC=CS%OBC)
     call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt_thermo, G, GV, US, &
                            CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
     call cpu_clock_end(id_clock_thick_diff)
@@ -1067,7 +1067,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     if (CS%debug) call hchksum(h,"Pre-thickness_diffuse h", G%HI, haloshift=0, scale=GV%H_to_m)
 
     if (associated(CS%VarMix)) &
-      call calc_slope_functions(h, CS%tv, dt, G, GV, US, CS%VarMix)
+      call calc_slope_functions(h, CS%tv, dt, G, GV, US, CS%VarMix, OBC=CS%OBC)
     call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt, G, GV, US, &
                            CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
 
@@ -1265,8 +1265,8 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
 
     call cpu_clock_begin(id_clock_diabatic)
 
-    call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                  dtdia, Time_end_thermo, G, GV, US, CS%diabatic_CSp, Waves=Waves)
+    call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, dtdia, &
+                  Time_end_thermo, G, GV, US, CS%diabatic_CSp, OBC=CS%OBC, Waves=Waves)
     fluxes%fluxes_used = .true.
 
     if (showCallTree) call callTree_waypoint("finished diabatic (step_MOM_thermo)")
@@ -1479,7 +1479,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
             call pass_var(CS%h, G%Domain)
             call calc_resoln_function(CS%h, CS%tv, G, GV, US, CS%VarMix)
             call calc_depth_function(G, CS%VarMix)
-            call calc_slope_functions(CS%h, CS%tv, dt_offline, G, GV, US, CS%VarMix)
+            call calc_slope_functions(CS%h, CS%tv, dt_offline, G, GV, US, CS%VarMix, OBC=CS%OBC)
           endif
           call tracer_hordiff(CS%h, dt_offline, CS%MEKE, CS%VarMix, G, GV, US, &
               CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
@@ -1505,7 +1505,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
             call pass_var(CS%h, G%Domain)
             call calc_resoln_function(CS%h, CS%tv, G, GV, US, CS%VarMix)
             call calc_depth_function(G, CS%VarMix)
-            call calc_slope_functions(CS%h, CS%tv, dt_offline, G, GV, US, CS%VarMix)
+            call calc_slope_functions(CS%h, CS%tv, dt_offline, G, GV, US, CS%VarMix, OBC=CS%OBC)
           endif
           call tracer_hordiff(CS%h, dt_offline, CS%MEKE, CS%VarMix, G, GV, US, &
               CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
@@ -1705,8 +1705,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   call find_obsolete_params(param_file)
 
+  ! Determining the internal unit scaling factors for this run.
+  call unit_scaling_init(param_file, CS%US)
+  US => CS%US
+
   ! Read relevant parameters and write them to the model log.
-  call log_version(param_file, "MOM", version, "")
+  call log_version(param_file, "MOM", version, "", log_to_all=.true., layout=.true., debugging=.true.)
   call get_param(param_file, "MOM", "VERBOSITY", verbosity,  &
                  "Integer controlling level of messaging\n" // &
                  "\t0 = Only FATAL messages\n" // &
@@ -1718,11 +1722,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   if (do_unit_tests) then
     call unit_tests(verbosity)
   endif
-
-  ! Determining the internal unit scaling factors for this run.
-  call unit_scaling_init(param_file, CS%US)
-
-  US => CS%US
 
   call get_param(param_file, "MOM", "SPLIT", CS%split, &
                  "Use the split time stepping if true.", default=.true.)
@@ -2665,7 +2664,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call register_obsolete_diagnostics(param_file, CS%diag)
 
   if (use_frazil) then
-    if (.not.query_initialized(CS%tv%frazil,"frazil",restart_CSp)) then
+    if (query_initialized(CS%tv%frazil, "frazil", restart_CSp)) then
       ! Test whether the dimensional rescaling has changed for heat content.
       if ((US%kg_m3_to_R_restart*US%m_to_Z_restart*US%J_kg_to_Q_restart /= 0.0) .and. &
           ((US%J_kg_to_Q*US%kg_m3_to_R*US%m_to_Z) /= &
