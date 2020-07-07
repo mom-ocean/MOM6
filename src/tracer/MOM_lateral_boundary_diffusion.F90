@@ -473,7 +473,8 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L
   real                :: inv_heff             !< Inverse of the harmonic mean of layer thicknesses [m^[-1]
   real                :: phi_L_avg, phi_R_avg !< Bulk, thickness-weighted tracer averages (left and right column)
                                               !!                                                   [conc m^-3 ]
-  real    :: htot    !< Total column thickness [m]
+  real    :: htot     !< Total column thickness [m]
+  real    :: heff_tot !< Total effective column thickness in the transition layer [m]
   integer :: k, k_bot_min, k_top_max   !< k-indices, min and max for bottom and top, respectively
   integer :: k_bot_max, k_top_min      !< k-indices, max and min for bottom and top, respectively
   integer :: k_bot_diff, k_top_diff    !< different between left and right k-indices for bottom and top, respectively
@@ -532,12 +533,19 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L
         heff = harmonic_mean(h_L(k), h_R(k))
         F_layer(k) = -(heff * khtr_u) * (phi_R(k) - phi_L(k))
       enddo
+      ! heff_total
+      heff_tot = 0.0
+      do k = k_bot_min+1,k_bot_max, 1
+        heff_tot = heff_tot + harmonic_mean(h_L(k), h_R(k))
+      enddo
 
-      a = -1.0/k_bot_diff
-      do k = k_bot_min+1,k_bot_max-1, 1
-        wgt = (a*(k-k_bot_min)) + 1.0
+      a = -1.0/heff_tot
+      heff_tot = 0.0
+      do k = k_bot_min+1,k_bot_max, 1
         heff = harmonic_mean(h_L(k), h_R(k))
+        wgt = (a*(heff_tot + (heff * 0.5))) + 1.0
         F_layer(k) = -(heff * khtr_u) * (phi_R(k) - phi_L(k)) * wgt
+        heff_tot = heff_tot + heff
       enddo
     else
       F_layer(k_bot_min) = -(heff * khtr_u) * (phi_R_avg - phi_L_avg)
@@ -619,6 +627,7 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
   real                :: phi_L_avg, phi_R_avg !< Bulk, thickness-weighted tracer averages (left and right column)
                                               !!                                                   [conc m^-3 ]
   real    :: htot                             ! Total column thickness [m]
+  real    :: heff_tot                         !< Total effective column thickness in the transition layer [m]
   integer :: k, k_min, k_max                  !< k-indices, min and max for top and bottom, respectively
   integer :: k_diff                           !< difference between k_max and k_min
   integer :: k_top_L, k_bot_L                 !< k-indices left
@@ -678,11 +687,20 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
       do k=1,k_min
         h_means(k) = harmonic_mean(h_L(k),h_R(k))
       enddo
+      ! heff_total
+      heff_tot = 0.0
+      do k = k_min+1,k_max, 1
+        heff_tot = heff_tot + harmonic_mean(h_L(k), h_R(k))
+      enddo
+
+      a = -1.0/heff_tot
+      heff_tot = 0.0
       ! fluxes will decay linearly at base of hbl
-      a = -1.0/k_diff
-      do k = k_min+1,k_max-1, 1
-        wgt = (a*(k-k_min)) + 1.0
+      do k = k_min+1,k_max, 1
+        heff = harmonic_mean(h_L(k), h_R(k))
+        wgt = (a*(heff_tot + (heff * 0.5))) + 1.0
         h_means(k) = harmonic_mean(h_L(k), h_R(k)) * wgt
+        heff_tot = heff_tot + heff
       enddo
     else
       ! left hand side
