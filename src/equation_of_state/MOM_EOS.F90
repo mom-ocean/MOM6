@@ -252,27 +252,26 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_re
   real,                  optional, intent(in) :: rho_ref  !< A reference density [kg m-3]
   real,                  optional, intent(in) :: scale    !< A multiplicative factor by which to scale density
                                                 !! in combination with scaling given by US [various]
-
   integer :: j
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_array called with an unassociated EOS_type EOS.")
 
-    select case (EOS%form_of_EOS)
-      case (EOS_LINEAR)
-        call calculate_density_linear(T, S, pressure, rho, start, npts, &
-                                      EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, rho_ref)
-      case (EOS_UNESCO)
-        call calculate_density_unesco(T, S, pressure, rho, start, npts, rho_ref)
-      case (EOS_WRIGHT)
-        call calculate_density_wright(T, S, pressure, rho, start, npts, rho_ref)
-      case (EOS_TEOS10)
-        call calculate_density_teos10(T, S, pressure, rho, start, npts, rho_ref)
-      case (EOS_NEMO)
-      call calculate_density_nemo(T, S, pressure, rho, start, npts, rho_ref)
-      case default
-        call MOM_error(FATAL, "calculate_density_array: EOS%form_of_EOS is not valid.")
-    end select
+  select case (EOS%form_of_EOS)
+    case (EOS_LINEAR)
+      call calculate_density_linear(T, S, pressure, rho, start, npts, &
+                                    EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, rho_ref)
+    case (EOS_UNESCO)
+      call calculate_density_unesco(T, S, pressure, rho, start, npts, rho_ref)
+    case (EOS_WRIGHT)
+      call calculate_density_wright(T, S, pressure, rho, start, npts, rho_ref)
+    case (EOS_TEOS10)
+      call calculate_density_teos10(T, S, pressure, rho, start, npts, rho_ref)
+    case (EOS_NEMO)
+    call calculate_density_nemo(T, S, pressure, rho, start, npts, rho_ref)
+    case default
+      call MOM_error(FATAL, "calculate_density_array: EOS%form_of_EOS is not valid.")
+  end select
 
   if (present(scale)) then ; if (scale /= 1.0) then ; do j=start,start+npts-1
     rho(j) = scale * rho(j)
