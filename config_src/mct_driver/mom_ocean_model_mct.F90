@@ -690,8 +690,9 @@ subroutine ocean_model_restart(OS, timestamp, restartname)
       "restart files can only be created after the buoyancy forcing is applied.")
 
   if (present(restartname)) then
+     ! NOTE: use_fms2=.true. routes routine to fms2 IO interface
      call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-          OS%restart_CSp, GV=OS%GV, filename=restartname)
+          OS%restart_CSp, GV=OS%GV, filename=restartname, use_fms2=.true.)
      call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
           OS%dirs%restart_output_dir) ! Is this needed?
      if (OS%use_ice_shelf) then
@@ -700,8 +701,9 @@ subroutine ocean_model_restart(OS, timestamp, restartname)
      endif
   else
      if (BTEST(OS%Restart_control,1)) then
+        ! NOTE:use_fms2=.true. routes routine to fms2 IO interface
         call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-             OS%restart_CSp, .true., GV=OS%GV)
+             OS%restart_CSp, .true., GV=OS%GV, use_fms2=.true.)
         call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
              OS%dirs%restart_output_dir, .true.)
         if (OS%use_ice_shelf) then
@@ -709,8 +711,9 @@ subroutine ocean_model_restart(OS, timestamp, restartname)
         endif
      endif
      if (BTEST(OS%Restart_control,0)) then
+        ! NOTE: use_fms2=.true. routes routine to fms2 IO interface
         call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-             OS%restart_CSp, GV=OS%GV)
+             OS%restart_CSp, GV=OS%GV, use_fms2=.true.)
         call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
              OS%dirs%restart_output_dir)
         if (OS%use_ice_shelf) then
@@ -766,7 +769,7 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
   if (present(directory)) then ; restart_dir = directory
   else ; restart_dir = OS%dirs%restart_output_dir ; endif
 
-  call save_restart(restart_dir, Time, OS%grid, OS%restart_CSp, GV=OS%GV)
+  call save_restart(restart_dir, Time, OS%grid, OS%restart_CSp, GV=OS%GV, use_fms2=.true.)
 
   call forcing_save_restart(OS%forcing_CSp, OS%grid, Time, restart_dir)
 

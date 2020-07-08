@@ -2,34 +2,47 @@
 module MOM_restart
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-use MOM_domains, only : pe_here, num_PEs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_string_functions, only : lowercase
+use MOM_string_functions, only : lowercase, append_substring
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : create_file, fieldtype, file_exists, open_file, close_file
-use MOM_io, only : MOM_read_data, read_data, get_filename_appendix
+use MOM_io, only : MOM_read_data, read_data, get_filename_appendix ! NOTE get_filename_appendix is not in fms2-io
 use MOM_io, only : get_file_info, get_file_atts, get_file_fields, get_file_times
 use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc
 use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
+use MOM_axis, only : get_time_units, convert_checksum_to_string
+use MOM_axis, only : axis_data_type, MOM_get_diagnostic_axis_data
+use MOM_axis, only : MOM_register_diagnostic_axis, get_var_dimension_metadata
 use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
 use MOM_time_manager, only : days_in_month, get_date, set_date
 use MOM_transform_FMS, only : mpp_chksum => rotated_mpp_chksum
 use MOM_transform_FMS, only : write_field => rotated_write_field
 use MOM_verticalGrid, only : verticalGrid_type
+use mpp_domains_mod, only: mpp_define_io_domain, mpp_get_domain_npes, mpp_get_io_domain
+use mpp_domains_mod, only: mpp_get_compute_domain, mpp_get_global_domain
 use mpp_io_mod,      only :  mpp_attribute_exist, mpp_get_atts
-use mpp_mod,         only :  mpp_pe
+use mpp_mod,         only: mpp_pe, mpp_max
+! fms2-io interfaces
+use fms2_io_mod, only : fms2_register_restart_field => register_restart_field
+use fms2_io_mod, only : check_if_open, is_dimension_registered, register_field, register_axis
+use fms2_io_mod, only : register_variable_attribute, read_data, read_restart, write_restart
+use fms2_io_mod, only : write_data, fms2_close_file=>close_file, fms2_open_file=>open_file
+use fms2_io_mod, only : global_att_exists, get_global_attribute, get_global_io_domain_indices
+use fms2_io_mod, only : get_dimension_names, get_dimension_size, get_num_dimensions, variable_exists
+use fms2_io_mod, only : dimension_exists, FmsNetcdfDomainFile_t, unlimited, get_variable_size
+use fms2_io_mod, only : get_variable_num_dimensions, get_variable_dimension_names
 
+use platform_mod
 implicit none ; private
 
 public restart_init, restart_end, restore_state, register_restart_field
 public save_restart, query_initialized, restart_init_end, vardesc
 public restart_files_exist, determine_is_new_run, is_new_run
 public register_restart_field_as_obsolete
+public write_initial_conditions
 public register_restart_pair
-
 !> A type for making arrays of pointers to 4-d arrays
 type p4d
   real, dimension(:,:,:,:), pointer :: p => NULL() !< A pointer to a 4d array
@@ -848,8 +861,32 @@ function query_initialized_4d_name(f_ptr, name, CS) result(query_initialized)
 
 end function query_initialized_4d_name
 
+!> wrapper routine for save_restart_old, save_restart_fms2, and write_initial_conditions_file
+subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, use_fms2, write_ic)
+  character(len=*),        intent(in)    :: directory !< The directory where the restart files
+                                                  !! are to be written
+  type(time_type),         intent(in)    :: time  !< The current model time
+  type(ocean_grid_type),   intent(inout) :: G     !< The ocean's grid structure
+  type(MOM_restart_CS),    pointer       :: CS    !< The control structure returned by a previous
+                                                  !! call to restart_init.
+  logical,          optional, intent(in) :: time_stamped !< If present and true, add time-stamp
+                                                  !! to the restart file names.
+  character(len=*), optional, intent(in) :: filename !< A filename that overrides the name in CS%restartfile.
+  type(verticalGrid_type), optional, intent(in) :: GV !< The ocean's vertical grid structure
+  logical, optional,  intent(in) :: use_fms2 !< flag to call save_restart_fms2
+  logical, optional,  intent(in) :: write_ic !< flag to call write_initial_conditions
+
+  if (present(write_ic) .and. write_ic) then
+    call write_initial_conditions(directory, time, G, CS, time_stamped=time_stamped, filename=filename, GV=GV)
+  elseif (present(use_fms2) .and. use_fms2) then
+    call save_restart_fms2(directory, time, G, CS, time_stamped=time_stamped, filename=filename, GV=GV)
+  else
+    call save_restart_old(directory, time, G, CS, time_stamped=time_stamped, filename=filename, GV=GV)
+  endif
+end subroutine save_restart
+
 !> save_restart saves all registered variables to restart files.
-subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
+subroutine save_restart_old(directory, time, G, CS, time_stamped, filename, GV)
   character(len=*),        intent(in)    :: directory !< The directory where the restart files
                                                   !! are to be written
   type(time_type),         intent(in)    :: time  !< The current model time
@@ -1056,12 +1093,488 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
     num_files = num_files+1
 
   enddo
-end subroutine save_restart
+end subroutine save_restart_old
+
+!> save all registered variables to a restart file using fms2-io
+subroutine save_restart_fms2(directory, time, G, CS, time_stamped, filename, GV)
+  character(len=*),        intent(in)    :: directory !< The directory where the restart files
+                                                  !! are to be written
+  type(time_type),         intent(in)    :: time  !< The current model time
+  type(ocean_grid_type),   intent(inout) :: G     !< The ocean's grid structure
+  type(MOM_restart_CS),    pointer       :: CS    !< The control structure returned by a previous
+                                                  !! call to restart_init.
+  logical,          optional, intent(in) :: time_stamped !< If present and true, add time-stamp
+                                                  !! to the restart file names.
+  character(len=*), optional, intent(in) :: filename !< A filename that overrides the name in CS%restartfile.
+  type(verticalGrid_type), optional, intent(in) :: GV   !< The ocean's vertical grid structure
+
+  ! Local variables
+  type(vardesc) :: vars(CS%max_fields)  ! Descriptions of the fields that
+                                        ! are to be read from the restart file.
+  type(fieldtype) :: fields(CS%max_fields) !
+  type(FmsNetcdfDomainFile_t) :: fileObjWrite ! netcdf file object returned by a call to open_file
+  character(len=1024) :: restartpath     ! The restart file path (dir/file).
+  character(len=512) :: restartname     ! The restart file name (no dir).
+  character(len=700) :: restartpath_temp ! temporary location for the restart file path (dir/file).
+  character(len=600) :: restartname_temp ! temporary location for restart name
+  character(len=512) :: base_file_name  ! Temporary location for restart file name (no dir)
+  character(len=8)   :: suffix          ! A suffix (like _2) that is appended
+                                        ! to the name of files after the first.
+  integer(kind=8) :: var_sz, size_in_file ! The size in bytes of each variable
+                                         ! and the variables already in a file.
+  integer(kind=8) :: max_file_size = 2147483647_8 ! The maximum size in bytes
+                                        ! for any one file.  With NetCDF3,
+                                        ! this should be 2 Gb or less.
+  integer :: start_var, next_var        ! The starting variables of the
+                                        ! current and next files.
+  integer :: unit                       ! The mpp unit of the open file.
+  integer :: m, nz, i, k, num_files
+  integer :: seconds, days, year, month, hour, minute
+  character(len=8) :: hor_grid, z_grid, t_grid ! Variable grid info.
+  character(len=8) :: t_grid_read
+  character(len=64) :: var_name         ! A variable's name.
+  character(len=256) :: date_appendix   ! date string to append to a file name if desired
+  character(len=64) :: dim_names(4)    ! Array to hold up to 4 strings for the variable axis names
+  integer, dimension(4) :: dim_lengths ! Array of integer lengths corresponding to the name(s) in axis_names
+  integer :: name_length
+  integer(kind=8) :: check_val(CS%max_fields,1)
+  integer :: is, ie
+  integer :: substring_index
+  integer :: horgrid_position
+  integer :: num_dims, total_axes
+  integer :: var_periods
+  logical :: fileOpenSuccess ! true if netcdf file is opened
+  real :: restart_time
+  character(len=32) :: filename_appendix = '' ! fms appendix to filename for ensemble runs
+  character(len=16) :: restart_time_units
+  character(len=64) :: checksum_char
+  character(len=64) :: units
+  character(len=256) :: longname
+  real, dimension(:), allocatable :: data_temp
+  type(axis_data_type) :: axis_data_CS
+  integer :: isL, ieL, jsL, jeL, pos
+  integer :: turns
+
+  turns = CS%turns
+
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
+      "save_restart_fms2: Module must be initialized before it is used.")
+  if (CS%novars > CS%max_fields) call restart_error(CS)
+
+  ! With parallel read & write, it is possible to disable the following...
+
+  ! The maximum file size is 4294967292, according to the NetCDF documentation.
+  if (CS%large_file_support) max_file_size = 4294967292_8
+
+  horgrid_position = 1
+  name_length = 0
+  num_files = 0
+  restartname = ""
+  base_file_name = ""
+  restartname_temp = ""
+  date_appendix = ""
+  restart_time_units = ""
+
+  ! define the io domain for 1-pe jobs because it is required to write domain-decomposed files
+  if (mpp_get_domain_npes(G%domain%mpp_domain) .eq. 1 ) then
+    if (.not. associated(mpp_get_io_domain(G%domain%mpp_domain))) &
+      call mpp_define_io_domain(G%domain%mpp_domain, (/1,1/))
+  endif
+  ! get the number of vertical levels
+  nz = 1 ; if (present(GV)) nz = GV%ke
+
+  if (present(filename)) then
+    base_file_name = trim(filename)
+  else
+    base_file_name=trim(CS%restartfile)
+  endif
+  ! append a time stamp to the file name if time_stamp is specified
+  if (PRESENT(time_stamped)) then
+    if (time_stamped) then
+      call get_date(time,year,month,days,hour,minute,seconds)
+      ! Compute the year-day, because I don't like months. - RWH
+      do m=1,month-1
+        days = days + days_in_month(set_date(year,m,2,0,0,0))
+      enddo
+      seconds = seconds + 60*minute + 3600*hour
+      if (year <= 9999) then
+        write(date_appendix,'("_Y",I4.4,"_D",I3.3,"_S",I5.5)') year, days, seconds
+      elseif (year <= 99999) then
+        write(date_appendix,'("_Y",I5.5,"_D",I3.3,"_S",I5.5)') year, days, seconds
+      else
+        write(date_appendix,'("_Y",I10.10,"_D",I3.3,"_S",I5.5)') year, days, seconds
+      endif
+      restartname_temp = trim(base_file_name)//trim(date_appendix)
+    endif
+  else
+    restartname_temp = trim(base_file_name)
+  endif
+
+  ! get the restart time units
+  restart_time = time_type_to_real(time) / 86400.0
+  restart_time_units = "days"
+  next_var = 1
+  do while (next_var <= CS%novars )
+    start_var = next_var
+    ! get variable sizes in bytes
+    size_in_file = 8*(2*G%Domain%niglobal+2*G%Domain%njglobal+2*nz+1000)
+
+    do m=start_var,CS%novars
+      call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
+                         z_grid=z_grid, t_grid=t_grid, caller="save_restart")
+      if (hor_grid == '1') then
+        var_sz = 8
+      else
+        var_sz = 8*(G%Domain%niglobal+1)*(G%Domain%njglobal+1)
+      endif
+      select case (z_grid)
+        case ('L') ; var_sz = var_sz * nz
+        case ('i') ; var_sz = var_sz * (nz+1)
+      end select
+      t_grid = adjustl(t_grid)
+      if (t_grid(1:1) == 'p') then
+        if (len_trim(t_grid(2:8)) > 0) then
+          var_periods = -1
+          t_grid_read = adjustl(t_grid(2:8))
+          read(t_grid_read,*) var_periods
+          if (var_periods > 1) var_sz = var_sz * var_periods
+        endif
+      endif
+
+      if ((m==start_var) .OR. (size_in_file < max_file_size-var_sz)) then
+        size_in_file = size_in_file + var_sz
+      else ; exit
+      endif
+
+    enddo
+    next_var = m
+
+    restartpath = ""
+    restartpath_temp = ""
+    suffix = ""
+
+    !query fms_io if there is a filename_appendix (for ensemble runs)
+    ! TODO move filename_appendix functionality to fms2-io or MOM6 framework
+    name_length = len_trim(restartname_temp)
+    call get_filename_appendix(filename_appendix)
+    if (len_trim(filename_appendix) > 0) then
+      if (restartname_temp(name_length-2:name_length) == '.nc') then
+        restartname = restartname_temp(1:name_length-3)//'.'//trim(filename_appendix)//'.nc'
+      else
+        if (trim(filename_appendix) .ne. " ") then
+          restartname = restartname_temp(1:name_length)  //'.'//trim(filename_appendix)
+        else
+          restartname(1:name_length) = trim(restartname_temp)
+        endif
+      endif
+    else
+      restartname(1:name_length) = trim(restartname_temp)
+    endif
+
+    if (num_files < 10) then
+      write(suffix,'("_",I1)') num_files
+    else
+      write(suffix,'("_",I2)') num_files
+    endif
+
+    if (num_files .gt. 0) then
+      name_length = len_trim(directory//restartname//suffix)
+      restartpath_temp = trim(directory)//trim(restartname)//trim(suffix)
+    else
+      name_length = len_trim(directory//restartname)
+      restartpath_temp = trim(directory)//trim(restartname)
+    endif
+    ! append '.nc' to the restart file path if it is missing
+    substring_index = index(trim(restartpath_temp), ".nc")
+    if (substring_index <= 0) then
+      restartpath = append_substring(restartpath_temp,".nc")
+    else
+      restartpath(1:len_trim(restartpath_temp)) = trim(restartpath_temp)
+    endif
+    ! create the file and register and write the global axes to the file
+    if (present(GV)) then
+      call create_file(trim(restartpath), fileObjWrite, CS%restart_field%vars, CS%novars, register_time=.true., &
+                        G=G, GV=GV, is_restart=.true.)
+    else
+      call create_file(trim(restartpath), fileObjWrite, CS%restart_field%vars, CS%novars, register_time=.true., &
+                       G=G, is_restart=.true.)
+    endif
+    ! register the time data
+    if (.not. variable_exists(fileObjWrite, "Time")) then
+      call register_field(fileObjWrite, "Time", "double", dimensions=(/"Time"/))
+      call register_variable_attribute(fileObjWrite, "Time", "units", restart_time_units)
+    endif
+
+    do m=start_var,next_var-1
+      vars(m-start_var+1) = CS%restart_field(m)%vars
+    enddo
+
+    call query_vardesc(vars(1), t_grid=t_grid, hor_grid=hor_grid, caller="save_restart")
+
+    t_grid = adjustl(t_grid)
+    if (t_grid(1:1) /= 'p') &
+      call modify_vardesc(vars(1), t_grid='s', caller="save_restart")
+    select case (hor_grid)
+      case ('q') ; pos = CORNER
+      case ('h') ; pos = CENTER
+      case ('u') ; pos = EAST_FACE
+      case ('v') ; pos = NORTH_FACE
+      case ('Bu') ; pos = CORNER
+      case ('T')  ; pos = CENTER
+      case ('Cu') ; pos = EAST_FACE
+      case ('Cv') ; pos = NORTH_FACE
+      case ('1') ; pos = 0
+      case default ; pos = 0
+    end select
+    !Prepare the checksum of the restart fields to be written to restart files
+    if (modulo(turns, 2) /= 0) then
+      call get_checksum_loop_ranges(G, pos, jsL, jeL, isL, ieL)
+    else
+      call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
+    endif
+
+    do m=start_var,next_var-1
+      if (associated(CS%var_ptr3d(m)%p)) then
+        check_val(m-start_var+1,1) = &
+            mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:), turns=-turns)
+      elseif (associated(CS%var_ptr2d(m)%p)) then
+        check_val(m-start_var+1,1) = &
+            mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL), turns=-turns)
+      elseif (associated(CS%var_ptr4d(m)%p)) then
+        check_val(m-start_var+1,1) = &
+            mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:), turns=-turns)
+      elseif (associated(CS%var_ptr1d(m)%p)) then
+        check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr1d(m)%p)
+      elseif (associated(CS%var_ptr0d(m)%p)) then
+        check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
+      endif
+    enddo
+
+    do m=start_var,next_var-1
+      longname = ""
+      num_dims = 0
+      units = ""
+      dim_names(:) = ""
+      if (.not.(variable_exists(fileObjWrite, CS%restart_field(m)%var_name))) then
+        call query_vardesc(vars(m-start_var+1), hor_grid=hor_grid, &
+                           z_grid=z_grid, t_grid=t_grid, longname=longname, &
+                           units=units, caller="save_restart")
+
+        call get_var_dimension_metadata(hor_grid, z_grid, t_grid, &
+                                        dim_names, dim_lengths, num_dims, G=G, GV=GV)
+        ! register the restart variables to the file
+        if (associated(CS%var_ptr3d(m)%p)) then
+          call fms2_register_restart_field(fileObjWrite, CS%restart_field(m-start_var+1)%var_name, &
+                                            CS%var_ptr3d(m)%p, dimensions=dim_names(1:num_dims))
+        elseif (associated(CS%var_ptr2d(m)%p)) then
+          call fms2_register_restart_field(fileObjWrite, CS%restart_field(m-start_var+1)%var_name, &
+                                           CS%var_ptr2d(m)%p, dimensions=dim_names(1:num_dims))
+        elseif (associated(CS%var_ptr4d(m)%p)) then
+          call fms2_register_restart_field(fileObjWrite, CS%restart_field(m-start_var+1)%var_name, &
+                                           CS%var_ptr4d(m)%p, dimensions=dim_names(1:num_dims))
+        elseif (associated(CS%var_ptr1d(m)%p)) then
+          ! need to pass dim_names argument as a 1-D array
+          call fms2_register_restart_field(fileObjWrite, CS%restart_field(m-start_var+1)%var_name, &
+                                           CS%var_ptr1d(m)%p, dimensions=(/dim_names(1:num_dims)/))
+        elseif (associated(CS%var_ptr0d(m)%p)) then
+          ! need to pass dim_names argument as a 1-D array
+          call fms2_register_restart_field(fileObjWrite, CS%restart_field(m-start_var+1)%var_name, &
+                                           CS%var_ptr0d(m)%p, dimensions=(/dim_names(1:num_dims)/))
+        endif
+        ! convert the checksum to a string
+        checksum_char = ''
+        checksum_char = convert_checksum_to_string(check_val(m,1))
+        !! register the variable attributes
+        !call register_variable_attribute(fileObjWrite, CS%restart_field(m-start_var+1)%var_name, &
+        !                                 'checksum', trim(checksum_char))
+        call register_variable_attribute(fileObjWrite, CS%restart_field(m-start_var+1)%var_name, &
+                                         'units', units)
+        call register_variable_attribute(fileObjWrite, CS%restart_field(m-start_var+1)%var_name, &
+                                         'long_name', longname)
+      endif
+    enddo
+    ! write the time data
+    call write_data(fileObjWrite, "Time", (/restart_time/))
+    ! write the restart file
+    call write_restart(fileObjWrite)
+    ! close the file
+    if (check_if_open(fileObjWrite)) call fms2_close_file(fileObjWrite)
+
+    if (associated(axis_data_CS%axis)) deallocate(axis_data_CS%axis)
+    if (associated(axis_data_CS%data)) deallocate(axis_data_CS%data)
+
+    num_files = num_files+1
+  enddo
+
+end subroutine save_restart_fms2
+
+!> write initial condition fields to a netCDF file
+subroutine write_initial_conditions(directory, time, G, CS, time_stamped, filename, GV)
+  character(len=*),        intent(in)    :: directory !< The directory where the restart files
+                                                  !! are to be written
+  type(time_type),         intent(in)    :: time  !< The current model time
+  type(ocean_grid_type),   intent(inout) :: G     !< The ocean's grid structure
+  type(MOM_restart_CS),    pointer       :: CS    !< The control structure returned by a previous
+                                                  !! call to restart_init.
+  logical,          optional, intent(in) :: time_stamped !< If present and true, add time-stamp
+                                                  !! to the restart file names.
+  character(len=*), optional, intent(in) :: filename !< A filename that overrides the name in CS%restartfile.
+  type(verticalGrid_type), optional, intent(in) :: GV   !< The ocean's vertical grid structure
+  ! local
+  type(vardesc) :: vd ! structure for variable metadata
+  type(FmsNetcdfDomainFile_t) :: fileObjWrite ! netCDF file object returned by call to open_file
+  type(axis_data_type) :: axis_data_CS ! structure for coordinate variable metadata
+  integer :: substring_index
+  integer :: name_length
+  integer :: num_dims ! counter for variable dimensions
+  integer :: total_axes ! counter for all coordinate axes in file
+  integer :: i, is, ie, k, m, isc, jsc, iec, jec, isg, jsg, ieg, jeg
+  integer :: var_periods
+  integer, dimension(4) :: dim_lengths
+  integer, allocatable :: pos(:),first(:,:), last(:,:)
+  logical :: fileOpenSuccess ! .true. if netcdf file is opened
+  character(len=200) :: base_file_name
+  character(len=200) :: dim_names(4)
+  character(len=20) :: time_units
+  character(len=64) :: units
+  character(len=256) :: longname
+  character(len=8) :: hor_grid, z_grid, t_grid ! Variable grid info.
+  real :: ic_time
+  real, dimension(:), allocatable :: data_temp
+
+  ! define the io domain for 1-pe jobs because it is required to write domain-decomposed files
+  if (mpp_get_domain_npes(G%domain%mpp_domain) .eq. 1 ) then
+    if (.not. associated(mpp_get_io_domain(G%domain%mpp_domain))) &
+      call mpp_define_io_domain(G%domain%mpp_domain, (/1,1/))
+  endif
+  ! append '.nc' to the restart file name if it is missing
+  ! TODO: require users to specify full file path including the file name appendix
+  ! in calls to open_file
+  substring_index = index(trim(filename), ".nc")
+  if (substring_index <= 0) then
+      base_file_name = append_substring(trim(directory)//trim(filename),".nc")
+  else
+      name_length = len(trim(directory)//trim(filename))
+      base_file_name(1:name_length) = trim(directory)//trim(filename)
+  endif
+  ! get the time units
+  ic_time = time_type_to_real(time) / 86400.0
+  time_units = get_time_units(ic_time*86400.0)
+  ! create the file and register and write the global axes to the file
+  if (present(GV)) then
+    call create_file(trim(base_file_name), fileObjWrite, CS%restart_field%vars, CS%novars, register_time=.true., &
+                     G=G, GV=GV)
+  else
+    call create_file(trim(base_file_name), fileObjWrite, CS%restart_field%vars, CS%novars, register_time=.true., G=G)
+  endif
+  ! register the time data
+  if (.not. variable_exists(fileObjWrite, "Time")) then
+    call register_field(fileObjWrite, "Time", "double", dimensions=(/"Time"/))
+    call register_variable_attribute(fileObjWrite, "Time", "units", time_units)
+  endif
+  ! allocate position indices for x- and y-dimensions associated with variables
+  allocate(pos(CS%novars))
+  allocate(first(CS%novars,2)); allocate(last(CS%novars,2));
+  first(:,:) = 0; last(:,:) = 0
+  pos(:) = CENTER
+  ! register and write the field variables to the initial conditions file
+  do m=1,CS%novars
+    longname = ""
+    num_dims = 0
+    units = ""
+    dim_names(:) = ""
+
+    call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
+                       z_grid=z_grid, t_grid=t_grid, longname=longname, &
+                       units=units, caller="save_restart")
+
+    call get_var_dimension_metadata(hor_grid, z_grid, t_grid, &
+                                    dim_names, dim_lengths, num_dims, G=G, GV=GV)
+    select case (hor_grid)
+      case ('q') ; pos(m) = CORNER
+      case ('h') ; pos(m) = CENTER
+      case ('u') ; pos(m) = EAST_FACE
+      case ('v') ; pos(m) =  NORTH_FACE
+      case ('Bu') ; pos(m) = CORNER
+      case ('T')  ; pos(m) = CENTER
+      case ('Cu') ; pos(m) = EAST_FACE
+      case ('Cv') ; pos(m) = NORTH_FACE
+      case ('1') ; pos(m) = 0
+      case default ; pos(m)= 0
+    end select
+    ! register the variables
+    if (associated(CS%var_ptr3d(m)%p)) then
+      call register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", &
+                              dimensions=dim_names(1:num_dims))
+    elseif (associated(CS%var_ptr2d(m)%p)) then
+      call register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", &
+                              dimensions=dim_names(1:num_dims))
+    elseif (associated(CS%var_ptr4d(m)%p)) then
+      call register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", &
+                              dimensions=dim_names(1:num_dims))
+    elseif (associated(CS%var_ptr1d(m)%p)) then
+      ! need to explicitly define dim_names array for 1-D variable
+      call register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", &
+                              dimensions=(/dim_names(1)/))
+    elseif (associated(CS%var_ptr0d(m)%p)) then
+      ! need to explicitly define dim_names array for scalar variable
+      call register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", &
+                              dimensions=(/dim_names(1)/))
+    endif
+    ! register the variable attributes
+    call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, "units", units)
+    call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, "long_name", longname)
+  enddo
+
+  do m=1,CS%novars
+    if (associated(CS%var_ptr3d(m)%p)) then
+      call write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr3d(m)%p, &
+                      unlim_dim_level=1)
+    elseif (associated(CS%var_ptr2d(m)%p)) then
+      call write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p, &
+                      unlim_dim_level=1)
+    elseif (associated(CS%var_ptr4d(m)%p)) then
+      call write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p, &
+                      unlim_dim_level=1)
+    elseif (associated(CS%var_ptr1d(m)%p)) then
+      call write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr1d(m)%p, &
+                      unlim_dim_level=1)
+    elseif (associated(CS%var_ptr0d(m)%p)) then
+      call write_data(fileObjWrite, CS%restart_field(m)%var_name,CS%var_ptr0d(m)%p)
+    endif
+  enddo
+  ! write the time data
+  call write_data(fileObjWrite, "Time", (/ic_time/))
+  ! close the IC file and deallocate the allocatable arrays
+  if(check_if_open(fileObjWrite)) call fms2_close_file(fileObjWrite)
+
+  if (associated(axis_data_CS%axis)) deallocate(axis_data_CS%axis)
+  if (associated(axis_data_CS%data)) deallocate(axis_data_CS%data)
+  deallocate(pos);  deallocate(first); deallocate(last)
+end subroutine write_initial_conditions
+
+!> wrapper routine for restore_state_old and restore_state_fms2
+subroutine restore_state(filename, directory, day, G, CS, use_fms2)
+  character(len=*),      intent(in)  :: filename  !< The list of restart file names or a single
+                                                  !! character 'r' to read automatically named files.
+  character(len=*),      intent(in)  :: directory !< The directory in which to find restart files
+  type(time_type),       intent(out) :: day       !< The time of the restarted run
+  type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
+  type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
+                                                  !! call to restart_init.
+  logical,     optional, intent(in)  :: use_fms2  !< if .true., call restore_state_fms2
+
+  if (present(use_fms2) .and. use_fms2) then
+    call restore_state_fms2(filename, directory, day, G, CS)
+  else
+    call restore_state_old(filename, directory, day, G, CS)
+  endif
+end subroutine restore_state
 
 !> restore_state reads the model state from previously generated files.  All
 !! restart variables are read from the first file in the input filename list
 !! in which they are found.
-subroutine restore_state(filename, directory, day, G, CS)
+subroutine restore_state_old(filename, directory, day, G, CS)
   character(len=*),      intent(in)  :: filename  !< The list of restart file names or a single
                                                   !! character 'r' to read automatically named files.
   character(len=*),      intent(in)  :: directory !< The directory in which to find restart files
@@ -1282,9 +1795,202 @@ subroutine restore_state(filename, directory, day, G, CS)
     endif
   enddo
 
-end subroutine restore_state
+end subroutine restore_state_old
+
+!> restore_state_fms2 reads the model state from previously generated files using fms2-io. All
+!! restart variables are read from the first file in the input filename list
+!! in which they are found.
+subroutine restore_state_fms2(filename, directory, day, G, CS)
+  character(len=*),      intent(in)  :: filename  !< The list of restart file names or a single
+                                                  !! character 'r' to read automatically named files.
+  character(len=*),      intent(in)  :: directory !< The directory in which to find restart files
+  type(time_type),       intent(out) :: day       !< The time of the restarted run
+  type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
+  type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
+                                                  !! call to restart_init.
+
+ !  This subroutine reads the model state from previously
+ !  generated files.  All restart variables are read from the first
+ !  file in the input filename list in which they are found.
+  ! Local variables
+  character(len=200) :: filepath  ! The path (dir/file) to the file being opened.
+  character(len=80) :: fname      ! The name of the current file.
+  character(len=8)  :: suffix     ! A suffix (like "_2") that is added to any
+                                  ! additional restart files.
+  character(len=512) :: mesg      ! A message for warnings.
+  character(len=80) :: varname    ! A variable's name.
+  integer :: i, m, n
+  integer :: isL, ieL, jsL, jeL, is0, js0
+  integer :: ntime, pos
+  character(len=200) :: unit_path(CS%max_fields) ! The file names.
+  logical :: unit_is_global(CS%max_fields) ! True if the file is global.
+  character(len=200) :: base_file_name
+  character(len=1024) :: temp_file_name
+  character(len=8)   :: hor_grid, z_grid, t_grid ! Variable grid info.
+  real    :: t1, t2 ! Two times.
+  real, allocatable :: time_vals(:)
+  logical :: check_exist, is_there_a_checksum
+  integer(l8_kind),dimension(3)  :: checksum_file
+  integer(kind=8)                  :: checksum_data
+  integer :: missing_fields
+  logical :: fileOpenSuccess ! .true. if netcdf file object is opened
+  type(FmsNetcdfDomainFile_t) :: fileObjRead  ! netcdf file object returned by open_file
+  integer :: str_index, num_file, is,ie,js,je
+  character(len=64) :: checksum_char, time_units
+  character(len=20), dimension(:), allocatable :: axis_names
+  character(len=32) :: dim_names(4)
+  integer :: dim_lengths(4), num_dims, dim_size
+
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
+      "restore_state: Module must be initialized before it is used.")
+  if (CS%novars > CS%max_fields) call restart_error(CS)
+  ! define the io domain if using 1 pe and the io domain is not set
+  if (mpp_get_domain_npes(G%domain%mpp_domain) .eq. 1 ) then
+    if (.not. associated(mpp_get_io_domain(G%domain%mpp_domain))) &
+      call mpp_define_io_domain(G%domain%mpp_domain, (/1,1/))
+  endif
+
+  str_index = 0
+  ! get the base restart file name
+  temp_file_name=''
+  if ((LEN_TRIM(filename) == 1 .and. filename(1:1) == 'F') .or. (trim(filename)=='r')) then
+    temp_file_name = trim(CS%restartfile)
+  else
+    temp_file_name = trim(filename)
+  endif
+  ! append '.nc.' to the file name if it is missing
+  base_file_name = ""
+  str_index = INDEX(temp_file_name, ".nc")
+  if (str_index <=0) then
+     base_file_name = trim(append_substring(temp_file_name, ".nc"))
+  else
+     base_file_name = trim(temp_file_name)
+  endif
+
+  num_file = get_num_restart_files(temp_file_name, directory, G, CS, file_paths=unit_path)
+  CS%restart_field(:)%initialized = .false.
+  ! Read each variable from the first file in which it is found.
+  do n=1,num_file
+    ! Open the restart file.
+    if (.not.(check_if_open(fileObjRead))) &
+      fileOpenSuccess=fms2_open_file(fileObjRead, trim(unit_path(n)), "read", &
+                                     G%domain%mpp_domain, is_restart=.true.)
+    if (fileOpenSuccess) &
+      call MOM_error(NOTE, "MOM_restart_fms2: MOM run restarted using : "//trim(unit_path(n)))
+
+    call get_dimension_size(fileObjRead, "Time", ntime)
+
+    if (ntime .lt. 1) then
+      call MOM_error(NOTE, "MOM_restart_fms2: time is scalar.")
+      ntime=1
+    endif
+    allocate(time_vals(ntime))
+    call read_data(fileObjRead, "Time", time_vals)
+    t1 = time_vals(1)
+    deallocate(time_vals)
+    t2 = t1
+    call mpp_max(t2)
+    if (t1 .ne. t2) then
+      call MOM_error(FATAL, "times are different in different restart files.")
+    endif
+
+    day = real_to_time(t1*86400.0)
+    ! Register the horizontal axes that correspond to x and y of the domain.
+    num_dims=get_num_dimensions(fileObjRead)
+    allocate(axis_names(num_dims))
+    axis_names(:)= ""
+    call get_dimension_names(fileObjRead, axis_names)
+    do i = 1,num_dims
+      call get_dimension_size(fileObjRead, trim(axis_names(i)), dim_size)
+      call MOM_register_diagnostic_axis(fileObjRead, trim(axis_names(i)), dim_size)
+    enddo
+   ! Read in each variable from the restart files.
+    missing_fields = 0
+    do m = 1, CS%novars
+      varname = ''
+      varname = trim(CS%restart_field(m)%var_name)
+      ! Check for obsolete fields
+      do i = 1,CS%num_obsolete_vars
+        if (adjustl(lowercase(trim(varname))) .eq. adjustl(lowercase(trim(CS%restart_obsolete(i)%field_name)))) then
+          call MOM_error(FATAL, "MOM_restart:restore_state_fms2: Attempting to use obsolete restart field "//&
+                               trim(varname)//" - the new corresponding restart field is "//&
+                               trim(CS%restart_obsolete(i)%replacement_name))
+        endif
+      enddo
+
+      if (CS%restart_field(m)%initialized) cycle
+      call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
+                         caller="restore_state_fms2")
+      select case (hor_grid)
+        case ('q') ; pos = CORNER
+        case ('h') ; pos = CENTER
+        case ('u') ; pos = EAST_FACE
+        case ('v') ; pos = NORTH_FACE
+        case ('Bu') ; pos = CORNER
+        case ('T')  ; pos = CENTER
+        case ('Cu') ; pos = EAST_FACE
+        case ('Cv') ; pos = NORTH_FACE
+        case ('1') ; pos = 0
+        case default ; pos = 0
+      end select
+
+      call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
+      ! Check if the variable is mandatory and present in the restart file(s)
+      if (.not. variable_exists(fileObjRead, trim(varname))) then
+        if (CS%restart_field(m)%mand_var) then
+          call MOM_error(WARNING, "MOM_restart_fms2: Unable to find mandatory variable " &
+                              //trim(varname)//" in restart file "//trim(directory)//trim(base_file_name))
+          missing_fields = missing_fields+1
+          cycle
+        endif
+      endif
+      ! Get the variable's "domain position."
+      num_dims = 0
+      dim_names(:) = ""
+      num_dims=get_variable_num_dimensions(fileobjRead, trim(varname))
+      call get_variable_dimension_names(fileObjRead, trim(varname), dim_names(1:num_dims))
+      ! Register the restart fields and compute the checksums.
+      if (associated(CS%var_ptr1d(m)%p)) then
+        call fms2_register_restart_field(fileObjRead, trim(varname), CS%var_ptr1d(m)%p, &
+                                         dimensions=(/dim_names(1)/))
+      elseif (associated(CS%var_ptr0d(m)%p)) then
+        call fms2_register_restart_field(fileObjRead, trim(varname), CS%var_ptr0d(m)%p)
+      elseif (associated(CS%var_ptr2d(m)%p)) then
+        call fms2_register_restart_field(fileObjRead, trim(varname), CS%var_ptr2d(m)%p, &
+                                         dimensions=dim_names(1:num_dims))
+      elseif (associated(CS%var_ptr3d(m)%p)) then
+        call fms2_register_restart_field(fileObjRead, trim(varname), CS%var_ptr3d(m)%p, &
+                                         dimensions=dim_names(1:num_dims))
+      elseif (associated(CS%var_ptr4d(m)%p)) then
+        call fms2_register_restart_field(fileObjRead, trim(varname), CS%var_ptr4d(m)%p, &
+                                         dimensions=dim_names(1:num_dims))
+      else
+        call MOM_error(FATAL, "MOM_restart restore_state_fms2: No pointers set for "//trim(varname))
+      endif
+      CS%restart_field(m)%initialized = .true.
+    enddo ! m=CS%novars
+    ! Read in restart data and then close the file.
+    call read_restart(fileObjRead, unlim_dim_level=1)
+    ! close the file
+    if (check_if_open(fileObjRead)) call fms2_close_file(fileObjRead)
+    if (allocated(axis_names)) deallocate(axis_names)
+    if (missing_fields == 0) exit
+  enddo
+
+  do m=1,CS%novars
+    if (.not.(CS%restart_field(m)%initialized)) then
+      CS%restart = .false.
+      if (CS%restart_field(m)%mand_var) then
+        call MOM_error(FATAL,"MOM_restart: Unable to find mandatory variable " &
+                       //trim(CS%restart_field(m)%var_name)//" in restart files.")
+      endif
+    endif
+  enddo
+
+end subroutine restore_state_fms2
 
 !> restart_files_exist determines whether any restart files exist.
+! TODO remove this function when fms2-io is fully implemented
 function restart_files_exist(filename, directory, G, CS)
   character(len=*),      intent(in)  :: filename  !< The list of restart file names or a single
                                                   !! character 'r' to read automatically named files.
@@ -1497,6 +2203,136 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
 
 end function open_restart_units
 
+!> get_num_restart_files determines the number of existing restart files and returns paths
+!! and whether the files are global or spatially decomposed.
+function get_num_restart_files(filename, directory, G, CS, file_paths) result(num_files)
+  character(len=*),      intent(in)  :: filename  !< The list of restart file names or a single
+                                                  !! character 'r' to read automatically named files.
+  character(len=*),      intent(in)  :: directory !< The directory in which to find restart files
+  type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
+  type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
+                                                  !! call to restart_init.
+  character(len=*), dimension(:), &
+               optional, intent(out) :: file_paths   !< The full paths to open files.
+  !logical, dimension(:), &
+  !             optional, intent(out) :: global_files !< True if a file is global.
+
+  integer :: num_files  !< The number of files (both automatically named restart
+                        !! files and others explicitly in filename) that have been opened.
+
+!    This subroutine reads the model state from previously
+!  generated files.  All restart variables are read from the first
+!  file in the input filename list in which they are found.
+
+  ! Local variables
+  character(len=256) :: filepath  ! The path (dir/file) to the file being opened.
+  character(len=256) :: fname     ! The name of the current file.
+  character(len=8)   :: suffix    ! A suffix (like "_2") that is added to any
+                                  ! additional restart files
+  integer :: num_restart     ! The number of restart files that have already
+                             ! been opened.
+  integer :: start_char      ! The location of the starting character in the
+                             ! current file name.
+  integer :: f, n, m, err, length, str_index
+  logical :: fexists
+  character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs
+  character(len=80) :: restartname
+  character(len=240) :: filepath_temp, filepath_temp2
+
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
+      "get_num_restart_files: Module must be initialized before it is used.")
+ ! Determine the file name
+  num_restart = 0 ; n=0; start_char = 1; str_index=0
+  if (present(file_paths)) file_paths(:) = ""
+  do while (start_char <= len_trim(filename) )
+    do m=start_char,len_trim(filename)
+      if (filename(m:m) == ' ') exit
+    enddo
+    fname = filename(start_char:m-1)
+    start_char = m
+    do while (start_char <= len_trim(filename))
+      if (filename(start_char:start_char) == ' ') then
+        start_char = start_char + 1
+      else
+        exit
+      endif
+    enddo
+
+    err = 0
+    if (num_restart > 0) err = 1 ! Avoid going through the file list twice.
+    do while (err == 0)
+      restartname = trim(CS%restartfile)
+      !  query fms_io if there is a filename_appendix (for ensemble runs)
+      ! TODO add support to fms2-io, or move to MOM6 framework
+      call get_filename_appendix(filename_appendix)
+      if (len_trim(filename_appendix) > 0 .and. trim(filename_appendix) .ne. " ") then
+        length = len_trim(restartname)
+        if (restartname(length-2:length) == '.nc') then
+          restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
+        else
+          restartname = restartname(1:length)  //'.'//trim(filename_appendix)
+        endif
+      endif
+      filepath = trim(directory) // trim(restartname)
+
+      if (num_restart < 10) then
+        write(suffix,'("_",I1)') num_restart
+      else
+        write(suffix,'("_",I2)') num_restart
+      endif
+      if (num_restart > 0) filepath = trim(filepath) // suffix
+
+      filepath_temp = trim(filepath)//".nc"
+      if (file_exists(trim(filepath_temp),.true.) .or. file_exists(trim(filepath_temp)//".0000",.true.)) then
+        n = n+1
+        if (present(file_paths)) file_paths(n) = trim(filepath_temp)
+        num_restart = num_restart + 1
+        call MOM_error(NOTE, "MOM_restart:get_num_restart_files: Found restart file : "//trim(filepath))
+      endif
+      ! search for files with "res_#" in the name
+      str_index = index(filepath_temp,".res.nc")
+      if (str_index .gt. 0) then
+        f = 0
+        do while (f .le. n)
+          f=f+1
+          filepath_temp2=""
+          ! check for names with extra .res.nc added by fms2-io
+          if ( f .lt. 10) then
+            write(filepath_temp2,'(A,I1,A)') trim(filepath_temp(1:str_index-1))//".res_",f,".res.nc"
+          elseif (f .ge. 10 .and. f .lt. 100) then
+            write(filepath_temp2,'(A,I2,A)') trim(filepath_temp(1:str_index-1))//".res_",f,".res.nc"
+          endif
+          if (file_exists(trim(filepath_temp2),.true.) .or. file_exists(trim(filepath_temp2)//".0000",.true.)) then
+            call MOM_error(NOTE, "MOM_restart:get_num_restart_files: Found restart file : "//trim(filepath_temp2))
+            num_restart=num_restart+1
+            n=n+1
+            if (present(file_paths)) file_paths(n) = trim(filepath_temp2)
+          else
+            ! check for fms-io-style name
+            filepath_temp2=""
+            if ( f .lt. 10) then
+              write(filepath_temp2,'(A,I1,A)') trim(filepath_temp(1:str_index-1))//".res_",f,".nc"
+            elseif (f .ge. 10 .and. f .lt. 100) then
+              write(filepath_temp2,'(A,I2,A)') trim(filepath_temp(1:str_index-1))//".res_",f,".nc"
+            endif
+            if (file_exists(trim(filepath_temp2),.true.) .or. file_exists(trim(filepath_temp2)//".0000",.true.)) then
+              call MOM_error(NOTE, "MOM_restart:get_num_restart_files: Found restart file : "//trim(filepath_temp2))
+              num_restart=num_restart+1
+              n=n+1
+              if (present(file_paths)) file_paths(n) = trim(filepath_temp2)
+            else
+              exit
+            endif
+          endif
+        enddo ! while (f .le. n-1)
+      endif
+      err = 1 ; exit
+    enddo ! while (err == 0) loop
+  enddo ! while (start_char < strlen(filename)) loop
+  num_files = n
+
+end function get_num_restart_files
+
 !> Initialize this module and set up a restart control structure.
 subroutine restart_init(param_file, CS, restart_root)
   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
@@ -1649,5 +2485,42 @@ subroutine get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
   endif
 
 end subroutine get_checksum_loop_ranges
+
+!> get the size of a variable in bytes
+function get_variable_byte_size(hor_grid, z_grid, t_grid, G, num_zlevels) result(var_sz)
+  character(len=*), intent(in) :: hor_grid !< horizontal grid string
+  character(len=*), intent(in) :: z_grid !< vertical grid string
+  character(len=*), intent(in) :: t_grid !< time string
+  type(ocean_grid_type), intent(in) :: G !< The ocean's grid structure;
+  integer, intent(in) :: num_zlevels     !< number of vertical levels
+  ! local
+  integer(kind=8) :: var_sz !< The size in bytes of each variable
+  integer :: var_periods
+  character(len=8) :: t_grid_read=''
+
+  var_periods = 0
+
+  if (trim(hor_grid) == '1') then
+     var_sz = 8
+  else
+     var_sz = 8*(G%Domain%niglobal+1)*(G%Domain%njglobal+1)
+  endif
+
+  select case (trim(z_grid))
+     case ('L') ; var_sz = var_sz * num_zlevels
+     case ('i') ; var_sz = var_sz * (num_zlevels+1)
+  end select
+
+  if (adjustl(t_grid(1:1)) == 'p') then
+     if (len_trim(t_grid(2:8)) > 0) then
+        var_periods = -1
+        t_grid_read = adjustl(t_grid(2:8))
+        read(t_grid_read,*) var_periods
+        if (var_periods > 1) var_sz = var_sz * var_periods
+     endif
+  endif
+
+end function get_variable_byte_size
+
 
 end module MOM_restart

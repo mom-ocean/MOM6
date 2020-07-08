@@ -534,7 +534,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
     write(restartname,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5)') trim(runid), year, month, day, seconds
 
     call save_restart(glb%ocn_state%dirs%restart_output_dir, glb%ocn_state%Time, glb%grid, &
-                      glb%ocn_state%restart_CSp, .false., filename=restartname, GV=glb%ocn_state%GV)
+                      glb%ocn_state%restart_CSp, .false., filename=restartname, GV=glb%ocn_state%GV, use_fms2=.true.)
 
     ! write name of restart file in the rpointer file
     nu = shr_file_getUnit()
