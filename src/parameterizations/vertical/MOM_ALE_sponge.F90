@@ -153,6 +153,8 @@ type, public :: ALE_sponge_CS ; private
   integer :: id_sp_val_v = -1
   integer :: id_sp_val_app_u = -1
   integer :: id_sp_val_app_v = -1
+  integer :: id_sp_val_s_presponge = -1
+  integer :: id_sp_val_s_postsponge = -1
 
 end type ALE_sponge_CS
 
@@ -161,7 +163,7 @@ contains
 !> This subroutine determines the number of points which are within sponges in this computational
 !! domain.  Only points that have positive values of Iresttime and which mask2dT indicates are ocean
 !! points are included in the sponges.  It also stores the target interface heights.
-subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_data)
+subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_data, Iresttime_u_in, Iresttime_v_in)
 
   type(ocean_grid_type),            intent(in) :: G !< The ocean's grid structure.
   integer,                          intent(in) :: nz_data !< The total number of sponge input layers.
@@ -172,6 +174,8 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
                                                      !! structure for this module (in/out).
   real, dimension(SZI_(G),SZJ_(G),nz_data), intent(in) :: data_h !< The thicknesses of the sponge
                                                      !! input layers [H ~> m or kg m-2].
+  real, dimension(SZIB_(G),SZJ_(G)), intent(in), optional :: Iresttime_u_in
+  real, dimension(SZI_(G),SZJB_(G)), intent(in), optional :: Iresttime_v_in
 
 
 ! This include declares and sets the variable "version".
@@ -283,9 +287,15 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
 
     ! u points
     CS%num_col_u = 0 ; !CS%fldno_u = 0
+    if (present(Iresttime_u_in)) then
+      Iresttime_u(:,:) = Iresttime_u_in
+    else
+      do j=CS%jsc,CS%jec ; do I=CS%iscB,CS%iecB
+        Iresttime_u(I,j) = 0.5 * (Iresttime(i,j) + Iresttime(i+1,j))
+      enddo ; enddo
+    endif
     do j=CS%jsc,CS%jec ; do I=CS%iscB,CS%iecB
        data_hu(I,j,:) = 0.5 * (data_h(i,j,:) + data_h(i+1,j,:))
-       Iresttime_u(I,j) = 0.5 * (Iresttime(i,j) + Iresttime(i+1,j))
        if ((Iresttime_u(I,j)>0.0) .and. (G%mask2dCu(I,j)>0)) &
           CS%num_col_u = CS%num_col_u + 1
     enddo ; enddo
@@ -320,9 +330,15 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
 
     ! v points
     CS%num_col_v = 0 ; !CS%fldno_v = 0
+    if (present(Iresttime_v_in)) then
+      Iresttime_v(:,:) = Iresttime_v_in
+    else
+      do J=CS%jscB,CS%jecB; do i=CS%isc,CS%iec
+        Iresttime_v(i,J) = 0.5 * (Iresttime(i,j) + Iresttime(i,j+1))
+      enddo ; enddo
+    endif
     do J=CS%jscB,CS%jecB; do i=CS%isc,CS%iec
       data_hv(i,J,:) = 0.5 * (data_h(i,j,:) + data_h(i,j+1,:))
-      Iresttime_v(i,J) = 0.5 * (Iresttime(i,j) + Iresttime(i,j+1))
       if ((Iresttime_v(i,J)>0.0) .and. (G%mask2dCv(i,J)>0)) &
         CS%num_col_v = CS%num_col_v + 1
     enddo ; enddo
@@ -409,7 +425,7 @@ end subroutine get_ALE_sponge_thicknesses
 !> This subroutine determines the number of points which are to be restoref in the computational
 !! domain.  Only points that have positive values of Iresttime and which mask2dT indicates are ocean
 !! points are included in the sponges.
-subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
+subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS, Iresttime_u_in, Iresttime_v_in)
 
   type(ocean_grid_type),            intent(in) :: G !< The ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: Iresttime !< The inverse of the restoring time [T-1 ~> s-1].
@@ -417,6 +433,8 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
                                                              !! for model parameter values.
   type(ALE_sponge_CS),              pointer    :: CS !< A pointer that is set to point to the control
                                                      !! structure for this module (in/out).
+  real, dimension(SZIB_(G),SZJ_(G)), intent(in), optional :: Iresttime_u_in
+  real, dimension(SZI_(G),SZJB_(G)), intent(in), optional :: Iresttime_v_in
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -507,10 +525,15 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
 
     call pass_var(Iresttime,G%Domain)
     ! u points
+    if (present(Iresttime_u_in)) then
+      Iresttime_u(:,:) = Iresttime_u_in
+    else
+      do j=CS%jsc,CS%jec ; do I=CS%iscB,CS%iecB
+        Iresttime_u(I,j) = 0.5 * (Iresttime(i,j) + Iresttime(i+1,j))
+      enddo ; enddo
+    endif
     CS%num_col_u = 0 ; !CS%fldno_u = 0
     do j=CS%jsc,CS%jec; do I=CS%iscB,CS%iecB
-      Iresttime_u(I,j) = 0.5 * (Iresttime(i,j) + Iresttime(i+1,j))
-      Iresttime_u(I,j) = Iresttime(i,j)
       if ((Iresttime_u(I,j)>0.0) .and. (G%mask2dCu(I,j)>0)) &
         CS%num_col_u = CS%num_col_u + 1
     enddo ; enddo
@@ -534,9 +557,15 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
     call log_param(param_file, mdl, "!Total sponge columns at u points", total_sponge_cols_u, &
                 "The total number of columns where sponges are applied at u points.")
     ! v points
+    if (present(Iresttime_v_in)) then
+      Iresttime_v(:,:) = Iresttime_v_in
+    else
+      do J=CS%jscB,CS%jecB; do i=CS%isc,CS%iec
+        Iresttime_v(i,J) = 0.5 * (Iresttime(i,j) + Iresttime(i,j+1))
+      enddo ; enddo
+    endif
     CS%num_col_v = 0 ; !CS%fldno_v = 0
     do J=CS%jscB,CS%jecB; do i=CS%isc,CS%iec
-      Iresttime_v(i,J) = 0.5 * (Iresttime(i,j) + Iresttime(i,j+1))
       if ((Iresttime_v(i,J)>0.0) .and. (G%mask2dCv(i,J)>0)) &
         CS%num_col_v = CS%num_col_v + 1
     enddo ; enddo
@@ -598,6 +627,12 @@ subroutine init_ALE_sponge_diags(Time, G, diag, CS)
 
   CS%id_sp_val_app_v = register_diag_field('ocean_model', 'sp_val_app_v', diag%axesCvL, Time, &
         'Sponge target value for meridional velocity at v points, only where sponge is applied', 'm s-1')
+
+  CS%id_sp_val_s_presponge = register_diag_field('ocean_model', 'sp_val_s_presponge', diag%axesTL, Time, &
+        'Salinity at h points before sponge is applied', 'degC')
+
+  CS%id_sp_val_s_postsponge = register_diag_field('ocean_model', 'sp_val_s_postsponge', diag%axesTL, Time, &
+        'Salinity at h points after sponge is applied', 'degC')
 
 end subroutine init_ALE_sponge_diags
 
@@ -894,6 +929,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
        allocate(mask_z(G%isd:G%ied,G%jsd:G%jed,1:nz_data))
        sp_val(:,:,:) = 0.0
        mask_z(:,:,:) = 0.0
+
        call horiz_interp_and_extrap_tracer(CS%Ref_val(m)%id, Time, 1.0, G, sp_val, mask_z, z_in, &
                       z_edges_in,  missing_value, .true., .false., .false., &
                       spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z, &
@@ -903,6 +939,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
        endif
        if (m .EQ. 2) then
          if (CS%id_sp_val_s > 0)  call post_data(CS%id_sp_val_s, sp_val, CS%diag)
+         if (CS%id_sp_val_s_presponge > 0)  call post_data(CS%id_sp_val_s_presponge, CS%var(m)%p, CS%diag)
        endif
 
        allocate( hsrc(nz_data) )
@@ -937,6 +974,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
 !                  ! reverting to using a minimum thickness criteria
 !                  CS%Ref_val(m)%p(k,c) = CS%Ref_val(m)%p(k-1,c)
 !          enddo
+
        enddo
        deallocate(sp_val, mask_z, hsrc, tmpT1d)
     enddo
@@ -964,8 +1002,10 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         call remapping_core_h(CS%remap_cs,nz_data, CS%Ref_h%p(1:nz_data,c), tmp_val2, &
                               CS%nz, h(i,j,:), tmp_val1, h_neglect, h_neglect_edge)
       endif
+
       !Backward Euler method
-!      CS%var(m)%p(i,j,1:CS%nz) = I1pdamp * (CS%var(m)%p(i,j,1:CS%nz) + tmp_val1 * damp)
+      CS%var(m)%p(i,j,1:CS%nz) = I1pdamp * (CS%var(m)%p(i,j,1:CS%nz) + tmp_val1 * damp)
+
     enddo
 
     if (m .EQ. 1) then
@@ -973,6 +1013,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
     endif
     if (m .EQ. 2) then
       if (CS%id_sp_val_app_s > 0)  call post_data(CS%id_sp_val_app_s, tmp, CS%diag)
+      if (CS%id_sp_val_s_postsponge > 0)  call post_data(CS%id_sp_val_s_postsponge, CS%var(m)%p, CS%diag)
     endif
 
   enddo
