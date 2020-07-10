@@ -27,7 +27,9 @@ real elemental pure function PLM_slope_wa(h_l, h_c, h_r, h_neglect, u_l, u_c, u_
   real, intent(in) :: u_c !< Value of center cell [units of u]
   real, intent(in) :: u_r !< Value of right cell [units of u]
   ! Local variables
-  real :: sigma_l, sigma_c, sigma_r, u_min, u_max
+  real :: sigma_l, sigma_c, sigma_r ! Left, central and right slope estimates as
+                                    ! differences across the cell [units of u]
+  real :: u_min, u_max ! Minimum and maximum value across cell [units of u]
 
   ! Side differences
   sigma_r = u_r - u_c
@@ -71,7 +73,10 @@ real elemental pure function PLM_slope_cw(h_l, h_c, h_r, h_neglect, u_l, u_c, u_
   real, intent(in) :: u_c !< Value of center cell [units of u]
   real, intent(in) :: u_r !< Value of right cell [units of u]
   ! Local variables
-  real :: sigma_l, sigma_c, sigma_r, u_min, u_max, h_cn
+  real :: sigma_l, sigma_c, sigma_r ! Left, central and right slope estimates as
+                                    ! differences across the cell [units of u]
+  real :: u_min, u_max ! Minimum and maximum value across cell [units of u]
+  real :: h_cn ! Thickness of center cell [units of grid thickness]
 
   h_cn = h_c + h_neglect
 
@@ -121,7 +126,9 @@ real elemental pure function PLM_monotonized_slope(u_l, u_c, u_r, s_l, s_c, s_r)
   real, intent(in) :: s_c !< PLM slope of center cell [units of u]
   real, intent(in) :: s_r !< PLM slope of right cell [units of u]
   ! Local variables
-  real :: e_r, e_l, edge, almost_two, slp
+  real :: e_r, e_l, edge ! Right, left and temporary edge values [units of u]
+  real :: almost_two ! The number 2, almost.
+  real :: slp ! Magnitude of PLM central slope [units of u]
 
   almost_two = 2. * ( 1. - epsilon(s_c) )
 
@@ -157,7 +164,8 @@ real elemental pure function PLM_extrapolate_slope(h_l, h_c, h_neglect, u_l, u_c
   real, intent(in) :: u_l !< Value of left cell [units of u]
   real, intent(in) :: u_c !< Value of center cell [units of u]
   ! Local variables
-  real :: left_edge, hl, hc
+  real :: left_edge ! Left edge value [units of u]
+  real :: hl, hc ! Left and central cell thicknesses [units of grid thickness]
 
   ! Avoid division by zero for vanished cells
    hl = h_l + h_neglect
