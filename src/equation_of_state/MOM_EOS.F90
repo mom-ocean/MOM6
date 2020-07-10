@@ -183,7 +183,7 @@ subroutine calculate_density_scalar(T, S, pressure, rho, EOS, rho_ref, scale)
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
       call calculate_density_linear(T, S, p_scale*pressure, rho, &
-                                      EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, rho_ref)
+                                    EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, rho_ref)
     case (EOS_UNESCO)
       call calculate_density_unesco(T, S, p_scale*pressure, rho, rho_ref)
     case (EOS_WRIGHT)
@@ -222,20 +222,38 @@ subroutine calculate_stanley_density_scalar(T, S, pressure, Tvar, TScov, Svar, r
                                           !! from kg m-3 to the desired units [R m3 kg-1]
   ! Local variables
   real :: d2RdTT, d2RdST, d2RdSS, d2RdSp, d2RdTp ! Second derivatives of density wrt T,S,p
+  real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
+  real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calculate_density_scalar called with an unassociated EOS_type EOS.")
+    "calculate_stanley_density_scalar called with an unassociated EOS_type EOS.")
 
-  ! Branching to the correct EOS happens within each of these calls
-  ! and will appropriately error if the second derivatives are not available.
-  call calculate_density_second_derivs_scalar(T, S, pressure, d2RdSS, d2RdST, d2RdTT, &
-                                              d2RdSp, d2RdTp, EOS)
-  call calculate_density_scalar(T, S, pressure, rho, EOS, rho_ref)
+  p_scale = EOS%RL2_T2_to_Pa
+
+  select case (EOS%form_of_EOS)
+    case (EOS_LINEAR)
+      call calculate_density_linear(T, S, p_scale*pressure, rho, &
+                                    EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, rho_ref)
+      call calculate_density_second_derivs_linear(T, S, pressure, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP)
+    case (EOS_WRIGHT)
+      call calculate_density_wright(T, S, p_scale*pressure, rho, rho_ref)
+      call calculate_density_second_derivs_wright(T, S, pressure, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP)
+    case (EOS_TEOS10)
+      call calculate_density_teos10(T, S, p_scale*pressure, rho, rho_ref)
+      call calculate_density_second_derivs_teos10(T, S, pressure, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP)
+    case default
+      call MOM_error(FATAL, "calculate_stanley_density_scalar: EOS is not valid.")
+  end select
 
   ! Equation 25 of Stanley et al., 2020.
   rho = rho + ( 0.5 * d2RdTT * Tvar + ( d2RdST * TScov + 0.5 * d2RdSS * Svar ) )
 
-  if (present(scale)) rho = scale * rho
+  rho_scale = EOS%kg_m3_to_R
+  if (present(scale)) rho_scale = rho_scale * scale
+  rho = rho_scale * rho
 
 end subroutine calculate_stanley_density_scalar
 
@@ -412,8 +430,6 @@ subroutine calculate_stanley_density_1d(T, S, pressure, Tvar, TScov, Svar, rho, 
   ! Local variables
   real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
-  real :: rho_unscale ! A factor to convert density from R to kg m-3 [kg m-3 R-1 ~> 1]
-  real :: rho_reference ! rho_ref converted to [kg m-3]
   real, dimension(size(rho)) :: pres  ! Pressure converted to [Pa]
   real, dimension(size(T)) :: d2RdTT, d2RdST, d2RdSS, d2RdSp, d2RdTp ! Second derivatives of density wrt T,S,p
   integer :: i, is, ie, npts
@@ -428,26 +444,32 @@ subroutine calculate_stanley_density_1d(T, S, pressure, Tvar, TScov, Svar, rho, 
   endif
 
   p_scale = EOS%RL2_T2_to_Pa
-  rho_unscale = EOS%R_to_kg_m3
-
-  if ((p_scale == 1.0) .and. (rho_unscale == 1.0)) then
-    call calculate_density_array(T, S, pressure, rho, is, npts, EOS, rho_ref=rho_ref)
-    call calculate_density_second_derivs_array(T, S, pressure, d2RdSS, d2RdST, d2RdTT, &
-                                               d2RdSp, d2RdTp, is, npts, EOS)
-  else ! This is the same as above, but with some extra work to rescale variables.
-    do i=is,ie ; pres(i) = p_scale * pressure(i) ; enddo
-    call calculate_density_second_derivs_array(T, S, pres, d2RdSS, d2RdST, d2RdTT, &
-                                               d2RdSp, d2RdTp, is, npts, EOS)
-    if (present(rho_ref)) then ! This is the same as above, but with some extra work to rescale variables.
-      rho_reference = rho_unscale*rho_ref
-      call calculate_density_array(T, S, pres, rho, is, npts, EOS, rho_ref=rho_reference)
-    else  ! There is rescaling of variables, but rho_ref is not present. Passing a 0 value of rho_ref
-        ! changes answers at roundoff for some equations of state, like Wright and UNESCO.
-      call calculate_density_array(T, S, pres, rho, is, npts, EOS)
-    endif
-  endif
   do i=is,ie
-    rho(i) = rho(i) + ( d2RdTT(i) * Tvar(i) + ( d2RdST(i) * TScov(i) + d2RdSS(i) * Svar(i) ) )
+    pres(i) = p_scale * pressure(i)
+  enddo
+
+  select case (EOS%form_of_EOS)
+    case (EOS_LINEAR)
+      call calculate_density_linear(T, S, pres, rho, 1, npts, &
+                                    EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, rho_ref)
+      call calculate_density_second_derivs_linear(T, S, pres, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP, 1, npts)
+    case (EOS_WRIGHT)
+      call calculate_density_wright(T, S, pres, rho, 1, npts, rho_ref)
+      call calculate_density_second_derivs_wright(T, S, pres, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP, 1, npts)
+    case (EOS_TEOS10)
+      call calculate_density_teos10(T, S, pres, rho, 1, npts, rho_ref)
+      call calculate_density_second_derivs_teos10(T, S, pres, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP, 1, npts)
+    case default
+      call MOM_error(FATAL, "calculate_stanley_density_scalar: EOS is not valid.")
+  end select
+
+  ! Equation 25 of Stanley et al., 2020.
+  do i=is,ie
+    rho(i) = rho(i) &
+             + ( 0.5 * d2RdTT(i) * Tvar(i) + ( d2RdST(i) * TScov(i) + 0.5 * d2RdSS(i) * Svar(i) ) )
   enddo
 
   rho_scale = EOS%kg_m3_to_R
