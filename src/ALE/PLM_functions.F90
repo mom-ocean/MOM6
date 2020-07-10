@@ -55,6 +55,8 @@ real elemental pure function PLM_slope_wa(h_l, h_c, h_r, h_neglect, u_l, u_c, u_
   endif
 
   ! An attempt to avoid inconsistency when the values become unrepresentable.
+  ! ### The following 1.E-140 is dimensionally inconsistent. A newer version of
+  ! PLM is progress that will avoid the need for such rounding.
   if (abs(PLM_slope_wa) < 1.E-140) PLM_slope_wa = 0.
 
 end function PLM_slope_wa
@@ -104,6 +106,8 @@ real elemental pure function PLM_slope_cw(h_l, h_c, h_r, h_neglect, u_l, u_c, u_
   endif
 
   ! An attempt to avoid inconsistency when the values become unrepresentable.
+  ! ### The following 1.E-140 is dimensionally inconsistent. A newer version of
+  ! PLM is progress that will avoid the need for such rounding.
   if (abs(PLM_slope_cw) < 1.E-140) PLM_slope_cw = 0.
 
 end function PLM_slope_cw
