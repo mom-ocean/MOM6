@@ -1687,7 +1687,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
       call register_time_deriv(lbound(MIS%u), MIS%u, CS%du_dt, CS)
     endif
-    if (.not.associated(ADp%diag_hfrac_u)) call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
   endif
 
   CS%id_hf_dv_dt = register_diag_field('ocean_model', 'hf_dvdt', diag%axesCvL, Time, &
@@ -1699,7 +1699,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
       call register_time_deriv(lbound(MIS%v), MIS%v, CS%dv_dt, CS)
     endif
-    if (.not.associated(ADp%diag_hfrac_v)) call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+    call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
   endif
 
   CS%id_hf_du_dt_2d = register_diag_field('ocean_model', 'hf_dudt_2d', diag%axesCu1, Time, &
@@ -1710,7 +1710,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
       call register_time_deriv(lbound(MIS%u), MIS%u, CS%du_dt, CS)
     endif
-    if (.not.associated(ADp%diag_hfrac_u)) call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
   endif
 
   CS%id_hf_dv_dt_2d = register_diag_field('ocean_model', 'hf_dvdt_2d', diag%axesCv1, Time, &
@@ -1721,7 +1721,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
       call register_time_deriv(lbound(MIS%v), MIS%v, CS%dv_dt, CS)
     endif
-    if (.not.associated(ADp%diag_hfrac_v)) call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+    call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
   endif
 
   ! layer thickness variables
