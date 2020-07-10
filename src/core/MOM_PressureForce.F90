@@ -28,8 +28,6 @@ public PressureForce, PressureForce_init, PressureForce_end
 type, public :: PressureForce_CS ; private
   logical :: Analytic_FV_PGF !< If true, use the analytic finite volume form
                              !! (Adcroft et al., Ocean Mod. 2008) of the PGF.
-  logical :: blocked_FV      !< If true, used the blocked version of the ANALYTIC_FV_PGF
-                             !! code.  The value of this parameter should not change answers.
   !> Control structure for the analytically integrated finite volume pressure force
   type(PressureForce_FV_CS), pointer :: PressureForce_FV_CSp => NULL()
   !> Control structure for the Montgomery potential form of pressure force
