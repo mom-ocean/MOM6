@@ -143,7 +143,7 @@ type, public :: ocean_state_type ; private
 
   integer :: nstep = 0        !< The number of calls to update_ocean.
   logical :: use_ice_shelf    !< If true, the ice shelf model is enabled.
-  logical :: use_waves        !< If true use wave coupling.
+  logical,public :: use_waves !< If true use wave coupling.
 
   logical :: icebergs_alter_ocean !< If true, the icebergs can change ocean the
                               !! ocean dynamics and forcing fluxes.
@@ -203,7 +203,7 @@ type, public :: ocean_state_type ; private
   type(marine_ice_CS), pointer :: &
     marine_ice_CSp => NULL()  !< A pointer to the control structure for the
                               !! marine ice effects module.
-  type(wave_parameters_cs), pointer :: &
+  type(wave_parameters_cs), pointer, public :: &
     Waves !< A structure containing pointers to the surface wave fields
   type(surface_forcing_CS), pointer :: &
     forcing_CSp => NULL()     !< A pointer to the MOM forcing control structure
@@ -386,6 +386,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
        "If true, enables surface wave modules.", default=.false.)
   if (OS%use_waves) then
     call MOM_wave_interface_init(OS%Time, OS%grid, OS%GV, OS%US, param_file, OS%Waves, OS%diag)
+    call get_param(param_file,mdl,"SURFBAND_WAVENUMBERS",OS%Waves%WaveNum_Cen, &
+           "Central wavenumbers for surface Stokes drift bands.",units='rad/m', &
+           default=0.12566)
   else
     call MOM_wave_interface_init_lite(param_file)
   endif
@@ -570,7 +573,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call set_net_mass_forcing(OS%fluxes, OS%forces, OS%grid, OS%US)
 
   if (OS%use_waves) then
-    call Update_Surface_Waves(OS%grid, OS%GV, OS%US, OS%time, ocean_coupling_time_step, OS%waves)
+    call Update_Surface_Waves(OS%grid, OS%GV, OS%US, OS%time, ocean_coupling_time_step, OS%waves, OS%forces)
   endif
 
   if (OS%nstep==0) then

@@ -606,6 +606,20 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   Ice_ocean_boundary%lrunoff         = 0.0
   Ice_ocean_boundary%frunoff         = 0.0
 
+  if (ocean_state%use_waves) then
+    Ice_ocean_boundary%num_stk_bands=ocean_state%Waves%NumBands
+    allocate ( Ice_ocean_boundary% ustk0 (isc:iec,jsc:jec),         &
+               Ice_ocean_boundary% vstk0 (isc:iec,jsc:jec),         &
+               Ice_ocean_boundary% ustkb (isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), &
+               Ice_ocean_boundary% vstkb (isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), &
+               Ice_ocean_boundary%stk_wavenumbers (Ice_ocean_boundary%num_stk_bands))
+    Ice_ocean_boundary%ustk0           = 0.0
+    Ice_ocean_boundary%vstk0           = 0.0
+    Ice_ocean_boundary%stk_wavenumbers = ocean_state%Waves%WaveNum_Cen
+    Ice_ocean_boundary%ustkb           = 0.0
+    Ice_ocean_boundary%vstkb           = 0.0
+  endif
+
   ocean_internalstate%ptr%ocean_state_type_ptr => ocean_state
   call ESMF_GridCompSetInternalState(gcomp, ocean_internalstate, rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
@@ -649,6 +663,17 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   !These are not currently used and changing requires a nuopc dictionary change
   !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"        , "will provide")
   !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"       , "will provide")
+  if (ocean_state%use_waves) then
+    if (Ice_ocean_boundary%num_stk_bands > 3) then 
+      call MOM_error(FATAL, "Number of Stokes Bands > 3, NUOPC cap not set up for this")
+    endif      
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_1" , "will provide")
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_1", "will provide")
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_2" , "will provide")
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_2", "will provide")
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_3" , "will provide")
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_3", "will provide")
+  endif 
 
   !--------- export fields -------------
   call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocean_mask"                 , "will provide")
