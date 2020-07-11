@@ -2666,7 +2666,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call register_obsolete_diagnostics(param_file, CS%diag)
 
   if (use_frazil) then
-    if (.not.query_initialized(CS%tv%frazil,"frazil",restart_CSp)) then
+    if (query_initialized(CS%tv%frazil,"frazil",restart_CSp)) then
       ! Test whether the dimensional rescaling has changed for heat content.
       if ((US%kg_m3_to_R_restart*US%m_to_Z_restart*US%J_kg_to_Q_restart /= 0.0) .and. &
           ((US%J_kg_to_Q*US%kg_m3_to_R*US%m_to_Z) /= &
