@@ -1,3 +1,4 @@
+
 !> Provides functions for some diabatic processes such as fraxil, brine rejection,
 !! tendency due to surface flux divergence.
 module MOM_diabatic_aux
@@ -8,7 +9,7 @@ use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,     only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
-use MOM_EOS,           only : calculate_density, calculate_TFreeze
+use MOM_EOS,           only : calculate_density, calculate_TFreeze, EOS_domain
 use MOM_EOS,           only : calculate_specific_vol_derivs, calculate_density_derivs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, callTree_showQuery
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
@@ -81,45 +82,47 @@ type, public :: diabatic_aux_CS ; private
   real, allocatable, dimension(:,:)   :: createdH       !< The amount of volume added in order to
                                                         !! avoid grounding [H T-1 ~> m s-1]
   real, allocatable, dimension(:,:,:) :: penSW_diag     !< Heating in a layer from convergence of
-                                                        !! penetrative SW [W m-2]
+                                                        !! penetrative SW [Q R Z T-1 ~> W m-2]
   real, allocatable, dimension(:,:,:) :: penSWflux_diag !< Penetrative SW flux at base of grid
-                                                        !! layer [W m-2]
+                                                        !! layer [Q R Z T-1 ~> W m-2]
   real, allocatable, dimension(:,:)   :: nonpenSW_diag  !< Non-downwelling SW radiation at ocean
-                                                        !! surface [W m-2]
+                                                        !! surface [Q R Z T-1 ~> W m-2]
 
 end type diabatic_aux_CS
 
 !>@{ CPU time clock IDs
 integer :: id_clock_uv_at_h, id_clock_frazil
-!!@}
+!>@}
 
 contains
 
 !> Frazil formation keeps the temperature above the freezing point.
 !! This subroutine warms any water that is colder than the (currently
 !! surface) freezing point up to the freezing point and accumulates
-!! the required heat (in J m-2) in tv%frazil.
-subroutine make_frazil(h, tv, G, GV, CS, p_surf, halo)
+!! the required heat (in [Q R Z ~> J m-2]) in tv%frazil.
+subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
   type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(inout) :: tv !< Structure containing pointers to any available
                                                !! thermodynamic fields.
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(diabatic_aux_CS),   intent(in)    :: CS !< The control structure returned by a previous
                                                !! call to diabatic_aux_init.
   real, dimension(SZI_(G),SZJ_(G)), &
-                 optional, intent(in)    :: p_surf !< The pressure at the ocean surface [Pa].
+                 optional, intent(in)    :: p_surf !< The pressure at the ocean surface [R L2 T-2 ~> Pa].
   integer,       optional, intent(in)    :: halo !< Halo width over which to calculate frazil
 
   ! Local variables
   real, dimension(SZI_(G)) :: &
-    fraz_col, & ! The accumulated heat requirement due to frazil [J].
+    fraz_col, & ! The accumulated heat requirement due to frazil [Q R Z ~> J m-2].
     T_freeze, & ! The freezing potential temperature at the current salinity [degC].
-    ps          ! pressure
+    ps          ! Surface pressure [R L2 T-2 ~> Pa]
   real, dimension(SZI_(G),SZK_(G)) :: &
-    pressure    ! The pressure at the middle of each layer [Pa].
-  real :: hc    ! A layer's heat capacity [J m-2 degC-1].
+    pressure    ! The pressure at the middle of each layer [R L2 T-2 ~> Pa].
+  real :: H_to_RL2_T2  ! A conversion factor from thicknesses in H to pressure [R L2 T-2 H-1 ~> Pa m-1 or Pa m2 kg-1]
+  real :: hc    ! A layer's heat capacity [Q R Z degC-1 ~> J m-2 degC-1].
   logical :: T_fr_set  ! True if the freezing point has been calculated for a
                        ! row of points.
   integer :: i, j, k, is, ie, js, je, nz
@@ -133,10 +136,11 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf, halo)
 
   if (.not.CS%pressure_dependent_frazil) then
     do k=1,nz ; do i=is,ie ; pressure(i,k) = 0.0 ; enddo ; enddo
+  else
+    H_to_RL2_T2 = GV%H_to_RZ * GV%g_Earth
   endif
-!$OMP parallel do default(none) shared(is,ie,js,je,CS,G,GV,h,nz,tv,p_surf) &
-!$OMP                           private(fraz_col,T_fr_set,T_freeze,hc,ps)  &
-!$OMP                      firstprivate(pressure)    !pressure might be set above, so should be firstprivate
+  !$OMP parallel do default(shared) private(fraz_col,T_fr_set,T_freeze,hc,ps)  &
+  !$OMP                             firstprivate(pressure) ! pressure might be set above, so should be firstprivate
   do j=js,je
     ps(:) = 0.0
     if (PRESENT(p_surf)) then ; do i=is,ie
@@ -147,11 +151,11 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf, halo)
 
     if (CS%pressure_dependent_frazil) then
       do i=is,ie
-        pressure(i,1) = ps(i) + (0.5*GV%H_to_Pa)*h(i,j,1)
+        pressure(i,1) = ps(i) + (0.5*H_to_RL2_T2)*h(i,j,1)
       enddo
       do k=2,nz ; do i=is,ie
         pressure(i,k) = pressure(i,k-1) + &
-          (0.5*GV%H_to_Pa) * (h(i,j,k) + h(i,j,k-1))
+          (0.5*H_to_RL2_T2) * (h(i,j,k) + h(i,j,k-1))
       enddo ; enddo
     endif
 
@@ -160,16 +164,16 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf, halo)
       do i=is,ie ; if (tv%frazil(i,j) > 0.0) then
         if (.not.T_fr_set) then
           call calculate_TFreeze(tv%S(i:,j,1), pressure(i:,1), T_freeze(i:), &
-                                 1, ie-i+1, tv%eqn_of_state)
+                                 1, ie-i+1, tv%eqn_of_state, pres_scale=US%RL2_T2_to_Pa)
           T_fr_set = .true.
         endif
 
         if (tv%T(i,j,1) > T_freeze(i)) then
     ! If frazil had previously been formed, but the surface temperature is now
     ! above freezing, cool the surface layer with the frazil heat deficit.
-          hc = (tv%C_p*GV%H_to_kg_m2) * h(i,j,1)
+          hc = (tv%C_p*GV%H_to_RZ) * h(i,j,1)
           if (tv%frazil(i,j) - hc * (tv%T(i,j,1) - T_freeze(i)) <= 0.0) then
-            tv%T(i,j,1) = tv%T(i,j,1) - tv%frazil(i,j)/hc
+            tv%T(i,j,1) = tv%T(i,j,1) - tv%frazil(i,j) / hc
             tv%frazil(i,j) = 0.0
           else
             tv%frazil(i,j) = tv%frazil(i,j) - hc * (tv%T(i,j,1) - T_freeze(i))
@@ -186,11 +190,11 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf, halo)
             ((tv%T(i,j,k) < 0.0) .or. (fraz_col(i) > 0.0))) then
           if (.not.T_fr_set) then
             call calculate_TFreeze(tv%S(i:,j,k), pressure(i:,k), T_freeze(i:), &
-                                   1, ie-i+1, tv%eqn_of_state)
+                                   1, ie-i+1, tv%eqn_of_state, pres_scale=US%RL2_T2_to_Pa)
             T_fr_set = .true.
           endif
 
-          hc = (tv%C_p*GV%H_to_kg_m2) * h(i,j,k)
+          hc = (tv%C_p*GV%H_to_RZ) * h(i,j,k)
           if (h(i,j,k) <= 10.0*GV%Angstrom_H) then
             ! Very thin layers should not be cooled by the frazil flux.
             if (tv%T(i,j,k) < T_freeze(i)) then
@@ -199,7 +203,7 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf, halo)
             endif
           else
             if (fraz_col(i) + hc * (T_freeze(i) - tv%T(i,j,k)) <= 0.0) then
-              tv%T(i,j,k) = tv%T(i,j,k) - fraz_col(i)/hc
+              tv%T(i,j,k) = tv%T(i,j,k) - fraz_col(i) / hc
               fraz_col(i) = 0.0
             else
               fraz_col(i) = fraz_col(i) + hc * (T_freeze(i) - tv%T(i,j,k))
@@ -403,12 +407,13 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt, id_brine_lay)
   real :: dzbr(SZI_(G)) ! Cumulative depth over which brine is distributed [H ~> m to kg m-2]
   real :: inject_layer(SZI_(G),SZJ_(G)) ! diagnostic
 
-  real :: p_ref_cv(SZI_(G))
+  real :: p_ref_cv(SZI_(G))       ! The pressure used to calculate the coordinate density [R L2 T-2 ~> Pa]
   real :: T(SZI_(G),SZK_(G))
   real :: S(SZI_(G),SZK_(G))
   real :: h_2d(SZI_(G),SZK_(G))   ! A 2-d slice of h with a minimum thickness [H ~> m to kg m-2]
-  real :: Rcv(SZI_(G),SZK_(G))
+  real :: Rcv(SZI_(G),SZK_(G))    ! The coordinate density [R ~> kg m-3]
   real :: s_new,R_new,t0,scale, cdz
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz, ks
 
   real :: brine_dz      ! minumum thickness over which to distribute brine [H ~> m or kg m-2]
@@ -422,7 +427,8 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt, id_brine_lay)
   ! because it is not convergent when resolution becomes very fine. I think that this whole
   ! subroutine needs to be revisited.- RWH
 
-  p_ref_cv(:)  = tv%P_ref
+  p_ref_cv(:) = tv%P_Ref
+  EOSdom(:) = EOS_domain(G%HI)
   brine_dz = 1.0*GV%m_to_H
 
   inject_layer(:,:) = nz
@@ -442,8 +448,7 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt, id_brine_lay)
         h_2d(i,k) = MAX(h(i,j,k), GV%Angstrom_H)
       enddo
 
-      call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), is, &
-                             ie-is+1, tv%eqn_of_state)
+      call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), tv%eqn_of_state, EOSdom)
     enddo
 
     ! First, try to find an interior layer where inserting all the salt
@@ -514,9 +519,9 @@ subroutine triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, T, S)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: hold !< The layer thicknesses before entrainment,
                                                                   !! [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: ea !< The amount of fluid entrained from the layer
-                                                 !! above within this time step [H ~> m or kg m-2].
+                                                                !! above within this time step [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: eb !< The amount of fluid entrained from the layer
-                                                 !! below within this time step [H ~> m or kg m-2].
+                                                                !! below within this time step [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: T  !< Layer potential temperatures [degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: S  !< Layer salinities [ppt].
 
@@ -653,16 +658,18 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb)
 end subroutine find_uv_at_h
 
 
-subroutine set_pen_shortwave(optics, fluxes, G, GV, CS, opacity_CSp, tracer_flow_CSp)
+subroutine set_pen_shortwave(optics, fluxes, G, GV, US, CS, opacity_CSp, tracer_flow_CSp)
   type(optics_type),       pointer       :: optics !< An optics structure that has will contain
                                                    !! information about shortwave fluxes and absorption.
   type(forcing),           intent(inout) :: fluxes !< points to forcing fields
                                                    !! unused fields have NULL ptrs
   type(ocean_grid_type),   intent(in)    :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
-  type(diabatic_aux_CS),   pointer       :: CS !< Control structure for diabatic_aux
+  type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
+  type(diabatic_aux_CS),   pointer       :: CS     !< Control structure for diabatic_aux
   type(opacity_CS),        pointer       :: opacity_CSp !< The control structure for the opacity module.
-  type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp !< A pointer to the control structure of the tracer modules.
+  type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp !< A pointer to the control structure
+                                                   !! organizing the tracer modules.
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G))          :: chl_2d !< Vertically uniform chlorophyll-A concentractions [mg m-3]
@@ -690,7 +697,7 @@ subroutine set_pen_shortwave(optics, fluxes, G, GV, CS, opacity_CSp, tracer_flow
       if (CS%id_chl > 0) call post_data(CS%id_chl, chl_2d, CS%diag)
 
       call set_opacity(optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
-                       fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, opacity_CSp, chl_2d=chl_2d)
+                       fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, US, opacity_CSp, chl_2d=chl_2d)
     else
       if (.not.associated(tracer_flow_CSp)) call MOM_error(FATAL, &
         "The tracer flow control structure must be associated when the model sets "//&
@@ -700,11 +707,11 @@ subroutine set_pen_shortwave(optics, fluxes, G, GV, CS, opacity_CSp, tracer_flow
       if (CS%id_chl > 0) call post_data(CS%id_chl, chl_3d(:,:,1), CS%diag)
 
       call set_opacity(optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
-                       fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, opacity_CSp, chl_3d=chl_3d)
+                       fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, US, opacity_CSp, chl_3d=chl_3d)
     endif
   else
     call set_opacity(optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
-                     fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, opacity_CSp)
+                     fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, US, opacity_CSp)
   endif
 
 end subroutine set_pen_shortwave
@@ -731,7 +738,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
 
   ! Local variables
   real, dimension(SZI_(G)) :: deltaRhoAtKm1, deltaRhoAtK ! Density differences [R ~> kg m-3].
-  real, dimension(SZI_(G)) :: pRef_MLD, pRef_N2 ! Reference pressures [Pa].
+  real, dimension(SZI_(G)) :: pRef_MLD, pRef_N2 ! Reference pressures [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G)) :: H_subML, dH_N2    ! Summed thicknesses used in N2 calculation [H ~> m].
   real, dimension(SZI_(G)) :: T_subML, T_deeper ! Temperatures used in the N2 calculation [degC].
   real, dimension(SZI_(G)) :: S_subML, S_deeper ! Salinities used in the N2 calculation [ppt].
@@ -747,6 +754,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   real :: dH_subML         ! Depth below ML over which to diagnose stratification [H ~> m].
   real :: aFac             ! A nondimensional factor [nondim]
   real :: ddRho            ! A density difference [R ~> kg m-3]
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, is, ie, js, je, k, nz, id_N2, id_SQ
 
   id_N2 = -1 ; if (PRESENT(id_N2subML)) id_N2 = id_N2subML
@@ -759,10 +767,10 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   pRef_MLD(:) = 0.0
+  EOSdom(:) = EOS_domain(G%HI)
   do j=js,je
     do i=is,ie ; dK(i) = 0.5 * h(i,j,1) * GV%H_to_Z ; enddo ! Depth of center of surface layer
-    call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, is, ie-is+1, &
-                           tv%eqn_of_state, scale=US%kg_m3_to_R)
+    call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, tv%eqn_of_state, EOSdom)
     do i=is,ie
       deltaRhoAtK(i) = 0.
       MLD(i,j) = 0.
@@ -803,8 +811,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
 
       ! Mixed-layer depth, using sigma-0 (surface reference pressure)
       do i=is,ie ; deltaRhoAtKm1(i) = deltaRhoAtK(i) ; enddo ! Store value from previous iteration of K
-      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, is, ie-is+1, &
-                             tv%eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, tv%eqn_of_state, EOSdom)
       do i = is, ie
         deltaRhoAtK(i) = deltaRhoAtK(i) - rhoSurf(i) ! Density difference between layer K and surface
         ddRho = deltaRhoAtK(i) - deltaRhoAtKm1(i)
@@ -821,16 +828,14 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
     enddo
 
     if (id_N2>0) then  ! Now actually calculate stratification, N2, below the mixed layer.
-      do i=is,ie ; pRef_N2(i) = GV%H_to_Pa * (H_subML(i) + 0.5*dH_N2(i)) ; enddo
+      do i=is,ie ; pRef_N2(i) = (GV%g_Earth * GV%H_to_RZ) * (H_subML(i) + 0.5*dH_N2(i)) ; enddo
       ! if ((.not.N2_region_set(i)) .and. (dH_N2(i) > 0.5*dH_subML)) then
       !    ! Use whatever stratification we can, measured over whatever distance is available?
       !    T_deeper(i) = tv%T(i,j,nz) ; S_deeper(i) = tv%S(i,j,nz)
       !    N2_region_set(i) = .true.
       ! endif
-      call calculate_density(T_subML, S_subML, pRef_N2, rho_subML, is, ie-is+1, &
-                             tv%eqn_of_state, scale=US%kg_m3_to_R)
-      call calculate_density(T_deeper, S_deeper, pRef_N2, rho_deeper, is, ie-is+1, &
-                             tv%eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density(T_subML, S_subML, pRef_N2, rho_subML, tv%eqn_of_state, EOSdom)
+      call calculate_density(T_deeper, S_deeper, pRef_N2, rho_deeper, tv%eqn_of_state, EOSdom)
       do i=is,ie ; if ((G%mask2dT(i,j)>0.5) .and. N2_region_set(i)) then
         subMLN2(i,j) =  gE_rho0 * (rho_deeper(i) - rho_subML(i)) / (GV%H_to_z * dH_N2(i))
       endif ; enddo
@@ -891,9 +896,9 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   real :: RivermixConst  ! A constant used in implementing river mixing [R Z2 T-1 ~> Pa s].
 
   real, dimension(SZI_(G)) :: &
-    d_pres,       &  ! pressure change across a layer [Pa]
-    p_lay,        &  ! average pressure in a layer [Pa]
-    pres,         &  ! pressure at an interface [Pa]
+    d_pres,       &  ! pressure change across a layer [R L2 T-2 ~> Pa]
+    p_lay,        &  ! average pressure in a layer [R L2 T-2 ~> Pa]
+    pres,         &  ! pressure at an interface [R L2 T-2 ~> Pa]
     netMassInOut, &  ! surface water fluxes [H ~> m or kg m-2] over time step
     netMassIn,    &  ! mass entering ocean surface [H ~> m or kg m-2] over a time step
     netMassOut,   &  ! mass leaving ocean surface [H ~> m or kg m-2] over a time step
@@ -903,7 +908,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                      ! [ppt H ~> ppt m or ppt kg m-2]
     nonpenSW,     &  ! non-downwelling SW, which is absorbed at ocean surface
                      ! [degC H ~> degC m or degC kg m-2]
-    SurfPressure, &  ! Surface pressure (approximated as 0.0) [Pa]
+    SurfPressure, &  ! Surface pressure (approximated as 0.0) [R L2 T-2 ~> Pa]
     dRhodT,       &  ! change in density per change in temperature [R degC-1 ~> kg m-3 degC-1]
     dRhodS,       &  ! change in density per change in salinity [R ppt-1 ~> kg m-3 ppt-1]
     netheat_rate, &  ! netheat but for dt=1 [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
@@ -927,7 +932,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   real, dimension(max(nsw,1),SZI_(G),SZK_(G)) :: &
     opacityBand      ! The opacity (inverse of the exponential absorption length) of each frequency
                      ! band of shortwave radation in each layer [H-1 ~> m-1 or m2 kg-1]
-  real, dimension(maxGroundings) :: hGrounding
+  real, dimension(maxGroundings) :: hGrounding ! Thickness added by each grounding event [H ~> m or kg m-2]
   real    :: Temp_in, Salin_in
   real    :: g_Hconv2 ! A conversion factor for use in the TKE calculation
                       ! in units of [Z3 R2 T-2 H-2 ~> kg2 m-5 s-2 or m s-2].
@@ -935,8 +940,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                       ! [Z T-2 R-1 ~> m4 s-2 kg-1]
   logical :: calculate_energetics
   logical :: calculate_buoyancy
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, is, ie, js, je, k, nz, n, nb
-  integer :: start, npts
   character(len=45) :: mesg
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -951,13 +956,12 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   calculate_buoyancy = present(SkinBuoyFlux)
   if (calculate_buoyancy) SkinBuoyFlux(:,:) = 0.0
   g_Hconv2 = (US%L_to_Z**2*GV%g_Earth * GV%H_to_RZ) * GV%H_to_RZ
+  EOSdom(:) = EOS_domain(G%HI)
 
   if (present(cTKE)) cTKE(:,:,:) = 0.0
   if (calculate_buoyancy) then
     SurfPressure(:) = 0.0
-    GoRho       = US%L_to_Z**2*GV%g_Earth / GV%Rho0
-    start       = 1 + G%isc - G%isd
-    npts        = 1 + G%iec - G%isc
+    GoRho = US%L_to_Z**2*GV%g_Earth / GV%Rho0
   endif
 
   ! H_limit_fluxes is used by extractFluxes1d to scale down fluxes if the total
@@ -974,8 +978,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,tv,nsw,G,GV,US,optics,fluxes,    &
   !$OMP                                  H_limit_fluxes,numberOfGroundings,iGround,jGround,&
   !$OMP                                  nonPenSW,hGrounding,CS,Idt,aggregate_FW_forcing,  &
-  !$OMP                                  minimum_forcing_depth,evap_CFL_limit,dt,     &
-  !$OMP                                  calculate_buoyancy,netPen_rate,SkinBuoyFlux,GoRho,     &
+  !$OMP                                  minimum_forcing_depth,evap_CFL_limit,dt,EOSdom,   &
+  !$OMP                                  calculate_buoyancy,netPen_rate,SkinBuoyFlux,GoRho, &
   !$OMP                                  calculate_energetics,dSV_dT,dSV_dS,cTKE,g_Hconv2) &
   !$OMP                          private(opacityBand,h2d,T2d,netMassInOut,netMassOut,      &
   !$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing,     &
@@ -985,7 +989,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   !$OMP                                  netmassinout_rate,netheat_rate,netsalt_rate,      &
   !$OMP                                  drhodt,drhods,pen_sw_bnd_rate,                    &
   !$OMP                                  pen_TKE_2d,Temp_in,Salin_in,RivermixConst)        &
-  !$OMP                     firstprivate(start,npts,SurfPressure)
+  !$OMP                     firstprivate(SurfPressure)
   do j=js,je
   ! Work in vertical slices for efficiency
 
@@ -1000,15 +1004,19 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
       ! The partial derivatives of specific volume with temperature and
       ! salinity need to be precalculated to avoid having heating of
       ! tiny layers give nonsensical values.
-      do i=is,ie ; pres(i) = 0.0 ; enddo ! Add surface pressure?
+      if (associated(tv%p_surf)) then
+        do i=is,ie ; pres(i) = tv%p_surf(i,j) ; enddo
+      else
+        do i=is,ie ; pres(i) = 0.0 ; enddo
+      endif
       do k=1,nz
         do i=is,ie
-          d_pres(i) = GV%H_to_Pa * h2d(i,k)
+          d_pres(i) = (GV%g_Earth * GV%H_to_RZ) * h2d(i,k)
           p_lay(i) = pres(i) + 0.5*d_pres(i)
           pres(i) = pres(i) + d_pres(i)
         enddo
-        call calculate_specific_vol_derivs(T2d(:,k), tv%S(:,j,k), p_lay(:),&
-                 dSV_dT(:,j,k), dSV_dS(:,j,k), is, ie-is+1, tv%eqn_of_state, scale=US%R_to_kg_m3)
+        call calculate_specific_vol_derivs(T2d(:,k), tv%S(:,j,k), p_lay(:), &
+                 dSV_dT(:,j,k), dSV_dS(:,j,k), tv%eqn_of_state, EOSdom)
         do i=is,ie ; dSV_dT_2d(i,k) = dSV_dT(i,j,k) ; enddo
       enddo
       pen_TKE_2d(:,:) = 0.0
@@ -1301,13 +1309,13 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
       tv%T(i,j,k) = T2d(i,k)
     enddo ; enddo
 
-    ! Diagnose heating [W m-2] applied to a grid cell from SW penetration
+    ! Diagnose heating [Q R Z T-1 ~> W m-2] applied to a grid cell from SW penetration
     ! Also diagnose the penetrative SW heat flux at base of layer.
     if (CS%id_penSW_diag > 0 .or. CS%id_penSWflux_diag > 0) then
 
       ! convergence of SW into a layer
       do k=1,nz ; do i=is,ie
-        CS%penSW_diag(i,j,k) = (T2d(i,k)-CS%penSW_diag(i,j,k))*h(i,j,k) * US%s_to_T*Idt * tv%C_p * GV%H_to_kg_m2
+        CS%penSW_diag(i,j,k) = (T2d(i,k)-CS%penSW_diag(i,j,k))*h(i,j,k) * Idt * tv%C_p * GV%H_to_RZ
       enddo ; enddo
 
       ! Perform a cumulative sum upwards from bottom to
@@ -1327,7 +1335,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     ! Fill CS%nonpenSW_diag
     if (CS%id_nonpenSW_diag > 0) then
       do i=is,ie
-        CS%nonpenSW_diag(i,j) = nonpenSW(i)
+        CS%nonpenSW_diag(i,j) = nonpenSW(i) * Idt * tv%C_p * GV%H_to_RZ
       enddo
     endif
 
@@ -1349,8 +1357,9 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
       do i=is,ie ; do nb=1,nsw ; netPen_rate(i) = netPen_rate(i) + pen_SW_bnd_rate(nb,i) ; enddo ; enddo
 
       ! Density derivatives
-      call calculate_density_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, &
-           dRhodT, dRhodS, start, npts, tv%eqn_of_state, scale=US%kg_m3_to_R)
+      if (associated(tv%p_surf)) then ; do i=is,ie ; SurfPressure(i) = tv%p_surf(i,j) ; enddo ; endif
+      call calculate_density_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, dRhodT, dRhodS, &
+                                    tv%eqn_of_state, EOSdom)
       ! 1. Adjust netSalt to reflect dilution effect of FW flux
       ! 2. Add in the SW heating for purposes of calculating the net
       ! surface buoyancy flux affecting the top layer.
@@ -1376,7 +1385,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     do i = 1, min(numberOfGroundings, maxGroundings)
       call forcing_SinglePointPrint(fluxes,G,iGround(i),jGround(i),'applyBoundaryFluxesInOut (grounding)')
       write(mesg(1:45),'(3es15.3)') G%geoLonT( iGround(i), jGround(i) ), &
-                             G%geoLatT( iGround(i), jGround(i)) , hGrounding(i)
+                             G%geoLatT( iGround(i), jGround(i)), hGrounding(i)*GV%H_to_m
       call MOM_error(WARNING, "MOM_diabatic_driver.F90, applyBoundaryFluxesInOut(): "//&
                               "Mass created. x,y,dh= "//trim(mesg), all_print=.true.)
     enddo
@@ -1493,30 +1502,29 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
     ! diagnostic for heating of a grid cell from convergence of SW heat into the cell
     CS%id_penSW_diag = register_diag_field('ocean_model', 'rsdoabsorb',                     &
           diag%axesTL, Time, 'Convergence of Penetrative Shortwave Flux in Sea Water Layer',&
-          'W m-2', standard_name='net_rate_of_absorption_of_shortwave_energy_in_ocean_layer',v_extensive=.true.)
+          'W m-2', conversion=US%QRZ_T_to_W_m2, &
+          standard_name='net_rate_of_absorption_of_shortwave_energy_in_ocean_layer', v_extensive=.true.)
 
     ! diagnostic for penetrative SW heat flux at top interface of tracer cell (nz+1 interfaces)
     ! k=1 gives penetrative SW at surface; SW(k=nz+1)=0 (no penetration through rock).
     CS%id_penSWflux_diag = register_diag_field('ocean_model', 'rsdo',                               &
           diag%axesTi, Time, 'Downwelling Shortwave Flux in Sea Water at Grid Cell Upper Interface',&
-          'W m-2', standard_name='downwelling_shortwave_flux_in_sea_water')
+          'W m-2', conversion=US%QRZ_T_to_W_m2, standard_name='downwelling_shortwave_flux_in_sea_water')
 
     ! need both arrays for the SW diagnostics (one for flux, one for convergence)
     if (CS%id_penSW_diag>0 .or. CS%id_penSWflux_diag>0) then
-       allocate(CS%penSW_diag(isd:ied,jsd:jed,nz))
-       CS%penSW_diag(:,:,:) = 0.0
-       allocate(CS%penSWflux_diag(isd:ied,jsd:jed,nz+1))
-       CS%penSWflux_diag(:,:,:) = 0.0
+      allocate(CS%penSW_diag(isd:ied,jsd:jed,nz)) ; CS%penSW_diag(:,:,:) = 0.0
+      allocate(CS%penSWflux_diag(isd:ied,jsd:jed,nz+1)) ; CS%penSWflux_diag(:,:,:) = 0.0
     endif
 
     ! diagnostic for non-downwelling SW radiation (i.e., SW absorbed at ocean surface)
     CS%id_nonpenSW_diag = register_diag_field('ocean_model', 'nonpenSW',                       &
           diag%axesT1, Time,                                                                   &
           'Non-downwelling SW radiation (i.e., SW absorbed in ocean surface with LW,SENS,LAT)',&
-          'W m-2', standard_name='nondownwelling_shortwave_flux_in_sea_water')
+          'W m-2', conversion=US%QRZ_T_to_W_m2, &
+          standard_name='nondownwelling_shortwave_flux_in_sea_water')
     if (CS%id_nonpenSW_diag > 0) then
-       allocate(CS%nonpenSW_diag(isd:ied,jsd:jed))
-       CS%nonpenSW_diag(:,:) = 0.0
+      allocate(CS%nonpenSW_diag(isd:ied,jsd:jed)) ; CS%nonpenSW_diag(:,:) = 0.0
     endif
   endif
 

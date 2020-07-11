@@ -24,23 +24,22 @@ contains
 !!
 !! It is assumed that the size of the array 'u' is equal to the number of cells
 !! defining 'grid' and 'ppoly'. No consistency check is performed here.
-subroutine P1M_interpolation( N, h, u, ppoly_E, ppoly_coef, h_neglect )
+subroutine P1M_interpolation( N, h, u, ppoly_E, ppoly_coef, h_neglect, answers_2018 )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
-  real, dimension(:,:), intent(inout) :: ppoly_E !< Potentially modified edge values,
-                                           !! with the same units as u.
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N) [A]
+  real, dimension(:,:), intent(inout) :: ppoly_E !< Potentially modified edge values [A]
   real, dimension(:,:), intent(inout) :: ppoly_coef !< Potentially modified
-                                           !! piecewise polynomial coefficients, mainly
-                                           !! with the same units as u.
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
-                                           !! in the same units as h.
+                                           !! piecewise polynomial coefficients, mainly [A]
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
+  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+
   ! Local variables
   integer   :: k            ! loop index
   real      :: u0_l, u0_r   ! edge values (left and right)
 
   ! Bound edge values (routine found in 'edge_values.F90')
-  call bound_edge_values( N, h, u, ppoly_E, h_neglect )
+  call bound_edge_values( N, h, u, ppoly_E, h_neglect, answers_2018 )
 
   ! Systematically average discontinuous edge values (routine found in
   ! 'edge_values.F90')
@@ -69,12 +68,11 @@ end subroutine P1M_interpolation
 subroutine P1M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef )
   ! Arguments
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
-  real, dimension(:),   intent(in)    :: u !< cell averages (size N)
-  real, dimension(:,:), intent(inout) :: ppoly_E !< edge values of piecewise polynomials,
-                                           !! with the same units as u.
-  real, dimension(:,:), intent(inout) :: ppoly_coef !< coefficients of piecewise polynomials, mainly
-                                           !! with the same units as u.
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
+  real, dimension(:),   intent(in)    :: u !< cell averages (size N) [A]
+  real, dimension(:,:), intent(inout) :: ppoly_E !< edge values of piecewise polynomials [A]
+  real, dimension(:,:), intent(inout) :: ppoly_coef !< coefficients of piecewise polynomials, mainly [A]
+
   ! Local variables
   real          :: u0, u1               ! cell averages
   real          :: h0, h1               ! corresponding cell widths

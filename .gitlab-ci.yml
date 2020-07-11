@@ -63,6 +63,7 @@ gnu:ocean-only-nolibs:
     - make -f MRS/Makefile.build build/gnu/env && cd build/gnu
     # mkdir -p build/gnu/repro/symmetric_dynamic/ocean_only && cd build/gnu/repro/symmetric_dynamic/ocean_only
     - ../../MOM6-examples/src/mkmf/bin/list_paths -l ../../../config_src/{solo_driver,dynamic_symmetric} ../../../src ../../MOM6-examples/src/FMS
+    - sed -i '/FMS\/.*\/test_/d' path_names
     - ../../MOM6-examples/src/mkmf/bin/mkmf -t ../../MOM6-examples/src/mkmf/templates/ncrc-gnu.mk -p MOM6 -c"-Duse_libMPI -Duse_netCDF" path_names
     - time (source ./env ; make NETCDF=3 REPRO=1 MOM6 -s -j)
 
@@ -75,6 +76,7 @@ gnu:ice-ocean-nolibs:
     - make -f MRS/Makefile.build build/gnu/env && cd build/gnu
     # mkdir -p build/gnu/repro/symmetric_dynamic/ocean_only && cd build/gnu/repro/symmetric_dynamic/ocean_only
     - ../../MOM6-examples/src/mkmf/bin/list_paths -l ../../../config_src/{coupled_driver,dynamic} ../../../src ../../MOM6-examples/src/{FMS,coupler,SIS2,icebergs,ice_param,land_null,atmos_null}
+    - sed -i '/FMS\/.*\/test_/d' path_names
     - ../../MOM6-examples/src/mkmf/bin/mkmf -t ../../MOM6-examples/src/mkmf/templates/ncrc-gnu.mk -p MOM6 -c"-Duse_libMPI -Duse_netCDF -D_USE_LEGACY_LAND_ -Duse_AM3_physics" path_names
     - time (source ./env ; make NETCDF=3 REPRO=1 MOM6 -s -j)
 

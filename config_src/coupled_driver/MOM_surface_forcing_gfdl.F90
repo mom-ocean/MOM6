@@ -71,8 +71,8 @@ type, public :: surface_forcing_CS ; private
   real :: latent_heat_fusion    !< Latent heat of fusion [J kg-1]
   real :: latent_heat_vapor     !< Latent heat of vaporization [J kg-1]
 
-  real :: max_p_surf            !< The maximum surface pressure that can be
-                                !! exerted by the atmosphere and floating sea-ice [Pa].
+  real :: max_p_surf            !< The maximum surface pressure that can be exerted by
+                                !! the atmosphere and floating sea-ice [R L2 T-2 ~> Pa].
                                 !! This is needed because the FMS coupling structure
                                 !! does not limit the water that can be frozen out
                                 !! of the ocean and the ice-ocean heat fluxes are
@@ -101,12 +101,12 @@ type, public :: surface_forcing_CS ; private
 
   logical :: rigid_sea_ice      !< If true, sea-ice exerts a rigidity that acts to damp surface
                                 !! deflections (especially surface gravity waves).  The default is false.
-  real    :: G_Earth            !< Gravitational acceleration [m s-2]
-  real    :: Kv_sea_ice         !< Viscosity in sea-ice that resists sheared vertical motions [m2 s-1]
-  real    :: density_sea_ice    !< Typical density of sea-ice [kg m-3]. The value is only used to convert
+  real    :: g_Earth            !< Gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
+  real    :: Kv_sea_ice         !< Viscosity in sea-ice that resists sheared vertical motions [L4 Z-2 T-1 ~> m2 s-1]
+  real    :: density_sea_ice    !< Typical density of sea-ice [R ~> kg m-3]. The value is only used to convert
                                 !! the ice pressure into appropriate units for use with Kv_sea_ice.
   real    :: rigid_sea_ice_mass !< A mass per unit area of sea-ice beyond which sea-ice viscosity
-                                !! becomes effective [kg m-2], typically of order 1000 kg m-2.
+                                !! becomes effective [R Z ~> kg m-2], typically of order 1000 kg m-2.
   logical :: allow_flux_adjustments !< If true, use data_override to obtain flux adjustments
 
   logical :: restore_salt       !< If true, the coupled MOM driver adds a term to restore surface
@@ -130,6 +130,8 @@ type, public :: surface_forcing_CS ; private
   logical :: answers_2018       !< If true, use the order of arithmetic and expressions that recover
                                 !! the answers from the end of 2018.  Otherwise, use a simpler
                                 !! expression to calculate gustiness.
+  logical :: fix_ustar_gustless_bug         !< If true correct a bug in the time-averaging of the
+                                            !! gustless wind friction velocity.
   logical :: check_no_land_fluxes           !< Return warning if IOB flux over land is non-zero
 
   type(diag_ctrl), pointer :: diag => NULL()  !< Structure to regulate diagnostic output timing
@@ -254,7 +256,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   real :: kg_m2_s_conversion  ! A combination of unit conversion factors for rescaling
                               ! mass fluxes [R Z s m2 kg-1 T-1 ~> 1].
   real :: rhoXcp              ! Reference density times heat capacity times unit scaling
-                              ! factors [J T s-1 Z-1 m-2 degC-1 ~> J m-3 degC-1]
+                              ! factors [Q R degC-1 ~> J m-3 degC-1]
   real :: sign_for_net_FW_bug ! Should be +1. but an old bug can be recovered by using -1.
 
   call cpu_clock_begin(id_clock_forcing)
@@ -267,8 +269,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   IsdB = G%IsdB  ; IedB = G%IedB   ; JsdB = G%JsdB  ; JedB = G%JedB
   isr = is-isd+1 ; ier  = ie-isd+1 ; jsr = js-jsd+1 ; jer = je-jsd+1
 
-  kg_m2_s_conversion = US%kg_m3_to_R*US%m_to_Z*US%T_to_s
-  if (CS%restore_temp) rhoXcp = US%R_to_kg_m3*US%Z_to_m*US%s_to_T * CS%Rho0 * fluxes%C_p
+  kg_m2_s_conversion = US%kg_m2s_to_RZ_T
+  if (CS%restore_temp) rhoXcp = CS%Rho0 * fluxes%C_p
   open_ocn_mask(:,:)     = 1.0
   pme_adj(:,:)           = 0.0
   fluxes%vPrecGlobalAdj  = 0.0
@@ -281,8 +283,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   ! allocation and initialization if this is the first time that this
   ! flux type has been used.
   if (fluxes%dt_buoy_accum < 0) then
-    call allocate_forcing_type(G, fluxes, water=.true., heat=.true., &
-                               ustar=.true., press=.true. )
+    call allocate_forcing_type(G, fluxes, water=.true., heat=.true., ustar=.true., press=.true., &
+                               fix_accum_bug=CS%fix_ustar_gustless_bug)
 
     call safe_alloc_ptr(fluxes%sw_vis_dir,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_vis_dif,isd,ied,jsd,jed)
@@ -346,8 +348,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   fluxes%dt_buoy_accum = US%s_to_T*valid_time
 
   if (CS%allow_flux_adjustments) then
-    fluxes%heat_added(:,:)=0.0
-    fluxes%salt_flux_added(:,:)=0.0
+    fluxes%heat_added(:,:) = 0.0
+    fluxes%salt_flux_added(:,:) = 0.0
   endif
 
   do j=js,je ; do i=is,ie
@@ -375,10 +377,10 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
       if (CS%adjust_net_srestore_to_zero) then
         if (CS%adjust_net_srestore_by_scaling) then
           call adjust_area_mean_to_zero(fluxes%salt_flux, G, fluxes%saltFluxGlobalScl, &
-                          unit_scale=US%R_to_kg_m3*US%Z_to_m*US%s_to_T)
+                          unit_scale=US%RZ_T_to_kg_m2s)
           fluxes%saltFluxGlobalAdj = 0.
         else
-          work_sum(is:ie,js:je) = US%L_to_m**2*US%R_to_kg_m3*US%Z_to_m*US%s_to_T * &
+          work_sum(is:ie,js:je) = US%L_to_m**2*US%RZ_T_to_kg_m2s * &
                   G%areaT(is:ie,js:je)*fluxes%salt_flux(is:ie,js:je)
           fluxes%saltFluxGlobalAdj = reproducing_sum(work_sum(:,:), isr,ier, jsr,jer)/CS%area_surf
           fluxes%salt_flux(is:ie,js:je) = fluxes%salt_flux(is:ie,js:je) - kg_m2_s_conversion * fluxes%saltFluxGlobalAdj
@@ -398,11 +400,11 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
       if (CS%adjust_net_srestore_to_zero) then
         if (CS%adjust_net_srestore_by_scaling) then
           call adjust_area_mean_to_zero(fluxes%vprec, G, fluxes%vPrecGlobalScl, &
-                       unit_scale=US%R_to_kg_m3*US%Z_to_m*US%s_to_T)
+                       unit_scale=US%RZ_T_to_kg_m2s)
           fluxes%vPrecGlobalAdj = 0.
         else
           work_sum(is:ie,js:je) = US%L_to_m**2*G%areaT(is:ie,js:je) * &
-                                  US%R_to_kg_m3*US%Z_to_m*US%s_to_T*fluxes%vprec(is:ie,js:je)
+                                  US%RZ_T_to_kg_m2s*fluxes%vprec(is:ie,js:je)
           fluxes%vPrecGlobalAdj = reproducing_sum(work_sum(:,:), isr, ier, jsr, jer) / CS%area_surf
           do j=js,je ; do i=is,ie
             fluxes%vprec(i,j) = ( fluxes%vprec(i,j) - kg_m2_s_conversion*fluxes%vPrecGlobalAdj ) * G%mask2dT(i,j)
@@ -471,73 +473,81 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     endif
 
     if (associated(IOB%mass_berg)) then
-      fluxes%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
+      fluxes%mass_berg(i,j) = US%m_to_Z*US%kg_m3_to_R * IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
       if (CS%check_no_land_fluxes) &
         call check_mask_val_consistency(IOB%mass_berg(i-i0,j-j0), G%mask2dT(i,j), i, j, 'mass_berg', G)
     endif
 
     if (associated(IOB%runoff_hflx)) then
-      fluxes%heat_content_lrunoff(i,j) = kg_m2_s_conversion * IOB%runoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
+      fluxes%heat_content_lrunoff(i,j) = US%W_m2_to_QRZ_T * IOB%runoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
       if (CS%check_no_land_fluxes) &
         call check_mask_val_consistency(IOB%runoff_hflx(i-i0,j-j0), G%mask2dT(i,j), i, j, 'runoff_hflx', G)
     endif
 
     if (associated(IOB%calving_hflx)) then
-      fluxes%heat_content_frunoff(i,j) = kg_m2_s_conversion * IOB%calving_hflx(i-i0,j-j0) * G%mask2dT(i,j)
+      fluxes%heat_content_frunoff(i,j) = US%W_m2_to_QRZ_T * IOB%calving_hflx(i-i0,j-j0) * G%mask2dT(i,j)
       if (CS%check_no_land_fluxes) &
         call check_mask_val_consistency(IOB%calving_hflx(i-i0,j-j0), G%mask2dT(i,j), i, j, 'calving_hflx', G)
     endif
 
     if (associated(IOB%lw_flux)) then
-      fluxes%LW(i,j) = IOB%lw_flux(i-i0,j-j0) * G%mask2dT(i,j)
+      fluxes%LW(i,j) = US%W_m2_to_QRZ_T * IOB%lw_flux(i-i0,j-j0) * G%mask2dT(i,j)
       if (CS%check_no_land_fluxes) &
         call check_mask_val_consistency(IOB%lw_flux(i-i0,j-j0), G%mask2dT(i,j), i, j, 'lw_flux', G)
     endif
 
     if (associated(IOB%t_flux)) then
-      fluxes%sens(i,j) = - IOB%t_flux(i-i0,j-j0) * G%mask2dT(i,j)
+      fluxes%sens(i,j) = -US%W_m2_to_QRZ_T* IOB%t_flux(i-i0,j-j0) * G%mask2dT(i,j)
       if (CS%check_no_land_fluxes) &
         call check_mask_val_consistency(IOB%t_flux(i-i0,j-j0), G%mask2dT(i,j), i, j, 't_flux', G)
     endif
 
     fluxes%latent(i,j) = 0.0
     if (associated(IOB%fprec)) then
-      fluxes%latent(i,j)            = fluxes%latent(i,j) - IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
-      fluxes%latent_fprec_diag(i,j) = -G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
+      fluxes%latent(i,j)            = fluxes%latent(i,j) - &
+           IOB%fprec(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
+      fluxes%latent_fprec_diag(i,j) = -G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
     endif
     if (associated(IOB%calving)) then
-      fluxes%latent(i,j)              = fluxes%latent(i,j) - IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
-      fluxes%latent_frunoff_diag(i,j) = -G%mask2dT(i,j) * IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
+      fluxes%latent(i,j)              = fluxes%latent(i,j) - &
+           IOB%calving(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
+      fluxes%latent_frunoff_diag(i,j) = -G%mask2dT(i,j) * IOB%calving(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
     endif
     if (associated(IOB%q_flux)) then
-      fluxes%latent(i,j)           = fluxes%latent(i,j) - IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
-      fluxes%latent_evap_diag(i,j) = -G%mask2dT(i,j) * IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
+      fluxes%latent(i,j)           = fluxes%latent(i,j) - &
+          IOB%q_flux(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_vapor
+      fluxes%latent_evap_diag(i,j) = -G%mask2dT(i,j) * IOB%q_flux(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_vapor
     endif
 
     fluxes%latent(i,j) = G%mask2dT(i,j) * fluxes%latent(i,j)
 
     if (associated(IOB%sw_flux_vis_dir)) then
-      fluxes%sw_vis_dir(i,j) = G%mask2dT(i,j) * IOB%sw_flux_vis_dir(i-i0,j-j0)
+      fluxes%sw_vis_dir(i,j) = G%mask2dT(i,j) * US%W_m2_to_QRZ_T * IOB%sw_flux_vis_dir(i-i0,j-j0)
       if (CS%check_no_land_fluxes) &
         call check_mask_val_consistency(IOB%sw_flux_vis_dir(i-i0,j-j0), G%mask2dT(i,j), i, j, 'sw_flux_vis_dir', G)
     endif
     if (associated(IOB%sw_flux_vis_dif)) then
-      fluxes%sw_vis_dif(i,j) = G%mask2dT(i,j) * IOB%sw_flux_vis_dif(i-i0,j-j0)
+      fluxes%sw_vis_dif(i,j) = G%mask2dT(i,j) * US%W_m2_to_QRZ_T * IOB%sw_flux_vis_dif(i-i0,j-j0)
       if (CS%check_no_land_fluxes) &
         call check_mask_val_consistency(IOB%sw_flux_vis_dif(i-i0,j-j0), G%mask2dT(i,j), i, j, 'sw_flux_vis_dif', G)
     endif
     if (associated(IOB%sw_flux_nir_dir)) then
-      fluxes%sw_nir_dir(i,j) = G%mask2dT(i,j) * IOB%sw_flux_nir_dir(i-i0,j-j0)
+      fluxes%sw_nir_dir(i,j) = G%mask2dT(i,j) * US%W_m2_to_QRZ_T * IOB%sw_flux_nir_dir(i-i0,j-j0)
       if (CS%check_no_land_fluxes) &
         call check_mask_val_consistency(IOB%sw_flux_nir_dir(i-i0,j-j0), G%mask2dT(i,j), i, j, 'sw_flux_nir_dir', G)
     endif
     if (associated(IOB%sw_flux_nir_dif)) then
-      fluxes%sw_nir_dif(i,j) = G%mask2dT(i,j) * IOB%sw_flux_nir_dif(i-i0,j-j0)
+      fluxes%sw_nir_dif(i,j) = G%mask2dT(i,j) * US%W_m2_to_QRZ_T * IOB%sw_flux_nir_dif(i-i0,j-j0)
       if (CS%check_no_land_fluxes) &
         call check_mask_val_consistency(IOB%sw_flux_nir_dif(i-i0,j-j0), G%mask2dT(i,j), i, j, 'sw_flux_nir_dif', G)
     endif
-    fluxes%sw(i,j) = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j) + &
-                     fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j)
+    if (CS%answers_2018) then
+      fluxes%sw(i,j) = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j) + &
+                       fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j)
+    else
+      fluxes%sw(i,j) = (fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j)) + &
+                       (fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j))
+    endif
 
   enddo ; enddo
 
@@ -545,14 +555,14 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   if (associated(IOB%p)) then
     if (CS%max_p_surf >= 0.0) then
       do j=js,je ; do i=is,ie
-        fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
+        fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * US%kg_m3_to_R*US%m_s_to_L_T**2*IOB%p(i-i0,j-j0)
         fluxes%p_surf(i,j) = MIN(fluxes%p_surf_full(i,j),CS%max_p_surf)
         if (CS%check_no_land_fluxes) &
           call check_mask_val_consistency(IOB%p(i-i0,j-j0), G%mask2dT(i,j), i, j, 'p', G)
       enddo ; enddo
     else
       do j=js,je ; do i=is,ie
-        fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
+        fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * US%kg_m3_to_R*US%m_s_to_L_T**2*IOB%p(i-i0,j-j0)
         fluxes%p_surf(i,j) = fluxes%p_surf_full(i,j)
         if (CS%check_no_land_fluxes) &
           call check_mask_val_consistency(IOB%p(i-i0,j-j0), G%mask2dT(i,j), i, j, 'p', G)
@@ -586,7 +596,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     sign_for_net_FW_bug = 1.
     if (CS%use_net_FW_adjustment_sign_bug) sign_for_net_FW_bug = -1.
     do j=js,je ; do i=is,ie
-      net_FW(i,j) = US%R_to_kg_m3*US%Z_to_m*US%s_to_T* &
+      net_FW(i,j) = US%RZ_T_to_kg_m2s* &
                     (((fluxes%lprec(i,j)   + fluxes%fprec(i,j)) + &
                       (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j))) + &
                       (fluxes%evap(i,j)    + fluxes%vprec(i,j)) ) * US%L_to_m**2*G%areaT(i,j)
@@ -605,7 +615,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     if (CS%adjust_net_fresh_water_by_scaling) then
       call adjust_area_mean_to_zero(net_FW2, G, fluxes%netFWGlobalScl)
       do j=js,je ; do i=is,ie
-        fluxes%vprec(i,j) = fluxes%vprec(i,j) + US%kg_m3_to_R*US%m_to_Z*US%T_to_s * &
+        fluxes%vprec(i,j) = fluxes%vprec(i,j) + US%kg_m2s_to_RZ_T * &
             (net_FW2(i,j) - net_FW(i,j)/(US%L_to_m**2*G%areaT(i,j))) * G%mask2dT(i,j)
       enddo ; enddo
     else
@@ -666,14 +676,14 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    rigidity_at_h, &  ! Ice rigidity at tracer points [m3 s-1]
+    rigidity_at_h, &  ! Ice rigidity at tracer points [L4 Z-1 T-1 ~> m3 s-1]
     net_mass_src, &   ! A temporary of net mass sources [kg m-2 s-1].
     ustar_tmp         ! A temporary array of ustar values [Z T-1 ~> m s-1].
 
-  real :: I_GEarth      ! 1.0 / G_Earth [s2 m-1]
-  real :: Kv_rho_ice    ! (CS%kv_sea_ice / CS%density_sea_ice) [m5 s-1 kg-1]
-  real :: mass_ice      ! mass of sea ice at a face [kg m-2]
-  real :: mass_eff      ! effective mass of sea ice for rigidity [kg m-2]
+  real :: I_GEarth      ! The inverse of the gravitational acceleration [T2 Z L-2 ~> s2 m-1]
+  real :: Kv_rho_ice    ! (CS%Kv_sea_ice / CS%density_sea_ice) [L4 Z-2 T-1 R-1 ~> m5 s-1 kg-1]
+  real :: mass_ice      ! mass of sea ice at a face [R Z ~> kg m-2]
+  real :: mass_eff      ! effective mass of sea ice for rigidity [R Z ~> kg m-2]
   real :: wt1, wt2      ! Relative weights of previous and current values of ustar, ND.
 
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0, istk
@@ -751,12 +761,12 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
   if (associated(IOB%p)) then
     if (CS%max_p_surf >= 0.0) then
       do j=js,je ; do i=is,ie
-        forces%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
+        forces%p_surf_full(i,j) = G%mask2dT(i,j) * US%kg_m3_to_R*US%m_s_to_L_T**2*IOB%p(i-i0,j-j0)
         forces%p_surf(i,j) = MIN(forces%p_surf_full(i,j),CS%max_p_surf)
       enddo ; enddo
     else
       do j=js,je ; do i=is,ie
-        forces%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
+        forces%p_surf_full(i,j) = G%mask2dT(i,j) * US%kg_m3_to_R*US%m_s_to_L_T**2*IOB%p(i-i0,j-j0)
         forces%p_surf(i,j) = forces%p_surf_full(i,j)
       enddo ; enddo
     endif
@@ -829,13 +839,13 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
   enddo ; enddo ; endif
 
   if (associated(IOB%mass_berg)) then ; do j=js,je ; do i=is,ie
-    forces%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
+    forces%mass_berg(i,j) = US%m_to_Z*US%kg_m3_to_R * IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
   enddo ; enddo ; endif
 
   ! Obtain sea ice related dynamic fields
   if (associated(IOB%ice_rigidity)) then
     do j=js,je ; do i=is,ie
-      rigidity_at_h(i,j) = IOB%ice_rigidity(i-i0,j-j0) * G%mask2dT(i,j)
+      rigidity_at_h(i,j) = US%m_to_L**3*US%Z_to_L*US%T_to_s * IOB%ice_rigidity(i-i0,j-j0) * G%mask2dT(i,j)
     enddo ; enddo
     call pass_var(rigidity_at_h, G%Domain, halo=1)
     do I=is-1,ie ; do j=js,je
@@ -850,14 +860,13 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
 
   if (CS%rigid_sea_ice) then
     call pass_var(forces%p_surf_full, G%Domain, halo=1)
-    I_GEarth = 1.0 / CS%G_Earth
-    Kv_rho_ice = (CS%kv_sea_ice / CS%density_sea_ice)
+    I_GEarth = 1.0 / CS%g_Earth
+    Kv_rho_ice = (CS%Kv_sea_ice / CS%density_sea_ice)
     do I=is-1,ie ; do j=js,je
       mass_ice = min(forces%p_surf_full(i,j), forces%p_surf_full(i+1,j)) * I_GEarth
       mass_eff = 0.0
       if (mass_ice > CS%rigid_sea_ice_mass) then
-        mass_eff = (mass_ice - CS%rigid_sea_ice_mass) **2 / &
-                   (mass_ice + CS%rigid_sea_ice_mass)
+        mass_eff = (mass_ice - CS%rigid_sea_ice_mass)**2 / (mass_ice + CS%rigid_sea_ice_mass)
       endif
       forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) + Kv_rho_ice * mass_eff
     enddo ; enddo
@@ -865,8 +874,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
       mass_ice = min(forces%p_surf_full(i,j), forces%p_surf_full(i,j+1)) * I_GEarth
       mass_eff = 0.0
       if (mass_ice > CS%rigid_sea_ice_mass) then
-        mass_eff = (mass_ice - CS%rigid_sea_ice_mass) **2 / &
-                   (mass_ice + CS%rigid_sea_ice_mass)
+        mass_eff = (mass_ice - CS%rigid_sea_ice_mass)**2 / (mass_ice + CS%rigid_sea_ice_mass)
       endif
       forces%rigidity_ice_v(i,J) = forces%rigidity_ice_v(i,J) + Kv_rho_ice * mass_eff
     enddo ; enddo
@@ -1142,7 +1150,7 @@ subroutine apply_flux_adjustments(G, US, CS, Time, fluxes)
   call data_override('OCN', 'hflx_adj', temp_at_h(isc:iec,jsc:jec), Time, override=overrode_h)
 
   if (overrode_h) then ; do j=jsc,jec ; do i=isc,iec
-    fluxes%heat_added(i,j) = fluxes%heat_added(i,j) + temp_at_h(i,j)* G%mask2dT(i,j)
+    fluxes%heat_added(i,j) = fluxes%heat_added(i,j) + US%W_m2_to_QRZ_T*temp_at_h(i,j)* G%mask2dT(i,j)
   enddo ; enddo ; endif
   ! Not needed? ! if (overrode_h) call pass_var(fluxes%heat_added, G%Domain)
 
@@ -1151,7 +1159,7 @@ subroutine apply_flux_adjustments(G, US, CS, Time, fluxes)
 
   if (overrode_h) then ; do j=jsc,jec ; do i=isc,iec
     fluxes%salt_flux_added(i,j) = fluxes%salt_flux_added(i,j) + &
-        US%kg_m3_to_R*US%m_to_Z*US%T_to_s * temp_at_h(i,j)* G%mask2dT(i,j)
+        US%kg_m2s_to_RZ_T * temp_at_h(i,j)* G%mask2dT(i,j)
   enddo ; enddo ; endif
   ! Not needed? ! if (overrode_h) call pass_var(fluxes%salt_flux_added, G%Domain)
 
@@ -1159,7 +1167,7 @@ subroutine apply_flux_adjustments(G, US, CS, Time, fluxes)
   call data_override('OCN', 'prcme_adj', temp_at_h(isc:iec,jsc:jec), Time, override=overrode_h)
 
   if (overrode_h) then ; do j=jsc,jec ; do i=isc,iec
-    fluxes%vprec(i,j) = fluxes%vprec(i,j) + US%kg_m3_to_R*US%m_to_Z*US%T_to_s * temp_at_h(i,j)* G%mask2dT(i,j)
+    fluxes%vprec(i,j) = fluxes%vprec(i,j) + US%kg_m2s_to_RZ_T * temp_at_h(i,j)* G%mask2dT(i,j)
   enddo ; enddo ; endif
   ! Not needed? ! if (overrode_h) call pass_var(fluxes%vprec, G%Domain)
 end subroutine apply_flux_adjustments
@@ -1312,8 +1320,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "needed because the FMS coupling structure does not "//&
                  "limit the water that can be frozen out of the ocean and "//&
                  "the ice-ocean heat fluxes are treated explicitly.  No "//&
-                 "limit is applied if a negative value is used.", units="Pa", &
-                 default=-1.0)
+                 "limit is applied if a negative value is used.", &
+                 units="Pa", default=-1.0, scale=US%kg_m3_to_R*US%m_s_to_L_T**2)
   call get_param(param_file, mdl, "RESTORE_SALINITY", CS%restore_salt, &
                  "If true, the coupled driver will add a globally-balanced "//&
                  "fresh-water flux that drives sea-surface salinity "//&
@@ -1374,7 +1382,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
   call get_param(param_file, mdl, "WIND_STRESS_MULTIPLIER", CS%wind_stress_multiplier, &
                  "A factor multiplying the wind-stress given to the ocean by the "//&
                  "coupler. This is used for testing and should be =1.0 for any "//&
-                 "production runs.", default=1.0)
+                 "production runs.", units="nondim", default=1.0)
 
   if (CS%restore_salt) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
@@ -1516,6 +1524,9 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "If true, use the order of arithmetic and expressions that recover the answers "//&
                  "from the end of 2018.  Otherwise, use a simpler expression to calculate gustiness.", &
                  default=default_2018_answers)
+  call get_param(param_file, mdl, "FIX_USTAR_GUSTLESS_BUG", CS%fix_ustar_gustless_bug, &
+                 "If true correct a bug in the time-averaging of the gustless wind friction velocity", &
+                 default=.false.)
 
 ! See whether sufficiently thick sea ice should be treated as rigid.
   call get_param(param_file, mdl, "USE_RIGID_SEA_ICE", CS%rigid_sea_ice, &
@@ -1525,18 +1536,19 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
   if (CS%rigid_sea_ice) then
     call get_param(param_file, mdl, "G_EARTH", CS%g_Earth, &
                  "The gravitational acceleration of the Earth.", &
-                 units="m s-2", default = 9.80)
+                 units="m s-2", default = 9.80, scale=US%Z_to_m*US%m_s_to_L_T**2)
     call get_param(param_file, mdl, "SEA_ICE_MEAN_DENSITY", CS%density_sea_ice, &
                  "A typical density of sea ice, used with the kinematic "//&
-                 "viscosity, when USE_RIGID_SEA_ICE is true.", units="kg m-3", &
-                 default=900.0)
+                 "viscosity, when USE_RIGID_SEA_ICE is true.", &
+                 units="kg m-3", default=900.0, scale=US%kg_m3_to_R)
     call get_param(param_file, mdl, "SEA_ICE_VISCOSITY", CS%Kv_sea_ice, &
                  "The kinematic viscosity of sufficiently thick sea ice "//&
                  "for use in calculating the rigidity of sea ice.", &
-                 units="m2 s-1", default=1.0e9)
+                 units="m2 s-1", default=1.0e9, scale=US%Z_to_L**2*US%m_to_L**2*US%T_to_s)
     call get_param(param_file, mdl, "SEA_ICE_RIGID_MASS", CS%rigid_sea_ice_mass, &
                  "The mass of sea-ice per unit area at which the sea-ice "//&
-                 "starts to exhibit rigidity", units="kg m-2", default=1000.0)
+                 "starts to exhibit rigidity", &
+                 units="kg m-2", default=1000.0, scale=US%kg_m3_to_R*US%m_to_Z)
   endif
 
   call get_param(param_file, mdl, "ALLOW_ICEBERG_FLUX_DIAGNOSTICS", iceberg_flux_diags, &

@@ -8,11 +8,13 @@ use MOM_error_handler, only : MOM_error, FATAL
 use MOM_string_functions, only : uppercase
 use regrid_edge_values, only : edge_values_explicit_h4, edge_values_implicit_h4
 use regrid_edge_values, only : edge_values_implicit_h4, edge_values_implicit_h6
-use regrid_edge_slopes, only : edge_slopes_implicit_h3, edge_slopes_implicit_h5
+use regrid_edge_values, only : edge_slopes_implicit_h3, edge_slopes_implicit_h5
 use PCM_functions, only : PCM_reconstruction
 use PLM_functions, only : PLM_reconstruction, PLM_boundary_extrapolation
 use PPM_functions, only : PPM_reconstruction, PPM_boundary_extrapolation
 use PQM_functions, only : PQM_reconstruction, PQM_boundary_extrapolation_v1
+
+use iso_fortran_env, only : stdout=>output_unit, stderr=>error_unit
 
 implicit none ; private
 
@@ -184,7 +186,7 @@ function isPosSumErrSignificant(n1, sum1, n2, sum2)
 end function isPosSumErrSignificant
 
 !> Remaps column of values u0 on grid h0 to grid h1 assuming the top edge is aligned.
-subroutine remapping_core_h(CS,  n0, h0, u0, n1, h1, u1, h_neglect, h_neglect_edge)
+subroutine remapping_core_h(CS, n0, h0, u0, n1, h1, u1, h_neglect, h_neglect_edge)
   type(remapping_CS),  intent(in)  :: CS !< Remapping control structure
   integer,             intent(in)  :: n0 !< Number of cells on source grid
   real, dimension(n0), intent(in)  :: h0 !< Cell widths on source grid
@@ -399,14 +401,14 @@ subroutine build_reconstructions_1d( CS, n0, h0, u0, ppoly_r_coefs, &
       iMethod = INTEGRATION_PLM
     case ( REMAPPING_PPM_H4 )
       call edge_values_explicit_h4( n0, h0, u0, ppoly_r_E, h_neglect_edge, answers_2018=CS%answers_2018 )
-      call PPM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect )
+      call PPM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect, answers_2018=CS%answers_2018 )
       if ( CS%boundary_extrapolation ) then
         call PPM_boundary_extrapolation( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect )
       endif
       iMethod = INTEGRATION_PPM
     case ( REMAPPING_PPM_IH4 )
       call edge_values_implicit_h4( n0, h0, u0, ppoly_r_E, h_neglect_edge, answers_2018=CS%answers_2018 )
-      call PPM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect )
+      call PPM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect, answers_2018=CS%answers_2018 )
       if ( CS%boundary_extrapolation ) then
         call PPM_boundary_extrapolation( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect )
       endif
@@ -414,7 +416,8 @@ subroutine build_reconstructions_1d( CS, n0, h0, u0, ppoly_r_coefs, &
     case ( REMAPPING_PQM_IH4IH3 )
       call edge_values_implicit_h4( n0, h0, u0, ppoly_r_E, h_neglect_edge, answers_2018=CS%answers_2018 )
       call edge_slopes_implicit_h3( n0, h0, u0, ppoly_r_S, h_neglect, answers_2018=CS%answers_2018 )
-      call PQM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_S, ppoly_r_coefs, h_neglect )
+      call PQM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_S, ppoly_r_coefs, h_neglect, &
+                               answers_2018=CS%answers_2018 )
       if ( CS%boundary_extrapolation ) then
         call PQM_boundary_extrapolation_v1( n0, h0, u0, ppoly_r_E, ppoly_r_S, &
                                             ppoly_r_coefs, h_neglect )
@@ -423,7 +426,8 @@ subroutine build_reconstructions_1d( CS, n0, h0, u0, ppoly_r_coefs, &
     case ( REMAPPING_PQM_IH6IH5 )
       call edge_values_implicit_h6( n0, h0, u0, ppoly_r_E, h_neglect_edge, answers_2018=CS%answers_2018 )
       call edge_slopes_implicit_h5( n0, h0, u0, ppoly_r_S, h_neglect, answers_2018=CS%answers_2018 )
-      call PQM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_S, ppoly_r_coefs, h_neglect )
+      call PQM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_S, ppoly_r_coefs, h_neglect, &
+                               answers_2018=CS%answers_2018 )
       if ( CS%boundary_extrapolation ) then
         call PQM_boundary_extrapolation_v1( n0, h0, u0, ppoly_r_E, ppoly_r_S, &
                                             ppoly_r_coefs, h_neglect )
@@ -1628,9 +1632,9 @@ logical function remapping_unit_tests(verbose)
   logical :: thisTest, v
 
   v = verbose
+  answers_2018 = .false. ! .true.
   h_neglect = hNeglect_dflt
-  h_neglect_edge = 1.0e-10
-  answers_2018 = .true.
+  h_neglect_edge = hNeglect_dflt ; if (answers_2018) h_neglect_edge = 1.0e-10
 
   write(*,*) '==== MOM_remapping: remapping_unit_tests ================='
   remapping_unit_tests = .false. ! Normally return false
@@ -1677,7 +1681,7 @@ logical function remapping_unit_tests(verbose)
   ppoly0_coefs(:,:) = 0.0
 
   call edge_values_explicit_h4( n0, h0, u0, ppoly0_E, h_neglect=1e-10, answers_2018=answers_2018 )
-  call PPM_reconstruction( n0, h0, u0, ppoly0_E, ppoly0_coefs, h_neglect )
+  call PPM_reconstruction( n0, h0, u0, ppoly0_E, ppoly0_coefs, h_neglect, answers_2018=answers_2018 )
   call PPM_boundary_extrapolation( n0, h0, u0, ppoly0_E, ppoly0_coefs, h_neglect )
   u1(:) = 0.
   call remapByProjection( n0, h0, u0, ppoly0_E, ppoly0_coefs, &
@@ -1808,13 +1812,15 @@ logical function remapping_unit_tests(verbose)
 
   call edge_values_explicit_h4( 5, (/1.,1.,1.,1.,1./), (/1.,3.,5.,7.,9./), ppoly0_E, &
                                 h_neglect=1e-10, answers_2018=answers_2018 )
-  ! The next two tests currently fail due to roundoff.
-  thisTest = test_answer(v, 5, ppoly0_E(:,1), (/0.,2.,4.,6.,8./), 'Line H4: left edges')
-  thisTest = test_answer(v, 5, ppoly0_E(:,2), (/2.,4.,6.,8.,10./), 'Line H4: right edges')
+  ! The next two tests currently fail due to roundoff, but pass when given a reasonable tolerance.
+  thisTest = test_answer(v, 5, ppoly0_E(:,1), (/0.,2.,4.,6.,8./), 'Line H4: left edges', tol=8.0e-15)
+  remapping_unit_tests = remapping_unit_tests .or. thisTest
+  thisTest = test_answer(v, 5, ppoly0_E(:,2), (/2.,4.,6.,8.,10./), 'Line H4: right edges', tol=1.0e-14)
+  remapping_unit_tests = remapping_unit_tests .or. thisTest
   ppoly0_E(:,1) = (/0.,2.,4.,6.,8./)
   ppoly0_E(:,2) = (/2.,4.,6.,8.,10./)
   call PPM_reconstruction(5, (/1.,1.,1.,1.,1./), (/1.,3.,5.,7.,9./), ppoly0_E(1:5,:), &
-                              ppoly0_coefs(1:5,:), h_neglect )
+                              ppoly0_coefs(1:5,:), h_neglect, answers_2018=answers_2018 )
   remapping_unit_tests = remapping_unit_tests .or. &
     test_answer(v, 5, ppoly0_coefs(:,1), (/1.,2.,4.,6.,9./), 'Line PPM: P0')
   remapping_unit_tests = remapping_unit_tests .or. &
@@ -1824,13 +1830,15 @@ logical function remapping_unit_tests(verbose)
 
   call edge_values_explicit_h4( 5, (/1.,1.,1.,1.,1./), (/1.,1.,7.,19.,37./), ppoly0_E, &
                                 h_neglect=1e-10, answers_2018=answers_2018 )
-  ! The next two tests currently fail due to roundoff.
-  thisTest = test_answer(v, 5, ppoly0_E(:,1), (/3.,0.,3.,12.,27./), 'Parabola H4: left edges')
-  thisTest = test_answer(v, 5, ppoly0_E(:,2), (/0.,3.,12.,27.,48./), 'Parabola H4: right edges')
+  ! The next two tests are now passing when answers_2018 = .false., but otherwise only work to roundoff.
+  thisTest = test_answer(v, 5, ppoly0_E(:,1), (/3.,0.,3.,12.,27./), 'Parabola H4: left edges', tol=2.7e-14)
+  remapping_unit_tests = remapping_unit_tests .or. thisTest
+  thisTest = test_answer(v, 5, ppoly0_E(:,2), (/0.,3.,12.,27.,48./), 'Parabola H4: right edges', tol=4.8e-14)
+  remapping_unit_tests = remapping_unit_tests .or. thisTest
   ppoly0_E(:,1) = (/0.,0.,3.,12.,27./)
   ppoly0_E(:,2) = (/0.,3.,12.,27.,48./)
   call PPM_reconstruction(5, (/1.,1.,1.,1.,1./), (/0.,1.,7.,19.,37./), ppoly0_E(1:5,:), &
-                          ppoly0_coefs(1:5,:), h_neglect )
+                          ppoly0_coefs(1:5,:), h_neglect, answers_2018=answers_2018 )
   remapping_unit_tests = remapping_unit_tests .or. &
     test_answer(v, 5, ppoly0_E(:,1), (/0.,0.,3.,12.,37./), 'Parabola PPM: left edges')
   remapping_unit_tests = remapping_unit_tests .or. &
@@ -1845,7 +1853,7 @@ logical function remapping_unit_tests(verbose)
   ppoly0_E(:,1) = (/0.,0.,6.,10.,15./)
   ppoly0_E(:,2) = (/0.,6.,12.,17.,15./)
   call PPM_reconstruction(5, (/1.,1.,1.,1.,1./), (/0.,5.,7.,16.,15./), ppoly0_E(1:5,:), &
-                          ppoly0_coefs(1:5,:), h_neglect )
+                          ppoly0_coefs(1:5,:), h_neglect, answers_2018=answers_2018 )
   remapping_unit_tests = remapping_unit_tests .or. &
     test_answer(v, 5, ppoly0_E(:,1), (/0.,3.,6.,16.,15./), 'Limits PPM: left edges')
   remapping_unit_tests = remapping_unit_tests .or. &
@@ -1876,26 +1884,30 @@ logical function remapping_unit_tests(verbose)
 end function remapping_unit_tests
 
 !> Returns true if any cell of u and u_true are not identical. Returns false otherwise.
-logical function test_answer(verbose, n, u, u_true, label)
+logical function test_answer(verbose, n, u, u_true, label, tol)
   logical,            intent(in) :: verbose !< If true, write results to stdout
-  integer,            intent(in) :: n !< Number of cells in u
-  real, dimension(n), intent(in) :: u !< Values to test
+  integer,            intent(in) :: n      !< Number of cells in u
+  real, dimension(n), intent(in) :: u      !< Values to test
   real, dimension(n), intent(in) :: u_true !< Values to test against (correct answer)
-  character(len=*),   intent(in) :: label !< Message
+  character(len=*),   intent(in) :: label  !< Message
+  real,     optional, intent(in) :: tol    !< The tolerance for differences between u and u_true
   ! Local variables
+  real :: tolerance ! The tolerance for differences between u and u_true
   integer :: k
 
+  tolerance = 0.0 ; if (present(tol)) tolerance = tol
   test_answer = .false.
   do k = 1, n
-    if (u(k) /= u_true(k)) test_answer = .true.
+    if (abs(u(k) - u_true(k)) > tolerance) test_answer = .true.
   enddo
   if (test_answer .or. verbose) then
-    write(*,'(a4,2a24,x,a)') 'k','Calculated value','Correct value',label
+    write(stdout,'(a4,2a24,x,a)') 'k','Calculated value','Correct value',label
     do k = 1, n
-      if (u(k) /= u_true(k)) then
-        write(*,'(i4,1p2e24.16,a,1pe24.16,a)') k,u(k),u_true(k),' err=',u(k)-u_true(k),' < wrong'
+      if (abs(u(k) - u_true(k)) > tolerance) then
+        write(stdout,'(i4,1p2e24.16,a,1pe24.16,a)') k,u(k),u_true(k),' err=',u(k)-u_true(k),' < wrong'
+        write(stderr,'(i4,1p2e24.16,a,1pe24.16,a)') k,u(k),u_true(k),' err=',u(k)-u_true(k),' < wrong'
       else
-        write(*,'(i4,1p2e24.16)') k,u(k),u_true(k)
+        write(stdout,'(i4,1p2e24.16)') k,u(k),u_true(k)
       endif
     enddo
   endif
@@ -1909,11 +1921,11 @@ subroutine dumpGrid(n,h,x,u)
   real, dimension(:), intent(in) :: x !< Interface delta
   real, dimension(:), intent(in) :: u !< Cell average values
   integer :: i
-  write(*,'("i=",20i10)') (i,i=1,n+1)
-  write(*,'("x=",20es10.2)') (x(i),i=1,n+1)
-  write(*,'("i=",5x,20i10)') (i,i=1,n)
-  write(*,'("h=",5x,20es10.2)') (h(i),i=1,n)
-  write(*,'("u=",5x,20es10.2)') (u(i),i=1,n)
+  write(stdout,'("i=",20i10)') (i,i=1,n+1)
+  write(stdout,'("x=",20es10.2)') (x(i),i=1,n+1)
+  write(stdout,'("i=",5x,20i10)') (i,i=1,n)
+  write(stdout,'("h=",5x,20es10.2)') (h(i),i=1,n)
+  write(stdout,'("u=",5x,20es10.2)') (u(i),i=1,n)
 end subroutine dumpGrid
 
 end module MOM_remapping

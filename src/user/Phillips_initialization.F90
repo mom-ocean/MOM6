@@ -166,8 +166,8 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read_p
   do k=nz-1,1 ; do j=js,je ; do I=is-1,ie
     y_2 = G%geoLatCu(I,j) - G%south_lat - 0.5*G%len_lat
 ! This uses d/d y_2 atan(y_2 / jet_width)
-!    u(I,j,k) = u(I,j,k+1) + (1e-3 * jet_height / &
-!           (US%m_to_L*jet_width * (1.0 + (y_2 / jet_width)**2))) * &
+!    u(I,j,k) = u(I,j,k+1) + ( jet_height / &
+!           (1.0e3*US%m_to_L*jet_width * (1.0 + (y_2 / jet_width)**2))) * &
 !           (2.0 * GV%g_prime(K+1) / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
 ! This uses d/d y_2 tanh(y_2 / jet_width)
     u(I,j,k) = u(I,j,k+1) + (1e-3 * (jet_height / (US%m_to_L*jet_width)) * &
@@ -219,10 +219,10 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
   real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces.
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta [Z ~> m].
   real :: temp(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for other variables.
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [s-1].
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
   real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta [Z ~> m].
-  real :: Idamp_im(SZJ_(G))         ! The inverse zonal-mean damping rate [s-1].
-  real :: damp_rate    ! The inverse zonal-mean damping rate [s-1].
+  real :: Idamp_im(SZJ_(G))         ! The inverse zonal-mean damping rate [T-1 ~> s-1].
+  real :: damp_rate    ! The inverse zonal-mean damping rate [T-1 ~> s-1].
   real :: jet_width    ! The width of the zonal mean jet, in km.
   real :: jet_height   ! The interface height scale associated with the zonal-mean jet [Z ~> m].
   real :: y_2          ! The y-position relative to the channel center, in km.
@@ -246,7 +246,7 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
                  units="nondim", default = 0.5)
   call get_param(param_file, mdl, "SPONGE_RATE", damp_rate, &
                  "The rate at which the zonal-mean sponges damp.", units="s-1", &
-                 default = 1.0/(10.0*86400.0))
+                 default = 1.0/(10.0*86400.0), scale=US%T_to_s)
 
   call get_param(param_file, mdl, "JET_WIDTH", jet_width, &
                  "The width of the zonal-mean jet.", units="km", &
@@ -351,13 +351,11 @@ end subroutine Phillips_initialize_topography
 !!  The one argument passed to initialize, Time, is set to the
 !!  current time of the simulation.  The fields which are initialized
 !!  here are:
-!!    u - Zonal velocity [m s-1].
-!!    v - Meridional velocity [m s-1].
-!!    h - Layer thickness in m.  (Must be positive.)
-!!    D - Basin depth in m.  (Must be positive.)
-!!    f - The Coriolis parameter [s-1].
-!!    g - The reduced gravity at each interface [m s-2]
-!!    Rlay - Layer potential density (coordinate variable) [kg m-3].
+!!    u - Zonal velocity [L T-1 ~> m s-1].
+!!    v - Meridional velocity [L T-1 ~> m s-1].
+!!    h - Layer thickness [H ~> m or kg m-2] (must be positive)
+!!    D - Basin depth [Z ~> m] (positive downward)
+!!    f - The Coriolis parameter [T-1 ~> s-1].
 !!  If ENABLE_THERMODYNAMICS is defined:
 !!    T - Temperature [degC].
 !!    S - Salinity [ppt].

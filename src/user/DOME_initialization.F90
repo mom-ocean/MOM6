@@ -157,13 +157,14 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
   type(sponge_CS),       pointer    :: CSp  !< A pointer that is set to point to the control
                                             !! structure for this module.
 
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta.
+  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta [Z ~> m].
   real :: temp(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for other variables. !
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [s-1].
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
 
   real :: H0(SZK_(G))  ! Interface heights [Z ~> m].
-  real :: min_depth
-  real :: damp, e_dense, damp_new
+  real :: min_depth    ! The minimum depth at which to apply damping [Z ~> m]
+  real :: damp, damp_new ! Damping rates in the sponge [days]
+  real :: e_dense      ! The depth of the densest interfaces [Z ~> m]
   character(len=40)  :: mdl = "DOME_initialize_sponges" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
@@ -186,17 +187,18 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
   do i=is,ie; do j=js,je
     if (G%geoLonT(i,j) < 100.0) then ; damp = 10.0
     elseif (G%geoLonT(i,j) < 200.0) then
-      damp = 10.0*(200.0-G%geoLonT(i,j))/100.0
+      damp = 10.0 * (200.0-G%geoLonT(i,j))/100.0
     else ; damp=0.0
     endif
 
     if (G%geoLonT(i,j) > 1400.0) then ; damp_new = 10.0
     elseif (G%geoLonT(i,j) > 1300.0) then
-       damp_new = 10.0*(G%geoLonT(i,j)-1300.0)/100.0
+       damp_new = 10.0 * (G%geoLonT(i,j)-1300.0)/100.0
     else ; damp_new = 0.0
     endif
 
-    if (damp <= damp_new) damp=damp_new
+    if (damp <= damp_new) damp = damp_new
+    damp = US%T_to_s*damp
 
     ! These will be stretched inside of apply_sponge, so they can be in
     ! depth space for Boussinesq or non-Boussinesq models.
@@ -212,7 +214,7 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
     eta(i,j,nz+1) = -G%bathyT(i,j)
 
     if (G%bathyT(i,j) > min_depth) then
-      Idamp(i,j) = damp/86400.0
+      Idamp(i,j) = damp / 86400.0
     else ; Idamp(i,j) = 0.0 ; endif
   enddo ; enddo
 
@@ -259,7 +261,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
 ! Local variables
   ! The following variables are used to set the target temperature and salinity.
   real :: T0(SZK_(G)), S0(SZK_(G))
-  real :: pres(SZK_(G))      ! An array of the reference pressure [Pa].
+  real :: pres(SZK_(G))      ! An array of the reference pressure [R L2 T-2 ~> Pa].
   real :: drho_dT(SZK_(G))   ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
   real :: drho_dS(SZK_(G))   ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
   real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 [R ~> kg m-3].
@@ -357,13 +359,13 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
     ! target density and a salinity of 35 psu.  This code is taken from
     ! USER_initialize_temp_sal.
     pres(:) = tv%P_Ref ; S0(:) = 35.0 ; T0(1) = 25.0
-    call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),tv%eqn_of_state, scale=US%kg_m3_to_R)
-    call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,tv%eqn_of_state, scale=US%kg_m3_to_R)
+    call calculate_density(T0(1), S0(1), pres(1), rho_guess(1), tv%eqn_of_state)
+    call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, tv%eqn_of_state, (/1,1/) )
 
     do k=1,nz ; T0(k) = T0(1) + (GV%Rlay(k)-rho_guess(1)) / drho_dT(1) ; enddo
     do itt=1,6
-      call calculate_density(T0,S0,pres,rho_guess,1,nz,tv%eqn_of_state, scale=US%kg_m3_to_R)
-      call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,tv%eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density(T0, S0, pres, rho_guess, tv%eqn_of_state)
+      call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, tv%eqn_of_state)
       do k=1,nz ; T0(k) = T0(k) + (GV%Rlay(k)-rho_guess(k)) / drho_dT(k) ; enddo
     enddo
 

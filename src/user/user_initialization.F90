@@ -242,10 +242,10 @@ end subroutine write_user_log
 !!
 !!  This subroutine initializes the fields for the simulations.
 !!  The one argument passed to initialize, Time, is set to the
-!!  current time of the simulation.  The fields which are initialized
+!!  current time of the simulation.  The fields which might be initialized
 !!  here are:
-!!  - u - Zonal velocity [m s-1].
-!!  - v - Meridional velocity [m s-1].
+!!  - u - Zonal velocity [Z T-1 ~> m s-1].
+!!  - v - Meridional velocity [Z T-1 ~> m s-1].
 !!  - h - Layer thickness [H ~> m or kg m-2].  (Must be positive.)
 !!  - G%bathyT - Basin depth [Z ~> m].  (Must be positive.)
 !!  - G%CoriolisBu - The Coriolis parameter [T-1 ~> s-1].
@@ -255,7 +255,7 @@ end subroutine write_user_log
 !!  - T - Temperature [degC].
 !!  - S - Salinity [psu].
 !!  If BULKMIXEDLAYER is defined:
-!!  - Rml - Mixed layer and buffer layer potential densities [kg m-3].
+!!  - Rml - Mixed layer and buffer layer potential densities [R ~> kg m-3].
 !!  If SPONGE is defined:
 !!  - A series of subroutine calls are made to set up the damping
 !!    rates and reference profiles for all variables that are damped

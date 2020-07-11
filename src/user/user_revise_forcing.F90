@@ -30,8 +30,8 @@ end type user_revise_forcing_CS
 contains
 
 !> This subroutine sets the surface wind stresses.
-subroutine user_alter_forcing(state, fluxes, day, G, CS)
-  type(surface),            intent(in)    :: state  !< A structure containing fields that
+subroutine user_alter_forcing(sfc_state, fluxes, day, G, CS)
+  type(surface),            intent(in)    :: sfc_state  !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(forcing),            intent(inout) :: fluxes !< A structure containing pointers to any
                                                     !! possible forcing fields. Unused fields
