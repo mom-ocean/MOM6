@@ -15,10 +15,10 @@ contains
 !!
 !! It is assumed that the dimension of 'u' is equal to the number of cells
 !! defining 'grid' and 'ppoly'. No consistency check is performed.
-subroutine PCM_reconstruction( N, u, ppoly_E, ppoly_coef )
+subroutine PCM_reconstruction( N, u, edge_values, ppoly_coef )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: u !< cell averages
-  real, dimension(:,:), intent(inout) :: ppoly_E    !< Edge value of polynomial,
+  real, dimension(:,:), intent(inout) :: edge_values !< Edge value of polynomial,
                                            !! with the same units as u.
   real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial,
                                            !! with the same units as u.
@@ -32,7 +32,7 @@ subroutine PCM_reconstruction( N, u, ppoly_E, ppoly_coef )
 
   ! The edge values are equal to the cell average
   do k = 1,N
-    ppoly_E(k,:) = u(k)
+    edge_values(k,:) = u(k)
   enddo
 
 end subroutine PCM_reconstruction
