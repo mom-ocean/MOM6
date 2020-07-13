@@ -7,7 +7,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : int_specific_vol_dp, calculate_density_derivs
+use MOM_EOS, only : calculate_density_derivs
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 

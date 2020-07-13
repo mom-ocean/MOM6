@@ -7,9 +7,9 @@ use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
-use MOM_PressureForce_AFV, only : PressureForce_AFV_Bouss, PressureForce_AFV_nonBouss
-use MOM_PressureForce_AFV, only : PressureForce_AFV_init, PressureForce_AFV_end
-use MOM_PressureForce_AFV, only : PressureForce_AFV_CS
+use MOM_PressureForce_FV, only : PressureForce_FV_Bouss, PressureForce_FV_nonBouss
+use MOM_PressureForce_FV, only : PressureForce_FV_init, PressureForce_FV_end
+use MOM_PressureForce_FV, only : PressureForce_FV_CS
 use MOM_PressureForce_Mont, only : PressureForce_Mont_Bouss, PressureForce_Mont_nonBouss
 use MOM_PressureForce_Mont, only : PressureForce_Mont_init, PressureForce_Mont_end
 use MOM_PressureForce_Mont, only : PressureForce_Mont_CS
@@ -28,10 +28,8 @@ public PressureForce, PressureForce_init, PressureForce_end
 type, public :: PressureForce_CS ; private
   logical :: Analytic_FV_PGF !< If true, use the analytic finite volume form
                              !! (Adcroft et al., Ocean Mod. 2008) of the PGF.
-  logical :: blocked_AFV     !< If true, used the blocked version of the ANALYTIC_FV_PGF
-                             !! code.  The value of this parameter should not change answers.
   !> Control structure for the analytically integrated finite volume pressure force
-  type(PressureForce_AFV_CS), pointer :: PressureForce_AFV_CSp => NULL()
+  type(PressureForce_FV_CS), pointer :: PressureForce_FV_CSp => NULL()
   !> Control structure for the Montgomery potential form of pressure force
   type(PressureForce_Mont_CS), pointer :: PressureForce_Mont_CSp => NULL()
 end type PressureForce_CS
@@ -64,10 +62,10 @@ subroutine PressureForce(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, e
 
   if (CS%Analytic_FV_PGF) then
     if (GV%Boussinesq) then
-      call PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS%PressureForce_AFV_CSp, &
+      call PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS%PressureForce_FV_CSp, &
                                    ALE_CSp, p_atm, pbce, eta)
     else
-      call PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS%PressureForce_AFV_CSp, &
+      call PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS%PressureForce_FV_CSp, &
                                       ALE_CSp, p_atm, pbce, eta)
     endif
   else
@@ -111,8 +109,8 @@ subroutine PressureForce_init(Time, G, GV, US, param_file, diag, CS, tides_CSp)
                  "described in Adcroft et al., O. Mod. (2008).", default=.true.)
 
   if (CS%Analytic_FV_PGF) then
-    call PressureForce_AFV_init(Time, G, GV, US, param_file, diag, &
-             CS%PressureForce_AFV_CSp, tides_CSp)
+    call PressureForce_FV_init(Time, G, GV, US, param_file, diag, &
+             CS%PressureForce_FV_CSp, tides_CSp)
   else
     call PressureForce_Mont_init(Time, G, GV, US, param_file, diag, &
              CS%PressureForce_Mont_CSp, tides_CSp)
@@ -125,7 +123,7 @@ subroutine PressureForce_end(CS)
   type(PressureForce_CS), pointer :: CS !< Pressure force control structure
 
   if (CS%Analytic_FV_PGF) then
-    call PressureForce_AFV_end(CS%PressureForce_AFV_CSp)
+    call PressureForce_FV_end(CS%PressureForce_FV_CSp)
   else
     call PressureForce_Mont_end(CS%PressureForce_Mont_CSp)
   endif

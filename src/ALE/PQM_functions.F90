@@ -17,12 +17,12 @@ contains
 !!
 !! It is assumed that the dimension of 'u' is equal to the number of cells
 !! defining 'grid' and 'ppoly'. No consistency check is performed.
-subroutine PQM_reconstruction( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect, answers_2018 )
+subroutine PQM_reconstruction( N, h, u, edge_values, edge_slopes, ppoly_coef, h_neglect, answers_2018 )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
   real, dimension(:),   intent(in)    :: u !< cell averages (size N) [A]
-  real, dimension(:,:), intent(inout) :: ppoly_E    !< Edge value of polynomial [A]
-  real, dimension(:,:), intent(inout) :: ppoly_S    !< Edge slope of polynomial [A H-1]
+  real, dimension(:,:), intent(inout) :: edge_values    !< Edge value of polynomial [A]
+  real, dimension(:,:), intent(inout) :: edge_slopes    !< Edge slope of polynomial [A H-1]
   real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial, mainly [A]
   real,       optional, intent(in)    :: h_neglect  !< A negligibly small width for
                                            !! the purpose of cell reconstructions [H]
@@ -36,16 +36,16 @@ subroutine PQM_reconstruction( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect,
   real      :: a, b, c, d, e    ! parabola coefficients
 
   ! PQM limiter
-  call PQM_limiter( N, h, u, ppoly_E, ppoly_S, h_neglect, answers_2018 )
+  call PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answers_2018 )
 
   ! Loop on cells to construct the cubic within each cell
   do k = 1,N
 
-    u0_l = ppoly_E(k,1)
-    u0_r = ppoly_E(k,2)
+    u0_l = edge_values(k,1)
+    u0_r = edge_values(k,2)
 
-    u1_l = ppoly_S(k,1)
-    u1_r = ppoly_S(k,2)
+    u1_l = edge_slopes(k,1)
+    u1_r = edge_slopes(k,2)
 
     h_c = h(k)
 
@@ -72,12 +72,12 @@ end subroutine PQM_reconstruction
 !!
 !! It is assumed that the dimension of 'u' is equal to the number of cells
 !! defining 'grid' and 'ppoly'. No consistency check is performed.
-subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S, h_neglect, answers_2018 )
+subroutine PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answers_2018 )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
   real, dimension(:),   intent(in)    :: u !< cell average properties (size N) [A]
-  real, dimension(:,:), intent(inout) :: ppoly_E !< Potentially modified edge values [A]
-  real, dimension(:,:), intent(inout) :: ppoly_S !< Potentially modified edge slopes [A H-1]
+  real, dimension(:,:), intent(inout) :: edge_values !< Potentially modified edge values [A]
+  real, dimension(:,:), intent(inout) :: edge_slopes !< Potentially modified edge slopes [A H-1]
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width for
                                            !! the purpose of cell reconstructions [H]
   logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
@@ -102,10 +102,10 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S, h_neglect, answers_2018 )
   hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   ! Bound edge values
-  call bound_edge_values( N, h, u, ppoly_E, hNeglect, answers_2018 )
+  call bound_edge_values( N, h, u, edge_values, hNeglect, answers_2018 )
 
   ! Make discontinuous edge values monotonic (thru averaging)
-  call check_discontinuous_edge_values( N, u, ppoly_E )
+  call check_discontinuous_edge_values( N, u, edge_values )
 
   ! Loop on interior cells to apply the PQM limiter
   do k = 2,N-1
@@ -116,10 +116,10 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S, h_neglect, answers_2018 )
     inflexion_r = 0
 
     ! Get edge values, edge slopes and cell width
-    u0_l = ppoly_E(k,1)
-    u0_r = ppoly_E(k,2)
-    u1_l = ppoly_S(k,1)
-    u1_r = ppoly_S(k,2)
+    u0_l = edge_values(k,1)
+    u0_r = edge_values(k,2)
+    u1_l = edge_slopes(k,1)
+    u1_r = edge_slopes(k,2)
 
     ! Get cell widths and cell averages (boundary cells are assumed to
     ! be local extrema for the sake of slopes)
@@ -320,19 +320,19 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S, h_neglect, answers_2018 )
     endif ! clause to check where to collapse inflexion points
 
     ! Save edge values and edge slopes for reconstruction
-    ppoly_E(k,1) = u0_l
-    ppoly_E(k,2) = u0_r
-    ppoly_S(k,1) = u1_l
-    ppoly_S(k,2) = u1_r
+    edge_values(k,1) = u0_l
+    edge_values(k,2) = u0_r
+    edge_slopes(k,1) = u1_l
+    edge_slopes(k,2) = u1_r
 
   enddo ! end loop on interior cells
 
   ! Constant reconstruction within boundary cells
-  ppoly_E(1,:) = u(1)
-  ppoly_S(1,:) = 0.0
+  edge_values(1,:) = u(1)
+  edge_slopes(1,:) = 0.0
 
-  ppoly_E(N,:) = u(N)
-  ppoly_S(N,:) = 0.0
+  edge_values(N,:) = u(N)
+  edge_slopes(N,:) = 0.0
 
 end subroutine PQM_limiter
 
@@ -351,11 +351,11 @@ end subroutine PQM_limiter
 !!
 !! It is assumed that the size of the array 'u' is equal to the number of cells
 !! defining 'grid' and 'ppoly'. No consistency check is performed here.
-subroutine PQM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef )
+subroutine PQM_boundary_extrapolation( N, h, u, edge_values, ppoly_coef )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
   real, dimension(:),   intent(in)    :: u !< cell averages (size N) [A]
-  real, dimension(:,:), intent(inout) :: ppoly_E    !< Edge value of polynomial [A]
+  real, dimension(:,:), intent(inout) :: edge_values    !< Edge value of polynomial [A]
   real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial, mainly [A]
   ! Local variables
   integer       :: i0, i1
@@ -389,7 +389,7 @@ subroutine PQM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef )
 
   ! The right edge value in the boundary cell is taken to be the left
   ! edge value in the neighboring cell
-  u0_r = ppoly_E(i1,1)
+  u0_r = edge_values(i1,1)
 
   ! Given the right edge value and slope, we determine the left
   ! edge value and slope by computing the parabola as determined by
@@ -408,8 +408,8 @@ subroutine PQM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef )
     u0_r = 3.0 * u0 - 2.0 * u0_l
   endif
 
-  ppoly_E(i0,1) = u0_l
-  ppoly_E(i0,2) = u0_r
+  edge_values(i0,1) = u0_l
+  edge_values(i0,2) = u0_r
 
   a = u0_l
   b = 6.0 * u0 - 4.0 * u0_l - 2.0 * u0_r
@@ -447,7 +447,7 @@ subroutine PQM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef )
 
   ! The left edge value in the boundary cell is taken to be the right
   ! edge value in the neighboring cell
-  u0_l = ppoly_E(i0,2)
+  u0_l = edge_values(i0,2)
 
   ! Given the left edge value and slope, we determine the right
   ! edge value and slope by computing the parabola as determined by
@@ -466,8 +466,8 @@ subroutine PQM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef )
     u0_r = 3.0 * u1 - 2.0 * u0_l
   endif
 
-  ppoly_E(i1,1) = u0_l
-  ppoly_E(i1,2) = u0_r
+  edge_values(i1,1) = u0_l
+  edge_values(i1,2) = u0_r
 
   a = u0_l
   b = 6.0 * u1 - 4.0 * u0_l - 2.0 * u0_r
@@ -498,12 +498,12 @@ end subroutine PQM_boundary_extrapolation
 !!
 !! It is assumed that the size of the array 'u' is equal to the number of cells
 !! defining 'grid' and 'ppoly'. No consistency check is performed here.
-subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect )
+subroutine PQM_boundary_extrapolation_v1( N, h, u, edge_values, edge_slopes, ppoly_coef, h_neglect )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
   real, dimension(:),   intent(in)    :: u !< cell averages (size N) [A]
-  real, dimension(:,:), intent(inout) :: ppoly_E    !< Edge value of polynomial [A]
-  real, dimension(:,:), intent(inout) :: ppoly_S    !< Edge slope of polynomial [A H-1]
+  real, dimension(:,:), intent(inout) :: edge_values    !< Edge value of polynomial [A]
+  real, dimension(:,:), intent(inout) :: edge_slopes    !< Edge slope of polynomial [A H-1]
   real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial, mainly [A]
   real,       optional, intent(in)    :: h_neglect  !< A negligibly small width for
                                            !! the purpose of cell reconstructions [H]
@@ -656,10 +656,10 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coef,
   endif
 
   ! Store edge values, edge slopes and coefficients
-  ppoly_E(i0,1) = u0_l
-  ppoly_E(i0,2) = u0_r
-  ppoly_S(i0,1) = u1_l
-  ppoly_S(i0,2) = u1_r
+  edge_values(i0,1) = u0_l
+  edge_values(i0,2) = u0_r
+  edge_slopes(i0,1) = u1_l
+  edge_slopes(i0,2) = u1_r
 
   a = u0_l
   b = h0 * u1_l
@@ -809,10 +809,10 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coef,
   endif
 
   ! Store edge values, edge slopes and coefficients
-  ppoly_E(i1,1) = u0_l
-  ppoly_E(i1,2) = u0_r
-  ppoly_S(i1,1) = u1_l
-  ppoly_S(i1,2) = u1_r
+  edge_values(i1,1) = u0_l
+  edge_values(i1,2) = u0_r
+  edge_slopes(i1,1) = u1_l
+  edge_slopes(i1,2) = u1_r
 
   a = u0_l
   b = h1 * u1_l

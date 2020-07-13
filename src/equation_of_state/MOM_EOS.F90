@@ -37,20 +37,27 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public calculate_compress, calculate_density, query_compressible
-public calculate_density_derivs, calculate_specific_vol_derivs
+public EOS_allocate
+public EOS_domain
+public EOS_end
+public EOS_init
+public EOS_manual_init
+public EOS_quadrature
+public EOS_use_linear
+public analytic_int_density_dz
+public analytic_int_specific_vol_dp
+public calculate_compress
+public calculate_density
+public calculate_density_derivs
 public calculate_density_second_derivs
-public EOS_init, EOS_manual_init, EOS_end, EOS_allocate, EOS_domain
-public EOS_use_linear, calculate_spec_vol
-public int_density_dz, int_specific_vol_dp
-public int_density_dz_generic_plm, int_density_dz_generic_ppm
-public int_spec_vol_dp_generic_plm !, int_spec_vol_dz_generic_ppm
-public int_density_dz_generic, int_spec_vol_dp_generic
-public find_depth_of_pressure_in_cell
+public calculate_spec_vol
+public calculate_specific_vol_derivs
 public calculate_TFreeze
 public convert_temp_salt_for_TEOS10
-public gsw_sp_from_sr, gsw_pt_from_ct
 public extract_member_EOS
+public gsw_sp_from_sr
+public gsw_pt_from_ct
+public query_compressible
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -60,6 +67,8 @@ public extract_member_EOS
 !> Calculates density of sea water from T, S and P
 interface calculate_density
   module procedure calculate_density_scalar, calculate_density_array, calculate_density_1d
+  module procedure calculate_stanley_density_scalar, calculate_stanley_density_array
+  module procedure calculate_stanley_density_1d
 end interface calculate_density
 
 !> Calculates specific volume of sea water from T, S and P
@@ -174,7 +183,7 @@ subroutine calculate_density_scalar(T, S, pressure, rho, EOS, rho_ref, scale)
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
       call calculate_density_linear(T, S, p_scale*pressure, rho, &
-                                      EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, rho_ref)
+                                    EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, rho_ref)
     case (EOS_UNESCO)
       call calculate_density_unesco(T, S, p_scale*pressure, rho, rho_ref)
     case (EOS_WRIGHT)
@@ -193,6 +202,61 @@ subroutine calculate_density_scalar(T, S, pressure, rho, EOS, rho_ref, scale)
 
 end subroutine calculate_density_scalar
 
+!> Calls the appropriate subroutine to calculate density of sea water for scalar inputs
+!! including the variance of T, S and covariance of T-S.
+!! The calculation uses only the second order correction in a series as discussed
+!! in Stanley et al., 2020.
+!! If rho_ref is present, the anomaly with respect to rho_ref is returned. The
+!! density can be rescaled using rho_ref.
+subroutine calculate_stanley_density_scalar(T, S, pressure, Tvar, TScov, Svar, rho, EOS, rho_ref, scale)
+  real,           intent(in)  :: T        !< Potential temperature referenced to the surface [degC]
+  real,           intent(in)  :: S        !< Salinity [ppt]
+  real,           intent(in)  :: Tvar     !< Variance of potential temperature referenced to the surface [degC2]
+  real,           intent(in)  :: TScov    !< Covariance of potential temperature and salinity [degC ppt]
+  real,           intent(in)  :: Svar     !< Variance of salinity [ppt2]
+  real,           intent(in)  :: pressure !< Pressure [Pa]
+  real,           intent(out) :: rho      !< Density (in-situ if pressure is local) [kg m-3] or [R ~> kg m-3]
+  type(EOS_type), pointer     :: EOS      !< Equation of state structure
+  real, optional, intent(in)  :: rho_ref  !< A reference density [kg m-3].
+  real, optional, intent(in)  :: scale    !< A multiplicative factor by which to scale density
+                                          !! from kg m-3 to the desired units [R m3 kg-1]
+  ! Local variables
+  real :: d2RdTT, d2RdST, d2RdSS, d2RdSp, d2RdTp ! Second derivatives of density wrt T,S,p
+  real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
+  real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
+
+  if (.not.associated(EOS)) call MOM_error(FATAL, &
+    "calculate_stanley_density_scalar called with an unassociated EOS_type EOS.")
+
+  p_scale = EOS%RL2_T2_to_Pa
+
+  select case (EOS%form_of_EOS)
+    case (EOS_LINEAR)
+      call calculate_density_linear(T, S, p_scale*pressure, rho, &
+                                    EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, rho_ref)
+      call calculate_density_second_derivs_linear(T, S, pressure, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP)
+    case (EOS_WRIGHT)
+      call calculate_density_wright(T, S, p_scale*pressure, rho, rho_ref)
+      call calculate_density_second_derivs_wright(T, S, pressure, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP)
+    case (EOS_TEOS10)
+      call calculate_density_teos10(T, S, p_scale*pressure, rho, rho_ref)
+      call calculate_density_second_derivs_teos10(T, S, pressure, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP)
+    case default
+      call MOM_error(FATAL, "calculate_stanley_density_scalar: EOS is not valid.")
+  end select
+
+  ! Equation 25 of Stanley et al., 2020.
+  rho = rho + ( 0.5 * d2RdTT * Tvar + ( d2RdST * TScov + 0.5 * d2RdSS * Svar ) )
+
+  rho_scale = EOS%kg_m3_to_R
+  if (present(scale)) rho_scale = rho_scale * scale
+  rho = rho_scale * rho
+
+end subroutine calculate_stanley_density_scalar
+
 !> Calls the appropriate subroutine to calculate the density of sea water for 1-D array inputs.
 !! If rho_ref is present, the anomaly with respect to rho_ref is returned.
 subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_ref, scale)
@@ -206,33 +270,88 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_re
   real,                  optional, intent(in) :: rho_ref  !< A reference density [kg m-3]
   real,                  optional, intent(in) :: scale    !< A multiplicative factor by which to scale density
                                                 !! in combination with scaling given by US [various]
-
   integer :: j
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_array called with an unassociated EOS_type EOS.")
 
-    select case (EOS%form_of_EOS)
-      case (EOS_LINEAR)
-        call calculate_density_linear(T, S, pressure, rho, start, npts, &
-                                      EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, rho_ref)
-      case (EOS_UNESCO)
-        call calculate_density_unesco(T, S, pressure, rho, start, npts, rho_ref)
-      case (EOS_WRIGHT)
-        call calculate_density_wright(T, S, pressure, rho, start, npts, rho_ref)
-      case (EOS_TEOS10)
-        call calculate_density_teos10(T, S, pressure, rho, start, npts, rho_ref)
-      case (EOS_NEMO)
-      call calculate_density_nemo(T, S, pressure, rho, start, npts, rho_ref)
-      case default
-        call MOM_error(FATAL, "calculate_density_array: EOS%form_of_EOS is not valid.")
-    end select
+  select case (EOS%form_of_EOS)
+    case (EOS_LINEAR)
+      call calculate_density_linear(T, S, pressure, rho, start, npts, &
+                                    EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, rho_ref)
+    case (EOS_UNESCO)
+      call calculate_density_unesco(T, S, pressure, rho, start, npts, rho_ref)
+    case (EOS_WRIGHT)
+      call calculate_density_wright(T, S, pressure, rho, start, npts, rho_ref)
+    case (EOS_TEOS10)
+      call calculate_density_teos10(T, S, pressure, rho, start, npts, rho_ref)
+    case (EOS_NEMO)
+    call calculate_density_nemo(T, S, pressure, rho, start, npts, rho_ref)
+    case default
+      call MOM_error(FATAL, "calculate_density_array: EOS%form_of_EOS is not valid.")
+  end select
 
   if (present(scale)) then ; if (scale /= 1.0) then ; do j=start,start+npts-1
     rho(j) = scale * rho(j)
   enddo ; endif ; endif
 
 end subroutine calculate_density_array
+
+!> Calls the appropriate subroutine to calculate the density of sea water for 1-D array inputs
+!! including the variance of T, S and covariance of T-S.
+!! The calculation uses only the second order correction in a series as discussed
+!! in Stanley et al., 2020.
+!! If rho_ref is present, the anomaly with respect to rho_ref is returned.
+subroutine calculate_stanley_density_array(T, S, pressure, Tvar, TScov, Svar, rho, start, npts, EOS, rho_ref, scale)
+  real, dimension(:), intent(in)    :: T        !< Potential temperature referenced to the surface [degC]
+  real, dimension(:), intent(in)    :: S        !< Salinity [ppt]
+  real, dimension(:), intent(in)    :: pressure !< Pressure [Pa]
+  real, dimension(:), intent(in)    :: Tvar     !< Variance of potential temperature referenced to the surface [degC2]
+  real, dimension(:), intent(in)    :: TScov    !< Covariance of potential temperature and salinity [degC ppt]
+  real, dimension(:), intent(in)    :: Svar     !< Variance of salinity [ppt2]
+  real, dimension(:), intent(inout) :: rho      !< Density (in-situ if pressure is local) [kg m-3]
+  integer,            intent(in)    :: start    !< Start index for computation
+  integer,            intent(in)    :: npts     !< Number of point to compute
+  type(EOS_type),     pointer       :: EOS      !< Equation of state structure
+  real,     optional, intent(in)    :: rho_ref  !< A reference density [kg m-3].
+  real,     optional, intent(in)    :: scale    !< A multiplicative factor by which to scale density
+                                                !! from kg m-3 to the desired units [R m3 kg-1]
+  ! Local variables
+  real, dimension(size(T)) :: d2RdTT, d2RdST, d2RdSS, d2RdSp, d2RdTp ! Second derivatives of density wrt T,S,p
+  integer :: j
+
+  if (.not.associated(EOS)) call MOM_error(FATAL, &
+    "calculate_density_array called with an unassociated EOS_type EOS.")
+
+  select case (EOS%form_of_EOS)
+    case (EOS_LINEAR)
+      call calculate_density_linear(T, S, pressure, rho, start, npts, &
+                                    EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, rho_ref)
+      call calculate_density_second_derivs_linear(T, S, pressure, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP, start, npts)
+    case (EOS_WRIGHT)
+      call calculate_density_wright(T, S, pressure, rho, start, npts, rho_ref)
+      call calculate_density_second_derivs_wright(T, S, pressure, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP, start, npts)
+    case (EOS_TEOS10)
+      call calculate_density_teos10(T, S, pressure, rho, start, npts, rho_ref)
+      call calculate_density_second_derivs_teos10(T, S, pressure, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP, start, npts)
+    case default
+      call MOM_error(FATAL, "calculate_stanley_density_array: EOS%form_of_EOS is not valid.")
+  end select
+
+  ! Equation 25 of Stanley et al., 2020.
+  do j=start,start+npts-1
+    rho(j) = rho(j) &
+             + ( 0.5 * d2RdTT(j) * Tvar(j) + ( d2RdST(j) * TScov(j) + 0.5 * d2RdSS(j) * Svar(j) ) )
+  enddo
+
+  if (present(scale)) then ; if (scale /= 1.0) then ; do j=start,start+npts-1
+    rho(j) = scale * rho(j)
+  enddo ; endif ; endif
+
+end subroutine calculate_stanley_density_array
 
 !> Calls the appropriate subroutine to calculate the density of sea water for 1-D array inputs,
 !! potentially limiting the domain of indices that are worked on.
@@ -287,6 +406,79 @@ subroutine calculate_density_1d(T, S, pressure, rho, EOS, dom, rho_ref, scale)
   enddo ; endif
 
 end subroutine calculate_density_1d
+
+!> Calls the appropriate subroutine to calculate the density of sea water for 1-D array inputs
+!! including the variance of T, S and covariance of T-S,
+!! potentially limiting the domain of indices that are worked on.
+!! The calculation uses only the second order correction in a series as discussed
+!! in Stanley et al., 2020.
+!! If rho_ref is present, the anomaly with respect to rho_ref is returned.
+subroutine calculate_stanley_density_1d(T, S, pressure, Tvar, TScov, Svar, rho, EOS, dom, rho_ref, scale)
+  real, dimension(:),    intent(in)    :: T        !< Potential temperature referenced to the surface [degC]
+  real, dimension(:),    intent(in)    :: S        !< Salinity [ppt]
+  real, dimension(:),    intent(in)    :: pressure !< Pressure [R L2 T-2 ~> Pa]
+  real, dimension(:),    intent(in)    :: Tvar     !< Variance of potential temperature [degC2]
+  real, dimension(:),    intent(in)    :: TScov    !< Covariance of potential temperature and salinity [degC ppt]
+  real, dimension(:),    intent(in)    :: Svar     !< Variance of salinity [ppt2]
+  real, dimension(:),    intent(inout) :: rho      !< Density (in-situ if pressure is local) [R ~> kg m-3]
+  type(EOS_type),        pointer       :: EOS      !< Equation of state structure
+  integer, dimension(2), optional, intent(in) :: dom   !< The domain of indices to work on, taking
+                                                       !! into account that arrays start at 1.
+  real,                  optional, intent(in) :: rho_ref !< A reference density [kg m-3]
+  real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale density
+                                                   !! in combination with scaling given by US [various]
+  ! Local variables
+  real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
+  real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
+  real, dimension(size(rho)) :: pres  ! Pressure converted to [Pa]
+  real, dimension(size(T)) :: d2RdTT, d2RdST, d2RdSS, d2RdSp, d2RdTp ! Second derivatives of density wrt T,S,p
+  integer :: i, is, ie, npts
+
+  if (.not.associated(EOS)) call MOM_error(FATAL, &
+    "calculate_density_1d called with an unassociated EOS_type EOS.")
+
+  if (present(dom)) then
+    is = dom(1) ; ie = dom(2) ; npts = 1 + ie - is
+  else
+    is = 1 ; ie = size(rho) ; npts = 1 + ie - is
+  endif
+
+  p_scale = EOS%RL2_T2_to_Pa
+  do i=is,ie
+    pres(i) = p_scale * pressure(i)
+  enddo
+
+  select case (EOS%form_of_EOS)
+    case (EOS_LINEAR)
+      call calculate_density_linear(T, S, pres, rho, 1, npts, &
+                                    EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, rho_ref)
+      call calculate_density_second_derivs_linear(T, S, pres, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP, 1, npts)
+    case (EOS_WRIGHT)
+      call calculate_density_wright(T, S, pres, rho, 1, npts, rho_ref)
+      call calculate_density_second_derivs_wright(T, S, pres, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP, 1, npts)
+    case (EOS_TEOS10)
+      call calculate_density_teos10(T, S, pres, rho, 1, npts, rho_ref)
+      call calculate_density_second_derivs_teos10(T, S, pres, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP, 1, npts)
+    case default
+      call MOM_error(FATAL, "calculate_stanley_density_scalar: EOS is not valid.")
+  end select
+
+  ! Equation 25 of Stanley et al., 2020.
+  do i=is,ie
+    rho(i) = rho(i) &
+             + ( 0.5 * d2RdTT(i) * Tvar(i) + ( d2RdST(i) * TScov(i) + 0.5 * d2RdSS(i) * Svar(i) ) )
+  enddo
+
+  rho_scale = EOS%kg_m3_to_R
+  if (present(scale)) rho_scale = rho_scale * scale
+  if (rho_scale /= 1.0) then ; do i=is,ie
+    rho(i) = rho_scale * rho(i)
+  enddo ; endif
+
+end subroutine calculate_stanley_density_1d
 
 !> Calls the appropriate subroutine to calculate the specific volume of sea water
 !! for 1-D array inputs.
@@ -990,7 +1182,7 @@ end function EOS_domain
 !! non-Boussinesq model.  There are essentially no free assumptions, apart from the
 !! use of Bode's rule to do the horizontal integrals, and from a truncation in the
 !! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
-subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
+subroutine analytic_int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                dza, intp_dza, intx_dza, inty_dza, halo_size, &
                                bathyP, dP_tiny, useMassWghtInterp)
   type(hor_index_type), intent(in)  :: HI  !< The horizontal index structure
@@ -1037,11 +1229,11 @@ subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "int_specific_vol_dp called with an unassociated EOS_type EOS.")
 
-  if (EOS%EOS_quadrature) then
-    call int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
-                                 dza, intp_dza, intx_dza, inty_dza, halo_size, &
-                                 bathyP, dP_tiny, useMassWghtInterp)
-  else ; select case (EOS%form_of_EOS)
+  ! We should never reach this point with quadrature. EOS_quadrature indicates that numerical
+  ! integration be used instead of analytic. This is a safety check.
+  if (EOS%EOS_quadrature) call MOM_error(FATAL, "EOS_quadrature is set!")
+
+  select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
       call int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, EOS%kg_m3_to_R*EOS%Rho_T0_S0, &
                                 EOS%kg_m3_to_R*EOS%dRho_dT, EOS%kg_m3_to_R*EOS%dRho_dS, dza, &
@@ -1052,17 +1244,15 @@ subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                   inty_dza, halo_size, bathyP, dP_tiny, useMassWghtInterp, &
                                   SV_scale=EOS%R_to_kg_m3, pres_scale=EOS%RL2_T2_to_Pa)
     case default
-      call int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
-                                   dza, intp_dza, intx_dza, inty_dza, halo_size, &
-                                   bathyP, dP_tiny, useMassWghtInterp)
-  end select ; endif
+      call MOM_error(FATAL, "No analytic integration option is available with this EOS!")
+  end select
 
-end subroutine int_specific_vol_dp
+end subroutine analytic_int_specific_vol_dp
 
 !> This subroutine calculates analytical and nearly-analytical integrals of
 !! pressure anomalies across layers, which are required for calculating the
 !! finite-volume form pressure accelerations in a Boussinesq model.
-subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, dpa, &
+subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, dpa, &
                           intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, useMassWghtInterp)
   type(hor_index_type), intent(in)  :: HI !< Ocean horizontal index structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
@@ -1110,10 +1300,11 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, dpa, &
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "int_density_dz called with an unassociated EOS_type EOS.")
 
-  if (EOS%EOS_quadrature) then
-    call int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, dpa, &
-                                intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, useMassWghtInterp)
-  else ; select case (EOS%form_of_EOS)
+  ! We should never reach this point with quadrature. EOS_quadrature indicates that numerical
+  ! integration be used instead of analytic. This is a safety check.
+  if (EOS%EOS_quadrature) call MOM_error(FATAL, "EOS_quadrature is set!")
+
+  select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
       rho_scale = EOS%kg_m3_to_R
       if (rho_scale /= 1.0) then
@@ -1138,11 +1329,10 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, dpa, &
                                    dz_neglect, useMassWghtInterp)
       endif
     case default
-      call int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, dpa, &
-                                  intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, useMassWghtInterp)
-  end select ; endif
+      call MOM_error(FATAL, "No analytic integration option is available with this EOS!")
+  end select
 
-end subroutine int_density_dz
+end subroutine analytic_int_density_dz
 
 !> Returns true if the equation of state is compressible (i.e. has pressure dependence)
 logical function query_compressible(EOS)
@@ -1336,1570 +1526,6 @@ subroutine EOS_use_linear(Rho_T0_S0, dRho_dT, dRho_dS, EOS, use_quadrature)
 
 end subroutine EOS_use_linear
 
-!>   This subroutine calculates (by numerical quadrature) integrals of
-!! pressure anomalies across layers, which are required for calculating the
-!! finite-volume form pressure accelerations in a Boussinesq model.
-subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
-                                  EOS, dpa, intz_dpa, intx_dpa, inty_dpa, &
-                                  bathyT, dz_neglect, useMassWghtInterp)
-  type(hor_index_type), intent(in)  :: HI !< Horizontal index type for variables.
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: T  !< Potential temperature of the layer [degC]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: S  !< Salinity of the layer [ppt]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: z_t !< Height at the top of the layer in depth units [Z ~> m]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: z_b !< Height at the bottom of the layer [Z ~> m]
-  real,                 intent(in)  :: rho_ref !< A mean density [R ~> kg m-3] or [kg m-3], that is
-                                          !! subtracted out to reduce the magnitude
-                                          !! of each of the integrals.
-  real,                 intent(in)  :: rho_0 !< A density [R ~> kg m-3] or [kg m-3], that is used
-                                          !! to calculate the pressure (as p~=-z*rho_0*G_e)
-                                          !! used in the equation of state.
-  real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration
-                                          !! [L2 Z-1 T-2 ~> m s-2] or [m2 Z-1 s-2 ~> m s-2]
-  type(EOS_type),       pointer     :: EOS !< Equation of state structure
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                      intent(inout) :: dpa !< The change in the pressure anomaly
-                                          !! across the layer [R L2 T-2 ~> Pa] or [Pa]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-            optional, intent(inout) :: intz_dpa !< The integral through the thickness of the
-                                          !! layer of the pressure anomaly relative to the
-                                          !! anomaly at the top of the layer [R L2 Z T-2 ~> Pa m]
-  real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
-            optional, intent(inout) :: intx_dpa !< The integral in x of the difference between
-                                          !! the pressure anomaly at the top and bottom of the
-                                          !! layer divided by the x grid spacing [R L2 T-2 ~> Pa]
-  real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
-            optional, intent(inout) :: inty_dpa !< The integral in y of the difference between
-                                          !! the pressure anomaly at the top and bottom of the
-                                          !! layer divided by the y grid spacing [R L2 T-2 ~> Pa]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(in)  :: bathyT !< The depth of the bathymetry [Z ~> m]
-  real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m]
-  logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
-                                          !! interpolate T/S for top and bottom integrals.
-  ! Local variables
-  real :: T5(5), S5(5) ! Temperatures and salinities at five quadrature points [degC] and [ppt]
-  real :: p5(5)      ! Pressures at five quadrature points, never rescaled from Pa [Pa]
-  real :: r5(5)      ! Densities at five quadrature points [R ~> kg m-3] or [kg m-3]
-  real :: rho_anom   ! The depth averaged density anomaly [R ~> kg m-3] or [kg m-3]
-  real :: w_left, w_right ! Left and right weights [nondim]
-  real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
-  real :: GxRho      ! The gravitational acceleration times density and unit conversion factors [Pa Z-1 ~> kg m-2 s-2]
-  real :: I_Rho      ! The inverse of the Boussinesq density [R-1 ~> m3 kg-1] or [m3 kg-1]
-  real :: rho_scale  ! A scaling factor for densities from kg m-3 to R [R m3 kg-1 ~> 1]
-  real :: rho_ref_mks ! The reference density in MKS units, never rescaled from kg m-3 [kg m-3]
-  real :: dz         ! The layer thickness [Z ~> m]
-  real :: hWght      ! A pressure-thickness below topography [Z ~> m]
-  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Z ~> m]
-  real :: iDenom     ! The inverse of the denominator in the weights [Z-2 ~> m-2]
-  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim]
-  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim]
-  real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim]
-  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim]
-  real :: intz(5)    ! The gravitational acceleration times the integrals of density
-                     ! with height at the 5 sub-column locations [R L2 T-2 ~> Pa] or [Pa]
-  logical :: do_massWeight ! Indicates whether to do mass weighting.
-  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j, m, n
-
-  ! These array bounds work for the indexing convention of the input arrays, but
-  ! on the computational domain defined for the output arrays.
-  Isq = HI%IscB ; Ieq = HI%IecB
-  Jsq = HI%JscB ; Jeq = HI%JecB
-  is = HI%isc ; ie = HI%iec
-  js = HI%jsc ; je = HI%jec
-
-  rho_scale = EOS%kg_m3_to_R
-  GxRho = EOS%RL2_T2_to_Pa * G_e * rho_0
-  rho_ref_mks = rho_ref * EOS%R_to_kg_m3
-  I_Rho = 1.0 / rho_0
-
-  do_massWeight = .false.
-  if (present(useMassWghtInterp)) then ; if (useMassWghtInterp) then
-    do_massWeight = .true.
-    if (.not.present(bathyT)) call MOM_error(FATAL, "int_density_dz_generic: "//&
-        "bathyT must be present if useMassWghtInterp is present and true.")
-    if (.not.present(dz_neglect)) call MOM_error(FATAL, "int_density_dz_generic: "//&
-        "dz_neglect must be present if useMassWghtInterp is present and true.")
-  endif ; endif
-
-  do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-    dz = z_t(i,j) - z_b(i,j)
-    do n=1,5
-      T5(n) = T(i,j) ; S5(n) = S(i,j)
-      p5(n) = -GxRho*(z_t(i,j) - 0.25*real(n-1)*dz)
-    enddo
-    if (rho_scale /= 1.0) then
-      call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
-    else
-      call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks)
-    endif
-
-    ! Use Bode's rule to estimate the pressure anomaly change.
-    rho_anom = C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3))
-    dpa(i,j) = G_e*dz*rho_anom
-    ! Use a Bode's-rule-like fifth-order accurate estimate of the double integral of
-    ! the pressure anomaly.
-    if (present(intz_dpa)) intz_dpa(i,j) = 0.5*G_e*dz**2 * &
-          (rho_anom - C1_90*(16.0*(r5(4)-r5(2)) + 7.0*(r5(5)-r5(1))) )
-  enddo ; enddo
-
-  if (present(intx_dpa)) then ; do j=js,je ; do I=Isq,Ieq
-    ! hWght is the distance measure by which the cell is violation of
-    ! hydrostatic consistency. For large hWght we bias the interpolation of
-    ! T & S along the top and bottom integrals, akin to thickness weighting.
-    hWght = 0.0
-    if (do_massWeight) &
-      hWght = max(0., -bathyT(i,j)-z_t(i+1,j), -bathyT(i+1,j)-z_t(i,j))
-    if (hWght > 0.) then
-      hL = (z_t(i,j) - z_b(i,j)) + dz_neglect
-      hR = (z_t(i+1,j) - z_b(i+1,j)) + dz_neglect
-      hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-      iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
-      hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-      hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
-    else
-      hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
-    endif
-
-    intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
-    do m=2,4
-      ! T, S, and z are interpolated in the horizontal.  The z interpolation
-      ! is linear, but for T and S it may be thickness weighted.
-      wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
-      wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
-      dz = wt_L*(z_t(i,j) - z_b(i,j)) + wt_R*(z_t(i+1,j) - z_b(i+1,j))
-      T5(1) = wtT_L*T(i,j) + wtT_R*T(i+1,j)
-      S5(1) = wtT_L*S(i,j) + wtT_R*S(i+1,j)
-      p5(1) = -GxRho*(wt_L*z_t(i,j) + wt_R*z_t(i+1,j))
-      do n=2,5
-        T5(n) = T5(1) ; S5(n) = S5(1) ; p5(n) = p5(n-1) + GxRho*0.25*dz
-      enddo
-      if (rho_scale /= 1.0) then
-        call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
-      else
-        call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks)
-      endif
-
-    ! Use Bode's rule to estimate the pressure anomaly change.
-      intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3)))
-    enddo
-    ! Use Bode's rule to integrate the bottom pressure anomaly values in x.
-    intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
-                           12.0*intz(3))
-  enddo ; enddo ; endif
-
-  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=is,ie
-    ! hWght is the distance measure by which the cell is violation of
-    ! hydrostatic consistency. For large hWght we bias the interpolation of
-    ! T & S along the top and bottom integrals, akin to thickness weighting.
-    hWght = 0.0
-    if (do_massWeight) &
-      hWght = max(0., -bathyT(i,j)-z_t(i,j+1), -bathyT(i,j+1)-z_t(i,j))
-    if (hWght > 0.) then
-      hL = (z_t(i,j) - z_b(i,j)) + dz_neglect
-      hR = (z_t(i,j+1) - z_b(i,j+1)) + dz_neglect
-      hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-      iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
-      hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-      hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
-    else
-      hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
-    endif
-
-    intz(1) = dpa(i,j) ; intz(5) = dpa(i,j+1)
-    do m=2,4
-      ! T, S, and z are interpolated in the horizontal.  The z interpolation
-      ! is linear, but for T and S it may be thickness weighted.
-      wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
-      wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
-      dz = wt_L*(z_t(i,j) - z_b(i,j)) + wt_R*(z_t(i,j+1) - z_b(i,j+1))
-      T5(1) = wtT_L*T(i,j) + wtT_R*T(i,j+1)
-      S5(1) = wtT_L*S(i,j) + wtT_R*S(i,j+1)
-      p5(1) = -GxRho*(wt_L*z_t(i,j) + wt_R*z_t(i,j+1))
-      do n=2,5
-        T5(n) = T5(1) ; S5(n) = S5(1)
-        p5(n) = p5(n-1) + GxRho*0.25*dz
-      enddo
-      if (rho_scale /= 1.0) then
-        call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
-      else
-        call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks)
-      endif
-
-    ! Use Bode's rule to estimate the pressure anomaly change.
-      intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3)))
-    enddo
-    ! Use Bode's rule to integrate the values.
-    inty_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
-                                     12.0*intz(3))
-  enddo ; enddo ; endif
-end subroutine int_density_dz_generic
-
-
-! ==========================================================================
-!> Compute pressure gradient force integrals by quadrature for the case where
-!! T and S are linear profiles.
-subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
-                                       rho_0, G_e, dz_subroundoff, bathyT, HI, EOS, dpa, &
-                                       intz_dpa, intx_dpa, inty_dpa, useMassWghtInterp)
-  type(hor_index_type), intent(in)  :: HI !< Ocean horizontal index structures for the arrays
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: T_t !< Potential temperatue at the cell top [degC]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: T_b !< Potential temperatue at the cell bottom [degC]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: S_t !< Salinity at the cell top [ppt]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: S_b !< Salinity at the cell bottom [ppt]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: z_t !< The geometric height at the top of the layer [Z ~> m]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: z_b !< The geometric height at the bottom of the layer [Z ~> m]
-  real,                 intent(in)  :: rho_ref !< A mean density [R ~> kg m-3] or [kg m-3], that is subtracted
-                                           !! out to reduce the magnitude of each of the integrals.
-  real,                 intent(in)  :: rho_0 !< A density [R ~> kg m-3] or [kg m-3], that is used to calculate
-                                           !! the pressure (as p~=-z*rho_0*G_e) used in the equation of state.
-  real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
-  real,                 intent(in)  :: dz_subroundoff !< A miniscule thickness change [Z ~> m]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: bathyT !< The depth of the bathymetry [Z ~> m]
-  type(EOS_type),       pointer     :: EOS !< Equation of state structure
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(inout) :: dpa !< The change in the pressure anomaly across the layer [R L2 T-2 ~> Pa]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(inout) :: intz_dpa !< The integral through the thickness of the layer of
-                                           !! the pressure anomaly relative to the anomaly at the
-                                           !! top of the layer [R L2 Z T-2 ~> Pa Z]
-  real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
-              optional, intent(inout) :: intx_dpa !< The integral in x of the difference between the
-                                           !! pressure anomaly at the top and bottom of the layer
-                                           !! divided by the x grid spacing [R L2 T-2 ~> Pa]
-  real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
-              optional, intent(inout) :: inty_dpa !< The integral in y of the difference between the
-                                           !! pressure anomaly at the top and bottom of the layer
-                                           !! divided by the y grid spacing [R L2 T-2 ~> Pa]
-  logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
-                                           !! interpolate T/S for top and bottom integrals.
-
-! This subroutine calculates (by numerical quadrature) integrals of
-! pressure anomalies across layers, which are required for calculating the
-! finite-volume form pressure accelerations in a Boussinesq model.  The one
-! potentially dodgy assumtion here is that rho_0 is used both in the denominator
-! of the accelerations, and in the pressure used to calculated density (the
-! latter being -z*rho_0*G_e).  These two uses could be separated if need be.
-!
-! It is assumed that the salinity and temperature profiles are linear in the
-! vertical. The top and bottom values within each layer are provided and
-! a linear interpolation is used to compute intermediate values.
-
-  ! Local variables
-  real :: T5((5*HI%iscB+1):(5*(HI%iecB+2)))  ! Temperatures along a line of subgrid locations [degC]
-  real :: S5((5*HI%iscB+1):(5*(HI%iecB+2)))  ! Salinities along a line of subgrid locations [ppt]
-  real :: p5((5*HI%iscB+1):(5*(HI%iecB+2)))  ! Pressures along a line of subgrid locations, never
-                                             ! rescaled from Pa [Pa]
-  real :: r5((5*HI%iscB+1):(5*(HI%iecB+2)))  ! Densities anomalies along a line of subgrid
-                                             ! locations [R ~> kg m-3] or [kg m-3]
-  real :: T15((15*HI%iscB+1):(15*(HI%iecB+1))) ! Temperatures at an array of subgrid locations [degC]
-  real :: S15((15*HI%iscB+1):(15*(HI%iecB+1))) ! Salinities at an array of subgrid locations [ppt]
-  real :: p15((15*HI%iscB+1):(15*(HI%iecB+1))) ! Pressures at an array of subgrid locations [Pa]
-  real :: r15((15*HI%iscB+1):(15*(HI%iecB+1))) ! Densities at an array of subgrid locations
-                                               ! [R ~> kg m-3] or [kg m-3]
-  real :: wt_t(5), wt_b(5)          ! Top and bottom weights [nondim]
-  real :: rho_anom                  ! A density anomaly [R ~> kg m-3] or [kg m-3]
-  real :: w_left, w_right           ! Left and right weights [nondim]
-  real :: intz(5)    ! The gravitational acceleration times the integrals of density
-                     ! with height at the 5 sub-column locations [R L2 T-2 ~> Pa] or [Pa]
-  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
-  real :: GxRho      ! The gravitational acceleration times density and unit conversion factors [Pa Z-1 ~> kg m-2 s-2]
-  real :: I_Rho      ! The inverse of the Boussinesq density [R-1 ~> m3 kg-1] or [m3 kg-1]
-  real :: rho_scale  ! A scaling factor for densities from kg m-3 to R [R m3 kg-1 ~> 1]
-  real :: rho_ref_mks ! The reference density in MKS units, never rescaled from kg m-3 [kg m-3]
-  real :: dz(HI%iscB:HI%iecB+1)   ! Layer thicknesses at tracer points [Z ~> m]
-  real :: dz_x(5,HI%iscB:HI%iecB) ! Layer thicknesses along an x-line of subrid locations [Z ~> m]
-  real :: dz_y(5,HI%isc:HI%iec)   ! Layer thicknesses along a y-line of subrid locations [Z ~> m]
-  real :: weight_t, weight_b        ! Nondimensional weights of the top and bottom [nondim]
-  real :: massWeightToggle          ! A nondimensional toggle factor (0 or 1) [nondim]
-  real :: Ttl, Tbl, Ttr, Tbr        ! Temperatures at the velocity cell corners [degC]
-  real :: Stl, Sbl, Str, Sbr        ! Salinities at the velocity cell corners [ppt]
-  real :: hWght                     ! A topographically limited thicknes weight [Z ~> m]
-  real :: hL, hR                    ! Thicknesses to the left and right [Z ~> m]
-  real :: iDenom                    ! The denominator of the thickness weight expressions [Z-2 ~> m-2]
-  integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n
-  integer :: pos
-
-  Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
-
-  rho_scale = EOS%kg_m3_to_R
-  GxRho = EOS%RL2_T2_to_Pa * G_e * rho_0
-  rho_ref_mks = rho_ref * EOS%R_to_kg_m3
-  I_Rho = 1.0 / rho_0
-  massWeightToggle = 0.
-  if (present(useMassWghtInterp)) then
-    if (useMassWghtInterp) massWeightToggle = 1.
-  endif
-
-  do n = 1, 5
-    wt_t(n) = 0.25 * real(5-n)
-    wt_b(n) = 1.0 - wt_t(n)
-  enddo
-
-  ! =============================
-  ! 1. Compute vertical integrals
-  ! =============================
-  do j=Jsq,Jeq+1
-    do i = Isq,Ieq+1
-      dz(i) = z_t(i,j) - z_b(i,j)
-      do n=1,5
-        p5(i*5+n) = -GxRho*(z_t(i,j) - 0.25*real(n-1)*dz(i))
-        ! Salinity and temperature points are linearly interpolated
-        S5(i*5+n) = wt_t(n) * S_t(i,j) + wt_b(n) * S_b(i,j)
-        T5(i*5+n) = wt_t(n) * T_t(i,j) + wt_b(n) * T_b(i,j)
-      enddo
-    enddo
-    if (rho_scale /= 1.0) then
-      call calculate_density_array(T5, S5, p5, r5, 1, (ieq-isq+2)*5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
-    else
-      call calculate_density_array(T5, S5, p5, r5, 1, (ieq-isq+2)*5, EOS, rho_ref=rho_ref_mks)
-    endif
-
-    do i=isq,ieq+1
-    ! Use Bode's rule to estimate the pressure anomaly change.
-      rho_anom = C1_90*(7.0*(r5(i*5+1)+r5(i*5+5)) + 32.0*(r5(i*5+2)+r5(i*5+4)) + 12.0*r5(i*5+3))
-      dpa(i,j) = G_e*dz(i)*rho_anom
-      if (present(intz_dpa)) then
-      ! Use a Bode's-rule-like fifth-order accurate estimate of
-      ! the double integral of the pressure anomaly.
-        intz_dpa(i,j) = 0.5*G_e*dz(i)**2 * &
-                (rho_anom - C1_90*(16.0*(r5(i*5+4)-r5(i*5+2)) + 7.0*(r5(i*5+5)-r5(i*5+1))) )
-      endif
-    enddo
-  enddo ! end loops on j
-
-
-  ! ==================================================
-  ! 2. Compute horizontal integrals in the x direction
-  ! ==================================================
-  if (present(intx_dpa)) then ; do j=HI%jsc,HI%jec
-    do I=Isq,Ieq
-      ! Corner values of T and S
-      ! hWght is the distance measure by which the cell is violation of
-      ! hydrostatic consistency. For large hWght we bias the interpolation
-      ! of T,S along the top and bottom integrals, almost like thickness
-      ! weighting.
-      ! Note: To work in terrain following coordinates we could offset
-      ! this distance by the layer thickness to replicate other models.
-      hWght = massWeightToggle * &
-              max(0., -bathyT(i,j)-z_t(i+1,j), -bathyT(i+1,j)-z_t(i,j))
-      if (hWght > 0.) then
-        hL = (z_t(i,j) - z_b(i,j)) + dz_subroundoff
-        hR = (z_t(i+1,j) - z_b(i+1,j)) + dz_subroundoff
-        hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-        iDenom = 1./( hWght*(hR + hL) + hL*hR )
-        Ttl = ( (hWght*hR)*T_t(i+1,j) + (hWght*hL + hR*hL)*T_t(i,j) ) * iDenom
-        Ttr = ( (hWght*hL)*T_t(i,j) + (hWght*hR + hR*hL)*T_t(i+1,j) ) * iDenom
-        Tbl = ( (hWght*hR)*T_b(i+1,j) + (hWght*hL + hR*hL)*T_b(i,j) ) * iDenom
-        Tbr = ( (hWght*hL)*T_b(i,j) + (hWght*hR + hR*hL)*T_b(i+1,j) ) * iDenom
-        Stl = ( (hWght*hR)*S_t(i+1,j) + (hWght*hL + hR*hL)*S_t(i,j) ) * iDenom
-        Str = ( (hWght*hL)*S_t(i,j) + (hWght*hR + hR*hL)*S_t(i+1,j) ) * iDenom
-        Sbl = ( (hWght*hR)*S_b(i+1,j) + (hWght*hL + hR*hL)*S_b(i,j) ) * iDenom
-        Sbr = ( (hWght*hL)*S_b(i,j) + (hWght*hR + hR*hL)*S_b(i+1,j) ) * iDenom
-      else
-        Ttl = T_t(i,j); Tbl = T_b(i,j); Ttr = T_t(i+1,j); Tbr = T_b(i+1,j)
-        Stl = S_t(i,j); Sbl = S_b(i,j); Str = S_t(i+1,j); Sbr = S_b(i+1,j)
-      endif
-
-      do m=2,4
-        w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
-        dz_x(m,i) = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i+1,j) - z_b(i+1,j))
-
-        ! Salinity and temperature points are linearly interpolated in
-        ! the horizontal. The subscript (1) refers to the top value in
-        ! the vertical profile while subscript (5) refers to the bottom
-        ! value in the vertical profile.
-        pos = i*15+(m-2)*5
-        T15(pos+1) = w_left*Ttl + w_right*Ttr
-        T15(pos+5) = w_left*Tbl + w_right*Tbr
-
-        S15(pos+1) = w_left*Stl + w_right*Str
-        S15(pos+5) = w_left*Sbl + w_right*Sbr
-
-        p15(pos+1) = -GxRho*(w_left*z_t(i,j) + w_right*z_t(i+1,j))
-
-        ! Pressure
-        do n=2,5
-          p15(pos+n) = p15(pos+n-1) + GxRho*0.25*dz_x(m,i)
-        enddo
-
-        ! Salinity and temperature (linear interpolation in the vertical)
-        do n=2,4
-          weight_t = 0.25 * real(5-n)
-          weight_b = 1.0 - weight_t
-          S15(pos+n) = weight_t * S15(pos+1) + weight_b * S15(pos+5)
-          T15(pos+n) = weight_t * T15(pos+1) + weight_b * T15(pos+5)
-        enddo
-      enddo
-    enddo
-
-    if (rho_scale /= 1.0) then
-      call calculate_density(T15, S15, p15, r15, 1, 15*(ieq-isq+1), EOS, rho_ref=rho_ref_mks, scale=rho_scale)
-    else
-      call calculate_density(T15, S15, p15, r15, 1, 15*(ieq-isq+1), EOS, rho_ref=rho_ref_mks)
-    endif
-
-    do I=Isq,Ieq
-      intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
-
-      ! Use Bode's rule to estimate the pressure anomaly change.
-      do m = 2,4
-        pos = i*15+(m-2)*5
-        intz(m) = G_e*dz_x(m,i)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + 32.0*(r15(pos+2)+r15(pos+4)) + &
-                          12.0*r15(pos+3)))
-      enddo
-      ! Use Bode's rule to integrate the bottom pressure anomaly values in x.
-      intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
-                             12.0*intz(3))
-    enddo
-  enddo ; endif
-
-  ! ==================================================
-  ! 3. Compute horizontal integrals in the y direction
-  ! ==================================================
-  if (present(inty_dpa)) then ; do J=Jsq,Jeq
-    do i=HI%isc,HI%iec
-    ! Corner values of T and S
-    ! hWght is the distance measure by which the cell is violation of
-    ! hydrostatic consistency. For large hWght we bias the interpolation
-    ! of T,S along the top and bottom integrals, almost like thickness
-    ! weighting.
-    ! Note: To work in terrain following coordinates we could offset
-    ! this distance by the layer thickness to replicate other models.
-      hWght = massWeightToggle * &
-              max(0., -bathyT(i,j)-z_t(i,j+1), -bathyT(i,j+1)-z_t(i,j))
-      if (hWght > 0.) then
-        hL = (z_t(i,j) - z_b(i,j)) + dz_subroundoff
-        hR = (z_t(i,j+1) - z_b(i,j+1)) + dz_subroundoff
-        hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-        iDenom = 1./( hWght*(hR + hL) + hL*hR )
-        Ttl = ( (hWght*hR)*T_t(i,j+1) + (hWght*hL + hR*hL)*T_t(i,j) ) * iDenom
-        Ttr = ( (hWght*hL)*T_t(i,j) + (hWght*hR + hR*hL)*T_t(i,j+1) ) * iDenom
-        Tbl = ( (hWght*hR)*T_b(i,j+1) + (hWght*hL + hR*hL)*T_b(i,j) ) * iDenom
-        Tbr = ( (hWght*hL)*T_b(i,j) + (hWght*hR + hR*hL)*T_b(i,j+1) ) * iDenom
-        Stl = ( (hWght*hR)*S_t(i,j+1) + (hWght*hL + hR*hL)*S_t(i,j) ) * iDenom
-        Str = ( (hWght*hL)*S_t(i,j) + (hWght*hR + hR*hL)*S_t(i,j+1) ) * iDenom
-        Sbl = ( (hWght*hR)*S_b(i,j+1) + (hWght*hL + hR*hL)*S_b(i,j) ) * iDenom
-        Sbr = ( (hWght*hL)*S_b(i,j) + (hWght*hR + hR*hL)*S_b(i,j+1) ) * iDenom
-      else
-        Ttl = T_t(i,j); Tbl = T_b(i,j); Ttr = T_t(i,j+1); Tbr = T_b(i,j+1)
-        Stl = S_t(i,j); Sbl = S_b(i,j); Str = S_t(i,j+1); Sbr = S_b(i,j+1)
-      endif
-
-      do m=2,4
-        w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
-        dz_y(m,i) = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i,j+1) - z_b(i,j+1))
-
-        ! Salinity and temperature points are linearly interpolated in
-        ! the horizontal. The subscript (1) refers to the top value in
-        ! the vertical profile while subscript (5) refers to the bottom
-        ! value in the vertical profile.
-        pos = i*15+(m-2)*5
-        T15(pos+1) = w_left*Ttl + w_right*Ttr
-        T15(pos+5) = w_left*Tbl + w_right*Tbr
-
-        S15(pos+1) = w_left*Stl + w_right*Str
-        S15(pos+5) = w_left*Sbl + w_right*Sbr
-
-        p15(pos+1) = -GxRho*(w_left*z_t(i,j) + w_right*z_t(i,j+1))
-
-        ! Pressure
-        do n=2,5 ; p15(pos+n) = p15(pos+n-1) + GxRho*0.25*dz_y(m,i) ; enddo
-
-        ! Salinity and temperature (linear interpolation in the vertical)
-        do n=2,4
-          weight_t = 0.25 * real(5-n)
-          weight_b = 1.0 - weight_t
-          S15(pos+n) = weight_t * S15(pos+1) + weight_b * S15(pos+5)
-          T15(pos+n) = weight_t * T15(pos+1) + weight_b * T15(pos+5)
-        enddo
-      enddo
-    enddo
-
-    if (rho_scale /= 1.0) then
-      call calculate_density_array(T15(15*HI%isc+1:), S15(15*HI%isc+1:), p15(15*HI%isc+1:), &
-                                   r15(15*HI%isc+1:), 1, 15*(HI%iec-HI%isc+1), EOS, &
-                                   rho_ref=rho_ref_mks, scale=rho_scale)
-    else
-      call calculate_density_array(T15(15*HI%isc+1:), S15(15*HI%isc+1:), p15(15*HI%isc+1:), &
-                                   r15(15*HI%isc+1:), 1, 15*(HI%iec-HI%isc+1), EOS, rho_ref=rho_ref_mks)
-    endif
-    do i=HI%isc,HI%iec
-      intz(1) = dpa(i,j) ; intz(5) = dpa(i,j+1)
-
-      ! Use Bode's rule to estimate the pressure anomaly change.
-      do m = 2,4
-        pos = i*15+(m-2)*5
-        intz(m) = G_e*dz_y(m,i)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + &
-                                         32.0*(r15(pos+2)+r15(pos+4)) + &
-                                         12.0*r15(pos+3)))
-      enddo
-      ! Use Bode's rule to integrate the values.
-      inty_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
-                             12.0*intz(3))
-    enddo
-  enddo ; endif
-
-end subroutine int_density_dz_generic_plm
-! ==========================================================================
-! Above is the routine where only the S and T profiles are modified
-! The real topography is still used
-! ==========================================================================
-
-!> Find the depth at which the reconstructed pressure matches P_tgt
-subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_tgt, &
-                       rho_ref, G_e, EOS, P_b, z_out, z_tol)
-  real,           intent(in)  :: T_t !< Potential temperatue at the cell top [degC]
-  real,           intent(in)  :: T_b !< Potential temperatue at the cell bottom [degC]
-  real,           intent(in)  :: S_t !< Salinity at the cell top [ppt]
-  real,           intent(in)  :: S_b !< Salinity at the cell bottom [ppt]
-  real,           intent(in)  :: z_t !< Absolute height of top of cell [Z ~> m]   (Boussinesq ????)
-  real,           intent(in)  :: z_b !< Absolute height of bottom of cell [Z ~> m]
-  real,           intent(in)  :: P_t !< Anomalous pressure of top of cell, relative to g*rho_ref*z_t [R L2 T-2 ~> Pa]
-  real,           intent(in)  :: P_tgt !< Target pressure at height z_out, relative to g*rho_ref*z_out [R L2 T-2 ~> Pa]
-  real,           intent(in)  :: rho_ref !< Reference density with which calculation are anomalous to [R ~> kg m-3]
-  real,           intent(in)  :: G_e !< Gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
-  type(EOS_type), pointer     :: EOS !< Equation of state structure
-  real,           intent(out) :: P_b !< Pressure at the bottom of the cell [R L2 T-2 ~> Pa]
-  real,           intent(out) :: z_out !< Absolute depth at which anomalous pressure = p_tgt [Z ~> m]
-  real, optional, intent(in)  :: z_tol !< The tolerance in finding z_out [Z ~> m]
-
-  ! Local variables
-  real :: dp    ! Pressure thickness of the layer [R L2 T-2 ~> Pa]
-  real :: F_guess, F_l, F_r  ! Fractional positions [nondim]
-  real :: GxRho ! The product of the gravitational acceleration and reference density [R L2 Z-1 T-2 ~> Pa m-1]
-  real :: Pa, Pa_left, Pa_right, Pa_tol ! Pressure anomalies, P = integral of g*(rho-rho_ref) dz [R L2 T-2 ~> Pa]
-  character(len=240) :: msg
-
-  GxRho = G_e * rho_ref
-
-  ! Anomalous pressure difference across whole cell
-  dp = frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, 1.0, EOS)
-
-  P_b = P_t + dp ! Anomalous pressure at bottom of cell
-
-  if (P_tgt <= P_t ) then
-    z_out = z_t
-    return
-  endif
-
-  if (P_tgt >= P_b) then
-    z_out = z_b
-    return
-  endif
-
-  F_l = 0.
-  Pa_left = P_t - P_tgt ! Pa_left < 0
-  F_r = 1.
-  Pa_right = P_b - P_tgt ! Pa_right > 0
-  Pa_tol = GxRho * 1.0e-5*EOS%m_to_Z
-  if (present(z_tol)) Pa_tol = GxRho * z_tol
-
-  F_guess = F_l - Pa_left / (Pa_right - Pa_left) * (F_r - F_l)
-  Pa = Pa_right - Pa_left ! To get into iterative loop
-  do while ( abs(Pa) > Pa_tol )
-
-    z_out = z_t + ( z_b - z_t ) * F_guess
-    Pa = frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, F_guess, EOS) - ( P_tgt - P_t )
-
-    if (Pa<Pa_left) then
-      write(msg,*) Pa_left,Pa,Pa_right,P_t-P_tgt,P_b-P_tgt
-      call MOM_error(FATAL, 'find_depth_of_pressure_in_cell out of bounds negative: /n'//msg)
-    elseif (Pa<0.) then
-      Pa_left = Pa
-      F_l = F_guess
-    elseif (Pa>Pa_right) then
-      write(msg,*) Pa_left,Pa,Pa_right,P_t-P_tgt,P_b-P_tgt
-      call MOM_error(FATAL, 'find_depth_of_pressure_in_cell out of bounds positive: /n'//msg)
-    elseif (Pa>0.) then
-      Pa_right = Pa
-      F_r = F_guess
-    else ! Pa == 0
-      return
-    endif
-    F_guess = F_l - Pa_left / (Pa_right - Pa_left) * (F_r - F_l)
-
-  enddo
-
-end subroutine find_depth_of_pressure_in_cell
-
-!> Returns change in anomalous pressure change from top to non-dimensional
-!! position pos between z_t and z_b
-real function frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, pos, EOS)
-  real,           intent(in)  :: T_t !< Potential temperatue at the cell top [degC]
-  real,           intent(in)  :: T_b !< Potential temperatue at the cell bottom [degC]
-  real,           intent(in)  :: S_t !< Salinity at the cell top [ppt]
-  real,           intent(in)  :: S_b !< Salinity at the cell bottom [ppt]
-  real,           intent(in)  :: z_t !< The geometric height at the top of the layer [Z ~> m]
-  real,           intent(in)  :: z_b !< The geometric height at the bottom of the layer [Z ~> m]
-  real,           intent(in)  :: rho_ref !< A mean density [R ~> kg m-3], that is subtracted out to
-                                     !! reduce the magnitude of each of the integrals.
-  real,           intent(in)  :: G_e !< The Earth's gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
-  real,           intent(in)  :: pos !< The fractional vertical position, 0 to 1 [nondim]
-  type(EOS_type), pointer     :: EOS !< Equation of state structure
-  real                        :: fract_dp_at_pos !< The change in pressure from the layer top to
-                                     !! fractional position pos [R L2 T-2 ~> Pa]
-  ! Local variables
-  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
-  real :: dz                 ! Distance from the layer top [Z ~> m]
-  real :: top_weight, bottom_weight ! Fractional weights at quadrature points [nondim]
-  real :: rho_ave            ! Average density [R ~> kg m-3]
-  real, dimension(5) :: T5   ! Tempratures at quadrature points [degC]
-  real, dimension(5) :: S5   ! Salinities at quadrature points [ppt]
-  real, dimension(5) :: p5   ! Pressures at quadrature points [R L2 T-2 ~> Pa]
-  real, dimension(5) :: rho5 ! Densities at quadrature points [R ~> kg m-3]
-  integer :: n
-
-  do n=1,5
-    ! Evalute density at five quadrature points
-    bottom_weight = 0.25*real(n-1) * pos
-    top_weight = 1.0 - bottom_weight
-    ! Salinity and temperature points are linearly interpolated
-    S5(n) = top_weight * S_t + bottom_weight * S_b
-    T5(n) = top_weight * T_t + bottom_weight * T_b
-    p5(n) = ( top_weight * z_t + bottom_weight * z_b ) * ( G_e * rho_ref )
-  enddo
-  call calculate_density_1d(T5, S5, p5, rho5, EOS)
-  rho5(:) = rho5(:) !- rho_ref ! Work with anomalies relative to rho_ref
-
-  ! Use Bode's rule to estimate the average density
-  rho_ave = C1_90*(7.0*(rho5(1)+rho5(5)) + 32.0*(rho5(2)+rho5(4)) + 12.0*rho5(3))
-
-  dz = ( z_t - z_b ) * pos
-  frac_dp_at_pos = G_e * dz * rho_ave
-end function frac_dp_at_pos
-
-
-! ==========================================================================
-!> Compute pressure gradient force integrals for the case where T and S
-!! are parabolic profiles
-subroutine int_density_dz_generic_ppm(T, T_t, T_b, S, S_t, S_b, &
-                                      z_t, z_b, rho_ref, rho_0, G_e, HI, &
-                                      EOS, dpa, intz_dpa, intx_dpa, inty_dpa)
-
-  type(hor_index_type), intent(in)  :: HI !< Ocean horizontal index structures for the arrays
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: T   !< Potential temperature referenced to the surface [degC]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: T_t !< Potential temperatue at the cell top [degC]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: T_b !< Potential temperatue at the cell bottom [degC]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: S   !< Salinity [ppt]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: S_t !< Salinity at the cell top [ppt]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: S_b !< Salinity at the cell bottom [ppt]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: z_t !< Height at the top of the layer [Z ~> m]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: z_b !< Height at the bottom of the layer [Z ~> m]
-  real,                 intent(in)  :: rho_ref !< A mean density [R ~> kg m-3] or [kg m-3], that is
-                                           !! subtracted out to reduce the magnitude of each of the integrals.
-  real,                 intent(in)  :: rho_0 !< A density [R ~> kg m-3] or [kg m-3], that is used to calculate
-                                           !! the pressure (as p~=-z*rho_0*G_e) used in the equation of state.
-  real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration [m s-2]
-  type(EOS_type),       pointer     :: EOS !< Equation of state structure
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(inout) :: dpa !< The change in the pressure anomaly across the layer [R L2 T-2 ~> Pa]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(inout) :: intz_dpa !< The integral through the thickness of the layer of
-                                           !! the pressure anomaly relative to the anomaly at the
-                                           !! top of the layer [R L2 Z T-2 ~> Pa m]
-  real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
-              optional, intent(inout) :: intx_dpa !< The integral in x of the difference between the
-                                           !! pressure anomaly at the top and bottom of the layer
-                                           !! divided by the x grid spacing [R L2 T-2 ~> Pa]
-  real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
-              optional, intent(inout) :: inty_dpa !< The integral in y of the difference between the
-                                           !! pressure anomaly at the top and bottom of the layer
-                                           !! divided by the y grid spacing [R L2 T-2 ~> Pa]
-
-! This subroutine calculates (by numerical quadrature) integrals of
-! pressure anomalies across layers, which are required for calculating the
-! finite-volume form pressure accelerations in a Boussinesq model.  The one
-! potentially dodgy assumtion here is that rho_0 is used both in the denominator
-! of the accelerations, and in the pressure used to calculated density (the
-! latter being -z*rho_0*G_e).  These two uses could be separated if need be.
-!
-! It is assumed that the salinity and temperature profiles are linear in the
-! vertical. The top and bottom values within each layer are provided and
-! a linear interpolation is used to compute intermediate values.
-
-!### Please note that this subroutine has not been verified to work properly!
-
-  ! Local variables
-  real :: T5(5), S5(5)
-  real :: p5(5)      ! Pressures at five quadrature points, never rescaled from Pa [Pa]
-  real :: r5(5)      ! Density anomalies from rho_ref at quadrature points [R ~> kg m-3] or [kg m-3]
-  real :: rho_anom   ! The integrated density anomaly [R ~> kg m-3] or [kg m-3]
-  real :: w_left, w_right  ! Left and right weights [nondim]
-  real :: intz(5)    ! The gravitational acceleration times the integrals of density
-                     ! with height at the 5 sub-column locations [R L2 T-2 ~> Pa] or [Pa]
-  real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
-  real :: GxRho      ! The gravitational acceleration times density and unit conversion factors [Pa Z-1 ~> kg m-2 s-2]
-  real :: I_Rho      ! The inverse of the Boussinesq density [R-1 ~> m3 kg-1] or [m3 kg-1]
-  real :: rho_scale  ! A scaling factor for densities from kg m-3 to R [R m3 kg-1 ~> 1]
-  real :: rho_ref_mks ! The reference density in MKS units, never rescaled from kg m-3 [kg m-3]
-  real :: dz
-  real :: weight_t, weight_b
-  real :: s0, s1, s2                   ! parabola coefficients for S [ppt]
-  real :: t0, t1, t2                   ! parabola coefficients for T [degC]
-  real :: xi                           ! normalized coordinate
-  real :: T_top, T_mid, T_bot
-  real :: S_top, S_mid, S_bot
-  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j, m, n
-  real, dimension(4) :: x, y
-  real, dimension(9) :: S_node, T_node, p_node, r_node
-
-
-  call MOM_error(FATAL, &
-    "int_density_dz_generic_ppm: the implementation is not done yet, contact developer")
-
-  ! These array bounds work for the indexing convention of the input arrays, but
-  ! on the computational domain defined for the output arrays.
-  Isq = HI%IscB ; Ieq = HI%IecB
-  Jsq = HI%JscB ; Jeq = HI%JecB
-  is = HI%isc ; ie = HI%iec
-  js = HI%jsc ; je = HI%jec
-
-  rho_scale = EOS%kg_m3_to_R
-  GxRho = EOS%RL2_T2_to_Pa * G_e * rho_0
-  rho_ref_mks = rho_ref * EOS%R_to_kg_m3
-  I_Rho = 1.0 / rho_0
-
-  ! =============================
-  ! 1. Compute vertical integrals
-  ! =============================
-  do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-    dz = z_t(i,j) - z_b(i,j)
-
-    ! Coefficients of the parabola for S
-    s0 = S_t(i,j)
-    s1 = 6.0 * S(i,j) - 4.0 * S_t(i,j) - 2.0 * S_b(i,j)
-    s2 = 3.0 * ( S_t(i,j) + S_b(i,j) - 2.0*S(i,j) )
-
-    ! Coefficients of the parabola for T
-    t0 = T_t(i,j)
-    t1 = 6.0 * T(i,j) - 4.0 * T_t(i,j) - 2.0 * T_b(i,j)
-    t2 = 3.0 * ( T_t(i,j) + T_b(i,j) - 2.0*T(i,j) )
-
-    do n=1,5
-      p5(n) = -GxRho*(z_t(i,j) - 0.25*real(n-1)*dz)
-
-      ! Parabolic reconstruction for T and S
-      xi = 0.25 * ( n - 1 )
-      S5(n) = s0 + s1 * xi + s2 * xi**2
-      T5(n) = t0 + t1 * xi + t2 * xi**2
-    enddo
-
-    if (rho_scale /= 1.0) then
-      call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
-    else
-      call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks)
-    endif
-
-    ! Use Bode's rule to estimate the pressure anomaly change.
-    rho_anom = C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3))
-
-    dpa(i,j) = G_e*dz*rho_anom
-
-    ! Use a Bode's-rule-like fifth-order accurate estimate of
-    ! the double integral of the pressure anomaly.
-    if (present(intz_dpa)) intz_dpa(i,j) = 0.5*G_e*dz**2 * &
-          (rho_anom - C1_90*(16.0*(r5(4)-r5(2)) + 7.0*(r5(5)-r5(1))) )
-
-  enddo ; enddo ! end loops on j and i
-
-  ! ==================================================
-  ! 2. Compute horizontal integrals in the x direction
-  ! ==================================================
-  if (present(intx_dpa)) then ; do j=js,je ; do I=Isq,Ieq
-    intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
-    do m=2,4
-      w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
-      dz = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i+1,j) - z_b(i+1,j))
-
-      ! Salinity and temperature points are linearly interpolated in
-      ! the horizontal. The subscript (1) refers to the top value in
-      ! the vertical profile while subscript (5) refers to the bottom
-      ! value in the vertical profile.
-      T_top = w_left*T_t(i,j) + w_right*T_t(i+1,j)
-      T_mid = w_left*T(i,j)   + w_right*T(i+1,j)
-      T_bot = w_left*T_b(i,j) + w_right*T_b(i+1,j)
-
-      S_top = w_left*S_t(i,j) + w_right*S_t(i+1,j)
-      S_mid = w_left*S(i,j)   + w_right*S(i+1,j)
-      S_bot = w_left*S_b(i,j) + w_right*S_b(i+1,j)
-
-      p5(1) = -GxRho*(w_left*z_t(i,j) + w_right*z_t(i+1,j))
-
-      ! Pressure
-      do n=2,5
-        p5(n) = p5(n-1) + GxRho*0.25*dz
-      enddo
-
-      ! Coefficients of the parabola for S
-      s0 = S_top
-      s1 = 6.0 * S_mid - 4.0 * S_top - 2.0 * S_bot
-      s2 = 3.0 * ( S_top + S_bot - 2.0*S_mid )
-
-      ! Coefficients of the parabola for T
-      t0 = T_top
-      t1 = 6.0 * T_mid - 4.0 * T_top - 2.0 * T_bot
-      t2 = 3.0 * ( T_top + T_bot - 2.0*T_mid )
-
-      do n=1,5
-        ! Parabolic reconstruction for T and S
-        xi = 0.25 * ( n - 1 )
-        S5(n) = s0 + s1 * xi + s2 * xi**2
-        T5(n) = t0 + t1 * xi + t2 * xi**2
-      enddo
-
-      if (rho_scale /= 1.0) then
-        call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks, scale=rho_scale)
-      else
-        call calculate_density(T5, S5, p5, r5, 1, 5, EOS, rho_ref=rho_ref_mks)
-      endif
-
-    ! Use Bode's rule to estimate the pressure anomaly change.
-      intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + &
-                            12.0*r5(3)) )
-    enddo
-    intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
-                           12.0*intz(3))
-
-    ! Use Gauss quadrature rule to compute integral
-
-    ! The following coordinates define the quadrilateral on which the integral
-    ! is computed
-    x(1) = 1.0
-    x(2) = 0.0
-    x(3) = 0.0
-    x(4) = 1.0
-    y(1) = z_t(i+1,j)
-    y(2) = z_t(i,j)
-    y(3) = z_b(i,j)
-    y(4) = z_b(i+1,j)
-
-    T_node = 0.0
-    p_node = 0.0
-
-    ! Nodal values for S
-
-    ! Parabolic reconstruction on the left
-    s0 = S_t(i,j)
-    s1 = 6.0 * S(i,j) - 4.0 * S_t(i,j) - 2.0 * S_b(i,j)
-    s2 = 3.0 * ( S_t(i,j) + S_b(i,j) - 2.0 * S(i,j) )
-    S_node(2) = s0
-    S_node(6) = s0 + 0.5 * s1 + 0.25 * s2
-    S_node(3) = s0 + s1 + s2
-
-    ! Parabolic reconstruction on the left
-    s0 = S_t(i+1,j)
-    s1 = 6.0 * S(i+1,j) - 4.0 * S_t(i+1,j) - 2.0 * S_b(i+1,j)
-    s2 = 3.0 * ( S_t(i+1,j) + S_b(i+1,j) - 2.0 * S(i+1,j) )
-    S_node(1) = s0
-    S_node(8) = s0 + 0.5 * s1 + 0.25 * s2
-    S_node(4) = s0 + s1 + s2
-
-    S_node(5) = 0.5 * ( S_node(2) + S_node(1) )
-    S_node(9) = 0.5 * ( S_node(6) + S_node(8) )
-    S_node(7) = 0.5 * ( S_node(3) + S_node(4) )
-
-    if (rho_scale /= 1.0) then
-      call calculate_density( T_node, S_node, p_node, r_node, 1, 9, EOS, rho_ref=rho_ref_mks, scale=rho_scale )
-    else
-      call calculate_density( T_node, S_node, p_node, r_node, 1, 9, EOS, rho_ref=rho_ref_mks)
-    endif
-    r_node = r_node - rho_ref
-
-    call compute_integral_quadratic( x, y, r_node, intx_dpa(i,j) )
-
-    intx_dpa(i,j) = intx_dpa(i,j) * G_e
-
-  enddo ; enddo ; endif
-
-  ! ==================================================
-  ! 3. Compute horizontal integrals in the y direction
-  ! ==================================================
-  if (present(inty_dpa)) then
-    call MOM_error(WARNING, "int_density_dz_generic_ppm still needs to be written for inty_dpa!")
-    do J=Jsq,Jeq ; do i=is,ie
-
-      inty_dpa(i,j) = 0.0
-
-    enddo ; enddo
-  endif
-
-end subroutine int_density_dz_generic_ppm
-
-
-
-! =============================================================================
-!> Compute the integral of the quadratic function
-subroutine compute_integral_quadratic( x, y, f, integral )
-  real, dimension(4), intent(in)  :: x  !< The x-position of the corners
-  real, dimension(4), intent(in)  :: y  !< The y-position of the corners
-  real, dimension(9), intent(in)  :: f  !< The function at the quadrature points
-  real,               intent(out) :: integral !< The returned integral
-
-  ! Local variables
-  integer               :: i, k
-  real, dimension(9)    :: weight, xi, eta          ! integration points
-  real                  :: f_k
-  real                  :: dxdxi, dxdeta
-  real                  :: dydxi, dydeta
-  real, dimension(4)    :: phiiso, dphiisodxi, dphiisodeta
-  real, dimension(9)    :: phi, dphidxi, dphideta
-  real                  :: jacobian_k
-  real                  :: t
-
-  ! Quadrature rule (4 points)
-  !weight(:) = 1.0
-  !xi(1) = - sqrt(3.0) / 3.0
-  !xi(2) = sqrt(3.0) / 3.0
-  !xi(3) = sqrt(3.0) / 3.0
-  !xi(4) = - sqrt(3.0) / 3.0
-  !eta(1) = - sqrt(3.0) / 3.0
-  !eta(2) = - sqrt(3.0) / 3.0
-  !eta(3) = sqrt(3.0) / 3.0
-  !eta(4) = sqrt(3.0) / 3.0
-
-  ! Quadrature rule (9 points)
-  t = sqrt(3.0/5.0)
-  weight(1) = 25.0/81.0 ; xi(1) = -t ; eta(1) = t
-  weight(2) = 40.0/81.0 ; xi(2) = .0 ; eta(2) = t
-  weight(3) = 25.0/81.0 ; xi(3) =  t ; eta(3) = t
-  weight(4) = 40.0/81.0 ; xi(4) = -t ; eta(4) = .0
-  weight(5) = 64.0/81.0 ; xi(5) = .0 ; eta(5) = .0
-  weight(6) = 40.0/81.0 ; xi(6) =  t ; eta(6) = .0
-  weight(7) = 25.0/81.0 ; xi(7) = -t ; eta(7) = -t
-  weight(8) = 40.0/81.0 ; xi(8) = .0 ; eta(8) = -t
-  weight(9) = 25.0/81.0 ; xi(9) =  t ; eta(9) = -t
-
-  integral = 0.0
-
-  ! Integration loop
-  do k = 1,9
-
-    ! Evaluate shape functions and gradients for isomorphism
-    call evaluate_shape_bilinear( xi(k), eta(k), phiiso, &
-                                  dphiisodxi, dphiisodeta )
-
-    ! Determine gradient of global coordinate at integration point
-    dxdxi  = 0.0
-    dxdeta = 0.0
-    dydxi  = 0.0
-    dydeta = 0.0
-
-    do i = 1,4
-      dxdxi  = dxdxi  + x(i) * dphiisodxi(i)
-      dxdeta = dxdeta + x(i) * dphiisodeta(i)
-      dydxi  = dydxi  + y(i) * dphiisodxi(i)
-      dydeta = dydeta + y(i) * dphiisodeta(i)
-    enddo
-
-    ! Evaluate Jacobian at integration point
-    jacobian_k = dxdxi*dydeta - dydxi*dxdeta
-
-    ! Evaluate shape functions for interpolation
-    call evaluate_shape_quadratic( xi(k), eta(k), phi, dphidxi, dphideta )
-
-    ! Evaluate function at integration point
-    f_k = 0.0
-    do i = 1,9
-      f_k = f_k + f(i) * phi(i)
-    enddo
-
-    integral = integral + weight(k) * f_k * jacobian_k
-
-  enddo ! end integration loop
-
-end subroutine compute_integral_quadratic
-
-
-! =============================================================================
-!> Evaluation of the four bilinear shape fn and their gradients at (xi,eta)
-subroutine evaluate_shape_bilinear( xi, eta, phi, dphidxi, dphideta )
-  real,               intent(in)  :: xi  !< The x position to evaluate
-  real,               intent(in)  :: eta !< The z position to evaluate
-  real, dimension(4), intent(inout) :: phi !< The weights of the four corners at this point
-  real, dimension(4), intent(inout) :: dphidxi  !< The x-gradient of the weights of the four
-                                         !! corners at this point
-  real, dimension(4), intent(inout) :: dphideta !< The z-gradient of the weights of the four
-                                         !! corners at this point
-
-  ! The shape functions within the parent element are defined as shown here:
-  !
-  !    (-1,1) 2 o------------o 1 (1,1)
-  !             |            |
-  !             |            |
-  !             |            |
-  !             |            |
-  !   (-1,-1) 3 o------------o 4 (1,-1)
-  !
-
-  phi(1) = 0.25 * ( 1 + xi ) * ( 1 + eta )
-  phi(2) = 0.25 * ( 1 - xi ) * ( 1 + eta )
-  phi(3) = 0.25 * ( 1 - xi ) * ( 1 - eta )
-  phi(4) = 0.25 * ( 1 + xi ) * ( 1 - eta )
-
-  dphidxi(1) = 0.25 * ( 1 + eta )
-  dphidxi(2) = - 0.25 * ( 1 + eta )
-  dphidxi(3) = - 0.25 * ( 1 - eta )
-  dphidxi(4) = 0.25 * ( 1 - eta )
-
-  dphideta(1) = 0.25 * ( 1 + xi )
-  dphideta(2) = 0.25 * ( 1 - xi )
-  dphideta(3) = - 0.25 * ( 1 - xi )
-  dphideta(4) = - 0.25 * ( 1 + xi )
-
-end subroutine evaluate_shape_bilinear
-
-
-! =============================================================================
-!> Evaluation of the nine quadratic shape fn weights and their gradients at (xi,eta)
-subroutine evaluate_shape_quadratic ( xi, eta, phi, dphidxi, dphideta )
-
-  ! Arguments
-  real,               intent(in)  :: xi  !< The x position to evaluate
-  real,               intent(in)  :: eta !< The z position to evaluate
-  real, dimension(9), intent(inout) :: phi !< The weights of the 9 bilinear quadrature points
-                                         !! at this point
-  real, dimension(9), intent(inout) :: dphidxi  !< The x-gradient of the weights of the 9 bilinear
-                                         !! quadrature points corners at this point
-  real, dimension(9), intent(inout) :: dphideta !< The z-gradient of the weights of the 9 bilinear
-                                         !! quadrature points corners at this point
-
-  ! The quadratic shape functions within the parent element are defined as shown here:
-  !
-  !                 5 (0,1)
-  !    (-1,1) 2 o------o------o 1 (1,1)
-  !             |             |
-  !             |   9 (0,0)   |
-  !    (-1,0) 6 o      o      o 8 (1,0)
-  !             |             |
-  !             |             |
-  !   (-1,-1) 3 o------o------o 4 (1,-1)
-  !                 7 (0,-1)
-  !
-
-  phi(:)   = 0.0
-  dphidxi(:)  = 0.0
-  dphideta(:) = 0.0
-
-  phi(1) = 0.25 * xi * ( 1 + xi ) * eta * ( 1 + eta )
-  phi(2) = - 0.25 * xi * ( 1 - xi ) * eta * ( 1 + eta )
-  phi(3) = 0.25 * xi * ( 1 - xi ) * eta * ( 1 - eta )
-  phi(4) = - 0.25 * xi * ( 1 + xi ) * eta * ( 1 - eta )
-  phi(5) = 0.5 * ( 1 + xi ) * ( 1 - xi ) * eta * ( 1 + eta )
-  phi(6) = - 0.5 * xi * ( 1 - xi ) * ( 1 - eta ) * ( 1 + eta )
-  phi(7) = - 0.5 * ( 1 - xi ) * ( 1 + xi ) * eta * ( 1 - eta )
-  phi(8) = 0.5 * xi * ( 1 + xi ) * ( 1 - eta ) * ( 1 + eta )
-  phi(9) = ( 1 - xi ) * ( 1 + xi ) * ( 1 - eta ) * ( 1 + eta )
-
-  !dphidxi(1) = 0.25 * ( 1 + 2*xi ) * eta * ( 1 + eta )
-  !dphidxi(2) = - 0.25 * ( 1 - 2*xi ) * eta * ( 1 + eta )
-  !dphidxi(3) = 0.25 * ( 1 - 2*xi ) * eta * ( 1 - eta )
-  !dphidxi(4) = - 0.25 * ( 1 + 2*xi ) * eta * ( 1 - eta )
-  !dphidxi(5) = - xi * eta * ( 1 + eta )
-  !dphidxi(6) = - 0.5 * ( 1 - 2*xi ) * ( 1 - eta ) * ( 1 + eta )
-  !dphidxi(7) = xi * eta * ( 1 - eta )
-  !dphidxi(8) = 0.5 * ( 1 + 2*xi ) * ( 1 - eta ) * ( 1 + eta )
-  !dphidxi(9) = - 2 * xi * ( 1 - eta ) * ( 1 + eta )
-
-  !dphideta(1) = 0.25 * xi * ( 1 + xi ) * ( 1 + 2*eta )
-  !dphideta(2) = - 0.25 * xi * ( 1 - xi ) * ( 1 + 2*eta )
-  !dphideta(3) = 0.25 * xi * ( 1 - xi ) * ( 1 - 2*eta )
-  !dphideta(4) = - 0.25 * xi * ( 1 + xi ) * ( 1 - 2*eta )
-  !dphideta(5) = 0.5 * ( 1 + xi ) * ( 1 - xi ) * ( 1 + 2*eta )
-  !dphideta(6) = xi * ( 1 - xi ) * eta
-  !dphideta(7) = - 0.5 * ( 1 - xi ) * ( 1 + xi ) * ( 1 - 2*eta )
-  !dphideta(8) = - xi * ( 1 + xi ) * eta
-  !dphideta(9) = - 2 * ( 1 - xi ) * ( 1 + xi ) * eta
-
-end subroutine evaluate_shape_quadratic
-! ==============================================================================
-
-!>   This subroutine calculates integrals of specific volume anomalies in
-!! pressure across layers, which are required for calculating the finite-volume
-!! form pressure accelerations in a non-Boussinesq model.  There are essentially
-!! no free assumptions, apart from the use of Bode's rule quadrature to do the integrals.
-subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, dza, &
-                                   intp_dza, intx_dza, inty_dza, halo_size, &
-                                   bathyP, dP_neglect, useMassWghtInterp)
-  type(hor_index_type), intent(in)  :: HI !< A horizontal index type structure.
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: T  !< Potential temperature of the layer [degC]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: S  !< Salinity of the layer [ppt]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: p_t !< Pressure atop the layer [R L2 T-2 ~> Pa] or [Pa]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: p_b !< Pressure below the layer [R L2 T-2 ~> Pa] or [Pa]
-  real,                 intent(in)  :: alpha_ref !< A mean specific volume that is subtracted out
-                            !! to reduce the magnitude of each of the integrals [R-1 ~> m3 kg-1]
-                            !! The calculation is mathematically identical with different values of
-                            !! alpha_ref, but alpha_ref alters the effects of roundoff, and
-                            !! answers do change.
-  type(EOS_type),       pointer     :: EOS !< Equation of state structure
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(inout) :: dza !< The change in the geopotential anomaly
-                            !! across the layer [L2 T-2 ~> m2 s-2] or [m2 s-2]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(inout) :: intp_dza !< The integral in pressure through the layer of
-                            !! the geopotential anomaly relative to the anomaly at the bottom of the
-                            !! layer [R L4 T-4 ~> Pa m2 s-2] or [Pa m2 s-2]
-  real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
-              optional, intent(inout) :: intx_dza  !< The integral in x of the difference between
-                            !! the geopotential anomaly at the top and bottom of the layer divided
-                            !! by the x grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2]
-  real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
-              optional, intent(inout) :: inty_dza  !< The integral in y of the difference between
-                            !! the geopotential anomaly at the top and bottom of the layer divided
-                            !! by the y grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2]
-  integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate dza.
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(in)  :: bathyP !< The pressure at the bathymetry [R L2 T-2 ~> Pa] or [Pa]
-  real,       optional, intent(in)  :: dP_neglect !< A miniscule pressure change with
-                                             !! the same units as p_t [R L2 T-2 ~> Pa] or [Pa]
-  logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
-                            !! to interpolate T/S for top and bottom integrals.
-
-!   This subroutine calculates analytical and nearly-analytical integrals in
-! pressure across layers of geopotential anomalies, which are required for
-! calculating the finite-volume form pressure accelerations in a non-Boussinesq
-! model.  There are essentially no free assumptions, apart from the use of
-! Bode's rule to do the horizontal integrals, and from a truncation in the
-! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
-
-  ! Local variables
-  real :: T5(5)      ! Temperatures at five quadrature points [degC]
-  real :: S5(5)      ! Salinities at five quadrature points [ppt]
-  real :: p5(5)      ! Pressures at five quadrature points, scaled back to Pa if necessary [Pa]
-  real :: a5(5)      ! Specific volumes at five quadrature points [R-1 ~> m3 kg-1] or [m3 kg-1]
-  real :: alpha_anom ! The depth averaged specific density anomaly [R-1 ~> m3 kg-1]
-  real :: dp         ! The pressure change through a layer [R L2 T-2 ~> Pa]
-  real :: hWght      ! A pressure-thickness below topography [R L2 T-2 ~> Pa]
-  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [R L2 T-2 ~> Pa]
-  real :: alpha_ref_mks ! The reference specific volume in MKS units, never rescaled from m3 kg-1 [m3 kg-1]
-  real :: iDenom     ! The inverse of the denominator in the weights [T4 R-2 L-4 ~> Pa-2]
-  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim]
-  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim]
-  real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim]
-  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim]
-  real :: intp(5)    ! The integrals of specific volume with pressure at the
-                     ! 5 sub-column locations [L2 T-2 ~> m2 s-2]
-  real :: RL2_T2_to_Pa  ! A unit conversion factor from the rescaled units of pressure to Pa [Pa T2 R-1 L-2 ~> 1]
-  real :: SV_scale   ! A multiplicative factor by which to scale specific
-                     ! volume from m3 kg-1 to the desired units [kg m-3 R-1 ~> 1]
-  logical :: do_massWeight ! Indicates whether to do mass weighting.
-  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant.
-  integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, n, halo
-
-  Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
-  halo = 0 ; if (present(halo_size)) halo = MAX(halo_size,0)
-  ish = HI%isc-halo ; ieh = HI%iec+halo ; jsh = HI%jsc-halo ; jeh = HI%jec+halo
-  if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh); endif
-  if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh); endif
-
-  SV_scale = EOS%R_to_kg_m3
-  RL2_T2_to_Pa = EOS%RL2_T2_to_Pa
-  alpha_ref_mks = alpha_ref * EOS%kg_m3_to_R
-
-  do_massWeight = .false.
-  if (present(useMassWghtInterp)) then ; if (useMassWghtInterp) then
-    do_massWeight = .true.
-    if (.not.present(bathyP)) call MOM_error(FATAL, "int_spec_vol_dp_generic: "//&
-        "bathyP must be present if useMassWghtInterp is present and true.")
-    if (.not.present(dP_neglect)) call MOM_error(FATAL, "int_spec_vol_dp_generic: "//&
-        "dP_neglect must be present if useMassWghtInterp is present and true.")
-  endif ; endif
-
-  do j=jsh,jeh ; do i=ish,ieh
-    dp = p_b(i,j) - p_t(i,j)
-    do n=1,5
-      T5(n) = T(i,j) ; S5(n) = S(i,j)
-      p5(n) = RL2_T2_to_Pa * (p_b(i,j) - 0.25*real(n-1)*dp)
-    enddo
-
-    if (SV_scale /= 1.0) then
-      call calculate_spec_vol(T5, S5, p5, a5, 1, 5, EOS, alpha_ref_mks, scale=SV_scale)
-    else
-      call calculate_spec_vol(T5, S5, p5, a5, 1, 5, EOS, alpha_ref_mks)
-    endif
-
-    ! Use Bode's rule to estimate the interface height anomaly change.
-    alpha_anom = C1_90*(7.0*(a5(1)+a5(5)) + 32.0*(a5(2)+a5(4)) + 12.0*a5(3))
-    dza(i,j) = dp*alpha_anom
-    ! Use a Bode's-rule-like fifth-order accurate estimate of the double integral of
-    ! the interface height anomaly.
-    if (present(intp_dza)) intp_dza(i,j) = 0.5*dp**2 * &
-          (alpha_anom - C1_90*(16.0*(a5(4)-a5(2)) + 7.0*(a5(5)-a5(1))) )
-  enddo ; enddo
-
-  if (present(intx_dza)) then ; do j=HI%jsc,HI%jec ; do I=Isq,Ieq
-    ! hWght is the distance measure by which the cell is violation of
-    ! hydrostatic consistency. For large hWght we bias the interpolation of
-    ! T & S along the top and bottom integrals, akin to thickness weighting.
-    hWght = 0.0
-    if (do_massWeight) &
-      hWght = max(0., bathyP(i,j)-p_t(i+1,j), bathyP(i+1,j)-p_t(i,j))
-    if (hWght > 0.) then
-      hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
-      hR = (p_b(i+1,j) - p_t(i+1,j)) + dP_neglect
-      hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-      iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
-      hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-      hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
-    else
-      hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
-    endif
-
-    intp(1) = dza(i,j) ; intp(5) = dza(i+1,j)
-    do m=2,4
-      wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
-      wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
-
-      ! T, S, and p are interpolated in the horizontal.  The p interpolation
-      ! is linear, but for T and S it may be thickness wekghted.
-      p5(1) = RL2_T2_to_Pa * (wt_L*p_b(i,j) + wt_R*p_b(i+1,j))
-      dp = wt_L*(p_b(i,j) - p_t(i,j)) + wt_R*(p_b(i+1,j) - p_t(i+1,j))
-      T5(1) = wtT_L*T(i,j) + wtT_R*T(i+1,j)
-      S5(1) = wtT_L*S(i,j) + wtT_R*S(i+1,j)
-
-      do n=2,5
-        T5(n) = T5(1) ; S5(n) = S5(1) ; p5(n) = p5(n-1) - RL2_T2_to_Pa * 0.25*dp
-      enddo
-      if (SV_scale /= 1.0) then
-        call calculate_spec_vol(T5, S5, p5, a5, 1, 5, EOS, alpha_ref_mks, scale=SV_scale)
-      else
-        call calculate_spec_vol(T5, S5, p5, a5, 1, 5, EOS, alpha_ref_mks)
-      endif
-
-    ! Use Bode's rule to estimate the interface height anomaly change.
-      intp(m) = dp*( C1_90*(7.0*(a5(1)+a5(5)) + 32.0*(a5(2)+a5(4)) + &
-                                12.0*a5(3)))
-    enddo
-    ! Use Bode's rule to integrate the interface height anomaly values in x.
-    intx_dza(i,j) = C1_90*(7.0*(intp(1)+intp(5)) + 32.0*(intp(2)+intp(4)) + &
-                           12.0*intp(3))
-  enddo ; enddo ; endif
-
-  if (present(inty_dza)) then ; do J=Jsq,Jeq ; do i=HI%isc,HI%iec
-    ! hWght is the distance measure by which the cell is violation of
-    ! hydrostatic consistency. For large hWght we bias the interpolation of
-    ! T & S along the top and bottom integrals, akin to thickness weighting.
-    hWght = 0.0
-    if (do_massWeight) &
-      hWght = max(0., bathyP(i,j)-p_t(i,j+1), bathyP(i,j+1)-p_t(i,j))
-    if (hWght > 0.) then
-      hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
-      hR = (p_b(i,j+1) - p_t(i,j+1)) + dP_neglect
-      hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-      iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
-      hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-      hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
-    else
-      hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
-    endif
-
-    intp(1) = dza(i,j) ; intp(5) = dza(i,j+1)
-    do m=2,4
-      wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
-      wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
-
-      ! T, S, and p are interpolated in the horizontal.  The p interpolation
-      ! is linear, but for T and S it may be thickness wekghted.
-      p5(1) = RL2_T2_to_Pa * (wt_L*p_b(i,j) + wt_R*p_b(i,j+1))
-      dp = wt_L*(p_b(i,j) - p_t(i,j)) + wt_R*(p_b(i,j+1) - p_t(i,j+1))
-      T5(1) = wtT_L*T(i,j) + wtT_R*T(i,j+1)
-      S5(1) = wtT_L*S(i,j) + wtT_R*S(i,j+1)
-      do n=2,5
-        T5(n) = T5(1) ; S5(n) = S5(1) ; p5(n) = RL2_T2_to_Pa * (p5(n-1) - 0.25*dp)
-      enddo
-      if (SV_scale /= 1.0) then
-        call calculate_spec_vol(T5, S5, p5, a5, 1, 5, EOS, alpha_ref_mks, scale=SV_scale)
-      else
-        call calculate_spec_vol(T5, S5, p5, a5, 1, 5, EOS, alpha_ref_mks)
-      endif
-
-    ! Use Bode's rule to estimate the interface height anomaly change.
-      intp(m) = dp*( C1_90*(7.0*(a5(1)+a5(5)) + 32.0*(a5(2)+a5(4)) + &
-                                12.0*a5(3)))
-    enddo
-    ! Use Bode's rule to integrate the interface height anomaly values in y.
-    inty_dza(i,j) = C1_90*(7.0*(intp(1)+intp(5)) + 32.0*(intp(2)+intp(4)) + &
-                           12.0*intp(3))
-  enddo ; enddo ; endif
-
-end subroutine int_spec_vol_dp_generic
-
-!>   This subroutine calculates integrals of specific volume anomalies in
-!! pressure across layers, which are required for calculating the finite-volume
-!! form pressure accelerations in a non-Boussinesq model.  There are essentially
-!! no free assumptions, apart from the use of Bode's rule quadrature to do the integrals.
-subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, &
-                             dP_neglect, bathyP, HI, EOS, dza, &
-                             intp_dza, intx_dza, inty_dza, useMassWghtInterp)
-  type(hor_index_type), intent(in)  :: HI !< A horizontal index type structure.
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: T_t  !< Potential temperature at the top of the layer [degC]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: T_b  !< Potential temperature at the bottom of the layer [degC]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: S_t  !< Salinity at the top the layer [ppt]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: S_b  !< Salinity at the bottom the layer [ppt]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: p_t !< Pressure atop the layer [R L2 T-2 ~> Pa] or [Pa]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: p_b !< Pressure below the layer [R L2 T-2 ~> Pa] or [Pa]
-  real,                 intent(in)  :: alpha_ref !< A mean specific volume that is subtracted out
-                            !! to reduce the magnitude of each of the integrals [R-1 ~> m3 kg-1]
-                            !! The calculation is mathematically identical with different values of
-                            !! alpha_ref, but alpha_ref alters the effects of roundoff, and
-                            !! answers do change.
-  real,                 intent(in)  :: dP_neglect !<!< A miniscule pressure change with
-                                             !! the same units as p_t [R L2 T-2 ~> Pa] or [Pa]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: bathyP !< The pressure at the bathymetry [R L2 T-2 ~> Pa] or [Pa]
-  type(EOS_type),       pointer     :: EOS !< Equation of state structure
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(inout) :: dza !< The change in the geopotential anomaly
-                            !! across the layer [L2 T-2 ~> m2 s-2]
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(inout) :: intp_dza !< The integral in pressure through the layer of
-                            !! the geopotential anomaly relative to the anomaly at the bottom of the
-                            !! layer [R L4 T-4 ~> Pa m2 s-2] or [Pa m2 s-2]
-  real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
-              optional, intent(inout) :: intx_dza  !< The integral in x of the difference between
-                            !! the geopotential anomaly at the top and bottom of the layer divided
-                            !! by the x grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2]
-  real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
-              optional, intent(inout) :: inty_dza  !< The integral in y of the difference between
-                            !! the geopotential anomaly at the top and bottom of the layer divided
-                            !! by the y grid spacing [L2 T-2 ~> m2 s-2] or [m2 s-2]
-  logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
-                            !! to interpolate T/S for top and bottom integrals.
-
-!   This subroutine calculates analytical and nearly-analytical integrals in
-! pressure across layers of geopotential anomalies, which are required for
-! calculating the finite-volume form pressure accelerations in a non-Boussinesq
-! model.  There are essentially no free assumptions, apart from the use of
-! Bode's rule to do the horizontal integrals, and from a truncation in the
-! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
-
-  real :: T5(5)      ! Temperatures at five quadrature points [degC]
-  real :: S5(5)      ! Salinities at five quadrature points [ppt]
-  real :: p5(5)      ! Pressures at five quadrature points, scaled back to Pa as necessary [Pa]
-  real :: a5(5)      ! Specific volumes at five quadrature points [R-1 ~> m3 kg-1] or [m3 kg-1]
-  real :: T15(15)    ! Temperatures at fifteen interior quadrature points [degC]
-  real :: S15(15)    ! Salinities at fifteen interior quadrature points [ppt]
-  real :: p15(15)    ! Pressures at fifteen quadrature points, scaled back to Pa as necessary [Pa]
-  real :: a15(15)    ! Specific volumes at fifteen quadrature points [R-1 ~> m3 kg-1] or [m3 kg-1]
-  real :: wt_t(5), wt_b(5) ! Weights of top and bottom values at quadrature points [nondim]
-  real :: T_top, T_bot, S_top, S_bot, P_top, P_bot
-
-  real :: alpha_anom ! The depth averaged specific density anomaly [m3 kg-1]
-  real :: dp         ! The pressure change through a layer [R L2 T-2 ~> Pa]
-  real :: dp_90(2:4) ! The pressure change through a layer divided by 90 [R L2 T-2 ~> Pa]
-  real :: hWght      ! A pressure-thickness below topography [R L2 T-2 ~> Pa]
-  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [R L2 T-2 ~> Pa]
-  real :: alpha_ref_mks ! The reference specific volume in MKS units, never rescaled from m3 kg-1 [m3 kg-1]
-  real :: iDenom     ! The inverse of the denominator in the weights [T4 R-2 L-4 ~> Pa-2]
-  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim]
-  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim]
-  real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim]
-  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim]
-  real :: intp(5)    ! The integrals of specific volume with pressure at the
-                     ! 5 sub-column locations [L2 T-2 ~> m2 s-2]
-  real :: RL2_T2_to_Pa  ! A unit conversion factor from the rescaled units of pressure to Pa [Pa T2 R-1 L-2 ~> 1]
-  real :: SV_scale   ! A multiplicative factor by which to scale specific
-                     ! volume from m3 kg-1 to the desired units [kg m-3 R-1 ~> 1]
-  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant.
-  logical :: do_massWeight ! Indicates whether to do mass weighting.
-  integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n, pos
-
-  Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
-
-  do_massWeight = .false.
-  if (present(useMassWghtInterp)) do_massWeight = useMassWghtInterp
-
-  SV_scale = EOS%R_to_kg_m3
-  RL2_T2_to_Pa = EOS%RL2_T2_to_Pa
-  alpha_ref_mks = alpha_ref * EOS%kg_m3_to_R
-
-  do n = 1, 5 ! Note that these are reversed from int_density_dz.
-    wt_t(n) = 0.25 * real(n-1)
-    wt_b(n) = 1.0 - wt_t(n)
-  enddo
-
-  ! =============================
-  ! 1. Compute vertical integrals
-  ! =============================
-  do j=Jsq,Jeq+1; do i=Isq,Ieq+1
-    dp = p_b(i,j) - p_t(i,j)
-    do n=1,5 ! T, S and p are linearly interpolated in the vertical.
-      p5(n) = RL2_T2_to_Pa * (wt_t(n) * p_t(i,j) + wt_b(n) * p_b(i,j))
-      S5(n) = wt_t(n) * S_t(i,j) + wt_b(n) * S_b(i,j)
-      T5(n) = wt_t(n) * T_t(i,j) + wt_b(n) * T_b(i,j)
-    enddo
-    if (SV_scale /= 1.0) then
-      call calculate_spec_vol(T5, S5, p5, a5, 1, 5, EOS, alpha_ref_mks, scale=SV_scale)
-    else
-      call calculate_spec_vol(T5, S5, p5, a5, 1, 5, EOS, alpha_ref_mks)
-    endif
-
-    ! Use Bode's rule to estimate the interface height anomaly change.
-    alpha_anom = C1_90*((7.0*(a5(1)+a5(5)) + 32.0*(a5(2)+a5(4))) + 12.0*a5(3))
-    dza(i,j) = dp*alpha_anom
-    ! Use a Bode's-rule-like fifth-order accurate estimate of the double integral of
-    ! the interface height anomaly.
-    if (present(intp_dza)) intp_dza(i,j) = 0.5*dp**2 * &
-          (alpha_anom - C1_90*(16.0*(a5(4)-a5(2)) + 7.0*(a5(5)-a5(1))) )
-  enddo ; enddo
-
-  ! ==================================================
-  ! 2. Compute horizontal integrals in the x direction
-  ! ==================================================
-  if (present(intx_dza)) then ; do j=HI%jsc,HI%jec ; do I=Isq,Ieq
-    ! hWght is the distance measure by which the cell is violation of
-    ! hydrostatic consistency. For large hWght we bias the interpolation
-    ! of T,S along the top and bottom integrals, almost like thickness
-    ! weighting. Note: To work in terrain following coordinates we could
-    ! offset this distance by the layer thickness to replicate other models.
-    hWght = 0.0
-    if (do_massWeight) &
-      hWght =  max(0., bathyP(i,j)-p_t(i+1,j), bathyP(i+1,j)-p_t(i,j))
-    if (hWght > 0.) then
-      hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
-      hR = (p_b(i+1,j) - p_t(i+1,j)) + dP_neglect
-      hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-      iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
-      hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-      hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
-    else
-      hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
-    endif
-
-    do m=2,4
-      wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
-      wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
-
-      ! T, S, and p are interpolated in the horizontal.  The p interpolation
-      ! is linear, but for T and S it may be thickness wekghted.
-      P_top = wt_L*p_t(i,j) + wt_R*p_t(i+1,j)
-      P_bot = wt_L*p_b(i,j) + wt_R*p_b(i+1,j)
-      T_top = wtT_L*T_t(i,j) + wtT_R*T_t(i+1,j)
-      T_bot = wtT_L*T_b(i,j) + wtT_R*T_b(i+1,j)
-      S_top = wtT_L*S_t(i,j) + wtT_R*S_t(i+1,j)
-      S_bot = wtT_L*S_b(i,j) + wtT_R*S_b(i+1,j)
-      dp_90(m) = C1_90*(P_bot - P_top)
-
-      ! Salinity, temperature and pressure with linear interpolation in the vertical.
-      pos = (m-2)*5
-      do n=1,5
-        p15(pos+n) = RL2_T2_to_Pa * (wt_t(n) * P_top + wt_b(n) * P_bot)
-        S15(pos+n) = wt_t(n) * S_top + wt_b(n) * S_bot
-        T15(pos+n) = wt_t(n) * T_top + wt_b(n) * T_bot
-      enddo
-    enddo
-
-    if (SV_scale /= 1.0) then
-      call calculate_spec_vol(T15, S15, p15, a15, 1, 15, EOS, alpha_ref_mks, scale=SV_scale)
-    else
-      call calculate_spec_vol(T15, S15, p15, a15, 1, 15, EOS, alpha_ref_mks)
-    endif
-
-    intp(1) = dza(i,j) ; intp(5) = dza(i+1,j)
-    do m=2,4
-      ! Use Bode's rule to estimate the interface height anomaly change.
-      ! The integrals at the ends of the segment are already known.
-      pos = (m-2)*5
-      intp(m) = dp_90(m)*((7.0*(a15(pos+1)+a15(pos+5)) + &
-                          32.0*(a15(pos+2)+a15(pos+4))) + 12.0*a15(pos+3))
-    enddo
-    ! Use Bode's rule to integrate the interface height anomaly values in x.
-    intx_dza(I,j) = C1_90*((7.0*(intp(1)+intp(5)) + 32.0*(intp(2)+intp(4))) + &
-                           12.0*intp(3))
-  enddo ; enddo ; endif
-
-  ! ==================================================
-  ! 3. Compute horizontal integrals in the y direction
-  ! ==================================================
-  if (present(inty_dza)) then ; do J=Jsq,Jeq ; do i=HI%isc,HI%iec
-    ! hWght is the distance measure by which the cell is violation of
-    ! hydrostatic consistency. For large hWght we bias the interpolation
-    ! of T,S along the top and bottom integrals, like thickness weighting.
-    hWght = 0.0
-    if (do_massWeight) &
-      hWght = max(0., bathyP(i,j)-p_t(i,j+1), bathyP(i,j+1)-p_t(i,j))
-    if (hWght > 0.) then
-      hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
-      hR = (p_b(i,j+1) - p_t(i,j+1)) + dP_neglect
-      hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-      iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
-      hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-      hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
-    else
-      hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
-    endif
-
-    do m=2,4
-      wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
-      wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
-
-      ! T, S, and p are interpolated in the horizontal.  The p interpolation
-      ! is linear, but for T and S it may be thickness wekghted.
-      P_top = wt_L*p_t(i,j) + wt_R*p_t(i,j+1)
-      P_bot = wt_L*p_b(i,j) + wt_R*p_b(i,j+1)
-      T_top = wtT_L*T_t(i,j) + wtT_R*T_t(i,j+1)
-      T_bot = wtT_L*T_b(i,j) + wtT_R*T_b(i,j+1)
-      S_top = wtT_L*S_t(i,j) + wtT_R*S_t(i,j+1)
-      S_bot = wtT_L*S_b(i,j) + wtT_R*S_b(i,j+1)
-      dp_90(m) = C1_90*(P_bot - P_top)
-
-      ! Salinity, temperature and pressure with linear interpolation in the vertical.
-      pos = (m-2)*5
-      do n=1,5
-        p15(pos+n) = RL2_T2_to_Pa * (wt_t(n) * P_top + wt_b(n) * P_bot)
-        S15(pos+n) = wt_t(n) * S_top + wt_b(n) * S_bot
-        T15(pos+n) = wt_t(n) * T_top + wt_b(n) * T_bot
-      enddo
-    enddo
-
-    if (SV_scale /= 1.0) then
-      call calculate_spec_vol(T15, S15, p15, a15, 1, 15, EOS, alpha_ref_mks, scale=SV_scale)
-    else
-      call calculate_spec_vol(T15, S15, p15, a15, 1, 15, EOS, alpha_ref_mks)
-    endif
-
-    intp(1) = dza(i,j) ; intp(5) = dza(i,j+1)
-    do m=2,4
-      ! Use Bode's rule to estimate the interface height anomaly change.
-      ! The integrals at the ends of the segment are already known.
-      pos = (m-2)*5
-      intp(m) = dp_90(m) * ((7.0*(a15(pos+1)+a15(pos+5)) + &
-                            32.0*(a15(pos+2)+a15(pos+4))) + 12.0*a15(pos+3))
-    enddo
-    ! Use Bode's rule to integrate the interface height anomaly values in x.
-    inty_dza(i,J) = C1_90*((7.0*(intp(1)+intp(5)) + 32.0*(intp(2)+intp(4))) + &
-                           12.0*intp(3))
-  enddo ; enddo ; endif
-
-end subroutine int_spec_vol_dp_generic_plm
 
 !> Convert T&S to Absolute Salinity and Conservative Temperature if using TEOS10
 subroutine convert_temp_salt_for_TEOS10(T, S, HI, kd, mask_z, EOS)
@@ -2933,6 +1559,14 @@ subroutine convert_temp_salt_for_TEOS10(T, S, HI, kd, mask_z, EOS)
     endif
   enddo ; enddo ; enddo
 end subroutine convert_temp_salt_for_TEOS10
+
+!> Return value of EOS_quadrature
+logical function EOS_quadrature(EOS)
+  type(EOS_type),    pointer     :: EOS !< Equation of state structure
+
+  EOS_quadrature  = EOS%EOS_quadrature
+
+end function EOS_quadrature
 
 !> Extractor routine for the EOS type if the members need to be accessed outside this module
 subroutine extract_member_EOS(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Compressible, &
