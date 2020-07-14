@@ -9,16 +9,18 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_string_functions, only : lowercase
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : create_file, fieldtype, file_exists, open_file, close_file
-use MOM_io, only : write_field, MOM_read_data, read_data, get_filename_appendix
+use MOM_io, only : MOM_read_data, read_data, get_filename_appendix
 use MOM_io, only : get_file_info, get_file_atts, get_file_fields, get_file_times
 use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc
 use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
 use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
 use MOM_time_manager, only : days_in_month, get_date, set_date
+use MOM_transform_FMS, only : mpp_chksum => rotated_mpp_chksum
+use MOM_transform_FMS, only : write_field => rotated_write_field
 use MOM_verticalGrid, only : verticalGrid_type
-use mpp_mod,         only:  mpp_chksum,mpp_pe
-use mpp_io_mod,      only:  mpp_attribute_exist, mpp_get_atts
+use mpp_io_mod,      only :  mpp_attribute_exist, mpp_get_atts
+use mpp_mod,         only :  mpp_pe
 
 implicit none ; private
 
@@ -26,6 +28,7 @@ public restart_init, restart_end, restore_state, register_restart_field
 public save_restart, query_initialized, restart_init_end, vardesc
 public restart_files_exist, determine_is_new_run, is_new_run
 public register_restart_field_as_obsolete
+public register_restart_pair
 
 !> A type for making arrays of pointers to 4-d arrays
 type p4d
@@ -86,6 +89,7 @@ type, public :: MOM_restart_CS ; private
                                     !! made from a run with a different mask_table than the current run,
                                     !! in which case the checksums will not match and cause crash.
   character(len=240) :: restartfile !< The name or name root for MOM restart files.
+  integer :: turns                  !< Number of quarter turns from input to model domain
 
   !> An array of descriptions of the registered fields
   type(field_restart), pointer :: restart_field(:) => NULL()
@@ -99,7 +103,7 @@ type, public :: MOM_restart_CS ; private
   type(p2d), pointer :: var_ptr2d(:) => NULL()
   type(p3d), pointer :: var_ptr3d(:) => NULL()
   type(p4d), pointer :: var_ptr4d(:) => NULL()
-  !!@}
+  !>@}
   integer :: max_fields !< The maximum number of restart fields
 end type MOM_restart_CS
 
@@ -111,6 +115,13 @@ interface register_restart_field
   module procedure register_restart_field_ptr1d, register_restart_field_1d
   module procedure register_restart_field_ptr0d, register_restart_field_0d
 end interface
+
+!> Register a pair of restart fieilds whose rotations map onto each other
+interface register_restart_pair
+  module procedure register_restart_pair_ptr2d
+  module procedure register_restart_pair_ptr3d
+  module procedure register_restart_pair_ptr4d
+end interface register_restart_pair
 
 !> Indicate whether a field has been read from a restart file
 interface query_initialized
@@ -286,6 +297,67 @@ subroutine register_restart_field_ptr0d(f_ptr, var_desc, mandatory, CS)
   CS%var_ptr1d(CS%novars)%p => NULL()
 
 end subroutine register_restart_field_ptr0d
+
+
+!> Register a pair of rotationally equivalent 2d restart fields
+subroutine register_restart_pair_ptr2d(a_ptr, b_ptr, a_desc, b_desc, &
+    mandatory, CS)
+  real, dimension(:,:), target, intent(in) :: a_ptr   !< First field pointer
+  real, dimension(:,:), target, intent(in) :: b_ptr   !< Second field pointer
+  type(vardesc), intent(in) :: a_desc   !< First field descriptor
+  type(vardesc), intent(in) :: b_desc   !< Second field descriptor
+  logical, intent(in) :: mandatory      !< If true, abort if field is missing
+  type(MOM_restart_CS), pointer :: CS   !< MOM restart control structure
+
+  if (modulo(CS%turns, 2) /= 0) then
+    call register_restart_field(b_ptr, a_desc, mandatory, CS)
+    call register_restart_field(a_ptr, b_desc, mandatory, CS)
+  else
+    call register_restart_field(a_ptr, a_desc, mandatory, CS)
+    call register_restart_field(b_ptr, b_desc, mandatory, CS)
+  endif
+end subroutine register_restart_pair_ptr2d
+
+
+!> Register a pair of rotationally equivalent 3d restart fields
+subroutine register_restart_pair_ptr3d(a_ptr, b_ptr, a_desc, b_desc, &
+    mandatory, CS)
+  real, dimension(:,:,:), target, intent(in) :: a_ptr   !< First field pointer
+  real, dimension(:,:,:), target, intent(in) :: b_ptr   !< Second field pointer
+  type(vardesc), intent(in) :: a_desc   !< First field descriptor
+  type(vardesc), intent(in) :: b_desc   !< Second field descriptor
+  logical, intent(in) :: mandatory      !< If true, abort if field is missing
+  type(MOM_restart_CS), pointer :: CS   !< MOM restart control structure
+
+  if (modulo(CS%turns, 2) /= 0) then
+    call register_restart_field(b_ptr, a_desc, mandatory, CS)
+    call register_restart_field(a_ptr, b_desc, mandatory, CS)
+  else
+    call register_restart_field(a_ptr, a_desc, mandatory, CS)
+    call register_restart_field(b_ptr, b_desc, mandatory, CS)
+  endif
+end subroutine register_restart_pair_ptr3d
+
+
+!> Register a pair of rotationally equivalent 2d restart fields
+subroutine register_restart_pair_ptr4d(a_ptr, b_ptr, a_desc, b_desc, &
+    mandatory, CS)
+  real, dimension(:,:,:,:), target, intent(in) :: a_ptr !< First field pointer
+  real, dimension(:,:,:,:), target, intent(in) :: b_ptr !< Second field pointer
+  type(vardesc), intent(in) :: a_desc   !< First field descriptor
+  type(vardesc), intent(in) :: b_desc   !< Second field descriptor
+  logical, intent(in) :: mandatory      !< If true, abort if field is missing
+  type(MOM_restart_CS), pointer :: CS   !< MOM restart control structure
+
+  if (modulo(CS%turns, 2) /= 0) then
+    call register_restart_field(b_ptr, a_desc, mandatory, CS)
+    call register_restart_field(a_ptr, b_desc, mandatory, CS)
+  else
+    call register_restart_field(a_ptr, a_desc, mandatory, CS)
+    call register_restart_field(b_ptr, b_desc, mandatory, CS)
+  endif
+end subroutine register_restart_pair_ptr4d
+
 
 ! The following provide alternate interfaces to register restarts.
 
@@ -815,6 +887,9 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   integer :: length
   integer(kind=8) :: check_val(CS%max_fields,1)
   integer :: isL, ieL, jsL, jeL, pos
+  integer :: turns
+
+  turns = CS%turns
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "save_restart: Module must be initialized before it is used.")
@@ -927,14 +1002,21 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
     end select
 
     !Prepare the checksum of the restart fields to be written to restart files
-    call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
+    if (modulo(turns, 2) /= 0) then
+      call get_checksum_loop_ranges(G, pos, jsL, jeL, isL, ieL)
+    else
+      call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
+    endif
     do m=start_var,next_var-1
       if (associated(CS%var_ptr3d(m)%p)) then
-        check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
+        check_val(m-start_var+1,1) = &
+            mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:), turns=-turns)
       elseif (associated(CS%var_ptr2d(m)%p)) then
-        check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
+        check_val(m-start_var+1,1) = &
+            mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL), turns=-turns)
       elseif (associated(CS%var_ptr4d(m)%p)) then
-        check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
+        check_val(m-start_var+1,1) = &
+            mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:), turns=-turns)
       elseif (associated(CS%var_ptr1d(m)%p)) then
         check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr1d(m)%p)
       elseif (associated(CS%var_ptr0d(m)%p)) then
@@ -951,16 +1033,15 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
     endif
 
     do m=start_var,next_var-1
-
       if (associated(CS%var_ptr3d(m)%p)) then
         call write_field(unit,fields(m-start_var+1), G%Domain%mpp_domain, &
-                         CS%var_ptr3d(m)%p, restart_time)
+                         CS%var_ptr3d(m)%p, restart_time, turns=-turns)
       elseif (associated(CS%var_ptr2d(m)%p)) then
         call write_field(unit,fields(m-start_var+1), G%Domain%mpp_domain, &
-                         CS%var_ptr2d(m)%p, restart_time)
+                         CS%var_ptr2d(m)%p, restart_time, turns=-turns)
       elseif (associated(CS%var_ptr4d(m)%p)) then
         call write_field(unit,fields(m-start_var+1), G%Domain%mpp_domain, &
-                         CS%var_ptr4d(m)%p, restart_time)
+                         CS%var_ptr4d(m)%p, restart_time, turns=-turns)
       elseif (associated(CS%var_ptr1d(m)%p)) then
         call write_field(unit, fields(m-start_var+1), CS%var_ptr1d(m)%p, &
                          restart_time)
@@ -1425,6 +1506,8 @@ subroutine restart_init(param_file, CS, restart_root)
                                           !! set by RESTARTFILE to enable the use of this module by
                                           !! other components than MOM.
 
+  logical :: rotate_index
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_restart"   ! This module's name.
@@ -1463,6 +1546,16 @@ subroutine restart_init(param_file, CS, restart_root)
                  "made from a run with a different mask_table than the current run, "//&
                  "in which case the checksums will not match and cause crash.",&
                  default=.true.)
+
+  ! Maybe not the best place to do this?
+  call get_param(param_file, mdl, "ROTATE_INDEX", rotate_index, &
+      default=.false., do_not_log=.true.)
+
+  CS%turns = 0
+  if (rotate_index) then
+    call get_param(param_file, mdl, "INDEX_TURNS", CS%turns, &
+        default=1, do_not_log=.true.)
+  endif
 
   allocate(CS%restart_field(CS%max_fields))
   allocate(CS%restart_obsolete(CS%max_fields))

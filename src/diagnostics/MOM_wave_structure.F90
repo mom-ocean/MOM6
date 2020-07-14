@@ -109,7 +109,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real, dimension(SZK_(G)+1) :: &
     dRho_dT, &    ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
     dRho_dS, &    ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
-    pres, &       ! Interface pressure [Pa]
+    pres, &       ! Interface pressure [R L2 T-2 ~> Pa]
     T_int, &      ! Temperature interpolated to interfaces [degC]
     S_int, &      ! Salinity interpolated to interfaces [ppt]
     gprime        ! The reduced gravity across each interface [m2 Z-1 s-2 ~> m s-2].
@@ -131,7 +131,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
     htot          ! The vertical sum of the thicknesses [Z ~> m]
   real :: lam
   real :: min_h_frac
-  real :: H_to_pres
+  real :: Z_to_pres ! A conversion factor from thicknesses to pressure [R L2 T-2 Z-1 ~> Pa m-1]
   real, dimension(SZI_(G)) :: &
     hmin, &        ! Thicknesses [Z ~> m]
     H_here, &      ! A thickness [Z ~> m]
@@ -199,7 +199,8 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   cg_subRO = 1e-100*US%m_s_to_L_T  ! The hard-coded value here might need to increase.
   use_EOS = associated(tv%eqn_of_state)
 
-  H_to_pres = GV%Z_to_H*GV%H_to_Pa
+  ! Simplifying the following could change answers at roundoff.
+  Z_to_pres = GV%Z_to_H * (GV%H_to_RZ * GV%g_Earth)
   ! rescale = 1024.0**4 ; I_rescale = 1.0/rescale
 
   min_h_frac = tol1 / real(nz)
@@ -272,12 +273,12 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
         if (use_EOS) then
           pres(1) = 0.0
           do k=2,kf(i)
-            pres(k) = pres(k-1) + H_to_pres*Hf(k-1,i)
+            pres(k) = pres(k-1) + Z_to_pres*Hf(k-1,i)
             T_int(k) = 0.5*(Tf(k,i)+Tf(k-1,i))
             S_int(k) = 0.5*(Sf(k,i)+Sf(k-1,i))
           enddo
-          call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, 2, &
-                                        kf(i)-1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+          call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, &
+                                        tv%eqn_of_state, (/2,kf(i)/) )
 
           ! Sum the reduced gravities to find out how small a density difference
           ! is negligibly small.

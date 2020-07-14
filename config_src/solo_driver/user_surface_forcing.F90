@@ -129,9 +129,8 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
   real :: Temp_restore   ! The temperature that is being restored toward [degC].
   real :: Salin_restore  ! The salinity that is being restored toward [ppt]
   real :: density_restore  ! The potential density that is being restored
-                         ! toward [kg m-3].
-  real :: rhoXcp         ! The mean density times the heat capacity [J m-3 degC-1].
-  real :: Rho0_mks         ! The mean density in MKS units [kg m-3]
+                         ! toward [R ~> kg m-3].
+  real :: rhoXcp         ! The mean density times the heat capacity [Q R degC-1 ~> J m-3 degC-1].
   real :: buoy_rest_const  ! A constant relating density anomalies to the
                            ! restoring buoyancy flux [L2 m3 T-3 kg-1 ~> m5 s-3 kg-1].
 
@@ -140,7 +139,6 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Rho0_mks = CS%Rho0 * US%R_to_kg_m3
 
   !   When modifying the code, comment out this error message.  It is here
   ! so that the original (unmodified) version is not accidentally used.
@@ -180,7 +178,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
       ! vprec will be set later, if it is needed for salinity restoring.
       fluxes%vprec(i,j) = 0.0
 
-      !   Heat fluxes are in units of W m-2 and are positive into the ocean.
+      !   Heat fluxes are in units of [Q R Z T-1 ~> W m-2] and are positive into the ocean.
       fluxes%lw(i,j) = 0.0 * G%mask2dT(i,j)
       fluxes%latent(i,j) = 0.0 * G%mask2dT(i,j)
       fluxes%sens(i,j) = 0.0 * G%mask2dT(i,j)
@@ -202,14 +200,14 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
       call MOM_error(FATAL, "User_buoyancy_surface_forcing: " // &
         "Temperature and salinity restoring used without modification." )
 
-      rhoXcp = Rho0_mks * fluxes%C_p
+      rhoXcp = CS%Rho0 * fluxes%C_p
       do j=js,je ; do i=is,ie
         !   Set Temp_restore and Salin_restore to the temperature (in degC) and
         ! salinity (in PSU or ppt) that are being restored toward.
         Temp_restore = 0.0
         Salin_restore = 0.0
 
-        fluxes%heat_added(i,j) = (G%mask2dT(i,j) * (rhoXcp * US%Z_to_m*US%s_to_T*CS%Flux_const)) * &
+        fluxes%heat_added(i,j) = (G%mask2dT(i,j) * (rhoXcp * CS%Flux_const)) * &
             (Temp_restore - sfc_state%SST(i,j))
         fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
             ((Salin_restore - sfc_state%SSS(i,j)) / (0.5 * (Salin_restore + sfc_state%SSS(i,j))))
@@ -221,11 +219,11 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
         "Buoyancy restoring used without modification." )
 
       ! The -1 is because density has the opposite sign to buoyancy.
-      buoy_rest_const = -1.0 * (CS%G_Earth * CS%Flux_const) / Rho0_mks
+      buoy_rest_const = -1.0 * (CS%G_Earth * CS%Flux_const) / CS%Rho0
       do j=js,je ; do i=is,ie
        !   Set density_restore to an expression for the surface potential
        ! density [kg m-3] that is being restored toward.
-        density_restore = 1030.0
+        density_restore = 1030.0*US%kg_m3_to_R
 
         fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &
                           (density_restore - sfc_state%sfc_density(i,j))

@@ -3,12 +3,13 @@ module MOM_checksums
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_array_transform, only: rotate_array, rotate_array_pair, rotate_vector
 use MOM_coms, only : PE_here, root_PE, num_PEs, sum_across_PEs
 use MOM_coms, only : min_across_PEs, max_across_PEs
 use MOM_coms, only : reproducing_sum
 use MOM_error_handler, only : MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : log_version, param_file_type
-use MOM_hor_index, only : hor_index_type
+use MOM_hor_index, only : hor_index_type, rotate_hor_index
 
 use iso_fortran_env, only: error_unit
 
@@ -191,68 +192,126 @@ subroutine zchksum(array, mesg, scale, logunit)
     enddo
     aMean = sum(array(:)) / real(n)
   end subroutine subStats
-
 end subroutine zchksum
 
 !> Checksums on a pair of 2d arrays staggered at tracer points.
 subroutine chksum_pair_h_2d(mesg, arrayA, arrayB, HI, haloshift, omit_corners, &
-                            scale, logunit)
+                            scale, logunit, scalar_pair)
   character(len=*),                 intent(in) :: mesg !< Identifying messages
-  type(hor_index_type),             intent(in) :: HI     !< A horizontal index type
-  real, dimension(HI%isd:,HI%jsd:), intent(in) :: arrayA !< The first array to be checksummed
-  real, dimension(HI%isd:,HI%jsd:), intent(in) :: arrayB !< The second array to be checksummed
+  type(hor_index_type),   target,   intent(in) :: HI     !< A horizontal index type
+  real, dimension(HI%isd:,HI%jsd:), target, intent(in) :: arrayA !< The first array to be checksummed
+  real, dimension(HI%isd:,HI%jsd:), target, intent(in) :: arrayB !< The second array to be checksummed
   integer,                optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                   optional, intent(in) :: scale     !< A scaling factor for this array.
   integer,                optional, intent(in) :: logunit !< IO unit for checksum logging
+  logical,                optional, intent(in) :: scalar_pair !< If true, then the arrays describe
+                                                              !! a scalar, rather than vector
+  logical :: vector_pair
+  integer :: turns
+  type(hor_index_type), pointer :: HI_in
+  real, dimension(:,:), pointer :: arrayA_in, arrayB_in
 
-  if (present(haloshift)) then
-    call chksum_h_2d(arrayA, 'x '//mesg, HI, haloshift, omit_corners, &
-                     scale=scale, logunit=logunit)
-    call chksum_h_2d(arrayB, 'y '//mesg, HI, haloshift, omit_corners, &
-                     scale=scale, logunit=logunit)
+  vector_pair = .true.
+  if (present(scalar_pair)) vector_pair = .not. scalar_pair
+
+  turns = HI%turns
+  if (modulo(turns, 4) /= 0) then
+    ! Rotate field back to the input grid
+    allocate(HI_in)
+    call rotate_hor_index(HI, -turns, HI_in)
+    allocate(arrayA_in(HI_in%isd:HI_in%ied, HI_in%jsd:HI_in%jed))
+    allocate(arrayB_in(HI_in%isd:HI_in%ied, HI_in%jsd:HI_in%jed))
+
+    if (vector_pair) then
+      call rotate_vector(arrayA, arrayB, -turns, arrayA_in, arrayB_in)
+    else
+      call rotate_array_pair(arrayA, arrayB, -turns, arrayA_in, arrayB_in)
+    endif
   else
-    call chksum_h_2d(arrayA, 'x '//mesg, HI, scale=scale, logunit=logunit)
-    call chksum_h_2d(arrayB, 'y '//mesg, HI, scale=scale, logunit=logunit)
+    HI_in => HI
+    arrayA_in => arrayA
+    arrayB_in => arrayB
   endif
 
+  if (present(haloshift)) then
+    call chksum_h_2d(arrayA_in, 'x '//mesg, HI_in, haloshift, omit_corners, &
+                     scale=scale, logunit=logunit)
+    call chksum_h_2d(arrayB_in, 'y '//mesg, HI_in, haloshift, omit_corners, &
+                     scale=scale, logunit=logunit)
+  else
+    call chksum_h_2d(arrayA_in, 'x '//mesg, HI_in, scale=scale, logunit=logunit)
+    call chksum_h_2d(arrayB_in, 'y '//mesg, HI_in, scale=scale, logunit=logunit)
+  endif
 end subroutine chksum_pair_h_2d
 
 !> Checksums on a pair of 3d arrays staggered at tracer points.
 subroutine chksum_pair_h_3d(mesg, arrayA, arrayB, HI, haloshift, omit_corners, &
-                            scale, logunit)
+                            scale, logunit, scalar_pair)
   character(len=*),                    intent(in) :: mesg !< Identifying messages
-  type(hor_index_type),                intent(in) :: HI   !< A horizontal index type
-  real, dimension(HI%isd:,HI%jsd:, :), intent(in) :: arrayA !< The first array to be checksummed
-  real, dimension(HI%isd:,HI%jsd:, :), intent(in) :: arrayB !< The second array to be checksummed
+  type(hor_index_type),      target,   intent(in) :: HI   !< A horizontal index type
+  real, dimension(HI%isd:,HI%jsd:, :), target, intent(in) :: arrayA !< The first array to be checksummed
+  real, dimension(HI%isd:,HI%jsd:, :), target, intent(in) :: arrayB !< The second array to be checksummed
   integer,                   optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                   optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                      optional, intent(in) :: scale     !< A scaling factor for this array.
   integer,                   optional, intent(in) :: logunit !< IO unit for checksum logging
 
-  if (present(haloshift)) then
-    call chksum_h_3d(arrayA, 'x '//mesg, HI, haloshift, omit_corners, &
-                     scale=scale, logunit=logunit)
-    call chksum_h_3d(arrayB, 'y '//mesg, HI, haloshift, omit_corners, &
-                     scale=scale, logunit=logunit)
+  logical,                optional, intent(in) :: scalar_pair !< If true, then the arrays describe
+                                                              !! a scalar, rather than vector
+  logical :: vector_pair
+  integer :: turns
+  type(hor_index_type), pointer :: HI_in
+  real, dimension(:,:,:), pointer :: arrayA_in, arrayB_in
+
+  vector_pair = .true.
+  if (present(scalar_pair)) vector_pair = .not. scalar_pair
+
+  turns = HI%turns
+  if (modulo(turns, 4) /= 0) then
+    ! Rotate field back to the input grid
+    allocate(HI_in)
+    call rotate_hor_index(HI, -turns, HI_in)
+    allocate(arrayA_in(HI_in%isd:HI_in%ied, HI_in%jsd:HI_in%jed, size(arrayA, 3)))
+    allocate(arrayB_in(HI_in%isd:HI_in%ied, HI_in%jsd:HI_in%jed, size(arrayB, 3)))
+
+    if (vector_pair) then
+      call rotate_vector(arrayA, arrayB, -turns, arrayA_in, arrayB_in)
+    else
+      call rotate_array_pair(arrayA, arrayB, -turns, arrayA_in, arrayB_in)
+    endif
   else
-    call chksum_h_3d(arrayA, 'x '//mesg, HI, scale=scale, logunit=logunit)
-    call chksum_h_3d(arrayB, 'y '//mesg, HI, scale=scale, logunit=logunit)
+    HI_in => HI
+    arrayA_in => arrayA
+    arrayB_in => arrayB
   endif
 
+  if (present(haloshift)) then
+    call chksum_h_3d(arrayA_in, 'x '//mesg, HI_in, haloshift, omit_corners, &
+                     scale=scale, logunit=logunit)
+    call chksum_h_3d(arrayB_in, 'y '//mesg, HI_in, haloshift, omit_corners, &
+                     scale=scale, logunit=logunit)
+  else
+    call chksum_h_3d(arrayA_in, 'x '//mesg, HI_in, scale=scale, logunit=logunit)
+    call chksum_h_3d(arrayB_in, 'y '//mesg, HI_in, scale=scale, logunit=logunit)
+  endif
+
+  ! NOTE: automatic deallocation of array[AB]_in
 end subroutine chksum_pair_h_3d
 
 !> Checksums a 2d array staggered at tracer points.
-subroutine chksum_h_2d(array, mesg, HI, haloshift, omit_corners, scale, logunit)
-  type(hor_index_type),            intent(in) :: HI     !< A horizontal index type
-  real, dimension(HI%isd:,HI%jsd:), intent(in) :: array !< The array to be checksummed
+subroutine chksum_h_2d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logunit)
+  type(hor_index_type), target, intent(in) :: HI_m    !< Horizontal index bounds of the model grid
+  real, dimension(HI_m%isd:,HI_m%jsd:), target, intent(in) :: array_m !< Field array on the model grid
   character(len=*),                intent(in) :: mesg  !< An identifying message
   integer,               optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,               optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                  optional, intent(in) :: scale     !< A scaling factor for this array.
   integer, optional, intent(in) :: logunit !< IO unit for checksum logging
 
+  real, pointer :: array(:,:)           ! Field array on the input grid
   real, allocatable, dimension(:,:) :: rescaled_array
+  type(hor_index_type), pointer :: HI   ! Horizontal index bounds of the input grid
   real :: scaling
   integer :: iounit !< Log IO unit
   integer :: i, j
@@ -260,6 +319,19 @@ subroutine chksum_h_2d(array, mesg, HI, haloshift, omit_corners, scale, logunit)
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners
+  integer :: turns                      ! Quarter turns from input to model grid
+
+  ! Rotate array to the input grid
+  turns = HI_m%turns
+  if (modulo(turns, 4) /= 0) then
+    allocate(HI)
+    call rotate_hor_index(HI_m, -turns, HI)
+    allocate(array(HI%isd:HI%ied, HI%jsd:HI%jed))
+    call rotate_array(array_m, -turns, array)
+  else
+    HI => HI_m
+    array => array_m
+  endif
 
   if (checkForNaNs) then
     if (is_NaN(array(HI%isc:HI%iec,HI%jsc:HI%jec))) &
@@ -373,31 +445,59 @@ end subroutine chksum_h_2d
 
 !> Checksums on a pair of 2d arrays staggered at q-points.
 subroutine chksum_pair_B_2d(mesg, arrayA, arrayB, HI, haloshift, symmetric, &
-                            omit_corners, scale, logunit)
+                            omit_corners, scale, logunit, scalar_pair)
   character(len=*),                 intent(in) :: mesg   !< Identifying messages
-  type(hor_index_type),             intent(in) :: HI     !< A horizontal index type
-  real, dimension(HI%isd:,HI%jsd:), intent(in) :: arrayA !< The first array to be checksummed
-  real, dimension(HI%isd:,HI%jsd:), intent(in) :: arrayB !< The second array to be checksummed
+  type(hor_index_type),   target,   intent(in) :: HI     !< A horizontal index type
+  real, dimension(HI%isd:,HI%jsd:), target, intent(in) :: arrayA !< The first array to be checksummed
+  real, dimension(HI%isd:,HI%jsd:), target, intent(in) :: arrayB !< The second array to be checksummed
   logical,                optional, intent(in) :: symmetric !< If true, do the checksums on the full
                                                             !! symmetric computational domain.
   integer,                optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                   optional, intent(in) :: scale     !< A scaling factor for this array.
   integer,                optional, intent(in) :: logunit !< IO unit for checksum logging
+  logical,                optional, intent(in) :: scalar_pair !< If true, then the arrays describe
+                                                              !! a scalar, rather than vector
 
   logical :: sym
+  logical :: vector_pair
+  integer :: turns
+  type(hor_index_type), pointer :: HI_in
+  real, dimension(:,:), pointer :: arrayA_in, arrayB_in
+
+  vector_pair = .true.
+  if (present(scalar_pair)) vector_pair = .not. scalar_pair
+
+  turns = HI%turns
+  if (modulo(turns, 4) /= 0) then
+    ! Rotate field back to the input grid
+    allocate(HI_in)
+    call rotate_hor_index(HI, -turns, HI_in)
+    allocate(arrayA_in(HI_in%IsdB:HI_in%IedB, HI_in%JsdB:HI_in%JedB))
+    allocate(arrayB_in(HI_in%IsdB:HI_in%IedB, HI_in%JsdB:HI_in%JedB))
+
+    if (vector_pair) then
+      call rotate_vector(arrayA, arrayB, -turns, arrayA_in, arrayB_in)
+    else
+      call rotate_array_pair(arrayA, arrayB, -turns, arrayA_in, arrayB_in)
+    endif
+  else
+    HI_in => HI
+    arrayA_in => arrayA
+    arrayB_in => arrayB
+  endif
 
   sym = .false. ; if (present(symmetric)) sym = symmetric
 
   if (present(haloshift)) then
-    call chksum_B_2d(arrayA, 'x '//mesg, HI, haloshift, symmetric=sym, &
+    call chksum_B_2d(arrayA_in, 'x '//mesg, HI_in, haloshift, symmetric=sym, &
                      omit_corners=omit_corners, scale=scale, logunit=logunit)
-    call chksum_B_2d(arrayB, 'y '//mesg, HI, haloshift, symmetric=sym, &
+    call chksum_B_2d(arrayB_in, 'y '//mesg, HI_in, haloshift, symmetric=sym, &
                      omit_corners=omit_corners, scale=scale, logunit=logunit)
   else
-    call chksum_B_2d(arrayA, 'x '//mesg, HI, symmetric=sym, scale=scale, &
+    call chksum_B_2d(arrayA_in, 'x '//mesg, HI_in, symmetric=sym, scale=scale, &
                      logunit=logunit)
-    call chksum_B_2d(arrayB, 'y '//mesg, HI, symmetric=sym, scale=scale, &
+    call chksum_B_2d(arrayB_in, 'y '//mesg, HI_in, symmetric=sym, scale=scale, &
                      logunit=logunit)
   endif
 
@@ -405,40 +505,67 @@ end subroutine chksum_pair_B_2d
 
 !> Checksums on a pair of 3d arrays staggered at q-points.
 subroutine chksum_pair_B_3d(mesg, arrayA, arrayB, HI, haloshift, symmetric, &
-                            omit_corners, scale, logunit)
+                            omit_corners, scale, logunit, scalar_pair)
   character(len=*),                    intent(in) :: mesg !< Identifying messages
-  type(hor_index_type),                intent(in) :: HI     !< A horizontal index type
-  real, dimension(HI%IsdB:,HI%JsdB:, :), intent(in) :: arrayA !< The first array to be checksummed
-  real, dimension(HI%IsdB:,HI%JsdB:, :), intent(in) :: arrayB !< The second array to be checksummed
+  type(hor_index_type),      target,   intent(in) :: HI     !< A horizontal index type
+  real, dimension(HI%IsdB:,HI%JsdB:, :), target, intent(in) :: arrayA !< The first array to be checksummed
+  real, dimension(HI%IsdB:,HI%JsdB:, :), target, intent(in) :: arrayB !< The second array to be checksummed
   integer,                   optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                   optional, intent(in) :: symmetric !< If true, do the checksums on the full
                                                                !! symmetric computational domain.
   logical,                   optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                      optional, intent(in) :: scale     !< A scaling factor for this array.
   integer,                   optional, intent(in) :: logunit !< IO unit for checksum logging
+  logical,                   optional, intent(in) :: scalar_pair !< If true, then the arrays describe
+                                                              !! a scalar, rather than vector
 
   logical :: sym
+  logical :: vector_pair
+  integer :: turns
+  type(hor_index_type), pointer :: HI_in
+  real, dimension(:,:,:), pointer :: arrayA_in, arrayB_in
 
-  if (present(haloshift)) then
-    call chksum_B_3d(arrayA, 'x '//mesg, HI, haloshift, symmetric, &
-                     omit_corners, scale=scale, logunit=logunit)
-    call chksum_B_3d(arrayB, 'y '//mesg, HI, haloshift, symmetric, &
-                     omit_corners, scale=scale, logunit=logunit)
+  vector_pair = .true.
+  if (present(scalar_pair)) vector_pair = .not. scalar_pair
+
+  turns = HI%turns
+  if (modulo(turns, 4) /= 0) then
+    ! Rotate field back to the input grid
+    allocate(HI_in)
+    call rotate_hor_index(HI, -turns, HI_in)
+    allocate(arrayA_in(HI_in%IsdB:HI_in%IedB, HI_in%JsdB:HI_in%JedB, size(arrayA, 3)))
+    allocate(arrayB_in(HI_in%IsdB:HI_in%IedB, HI_in%JsdB:HI_in%JedB, size(arrayB, 3)))
+
+    if (vector_pair) then
+      call rotate_vector(arrayA, arrayB, -turns, arrayA_in, arrayB_in)
+    else
+      call rotate_array_pair(arrayA, arrayB, -turns, arrayA_in, arrayB_in)
+    endif
   else
-    call chksum_B_3d(arrayA, 'x '//mesg, HI, symmetric=symmetric, scale=scale, &
-                     logunit=logunit)
-    call chksum_B_3d(arrayB, 'y '//mesg, HI, symmetric=symmetric, scale=scale, &
-                     logunit=logunit)
+    HI_in => HI
+    arrayA_in => arrayA
+    arrayB_in => arrayB
   endif
 
+  if (present(haloshift)) then
+    call chksum_B_3d(arrayA_in, 'x '//mesg, HI_in, haloshift, symmetric, &
+                     omit_corners, scale=scale, logunit=logunit)
+    call chksum_B_3d(arrayB_in, 'y '//mesg, HI_in, haloshift, symmetric, &
+                     omit_corners, scale=scale, logunit=logunit)
+  else
+    call chksum_B_3d(arrayA_in, 'x '//mesg, HI_in, symmetric=symmetric, scale=scale, &
+                     logunit=logunit)
+    call chksum_B_3d(arrayB_in, 'y '//mesg, HI_in, symmetric=symmetric, scale=scale, &
+                     logunit=logunit)
+  endif
 end subroutine chksum_pair_B_3d
 
 !> Checksums a 2d array staggered at corner points.
-subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric, omit_corners, &
+subroutine chksum_B_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, &
                        scale, logunit)
-  type(hor_index_type), intent(in) :: HI     !< A horizontal index type
-  real, dimension(HI%IsdB:,HI%JsdB:), &
-                        intent(in) :: array !< The array to be checksummed
+  type(hor_index_type), target, intent(in) :: HI_m     !< A horizontal index type
+  real, dimension(HI_m%IsdB:,HI_m%JsdB:), &
+                        target, intent(in) :: array_m !< The array to be checksummed
   character(len=*),     intent(in) :: mesg  !< An identifying message
   integer,    optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,    optional, intent(in) :: symmetric !< If true, do the checksums on the
@@ -447,7 +574,9 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric, omit_corners, &
   real,       optional, intent(in) :: scale     !< A scaling factor for this array.
   integer, optional, intent(in) :: logunit !< IO unit for checksum logging
 
+  real, pointer :: array(:,:)           ! Field array on the input grid
   real, allocatable, dimension(:,:) :: rescaled_array
+  type(hor_index_type), pointer :: HI   ! Horizontal index bounds of the input grid
   real :: scaling
   integer :: iounit !< Log IO unit
   integer :: i, j, Is, Js
@@ -455,6 +584,19 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric, omit_corners, &
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners, sym, sym_stats
+  integer :: turns                      ! Quarter turns from input to model grid
+
+  ! Rotate array to the input grid
+  turns = HI_m%turns
+  if (modulo(turns, 4) /= 0) then
+    allocate(HI)
+    call rotate_hor_index(HI_m, -turns, HI)
+    allocate(array(HI%IsdB:HI%IedB, HI%JsdB:HI%JedB))
+    call rotate_array(array_m, -turns, array)
+  else
+    HI => HI_m
+    array => array_m
+  endif
 
   if (checkForNaNs) then
     if (is_NaN(array(HI%IscB:HI%IecB,HI%JscB:HI%JecB))) &
@@ -585,65 +727,119 @@ end subroutine chksum_B_2d
 
 !> Checksums a pair of 2d velocity arrays staggered at C-grid locations
 subroutine chksum_uv_2d(mesg, arrayU, arrayV, HI, haloshift, symmetric, &
-                        omit_corners, scale, logunit)
+                        omit_corners, scale, logunit, scalar_pair)
   character(len=*),                  intent(in) :: mesg   !< Identifying messages
-  type(hor_index_type),              intent(in) :: HI     !< A horizontal index type
-  real, dimension(HI%IsdB:,HI%jsd:), intent(in) :: arrayU !< The u-component array to be checksummed
-  real, dimension(HI%isd:,HI%JsdB:), intent(in) :: arrayV !< The v-component array to be checksummed
+  type(hor_index_type),    target,   intent(in) :: HI     !< A horizontal index type
+  real, dimension(HI%IsdB:,HI%jsd:), target, intent(in) :: arrayU !< The u-component array to be checksummed
+  real, dimension(HI%isd:,HI%JsdB:), target, intent(in) :: arrayV !< The v-component array to be checksummed
   integer,                 optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                 optional, intent(in) :: symmetric !< If true, do the checksums on the full
                                                              !! symmetric computational domain.
   logical,                 optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                    optional, intent(in) :: scale     !< A scaling factor for these arrays.
   integer,                 optional, intent(in) :: logunit !< IO unit for checksum logging
+  logical,                 optional, intent(in) :: scalar_pair !< If true, then the arrays describe a
+                                                               !! a scalar, rather than vector
+  logical :: vector_pair
+  integer :: turns
+  type(hor_index_type), pointer :: HI_in
+  real, dimension(:,:), pointer :: arrayU_in, arrayV_in
 
-  if (present(haloshift)) then
-    call chksum_u_2d(arrayU, 'u '//mesg, HI, haloshift, symmetric, &
-                     omit_corners, scale, logunit=logunit)
-    call chksum_v_2d(arrayV, 'v '//mesg, HI, haloshift, symmetric, &
-                     omit_corners, scale, logunit=logunit)
+  vector_pair = .true.
+  if (present(scalar_pair)) vector_pair = .not. scalar_pair
+
+  turns = HI%turns
+  if (modulo(turns, 4) /= 0) then
+    ! Rotate field back to the input grid
+    allocate(HI_in)
+    call rotate_hor_index(HI, -turns, HI_in)
+    allocate(arrayU_in(HI_in%IsdB:HI_in%IedB, HI_in%jsd:HI_in%jed))
+    allocate(arrayV_in(HI_in%isd:HI_in%ied, HI_in%JsdB:HI_in%JedB))
+
+    if (vector_pair) then
+      call rotate_vector(arrayU, arrayV, -turns, arrayU_in, arrayV_in)
+    else
+      call rotate_array_pair(arrayU, arrayV, -turns, arrayU_in, arrayV_in)
+    endif
   else
-    call chksum_u_2d(arrayU, 'u '//mesg, HI, symmetric=symmetric, &
-                     logunit=logunit)
-    call chksum_v_2d(arrayV, 'v '//mesg, HI, symmetric=symmetric, &
-                     logunit=logunit)
+    HI_in => HI
+    arrayU_in => arrayU
+    arrayV_in => arrayV
   endif
 
+  if (present(haloshift)) then
+    call chksum_u_2d(arrayU_in, 'u '//mesg, HI_in, haloshift, symmetric, &
+                     omit_corners, scale=scale, logunit=logunit)
+    call chksum_v_2d(arrayV_in, 'v '//mesg, HI_in, haloshift, symmetric, &
+                     omit_corners, scale=scale, logunit=logunit)
+  else
+    call chksum_u_2d(arrayU_in, 'u '//mesg, HI_in, symmetric=symmetric, &
+                     scale=scale, logunit=logunit)
+    call chksum_v_2d(arrayV_in, 'v '//mesg, HI_in, symmetric=symmetric, &
+                     scale=scale, logunit=logunit)
+  endif
 end subroutine chksum_uv_2d
 
 !> Checksums a pair of 3d velocity arrays staggered at C-grid locations
 subroutine chksum_uv_3d(mesg, arrayU, arrayV, HI, haloshift, symmetric, &
-                        omit_corners, scale, logunit)
+                        omit_corners, scale, logunit, scalar_pair)
   character(len=*),                    intent(in) :: mesg   !< Identifying messages
-  type(hor_index_type),                intent(in) :: HI     !< A horizontal index type
-  real, dimension(HI%IsdB:,HI%jsd:,:), intent(in) :: arrayU !< The u-component array to be checksummed
-  real, dimension(HI%isd:,HI%JsdB:,:), intent(in) :: arrayV !< The v-component array to be checksummed
+  type(hor_index_type),      target,   intent(in) :: HI     !< A horizontal index type
+  real, dimension(HI%IsdB:,HI%jsd:,:), target, intent(in) :: arrayU !< The u-component array to be checksummed
+  real, dimension(HI%isd:,HI%JsdB:,:), target, intent(in) :: arrayV !< The v-component array to be checksummed
   integer,                   optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                   optional, intent(in) :: symmetric !< If true, do the checksums on the full
                                                                !! symmetric computational domain.
   logical,                   optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                      optional, intent(in) :: scale     !< A scaling factor for these arrays.
   integer,                   optional, intent(in) :: logunit !< IO unit for checksum logging
+  logical,                 optional, intent(in) :: scalar_pair !< If true, then the arrays describe a
+                                                               !! a scalar, rather than vector
+  logical :: vector_pair
+  integer :: turns
+  type(hor_index_type), pointer :: HI_in
+  real, dimension(:,:,:), pointer :: arrayU_in, arrayV_in
 
-  if (present(haloshift)) then
-    call chksum_u_3d(arrayU, 'u '//mesg, HI, haloshift, symmetric, &
-                     omit_corners, scale, logunit=logunit)
-    call chksum_v_3d(arrayV, 'v '//mesg, HI, haloshift, symmetric, &
-                     omit_corners, scale, logunit=logunit)
+  vector_pair = .true.
+  if (present(scalar_pair)) vector_pair = .not. scalar_pair
+
+  turns = HI%turns
+  if (modulo(turns, 4) /= 0) then
+    ! Rotate field back to the input grid
+    allocate(HI_in)
+    call rotate_hor_index(HI, -turns, HI_in)
+    allocate(arrayU_in(HI_in%IsdB:HI_in%IedB, HI_in%jsd:HI_in%jed, size(arrayU, 3)))
+    allocate(arrayV_in(HI_in%isd:HI_in%ied, HI_in%JsdB:HI_in%JedB, size(arrayV, 3)))
+
+    if (vector_pair) then
+      call rotate_vector(arrayU, arrayV, -turns, arrayU_in, arrayV_in)
+    else
+      call rotate_array_pair(arrayU, arrayV, -turns, arrayU_in, arrayV_in)
+    endif
   else
-    call chksum_u_3d(arrayU, 'u '//mesg, HI, symmetric=symmetric, &
-                     logunit=logunit)
-    call chksum_v_3d(arrayV, 'v '//mesg, HI, symmetric=symmetric, &
-                     logunit=logunit)
+    HI_in => HI
+    arrayU_in => arrayU
+    arrayV_in => arrayV
   endif
 
+  if (present(haloshift)) then
+    call chksum_u_3d(arrayU_in, 'u '//mesg, HI_in, haloshift, symmetric, &
+                     omit_corners, scale=scale, logunit=logunit)
+    call chksum_v_3d(arrayV_in, 'v '//mesg, HI_in, haloshift, symmetric, &
+                     omit_corners, scale=scale, logunit=logunit)
+  else
+    call chksum_u_3d(arrayU_in, 'u '//mesg, HI_in, symmetric=symmetric, &
+                     scale=scale, logunit=logunit)
+    call chksum_v_3d(arrayV_in, 'v '//mesg, HI_in, symmetric=symmetric, &
+                     scale=scale, logunit=logunit)
+  endif
 end subroutine chksum_uv_3d
 
 !> Checksums a 2d array staggered at C-grid u points.
-subroutine chksum_u_2d(array, mesg, HI, haloshift, symmetric, omit_corners, &
+subroutine chksum_u_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, &
                        scale, logunit)
-  type(hor_index_type),           intent(in) :: HI     !< A horizontal index type
-  real, dimension(HI%IsdB:,HI%jsd:), intent(in) :: array !< The array to be checksummed
+  type(hor_index_type),  target,   intent(in) :: HI_m     !< A horizontal index type
+  real, dimension(HI_m%IsdB:,HI_m%jsd:), target, intent(in) :: array_m !< The array to be checksummed
   character(len=*),                intent(in) :: mesg  !< An identifying message
   integer,               optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,               optional, intent(in) :: symmetric !< If true, do the checksums on the full
@@ -652,7 +848,9 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift, symmetric, omit_corners, &
   real,                    optional, intent(in) :: scale     !< A scaling factor for this array.
   integer, optional, intent(in) :: logunit !< IO unit for checksum logging
 
+  real, pointer :: array(:,:)           ! Field array on the input grid
   real, allocatable, dimension(:,:) :: rescaled_array
+  type(hor_index_type), pointer :: HI   ! Horizontal index bounds of the input grid
   real :: scaling
   integer :: iounit !< Log IO unit
   integer :: i, j, Is
@@ -660,6 +858,27 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift, symmetric, omit_corners, &
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners, sym, sym_stats
+  integer :: turns                      ! Quarter turns from input to model grid
+
+  ! Rotate array to the input grid
+  turns = HI_m%turns
+  if (modulo(turns, 4) /= 0) then
+    allocate(HI)
+    call rotate_hor_index(HI_m, -turns, HI)
+    if (modulo(turns, 2) /= 0) then
+      ! Arrays originating from v-points must be handled by vchksum
+      allocate(array(HI%isd:HI%ied, HI%JsdB:HI%JedB))
+      call rotate_array(array_m, -turns, array)
+      call vchksum(array, mesg, HI, haloshift, symmetric, omit_corners, scale, logunit)
+      return
+    else
+      allocate(array(HI%IsdB:HI%IedB, HI%jsd:HI%jed))
+      call rotate_array(array_m, -turns, array)
+    endif
+  else
+    HI => HI_m
+    array => array_m
+  endif
 
   if (checkForNaNs) then
     if (is_NaN(array(HI%IscB:HI%IecB,HI%jsc:HI%jec))) &
@@ -794,10 +1013,10 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift, symmetric, omit_corners, &
 end subroutine chksum_u_2d
 
 !> Checksums a 2d array staggered at C-grid v points.
-subroutine chksum_v_2d(array, mesg, HI, haloshift, symmetric, omit_corners, &
+subroutine chksum_v_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, &
                        scale, logunit)
-  type(hor_index_type),           intent(in) :: HI     !< A horizontal index type
-  real, dimension(HI%isd:,HI%JsdB:), intent(in) :: array !< The array to be checksummed
+  type(hor_index_type),  target,   intent(in) :: HI_m      !< A horizontal index type
+  real, dimension(HI_m%isd:,HI_m%JsdB:), target, intent(in) :: array_m !< The array to be checksummed
   character(len=*),                intent(in) :: mesg  !< An identifying message
   integer,               optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,               optional, intent(in) :: symmetric !< If true, do the checksums on the full
@@ -806,7 +1025,9 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift, symmetric, omit_corners, &
   real,                  optional, intent(in) :: scale     !< A scaling factor for this array.
   integer, optional, intent(in) :: logunit !< IO unit for checksum logging
 
+  real, pointer :: array(:,:)           ! Field array on the input grid
   real, allocatable, dimension(:,:) :: rescaled_array
+  type(hor_index_type), pointer :: HI   ! Horizontal index bounds of the input grid
   real :: scaling
   integer :: iounit !< Log IO unit
   integer :: i, j, Js
@@ -814,6 +1035,27 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift, symmetric, omit_corners, &
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners, sym, sym_stats
+  integer :: turns                      ! Quarter turns from input to model grid
+
+  ! Rotate array to the input grid
+  turns = HI_m%turns
+  if (modulo(turns, 4) /= 0) then
+    allocate(HI)
+    call rotate_hor_index(HI_m, -turns, HI)
+    if (modulo(turns, 2) /= 0) then
+      ! Arrays originating from u-points must be handled by uchksum
+      allocate(array(HI%IsdB:HI%IedB, HI%jsd:HI%jed))
+      call rotate_array(array_m, -turns, array)
+      call uchksum(array, mesg, HI, haloshift, symmetric, omit_corners, scale, logunit)
+      return
+    else
+      allocate(array(HI%isd:HI%ied, HI%JsdB:HI%JedB))
+      call rotate_array(array_m, -turns, array)
+    endif
+  else
+    HI => HI_m
+    array => array_m
+  endif
 
   if (checkForNaNs) then
     if (is_NaN(array(HI%isc:HI%iec,HI%JscB:HI%JecB))) &
@@ -948,16 +1190,18 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift, symmetric, omit_corners, &
 end subroutine chksum_v_2d
 
 !> Checksums a 3d array staggered at tracer points.
-subroutine chksum_h_3d(array, mesg, HI, haloshift, omit_corners, scale, logunit)
-  type(hor_index_type),             intent(in) :: HI !< A horizontal index type
-  real, dimension(HI%isd:,HI%jsd:,:),  intent(in) :: array !< The array to be checksummed
+subroutine chksum_h_3d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logunit)
+  type(hor_index_type),    target,   intent(in) :: HI_m !< A horizontal index type
+  real, dimension(HI_m%isd:,HI_m%jsd:,:), target, intent(in) :: array_m !< The array to be checksummed
   character(len=*),                  intent(in) :: mesg  !< An identifying message
   integer,                 optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                 optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                    optional, intent(in) :: scale     !< A scaling factor for this array.
   integer, optional, intent(in) :: logunit !< IO unit for checksum logging
 
+  real, pointer :: array(:,:,:)         ! Field array on the input grid
   real, allocatable, dimension(:,:,:) :: rescaled_array
+  type(hor_index_type), pointer :: HI   ! Horizontal index bounds of the input grid
   real :: scaling
   integer :: iounit !< Log IO unit
   integer :: i, j, k
@@ -965,6 +1209,19 @@ subroutine chksum_h_3d(array, mesg, HI, haloshift, omit_corners, scale, logunit)
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners
+  integer :: turns                      ! Quarter turns from input to model grid
+
+  ! Rotate array to the input grid
+  turns = HI_m%turns
+  if (modulo(turns, 4) /= 0) then
+    allocate(HI)
+    call rotate_hor_index(HI_m, -turns, HI)
+    allocate(array(HI%isd:HI%ied, HI%jsd:HI%jed, size(array_m, 3)))
+    call rotate_array(array_m, -turns, array)
+  else
+    HI => HI_m
+    array => array_m
+  endif
 
   if (checkForNaNs) then
     if (is_NaN(array(HI%isc:HI%iec,HI%jsc:HI%jec,:))) &
@@ -1080,10 +1337,10 @@ subroutine chksum_h_3d(array, mesg, HI, haloshift, omit_corners, scale, logunit)
 end subroutine chksum_h_3d
 
 !> Checksums a 3d array staggered at corner points.
-subroutine chksum_B_3d(array, mesg, HI, haloshift, symmetric, omit_corners, &
+subroutine chksum_B_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, &
                        scale, logunit)
-  type(hor_index_type),              intent(in) :: HI !< A horizontal index type
-  real, dimension(HI%IsdB:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed
+  type(hor_index_type),     target,   intent(in) :: HI_m !< A horizontal index type
+  real, dimension(HI_m%IsdB:,HI_m%JsdB:,:), target, intent(in) :: array_m !< The array to be checksummed
   character(len=*),                   intent(in) :: mesg  !< An identifying message
   integer,                  optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                  optional, intent(in) :: symmetric !< If true, do the checksums on the full
@@ -1092,7 +1349,9 @@ subroutine chksum_B_3d(array, mesg, HI, haloshift, symmetric, omit_corners, &
   real,                     optional, intent(in) :: scale     !< A scaling factor for this array.
   integer, optional, intent(in) :: logunit !< IO unit for checksum logging
 
+  real, pointer :: array(:,:,:)         ! Field array on the input grid
   real, allocatable, dimension(:,:,:) :: rescaled_array
+  type(hor_index_type), pointer :: HI   ! Horizontal index bounds of the input grid
   real :: scaling
   integer :: iounit !< Log IO unit
   integer :: i, j, k, Is, Js
@@ -1100,6 +1359,19 @@ subroutine chksum_B_3d(array, mesg, HI, haloshift, symmetric, omit_corners, &
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners, sym, sym_stats
+  integer :: turns                      ! Quarter turns from input to model grid
+
+  ! Rotate array to the input grid
+  turns = HI_m%turns
+  if (modulo(turns, 4) /= 0) then
+    allocate(HI)
+    call rotate_hor_index(HI_m, -turns, HI)
+    allocate(array(HI%IsdB:HI%IedB, HI%JsdB:HI%JedB, size(array_m, 3)))
+    call rotate_array(array_m, -turns, array)
+  else
+    HI => HI_m
+    array => array_m
+  endif
 
   if (checkForNaNs) then
     if (is_NaN(array(HI%IscB:HI%IecB,HI%JscB:HI%JecB,:))) &
@@ -1235,10 +1507,10 @@ subroutine chksum_B_3d(array, mesg, HI, haloshift, symmetric, omit_corners, &
 end subroutine chksum_B_3d
 
 !> Checksums a 3d array staggered at C-grid u points.
-subroutine chksum_u_3d(array, mesg, HI, haloshift, symmetric, omit_corners, &
+subroutine chksum_u_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, &
                        scale, logunit)
-  type(hor_index_type),             intent(in) :: HI !< A horizontal index type
-  real, dimension(HI%isdB:,HI%Jsd:,:), intent(in) :: array !< The array to be checksummed
+  type(hor_index_type),    target,   intent(in) :: HI_m !< A horizontal index type
+  real, dimension(HI_m%isdB:,HI_m%Jsd:,:), target, intent(in) :: array_m !< The array to be checksummed
   character(len=*),                  intent(in) :: mesg  !< An identifying message
   integer,                 optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                 optional, intent(in) :: symmetric !< If true, do the checksums on the full
@@ -1247,7 +1519,9 @@ subroutine chksum_u_3d(array, mesg, HI, haloshift, symmetric, omit_corners, &
   real,                    optional, intent(in) :: scale     !< A scaling factor for this array.
   integer, optional, intent(in) :: logunit !< IO unit for checksum logging
 
+  real, pointer :: array(:,:,:)         ! Field array on the input grid
   real, allocatable, dimension(:,:,:) :: rescaled_array
+  type(hor_index_type), pointer :: HI   ! Horizontal index bounds of the input grid
   real :: scaling
   integer :: iounit !< Log IO unit
   integer :: i, j, k, Is
@@ -1255,6 +1529,27 @@ subroutine chksum_u_3d(array, mesg, HI, haloshift, symmetric, omit_corners, &
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners, sym, sym_stats
+  integer :: turns                      ! Quarter turns from input to model grid
+
+  ! Rotate array to the input grid
+  turns = HI_m%turns
+  if (modulo(turns, 4) /= 0) then
+    allocate(HI)
+    call rotate_hor_index(HI_m, -turns, HI)
+    if (modulo(turns, 2) /= 0) then
+      ! Arrays originating from v-points must be handled by vchksum
+      allocate(array(HI%isd:HI%ied, HI%JsdB:HI%JedB, size(array_m, 3)))
+      call rotate_array(array_m, -turns, array)
+      call vchksum(array, mesg, HI, haloshift, symmetric, omit_corners, scale, logunit)
+      return
+    else
+      allocate(array(HI%IsdB:HI%IedB, HI%jsd:HI%jed, size(array_m, 3)))
+      call rotate_array(array_m, -turns, array)
+    endif
+  else
+    HI => HI_m
+    array => array_m
+  endif
 
   if (checkForNaNs) then
     if (is_NaN(array(HI%IscB:HI%IecB,HI%jsc:HI%jec,:))) &
@@ -1389,10 +1684,10 @@ subroutine chksum_u_3d(array, mesg, HI, haloshift, symmetric, omit_corners, &
 end subroutine chksum_u_3d
 
 !> Checksums a 3d array staggered at C-grid v points.
-subroutine chksum_v_3d(array, mesg, HI, haloshift, symmetric, omit_corners, &
+subroutine chksum_v_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, &
                        scale, logunit)
-  type(hor_index_type),             intent(in) :: HI !< A horizontal index type
-  real, dimension(HI%isd:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed
+  type(hor_index_type),    target,   intent(in) :: HI_m !< A horizontal index type
+  real, dimension(HI_m%isd:,HI_m%JsdB:,:), target, intent(in) :: array_m !< The array to be checksummed
   character(len=*),                  intent(in) :: mesg  !< An identifying message
   integer,                 optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                 optional, intent(in) :: symmetric !< If true, do the checksums on the full
@@ -1401,7 +1696,9 @@ subroutine chksum_v_3d(array, mesg, HI, haloshift, symmetric, omit_corners, &
   real,                    optional, intent(in) :: scale     !< A scaling factor for this array.
   integer, optional, intent(in) :: logunit !< IO unit for checksum logging
 
+  real, pointer :: array(:,:,:)         ! Field array on the input grid
   real, allocatable, dimension(:,:,:) :: rescaled_array
+  type(hor_index_type), pointer :: HI   ! Horizontal index bounds of the input grid
   real :: scaling
   integer :: iounit !< Log IO unit
   integer :: i, j, k, Js
@@ -1409,6 +1706,27 @@ subroutine chksum_v_3d(array, mesg, HI, haloshift, symmetric, omit_corners, &
   integer :: bcN, bcS, bcE, bcW
   real :: aMean, aMin, aMax
   logical :: do_corners, sym, sym_stats
+  integer :: turns                      ! Quarter turns from input to model grid
+
+  ! Rotate array to the input grid
+  turns = HI_m%turns
+  if (modulo(turns, 4) /= 0) then
+    allocate(HI)
+    call rotate_hor_index(HI_m, -turns, HI)
+    if (modulo(turns, 2) /= 0) then
+      ! Arrays originating from u-points must be handled by uchksum
+      allocate(array(HI%IsdB:HI%IedB, HI%jsd:HI%jed, size(array_m, 3)))
+      call rotate_array(array_m, -turns, array)
+      call uchksum(array, mesg, HI, haloshift, symmetric, omit_corners, scale, logunit)
+      return
+    else
+      allocate(array(HI%isd:HI%ied, HI%JsdB:HI%JedB, size(array_m, 3)))
+      call rotate_array(array_m, -turns, array)
+    endif
+  else
+    HI => HI_m
+    array => array_m
+  endif
 
   if (checkForNaNs) then
     if (is_NaN(array(HI%isc:HI%iec,HI%JscB:HI%JecB,:))) &

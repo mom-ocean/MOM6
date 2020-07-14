@@ -18,7 +18,7 @@ use MOM_time_manager,     only : time_type, set_time, operator(+), operator(<=)
 use MOM_unit_scaling,     only : unit_scale_type
 use MOM_variables,        only : thermo_var_ptrs, vertvisc_type, p3d
 use MOM_verticalGrid,     only : verticalGrid_type
-use MOM_EOS,              only : calculate_density, calculate_density_derivs
+use MOM_EOS,              only : calculate_density, calculate_density_derivs, EOS_domain
 
 implicit none ; private
 
@@ -56,7 +56,7 @@ type, public :: int_tide_input_CS ; private
 
   !>@{ Diagnostic IDs
   integer :: id_TKE_itidal = -1, id_Nb = -1, id_N2_bot = -1
-  !!@}
+  !>@}
 end type int_tide_input_CS
 
 !> This type is used to exchange fields related to the internal tides.
@@ -137,7 +137,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
   if (CS%debug) then
     call hchksum(N2_bot,"N2_bot",G%HI,haloshift=0, scale=US%s_to_T**2)
     call hchksum(itide%TKE_itidal_input,"TKE_itidal_input",G%HI,haloshift=0, &
-                 scale=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+                 scale=US%RZ3_T3_to_W_m2)
   endif
 
   if (CS%id_TKE_itidal > 0) call post_data(CS%id_TKE_itidal, itide%TKE_itidal_input, CS%diag)
@@ -167,7 +167,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
   real, dimension(SZI_(G),SZK_(G)+1) :: &
     dRho_int      ! The unfiltered density differences across interfaces [R ~> kg m-3].
   real, dimension(SZI_(G)) :: &
-    pres, &       ! The pressure at each interface [Pa].
+    pres, &       ! The pressure at each interface [R L2 T-2 ~> Pa].
     Temp_int, &   ! The temperature at each interface [degC].
     Salin_int, &  ! The salinity at each interface [ppt].
     drho_bot, &   ! The density difference at the bottom of a layer [R ~> kg m-3]
@@ -181,17 +181,19 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
   real :: G_Rho0  ! The gravitation acceleration divided by the Boussinesq
                   ! density [Z T-2 R-1 ~> m4 s-2 kg-1].
   logical :: do_i(SZI_(G)), do_any
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   G_Rho0 = (US%L_to_Z**2*GV%g_Earth) / GV%Rho0
+  EOSdom(:) = EOS_domain(G%HI)
 
   ! Find the (limited) density jump across each interface.
   do i=is,ie
     dRho_int(i,1) = 0.0 ; dRho_int(i,nz+1) = 0.0
   enddo
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,tv,fluxes,G,GV,US,h,T_f,S_f, &
-!$OMP                                  h2,N2_bot,G_Rho0) &
+!$OMP                                  h2,N2_bot,G_Rho0,EOSdom) &
 !$OMP                          private(pres,Temp_Int,Salin_Int,dRho_dT,dRho_dS, &
 !$OMP                                  hb,dRho_bot,z_from_bot,do_i,h_amp,       &
 !$OMP                                  do_any,dz_int) &
@@ -205,12 +207,12 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
       endif
       do K=2,nz
         do i=is,ie
-          pres(i) = pres(i) + GV%H_to_Pa*h(i,j,k-1)
+          pres(i) = pres(i) + (GV%g_Earth*GV%H_to_RZ)*h(i,j,k-1)
           Temp_Int(i) = 0.5 * (T_f(i,j,k) + T_f(i,j,k-1))
           Salin_Int(i) = 0.5 * (S_f(i,j,k) + S_f(i,j,k-1))
         enddo
-        call calculate_density_derivs(Temp_int, Salin_int, pres, &
-                 dRho_dT(:), dRho_dS(:), is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density_derivs(Temp_int, Salin_int, pres, dRho_dT(:), dRho_dS(:), &
+                                      tv%eqn_of_state, EOSdom)
         do i=is,ie
           dRho_int(i,K) = max(dRho_dT(i)*(T_f(i,j,k) - T_f(i,j,k-1)) + &
                               dRho_dS(i)*(S_f(i,j,k) - S_f(i,j,k-1)), 0.0)
@@ -326,7 +328,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_fill, &
                  "A diapycnal diffusivity that is used to interpolate "//&
                  "more sensible values of T & S into thin layers.", &
-                 default=1.0e-6, scale=US%m2_s_to_Z2_T)
+                 units="m2 s-1", default=1.0e-6, scale=US%m2_s_to_Z2_T)
 
   call get_param(param_file, mdl, "UTIDE", utide, &
                "The constant tidal amplitude used with INT_TIDE_DISSIPATION.", &
@@ -349,7 +351,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   call get_param(param_file, mdl, "TKE_ITIDE_MAX", CS%TKE_itide_max, &
                "The maximum internal tide energy source available to mix "//&
                "above the bottom boundary layer with INT_TIDE_DISSIPATION.", &
-               units="W m-2", default=1.0e3, scale=US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**3)
+               units="W m-2", default=1.0e3, scale=US%W_m2_to_RZ3_T3)
 
   call get_param(param_file, mdl, "READ_TIDEAMP", read_tideamp, &
                "If true, read a file (given by TIDEAMP_FILE) containing "//&
@@ -409,7 +411,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
 
   CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal_itide',diag%axesT1,Time, &
       'Internal Tide Driven Turbulent Kinetic Energy', &
-      'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+      'W m-2', conversion=US%RZ3_T3_to_W_m2)
 
   CS%id_Nb = register_diag_field('ocean_model','Nb_itide',diag%axesT1,Time, &
        'Bottom Buoyancy Frequency', 's-1', conversion=US%s_to_T)
