@@ -650,6 +650,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real :: H_eff_dx2   ! The effective total thickness divided by the grid spacing
                       ! squared [H L-2 ~> m-1 or kg m-4].
   real :: u_max_cor, v_max_cor ! The maximum corrective velocities [L T-1 ~> m s-1].
+  real :: uint_cor, vint_cor ! The maximum time-integrated corrective velocities [L ~> m].
   real :: Htot        ! The total thickness [H ~> m or kg m-2].
   real :: eta_cor_max ! The maximum fluid that can be added as a correction to eta [H ~> m or kg m-2].
   real :: accel_underflow ! An acceleration that is so small it should be zeroed out [L T-2 ~> m s-2].
@@ -1080,22 +1081,31 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
         vbt(i,J) = vbt(i,J) + CS%frhatv(i,J,k) * v_vh0(i,J,k)
       enddo ; enddo ; enddo
     endif
-    if (use_BT_cont) then
-      if (CS%adjust_BT_cont) then
-        ! Use the additional input transports to broaden the fits
-        ! over which the bt_cont_type applies.
+    if ((use_BT_cont .or. integral_BT_cont) .and. CS%adjust_BT_cont) then
+      ! Use the additional input transports to broaden the fits
+      ! over which the bt_cont_type applies.
 
-        ! Fill in the halo data for ubt, vbt, uhbt, and vhbt.
-        if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
-        if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
-        call pass_vector(ubt, vbt, CS%BT_Domain, complete=.false., halo=1+ievf-ie)
-        call pass_vector(uhbt, vhbt, CS%BT_Domain, complete=.true., halo=1+ievf-ie)
-        if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
-        if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
+      ! Fill in the halo data for ubt, vbt, uhbt, and vhbt.
+      if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
+      if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
+      call pass_vector(ubt, vbt, CS%BT_Domain, complete=.false., halo=1+ievf-ie)
+      call pass_vector(uhbt, vhbt, CS%BT_Domain, complete=.true., halo=1+ievf-ie)
+      if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
+      if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
 
-        call adjust_local_BT_cont_types(ubt, uhbt, vbt, vhbt, BTCL_u, BTCL_v, &
-                                        G, US, MS, 1+ievf-ie)
-      endif
+      call adjust_local_BT_cont_types(ubt, uhbt, vbt, vhbt, BTCL_u, BTCL_v, &
+                                      G, US, MS, 1+ievf-ie)
+    endif
+    if (integral_BT_cont) then
+      !$OMP parallel do default(shared)
+      do j=js,je ; do I=is-1,ie
+        uhbt0(I,j) = uhbt(I,j) - find_uhbt_int(dt*ubt(I,j), BTCL_u(I,j), dt, Idt2) * Idt
+      enddo ; enddo
+      !$OMP parallel do default(shared)
+      do J=js-1,je ; do i=is,ie
+        vhbt0(i,J) = vhbt(i,J) - find_vhbt_int(dt*vbt(i,J), BTCL_v(i,J), dt, Idt2) * Idt
+      enddo ; enddo
+    elseif (use_BT_cont) then
       !$OMP parallel do default(shared)
       do j=js,je ; do I=is-1,ie
         uhbt0(I,j) = uhbt(I,j) - find_uhbt(ubt(I,j), BTCL_u(I,j))
@@ -1177,6 +1187,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       endif
       if (Htot_avg*CS%dy_Cu(I,j) <= 0.0) then
         CS%IDatu(I,j) = 0.0
+      elseif (integral_BT_cont) then
+        CS%IDatu(I,j) = CS%dy_Cu(I,j) / (max(find_duhbt_du_int(ubt(I,j)*dt, BTCL_u(I,j), US, dt, Idt2), &
+                                             CS%dy_Cu(I,j)*Htot_avg) )
       elseif (use_BT_cont) then ! Reconsider the max and whether there should be some scaling.
         CS%IDatu(I,j) = CS%dy_Cu(I,j) / (max(find_duhbt_du(ubt(I,j), BTCL_u(I,j), US), &
                                              CS%dy_Cu(I,j)*Htot_avg) )
@@ -1200,6 +1213,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       endif
       if (Htot_avg*CS%dx_Cv(i,J) <= 0.0) then
         CS%IDatv(i,J) = 0.0
+      elseif (integral_BT_cont) then
+        CS%IDatv(i,J) = CS%dx_Cv(i,J) / (max(find_dvhbt_dv_int(vbt(i,J)*dt, BTCL_v(i,J), US, dt, Idt2), &
+                                             CS%dx_Cv(i,J)*Htot_avg) )
       elseif (use_BT_cont) then ! Reconsider the max and whether there should be some scaling.
         CS%IDatv(i,J) = CS%dx_Cv(i,J) / (max(find_dvhbt_dv(vbt(i,J), BTCL_v(i,J), US), &
                                              CS%dx_Cv(i,J)*Htot_avg) )
@@ -1363,7 +1379,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   endif
   if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
   if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
-  !$OMP parallel default(shared) private(u_max_cor,v_max_cor,eta_cor_max,Htot)
+  !$OMP parallel default(shared) private(u_max_cor,uint_cor,v_max_cor,vint_cor,eta_cor_max,Htot)
   !$OMP do
   do j=js-1,je+1 ; do I=is-1,ie ; av_rem_u(I,j) = 0.0 ; enddo ; enddo
   !$OMP do
@@ -1450,18 +1466,28 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   ! Set the mass source, after first initializing the halos to 0.
   !$OMP do
   do j=jsvf-1,jevf+1; do i=isvf-1,ievf+1 ; eta_src(i,j) = 0.0 ; enddo ; enddo
-  if (CS%bound_BT_corr) then ; if (use_BT_Cont .and. CS%BT_cont_bounds) then
+  if (CS%bound_BT_corr) then ; if ((use_BT_Cont.or.integral_BT_cont) .and. CS%BT_cont_bounds) then
     do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
       if (CS%eta_cor(i,j) > 0.0) then
         !   Limit the source (outward) correction to be a fraction the mass that
         ! can be transported out of the cell by velocities with a CFL number of CFL_cor.
-        u_max_cor = G%dxT(i,j) * (CS%maxCFL_BT_cont*Idt)
-        v_max_cor = G%dyT(i,j) * (CS%maxCFL_BT_cont*Idt)
-        eta_cor_max = dt * (CS%IareaT(i,j) * &
+        if (integral_BT_cont) then
+          uint_cor = G%dxT(i,j) * CS%maxCFL_BT_cont
+          vint_cor = G%dyT(i,j) * CS%maxCFL_BT_cont
+          eta_cor_max = (CS%IareaT(i,j) * &
+                   (((find_uhbt_int(uint_cor, BTCL_u(I,j), dt, Idt2) + dt*uhbt0(I,j)) - &
+                     (find_uhbt_int(-uint_cor, BTCL_u(I-1,j), dt, Idt2) + dt*uhbt0(I-1,j))) + &
+                    ((find_vhbt_int(vint_cor, BTCL_v(i,J), dt, Idt2) + dt*vhbt0(i,J)) - &
+                     (find_vhbt_int(-vint_cor, BTCL_v(i,J-1), dt, Idt2) + dt*vhbt0(i,J-1))) ))
+        else ! (use_BT_Cont) then
+          u_max_cor = G%dxT(i,j) * (CS%maxCFL_BT_cont*Idt)
+          v_max_cor = G%dyT(i,j) * (CS%maxCFL_BT_cont*Idt)
+          eta_cor_max = dt * (CS%IareaT(i,j) * &
                    (((find_uhbt(u_max_cor, BTCL_u(I,j)) + uhbt0(I,j)) - &
                      (find_uhbt(-u_max_cor, BTCL_u(I-1,j)) + uhbt0(I-1,j))) + &
                     ((find_vhbt(v_max_cor, BTCL_v(i,J)) + vhbt0(i,J)) - &
                      (find_vhbt(-v_max_cor, BTCL_v(i,J-1)) + vhbt0(i,J-1))) ))
+        endif
         CS%eta_cor(i,j) = min(CS%eta_cor(i,j), max(0.0, eta_cor_max))
       else
         ! Limit the sink (inward) correction to the amount of mass that is already inside the cell.
@@ -3406,6 +3432,32 @@ function find_duhbt_du(u, BTC, US) result(duhbt_du)
 
 end function find_duhbt_du
 
+!> The function find_duhbt_du_int determines the marginal zonal face area for a given
+!! time-integrated velocity.
+function find_duhbt_du_int(u_int, BTC, US, dt_bc, Idt2) result(duhbt_du)
+  real, intent(in) :: u_int !< The local zonal time-integrated velocity [L ~> m]
+  type(local_BT_cont_u_type), intent(in) :: BTC !< A structure containing various fields that
+                           !! allow the barotropic transports to be calculated consistently
+                           !! with the layers' continuity equations.
+  type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
+  real, intent(in)  :: dt_bc !< The baroclinic timestep used to set up BTC [T ~> s].
+  real, intent(in)  :: Idt2  !< The squared inverse of dt_bc [T-2 ~> s-2].
+
+  real :: duhbt_du !< The zonal barotropic face area [L H ~> m2]
+
+  if (u_int == 0.0) then
+    duhbt_du = 0.5*(BTC%FA_u_E0 + BTC%FA_u_W0)  ! Note the potential discontinuity here.
+  elseif (u_int < BTC%uBT_EE*dt_bc) then
+    duhbt_du = BTC%FA_u_EE
+  elseif (u_int < 0.0) then
+    duhbt_du = (BTC%FA_u_E0 + 3.0*(BTC%uh_crvE*Idt2) * u_int**2)
+  elseif (u_int <= BTC%uBT_WW*dt_bc) then
+    duhbt_du = (BTC%FA_u_W0 + 3.0*(BTC%uh_crvW*Idt2) * u_int**2)
+  else ! (u_int > BTC%uBT_WW*dt_bc)
+    duhbt_du = BTC%FA_u_WW
+  endif
+
+end function find_duhbt_du_int
 
 !> This function inverts the transport function to determine the barotopic
 !! velocity that is consistent with a given transport.
@@ -3570,6 +3622,32 @@ function find_dvhbt_dv(v, BTC, US) result(dvhbt_dv)
   endif
 
 end function find_dvhbt_dv
+
+!> The function find_dvhbt_dv_int determines the marginal meridional face area for a given
+!! time-integrated velocity.
+function find_dvhbt_dv_int(v_int, BTC, US, dt_bc, Idt2) result(dvhbt_dv)
+  real, intent(in) :: v_int !< The local time-integrated meridional velocity [L ~> m]
+  type(local_BT_cont_v_type), intent(in) :: BTC !< A structure containing various fields that
+                           !! allow the barotropic transports to be calculated consistently
+                           !! with the layers' continuity equations.
+  type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
+  real, intent(in)  :: dt_bc !< The baroclinic timestep used to set up BTC [T ~> s].
+  real, intent(in)  :: Idt2  !< The squared inverse of dt_bc [T-2 ~> s-2].
+  real :: dvhbt_dv !< The meridional barotropic face area [L H ~> m2]
+
+  if (v_int == 0.0) then
+    dvhbt_dv = 0.5*(BTC%FA_v_N0 + BTC%FA_v_S0)  ! Note the potential discontinuity here.
+  elseif (v_int < BTC%vBT_NN*dt_bc) then
+    dvhbt_dv = BTC%FA_v_NN
+  elseif (v_int < 0.0) then
+    dvhbt_dv = BTC%FA_v_N0 + 3.0*(BTC%vh_crvN*Idt2) * v_int**2
+  elseif (v_int <= BTC%vBT_SS*dt_bc) then
+    dvhbt_dv = BTC%FA_v_S0 + 3.0*(BTC%vh_crvS*Idt2) * v_int**2
+  else ! (v_int > BTC%vBT_SS*dt_bc)
+    dvhbt_dv = BTC%FA_v_SS
+  endif
+
+end function find_dvhbt_dv_int
 
 !> This function inverts the transport function to determine the barotopic
 !! velocity that is consistent with a given transport.
