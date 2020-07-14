@@ -635,8 +635,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                       ! velocity point [H ~> m or kg m-2]
   logical :: do_hifreq_output  ! If true, output occurs every barotropic step.
   logical :: use_BT_cont, do_ave, find_etaav, find_PF, find_Cor
-  logical :: integral_BT_cont ! If true, update the continuity directly from the initial
-                      ! condition using the time-integrated barotropic velocity.
+  logical :: integral_BT_cont ! If true, update the barotropic continuity equation directly
+                      ! from the initial condition using the time-integrated barotropic velocity.
   logical :: ice_is_rigid, nonblock_setup, interp_eta_PF
   logical :: project_velocity, add_uh0
 
@@ -2185,46 +2185,31 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     !GOMP end parallel
 
     if (apply_OBCs) then
-      if (CS%BT_OBC%apply_u_OBCs) then  ! copy back the value for u-points on the boundary.
-        !GOMP parallel do default(shared)
-        do j=js,je ; do I=is-1,ie
-          if (OBC%segnum_u(I,j) /= OBC_NONE) then
-            ubt_sum(I,j) = ubt_sum_prev(I,j) ; uhbt_sum(I,j) = uhbt_sum_prev(I,j)
-            ubt_wtd(I,j) = ubt_wtd_prev(I,j)
-          endif
-        enddo ; enddo
-      endif
-
-      if (CS%BT_OBC%apply_v_OBCs) then  ! copy back the value for v-points on the boundary.
-        !GOMP parallel do default(shared)
-        do J=js-1,je ; do I=is,ie
-          if (OBC%segnum_v(i,J) /= OBC_NONE) then
-            vbt_sum(i,J) = vbt_sum_prev(i,J) ; vhbt_sum(i,J) = vhbt_sum_prev(i,J)
-            vbt_wtd(i,J) = vbt_wtd_prev(i,J)
-          endif
-        enddo ; enddo
-      endif
 
       call apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, &
            ubt_trans, vbt_trans, eta, ubt_old, vbt_old, CS%BT_OBC, &
-           G, MS, US, iev-ie, dtbt, bebt, use_BT_cont, Datu, Datv, BTCL_u, BTCL_v, &
-           uhbt0, vhbt0)
+           G, MS, US, iev-ie, dtbt, bebt, use_BT_cont, integral_BT_cont, &
+           n*dtbt, dt, Datu, Datv, BTCL_u, BTCL_v, uhbt0, vhbt0, &
+           ubt_int_prev, vbt_int_prev, uhbt_int_prev, vhbt_int_prev)
+
       if (CS%BT_OBC%apply_u_OBCs) then ; do j=js,je ; do I=is-1,ie
         if (OBC%segnum_u(I,j) /= OBC_NONE) then
-          ubt_sum(I,j) = ubt_sum(I,j) + wt_trans(n) * ubt_trans(I,j)
+          ! Update the summed and integrated quantities from the saved previous values.
+          ubt_sum(I,j) = ubt_sum_prev(I,j) + wt_trans(n) * ubt_trans(I,j)
           ubt_int(I,j) = ubt_int_prev(I,j) + dtbt * ubt_trans(I,j)
-          uhbt_sum(I,j) = uhbt_sum(I,j) + wt_trans(n) * uhbt(I,j)
+          uhbt_sum(I,j) = uhbt_sum_prev(I,j) + wt_trans(n) * uhbt(I,j)
           uhbt_int(I,j) = uhbt_int_prev(I,j) + dtbt * uhbt(I,j)
-          ubt_wtd(I,j) = ubt_wtd(I,j) + wt_vel(n) * ubt(I,j)
+          ubt_wtd(I,j) = ubt_wtd_prev(I,j) + wt_vel(n) * ubt(I,j)
         endif
       enddo ; enddo ; endif
       if (CS%BT_OBC%apply_v_OBCs) then ; do J=js-1,je ; do i=is,ie
         if (OBC%segnum_v(i,J) /= OBC_NONE) then
-          vbt_sum(i,J) = vbt_sum(i,J) + wt_trans(n) * vbt_trans(i,J)
+          ! Update the summed and integrated quantities from the saved previous values.
+          vbt_sum(i,J) = vbt_sum_prev(i,J) + wt_trans(n) * vbt_trans(i,J)
           vbt_int(i,J) = vbt_int_prev(i,J) + dtbt * vbt_trans(i,J)
-          vhbt_sum(i,J) = vhbt_sum(i,J) + wt_trans(n) * vhbt(i,J)
+          vhbt_sum(i,J) = vhbt_sum_prev(i,J) + wt_trans(n) * vhbt(i,J)
           vhbt_int(i,J) = vhbt_int_prev(i,J) + dtbt * vhbt(i,J)
-          vbt_wtd(i,J) = vbt_wtd(i,J) + wt_vel(n) * vbt(i,J)
+          vbt_wtd(i,J) = vbt_wtd_prev(i,J) + wt_vel(n) * vbt(i,J)
         endif
       enddo ; enddo ; endif
     endif
@@ -2706,8 +2691,9 @@ end subroutine set_dtbt
 !! velocities and mass transports, as developed by Mehmet Ilicak.
 subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, &
                                eta, ubt_old, vbt_old, BT_OBC, &
-                               G, MS, US, halo, dtbt, bebt, use_BT_cont, Datu, Datv, &
-                               BTCL_u, BTCL_v, uhbt0, vhbt0)
+                               G, MS, US, halo, dtbt, bebt, use_BT_cont, integral_BT_cont, &
+                               dt_elapsed, dt_baroclinic, Datu, Datv, BTCL_u, BTCL_v, &
+                               uhbt0, vhbt0, ubt_int, vbt_int, uhbt_int_prev, vhbt_int_prev)
   type(ocean_OBC_type),                  pointer       :: OBC     !< An associated pointer to an OBC type.
   type(ocean_grid_type),                 intent(inout) :: G       !< The ocean's grid structure.
   type(memory_size_type),                intent(in)    :: MS      !< A type that describes the memory sizes of
@@ -2739,6 +2725,13 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
                                                                   !! in determining the transport.
   logical,                               intent(in)    :: use_BT_cont !< If true, use the BT_cont_types to calculate
                                                                   !! transports.
+  logical,                               intent(in)    :: integral_BT_cont ! If true, update the barotropic continuity
+                                                                  !! equation directly from the initial condition
+                                                                  !! using the time-integrated barotropic velocity.
+  real,                                  intent(in)    :: dt_elapsed !< The amount of time in the barotropic stepping
+                                                                  !! that will have elapsed [T ~> s].
+  real,                                  intent(in)    :: dt_baroclinic !< The baroclinic timestep for this cycle of
+                                                                  !! updates to the barotropic solver [T ~> s]
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: Datu    !< A fixed estimate of the face areas at u points
                                                                   !! [H L ~> m2 or kg m-1].
   real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: Datv    !< A fixed estimate of the face areas at v points
@@ -2757,6 +2750,14 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
                                                                   !! the barotropic functions agree with the sum
                                                                   !! of the layer transports
                                                                   !! [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in) :: ubt_int    !< The time-integrated zonal barotropic
+                                                                  !! velocity [L T-1 ~> m s-1].
+  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in) :: uhbt_int_prev !< The time-integrated zonal barotropic
+                                                                  !! transport [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in) :: vbt_int    !< The time-integrated meridional barotropic
+                                                                  !! velocity [L T-1 ~> m s-1].
+  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in) :: vhbt_int_prev !< The time-integrated meridional barotropic
+                                                                  !! transport [H L2 T-1 ~> m3 s-1 or kg s-1].
 
   ! Local variables
   real :: vel_prev    ! The previous velocity [L T-1 ~> m s-1].
@@ -2767,13 +2768,22 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
   real :: cfl         ! The CFL number at the point in question [nondim]
   real :: u_inlet     ! The zonal inflow velocity [L T-1 ~> m s-1]
   real :: v_inlet     ! The meridional inflow velocity [L T-1 ~> m s-1]
-  real :: h_in
+  real :: uhbt_int_new ! The updated time-integrated zonal transport [H L2 ~> m3]
+  real :: vhbt_int_new ! The updated time-integrated meridional transport [H L2 ~> m3]
+  real :: h_in        ! The inflow thickess [H ~> m or kg m-2].
   real :: cff, Cx, Cy, tau
   real :: dhdt, dhdx, dhdy
+  real :: Idt2        ! The inverse square of the baroclinic time interval [T-2 ~> s-2].
+  real :: Idtbt       ! The inverse of the barotropic time step [T-1 ~> s-1]
   integer :: i, j, is, ie, js, je
   real, dimension(SZIB_(G),SZJB_(G)) :: grad
   real, parameter :: eps = 1.0e-20
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
+
+  if (.not.(BT_OBC%apply_u_OBCs .or. BT_OBC%apply_v_OBCs)) return
+
+  Idtbt = 1.0 / dtbt
+  Idt2 = (1.0 / dt_baroclinic)**2
 
   if (BT_OBC%apply_u_OBCs) then
     do j=js,je ; do I=is-1,ie ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
@@ -2814,7 +2824,12 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
       endif
 
       if (.not. OBC%segment(OBC%segnum_u(I,j))%specified) then
-        if (use_BT_cont) then
+        !Need: ubt_int, uhbt_int_prev, dt, Idt2, n, Idtbt.
+        if (integral_BT_cont) then
+          uhbt_int_new = find_uhbt_int(ubt_int(I,j) + dtbt*vel_trans, BTCL_u(I,j), dt_baroclinic, Idt2) + &
+                          dt_elapsed*uhbt0(I,j)
+          uhbt(I,j) = (uhbt_int_new - uhbt_int_prev(I,j)) * Idtbt
+        elseif (use_BT_cont) then
           uhbt(I,j) = find_uhbt(vel_trans, BTCL_u(I,j)) + uhbt0(I,j)
         else
           uhbt(I,j) = Datu(I,j)*vel_trans + uhbt0(I,j)
@@ -2866,10 +2881,15 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
       endif
 
       if (.not. OBC%segment(OBC%segnum_v(i,J))%specified) then
-        if (use_BT_cont) then
-           vhbt(i,J) = find_vhbt(vel_trans, BTCL_v(i,J)) + vhbt0(i,J)
+        !Need: vbt_int, vhbt_int_prev.
+        if (integral_BT_cont) then
+          vhbt_int_new = find_vhbt_int(vbt_int(i,J) + dtbt*vel_trans, BTCL_v(i,J), dt_baroclinic, Idt2) + &
+                          dt_elapsed*vhbt0(i,J)
+          vhbt(i,J) = (vhbt_int_new - vhbt_int_prev(i,J)) * Idtbt
+        elseif (use_BT_cont) then
+          vhbt(i,J) = find_vhbt(vel_trans, BTCL_v(i,J)) + vhbt0(i,J)
         else
-           vhbt(i,J) = vel_trans*Datv(i,J) + vhbt0(i,J)
+          vhbt(i,J) = vel_trans*Datv(i,J) + vhbt0(i,J)
         endif
       endif
 
@@ -3873,8 +3893,10 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, US, MS, BT_Domain
 end subroutine set_local_BT_cont_types
 
 
-!> Adjust_local_BT_cont_types sets up reordered versions of the BT_cont type
-!! in the local_BT_cont types, which have wide halos properly filled in.
+!> Adjust_local_BT_cont_types expands the range of velocities with a cubic curve
+!! translating velocities into transports to match the inital values of velocities and
+!! summed transports when the velocities are larger than the first guesses of the cubic
+!! transition velocities used to set up the local_BT_cont types.
 subroutine adjust_local_BT_cont_types(ubt, uhbt, vbt, vhbt, BTCL_u, BTCL_v, &
                                       G, US, MS, halo)
   type(memory_size_type), intent(in)  :: MS   !< A type that describes the memory sizes of the argument arrays.
