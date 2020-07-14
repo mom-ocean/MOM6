@@ -19,6 +19,7 @@ use MOM_open_boundary,         only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIREC
 use MOM_open_boundary,         only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_NONE
 use MOM_unit_scaling,          only : unit_scale_type
 use MOM_verticalGrid,          only : verticalGrid_type
+use MOM_variables,             only : accel_diag_ptrs
 
 implicit none ; private
 
@@ -210,7 +211,7 @@ contains
 !!   v[is-2:ie+2,js-2:je+2]
 !!   h[is-1:ie+1,js-1:je+1]
 subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, &
-                                CS, OBC, BT, TD, hfrac_u, hfrac_v)
+                                CS, OBC, BT, TD, ADp)
   type(ocean_grid_type),         intent(in)  :: G      !< The ocean's grid structure.
   type(verticalGrid_type),       intent(in)  :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -237,8 +238,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                                                        !! barotropic velocities.
   type(thickness_diffuse_CS), optional, pointer :: TD  !< Pointer to a structure containing
                                                        !! thickness diffusivities.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), optional, intent(in) :: hfrac_u ! Fractional layer thickness at u points
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), optional, intent(in) :: hfrac_v ! Fractional layer thickness at v points
+  type(accel_diag_ptrs), optional, pointer :: ADp   !!< Acceleration diagnostic pointers
 
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: &
@@ -1318,29 +1318,29 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   endif
 
   ! Diagnostics for terms multiplied by fractional thicknesses
-  if (present(hfrac_u) .and. (CS%id_hf_diffu > 0)) then
+  if (present(ADp) .and. (CS%id_hf_diffu > 0)) then
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      CS%hf_diffu(I,j,k) = diffu(I,j,k) * hfrac_u(I,j,k)
+      CS%hf_diffu(I,j,k) = diffu(I,j,k) * ADp%diag_hfrac_u(I,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hf_diffu, CS%hf_diffu, CS%diag)
   endif
-  if (present(hfrac_v) .and. (CS%id_hf_diffv > 0)) then
+  if (present(ADp) .and. (CS%id_hf_diffv > 0)) then
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      CS%hf_diffv(i,J,k) = diffv(i,J,k) * hfrac_v(i,J,k)
+      CS%hf_diffv(i,J,k) = diffv(i,J,k) * ADp%diag_hfrac_v(i,J,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hf_diffv, CS%hf_diffv, CS%diag)
   endif
-  if (present(hfrac_u) .and. (CS%id_hf_diffu_2d > 0)) then
+  if (present(ADp) .and. (CS%id_hf_diffu_2d > 0)) then
     CS%hf_diffu_2d(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      CS%hf_diffu_2d(I,j) = CS%hf_diffu_2d(I,j) + diffu(I,j,k) * hfrac_u(I,j,k)
+      CS%hf_diffu_2d(I,j) = CS%hf_diffu_2d(I,j) + diffu(I,j,k) * ADp%diag_hfrac_u(I,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hf_diffu_2d, CS%hf_diffu_2d, CS%diag)
   endif
-  if (present(hfrac_v) .and. (CS%id_hf_diffv_2d > 0)) then
+  if (present(ADp) .and. (CS%id_hf_diffv_2d > 0)) then
     CS%hf_diffv_2d(:,:) = 0.0
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      CS%hf_diffv_2d(i,J) = CS%hf_diffv_2d(i,J) + diffv(i,J,k) * hfrac_v(i,J,k)
+      CS%hf_diffv_2d(i,J) = CS%hf_diffv_2d(i,J) + diffv(i,J,k) * ADp%diag_hfrac_v(i,J,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hf_diffv_2d, CS%hf_diffv_2d, CS%diag)
   endif
@@ -1350,7 +1350,7 @@ end subroutine horizontal_viscosity
 !> Allocates space for and calculates static variables used by horizontal_viscosity().
 !! hor_visc_init calculates and stores the values of a number of metric functions that
 !! are used in horizontal_viscosity().
-subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
+subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE, ADp)
   type(time_type),         intent(in)    :: Time !< Current model time.
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
@@ -1359,6 +1359,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
   type(diag_ctrl), target, intent(inout) :: diag !< Structure to regulate diagnostic output.
   type(hor_visc_CS), pointer             :: CS   !< Pointer to the control structure for this module
   type(MEKE_type), pointer               :: MEKE !< MEKE data
+  type(accel_diag_ptrs), optional, pointer :: ADp !< Acceleration diagnostic pointers
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: u0u, u0v
   real, dimension(SZI_(G),SZJB_(G)) :: v0u, v0v
@@ -2057,22 +2058,34 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
   CS%id_hf_diffu = register_diag_field('ocean_model', 'hf_diffu', diag%axesCuL, Time, &
       'Fractional Thickness-weighted Zonal Acceleration from Horizontal Viscosity', 'm s-2', &
       v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_diffu > 0) call safe_alloc_ptr(CS%hf_diffu,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
+  if ((CS%id_hf_diffu > 0) .and. (present(ADp))) then
+    call safe_alloc_ptr(CS%hf_diffu,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
+    call safe_alloc_ptr(ADp%diag_hfrac_u,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
+  endif
 
   CS%id_hf_diffv = register_diag_field('ocean_model', 'hf_diffv', diag%axesCvL, Time, &
       'Fractional Thickness-weighted Meridional Acceleration from Horizontal Viscosity', 'm s-2', &
       v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_diffv > 0) call safe_alloc_ptr(CS%hf_diffv,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
+  if ((CS%id_hf_diffv > 0) .and. (present(ADp))) then
+    call safe_alloc_ptr(CS%hf_diffv,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
+    call safe_alloc_ptr(ADp%diag_hfrac_v,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
+  endif
 
   CS%id_hf_diffu_2d = register_diag_field('ocean_model', 'hf_diffu_2d', diag%axesCu1, Time, &
       'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Horizontal Viscosity', 'm s-2', &
       conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_diffu_2d > 0) call safe_alloc_ptr(CS%hf_diffu_2d,G%IsdB,G%IedB,G%jsd,G%jed)
+  if ((CS%id_hf_diffu_2d > 0) .and. (present(ADp))) then
+    call safe_alloc_ptr(CS%hf_diffu_2d,G%IsdB,G%IedB,G%jsd,G%jed)
+    call safe_alloc_ptr(ADp%diag_hfrac_u,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
+  endif
 
   CS%id_hf_diffv_2d = register_diag_field('ocean_model', 'hf_diffv_2d', diag%axesCv1, Time, &
       'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Horizontal Viscosity', 'm s-2', &
       conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_diffv_2d > 0) call safe_alloc_ptr(CS%hf_diffv_2d,G%isd,G%ied,G%JsdB,G%JedB)
+  if ((CS%id_hf_diffv_2d > 0) .and. (present(ADp))) then
+    call safe_alloc_ptr(CS%hf_diffv_2d,G%isd,G%ied,G%JsdB,G%JedB)
+    call safe_alloc_ptr(ADp%diag_hfrac_v,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
+  endif
 
   if (CS%biharmonic) then
     CS%id_Ah_h = register_diag_field('ocean_model', 'Ahh', diag%axesTL, Time,    &
