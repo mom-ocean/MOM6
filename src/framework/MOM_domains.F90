@@ -30,6 +30,7 @@ use mpp_parameter_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EX
 use mpp_parameter_mod, only : To_East => WUPDATE, To_West => EUPDATE, Omit_Corners => EDGEUPDATE
 use mpp_parameter_mod, only : To_North => SUPDATE, To_South => NUPDATE, CENTER
 use fms_io_mod,        only : file_exist, parse_mask_table
+use fms_affinity_mod,  only : fms_affinity_init, fms_affinity_set,fms_affinity_get
 
 implicit none ; private
 
@@ -1192,7 +1193,6 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   integer, dimension(4) :: global_indices
 !$ integer :: ocean_nthreads       ! Number of Openmp threads
 !$ integer :: get_cpu_affinity, omp_get_thread_num, omp_get_num_threads
-!$ integer :: omp_cores_per_node, adder, base_cpu
 !$ logical :: ocean_omp_hyper_thread
   integer :: nihalo_dflt, njhalo_dflt
   integer :: pe, proc_used
@@ -1274,6 +1274,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  default=.false.)
 
 #ifndef NOT_SET_AFFINITY
+!$  call fms_affinity_init
 !$OMP PARALLEL
 !$OMP master
 !$ ocean_nthreads = omp_get_num_threads()
@@ -1285,27 +1286,10 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 !$              default = 1, layoutParam=.true.)
 !$   call get_param(param_file, mdl, "OCEAN_OMP_HYPER_THREAD", ocean_omp_hyper_thread, &
 !$              "If True, use hyper-threading.", default = .false., layoutParam=.true.)
-!$   if (ocean_omp_hyper_thread) then
-!$     call get_param(param_file, mdl, "OMP_CORES_PER_NODE", omp_cores_per_node, &
-!$              "Number of cores per node needed for hyper-threading.", &
-!$              fail_if_missing=.true., layoutParam=.true.)
-!$   endif
+!$   call fms_affinity_set('OCEAN', ocean_omp_hyper_thread, ocean_nthreads)
 !$   call omp_set_num_threads(ocean_nthreads)
-!$   base_cpu = get_cpu_affinity()
-!$OMP PARALLEL private(adder)
-!$   if (ocean_omp_hyper_thread) then
-!$     if (mod(omp_get_thread_num(),2) == 0) then
-!$       adder = omp_get_thread_num()/2
-!$     else
-!$       adder = omp_cores_per_node + omp_get_thread_num()/2
-!$     endif
-!$   else
-!$     adder = omp_get_thread_num()
-!$   endif
-!$   call set_cpu_affinity(base_cpu + adder)
-!!$     write(6,*) " ocean  ", base_cpu, get_cpu_affinity(), adder, omp_get_thread_num(), omp_get_num_threads()
-!!$     call flush(6)
-!$OMP END PARALLEL
+!$   write(6,*) "MOM_domains_mod OMPthreading ", fms_affinity_get(), omp_get_thread_num(), omp_get_num_threads()
+!$   call flush(6)
 !$ endif
 #endif
   call log_param(param_file, mdl, "!SYMMETRIC_MEMORY_", MOM_dom%symmetric, &

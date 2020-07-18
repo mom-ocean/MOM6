@@ -66,6 +66,7 @@ program MOM_main
   use ensemble_manager_mod, only : ensemble_pelist_setup
   use mpp_mod, only : set_current_pelist => mpp_set_current_pelist
   use time_interp_external_mod, only : time_interp_external_init
+  use fms_affinity_mod,     only : fms_affinity_init, fms_affinity_set,fms_affinity_get
 
   use MOM_ice_shelf, only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
   use MOM_ice_shelf, only : shelf_calc_flux, add_shelf_forces, ice_shelf_save_restart
@@ -207,11 +208,10 @@ program MOM_main
   character(len=40)  :: mod_name = "MOM_main (MOM_driver)" ! This module's name.
 
   integer :: ocean_nthreads = 1
-  integer :: ncores_per_node = 36
   logical :: use_hyper_thread = .false.
-  integer :: omp_get_num_threads,omp_get_thread_num,get_cpu_affinity,adder,base_cpu
+  integer :: omp_get_num_threads,omp_get_thread_num
   namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds,&
-                            ocean_nthreads, ncores_per_node, use_hyper_thread
+                            ocean_nthreads, use_hyper_thread
 
   !=====================================================================
 
@@ -252,20 +252,11 @@ program MOM_main
     endif
   endif
 
+!$  call fms_affinity_init
+!$  call fms_affinity_set('OCEAN', use_hyper_thread, ocean_nthreads)
 !$  call omp_set_num_threads(ocean_nthreads)
-!$  base_cpu = get_cpu_affinity()
-!$OMP PARALLEL private(adder)
-!$  if (use_hyper_thread) then
-!$     if (mod(omp_get_thread_num(),2) == 0) then
-!$        adder = omp_get_thread_num()/2
-!$     else
-!$        adder = ncores_per_node + omp_get_thread_num()/2
-!$     endif
-!$  else
-!$     adder = omp_get_thread_num()
-!$  endif
-!$  call set_cpu_affinity (base_cpu + adder)
-!$  write(6,*) " ocean ", base_cpu, get_cpu_affinity(), adder, omp_get_thread_num(), omp_get_num_threads()
+!$OMP PARALLEL
+!$  write(6,*) "ocean_solo OMPthreading ", fms_affinity_get(), omp_get_thread_num(), omp_get_num_threads()
 !$  call flush(6)
 !$OMP END PARALLEL
 

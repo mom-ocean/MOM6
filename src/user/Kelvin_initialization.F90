@@ -242,20 +242,21 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
         x = (x1 - CS%coast_offset1) * cosa + y1 * sina
         y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
         if (CS%mode == 0) then
-          cff = sqrt(GV%g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
+          ! Use inside bathymetry
+          cff = sqrt(GV%g_Earth * G%bathyT(i+1,j) )
           val2 = fac * exp(- US%T_to_s*CS%F_0 * US%m_to_L*y / cff)
           segment%eta(I,j) = val2 * cos(omega * time_sec)
           segment%normal_vel_bt(I,j) = (val2 * (val1 * cff * cosa / &
-                 (0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))) )
+                 (G%bathyT(i+1,j) )) )
           if (segment%nudged) then
             do k=1,nz
               segment%nudged_normal_vel(I,j,k) = (val2 * (val1 * cff * cosa / &
-                     (0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))) )
+                     (G%bathyT(i+1,j))) )
             enddo
           elseif (segment%specified) then
             do k=1,nz
               segment%normal_vel(I,j,k) = (val2 * (val1 * cff * cosa / &
-                     (0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))) )
+                     (G%bathyT(i+1,j) )) )
               segment%normal_trans(I,j,k) = segment%normal_vel(I,j,k) * h(i+1,j,k) * G%dyCu(I,j)
             enddo
           endif
@@ -285,16 +286,16 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           y1 = 1000. * G%geoLatBu(I,J)
           x = (x1 - CS%coast_offset1) * cosa + y1 * sina
           y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
-          cff =sqrt(GV%g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
+          cff =sqrt(GV%g_Earth * G%bathyT(i+1,j) )
           val2 = fac * exp(- US%T_to_s*CS%F_0 * US%m_to_L*y / cff)
           if (CS%mode == 0) then ; do k=1,nz
             segment%tangential_vel(I,J,k) = (val1 * val2 * cff * sina) / &
-               ( 0.25*((G%bathyT(i,j) + G%bathyT(i+1,j+1)) +  (G%bathyT(i+1,j) + G%bathyT(i,j+1))) )
+               ( 0.5*(G%bathyT(i+1,j+1) +  G%bathyT(i+1,j) ) )
 
           enddo ; endif
         enddo ; enddo
       endif
-    else
+    else ! Must be south
       isd = segment%HI%isd ; ied = segment%HI%ied
       JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
       do J=JsdB,JedB ; do i=isd,ied
@@ -303,20 +304,20 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
         x = (x1 - CS%coast_offset1) * cosa + y1 * sina
         y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
         if (CS%mode == 0) then
-          cff = sqrt(GV%g_Earth * 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j)))
+          cff = sqrt(GV%g_Earth * G%bathyT(i,j+1) )
           val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * US%m_to_L*y / cff)
           segment%eta(I,j) = val2 * cos(omega * time_sec)
           segment%normal_vel_bt(I,j) = US%L_T_to_m_s * (val1 * cff * sina / &
-                 (0.5*(G%bathyT(i+1,j) + G%bathyT(i,j)))) * val2
+                 (G%bathyT(i,j+1) )) * val2
           if (segment%nudged) then
             do k=1,nz
               segment%nudged_normal_vel(I,j,k) = US%L_T_to_m_s * (val1 * cff * sina / &
-                     (0.5*(G%bathyT(i+1,j) + G%bathyT(i,j)))) * val2
+                     (G%bathyT(i,j+1) )) * val2
             enddo
           elseif (segment%specified) then
             do k=1,nz
               segment%normal_vel(I,j,k) = US%L_T_to_m_s * (val1 * cff * sina / &
-                     (0.5*(G%bathyT(i+1,j) + G%bathyT(i,j)))) * val2
+                     (G%bathyT(i,j+1) )) * val2
               segment%normal_trans(i,J,k) = segment%normal_vel(i,J,k) * h(i,j+1,k) * G%dxCv(i,J)
             enddo
           endif
@@ -344,11 +345,11 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           y1 = 1000. * G%geoLatBu(I,J)
           x = (x1 - CS%coast_offset1) * cosa + y1 * sina
           y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
-          cff = sqrt(GV%g_Earth * 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j)))
+          cff = sqrt(GV%g_Earth * G%bathyT(i,j+1) )
           val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * US%m_to_L*y / cff)
           if (CS%mode == 0) then ; do k=1,nz
             segment%tangential_vel(I,J,k) = ((val1 * val2 * cff * sina) / &
-                ( 0.25*((G%bathyT(i,j) + G%bathyT(i+1,j+1)) + (G%bathyT(i+1,j) +  G%bathyT(i,j+1))) ))
+                ( 0.5*((G%bathyT(i+1,j+1)) + G%bathyT(i,j+1))) )
           enddo ; endif
         enddo ; enddo
       endif
