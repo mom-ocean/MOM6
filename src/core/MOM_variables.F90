@@ -149,7 +149,7 @@ type, public :: ocean_internal_state
     pbce => NULL(), &  !< Pointer to the baroclinic pressure force dependency on free surface movement
                        !! [L2 T-2 H-1 ~> m s-2 or m4 kg-1 s-2]
     u_accel_bt => NULL(), & !< Pointer to the zonal barotropic-solver acceleration [L T-2 ~> m s-2]
-    v_accel_bt => NULL()    !< Pointer to the meridional barotropic-solver acceleration [L T-2 ~> m s-2]
+    v_accel_bt => NULL()  !< Pointer to the meridional barotropic-solver acceleration [L T-2 ~> m s-2]
   real, pointer, dimension(:,:,:) :: &
     u_av => NULL(), &  !< Pointer to zonal velocity averaged over the timestep [L T-1 ~> m s-1]
     v_av => NULL(), &  !< Pointer to meridional velocity averaged over the timestep [L T-1 ~> m s-1]

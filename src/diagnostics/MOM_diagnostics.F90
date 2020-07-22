@@ -70,8 +70,10 @@ type, public :: diagnostics_CS ; private
     du_dt => NULL(), & !< net i-acceleration [L T-2 ~> m s-2]
     dv_dt => NULL(), & !< net j-acceleration [L T-2 ~> m s-2]
     dh_dt => NULL(), & !< thickness rate of change [H T-1 ~> m s-1 or kg m-2 s-1]
-    p_ebt => NULL(), & !< Equivalent barotropic modal structure [nondim]
-    hf_du_dt => NULL(), hf_dv_dt => NULL() ! du_dt, dv_dt x fract. thickness [L T-2 ~> m s-2].
+    p_ebt => NULL()    !< Equivalent barotropic modal structure [nondim]
+    ! hf_du_dt => NULL(), hf_dv_dt => NULL() ! du_dt, dv_dt x fract. thickness [L T-2 ~> m s-2].
+    ! 3D diagnostics hf_du(dv)_dt are commented because there is no clarity on proper remapping grid option.
+    ! The code is retained for degugging purposes in the future.
 
   real, pointer, dimension(:,:,:) :: h_Rlay => NULL() !< Layer thicknesses in potential density
                                               !! coordinates [H ~> m or kg m-2]
@@ -112,7 +114,7 @@ type, public :: diagnostics_CS ; private
   integer :: id_u = -1,   id_v = -1, id_h = -1
   integer :: id_e              = -1, id_e_D            = -1
   integer :: id_du_dt          = -1, id_dv_dt          = -1
-  integer :: id_hf_du_dt       = -1, id_hf_dv_dt       = -1
+  ! integer :: id_hf_du_dt       = -1, id_hf_dv_dt       = -1
   integer :: id_hf_du_dt_2d    = -1, id_hf_dv_dt_2d    = -1
   integer :: id_col_ht         = -1, id_dh_dt          = -1
   integer :: id_KE             = -1, id_dKEdt          = -1
@@ -276,20 +278,23 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
 
     if (CS%id_dh_dt>0) call post_data(CS%id_dh_dt, CS%dh_dt, CS%diag, alt_h = diag_pre_sync%h_state)
 
-    ! Diagnostics for terms multiplied by fractional thicknesses
-    if (CS%id_hf_du_dt > 0) then
-      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-        CS%hf_du_dt(I,j,k) = CS%du_dt(I,j,k) * ADp%diag_hfrac_u(I,j,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_hf_du_dt, CS%hf_du_dt, CS%diag, alt_h = diag_pre_sync%h_state)
-    endif
+    !! Diagnostics for terms multiplied by fractional thicknesses
 
-    if (CS%id_hf_dv_dt > 0) then
-      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        CS%hf_dv_dt(i,J,k) = CS%dv_dt(i,J,k) * ADp%diag_hfrac_v(i,J,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_hf_dv_dt, CS%hf_dv_dt, CS%diag, alt_h = diag_pre_sync%h_state)
-    endif
+    ! 3D diagnostics hf_du(dv)_dt are commented because there is no clarity on proper remapping grid option.
+    ! The code is retained for degugging purposes in the future.
+    !if (CS%id_hf_du_dt > 0) then
+    !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+    !    CS%hf_du_dt(I,j,k) = CS%du_dt(I,j,k) * ADp%diag_hfrac_u(I,j,k)
+    !  enddo ; enddo ; enddo
+    !  call post_data(CS%id_hf_du_dt, CS%hf_du_dt, CS%diag, alt_h = diag_pre_sync%h_state)
+    !endif
+
+    !if (CS%id_hf_dv_dt > 0) then
+    !  do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+    !    CS%hf_dv_dt(i,J,k) = CS%dv_dt(i,J,k) * ADp%diag_hfrac_v(i,J,k)
+    !  enddo ; enddo ; enddo
+    !  call post_data(CS%id_hf_dv_dt, CS%hf_dv_dt, CS%diag, alt_h = diag_pre_sync%h_state)
+    !endif
 
     if (CS%id_hf_du_dt_2d > 0) then
       CS%hf_du_dt_2d(:,:) = 0.0
@@ -1679,29 +1684,29 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
     call register_time_deriv(lbound(MIS%h), MIS%h, CS%dh_dt, CS)
   endif
 
-  CS%id_hf_du_dt = register_diag_field('ocean_model', 'hf_dudt', diag%axesCuL, Time, &
-      'Fractional Thickness-weighted Zonal Acceleration', 'm s-2', v_extensive=.true., &
-      conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_du_dt > 0) then
-    call safe_alloc_ptr(CS%hf_du_dt,IsdB,IedB,jsd,jed,nz)
-    if (.not.associated(CS%du_dt)) then
-      call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
-      call register_time_deriv(lbound(MIS%u), MIS%u, CS%du_dt, CS)
-    endif
-    call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
-  endif
+  !CS%id_hf_du_dt = register_diag_field('ocean_model', 'hf_dudt', diag%axesCuL, Time, &
+  !    'Fractional Thickness-weighted Zonal Acceleration', 'm s-2', v_extensive=.true., &
+  !    conversion=US%L_T2_to_m_s2)
+  !if (CS%id_hf_du_dt > 0) then
+  !  call safe_alloc_ptr(CS%hf_du_dt,IsdB,IedB,jsd,jed,nz)
+  !  if (.not.associated(CS%du_dt)) then
+  !    call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
+  !    call register_time_deriv(lbound(MIS%u), MIS%u, CS%du_dt, CS)
+  !  endif
+  !  call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+  !endif
 
-  CS%id_hf_dv_dt = register_diag_field('ocean_model', 'hf_dvdt', diag%axesCvL, Time, &
-      'Fractional Thickness-weighted Meridional Acceleration', 'm s-2', v_extensive=.true., &
-      conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_dv_dt > 0) then
-    call safe_alloc_ptr(CS%hf_dv_dt,isd,ied,JsdB,JedB,nz)
-    if (.not.associated(CS%dv_dt)) then
-      call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
-      call register_time_deriv(lbound(MIS%v), MIS%v, CS%dv_dt, CS)
-    endif
-    call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
-  endif
+  !CS%id_hf_dv_dt = register_diag_field('ocean_model', 'hf_dvdt', diag%axesCvL, Time, &
+  !    'Fractional Thickness-weighted Meridional Acceleration', 'm s-2', v_extensive=.true., &
+  !    conversion=US%L_T2_to_m_s2)
+  !if (CS%id_hf_dv_dt > 0) then
+  !  call safe_alloc_ptr(CS%hf_dv_dt,isd,ied,JsdB,JedB,nz)
+  !  if (.not.associated(CS%dv_dt)) then
+  !    call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
+  !    call register_time_deriv(lbound(MIS%v), MIS%v, CS%dv_dt, CS)
+  !  endif
+  !  call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+  !endif
 
   CS%id_hf_du_dt_2d = register_diag_field('ocean_model', 'hf_dudt_2d', diag%axesCu1, Time, &
       'Depth-sum Fractional Thickness-weighted Zonal Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)

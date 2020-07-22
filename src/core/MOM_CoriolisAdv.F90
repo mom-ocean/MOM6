@@ -74,9 +74,9 @@ type, public :: CoriolisAdv_CS ; private
   !>@{ Diagnostic IDs
   integer :: id_rv = -1, id_PV = -1, id_gKEu = -1, id_gKEv = -1
   integer :: id_rvxu = -1, id_rvxv = -1
-  integer :: id_hf_gKEu    = -1, id_hf_gKEv    = -1
+  ! integer :: id_hf_gKEu    = -1, id_hf_gKEv    = -1
   integer :: id_hf_gKEu_2d = -1, id_hf_gKEv_2d = -1
-  integer :: id_hf_rvxu    = -1, id_hf_rvxv    = -1
+  ! integer :: id_hf_rvxu    = -1, id_hf_rvxv    = -1
   integer :: id_hf_rvxu_2d = -1, id_hf_rvxv_2d = -1
   !>@}
 end type CoriolisAdv_CS
@@ -219,9 +219,11 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
   real, pointer, dimension(:,:) :: &
     hf_gKEu_2d => NULL(), hf_gKEv_2d => NULL(), & ! Depth sum of hf_gKEu, hf_gKEv [L T-2 ~> m s-2].
     hf_rvxu_2d => NULL(), hf_rvxv_2d => NULL()    ! Depth sum of hf_rvxu, hf_rvxv [L T-2 ~> m s-2].
-  real, pointer, dimension(:,:,:) :: &
-    hf_gKEu => NULL(), hf_gKEv => NULL(), & ! accel. due to KE gradient x fract. thickness  [L T-2 ~> m s-2].
-    hf_rvxu => NULL(), hf_rvxv => NULL()    ! accel. due to RV x fract. thickness [L T-2 ~> m s-2].
+  !real, pointer, dimension(:,:,:) :: &
+  !  hf_gKEu => NULL(), hf_gKEv => NULL(), & ! accel. due to KE gradient x fract. thickness  [L T-2 ~> m s-2].
+  !  hf_rvxu => NULL(), hf_rvxv => NULL()    ! accel. due to RV x fract. thickness [L T-2 ~> m s-2].
+  ! 3D diagnostics hf_gKEu etc. are commented because there is no clarity on proper remapping grid option.
+  ! The code is retained for degugging purposes in the future.
 
 ! To work, the following fields must be set outside of the usual
 ! is to ie range before this subroutine is called:
@@ -842,21 +844,24 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
     if (CS%id_rvxv > 0) call post_data(CS%id_rvxv, AD%rv_x_v, CS%diag)
 
     ! Diagnostics for terms multiplied by fractional thicknesses
-    if (CS%id_hf_gKEu > 0) then
-      call safe_alloc_ptr(hf_gKEu,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
-      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-        hf_gKEu(I,j,k) = AD%gradKEu(I,j,k) * AD%diag_hfrac_u(I,j,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_hf_gKEu, hf_gKEu, CS%diag)
-    endif
 
-    if (CS%id_hf_gKEv > 0) then
-      call safe_alloc_ptr(hf_gKEv,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
-      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        hf_gKEv(i,J,k) = AD%gradKEv(i,J,k) * AD%diag_hfrac_v(i,J,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_hf_gKEv, hf_gKEv, CS%diag)
-    endif
+    ! 3D diagnostics hf_gKEu etc. are commented because there is no clarity on proper remapping grid option.
+    ! The code is retained for degugging purposes in the future.
+    !if (CS%id_hf_gKEu > 0) then
+    !  call safe_alloc_ptr(hf_gKEu,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
+    !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+    !    hf_gKEu(I,j,k) = AD%gradKEu(I,j,k) * AD%diag_hfrac_u(I,j,k)
+    !  enddo ; enddo ; enddo
+    !  call post_data(CS%id_hf_gKEu, hf_gKEu, CS%diag)
+    !endif
+
+    !if (CS%id_hf_gKEv > 0) then
+    !  call safe_alloc_ptr(hf_gKEv,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
+    !  do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+    !    hf_gKEv(i,J,k) = AD%gradKEv(i,J,k) * AD%diag_hfrac_v(i,J,k)
+    !  enddo ; enddo ; enddo
+    !  call post_data(CS%id_hf_gKEv, hf_gKEv, CS%diag)
+    !endif
 
     if (CS%id_hf_gKEu_2d > 0) then
       call safe_alloc_ptr(hf_gKEu_2d,G%IsdB,G%IedB,G%jsd,G%jed)
@@ -876,21 +881,21 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
       call post_data(CS%id_hf_gKEv_2d, hf_gKEv_2d, CS%diag)
     endif
 
-    if (CS%id_hf_rvxv > 0) then
-      call safe_alloc_ptr(hf_rvxv,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
-      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-        hf_rvxv(I,j,k) = AD%rv_x_v(I,j,k) * AD%diag_hfrac_u(I,j,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_hf_rvxv, hf_rvxv, CS%diag)
-    endif
+    !if (CS%id_hf_rvxv > 0) then
+    !  call safe_alloc_ptr(hf_rvxv,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
+    !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+    !    hf_rvxv(I,j,k) = AD%rv_x_v(I,j,k) * AD%diag_hfrac_u(I,j,k)
+    !  enddo ; enddo ; enddo
+    !  call post_data(CS%id_hf_rvxv, hf_rvxv, CS%diag)
+    !endif
 
-    if (CS%id_hf_rvxu > 0) then
-      call safe_alloc_ptr(hf_rvxu,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
-      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        hf_rvxu(i,J,k) = AD%rv_x_u(i,J,k) * AD%diag_hfrac_v(i,J,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_hf_rvxu, hf_rvxu, CS%diag)
-    endif
+    !if (CS%id_hf_rvxu > 0) then
+    !  call safe_alloc_ptr(hf_rvxu,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
+    !  do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+    !    hf_rvxu(i,J,k) = AD%rv_x_u(i,J,k) * AD%diag_hfrac_v(i,J,k)
+    !  enddo ; enddo ; enddo
+    !  call post_data(CS%id_hf_rvxu, hf_rvxu, CS%diag)
+    !endif
 
     if (CS%id_hf_rvxv_2d > 0) then
       call safe_alloc_ptr(hf_rvxv_2d,G%IsdB,G%IedB,G%jsd,G%jed)
@@ -1168,21 +1173,21 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
      'Zonal Acceleration from Relative Vorticity', 'm-1 s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_rvxv > 0) call safe_alloc_ptr(AD%rv_x_v,IsdB,IedB,jsd,jed,nz)
 
-  CS%id_hf_gKEu = register_diag_field('ocean_model', 'hf_gKEu', diag%axesCuL, Time, &
-     'Fractional Thickness-weighted Zonal Acceleration from Grad. Kinetic Energy', &
-     'm-1 s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_gKEu > 0) then
-    call safe_alloc_ptr(AD%gradKEu,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(AD%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
-  endif
+  !CS%id_hf_gKEu = register_diag_field('ocean_model', 'hf_gKEu', diag%axesCuL, Time, &
+  !   'Fractional Thickness-weighted Zonal Acceleration from Grad. Kinetic Energy', &
+  !   'm-1 s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !if (CS%id_hf_gKEu > 0) then
+  !  call safe_alloc_ptr(AD%gradKEu,IsdB,IedB,jsd,jed,nz)
+  !  call safe_alloc_ptr(AD%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+  !endif
 
-  CS%id_hf_gKEv = register_diag_field('ocean_model', 'hf_gKEv', diag%axesCvL, Time, &
-     'Fractional Thickness-weighted Meridional Acceleration from Grad. Kinetic Energy', &
-     'm-1 s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_gKEv > 0) then
-    call safe_alloc_ptr(AD%gradKEv,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
-  endif
+  !CS%id_hf_gKEv = register_diag_field('ocean_model', 'hf_gKEv', diag%axesCvL, Time, &
+  !   'Fractional Thickness-weighted Meridional Acceleration from Grad. Kinetic Energy', &
+  !   'm-1 s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !if (CS%id_hf_gKEv > 0) then
+  !  call safe_alloc_ptr(AD%gradKEv,isd,ied,JsdB,JedB,nz)
+  !  call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+  !endif
 
   CS%id_hf_gKEu_2d = register_diag_field('ocean_model', 'hf_gKEu_2d', diag%axesCuL, Time, &
      'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Grad. Kinetic Energy', &
@@ -1195,26 +1200,26 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
   CS%id_hf_gKEv_2d = register_diag_field('ocean_model', 'hf_gKEv_2d', diag%axesCvL, Time, &
      'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Grad. Kinetic Energy', &
      'm-1 s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_gKEv > 0) then
+  if (CS%id_hf_gKEv_2d > 0) then
     call safe_alloc_ptr(AD%gradKEv,isd,ied,JsdB,JedB,nz)
     call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
   endif
 
-  CS%id_hf_rvxu = register_diag_field('ocean_model', 'hf_rvxu', diag%axesCvL, Time, &
-     'Fractional Thickness-weighted Meridional Acceleration from Relative Vorticity', &
-     'm-1 s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_rvxu > 0) then
-    call safe_alloc_ptr(AD%rv_x_u,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
-  endif
+  !CS%id_hf_rvxu = register_diag_field('ocean_model', 'hf_rvxu', diag%axesCvL, Time, &
+  !   'Fractional Thickness-weighted Meridional Acceleration from Relative Vorticity', &
+  !   'm-1 s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !if (CS%id_hf_rvxu > 0) then
+  !  call safe_alloc_ptr(AD%rv_x_u,isd,ied,JsdB,JedB,nz)
+  !  call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+  !endif
 
-  CS%id_hf_rvxv = register_diag_field('ocean_model', 'hf_rvxv', diag%axesCuL, Time, &
-     'Fractional Thickness-weighted Zonal Acceleration from Relative Vorticity', &
-     'm-1 s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_rvxv > 0) then
-    call safe_alloc_ptr(AD%rv_x_v,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(AD%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
-  endif
+  !CS%id_hf_rvxv = register_diag_field('ocean_model', 'hf_rvxv', diag%axesCuL, Time, &
+  !   'Fractional Thickness-weighted Zonal Acceleration from Relative Vorticity', &
+  !   'm-1 s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !if (CS%id_hf_rvxv > 0) then
+  !  call safe_alloc_ptr(AD%rv_x_v,IsdB,IedB,jsd,jed,nz)
+  !  call safe_alloc_ptr(AD%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+  !endif
 
   CS%id_hf_rvxu_2d = register_diag_field('ocean_model', 'hf_rvxu_2d', diag%axesCvL, Time, &
      'Fractional Thickness-weighted Meridional Acceleration from Relative Vorticity', &

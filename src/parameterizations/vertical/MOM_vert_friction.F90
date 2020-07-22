@@ -124,7 +124,7 @@ type, public :: vertvisc_CS ; private
   integer :: id_h_u = -1, id_h_v = -1, id_hML_u = -1 , id_hML_v = -1
   integer :: id_Ray_u = -1, id_Ray_v = -1, id_taux_bot = -1, id_tauy_bot = -1
   integer :: id_Kv_slow = -1, id_Kv_u = -1, id_Kv_v = -1
-  integer :: id_hf_du_dt_visc    = -1, id_hf_dv_dt_visc    = -1
+  ! integer :: id_hf_du_dt_visc    = -1, id_hf_dv_dt_visc    = -1
   integer :: id_hf_du_dt_visc_2d = -1, id_hf_dv_dt_visc_2d = -1
   !>@}
 
@@ -133,8 +133,10 @@ type, public :: vertvisc_CS ; private
 
   real, pointer :: hf_du_dt_visc_2d(:,:) => NULL()
   real, pointer :: hf_dv_dt_visc_2d(:,:) => NULL()
-  real, pointer :: hf_du_dt_visc(:,:,:)  => NULL() ! Zonal friction accel. x fract. thickness [L T-2 ~> m s-2].
-  real, pointer :: hf_dv_dt_visc(:,:,:)  => NULL() ! Merdional friction accel. x fract. thickness [L T-2 ~> m s-2].
+  ! real, pointer :: hf_du_dt_visc(:,:,:)  => NULL() ! Zonal friction accel. x fract. thickness [L T-2 ~> m s-2].
+  ! real, pointer :: hf_dv_dt_visc(:,:,:)  => NULL() ! Merdional friction accel. x fract. thickness [L T-2 ~> m s-2].
+  ! 3D diagnostics hf_du(dv)_dt_visc are commented because there is no clarity on proper remapping grid option.
+  ! The code is retained for degugging purposes in the future.
 
 end type vertvisc_CS
 
@@ -462,18 +464,21 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     call post_data(CS%id_tauy_bot, tauy_bot, CS%diag)
 
   ! Diagnostics for terms multiplied by fractional thicknesses
-  if (CS%id_hf_du_dt_visc > 0) then
-    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      CS%hf_du_dt_visc(I,j,k) = ADp%du_dt_visc(I,j,k) * ADp%diag_hfrac_u(I,j,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_hf_du_dt_visc, CS%hf_du_dt_visc, CS%diag)
-  endif
-  if (CS%id_hf_dv_dt_visc > 0) then
-    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      CS%hf_dv_dt_visc(i,J,k) = ADp%dv_dt_visc(i,J,k) * ADp%diag_hfrac_v(i,J,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_hf_dv_dt_visc, CS%hf_dv_dt_visc, CS%diag)
-  endif
+
+  ! 3D diagnostics hf_du(dv)_dt_visc are commented because there is no clarity on proper remapping grid option.
+  ! The code is retained for degugging purposes in the future.
+  !if (CS%id_hf_du_dt_visc > 0) then
+  !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+  !    CS%hf_du_dt_visc(I,j,k) = ADp%du_dt_visc(I,j,k) * ADp%diag_hfrac_u(I,j,k)
+  !  enddo ; enddo ; enddo
+  !  call post_data(CS%id_hf_du_dt_visc, CS%hf_du_dt_visc, CS%diag)
+  !endif
+  !if (CS%id_hf_dv_dt_visc > 0) then
+  !  do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+  !    CS%hf_dv_dt_visc(i,J,k) = ADp%dv_dt_visc(i,J,k) * ADp%diag_hfrac_v(i,J,k)
+  !  enddo ; enddo ; enddo
+  !  call post_data(CS%id_hf_dv_dt_visc, CS%hf_dv_dt_visc, CS%diag)
+  !endif
   if (CS%id_hf_du_dt_visc_2d > 0) then
     CS%hf_du_dt_visc_2d(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
@@ -1793,23 +1798,23 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
      Time, 'Meridional Bottom Stress from Ocean to Earth', 'Pa', &
      conversion=US%RZ_to_kg_m2*US%L_T2_to_m_s2)
 
-  CS%id_hf_du_dt_visc = register_diag_field('ocean_model', 'hf_du_dt_visc', diag%axesCuL, Time, &
-      'Fractional Thickness-weighted Zonal Acceleration from Vertical Viscosity', 'm s-2', &
-      v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_du_dt_visc > 0) then
-    call safe_alloc_ptr(CS%hf_du_dt_visc,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
-  endif
+  !CS%id_hf_du_dt_visc = register_diag_field('ocean_model', 'hf_du_dt_visc', diag%axesCuL, Time, &
+  !    'Fractional Thickness-weighted Zonal Acceleration from Vertical Viscosity', 'm s-2', &
+  !    v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !if (CS%id_hf_du_dt_visc > 0) then
+  !  call safe_alloc_ptr(CS%hf_du_dt_visc,IsdB,IedB,jsd,jed,nz)
+  !  call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
+  !  call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+  !endif
 
-  CS%id_hf_dv_dt_visc = register_diag_field('ocean_model', 'hf_dv_dt_visc', diag%axesCvL, Time, &
-      'Fractional Thickness-weighted Meridional Acceleration from Vertical Viscosity', 'm s-2', &
-      v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_dv_dt_visc > 0) then
-    call safe_alloc_ptr(CS%hf_dv_dt_visc,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
-  endif
+  !CS%id_hf_dv_dt_visc = register_diag_field('ocean_model', 'hf_dv_dt_visc', diag%axesCvL, Time, &
+  !    'Fractional Thickness-weighted Meridional Acceleration from Vertical Viscosity', 'm s-2', &
+  !    v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !if (CS%id_hf_dv_dt_visc > 0) then
+  !  call safe_alloc_ptr(CS%hf_dv_dt_visc,isd,ied,JsdB,JedB,nz)
+  !  call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
+  !  call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+  !endif
 
   CS%id_hf_du_dt_visc_2d = register_diag_field('ocean_model', 'hf_du_dt_visc_2d', diag%axesCu1, Time, &
       'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Vertical Viscosity', 'm s-2', &
