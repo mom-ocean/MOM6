@@ -1156,16 +1156,27 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   endif
 
 ! Calculate the initial barotropic velocities from the layer's velocities.
-  !$OMP parallel do default(shared)
-  do j=jsvf-1,jevf+1 ; do I=isvf-2,ievf+1
-    ubt(I,j) = 0.0 ; uhbt(I,j) = 0.0 ; u_accel_bt(I,j) = 0.0
-    ubt_int(I,j) = 0.0 ; uhbt_int(I,j) = 0.0
-  enddo ; enddo
-  !$OMP parallel do default(shared)
-  do J=jsvf-2,jevf+1 ; do i=isvf-1,ievf+1
-    vbt(i,J) = 0.0 ; vhbt(i,J) = 0.0 ; v_accel_bt(i,J) = 0.0
-    vbt_int(i,J) = 0.0 ; vhbt_int(i,J) = 0.0
-  enddo ; enddo
+  if (integral_BT_cont) then
+    !$OMP parallel do default(shared)
+    do j=jsvf-1,jevf+1 ; do I=isvf-2,ievf+1
+      ubt(I,j) = 0.0 ; uhbt(I,j) = 0.0 ; u_accel_bt(I,j) = 0.0
+      ubt_int(I,j) = 0.0 ; uhbt_int(I,j) = 0.0
+    enddo ; enddo
+    !$OMP parallel do default(shared)
+    do J=jsvf-2,jevf+1 ; do i=isvf-1,ievf+1
+      vbt(i,J) = 0.0 ; vhbt(i,J) = 0.0 ; v_accel_bt(i,J) = 0.0
+      vbt_int(i,J) = 0.0 ; vhbt_int(i,J) = 0.0
+    enddo ; enddo
+  else
+    !$OMP parallel do default(shared)
+    do j=jsvf-1,jevf+1 ; do I=isvf-2,ievf+1
+      ubt(I,j) = 0.0 ; uhbt(I,j) = 0.0 ; u_accel_bt(I,j) = 0.0
+    enddo ; enddo
+    !$OMP parallel do default(shared)
+    do J=jsvf-2,jevf+1 ; do i=isvf-1,ievf+1
+      vbt(i,J) = 0.0 ; vhbt(i,J) = 0.0 ; v_accel_bt(i,J) = 0.0
+    enddo ; enddo
+  endif
   !$OMP parallel do default(shared)
   do j=js,je ; do k=1,nz ; do I=is-1,ie
     ubt(I,j) = ubt(I,j) + wt_u(I,j,k) * U_in(I,j,k)
@@ -2203,20 +2214,24 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
         if (OBC%segnum_u(I,j) /= OBC_NONE) then
           ! Update the summed and integrated quantities from the saved previous values.
           ubt_sum(I,j) = ubt_sum_prev(I,j) + wt_trans(n) * ubt_trans(I,j)
-          ubt_int(I,j) = ubt_int_prev(I,j) + dtbt * ubt_trans(I,j)
           uhbt_sum(I,j) = uhbt_sum_prev(I,j) + wt_trans(n) * uhbt(I,j)
-          uhbt_int(I,j) = uhbt_int_prev(I,j) + dtbt * uhbt(I,j)
           ubt_wtd(I,j) = ubt_wtd_prev(I,j) + wt_vel(n) * ubt(I,j)
+          if (integral_BT_cont) then
+            uhbt_int(I,j) = uhbt_int_prev(I,j) + dtbt * uhbt(I,j)
+            ubt_int(I,j) = ubt_int_prev(I,j) + dtbt * ubt_trans(I,j)
+          endif
         endif
       enddo ; enddo ; endif
       if (CS%BT_OBC%apply_v_OBCs) then ; do J=js-1,je ; do i=is,ie
         if (OBC%segnum_v(i,J) /= OBC_NONE) then
           ! Update the summed and integrated quantities from the saved previous values.
           vbt_sum(i,J) = vbt_sum_prev(i,J) + wt_trans(n) * vbt_trans(i,J)
-          vbt_int(i,J) = vbt_int_prev(i,J) + dtbt * vbt_trans(i,J)
           vhbt_sum(i,J) = vhbt_sum_prev(i,J) + wt_trans(n) * vhbt(i,J)
-          vhbt_int(i,J) = vhbt_int_prev(i,J) + dtbt * vhbt(i,J)
           vbt_wtd(i,J) = vbt_wtd_prev(i,J) + wt_vel(n) * vbt(i,J)
+          if (integral_BT_cont) then
+            vbt_int(i,J) = vbt_int_prev(i,J) + dtbt * vbt_trans(i,J)
+            vhbt_int(i,J) = vhbt_int_prev(i,J) + dtbt * vhbt(i,J)
+          endif
         endif
       enddo ; enddo ; endif
     endif
@@ -2731,7 +2746,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
                                                                   !! in determining the transport.
   logical,                               intent(in)    :: use_BT_cont !< If true, use the BT_cont_types to calculate
                                                                   !! transports.
-  logical,                               intent(in)    :: integral_BT_cont ! If true, update the barotropic continuity
+  logical,                               intent(in)    :: integral_BT_cont !< If true, update the barotropic continuity
                                                                   !! equation directly from the initial condition
                                                                   !! using the time-integrated barotropic velocity.
   real,                                  intent(in)    :: dt_elapsed !< The amount of time in the barotropic stepping
@@ -2918,7 +2933,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
   integer,                               intent(in)    :: halo   !< The extra halo size to use here.
   logical,                               intent(in)    :: use_BT_cont !< If true, use the BT_cont_types to calculate
                                                                  !! transports.
-  logical,                               intent(in)    :: integral_BT_cont ! If true, update the barotropic continuity
+  logical,                               intent(in)    :: integral_BT_cont !< If true, update the barotropic continuity
                                                                  !! equation directly from the initial condition
                                                                  !! using the time-integrated barotropic velocity.
   real,                                  intent(in)    :: dt_baroclinic !< The baroclinic timestep for this cycle of
@@ -3774,11 +3789,8 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, US, MS, BT_Domain
   if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
   if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
 
-!$OMP parallel default(none) shared(is,ie,js,je,hs,BTCL_u,FA_u_EE,FA_u_E0,FA_u_W0, &
-!$OMP                               FA_u_WW,uBT_EE,uBT_WW,u_polarity,BTCL_v,       &
-!$OMP                               FA_v_NN,FA_v_N0,FA_v_S0,FA_v_SS,vBT_NN,vBT_SS, &
-!$OMP                               v_polarity )
-!$OMP do
+  !$OMP parallel default(shared)
+  !$OMP do
   do j=js-hs,je+hs ; do I=is-hs-1,ie+hs
     BTCL_u(I,j)%FA_u_EE = FA_u_EE(I,j) ; BTCL_u(I,j)%FA_u_E0 = FA_u_E0(I,j)
     BTCL_u(I,j)%FA_u_W0 = FA_u_W0(I,j) ; BTCL_u(I,j)%FA_u_WW = FA_u_WW(I,j)
@@ -3801,7 +3813,7 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, US, MS, BT_Domain
     if (abs(BTCL_u(I,j)%uBT_EE) > 0.0) BTCL_u(I,j)%uh_crvE = &
       (C1_3 * (BTCL_u(I,j)%FA_u_EE - BTCL_u(I,j)%FA_u_E0)) / BTCL_u(I,j)%uBT_EE**2
   enddo ; enddo
-!$OMP do
+  !$OMP do
   do J=js-hs-1,je+hs ; do i=is-hs,ie+hs
     BTCL_v(i,J)%FA_v_NN = FA_v_NN(i,J) ; BTCL_v(i,J)%FA_v_N0 = FA_v_N0(i,J)
     BTCL_v(i,J)%FA_v_S0 = FA_v_S0(i,J) ; BTCL_v(i,J)%FA_v_SS = FA_v_SS(i,J)
@@ -3824,7 +3836,7 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, US, MS, BT_Domain
     if (abs(BTCL_v(i,J)%vBT_NN) > 0.0) BTCL_v(i,J)%vh_crvN = &
       (C1_3 * (BTCL_v(i,J)%FA_v_NN - BTCL_v(i,J)%FA_v_N0)) / BTCL_v(i,J)%vBT_NN**2
   enddo ; enddo
-!$OMP end parallel
+  !$OMP end parallel
 end subroutine set_local_BT_cont_types
 
 
