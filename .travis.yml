@@ -13,7 +13,7 @@ addons:
     - tcsh pkg-config netcdf-bin libnetcdf-dev libnetcdff-dev gfortran
     - mpich libmpich-dev
     - doxygen graphviz flex bison cmake
-    - python-virtualenv
+    - python-dev python-virtualenv
     - bc
 
 jobs:
