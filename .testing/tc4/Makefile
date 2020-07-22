@@ -1,6 +1,17 @@
-ocean_hgrid.nc topog.nc temp_salt_ic.nc sponge.nc:
-	python2 -m virtualenv local-env
+all: ocean_hgrid.nc topog.nc temp_salt_ic.nc sponge.nc
+
+local-env:
+	python3 -m venv local-env
 	. local-env/bin/activate \
-	  && pip install netCDF4 \
+	  && pip install netCDF4
+
+ocean_hgrid.nc topog.nc: local-env
+	. local-env/bin/activate \
 	  && python build_grid.py \
+
+temp_salt_ic.nc sponge.nc: local-env
+	. local-env/bin/activate \
 	  && python build_data.py
+
+clean:
+	rm -rf local-env ocean_hgrid.nc topog.nc temp_salt_ic.nc sponge.nc
