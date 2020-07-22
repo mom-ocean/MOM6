@@ -877,9 +877,7 @@ subroutine setup_segment_indices(G, seg, Is_obc, Ie_obc, Js_obc, Je_obc)
     jsg = JsgB
     ieg = IegB
     jeg = JegB
-  endif
-
-  if (Is_obc < Ie_obc) then
+  else
     ! Southern boundary
     isg = IsgB + 1
     jsg = JsgB + 1
@@ -893,9 +891,7 @@ subroutine setup_segment_indices(G, seg, Is_obc, Ie_obc, Js_obc, Je_obc)
     jsg = JsgB + 1
     ieg = IegB
     jeg = JegB
-  endif
-
-  if (Js_obc > Je_obc) then
+  else
     ! Western boundary
     isg = IsgB + 1
     jsg = JsgB + 1
