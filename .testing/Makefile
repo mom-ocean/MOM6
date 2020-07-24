@@ -93,10 +93,33 @@ TARGET_SOURCE = $(call SOURCE,build/target_codebase/src) \
 FMS_SOURCE = $(call SOURCE,$(DEPS)/fms/src)
 
 #---
+# Python preprocessing environment configuration
+
+HAS_NUMPY = $(shell python -c "import numpy" 2> /dev/null && echo "yes")
+HAS_NETCDF4 = $(shell python -c "import netCDF4" 2> /dev/null && echo "yes")
+
+USE_VENV =
+ifneq ($(HAS_NUMPY), yes)
+  USE_VENV = yes
+endif
+ifneq ($(HAS_NETCDF4), yes)
+  USE_VENV = yes
+endif
+
+# When disabled, activation is a null operation (`true`)
+VENV_PATH =
+VENV_ACTIVATE = true
+ifeq ($(USE_VENV), yes)
+  VENV_PATH = work/local-env
+  VENV_ACTIVATE = . $(VENV_PATH)/bin/activate
+endif
+
+
+#---
 # Rules
 
 .PHONY: all build.regressions
-all: $(foreach b,$(BUILDS),build/$(b)/MOM6)
+all: $(foreach b,$(BUILDS),build/$(b)/MOM6) $(VENV_PATH)
 build.regressions: $(foreach b,symmetric target,build/$(b)/MOM6)
 
 # Executable
@@ -184,6 +207,18 @@ $(LIST_PATHS) $(MKMF):
 	cd $(DEPS)/mkmf; git checkout $(MKMF_COMMIT)
 
 
+#---
+# Python preprocessing
+# NOTE: Some less mature environments (e.g. Arm64 Ubuntu) require explicit
+#   installation of numpy before netCDF4, as well as wheel and cython support.
+work/local-env:
+	python3 -m venv $@
+	. $@/bin/activate \
+	  && pip3 install wheel \
+	  && pip3 install cython \
+	  && pip3 install numpy \
+	  && pip3 install netCDF4
+
 #----
 # Testing
 
@@ -264,7 +299,6 @@ $(eval $(call CMP_RULE,regression,symmetric target))
 
 # TODO: chksum_diag parsing of restart files
 
-
 #---
 # Test run output files
 
@@ -281,7 +315,13 @@ work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6
 	if [ $(3) ]; then find build/$(2) -name *.gcda -exec rm -f '{}' \; ; fi
 	mkdir -p $$(@D)
 	cp -rL $$*/* $$(@D)
-	cd $$(@D) && if [ -f Makefile ]; then $(MAKE); fi
+	if [ -f $$(@D)/Makefile ]; then \
+	  $$(VENV_ACTIVATE) \
+	    && cd $$(@D) \
+	    && $(MAKE); \
+	else \
+	  cd $$(@D); \
+	fi
 	mkdir -p $$(@D)/RESTART
 	echo -e "$(4)" > $$(@D)/MOM_override
 	cd $$(@D) \
@@ -327,7 +367,13 @@ work/%/restart/ocean.stats: build/symmetric/MOM6
 	rm -rf $(@D)
 	mkdir -p $(@D)
 	cp -rL $*/* $(@D)
-	cd work/$*/restart && if [ -f Makefile ]; then $(MAKE); fi
+	if [ -f $(@D)/Makefile ]; then \
+	  $(VENV_ACTIVATE) \
+	    && cd work/$*/restart \
+	    && $(MAKE); \
+	else \
+	  cd work/$*/restart; \
+	fi
 	mkdir -p $(@D)/RESTART
 	# Generate the half-period input namelist
 	# TODO: Assumes that runtime set by DAYMAX, will fail if set by input.nml
