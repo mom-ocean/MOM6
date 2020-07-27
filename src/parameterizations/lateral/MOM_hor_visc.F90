@@ -238,7 +238,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                                                        !! barotropic velocities.
   type(thickness_diffuse_CS), optional, pointer :: TD  !< Pointer to a structure containing
                                                        !! thickness diffusivities.
-  type(accel_diag_ptrs), optional, pointer :: ADp   !!< Acceleration diagnostic pointers
+  type(accel_diag_ptrs), optional, pointer :: ADp      !< Acceleration diagnostic pointers
 
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: &
