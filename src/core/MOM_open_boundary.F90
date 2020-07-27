@@ -1586,7 +1586,7 @@ subroutine open_boundary_init(G, GV, US, param_file, OBC, restart_CSp)
   ! Local variables
   real :: vel2_rescale ! A rescaling factor for squared velocities from the representation in
                        ! a restart file to the internal representation in this run.
-  integer :: i, j, k, isd, ied, jsd, jed, nz
+  integer :: i, j, k, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -1599,6 +1599,11 @@ subroutine open_boundary_init(G, GV, US, param_file, OBC, restart_CSp)
   if (OBC%oblique_BCs_exist_globally) call pass_vector(OBC%rx_oblique, OBC%ry_oblique, G%Domain, &
                      To_All+Scalar_Pair)
   if (associated(OBC%cff_normal)) call pass_var(OBC%cff_normal, G%Domain, position=CORNER)
+  if (associated(OBC%tres_x) .or. associated(OBC%tres_y)) then
+    do m=1,OBC%ntr
+      call pass_vector(OBC%tres_x(:,:,:,m), OBC%tres_y(:,:,:,m), G%Domain, To_All+Scalar_Pair)
+    enddo
+  endif
 
   ! The rx_normal and ry_normal arrays used with radiation OBCs are currently in units of grid
   ! points per timestep, but if this were to be corrected to [L T-1 ~> m s-1] or [T-1 ~> s-1] to
@@ -4707,7 +4712,8 @@ subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart
   endif
 
   ! Still painfully inefficient, now in four dimensions.
-  if (any(OBC%tracer_x_reservoirs_used)) then
+  ! Allocating both for now so that the pass_vector works.
+  if (any(OBC%tracer_x_reservoirs_used) .or. any(OBC%tracer_y_reservoirs_used)) then
     allocate(OBC%tres_x(HI%isdB:HI%iedB,HI%jsd:HI%jed,GV%ke,OBC%ntr))
     OBC%tres_x(:,:,:,:) = 0.0
     do m=1,OBC%ntr
@@ -4723,8 +4729,8 @@ subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart
         endif
       endif
     enddo
-  endif
-  if (any(OBC%tracer_y_reservoirs_used)) then
+! endif
+! if (any(OBC%tracer_y_reservoirs_used)) then
     allocate(OBC%tres_y(HI%isd:HI%ied,HI%jsdB:HI%jedB,GV%ke,OBC%ntr))
     OBC%tres_y(:,:,:,:) = 0.0
     do m=1,OBC%ntr

@@ -806,7 +806,8 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos, better_spee
 
   min_h_frac = tol_Hfrac / real(nz)
   !$OMP parallel do default(private) shared(is,ie,js,je,nz,h,G,GV,US,min_h_frac,use_EOS,T,S, &
-  !$OMP                                     Z_to_pres,tv,cn,g_Rho0,nmodes)
+  !$OMP                                     Z_to_pres,tv,cn,g_Rho0,nmodes,cg1_min2,better_est, &
+  !$OMP                                     c1_thresh,tol_solve,tol_merge)
   do j=js,je
     !   First merge very thin layers with the one above (or below if they are
     ! at the top).  This also transposes the row order so that columns can

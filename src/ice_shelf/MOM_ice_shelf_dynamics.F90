@@ -1405,6 +1405,7 @@ subroutine ice_shelf_advect_thickness_y(CS, G, LB, time_step, hmask, h0, h_after
   real :: h_face     ! Thickness at a face for transport [Z ~> m]
   real :: slope_lim  ! The value of the slope limiter, in the range of 0 to 2 [nondim]
 
+  ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh
 
   ! hmask coded values: 1) fully covered; 2) partly covered - no export; 3) Specified boundary condition
   ! relevant u_face_mask coded values: 1) Normal interior point; 4) Specified flux BC
