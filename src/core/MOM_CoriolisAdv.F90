@@ -216,12 +216,12 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
   integer :: i, j, k, n, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
 
 ! Diagnostics for fractional thickness-weighted terms
-  real, pointer, dimension(:,:) :: &
-    hf_gKEu_2d => NULL(), hf_gKEv_2d => NULL(), & ! Depth sum of hf_gKEu, hf_gKEv [L T-2 ~> m s-2].
-    hf_rvxu_2d => NULL(), hf_rvxv_2d => NULL()    ! Depth sum of hf_rvxu, hf_rvxv [L T-2 ~> m s-2].
-  !real, pointer, dimension(:,:,:) :: &
-  !  hf_gKEu => NULL(), hf_gKEv => NULL(), & ! accel. due to KE gradient x fract. thickness  [L T-2 ~> m s-2].
-  !  hf_rvxu => NULL(), hf_rvxv => NULL()    ! accel. due to RV x fract. thickness [L T-2 ~> m s-2].
+  real, allocatable, dimension(:,:) :: &
+    hf_gKEu_2d, hf_gKEv_2d, & ! Depth sum of hf_gKEu, hf_gKEv [L T-2 ~> m s-2].
+    hf_rvxu_2d, hf_rvxv_2d    ! Depth sum of hf_rvxu, hf_rvxv [L T-2 ~> m s-2].
+  !real, allocatable, dimension(:,:,:) :: &
+  !  hf_gKEu, hf_gKEv, & ! accel. due to KE gradient x fract. thickness  [L T-2 ~> m s-2].
+  !  hf_rvxu, hf_rvxv    ! accel. due to RV x fract. thickness [L T-2 ~> m s-2].
   ! 3D diagnostics hf_gKEu etc. are commented because there is no clarity on proper remapping grid option.
   ! The code is retained for degugging purposes in the future.
 
@@ -848,7 +848,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
     ! 3D diagnostics hf_gKEu etc. are commented because there is no clarity on proper remapping grid option.
     ! The code is retained for degugging purposes in the future.
     !if (CS%id_hf_gKEu > 0) then
-    !  call safe_alloc_ptr(hf_gKEu,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
+    !  allocate(hf_gKEu(G%IsdB:G%IedB,G%jsd:G%jed,G%ke))
     !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     !    hf_gKEu(I,j,k) = AD%gradKEu(I,j,k) * AD%diag_hfrac_u(I,j,k)
     !  enddo ; enddo ; enddo
@@ -856,7 +856,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
     !endif
 
     !if (CS%id_hf_gKEv > 0) then
-    !  call safe_alloc_ptr(hf_gKEv,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
+    !  allocate(hf_gKEv(G%isd:G%ied,G%JsdB:G%JedB,G%ke))
     !  do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     !    hf_gKEv(i,J,k) = AD%gradKEv(i,J,k) * AD%diag_hfrac_v(i,J,k)
     !  enddo ; enddo ; enddo
@@ -864,25 +864,27 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
     !endif
 
     if (CS%id_hf_gKEu_2d > 0) then
-      call safe_alloc_ptr(hf_gKEu_2d,G%IsdB,G%IedB,G%jsd,G%jed)
+      allocate(hf_gKEu_2d(G%IsdB:G%IedB,G%jsd:G%jed))
       hf_gKEu_2d(:,:) = 0.0
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq
         hf_gKEu_2d(I,j) = hf_gKEu_2d(I,j) + AD%gradKEu(I,j,k) * AD%diag_hfrac_u(I,j,k)
       enddo ; enddo ; enddo
       call post_data(CS%id_hf_gKEu_2d, hf_gKEu_2d, CS%diag)
+      deallocate(hf_gKEu_2d)
     endif
 
     if (CS%id_hf_gKEv_2d > 0) then
-      call safe_alloc_ptr(hf_gKEv_2d,G%isd,G%ied,G%JsdB,G%JedB)
+      allocate(hf_gKEv_2d(G%isd:G%ied,G%JsdB:G%JedB))
       hf_gKEv_2d(:,:) = 0.0
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
         hf_gKEv_2d(i,J) = hf_gKEv_2d(i,J) + AD%gradKEv(i,J,k) * AD%diag_hfrac_v(i,J,k)
       enddo ; enddo ; enddo
       call post_data(CS%id_hf_gKEv_2d, hf_gKEv_2d, CS%diag)
+      deallocate(hf_gKEv_2d)
     endif
 
     !if (CS%id_hf_rvxv > 0) then
-    !  call safe_alloc_ptr(hf_rvxv,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
+    !  allocate(hf_rvxv(G%IsdB:G%IedB,G%jsd:G%jed,G%ke))
     !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     !    hf_rvxv(I,j,k) = AD%rv_x_v(I,j,k) * AD%diag_hfrac_u(I,j,k)
     !  enddo ; enddo ; enddo
@@ -890,7 +892,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
     !endif
 
     !if (CS%id_hf_rvxu > 0) then
-    !  call safe_alloc_ptr(hf_rvxu,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
+    !  allocate(hf_rvxu(G%isd:G%ied,G%JsdB:G%JedB,G%ke))
     !  do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     !    hf_rvxu(i,J,k) = AD%rv_x_u(i,J,k) * AD%diag_hfrac_v(i,J,k)
     !  enddo ; enddo ; enddo
@@ -898,21 +900,23 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
     !endif
 
     if (CS%id_hf_rvxv_2d > 0) then
-      call safe_alloc_ptr(hf_rvxv_2d,G%IsdB,G%IedB,G%jsd,G%jed)
+      allocate(hf_rvxv_2d(G%IsdB:G%IedB,G%jsd:G%jed))
       hf_rvxv_2d(:,:) = 0.0
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq
         hf_rvxv_2d(I,j) = hf_rvxv_2d(I,j) + AD%rv_x_v(I,j,k) * AD%diag_hfrac_u(I,j,k)
       enddo ; enddo ; enddo
       call post_data(CS%id_hf_rvxv_2d, hf_rvxv_2d, CS%diag)
+      deallocate(hf_rvxv_2d)
     endif
 
     if (CS%id_hf_rvxu_2d > 0) then
-      call safe_alloc_ptr(hf_rvxu_2d,G%isd,G%ied,G%JsdB,G%JedB)
+      allocate(hf_rvxu_2d(G%isd:G%ied,G%JsdB:G%JedB))
       hf_rvxu_2d(:,:) = 0.0
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
         hf_rvxu_2d(i,J) = hf_rvxu_2d(i,J) + AD%rv_x_u(i,J,k) * AD%diag_hfrac_v(i,J,k)
       enddo ; enddo ; enddo
       call post_data(CS%id_hf_rvxu_2d, hf_rvxu_2d, CS%diag)
+      deallocate(hf_rvxu_2d)
     endif
   endif
 

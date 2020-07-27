@@ -448,7 +448,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: visc_rem_v    !< Ditto for meridional direction [nondim].
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(out) :: etaav        !< The free surface height or column mass
                                                          !! averaged over the barotropic integration [H ~> m or kg m-2].
-  type(accel_diag_ptrs), optional, pointer :: ADp !< Acceleration diagnostic pointers
+  type(accel_diag_ptrs),               optional, pointer :: ADp          !< Acceleration diagnostic pointers
   type(ocean_OBC_type),                optional, pointer :: OBC          !< The open boundary condition structure.
   type(BT_cont_type),                  optional, pointer :: BT_cont      !< A structure with elements that describe
                                                          !! the effective open face areas as a function of barotropic

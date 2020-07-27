@@ -71,7 +71,7 @@ type, public :: diagnostics_CS ; private
     dv_dt => NULL(), & !< net j-acceleration [L T-2 ~> m s-2]
     dh_dt => NULL(), & !< thickness rate of change [H T-1 ~> m s-1 or kg m-2 s-1]
     p_ebt => NULL()    !< Equivalent barotropic modal structure [nondim]
-    ! hf_du_dt => NULL(), hf_dv_dt => NULL() ! du_dt, dv_dt x fract. thickness [L T-2 ~> m s-2].
+    ! hf_du_dt => NULL(), hf_dv_dt => NULL() !< du_dt, dv_dt x fract. thickness [L T-2 ~> m s-2].
     ! 3D diagnostics hf_du(dv)_dt are commented because there is no clarity on proper remapping grid option.
     ! The code is retained for degugging purposes in the future.
 
@@ -92,8 +92,7 @@ type, public :: diagnostics_CS ; private
     Rd1 => NULL(),       & !< First baroclinic deformation radius [L ~> m]
     cfl_cg1 => NULL(),   & !< CFL for first baroclinic gravity wave speed [nondim]
     cfl_cg1_x => NULL(), & !< i-component of CFL for first baroclinic gravity wave speed [nondim]
-    cfl_cg1_y => NULL(), & !< j-component of CFL for first baroclinic gravity wave speed [nondim]
-    hf_du_dt_2d => NULL(), hf_dv_dt_2d => NULL() ! z integeral of hf_du_dt, hf_dv_dt [L T-2 ~> m s-2].
+    cfl_cg1_y => NULL()    !< j-component of CFL for first baroclinic gravity wave speed [nondim]
 
   ! The following arrays hold diagnostics in the layer-integrated energy budget.
   real, pointer, dimension(:,:,:) :: &
@@ -239,6 +238,9 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   real :: work_2d(SZI_(G),SZJ_(G))         ! A 2-d temporary work array.
   real :: rho_in_situ(SZI_(G))             ! In situ density [R ~> kg m-3]
 
+  real, allocatable, dimension(:,:) :: &
+    hf_du_dt_2d, hf_dv_dt_2d ! z integeral of hf_du_dt, hf_dv_dt [L T-2 ~> m s-2].
+
   ! tmp array for surface properties
   real :: surface_field(SZI_(G),SZJ_(G))
   real :: pressure_1d(SZI_(G)) ! Temporary array for pressure when calling EOS [R L2 T-2 ~> Pa]
@@ -297,19 +299,23 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     !endif
 
     if (CS%id_hf_du_dt_2d > 0) then
-      CS%hf_du_dt_2d(:,:) = 0.0
+      allocate(hf_du_dt_2d(G%IsdB:G%IedB,G%jsd:G%jed))
+      hf_du_dt_2d(:,:) = 0.0
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-        CS%hf_du_dt_2d(I,j) = CS%hf_du_dt_2d(I,j) + CS%du_dt(I,j,k) * ADp%diag_hfrac_u(I,j,k)
+        hf_du_dt_2d(I,j) = hf_du_dt_2d(I,j) + CS%du_dt(I,j,k) * ADp%diag_hfrac_u(I,j,k)
       enddo ; enddo ; enddo
-      call post_data(CS%id_hf_du_dt_2d, CS%hf_du_dt_2d, CS%diag)
+      call post_data(CS%id_hf_du_dt_2d, hf_du_dt_2d, CS%diag)
+      deallocate(hf_du_dt_2d)
     endif
 
     if (CS%id_hf_dv_dt_2d > 0) then
-      CS%hf_dv_dt_2d(:,:) = 0.0
+      allocate(hf_dv_dt_2d(G%isd:G%ied,G%JsdB:G%JedB))
+      hf_dv_dt_2d(:,:) = 0.0
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        CS%hf_dv_dt_2d(i,J) = CS%hf_dv_dt_2d(i,J) + CS%dv_dt(i,J,k) * ADp%diag_hfrac_v(i,J,k)
+        hf_dv_dt_2d(i,J) = hf_dv_dt_2d(i,J) + CS%dv_dt(i,J,k) * ADp%diag_hfrac_v(i,J,k)
       enddo ; enddo ; enddo
-      call post_data(CS%id_hf_dv_dt_2d, CS%hf_dv_dt_2d, CS%diag)
+      call post_data(CS%id_hf_dv_dt_2d, hf_dv_dt_2d, CS%diag)
+      deallocate(hf_dv_dt_2d)
     endif
 
     call diag_restore_grids(CS%diag)
@@ -1711,7 +1717,6 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   CS%id_hf_du_dt_2d = register_diag_field('ocean_model', 'hf_dudt_2d', diag%axesCu1, Time, &
       'Depth-sum Fractional Thickness-weighted Zonal Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_du_dt_2d > 0) then
-    call safe_alloc_ptr(CS%hf_du_dt_2d,IsdB,IedB,jsd,jed)
     if (.not.associated(CS%du_dt)) then
       call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
       call register_time_deriv(lbound(MIS%u), MIS%u, CS%du_dt, CS)
@@ -1722,7 +1727,6 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   CS%id_hf_dv_dt_2d = register_diag_field('ocean_model', 'hf_dvdt_2d', diag%axesCv1, Time, &
       'Depth-sum Fractional Thickness-weighted Meridional Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_dv_dt_2d > 0) then
-    call safe_alloc_ptr(CS%hf_dv_dt_2d,isd,ied,JsdB,JedB)
     if (.not.associated(CS%dv_dt)) then
       call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
       call register_time_deriv(lbound(MIS%v), MIS%v, CS%dv_dt, CS)

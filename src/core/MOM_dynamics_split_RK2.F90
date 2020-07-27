@@ -317,10 +317,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   real, pointer, dimension(:,:) :: &
     p_surf => NULL(), eta_PF_start => NULL(), &
     taux_bot => NULL(), tauy_bot => NULL(), &
-    eta => NULL(), &
-    hf_PFu_2d => NULL(), hf_PFv_2d => NULL(), & ! Depth integeral of hf_PFu, hf_PFv [L T-2 ~> m s-2].
-    hf_CAu_2d => NULL(), hf_CAv_2d => NULL(), & ! Depth integeral of hf_CAu, hf_CAv [L T-2 ~> m s-2].
-    hf_u_BT_accel_2d => NULL(), hf_v_BT_accel_2d => NULL() ! Depth integeral of hf_u_BT_accel, hf_v_BT_accel
+    eta => NULL()
 
   real, pointer, dimension(:,:,:) :: &
     uh_ptr => NULL(), u_ptr => NULL(),  vh_ptr => NULL(), v_ptr => NULL(), &
@@ -328,11 +325,17 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     v_av, & ! The meridional velocity time-averaged over a time step [L T-1 ~> m s-1].
     h_av    ! The layer thickness time-averaged over a time step [H ~> m or kg m-2].
 
-    ! hf_PFu => NULL(), hf_PFv => NULL(), & ! Pressure force accel. x fract. thickness [L T-2 ~> m s-2].
-    ! hf_CAu => NULL(), hf_CAv => NULL(), & ! Coriolis force accel. x fract. thickness [L T-2 ~> m s-2].
-    ! hf_u_BT_accel => NULL(), hf_v_BT_accel => NULL(), & ! barotropic correction accel. x fract. thickness [L T-2 ~> m s-2].
+  ! real, allocatable, dimension(:,:,:) :: &
+    ! hf_PFu, hf_PFv, & ! Pressure force accel. x fract. thickness [L T-2 ~> m s-2].
+    ! hf_CAu, hf_CAv, & ! Coriolis force accel. x fract. thickness [L T-2 ~> m s-2].
+    ! hf_u_BT_accel, hf_v_BT_accel ! barotropic correction accel. x fract. thickness [L T-2 ~> m s-2].
     ! 3D diagnostics hf_PFu etc. are commented because there is no clarity on proper remapping grid option.
     ! The code is retained for degugging purposes in the future.
+
+  real, allocatable, dimension(:,:) :: &
+    hf_PFu_2d, hf_PFv_2d, & ! Depth integeral of hf_PFu, hf_PFv [L T-2 ~> m s-2].
+    hf_CAu_2d, hf_CAv_2d, & ! Depth integeral of hf_CAu, hf_CAv [L T-2 ~> m s-2].
+    hf_u_BT_accel_2d, hf_v_BT_accel_2d ! Depth integeral of hf_u_BT_accel, hf_v_BT_accel
 
   real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping [T ~> s].
 
@@ -882,96 +885,102 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   ! 3D diagnostics hf_PFu etc. are commented because there is no clarity on proper remapping grid option.
   ! The code is retained for degugging purposes in the future.
   !if (CS%id_hf_PFu > 0) then
-  !  call safe_alloc_ptr(hf_PFu,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
+  !  allocate(hf_PFu(G%IsdB:G%IedB,G%jsd:G%jed,G%ke))
   !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
   !    hf_PFu(I,j,k) = CS%PFu(I,j,k) * CS%ADp%diag_hfrac_u(I,j,k)
   !  enddo ; enddo ; enddo
   !  call post_data(CS%id_hf_PFu, hf_PFu, CS%diag)
   !endif
   !if (CS%id_hf_PFv > 0) then
-  !  call safe_alloc_ptr(hf_PFv,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
+  !  allocate(hf_PFv(G%isd:G%ied,G%JsdB:G%JedB,G%ke))
   !  do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
   !    hf_PFv(i,J,k) = CS%PFv(i,J,k) * CS%ADp%diag_hfrac_v(i,J,k)
   !  enddo ; enddo ; enddo
   !  call post_data(CS%id_hf_PFv, hf_PFv, CS%diag)
   !endif
   if (CS%id_hf_PFu_2d > 0) then
-    call safe_alloc_ptr(hf_PFu_2d,G%IsdB,G%IedB,G%jsd,G%jed)
+    allocate(hf_PFu_2d(G%IsdB:G%IedB,G%jsd:G%jed))
     hf_PFu_2d(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       hf_PFu_2d(I,j) = hf_PFu_2d(I,j) + CS%PFu(I,j,k) * CS%ADp%diag_hfrac_u(I,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hf_PFu_2d, hf_PFu_2d, CS%diag)
+    deallocate(hf_PFu_2d)
   endif
   if (CS%id_hf_PFv_2d > 0) then
-    call safe_alloc_ptr(hf_PFv_2d,G%isd,G%ied,G%JsdB,G%JedB)
+    allocate(hf_PFv_2d(G%isd:G%ied,G%JsdB:G%JedB))
     hf_PFv_2d(:,:) = 0.0
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       hf_PFv_2d(i,J) = hf_PFv_2d(i,J) + CS%PFv(i,J,k) * CS%ADp%diag_hfrac_v(i,J,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hf_PFv_2d, hf_PFv_2d, CS%diag)
+    deallocate(hf_PFv_2d)
   endif
 
   !if (CS%id_hf_CAu > 0) then
-  !  call safe_alloc_ptr(hf_CAu,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
+  !  allocate(hf_CAu(G%IsdB:G%IedB,G%jsd:G%jed,G%ke))
   !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
   !    hf_CAu(I,j,k) = CS%CAu(I,j,k) * CS%ADp%diag_hfrac_u(I,j,k)
   !  enddo ; enddo ; enddo
   !  call post_data(CS%id_hf_CAu, hf_CAu, CS%diag)
   !endif
   !if (CS%id_hf_CAv > 0) then
-  !  call safe_alloc_ptr(hf_CAv,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
+  !  allocate(hf_CAv(G%isd:G%ied,G%JsdB:G%JedB,G%ke))
   !  do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
   !    hf_CAv(i,J,k) = CS%CAv(i,J,k) * CS%ADp%diag_hfrac_v(i,J,k)
   !  enddo ; enddo ; enddo
   !  call post_data(CS%id_hf_CAv, hf_CAv, CS%diag)
   !endif
   if (CS%id_hf_CAu_2d > 0) then
-    call safe_alloc_ptr(hf_CAu_2d,G%IsdB,G%IedB,G%jsd,G%jed)
+    allocate(hf_CAu_2d(G%IsdB:G%IedB,G%jsd:G%jed))
     hf_CAu_2d(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       hf_CAu_2d(I,j) = hf_CAu_2d(I,j) + CS%CAu(I,j,k) * CS%ADp%diag_hfrac_u(I,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hf_CAu_2d, hf_CAu_2d, CS%diag)
+    deallocate(hf_CAu_2d)
   endif
   if (CS%id_hf_CAv_2d > 0) then
-    call safe_alloc_ptr(hf_CAv_2d,G%isd,G%ied,G%JsdB,G%JedB)
+    allocate(hf_CAv_2d(G%isd:G%ied,G%JsdB:G%JedB))
     hf_CAv_2d(:,:) = 0.0
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       hf_CAv_2d(i,J) = hf_CAv_2d(i,J) + CS%CAv(i,J,k) * CS%ADp%diag_hfrac_v(i,J,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hf_CAv_2d, hf_CAv_2d, CS%diag)
+    deallocate(hf_CAv_2d)
   endif
 
   !if (CS%id_hf_u_BT_accel > 0) then
-  !  call safe_alloc_ptr(hf_u_BT_accel,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
+  !  allocate(hf_u_BT_accel(G%IsdB:G%IedB,G%jsd:G%jed,G%ke))
   !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
   !    hf_u_BT_accel(I,j,k) = CS%u_accel_bt(I,j,k) * CS%ADp%diag_hfrac_u(I,j,k)
   !  enddo ; enddo ; enddo
   !  call post_data(CS%id_hf_u_BT_accel, hf_u_BT_accel, CS%diag)
   !endif
   !if (CS%id_hf_v_BT_accel > 0) then
-  !  call safe_alloc_ptr(hf_v_BT_accel,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
+  !  allocate(hf_v_BT_accel(G%isd:G%ied,G%JsdB:G%JedB,G%ke))
   !  do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
   !    hf_v_BT_accel(i,J,k) = CS%v_accel_bt(i,J,k) * CS%ADp%diag_hfrac_v(i,J,k)
   !  enddo ; enddo ; enddo
   !  call post_data(CS%id_hf_v_BT_accel, hf_v_BT_accel, CS%diag)
   !endif
   if (CS%id_hf_u_BT_accel_2d > 0) then
-    call safe_alloc_ptr(hf_u_BT_accel_2d,G%IsdB,G%IedB,G%jsd,G%jed)
+    allocate(hf_u_BT_accel_2d(G%IsdB:G%IedB,G%jsd:G%jed))
     hf_u_BT_accel_2d(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       hf_u_BT_accel_2d(I,j) = hf_u_BT_accel_2d(I,j) + CS%u_accel_bt(I,j,k) * CS%ADp%diag_hfrac_u(I,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hf_u_BT_accel_2d, hf_u_BT_accel_2d, CS%diag)
+    deallocate(hf_u_BT_accel_2d)
   endif
   if (CS%id_hf_v_BT_accel_2d > 0) then
-    call safe_alloc_ptr(hf_v_BT_accel_2d,G%isd,G%ied,G%JsdB,G%JedB)
+    allocate(hf_v_BT_accel_2d(G%isd:G%ied,G%JsdB:G%JedB))
     hf_v_BT_accel_2d(:,:) = 0.0
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       hf_v_BT_accel_2d(i,J) = hf_v_BT_accel_2d(i,J) + CS%v_accel_bt(i,J,k) * CS%ADp%diag_hfrac_v(i,J,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_hf_v_BT_accel_2d, hf_v_BT_accel_2d, CS%diag)
+    deallocate(hf_v_BT_accel_2d)
   endif
 
   if (CS%debug) then

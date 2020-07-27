@@ -175,8 +175,6 @@ type, public :: hor_visc_CS ; private
 
   type(diag_ctrl), pointer :: diag => NULL() !< structure to regulate diagnostics
 
-  real, pointer :: hf_diffu_2d(:,:)  => NULL()
-  real, pointer :: hf_diffv_2d(:,:)  => NULL()
   ! real, pointer :: hf_diffu(:,:,:)   => NULL() ! Zonal hor. visc. accel. x fract. thickness [L T-2 ~> m s-2].
   ! real, pointer :: hf_diffv(:,:,:)   => NULL() ! Merdional hor. visc. accel. x fract. thickness [L T-2 ~> m s-2].
   ! 3D diagnostics hf_diffu(diffv) are commented because there is no clarity on proper remapping grid option.
@@ -275,6 +273,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     grad_d2vel_mag_h, & ! Magnitude of the Laplacian of the velocity vector, squared [L-2 T-2 ~> m-2 s-2]
     boundary_mask_h ! A mask that zeroes out cells with at least one land edge [nondim]
 
+  real, allocatable, dimension(:,:) :: hf_diffu_2d ! Depth sum of hf_diffu [L T-2 ~> m s-2]
+  real, allocatable, dimension(:,:) :: hf_diffv_2d ! Depth sum of hf_diffv [L T-2 ~> m s-2]
+
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     dvdx, dudy, & ! components in the shearing strain [T-1 ~> s-1]
     dDel2vdx, dDel2udy, & ! Components in the biharmonic equivalent of the shearing strain [L-2 T-1 ~> m-2 s-1]
@@ -361,7 +362,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   real :: inv_PI3, inv_PI2, inv_PI5
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-
+  
   h_neglect  = GV%H_subroundoff
   h_neglect3 = h_neglect**3
   inv_PI3 = 1.0/((4.0*atan(1.0))**3)
@@ -1336,18 +1337,22 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   !  call post_data(CS%id_hf_diffv, CS%hf_diffv, CS%diag)
   !endif
   if (present(ADp) .and. (CS%id_hf_diffu_2d > 0)) then
-    CS%hf_diffu_2d(:,:) = 0.0
+    allocate(hf_diffu_2d(G%IsdB:G%IedB,G%jsd:G%jed))
+    hf_diffu_2d(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      CS%hf_diffu_2d(I,j) = CS%hf_diffu_2d(I,j) + diffu(I,j,k) * ADp%diag_hfrac_u(I,j,k)
+      hf_diffu_2d(I,j) = hf_diffu_2d(I,j) + diffu(I,j,k) * ADp%diag_hfrac_u(I,j,k)
     enddo ; enddo ; enddo
-    call post_data(CS%id_hf_diffu_2d, CS%hf_diffu_2d, CS%diag)
+    call post_data(CS%id_hf_diffu_2d, hf_diffu_2d, CS%diag)
+    deallocate(hf_diffu_2d)
   endif
   if (present(ADp) .and. (CS%id_hf_diffv_2d > 0)) then
-    CS%hf_diffv_2d(:,:) = 0.0
+    allocate(hf_diffv_2d(G%isd:G%ied,G%JsdB:G%JedB))
+    hf_diffv_2d(:,:) = 0.0
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      CS%hf_diffv_2d(i,J) = CS%hf_diffv_2d(i,J) + diffv(i,J,k) * ADp%diag_hfrac_v(i,J,k)
+      hf_diffv_2d(i,J) = hf_diffv_2d(i,J) + diffv(i,J,k) * ADp%diag_hfrac_v(i,J,k)
     enddo ; enddo ; enddo
-    call post_data(CS%id_hf_diffv_2d, CS%hf_diffv_2d, CS%diag)
+    call post_data(CS%id_hf_diffv_2d, hf_diffv_2d, CS%diag)
+    deallocate(hf_diffv_2d)
   endif
 
 end subroutine horizontal_viscosity
@@ -2080,7 +2085,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE, ADp)
       'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Horizontal Viscosity', 'm s-2', &
       conversion=US%L_T2_to_m_s2)
   if ((CS%id_hf_diffu_2d > 0) .and. (present(ADp))) then
-    call safe_alloc_ptr(CS%hf_diffu_2d,G%IsdB,G%IedB,G%jsd,G%jed)
     call safe_alloc_ptr(ADp%diag_hfrac_u,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
   endif
 
@@ -2088,7 +2092,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE, ADp)
       'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Horizontal Viscosity', 'm s-2', &
       conversion=US%L_T2_to_m_s2)
   if ((CS%id_hf_diffv_2d > 0) .and. (present(ADp))) then
-    call safe_alloc_ptr(CS%hf_diffv_2d,G%isd,G%ied,G%JsdB,G%JedB)
     call safe_alloc_ptr(ADp%diag_hfrac_v,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
   endif
 
