@@ -507,7 +507,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
     ! This no longer includes any pressure dependency, since this routine
     ! will come down with a fatal error if there is any compressibility.
     !$OMP parallel do default(shared)
-    do k=1,nz+1 ; do j=Jsq,Jeq+1
+    do k=1,nz ; do j=Jsq,Jeq+1
       call calculate_density(tv_tmp%T(:,j,k), tv_tmp%S(:,j,k), p_ref, rho_star(:,j,k), &
                              tv%eqn_of_state, EOSdom)
       do i=Isq,Ieq+1 ; rho_star(i,j,k) = G_Rho0*rho_star(i,j,k) ; enddo
