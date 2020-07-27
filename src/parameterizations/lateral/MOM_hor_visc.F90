@@ -362,7 +362,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   real :: inv_PI3, inv_PI2, inv_PI5
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  
+
   h_neglect  = GV%H_subroundoff
   h_neglect3 = h_neglect**3
   inv_PI3 = 1.0/((4.0*atan(1.0))**3)
