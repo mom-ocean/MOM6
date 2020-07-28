@@ -1,3 +1,8 @@
-ocean_hgrid.nc topog.nc temp_salt_ic.nc sponge.nc:
+OUT=ocean_hgrid.nc sponge.nc temp_salt_ic.nc topog.nc
+
+$(OUT):
 	python build_grid.py
 	python build_data.py
+
+clean:
+	rm -rf $(OUT)
