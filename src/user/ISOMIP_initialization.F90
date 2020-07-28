@@ -21,6 +21,7 @@ use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
 use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
 use regrid_consts, only : REGRIDDING_SIGMA_SHELF_ZSTAR
+use regrid_consts, only : REGRIDDING_HYCOM1
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -220,7 +221,7 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, US, param_file, tv, just_read
       enddo
     enddo ; enddo
 
-  case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR )   ! Initial thicknesses for z coordinates
+  case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR, REGRIDDING_HYCOM1 )   ! Initial thicknesses for z coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
       eta1D(nz+1) = -G%bathyT(i,j)
@@ -234,6 +235,8 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, US, param_file, tv, just_read
         endif
       enddo
    enddo ; enddo
+
+!  case ( REGRIDDING_HYCOM1 ) ! Initial thicknesses for hycom1 grid
 
   case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
@@ -310,7 +313,8 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
 
   select case ( coordinateMode(verticalCoordinate) )
 
-    case (  REGRIDDING_RHO, REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR, REGRIDDING_SIGMA )
+  case (  REGRIDDING_RHO, REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR, &
+       REGRIDDING_SIGMA, REGRIDDING_HYCOM1 )
       if (just_read) return ! All run-time parameters have been read, so return.
 
       dS_dz = (s_sur - s_bot) / G%max_depth
@@ -562,7 +566,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
          enddo
        enddo ; enddo
 
-     case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR )   ! Initial thicknesses for z coordinates
+     case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR, REGRIDDING_HYCOM1 )   ! Initial thicknesses for z coordinates
        do j=js,je ; do i=is,ie
          eta1D(nz+1) = -G%bathyT(i,j)
          do k=nz,1,-1

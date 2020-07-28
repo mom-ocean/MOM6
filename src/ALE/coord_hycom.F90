@@ -124,11 +124,15 @@ subroutine build_hycom1_column(CS, eqn_of_state, nz, depth, h, T, S, p_col, &
   real :: nominal_z ! Nominal depth of interface when using z* [H ~> m or kg m-2]
   logical :: maximum_depths_set ! If true, the maximum depths of interface have been set.
   logical :: maximum_h_set      ! If true, the maximum layer thicknesses have been set.
+  logical :: use_ice_shelf
 
   maximum_depths_set = allocated(CS%max_interface_depths)
   maximum_h_set = allocated(CS%max_layer_thickness)
 
   z_scale = 1.0 ; if (present(zScale)) z_scale = zScale
+
+  use_ice_shelf=.false.
+  if (z_col(1) > 0.) use_ice_shelf=.true.
 
   ! Work bottom recording potential density
   call calculate_density(T, S, p_col, rho_col, eqn_of_state)
@@ -145,7 +149,11 @@ subroutine build_hycom1_column(CS, eqn_of_state, nz, depth, h, T, S, p_col, &
 
   ! Sweep down the interfaces and make sure that the interface is at least
   ! as deep as a nominal target z* grid
-  nominal_z = 0.
+  if (use_ice_shelf) then
+     nominal_z = z_col(1)
+  else
+     nominal_z = 0.
+  endif
   stretching = z_col(nz+1) / depth ! Stretches z* to z
   do k = 2, CS%nk+1
     nominal_z = nominal_z + (z_scale * CS%coordinateResolution(k-1)) * stretching
