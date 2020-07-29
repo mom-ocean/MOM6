@@ -447,7 +447,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
     call get_param(param_file, mdl, "OBC_RAMP_TIMESCALE", OBC%ramp_timescale, &
          "If RAMP_OBCS is true, this sets the ramping timescale.", &
          units="days", default=1.0, scale=86400.0*US%s_to_T)
-    call get_param(param_file, mdl, "OBC_n_tide_constituents", OBC%n_tide_constituents, &
+    call get_param(param_file, mdl, "OBC_N_TIDE_CONSTITUENTS", OBC%n_tide_constituents, &
          "Number of tidal constituents being added to the open boundary.", &
          default=0)
 
