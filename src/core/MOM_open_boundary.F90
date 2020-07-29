@@ -469,7 +469,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
           "Reference date to use for tidal calculations and equilibrium phase.", &
           fail_if_missing=.true.)
 
-      call get_param(param_file, mdl, "OBC_NODAL_REF_DATE", nodal_ref_date, &
+      call get_param(param_file, mdl, "OBC_TIDE_NODAL_REF_DATE", nodal_ref_date, &
           "Fixed reference date to use for nodal modulation of boundary tides.", &
           fail_if_missing=.false., default=0)
 
