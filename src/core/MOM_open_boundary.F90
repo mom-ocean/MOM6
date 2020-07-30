@@ -4416,6 +4416,7 @@ subroutine mask_outside_OBCs(G, US, param_file, OBC)
   ! Local variables
   integer :: isd, ied, IsdB, IedB, jsd, jed, JsdB, JedB, n
   integer :: i, j
+  integer :: l_seg
   logical :: fatal_error = .False.
   real    :: min_depth
   integer, parameter :: cin = 3, cout = 4, cland = -1, cedge = -2
@@ -4457,38 +4458,50 @@ subroutine mask_outside_OBCs(G, US, param_file, OBC)
   enddo
 
   do j=G%jsd,G%jed ; do i=G%IsdB+1,G%IedB-1
-    if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+    l_seg = OBC%segnum_u(I,j)
+    if (l_seg == OBC_NONE) cycle
+
+    if (OBC%segment(l_seg)%direction == OBC_DIRECTION_W) then
       if (color(i,j) == 0.0) color(i,j) = cout
       if (color(i+1,j) == 0.0) color(i+1,j) = cin
-    elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+    elseif (OBC%segment(l_seg)%direction == OBC_DIRECTION_E) then
       if (color(i,j) == 0.0) color(i,j) = cin
       if (color(i+1,j) == 0.0) color(i+1,j) = cout
     endif
   enddo ; enddo
   do J=G%JsdB+1,G%JedB-1 ; do i=G%isd,G%ied
-    if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+    l_seg = OBC%segnum_v(i,J)
+    if (l_seg == OBC_NONE) cycle
+
+    if (OBC%segment(l_seg)%direction == OBC_DIRECTION_S) then
       if (color(i,j) == 0.0) color(i,j) = cout
       if (color(i,j+1) == 0.0) color(i,j+1) = cin
-    elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+    elseif (OBC%segment(l_seg)%direction == OBC_DIRECTION_N) then
       if (color(i,j) == 0.0) color(i,j) = cin
       if (color(i,j+1) == 0.0) color(i,j+1) = cout
     endif
   enddo ; enddo
 
   do J=G%JsdB+1,G%JedB-1 ; do i=G%isd,G%ied
-    if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+    l_seg = OBC%segnum_v(i,J)
+    if (l_seg == OBC_NONE) cycle
+
+    if (OBC%segment(l_seg)%direction == OBC_DIRECTION_S) then
       if (color2(i,j) == 0.0) color2(i,j) = cout
       if (color2(i,j+1) == 0.0) color2(i,j+1) = cin
-    elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+    elseif (OBC%segment(l_seg)%direction == OBC_DIRECTION_N) then
       if (color2(i,j) == 0.0) color2(i,j) = cin
       if (color2(i,j+1) == 0.0) color2(i,j+1) = cout
     endif
   enddo ; enddo
   do j=G%jsd,G%jed ; do i=G%IsdB+1,G%IedB-1
-    if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+    l_seg = OBC%segnum_u(I,j)
+    if (l_seg == OBC_NONE) cycle
+
+    if (OBC%segment(l_seg)%direction == OBC_DIRECTION_W) then
       if (color2(i,j) == 0.0) color2(i,j) = cout
       if (color2(i+1,j) == 0.0) color2(i+1,j) = cin
-    elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+    elseif (OBC%segment(l_seg)%direction == OBC_DIRECTION_E) then
       if (color2(i,j) == 0.0) color2(i,j) = cin
       if (color2(i+1,j) == 0.0) color2(i+1,j) = cout
     endif
