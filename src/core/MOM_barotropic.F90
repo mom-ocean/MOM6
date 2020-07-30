@@ -27,6 +27,7 @@ use MOM_time_manager, only : time_type, real_to_time, operator(+), operator(-)
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : BT_cont_type, alloc_bt_cont_type
 use MOM_verticalGrid, only : verticalGrid_type
+use MOM_variables, only : accel_diag_ptrs
 
 implicit none ; private
 
@@ -405,7 +406,7 @@ contains
 subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, &
                   eta_PF_in, U_Cor, V_Cor, accel_layer_u, accel_layer_v, &
                   eta_out, uhbtav, vhbtav, G, GV, US, CS, &
-                  visc_rem_u, visc_rem_v, etaav, OBC, BT_cont, eta_PF_start, &
+                  visc_rem_u, visc_rem_v, etaav, ADp, OBC, BT_cont, eta_PF_start, &
                   taux_bot, tauy_bot, uh0, vh0, u_uh0, v_vh0)
   type(ocean_grid_type),                   intent(inout) :: G       !< The ocean's grid structure.
   type(verticalGrid_type),                   intent(in)  :: GV      !< The ocean's vertical grid structure.
@@ -458,6 +459,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: visc_rem_v    !< Ditto for meridional direction [nondim].
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(out) :: etaav        !< The free surface height or column mass
                                                          !! averaged over the barotropic integration [H ~> m or kg m-2].
+  type(accel_diag_ptrs),               optional, pointer :: ADp          !< Acceleration diagnostic pointers
   type(ocean_OBC_type),                optional, pointer :: OBC          !< The open boundary condition structure.
   type(BT_cont_type),                  optional, pointer :: BT_cont      !< A structure with elements that describe
                                                          !! the effective open face areas as a function of barotropic
@@ -2588,6 +2590,17 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   else
     if (CS%id_frhatu1 > 0) CS%frhatu1(:,:,:) = CS%frhatu(:,:,:)
     if (CS%id_frhatv1 > 0) CS%frhatv1(:,:,:) = CS%frhatv(:,:,:)
+  endif
+
+  if ((present(ADp)) .and. (associated(ADp%diag_hfrac_u))) then
+    do k=1,nz ; do j=js,je ; do I=is-1,ie
+      ADp%diag_hfrac_u(I,j,k) = CS%frhatu(I,j,k)
+    enddo ; enddo ; enddo
+  endif
+  if ((present(ADp)) .and. (associated(ADp%diag_hfrac_v))) then
+    do k=1,nz ; do J=js-1,je ; do i=is,ie
+      ADp%diag_hfrac_v(i,J,k) = CS%frhatv(i,J,k)
+    enddo ; enddo ; enddo
   endif
 
   if (G%nonblocking_updates) then
