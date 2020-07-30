@@ -687,6 +687,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   integer :: is, ie, js, je, nz, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: ioff, joff
+  integer :: l_seg
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
       "btstep: Module MOM_barotropic must be initialized before it is used.")
@@ -2324,9 +2325,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     if (CS%BT_OBC%apply_u_OBCs) then  ! copy back the value for u-points on the boundary.
       !GOMP parallel do default(shared)
       do j=js,je ; do I=is-1,ie
-        if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+        l_seg = OBC%segnum_u(I,j)
+        if (l_seg == OBC_NONE) cycle
+
+        if (OBC%segment(l_seg)%direction == OBC_DIRECTION_E) then
           e_anom(i+1,j) = e_anom(i,j)
-        elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+        elseif (OBC%segment(l_seg)%direction == OBC_DIRECTION_W) then
           e_anom(i,j) = e_anom(i+1,j)
         endif
       enddo ; enddo
@@ -2335,9 +2339,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     if (CS%BT_OBC%apply_v_OBCs) then  ! copy back the value for v-points on the boundary.
       !GOMP parallel do default(shared)
       do J=js-1,je ; do I=is,ie
-        if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+        l_seg = OBC%segnum_v(i,J)
+        if (l_seg == OBC_NONE) cycle
+
+        if (OBC%segment(l_seg)%direction == OBC_DIRECTION_N) then
           e_anom(i,j+1) = e_anom(i,j)
-        elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+        elseif (OBC%segment(l_seg)%direction == OBC_DIRECTION_S) then
           e_anom(i,j) = e_anom(i,j+1)
         endif
       enddo ; enddo

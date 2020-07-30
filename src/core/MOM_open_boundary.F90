@@ -445,9 +445,8 @@ subroutine open_boundary_config(G, US, param_file, OBC)
     call get_param(param_file, mdl, "REENTRANT_Y", reentrant_y, default=.false.)
 
     ! Allocate everything
-    ! Note the 0-segment is needed when %segnum_u/v(:,:) = 0
-    allocate(OBC%segment(0:OBC%number_of_segments))
-    do l=0,OBC%number_of_segments
+    allocate(OBC%segment(1:OBC%number_of_segments))
+    do l=1,OBC%number_of_segments
       OBC%segment(l)%Flather = .false.
       OBC%segment(l)%radiation = .false.
       OBC%segment(l)%radiation_tan = .false.
@@ -4971,7 +4970,7 @@ subroutine rotate_OBC_config(OBC_in, G_in, OBC, G, turns)
 
   ! Segment rotation
   allocate(OBC%segment(0:OBC%number_of_segments))
-  do l = 0, OBC%number_of_segments
+  do l = 1, OBC%number_of_segments
     call rotate_OBC_segment_config(OBC_in%segment(l), G_in, OBC%segment(l), G, turns)
     ! Data up to setup_[uv]_point_obc is needed for allocate_obc_segment_data!
     call allocate_OBC_segment_data(OBC, OBC%segment(l))
@@ -5168,7 +5167,7 @@ subroutine rotate_OBC_init(OBC_in, G, GV, US, param_file, tv, restart_CSp, OBC)
                  "If true, Temperature and salinity are used as state "//&
                  "variables.", default=.true., do_not_log=.true.)
 
-  do l = 0, OBC%number_of_segments
+  do l = 1, OBC%number_of_segments
     call rotate_OBC_segment_data(OBC_in%segment(l), OBC%segment(l), G%HI%turns)
   enddo
 

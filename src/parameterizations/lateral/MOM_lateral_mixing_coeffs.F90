@@ -17,7 +17,7 @@ use MOM_unit_scaling,      only : unit_scale_type
 use MOM_variables,         only : thermo_var_ptrs
 use MOM_verticalGrid,      only : verticalGrid_type
 use MOM_wave_speed,        only : wave_speed, wave_speed_CS, wave_speed_init
-use MOM_open_boundary,     only : ocean_OBC_type
+use MOM_open_boundary,     only : ocean_OBC_type, OBC_NONE
 
 implicit none ; private
 
@@ -499,6 +499,7 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS, O
   real :: H_geom        ! The geometric mean of Hup*Hdn [H ~> m or kg m-2].
   integer :: is, ie, js, je, nz
   integer :: i, j, k, kb_max
+  integer :: l_seg
   real :: S2max, wNE, wSE, wSW, wNW
   real :: H_u(SZIB_(G)), H_v(SZI_(G))
   real :: S2_u(SZIB_(G), SZJ_(G))
@@ -568,8 +569,12 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS, O
         CS%SN_u(I,j) = 0.
       endif
       if (local_open_u_BC) then
-        if (OBC%segment(OBC%segnum_u(I,j))%open) then
-          CS%SN_u(i,J) = 0.
+        l_seg = OBC%segnum_u(I,j)
+
+        if (l_seg /= OBC_NONE) then
+          if (OBC%segment(l_seg)%open) then
+            CS%SN_u(i,J) = 0.
+          endif
         endif
       endif
     enddo
@@ -609,8 +614,12 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS, O
         CS%SN_v(i,J) = 0.
       endif
       if (local_open_v_BC) then
-        if (OBC%segment(OBC%segnum_v(i,J))%open) then
-          CS%SN_v(i,J) = 0.
+        l_seg = OBC%segnum_v(i,J)
+
+        if (l_seg /= OBC_NONE) then
+          if (OBC%segment(OBC%segnum_v(i,J))%open) then
+            CS%SN_v(i,J) = 0.
+          endif
         endif
       endif
     enddo
@@ -657,6 +666,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   real :: one_meter     ! One meter in thickness units [H ~> m or kg m-2].
   integer :: is, ie, js, je, nz
   integer :: i, j, k, kb_max
+  integer :: l_seg
   real    :: S2N2_u_local(SZIB_(G), SZJ_(G),SZK_(G))
   real    :: S2N2_v_local(SZI_(G), SZJB_(G),SZK_(G))
   logical :: local_open_u_BC, local_open_v_BC
@@ -754,8 +764,12 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
         CS%SN_u(I,j) = 0.0
       endif
       if (local_open_u_BC) then
-        if (OBC%segment(OBC%segnum_u(I,j))%open) then
-          CS%SN_u(I,j) = 0.
+        l_seg = OBC%segnum_u(I,j)
+
+        if (l_seg /= OBC_NONE) then
+          if (OBC%segment(l_seg)%open) then
+            CS%SN_u(I,j) = 0.
+          endif
         endif
       endif
     enddo
@@ -776,8 +790,12 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
         CS%SN_v(I,j) = 0.0
       endif
       if (local_open_v_BC) then
-        if (OBC%segment(OBC%segnum_v(I,j))%open) then
-          CS%SN_v(I,j) = 0.
+        l_seg = OBC%segnum_v(I,j)
+
+        if (l_seg /= OBC_NONE) then
+          if (OBC%segment(OBC%segnum_v(I,j))%open) then
+            CS%SN_v(I,j) = 0.
+          endif
         endif
       endif
     enddo
