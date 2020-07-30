@@ -3947,7 +3947,8 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                           G%dyCu(I,j)
                 normal_trans_bt(I,j) = normal_trans_bt(I,j) + segment%normal_trans(I,j,k)
               enddo
-              segment%normal_vel_bt(I,j) = normal_trans_bt(I,j) / (max(segment%Htot(I,j),1.e-12) * G%dyCu(I,j))
+              segment%normal_vel_bt(I,j) = normal_trans_bt(I,j) &
+                  / (max(segment%Htot(I,j), 1.e-12 * GV%m_to_H) * G%dyCu(I,j))
               if (associated(segment%nudged_normal_vel)) segment%nudged_normal_vel(I,j,:) = segment%normal_vel(I,j,:)
             enddo
           elseif (trim(segment%field(m)%name) == 'V' .and. segment%is_N_or_S) then
@@ -3960,7 +3961,8 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                           G%dxCv(i,J)
                 normal_trans_bt(i,J) = normal_trans_bt(i,J) + segment%normal_trans(i,J,k)
               enddo
-              segment%normal_vel_bt(i,J) = normal_trans_bt(i,J) / (max(segment%Htot(i,J),1.e-12) * G%dxCv(i,J))
+              segment%normal_vel_bt(i,J) = normal_trans_bt(i,J) &
+                  / (max(segment%Htot(i,J), 1.e-12 * GV%m_to_H) * G%dxCv(i,J))
               if (associated(segment%nudged_normal_vel)) segment%nudged_normal_vel(i,J,:) = segment%normal_vel(i,J,:)
             enddo
           elseif (trim(segment%field(m)%name) == 'V' .and. segment%is_E_or_W .and. &
@@ -4028,13 +4030,14 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
         if (OBC%ramp) then
           do j=js_obc2,je_obc
             do i=is_obc2,ie_obc
-              segment%eta(i,j) = OBC%ramp_value * segment%field(m)%buffer_dst(i,j,1)
+              segment%eta(i,j) = GV%m_to_H * OBC%ramp_value &
+                  * segment%field(m)%buffer_dst(i,j,1)
             enddo
           enddo
         else
           do j=js_obc2,je_obc
             do i=is_obc2,ie_obc
-              segment%eta(i,j) = segment%field(m)%buffer_dst(i,j,1)
+              segment%eta(i,j) = GV%m_to_H * segment%field(m)%buffer_dst(i,j,1)
             enddo
           enddo
         endif
@@ -4883,8 +4886,8 @@ subroutine adjustSegmentEtaToFitBathymetry(G, GV, US, segment,fld)
     ! The normal slope at the boundary is zero by a
     ! previous call to open_boundary_impose_normal_slope
     do k=nz+1,1,-1
-      if (-eta(i,j,k) > segment%Htot(i,j) + hTolerance) then
-         eta(i,j,k) = -segment%Htot(i,j)
+      if (-eta(i,j,k) > segment%Htot(i,j)*GV%H_to_Z + hTolerance) then
+         eta(i,j,k) = -segment%Htot(i,j)*GV%H_to_Z
          contractions = contractions + 1
       endif
     enddo
@@ -4902,10 +4905,10 @@ subroutine adjustSegmentEtaToFitBathymetry(G, GV, US, segment,fld)
 
     !   The whole column is dilated to accommodate deeper topography than
     ! the bathymetry would indicate.
-    if (-eta(i,j,nz+1) < segment%Htot(i,j) - hTolerance) then
+    if (-eta(i,j,nz+1) < (segment%Htot(i,j) * GV%H_to_Z) - hTolerance) then
        dilations = dilations + 1
        ! expand bottom-most cell only
-       eta(i,j,nz+1) = -segment%Htot(i,j)
+       eta(i,j,nz+1) = -(segment%Htot(i,j) * GV%H_to_Z)
        segment%field(fld)%dz_src(i,j,nz)= eta(i,j,nz)-eta(i,j,nz+1)
        ! if (eta(i,j,1) <= eta(i,j,nz+1)) then
        !   do k=1,nz ; segment%field(fld)%dz_src(i,j,k) = (eta(i,j,1) + G%bathyT(i,j)) / real(nz) ; enddo
