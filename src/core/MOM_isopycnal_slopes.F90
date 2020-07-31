@@ -8,7 +8,7 @@ use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density_derivs
-use MOM_open_boundary, only : ocean_OBC_type
+use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 
 implicit none ; private
@@ -105,6 +105,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   integer, dimension(2) :: EOSdom_u, EOSdom_v ! Domains for the equation of state calculations at u and v points
   integer :: is, ie, js, je, nz, IsdB
   integer :: i, j, k
+  integer :: l_seg
   logical :: local_open_u_BC, local_open_v_BC
 
   if (present(halo)) then
@@ -183,7 +184,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
   !$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
   !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
-  !$OMP                                  drdx,mag_grad2,Slope,slope2_Ratio)
+  !$OMP                                  drdx,mag_grad2,Slope,slope2_Ratio,l_seg)
   do j=js,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
       drdiA = 0.0 ; drdiB = 0.0
@@ -260,15 +261,18 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
         slope_x(I,j,K) = (Z_to_L*(e(i,j,K)-e(i+1,j,K))) * G%IdxCu(I,j)
       endif
       if (local_open_u_BC) then
-        if (OBC%segment(OBC%segnum_u(I,j))%open) then
-          slope_x(I,j,K) = 0.
-          ! This and/or the masking code below is to make slopes match inside
-          ! land mask. Might not be necessary except for DEBUG output.
-!         if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-!           slope_x(I+1,j,K) = 0.
-!         else
-!           slope_x(I-1,j,K) = 0.
-!         endif
+        l_seg = OBC%segnum_u(I,j)
+        if (l_seg /= OBC_NONE) then
+          if (OBC%segment(l_seg)%open) then
+            slope_x(I,j,K) = 0.
+            ! This and/or the masking code below is to make slopes match inside
+            ! land mask. Might not be necessary except for DEBUG output.
+!           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+!             slope_x(I+1,j,K) = 0.
+!           else
+!             slope_x(I-1,j,K) = 0.
+!           endif
+          endif
         endif
         slope_x(I,j,K) = slope_x(I,j,k) * max(g%mask2dT(i,j),g%mask2dT(i+1,j))
       endif
@@ -286,7 +290,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   !$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
   !$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
   !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
-  !$OMP                                  drdy,mag_grad2,Slope,slope2_Ratio)
+  !$OMP                                  drdy,mag_grad2,Slope,slope2_Ratio,l_seg)
   do j=js-1,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
       drdjA = 0.0 ; drdjB = 0.0
@@ -360,15 +364,18 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
         slope_y(i,J,K) = (Z_to_L*(e(i,j,K)-e(i,j+1,K))) * G%IdyCv(i,J)
       endif
       if (local_open_v_BC) then
-        if (OBC%segment(OBC%segnum_v(i,J))%open) then
-          slope_y(i,J,K) = 0.
-          ! This and/or the masking code below is to make slopes match inside
-          ! land mask. Might not be necessary except for DEBUG output.
-!         if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-!           slope_y(i,J+1,K) = 0.
-!         else
-!           slope_y(i,J-1,K) = 0.
-!         endif
+        l_seg = OBC%segnum_v(i,J)
+        if (l_seg /= OBC_NONE) then
+          if (OBC%segment(l_seg)%open) then
+            slope_y(i,J,K) = 0.
+            ! This and/or the masking code below is to make slopes match inside
+            ! land mask. Might not be necessary except for DEBUG output.
+!           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+!             slope_y(i,J+1,K) = 0.
+!           else
+!             slope_y(i,J-1,K) = 0.
+!           endif
+          endif
         endif
         slope_y(i,J,K) = slope_y(i,J,k) * max(g%mask2dT(i,j),g%mask2dT(i,j+1))
       endif
