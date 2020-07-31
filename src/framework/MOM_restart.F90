@@ -12,6 +12,7 @@ use MOM_io, only : get_file_info, get_file_atts, get_file_fields, get_file_times
 use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc
 use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
+use MOM_array_transform, only : allocate_rotated_array, rotate_array
 use MOM_axis, only : get_time_units, convert_checksum_to_string
 use MOM_axis, only : axis_data_type, MOM_get_diagnostic_axis_data
 use MOM_axis, only : MOM_register_diagnostic_axis, get_var_dimension_metadata
@@ -875,10 +876,16 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, use_
   type(verticalGrid_type), optional, intent(in) :: GV !< The ocean's vertical grid structure
   logical, optional,  intent(in) :: use_fms2 !< flag to call save_restart_fms2
   logical, optional,  intent(in) :: write_ic !< flag to call write_initial_conditions
+  ! local
+  logical :: write_initcond, call_fms2
+  write_initcond = .false.
+  call_fms2 = .false.
+  if (present(use_fms2)) call_fms2 = use_fms2
+  if (present(write_ic)) write_initcond = write_ic
 
-  if (present(write_ic) .and. write_ic) then
+  if (write_initcond) then
     call write_initial_conditions(directory, time, G, CS, time_stamped=time_stamped, filename=filename, GV=GV)
-  elseif (present(use_fms2) .and. use_fms2) then
+  elseif (call_fms2) then
     call save_restart_fms2(directory, time, G, CS, time_stamped=time_stamped, filename=filename, GV=GV)
   else
     call save_restart_old(directory, time, G, CS, time_stamped=time_stamped, filename=filename, GV=GV)
@@ -1151,11 +1158,26 @@ subroutine save_restart_fms2(directory, time, G, CS, time_stamped, filename, GV)
   character(len=64) :: units
   character(len=256) :: longname
   real, dimension(:), allocatable :: data_temp
+  type a2d
+    real, allocatable :: a(:,:)
+  end type a2d
+  type a3d
+    real, allocatable :: a(:,:,:)
+  end type a3d
+  type a4d
+    real, allocatable :: a(:,:,:,:)
+  end type a4d
+  type(a2d), allocatable :: field_rot2d(:)
+  type(a3d), allocatable :: field_rot3d(:)
+  type(a4d), allocatable :: field_rot4d(:)
   type(axis_data_type) :: axis_data_CS
   integer :: isL, ieL, jsL, jeL, pos
   integer :: turns
 
   turns = CS%turns
+  allocate(field_rot2d(CS%novars))
+  allocate(field_rot3d(CS%novars))
+  allocate(field_rot4d(CS%novars))
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "save_restart_fms2: Module must be initialized before it is used.")
@@ -1302,7 +1324,8 @@ subroutine save_restart_fms2(directory, time, G, CS, time_stamped, filename, GV)
     ! register the time data
     if (.not. variable_exists(fileObjWrite, "Time")) then
       call register_field(fileObjWrite, "Time", "double", dimensions=(/"Time"/))
-      call register_variable_attribute(fileObjWrite, "Time", "units", restart_time_units)
+      call register_variable_attribute(fileObjWrite, "Time", "units", restart_time_units, &
+                                       str_len=len_trim(restart_time_units))
     endif
 
     do m=start_var,next_var-1
@@ -1364,14 +1387,35 @@ subroutine save_restart_fms2(directory, time, G, CS, time_stamped, filename, GV)
                                         dim_names, dim_lengths, num_dims, G=G, GV=GV)
         ! register the restart variables to the file
         if (associated(CS%var_ptr3d(m)%p)) then
-          call fms2_register_restart_field(fileObjWrite, CS%restart_field(m-start_var+1)%var_name, &
-                                            CS%var_ptr3d(m)%p, dimensions=dim_names(1:num_dims))
+          if (modulo(turns, 2) /= 0) then
+            call allocate_rotated_array(CS%var_ptr3d(m)%p, [1,1,1], turns, field_rot3d(m)%a)
+            call rotate_array(CS%var_ptr3d(m)%p, turns, field_rot3d(m)%a)
+            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m-start_var+1)%var_name, &
+                                             field_rot3d(m)%a, dimensions=dim_names(1:num_dims))
+          else
+            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m-start_var+1)%var_name, &
+                                             CS%var_ptr3d(m)%p, dimensions=dim_names(1:num_dims))
+          endif
         elseif (associated(CS%var_ptr2d(m)%p)) then
-          call fms2_register_restart_field(fileObjWrite, CS%restart_field(m-start_var+1)%var_name, &
-                                           CS%var_ptr2d(m)%p, dimensions=dim_names(1:num_dims))
+          if (modulo(turns, 2) /= 0) then
+            call allocate_rotated_array(CS%var_ptr2d(m)%p, [1,1], turns, field_rot2d(m)%a)
+            call rotate_array(CS%var_ptr2d(m)%p, turns, field_rot2d(m)%a)
+            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m-start_var+1)%var_name, &
+                                             field_rot2d(m)%a, dimensions=dim_names(1:num_dims))
+          else
+            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m-start_var+1)%var_name, &
+                                             CS%var_ptr2d(m)%p, dimensions=dim_names(1:num_dims))
+          endif
         elseif (associated(CS%var_ptr4d(m)%p)) then
-          call fms2_register_restart_field(fileObjWrite, CS%restart_field(m-start_var+1)%var_name, &
-                                           CS%var_ptr4d(m)%p, dimensions=dim_names(1:num_dims))
+          if (modulo(turns, 2) /= 0) then
+            call allocate_rotated_array(CS%var_ptr4d(m)%p, [1,1,1,1], turns, field_rot4d(m)%a)
+            call rotate_array(CS%var_ptr4d(m)%p, turns, field_rot4d(m)%a)
+            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m-start_var+1)%var_name, &
+                                             field_rot4d(m)%a, dimensions=dim_names(1:num_dims))
+          else
+            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m-start_var+1)%var_name, &
+                                             CS%var_ptr4d(m)%p, dimensions=dim_names(1:num_dims))
+          endif
         elseif (associated(CS%var_ptr1d(m)%p)) then
           ! need to pass dim_names argument as a 1-D array
           call fms2_register_restart_field(fileObjWrite, CS%restart_field(m-start_var+1)%var_name, &
@@ -1388,9 +1432,9 @@ subroutine save_restart_fms2(directory, time, G, CS, time_stamped, filename, GV)
         !call register_variable_attribute(fileObjWrite, CS%restart_field(m-start_var+1)%var_name, &
         !                                 'checksum', trim(checksum_char))
         call register_variable_attribute(fileObjWrite, CS%restart_field(m-start_var+1)%var_name, &
-                                         'units', units)
+                                         'units', units, str_len=len_trim(units))
         call register_variable_attribute(fileObjWrite, CS%restart_field(m-start_var+1)%var_name, &
-                                         'long_name', longname)
+                                         'long_name', longname, str_len=len_trim(longname))
       endif
     enddo
     ! write the time data
@@ -1404,8 +1448,15 @@ subroutine save_restart_fms2(directory, time, G, CS, time_stamped, filename, GV)
     if (associated(axis_data_CS%data)) deallocate(axis_data_CS%data)
 
     num_files = num_files+1
+    do m=1,CS%novars
+      if (allocated(field_rot4d(m)%a)) deallocate(field_rot4d(m)%a)
+      if (allocated(field_rot3d(m)%a)) deallocate(field_rot3d(m)%a)
+      if (allocated(field_rot2d(m)%a)) deallocate(field_rot2d(m)%a)
+    enddo
   enddo
-
+  if (allocated(field_rot2d)) deallocate(field_rot2d)
+  if (allocated(field_rot3d)) deallocate(field_rot3d)
+  if (allocated(field_rot4d)) deallocate(field_rot4d)
 end subroutine save_restart_fms2
 
 !> write initial condition fields to a netCDF file
@@ -1431,7 +1482,6 @@ subroutine write_initial_conditions(directory, time, G, CS, time_stamped, filena
   integer :: i, is, ie, k, m, isc, jsc, iec, jec, isg, jsg, ieg, jeg
   integer :: var_periods
   integer, dimension(4) :: dim_lengths
-  integer, allocatable :: pos(:),first(:,:), last(:,:)
   logical :: fileOpenSuccess ! .true. if netcdf file is opened
   character(len=200) :: base_file_name
   character(len=200) :: dim_names(4)
@@ -1441,6 +1491,10 @@ subroutine write_initial_conditions(directory, time, G, CS, time_stamped, filena
   character(len=8) :: hor_grid, z_grid, t_grid ! Variable grid info.
   real :: ic_time
   real, dimension(:), allocatable :: data_temp
+  real, allocatable :: field_rot_2d(:,:), field_rot_3d(:,:,:), field_rot_4d(:,:,:,:)
+  integer :: turns
+
+  turns = CS%turns
 
   ! define the io domain for 1-pe jobs because it is required to write domain-decomposed files
   if (mpp_get_domain_npes(G%domain%mpp_domain) .eq. 1 ) then
@@ -1470,13 +1524,8 @@ subroutine write_initial_conditions(directory, time, G, CS, time_stamped, filena
   ! register the time data
   if (.not. variable_exists(fileObjWrite, "Time")) then
     call register_field(fileObjWrite, "Time", "double", dimensions=(/"Time"/))
-    call register_variable_attribute(fileObjWrite, "Time", "units", time_units)
+    call register_variable_attribute(fileObjWrite, "Time", "units", time_units, str_len=len_trim(time_units))
   endif
-  ! allocate position indices for x- and y-dimensions associated with variables
-  allocate(pos(CS%novars))
-  allocate(first(CS%novars,2)); allocate(last(CS%novars,2));
-  first(:,:) = 0; last(:,:) = 0
-  pos(:) = CENTER
   ! register and write the field variables to the initial conditions file
   do m=1,CS%novars
     longname = ""
@@ -1490,22 +1539,10 @@ subroutine write_initial_conditions(directory, time, G, CS, time_stamped, filena
 
     call get_var_dimension_metadata(hor_grid, z_grid, t_grid, &
                                     dim_names, dim_lengths, num_dims, G=G, GV=GV)
-    select case (hor_grid)
-      case ('q') ; pos(m) = CORNER
-      case ('h') ; pos(m) = CENTER
-      case ('u') ; pos(m) = EAST_FACE
-      case ('v') ; pos(m) =  NORTH_FACE
-      case ('Bu') ; pos(m) = CORNER
-      case ('T')  ; pos(m) = CENTER
-      case ('Cu') ; pos(m) = EAST_FACE
-      case ('Cv') ; pos(m) = NORTH_FACE
-      case ('1') ; pos(m) = 0
-      case default ; pos(m)= 0
-    end select
     ! register the variables
     if (associated(CS%var_ptr3d(m)%p)) then
       call register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", &
-                              dimensions=dim_names(1:num_dims))
+                            dimensions=dim_names(1:num_dims))
     elseif (associated(CS%var_ptr2d(m)%p)) then
       call register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", &
                               dimensions=dim_names(1:num_dims))
@@ -1522,20 +1559,46 @@ subroutine write_initial_conditions(directory, time, G, CS, time_stamped, filena
                               dimensions=(/dim_names(1)/))
     endif
     ! register the variable attributes
-    call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, "units", units)
-    call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, "long_name", longname)
+    call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, "units", units, &
+                                     str_len=len_trim(units))
+    call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, "long_name", longname, &
+                                     str_len=len_trim(longname))
   enddo
 
   do m=1,CS%novars
     if (associated(CS%var_ptr3d(m)%p)) then
-      call write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr3d(m)%p, &
+      if (modulo(turns, 2) /= 0) then
+        call allocate_rotated_array(CS%var_ptr3d(m)%p, [1,1,1], turns, field_rot_3d)
+        call rotate_array(CS%var_ptr3d(m)%p, turns, field_rot_3d)
+        call write_data(fileObjWrite, CS%restart_field(m)%var_name, field_rot_3d, &
+                        unlim_dim_level=1)
+        deallocate(field_rot_3d)
+      else
+        call write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr3d(m)%p, &
                       unlim_dim_level=1)
+      endif
     elseif (associated(CS%var_ptr2d(m)%p)) then
-      call write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p, &
-                      unlim_dim_level=1)
+      if (modulo(turns, 2) /= 0) then
+        call allocate_rotated_array(CS%var_ptr2d(m)%p, [1,1], turns, field_rot_2d)
+        call rotate_array(CS%var_ptr2d(m)%p, turns, field_rot_2d)
+        call write_data(fileObjWrite, CS%restart_field(m)%var_name, field_rot_2d, &
+                        unlim_dim_level=1)
+        deallocate(field_rot_2d)
+      else
+        call write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p, &
+                        unlim_dim_level=1)
+      endif
     elseif (associated(CS%var_ptr4d(m)%p)) then
-      call write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p, &
-                      unlim_dim_level=1)
+       if (modulo(turns, 2) /= 0) then
+        call allocate_rotated_array(CS%var_ptr4d(m)%p, [1,1,1,1], turns, field_rot_4d)
+        call rotate_array(CS%var_ptr4d(m)%p, turns, field_rot_4d)
+        call write_data(fileObjWrite, CS%restart_field(m)%var_name, field_rot_4d, &
+                        unlim_dim_level=1)
+        deallocate(field_rot_4d)
+      else
+        call write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p, &
+                        unlim_dim_level=1)
+      endif
     elseif (associated(CS%var_ptr1d(m)%p)) then
       call write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr1d(m)%p, &
                       unlim_dim_level=1)
@@ -1550,7 +1613,6 @@ subroutine write_initial_conditions(directory, time, G, CS, time_stamped, filena
 
   if (associated(axis_data_CS%axis)) deallocate(axis_data_CS%axis)
   if (associated(axis_data_CS%data)) deallocate(axis_data_CS%data)
-  deallocate(pos);  deallocate(first); deallocate(last)
 end subroutine write_initial_conditions
 
 !> wrapper routine for restore_state_old and restore_state_fms2
@@ -2521,6 +2583,5 @@ function get_variable_byte_size(hor_grid, z_grid, t_grid, G, num_zlevels) result
   endif
 
 end function get_variable_byte_size
-
 
 end module MOM_restart

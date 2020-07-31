@@ -541,14 +541,17 @@ subroutine create_file_fms2_filename(filename, vars, numVariables, use_fms2, reg
                                   "double", dimensions=(/trim(axis_data_CS%axis(j)%name)/))
 
                 call register_variable_attribute(fileObjDD, trim(axis_data_CS%axis(j)%name), &
-                                               'long_name', axis_data_CS%axis(j)%longname)
+                                                 'long_name', axis_data_CS%axis(j)%longname, &
+                                                  str_len=len_trim(axis_data_CS%axis(j)%longname))
 
                 call register_variable_attribute(fileObjDD, trim(axis_data_CS%axis(j)%name), &
-                                               'units', trim(axis_data_CS%axis(j)%units))
+                                                 'units', trim(axis_data_CS%axis(j)%units), &
+                                                 str_len=len_trim(axis_data_CS%axis(j)%units))
 
                 if (len_trim(axis_data_CS%axis(j)%positive)>1) &
                   call register_variable_attribute(fileObjDD, trim(axis_data_CS%axis(j)%name), &
-                                                   'positive', trim(axis_data_CS%axis(j)%positive))
+                                                   'positive', trim(axis_data_CS%axis(j)%positive), &
+                                                   str_len=len_trim(axis_data_CS%axis(j)%positive))
 
                 if (axis_data_CS%axis(j)%is_domain_decomposed) then
                   call get_global_io_domain_indices(fileObjDD, trim(axis_data_CS%axis(j)%name), is, ie)
@@ -801,14 +804,17 @@ subroutine create_file_fms2_fileobj(filename, fileObjDD, vars, numVariables, reg
                                   "double", dimensions=(/trim(axis_data_CS%axis(j)%name)/))
 
                 call register_variable_attribute(fileObjDD, trim(axis_data_CS%axis(j)%name), &
-                                               'long_name', axis_data_CS%axis(j)%longname)
+                                                 'long_name', axis_data_CS%axis(j)%longname, &
+                                                 str_len=len_trim(axis_data_CS%axis(j)%longname))
 
                 call register_variable_attribute(fileObjDD, trim(axis_data_CS%axis(j)%name), &
-                                               'units', trim(axis_data_CS%axis(j)%units))
+                                                 'units', trim(axis_data_CS%axis(j)%units), &
+                                                 str_len=len_trim(axis_data_CS%axis(j)%units))
 
                 if (len_trim(axis_data_CS%axis(j)%positive)>1) &
                   call register_variable_attribute(fileObjDD, trim(axis_data_CS%axis(j)%name), &
-                                                   'positive', trim(axis_data_CS%axis(j)%positive))
+                                                   'positive', trim(axis_data_CS%axis(j)%positive), &
+                                                   str_len=len_trim(axis_data_CS%axis(j)%positive))
 
                 if (axis_data_CS%axis(j)%is_domain_decomposed) then
                   call get_global_io_domain_indices(fileObjDD, trim(axis_data_CS%axis(j)%name), is, ie)
