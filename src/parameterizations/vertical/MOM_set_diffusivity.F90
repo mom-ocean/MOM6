@@ -1677,7 +1677,9 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS, OBC)
 
   logical :: domore, do_i(SZI_(G))
   integer :: i, j, k, is, ie, js, je, nz
+  integer :: l_seg
   logical :: local_open_u_BC, local_open_v_BC
+  logical :: has_obc
 
   local_open_u_BC = .false.
   local_open_v_BC = .false.
@@ -1718,15 +1720,21 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS, OBC)
     do k=nz,1,-1
       domore = .false.
       do i=is,ie ; if (do_i(i)) then
+        ! Determine if grid point is an OBC
+        has_obc = .false.
         if (local_open_v_BC) then
-          if (OBC%segment(OBC%segnum_v(i,J))%open) then
-            if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-              hvel = GV%H_to_Z*h(i,j,k)
-            else
-              hvel = GV%H_to_Z*h(i,j+1,k)
-            endif
+          l_seg = OBC%segnum_v(i,J)
+          if (l_seg /= OBC_NONE) then
+            has_obc = OBC%segment(l_seg)%open
+          endif
+        endif
+
+        ! Compute h based on OBC state
+        if (has_obc) then
+          if (OBC%segment(l_seg)%direction == OBC_DIRECTION_N) then
+            hvel = GV%H_to_Z*h(i,j,k)
           else
-            hvel = 0.5*GV%H_to_Z*(h(i,j,k) + h(i,j+1,k))
+            hvel = GV%H_to_Z*h(i,j+1,k)
           endif
         else
           hvel = 0.5*GV%H_to_Z*(h(i,j,k) + h(i,j+1,k))
@@ -1760,15 +1768,21 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS, OBC)
     endif ; enddo
     do k=nz,1,-1 ; domore = .false.
       do I=is-1,ie ; if (do_i(I)) then
+        ! Determine if grid point is an OBC
+        has_obc = .false.
         if (local_open_u_BC) then
-          if (OBC%segment(OBC%segnum_u(I,j))%open) then
-            if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-              hvel = GV%H_to_Z*h(i,j,k)
-            else
-              hvel = GV%H_to_Z*h(i+1,j,k)
-            endif
-          else
-            hvel = 0.5*GV%H_to_Z*(h(i,j,k) + h(i+1,j,k))
+          l_seg = OBC%segnum_u(I,j)
+          if (l_seg /= OBC_NONE) then
+            has_obc = OBC%segment(l_seg)%open
+          endif
+        endif
+
+        ! Compute h based on OBC state
+        if (has_obc) then
+          if (OBC%segment(l_seg)%direction == OBC_DIRECTION_E) then
+            hvel = GV%H_to_Z*h(i,j,k)
+          else ! OBC_DIRECTION_W
+            hvel = GV%H_to_Z*h(i+1,j,k)
           endif
         else
           hvel = 0.5*GV%H_to_Z*(h(i,j,k) + h(i+1,j,k))

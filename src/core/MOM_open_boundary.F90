@@ -505,9 +505,8 @@ subroutine open_boundary_config(G, US, param_file, OBC)
     call get_param(param_file, mdl, "REENTRANT_Y", reentrant_y, default=.false.)
 
     ! Allocate everything
-    ! Note the 0-segment is needed when %segnum_u/v(:,:) = 0
-    allocate(OBC%segment(0:OBC%number_of_segments))
-    do l=0,OBC%number_of_segments
+    allocate(OBC%segment(1:OBC%number_of_segments))
+    do l=1,OBC%number_of_segments
       OBC%segment(l)%Flather = .false.
       OBC%segment(l)%radiation = .false.
       OBC%segment(l)%radiation_tan = .false.
@@ -4183,7 +4182,8 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                 segment%normal_trans(I,j,k) = segment%normal_vel(I,j,k)*segment%h(I,j,k) * G%dyCu(I,j)
                 normal_trans_bt(I,j) = normal_trans_bt(I,j) + segment%normal_trans(I,j,k)
               enddo
-              segment%normal_vel_bt(I,j) = normal_trans_bt(I,j) / (max(segment%Htot(I,j),1.e-12) * G%dyCu(I,j))
+              segment%normal_vel_bt(I,j) = normal_trans_bt(I,j) &
+                  / (max(segment%Htot(I,j), 1.e-12 * GV%m_to_H) * G%dyCu(I,j))
               if (associated(segment%nudged_normal_vel)) segment%nudged_normal_vel(I,j,:) = segment%normal_vel(I,j,:)
             enddo
           elseif (trim(segment%field(m)%name) == 'V' .and. segment%is_N_or_S) then
@@ -4203,7 +4203,8 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                           G%dxCv(i,J)
                 normal_trans_bt(i,J) = normal_trans_bt(i,J) + segment%normal_trans(i,J,k)
               enddo
-              segment%normal_vel_bt(i,J) = normal_trans_bt(i,J) / (max(segment%Htot(i,J),1.e-12) * G%dxCv(i,J))
+              segment%normal_vel_bt(i,J) = normal_trans_bt(i,J) &
+                  / (max(segment%Htot(i,J), 1.e-12 * GV%m_to_H) * G%dxCv(i,J))
               if (associated(segment%nudged_normal_vel)) segment%nudged_normal_vel(i,J,:) = segment%normal_vel(i,J,:)
             enddo
           elseif (trim(segment%field(m)%name) == 'V' .and. segment%is_E_or_W .and. &
@@ -4292,7 +4293,8 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                     cos((time_type_to_real(Time) - OBC%time_ref)*OBC%tide_frequencies(c) - segment%field(segment%zphase_index)%buffer_dst(i,j,c) + OBC%tide_eq_phases(c) + OBC%tide_un(c))
                 enddo
               endif
-              segment%eta(i,j) = OBC%ramp_value * (segment%field(m)%buffer_dst(i,j,1) + tidal_elev)
+              segment%eta(i,j) = GV%m_to_H * OBC%ramp_value &
+                * (segment%field(m)%buffer_dst(i,j,1) + tidal_elev)
             enddo
           enddo
         else
@@ -4305,7 +4307,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                     cos((time_type_to_real(Time) - OBC%time_ref)*OBC%tide_frequencies(c) - segment%field(segment%zphase_index)%buffer_dst(i,j,c) + OBC%tide_eq_phases(c) + OBC%tide_un(c))
                 enddo
               endif
-              segment%eta(i,j) = segment%field(m)%buffer_dst(i,j,1) + tidal_elev
+              segment%eta(i,j) = GV%m_to_H * (segment%field(m)%buffer_dst(i,j,1) + tidal_elev)
             enddo
           enddo
         endif
@@ -4688,6 +4690,7 @@ subroutine mask_outside_OBCs(G, US, param_file, OBC)
   ! Local variables
   integer :: isd, ied, IsdB, IedB, jsd, jed, JsdB, JedB, n
   integer :: i, j
+  integer :: l_seg
   logical :: fatal_error = .False.
   real    :: min_depth
   integer, parameter :: cin = 3, cout = 4, cland = -1, cedge = -2
@@ -4729,38 +4732,50 @@ subroutine mask_outside_OBCs(G, US, param_file, OBC)
   enddo
 
   do j=G%jsd,G%jed ; do i=G%IsdB+1,G%IedB-1
-    if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+    l_seg = OBC%segnum_u(I,j)
+    if (l_seg == OBC_NONE) cycle
+
+    if (OBC%segment(l_seg)%direction == OBC_DIRECTION_W) then
       if (color(i,j) == 0.0) color(i,j) = cout
       if (color(i+1,j) == 0.0) color(i+1,j) = cin
-    elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+    elseif (OBC%segment(l_seg)%direction == OBC_DIRECTION_E) then
       if (color(i,j) == 0.0) color(i,j) = cin
       if (color(i+1,j) == 0.0) color(i+1,j) = cout
     endif
   enddo ; enddo
   do J=G%JsdB+1,G%JedB-1 ; do i=G%isd,G%ied
-    if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+    l_seg = OBC%segnum_v(i,J)
+    if (l_seg == OBC_NONE) cycle
+
+    if (OBC%segment(l_seg)%direction == OBC_DIRECTION_S) then
       if (color(i,j) == 0.0) color(i,j) = cout
       if (color(i,j+1) == 0.0) color(i,j+1) = cin
-    elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+    elseif (OBC%segment(l_seg)%direction == OBC_DIRECTION_N) then
       if (color(i,j) == 0.0) color(i,j) = cin
       if (color(i,j+1) == 0.0) color(i,j+1) = cout
     endif
   enddo ; enddo
 
   do J=G%JsdB+1,G%JedB-1 ; do i=G%isd,G%ied
-    if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+    l_seg = OBC%segnum_v(i,J)
+    if (l_seg == OBC_NONE) cycle
+
+    if (OBC%segment(l_seg)%direction == OBC_DIRECTION_S) then
       if (color2(i,j) == 0.0) color2(i,j) = cout
       if (color2(i,j+1) == 0.0) color2(i,j+1) = cin
-    elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+    elseif (OBC%segment(l_seg)%direction == OBC_DIRECTION_N) then
       if (color2(i,j) == 0.0) color2(i,j) = cin
       if (color2(i,j+1) == 0.0) color2(i,j+1) = cout
     endif
   enddo ; enddo
   do j=G%jsd,G%jed ; do i=G%IsdB+1,G%IedB-1
-    if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+    l_seg = OBC%segnum_u(I,j)
+    if (l_seg == OBC_NONE) cycle
+
+    if (OBC%segment(l_seg)%direction == OBC_DIRECTION_W) then
       if (color2(i,j) == 0.0) color2(i,j) = cout
       if (color2(i+1,j) == 0.0) color2(i+1,j) = cin
-    elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+    elseif (OBC%segment(l_seg)%direction == OBC_DIRECTION_E) then
       if (color2(i,j) == 0.0) color2(i,j) = cin
       if (color2(i+1,j) == 0.0) color2(i+1,j) = cout
     endif
@@ -5154,8 +5169,8 @@ subroutine adjustSegmentEtaToFitBathymetry(G, GV, US, segment,fld)
     ! The normal slope at the boundary is zero by a
     ! previous call to open_boundary_impose_normal_slope
     do k=nz+1,1,-1
-      if (-eta(i,j,k) > segment%Htot(i,j) + hTolerance) then
-         eta(i,j,k) = -segment%Htot(i,j)
+      if (-eta(i,j,k) > segment%Htot(i,j)*GV%H_to_Z + hTolerance) then
+         eta(i,j,k) = -segment%Htot(i,j)*GV%H_to_Z
          contractions = contractions + 1
       endif
     enddo
@@ -5173,10 +5188,10 @@ subroutine adjustSegmentEtaToFitBathymetry(G, GV, US, segment,fld)
 
     !   The whole column is dilated to accommodate deeper topography than
     ! the bathymetry would indicate.
-    if (-eta(i,j,nz+1) < segment%Htot(i,j) - hTolerance) then
+    if (-eta(i,j,nz+1) < (segment%Htot(i,j) * GV%H_to_Z) - hTolerance) then
        dilations = dilations + 1
        ! expand bottom-most cell only
-       eta(i,j,nz+1) = -segment%Htot(i,j)
+       eta(i,j,nz+1) = -(segment%Htot(i,j) * GV%H_to_Z)
        segment%field(fld)%dz_src(i,j,nz)= eta(i,j,nz)-eta(i,j,nz+1)
        ! if (eta(i,j,1) <= eta(i,j,nz+1)) then
        !   do k=1,nz ; segment%field(fld)%dz_src(i,j,k) = (eta(i,j,1) + G%bathyT(i,j)) / real(nz) ; enddo
@@ -5242,7 +5257,7 @@ subroutine rotate_OBC_config(OBC_in, G_in, OBC, G, turns)
 
   ! Segment rotation
   allocate(OBC%segment(0:OBC%number_of_segments))
-  do l = 0, OBC%number_of_segments
+  do l = 1, OBC%number_of_segments
     call rotate_OBC_segment_config(OBC_in%segment(l), G_in, OBC%segment(l), G, turns)
     ! Data up to setup_[uv]_point_obc is needed for allocate_obc_segment_data!
     call allocate_OBC_segment_data(OBC, OBC%segment(l))
@@ -5439,7 +5454,7 @@ subroutine rotate_OBC_init(OBC_in, G, GV, US, param_file, tv, restart_CSp, OBC)
                  "If true, Temperature and salinity are used as state "//&
                  "variables.", default=.true., do_not_log=.true.)
 
-  do l = 0, OBC%number_of_segments
+  do l = 1, OBC%number_of_segments
     call rotate_OBC_segment_data(OBC_in%segment(l), OBC%segment(l), G%HI%turns)
   enddo
 

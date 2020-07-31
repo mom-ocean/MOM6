@@ -263,6 +263,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
   real :: du_lim  ! The velocity change that give a relative CFL of 1 [L T-1 ~> m s-1].
   real :: dx_E, dx_W ! Effective x-grid spacings to the east and west [L ~> m].
   integer :: i, j, k, ish, ieh, jsh, jeh, n, nz
+  integer :: l_seg
   logical :: local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
   logical :: local_Flather_OBC, local_open_BC, is_simple
   type(OBC_segment_type), pointer :: segment => NULL()
@@ -303,7 +304,8 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
 !$OMP                                  uh,dt,US,G,GV,CS,local_specified_BC,OBC,uhbt,set_BT_cont,    &
 !$OMP                                  CFL_dt,I_dt,u_cor,BT_cont, local_Flather_OBC) &
 !$OMP                          private(do_I,duhdu,du,du_max_CFL,du_min_CFL,uh_tot_0,duhdu_tot_0, &
-!$OMP                                  is_simple,FAuI,visc_rem_max,I_vrm,du_lim,dx_E,dx_W,any_simple_OBC ) &
+!$OMP                                  is_simple,FAuI,visc_rem_max,I_vrm,du_lim,dx_E,dx_W, &
+!$OMP                                  any_simple_OBC,l_seg) &
 !$OMP      firstprivate(visc_rem)
   do j=jsh,jeh
     do I=ish-1,ieh ; do_I(I) = .true. ; visc_rem_max(I) = 0.0 ; enddo
@@ -318,8 +320,12 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
                             dt, G, US, j, ish, ieh, do_I, CS%vol_CFL, OBC)
       if (local_specified_BC) then
         do I=ish-1,ieh
-          if (OBC%segment(OBC%segnum_u(I,j))%specified) &
-            uh(I,j,k) = OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k)
+          l_seg = OBC%segnum_u(I,j)
+
+          if (l_seg /= OBC_NONE) then
+            if (OBC%segment(l_seg)%specified) &
+              uh(I,j,k) = OBC%segment(l_seg)%normal_trans(I,j,k)
+          endif
         enddo
       endif
     enddo
@@ -408,9 +414,13 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
       any_simple_OBC = .false.
       if (present(uhbt) .or. set_BT_cont) then
         if (local_specified_BC .or. local_Flather_OBC) then ; do I=ish-1,ieh
+          l_seg = OBC%segnum_u(I,j)
+
           ! Avoid reconciling barotropic/baroclinic transports if transport is specified
-          is_simple = OBC%segment(OBC%segnum_u(I,j))%specified
-          do_I(I) = .not.(OBC%segnum_u(I,j) /= OBC_NONE .and. is_simple)
+          is_simple = .false.
+          if (l_seg /= OBC_NONE) &
+            is_simple = OBC%segment(l_seg)%specified
+          do_I(I) = .not. (l_seg /= OBC_NONE .and. is_simple)
           any_simple_OBC = any_simple_OBC .or. is_simple
         enddo ; else ; do I=ish-1,ieh
           do_I(I) = .true.
@@ -425,8 +435,12 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
         if (present(u_cor)) then ; do k=1,nz
           do I=ish-1,ieh ; u_cor(I,j,k) = u(I,j,k) + du(I) * visc_rem(I,k) ; enddo
           if (local_specified_BC) then ; do I=ish-1,ieh
-            if (OBC%segment(OBC%segnum_u(I,j))%specified) &
-              u_cor(I,j,k) = OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)
+            l_seg = OBC%segnum_u(I,j)
+
+            if (l_seg /= OBC_NONE) then
+              if (OBC%segment(l_seg)%specified) &
+                u_cor(I,j,k) = OBC%segment(l_seg)%normal_vel(I,j,k)
+            endif
           enddo ; endif
         enddo ; endif ! u-corrected
 
@@ -438,9 +452,15 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
                                visc_rem_max, j, ish, ieh, do_I)
         if (any_simple_OBC) then
           do I=ish-1,ieh
-            do_I(I) = OBC%segment(OBC%segnum_u(I,j))%specified
+            l_seg = OBC%segnum_u(I,j)
+
+            do_I(I) = .false.
+            if (l_seg /= OBC_NONE) &
+              do_I(I) = OBC%segment(l_seg)%specified
+
             if (do_I(I)) FAuI(I) = GV%H_subroundoff*G%dy_Cu(I,j)
           enddo
+          ! NOTE: do_I(I) should prevent access to segment OBC_NONE
           do k=1,nz ; do I=ish-1,ieh ; if (do_I(I)) then
             if ((abs(OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)) > 0.0) .and. &
                 (OBC%segment(OBC%segnum_u(I,j))%specified)) &
@@ -529,6 +549,7 @@ subroutine zonal_flux_layer(u, h, h_L, h_R, uh, duhdu, visc_rem, dt, G, US, j, &
                  ! with the same units as h_in.
   real :: h_marg ! The marginal thickness of a flux [H ~> m or kg m-2].
   integer :: i
+  integer :: l_seg
   logical :: local_open_BC
 
   local_open_BC = .false.
@@ -561,13 +582,17 @@ subroutine zonal_flux_layer(u, h, h_L, h_R, uh, duhdu, visc_rem, dt, G, US, j, &
 
   if (local_open_BC) then
     do I=ish-1,ieh ; if (do_I(I)) then
-      if (OBC%segment(OBC%segnum_u(I,j))%open) then
-        if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-          uh(I) = G%dy_Cu(I,j) * u(I) * h(i)
-          duhdu(I) = G%dy_Cu(I,j) * h(i) * visc_rem(I)
-        else
-          uh(I) = G%dy_Cu(I,j) * u(I) * h(i+1)
-          duhdu(I) = G%dy_Cu(I,j) * h(i+1) * visc_rem(I)
+      l_seg = OBC%segnum_u(I,j)
+
+      if (l_seg /= OBC_NONE) then
+        if (OBC%segment(l_seg)%open) then
+          if (OBC%segment(l_seg)%direction == OBC_DIRECTION_E) then
+            uh(I) = G%dy_Cu(I,j) * u(I) * h(i)
+            duhdu(I) = G%dy_Cu(I,j) * h(i) * visc_rem(I)
+          else
+            uh(I) = G%dy_Cu(I,j) * u(I) * h(i+1)
+            duhdu(I) = G%dy_Cu(I,j) * h(i+1) * visc_rem(I)
+          endif
         endif
       endif
     endif ; enddo
@@ -1062,6 +1087,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, vhbt, OBC, &
   real :: dv_lim  ! The velocity change that give a relative CFL of 1 [L T-1 ~> m s-1].
   real :: dy_N, dy_S ! Effective y-grid spacings to the north and south [L ~> m].
   integer :: i, j, k, ish, ieh, jsh, jeh, n, nz
+  integer :: l_seg
   logical :: local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
   logical :: local_Flather_OBC, is_simple, local_open_BC
   type(OBC_segment_type), pointer :: segment => NULL()
@@ -1103,7 +1129,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, vhbt, OBC, &
 !$OMP                                  set_BT_cont,CFL_dt,I_dt,v_cor,BT_cont, local_Flather_OBC ) &
 !$OMP                          private(do_I,dvhdv,dv,dv_max_CFL,dv_min_CFL,vh_tot_0,    &
 !$OMP                                  dvhdv_tot_0,visc_rem_max,I_vrm,dv_lim,dy_N,      &
-!$OMP                                  is_simple,FAvi,dy_S,any_simple_OBC ) &
+!$OMP                                  is_simple,FAvi,dy_S,any_simple_OBC,l_seg) &
 !$OMP                     firstprivate(visc_rem)
   do J=jsh-1,jeh
     do i=ish,ieh ; do_I(i) = .true. ; visc_rem_max(I) = 0.0 ; enddo
@@ -1118,8 +1144,12 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, vhbt, OBC, &
                             dt, G, US, J, ish, ieh, do_I, CS%vol_CFL, OBC)
       if (local_specified_BC) then
         do i=ish,ieh
-          if (OBC%segment(OBC%segnum_v(i,J))%specified) &
-            vh(i,J,k) = OBC%segment(OBC%segnum_v(i,J))%normal_trans(i,J,k)
+          l_seg = OBC%segnum_v(i,J)
+
+          if (l_seg /= OBC_NONE) then
+            if (OBC%segment(l_seg)%specified) &
+              vh(i,J,k) = OBC%segment(l_seg)%normal_trans(i,J,k)
+          endif
         enddo
       endif
     enddo ! k-loop
@@ -1204,9 +1234,13 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, vhbt, OBC, &
       any_simple_OBC = .false.
       if (present(vhbt) .or. set_BT_cont) then
         if (local_specified_BC .or. local_Flather_OBC) then ; do i=ish,ieh
+          l_seg = OBC%segnum_v(i,J)
+
           ! Avoid reconciling barotropic/baroclinic transports if transport is specified
-          is_simple = OBC%segment(OBC%segnum_v(i,J))%specified
-          do_I(i) = .not.(OBC%segnum_v(i,J) /= OBC_NONE .and. is_simple)
+          is_simple = .false.
+          if (l_seg /= OBC_NONE) &
+            is_simple = OBC%segment(l_seg)%specified
+          do_I(i) = .not.(l_seg /= OBC_NONE .and. is_simple)
           any_simple_OBC = any_simple_OBC .or. is_simple
         enddo ; else ; do i=ish,ieh
           do_I(i) = .true.
@@ -1221,8 +1255,12 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, vhbt, OBC, &
         if (present(v_cor)) then ; do k=1,nz
           do i=ish,ieh ; v_cor(i,J,k) = v(i,J,k) + dv(i) * visc_rem(i,k) ; enddo
           if (local_specified_BC) then ; do i=ish,ieh
-            if (OBC%segment(OBC%segnum_v(i,J))%specified) &
-              v_cor(i,J,k) = OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)
+            l_seg = OBC%segnum_v(i,J)
+
+            if (l_seg /= OBC_NONE) then
+              if (OBC%segment(OBC%segnum_v(i,J))%specified) &
+                v_cor(i,J,k) = OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)
+            endif
           enddo ; endif
         enddo ; endif ! v-corrected
       endif
@@ -1233,9 +1271,15 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, vhbt, OBC, &
                                visc_rem_max, J, ish, ieh, do_I)
         if (any_simple_OBC) then
           do i=ish,ieh
-            do_I(i) = (OBC%segment(OBC%segnum_v(i,J))%specified)
+            l_seg = OBC%segnum_v(i,J)
+
+            do_I(I) = .false.
+            if(l_seg /= OBC_NONE) &
+              do_I(i) = (OBC%segment(l_seg)%specified)
+
             if (do_I(i)) FAvi(i) = GV%H_subroundoff*G%dx_Cv(i,J)
           enddo
+          ! NOTE: do_I(I) should prevent access to segment OBC_NONE
           do k=1,nz ; do i=ish,ieh ; if (do_I(i)) then
             if ((abs(OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)) > 0.0) .and. &
                 (OBC%segment(OBC%segnum_v(i,J))%specified)) &
@@ -1327,6 +1371,7 @@ subroutine merid_flux_layer(v, h, h_L, h_R, vh, dvhdv, visc_rem, dt, G, US, J, &
                  ! with the same units as h, i.e. [H ~> m or kg m-2].
   real :: h_marg ! The marginal thickness of a flux [H ~> m or kg m-2].
   integer :: i
+  integer :: l_seg
   logical :: local_open_BC
 
   local_open_BC = .false.
@@ -1360,13 +1405,17 @@ subroutine merid_flux_layer(v, h, h_L, h_R, vh, dvhdv, visc_rem, dt, G, US, J, &
 
   if (local_open_BC) then
     do i=ish,ieh ; if (do_I(i)) then
-      if (OBC%segment(OBC%segnum_v(i,J))%open) then
-        if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-          vh(i) = G%dx_Cv(i,J) * v(i) * h(i,j)
-          dvhdv(i) = G%dx_Cv(i,J) * h(i,j) * visc_rem(i)
-        else
-          vh(i) = G%dx_Cv(i,J) * v(i) * h(i,j+1)
-          dvhdv(i) = G%dx_Cv(i,J) * h(i,j+1) * visc_rem(i)
+      l_seg = OBC%segnum_v(i,J)
+
+      if (l_seg /= OBC_NONE) then
+        if (OBC%segment(l_seg)%open) then
+          if (OBC%segment(l_seg)%direction == OBC_DIRECTION_N) then
+            vh(i) = G%dx_Cv(i,J) * v(i) * h(i,j)
+            dvhdv(i) = G%dx_Cv(i,J) * h(i,j) * visc_rem(i)
+          else
+            vh(i) = G%dx_Cv(i,J) * v(i) * h(i,j+1)
+            dvhdv(i) = G%dx_Cv(i,J) * h(i,j+1) * visc_rem(i)
+          endif
         endif
       endif
     endif ; enddo
