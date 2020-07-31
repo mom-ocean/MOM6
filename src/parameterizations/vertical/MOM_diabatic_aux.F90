@@ -195,14 +195,14 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
           endif
 
           hc = (tv%C_p*GV%H_to_RZ) * h(i,j,k)
-          if (h(i,j,k) <= 10.0*GV%Angstrom_H) then
+          if (h(i,j,k) <= 10.0*(GV%Angstrom_H + GV%H_subroundoff)) then
             ! Very thin layers should not be cooled by the frazil flux.
             if (tv%T(i,j,k) < T_freeze(i)) then
               fraz_col(i) = fraz_col(i) + hc * (T_freeze(i) - tv%T(i,j,k))
               tv%T(i,j,k) = T_freeze(i)
             endif
-          else
-            if (fraz_col(i) + hc * (T_freeze(i) - tv%T(i,j,k)) <= 0.0) then
+          elseif ((fraz_col(i) > 0.0) .or. (tv%T(i,j,k) < T_freeze(i))) then
+            if (fraz_col(i) + hc * (T_freeze(i) - tv%T(i,j,k)) < 0.0) then
               tv%T(i,j,k) = tv%T(i,j,k) - fraz_col(i) / hc
               fraz_col(i) = 0.0
             else
