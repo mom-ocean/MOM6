@@ -13,10 +13,8 @@ module MOM_generic_tracer
 #define _ALLOCATED allocated
 #endif
 
-
   ! ### These imports should not reach into FMS directly ###
-  use mpp_mod,        only: stdout, mpp_error, FATAL,WARNING,NOTE
-  use field_manager_mod, only: fm_get_index,fm_string_len
+  use field_manager_mod, only: fm_string_len
 
   use generic_tracer, only: generic_tracer_register, generic_tracer_get_diag_list
   use generic_tracer, only: generic_tracer_init, generic_tracer_source, generic_tracer_register_diag
@@ -108,7 +106,7 @@ contains
 ! Local variables
     logical :: register_MOM_generic_tracer
 
-    character(len=fm_string_len), parameter :: sub_name = 'register_MOM_generic_tracer'
+    character(len=128), parameter :: sub_name = 'register_MOM_generic_tracer'
     character(len=200) :: inputdir ! The directory where NetCDF input files are.
     ! These can be overridden later in via the field manager?
 
@@ -122,7 +120,7 @@ contains
 
     register_MOM_generic_tracer = .false.
     if (associated(CS)) then
-       call mpp_error(WARNING, "register_MOM_generic_tracer called with an "// &
+       call MOM_error(WARNING, "register_MOM_generic_tracer called with an "// &
             "associated control structure.")
        return
     endif
@@ -185,7 +183,7 @@ contains
 
     !Get the tracer list
     call generic_tracer_get_list(CS%g_tracer_list)
-    if (.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
+    if (.NOT. associated(CS%g_tracer_list)) call MOM_error(FATAL, trim(sub_name)//&
          ": No tracer in the list.")
     ! For each tracer name get its T_prog index and get its fields
 
@@ -247,7 +245,7 @@ contains
     type(ALE_sponge_CS),                   pointer    :: ALE_sponge_CSp !< Pointer  to the control structure for the
                                                                  !! ALE sponges.
 
-    character(len=fm_string_len), parameter :: sub_name = 'initialize_MOM_generic_tracer'
+    character(len=128), parameter :: sub_name = 'initialize_MOM_generic_tracer'
     logical :: OK
     integer :: i, j, k, isc, iec, jsc, jec, nk
     type(g_tracer_type), pointer    :: g_tracer,g_tracer_next
@@ -265,7 +263,7 @@ contains
 
     CS%diag=>diag
     !Get the tracer list
-    if (.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
+    if (.NOT. associated(CS%g_tracer_list)) call MOM_error(FATAL, trim(sub_name)//&
          ": No tracer in the list.")
     !For each tracer name get its  fields
     g_tracer=>CS%g_tracer_list
@@ -426,7 +424,7 @@ contains
     !     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
 
     ! Local variables
-    character(len=fm_string_len), parameter :: sub_name = 'MOM_generic_tracer_column_physics'
+    character(len=128), parameter :: sub_name = 'MOM_generic_tracer_column_physics'
 
     type(g_tracer_type), pointer  :: g_tracer, g_tracer_next
     character(len=fm_string_len)  :: g_tracer_name
@@ -443,7 +441,7 @@ contains
     isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = G%ke
 
     !Get the tracer list
-    if (.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL,&
+    if (.NOT. associated(CS%g_tracer_list)) call MOM_error(FATAL,&
          trim(sub_name)//": No tracer in the list.")
 
 #ifdef _USE_MOM6_DIAG
@@ -587,7 +585,7 @@ contains
     type(g_tracer_type), pointer  :: g_tracer, g_tracer_next
     real, dimension(:,:,:,:), pointer   :: tr_field
     real, dimension(:,:,:), pointer     :: tr_ptr
-    character(len=fm_string_len), parameter :: sub_name = 'MOM_generic_tracer_stock'
+    character(len=128), parameter :: sub_name = 'MOM_generic_tracer_stock'
 
     integer :: i, j, k, is, ie, js, je, nz, m
     is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -660,7 +658,7 @@ contains
     type(g_tracer_type), pointer  :: g_tracer, g_tracer_next
     real, dimension(:,:,:,:), pointer   :: tr_field
     real, dimension(:,:,:), pointer     :: tr_ptr
-    character(len=fm_string_len), parameter :: sub_name = 'MOM_generic_tracer_min_max'
+    character(len=128), parameter :: sub_name = 'MOM_generic_tracer_min_max'
 
     real, dimension(:,:,:),pointer :: grid_tmask
     integer :: isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau
@@ -728,7 +726,7 @@ contains
 ! Local variables
     real :: sosga
 
-    character(len=fm_string_len), parameter :: sub_name = 'MOM_generic_tracer_surface_state'
+    character(len=128), parameter :: sub_name = 'MOM_generic_tracer_surface_state'
     real, dimension(G%isd:G%ied,G%jsd:G%jed,1:G%ke,1) :: rho0
     real, dimension(G%isd:G%ied,G%jsd:G%jed,1:G%ke) ::  dzt
     type(g_tracer_type), pointer :: g_tracer
@@ -750,7 +748,7 @@ contains
          tau=1,sosga=sosga,model_time=get_diag_time_end(CS%diag))
 
     !Output diagnostics via diag_manager for all tracers in this module
-!    if (.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
+!    if (.NOT. associated(CS%g_tracer_list)) call MOM_error(FATAL, trim(sub_name)//&
 !         "No tracer in the list.")
 !    call g_tracer_send_diag(CS%g_tracer_list, get_diag_time_end(CS%diag), tau=1)
     !Niki: The problem with calling diagnostic outputs here is that this subroutine is called every dt_cpld
@@ -767,7 +765,7 @@ contains
     integer :: ind
     character(len=fm_string_len)   :: g_tracer_name,longname, package,units,old_package,file_in,file_out
     real :: const_init_value
-    character(len=fm_string_len), parameter :: sub_name = 'MOM_generic_flux_init'
+    character(len=128), parameter :: sub_name = 'MOM_generic_flux_init'
     type(g_tracer_type), pointer :: g_tracer_list,g_tracer,g_tracer_next
 
     if (.not. g_registered) then
@@ -777,7 +775,7 @@ contains
 
     call generic_tracer_get_list(g_tracer_list)
     if (.NOT. associated(g_tracer_list)) then
-       call mpp_error(WARNING, trim(sub_name)// ": No generic tracer in the list.")
+       call MOM_error(WARNING, trim(sub_name)// ": No generic tracer in the list.")
        return
     endif
 
@@ -812,7 +810,7 @@ contains
     type(MOM_generic_tracer_CS), pointer :: CS   !< Pointer to the control structure for this module.
 
     real, dimension(:,:,:),   pointer :: array_ptr
-    character(len=fm_string_len), parameter :: sub_name = 'MOM_generic_tracer_get'
+    character(len=128), parameter :: sub_name = 'MOM_generic_tracer_get'
 
     call g_tracer_get_pointer(CS%g_tracer_list,name,member,array_ptr)
     array(:,:,:) = array_ptr(:,:,:)
