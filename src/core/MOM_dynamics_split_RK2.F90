@@ -28,7 +28,8 @@ use MOM_error_handler,     only : callTree_enter, callTree_leave, callTree_waypo
 use MOM_file_parser,       only : get_param, log_version, param_file_type
 use MOM_get_input,         only : directories
 use MOM_io,                only : MOM_io_init, vardesc, var_desc
-use MOM_restart,           only : register_restart_field, query_initialized, save_restart
+use MOM_restart,           only : register_restart_field, register_restart_pair
+use MOM_restart,           only : query_initialized, save_restart
 use MOM_restart,           only : restart_init, is_new_run, MOM_restart_CS
 use MOM_time_manager,      only : time_type, time_type_to_real, operator(+)
 use MOM_time_manager,      only : operator(-), operator(>), operator(*), operator(/)
@@ -49,7 +50,7 @@ use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_open_boundary,         only : ocean_OBC_type, radiation_open_bdry_conds
 use MOM_open_boundary,         only : open_boundary_zero_normal_flow
-use MOM_open_boundary,         only : open_boundary_test_extern_h
+use MOM_open_boundary,         only : open_boundary_test_extern_h, update_OBC_ramp
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_ML, set_visc_CS
 use MOM_thickness_diffuse,     only : thickness_diffuse_CS
@@ -163,7 +164,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   ! Split scheme only.
   integer :: id_uav        = -1, id_vav        = -1
   integer :: id_u_BT_accel = -1, id_v_BT_accel = -1
-  !!@}
+  !>@}
 
   type(diag_ctrl), pointer       :: diag !< A structure that is used to regulate the
                                          !! timing of diagnostic output.
@@ -227,15 +228,14 @@ integer :: id_clock_horvisc, id_clock_mom_update
 integer :: id_clock_continuity, id_clock_thick_diff
 integer :: id_clock_btstep, id_clock_btcalc, id_clock_btforce
 integer :: id_clock_pass, id_clock_pass_init
-!!@}
+!>@}
 
 contains
 
 !> RK2 splitting for time stepping MOM adiabatic dynamics
-subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
-                 Time_local, dt, forces, p_surf_begin, p_surf_end, &
-                 uh, vh, uhtr, vhtr, eta_av, &
-                 G, GV, US, CS, calc_dtbt, VarMix, MEKE, thickness_diffuse_CSp, Waves)
+subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_surf_begin, p_surf_end, &
+                                  uh, vh, uhtr, vhtr, eta_av, G, GV, US, CS, calc_dtbt, VarMix, &
+                                  MEKE, thickness_diffuse_CSp, Waves)
   type(ocean_grid_type),             intent(inout) :: G            !< ocean grid structure
   type(verticalGrid_type),           intent(in)    :: GV           !< ocean vertical grid structure
   type(unit_scale_type),             intent(in)    :: US           !< A dimensional unit scaling type
@@ -250,10 +250,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   type(time_type),                   intent(in)    :: Time_local   !< model time at end of time step
   real,                              intent(in)    :: dt           !< time step [T ~> s]
   type(mech_forcing),                intent(in)    :: forces       !< A structure with the driving mechanical forces
-  real, dimension(:,:),              pointer       :: p_surf_begin !< surf pressure at start of this dynamic
-                                                                   !! time step [Pa]
-  real, dimension(:,:),              pointer       :: p_surf_end   !< surf pressure at end   of this dynamic
-                                                                   !! time step [Pa]
+  real, dimension(:,:),              pointer       :: p_surf_begin !< surf pressure at the start of this dynamic
+                                                                   !! time step [R L2 T-2 ~> Pa]
+  real, dimension(:,:),              pointer       :: p_surf_end   !< surf pressure at the end of this dynamic
+                                                                   !! time step [R L2 T-2 ~> Pa]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                              target, intent(inout) :: uh           !< zonal volume/mass transport
                                                                    !! [H L2 T-1 ~> m3 s-1 or kg s-1]
@@ -272,8 +272,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   logical,                           intent(in)    :: calc_dtbt    !< if true, recalculate barotropic time step
   type(VarMix_CS),                   pointer       :: VarMix       !< specify the spatially varying viscosities
   type(MEKE_type),                   pointer       :: MEKE         !< related to mesoscale eddy kinetic energy param
-  type(thickness_diffuse_CS),        pointer       :: thickness_diffuse_CSp!< Pointer to a structure containing
-                                                                    !! interface height diffusivities
+  type(thickness_diffuse_CS),        pointer       :: thickness_diffuse_CSp !< Pointer to a structure containing
+                                                                   !! interface height diffusivities
   type(wave_parameters_CS), optional, pointer      :: Waves        !< A pointer to a structure containing
                                                                    !! fields related to the surface wave conditions
 
@@ -306,7 +306,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     ! u_old_rad_OBC and v_old_rad_OBC are the starting velocities, which are
     ! saved for use in the Flather open boundary condition code [L T-1 ~> m s-1].
 
-  real :: Pa_to_eta ! A factor that converts pressures to the units of eta.
+  real :: pres_to_eta ! A factor that converts pressures to the units of eta
+                      ! [H T2 R-1 L-2 ~> m Pa-1 or kg m-2 Pa-1]
   real, pointer, dimension(:,:) :: &
     p_surf => NULL(), eta_PF_start => NULL(), &
     taux_bot => NULL(), tauy_bot => NULL(), &
@@ -365,6 +366,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (associated(CS%OBC)) then
     if (CS%debug_OBC) call open_boundary_test_extern_h(G, GV, CS%OBC, h)
 
+    ! Update OBC ramp value as function of time
+    call update_OBC_ramp(Time_local, CS%OBC)
+
     do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
       u_old_rad_OBC(I,j,k) = u_av(I,j,k)
     enddo ; enddo ; enddo
@@ -384,10 +388,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   !--- begin set up for group halo pass
 
   cont_stencil = continuity_stencil(CS%continuity_CSp)
-  !### Apart from circle_OBCs halo for eta could be 1, but halo>=3 is required
-  !### to match circle_OBCs solutions. Why?
   call cpu_clock_begin(id_clock_pass)
-  call create_group_pass(CS%pass_eta, eta, G%Domain) !### , halo=1)
+  call create_group_pass(CS%pass_eta, eta, G%Domain, halo=1)
   call create_group_pass(CS%pass_visc_rem, CS%visc_rem_u, CS%visc_rem_v, G%Domain, &
                          To_All+SCALAR_PAIR, CGRID_NE, halo=max(1,cont_stencil))
   call create_group_pass(CS%pass_uvp, up, vp, G%Domain, halo=max(1,cont_stencil))
@@ -410,11 +412,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call PressureForce(h, tv, CS%PFu, CS%PFv, G, GV, US, CS%PressureForce_CSp, &
                      CS%ALE_CSp, p_surf, CS%pbce, CS%eta_PF)
   if (dyn_p_surf) then
-    Pa_to_eta = 1.0 / GV%H_to_Pa
+    pres_to_eta = 1.0 / (GV%g_Earth * GV%H_to_RZ)
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      eta_PF_start(i,j) = CS%eta_PF(i,j) - Pa_to_eta * &
-                          (p_surf_begin(i,j) - p_surf_end(i,j))
+      eta_PF_start(i,j) = CS%eta_PF(i,j) - pres_to_eta * (p_surf_begin(i,j) - p_surf_end(i,j))
     enddo ; enddo
   endif
   call cpu_clock_end(id_clock_pres)
@@ -884,11 +885,12 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, param_file, CS, restart_CS, u
   real, dimension(SZI_(HI),SZJB_(HI),SZK_(GV)), &
                          target, intent(inout) :: vh !< merid volume/mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]
 
-  type(vardesc)      :: vd
+  type(vardesc)      :: vd(2)
   character(len=40)  :: mdl = "MOM_dynamics_split_RK2" ! This module's name.
   character(len=48)  :: thickness_units, flux_units
 
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
+
   isd  = HI%isd  ; ied  = HI%ied  ; jsd  = HI%jsd  ; jed  = HI%jed ; nz = GV%ke
   IsdB = HI%IsdB ; IedB = HI%IedB ; JsdB = HI%JsdB ; JedB = HI%JedB
 
@@ -916,32 +918,26 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, param_file, CS, restart_CS, u
   flux_units = get_flux_units(GV)
 
   if (GV%Boussinesq) then
-    vd = var_desc("sfc",thickness_units,"Free surface Height",'h','1')
+    vd(1) = var_desc("sfc",thickness_units,"Free surface Height",'h','1')
   else
-    vd = var_desc("p_bot",thickness_units,"Bottom Pressure",'h','1')
+    vd(1) = var_desc("p_bot",thickness_units,"Bottom Pressure",'h','1')
   endif
-  call register_restart_field(CS%eta, vd, .false., restart_CS)
+  call register_restart_field(CS%eta, vd(1), .false., restart_CS)
 
-  vd = var_desc("u2","m s-1","Auxiliary Zonal velocity",'u','L')
-  call register_restart_field(CS%u_av, vd, .false., restart_CS)
+  vd(1) = var_desc("u2","m s-1","Auxiliary Zonal velocity",'u','L')
+  vd(2) = var_desc("v2","m s-1","Auxiliary Meridional velocity",'v','L')
+  call register_restart_pair(CS%u_av, CS%v_av, vd(1), vd(2), .false., restart_CS)
 
-  vd = var_desc("v2","m s-1","Auxiliary Meridional velocity",'v','L')
-  call register_restart_field(CS%v_av, vd, .false., restart_CS)
+  vd(1) = var_desc("h2",thickness_units,"Auxiliary Layer Thickness",'h','L')
+  call register_restart_field(CS%h_av, vd(1), .false., restart_CS)
 
-  vd = var_desc("h2",thickness_units,"Auxiliary Layer Thickness",'h','L')
-  call register_restart_field(CS%h_av, vd, .false., restart_CS)
+  vd(1) = var_desc("uh",flux_units,"Zonal thickness flux",'u','L')
+  vd(2) = var_desc("vh",flux_units,"Meridional thickness flux",'v','L')
+  call register_restart_pair(uh, vh, vd(1), vd(2), .false., restart_CS)
 
-  vd = var_desc("uh",flux_units,"Zonal thickness flux",'u','L')
-  call register_restart_field(uh, vd, .false., restart_CS)
-
-  vd = var_desc("vh",flux_units,"Meridional thickness flux",'v','L')
-  call register_restart_field(vh, vd, .false., restart_CS)
-
-  vd = var_desc("diffu","m s-2","Zonal horizontal viscous acceleration",'u','L')
-  call register_restart_field(CS%diffu, vd, .false., restart_CS)
-
-  vd = var_desc("diffv","m s-2","Meridional horizontal viscous acceleration",'v','L')
-  call register_restart_field(CS%diffv, vd, .false., restart_CS)
+  vd(1) = var_desc("diffu","m s-2","Zonal horizontal viscous acceleration",'u','L')
+  vd(2) = var_desc("diffv","m s-2","Meridional horizontal viscous acceleration",'v','L')
+  call register_restart_pair(CS%diffu, CS%diffv, vd(1), vd(2), .false., restart_CS)
 
   call register_barotropic_restarts(HI, GV, param_file, CS%barotropic_CSp, &
                                     restart_CS)
@@ -954,7 +950,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                       diag, CS, restart_CS, dt, Accel_diag, Cont_diag, MIS, &
                       VarMix, MEKE, thickness_diffuse_CSp,                  &
                       OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
-                      visc, dirs, ntrunc, calc_dtbt)
+                      visc, dirs, ntrunc, calc_dtbt, cont_stencil)
   type(ocean_grid_type),            intent(inout) :: G          !< ocean grid structure
   type(verticalGrid_type),          intent(in)    :: GV         !< ocean vertical grid structure
   type(unit_scale_type),            intent(in)    :: US         !< A dimensional unit scaling type
@@ -995,6 +991,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                                                                 !! the number of times the velocity is
                                                                 !! truncated (this should be 0).
   logical,                          intent(out)   :: calc_dtbt  !< If true, recalculate the barotropic time step
+  integer,                optional, intent(out)   :: cont_stencil !< The stencil for thickness
+                                                                !! from the continuity solver.
 
   ! local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_tmp
@@ -1104,6 +1102,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                                      grain=CLOCK_ROUTINE)
 
   call continuity_init(Time, G, GV, US, param_file, diag, CS%continuity_CSp)
+  if (present(cont_stencil)) cont_stencil = continuity_stencil(CS%continuity_CSp)
   call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv_CSp)
   if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &
@@ -1118,7 +1117,11 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                                 activate=is_new_run(restart_CS) )
 
   if (associated(ALE_CSp)) CS%ALE_CSp => ALE_CSp
-  if (associated(OBC)) CS%OBC => OBC
+  if (associated(OBC)) then
+    CS%OBC => OBC
+    if (OBC%ramp) call update_OBC_ramp(Time, CS%OBC, &
+                                activate=is_new_run(restart_CS) )
+  endif
   if (associated(update_OBC_CSp)) CS%update_OBC_CSp => update_OBC_CSp
 
   eta_rest_name = "sfc" ; if (.not.GV%Boussinesq) eta_rest_name = "p_bot"

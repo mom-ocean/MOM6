@@ -4,8 +4,8 @@ module MOM_spatial_means
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_coms, only : EFP_type, operator(+), operator(-), assignment(=)
-use MOM_coms, only : EFP_to_real, real_to_EFP, EFP_list_sum_across_PEs
-use MOM_coms, only : reproducing_sum
+use MOM_coms, only : EFP_to_real, real_to_EFP, EFP_sum_across_PEs
+use MOM_coms, only : reproducing_sum, reproducing_sum_EFP, EFP_to_real
 use MOM_coms, only : query_EFP_overflow_error, reset_EFP_overflow_error
 use MOM_error_handler, only : MOM_error, NOTE, WARNING, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -47,14 +47,18 @@ function global_area_mean(var, G, scale)
 
 end function global_area_mean
 
-!> Return the global area integral of a variable. This uses reproducing sums.
-function global_area_integral(var, G, scale)
-  type(ocean_grid_type),             intent(in)  :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G), SZJ_(G)), intent(in)  :: var  !< The variable to integrate
-  real,                    optional, intent(in)  :: scale !< A rescaling factor for the variable
-  real, dimension(SZI_(G), SZJ_(G))              :: tmpForSumming
-  real :: global_area_integral
+!> Return the global area integral of a variable, by default using the masked area from the
+!! grid, but an alternate could be used instead.  This uses reproducing sums.
+function global_area_integral(var, G, scale, area)
+  type(ocean_grid_type),            intent(in)  :: G     !< The ocean's grid structure
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: var   !< The variable to integrate
+  real,                   optional, intent(in)  :: scale !< A rescaling factor for the variable
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: area !< The alternate area to use, including
+                                                          !! any required masking [L2 ~> m2].
+  real :: global_area_integral !< The returned area integral, usually in the units of var times [m2].
 
+  ! Local variables
+  real, dimension(SZI_(G),SZJ_(G)) :: tmpForSumming
   real :: scalefac  ! An overall scaling factor for the areas and variable.
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -62,9 +66,15 @@ function global_area_integral(var, G, scale)
   scalefac = G%US%L_to_m**2 ; if (present(scale)) scalefac = G%US%L_to_m**2*scale
 
   tmpForSumming(:,:) = 0.
-  do j=js,je ; do i=is, ie
-    tmpForSumming(i,j) = var(i,j) * (scalefac * G%areaT(i,j) * G%mask2dT(i,j))
-  enddo ; enddo
+  if (present(area)) then
+    do j=js,je ; do i=is,ie
+      tmpForSumming(i,j) = var(i,j) * (scalefac * area(i,j))
+    enddo ; enddo
+  else
+    do j=js,je ; do i=is,ie
+      tmpForSumming(i,j) = var(i,j) * (scalefac * G%areaT(i,j) * G%mask2dT(i,j))
+    enddo ; enddo
+  endif
   global_area_integral = reproducing_sum(tmpForSumming)
 
 end function global_area_integral
@@ -78,8 +88,8 @@ function global_layer_mean(var, h, G, GV, scale)
   real,                            optional, intent(in)  :: scale !< A rescaling factor for the variable
   real, dimension(SZK_(GV))                   :: global_layer_mean
 
-  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: tmpForSumming, weight
-  real, dimension(SZK_(GV)) :: scalarij, weightij
+  real, dimension(G%isc:G%iec, G%jsc:G%jec, SZK_(GV)) :: tmpForSumming, weight
+  type(EFP_type), dimension(2*SZK_(GV)) :: laysums
   real, dimension(SZK_(GV)) :: global_temp_scalar, global_weight_scalar
   real :: scalefac  ! A scaling factor for the variable.
   integer :: i, j, k, is, ie, js, je, nz
@@ -93,11 +103,12 @@ function global_layer_mean(var, h, G, GV, scale)
     tmpForSumming(i,j,k) =  scalefac * var(i,j,k) * weight(i,j,k)
   enddo ; enddo ; enddo
 
-  global_temp_scalar   = reproducing_sum(tmpForSumming,sums=scalarij)
-  global_weight_scalar = reproducing_sum(weight,sums=weightij)
+  global_temp_scalar = reproducing_sum(tmpForSumming, EFP_lay_sums=laysums(1:nz), only_on_PE=.true.)
+  global_weight_scalar = reproducing_sum(weight, EFP_lay_sums=laysums(nz+1:2*nz), only_on_PE=.true.)
+  call EFP_sum_across_PEs(laysums, 2*nz)
 
-  do k=1, nz
-    global_layer_mean(k) = scalarij(k) / weightij(k)
+  do k=1,nz
+    global_layer_mean(k) = EFP_to_real(laysums(k)) / EFP_to_real(laysums(nz+k))
   enddo
 
 end function global_layer_mean
@@ -226,8 +237,8 @@ subroutine global_i_mean(array, i_mean, G, mask, scale, tmp_scale)
     if (query_EFP_overflow_error()) call MOM_error(FATAL, &
       "global_i_mean overflow error occurred before sums across PEs.")
 
-    call EFP_list_sum_across_PEs(asum(G%jsg:G%jeg), G%jeg-G%jsg+1)
-    call EFP_list_sum_across_PEs(mask_sum(G%jsg:G%jeg), G%jeg-G%jsg+1)
+    call EFP_sum_across_PEs(asum(G%jsg:G%jeg), G%jeg-G%jsg+1)
+    call EFP_sum_across_PEs(mask_sum(G%jsg:G%jeg), G%jeg-G%jsg+1)
 
     if (query_EFP_overflow_error()) call MOM_error(FATAL, &
       "global_i_mean overflow error occurred during sums across PEs.")
@@ -250,7 +261,7 @@ subroutine global_i_mean(array, i_mean, G, mask, scale, tmp_scale)
     if (query_EFP_overflow_error()) call MOM_error(FATAL, &
       "global_i_mean overflow error occurred before sum across PEs.")
 
-    call EFP_list_sum_across_PEs(asum(G%jsg:G%jeg), G%jeg-G%jsg+1)
+    call EFP_sum_across_PEs(asum(G%jsg:G%jeg), G%jeg-G%jsg+1)
 
     if (query_EFP_overflow_error()) call MOM_error(FATAL, &
       "global_i_mean overflow error occurred during sum across PEs.")
@@ -312,8 +323,8 @@ subroutine global_j_mean(array, j_mean, G, mask, scale, tmp_scale)
     if (query_EFP_overflow_error()) call MOM_error(FATAL, &
       "global_j_mean overflow error occurred before sums across PEs.")
 
-    call EFP_list_sum_across_PEs(asum(G%isg:G%ieg), G%ieg-G%isg+1)
-    call EFP_list_sum_across_PEs(mask_sum(G%isg:G%ieg), G%ieg-G%isg+1)
+    call EFP_sum_across_PEs(asum(G%isg:G%ieg), G%ieg-G%isg+1)
+    call EFP_sum_across_PEs(mask_sum(G%isg:G%ieg), G%ieg-G%isg+1)
 
     if (query_EFP_overflow_error()) call MOM_error(FATAL, &
       "global_j_mean overflow error occurred during sums across PEs.")
@@ -336,7 +347,7 @@ subroutine global_j_mean(array, j_mean, G, mask, scale, tmp_scale)
     if (query_EFP_overflow_error()) call MOM_error(FATAL, &
       "global_j_mean overflow error occurred before sum across PEs.")
 
-    call EFP_list_sum_across_PEs(asum(G%isg:G%ieg), G%ieg-G%isg+1)
+    call EFP_sum_across_PEs(asum(G%isg:G%ieg), G%ieg-G%isg+1)
 
     if (query_EFP_overflow_error()) call MOM_error(FATAL, &
       "global_j_mean overflow error occurred during sum across PEs.")
@@ -359,8 +370,9 @@ subroutine adjust_area_mean_to_zero(array, G, scaling, unit_scale)
   real, optional,                   intent(out)   :: scaling !< The scaling factor used
   real,                   optional, intent(in)    :: unit_scale !< A rescaling factor for the variable
   ! Local variables
-  real, dimension(SZI_(G), SZJ_(G)) :: posVals, negVals, areaXposVals, areaXnegVals
+  real, dimension(G%isc:G%iec, G%jsc:G%jec) :: posVals, negVals, areaXposVals, areaXnegVals
   integer :: i,j
+  type(EFP_type), dimension(2) :: areaInt_EFP
   real :: scalefac  ! A scaling factor for the variable.
   real :: I_scalefac ! The Adcroft reciprocal of scalefac
   real :: areaIntPosVals, areaIntNegVals, posScale, negScale
@@ -368,8 +380,8 @@ subroutine adjust_area_mean_to_zero(array, G, scaling, unit_scale)
   scalefac = 1.0 ; if (present(unit_scale)) scalefac = unit_scale
   I_scalefac = 0.0 ; if (scalefac /= 0.0) I_scalefac = 1.0 / scalefac
 
-  areaXposVals(:,:) = 0.
-  areaXnegVals(:,:) = 0.
+  ! areaXposVals(:,:) = 0.  ! This zeros out halo points.
+  ! areaXnegVals(:,:) = 0.  ! This zeros out halo points.
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     posVals(i,j) = max(0., scalefac*array(i,j))
@@ -378,8 +390,12 @@ subroutine adjust_area_mean_to_zero(array, G, scaling, unit_scale)
     areaXnegVals(i,j) = G%US%L_to_m**2*G%areaT(i,j) * negVals(i,j)
   enddo ; enddo
 
-  areaIntPosVals = reproducing_sum( areaXposVals )
-  areaIntNegVals = reproducing_sum( areaXnegVals )
+  ! Combining the sums like this avoids separate blocking global sums.
+  areaInt_EFP(1) = reproducing_sum_EFP( areaXposVals, only_on_PE=.true. )
+  areaInt_EFP(2) = reproducing_sum_EFP( areaXnegVals, only_on_PE=.true. )
+  call EFP_sum_across_PEs(areaInt_EFP, 2)
+  areaIntPosVals = EFP_to_real( areaInt_EFP(1) )
+  areaIntNegVals = EFP_to_real( areaInt_EFP(2) )
 
   posScale = 0.0 ; negScale = 0.0
   if ((areaIntPosVals>0.).and.(areaIntNegVals<0.)) then ! Only adjust if possible

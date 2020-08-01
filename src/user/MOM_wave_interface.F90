@@ -126,7 +126,7 @@ type, public :: wave_parameters_CS ; private
   integer, public :: id_surfacestokes_x = -1 , id_surfacestokes_y = -1
   integer, public :: id_3dstokes_x = -1 , id_3dstokes_y = -1
   integer, public :: id_La_turb = -1
-  !!@}
+  !>@}
 
 end type wave_parameters_CS
 
@@ -184,7 +184,7 @@ logical :: WaveAgePeakFreq ! Flag to use W
 logical :: StaticWaves, DHH85_Is_Set
 real    :: WaveAge, WaveWind
 real    :: PI
-!!@}
+!>@}
 
 contains
 
@@ -714,7 +714,8 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
             !    uniform cases.
             ! call DHH85_mid(GV, US, Midpoint, UStokes)
             ! Putting into x-direction, so setting y direction to 0
-            CS%US_y(ii,JJ,kk) = 0.0 !### Note that =0 should be =US - RWH
+            CS%US_y(ii,JJ,kk) = 0.0
+            ! For rotational symmetry there should be the option for this to become = UStokes
             !    bgr - see note above, but this is true
             !          if this is used for anything
             !          other than simple LES comparison
@@ -1100,7 +1101,7 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, UStokes_SL, LA)
     !
     ! peak frequency (PM, Bouws, 1998)
     tmp = 2.0 * PI * u19p5_to_u10 * u10
-    fp = 0.877 * GV%mks_g_Earth / tmp
+    fp = 0.877 * US%L_T_to_m_s**2*US%m_to_Z * GV%g_Earth / tmp
     !
     ! mean frequency
     fm = fm_into_fp * fp
@@ -1144,7 +1145,7 @@ end subroutine Get_StokesSL_LiFoxKemper
 subroutine Get_SL_Average_Prof( GV, AvgDepth, H, Profile, Average )
   type(verticalGrid_type),  &
        intent(in)   :: GV       !< Ocean vertical grid structure
-  real, intent(in)  :: AvgDepth !< Depth to average over [Z ~> m].
+  real, intent(in)  :: AvgDepth !< Depth to average over (negative) [Z ~> m].
   real, dimension(SZK_(GV)), &
        intent(in)   :: H        !< Grid thickness [H ~> m or kg m-2]
   real, dimension(SZK_(GV)), &
@@ -1153,7 +1154,7 @@ subroutine Get_SL_Average_Prof( GV, AvgDepth, H, Profile, Average )
   real, intent(out) :: Average  !< Output quantity averaged over depth AvgDepth [arbitrary]
                                 !! (used here for Stokes drift)
   !Local variables
-  real :: top, midpoint, bottom ! Depths [Z ~> m].
+  real :: top, midpoint, bottom ! Depths, negative downward [Z ~> m].
   real :: Sum
   integer :: kk
 
@@ -1166,17 +1167,25 @@ subroutine Get_SL_Average_Prof( GV, AvgDepth, H, Profile, Average )
     Top = Bottom
     MidPoint = Bottom - GV%H_to_Z * 0.5*h(kk)
     Bottom = Bottom - GV%H_to_Z * h(kk)
-    if (AvgDepth < Bottom) then !Whole cell within H_LA
+    if (AvgDepth < Bottom) then ! The whole cell is within H_LA
       Sum = Sum + Profile(kk) * (GV%H_to_Z * H(kk))
-    elseif (AvgDepth < Top) then !partial cell within H_LA
+    elseif (AvgDepth < Top) then ! A partial cell is within H_LA
       Sum = Sum + Profile(kk) * (Top-AvgDepth)
+      exit
+    else
+      exit
     endif
   enddo
 
-  ! Divide by AvgDepth  !### Consider dividing by the depth in the column if that is smaller. -RWH
-  Average = Sum / abs(AvgDepth)
+  ! Divide by AvgDepth or the depth in the column, whichever is smaller.
+  if (abs(AvgDepth) <= abs(Bottom)) then
+    Average = Sum / abs(AvgDepth)
+  elseif (abs(Bottom) > 0.0) then
+    Average = Sum / abs(Bottom)
+  else
+    Average = 0.0
+  endif
 
-  return
 end subroutine Get_SL_Average_Prof
 
 !> Get SL averaged Stokes drift from the banded Spectrum method
@@ -1216,29 +1225,31 @@ end subroutine Get_SL_Average_Band
 subroutine DHH85_mid(GV, US, zpt, UStokes)
   type(verticalGrid_type), intent(in)  :: GV  !< Ocean vertical grid
   type(unit_scale_type),   intent(in)  :: US  !< A dimensional unit scaling type
-  real, intent(in)  :: ZPT   !< Depth to get Stokes drift [Z ~> m]. !### THIS IS NOT USED YET.
+  real, intent(in)  :: zpt   !< Depth to get Stokes drift [Z ~> m].
   real, intent(out) :: UStokes !< Stokes drift [m s-1]
   !
   real :: ann, Bnn, Snn, Cnn, Dnn
   real :: omega_peak, omega, u10, WA, domega
   real :: omega_min, omega_max, wavespec, Stokes
+  real :: g_Earth ! Gravitational acceleration [m s-2]
   integer :: Nomega, OI
 
   WA = WaveAge
   u10 = WaveWind
+  g_Earth = US%L_T_to_m_s**2*US%m_to_Z * GV%g_Earth
 
   !/
   omega_min = 0.1 ! Hz
   ! Cut off at 30cm for now...
-  omega_max = 10. ! ~sqrt(0.2*GV%mks_g_Earth*2*pi/0.3)
+  omega_max = 10. ! ~sqrt(0.2*g_Earth*2*pi/0.3)
   NOmega = 1000
   domega = (omega_max-omega_min)/real(NOmega)
 
   !
   if (WaveAgePeakFreq) then
-    omega_peak = GV%mks_g_Earth / (WA * u10)
+    omega_peak = g_Earth / (WA * u10)
   else
-    omega_peak = 2. * pi * 0.13 * GV%mks_g_Earth / U10
+    omega_peak = 2. * pi * 0.13 * g_Earth / U10
   endif
   !/
   Ann = 0.006 * WaveAge**(-0.55)
@@ -1254,11 +1265,11 @@ subroutine DHH85_mid(GV, US, zpt, UStokes)
   do oi = 1,nomega-1
     Dnn = exp ( -0.5 * (omega-omega_peak)**2 / (Snn**2 * omega_peak**2) )
     ! wavespec units = m2s
-    wavespec = (Ann * GV%mks_g_Earth**2 / (omega_peak*omega**4 ) ) * &
+    wavespec = (Ann * g_Earth**2 / (omega_peak*omega**4 ) ) * &
                exp(-bnn*(omega_peak/omega)**4)*Cnn**Dnn
     ! Stokes units m  (multiply by frequency range for units of m/s)
     Stokes = 2.0 * wavespec * omega**3 * &
-         exp( 2.0 * omega**2 * zpt / GV%mks_g_Earth) / GV%mks_g_Earth
+         exp( 2.0 * omega**2 * US%Z_to_m*zpt / g_Earth) / g_Earth
     UStokes = UStokes + Stokes*domega
     omega = omega + domega
   enddo
