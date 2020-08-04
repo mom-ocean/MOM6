@@ -480,7 +480,9 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   logical :: use_ALE         ! If true, use an ALE pressure reconstruction.
   logical :: use_EOS         ! If true, density is calculated from T & S using an equation of state.
   type(thermo_var_ptrs) :: tv_tmp! A structure of temporary T & S.
-  real :: dTdi2, dTdj2       ! Differences in T variance [degC2]
+ !real :: dTdi2, dTdj2       ! Differences in T variance [degC2]
+  real :: Tl(5), mn_T, mn_T2 ! copy and moment of local stenil of T [degC or degC2]
+  real :: Hl(5), mn_H        ! Copy of local stencial of H [H ~> m]
   real, parameter :: C1_6 = 1.0/6.0
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
@@ -504,15 +506,39 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   if (CS%Stanley_T2_det_coeff>=0.) then
     if (.not. associated(tv%varT)) call safe_alloc_ptr(tv%varT, G%isd, G%ied, G%jsd, G%jed, GV%ke)
     do k=1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
-      ! SGS variance in i-direction [degC2]
-      dTdi2 = ( ( G%mask2dCu(I  ,j) * G%IdxCu(I  ,j) * ( tv%T(i+1,j,k) - tv%T(i,j,k) ) &
-                + G%mask2dCu(I-1,j) * G%IdxCu(I-1,j) * ( tv%T(i,j,k) - tv%T(i-1,j,k) ) &
-                ) * G%dxT(i,j) * 0.5 )**2
-      ! SGS variance in j-direction [degC2]
-      dTdj2 = ( ( G%mask2dCv(i,J  ) * G%IdyCv(i,J  ) * ( tv%T(i,j+1,k) - tv%T(i,j,k) ) &
-                + G%mask2dCv(i,J-1) * G%IdyCv(i,J-1) * ( tv%T(i,j,k) - tv%T(i,j-1,k) ) &
-                ) * G%dyT(i,j) * 0.5 )**2
-      tv%varT(i,j,k) = CS%Stanley_T2_det_coeff * 0.5 * ( dTdi2 + dTdj2 )
+      ! Strictly speaking we should be estimate the horizontal grid-scale variance
+      ! but neither of the following blocks make a rotation to the horizontal
+      ! but work along coordinate
+
+      ! This block calculates a simple |delta T| along coordinates and does
+      ! not allow vanishing layer thicknesses or layers tracking topography
+      !! SGS variance in i-direction [degC2]
+      !dTdi2 = ( ( G%mask2dCu(I  ,j) * G%IdxCu(I  ,j) * ( tv%T(i+1,j,k) - tv%T(i,j,k) ) &
+      !          + G%mask2dCu(I-1,j) * G%IdxCu(I-1,j) * ( tv%T(i,j,k) - tv%T(i-1,j,k) ) &
+      !          ) * G%dxT(i,j) * 0.5 )**2
+      !! SGS variance in j-direction [degC2]
+      !dTdj2 = ( ( G%mask2dCv(i,J  ) * G%IdyCv(i,J  ) * ( tv%T(i,j+1,k) - tv%T(i,j,k) ) &
+      !          + G%mask2dCv(i,J-1) * G%IdyCv(i,J-1) * ( tv%T(i,j,k) - tv%T(i,j-1,k) ) &
+      !          ) * G%dyT(i,j) * 0.5 )**2
+      !tv%varT(i,j,k) = CS%Stanley_T2_det_coeff * 0.5 * ( dTdi2 + dTdj2 )
+
+      ! This block does a thickness weighted variance calculation and helps control for
+      ! extreme gradients along layers which are vanished against topography. It is
+      ! still a poor approximation in the interior when coordinates are strongly tilted.
+      hl(1) = h(i,j,k) ; hl(2) = h(i-1,j,k) ; hl(3) = h(i+1,j,k) ; hl(4) = h(i,j-1,k) ; hl(5) = h(i,j+1,k)
+      mn_H = ( hl(1) + ( ( hl(2) + hl(3) ) + ( hl(4) + hl(5) ) ) ) + GV%H_subroundoff
+      mn_H = 1. / mn_H ! Hereafter, mn_H is the reciprocal of mean h for the stencil
+      ! Mean of T
+      Tl(1) = tv%T(i,j,k) ; Tl(2) = tv%T(i-1,j,k) ; Tl(3) = tv%T(i+1,j,k) ; Tl(4) = tv%T(i,j-1,k) ; Tl(5) = tv%T(i,j+1,k)
+      mn_T = ( hl(1)*Tl(1) + ( ( hl(2)*Tl(2) + hl(3)*Tl(3) ) + ( hl(4)*Tl(4) + hl(5)*Tl(5) ) ) ) * mn_H
+      ! Adjust T vectors to have zero mean
+      Tl(:) = Tl(:) - mn_T ; mn_T = 0.
+      ! Variance of T
+      mn_T2 = ( hl(1)*Tl(1)*Tl(1) + ( ( hl(2)*Tl(2)*Tl(2) + hl(3)*Tl(3)*Tl(3) ) &
+                                    + ( hl(4)*Tl(4)*Tl(4) + hl(5)*Tl(5)*Tl(5) ) ) ) * mn_H
+      ! Variance should be positive but round-off can violate this. Calculating
+      ! variance directly would fix this but requires more operations.
+      tv%varT(i,j,k) = CS%Stanley_T2_det_coeff * max(0., mn_T2 - mn_T*mn_T)
     enddo ; enddo ; enddo
   endif
 
