@@ -58,6 +58,7 @@ type, public :: PressureForce_FV_CS ; private
                             !! the mean temperature gradient in the deterministic part of
                             !! the Stanley form of the Brankart correction.
   integer :: id_e_tidal = -1 !< Diagnostic identifier
+  integer :: id_tvar_sgs = -1 !< Diagnostic identifier
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL() !< Tides control structure
 end type PressureForce_FV_CS
 
@@ -758,6 +759,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   endif
 
   if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, e_tidal, CS%diag)
+  if (CS%id_tvar_sgs>0) call post_data(CS%id_tvar_sgs, tv%varT, CS%diag)
 
 end subroutine PressureForce_FV_Bouss
 
@@ -826,6 +828,10 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, tides_CS
                  "the mean temperature gradient in the deterministic part of "// &
                  "the Stanley form of the Brankart correction. "// &
                  "Negative values disable the scheme.", units="nondim", default=-1.0)
+  if (CS%Stanley_T2_det_coeff>=0.) then
+    CS%id_tvar_sgs = register_diag_field('ocean_model', 'tvar_sgs_pgf', diag%axesTL, &
+        Time, 'SGS temperature variance used in PGF', 'degC2')
+  endif
   if (CS%tides) then
     CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', diag%axesT1, &
         Time, 'Tidal Forcing Astronomical and SAL Height Anomaly', 'meter', conversion=US%Z_to_m)
