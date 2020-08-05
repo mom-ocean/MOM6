@@ -434,6 +434,9 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   integer                   :: ocn_cpl_dt   !< one ocn coupling interval in seconds. (to be received from cesm)
   real (kind=8)             :: mom_cpl_dt   !< one ocn coupling interval in seconds. (internal)
   integer                   :: ncouple_per_day !< number of ocean coupled call in one day (non-dim)
+  integer                   :: num_rest_files !< number of restart files written
+  integer                   :: i
+  character(len=8)          :: suffix
 
   ! reset shr logging to ocn log file:
   if (is_root_pe()) then
@@ -534,7 +537,8 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
     write(restartname,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5)') trim(runid), year, month, day, seconds
 
     call save_restart(glb%ocn_state%dirs%restart_output_dir, glb%ocn_state%Time, glb%grid, &
-                      glb%ocn_state%restart_CSp, .false., filename=restartname, GV=glb%ocn_state%GV)
+                      glb%ocn_state%restart_CSp, .false., filename=restartname, GV=glb%ocn_state%GV, &
+                      num_rest_files=num_rest_files)
 
     ! write name of restart file in the rpointer file
     nu = shr_file_getUnit()
@@ -542,6 +546,19 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
       restart_pointer_file = trim(glb%pointer_filename)
       open(nu, file=restart_pointer_file, form='formatted', status='unknown')
       write(nu,'(a)') trim(restartname) //'.nc'
+
+      if (num_rest_files > 1) then
+        ! append i.th restart file name to rpointer
+        do i=1, num_rest_files-1
+          if (i < 10) then
+            write(suffix,'("_",I1)') i
+          else
+            write(suffix,'("_",I2)') i
+          endif
+          write(nu,'(a)') trim(restartname) // trim(suffix) // '.nc'
+        enddo
+      endif
+
       close(nu)
       write(glb%stdout,*) 'ocn restart pointer file written: ',trim(restartname)
     endif
