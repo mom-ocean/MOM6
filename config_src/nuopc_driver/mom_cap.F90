@@ -688,6 +688,10 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
                    return
                 endif
               endif
+              ! check if the length of restartfiles variable is sufficient:
+              if (len(restartfiles)-len(trim(restartfiles)) < len(trim(restartfile))) then
+                call MOM_error(FATAL, "Restart file name(s) too long.")
+              endif
               restartfiles = trim(restartfiles) // " " // trim(restartfile)
             enddo
             close(readunit)
@@ -1862,7 +1866,7 @@ subroutine ModelAdvance(gcomp, rc)
            if (num_rest_files > 1) then
               ! append i.th restart file name to rpointer
               do i=1, num_rest_files-1
-                if (num_rest_files < 10) then
+                if (i < 10) then
                   write(suffix,'("_",I1)') i
                 else
                   write(suffix,'("_",I2)') i
