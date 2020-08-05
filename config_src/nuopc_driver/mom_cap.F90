@@ -1861,7 +1861,7 @@ subroutine ModelAdvance(gcomp, rc)
 
            if (num_rest_files > 1) then
               ! append i.th restart file name to rpointer
-              do i=2, num_rest_files
+              do i=1, num_rest_files-1
                 if (num_rest_files < 10) then
                   write(suffix,'("_",I1)') i
                 else
