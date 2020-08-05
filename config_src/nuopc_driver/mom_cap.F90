@@ -464,7 +464,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   integer                                :: iostat
   integer                                :: readunit
   character(len=512)                     :: restartfile          ! Path/Name of restart file
-  character(len=512)                     :: restartfiles         ! Path/Name of restart files
+  character(len=2048)                    :: restartfiles         ! Path/Name of restart files
                                                                  ! (same as restartfile if single restart file)
   character(len=*), parameter            :: subname='(MOM_cap:InitializeAdvertise)'
   character(len=32)                      :: calendar
@@ -697,7 +697,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
             close(readunit)
          endif
          ! broadcast attribute set on master task to all tasks
-         call ESMF_VMBroadcast(vm, restartfiles, count=ESMF_MAXSTR-1, rootPet=0, rc=rc)
+         call ESMF_VMBroadcast(vm, restartfiles, count=len(restartfiles), rootPet=0, rc=rc)
          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
       else
          call ESMF_LogWrite('MOM_cap: restart requested, use input.nml', ESMF_LOGMSG_WARNING)
