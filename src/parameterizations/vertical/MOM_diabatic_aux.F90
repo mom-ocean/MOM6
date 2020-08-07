@@ -822,19 +822,18 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  ! Only apply forcing if fluxes%sw is associated.
-  if (.not.associated(fluxes%sw)) return
-
-#define _OLD_ALG_
   Idt = 1.0 / dt
 
   calculate_energetics = (present(cTKE) .and. present(dSV_dT) .and. present(dSV_dS))
   calculate_buoyancy = present(SkinBuoyFlux)
   if (calculate_buoyancy) SkinBuoyFlux(:,:) = 0.0
+  if (present(cTKE)) cTKE(:,:,:) = 0.0
   g_Hconv2 = (US%L_to_Z**2*GV%g_Earth * GV%H_to_RZ) * GV%H_to_RZ
   EOSdom(:) = EOS_domain(G%HI)
 
-  if (present(cTKE)) cTKE(:,:,:) = 0.0
+  ! Only apply forcing if fluxes%sw is associated.
+  if (.not.associated(fluxes%sw) .and. .not.calculate_energetics) return
+
   if (calculate_buoyancy) then
     SurfPressure(:) = 0.0
     GoRho = US%L_to_Z**2*GV%g_Earth / GV%Rho0
@@ -874,7 +873,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
       h2d(i,k) = h(i,j,k)
       T2d(i,k) = tv%T(i,j,k)
     enddo ; enddo
-    if (nsw>0) call extract_optics_slice(optics, j, G, GV, opacity=opacityBand, opacity_scale=(1.0/GV%m_to_H))
 
     if (calculate_energetics) then
       ! The partial derivatives of specific volume with temperature and
@@ -897,6 +895,11 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
       enddo
       pen_TKE_2d(:,:) = 0.0
     endif
+
+    ! Nothing more is done on this j-slice if there is no buoyancy forcing.
+    if (.not.associated(fluxes%sw)) cycle
+
+    if (nsw>0) call extract_optics_slice(optics, j, G, GV, opacity=opacityBand, opacity_scale=(1.0/GV%m_to_H))
 
     ! The surface forcing is contained in the fluxes type.
     ! We aggregate the thermodynamic forcing for a time step into the following:
