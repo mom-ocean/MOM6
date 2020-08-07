@@ -464,6 +464,8 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   integer                                :: iostat
   integer                                :: readunit
   character(len=512)                     :: restartfile          ! Path/Name of restart file
+  character(len=2048)                    :: restartfiles         ! Path/Name of restart files
+                                                                 ! (same as restartfile if single restart file)
   character(len=*), parameter            :: subname='(MOM_cap:InitializeAdvertise)'
   character(len=32)                      :: calendar
 !--------------------------------
@@ -653,10 +655,10 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
          return
   endif
 
-  restartfile = ""
+  restartfile = ""; restartfiles = ""
   if (runtype == "initial") then
 
-     restartfile = "n"
+     restartfiles = "n"
 
   else if (runtype == "continue") then ! hybrid or branch or continuos runs
 
@@ -675,16 +677,27 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
                      line=__LINE__, file=u_FILE_u, rcToReturn=rc)
                 return
             endif
-            read(readunit,'(a)', iostat=iostat) restartfile
-            if (iostat /= 0) then
-               call ESMF_LogSetError(ESMF_RC_FILE_READ, msg=subname//' ERROR reading rpointer.ocn', &
-                    line=__LINE__, file=u_FILE_u, rcToReturn=rc)
-                return
-            endif
+            do
+              read(readunit,'(a)', iostat=iostat) restartfile
+              if (iostat /= 0) then
+                if (len(trim(restartfiles))>1 .and. iostat<0) then
+                  exit ! done reading restart files list.
+                else
+                   call ESMF_LogSetError(ESMF_RC_FILE_READ, msg=subname//' ERROR reading rpointer.ocn', &
+                     line=__LINE__, file=u_FILE_u, rcToReturn=rc)
+                   return
+                endif
+              endif
+              ! check if the length of restartfiles variable is sufficient:
+              if (len(restartfiles)-len(trim(restartfiles)) < len(trim(restartfile))) then
+                call MOM_error(FATAL, "Restart file name(s) too long.")
+              endif
+              restartfiles = trim(restartfiles) // " " // trim(restartfile)
+            enddo
             close(readunit)
          endif
          ! broadcast attribute set on master task to all tasks
-         call ESMF_VMBroadcast(vm, restartfile, count=ESMF_MAXSTR-1, rootPet=0, rc=rc)
+         call ESMF_VMBroadcast(vm, restartfiles, count=len(restartfiles), rootPet=0, rc=rc)
          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
       else
          call ESMF_LogWrite('MOM_cap: restart requested, use input.nml', ESMF_LOGMSG_WARNING)
@@ -693,7 +706,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   endif
 
   ocean_public%is_ocean_pe = .true.
-  call ocean_model_init(ocean_public, ocean_state, time0, time_start, input_restart_file=trim(restartfile))
+  call ocean_model_init(ocean_public, ocean_state, time0, time_start, input_restart_file=trim(restartfiles))
 
   call ocean_model_init_sfc(ocean_state, ocean_public)
 
@@ -1611,10 +1624,12 @@ subroutine ModelAdvance(gcomp, rc)
   integer                                :: writeunit
   integer                                :: localPet
   type(ESMF_VM)                          :: vm
-  integer                                :: n
+  integer                                :: n, i
   character(240)                         :: import_timestr, export_timestr
   character(len=128)                     :: fldname
   character(len=*),parameter             :: subname='(MOM_cap:ModelAdvance)'
+  character(len=8)                       :: suffix
+  integer                                :: num_rest_files
 
   rc = ESMF_SUCCESS
   if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM Model_ADVANCE: ")
@@ -1832,6 +1847,12 @@ subroutine ModelAdvance(gcomp, rc)
 
         write(restartname,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5)') &
              trim(casename), year, month, day, seconds
+
+        call ESMF_LogWrite("MOM_cap: Writing restart :  "//trim(restartname), ESMF_LOGMSG_INFO, rc=rc)
+
+        ! write restart file(s)
+        call ocean_model_restart(ocean_state, restartname=restartname, num_rest_files=num_rest_files)
+
         if (localPet == 0) then
            ! Write name of restart file in the rpointer file - this is currently hard-coded for the ocean
            open(newunit=writeunit, file='rpointer.ocn', form='formatted', status='unknown', iostat=iostat)
@@ -1841,6 +1862,19 @@ subroutine ModelAdvance(gcomp, rc)
               return
            endif
            write(writeunit,'(a)') trim(restartname)//'.nc'
+
+           if (num_rest_files > 1) then
+              ! append i.th restart file name to rpointer
+              do i=1, num_rest_files-1
+                if (i < 10) then
+                  write(suffix,'("_",I1)') i
+                else
+                  write(suffix,'("_",I2)') i
+                endif
+                write(writeunit,'(a)') trim(restartname) // trim(suffix) // '.nc'
+              enddo
+           endif
+
            close(writeunit)
         endif
     else
@@ -1851,16 +1885,17 @@ subroutine ModelAdvance(gcomp, rc)
         write(restartname,'(A,I4.4,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2)') &
              "MOM.res.", year, month, day, hour, minute, seconds
       endif
+
+      call ESMF_LogWrite("MOM_cap: Writing restart :  "//trim(restartname), ESMF_LOGMSG_INFO, rc=rc)
+
+      ! write restart file(s)
+      call ocean_model_restart(ocean_state, restartname=restartname)
     end if
-    call ESMF_LogWrite("MOM_cap: Writing restart :  "//trim(restartname), ESMF_LOGMSG_INFO, rc=rc)
 
-     ! write restart file(s)
-     call ocean_model_restart(ocean_state, restartname=restartname)
-
-     if (is_root_pe()) then
-       write(logunit,*) subname//' writing restart file ',trim(restartname)
-     endif
+    if (is_root_pe()) then
+      write(logunit,*) subname//' writing restart file ',trim(restartname)
     endif
+  endif
 
   !---------------
   ! Write diagnostics
