@@ -21,8 +21,11 @@ use MOM_interface_heights, only : find_eta
 use MOM_io, only : file_exists, field_size, MOM_read_data, MOM_read_vector, slasher
 use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init, set_tracer_data
 use MOM_open_boundary, only : OBC_NONE, OBC_SIMPLE
-use MOM_open_boundary, only : open_boundary_query, open_boundary_test_extern_h
-use MOM_open_boundary, only : fill_temp_salt_segments, update_OBC_segment_data
+use MOM_open_boundary, only : open_boundary_query
+use MOM_open_boundary, only : set_tracer_data, initialize_segment_data
+use MOM_open_boundary, only : open_boundary_test_extern_h
+use MOM_open_boundary, only : fill_temp_salt_segments
+use MOM_open_boundary, only : update_OBC_segment_data
 !use MOM_open_boundary, only : set_3D_OBC_data
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, determine_is_new_run, MOM_restart_CS
@@ -555,6 +558,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
 
   ! This controls user code for setting open boundary data
   if (associated(OBC)) then
+     call initialize_segment_data(G, OBC, PF) !   call initialize_segment_data(G, OBC, param_file)
+!     call open_boundary_config(G, US, PF, OBC)
     ! Call this once to fill boundary arrays from fixed values
     if (.not. OBC%needs_IO_for_data)  &
       call update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
