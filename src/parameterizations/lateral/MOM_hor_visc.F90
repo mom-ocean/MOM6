@@ -218,6 +218,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                                  intent(out) :: diffu  !< Zonal acceleration due to convergence of
                                                        !! along-coordinate stress tensor [L T-2 ~> m s-2]
+  real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
+                                 intent(out) :: NoSt   !< Normal stress [T-1 ~> s-1].
+
+  real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
+                                 intent(out) :: ShSt   !< Shear stress [T-1 ~> s-1].
+
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                                  intent(out) :: diffv  !< Meridional acceleration due to convergence
                                                        !! of along-coordinate stress tensor [L T-2 ~> m s-2].
