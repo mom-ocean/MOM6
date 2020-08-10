@@ -18,10 +18,8 @@ use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
 use MOM_interface_heights, only : find_eta
-use MOM_io, only : file_exists
-use MOM_io, only : MOM_read_data, MOM_read_vector
-use MOM_io, only : slasher
-use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init
+use MOM_io, only : file_exists, field_size, MOM_read_data, MOM_read_vector, slasher
+use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init, set_tracer_data
 use MOM_open_boundary, only : OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary, only : open_boundary_query
 use MOM_open_boundary, only : set_tracer_data, initialize_segment_data
@@ -33,8 +31,7 @@ use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, determine_is_new_run, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, set_up_sponge_ML_density
 use MOM_sponge, only : initialize_sponge, sponge_CS
-use MOM_ALE_sponge, only : set_up_ALE_sponge_field, initialize_ALE_sponge
-use MOM_ALE_sponge, only : ALE_sponge_CS
+use MOM_ALE_sponge, only : set_up_ALE_sponge_field, initialize_ALE_sponge, ALE_sponge_CS
 use MOM_string_functions, only : uppercase, lowercase
 use MOM_time_manager, only : time_type
 use MOM_tracer_registry, only : tracer_registry_type
@@ -44,8 +41,7 @@ use MOM_verticalGrid, only : setVerticalGridAxes, verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type, EOS_domain
 use MOM_EOS, only : convert_temp_salt_for_TEOS10
 use user_initialization, only : user_initialize_thickness, user_initialize_velocity
-use user_initialization, only : user_init_temperature_salinity
-use user_initialization, only : user_set_OBC_data
+use user_initialization, only : user_init_temperature_salinity, user_set_OBC_data
 use user_initialization, only : user_initialize_sponges
 use DOME_initialization, only : DOME_initialize_thickness
 use DOME_initialization, only : DOME_set_OBC_data
@@ -97,7 +93,6 @@ use MOM_regridding, only : regridding_main
 use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_remapping, only : remapping_core_h
 use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
-use fms_io_mod, only : field_size
 
 implicit none ; private
 
