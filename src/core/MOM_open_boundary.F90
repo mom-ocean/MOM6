@@ -546,13 +546,6 @@ subroutine open_boundary_config(G, US, param_file, OBC)
       if (Lscale_out>0.) OBC%segment(l)%Tr_InvLscale_out =  1.0/Lscale_out
     enddo
 
-    ! There is a problem with the order of the OBC initialization
-    ! with respect to ALE_init. Currently handling this by copying the
-    ! param file so that I can use it later in step_MOM in order to finish
-    ! initializing segments on the first step.
-
-    ! Is the above comment still relevant ?
-
     call get_param(param_file, mdl, "REMAPPING_SCHEME", remappingScheme, &
           "This sets the reconstruction scheme used "//&
           "for vertical remapping for all variables. "//&
