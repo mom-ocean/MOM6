@@ -783,8 +783,8 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kd_int, Kv
 
 
       ! XXX: Temporary de-scaling of N2_int(i,:) into a temporary variable
-      do k=1,G%ke+1
-        N2_int_i(k) = US%s_to_T**2 * N2_int(i,k)
+      do K=1,G%ke+1
+        N2_int_i(K) = US%s_to_T**2 * N2_int(i,K)
       enddo
 
       call CVMix_coeffs_tidal( Mdiff_out               = Kv_tidal,            &
@@ -803,14 +803,14 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kd_int, Kv
         Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5 * US%m2_s_to_Z2_T * (Kd_tidal(k) + Kd_tidal(k+1))
       enddo
       if (present(Kd_int)) then
-        do k=1,G%ke+1
-          Kd_int(i,j,k) = Kd_int(i,j,k) +  (US%m2_s_to_Z2_T * Kd_tidal(k))
+        do K=1,G%ke+1
+          Kd_int(i,j,K) = Kd_int(i,j,K) +  (US%m2_s_to_Z2_T * Kd_tidal(K))
         enddo
       endif
       ! Update viscosity with the proper unit conversion.
       if (associated(Kv)) then
-        do k=1,G%ke+1
-          Kv(i,j,k) = Kv(i,j,k) + US%m2_s_to_Z2_T * Kv_tidal(k)  ! Rescale from m2 s-1 to Z2 T-1.
+        do K=1,G%ke+1
+          Kv(i,j,K) = Kv(i,j,K) + US%m2_s_to_Z2_T * Kv_tidal(K)  ! Rescale from m2 s-1 to Z2 T-1.
         enddo
       endif
 
@@ -903,15 +903,15 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kd_int, Kv
         Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5 * US%m2_s_to_Z2_T * (Kd_tidal(k) + Kd_tidal(k+1))
       enddo
       if (present(Kd_int)) then
-        do k=1,G%ke+1
-          Kd_int(i,j,k) = Kd_int(i,j,k) +  (US%m2_s_to_Z2_T * Kd_tidal(k))
+        do K=1,G%ke+1
+          Kd_int(i,j,K) = Kd_int(i,j,K) +  (US%m2_s_to_Z2_T * Kd_tidal(K))
         enddo
       endif
 
       ! Update viscosity
       if (associated(Kv)) then
-        do k=1,G%ke+1
-          Kv(i,j,k) = Kv(i,j,k) + US%m2_s_to_Z2_T * Kv_tidal(k)   ! Rescale from m2 s-1 to Z2 T-1.
+        do K=1,G%ke+1
+          Kv(i,j,K) = Kv(i,j,K) + US%m2_s_to_Z2_T * Kv_tidal(K)   ! Rescale from m2 s-1 to Z2 T-1.
         enddo
       endif
 
