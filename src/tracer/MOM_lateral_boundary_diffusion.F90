@@ -314,9 +314,9 @@ real function bulk_average(boundary, nk, deg, h, hBLT, phi, ppoly0_E, ppoly0_coe
   real, dimension(nk) :: h                 !< Layer thicknesses                                     [H ~> m or kg m-2]
   real                :: hBLT              !< Depth of the boundary layer                           [H ~> m or kg m-2]
   real, dimension(nk) :: phi               !< Scalar quantity
-  real, dimension(nk,2)    :: ppoly0_E(:,:)      !< Edge value of polynomial
-  real, dimension(nk,deg+1) :: ppoly0_coefs(:,:) !< Coefficients of polynomial
-  integer                   :: method            !< Remapping scheme to use
+  real, dimension(nk,2)     :: ppoly0_E    !< Edge value of polynomial
+  real, dimension(nk,deg+1) :: ppoly0_coefs!< Coefficients of polynomial
+  integer                   :: method      !< Remapping scheme to use
 
   integer             :: k_top             !< Index of the first layer within the boundary
   real                :: zeta_top          !< Fraction of the layer encompassed by the bottom boundary layer
