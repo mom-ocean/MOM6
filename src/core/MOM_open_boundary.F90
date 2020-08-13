@@ -3844,9 +3844,9 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
             if (segment%is_E_or_W) then
               if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX' .or. &
                   segment%field(m)%name == 'Vamp' .or. segment%field(m)%name == 'Vphase') then
-                allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,siz(3)))
+                allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
               else
-                allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,siz(3)))
+                allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,1))
               endif
               if (segment%field(m)%name == 'U') then
                 allocate(segment%field(m)%bt_vel(is_obc:ie_obc,js_obc+1:je_obc))
@@ -3855,9 +3855,9 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
             else
               if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY' .or. &
                 segment%field(m)%name == 'Uamp' .or. segment%field(m)%name == 'Uphase') then
-                allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,siz(3)))
+                allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
               else
-                allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,siz(3)))
+                allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,1))
               endif
               if (segment%field(m)%name == 'V') then
                 allocate(segment%field(m)%bt_vel(is_obc+1:ie_obc,js_obc:je_obc))
@@ -4122,7 +4122,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
               allocate(segment%field(m)%bt_vel(is_obc:ie_obc,js_obc:je_obc))
             else if (segment%field(m)%name == 'Vamp' .or. segment%field(m)%name == 'Vphase') then
-              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,siz(3)))  ! <- ?
+              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,siz(3)))  ! <- not sure how to handle tides here ?
             elseif (segment%field(m)%name == 'U') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,G%ke))
               allocate(segment%field(m)%bt_vel(is_obc:ie_obc,js_obc+1:je_obc))
@@ -4131,7 +4131,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
             elseif (segment%field(m)%name == 'DVDX') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
             elseif (segment%field(m)%name == 'SSH' .or. segment%field(m)%name == 'SSHamp' .or. segment%field(m)%name == 'SSHphase') then
-              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,siz(3))) ! <- ?
+              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1)) ! <- ?
             else
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,G%ke))
             endif
@@ -4140,16 +4140,16 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
               allocate(segment%field(m)%bt_vel(is_obc:ie_obc,js_obc:je_obc))
             elseif (segment%field(m)%name == 'Uamp' .or. segment%field(m)%name == 'Uphase') then
-              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,siz(3))) ! untested
+              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1)) ! not sure how to handle tides here ?
             elseif (segment%field(m)%name == 'V') then
               allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,G%ke))
               allocate(segment%field(m)%bt_vel(is_obc+1:ie_obc,js_obc:je_obc))
             elseif (segment%field(m)%name == 'Vamp' .or. segment%field(m)%name == 'Vphase') then
-              allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,siz(3))) ! untested
+              allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,1)) ! ?
             elseif (segment%field(m)%name == 'DUDY') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
             elseif (segment%field(m)%name == 'SSH' .or. segment%field(m)%name == 'SSHamp' .or. segment%field(m)%name == 'SSHphase') then
-              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,siz(3)))  ! untested
+              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))  ! ?
             else
               allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,G%ke))
             endif
@@ -4309,7 +4309,6 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                     cos((time_type_to_real(Time) - OBC%time_ref)*OBC%tide_frequencies(c) - segment%field(segment%zphase_index)%buffer_dst(i,j,c) + OBC%tide_eq_phases(c) + OBC%tide_un(c))
                 enddo
               endif
-              segment%eta(i,j) = GV%m_to_H * (segment%field(m)%buffer_dst(i,j,1) + tidal_elev)
             enddo
           enddo
         endif
