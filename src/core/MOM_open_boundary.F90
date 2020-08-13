@@ -63,6 +63,7 @@ public update_segment_tracer_reservoirs
 public update_OBC_ramp
 public rotate_OBC_config
 public rotate_OBC_init
+public initialize_segment_data
 
 integer, parameter, public :: OBC_NONE = 0      !< Indicates the use of no open boundary
 integer, parameter, public :: OBC_SIMPLE = 1    !< Indicates the use of a simple inflow open boundary
@@ -291,7 +292,7 @@ type, public :: ocean_OBC_type
   real :: rx_max   !< The maximum magnitude of the baroclinic radiation velocity (or speed of
                    !! characteristics) in units of grid points per timestep [nondim].
   logical :: OBC_pe !< Is there an open boundary on this tile?
-  type(remapping_CS),      pointer :: remap_CS   !< ALE remapping control structure for segments only
+  type(remapping_CS),      pointer :: remap_CS=> NULL()   !< ALE remapping control structure for segments only
   type(OBC_registry_type), pointer :: OBC_Reg => NULL()  !< Registry type for boundaries
   real, pointer, dimension(:,:,:) :: &
     rx_normal => NULL(), & !< Array storage for normal phase speed for EW radiation OBCs in units of
@@ -366,6 +367,10 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   real               :: Lscale_in, Lscale_out ! parameters controlling tracer values at the boundaries [L ~> m]
   integer, dimension(3) :: tide_ref_date, nodal_ref_date  !< Reference date (t = 0) for tidal forcing and fixed date for nodal modulation.
   character(len=50) :: tide_constituent_str  !< List of tidal constituents to add to boundary.
+  character(len=128) :: inputdir
+  logical :: answers_2018, default_2018_answers
+  logical :: check_reconstruction, check_remapping, force_bounds_in_subcell
+  character(len=32)  :: remappingScheme
   allocate(OBC)
 
   call get_param(param_file, mdl, "OBC_NUMBER_OF_SEGMENTS", OBC%number_of_segments, &
@@ -570,7 +575,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
       call time_interp_external_init()
     endif
     !    if (open_boundary_query(OBC, needs_ext_seg_data=.true.)) &
-    call initialize_segment_data(G, OBC, param_file)
+ !   call initialize_segment_data(G, OBC, param_file)
 
     if (open_boundary_query(OBC, apply_open_OBC=.true.)) then
       call get_param(param_file, mdl, "OBC_RADIATION_MAX", OBC%rx_max, &
@@ -613,6 +618,39 @@ subroutine open_boundary_config(G, US, param_file, OBC)
       if (Lscale_out>0.) OBC%segment(l)%Tr_InvLscale_out =  1.0/Lscale_out
     enddo
 
+    call get_param(param_file, mdl, "REMAPPING_SCHEME", remappingScheme, &
+          "This sets the reconstruction scheme used "//&
+          "for vertical remapping for all variables. "//&
+          "It can be one of the following schemes: \n"//&
+          trim(remappingSchemesDoc), default=remappingDefaultScheme,do_not_log=.true.)
+    call get_param(param_file, mdl, "FATAL_CHECK_RECONSTRUCTIONS", check_reconstruction, &
+          "If true, cell-by-cell reconstructions are checked for "//&
+          "consistency and if non-monotonicity or an inconsistency is "//&
+          "detected then a FATAL error is issued.", default=.false.,do_not_log=.true.)
+    call get_param(param_file, mdl, "FATAL_CHECK_REMAPPING", check_remapping, &
+          "If true, the results of remapping are checked for "//&
+          "conservation and new extrema and if an inconsistency is "//&
+          "detected then a FATAL error is issued.", default=.false.,do_not_log=.true.)
+    call get_param(param_file, mdl, "BRUSHCUTTER_MODE", OBC%brushcutter_mode, &
+         "If true, read external OBC data on the supergrid.", &
+         default=.false.)
+    call get_param(param_file, mdl, "REMAP_BOUND_INTERMEDIATE_VALUES", force_bounds_in_subcell, &
+          "If true, the values on the intermediate grid used for remapping "//&
+          "are forced to be bounded, which might not be the case due to "//&
+          "round off.", default=.false.,do_not_log=.true.)
+    call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.false.)
+    call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=default_2018_answers)
+
+    allocate(OBC%remap_CS)
+    call initialize_remapping(OBC%remap_CS, remappingScheme, boundary_extrapolation = .false., &
+               check_reconstruction=check_reconstruction, check_remapping=check_remapping, &
+               force_bounds_in_subcell=force_bounds_in_subcell, answers_2018=answers_2018)
+
   endif ! OBC%number_of_segments > 0
 
     ! Safety check
@@ -638,7 +676,7 @@ end subroutine open_boundary_config
 subroutine initialize_segment_data(G, OBC, PF)
   use mpp_mod, only : mpp_pe, mpp_set_current_pelist, mpp_get_current_pelist,mpp_npes
 
-  type(dyn_horgrid_type), intent(in)    :: G   !< Ocean grid structure
+  type(ocean_grid_type), intent(in)    :: G   !< Ocean grid structure
   type(ocean_OBC_type),   intent(inout) :: OBC !< Open boundary control structure
   type(param_file_type),  intent(in)    :: PF  !< Parameter file handle
 
@@ -651,10 +689,7 @@ subroutine initialize_segment_data(G, OBC, PF)
   character(len=32), dimension(MAX_OBC_FIELDS) :: fields  ! segment field names
   character(len=128) :: inputdir
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
-  character(len=32)  :: remappingScheme
   character(len=256) :: mesg    ! Message for error messages.
-  logical :: check_reconstruction, check_remapping, force_bounds_in_subcell
-  logical :: answers_2018, default_2018_answers
   integer, dimension(4) :: siz,siz2
   integer :: is, ie, js, je
   integer :: isd, ied, jsd, jed
@@ -673,39 +708,6 @@ subroutine initialize_segment_data(G, OBC, PF)
 
   call get_param(PF, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
-
-  call get_param(PF, mdl, "REMAPPING_SCHEME", remappingScheme, &
-          "This sets the reconstruction scheme used "//&
-          "for vertical remapping for all variables. "//&
-          "It can be one of the following schemes: \n"//&
-          trim(remappingSchemesDoc), default=remappingDefaultScheme,do_not_log=.true.)
-  call get_param(PF, mdl, "FATAL_CHECK_RECONSTRUCTIONS", check_reconstruction, &
-          "If true, cell-by-cell reconstructions are checked for "//&
-          "consistency and if non-monotonicity or an inconsistency is "//&
-          "detected then a FATAL error is issued.", default=.false.,do_not_log=.true.)
-  call get_param(PF, mdl, "FATAL_CHECK_REMAPPING", check_remapping, &
-          "If true, the results of remapping are checked for "//&
-          "conservation and new extrema and if an inconsistency is "//&
-          "detected then a FATAL error is issued.", default=.false.,do_not_log=.true.)
-  call get_param(PF, mdl, "REMAP_BOUND_INTERMEDIATE_VALUES", force_bounds_in_subcell, &
-          "If true, the values on the intermediate grid used for remapping "//&
-          "are forced to be bounded, which might not be the case due to "//&
-          "round off.", default=.false.,do_not_log=.true.)
-  call get_param(PF, mdl, "BRUSHCUTTER_MODE", OBC%brushcutter_mode, &
-         "If true, read external OBC data on the supergrid.", &
-         default=.false.)
-  call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
-                 "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
-  call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
-                 "If true, use the order of arithmetic and expressions that recover the "//&
-                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
-                 "forms of the same expressions.", default=default_2018_answers)
-
-  allocate(OBC%remap_CS)
-  call initialize_remapping(OBC%remap_CS, remappingScheme, boundary_extrapolation = .false., &
-               check_reconstruction=check_reconstruction, check_remapping=check_remapping, &
-               force_bounds_in_subcell=force_bounds_in_subcell, answers_2018=answers_2018)
 
   if (OBC%user_BCs_set_globally) return
 
@@ -5237,6 +5239,8 @@ subroutine rotate_OBC_config(OBC_in, G_in, OBC, G, turns)
 
   integer :: l
 
+  if (OBC_in%number_of_segments==0) return
+
   ! Scalar and logical transfer
   OBC%number_of_segments = OBC_in%number_of_segments
   OBC%ke = OBC_in%ke
@@ -5294,8 +5298,10 @@ subroutine rotate_OBC_config(OBC_in, G_in, OBC, G, turns)
   OBC%OBC_pe = OBC_in%OBC_pe
 
   ! remap_CS is set up by initialize_segment_data, so we copy the fields here.
-  allocate(OBC%remap_CS)
-  OBC%remap_CS = OBC_in%remap_CS
+  if (ASSOCIATED(OBC_in%remap_CS)) then
+     allocate(OBC%remap_CS)
+     OBC%remap_CS = OBC_in%remap_CS
+  endif
 
   ! TODO: The OBC registry seems to be a list of "registered" OBC types.
   !   It does not appear to be used, so for now we skip this record.
