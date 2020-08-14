@@ -124,10 +124,18 @@ type, public :: vertvisc_CS ; private
   integer :: id_h_u = -1, id_h_v = -1, id_hML_u = -1 , id_hML_v = -1
   integer :: id_Ray_u = -1, id_Ray_v = -1, id_taux_bot = -1, id_tauy_bot = -1
   integer :: id_Kv_slow = -1, id_Kv_u = -1, id_Kv_v = -1
+  ! integer :: id_hf_du_dt_visc    = -1, id_hf_dv_dt_visc    = -1
+  integer :: id_hf_du_dt_visc_2d = -1, id_hf_dv_dt_visc_2d = -1
   !>@}
 
   type(PointAccel_CS), pointer :: PointAccel_CSp => NULL() !< A pointer to the control structure
                               !! for recording accelerations leading to velocity truncations
+
+  ! real, pointer :: hf_du_dt_visc(:,:,:)  => NULL() ! Zonal friction accel. x fract. thickness [L T-2 ~> m s-2].
+  ! real, pointer :: hf_dv_dt_visc(:,:,:)  => NULL() ! Merdional friction accel. x fract. thickness [L T-2 ~> m s-2].
+  ! 3D diagnostics hf_du(dv)_dt_visc are commented because there is no clarity on proper remapping grid option.
+  ! The code is retained for degugging purposes in the future.
+
 end type vertvisc_CS
 
 contains
@@ -202,11 +210,14 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   real :: surface_stress(SZIB_(G))! The same as stress, unless the wind stress
                            ! stress is applied as a body force [H L T-1 ~> m2 s-1 or kg m-1 s-1].
 
+  real, allocatable, dimension(:,:) :: hf_du_dt_visc_2d ! Depth sum of hf_du_dt_visc [L T-2 ~> m s-2]
+  real, allocatable, dimension(:,:) :: hf_dv_dt_visc_2d ! Depth sum of hf_dv_dt_visc [L T-2 ~> m s-2]
+
   logical :: do_i(SZIB_(G))
   logical :: DoStokesMixing
 
-  integer :: i, j, k, is, ie, Isq, Ieq, Jsq, Jeq, nz, n
-  is = G%isc ; ie = G%iec
+  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, n
+  is = G%isc ; ie = G%iec; js = G%jsc; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
@@ -452,6 +463,41 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     call post_data(CS%id_taux_bot, taux_bot, CS%diag)
   if (present(tauy_bot) .and. (CS%id_tauy_bot > 0)) &
     call post_data(CS%id_tauy_bot, tauy_bot, CS%diag)
+
+  ! Diagnostics for terms multiplied by fractional thicknesses
+
+  ! 3D diagnostics hf_du(dv)_dt_visc are commented because there is no clarity on proper remapping grid option.
+  ! The code is retained for degugging purposes in the future.
+  !if (CS%id_hf_du_dt_visc > 0) then
+  !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+  !    CS%hf_du_dt_visc(I,j,k) = ADp%du_dt_visc(I,j,k) * ADp%diag_hfrac_u(I,j,k)
+  !  enddo ; enddo ; enddo
+  !  call post_data(CS%id_hf_du_dt_visc, CS%hf_du_dt_visc, CS%diag)
+  !endif
+  !if (CS%id_hf_dv_dt_visc > 0) then
+  !  do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+  !    CS%hf_dv_dt_visc(i,J,k) = ADp%dv_dt_visc(i,J,k) * ADp%diag_hfrac_v(i,J,k)
+  !  enddo ; enddo ; enddo
+  !  call post_data(CS%id_hf_dv_dt_visc, CS%hf_dv_dt_visc, CS%diag)
+  !endif
+  if (CS%id_hf_du_dt_visc_2d > 0) then
+    allocate(hf_du_dt_visc_2d(G%IsdB:G%IedB,G%jsd:G%jed))
+    hf_du_dt_visc_2d(:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      hf_du_dt_visc_2d(I,j) = hf_du_dt_visc_2d(I,j) + ADp%du_dt_visc(I,j,k) * ADp%diag_hfrac_u(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_hf_du_dt_visc_2d, hf_du_dt_visc_2d, CS%diag)
+    deallocate(hf_du_dt_visc_2d)
+  endif
+  if (CS%id_hf_dv_dt_visc_2d > 0) then
+    allocate(hf_dv_dt_visc_2d(G%isd:G%ied,G%JsdB:G%JedB))
+    hf_dv_dt_visc_2d(:,:) = 0.0
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      hf_dv_dt_visc_2d(i,J) = hf_dv_dt_visc_2d(i,J) + ADp%dv_dt_visc(i,J,k) * ADp%diag_hfrac_v(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_hf_dv_dt_visc_2d, hf_dv_dt_visc_2d, CS%diag)
+    deallocate(hf_dv_dt_visc_2d)
+  endif
 
 end subroutine vertvisc
 
@@ -1097,12 +1143,12 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   real :: h_neglect   ! A thickness that is so small it is usually lost
                       ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: z2      ! A copy of z_i [nondim]
+  real :: botfn   ! A function that is 1 at the bottom and small far from it [nondim]
   real :: topfn   ! A function that is 1 at the top and small far from it [nondim]
   real :: kv_top  ! A viscosity associated with the top boundary layer [Z2 T-1 ~> m2 s-1]
   logical :: do_shelf, do_OBCs
   integer :: i, k, is, ie, max_nk
   integer :: nz
-  real    :: botfn
 
   a_cpl(:,:) = 0.0
   Kv_tot(:,:) = 0.0
@@ -1759,6 +1805,40 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   CS%id_tauy_bot = register_diag_field('ocean_model', 'tauy_bot', diag%axesCv1, &
      Time, 'Meridional Bottom Stress from Ocean to Earth', 'Pa', &
      conversion=US%RZ_to_kg_m2*US%L_T2_to_m_s2)
+
+  !CS%id_hf_du_dt_visc = register_diag_field('ocean_model', 'hf_du_dt_visc', diag%axesCuL, Time, &
+  !    'Fractional Thickness-weighted Zonal Acceleration from Vertical Viscosity', 'm s-2', &
+  !    v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !if (CS%id_hf_du_dt_visc > 0) then
+  !  call safe_alloc_ptr(CS%hf_du_dt_visc,IsdB,IedB,jsd,jed,nz)
+  !  call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
+  !  call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+  !endif
+
+  !CS%id_hf_dv_dt_visc = register_diag_field('ocean_model', 'hf_dv_dt_visc', diag%axesCvL, Time, &
+  !    'Fractional Thickness-weighted Meridional Acceleration from Vertical Viscosity', 'm s-2', &
+  !    v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !if (CS%id_hf_dv_dt_visc > 0) then
+  !  call safe_alloc_ptr(CS%hf_dv_dt_visc,isd,ied,JsdB,JedB,nz)
+  !  call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
+  !  call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+  !endif
+
+  CS%id_hf_du_dt_visc_2d = register_diag_field('ocean_model', 'hf_du_dt_visc_2d', diag%axesCu1, Time, &
+      'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Vertical Viscosity', 'm s-2', &
+      conversion=US%L_T2_to_m_s2)
+  if (CS%id_hf_du_dt_visc_2d > 0) then
+    call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+  endif
+
+  CS%id_hf_dv_dt_visc_2d = register_diag_field('ocean_model', 'hf_dv_dt_visc_2d', diag%axesCv1, Time, &
+      'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Vertical Viscosity', 'm s-2', &
+      conversion=US%L_T2_to_m_s2)
+  if (CS%id_hf_dv_dt_visc_2d > 0) then
+    call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+  endif
 
   if ((len_trim(CS%u_trunc_file) > 0) .or. (len_trim(CS%v_trunc_file) > 0)) &
     call PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS%PointAccel_CSp)

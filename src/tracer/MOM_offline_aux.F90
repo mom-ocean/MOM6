@@ -4,7 +4,6 @@ module MOM_offline_aux
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use mpp_domains_mod,      only : CENTER, CORNER, NORTH, EAST
 use data_override_mod,    only : data_override_init, data_override
 use MOM_time_manager,     only : time_type, operator(-)
 use MOM_debugging,        only : check_column_integrals
@@ -12,7 +11,7 @@ use MOM_domains,          only : pass_var, pass_vector, To_All
 use MOM_diag_vkernels,    only : reintegrate_column
 use MOM_error_handler,    only : callTree_enter, callTree_leave, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_grid,             only : ocean_grid_type
-use MOM_io,               only : MOM_read_data, MOM_read_vector
+use MOM_io,               only : MOM_read_data, MOM_read_vector, CENTER
 use MOM_verticalGrid,     only : verticalGrid_type
 use MOM_file_parser,      only : get_param, log_version, param_file_type
 use astronomy_mod,        only : orbital_time, diurnal_solar, daily_mean_solar
