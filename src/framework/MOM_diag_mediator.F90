@@ -33,7 +33,7 @@ use MOM_diag_remap,       only : horizontally_average_diag_field
 use diag_axis_mod, only : get_diag_axis_name
 use diag_data_mod, only : null_axis_id
 use diag_manager_mod, only : diag_manager_init, diag_manager_end
-use diag_manager_mod, only : send_data, diag_axis_init, diag_field_add_attribute
+use diag_manager_mod, only : send_data, diag_axis_init, EAST, NORTH, diag_field_add_attribute
 ! The following module is needed for PGI since the following line does not compile with PGI 6.5.0
 ! was: use diag_manager_mod, only : register_diag_field_fms=>register_diag_field
 use MOM_diag_manager_wrapper, only : register_diag_field_fms
@@ -365,14 +365,14 @@ subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
   ! Horizontal axes for the native grids
   if (G%symmetric) then
     id_xq = diag_axis_init('xq', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
-              'q point nominal longitude', Domain2=G%Domain%mpp_domain)
+              'q point nominal longitude', Domain2=G%Domain%mpp_domain, domain_position=EAST)
     id_yq = diag_axis_init('yq', G%gridLatB(G%jsgB:G%jegB), G%y_axis_units, 'y', &
-              'q point nominal latitude', Domain2=G%Domain%mpp_domain)
+              'q point nominal latitude', Domain2=G%Domain%mpp_domain, domain_position=NORTH)
   else
     id_xq = diag_axis_init('xq', G%gridLonB(G%isg:G%ieg), G%x_axis_units, 'x', &
-              'q point nominal longitude', Domain2=G%Domain%mpp_domain)
+              'q point nominal longitude', Domain2=G%Domain%mpp_domain, domain_position=EAST)
     id_yq = diag_axis_init('yq', G%gridLatB(G%jsg:G%jeg), G%y_axis_units, 'y', &
-              'q point nominal latitude', Domain2=G%Domain%mpp_domain)
+              'q point nominal latitude', Domain2=G%Domain%mpp_domain, domain_position=NORTH)
   endif
   id_xh = diag_axis_init('xh', G%gridLonT(G%isg:G%ieg), G%x_axis_units, 'x', &
               'h point nominal longitude', Domain2=G%Domain%mpp_domain)
@@ -3032,7 +3032,7 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
                  default=1)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&

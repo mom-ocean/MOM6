@@ -60,9 +60,10 @@ subroutine MOM_write_cputime_init(param_file, directory, Input_start_time, CS)
 
   ! Local variables
   integer :: new_cputime   ! The CPU time returned by SYSTEM_CLOCK
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = 'MOM_write_cputime'  ! This module's name.
+  logical :: all_default   ! If true, all parameters are using their default values.
 
   if (.not.associated(CS)) then
     allocate(CS)
@@ -71,7 +72,13 @@ subroutine MOM_write_cputime_init(param_file, directory, Input_start_time, CS)
   endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mdl, version, "")
+
+  ! Determine whether all paramters are set to their default values.
+  call get_param(param_file, mdl, "MAXCPU", CS%maxcpu, default=-1.0, do_not_log=.true.)
+  call get_param(param_file, mdl, "CPU_TIME_FILE", CS%CPUfile, default="CPU_stats", do_not_log=.true.)
+  all_default = (CS%maxcpu == -1.0) .and. (trim(CS%CPUfile) == trim("CPU_stats"))
+
+  call log_version(param_file, mdl, version, "", all_default=all_default)
   call get_param(param_file, mdl, "MAXCPU", CS%maxcpu, &
                  "The maximum amount of cpu time per processor for which "//&
                  "MOM should run before saving a restart file and "//&
