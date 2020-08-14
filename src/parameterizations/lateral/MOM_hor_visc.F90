@@ -2066,10 +2066,10 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE, ADp)
 
   ! Register fields for output from this module.
   CS%id_normstress = register_diag_field('ocean_model', 'NoSt', diag%axesTL, Time, &
-      'Normal Stress', 's-1', conversion=US%s_to_T)
+      'Normal Stress', 's-1', conversion=US%T_to_s)
 
   CS%id_shearstress = register_diag_field('ocean_model', 'ShSt', diag%axesBL, Time, &
-      'Shear Stress', 's-1', conversion=US%s_to_T)
+      'Shear Stress', 's-1', conversion=US%T_to_s)
 
   CS%id_diffu = register_diag_field('ocean_model', 'diffu', diag%axesCuL, Time, &
       'Zonal Acceleration from Horizontal Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
