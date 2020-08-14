@@ -100,6 +100,7 @@ subroutine basin_builder_topography(D, G, param_file, max_depth)
                      "latitude intersection with Prime Meridian, footprint radius, shelf depth.", &
                      units="degrees_E,degrees_N,degrees,m", &
                      fail_if_missing=.true.)
+      pars(4) = pars(4) / max_depth
       do j=G%jsc,G%jec ; do i=G%isc,G%iec
         lon = G%geoLonT(i,j)
         lat = G%geoLatT(i,j)
