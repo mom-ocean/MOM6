@@ -96,8 +96,8 @@ subroutine basin_builder_topography(D, G, param_file, max_depth)
       enddo ; enddo
     elseif (trim(lowercase(funcs)) == 'angled_coast') then
       call get_param(param_file, mdl, pname2, pars(1:4), &
-                     "ANGLED_COAST parameters: longitude, latitude, "//&
-                     "footprint radius, shelf depth.", &
+                     "ANGLED_COAST parameters: longitude intersection with Equator, "//&
+                     "latitude intersection with Prime Meridian, footprint radius, shelf depth.", &
                      units="degrees_E,degrees_N,degrees,m", &
                      fail_if_missing=.true.)
       do j=G%jsc,G%jec ; do i=G%isc,G%iec
@@ -226,14 +226,14 @@ end function dist_line_fixed_y
 real function angled_coast(lon, lat, lon_eq, lat_mer, dr, sh)
   real, intent(in) :: lon     !< Longitude [degrees_E]
   real, intent(in) :: lat     !< Latitude [degrees_N]
-  real, intent(in) :: lon_eq  !< Longitude [degrees_E]
-  real, intent(in) :: lat_mer !< Latitude [degrees_N]
+  real, intent(in) :: lon_eq  !< Longitude intersection with Equator [degrees_E]
+  real, intent(in) :: lat_mer !< Latitude intersection with Prime Meridian [degrees_N]
   real, intent(in) :: dr      !< "Radius" of coast profile [degrees]
   real, intent(in) :: sh      !< depth of shelf as fraction of full depth [nondim]
   real :: r
 
   r = 1/sqrt( lat_mer*lat_mer + lon_eq*lon_eq )
-  r = r * ( lat_mer*lat + lon_eq*lon - lon_eq*lat_mer)
+  r = r * ( lat_mer*lon + lon_eq*lat - lon_eq*lat_mer)
   angled_coast = cstprof(r, 0., dr, 0.125, 0.125, 0.5, sh)
 end function angled_coast
 
