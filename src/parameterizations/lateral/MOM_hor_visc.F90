@@ -191,6 +191,7 @@ type, public :: hor_visc_CS ; private
   integer :: id_vort_xy_q = -1, id_div_xx_h      = -1
   integer :: id_FrictWork = -1, id_FrictWorkIntz = -1
   integer :: id_FrictWork_GME = -1
+  integer :: id_normstress = -1, id_shearstress = -1
   !>@}
 
 
@@ -302,8 +303,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     Kh_q, &      ! Laplacian viscosity at corner points [L2 T-1 ~> m2 s-1]
     vort_xy_q, & ! vertical vorticity at corner points [T-1 ~> s-1]
     GME_coeff_q, &  !< GME coeff. at q-points [L2 T-1 ~> m2 s-1]
-    max_diss_rate_q ! maximum possible energy dissipated by lateral friction [L2 T-3 ~> m2 s-3]
-
+    max_diss_rate_q, & ! maximum possible energy dissipated by lateral friction [L2 T-3 ~> m2 s-3]
+    ShSt        !< A diagnostic array of shear stress [T-1 ~> s-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1) :: &
     KH_u_GME  !< interface height diffusivities in u-columns [L2 T-1 ~> m2 s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1) :: &
@@ -314,7 +315,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     max_diss_rate_h, & ! maximum possible energy dissipated by lateral friction [L2 T-3 ~> m2 s-3]
     FrictWork, &     ! work done by MKE dissipation mechanisms [R L2 T-3 ~> W m-2]
     FrictWork_GME, &  ! work done by GME [R L2 T-3 ~> W m-2]
-    div_xx_h         ! horizontal divergence [T-1 ~> s-1]
+    div_xx_h, &         ! horizontal divergence [T-1 ~> s-1]
+    NoSt        !< A diagnostic array of normal stress [T-1 ~> s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     GME_coeff_h      !< GME coeff. at h-points [L2 T-1 ~> m2 s-1]
   real :: Ah         ! biharmonic viscosity [L4 T-1 ~> m4 s-1]
@@ -512,6 +514,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       dvdy(i,j) = CS%DX_dyT(i,j)*(G%IdxCv(i,J) * v(i,J,k) - &
                                   G%IdxCv(i,J-1) * v(i,J-1,k))
       sh_xx(i,j) = dudx(i,j) - dvdy(i,j)
+      if (CS%id_normstress > 0) NoSt(i,j,k) = sh_xx(i,j)
     enddo ; enddo
 
     ! Components for the shearing strain
@@ -659,10 +662,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     if (CS%no_slip) then
       do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
         sh_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) + dudy(I,J) )
+        if (CS%id_shearstress > 0) ShSt(I,J,k) = sh_xy(I,J)
       enddo ; enddo
     else
       do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
         sh_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) + dudy(I,J) )
+        if (CS%id_shearstress > 0) ShSt(I,J,k) = sh_xy(I,J)
       enddo ; enddo
     endif
 
@@ -1288,6 +1293,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   enddo ! end of k loop
 
   ! Offer fields for diagnostic averaging.
+  if (CS%id_normstress > 0) call post_data(CS%id_normstress, NoSt, CS%diag)
+  if (CS%id_shearstress > 0) call post_data(CS%id_shearstress, ShSt, CS%diag)
   if (CS%id_diffu>0)     call post_data(CS%id_diffu, diffu, CS%diag)
   if (CS%id_diffv>0)     call post_data(CS%id_diffv, diffv, CS%diag)
   if (CS%id_FrictWork>0) call post_data(CS%id_FrictWork, FrictWork, CS%diag)
@@ -2058,6 +2065,11 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE, ADp)
   endif
 
   ! Register fields for output from this module.
+  CS%id_normstress = register_diag_field('ocean_model', 'NoSt', diag%axesTL, Time, &
+      'Normal Stress', 's-1', conversion=US%T_to_s)
+
+  CS%id_shearstress = register_diag_field('ocean_model', 'ShSt', diag%axesBL, Time, &
+      'Shear Stress', 's-1', conversion=US%T_to_s)
 
   CS%id_diffu = register_diag_field('ocean_model', 'diffu', diag%axesCuL, Time, &
       'Zonal Acceleration from Horizontal Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
