@@ -565,8 +565,8 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
            endif
          enddo
        enddo ; enddo
-
-     case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR, REGRIDDING_HYCOM1 )   ! Initial thicknesses for z coordinates
+     ! Initial thicknesses for z coordinates
+     case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR, REGRIDDING_HYCOM1 )
        do j=js,je ; do i=is,ie
          eta1D(nz+1) = -G%bathyT(i,j)
          do k=nz,1,-1
