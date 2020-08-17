@@ -352,7 +352,6 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   endif ! associated(tv%T) .AND. associated(tv%frazil)
   if (CS%debugConservation) call MOM_state_stats('1st make_frazil', u, v, h, tv%T, tv%S, G, GV, US)
 
-
   if (CS%use_int_tides) then
     ! This block provides an interface for the unresolved low-mode internal tide module (BDM).
     call set_int_tide_input(u, v, h, tv, fluxes, CS%int_tide_input, dt, G, GV, US, &
@@ -3379,13 +3378,13 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 
   if (CS%use_int_tides) then
     CS%id_cg1 = register_diag_field('ocean_model', 'cn1', diag%axesT1, &
-                 Time, 'First baroclinic mode (eigen) speed', 'm s-1')
+                 Time, 'First baroclinic mode (eigen) speed', 'm s-1', conversion=US%L_T_to_m_s)
     allocate(CS%id_cn(CS%nMode)) ; CS%id_cn(:) = -1
     do m=1,CS%nMode
       write(var_name, '("cn_mode",i1)') m
       write(var_descript, '("Baroclinic (eigen) speed of mode ",i1)') m
       CS%id_cn(m) = register_diag_field('ocean_model',var_name, diag%axesT1, &
-                   Time, var_descript, 'm s-1')
+                   Time, var_descript, 'm s-1', conversion=US%L_T_to_m_s)
       call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
     enddo
   endif
