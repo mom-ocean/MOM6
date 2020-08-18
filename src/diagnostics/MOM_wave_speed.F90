@@ -94,9 +94,8 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
     H_bot, &      ! The distance of each filtered interface from the bottom [Z ~> m]
     gprime        ! The reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
   real, dimension(SZK_(G)) :: &
-    Igl, Igu, Igd ! The inverse of the reduced gravity across an interface times
-                  ! the thickness of the layer below (Igl) or above (Igu) it.
-                  ! Their sum, Igd, is provided for the tridiagonal solver.  [T2 L-2 ~> s2 m-2]
+    Igl, Igu      ! The inverse of the reduced gravity across an interface times
+                  ! the thickness of the layer below (Igl) or above (Igu) it, in [T2 L-2 ~> s2 m-2].
   real, dimension(SZK_(G),SZI_(G)) :: &
     Hf, &         ! Layer thicknesses after very thin layers are combined [Z ~> m]
     Tf, &         ! Layer temperatures after very thin layers are combined [degC]
@@ -211,7 +210,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
 !$OMP                          private(htot,hmin,kf,H_here,HxT_here,HxS_here,HxR_here, &
 !$OMP                                  Hf,Tf,Sf,Rf,pres,T_int,S_int,drho_dT,drho_dS,   &
 !$OMP                                  drxh_sum,kc,Hc,Hc_H,tC,sc,I_Hnew,gprime,&
-!$OMP                                  Rc,speed2_tot,Igl,Igu,Igd,lam0,lam,lam_it,dlam, &
+!$OMP                                  Rc,speed2_tot,Igl,Igu,lam0,lam,lam_it,dlam, &
 !$OMP                                  mode_struct,sum_hc,N2min,gp,hw,                 &
 !$OMP                                  ms_min,ms_max,ms_sq,H_top,H_bot,I_Htot,merge,   &
 !$OMP                                  det,ddet,detKm1,ddetKm1,detKm2,ddetKm2,det_it,ddet_it)
@@ -493,57 +492,27 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
           do itt=1,max_itt
             lam_it(itt) = lam
             if (l_use_ebt_mode) then
-              ! This initialization of det,ddet imply Neumann boundary conditions so that first 3 rows
-              ! of the matrix are
+              ! This initialization of det,ddet imply Neumann boundary conditions for horizontal
+              ! velocity or pressure modes, so that first 3 rows of the matrix are
               !    /   b(1)-lam  igl(1)      0        0     0  ...  \
               !    |  igu(2)    b(2)-lam   igl(2)     0     0  ...  |
               !    |    0        igu(3)   b(3)-lam  igl(3)  0  ...  |
-              ! which is consistent if the eigenvalue problem is for horizontal velocity or pressure modes.
-             !detKm1 = c2_scale*(Igl(1)-lam) ; ddetKm1 = -1.0*c2_scale
-             !det = (Igu(2)+Igl(2)-lam)*detKm1 - (Igu(2)*Igl(1)) ; ddet = (Igu(2)+Igl(2)-lam)*ddetKm1 - detKm1
-              detKm1 = 1.0 ; ddetKm1 = 0.0
-              det = (Igl(1)-lam) ; ddet = -1.0
-              if (kc>1) then
-                ! Shift variables and rescale rows to avoid over- or underflow.
-                detKm2 = c2_scale*detKm1 ; ddetKm2 = c2_scale*ddetKm1
-                detKm1 = c2_scale*det    ; ddetKm1 = c2_scale*ddet
-                det = (Igu(2)+Igl(2)-lam)*detKm1 - (Igu(2)*Igl(1))*detKm2
-                ddet = (Igu(2)+Igl(2)-lam)*ddetKm1 - (Igu(2)*Igl(1))*ddetKm2 - detKm1
-              endif
               ! The last two rows of the pressure equation matrix are
               !    |    ...  0  igu(kc-1)  b(kc-1)-lam  igl(kc-1)  |
               !    \    ...  0     0        igu(kc)     b(kc)-lam  /
+              call tridiag_det(Igu, Igl, 1, kc, lam, det, ddet, row_scale=c2_scale)
             else
-              ! This initialization of det,ddet imply Dirichlet boundary conditions so that first 3 rows
-              ! of the matrix are
+              ! This initialization of det,ddet imply Dirichlet boundary conditions for vertical
+              ! velocity modes, so that first 3 rows of the matrix are
               !    /  b(2)-lam  igl(2)      0       0     0  ...  |
               !    |  igu(3)  b(3)-lam   igl(3)     0     0  ...  |
               !    |    0       igu(4)  b(4)-lam  igl(4)  0  ...  |
-              ! which is consistent if the eigenvalue problem is for vertical velocity modes.
-              detKm1 = 1.0 ; ddetKm1 = 0.0
-              det = (Igu(2) + Igl(2) - lam) ; ddet = -1.0
               ! The last three rows of the w equation matrix are
-              !    |    ...   0  igu(kc-1)  b(kc-1)-lam  igl(kc-1)     0       |
+              !    |    ...   0  igu(kc-2)  b(kc-2)-lam  igl(kc-2)     0       |
               !    |    ...   0     0        igu(kc-1)  b(kc-1)-lam  igl(kc-1) |
               !    \    ...   0     0           0        igu(kc)    b(kc)-lam  /
+              call tridiag_det(Igu, Igl, 2, kc, lam, det, ddet, row_scale=c2_scale)
             endif
-            do k=3,kc
-              ! Shift variables and rescale rows to avoid over- or underflow.
-              detKm2 = c2_scale*detKm1 ; ddetKm2 = c2_scale*ddetKm1
-              detKm1 = c2_scale*det    ; ddetKm1 = c2_scale*ddet
-
-              det = (Igu(k)+Igl(k)-lam)*detKm1 - (Igu(k)*Igl(k-1))*detKm2
-              ddet = (Igu(k)+Igl(k)-lam)*ddetKm1 - (Igu(k)*Igl(k-1))*ddetKm2 - detKm1
-
-              ! Rescale det & ddet if det is getting too large or too small.
-              if (abs(det) > rescale) then
-                det = I_rescale*det ; detKm1 = I_rescale*detKm1
-                ddet = I_rescale*ddet ; ddetKm1 = I_rescale*ddetKm1
-              elseif (abs(det) < I_rescale) then
-                det = rescale*det ; detKm1 = rescale*detKm1
-                ddet = rescale*ddet ; ddetKm1 = rescale*ddetKm1
-              endif
-            enddo
             ! Use Newton's method iteration to find a new estimate of lam.
             det_it(itt) = det ; ddet_it(itt) = ddet
 
@@ -559,10 +528,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
             endif
 
             if (calc_modal_structure) then
-              do k = 1,kc
-                Igd(k) = Igu(k) + Igl(k)
-              enddo
-              call tdma6(kc, -Igu, Igd, -Igl, lam, mode_struct)
+              call tdma6(kc, Igu, Igl, lam, mode_struct)
               ms_min = mode_struct(1)
               ms_max = mode_struct(1)
               ms_sq = mode_struct(1)**2
@@ -620,51 +586,54 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
 
 end subroutine wave_speed
 
-!> Solve a non-symmetric tridiagonal problem with a scalar contribution to the leading diagonal.
+!> Solve a non-symmetric tridiagonal problem with the sum of the upper and lower diagnonals minus a
+!! scalar contribution as the leading diagonal.
 !! This uses the Thomas algorithm rather than the Hallberg algorithm since the matrix is not symmetric.
-subroutine tdma6(n, a, b, c, lam, y)
+subroutine tdma6(n, a, c, lam, y)
   integer,            intent(in)    :: n !< Number of rows of matrix
-  real, dimension(n), intent(in)    :: a !< Lower diagonal   [T2 L-2 ~> s2 m-2]
-  real, dimension(n), intent(in)    :: b !< Leading diagonal [T2 L-2 ~> s2 m-2]
-  real, dimension(n), intent(in)    :: c !< Upper diagonal   [T2 L-2 ~> s2 m-2]
+  real, dimension(:), intent(in)    :: a !< Lower diagonal   [T2 L-2 ~> s2 m-2]
+  real, dimension(:), intent(in)    :: c !< Upper diagonal   [T2 L-2 ~> s2 m-2]
   real,               intent(in)    :: lam !< Scalar subtracted from leading diagonal [T2 L-2 ~> s2 m-2]
-  real, dimension(n), intent(inout) :: y !< RHS on entry, result on exit
+  real, dimension(:), intent(inout) :: y !< RHS on entry, result on exit
+
   ! Local variables
-  integer :: k, l
-  real :: beta(n), lambda  ! Temporary variables in [T2 L-2 ~> s2 m-2]
-  real :: I_beta(n)        ! Temporary variables in [L2 T-2 ~> m2 s-2]
-  real :: yy(n)            ! A temporary variable with the same units as y on entry.
+  real :: lambda     ! A temporary variable in [T2 L-2 ~> s2 m-2]
+  real :: beta(n)    ! A temporary variable in [T2 L-2 ~> s2 m-2]
+  real :: I_beta(n)  ! A temporary variable in [L2 T-2 ~> m2 s-2]
+  real :: yy(n)      ! A temporary variable with the same units as y on entry.
+  integer :: k, m
 
   lambda = lam
-  beta(1) = b(1) - lambda
+  beta(1) = (a(1)+c(1)) - lambda
   if (beta(1)==0.) then ! lam was chosen too perfectly
     ! Change lambda and redo this first row
     lambda = (1. + 1.e-5) * lambda
-    beta(1) = b(1) - lambda
+    beta(1) = (a(1)+c(1)) - lambda
   endif
   I_beta(1) = 1. / beta(1)
   yy(1) = y(1)
   do k = 2, n
-    beta(k) = ( b(k) - lambda ) - a(k) * c(k-1) * I_beta(k-1)
+    beta(k) = ( (a(k)+c(k)) - lambda ) - a(k) * c(k-1) * I_beta(k-1)
     ! Perhaps the following 0 needs to become a tolerance to handle underflow?
     if (beta(k)==0.) then ! lam was chosen too perfectly
       ! Change lambda and redo everything up to row k
       lambda = (1. + 1.e-5) * lambda
-      I_beta(1) = 1. / ( b(1) - lambda )
-      do l = 2, k
-        I_beta(l) = 1. / ( ( b(l) - lambda ) - a(l) * c(l-1) * I_beta(l-1) )
-        yy(l) = y(l) - a(l) * yy(l-1) * I_beta(l-1)
+      I_beta(1) = 1. / ( (a(1)+c(1)) - lambda )
+      do m = 2, k
+        I_beta(m) = 1. / ( ( (a(m)+c(m)) - lambda ) - a(m) * c(m-1) * I_beta(m-1) )
+        yy(m) = y(m) + a(m) * yy(m-1) * I_beta(m-1)
       enddo
     else
       I_beta(k) = 1. / beta(k)
     endif
-    yy(k) = y(k) - a(k) * yy(k-1) * I_beta(k-1)
+    yy(k) = y(k) + a(k) * yy(k-1) * I_beta(k-1)
   enddo
   ! The units of y change by a factor of [L2 T-2] in the following lines.
   y(n) = yy(n) * I_beta(n)
   do k = n-1, 1, -1
-    y(k) = ( yy(k) - c(k) * y(k+1) ) * I_beta(k)
+    y(k) = ( yy(k) + c(k) * y(k+1) ) * I_beta(k)
   enddo
+
 end subroutine tdma6
 
 !> Calculates the wave speeds for the first few barolinic modes.
@@ -709,10 +678,6 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos, better_spee
     Tc, &         ! A column of layer temperatures after convective istabilities are removed [degC]
     Sc, &         ! A column of layer salinites after convective istabilities are removed [ppt]
     Rc            ! A column of layer densities after convective istabilities are removed [R ~> kg m-3]
-  real, dimension(SZK_(G)-1) :: &
-    a_diag, b_diag, c_diag
-                  ! diagonals of tridiagonal matrix; one value for each
-                  ! interface (excluding surface and bottom) [T2 L-2 ~> s2 m-2]
   real :: I_Htot  ! The inverse of the total filtered thicknesses [Z ~> m]
   real :: c1_thresh  ! if c1 is below this value, don't bother calculating
                      ! cn values for higher modes [L T-1 ~> m s-1]
@@ -768,7 +733,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos, better_spee
                         ! for root finding (# intervals = 2**sub_it_max)
   logical :: sub_rootfound ! if true, subdivision has located root
   integer :: kc         ! The number of layers in the column after merging
-  integer :: nrows, sub, sub_it
+  integer :: sub, sub_it
   integer :: i, j, k, k2, itt, is, ie, js, je, nz, row, iint, m, ig, jg
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -1044,29 +1009,13 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos, better_spee
               endif
             enddo
 
-            ! Define the diagonals of the tridiagonal matrix for use by tridiag_det
-            a_diag(1) = 0.0
-            b_diag(1) = Igu(2)+Igl(2)
-            c_diag(1) = -Igl(2)
-            do k=2,kc-2
-              a_diag(k) = -Igu(k+1)
-              b_diag(k) = Igu(k+1)+Igl(k+1)
-              c_diag(k) = -Igl(k+1)
-            enddo
-            a_diag(kc-1) = -Igu(kc)
-            b_diag(kc-1) = Igu(kc)+Igl(kc)
-            c_diag(kc-1) = 0.0
-            ! Total number of rows in the matrix = number of interior interfaces
-            nrows = kc-1
-
             ! Under estimate the first eigenvalue (overestimate the speed) to start with.
             lam_1 = 1.0 / speed2_tot
 
             ! Find the first eigen value
             do itt=1,max_itt
               ! calculate the determinant of (A-lam_1*I)
-              call tridiag_det(a_diag(1:nrows), b_diag(1:nrows), c_diag(1:nrows), &
-                                      nrows, lam_1, det, ddet, row_scale=c2_scale)
+              call tridiag_det(Igu, Igl, 2, kc, lam_1, det, ddet, row_scale=c2_scale)
 
               ! If possible, use Newton's method iteration to find a new estimate of lam_1
               !det = det_it(itt) ; ddet = ddet_it(itt)
@@ -1103,14 +1052,12 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos, better_spee
               ! that are beyond the first root
 
               ! find det_l of first interval (det at left endpoint)
-              call tridiag_det(a_diag(1:nrows),b_diag(1:nrows),c_diag(1:nrows), &
-                               nrows,lamMin,det_l,ddet_l, row_scale=c2_scale)
+              call tridiag_det(Igu, Igl, 2, kc, lamMin, det_l, ddet_l, row_scale=c2_scale)
               ! move interval window looking for zero-crossings************************
               do iint=1,numint
                 xr = lamMin + lamInc * iint
                 xl = xr - lamInc
-                call tridiag_det(a_diag(1:nrows),b_diag(1:nrows),c_diag(1:nrows), &
-                                 nrows,xr,det_r,ddet_r, row_scale=c2_scale)
+                call tridiag_det(Igu, Igl, 2, kc, xr, det_r, ddet_r, row_scale=c2_scale)
                 if (det_l*det_r < 0.0) then  ! if function changes sign
                   if (det_l*ddet_l < 0.0) then ! if function at left is headed to zero
                     nrootsfound = nrootsfound + 1
@@ -1130,8 +1077,8 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos, better_spee
                       ! loop over each subinterval:
                       do sub=1,nsub-1,2 ! only check odds; sub = 1; 1,3; 1,3,5,7;...
                         xl_sub = xl + lamInc/(nsub)*sub
-                        call tridiag_det(a_diag(1:nrows),b_diag(1:nrows),c_diag(1:nrows), &
-                                 nrows,xl_sub,det_sub,ddet_sub, row_scale=c2_scale)
+                        call tridiag_det(Igu, Igl, 2, kc, xl_sub, det_sub, ddet_sub, &
+                                         row_scale=c2_scale)
                         if (det_sub*det_r < 0.0) then  ! if function changes sign
                           if (det_sub*ddet_sub < 0.0) then ! if function at left is headed to zero
                             sub_rootfound = .true.
@@ -1173,8 +1120,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos, better_spee
                 lam_n = xbl(m) ! first guess is left edge of window
                 do itt=1,max_itt
                   ! calculate the determinant of (A-lam_n*I)
-                  call tridiag_det(a_diag(1:nrows),b_diag(1:nrows),c_diag(1:nrows), &
-                                   nrows,lam_n,det,ddet, row_scale=c2_scale)
+                  call tridiag_det(Igu, Igl, 2, kc, lam_n, det, ddet, row_scale=c2_scale)
                   ! Use Newton's method to find a new estimate of lam_n
                   dlam = - det / ddet
                   lam_n = lam_n + dlam
@@ -1196,11 +1142,11 @@ end subroutine wave_speeds
 !! with lam, where lam is constant across rows.  Only the ratio of det to its derivative and their
 !! signs are typically used, so internal rescaling by consistent factors are used to avoid
 !! over- or underflow.
-subroutine tridiag_det(a, b, c, nrows, lam, det, ddet, row_scale)
+subroutine tridiag_det(a, c, ks, ke, lam, det, ddet, row_scale)
   real, dimension(:), intent(in) :: a     !< Lower diagonal of matrix (first entry unused)
-  real, dimension(:), intent(in) :: b     !< Leading diagonal of matrix (excluding lam)
   real, dimension(:), intent(in) :: c     !< Upper diagonal of matrix (last entry unused)
-  integer,            intent(in) :: nrows !< Size of matrix
+  integer,            intent(in) :: ks    !< Starting index to use in determinant
+  integer,            intent(in) :: ke    !< Ending index to use in determinant
   real,               intent(in) :: lam   !< Value subtracted from b
   real,               intent(out):: det   !< Determinant
   real,               intent(out):: ddet  !< Derivative of determinant with lam
@@ -1214,22 +1160,18 @@ subroutine tridiag_det(a, b, c, nrows, lam, det, ddet, row_scale)
   real :: I_rescale ! inverse of rescale
   integer :: k      ! row (layer interface) index
 
-  if (size(b) /= nrows) call MOM_error(WARNING, "Diagonal b must be same length as nrows.")
-  if (size(a) /= nrows) call MOM_error(WARNING, "Diagonal a must be same length as nrows.")
-  if (size(c) /= nrows) call MOM_error(WARNING, "Diagonal c must be same length as nrows.")
-
   I_rescale = 1.0 / rescale
   rscl = 1.0 ; if (present(row_scale)) rscl = row_scale
 
   detKm1 = 1.0 ; ddetKm1 = 0.0
-  det = (b(1) - lam) ; ddet = -1.0
-  do k=2,nrows
+  det = (a(ks)+c(ks)) - lam ; ddet = -1.0
+  do k=ks+1,ke
     ! Shift variables and rescale rows to avoid over- or underflow.
     detKm2 = row_scale*detKm1 ; ddetKm2 = row_scale*ddetKm1
     detKm1 = row_scale*det    ; ddetKm1 = row_scale*ddet
 
-    det = (b(k)-lam)*detKm1 - (a(k)*c(k-1))*detKm2
-    ddet = (b(k)-lam)*ddetKm1 - (a(k)*c(k-1))*ddetKm2 - detKm1
+    det =  ((a(k)+c(k))-lam)*detKm1  - (a(k)*c(k-1))*detKm2
+    ddet = ((a(k)+c(k))-lam)*ddetKm1 - (a(k)*c(k-1))*ddetKm2 - detKm1
 
     ! Rescale det & ddet if det is getting too large or too small.
     if (abs(det) > rescale) then
