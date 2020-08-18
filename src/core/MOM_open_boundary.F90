@@ -87,7 +87,6 @@ type, public :: OBC_segment_data_type
   real, dimension(:,:,:), allocatable :: dz_src !< vertical grid cell spacing of the incoming segment
                                                 !! data, set in [Z ~> m] then scaled to [H ~> m or kg m-2]
   real, dimension(:,:,:), pointer :: buffer_dst=>NULL() !< buffer src data remapped to the target vertical grid
-  real, dimension(:,:), pointer   :: bt_vel=>NULL()     !< barotropic velocity [L T-1 ~> m s-1]
   real                            :: value              !< constant value if fid is equal to -1
 end type OBC_segment_data_type
 
@@ -3836,10 +3835,6 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
               else
                 allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,G%ke))
               endif
-              if (segment%field(m)%name == 'U') then
-                allocate(segment%field(m)%bt_vel(is_obc:ie_obc,js_obc+1:je_obc))
-                segment%field(m)%bt_vel(:,:)=0.0
-              endif
             else
               if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') then
                 allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
@@ -3851,10 +3846,6 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
               else
                 allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,G%ke))
               endif
-              if (segment%field(m)%name == 'V') then
-                allocate(segment%field(m)%bt_vel(is_obc+1:ie_obc,js_obc:je_obc))
-                segment%field(m)%bt_vel(:,:)=0.0
-              endif
             endif
           else
             if (segment%is_E_or_W) then
@@ -3864,20 +3855,12 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
               else
                 allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,1))
               endif
-              if (segment%field(m)%name == 'U') then
-                allocate(segment%field(m)%bt_vel(is_obc:ie_obc,js_obc+1:je_obc))
-                segment%field(m)%bt_vel(:,:)=0.0
-              endif
             else
               if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY' .or. &
                 segment%field(m)%name == 'Uamp' .or. segment%field(m)%name == 'Uphase') then
                 allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
               else
                 allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,1))
-              endif
-              if (segment%field(m)%name == 'V') then
-                allocate(segment%field(m)%bt_vel(is_obc+1:ie_obc,js_obc:je_obc))
-                segment%field(m)%bt_vel(:,:)=0.0
               endif
             endif
           endif
@@ -5535,8 +5518,6 @@ subroutine rotate_OBC_segment_data(segment_in, segment, turns)
     endif
 
     segment%field(n)%buffer_dst => NULL()
-    segment%field(n)%bt_vel => NULL()
-
     segment%field(n)%value = segment_in%field(n)%value
   enddo
 
