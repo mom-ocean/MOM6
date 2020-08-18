@@ -4309,6 +4309,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                     cos((time_type_to_real(Time) - OBC%time_ref)*OBC%tide_frequencies(c) - segment%field(segment%zphase_index)%buffer_dst(i,j,c) + OBC%tide_eq_phases(c) + OBC%tide_un(c))
                 enddo
               endif
+              segment%eta(i,j) = GV%m_to_H * (segment%field(m)%buffer_dst(i,j,1) + tidal_elev)
             enddo
           enddo
         endif
