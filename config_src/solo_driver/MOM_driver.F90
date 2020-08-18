@@ -583,18 +583,16 @@ program MOM_main
     if ((permit_incr_restart) .and. (fluxes%fluxes_used) .and. &
         (Time + (Time_step_ocean/2) > restart_time)) then
       if (BTEST(Restart_control,1)) then
-        ! NOTE: use_fms2=.true. routes routine to fms2 IO interface
         call save_restart(dirs%restart_output_dir, Time, grid, &
-                          restart_CSp, .true., GV=GV, use_fms2=.true.)
+                          restart_CSp, .true., GV=GV)
         call forcing_save_restart(surface_forcing_CSp, grid, Time, &
                             dirs%restart_output_dir, .true.)
         if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
                                     dirs%restart_output_dir, .true.)
       endif
       if (BTEST(Restart_control,0)) then
-        ! NOTE: use_fms2=.true. routes routine to fms2 IO interface
         call save_restart(dirs%restart_output_dir, Time, grid, &
-                          restart_CSp, GV=GV, use_fms2=.true.)
+                          restart_CSp, GV=GV)
         call forcing_save_restart(surface_forcing_CSp, grid, Time, &
                             dirs%restart_output_dir)
         if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
@@ -618,8 +616,8 @@ program MOM_main
          "End of MOM_main reached with unused buoyancy fluxes. "//&
          "For conservation, the ocean restart files can only be "//&
          "created after the buoyancy forcing is applied.")
-    ! NOTE: use_fms2=.true. routes routine to fms2 IO interface
-    call save_restart(dirs%restart_output_dir, Time, grid, restart_CSp, GV=GV, use_fms2=.true.)
+
+    call save_restart(dirs%restart_output_dir, Time, grid, restart_CSp, GV=GV)
     if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
                                 dirs%restart_output_dir)
     ! Write ocean solo restart file.

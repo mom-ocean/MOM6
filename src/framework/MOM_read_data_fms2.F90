@@ -76,13 +76,12 @@ contains
 
 !> This routine calls the fms_io read_data subroutine to read 1-D domain-decomposed data field named "fieldname"
 !! from file "filename". The routine multiplies the data by "scale" if the optional argument is included in the call.
-subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, use_fms2, start_index, edge_lengths, &
+subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, start_index, edge_lengths, &
                                timelevel, scale, x_position, y_position, leave_file_open)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:), intent(inout) :: data !< The 1-dimensional data array to pass to read_data
   type(MOM_domain_type), intent(in) :: domain !< MOM domain attribute with the mpp_domain decomposition
-  logical, intent(in) :: use_fms2 !< flag to distinguish interface from the old write_field interface
   integer, dimension(1), optional, intent(in) :: start_index !< starting index of data buffer. Default is 1
   integer, dimension(1), optional, intent(in) :: edge_lengths !< number of data values to read in
                                                               !! default is the variable size
@@ -188,13 +187,12 @@ end subroutine MOM_read_data_1d_DD
 
 !> This routine calls the fms_io read_data subroutine to read 2-D domain-decomposed data field named "fieldname"
 !! from file "filename". The routine multiplies the data by "scale" if the optional argument is included in the call.
-subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain, use_fms2, start_index, edge_lengths, &
+subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain,start_index, edge_lengths, &
                                timelevel, scale, x_position, y_position, leave_file_open)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:,:), intent(inout) :: data !< The 2-dimensional data array to pass to read_data
   type(MOM_domain_type), intent(in) :: domain !< MOM domain attribute with the mpp_domain decomposition
-  logical, intent(in) :: use_fms2 !< flag to distinguish interface from the old write_field interface
   integer, dimension(2), optional, intent(in) :: start_index !< starting indices of data buffer. Default is 1
   integer, dimension(2), optional, intent(in) :: edge_lengths !< number of data values to read in.
                                                               !! Default values are the variable dimension sizes
@@ -323,13 +321,12 @@ end subroutine MOM_read_data_2d_DD
 
 !> This routine calls the fms_io read_data subroutine to read 3-D domain-decomposed data field named "fieldname"
 !! from file "filename". The routine multiplies the data by "scale" if the optional argument is included in the call.
-subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, use_fms2, start_index, edge_lengths, &
+subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, start_index, edge_lengths, &
                                timelevel, scale, x_position, y_position, leave_file_open)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:), intent(inout) :: data !< The 3-dimensional data array to pass to read_data
   type(MOM_domain_type), intent(in) :: domain !< MOM domain attribute with the mpp_domain decomposition
-  logical, intent(in) :: use_fms2 !< flag indicating whether to use this routine
   integer, dimension(3), optional, intent(in) :: start_index !< starting indices of data buffer. Default is 1
   integer, dimension(3), optional, intent(in) :: edge_lengths !< number of data values to read in.
                                                              !! Default values are the variable dimension sizes
@@ -460,13 +457,12 @@ end subroutine MOM_read_data_3d_DD
 
 !> This routine calls the fms_io read_data subroutine to read 4-D domain-decomposed data field named "fieldname"
 !! from file "filename". The routine multiplies the data by "scale" if the optional argument is included in the call.
-subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, use_fms2, start_index, edge_lengths, &
+subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, start_index, edge_lengths, &
                                timelevel, scale, x_position, y_position, leave_file_open)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:,:), intent(inout) :: data !< The 1-dimensional data array to pass to read_data
   type(MOM_domain_type), intent(in) :: domain !< MOM domain attribute with the mpp_domain decomposition
-  logical, intent(in) :: use_fms2 !< flag indicating whether to use this routine
   integer, dimension(4),  optional, intent(in) :: start_index !< starting indices of data buffer. Default is 1
   integer, dimension(4),  optional, intent(in) :: edge_lengths !< number of data values to read in.
                                                               !! Default values are the variable dimension sizes
@@ -600,11 +596,10 @@ end subroutine MOM_read_data_4d_DD
 
 !!> This routine calls the fms_io read_data subroutine to read a scalar (0-D) field named "fieldname"
 !! from file "filename".
-subroutine MOM_read_data_scalar(filename, fieldname, data, use_fms2, leave_file_open)
+subroutine MOM_read_data_scalar(filename, fieldname, data, leave_file_open)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
   real, intent(inout) :: data !< data buffer to pass to read_data
-  logical, intent(in) :: use_fms2 !< flag distinguishing interface from old MOM_read_data
   logical, optional, intent(in) :: leave_file_open !< if .true., leave file open
   ! local
   integer :: i
@@ -649,12 +644,11 @@ end subroutine MOM_read_data_scalar
 
 !> This routine calls the fms_io read_data subroutine to read 1-D non-domain-decomposed data field named "fieldname"
 !! from file "filename". The routine multiplies the data by "scale" if the optional argument is included in the call.
-subroutine MOM_read_data_1d_noDD(filename, fieldname, data, use_fms2, start_index, &
+subroutine MOM_read_data_1d_noDD(filename, fieldname, data, start_index, &
                                  edge_lengths, timelevel, scale, leave_file_open)
   character(len=*),       intent(in) :: filename !< The name of the file to read
   character(len=*),       intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:),     intent(inout) :: data !< The 1-dimensional data array to pass to read_data
-  logical, intent(in) :: use_fms2 !< flag to distinguish interface from old MOM_read_data interface
   integer, dimension(1), optional, intent(in) :: start_index !< starting index of data buffer. Default is 1
   integer, dimension(1), optional, intent(in) :: edge_lengths !< number of data values to read in; default is
                                                              !! the variable size
@@ -748,12 +742,11 @@ end subroutine MOM_read_data_1d_noDD
 
 !> This routine calls the fms_io read_data subroutine to read 2-D non-domain-decomposed data field named "fieldname"
 !! from file "filename". The routine multiplies the data by "scale" if the optional argument is included in the call.
-subroutine MOM_read_data_2d_noDD(filename, fieldname, data, use_fms2, start_index, &
+subroutine MOM_read_data_2d_noDD(filename, fieldname, data, start_index, &
                                  edge_lengths, timelevel, scale, leave_file_open)
   character(len=*),       intent(in) :: filename !< The name of the file to read
   character(len=*),       intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:,:),     intent(inout) :: data !< The 2-dimensional data array to pass to read_data
-  logical, intent(in) :: use_fms2 !< flag to distinguish interface from old MOM_read_data interface
   integer, dimension(2),  optional, intent(in) :: start_index !< starting indices of data buffer. Default is 1
   integer, dimension(2),  optional, intent(in) :: edge_lengths !< number of data values to read in.
                                                               !! Default values are the variable dimension sizes
@@ -842,12 +835,11 @@ end subroutine MOM_read_data_2d_noDD
 
 !> This routine calls the fms_io read_data subroutine to read 3-D non-domain-decomposed data field named "fieldname"
 !! from file "filename". The routine multiplies the data by "scale" if the optional argument is included in the call.
-subroutine MOM_read_data_3d_noDD(filename, fieldname, data, use_fms2, start_index, &
+subroutine MOM_read_data_3d_noDD(filename, fieldname, data, start_index, &
                                  edge_lengths, timelevel, scale, leave_file_open)
   character(len=*),       intent(in) :: filename !< The name of the file to read
   character(len=*),       intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:),     intent(inout) :: data !< The 3-dimensional data array to pass to read_data
-  logical, intent(in) :: use_fms2 !< flag to distinguish interface from old MOM_read_data interface
   integer, dimension(3), optional, intent(in) :: start_index !< starting indices of data buffer. Default is 1
   integer, dimension(3), optional, intent(in) :: edge_lengths !< number of data values to read in.
                                                               !! Default values are the variable dimension sizes
@@ -935,12 +927,11 @@ end subroutine MOM_read_data_3d_noDD
 
 !> This routine calls the fms_io read_data subroutine to read 4-D non-domain-decomposed data field named "fieldname"
 !! from file "filename". The routine multiplies the data by "scale" if the optional argument is included in the call.
-subroutine MOM_read_data_4d_noDD(filename, fieldname, data, use_fms2, start_index, &
+subroutine MOM_read_data_4d_noDD(filename, fieldname, data, start_index, &
                                  edge_lengths, timelevel, scale, leave_file_open)
   character(len=*),       intent(in) :: filename !< The name of the file to read
   character(len=*),       intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:,:),     intent(inout) :: data !< The 4-dimensional data array to pass to read_data
-  logical, intent(in) :: use_fms2 !< flag to distinguish interface from old MOM_read_data interface
   integer, dimension(4),  optional, intent(in) :: start_index !< starting indices of data buffer. Default is 1
   integer, dimension(4),  optional, intent(in) :: edge_lengths !< number of data values to read in.
                                                               !! Default values are the variable dimension sizes
@@ -1191,7 +1182,7 @@ end subroutine MOM_read_data_2d_supergrid
 !! 2-D data fields with names given by "[uv]_fieldname" from file "filename".  Valid values for
 !! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
 subroutine MOM_read_vector_2d_fms2(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
-                              use_fms2, timelevel, stagger, scale, leave_file_open)
+                                   timelevel, stagger, scale, leave_file_open)
   character(len=*),       intent(in)    :: filename !< name of the netcdf file to read
   character(len=*),       intent(in)    :: u_fieldname !< The variable name of the u data in the file
   character(len=*),       intent(in)    :: v_fieldname !< The variable name of the v data in the file
@@ -1200,7 +1191,6 @@ subroutine MOM_read_vector_2d_fms2(filename, u_fieldname, v_fieldname, u_data, v
   real, dimension(:,:),   intent(inout) :: v_data    !< The 2 dimensional array into which the
                                                      !! v-component of the data should be read
   type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
-  logical,                intent(in)    :: use_fms2  !< flag indicating whether to use this routine
   integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
   integer,      optional, intent(in)    :: stagger   !< A flag indicating where this vector is discretized
   real,         optional, intent(in)    :: scale     !< A scaling factor that the fields are multiplied
@@ -1320,7 +1310,7 @@ end subroutine MOM_read_vector_2d_fms2
 !! 3-D data fields with names given by "[uv]_fieldname" from file "filename".  Valid values for
 !! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
 subroutine MOM_read_vector_3d_fms2(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
-                              use_fms2, timelevel, stagger, scale, leave_file_open)
+                                   timelevel, stagger, scale, leave_file_open)
   character(len=*),       intent(in)    :: filename !< name of the netcdf file to read
   character(len=*),       intent(in)    :: u_fieldname !< The variable name of the u data in the file
   character(len=*),       intent(in)    :: v_fieldname !< The variable name of the v data in the file
@@ -1329,7 +1319,6 @@ subroutine MOM_read_vector_3d_fms2(filename, u_fieldname, v_fieldname, u_data, v
   real, dimension(:,:,:), intent(inout) :: v_data    !< The 3 dimensional array into which the
                                                      !! v-component of the data should be read
   type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
-  logical,                intent(in)    :: use_fms2  !< flag indicating whether to call this routine
   integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
   integer,      optional, intent(in)    :: stagger   !< A flag indicating where this vector is discretized
   real,         optional, intent(in)    :: scale     !< A scaling factor that the fields are multiplied

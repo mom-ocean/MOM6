@@ -481,10 +481,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   if (.not.new_sim) then ! This block restores the state from a restart file.
     !    This line calls a subroutine that reads the initial conditions
     !  from a previously generated file.
-
-    ! NOTE: use_fms2=.true. routes routine to fms2 IO interface
     call restore_state(dirs%input_filename, dirs%restart_input_dir, Time, &
-                       G, restart_CS, use_fms2=.true.)
+                       G, restart_CS)
     if (present(Time_in)) Time = Time_in
     if ((GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= GV%m_to_H)) then
       H_rescale = GV%m_to_H / GV%m_to_H_restart

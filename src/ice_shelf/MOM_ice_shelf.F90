@@ -1512,9 +1512,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   elseif (.not.new_sim) then
     ! This line calls a subroutine that reads the initial conditions from a restart file.
     call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: Restoring ice shelf from file.")
-   ! NOTE: use_fms2=.true. routes routine to fms2 IO interface
    call restore_state(dirs%input_filename, dirs%restart_input_dir, Time, &
-                      G, CS%restart_CSp, use_fms2=.true.)
+                      G, CS%restart_CSp)
 
     if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= US%m_to_Z)) then
       Z_rescale = US%m_to_Z / US%m_to_Z_restart
@@ -1781,8 +1780,8 @@ subroutine ice_shelf_save_restart(CS, Time, directory, time_stamped, filename_su
 
   if (present(directory)) then ; restart_dir = directory
   else ; restart_dir = CS%restart_output_dir ; endif
-  ! NOTE: first use_fms2=.true. routes routine to fms2 IO interface
-  call save_restart(restart_dir, Time, CS%grid, CS%restart_CSp, time_stamped, use_fms2=.true.)
+
+  call save_restart(restart_dir, Time, CS%grid, CS%restart_CSp, time_stamped)
 
 end subroutine ice_shelf_save_restart
 

@@ -1001,8 +1001,7 @@ subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
 
   if (.not.associated(CS)) return
   if (.not.associated(CS%restart_CSp)) return
-  ! NOTE: use_fms2=.true. routes routine to fms2 IO interface
-  call save_restart(.true., directory, Time, G, CS%restart_CSp, time_stamped, use_fms2=.true.)
+  call save_restart(directory, Time, G, CS%restart_CSp, time_stamped)
 
 end subroutine forcing_save_restart
 
@@ -1326,9 +1325,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
     if ((dirs%input_filename(1:1) == 'n') .and. &
         (LEN_TRIM(dirs%input_filename) == 1)) new_sim = .true.
     if (.not.new_sim) then
-      ! NOTE: use_fms2=.true. routes routine to fms2 IO interface
       call restore_state(dirs%input_filename, dirs%restart_input_dir, Time_frc, &
-                         G, CS%restart_CSp, use_fms2=.true.)
+                         G, CS%restart_CSp)
     endif
   endif
 

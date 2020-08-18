@@ -38,6 +38,8 @@ use fms2_io_mod, only : get_variable_num_dimensions, get_variable_dimension_name
 use platform_mod
 implicit none ; private
 
+logical :: use_fms2 = .true. !< Flag to use fms2-io interfaces
+
 public restart_init, restart_end, restore_state, register_restart_field
 public save_restart, query_initialized, restart_init_end, vardesc
 public restart_files_exist, determine_is_new_run, is_new_run
@@ -863,7 +865,7 @@ function query_initialized_4d_name(f_ptr, name, CS) result(query_initialized)
 end function query_initialized_4d_name
 
 !> wrapper routine for save_restart_old, save_restart_fms2, and write_initial_conditions_file
-subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, use_fms2, write_ic)
+subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, write_ic)
   character(len=*),        intent(in)    :: directory !< The directory where the restart files
                                                   !! are to be written
   type(time_type),         intent(in)    :: time  !< The current model time
@@ -874,18 +876,16 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, use_
                                                   !! to the restart file names.
   character(len=*), optional, intent(in) :: filename !< A filename that overrides the name in CS%restartfile.
   type(verticalGrid_type), optional, intent(in) :: GV !< The ocean's vertical grid structure
-  logical, optional,  intent(in) :: use_fms2 !< flag to call save_restart_fms2
   logical, optional,  intent(in) :: write_ic !< flag to call write_initial_conditions
   ! local
   logical :: write_initcond, call_fms2
   write_initcond = .false.
   call_fms2 = .false.
-  if (present(use_fms2)) call_fms2 = use_fms2
   if (present(write_ic)) write_initcond = write_ic
 
   if (write_initcond) then
     call write_initial_conditions(directory, time, G, CS, time_stamped=time_stamped, filename=filename, GV=GV)
-  elseif (call_fms2) then
+  elseif (use_fms2) then
     call save_restart_fms2(directory, time, G, CS, time_stamped=time_stamped, filename=filename, GV=GV)
   else
     call save_restart_old(directory, time, G, CS, time_stamped=time_stamped, filename=filename, GV=GV)
@@ -1616,7 +1616,7 @@ subroutine write_initial_conditions(directory, time, G, CS, time_stamped, filena
 end subroutine write_initial_conditions
 
 !> wrapper routine for restore_state_old and restore_state_fms2
-subroutine restore_state(filename, directory, day, G, CS, use_fms2)
+subroutine restore_state(filename, directory, day, G, CS)
   character(len=*),      intent(in)  :: filename  !< The list of restart file names or a single
                                                   !! character 'r' to read automatically named files.
   character(len=*),      intent(in)  :: directory !< The directory in which to find restart files
@@ -1624,9 +1624,7 @@ subroutine restore_state(filename, directory, day, G, CS, use_fms2)
   type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
   type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
                                                   !! call to restart_init.
-  logical,     optional, intent(in)  :: use_fms2  !< if .true., call restore_state_fms2
-
-  if (present(use_fms2) .and. use_fms2) then
+  if (use_fms2) then
     call restore_state_fms2(filename, directory, day, G, CS)
   else
     call restore_state_old(filename, directory, day, G, CS)
@@ -1936,9 +1934,12 @@ subroutine restore_state_fms2(filename, directory, day, G, CS)
     ! Open the restart file.
     if (.not.(check_if_open(fileObjRead))) &
       fileOpenSuccess=fms2_open_file(fileObjRead, trim(unit_path(n)), "read", &
-                                     G%domain%mpp_domain, is_restart=.true.)
-    if (fileOpenSuccess) &
+                                     G%domain%mpp_domain, is_restart=.true., dont_add_res_to_filename=.true.)
+    if (fileOpenSuccess) then
       call MOM_error(NOTE, "MOM_restart_fms2: MOM run restarted using : "//trim(unit_path(n)))
+    else
+      call MOM_error(FATAL, "MOM_restart_fms2: Error opening file: "//trim(unit_path(n)))
+    endif
 
     call get_dimension_size(fileObjRead, "Time", ntime)
 
@@ -2005,6 +2006,7 @@ subroutine restore_state_fms2(filename, directory, day, G, CS)
           missing_fields = missing_fields+1
           cycle
         endif
+        cycle
       endif
       ! Get the variable's "domain position."
       num_dims = 0
