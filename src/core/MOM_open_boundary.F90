@@ -661,6 +661,8 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   ! Need to do this last, because it depends on time_interp_external_init having already been called
   if (OBC%add_tide_constituents) then
     call initialize_obc_tides(OBC, tide_ref_date, nodal_ref_date, tide_constituent_str)
+    ! Tide update is done within update_OBC_segment_data, so this should be true if tides are included.
+    OBC%update_OBC = .true.
   endif
 
   if (.not.(OBC%specified_u_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally .or. &
@@ -927,24 +929,38 @@ subroutine initialize_segment_data(G, OBC, PF)
         segment%field(m)%fid = -1
         segment%field(m)%value = value
         segment%field(m)%name = trim(fields(m))
+        ! Check if this is a tidal field. If so, the number 
+        ! of expected constiuents must be 1.
+        if ((index(segment%field(m)%name, 'phase') > 0) .or. (index(segment%field(m)%name, 'amp') > 0)) then
+          if (OBC%n_tide_constituents .gt. 1 .and. OBC%add_tide_constituents) then
+            call MOM_error(FATAL, 'Only one constituent is supported when specifying '//&
+                'tidal boundary conditions by value rather than file.')
+          endif
+        endif
         if (segment%field(m)%name == 'U') then
           segment%u_values_needed = .false.
         elseif (segment%field(m)%name == 'Uamp') then
           segment%uamp_values_needed = .false.
+          segment%uamp_index = m
         elseif (segment%field(m)%name == 'Uphase') then
           segment%uphase_values_needed = .false.
+          segment%uphase_index = m
         elseif (segment%field(m)%name == 'V') then
           segment%v_values_needed = .false.
         elseif (segment%field(m)%name == 'Vamp') then
           segment%vamp_values_needed = .false.
+          segment%vamp_index = m
         elseif (segment%field(m)%name == 'Vphase') then
           segment%vphase_values_needed = .false.
+          segment%vphase_index = m
         elseif (segment%field(m)%name == 'SSH') then
           segment%z_values_needed = .false.
         elseif (segment%field(m)%name == 'SSHamp') then
           segment%zamp_values_needed = .false.
+          segment%zamp_index = m
         elseif (segment%field(m)%name == 'SSHphase') then
           segment%zphase_values_needed = .false.
+          segment%zphase_index = m
         elseif (segment%field(m)%name == 'TEMP') then
           segment%t_values_needed = .false.
         elseif (segment%field(m)%name == 'SALT') then
@@ -4120,152 +4136,145 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
           if (segment%is_E_or_W) then
             if (segment%field(m)%name == 'V') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
-              allocate(segment%field(m)%bt_vel(is_obc:ie_obc,js_obc:je_obc))
             else if (segment%field(m)%name == 'Vamp' .or. segment%field(m)%name == 'Vphase') then
-              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,siz(3)))  ! <- not sure how to handle tides here ?
+              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
             elseif (segment%field(m)%name == 'U') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,G%ke))
-              allocate(segment%field(m)%bt_vel(is_obc:ie_obc,js_obc+1:je_obc))
             elseif (segment%field(m)%name == 'Uamp' .or. segment%field(m)%name == 'Uphase') then
-              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,siz(3))) ! <- ?
+              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,1))
             elseif (segment%field(m)%name == 'DVDX') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
             elseif (segment%field(m)%name == 'SSH' .or. segment%field(m)%name == 'SSHamp' .or. segment%field(m)%name == 'SSHphase') then
-              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1)) ! <- ?
+              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
             else
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,G%ke))
             endif
           else
             if (segment%field(m)%name == 'U') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
-              allocate(segment%field(m)%bt_vel(is_obc:ie_obc,js_obc:je_obc))
             elseif (segment%field(m)%name == 'Uamp' .or. segment%field(m)%name == 'Uphase') then
-              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1)) ! not sure how to handle tides here ?
+              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
             elseif (segment%field(m)%name == 'V') then
               allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,G%ke))
-              allocate(segment%field(m)%bt_vel(is_obc+1:ie_obc,js_obc:je_obc))
             elseif (segment%field(m)%name == 'Vamp' .or. segment%field(m)%name == 'Vphase') then
-              allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,1)) ! ?
+              allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,1))
             elseif (segment%field(m)%name == 'DUDY') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
             elseif (segment%field(m)%name == 'SSH' .or. segment%field(m)%name == 'SSHamp' .or. segment%field(m)%name == 'SSHphase') then
-              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))  ! ?
+              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
             else
               allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,G%ke))
             endif
           endif
           segment%field(m)%buffer_dst(:,:,:) = segment%field(m)%value
-          if (trim(segment%field(m)%name) == 'U' .or. trim(segment%field(m)%name) == 'V') then
-            segment%field(m)%bt_vel(:,:) = segment%field(m)%value
-            ! TODO: tides?
-          endif
         endif
       endif
     enddo
     ! Start second loop to update all fields now that data for all fields are available.
     ! (split because tides depend on multiple variables).
     do m = 1,segment%num_fields
-      if (segment%field(m)%fid>0) then
-        ! calculate external BT velocity and transport if needed
-        if (trim(segment%field(m)%name) == 'U' .or. trim(segment%field(m)%name) == 'V') then
-          if (trim(segment%field(m)%name) == 'U' .and. segment%is_E_or_W) then
-            I=is_obc
-            do j=js_obc+1,je_obc
-              normal_trans_bt(I,j) = 0.0
-              tidal_vel = 0.0
-              if(OBC%add_tide_constituents) then
-                do c=1,OBC%n_tide_constituents
-                  tidal_vel = tidal_vel + OBC%tide_fn(c)*segment%field(segment%uamp_index)%buffer_dst(I,j,c) * &
-                    cos((time_type_to_real(Time) - OBC%time_ref)*OBC%tide_frequencies(c) - segment%field(segment%uphase_index)%buffer_dst(I,j,c) + OBC%tide_eq_phases(c) + OBC%tide_un(c) )
-                enddo
-              endif
-              do k=1,G%ke
-                segment%normal_vel(I,j,k) = US%m_s_to_L_T*(segment%field(m)%buffer_dst(I,j,k) + tidal_vel)
-                segment%normal_trans(I,j,k) = segment%normal_vel(I,j,k)*segment%h(I,j,k) * G%dyCu(I,j)
-                normal_trans_bt(I,j) = normal_trans_bt(I,j) + segment%normal_trans(I,j,k)
-              enddo
-              segment%normal_vel_bt(I,j) = normal_trans_bt(I,j) &
-                  / (max(segment%Htot(I,j), 1.e-12 * GV%m_to_H) * G%dyCu(I,j))
-              if (associated(segment%nudged_normal_vel)) segment%nudged_normal_vel(I,j,:) = segment%normal_vel(I,j,:)
-            enddo
-          elseif (trim(segment%field(m)%name) == 'V' .and. segment%is_N_or_S) then
-            J=js_obc
-            do i=is_obc+1,ie_obc
-              normal_trans_bt(i,J) = 0.0
-              tidal_vel = 0.0
-              if(OBC%add_tide_constituents) then
-                do c=1,OBC%n_tide_constituents
-                  tidal_vel = tidal_vel + OBC%tide_fn(c)*segment%field(segment%vamp_index)%buffer_dst(I,j,c) * &
-                    cos((time_type_to_real(Time) - OBC%time_ref)*OBC%tide_frequencies(c) - segment%field(segment%vphase_index)%buffer_dst(I,j,c) + OBC%tide_eq_phases(c) + OBC%tide_un(c))
-                enddo
-              endif
-              do k=1,G%ke
-                segment%normal_vel(i,J,k) = US%m_s_to_L_T*(segment%field(m)%buffer_dst(i,J,k) + tidal_vel)
-                segment%normal_trans(i,J,k) = segment%normal_vel(i,J,k)*segment%h(i,J,k) * &
-                          G%dxCv(i,J)
-                normal_trans_bt(i,J) = normal_trans_bt(i,J) + segment%normal_trans(i,J,k)
-              enddo
-              segment%normal_vel_bt(i,J) = normal_trans_bt(i,J) &
-                  / (max(segment%Htot(i,J), 1.e-12 * GV%m_to_H) * G%dxCv(i,J))
-              if (associated(segment%nudged_normal_vel)) segment%nudged_normal_vel(i,J,:) = segment%normal_vel(i,J,:)
-            enddo
-          elseif (trim(segment%field(m)%name) == 'V' .and. segment%is_E_or_W .and. &
-                  associated(segment%tangential_vel)) then
-            I=is_obc
-            do J=js_obc,je_obc
-              tidal_vel = 0.0
-              if(OBC%add_tide_constituents) then
-                do c=1,OBC%n_tide_constituents
-                  tidal_vel = tidal_vel + OBC%tide_fn(c)*segment%field(segment%vamp_index)%buffer_dst(I,j,c) * &
-                    cos((time_type_to_real(Time) - OBC%time_ref)*OBC%tide_frequencies(c) - segment%field(segment%vphase_index)%buffer_dst(I,j,c) + OBC%tide_eq_phases(c) + OBC%tide_un(c))
-                enddo
-              endif
-              do k=1,G%ke
-                segment%tangential_vel(I,J,k) = US%m_s_to_L_T*(segment%field(m)%buffer_dst(I,J,k) + tidal_vel)
-              enddo
-              if (associated(segment%nudged_tangential_vel)) &
-                segment%nudged_tangential_vel(I,J,:) = segment%tangential_vel(I,J,:)
-            enddo
-          elseif (trim(segment%field(m)%name) == 'U' .and. segment%is_N_or_S .and. &
-                  associated(segment%tangential_vel)) then
-            J=js_obc
+      ! if (segment%field(m)%fid>0) then
+      ! calculate external BT velocity and transport if needed
+      if (trim(segment%field(m)%name) == 'U' .or. trim(segment%field(m)%name) == 'V') then
+        if (trim(segment%field(m)%name) == 'U' .and. segment%is_E_or_W) then
+          I=is_obc
+          do j=js_obc+1,je_obc
+            normal_trans_bt(I,j) = 0.0
             tidal_vel = 0.0
             if(OBC%add_tide_constituents) then
               do c=1,OBC%n_tide_constituents
                 tidal_vel = tidal_vel + OBC%tide_fn(c)*segment%field(segment%uamp_index)%buffer_dst(I,j,c) * &
-                  cos((time_type_to_real(Time) - OBC%time_ref)*OBC%tide_frequencies(c) - segment%field(segment%uphase_index)%buffer_dst(I,j,c) + OBC%tide_eq_phases(c) + OBC%tide_un(c))
+                  cos((time_type_to_real(Time) - OBC%time_ref)*OBC%tide_frequencies(c) - segment%field(segment%uphase_index)%buffer_dst(I,j,c) + OBC%tide_eq_phases(c) + OBC%tide_un(c) )
               enddo
             endif
-            do I=is_obc,ie_obc
-              do k=1,G%ke
-                segment%tangential_vel(I,J,k) = US%m_s_to_L_T*(segment%field(m)%buffer_dst(I,J,k) + tidal_vel)
-              enddo
-              if (associated(segment%nudged_tangential_vel)) &
-                segment%nudged_tangential_vel(I,J,:) = segment%tangential_vel(I,J,:)
+            do k=1,G%ke
+              segment%normal_vel(I,j,k) = US%m_s_to_L_T*(segment%field(m)%buffer_dst(I,j,k) + tidal_vel)
+              segment%normal_trans(I,j,k) = segment%normal_vel(I,j,k)*segment%h(I,j,k) * G%dyCu(I,j)
+              normal_trans_bt(I,j) = normal_trans_bt(I,j) + segment%normal_trans(I,j,k)
             enddo
-          endif
-        elseif (trim(segment%field(m)%name) == 'DVDX' .and. segment%is_E_or_W .and. &
-                associated(segment%tangential_grad)) then
+            segment%normal_vel_bt(I,j) = normal_trans_bt(I,j) &
+                / (max(segment%Htot(I,j), 1.e-12 * GV%m_to_H) * G%dyCu(I,j))
+            if (associated(segment%nudged_normal_vel)) segment%nudged_normal_vel(I,j,:) = segment%normal_vel(I,j,:)
+          enddo
+        elseif (trim(segment%field(m)%name) == 'V' .and. segment%is_N_or_S) then
+          J=js_obc
+          do i=is_obc+1,ie_obc
+            normal_trans_bt(i,J) = 0.0
+            tidal_vel = 0.0
+            if(OBC%add_tide_constituents) then
+              do c=1,OBC%n_tide_constituents
+                tidal_vel = tidal_vel + OBC%tide_fn(c)*segment%field(segment%vamp_index)%buffer_dst(I,j,c) * &
+                  cos((time_type_to_real(Time) - OBC%time_ref)*OBC%tide_frequencies(c) - segment%field(segment%vphase_index)%buffer_dst(I,j,c) + OBC%tide_eq_phases(c) + OBC%tide_un(c))
+              enddo
+            endif
+            do k=1,G%ke
+              segment%normal_vel(i,J,k) = US%m_s_to_L_T*(segment%field(m)%buffer_dst(i,J,k) + tidal_vel)
+              segment%normal_trans(i,J,k) = segment%normal_vel(i,J,k)*segment%h(i,J,k) * &
+                        G%dxCv(i,J)
+              normal_trans_bt(i,J) = normal_trans_bt(i,J) + segment%normal_trans(i,J,k)
+            enddo
+            segment%normal_vel_bt(i,J) = normal_trans_bt(i,J) &
+                / (max(segment%Htot(i,J), 1.e-12 * GV%m_to_H) * G%dxCv(i,J))
+            if (associated(segment%nudged_normal_vel)) segment%nudged_normal_vel(i,J,:) = segment%normal_vel(i,J,:)
+          enddo
+        elseif (trim(segment%field(m)%name) == 'V' .and. segment%is_E_or_W .and. &
+                associated(segment%tangential_vel)) then
           I=is_obc
           do J=js_obc,je_obc
+            tidal_vel = 0.0
+            if(OBC%add_tide_constituents) then
+              do c=1,OBC%n_tide_constituents
+                tidal_vel = tidal_vel + OBC%tide_fn(c)*segment%field(segment%vamp_index)%buffer_dst(I,j,c) * &
+                  cos((time_type_to_real(Time) - OBC%time_ref)*OBC%tide_frequencies(c) - segment%field(segment%vphase_index)%buffer_dst(I,j,c) + OBC%tide_eq_phases(c) + OBC%tide_un(c))
+              enddo
+            endif
             do k=1,G%ke
-              segment%tangential_grad(I,J,k) = US%T_to_s*segment%field(m)%buffer_dst(I,J,k)
-              if (associated(segment%nudged_tangential_grad)) &
-                segment%nudged_tangential_grad(I,J,:) = segment%tangential_grad(I,J,:)
+              segment%tangential_vel(I,J,k) = US%m_s_to_L_T*(segment%field(m)%buffer_dst(I,J,k) + tidal_vel)
             enddo
+            if (associated(segment%nudged_tangential_vel)) &
+              segment%nudged_tangential_vel(I,J,:) = segment%tangential_vel(I,J,:)
           enddo
-        elseif (trim(segment%field(m)%name) == 'DUDY' .and. segment%is_N_or_S .and. &
-                associated(segment%tangential_grad)) then
+        elseif (trim(segment%field(m)%name) == 'U' .and. segment%is_N_or_S .and. &
+                associated(segment%tangential_vel)) then
           J=js_obc
+          tidal_vel = 0.0
+          if(OBC%add_tide_constituents) then
+            do c=1,OBC%n_tide_constituents
+              tidal_vel = tidal_vel + OBC%tide_fn(c)*segment%field(segment%uamp_index)%buffer_dst(I,j,c) * &
+                cos((time_type_to_real(Time) - OBC%time_ref)*OBC%tide_frequencies(c) - segment%field(segment%uphase_index)%buffer_dst(I,j,c) + OBC%tide_eq_phases(c) + OBC%tide_un(c))
+            enddo
+          endif
           do I=is_obc,ie_obc
             do k=1,G%ke
-              segment%tangential_grad(I,J,k) = US%T_to_s*segment%field(m)%buffer_dst(I,J,k)
-              if (associated(segment%nudged_tangential_grad)) &
-                segment%nudged_tangential_grad(I,J,:) = segment%tangential_grad(I,J,:)
+              segment%tangential_vel(I,J,k) = US%m_s_to_L_T*(segment%field(m)%buffer_dst(I,J,k) + tidal_vel)
             enddo
+            if (associated(segment%nudged_tangential_vel)) &
+              segment%nudged_tangential_vel(I,J,:) = segment%tangential_vel(I,J,:)
           enddo
         endif
+      elseif (trim(segment%field(m)%name) == 'DVDX' .and. segment%is_E_or_W .and. &
+              associated(segment%tangential_grad)) then
+        I=is_obc
+        do J=js_obc,je_obc
+          do k=1,G%ke
+            segment%tangential_grad(I,J,k) = US%T_to_s*segment%field(m)%buffer_dst(I,J,k)
+            if (associated(segment%nudged_tangential_grad)) &
+              segment%nudged_tangential_grad(I,J,:) = segment%tangential_grad(I,J,:)
+          enddo
+        enddo
+      elseif (trim(segment%field(m)%name) == 'DUDY' .and. segment%is_N_or_S .and. &
+              associated(segment%tangential_grad)) then
+        J=js_obc
+        do I=is_obc,ie_obc
+          do k=1,G%ke
+            segment%tangential_grad(I,J,k) = US%T_to_s*segment%field(m)%buffer_dst(I,J,k)
+            if (associated(segment%nudged_tangential_grad)) &
+              segment%nudged_tangential_grad(I,J,:) = segment%tangential_grad(I,J,:)
+          enddo
+        enddo
       endif
+
+      ! endif
 
       ! from this point on, data are entirely on segments - will
       ! write all segment loops as 2d loops.
