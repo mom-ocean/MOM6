@@ -564,9 +564,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     do k=1,nz ; do j=js-halo,je+halo ; do i=is-halo,ie+halo
       h_orig(i,j,k) = h(i,j,k) ; eatr(i,j,k) = 0.0 ; ebtr(i,j,k) = 0.0
     enddo ; enddo ; enddo
-  endif
 
-  if (CS%use_geothermal) then
     call cpu_clock_begin(id_clock_geothermal)
     call geothermal(h, tv, dt, eatr, ebtr, G, GV, US, CS%geothermal_CSp, halo=CS%halo_TS_diff)
     call cpu_clock_end(id_clock_geothermal)
@@ -602,6 +600,8 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   call cpu_clock_begin(id_clock_set_diffusivity)
   ! Sets: Kd_lay, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S and visc%TKE_turb
   ! Also changes: visc%Kd_shear, visc%Kv_shear and visc%Kv_slow
+  if (CS%debug) &
+    call MOM_state_chksum("before set_diffusivity", u, v, h, G, GV, US, haloshift=CS%halo_TS_diff)
   call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, &
                        visc, dt, G, GV, US, CS%set_diff_CSp, Kd_lay, Kd_int)
   call cpu_clock_end(id_clock_set_diffusivity)
@@ -1386,6 +1386,8 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   call cpu_clock_begin(id_clock_set_diffusivity)
   ! Sets: Kd_lay, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S and visc%TKE_turb
   ! Also changes: visc%Kd_shear, visc%Kv_shear and visc%Kv_slow
+  if (CS%debug) &
+    call MOM_state_chksum("before set_diffusivity", u, v, h, G, GV, US, haloshift=CS%halo_TS_diff)
   call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics,  &
                        visc, dt, G, GV, US,CS%set_diff_CSp, Kd_lay, Kd_int)
   call cpu_clock_end(id_clock_set_diffusivity)
@@ -2123,6 +2125,8 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     if (associated(tv%T)) call pass_var(tv%S, G%Domain, halo=CS%halo_TS_diff, complete=.false.)
     call pass_var(h, G%domain, halo=CS%halo_TS_diff, complete=.true.)
   endif
+  if (CS%debug) &
+    call MOM_state_chksum("before set_diffusivity", u, v, h, G, GV, US, haloshift=CS%halo_TS_diff)
   call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, &
                        visc, dt, G, GV, US, CS%set_diff_CSp, Kd_lay, Kd_int)
   call cpu_clock_end(id_clock_set_diffusivity)
@@ -2848,8 +2852,8 @@ end subroutine layered_diabatic
 
 !> Returns pointers or values of members within the diabatic_CS type. For extensibility,
 !! each returned argument is an optional argument
-subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, evap_CFL_limit, &
-                                   minimum_forcing_depth, KPP_CSp, energetic_PBL_CSp, diabatic_aux_CSp)
+subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, evap_CFL_limit, minimum_forcing_depth, &
+                                   KPP_CSp, energetic_PBL_CSp, diabatic_aux_CSp, diabatic_halo)
   type(diabatic_CS), intent(in   )           :: CS !< module control structure
   ! All output arguments are optional
   type(opacity_CS),  optional, pointer       :: opacity_CSp !< A pointer to be set to the opacity control structure
@@ -2862,6 +2866,8 @@ subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, evap_CFL_limit, 
                                                             !! and freshwater fluxes are applied [H ~> m or kg m-2].
   type(diabatic_aux_CS), optional, pointer   :: diabatic_aux_CSp !< A pointer to be set to the diabatic_aux
                                                             !! control structure
+  integer,           optional, intent(  out) :: diabatic_halo !< The halo size where the diabatic algorithms
+                                                            !! assume thermodynamics properties are valid.
 
   ! Pointers to control structures
   if (present(opacity_CSp))       opacity_CSp => CS%opacity_CSp
@@ -2872,6 +2878,7 @@ subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, evap_CFL_limit, 
   ! Constants within diabatic_CS
   if (present(evap_CFL_limit))        evap_CFL_limit = CS%evap_CFL_limit
   if (present(minimum_forcing_depth)) minimum_forcing_depth = CS%minimum_forcing_depth
+  if (present(diabatic_halo)) diabatic_halo = CS%halo_TS_diff
 
 end subroutine extract_diabatic_member
 

@@ -80,6 +80,9 @@ type, public :: Kappa_shear_CS ; private
                              !! greater than 1.  The lower limit for the permitted fractional
                              !! decrease is (1 - 0.5/kappa_src_max_chg).  These limits could
                              !! perhaps be made dynamic with an improved iterative solver.
+  logical :: psurf_bug       !! If true, do a simple average of the cell surface pressures to get a
+                             !! surface pressure at the corner if VERTEX_SHEAR=True.  Otherwise mask
+                             !! out any land points in the average.
   logical :: all_layer_TKE_bug !< If true, report back the latest estimate of TKE instead of the
                              !! time average TKE when there is mass in all layers.  Otherwise always
                              !! report the time-averaged TKE, as is currently done when there
@@ -534,9 +537,19 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
         do k=1,nzc+1 ; kc(k) = k ; kf(k) = 0.0 ; enddo
       endif
       f2 = G%CoriolisBu(I,J)**2
-      surface_pres = 0.0 ; if (associated(p_surf)) &
-        surface_pres = 0.25 * ((p_surf(i,j) + p_surf(i+1,j+1)) + &
-                               (p_surf(i+1,j) + p_surf(i,j+1)))
+      surface_pres = 0.0
+      if (associated(p_surf)) then
+        if (CS%psurf_bug) then
+          ! This is wrong because it is averaging values from land in some places.
+          surface_pres = 0.25 * ((p_surf(i,j) + p_surf(i+1,j+1)) + &
+                                 (p_surf(i+1,j) + p_surf(i,j+1)))
+        else
+          surface_pres = ((G%mask2dT(i,j) * p_surf(i,j) + G%mask2dT(i+1,j+1) * p_surf(i+1,j+1)) + &
+                          (G%mask2dT(i+1,j) * p_surf(i+1,j) + G%mask2dT(i,j+1) * p_surf(i,j+1)) ) / &
+                         ((G%mask2dT(i,j) + G%mask2dT(i+1,j+1)) + &
+                          (G%mask2dT(i+1,j) + G%mask2dT(i,j+1)) + 1.0e-36 )
+        endif
+      endif
 
     ! ----------------------------------------------------
     ! Set the initial guess for kappa, here defined at interfaces.
@@ -1759,6 +1772,7 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
 
   ! Local variables
   logical :: merge_mixedlayer
+  logical :: debug_shear
   logical :: just_read ! If true, this module is not used, so only read the parameters.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -1879,11 +1893,18 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
                  "could perhaps be made dynamic with an improved iterative solver.", &
                  default=10.0, units="nondim", do_not_log=just_read)
 
-  call get_param(param_file, mdl, "DEBUG_KAPPA_SHEAR", CS%debug, &
-                 "If true, write debugging data for the kappa-shear code. \n"//&
-                 "Caution: this option is _very_ verbose and should only "//&
-                 "be used in single-column mode!", &
+  call get_param(param_file, mdl, "DEBUG", CS%debug, &
+                 "If true, write out verbose debugging data.", &
                  default=.false., debuggingParam=.true., do_not_log=just_read)
+  call get_param(param_file, mdl, "DEBUG_KAPPA_SHEAR", debug_shear, &
+                 "If true, write debugging data for the kappa-shear code.", &
+                 default=.false., debuggingParam=.true., do_not_log=.true.)
+  if (debug_shear) CS%debug = .true.
+  call get_param(param_file, mdl, "KAPPA_SHEAR_VERTEX_PSURF_BUG", CS%psurf_bug, &
+                 "If true, do a simple average of the cell surface pressures to get a pressure "//&
+                 "at the corner if VERTEX_SHEAR=True.  Otherwise mask out any land points in "//&
+                 "the average.", default=.true., do_not_log=(just_read .or. (.not.CS%KS_at_vertex)))
+
   call get_param(param_file, mdl, "KAPPA_SHEAR_ITER_BUG", CS%dKdQ_iteration_bug, &
                  "If true, use an older, dimensionally inconsistent estimate of the "//&
                  "derivative of diffusivity with energy in the Newton's method iteration.  "//&
