@@ -3901,11 +3901,13 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
         if (turns /= 0) then
           ! TODO: This is hardcoded for 90 degrees, and needs to be generalized.
           if (segment%is_E_or_W &
-              .and. .not. (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX')) then
+              .and. .not. (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'Vamp' &
+                  .or. segment%field(m)%name == 'Vphase' .or. segment%field(m)%name == 'DVDX')) then
             nj_buf = size(tmp_buffer, 2) - 1
             call rotate_array(tmp_buffer_in(:nj_buf,:,:), turns, tmp_buffer(:,:nj_buf,:))
           elseif (segment%is_N_or_S &
-              .and. .not. (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY')) then
+              .and. .not. (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'Uamp' &
+                  .or. segment%field(m)%name == 'Uphase' .or. segment%field(m)%name == 'DUDY')) then
             ni_buf = size(tmp_buffer, 1) - 1
             call rotate_array(tmp_buffer_in(:,:ni_buf,:), turns, tmp_buffer(:ni_buf,:,:))
           else
@@ -3915,7 +3917,8 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
           ! TODO: This is hardcoded for 90 degrees, and needs to be generalized.
           if (segment%field(m)%name == 'U' &
               .or. segment%field(m)%name == 'DVDX' &
-              .or. segment%field(m)%name == 'DUDY') then
+              .or. segment%field(m)%name == 'DUDY' &
+              .or. segment%field(m)%name == 'Uamp') then
             tmp_buffer(:,:,:) = -tmp_buffer(:,:,:)
           endif
         endif
@@ -5486,8 +5489,16 @@ subroutine rotate_OBC_segment_data(segment_in, segment, turns)
       select case (segment_in%field(n)%name)
         case ('U')
           segment%field(n)%name = 'V'
+        case ('Uamp')
+          segment%field(n)%name = 'Vamp'
+        case ('Uphase')
+          segment%field(n)%name = 'Vphase'
         case ('V')
           segment%field(n)%name = 'U'
+        case ('Vamp')
+          segment%field(n)%name = 'Uamp'
+        case ('Vphase')
+          segment%field(n)%name = 'Uphase'
         case ('DVDX')
           segment%field(n)%name = 'DUDY'
         case ('DUDY')
