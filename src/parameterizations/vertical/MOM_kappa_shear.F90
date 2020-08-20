@@ -80,7 +80,7 @@ type, public :: Kappa_shear_CS ; private
                              !! greater than 1.  The lower limit for the permitted fractional
                              !! decrease is (1 - 0.5/kappa_src_max_chg).  These limits could
                              !! perhaps be made dynamic with an improved iterative solver.
-  logical :: psurf_bug       !! If true, do a simple average of the cell surface pressures to get a
+  logical :: psurf_bug       !< If true, do a simple average of the cell surface pressures to get a
                              !! surface pressure at the corner if VERTEX_SHEAR=True.  Otherwise mask
                              !! out any land points in the average.
   logical :: all_layer_TKE_bug !< If true, report back the latest estimate of TKE instead of the
