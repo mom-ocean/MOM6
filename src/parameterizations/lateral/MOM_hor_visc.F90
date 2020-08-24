@@ -515,7 +515,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     enddo ; enddo
 
     ! Components for the shearing strain
-    do J=js-2,Jeq+2 ; do I=is-2,Ieq+2
+    do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
       dvdx(I,J) = CS%DY_dxBu(I,J)*(v(i+1,J,k)*G%IdyCv(i+1,J) - v(i,J,k)*G%IdyCv(i,J))
       dudy(I,J) = CS%DX_dyBu(I,J)*(u(I,j+1,k)*G%IdxCu(I,j+1) - u(I,j,k)*G%IdxCu(I,j))
     enddo ; enddo
@@ -694,11 +694,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
     ! Vorticity
     if (CS%no_slip) then
-      do J=js-2,Jeq+2 ; do I=is-2,Ieq+2
+      do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
         vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
       enddo ; enddo
     else
-      do J=js-2,Jeq+2 ; do I=is-2,Ieq+2
+      do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
         vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
       enddo ; enddo
     endif
@@ -711,22 +711,23 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
 
       ! Vorticity gradient
-      do J=js-2,Jeq+2 ; do i=is-1,Ieq+2
+      do J=Jsq-1,Jeq+1 ; do i=Isq-1,Ieq+2
         DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
         vort_xy_dx(i,J) = DY_dxBu * (vort_xy(I,J) * G%IdyCu(I,j) - vort_xy(I-1,J) * G%IdyCu(I-1,j))
       enddo ; enddo
 
-      do j=js-1,Jeq+2 ; do I=is-2,Ieq+2
+      do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+1
         DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
         vort_xy_dy(I,j) = DX_dyBu * (vort_xy(I,J) * G%IdxCv(i,J) - vort_xy(I,J-1) * G%IdxCv(i,J-1))
       enddo ; enddo
 
       ! Laplacian of vorticity
       do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
-        DY_dxCv = G%dyCv(i,J) * G%IdxCv(i,J)
-        DX_dyCu = G%dyCu(I,j) * G%IdyCu(I,j)
-        Del2vort_q(I,J) = DY_dxCv * (vort_xy_dx(i+1,J) * G%IdyT(i+1,j) - vort_xy_dx(i,J) * G%IdyT(i,j)) + &
-                        DX_dyCu * (vort_xy_dy(I,j+1) * G%IdyT(i,j+1) - vort_xy_dy(I,j) * G%IdyT(i,j))
+        DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
+        DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
+
+        Del2vort_q(I,J) = DY_dxBu * (vort_xy_dx(i+1,J) * G%IdyCv(i+1,J) - vort_xy_dx(i,J) * G%IdyCv(i,J)) + &
+                        DX_dyBu * (vort_xy_dy(I,j+1) * G%IdyCu(I,j+1) - vort_xy_dy(I,j) * G%IdyCu(I,j))
       enddo ; enddo
       do J=Jsq,Jeq+1 ; do I=Isq,Ieq+1
         Del2vort_h(i,j) = 0.25*(Del2vort_q(I,J) + Del2vort_q(I-1,J) + Del2vort_q(I,J-1) + Del2vort_q(I-1,J-1))
@@ -1091,7 +1092,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         endif
 
         if (CS%Re_Ah > 0.0) then
-          KE = 0.125*((u(I,j,k)+u(I-1,j,k))**2 + (v(i,J,k)+v(i,J-1,k))**2)
+          KE = 0.125*((u(I,j,k)+u(I,j+1,k))**2 + (v(i,J,k)+v(i+1,J,k))**2)
           Ah = sqrt(KE) * CS%Re_Ah_const_xy(i,j)
         endif
 
