@@ -4223,14 +4223,14 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
         elseif (trim(segment%field(m)%name) == 'U' .and. segment%is_N_or_S .and. &
                 associated(segment%tangential_vel)) then
           J=js_obc
-          tidal_vel = 0.0
-          if(OBC%add_tide_constituents) then
-            do c=1,OBC%n_tide_constituents
-              tidal_vel = tidal_vel + OBC%tide_fn(c)*segment%field(segment%uamp_index)%buffer_dst(I,j,c) * &
-                cos((time_type_to_real(Time) - OBC%time_ref)*OBC%tide_frequencies(c) - segment%field(segment%uphase_index)%buffer_dst(I,j,c) + OBC%tide_eq_phases(c) + OBC%tide_un(c))
-            enddo
-          endif
           do I=is_obc,ie_obc
+            tidal_vel = 0.0
+            if(OBC%add_tide_constituents) then
+              do c=1,OBC%n_tide_constituents
+                tidal_vel = tidal_vel + OBC%tide_fn(c)*segment%field(segment%uamp_index)%buffer_dst(I,j,c) * &
+                    cos((time_type_to_real(Time) - OBC%time_ref)*OBC%tide_frequencies(c) - segment%field(segment%uphase_index)%buffer_dst(I,j,c) + OBC%tide_eq_phases(c) + OBC%tide_un(c))
+              enddo
+            endif
             do k=1,G%ke
               segment%tangential_vel(I,J,k) = US%m_s_to_L_T*(segment%field(m)%buffer_dst(I,J,k) + tidal_vel)
             enddo
