@@ -1846,6 +1846,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   logical :: default_2018_answers
   logical :: use_kappa_shear, adiabatic, use_omega, MLE_use_PBL_MLD
   logical :: use_CVMix_ddiff, differential_diffusion, use_KPP
+  logical :: use_regridding
   character(len=200) :: filename, tideamp_file
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to OBC segment type
   ! This include declares and sets the variable "version".
@@ -1991,10 +1992,13 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                    "velocity magnitude.  DRAG_BG_VEL is only used when "//&
                    "BOTTOMDRAGLAW is defined.", units="m s-1", default=0.0, scale=US%m_s_to_L_T)
     endif
+    call get_param(param_file, mdl, "USE_REGRIDDING", use_regridding, &
+         do_not_log = .true.)
     call get_param(param_file, mdl, "BBL_USE_EOS", CS%BBL_use_EOS, &
                  "If true, use the equation of state in determining the "//&
                  "properties of the bottom boundary layer.  Otherwise use "//&
-                 "the layer target potential densities.", default=.false.)
+                 "the layer target potential densities.  The default of "//&
+                 "this is determined by USE_REGRIDDING.", default=use_regridding)
   endif
   call get_param(param_file, mdl, "BBL_THICK_MIN", CS%BBL_thick_min, &
                  "The minimum bottom boundary layer thickness that can be "//&
