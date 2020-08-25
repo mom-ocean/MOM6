@@ -382,7 +382,7 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
 
   call get_param(param_file, mdl, "TIDE_USE_EQ_PHASE", CS%use_eq_phase, &
                  "Correct phases by calculating equilibrium phase arguments for TIDE_REF_DATE. ", &
-                 default=.true., fail_if_missing=.false.)
+                 default=.false., fail_if_missing=.false.)
 
   if (sum(tide_ref_date) == 0) then  ! tide_ref_date defaults to 0.
     CS%time_ref = 0
