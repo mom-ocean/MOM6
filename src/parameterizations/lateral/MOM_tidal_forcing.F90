@@ -77,10 +77,10 @@ contains
 !! be at midnight. These formulas also only make sense if
 !! the calendar is gregorian.
 subroutine astro_longitudes_init(time_ref, longitudes_shpn)
-  real, dimension(4), intent(out) :: longitudes_shpn
-  real, intent(in) :: time_ref
-  real :: D, T
-  real, parameter :: PI = 4.0*atan(1.0) ! 3.14159...
+  real, dimension(4), intent(out) :: longitudes_shpn !> Longitudes s, h, p, N
+  real, intent(in) :: time_ref                       !> Time to calculate longitudes for.
+  real :: D, T                                       !> Date offsets
+  real, parameter :: PI = 4.0*atan(1.0)              !> 3.14159...
   ! if time_ref is not at midnight, this could be used to round down to nearest day.
   ! time_ref = time_ref - mod(time_ref, 24.0*3600.0)
   ! Find date at time_ref in days since 1900-01-01
@@ -88,13 +88,13 @@ subroutine astro_longitudes_init(time_ref, longitudes_shpn)
   ! Time since 1900-01-01 in Julian centuries
   T = D / 36525.0
   ! s: Mean longitude of moon
-  longitudes_shpn(1) = 277.0248 + 481267.8906 * T + 0.0011 * (T**2)
+  longitudes_shpn(1) = (277.0248 + 481267.8906 * T) + 0.0011 * (T**2)
   ! h: Mean longitude of sun
-  longitudes_shpn(2) = 280.1895 + 36000.7689 * T + 3.0310e-4 * (T**2)
+  longitudes_shpn(2) = (280.1895 + 36000.7689 * T) + 3.0310e-4 * (T**2)
   ! p: Mean longitude of lunar perigee
-  longitudes_shpn(3) = 334.3853 + 4069.0340 * T - 0.0103 * (T**2)
+  longitudes_shpn(3) = (334.3853 + 4069.0340 * T) - 0.0103 * (T**2)
   ! n: Longitude of ascending node
-  longitudes_shpn(4) = 259.1568 - 1934.142 * T + 0.0021 * (T**2)
+  longitudes_shpn(4) = (259.1568 - 1934.142 * T) + 0.0021 * (T**2)
   ! Convert to radians on [0, 2pi)
   longitudes_shpn = mod(longitudes_shpn, 360.0) * PI / 180.0
 end subroutine astro_longitudes_init
@@ -104,11 +104,11 @@ end subroutine astro_longitudes_init
 !! These formulas follow Table I.4 of Kowalik and Luick,
 !! "Modern Theory and Practice of Tide Analysis and Tidal Power", 2019.
 function eq_phase(constit, shpn)
-  character (len=2), intent(in) :: constit  !> Name of constituent (e.g., M2).
-  real, dimension(3), intent(in) :: shpn    !> Mean longitudes calculated using astro_longitudes_init
-  real :: s, h, p                           !> Longitudes of moon, sun, and lunar perigee.
-  real, parameter :: PI = 4.0*atan(1.0)     !> 3.14159...
-  real :: eq_phase                          !> The equilibrium phase argument for the constituent.
+  character (len=2), intent(in) :: constit !> Name of constituent (e.g., M2).
+  real, dimension(3), intent(in) :: shpn   !> Mean longitudes calculated using astro_longitudes_init
+  real :: s, h, p                          !> Longitudes of moon, sun, and lunar perigee.
+  real, parameter :: PI = 4.0*atan(1.0)    !> 3.14159...
+  real :: eq_phase                         !> The equilibrium phase argument for the constituent.
 
   s = shpn(1)
   h = shpn(2)
@@ -120,17 +120,17 @@ function eq_phase(constit, shpn)
     case ("S2")
       eq_phase = 0.0
     case ("N2")
-      eq_phase = - 3 * s + 2 * h + p
+      eq_phase = (- 3 * s + 2 * h) + p
     case ("K2")
       eq_phase = 2 * h
     case ("K1")
       eq_phase = h + PI / 2.0
     case("O1")
-      eq_phase = - 2 * s + h - PI / 2.0
+      eq_phase = (- 2 * s + h) - PI / 2.0
     case ("P1")
       eq_phase = - h - PI / 2.0
     case ("Q1")
-      eq_phase = - 3 * s + h + p - PI / 2.0
+      eq_phase = ((- 3 * s + h) + p) - PI / 2.0
     case ("MF")
       eq_phase = 2 * s
     case ("MM")
@@ -180,8 +180,8 @@ subroutine nodal_fu(constit, N, fn, un)
   real, intent(in) :: N                                 !> Longitude of ascending node in radians.
                                                         !! Calculate using astro_longitudes_init.
   real, parameter :: RADIANS = 4.0 * atan(1.0) / 180.0  !> Converts degrees to radians.
-  real, intent(out) :: fn, un                           !> Amplitude (fn, unitless) and phase (un, radians) modulation.
-
+  real, intent(out) :: fn, un                           !> Amplitude (fn, unitless) and phase
+                                                        !! (un, radians) modulation.
   select case (constit)
     case ("M2")
       fn = 1.0 - 0.037 * cos(N)
