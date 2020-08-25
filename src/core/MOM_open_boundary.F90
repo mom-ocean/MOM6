@@ -4178,9 +4178,9 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
             tidal_vel = 0.0
             if(OBC%add_tide_constituents) then
               do c=1,OBC%n_tide_constituents
-                tidal_vel = tidal_vel + OBC%tide_fn(c)*segment%field(segment%uamp_index)%buffer_dst(I,j,c) * &
-                  cos(time_delta*OBC%tide_frequencies(c) - segment%field(segment%uphase_index)%buffer_dst(I,j,c) &
-                      + OBC%tide_eq_phases(c) + OBC%tide_un(c) )
+                tidal_vel = tidal_vel + (OBC%tide_fn(c) * segment%field(segment%uamp_index)%buffer_dst(I,j,c)) * &
+                  cos((time_delta*OBC%tide_frequencies(c) - segment%field(segment%uphase_index)%buffer_dst(I,j,c)) &
+                      + (OBC%tide_eq_phases(c) + OBC%tide_un(c)))
               enddo
             endif
             do k=1,G%ke
@@ -4199,9 +4199,9 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
             tidal_vel = 0.0
             if (OBC%add_tide_constituents) then
               do c=1,OBC%n_tide_constituents
-                tidal_vel = tidal_vel + OBC%tide_fn(c)*segment%field(segment%vamp_index)%buffer_dst(I,j,c) * &
-                  cos(time_delta*OBC%tide_frequencies(c) - segment%field(segment%vphase_index)%buffer_dst(I,j,c) &
-                      + OBC%tide_eq_phases(c) + OBC%tide_un(c))
+                tidal_vel = tidal_vel + (OBC%tide_fn(c) * segment%field(segment%vamp_index)%buffer_dst(I,j,c)) * &
+                  cos((time_delta*OBC%tide_frequencies(c) - segment%field(segment%vphase_index)%buffer_dst(I,j,c)) &
+                      + (OBC%tide_eq_phases(c) + OBC%tide_un(c)))
               enddo
             endif
             do k=1,G%ke
@@ -4221,9 +4221,9 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
             tidal_vel = 0.0
             if(OBC%add_tide_constituents) then
               do c=1,OBC%n_tide_constituents
-                tidal_vel = tidal_vel + OBC%tide_fn(c)*segment%field(segment%vamp_index)%buffer_dst(I,j,c) * &
-                  cos(time_delta*OBC%tide_frequencies(c) - segment%field(segment%vphase_index)%buffer_dst(I,j,c) &
-                      + OBC%tide_eq_phases(c) + OBC%tide_un(c))
+                tidal_vel = tidal_vel + (OBC%tide_fn(c) * segment%field(segment%vamp_index)%buffer_dst(I,j,c)) * &
+                  cos((time_delta*OBC%tide_frequencies(c) - segment%field(segment%vphase_index)%buffer_dst(I,j,c)) &
+                      + (OBC%tide_eq_phases(c) + OBC%tide_un(c)))
               enddo
             endif
             do k=1,G%ke
@@ -4239,9 +4239,9 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
             tidal_vel = 0.0
             if(OBC%add_tide_constituents) then
               do c=1,OBC%n_tide_constituents
-                tidal_vel = tidal_vel + OBC%tide_fn(c)*segment%field(segment%uamp_index)%buffer_dst(I,j,c) * &
-                    cos(time_delta*OBC%tide_frequencies(c) - segment%field(segment%uphase_index)%buffer_dst(I,j,c) &
-                        + OBC%tide_eq_phases(c) + OBC%tide_un(c))
+                tidal_vel = tidal_vel + (OBC%tide_fn(c) * segment%field(segment%uamp_index)%buffer_dst(I,j,c)) * &
+                    cos((time_delta*OBC%tide_frequencies(c) - segment%field(segment%uphase_index)%buffer_dst(I,j,c)) &
+                        + (OBC%tide_eq_phases(c) + OBC%tide_un(c)))
               enddo
             endif
             do k=1,G%ke
@@ -4299,9 +4299,9 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
               tidal_elev = 0.0
               if(OBC%add_tide_constituents) then
                 do c=1,OBC%n_tide_constituents
-                  tidal_elev = tidal_elev + OBC%tide_fn(c)*segment%field(segment%zamp_index)%buffer_dst(i,j,c) * &
-                    cos(time_delta*OBC%tide_frequencies(c) - segment%field(segment%zphase_index)%buffer_dst(i,j,c) &
-                        + OBC%tide_eq_phases(c) + OBC%tide_un(c))
+                  tidal_elev = tidal_elev + (OBC%tide_fn(c) * segment%field(segment%zamp_index)%buffer_dst(i,j,c)) * &
+                      cos((time_delta*OBC%tide_frequencies(c) - segment%field(segment%zphase_index)%buffer_dst(i,j,c)) &
+                          + (OBC%tide_eq_phases(c) + OBC%tide_un(c)))
                 enddo
               endif
               segment%eta(i,j) = GV%m_to_H * OBC%ramp_value &
@@ -4314,9 +4314,9 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
               tidal_elev = 0.0
               if(OBC%add_tide_constituents) then
                 do c=1,OBC%n_tide_constituents
-                  tidal_elev = tidal_elev + OBC%tide_fn(c)*segment%field(segment%zamp_index)%buffer_dst(i,j,c) * &
-                    cos(time_delta*OBC%tide_frequencies(c) - segment%field(segment%zphase_index)%buffer_dst(i,j,c) &
-                        + OBC%tide_eq_phases(c) + OBC%tide_un(c))
+                  tidal_elev = tidal_elev + (OBC%tide_fn(c) * segment%field(segment%zamp_index)%buffer_dst(i,j,c)) * &
+                      cos((time_delta*OBC%tide_frequencies(c) - segment%field(segment%zphase_index)%buffer_dst(i,j,c)) &
+                          + (OBC%tide_eq_phases(c) + OBC%tide_un(c)))
                 enddo
               endif
               segment%eta(i,j) = GV%m_to_H * (segment%field(m)%buffer_dst(i,j,1) + tidal_elev)
