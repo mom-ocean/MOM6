@@ -1993,7 +1993,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                    "BOTTOMDRAGLAW is defined.", units="m s-1", default=0.0, scale=US%m_s_to_L_T)
     endif
     call get_param(param_file, mdl, "USE_REGRIDDING", use_regridding, &
-         do_not_log = .true.)
+         do_not_log = .true., default = .false. )
     call get_param(param_file, mdl, "BBL_USE_EOS", CS%BBL_use_EOS, &
                  "If true, use the equation of state in determining the "//&
                  "properties of the bottom boundary layer.  Otherwise use "//&
