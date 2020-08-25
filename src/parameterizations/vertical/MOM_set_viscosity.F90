@@ -1999,6 +1999,9 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                  "properties of the bottom boundary layer.  Otherwise use "//&
                  "the layer target potential densities.  The default of "//&
                  "this is determined by USE_REGRIDDING.", default=use_regridding)
+    if (use_regridding .and. (.not. CS%BBL_use_EOS)) &
+      call MOM_error(FATAL,"When using MOM6 in ALE mode it is required to "//&
+           "set BBL_USE_EOS to True")
   endif
   call get_param(param_file, mdl, "BBL_THICK_MIN", CS%BBL_thick_min, &
                  "The minimum bottom boundary layer thickness that can be "//&
