@@ -316,7 +316,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
   ! Check if hbl needs to be extracted
   if (CS%interior_only) then
     hbl(:,:) = 100.
-    hbl(4:6,:) = 100.
+    hbl(4:6,:) = 500.
     !if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G)
     !if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US)
     call pass_var(hbl,G%Domain)
@@ -434,7 +434,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
       if (CS%interior_only) then
         if (.not. CS%stable_cell(i,j,k_bot(i,j))) zeta_bot(i,j) = -1.
         ! set values in the surface and bottom boundary layer to false.
-        do k = 1, k_bot(i,j)-1
+        do k = 1, k_bot(i,j)
           CS%stable_cell(i,j,k) = .false.
         enddo
       endif
