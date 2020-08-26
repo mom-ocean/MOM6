@@ -1923,7 +1923,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
         endif
       endif
       if (CS%Leith_Ah) then
-         CS%biharm6_const_xy(i,j) = Leith_bi_const * (grid_sp_q3 * grid_sp_q3)
+         CS%biharm6_const_xy(I,J) = Leith_bi_const * (grid_sp_q3 * grid_sp_q3)
       endif
       CS%Ah_bg_xy(I,J) = MAX(Ah, Ah_vel_scale * grid_sp_q2 * sqrt(grid_sp_q2))
       if (CS%Re_Ah > 0.0) CS%Re_Ah_const_xy(i,j) = grid_sp_q3 / CS%Re_Ah
