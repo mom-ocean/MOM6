@@ -138,6 +138,9 @@ THICKNESS_CONFIG = "uniform"    !
 
 ! === module MOM_diag_mediator ===
 
+USE_GRID_SPACE_DIAG_COORDINATE_AXES = True !   [Boolean] default = False
+                                ! If true, use a grid index coordinate convention for diagnostic axes.
+
 ! === module MOM_MEKE ===
 
 ! === module MOM_lateral_mixing_coeffs ===
