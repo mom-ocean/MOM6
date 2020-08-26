@@ -636,7 +636,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       elseif (OBC%segment(n)%direction == OBC_DIRECTION_S) then
         if ((J >= js-1) .and. (J <= je+1)) then
           do I = max(Isq-1,OBC%segment(n)%HI%isd), min(Ieq+1,OBC%segment(n)%HI%ied)
-            h_u(I,j) = h_u(i,j+1)
+            h_u(I,j) = h_u(I,j+1)
           enddo
         endif
       elseif (OBC%segment(n)%direction == OBC_DIRECTION_E) then
@@ -1087,8 +1087,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         endif ! Smagorinsky_Ah or Leith_Ah
 
         if (use_MEKE_Au) then ! *Add* the MEKE contribution
-          Ah = Ah + 0.25*( (MEKE%Au(I,J) + MEKE%Au(I+1,J+1)) +  &
-                           (MEKE%Au(I+1,J) + MEKE%Au(I,J+1)) )
+          Ah = Ah + 0.25*( (MEKE%Au(i,j) + MEKE%Au(i+1,j+1)) +  &
+                           (MEKE%Au(i+1,j) + MEKE%Au(i,j+1)) )
         endif
 
         if (CS%Re_Ah > 0.0) then
@@ -1194,7 +1194,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                                      CS%dy2h(i+1,j)*str_xx(i+1,j)) + &
                        G%IdxCu(I,j)*(CS%dx2q(I,J-1)*str_xy(I,J-1) - &
                                      CS%dx2q(I,J) *str_xy(I,J))) * &
-                     G%IareaCu(I,j)) / (h_u(i,j) + h_neglect)
+                     G%IareaCu(I,j)) / (h_u(I,j) + h_neglect)
 
     enddo ; enddo
     if (apply_OBC) then
