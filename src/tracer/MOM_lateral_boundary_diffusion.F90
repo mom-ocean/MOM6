@@ -167,7 +167,7 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
 
   Idt = 1./dt
   hbl(:,:) = 100.
-  hbl(4:6,:) = 100.
+  hbl(4:6,:) = 500.
   !if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G)
   !if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US)
 
@@ -532,19 +532,19 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L
     ! GMM, khtr_avg should be computed once khtr is 3D
     if ((linear) .and. (k_bot_diff .gt. 1)) then
       ! apply linear decay at the base of hbl
-      do k = k_bot_min,1,-1
+      do k = k_bot_min-1,1,-1
         heff = harmonic_mean(h_L(k), h_R(k))
         F_layer(k) = -(heff * khtr_u) * (phi_R(k) - phi_L(k))
       enddo
       ! heff_total
       heff_tot = 0.0
-      do k = k_bot_min+1,k_bot_max, 1
+      do k = k_bot_min,k_bot_max, 1
         heff_tot = heff_tot + harmonic_mean(h_L(k), h_R(k))
       enddo
 
       a = -1.0/heff_tot
       heff_tot = 0.0
-      do k = k_bot_min+1,k_bot_max, 1
+      do k = k_bot_min,k_bot_max, 1
         heff = harmonic_mean(h_L(k), h_R(k))
         wgt = (a*(heff_tot + (heff * 0.5))) + 1.0
         F_layer(k) = -(heff * khtr_u) * (phi_R(k) - phi_L(k)) * wgt
