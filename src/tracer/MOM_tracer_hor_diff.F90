@@ -36,7 +36,7 @@ implicit none ; private
 
 public tracer_hordiff, tracer_hor_diff_init, tracer_hor_diff_end
 
-!> The ocntrol structure for along-layer and epineutral tracer diffusion
+!> The control structure for along-layer and epineutral tracer diffusion
 type, public :: tracer_hor_diff_CS ; private
   real    :: KhTr           !< The along-isopycnal tracer diffusivity [L2 T-1 ~> m2 s-1].
   real    :: KhTr_Slope_Cff !< The non-dimensional coefficient in KhTr formula [nondim]
@@ -122,7 +122,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
                                                        !! for epipycnal mixing between mixed layer and the interior.
   ! Optional inputs for offline tracer transport
   logical,          optional, intent(in)    :: do_online_flag !< If present and true, do online
-                                                       !! tracer transport with stored velcities.
+                                                       !! tracer transport with stored velocities.
   real, dimension(SZIB_(G),SZJ_(G)), &
                     optional, intent(in)    :: read_khdt_x !< If present, these are the zonal
                                                        !! diffusivities from previous run.
@@ -609,7 +609,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   real, dimension(SZI_(G), SZJ_(G), max(1,GV%nk_rho_varies)) :: &
     rho_coord ! The coordinate density that is used to mix along [R ~> kg m-3].
 
-  ! The naming mnemnonic is a=above,b=below,L=Left,R=Right,u=u-point,v=v-point.
+  ! The naming mnemonic is a=above,b=below,L=Left,R=Right,u=u-point,v=v-point.
   ! These are 1-D arrays of pointers to 2-d arrays to minimize memory usage.
   type(p2d), dimension(SZJ_(G)) :: &
     deep_wt_Lu, deep_wt_Ru, &  ! The relative weighting of the deeper of a pair [nondim].
@@ -644,10 +644,6 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     h_used_R, &   ! have actually been used [H ~> m or kg m-2].
     h_supply_frac_L, &  ! The fraction of the demanded thickness that can
     h_supply_frac_R     ! actually be supplied from a layer.
-  integer, dimension(SZK_(G)) :: &
-    kbs_Lp, &   ! The sorted indicies of the Left and Right columns for
-    kbs_Rp      ! each pairing.
-
   integer, dimension(SZI_(G), SZJ_(G))  :: &
     num_srt, &   ! The number of layers that are sorted in each column.
     k_end_srt, & ! The maximum index in each column that might need to be
@@ -677,9 +673,16 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   real :: h_L, h_R   ! Thicknesses to the left and right [H ~> m or kg m-2].
   real :: wt_a, wt_b ! Fractional weights of layers above and below [nondim].
   real :: vol        ! A cell volume or mass [H L2 ~> m3 or kg].
-  logical, dimension(SZK_(G)) :: &
+
+  ! The total number of pairings is usually much less than twice the number of layers, but
+  ! the memory in these 1-d columns of pairings can be allocated generously for safety.
+  integer, dimension(SZK_(G)*2) :: &
+    kbs_Lp, &   ! The sorted indices of the Left and Right columns for
+    kbs_Rp      ! each pairing.
+  logical, dimension(SZK_(G)*2) :: &
     left_set, &  ! If true, the left or right point determines the density of
     right_set    ! of the trio.  If densities are exactly equal, both are true.
+
   real :: tmp
   real :: p_ref_cv(SZI_(G)) ! The reference pressure for the coordinate density [R L2 T-2 ~> Pa]
 
@@ -1186,8 +1189,8 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 
             !   Ensure that the tracer flux does not drive the tracer values
             ! outside of the range Tr_min_face <= Tr <= Tr_max_face, or if it
-            ! does that the concentration in both contributing peices exceed
-            ! this range equally. With downgradient fluxes and the initial tracer
+            ! does that the concentration in both contributing pieces exceed
+            ! this range equally. With down-gradient fluxes and the initial tracer
             ! concentrations determining the valid range, the latter condition
             ! only enters for large values of the effective diffusive CFL number.
             if (Tr_flux > 0.0) then
@@ -1221,8 +1224,8 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 
             !   Ensure that the tracer flux does not drive the tracer values
             ! outside of the range Tr_min_face <= Tr <= Tr_max_face, or if it
-            ! does that the concentration in both contributing peices exceed
-            ! this range equally. With downgradient fluxes and the initial tracer
+            ! does that the concentration in both contributing pieces exceed
+            ! this range equally. With down-gradient fluxes and the initial tracer
             ! concentrations determining the valid range, the latter condition
             ! only enters for large values of the effective diffusive CFL number.
             if (Tr_flux < 0.0) then
