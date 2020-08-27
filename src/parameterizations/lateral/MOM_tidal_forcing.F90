@@ -72,7 +72,7 @@ contains
 !! at the specified reference time time_ref.
 !! These formulas were obtained from
 !! Kowalik and Luick, "Modern Theory and Practice of Tide Analysis and Tidal Power", 2019
-!! (their Equation I.71), which is from Schureman, 1958.
+!! (their Equation I.71), which are based on Schureman, 1958.
 !! For simplicity, the time associated with time_ref should
 !! be at midnight. These formulas also only make sense if
 !! the calendar is gregorian.
@@ -86,6 +86,7 @@ subroutine astro_longitudes_init(time_ref, longitudes_shpn)
   ! Find date at time_ref in days since 1900-01-01
   D = (time_ref - time_type_to_real(set_date(1900, 1, 1))) / (24.0 * 3600.0)
   ! Time since 1900-01-01 in Julian centuries
+  ! Kowalik and Luick use 36526, but Schureman uses 36525 which I think is correct.
   T = D / 36525.0
   ! s: Mean longitude of moon
   longitudes_shpn(1) = (277.0248 + 481267.8906 * T) + 0.0011 * (T**2)
