@@ -189,7 +189,7 @@ subroutine nodal_fu(constit, N, fn, un)
       un = -2.1 * RADIANS * sin(N)
     case ("S2")
       fn = 1.0  ! Solar S2 has no amplitude modulation.
-      un = 0.0  ! S2 has no phase mdulation.
+      un = 0.0  ! S2 has no phase modulation.
     case ("N2")
       fn = 1.0 - 0.037 * cos(N)
       un = -2.1 * RADIANS * sin(N)
@@ -204,7 +204,7 @@ subroutine nodal_fu(constit, N, fn, un)
       un = 10.8 * RADIANS * sin(N)
     case ("P1")
       fn = 1.0  ! P1 has no amplitude modulation.
-      un = 0.0  ! P1 has no phase mdulation.
+      un = 0.0  ! P1 has no phase modulation.
     case ("Q1")
       fn = 1.009 + 0.187 * cos(N)
       un = 10.8 * RADIANS * sin(N)
