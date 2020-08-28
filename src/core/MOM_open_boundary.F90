@@ -268,16 +268,17 @@ type, public :: ocean_OBC_type
   integer :: n_tide_constituents = 0                  !< Number of tidal constituents to add to the boundary.
   logical :: add_tide_constituents = .false.          !< If true, add tidal constituents to the boundary elevation
                                                       !! and velocity. Will be set to true if n_tide_constituents > 0.
-  character(len=2), allocatable, dimension(:) :: tide_names            !< Names of tidal constituents to add.
-  real, allocatable, dimension(:) :: tide_frequencies                  !< Angular frequencies of tidal constituents.
-  real, allocatable, dimension(:) :: tide_eq_phases, tide_fn, tide_un  !< Equilibrium phases and nodal modulation
-                                                                       !! for tidal constituents.
+  character(len=2), allocatable, dimension(:) :: tide_names  !< Names of tidal constituents to add to the boundary data.
+  real, allocatable, dimension(:) :: tide_frequencies        !< Angular frequencies of chosen tidal constituents.
+  real, allocatable, dimension(:) :: tide_eq_phases          !< Equilibrium phases of chosen tidal constituents.
+  real, allocatable, dimension(:) :: tide_fn                 !< Amplitude modulation of boundary tides by nodal cycle.
+  real, allocatable, dimension(:) :: tide_un                 !< Phase modulation of boundary tides by nodal cycle.
   logical :: add_eq_phase = .false.                   !< If true, add the equilibrium phase argument
                                                       !! to the specified boundary tidal phase.
   logical :: add_nodal_terms = .false.                !< If true, insert terms for the 18.6 year modulation when
                                                       !! calculating tidal boundary conditions.
   real :: time_ref                                    !< Reference date (t = 0) for tidal forcing.
-  real, dimension(4) :: astro_shpn                    ! Lunar and solar longitudes used to calculate tidal forcing.
+  real, dimension(4) :: astro_shpn                    !< Lunar and solar longitudes used to calculate tidal forcing.
   ! Properties of the segments used.
   type(OBC_segment_type), pointer, dimension(:) :: &
     segment => NULL()   !< List of segment objects.
