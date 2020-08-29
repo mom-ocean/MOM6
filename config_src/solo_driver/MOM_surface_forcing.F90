@@ -302,6 +302,12 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
   endif
 
   ! calls to various buoyancy forcing options
+  if (CS%restorebuoy .and. .not.CS%variable_buoyforce) then
+    call MOM_error(WARNING, "With RESTOREBUOY = True, VARIABLE_BUOYFORCE = True should be used. "//&
+                            "Changed to VARIABLE_BUOYFORCE = True")
+    CS%variable_buoyforce = .true.
+  endif
+
   if ((CS%variable_buoyforce .or. CS%first_call_set_forcing) .and. &
       (.not.CS%adiabatic)) then
     if (trim(CS%buoy_config) == "file") then
