@@ -378,7 +378,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
           ! Also, note that "K" refers to an interface, while "k" refers to the layer below.
           ! Need at least 3 layers (2 internal interfaces) to generate a matrix, also
           ! need number of layers to be greater than the mode number
-          if (kc >= ModeNum + 1) then
+          if (kc >= max(3, ModeNum + 1)) then
             ! Set depth at surface
             z_int(1) = 0.0
             ! Calculate Igu, Igl, depth, and N2 at each interior interface
@@ -485,8 +485,8 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
 
             ! Calculate terms in vertically integrated energy equation
             int_dwdz2 = 0.0 ; int_w2 = 0.0 ; int_N2w2 = 0.0
-            u_strct2(:) = u_strct(1:nzm)**2
-            w_strct2(:) = w_strct(1:nzm)**2
+            u_strct2(1:nzm) = u_strct(1:nzm)**2
+            w_strct2(1:nzm) = w_strct(1:nzm)**2
             ! vertical integration with Trapezoidal rule
             do k=1,nzm-1
               int_dwdz2 = int_dwdz2 + 0.5*(u_strct2(K)+u_strct2(K+1)) * US%m_to_Z*dz(k)
@@ -518,12 +518,12 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
             endif
 
             ! Store values in control structure
-            CS%w_strct(i,j,1:nzm)     = w_strct(:)
-            CS%u_strct(i,j,1:nzm)     = u_strct(:)
-            CS%W_profile(i,j,1:nzm)   = W_profile(:)
-            CS%Uavg_profile(i,j,1:nzm)= Uavg_profile(:)
-            CS%z_depths(i,j,1:nzm)    = US%Z_to_m*z_int(:)
-            CS%N2(i,j,1:nzm)          = N2(:)
+            CS%w_strct(i,j,1:nzm)     = w_strct(1:nzm)
+            CS%u_strct(i,j,1:nzm)     = u_strct(1:nzm)
+            CS%W_profile(i,j,1:nzm)   = W_profile(1:nzm)
+            CS%Uavg_profile(i,j,1:nzm)= Uavg_profile(1:nzm)
+            CS%z_depths(i,j,1:nzm)    = US%Z_to_m*z_int(1:nzm)
+            CS%N2(i,j,1:nzm)          = N2(1:nzm)
             CS%num_intfaces(i,j)      = nzm
           else
             ! If not enough layers, default to zero
