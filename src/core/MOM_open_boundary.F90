@@ -1009,10 +1009,16 @@ subroutine initialize_obc_tides(OBC, tide_ref_date, nodal_ref_date, tide_constit
   ! Otherwise, it can use N from the time reference.
   if (OBC%add_nodal_terms) then
     if (sum(nodal_ref_date) .ne. 0) then
+      ! A reference date was provided for the nodal correction
       nodal_time = time_type_to_real(set_date(nodal_ref_date(1), nodal_ref_date(2), nodal_ref_date(3)))
       call astro_longitudes_init(nodal_time, nodal_shpn)
-    else
+    elseif (OBC%add_eq_phase) then
+      ! Astronomical longitudes were already calculated for use in equilibrium phases,
+      ! so use nodal longitude from that.
       nodal_shpn = OBC%astro_shpn
+    else
+      ! Tidal reference time is a required parameter, so calculate the longitudes from that.
+      call astro_longitudes_init(OBC%time_ref, nodal_shpn)
     endif
   endif
 
