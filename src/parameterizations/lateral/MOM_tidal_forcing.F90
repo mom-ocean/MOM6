@@ -80,7 +80,7 @@ subroutine astro_longitudes_init(time_ref, longitudes_shpn)
   real, dimension(4), intent(out) :: longitudes_shpn !> Longitudes s, h, p, N
   real, intent(in) :: time_ref                       !> Time to calculate longitudes for.
   real :: D, T                                       !> Date offsets
-  real, parameter :: PI = 4.0*atan(1.0)              !> 3.14159...
+  real, parameter :: PI = 4.0 * atan(1.0)            !> 3.14159...
   ! if time_ref is not at midnight, this could be used to round down to nearest day.
   ! time_ref = time_ref - mod(time_ref, 24.0*3600.0)
   ! Find date at time_ref in days since 1900-01-01
@@ -108,7 +108,7 @@ function eq_phase(constit, shpn)
   character (len=2), intent(in) :: constit !> Name of constituent (e.g., M2).
   real, dimension(3), intent(in) :: shpn   !> Mean longitudes calculated using astro_longitudes_init
   real :: s, h, p                          !> Longitudes of moon, sun, and lunar perigee.
-  real, parameter :: PI = 4.0*atan(1.0)    !> 3.14159...
+  real, parameter :: PI = 4.0 * atan(1.0)  !> 3.14159...
   real :: eq_phase                         !> The equilibrium phase argument for the constituent.
 
   s = shpn(1)
@@ -126,7 +126,7 @@ function eq_phase(constit, shpn)
       eq_phase = 2 * h
     case ("K1")
       eq_phase = h + PI / 2.0
-    case("O1")
+    case ("O1")
       eq_phase = (- 2 * s + h) - PI / 2.0
     case ("P1")
       eq_phase = - h - PI / 2.0

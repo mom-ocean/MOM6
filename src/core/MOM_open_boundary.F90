@@ -460,7 +460,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
          "Number of tidal constituents being added to the open boundary.", &
          default=0)
 
-    if(OBC%n_tide_constituents > 0) then
+    if (OBC%n_tide_constituents > 0) then
       OBC%add_tide_constituents = .true.
       call get_param(param_file, mdl, "OBC_TIDE_CONSTITUENTS", tide_constituent_str, &
           "Names of tidal constituents being added to the open boundaries.", &
@@ -482,7 +482,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
           "Fixed reference date to use for nodal modulation of boundary tides.", &
           fail_if_missing=.false., default=0)
 
-      if(.not. OBC%add_eq_phase) then
+      if (.not. OBC%add_eq_phase) then
         ! If equilibrium phase argument is not added, the input phases
         ! should already be relative to the reference time.
         call MOM_mesg('OBC tidal phases will *not* be corrected with equilibrium arguments.')
@@ -573,8 +573,8 @@ subroutine open_boundary_config(G, US, param_file, OBC)
 
     ! Moved this earlier because time_interp_external_init needs to be called
     ! before anything that uses time_interp_external (such as initialize_segment_data)
-    if ((OBC%specified_u_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally .or. &
-      OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally)) then
+    if (OBC%specified_u_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally .or. &
+      OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally) then
       ! Need this for ocean_only mode boundary interpolation.
       call time_interp_external_init()
     endif
@@ -4183,7 +4183,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
           do j=js_obc+1,je_obc
             normal_trans_bt(I,j) = 0.0
             tidal_vel = 0.0
-            if(OBC%add_tide_constituents) then
+            if (OBC%add_tide_constituents) then
               do c=1,OBC%n_tide_constituents
                 tidal_vel = tidal_vel + (OBC%tide_fn(c) * segment%field(segment%uamp_index)%buffer_dst(I,j,c)) * &
                   cos((time_delta*OBC%tide_frequencies(c) - segment%field(segment%uphase_index)%buffer_dst(I,j,c)) &
@@ -4226,7 +4226,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
           I=is_obc
           do J=js_obc,je_obc
             tidal_vel = 0.0
-            if(OBC%add_tide_constituents) then
+            if (OBC%add_tide_constituents) then
               do c=1,OBC%n_tide_constituents
                 tidal_vel = tidal_vel + (OBC%tide_fn(c) * segment%field(segment%vamp_index)%buffer_dst(I,j,c)) * &
                   cos((time_delta*OBC%tide_frequencies(c) - segment%field(segment%vphase_index)%buffer_dst(I,j,c)) &
@@ -4244,7 +4244,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
           J=js_obc
           do I=is_obc,ie_obc
             tidal_vel = 0.0
-            if(OBC%add_tide_constituents) then
+            if (OBC%add_tide_constituents) then
               do c=1,OBC%n_tide_constituents
                 tidal_vel = tidal_vel + (OBC%tide_fn(c) * segment%field(segment%uamp_index)%buffer_dst(I,j,c)) * &
                     cos((time_delta*OBC%tide_frequencies(c) - segment%field(segment%uphase_index)%buffer_dst(I,j,c)) &
@@ -4304,7 +4304,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
           do j=js_obc2,je_obc
             do i=is_obc2,ie_obc
               tidal_elev = 0.0
-              if(OBC%add_tide_constituents) then
+              if (OBC%add_tide_constituents) then
                 do c=1,OBC%n_tide_constituents
                   tidal_elev = tidal_elev + (OBC%tide_fn(c) * segment%field(segment%zamp_index)%buffer_dst(i,j,c)) * &
                       cos((time_delta*OBC%tide_frequencies(c) - segment%field(segment%zphase_index)%buffer_dst(i,j,c)) &
@@ -4319,7 +4319,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
           do j=js_obc2,je_obc
             do i=is_obc2,ie_obc
               tidal_elev = 0.0
-              if(OBC%add_tide_constituents) then
+              if (OBC%add_tide_constituents) then
                 do c=1,OBC%n_tide_constituents
                   tidal_elev = tidal_elev + (OBC%tide_fn(c) * segment%field(segment%zamp_index)%buffer_dst(i,j,c)) * &
                       cos((time_delta*OBC%tide_frequencies(c) - segment%field(segment%zphase_index)%buffer_dst(i,j,c)) &
