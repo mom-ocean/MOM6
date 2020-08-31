@@ -18,13 +18,11 @@ use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
 use MOM_interface_heights, only : find_eta
-use MOM_io, only : file_exists
-use MOM_io, only : MOM_read_data, MOM_read_vector
-use MOM_io, only : slasher
-use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init
+use MOM_io, only : file_exists, field_size, MOM_read_data, MOM_read_vector, slasher
+use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init, set_tracer_data
 use MOM_open_boundary, only : OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary, only : open_boundary_query
-use MOM_open_boundary, only : set_tracer_data
+use MOM_open_boundary, only : set_tracer_data, initialize_segment_data
 use MOM_open_boundary, only : open_boundary_test_extern_h
 use MOM_open_boundary, only : fill_temp_salt_segments
 use MOM_open_boundary, only : update_OBC_segment_data
@@ -33,8 +31,7 @@ use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, determine_is_new_run, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, set_up_sponge_ML_density
 use MOM_sponge, only : initialize_sponge, sponge_CS
-use MOM_ALE_sponge, only : set_up_ALE_sponge_field, initialize_ALE_sponge
-use MOM_ALE_sponge, only : ALE_sponge_CS
+use MOM_ALE_sponge, only : set_up_ALE_sponge_field, initialize_ALE_sponge, ALE_sponge_CS
 use MOM_string_functions, only : uppercase, lowercase
 use MOM_time_manager, only : time_type
 use MOM_tracer_registry, only : tracer_registry_type
@@ -44,8 +41,7 @@ use MOM_verticalGrid, only : setVerticalGridAxes, verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type, EOS_domain
 use MOM_EOS, only : convert_temp_salt_for_TEOS10
 use user_initialization, only : user_initialize_thickness, user_initialize_velocity
-use user_initialization, only : user_init_temperature_salinity
-use user_initialization, only : user_set_OBC_data
+use user_initialization, only : user_init_temperature_salinity, user_set_OBC_data
 use user_initialization, only : user_initialize_sponges
 use DOME_initialization, only : DOME_initialize_thickness
 use DOME_initialization, only : DOME_set_OBC_data
@@ -88,7 +84,7 @@ use BFB_initialization, only : BFB_initialize_sponges_southonly
 use dense_water_initialization, only : dense_water_initialize_TS
 use dense_water_initialization, only : dense_water_initialize_sponges
 use dumbbell_initialization, only : dumbbell_initialize_sponges
-use MOM_tracer_Z_init, only : find_interfaces, tracer_Z_init_array, determine_temperature
+use MOM_tracer_Z_init, only : tracer_Z_init_array, determine_temperature
 use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
 use MOM_ALE, only : ALE_remap_scalar, ALE_build_grid, ALE_regrid_accelerated
 use MOM_ALE, only : TS_PLM_edge_values
@@ -97,7 +93,6 @@ use MOM_regridding, only : regridding_main
 use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_remapping, only : remapping_core_h
 use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
-use fms_io_mod, only : field_size
 
 implicit none ; private
 
@@ -563,6 +558,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
 
   ! This controls user code for setting open boundary data
   if (associated(OBC)) then
+     call initialize_segment_data(G, OBC, PF) !   call initialize_segment_data(G, OBC, param_file)
+!     call open_boundary_config(G, US, PF, OBC)
     ! Call this once to fill boundary arrays from fixed values
     if (.not. OBC%needs_IO_for_data)  &
       call update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
@@ -2424,6 +2421,114 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   call cpu_clock_end(id_clock_routine)
 
 end subroutine MOM_temp_salt_initialize_from_Z
+
+
+!> Find interface positions corresponding to interpolated depths in a density profile
+subroutine find_interfaces(rho, zin, nk_data, Rb, depth, zi, G, US, nlevs, nkml, hml, &
+                           eps_z, eps_rho)
+  type(ocean_grid_type),      intent(in)  :: G     !< The ocean's grid structure
+  integer,                    intent(in)  :: nk_data !< The number of levels in the input data
+  real, dimension(SZI_(G),SZJ_(G),nk_data), &
+                              intent(in)  :: rho   !< Potential density in z-space [R ~> kg m-3]
+  real, dimension(nk_data),   intent(in)  :: zin   !< Input data levels [Z ~> m].
+  real, dimension(SZK_(G)+1), intent(in)  :: Rb    !< target interface densities [R ~> kg m-3]
+  real, dimension(SZI_(G),SZJ_(G)), &
+                              intent(in)  :: depth !< ocean depth [Z ~> m].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                              intent(out) :: zi    !< The returned interface heights [Z ~> m]
+  type(unit_scale_type),      intent(in)  :: US    !< A dimensional unit scaling type
+  integer, dimension(SZI_(G),SZJ_(G)), &
+                              intent(in)  :: nlevs !< number of valid points in each column
+  integer,                    intent(in)  :: nkml  !< number of mixed layer pieces to distribute over
+                                                   !! a depth of hml.
+  real,                       intent(in)  :: hml   !< mixed layer depth [Z ~> m].
+  real,                       intent(in)  :: eps_z !< A negligibly small layer thickness [Z ~> m].
+  real,                       intent(in)  :: eps_rho !< A negligibly small density difference [R ~> kg m-3].
+
+  ! Local variables
+  real, dimension(nk_data) :: rho_ ! A column of densities [R ~> kg m-3]
+  real, dimension(SZK_(G)+1) :: zi_ ! A column interface heights (negative downward) [Z ~> m].
+  real    :: slope      ! The rate of change of height with density [Z R-1 ~> m4 kg-1]
+  real    :: drhodz     ! A local vertical density gradient [R Z-1 ~> kg m-4]
+  real, parameter :: zoff=0.999
+  logical :: unstable   ! True if the column is statically unstable anywhere.
+  integer :: nlevs_data ! The number of data values in a column.
+  logical :: work_down  ! This indicates whether this pass goes up or down the water column.
+  integer :: k_int, lo_int, hi_int, mid
+  integer :: i, j, k, is, ie, js, je, nz
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  zi(:,:,:) = 0.0
+
+  do j=js,je ; do i=is,ie
+    nlevs_data = nlevs(i,j)
+    do k=1,nlevs_data ; rho_(k) = rho(i,j,k) ; enddo
+
+    unstable=.true.
+    work_down = .true.
+    do while (unstable)
+      ! Modifiy the input profile until it no longer has densities that decrease with depth.
+      unstable=.false.
+      if (work_down) then
+        do k=2,nlevs_data-1 ; if (rho_(k) - rho_(k-1) < 0.0 ) then
+          if (k == 2) then
+            rho_(k-1) = rho_(k) - eps_rho
+          else
+            drhodz = (rho_(k+1)-rho_(k-1)) / (zin(k+1)-zin(k-1))
+            if (drhodz < 0.0) unstable=.true.
+            rho_(k) = rho_(k-1) + drhodz*zoff*(zin(k)-zin(k-1))
+          endif
+        endif ; enddo
+        work_down = .false.
+      else
+        do k=nlevs_data-1,2,-1 ;  if (rho_(k+1) - rho_(k) < 0.0) then
+          if (k == nlevs_data-1) then
+            rho_(k+1) = rho_(k-1) + eps_rho !### This should be rho_(k) + eps_rho
+          else
+            drhodz = (rho_(k+1)-rho_(k-1)) / (zin(k+1)-zin(k-1))
+            if (drhodz  < 0.0) unstable=.true.
+            rho_(k) = rho_(k+1) - drhodz*(zin(k+1)-zin(k))
+          endif
+        endif ; enddo
+        work_down = .true.
+      endif
+    enddo
+
+    ! Find and store the interface depths.
+    zi_(1) = 0.0
+    do K=2,nz
+      ! Find the value of k_int in the list of rho_ where rho_(k_int) <= Rb(K) < rho_(k_int+1).
+      ! This might be made a little faster by exploiting the fact that Rb is
+      ! monotonically increasing and not resetting lo_int back to 1 inside the K loop.
+      lo_int = 1 ; hi_int = nlevs_data
+      do while (lo_int < hi_int)
+        mid = (lo_int+hi_int) / 2
+        if (Rb(K) < rho_(mid)) then ; hi_int = mid
+        else ; lo_int = mid+1 ; endif
+      enddo
+      k_int = max(1, lo_int-1)
+
+      ! Linearly interpolate to find the depth, zi_, where Rb would be found.
+      slope = (zin(k_int+1) - zin(k_int)) / max(rho_(k_int+1) - rho_(k_int), eps_rho)
+      zi_(K) = -1.0*(zin(k_int) + slope*(Rb(K)-rho_(k_int)))
+      zi_(K) = min(max(zi_(K), -depth(i,j)), -1.0*hml)
+    enddo
+    zi_(nz+1) = -depth(i,j)
+    if (nkml > 0) then ; do K=2,nkml+1
+      zi_(K) = max(hml*((1.0-real(K))/real(nkml)), -depth(i,j))
+    enddo ; endif
+    do K=nz,max(nkml+2,2),-1
+      if (zi_(K) < zi_(K+1) + eps_Z) zi_(K) = zi_(K+1) + eps_Z
+      if (zi_(K) > -1.0*hml)  zi_(K) = max(-1.0*hml, -depth(i,j))
+    enddo
+
+    do K=1,nz+1
+      zi(i,j,K) = zi_(K)
+    enddo
+  enddo ; enddo ! i- and j- loops
+
+end subroutine find_interfaces
 
 !> Run simple unit tests
 subroutine MOM_state_init_tests(G, GV, US, tv)

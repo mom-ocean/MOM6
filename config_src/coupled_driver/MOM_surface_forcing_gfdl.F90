@@ -9,10 +9,8 @@ use MOM_coms,             only : reproducing_sum
 use MOM_constants,        only : hlv, hlf
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_SUBCOMPONENT
-use MOM_diag_mediator,    only : diag_ctrl
-use MOM_diag_mediator,    only : safe_alloc_ptr, time_type
+use MOM_diag_mediator,    only : diag_ctrl, safe_alloc_ptr, time_type
 use MOM_domains,          only : pass_vector, pass_var, fill_symmetric_edges
-use MOM_domains,          only : global_field_sum, BITWISE_EXACT_SUM
 use MOM_domains,          only : AGRID, BGRID_NE, CGRID_NE, To_All
 use MOM_domains,          only : To_North, To_East, Omit_Corners
 use MOM_error_handler,    only : MOM_error, WARNING, FATAL, is_root_pe, MOM_mesg
