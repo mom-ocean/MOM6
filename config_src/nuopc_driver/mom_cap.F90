@@ -272,6 +272,7 @@ subroutine InitializeP0(gcomp, importState, exportState, clock, rc)
   if (isPresent .and. isSet) grid_attach_area=(trim(value)=="true")
   write(logmsg,*) grid_attach_area
   call ESMF_LogWrite('MOM_cap:GridAttachArea = '//trim(logmsg), ESMF_LOGMSG_INFO)
+
   call NUOPC_CompAttributeGet(gcomp, name='dbug_flag', value=value, isPresent=isPresent, isSet=isSet, rc=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
   if (isPresent .and. isSet) then
@@ -528,7 +529,6 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
 
   restartfile = ""
   if (runtype == "initial") then
-
     if (cesm_coupled) then
       restartfile = "n"
     else
@@ -1444,6 +1444,7 @@ subroutine ModelAdvance(gcomp, rc)
        endif
       enddo
      endif
+
      if (dbug > 0) then
        call state_diagnose(importState,subname//':IS ',rc=rc)
        if (ChkErr(rc,__LINE__,u_FILE_u)) return

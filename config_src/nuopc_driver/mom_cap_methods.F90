@@ -764,6 +764,7 @@ subroutine State_SetExport(state, fldname, isc, iec, jsc, jec, input, ocean_grid
   endif
 
 end subroutine State_SetExport
+
 subroutine state_diagnose(State, string, rc)
 
   ! ----------------------------------------------
