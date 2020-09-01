@@ -243,6 +243,12 @@ test.nans: $(foreach c,$(CONFIGS),$(c).nan $(c).nan.diag)
 test.dims: $(foreach c,$(CONFIGS),$(foreach d,$(DIMS),$(c).dim.$(d) $(c).dim.$(d).diag))
 test.regressions: $(foreach c,$(CONFIGS),$(c).regression $(c).regression.diag)
 
+.PHONY: run.symmetric run.asymmetric run.nans run.openmp
+run.symmetric: $(foreach c,$(CONFIGS),work/$(c)/symmetric/ocean.stats)
+run.asymmetric: $(foreach c,$(filter-out tc3,$(CONFIGS)),$(CONFIGS),work/$(c)/asymmetric/ocean.stats)
+run.nans: $(foreach c,$(CONFIGS),work/$(c)/nan/ocean.stats)
+run.openmp: $(foreach c,$(CONFIGS),work/$(c)/openmp/ocean.stats)
+
 # Color highlights for test results
 RED=\033[0;31m
 GREEN=\033[0;32m
