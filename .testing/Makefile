@@ -293,9 +293,9 @@ $(eval $(call CMP_RULE,regression,symmetric target))
 	  || !( \
 	    mkdir -p results/$*; \
 	    (diff $$^ | tee results/$*/chksum_diag.restart.diff | head) ; \
-	    echo -e "${FAIL}: Diagnostics $*.restart.diag have changed." \
+	    echo -e "${FAIL}: Solutions $*.restart have changed." \
 	  )
-	@echo -e "${PASS}: Diagnostics $*.restart.diag agree."
+	@echo -e "${PASS}: Solutions $*.restart agree."
 
 # TODO: chksum_diag parsing of restart files
 
