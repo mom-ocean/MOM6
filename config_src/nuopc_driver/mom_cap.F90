@@ -26,7 +26,7 @@ use time_manager_mod,         only: date_to_string
 use time_manager_mod,         only: fms_get_calendar_type => get_calendar_type
 use MOM_domains,              only: MOM_infra_init, num_pes, root_pe, pe_here
 use MOM_file_parser,          only: get_param, log_version, param_file_type, close_param_file
-use MOM_get_input,            only: Get_MOM_Input, directories
+use MOM_get_input,            only: get_MOM_input, directories
 use MOM_domains,              only: pass_var
 use MOM_error_handler,        only: MOM_error, FATAL, is_root_pe
 use MOM_ocean_model_nuopc,    only: ice_ocean_boundary_type
@@ -36,7 +36,7 @@ use MOM_ocean_model_nuopc,    only: ocean_model_init_sfc
 use MOM_ocean_model_nuopc,    only: ocean_model_init, update_ocean_model, ocean_model_end
 use MOM_ocean_model_nuopc,    only: get_ocean_grid, get_eps_omesh
 use MOM_cap_time,             only: AlarmInit
-use MOM_cap_methods,          only: mom_import, mom_export, mom_set_geomtype
+use MOM_cap_methods,          only: mom_import, mom_export, mom_set_geomtype, state_diagnose
 #ifdef CESMCOUPLED
 use shr_file_mod,             only: shr_file_setLogUnit, shr_file_getLogUnit
 #endif
@@ -124,7 +124,7 @@ type (fld_list_type) :: fldsToOcn(fldsMax)
 integer              :: fldsFrOcn_num = 0
 type (fld_list_type) :: fldsFrOcn(fldsMax)
 
-integer              :: debug = 0
+integer              :: dbug = 0
 integer              :: import_slice = 1
 integer              :: export_slice = 1
 character(len=256)   :: tmpstr
@@ -272,6 +272,13 @@ subroutine InitializeP0(gcomp, importState, exportState, clock, rc)
   if (isPresent .and. isSet) grid_attach_area=(trim(value)=="true")
   write(logmsg,*) grid_attach_area
   call ESMF_LogWrite('MOM_cap:GridAttachArea = '//trim(logmsg), ESMF_LOGMSG_INFO)
+  call NUOPC_CompAttributeGet(gcomp, name='dbug_flag', value=value, isPresent=isPresent, isSet=isSet, rc=rc)
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (isPresent .and. isSet) then
+   read(value,*) dbug
+  end if
+  write(logmsg,'(i6)') dbug
+  call ESMF_LogWrite('MOM_cap:dbug = '//trim(logmsg), ESMF_LOGMSG_INFO)
 
   scalar_field_name = ""
   call NUOPC_CompAttributeGet(gcomp, name="ScalarFieldName", value=value, &
@@ -358,6 +365,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   type(ice_ocean_boundary_type), pointer :: Ice_ocean_boundary => NULL()
   type(ocean_internalstate_wrapper)      :: ocean_internalstate
   type(ocean_grid_type),         pointer :: ocean_grid => NULL()
+  type(directories)                      :: dirs
   type(time_type)                        :: Run_len      !< length of experiment
   type(time_type)                        :: time0        !< Start time of coupled model's calendar.
   type(time_type)                        :: time_start   !< The time at which to initialize the ocean model
@@ -521,7 +529,13 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   restartfile = ""
   if (runtype == "initial") then
 
-     restartfile = "n"
+    if (cesm_coupled) then
+      restartfile = "n"
+    else
+      call get_MOM_input(dirs=dirs)
+      restartfile = dirs%input_filename(1:1)
+    endif
+    call ESMF_LogWrite('MOM_cap:restartfile = '//trim(restartfile), ESMF_LOGMSG_INFO)
 
   else if (runtype == "continue") then ! hybrid or branch or continuos runs
 
@@ -821,7 +835,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   allocate(xb(ntiles),xe(ntiles),yb(ntiles),ye(ntiles),pe(ntiles))
   call mpp_get_compute_domains(ocean_public%domain, xbegin=xb, xend=xe, ybegin=yb, yend=ye)
   call mpp_get_pelist(ocean_public%domain, pe)
-  if (debug > 0) then
+  if (dbug > 1) then
      do n = 1,ntiles
         write(tmpstr,'(a,6i6)') subname//' tiles ',n,pe(n),xb(n),xe(n),yb(n),ye(n)
         call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO)
@@ -1430,6 +1444,10 @@ subroutine ModelAdvance(gcomp, rc)
        endif
       enddo
      endif
+     if (dbug > 0) then
+       call state_diagnose(importState,subname//':IS ',rc=rc)
+       if (ChkErr(rc,__LINE__,u_FILE_u)) return
+     end if
 
      !---------------
      ! Get ocean grid
@@ -1459,6 +1477,10 @@ subroutine ModelAdvance(gcomp, rc)
      call mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
+     if (dbug > 0) then
+       call state_diagnose(exportState,subname//':ES ',rc=rc)
+       if (ChkErr(rc,__LINE__,u_FILE_u)) return
+     end if
   endif
 
   !---------------
