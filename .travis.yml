@@ -41,6 +41,8 @@ jobs:
         - make test.summary
 
     # NOTE: Code coverage upload is here to reduce load imbalance
+    # We do coverage with the regressions if part of a pull request
+    # otherwise as a separate job.
     - if: type = pull_request
       env:
         - JOB="x86 Regression testing"
@@ -56,6 +58,19 @@ jobs:
         - echo -en 'travis_fold:end:script.1\\r'
         - make -k -s test.regressions
         - make test.summary
+
+    - if: NOT type = pull_request
+      env:
+        - JOB="Coverage upload"
+        - REPORT_COVERAGE=true
+        - DO_REGRESSION_TESTS=false
+        - MKMF_TEMPLATE=linux-ubuntu-xenial-gnu.mk
+      script:
+        - cd .testing
+        - echo 'Build executables...' && echo -en 'travis_fold:start:script.1\\r'
+        - make build/symmetric/MOM6
+        - echo -en 'travis_fold:end:script.1\\r'
+        - make -k -s run.symmetric
 
     - arch: arm64
       env:
