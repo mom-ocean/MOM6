@@ -524,7 +524,11 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
       ! This block does a thickness weighted variance calculation and helps control for
       ! extreme gradients along layers which are vanished against topography. It is
       ! still a poor approximation in the interior when coordinates are strongly tilted.
-      hl(1) = h(i,j,k) ; hl(2) = h(i-1,j,k) ; hl(3) = h(i+1,j,k) ; hl(4) = h(i,j-1,k) ; hl(5) = h(i,j+1,k)
+      hl(1) = h(i,j,k) * G%mask2dT(i,j)
+      hl(2) = h(i-1,j,k) * G%mask2dCu(I-1,j)
+      hl(3) = h(i+1,j,k) * G%mask2dCu(I,j)
+      hl(4) = h(i,j-1,k) * G%mask2dCv(i,J-1)
+      hl(5) = h(i,j+1,k) * G%mask2dCv(i,J)
       mn_H = ( hl(1) + ( ( hl(2) + hl(3) ) + ( hl(4) + hl(5) ) ) ) + GV%H_subroundoff
       mn_H = 1. / mn_H ! Hereafter, mn_H is the reciprocal of mean h for the stencil
       ! Mean of T
