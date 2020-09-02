@@ -158,6 +158,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   real :: hv(SZI_(G), SZJ_(G))       ! v-thickness [H ~> m or kg m-2]
   real :: KH_u_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities [L2 T-1 ~> m2 s-1]
   real :: KH_v_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities [L2 T-1 ~> m2 s-1]
+  real :: Tl(5), mn_T, mn_T2 ! copy and moment of local stencil of T [degC or degC2]
+  real :: Hl(5), mn_H        ! Copy of local stencil of H [H ~> m]
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_thickness_diffuse: "//&
          "Module must be initialized before it is used.")
@@ -746,16 +748,38 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   if (use_Stanley) then
 !$OMP do
     do k=1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
-      ! SGS variance in i-direction [degC2]
-      dTdi2 = ( ( G%mask2dCu(I  ,j) * G%IdxCu(I  ,j) * ( T(i+1,j,k) - T(i,j,k) ) &
-                + G%mask2dCu(I-1,j) * G%IdxCu(I-1,j) * ( T(i,j,k) - T(i-1,j,k) ) &
-                ) * G%dxT(i,j) * 0.5 )**2
-      ! SGS variance in j-direction [degC2]
-      dTdj2 = ( ( G%mask2dCv(i,J  ) * G%IdyCv(i,J  ) * ( T(i,j+1,k) - T(i,j,k) ) &
-                + G%mask2dCv(i,J-1) * G%IdyCv(i,J-1) * ( T(i,j,k) - T(i,j-1,k) ) &
-                ) * G%dyT(i,j) * 0.5 )**2
-      Tsgs2(i,j,k) = CS%Stanley_det_coeff * 0.5 * ( dTdi2 + dTdj2 )
-    enddo ; enddo ; enddo
+      !! SGS variance in i-direction [degC2]
+      !dTdi2 = ( ( G%mask2dCu(I  ,j) * G%IdxCu(I  ,j) * ( T(i+1,j,k) - T(i,j,k) ) &
+      !          + G%mask2dCu(I-1,j) * G%IdxCu(I-1,j) * ( T(i,j,k) - T(i-1,j,k) ) &
+      !          ) * G%dxT(i,j) * 0.5 )**2
+      !! SGS variance in j-direction [degC2]
+      !dTdj2 = ( ( G%mask2dCv(i,J  ) * G%IdyCv(i,J  ) * ( T(i,j+1,k) - T(i,j,k) ) &
+      !          + G%mask2dCv(i,J-1) * G%IdyCv(i,J-1) * ( T(i,j,k) - T(i,j-1,k) ) &
+      !          ) * G%dyT(i,j) * 0.5 )**2
+      !Tsgs2(i,j,k) = CS%Stanley_det_coeff * 0.5 * ( dTdi2 + dTdj2 )
+      ! This block does a thickness weighted variance calculation and helps control for
+      ! extreme gradients along layers which are vanished against topography. It is
+      ! still a poor approximation in the interior when coordinates are strongly tilted.
+      hl(1) = h(i,j,k) * G%mask2dT(i,j)
+      hl(2) = h(i-1,j,k) * G%mask2dCu(I-1,j)
+      hl(3) = h(i+1,j,k) * G%mask2dCu(I,j)
+      hl(4) = h(i,j-1,k) * G%mask2dCv(i,J-1)
+      hl(5) = h(i,j+1,k) * G%mask2dCv(i,J)
+      mn_H = ( hl(1) + ( ( hl(2) + hl(3) ) + ( hl(4) + hl(5) ) ) ) + GV%H_subroundoff
+      mn_H = 1. / mn_H ! Hereafter, mn_H is the reciprocal of mean h for the stencil
+      ! Mean of T
+      Tl(1) = T(i,j,k) ; Tl(2) = T(i-1,j,k) ; Tl(3) = T(i+1,j,k)
+      Tl(4) = T(i,j-1,k) ; Tl(5) = T(i,j+1,k)
+      mn_T = ( hl(1)*Tl(1) + ( ( hl(2)*Tl(2) + hl(3)*Tl(3) ) + ( hl(4)*Tl(4) + hl(5)*Tl(5) ) ) ) * mn_H
+      ! Adjust T vectors to have zero mean
+      Tl(:) = Tl(:) - mn_T ; mn_T = 0.
+      ! Variance of T
+      mn_T2 = ( hl(1)*Tl(1)*Tl(1) + ( ( hl(2)*Tl(2)*Tl(2) + hl(3)*Tl(3)*Tl(3) ) &
+                                    + ( hl(4)*Tl(4)*Tl(4) + hl(5)*Tl(5)*Tl(5) ) ) ) * mn_H
+      ! Variance should be positive but round-off can violate this. Calculating
+      ! variance directly would fix this but requires more operations.
+      Tsgs2(i,j,k) = CS%Stanley_T2_det_coeff * max(0., mn_T2)
+     enddo ; enddo ; enddo
   endif
 !$OMP do
   do j=js-1,je+1
@@ -846,8 +870,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
         if (use_Stanley) then
           ! Correction to the horizontal density gradient due to nonlinearity in
           ! the EOS rectifying SGS temperature anomalies
-          drdiA = drdiA + drho_dT_dT_u(I) * ( Tsgs2(i+1,j,k-1)-Tsgs2(i,j,k-1) )
-          drdiB = drdiB + drho_dT_dT_u(I) * ( Tsgs2(i+1,j,k)-Tsgs2(i,j,k) )
+          drdiA = drdiA + drho_dT_dT_u(I) * 0.5 * ( Tsgs2(i+1,j,k-1)-Tsgs2(i,j,k-1) )
+          drdiB = drdiB + drho_dT_dT_u(I) * 0.5 * ( Tsgs2(i+1,j,k)-Tsgs2(i,j,k) )
         endif
         if (find_work) drdi_u(I,k) = drdiB
 
@@ -1111,8 +1135,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
         if (use_Stanley) then
           ! Correction to the horizontal density gradient due to nonlinearity in
           ! the EOS rectifying SGS temperature anomalies
-          drdjA = drdjA + drho_dT_dT_v(I) * ( Tsgs2(i,j+1,k-1)-Tsgs2(i,j,k-1) )
-          drdjB = drdjB + drho_dT_dT_v(I) * ( Tsgs2(i,j+1,k)-Tsgs2(i,j,k) )
+          drdjA = drdjA + drho_dT_dT_v(I) * 0.5 * ( Tsgs2(i,j+1,k-1)-Tsgs2(i,j,k-1) )
+          drdjB = drdjB + drho_dT_dT_v(I) * 0.5 * ( Tsgs2(i,j+1,k)-Tsgs2(i,j,k) )
         endif
 
         if (find_work) drdj_v(i,k) = drdjB
