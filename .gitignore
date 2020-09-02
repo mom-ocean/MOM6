@@ -2,14 +2,19 @@
 *.swp
 *~
 html
-*.log
+
+
+# Build output
+*.o
+*.mod
 MOM6
 
+
 # Autoconf
-/aclocal.m4
-/autom4te.cache/
-/config.log
-/config.status
-/configure
+aclocal.m4
+autom4te.cache/
+config.log
+config.status
+configure
 /Makefile
-/Makefile.mkmf
+Makefile.mkmf
