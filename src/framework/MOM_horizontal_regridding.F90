@@ -915,6 +915,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
         do j=js,je
           do i=is,ie
             tr_z(i,j,k)=data_in(i,j,k)
+             mask_z(i,j,k) = 1.
             if (abs(tr_z(i,j,k)-missing_value) < abs(roundoff*missing_value)) mask_z(i,j,k) = 0.
           enddo
         enddo
