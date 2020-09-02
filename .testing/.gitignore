@@ -1,3 +1,5 @@
-config.mk
-work/
-results/
+# Test output
+/config.mk
+/build/
+/work/
+/results/
