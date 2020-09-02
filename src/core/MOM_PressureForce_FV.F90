@@ -542,7 +542,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
                                     + ( hl(4)*Tl(4)*Tl(4) + hl(5)*Tl(5)*Tl(5) ) ) ) * mn_H
       ! Variance should be positive but round-off can violate this. Calculating
       ! variance directly would fix this but requires more operations.
-      tv%varT(i,j,k) = CS%Stanley_T2_det_coeff * max(0., mn_T2 - mn_T*mn_T)
+      tv%varT(i,j,k) = CS%Stanley_T2_det_coeff * max(0., mn_T2)
     enddo ; enddo ; enddo
   endif
 
