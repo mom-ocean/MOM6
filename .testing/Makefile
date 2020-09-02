@@ -17,7 +17,7 @@ FCFLAGS_DEBUG ?= -g -O0
 FCFLAGS_REPRO ?= -g -O2
 FCFLAGS_INIT ?=
 FCFLAGS_COVERAGE ?=
-# Addtional notes:
+# Additional notes:
 #
 # - The default values are simple, minimalist flags, supported by nearly all
 #   compilers and meant to represent GFDL's canonical DEBUG and REPRO builds.
@@ -137,10 +137,13 @@ BUILD_TARGETS = MOM6 Makefile path_names
 # Conditionally build symmetric with coverage support
 COVERAGE=$(if $(REPORT_COVERAGE),"$(FCFLAGS_COVERAGE)",)
 
+# Explicit FMS link to target build
 # TODO: We should probably build TARGET with the FMS that it was configured
 #   to use.  But for now we use the same FMS over all builds.
-FCFLAGS_TARGET_FMS = -I../../../deps/include -L../../../deps/lib
+FCFLAGS_TARGET_FMS = -I../../../deps/include
+LDFLAGS_TARGET_FMS = -L../../../deps/lib
 PATH_TARGET = PATH="${PATH}:../../../deps/bin"
+
 
 # Define the build targets in terms of the traditional DEBUG/REPRO/etc labels
 FCFLAGS_SYMMETRIC =
@@ -155,6 +158,8 @@ ifneq ($(FCFLAGS_DEBUG)$(FCFLAGS_INIT),)
   FCFLAGS_TARGET := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_TARGET_FMS)"
   FCFLAGS_ASYMMETRIC := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT)"
   FCFLAGS_OPENMP := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT)"
+else
+  FCFLAGS_TARGET := FCFLAGS="$(FCFLAGS_TARGET_FMS)"
 endif
 
 FCFLAGS_REPRO_RUN =
@@ -162,13 +167,19 @@ ifneq ($(FCFLAGS_REPRO),)
   FCFLAGS_REPRO_RUN := FCFLAGS="$(FCFLAGS_REPRO)"
 endif
 
+LDFLAGS_SYMMETRIC =
+ifneq ($(COVERAGE),)
+  LDFLAGS_SYMMETRIC := LDFLAGS="$(COVERAGE)"
+endif
+LDFLAGS_TARGET := LDFLAGS="$(LDFLAGS_TARGET_FMS)"
+
 
 # Environment variable configuration
-build/symmetric/Makefile: FC_ENV=$(FCFLAGS_SYMMETRIC)
+build/symmetric/Makefile: FC_ENV=$(FCFLAGS_SYMMETRIC) $(LDFLAGS_SYMMETRIC)
 build/asymmetric/Makefile: FC_ENV=$(FCFLAGS_ASYMMETRIC)
 build/repro/Makefile: FC_ENV=$(FCFLAGS_REPRO_RUN)
 build/openmp/Makefile: FC_ENV=$(FCFLAGS_OPENMP)
-build/target/Makefile: FC_ENV=$(FCFLAGS_TARGET) $(PATH_TARGET)
+build/target/Makefile: FC_ENV=$(FCFLAGS_TARGET) $(LDFLAGS_TARGET) $(PATH_TARGET)
 
 
 # Configure script flags
