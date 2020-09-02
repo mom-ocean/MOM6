@@ -298,6 +298,7 @@ run.openmp: $(foreach c,$(CONFIGS),work/$(c)/openmp/ocean.stats)
 # Color highlights for test results
 RED=\033[0;31m
 GREEN=\033[0;32m
+MAGENTA=\033[0;35m
 RESET=\033[0m
 
 DONE=${GREEN}DONE${RESET}
@@ -391,7 +392,8 @@ work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6
 	  mkdir -p results/$$* ; \
 	  bash <(curl -s https://codecov.io/bash) -n $$@ \
 	    > work/$$*/codecov.$(1).out \
-	    2> work/$$*/codecov.$(1).err ; \
+	    2> work/$$*/codecov.$(1).err \
+	    && echo -e "${MAGENTA}Report uploaded to codecov.${RESET}"; \
 	fi
 endef
 
