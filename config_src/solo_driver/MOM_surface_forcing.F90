@@ -304,7 +304,7 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
   ! calls to various buoyancy forcing options
   if (CS%restorebuoy .and. .not.CS%variable_buoyforce) then
     call MOM_error(FATAL, "With RESTOREBUOY = True, VARIABLE_BUOYFORCE = True should be used. "//&
-                          "Otherwise, this can lead to diverging soultions when a simulation "//&
+                          "Otherwise, this can lead to diverging solutions when a simulation "//&
                           "is continued using a restart file.")
   endif
 
