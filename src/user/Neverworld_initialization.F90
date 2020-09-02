@@ -248,8 +248,7 @@ subroutine Neverworld_initialize_thickness(h, G, GV, US, param_file, eqn_of_stat
   type(param_file_type),   intent(in) :: param_file           !< A structure indicating the open
                                                               !! file to parse for model
                                                               !! parameter values.
-  type(EOS_type),          pointer    :: eqn_of_state         !< integer that selects the
-                                                              !! equation of state.
+  type(EOS_type),          pointer    :: eqn_of_state         !< Equation of state structure
   real,                    intent(in) :: P_Ref                !< The coordinate-density
                                                               !! reference pressure [R L2 T-2 ~> Pa].
   ! Local variables
