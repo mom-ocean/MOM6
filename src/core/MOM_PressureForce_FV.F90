@@ -480,8 +480,11 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   logical :: use_ALE         ! If true, use an ALE pressure reconstruction.
   logical :: use_EOS         ! If true, density is calculated from T & S using an equation of state.
   type(thermo_var_ptrs) :: tv_tmp! A structure of temporary T & S.
-  real :: Tl(5), mn_T, mn_T2 ! copy and moment of local stencil of T [degC or degC2]
-  real :: Hl(5), mn_H        ! Copy of local stencil of H [H ~> m]
+  real :: Tl(5)              ! copy and T in local stencil [degC]
+  real :: mn_T               ! mean of T in local stencil [degC]
+  real :: mn_T2              ! mean of T**2 in local stencil [degC]
+  real :: hl(5)              ! Copy of local stencil of H [H ~> m]
+  real :: r_sm_H             ! Reciprocal of sum of H in local stencil [H-1 ~> m-1]
   real, parameter :: C1_6 = 1.0/6.0
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
@@ -529,17 +532,16 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
       hl(3) = h(i+1,j,k) * G%mask2dCu(I,j)
       hl(4) = h(i,j-1,k) * G%mask2dCv(i,J-1)
       hl(5) = h(i,j+1,k) * G%mask2dCv(i,J)
-      mn_H = ( hl(1) + ( ( hl(2) + hl(3) ) + ( hl(4) + hl(5) ) ) ) + GV%H_subroundoff
-      mn_H = 1. / mn_H ! Hereafter, mn_H is the reciprocal of mean h for the stencil
+      r_sm_H = 1. / ( ( hl(1) + ( ( hl(2) + hl(3) ) + ( hl(4) + hl(5) ) ) ) + GV%H_subroundoff )
       ! Mean of T
       Tl(1) = tv%T(i,j,k) ; Tl(2) = tv%T(i-1,j,k) ; Tl(3) = tv%T(i+1,j,k)
       Tl(4) = tv%T(i,j-1,k) ; Tl(5) = tv%T(i,j+1,k)
-      mn_T = ( hl(1)*Tl(1) + ( ( hl(2)*Tl(2) + hl(3)*Tl(3) ) + ( hl(4)*Tl(4) + hl(5)*Tl(5) ) ) ) * mn_H
+      mn_T = ( hl(1)*Tl(1) + ( ( hl(2)*Tl(2) + hl(3)*Tl(3) ) + ( hl(4)*Tl(4) + hl(5)*Tl(5) ) ) ) * r_sm_H
       ! Adjust T vectors to have zero mean
       Tl(:) = Tl(:) - mn_T ; mn_T = 0.
       ! Variance of T
       mn_T2 = ( hl(1)*Tl(1)*Tl(1) + ( ( hl(2)*Tl(2)*Tl(2) + hl(3)*Tl(3)*Tl(3) ) &
-                                    + ( hl(4)*Tl(4)*Tl(4) + hl(5)*Tl(5)*Tl(5) ) ) ) * mn_H
+                                    + ( hl(4)*Tl(4)*Tl(4) + hl(5)*Tl(5)*Tl(5) ) ) ) * r_sm_H
       ! Variance should be positive but round-off can violate this. Calculating
       ! variance directly would fix this but requires more operations.
       tv%varT(i,j,k) = CS%Stanley_T2_det_coeff * max(0., mn_T2 - mn_T*mn_T)
