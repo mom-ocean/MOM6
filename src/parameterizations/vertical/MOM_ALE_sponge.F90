@@ -143,6 +143,8 @@ type, public :: ALE_sponge_CS ; private
 
   logical :: time_varying_sponges  !< True if using newer sponge code
   logical :: spongeDataOngrid !< True if the sponge data are on the model horizontal grid
+  logical :: reentrant_x !< grid is reentrant in the x direction
+  logical :: tripolar_N !< grid is folded at its north edg
 
   !>@{ Diagnostic IDs
   integer :: id_sp_val_t = -1
@@ -233,6 +235,11 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
                  "If true, use the order of arithmetic for horizonal regridding that recovers "//&
                  "the answers from the end of 2018.  Otherwise, use rotationally symmetric "//&
                  "forms of the same expressions.", default=default_2018_answers)
+  call get_param(param_file, mdl, "REENTRANT_X", CS%reentrant_x, &
+                 "If true, the domain is zonally reentrant.", default=.true.)
+  call get_param(param_file, mdl, "TRIPOLAR_N", CS%tripolar_N, &
+                 "Use tripolar connectivity at the northern edge of the "//&
+                 "domain.  With TRIPOLAR_N, NIGLOBAL must be even.", default=.false.)
 
   CS%time_varying_sponges = .false.
   CS%nz = G%ke
@@ -485,6 +492,12 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS, Iresttime
                  "When defined, the incoming sponge data are "//&
                  "assumed to be on the model grid " , &
                  default=.false.)
+  call get_param(param_file, mdl, "REENTRANT_X", CS%reentrant_x, &
+                 "If true, the domain is zonally reentrant.", default=.true.)
+  call get_param(param_file, mdl, "TRIPOLAR_N", CS%tripolar_N, &
+                 "Use tripolar connectivity at the northern edge of the "//&
+                 "domain.  With TRIPOLAR_N, NIGLOBAL must be even.", default=.false.)
+
   CS%time_varying_sponges = .true.
   CS%nz = G%ke
   CS%isc = G%isc ; CS%iec = G%iec ; CS%jsc = G%jsc ; CS%jec = G%jec
@@ -823,7 +836,7 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u, fieldname_u, filename
   CS%Ref_val_u%nz_data = fld_sz(3)
   CS%Ref_val_u%num_tlevs = fld_sz(4)
 
-  CS%Ref_val_v%id = init_external_field(filename_v, fieldname_v,domain=G%Domain%mpp_domain)
+  CS%Ref_val_v%id = init_external_field(filename_v, fieldname_v, domain=G%Domain%mpp_domain)
   fld_sz(1:4)=-1
   fld_sz = get_external_field_size(CS%Ref_val_v%id)
   CS%Ref_val_v%nz_data = fld_sz(3)
@@ -931,7 +944,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
        mask_z(:,:,:) = 0.0
 
        call horiz_interp_and_extrap_tracer(CS%Ref_val(m)%id, Time, 1.0, G, sp_val, mask_z, z_in, &
-                      z_edges_in,  missing_value, .true., .false., .false., &
+                      z_edges_in,  missing_value, CS%reentrant_x, CS%tripolar_N, .false., &
                       spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z, &
                       answers_2018=CS%hor_regrid_answers_2018)
        if (m .EQ. 1) then
@@ -966,14 +979,14 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
 !         ! In case data is deeper than model
           hsrc(nz_data) = hsrc(nz_data) + ( zTopOfCell + G%bathyT(CS%col_i(c),CS%col_j(c)) )
           CS%Ref_val(m)%h(1:nz_data,c) = GV%Z_to_H*hsrc(1:nz_data)
-!          CS%Ref_val(CS%fldno)%p(1:nz_data,c) = tmpT1d(1:nz_data)
-!          do k=2,nz_data
-!             !          if (mask_z(i,j,k)==0.) &
-!             if (CS%Ref_val(m)%h(k,c) <= 0.001*GV%m_to_H) &
-!                  ! some confusion here about why the masks are not correct returning from horiz_interp
-!                  ! reverting to using a minimum thickness criteria
-!                  CS%Ref_val(m)%p(k,c) = CS%Ref_val(m)%p(k-1,c)
-!          enddo
+          CS%Ref_val(m)%p(1:nz_data,c) = tmpT1d(1:nz_data)
+          do k=2,nz_data
+             !          if (mask_z(i,j,k)==0.) &
+             if (CS%Ref_val(m)%h(k,c) <= 0.001*GV%m_to_H) &
+                  ! some confusion here about why the masks are not correct returning from horiz_interp
+                  ! reverting to using a minimum thickness criteria
+                  CS%Ref_val(m)%p(k,c) = CS%Ref_val(m)%p(k-1,c)
+          enddo
 
        enddo
        deallocate(sp_val, mask_z, hsrc, tmpT1d)
