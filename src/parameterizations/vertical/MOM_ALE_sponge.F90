@@ -23,6 +23,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
 use MOM_spatial_means, only : global_i_mean
 use MOM_time_manager, only : time_type, init_external_field, get_external_field_size, time_interp_external_init
+use MOM_time_manager, only : time_interp_external_init, time_interp_external
 use MOM_remapping, only : remapping_cs, remapping_core_h, initialize_remapping
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_verticalGrid, only : verticalGrid_type
@@ -1012,26 +1013,21 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
          call MOM_error(FATAL,"apply_ALE_sponge: No time information provided")
 
       nz_data = CS%Ref_val_u%nz_data
-      allocate(sp_val(G%isd:G%ied,G%jsd:G%jed,1:nz_data))
       allocate(sp_val_u(G%isdB:G%iedB,G%jsd:G%jed,1:nz_data))
       allocate(mask_z(G%isdB:G%iedB,G%jsd:G%jed,1:nz_data))
-      sp_val(:,:,:) = 0.0
       sp_val_u(:,:,:) = 0.0
       mask_z(:,:,:) = 0.0
       ! Interpolate from the external horizontal grid and in time
-      call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id, Time, 1.0, G, sp_val, mask_z, z_in, &
-                                          z_edges_in, missing_value, .true., .false., .false., &
-                                          spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z,&
-                                          answers_2018=CS%hor_regrid_answers_2018)
+      if (CS%SpongeDataOngrid) then
+        call time_interp_external(CS%Ref_val_u%id, Time, sp_val_u, verbose=.true.)
+        do j=CS%jsc,CS%jec; do I=CS%iscB,CS%iecB; do k=1,nz
+          mask_z(i,j,k) = 1.
+          if (abs(sp_val_u(i,j,k)-missing_value) < abs(1.e-04*missing_value)) mask_z(i,j,k) = 0.
+        enddo ; enddo ; enddo
+      else
+        call MOM_error(FATAL, "Velocity sponge data on non-native grid not supported yet.")
+      endif
  
-      call pass_var(sp_val,G%Domain)
-      do j=CS%jsc,CS%jec; do I=CS%iscB,CS%iecB
-        sp_val_u(I,j,1:nz_data) = 0.5*(sp_val(i,j,1:nz_data)+sp_val(i+1,j,1:nz_data))
-      enddo ; enddo
-      !if (CS%id_sp_val_u > 0)  call post_data(CS%id_sp_val_u, sp_val, CS%diag)
- 
-      !call pass_var(sp_val,G%Domain)
-      !call pass_var(mask_z,G%Domain)
       allocate( hsrc(nz_data) )
       allocate( tmpT1d(nz_data) )
       do c=1,CS%num_col_u
@@ -1044,7 +1040,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         do k=1,nz_data
           if (mask_z(i,j,k) == 1.0) then
             zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
-            tmpT1d(k) = sp_val(i,j,k)
+            tmpT1d(k) = sp_val_u(i,j,k)
           elseif (k>1) then
             zBottomOfCell = -G%bathyT(i,j)
             tmpT1d(k) = tmpT1d(k-1)
@@ -1058,35 +1054,33 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         ! In case data is deeper than model
         hsrc(nz_data) = hsrc(nz_data) + ( zTopOfCell + G%bathyT(i,j) )
         CS%Ref_val_u%h(1:nz_data,c) = GV%Z_to_H*hsrc(1:nz_data)
-!        CS%Ref_val_u%p(1:nz_data,c) = tmpT1d(1:nz_data)
-!        do k=2,nz_data
-!           !          if (mask_z(i,j,k)==0.) &
-!           if (CS%Ref_val_u%h(k,c) <= 0.001*GV%m_to_H) &
-!                ! some confusion here about why the masks are not correct returning from horiz_interp
-!                ! reverting to using a minimum thickness criteria
-!                CS%Ref_val_u%p(k,c) = CS%Ref_val_u%p(k-1,c)
-!        enddo
+        CS%Ref_val_u%p(1:nz_data,c) = tmpT1d(1:nz_data)
+        do k=2,nz_data
+           !          if (mask_z(i,j,k)==0.) &
+          if (CS%Ref_val_u%h(k,c) <= 0.001*GV%m_to_H) &
+                ! some confusion here about why the masks are not correct returning from horiz_interp
+                ! reverting to using a minimum thickness criteria
+                CS%Ref_val_u%p(k,c) = CS%Ref_val_u%p(k-1,c)
+        enddo
 
       enddo
 
-      deallocate(sp_val, sp_val_u, mask_z, hsrc, tmpT1d)
+      deallocate(sp_val_u, mask_z, hsrc, tmpT1d)
 
       nz_data = CS%Ref_val_v%nz_data
-      allocate(sp_val(G%isd:G%ied,G%jsd:G%jed,1:nz_data))
       allocate(sp_val_v(G%isd:G%ied,G%jsdB:G%jedB,1:nz_data))
       allocate(mask_z(G%isd:G%ied,G%jsdB:G%jedB,1:nz_data))
-      sp_val(:,:,:) = 0.0
       mask_z(:,:,:) = 0.0
       ! Interpolate from the external horizontal grid and in time
-      call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id, Time, 1.0, G, sp_val, mask_z, z_in, &
-                                          z_edges_in, missing_value, .true., .false., .false., &
-                                          spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z,& 
-                                          answers_2018=CS%hor_regrid_answers_2018)
-      call pass_var(sp_val,G%Domain)
-      do J=CS%jscB,CS%jecB; do i=CS%isc,CS%iec
-        sp_val_v(i,J,1:nz_data) = 0.5*(sp_val(i,j,1:nz_data)+sp_val(i,j+1,1:nz_data))
-      enddo ; enddo
-      !call pass_var(mask_z,G%Domain)
+      if (CS%SpongeDataOngrid) then
+        call time_interp_external(CS%Ref_val_v%id, Time, sp_val_v, verbose=.true.)
+        do J=CS%jscB,CS%jecB; do i=CS%isc,CS%iec; do k=1,nz
+          mask_z(i,j,k) = 1.
+          if (abs(sp_val_v(i,j,k)-missing_value) < abs(1.e-04*missing_value)) mask_z(i,j,k) = 0.
+        enddo ; enddo ; enddo
+      else
+        call MOM_error(FATAL, "Velocity sponge data on non-native grid not supported yet.")
+      endif
       allocate( hsrc(nz_data) )
       allocate( tmpT1d(nz_data) )
       do c=1,CS%num_col_v
@@ -1099,7 +1093,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         do k=1,nz_data
           if (mask_z(i,j,k) == 1.0) then
             zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
-            tmpT1d(k) = sp_val(i,j,k)
+            tmpT1d(k) = sp_val_v(i,j,k)
           elseif (k>1) then
             zBottomOfCell = -G%bathyT(i,j)
             tmpT1d(k) = tmpT1d(k-1)
@@ -1113,18 +1107,18 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         ! In case data is deeper than model
         hsrc(nz_data) = hsrc(nz_data) + ( zTopOfCell + G%bathyT(i,j) )
         CS%Ref_val_v%h(1:nz_data,c) = GV%Z_to_H*hsrc(1:nz_data)
-!        CS%Ref_val_v%p(1:nz_data,c) = tmpT1d(1:nz_data)
-!        do k=2,nz_data
-!         !          if (mask_z(i,j,k)==0.) &
-!         if (CS%Ref_val_v%h(k,c) <= 0.001*GV%m_to_H) &
-!         ! some confusion here about why the masks are not correct returning from horiz_interp
-!         ! reverting to using a minimum thickness criteria
-!           CS%Ref_val_v%p(k,c) = CS%Ref_val_v%p(k-1,c)
-!        enddo
+        CS%Ref_val_v%p(1:nz_data,c) = tmpT1d(1:nz_data)
+        do k=2,nz_data
+         !          if (mask_z(i,j,k)==0.) &
+         if (CS%Ref_val_v%h(k,c) <= 0.001*GV%m_to_H) &
+         ! some confusion here about why the masks are not correct returning from horiz_interp
+         ! reverting to using a minimum thickness criteria
+           CS%Ref_val_v%p(k,c) = CS%Ref_val_v%p(k-1,c)
+        enddo
 
       enddo
 
-      deallocate(sp_val, sp_val_v, mask_z, hsrc, tmpT1d)
+      deallocate(sp_val_v, mask_z, hsrc, tmpT1d)
     else
       nz_data = CS%nz_data
     endif
