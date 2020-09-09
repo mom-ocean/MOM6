@@ -727,11 +727,10 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   !   Use bracketing and bisection to find the k-level that the densest of the
   ! mixed and buffer layer corresponds to, such that:
   !     GV%Rlay(max_kRho-1) < Rml_max <= GV%Rlay(max_kRho)
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,nkmb,G,GV,Rml_max,max_kRho) &
-!$OMP                          private(k_min,k_max,k_test)
+  !$OMP parallel do default(shared) private(k_min,k_max,k_test)
   do j=js-2,je+2 ; do i=is-2,ie+2 ; if (G%mask2dT(i,j) > 0.5) then
-    if (Rml_max(i,j) > GV%Rlay(nz)) then ; max_kRho(i,j) = nz+1
-    elseif (Rml_max(i,j) <= GV%Rlay(nkmb+1)) then ; max_kRho(i,j) = nkmb+1
+    if ((Rml_max(i,j) > GV%Rlay(nz)) .or. (nkmb+1 > nz)) then ; max_kRho(i,j) = nz+1
+    elseif ((Rml_max(i,j) <= GV%Rlay(nkmb+1)) .or. (nkmb+2 > nz)) then ; max_kRho(i,j) = nkmb+1
     else
       k_min = nkmb+2 ; k_max = nz
       do
@@ -754,10 +753,8 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   if (PEmax_kRho > nz) PEmax_kRho = nz ! PEmax_kRho could have been nz+1.
 
   h_exclude = 10.0*(GV%Angstrom_H + GV%H_subroundoff)
-!$OMP parallel default(none) shared(is,ie,js,je,nkmb,G,GV,h,h_exclude,num_srt,k0_srt, &
-!$OMP                               rho_srt,h_srt,PEmax_kRho,k_end_srt,rho_coord,max_srt) &
-!$OMP                       private(ns,tmp,itmp)
-!$OMP do
+  !$OMP parallel default(shared) private(ns,tmp,itmp)
+  !$OMP do
   do j=js-1,je+1
     do k=1,nkmb ; do i=is-1,ie+1 ; if (G%mask2dT(i,j) > 0.5) then
       if (h(i,j,k) > h_exclude) then
@@ -778,7 +775,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   enddo
   ! Sort each column by increasing density.  This should already be close,
   ! and the size of the arrays are small, so straight insertion is used.
-!$OMP do
+  !$OMP do
    do j=js-1,je+1; do i=is-1,ie+1
     do k=2,num_srt(i,j) ; if (rho_srt(i,k,j) < rho_srt(i,k-1,j)) then
       ! The last segment needs to be shuffled earlier in the list.
@@ -789,12 +786,12 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
       enddo
     endif ; enddo
   enddo ; enddo
-!$OMP do
+  !$OMP do
   do j=js-1,je+1
     max_srt(j) = 0
     do i=is-1,ie+1 ; max_srt(j) = max(max_srt(j), num_srt(i,j)) ; enddo
   enddo
-!$OMP end parallel
+  !$OMP end parallel
 
   do j=js,je
     k_size = max(2*max_srt(j),1)
