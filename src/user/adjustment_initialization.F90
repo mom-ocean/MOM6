@@ -125,8 +125,13 @@ subroutine adjustment_initialize_thickness ( h, G, GV, US, param_file, just_read
           e0(k) = -G%max_depth * (real(k-1) / real(nz))
         enddo
       endif
-      target_values(1)    = ( GV%Rlay(1) + 0.5*(GV%Rlay(1)-GV%Rlay(2)) )
-      target_values(nz+1) = ( GV%Rlay(nz) + 0.5*(GV%Rlay(nz)-GV%Rlay(nz-1)) )
+      if (nz > 1) then
+        target_values(1)    = ( GV%Rlay(1) + 0.5*(GV%Rlay(1)-GV%Rlay(2)) )
+        target_values(nz+1) = ( GV%Rlay(nz) + 0.5*(GV%Rlay(nz)-GV%Rlay(nz-1)) )
+      else ! This might not be needed, but it avoids segmentation faults if nz=1.
+        target_values(1)    = 0.0
+        target_values(nz+1) = 2.0 * GV%Rlay(1)
+      endif
       do k = 2,nz
         target_values(k) = target_values(k-1) + ( GV%Rlay(nz) - GV%Rlay(1) ) / (nz-1)
       enddo

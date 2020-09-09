@@ -595,7 +595,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     dt_therm = dt ; ntstep = 1
     if (associated(fluxes%p_surf)) p_surf => fluxes%p_surf
     CS%tv%p_surf => NULL()
-    if (associated(forces%p_surf)) then  !### This should be fluxes%p_surf!
+    if (associated(fluxes%p_surf)) then
       if (CS%use_p_surf_in_EOS) CS%tv%p_surf => fluxes%p_surf
     endif
     if (CS%UseWaves) call pass_var(fluxes%ustar, G%Domain, clock=id_clock_pass)

@@ -53,15 +53,15 @@ contains
 
 !> Initializes temperature and salinity for the SCM CVMix test example
 subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read_params)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T  !< Potential temperature [degC]
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: S  !< Salinity [psu]
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
-  type(ocean_grid_type),                  intent(in)  :: G  !< Grid structure
-  type(verticalGrid_type),                intent(in)  :: GV !< Vertical grid structure
-  type(unit_scale_type),                  intent(in)  :: US !< A dimensional unit scaling type
-  type(param_file_type),                  intent(in)  :: param_file !< Input parameter structure
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T  !< Potential temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S  !< Salinity [psu]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
+  type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
+  type(param_file_type),                     intent(in)  :: param_file !< Input parameter structure
+  logical,                         optional, intent(in)  :: just_read_params !< If present and true, this call
+                                                               !! will only read parameters without changing h.
   ! Local variables
   real :: UpperLayerTempMLD !< Upper layer Temp MLD thickness [Z ~> m].
   real :: UpperLayerSaltMLD !< Upper layer Salt MLD thickness [Z ~> m].
