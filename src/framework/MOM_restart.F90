@@ -849,7 +849,7 @@ function query_initialized_4d_name(f_ptr, name, CS) result(query_initialized)
 end function query_initialized_4d_name
 
 !> save_restart saves all registered variables to restart files.
-subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
+subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_rest_files)
   character(len=*),        intent(in)    :: directory !< The directory where the restart files
                                                   !! are to be written
   type(time_type),         intent(in)    :: time  !< The current model time
@@ -860,6 +860,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
                                                   !! to the restart file names.
   character(len=*), optional, intent(in) :: filename !< A filename that overrides the name in CS%restartfile.
   type(verticalGrid_type), optional, intent(in) :: GV   !< The ocean's vertical grid structure
+  integer, optional, intent(out) :: num_rest_files      !< number of restart files written
 
   ! Local variables
   type(vardesc) :: vars(CS%max_fields)  ! Descriptions of the fields that
@@ -1056,6 +1057,9 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
     num_files = num_files+1
 
   enddo
+
+  if (present(num_rest_files)) num_rest_files = num_files
+
 end subroutine save_restart
 
 !> restore_state reads the model state from previously generated files.  All
