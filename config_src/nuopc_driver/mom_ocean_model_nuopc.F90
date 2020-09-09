@@ -39,6 +39,7 @@ use MOM_time_manager,        only : time_type, get_time, set_time, operator(>)
 use MOM_time_manager,        only : operator(+), operator(-), operator(*), operator(/)
 use MOM_time_manager,        only : operator(/=), operator(<=), operator(>=)
 use MOM_time_manager,        only : operator(<), real_to_time_type, time_type_to_real
+use time_interp_external_mod,only : time_interp_external_init
 use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_init
 use MOM_tracer_flow_control, only : call_tracer_flux_init
 use MOM_unit_scaling,        only : unit_scale_type
@@ -266,6 +267,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   OS%is_ocean_pe = Ocean_sfc%is_ocean_pe
   if (.not.OS%is_ocean_pe) return
+
+  call time_interp_external_init
 
   OS%Time = Time_in
   call initialize_MOM(OS%Time, Time_init, param_file, OS%dirs, OS%MOM_CSp, &
@@ -668,7 +671,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 end subroutine update_ocean_model
 
 !> This subroutine writes out the ocean model restart file.
-subroutine ocean_model_restart(OS, timestamp, restartname)
+subroutine ocean_model_restart(OS, timestamp, restartname, num_rest_files)
   type(ocean_state_type),     pointer    :: OS !< A pointer to the structure containing the
                                                !! internal ocean state being saved to a restart file
   character(len=*), optional, intent(in) :: timestamp !< An optional timestamp string that should be
@@ -676,6 +679,7 @@ subroutine ocean_model_restart(OS, timestamp, restartname)
   character(len=*), optional, intent(in) :: restartname !< Name of restart file to use
                                                !! This option distinguishes the cesm interface from the
                                                !! non-cesm interface
+  integer, optional, intent(out)         :: num_rest_files !< number of restart files written
 
   if (.not.MOM_state_is_synchronized(OS%MOM_CSp)) &
       call MOM_error(WARNING, "End of MOM_main reached with inconsistent "//&
@@ -687,7 +691,7 @@ subroutine ocean_model_restart(OS, timestamp, restartname)
 
   if (present(restartname)) then
      call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-          OS%restart_CSp, GV=OS%GV, filename=restartname)
+          OS%restart_CSp, GV=OS%GV, filename=restartname, num_rest_files=num_rest_files)
      call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
           OS%dirs%restart_output_dir) ! Is this needed?
      if (OS%use_ice_shelf) then
