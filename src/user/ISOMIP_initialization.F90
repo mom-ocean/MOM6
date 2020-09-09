@@ -370,7 +370,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
         if (fit_salin) then
           ! A first guess of the layers' salinity.
           do k=nz,1,-1
-             S0(k) = max(0.0, S0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dS1)
+            S0(k) = max(0.0, S0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dS1)
           enddo
           ! Refine the guesses for each layer.
           do itt=1,6

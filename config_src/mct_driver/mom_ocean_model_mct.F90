@@ -11,56 +11,57 @@ module MOM_ocean_model_mct
 ! This code is a stop-gap wrapper of the MOM6 code to enable it to be called
 ! in the same way as MOM4.
 
-use MOM,                     only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
-use MOM,                     only : extract_surface_state, allocate_surface_state, finish_MOM_initialization
-use MOM,                     only : get_MOM_state_elements, MOM_state_is_synchronized
-use MOM,                     only : get_ocean_stocks, step_offline
-use MOM_constants,           only : CELSIUS_KELVIN_OFFSET, hlf
-use MOM_diag_mediator,       only : diag_ctrl, enable_averaging, disable_averaging
-use MOM_diag_mediator,       only : diag_mediator_close_registration, diag_mediator_end
-use MOM_domains,             only : pass_var, pass_vector, AGRID, BGRID_NE, CGRID_NE
-use MOM_domains,             only : TO_ALL, Omit_Corners
-use MOM_error_handler,       only : MOM_error, FATAL, WARNING, is_root_pe
-use MOM_error_handler,       only : callTree_enter, callTree_leave
-use MOM_file_parser,         only : get_param, log_version, close_param_file, param_file_type
-use MOM_forcing_type,        only : allocate_forcing_type
-use MOM_forcing_type,        only : forcing, mech_forcing
-use MOM_forcing_type,        only : forcing_accumulate, copy_common_forcing_fields
-use MOM_forcing_type,        only : copy_back_forcing_fields, set_net_mass_forcing
-use MOM_forcing_type,        only : set_derived_forcing_fields
-use MOM_forcing_type,        only : forcing_diagnostics, mech_forcing_diags
-use MOM_get_input,           only : Get_MOM_Input, directories
-use MOM_grid,                only : ocean_grid_type
-use MOM_io,                  only : close_file, file_exists, read_data, write_version_number
-use MOM_marine_ice,          only : iceberg_forces, iceberg_fluxes, marine_ice_init, marine_ice_CS
-use MOM_restart,             only : MOM_restart_CS, save_restart
-use MOM_string_functions,    only : uppercase
-use MOM_surface_forcing_mct, only : surface_forcing_init, convert_IOB_to_fluxes
-use MOM_surface_forcing_mct, only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
-use MOM_surface_forcing_mct, only : ice_ocean_boundary_type, surface_forcing_CS
-use MOM_surface_forcing_mct, only : forcing_save_restart
-use MOM_time_manager,        only : time_type, get_time, set_time, operator(>)
-use MOM_time_manager,        only : operator(+), operator(-), operator(*), operator(/)
-use MOM_time_manager,        only : operator(/=), operator(<=), operator(>=)
-use MOM_time_manager,        only : operator(<), real_to_time_type, time_type_to_real
-use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_init
-use MOM_tracer_flow_control, only : call_tracer_flux_init
-use MOM_unit_scaling,        only : unit_scale_type
-use MOM_variables,           only : surface
-use MOM_verticalGrid,        only : verticalGrid_type
-use MOM_ice_shelf,           only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
-use MOM_ice_shelf,           only : add_shelf_forces, ice_shelf_end, ice_shelf_save_restart
-use coupler_types_mod,       only : coupler_1d_bc_type, coupler_2d_bc_type
-use coupler_types_mod,       only : coupler_type_spawn, coupler_type_write_chksums
-use coupler_types_mod,       only : coupler_type_initialized, coupler_type_copy_data
-use coupler_types_mod,       only : coupler_type_set_diags, coupler_type_send_data
-use mpp_domains_mod,         only : domain2d, mpp_get_layout, mpp_get_global_domain
-use mpp_domains_mod,         only : mpp_define_domains, mpp_get_compute_domain, mpp_get_data_domain
-use fms_mod,                 only : stdout
-use mpp_mod,                 only : mpp_chksum
-use MOM_EOS,                 only : gsw_sp_from_sr, gsw_pt_from_ct
-use MOM_wave_interface,      only: wave_parameters_CS, MOM_wave_interface_init
-use MOM_wave_interface,      only: MOM_wave_interface_init_lite, Update_Surface_Waves
+use MOM,                      only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
+use MOM,                      only : extract_surface_state, allocate_surface_state, finish_MOM_initialization
+use MOM,                      only : get_MOM_state_elements, MOM_state_is_synchronized
+use MOM,                      only : get_ocean_stocks, step_offline
+use MOM_constants,            only : CELSIUS_KELVIN_OFFSET, hlf
+use MOM_diag_mediator,        only : diag_ctrl, enable_averaging, disable_averaging
+use MOM_diag_mediator,        only : diag_mediator_close_registration, diag_mediator_end
+use MOM_domains,              only : pass_var, pass_vector, AGRID, BGRID_NE, CGRID_NE
+use MOM_domains,              only : TO_ALL, Omit_Corners
+use MOM_error_handler,        only : MOM_error, FATAL, WARNING, is_root_pe
+use MOM_error_handler,        only : callTree_enter, callTree_leave
+use MOM_file_parser,          only : get_param, log_version, close_param_file, param_file_type
+use MOM_forcing_type,         only : allocate_forcing_type
+use MOM_forcing_type,         only : forcing, mech_forcing
+use MOM_forcing_type,         only : forcing_accumulate, copy_common_forcing_fields
+use MOM_forcing_type,         only : copy_back_forcing_fields, set_net_mass_forcing
+use MOM_forcing_type,         only : set_derived_forcing_fields
+use MOM_forcing_type,         only : forcing_diagnostics, mech_forcing_diags
+use MOM_get_input,            only : Get_MOM_Input, directories
+use MOM_grid,                 only : ocean_grid_type
+use MOM_io,                   only : close_file, file_exists, read_data, write_version_number
+use MOM_marine_ice,           only : iceberg_forces, iceberg_fluxes, marine_ice_init, marine_ice_CS
+use MOM_restart,              only : MOM_restart_CS, save_restart
+use MOM_string_functions,     only : uppercase
+use MOM_surface_forcing_mct,  only : surface_forcing_init, convert_IOB_to_fluxes
+use MOM_surface_forcing_mct,  only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
+use MOM_surface_forcing_mct,  only : ice_ocean_boundary_type, surface_forcing_CS
+use MOM_surface_forcing_mct,  only : forcing_save_restart
+use MOM_time_manager,         only : time_type, get_time, set_time, operator(>)
+use MOM_time_manager,         only : operator(+), operator(-), operator(*), operator(/)
+use MOM_time_manager,         only : operator(/=), operator(<=), operator(>=)
+use MOM_time_manager,         only : operator(<), real_to_time_type, time_type_to_real
+use MOM_tracer_flow_control,  only : call_tracer_register, tracer_flow_control_init
+use MOM_tracer_flow_control,  only : call_tracer_flux_init
+use MOM_unit_scaling,         only : unit_scale_type
+use MOM_variables,            only : surface
+use MOM_verticalGrid,         only : verticalGrid_type
+use MOM_ice_shelf,            only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
+use MOM_ice_shelf,            only : add_shelf_forces, ice_shelf_end, ice_shelf_save_restart
+use coupler_types_mod,        only : coupler_1d_bc_type, coupler_2d_bc_type
+use coupler_types_mod,        only : coupler_type_spawn, coupler_type_write_chksums
+use coupler_types_mod,        only : coupler_type_initialized, coupler_type_copy_data
+use coupler_types_mod,        only : coupler_type_set_diags, coupler_type_send_data
+use mpp_domains_mod,          only : domain2d, mpp_get_layout, mpp_get_global_domain
+use mpp_domains_mod,          only : mpp_define_domains, mpp_get_compute_domain, mpp_get_data_domain
+use fms_mod,                  only : stdout
+use mpp_mod,                  only : mpp_chksum
+use MOM_EOS,                  only : gsw_sp_from_sr, gsw_pt_from_ct
+use MOM_wave_interface,       only : wave_parameters_CS, MOM_wave_interface_init
+use MOM_wave_interface,       only : MOM_wave_interface_init_lite, Update_Surface_Waves
+use time_interp_external_mod, only : time_interp_external_init
 
 ! MCT specfic routines
 use MOM_domains,             only : MOM_infra_end
@@ -264,6 +265,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   OS%is_ocean_pe = Ocean_sfc%is_ocean_pe
   if (.not.OS%is_ocean_pe) return
+
+  call time_interp_external_init
 
   OS%Time = Time_in
   call initialize_MOM(OS%Time, Time_init, param_file, OS%dirs, OS%MOM_CSp, &
