@@ -113,7 +113,7 @@ AC_CONFIG_COMMANDS([path_names],
 
 
 AC_CONFIG_COMMANDS([mkmf],
-  [${MKMF} -p ../../lib/libFMS.a -m Makefile.mkmf path_names],
+  [${MKMF} -p libFMS.a -m Makefile.mkmf path_names],
   [MKMF=${MKMF}])
 
 

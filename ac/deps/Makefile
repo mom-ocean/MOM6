@@ -59,11 +59,13 @@ mkmf:
 #   handled more safely, but this is adequate for now.
 
 # TODO: track *.mod copy?
-lib/libFMS.a: fms/build/Makefile
+lib/libFMS.a: fms/build/libFMS.a fms/build/Makefile
 	mkdir -p {lib,include}
-	cd fms/build && $(MAKE) -j ../../lib/libFMS.a
+	cp fms/build/libFMS.a lib/libFMS.a
 	cp fms/build/*.mod include
 
+fms/build/libFMS.a: fms/build/Makefile
+	make -C fms/build libFMS.a
 
 # TODO: Include FC, CC, CFLAGS?
 fms/build/Makefile: FC_ENV=$(FCFLAGS_ENV)

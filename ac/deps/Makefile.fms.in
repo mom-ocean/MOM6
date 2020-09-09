@@ -42,4 +42,7 @@ CPPFLAGS = @CPPFLAGS@
 FFLAGS = @FCFLAGS@
 LDFLAGS = @LDFLAGS@
 
+# Gather modulefiles
+TMPFILES = $(wildcard *.mod)
+
 include Makefile.mkmf
