@@ -31,7 +31,7 @@ FCFLAGS_COVERAGE ?=
 
 #---
 # Dependencies
-DEPS = ../deps
+DEPS = ../ac/deps
 
 # mkmf, list_paths (GFDL build toolchain)
 LIST_PATHS := $(DEPS)/bin/list_paths
@@ -140,9 +140,9 @@ COVERAGE=$(if $(REPORT_COVERAGE),"$(FCFLAGS_COVERAGE)",)
 # Explicit FMS link to target build
 # TODO: We should probably build TARGET with the FMS that it was configured
 #   to use.  But for now we use the same FMS over all builds.
-FCFLAGS_TARGET_FMS = -I../../../deps/include
-LDFLAGS_TARGET_FMS = -L../../../deps/lib
-PATH_TARGET = PATH="${PATH}:../../../deps/bin"
+FCFLAGS_TARGET_FMS = -I../../$(DEPS)/include
+LDFLAGS_TARGET_FMS = -L../../$(DEPS)/lib
+PATH_TARGET = PATH="${PATH}:../../$(DEPS)/bin"
 
 
 # Define the build targets in terms of the traditional DEBUG/REPRO/etc labels
@@ -209,14 +209,15 @@ build/%/MOM6: build/%/Makefile
 
 # Use autoconf to construct the Makefile for each target
 .PRECIOUS: $(foreach b,$(BUILDS),build/$(b)/Makefile)
-build/%/Makefile: ../configure $(DEPS)/lib/libFMS.a $(MKMF) $(LIST_PATHS)
+build/%/Makefile: ../ac/configure $(DEPS)/lib/libFMS.a $(MKMF) $(LIST_PATHS)
 	mkdir -p $(@D)
 	cd $(@D) \
-	  && $(FC_ENV) ../../../configure $(AC_FLAGS) \
+	  && $(FC_ENV) ../../../ac/configure $(AC_FLAGS) \
 	  || (cat config.log && false)
 
 
-../configure: ../configure.ac ../Makefile.in ../m4
+# TODO: Replace m4 with *.m4 macros
+../ac/configure: ../ac/configure.ac ../ac/Makefile.in ../ac/m4
 	autoreconf -i $<
 
 
@@ -236,9 +237,9 @@ $(TARGET_CODEBASE):
 	git clone --recursive $(MOM_TARGET_URL) $@
 	cd $@ && git checkout $(MOM_TARGET_BRANCH)
 	# Copy modern autoconf files to target?
-	cp ../configure.ac $(TARGET_CODEBASE)/
-	cp ../Makefile.in $(TARGET_CODEBASE)/
-	cp -r ../m4 $(TARGET_CODEBASE)/
+	cp ../ac/configure.ac $(TARGET_CODEBASE)/
+	cp ../ac/Makefile.in $(TARGET_CODEBASE)/
+	cp -r ../ac/m4 $(TARGET_CODEBASE)/
 
 
 # FMS
