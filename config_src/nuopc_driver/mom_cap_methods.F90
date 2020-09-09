@@ -735,7 +735,7 @@ subroutine State_SetExport(state, fldname, isc, iec, jsc, jec, input, ocean_grid
         do j = jsc, jec
            jg = j + ocean_grid%jsc - jsc
            do i = isc, iec
-             ig = i + ocean_grid%isc - isc
+              ig = i + ocean_grid%isc - isc
               n = n+1
               dataPtr1d(n) = input(i,j) * ocean_grid%mask2dT(ig,jg)
            enddo
@@ -877,11 +877,11 @@ subroutine field_getfldptr(field, fldptr1, fldptr2, rank, abort, rc)
   if (status /= ESMF_FIELDSTATUS_COMPLETE) then
      lrank = 0
      if (labort) then
-        call ESMF_LogWrite(trim(subname)//": ERROR data not allocated ", ESMF_LOGMSG_INFO, rc=rc)
+        call ESMF_LogWrite(trim(subname)//": ERROR data not allocated ", ESMF_LOGMSG_INFO)
         rc = ESMF_FAILURE
         return
      else
-        call ESMF_LogWrite(trim(subname)//": WARNING data not allocated ", ESMF_LOGMSG_INFO, rc=rc)
+        call ESMF_LogWrite(trim(subname)//": WARNING data not allocated ", ESMF_LOGMSG_INFO)
      endif
   else
 
@@ -901,7 +901,7 @@ subroutine field_getfldptr(field, fldptr1, fldptr2, rank, abort, rc)
         if (nnodes == 0 .and. nelements == 0) lrank = 0
      else  
         call ESMF_LogWrite(trim(subname)//": ERROR geomtype not supported ", &
-             ESMF_LOGMSG_INFO, rc=rc)
+             ESMF_LOGMSG_INFO)
         rc = ESMF_FAILURE
         return
      endif ! geomtype

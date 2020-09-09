@@ -191,7 +191,7 @@ type, public :: ice_ocean_boundary_type
   integer :: num_stk_bands            !< Number of Stokes drift bands passed through the coupler
   integer :: xtype                                            !< The type of the exchange - REGRID, REDIST or DIRECT
   type(coupler_2d_bc_type)      :: fluxes                     !< A structure that may contain an array of
-                                                              !! namedfields used for passive tracer fluxes.
+                                                              !! named fields used for passive tracer fluxes.
   integer :: wind_stagger = -999                              !< A flag indicating the spatial discretization of
                                                               !! wind stresses.  This flag may be set by the
                                                               !! flux-exchange code, based on what the sea-ice
