@@ -158,8 +158,6 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   real :: hv(SZI_(G), SZJ_(G))       ! v-thickness [H ~> m or kg m-2]
   real :: KH_u_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities [L2 T-1 ~> m2 s-1]
   real :: KH_v_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities [L2 T-1 ~> m2 s-1]
-  real :: Tl(5), mn_T, mn_T2 ! copy and moment of local stencil of T [degC or degC2]
-  real :: Hl(5), mn_H        ! Copy of local stencil of H [H ~> m]
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_thickness_diffuse: "//&
          "Module must be initialized before it is used.")
@@ -691,6 +689,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   logical :: use_Stanley
   integer :: is, ie, js, je, nz, IsdB, halo
   integer :: i, j, k
+  real :: Tl(5), mn_T, mn_T2 ! copy and moment of local stencil of T [degC or degC2]
+  real :: Hl(5), mn_H        ! Copy of local stencil of H [H ~> m]
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke ; IsdB = G%IsdB
 
   I4dt = 0.25 / dt
