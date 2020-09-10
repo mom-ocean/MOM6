@@ -26,10 +26,10 @@ integer, parameter :: MAX_CONSTITUENTS = 10 !< The maximum number of tidal
 !> Simple type to store astronomical longitudes used to calculate tidal phases.
 type, public :: astro_longitudes
   real :: &
-    s, &  !< Mean longitude of moon
-    h, &  !< Mean longitude of sun
-    p, &  !< Mean longitude of lunar perigee
-    N     !< Longitude of ascending node
+    s, &  !< Mean longitude of moon [rad]
+    h, &  !< Mean longitude of sun [rad]
+    p, &  !< Mean longitude of lunar perigee [rad]
+    N     !< Longitude of ascending node [rad]
 end type astro_longitudes
 
 !> The control structure for the MOM_tidal_forcing module
@@ -113,7 +113,7 @@ function eq_phase(constit, longitudes)
   character (len=2), intent(in) :: constit !> Name of constituent (e.g., M2).
   type(astro_longitudes), intent(in) :: longitudes   !> Mean longitudes calculated using astro_longitudes_init
   real, parameter :: PI = 4.0 * atan(1.0)  !> 3.14159...
-  real :: eq_phase                         !> The equilibrium phase argument for the constituent.
+  real :: eq_phase                         !> The equilibrium phase argument for the constituent [rad].
 
   select case (constit)
     case ("M2")
@@ -145,7 +145,7 @@ end function eq_phase
 !! Values used here are from previous versions of MOM.
 function tidal_frequency(constit)
   character (len=2), intent(in) :: constit !> Constituent to look up
-  real :: tidal_frequency                  !> Angular frequency (s^{-1})
+  real :: tidal_frequency                  !> Angular frequency [s-1]
 
   select case (constit)
     case ("M2")
@@ -178,11 +178,12 @@ end function tidal_frequency
 !! "Modern Theory and Practice of Tide Analysis and Tidal Power", 2019.
 subroutine nodal_fu(constit, N, fn, un)
   character (len=2), intent(in) :: constit              !> Tidal constituent to find modulation for.
-  real, intent(in) :: N                                 !> Longitude of ascending node in radians.
+  real, intent(in) :: N                                 !> Longitude of ascending node [rad].
                                                         !! Calculate using astro_longitudes_init.
   real, parameter :: RADIANS = 4.0 * atan(1.0) / 180.0  !> Converts degrees to radians.
-  real, intent(out) :: fn, un                           !> Amplitude (fn, unitless) and phase
-                                                        !! (un, radians) modulation.
+  real, intent(out) :: &
+    fn, & !> Amplitude modulation [nondim]
+    un    !> Phase modulation [rad]
   select case (constit)
     case ("M2")
       fn = 1.0 - 0.037 * cos(N)

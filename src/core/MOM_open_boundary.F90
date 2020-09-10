@@ -269,16 +269,16 @@ type, public :: ocean_OBC_type
   logical :: add_tide_constituents = .false.          !< If true, add tidal constituents to the boundary elevation
                                                       !! and velocity. Will be set to true if n_tide_constituents > 0.
   character(len=2), allocatable, dimension(:) :: tide_names  !< Names of tidal constituents to add to the boundary data.
-  real, allocatable, dimension(:) :: tide_frequencies        !< Angular frequencies of chosen tidal constituents.
-  real, allocatable, dimension(:) :: tide_eq_phases          !< Equilibrium phases of chosen tidal constituents.
-  real, allocatable, dimension(:) :: tide_fn                 !< Amplitude modulation of boundary tides by nodal cycle.
-  real, allocatable, dimension(:) :: tide_un                 !< Phase modulation of boundary tides by nodal cycle.
+  real, allocatable, dimension(:) :: tide_frequencies        !< Angular frequencies of chosen tidal constituents [s-1].
+  real, allocatable, dimension(:) :: tide_eq_phases   !< Equilibrium phases of chosen tidal constituents [rad].
+  real, allocatable, dimension(:) :: tide_fn          !< Amplitude modulation of boundary tides by nodal cycle [nondim].
+  real, allocatable, dimension(:) :: tide_un          !< Phase modulation of boundary tides by nodal cycle [rad].
   logical :: add_eq_phase = .false.                   !< If true, add the equilibrium phase argument
                                                       !! to the specified boundary tidal phase.
   logical :: add_nodal_terms = .false.                !< If true, insert terms for the 18.6 year modulation when
                                                       !! calculating tidal boundary conditions.
   type(time_type) :: time_ref                         !< Reference date (t = 0) for tidal forcing.
-  type(astro_longitudes) :: tidal_longitudes                    !< Lunar and solar longitudes used to calculate tidal forcing.
+  type(astro_longitudes) :: tidal_longitudes          !< Lunar and solar longitudes used to calculate tidal forcing.
   ! Properties of the segments used.
   type(OBC_segment_type), pointer, dimension(:) :: &
     segment => NULL()   !< List of segment objects.
@@ -992,8 +992,8 @@ subroutine initialize_obc_tides(OBC, tide_ref_date, nodal_ref_date, tide_constit
   integer, dimension(3), intent(in) :: tide_ref_date      !< Reference date (t = 0) for tidal forcing.
   integer, dimension(3), intent(in) :: nodal_ref_date     !< Date to calculate nodal modulation for.
   character(len=50), intent(in) :: tide_constituent_str   !< List of tidal constituents to include on boundary.
-  type(astro_longitudes) :: nodal_longitudes                        !< Solar and lunar longitudes for tidal forcing
-  type(time_type) :: nodal_time                                      !< Model time to calculate nodal modulation for.
+  type(astro_longitudes) :: nodal_longitudes              !< Solar and lunar longitudes for tidal forcing
+  type(time_type) :: nodal_time                           !< Model time to calculate nodal modulation for.
   integer :: c                                            !< Index to tidal constituent.
 
   allocate(OBC%tide_names(OBC%n_tide_constituents))
