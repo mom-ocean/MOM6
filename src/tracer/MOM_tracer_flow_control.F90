@@ -264,7 +264,8 @@ subroutine tracer_flow_control_init(restart, day, G, GV, US, h, param_file, diag
   type(verticalGrid_type),               intent(in)    :: GV      !< The ocean's vertical grid
                                                                   !! structure.
   type(unit_scale_type),                 intent(in)    :: US      !< A dimensional unit scaling type
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h       !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                                         intent(in)    :: h       !< Layer thicknesses [H ~> m or kg m-2]
   type(param_file_type),                 intent(in)    :: param_file !< A structure to parse for
                                                                   !! run-time parameters
   type(diag_ctrl), target,               intent(in)    :: diag    !< A structure that is used to
@@ -332,15 +333,15 @@ end subroutine tracer_flow_control_init
 
 !> This subroutine extracts the chlorophyll concentrations from the model state, if possible
 subroutine get_chl_from_model(Chl_array, G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), &
+  type(ocean_grid_type),        intent(in)  :: G         !< The ocean's grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                 intent(out) :: Chl_array !< The array in which to store the model's
                                                          !! Chlorophyll-A concentrations in mg m-3.
-  type(ocean_grid_type),        intent(in)  :: G         !< The ocean's grid structure.
   type(tracer_flow_control_CS), pointer     :: CS        !< The control structure returned by a
                                                          !! previous call to call_tracer_register.
 
   if (CS%use_MOM_generic_tracer) then
-    call MOM_generic_tracer_get('chl','field',Chl_array, CS%MOM_generic_tracer_CSp)
+    call MOM_generic_tracer_get('chl', 'field', Chl_array, CS%MOM_generic_tracer_CSp)
   else
     call MOM_error(FATAL, "get_chl_from_model was called in a configuration "// &
              "that is unable to provide a sensible model-based value.\n"// &
@@ -377,25 +378,24 @@ end subroutine call_tracer_set_forcing
 !> This subroutine calls all registered tracer column physics subroutines.
 subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, US, tv, optics, CS, &
                                   debug, evap_CFL_limit, minimum_forcing_depth)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old  !< Layer thickness before entrainment
+  type(ocean_grid_type),                 intent(in) :: G      !< The ocean's grid structure.
+  type(verticalGrid_type),               intent(in) :: GV     !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h_old !< Layer thickness before entrainment
                                                               !! [H ~> m or kg m-2].
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_new  !< Layer thickness after entrainment
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h_new !< Layer thickness after entrainment
                                                               !! [H ~> m or kg m-2].
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: ea     !< an array to which the amount of
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: ea !< an array to which the amount of
                                           !! fluid entrained from the layer above during this call
                                           !! will be added [H ~> m or kg m-2].
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: eb     !< an array to which the amount of
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: eb !< an array to which the amount of
                                           !! fluid entrained from the layer below during this call
                                           !! will be added [H ~> m or kg m-2].
   type(forcing),                         intent(in) :: fluxes !< A structure containing pointers to
                                                               !! any possible forcing fields.
                                                               !! Unused fields have NULL ptrs.
-  real, dimension(NIMEM_,NJMEM_),        intent(in) :: Hml    !< Mixed layer depth [Z ~> m]
+  real, dimension(SZI_(G),SZJ_(G)),      intent(in) :: Hml    !< Mixed layer depth [Z ~> m]
   real,                                  intent(in) :: dt     !< The amount of time covered by this
                                                               !! call [T ~> s]
-  type(ocean_grid_type),                 intent(in) :: G      !< The ocean's grid structure.
-  type(verticalGrid_type),               intent(in) :: GV     !< The ocean's vertical grid
-                                                              !! structure.
   type(unit_scale_type),                 intent(in) :: US     !< A dimensional unit scaling type
   type(thermo_var_ptrs),                 intent(in) :: tv     !< A structure pointing to various
                                                               !! thermodynamic variables.
@@ -542,12 +542,12 @@ end subroutine call_tracer_column_fns
 subroutine call_tracer_stocks(h, stock_values, G, GV, CS, stock_names, stock_units, &
                               num_stocks, stock_index, got_min_max, global_min, global_max, &
                               xgmin, ygmin, zgmin, xgmax, ygmax, zgmax)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),    &
+  type(ocean_grid_type),          intent(in)  :: G           !< The ocean's grid structure.
+  type(verticalGrid_type),        intent(in)  :: GV          !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    &
                                   intent(in)  :: h           !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(:),             intent(out) :: stock_values !< The integrated amounts of a tracer
                              !! on the current PE, usually in kg x concentration [kg conc].
-  type(ocean_grid_type),          intent(in)  :: G           !< The ocean's grid structure.
-  type(verticalGrid_type),        intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(tracer_flow_control_CS),   pointer     :: CS          !< The control structure returned by a
                                                              !! previous call to
                                                              !! call_tracer_register.
@@ -725,9 +725,9 @@ end subroutine store_stocks
 subroutine call_tracer_surface_state(sfc_state, h, G, CS)
   type(surface),                intent(inout) :: sfc_state !< A structure containing fields that
                                                        !! describe the surface state of the ocean.
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), &
-                                intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
   type(ocean_grid_type),        intent(in)    :: G     !< The ocean's grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
   type(tracer_flow_control_CS), pointer       :: CS    !< The control structure returned by a
                                                        !! previous call to call_tracer_register.
 
