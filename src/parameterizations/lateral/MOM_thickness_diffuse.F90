@@ -778,7 +778,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
                                     + ( hl(4)*Tl(4)*Tl(4) + hl(5)*Tl(5)*Tl(5) ) ) ) * mn_H
       ! Variance should be positive but round-off can violate this. Calculating
       ! variance directly would fix this but requires more operations.
-      Tsgs2(i,j,k) = CS%Stanley_T2_det_coeff * max(0., mn_T2)
+      Tsgs2(i,j,k) = CS%Stanley_det_coeff * max(0., mn_T2)
      enddo ; enddo ; enddo
   endif
 !$OMP do

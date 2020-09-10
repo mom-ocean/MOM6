@@ -4,3 +4,9 @@
 [submodule "pkg/GSW-Fortran"]
 	path = pkg/GSW-Fortran
 	url = https://github.com/TEOS-10/GSW-Fortran.git
+[submodule "pkg/geoKdTree"]
+	path = pkg/geoKdTree
+	url = https://github.com/travissluka/geoKdTree.git
+[submodule "pkg/mom6_da_hooks"]
+	path = pkg/mom6_da_hooks
+	url = https://github.com/NOAA-GFDL/MOM6_DA_hooks.git
