@@ -22,7 +22,7 @@ use MOM_restart,              only : register_restart_field, register_restart_pa
 use MOM_restart,              only : query_initialized, MOM_restart_CS
 use MOM_obsolete_params,      only : obsolete_logical, obsolete_int, obsolete_real, obsolete_char
 use MOM_string_functions,     only : extract_word, remove_spaces
-use MOM_tidal_forcing,        only : astro_longitudes_init, eq_phase, nodal_fu, tidal_frequency
+use MOM_tidal_forcing,        only : astro_longitudes, astro_longitudes_init, eq_phase, nodal_fu, tidal_frequency
 use MOM_time_manager,         only : set_date, time_type, time_type_to_real, operator(-)
 use MOM_tracer_registry,      only : tracer_type, tracer_registry_type, tracer_name_lookup
 use time_interp_external_mod, only : init_external_field, time_interp_external
@@ -278,7 +278,7 @@ type, public :: ocean_OBC_type
   logical :: add_nodal_terms = .false.                !< If true, insert terms for the 18.6 year modulation when
                                                       !! calculating tidal boundary conditions.
   type(time_type) :: time_ref                         !< Reference date (t = 0) for tidal forcing.
-  real, dimension(4) :: astro_shpn                    !< Lunar and solar longitudes used to calculate tidal forcing.
+  type(astro_longitudes) :: tidal_longitudes                    !< Lunar and solar longitudes used to calculate tidal forcing.
   ! Properties of the segments used.
   type(OBC_segment_type), pointer, dimension(:) :: &
     segment => NULL()   !< List of segment objects.
@@ -992,7 +992,7 @@ subroutine initialize_obc_tides(OBC, tide_ref_date, nodal_ref_date, tide_constit
   integer, dimension(3), intent(in) :: tide_ref_date      !< Reference date (t = 0) for tidal forcing.
   integer, dimension(3), intent(in) :: nodal_ref_date     !< Date to calculate nodal modulation for.
   character(len=50), intent(in) :: tide_constituent_str   !< List of tidal constituents to include on boundary.
-  real, dimension(4) :: nodal_shpn                        !< Solar and lunar longitudes for tidal forcing
+  type(astro_longitudes) :: nodal_longitudes                        !< Solar and lunar longitudes for tidal forcing
   type(time_type) :: nodal_time                                      !< Model time to calculate nodal modulation for.
   integer :: c                                            !< Index to tidal constituent.
 
@@ -1003,7 +1003,7 @@ subroutine initialize_obc_tides(OBC, tide_ref_date, nodal_ref_date, tide_constit
   OBC%time_ref = set_date(tide_ref_date(1), tide_ref_date(2), tide_ref_date(3))
 
   ! Find relevant lunar and solar longitudes at the reference time
-  if (OBC%add_eq_phase) call astro_longitudes_init(OBC%time_ref, OBC%astro_shpn)
+  if (OBC%add_eq_phase) call astro_longitudes_init(OBC%time_ref, OBC%tidal_longitudes)
 
   ! If the nodal correction is based on a different time, initialize that.
   ! Otherwise, it can use N from the time reference.
@@ -1011,14 +1011,14 @@ subroutine initialize_obc_tides(OBC, tide_ref_date, nodal_ref_date, tide_constit
     if (sum(nodal_ref_date) .ne. 0) then
       ! A reference date was provided for the nodal correction
       nodal_time = set_date(nodal_ref_date(1), nodal_ref_date(2), nodal_ref_date(3))
-      call astro_longitudes_init(nodal_time, nodal_shpn)
+      call astro_longitudes_init(nodal_time, nodal_longitudes)
     elseif (OBC%add_eq_phase) then
       ! Astronomical longitudes were already calculated for use in equilibrium phases,
       ! so use nodal longitude from that.
-      nodal_shpn = OBC%astro_shpn
+      nodal_longitudes = OBC%tidal_longitudes
     else
       ! Tidal reference time is a required parameter, so calculate the longitudes from that.
-      call astro_longitudes_init(OBC%time_ref, nodal_shpn)
+      call astro_longitudes_init(OBC%time_ref, nodal_longitudes)
     endif
   endif
 
@@ -1032,14 +1032,14 @@ subroutine initialize_obc_tides(OBC, tide_ref_date, nodal_ref_date, tide_constit
 
     ! Find equilibrum phase if needed
     if (OBC%add_eq_phase) then
-      OBC%tide_eq_phases(c) = eq_phase(trim(OBC%tide_names(c)), OBC%astro_shpn)
+      OBC%tide_eq_phases(c) = eq_phase(trim(OBC%tide_names(c)), OBC%tidal_longitudes)
     else
       OBC%tide_eq_phases(c) = 0.0
     endif
 
     ! Find nodal corrections if needed
     if (OBC%add_nodal_terms) then
-      call nodal_fu(trim(OBC%tide_names(c)), nodal_shpn(4), OBC%tide_fn(c), OBC%tide_un(c))
+      call nodal_fu(trim(OBC%tide_names(c)), nodal_longitudes%N, OBC%tide_fn(c), OBC%tide_un(c))
     else
       OBC%tide_fn(c) = 1.0
       OBC%tide_un(c) = 0.0

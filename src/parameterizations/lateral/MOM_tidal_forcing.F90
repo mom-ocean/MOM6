@@ -23,6 +23,14 @@ public astro_longitudes_init, eq_phase, nodal_fu, tidal_frequency
 
 integer, parameter :: MAX_CONSTITUENTS = 10 !< The maximum number of tidal
                                             !! constituents that could be used.
+!> Simple type to store astronomical longitudes used to calculate tidal phases.
+type, public :: astro_longitudes
+  real :: &
+    s, &  !< Mean longitude of moon
+    h, &  !< Mean longitude of sun
+    p, &  !< Mean longitude of lunar perigee
+    N     !< Longitude of ascending node
+end type astro_longitudes
 
 !> The control structure for the MOM_tidal_forcing module
 type, public :: tidal_forcing_CS ; private
@@ -50,7 +58,7 @@ type, public :: tidal_forcing_CS ; private
   character (len=16) :: const_name(MAX_CONSTITUENTS) !< The name of each constituent
 
   type(time_type) :: time_ref !< Reference time (t = 0) used to calculate tidal forcing.
-  real, dimension(4) :: astro_shpn !< Astronomical longitudes used to calculate
+  type(astro_longitudes) :: tidal_longitudes !< Astronomical longitudes used to calculate
                                    !! tidal phases at t = 0.
   real, pointer, dimension(:,:,:) :: &
     sin_struct => NULL(), &    !< The sine and cosine based structures that can
@@ -76,9 +84,9 @@ contains
 !! For simplicity, the time associated with time_ref should
 !! be at midnight. These formulas also only make sense if
 !! the calendar is gregorian.
-subroutine astro_longitudes_init(time_ref, longitudes_shpn)
-  real, dimension(4), intent(out) :: longitudes_shpn !> Longitudes s, h, p, N
+subroutine astro_longitudes_init(time_ref, longitudes)
   type(time_type), intent(in) :: time_ref            !> Time to calculate longitudes for.
+  type(astro_longitudes), intent(out) :: longitudes  !> Lunar and solar longitudes at time_ref.
   real :: D, T                                       !> Date offsets
   real, parameter :: PI = 4.0 * atan(1.0)            !> 3.14159...
   ! Find date at time_ref in days since 1900-01-01
@@ -86,54 +94,48 @@ subroutine astro_longitudes_init(time_ref, longitudes_shpn)
   ! Time since 1900-01-01 in Julian centuries
   ! Kowalik and Luick use 36526, but Schureman uses 36525 which I think is correct.
   T = D / 36525.0
+  ! Calculate longitudes, including converting to radians on [0, 2pi)
   ! s: Mean longitude of moon
-  longitudes_shpn(1) = (277.0248 + 481267.8906 * T) + 0.0011 * (T**2)
+  longitudes%s = mod((277.0248 + 481267.8906 * T) + 0.0011 * (T**2), 360.0) * PI / 180.0
   ! h: Mean longitude of sun
-  longitudes_shpn(2) = (280.1895 + 36000.7689 * T) + 3.0310e-4 * (T**2)
+  longitudes%h = mod((280.1895 + 36000.7689 * T) + 3.0310e-4 * (T**2), 360.0) * PI / 180.0
   ! p: Mean longitude of lunar perigee
-  longitudes_shpn(3) = (334.3853 + 4069.0340 * T) - 0.0103 * (T**2)
+  longitudes%p = mod((334.3853 + 4069.0340 * T) - 0.0103 * (T**2), 360.0) * PI / 180.0
   ! n: Longitude of ascending node
-  longitudes_shpn(4) = (259.1568 - 1934.142 * T) + 0.0021 * (T**2)
-  ! Convert to radians on [0, 2pi)
-  longitudes_shpn = mod(longitudes_shpn, 360.0) * PI / 180.0
+  longitudes%N = mod((259.1568 - 1934.142 * T) + 0.0021 * (T**2), 360.0) * PI / 180.0
 end subroutine astro_longitudes_init
 
 !> Calculates the equilibrium phase argument for the given tidal
-!! constituent constit and the array of longitudes shpn.
+!! constituent constit and the astronomical longitudes and the reference time.
 !! These formulas follow Table I.4 of Kowalik and Luick,
 !! "Modern Theory and Practice of Tide Analysis and Tidal Power", 2019.
-function eq_phase(constit, shpn)
+function eq_phase(constit, longitudes)
   character (len=2), intent(in) :: constit !> Name of constituent (e.g., M2).
-  real, dimension(3), intent(in) :: shpn   !> Mean longitudes calculated using astro_longitudes_init
-  real :: s, h, p                          !> Longitudes of moon, sun, and lunar perigee.
+  type(astro_longitudes), intent(in) :: longitudes   !> Mean longitudes calculated using astro_longitudes_init
   real, parameter :: PI = 4.0 * atan(1.0)  !> 3.14159...
   real :: eq_phase                         !> The equilibrium phase argument for the constituent.
 
-  s = shpn(1)
-  h = shpn(2)
-  p = shpn(3)
-
   select case (constit)
     case ("M2")
-      eq_phase = 2 * (h - s)
+      eq_phase = 2 * (longitudes%h - longitudes%s)
     case ("S2")
       eq_phase = 0.0
     case ("N2")
-      eq_phase = (- 3 * s + 2 * h) + p
+      eq_phase = (- 3 * longitudes%s + 2 * longitudes%h) + longitudes%p
     case ("K2")
-      eq_phase = 2 * h
+      eq_phase = 2 * longitudes%h
     case ("K1")
-      eq_phase = h + PI / 2.0
+      eq_phase = longitudes%h + PI / 2.0
     case ("O1")
-      eq_phase = (- 2 * s + h) - PI / 2.0
+      eq_phase = (- 2 * longitudes%s + longitudes%h) - PI / 2.0
     case ("P1")
-      eq_phase = - h - PI / 2.0
+      eq_phase = - longitudes%h - PI / 2.0
     case ("Q1")
-      eq_phase = ((- 3 * s + h) + p) - PI / 2.0
+      eq_phase = ((- 3 * longitudes%s + longitudes%h) + longitudes%p) - PI / 2.0
     case ("MF")
-      eq_phase = 2 * s
+      eq_phase = 2 * longitudes%s
     case ("MM")
-      eq_phase = s - p
+      eq_phase = longitudes%s - longitudes%p
     case default
       call MOM_error(FATAL, "eq_phase: unrecognized constituent")
   end select
@@ -397,7 +399,7 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
   ! Set the parameters for all components that are in use.
   ! Initialize reference time for tides and
   ! find relevant lunar and solar longitudes at the reference time.
-  if (CS%use_eq_phase) call astro_longitudes_init(CS%time_ref, CS%astro_shpn)
+  if (CS%use_eq_phase) call astro_longitudes_init(CS%time_ref, CS%tidal_longitudes)
   c=0
   if (use_M2) then
     c=c+1 ; CS%const_name(c) = "M2" ; CS%struct(c) = 2
@@ -458,7 +460,7 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
     amp_def(c) = CS%amp(c)
     CS%phase0(c) = 0.0
     if (CS%use_eq_phase) then
-      phase0_def(c) = eq_phase(CS%const_name(c), CS%astro_shpn)
+      phase0_def(c) = eq_phase(CS%const_name(c), CS%tidal_longitudes)
     else
       phase0_def(c) = 0.0
     endif
