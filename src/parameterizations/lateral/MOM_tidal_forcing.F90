@@ -49,7 +49,7 @@ type, public :: tidal_forcing_CS ; private
   integer :: struct(MAX_CONSTITUENTS) !< An encoded spatial structure for each constituent
   character (len=16) :: const_name(MAX_CONSTITUENTS) !< The name of each constituent
 
-  real :: time_ref !< Reference time (t = 0) used to calculate tidal forcing.
+  type(time_type) :: time_ref !< Reference time (t = 0) used to calculate tidal forcing.
   real, dimension(4) :: astro_shpn !< Astronomical longitudes used to calculate
                                    !! tidal phases at t = 0.
   real, pointer, dimension(:,:,:) :: &
@@ -78,13 +78,11 @@ contains
 !! the calendar is gregorian.
 subroutine astro_longitudes_init(time_ref, longitudes_shpn)
   real, dimension(4), intent(out) :: longitudes_shpn !> Longitudes s, h, p, N
-  real, intent(in) :: time_ref                       !> Time to calculate longitudes for.
+  type(time_type), intent(in) :: time_ref            !> Time to calculate longitudes for.
   real :: D, T                                       !> Date offsets
   real, parameter :: PI = 4.0 * atan(1.0)            !> 3.14159...
-  ! if time_ref is not at midnight, this could be used to round down to nearest day.
-  ! time_ref = time_ref - mod(time_ref, 24.0*3600.0)
   ! Find date at time_ref in days since 1900-01-01
-  D = (time_ref - time_type_to_real(set_date(1900, 1, 1))) / (24.0 * 3600.0)
+  D = time_type_to_real(time_ref - set_date(1900, 1, 1)) / (24.0 * 3600.0)
   ! Time since 1900-01-01 in Julian centuries
   ! Kowalik and Luick use 36526, but Schureman uses 36525 which I think is correct.
   T = D / 36525.0
@@ -386,7 +384,7 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
                  default=.false., fail_if_missing=.false.)
 
   if (sum(tide_ref_date) == 0) then  ! tide_ref_date defaults to 0.
-    CS%time_ref = 0
+    CS%time_ref = set_date(1, 1, 1)
   else
     if(.not. CS%use_eq_phase) then
       ! Using a reference date but not using phase relative to equilibrium.
@@ -394,7 +392,7 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
       ! correctly simulating tidal phases is not desired.
       call MOM_mesg('Tidal phases will *not* be corrected with equilibrium arguments.')
     endif
-    CS%time_ref = time_type_to_real(set_date(tide_ref_date(1), tide_ref_date(2), tide_ref_date(3)))
+    CS%time_ref = set_date(tide_ref_date(1), tide_ref_date(2), tide_ref_date(3))
   endif
   ! Set the parameters for all components that are in use.
   ! Initialize reference time for tides and
@@ -610,7 +608,7 @@ subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, CS, deta_tidal_deta, m_to
     return
   endif
 
-  now = time_type_to_real(Time) - cs%time_ref
+  now = time_type_to_real(Time - cs%time_ref)
 
   if (CS%USE_SAL_SCALAR .and. CS%USE_PREV_TIDES) then
     eta_prop = 2.0*CS%SAL_SCALAR

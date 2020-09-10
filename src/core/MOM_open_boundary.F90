@@ -277,7 +277,7 @@ type, public :: ocean_OBC_type
                                                       !! to the specified boundary tidal phase.
   logical :: add_nodal_terms = .false.                !< If true, insert terms for the 18.6 year modulation when
                                                       !! calculating tidal boundary conditions.
-  real :: time_ref                                    !< Reference date (t = 0) for tidal forcing.
+  type(time_type) :: time_ref                         !< Reference date (t = 0) for tidal forcing.
   real, dimension(4) :: astro_shpn                    !< Lunar and solar longitudes used to calculate tidal forcing.
   ! Properties of the segments used.
   type(OBC_segment_type), pointer, dimension(:) :: &
@@ -993,14 +993,14 @@ subroutine initialize_obc_tides(OBC, tide_ref_date, nodal_ref_date, tide_constit
   integer, dimension(3), intent(in) :: nodal_ref_date     !< Date to calculate nodal modulation for.
   character(len=50), intent(in) :: tide_constituent_str   !< List of tidal constituents to include on boundary.
   real, dimension(4) :: nodal_shpn                        !< Solar and lunar longitudes for tidal forcing
-  real :: nodal_time                                      !< Model time to calculate nodal modulation for.
+  type(time_type) :: nodal_time                                      !< Model time to calculate nodal modulation for.
   integer :: c                                            !< Index to tidal constituent.
 
   allocate(OBC%tide_names(OBC%n_tide_constituents))
   read(tide_constituent_str, *) OBC%tide_names
 
   ! Set reference time (t = 0) for boundary tidal forcing.
-  OBC%time_ref = time_type_to_real(set_date(tide_ref_date(1), tide_ref_date(2), tide_ref_date(3)))
+  OBC%time_ref = set_date(tide_ref_date(1), tide_ref_date(2), tide_ref_date(3))
 
   ! Find relevant lunar and solar longitudes at the reference time
   if (OBC%add_eq_phase) call astro_longitudes_init(OBC%time_ref, OBC%astro_shpn)
@@ -1010,7 +1010,7 @@ subroutine initialize_obc_tides(OBC, tide_ref_date, nodal_ref_date, tide_constit
   if (OBC%add_nodal_terms) then
     if (sum(nodal_ref_date) .ne. 0) then
       ! A reference date was provided for the nodal correction
-      nodal_time = time_type_to_real(set_date(nodal_ref_date(1), nodal_ref_date(2), nodal_ref_date(3)))
+      nodal_time = set_date(nodal_ref_date(1), nodal_ref_date(2), nodal_ref_date(3))
       call astro_longitudes_init(nodal_time, nodal_shpn)
     elseif (OBC%add_eq_phase) then
       ! Astronomical longitudes were already calculated for use in equilibrium phases,
@@ -3774,7 +3774,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
 
   if (.not. associated(OBC)) return
 
-  if (OBC%add_tide_constituents) time_delta = time_type_to_real(Time) - OBC%time_ref
+  if (OBC%add_tide_constituents) time_delta = time_type_to_real(Time - OBC%time_ref)
 
   do n = 1, OBC%number_of_segments
     segment => OBC%segment(n)
