@@ -656,6 +656,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
            optional, intent(out)   :: dz_Int_1d !< The extent of a finite-volume space surrounding an interface,
                                                !! as used in calculating kappa and TKE [Z ~> m].
 
+  ! Local variables
   real, dimension(nzc) :: &
     u, &        ! The zonal velocity after a timestep of mixing [L T-1 ~> m s-1].
     v, &        ! The meridional velocity after a timestep of mixing [L T-1 ~> m s-1].
@@ -1231,7 +1232,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   real, dimension(nz+1), optional, &
                          intent(out)   :: local_src !< The sum of all local sources for kappa,
                                               !! [T-1 ~> s-1].
-!   This subroutine calculates new, consistent estimates of TKE and kappa.
+  ! This subroutine calculates new, consistent estimates of TKE and kappa.
 
   ! Local variables
   real, dimension(nz) :: &
@@ -1756,7 +1757,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
 
 end subroutine find_kappa_tke
 
-!> This subroutineinitializesthe parameters that regulate shear-driven mixing
+!> This subroutine initializes the parameters that regulate shear-driven mixing
 function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time !< The current model time.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
@@ -1943,25 +1944,30 @@ end function kappa_shear_init
 !! parameterization will be used without needing to duplicate the log entry.
 logical function kappa_shear_is_used(param_file)
   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
-! Reads the parameter "USE_JACKSON_PARAM" and returns state.
+
+  ! Local variables
   character(len=40)  :: mdl = "MOM_kappa_shear"  ! This module's name.
+  ! This function reads the parameter "USE_JACKSON_PARAM" and returns its value.
 
   call get_param(param_file, mdl, "USE_JACKSON_PARAM", kappa_shear_is_used, &
                  default=.false., do_not_log=.true.)
 end function kappa_shear_is_used
 
-!> This function indicates to other modules whether the Jackson et al shear mixing
-!! parameterization will be used without needing to duplicate the log entry.
+!> This function indicates to other modules whether the Jackson et al shear mixing parameterization
+!! will be used at the vertices without needing to duplicate the log entry.  It returns false if
+!! the Jackson et al scheme is not used or if it is used via calculations at the tracer points.
 logical function kappa_shear_at_vertex(param_file)
   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
-! Reads the parameter "USE_JACKSON_PARAM" and returns state.
-  character(len=40)  :: mdl = "MOM_kappa_shear"  ! This module's name.
 
+  ! Local variables
+  character(len=40)  :: mdl = "MOM_kappa_shear"  ! This module's name.
   logical :: do_kappa_shear
+  ! This function returns true only if the parameters "USE_JACKSON_PARAM" and "VERTEX_SHEAR" are both true.
+
+  kappa_shear_at_vertex = .false.
 
   call get_param(param_file, mdl, "USE_JACKSON_PARAM", do_kappa_shear, &
                  default=.false., do_not_log=.true.)
-  kappa_shear_at_vertex = .false.
   if (do_Kappa_Shear) &
     call get_param(param_file, mdl, "VERTEX_SHEAR", kappa_shear_at_vertex, &
                  "If true, do the calculations of the shear-driven mixing "//&
