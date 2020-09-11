@@ -709,8 +709,8 @@ subroutine postALE_tracer_diagnostics(Reg, G, GV, diag, dt)
 end subroutine postALE_tracer_diagnostics
 
 !> Post tracer diganostics when that should only be posted when MOM's state
-!! is self-consistent (also referred to as 'synchronized') subroutine
-post_tracer_diagnostics_at_sync(Reg, h, diag_prev, diag, G, GV, dt)
+!! is self-consistent (also referred to as 'synchronized')
+subroutine post_tracer_diagnostics_at_sync(Reg, h, diag_prev, diag, G, GV, dt)
   type(ocean_grid_type),      intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
   type(tracer_registry_type), pointer    :: Reg  !< pointer to the tracer registry
