@@ -2,13 +2,20 @@ SHELL = bash
 .SUFFIXES:
 
 # FMS build configuration
-# TODO: Include FC?
-FCFLAGS_FMS ?=
+PATH_ENV ?=
+FCFLAGS_ENV ?=
 
 # Only set FCFLAGS if an argument is provided.
-FCFLAGS_ENV =
-ifneq ($(FCFLAGS_FMS),)
-  FCFLAGS_ENV := FCFLAGS="$(FCFLAGS_FMS)"
+FMS_FCFLAGS =
+ifneq ($(FCFLAGS_ENV),)
+  FMS_FCFLAGS := FCFLAGS="$(FCFLAGS_ENV)"
+endif
+
+
+# Ditto for path
+FMS_PATH =
+ifneq ($(PATH_ENV),)
+  FMS_PATH := PATH="$(PATH_ENV)"
 endif
 
 
@@ -64,24 +71,25 @@ lib/libFMS.a: fms/build/libFMS.a fms/build/Makefile
 	cp fms/build/libFMS.a lib/libFMS.a
 	cp fms/build/*.mod include
 
+
 fms/build/libFMS.a: fms/build/Makefile
 	make -C fms/build libFMS.a
 
-# TODO: Include FC, CC, CFLAGS?
-fms/build/Makefile: FC_ENV=$(FCFLAGS_ENV)
 
-fms/build/Makefile: fms/src/configure bin/mkmf bin/list_paths
+# TODO: Include FC, CC, CFLAGS?
+fms/build/Makefile: FMS_ENV=$(FMS_PATH) $(FMS_FCFLAGS)
+
+fms/build/Makefile: Makefile.fms.in fms/src/configure bin/mkmf bin/list_paths
 	mkdir -p fms/build
-	cd $(@D) && $(FC_ENV) ../src/configure --srcdir=../src
+	cp Makefile.fms.in fms/src/Makefile.in
+	cd $(@D) && $(FMS_ENV) ../src/configure --srcdir=../src
 
 
 # TODO: Track m4 macros?
-fms/src/configure: fms/src configure.fms.ac Makefile.fms.in $(FMS_SOURCE)
-	cp configure.fms.ac $</configure.ac
-	cp Makefile.fms.in $</Makefile.in
-	cp -r ../m4 $(@D)
+fms/src/configure: configure.fms.ac $(FMS_SOURCE) | fms/src
+	cp configure.fms.ac fms/src/configure.ac
+	cp -r m4 $(@D)
 	cd $(@D) && autoreconf -i
-
 
 fms/src:
 	git clone $(FMS_URL) $@
@@ -92,5 +100,7 @@ fms/src:
 clean:
 	rm -rf fms/build lib include bin
 
+
+.PHONY: distclean
 distclean: clean
 	rm -rf fms mkmf

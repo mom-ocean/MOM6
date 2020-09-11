@@ -30,7 +30,6 @@ AC_SUBST(LD, $MPIFC)
 
 
 # Module tests
-# XXX: This is a little redundant after AX_MPI, but it is Fortran-specific
 AX_FC_CHECK_MODULE([mpi])
 AC_DEFINE([use_libMPI])
 

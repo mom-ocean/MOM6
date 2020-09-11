@@ -31,7 +31,7 @@ FCFLAGS_COVERAGE ?=
 
 #---
 # Dependencies
-DEPS = ../ac/deps
+DEPS = deps
 
 # mkmf, list_paths (GFDL build toolchain)
 LIST_PATHS := $(DEPS)/bin/list_paths
@@ -137,60 +137,43 @@ BUILD_TARGETS = MOM6 Makefile path_names
 # Conditionally build symmetric with coverage support
 COVERAGE=$(if $(REPORT_COVERAGE),"$(FCFLAGS_COVERAGE)",)
 
-# Explicit FMS link to target build
+# .testing dependencies
 # TODO: We should probably build TARGET with the FMS that it was configured
 #   to use.  But for now we use the same FMS over all builds.
-FCFLAGS_TARGET_FMS = -I../../$(DEPS)/include
-LDFLAGS_TARGET_FMS = -L../../$(DEPS)/lib
-PATH_TARGET = PATH="${PATH}:../../$(DEPS)/bin"
+FCFLAGS_FMS = -I../../$(DEPS)/include
+LDFLAGS_FMS = -L../../$(DEPS)/lib
+PATH_FMS = PATH="${PATH}:../../$(DEPS)/bin"
 
 
 # Define the build targets in terms of the traditional DEBUG/REPRO/etc labels
-FCFLAGS_SYMMETRIC =
-ifneq ($(FCFLAGS_DEBUG)$(FCFLAGS_INIT)$(COVERAGE),)
-  FCFLAGS_SYMMETRIC := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(COVERAGE)"
-endif
+SYMMETRIC_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(COVERAGE) $(FCFLAGS_FMS)"
+ASYMMETRIC_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_FMS)"
+REPRO_FCFLAGS := FCFLAGS="$(FCFLAGS_REPRO) $(FCFLAGS_FMS)"
+OPENMP_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_FMS)"
+TARGET_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_FMS)"
 
-FCFLAGS_TARGET =
-FCFLAGS_ASYMMETRIC =
-FCFLAGS_OPENMP =
-ifneq ($(FCFLAGS_DEBUG)$(FCFLAGS_INIT),)
-  FCFLAGS_TARGET := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_TARGET_FMS)"
-  FCFLAGS_ASYMMETRIC := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT)"
-  FCFLAGS_OPENMP := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT)"
-else
-  FCFLAGS_TARGET := FCFLAGS="$(FCFLAGS_TARGET_FMS)"
-endif
-
-FCFLAGS_REPRO_RUN =
-ifneq ($(FCFLAGS_REPRO),)
-  FCFLAGS_REPRO_RUN := FCFLAGS="$(FCFLAGS_REPRO)"
-endif
-
-LDFLAGS_SYMMETRIC =
-ifneq ($(COVERAGE),)
-  LDFLAGS_SYMMETRIC := LDFLAGS="$(COVERAGE)"
-endif
-LDFLAGS_TARGET := LDFLAGS="$(LDFLAGS_TARGET_FMS)"
+MOM_LDFLAGS := LDFLAGS="$(LDFLAGS_FMS)"
+SYMMETRIC_LDFLAGS := LDFLAGS="$(COVERAGE) $(LDFLAGS_FMS)"
 
 
 # Environment variable configuration
-build/symmetric/Makefile: FC_ENV=$(FCFLAGS_SYMMETRIC) $(LDFLAGS_SYMMETRIC)
-build/asymmetric/Makefile: FC_ENV=$(FCFLAGS_ASYMMETRIC)
-build/repro/Makefile: FC_ENV=$(FCFLAGS_REPRO_RUN)
-build/openmp/Makefile: FC_ENV=$(FCFLAGS_OPENMP)
-build/target/Makefile: FC_ENV=$(FCFLAGS_TARGET) $(LDFLAGS_TARGET) $(PATH_TARGET)
+build/symmetric/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(SYMMETRIC_LDFLAGS)
+build/asymmetric/Makefile: MOM_ENV=$(PATH_FMS) $(ASYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
+build/repro/Makefile: MOM_ENV=$(PATH_FMS) $(REPRO_FCFLAGS) $(MOM_LDFLAGS)
+build/openmp/Makefile: MOM_ENV=$(PATH_FMS) $(OPENMP_FCFLAGS) $(MOM_LDFLAGS)
+build/target/Makefile: MOM_ENV=$(PATH_FMS) $(TARGET_FCFLAGS) $(MOM_LDFLAGS)
 
 
 # Configure script flags
-build/asymmetric/Makefile: AC_FLAGS=
-build/openmp/Makefile: AC_FLAGS=--enable-symmetric --enable-openmp
-build/target/Makefile: AC_FLAGS=--srcdir=../../$(TARGET_CODEBASE) --enable-symmetric
-build/%/Makefile: AC_FLAGS=--enable-symmetric
+build/symmetric/Makefile: MOM_ACFLAGS=--enable-symmetric
+build/asymmetric/Makefile: MOM_ACFLAGS=
+build/repro/Makefile: MOM_ACFLAGS=--enable-symmetric
+build/openmp/Makefile: MOM_ACFLAGS=--enable-symmetric --enable-openmp
+build/target/Makefile: MOM_ACFLAGS=--srcdir=../../$(TARGET_CODEBASE) --enable-symmetric
 
 
 # Fetch regression target source code
-build/target/Makefile: $(TARGET_CODEBASE)
+build/target/Makefile: | $(TARGET_CODEBASE)
 
 
 # Define source code dependencies
@@ -209,23 +192,22 @@ build/%/MOM6: build/%/Makefile
 
 # Use autoconf to construct the Makefile for each target
 .PRECIOUS: $(foreach b,$(BUILDS),build/$(b)/Makefile)
-build/%/Makefile: ../ac/configure $(DEPS)/lib/libFMS.a $(MKMF) $(LIST_PATHS)
+build/%/Makefile: ../ac/configure ../ac/Makefile.in $(DEPS)/lib/libFMS.a $(MKMF) $(LIST_PATHS)
 	mkdir -p $(@D)
 	cd $(@D) \
-	  && $(FC_ENV) ../../../ac/configure $(AC_FLAGS) \
+	  && $(MOM_ENV) ../../../ac/configure $(MOM_ACFLAGS) \
 	  || (cat config.log && false)
 
 
-# TODO: Replace m4 with *.m4 macros
-../ac/configure: ../ac/configure.ac ../ac/Makefile.in ../ac/m4
+../ac/configure: ../ac/configure.ac ../ac/m4
 	autoreconf -i $<
 
 
 # Fetch the regression target codebase
-build/target/Makefile: $(TARGET_CODEBASE)/configure $(DEPS)/lib/libFMS.a $(MKMF) $(LIST_PATHS)
+build/target/Makefile: $(TARGET_CODEBASE)/configure build/fms/libFMS.a $(MKMF) $(LIST_PATHS)
 	mkdir -p $(@D)
 	cd $(@D) \
-	  && $(FC_ENV) ../../$(TARGET_CODEBASE)/configure $(AC_FLAGS) \
+	  && $(MOM_ENV) ../../$(TARGET_CODEBASE)/configure $(MOM_ACFLAGS) \
 	  || (cat config.log && false)
 
 
@@ -242,17 +224,42 @@ $(TARGET_CODEBASE):
 	cp -r ../ac/m4 $(TARGET_CODEBASE)/
 
 
+#---
 # FMS
-$(DEPS)/lib/libFMS.a: $(DEPS)/Makefile $(FMS_SOURCE) $(MKMF) $(LIST_PATHS)
-	FCFLAGS_FMS="$(FCFLAGS_DEBUG)" $(MAKE) -C $(DEPS) lib/libFMS.a
 
+# TODO: *.mod dependencies?
+$(DEPS)/lib/libFMS.a: $(DEPS)/fms/build/libFMS.a
+	$(MAKE) -C $(DEPS) lib/libFMS.a
+
+$(DEPS)/fms/build/libFMS.a: $(DEPS)/fms/build/Makefile
+	$(MAKE) -C $(DEPS) fms/build/libFMS.a
+
+$(DEPS)/fms/build/Makefile: $(DEPS)/fms/src/configure $(DEPS)/Makefile.fms.in $(MKMF) $(LIST_PATHS)
+	PATH_ENV="${PATH}:../../bin" FCFLAGS_ENV="$(FCFLAGS_DEBUG)" $(MAKE) -C $(DEPS) fms/build/Makefile
+
+$(DEPS)/Makefile.fms.in: ../ac/deps/Makefile.fms.in
+	cp $< $(DEPS)
+
+# TODO: m4 dependencies?
+$(DEPS)/fms/src/configure: ../ac/deps/configure.fms.ac $(DEPS)/Makefile $(FMS_SOURCE) | $(DEPS)/fms/src
+	cp ../ac/deps/configure.fms.ac $(DEPS)
+	cp -r ../ac/deps/m4 $(DEPS)
+	$(MAKE) -C $(DEPS) fms/src/configure
+
+$(DEPS)/fms/src: $(DEPS)/Makefile
+	make -C $(DEPS) fms/src
 
 # mkmf
 $(MKMF) $(LIST_PATHS): $(DEPS)/mkmf
-
-$(DEPS)/mkmf: $(DEPS)/Makefile
 	$(MAKE) -C $(DEPS) bin/$(@F)
 
+$(DEPS)/mkmf: $(DEPS)/Makefile
+	$(MAKE) -C $(DEPS) mkmf
+
+# Dependency init
+$(DEPS)/Makefile: ../ac/deps/Makefile
+	mkdir -p $(@D)
+	cp $< $@
 
 #---
 # Python preprocessing
@@ -266,7 +273,7 @@ work/local-env:
 	  && pip3 install numpy \
 	  && pip3 install netCDF4
 
-#----
+#---
 # Testing
 
 .PHONY: test
