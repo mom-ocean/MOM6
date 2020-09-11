@@ -1,4 +1,4 @@
-dnl Test if Cray pointers are supported.
+dnl AX_FC_CRAY_POINTER([ACTION-IF-SUCCESS], [ACTION-IF-FAILURE])
 dnl
 dnl This macro tests if any flags are required to enable Cray pointers.
 dnl
@@ -6,48 +6,49 @@ dnl Cray pointers provided a means for more direct access to memory.  Since
 dnl such references can potentially violate certain requirements of the
 dnl language standard, they are typically considered a vendor extension.
 dnl
-dnl Most compilers provide these in some form.  As far as I can tell, only GNU
-dnl explicitly requires a flag.  Known tests are shown below, but additional
-dnl feedback is required to fill this out.
+dnl Most compilers provide these in some form.  A partial list of supported
+dnl flags are shown below, but additional feedback is required for other
+dnl compilers.
 dnl
-dnl Flags
+dnl The known flags are:
 dnl     GCC               -fcray-pointer
 dnl     Intel Fortran     none
-dnl     PGI Fortran       none
+dnl     PGI Fortran       -Mcray=pointer
 dnl     Cray Fortran      none
 dnl
-AC_DEFUN([AX_FC_CRAY_POINTER],
-  [CRAY_POINTER_FCFLAGS=
-  AC_CACHE_CHECK([for $FC option to support Cray pointers],
-    [ac_cv_prog_fc_cray_ptr],
-    [AC_COMPILE_IFELSE(
-      [AC_LANG_PROGRAM([], [
-      integer aptr(2)
-      pointer (iptr, aptr)
-      ])],
-      [ac_cv_prog_fc_cray_ptr='none needed'],
-      [ac_cv_prog_fc_cray_ptr='unsupported'
-      for ac_option in -fcray-pointer; do
-        ac_save_FCFLAGS=$FCFLAGS
-        FCFLAGS="$FCFLAGS $ac_option"
-        AC_LINK_IFELSE(
-          [AC_LANG_PROGRAM([], [
-          integer aptr(2)
-          pointer (iptr, aptr)
-          ])],
-          [ac_cv_prog_fc_cray_ptr=$ac_option]
-        )
-        FCFLAGS=$ac_save_FCFLAGS
-        if test "$ac_cv_prog_fc_cray_ptr" != unsupported; then
-          break
-        fi
-      done])
+AC_DEFUN([AX_FC_CRAY_POINTER], [
+  AC_LANG_ASSERT([Fortran])
+  AC_MSG_CHECKING([for $FC option to support Cray pointers])
+  AC_CACHE_VAL([ac_cv_fc_cray_ptr], [
+    ac_cv_fc_cray_ptr='unknown'
+    ac_save_FCFLAGS=$FCFLAGS
+    for ac_option in none -fcray-pointer -Mcray=pointer; do
+      test "$ac_option" != none && FCFLAGS="$ac_save_FCFLAGS $ac_option"
+      AC_COMPILE_IFELSE(
+        [AC_LANG_PROGRAM([], [
+        integer aptr(2)
+        pointer (iptr, aptr)
+        ])],
+        [ac_cv_fc_cray_ptr=$ac_option],
+      )
+      FCFLAGS=$ac_save_FCFLAGS
+      AS_IF([test "$ac_cv_fc_cray_ptr" != unknown], [break])
+    done
   ])
-  case $ac_cv_prog_fc_cray_ptr in #(
-    "none needed" | unsupported)
-  ;; #(
+  case "$ac_cv_fc_cray_ptr" in
+    none)
+      AC_MSG_RESULT([none needed]) ;;
+    unknown)
+      AC_MSG_RESULT([unsupported]) ;;
     *)
-  CRAY_POINTER_FCFLAGS=$ac_cv_prog_fc_cray_ptr ;;
+      AC_MSG_RESULT([$ac_cv_fc_cray_ptr]) ;;
   esac
-  AC_SUBST(CRAY_POINTER_FCFLAGS)
+  AS_IF([test "$ac_cv_fc_cray_ptr" != unknown], [
+    m4_default([$1], [
+      AS_IF([test "$ac_cv_fc_cray_ptr" != none],
+        [FCFLAGS="$FCFLAGS $ac_cv_fc_cray_ptr"]
+      )
+    ])],
+    [m4_default([$2], [AC_MSG_ERROR(["$FC does not support Cray pointers"])])]
+  )
 ])

@@ -52,11 +52,6 @@ AC_DEFINE([use_netCDF])
 
 # Enable Cray pointers
 AX_FC_CRAY_POINTER
-AS_IF([test "$enable_cray_ptr" != no],
-  [FCFLAGS="$FCFLAGS $CRAY_POINTER_FCFLAGS"],
-  [AC_MSG_ERROR(["$FC cannot support Cray pointers"])]
-)
-
 
 # Force 8-byte reals
 AX_FC_REAL8
