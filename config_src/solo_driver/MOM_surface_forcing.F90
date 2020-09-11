@@ -39,8 +39,6 @@ use MOM_unit_scaling,        only : unit_scale_type
 use MOM_variables,           only : surface
 use MESO_surface_forcing,    only : MESO_buoyancy_forcing
 use MESO_surface_forcing,    only : MESO_surface_forcing_init, MESO_surface_forcing_CS
-use Neverland_surface_forcing, only : Neverland_wind_forcing, Neverland_buoyancy_forcing
-use Neverland_surface_forcing, only : Neverland_surface_forcing_init, Neverland_surface_forcing_CS
 use user_surface_forcing,    only : USER_wind_forcing, USER_buoyancy_forcing
 use user_surface_forcing,    only : USER_surface_forcing_init, user_surface_forcing_CS
 use user_revise_forcing,     only : user_alter_forcing, user_revise_forcing_init
@@ -83,8 +81,8 @@ type, public :: surface_forcing_CS ; private
   real :: Flux_const            !< piston velocity for surface restoring [Z T-1 ~> m s-1]
   real :: Flux_const_T          !< piston velocity for surface temperature restoring [m s-1]
   real :: Flux_const_S          !< piston velocity for surface salinity restoring [Z T-1 ~> m s-1]
-  real :: latent_heat_fusion    !< latent heat of fusion times scaling factors [J T m-2 R-1 Z-1 s-1 ~> J kg-1]
-  real :: latent_heat_vapor     !< latent heat of vaporization [J kg-1]
+  real :: latent_heat_fusion    !< latent heat of fusion times [Q ~> J kg-1]
+  real :: latent_heat_vapor     !< latent heat of vaporization [Q ~> J kg-1]
   real :: tau_x0                !< Constant zonal wind stress used in the WIND_CONFIG="const" forcing
   real :: tau_y0                !< Constant meridional wind stress used in the WIND_CONFIG="const" forcing
 
@@ -95,7 +93,7 @@ type, public :: surface_forcing_CS ; private
 
   real, pointer :: T_Restore(:,:)    => NULL()  !< temperature to damp (restore) the SST to [degC]
   real, pointer :: S_Restore(:,:)    => NULL()  !< salinity to damp (restore) the SSS [ppt]
-  real, pointer :: Dens_Restore(:,:) => NULL()  !< density to damp (restore) surface density [kg m-3]
+  real, pointer :: Dens_Restore(:,:) => NULL()  !< density to damp (restore) surface density [R ~> kg m-3]
 
   integer :: buoy_last_lev_read = -1 !< The last time level read from buoyancy input files
 
@@ -109,6 +107,11 @@ type, public :: surface_forcing_CS ; private
                              !! the answers from the end of 2018.  Otherwise, use a form of the gyre
                              !! wind stresses that are rotationally invariant and more likely to be
                              !! the same between compilers.
+  logical :: fix_ustar_gustless_bug         !< If true correct a bug in the time-averaging of the
+                                            !! gustless wind friction velocity.
+  ! if WIND_CONFIG=='scurves' then use the following to define a piecwise scurve profile
+  real :: scurves_ydata(20) = 90. !< Latitudes of scurve nodes [degreesN]
+  real :: scurves_taux(20) = 0.   !< Zonal wind stress values at scurve nodes [Pa]
 
   real :: T_north   !< target temperatures at north used in buoyancy_forcing_linear
   real :: T_south   !< target temperatures at south used in buoyancy_forcing_linear
@@ -121,7 +124,7 @@ type, public :: surface_forcing_CS ; private
   logical :: dataOverrideIsInitialized = .false. !< If true, data override has been initialized
 
   real :: wind_scale          !< value by which wind-stresses are scaled, ND.
-  real :: constantHeatForcing !< value used for sensible heat flux when buoy_config="const"
+  real :: constantHeatForcing !< value used for sensible heat flux when buoy_config="const" [Q R Z T-1 ~> W m-2]
 
   character(len=8)   :: wind_stagger !< A character indicating how the wind stress components
                               !! are staggered in WIND_FILE.  Valid values are A or C for now.
@@ -202,10 +205,9 @@ type, public :: surface_forcing_CS ; private
   type(BFB_surface_forcing_CS), pointer :: BFB_forcing_CSp => NULL()
   type(dumbbell_surface_forcing_CS), pointer :: dumbbell_forcing_CSp => NULL()
   type(MESO_surface_forcing_CS), pointer :: MESO_forcing_CSp => NULL()
-  type(Neverland_surface_forcing_CS), pointer :: Neverland_forcing_CSp => NULL()
   type(idealized_hurricane_CS), pointer :: idealized_hurricane_CSp => NULL()
   type(SCM_CVmix_tests_CS),      pointer :: SCM_CVmix_tests_CSp => NULL()
-  !!@}
+  !>@}
 
 end type surface_forcing_CS
 
@@ -244,7 +246,7 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
     ! Allocate memory for the mechanical and thermodyanmic forcing fields.
     call allocate_mech_forcing(G, forces, stress=.true., ustar=.true., press=.true.)
 
-    call allocate_forcing_type(G, fluxes, ustar=.true.)
+    call allocate_forcing_type(G, fluxes, ustar=.true., fix_accum_bug=CS%fix_ustar_gustless_bug)
     if (trim(CS%buoy_config) /= "NONE") then
       if ( CS%use_temperature ) then
         call allocate_forcing_type(G, fluxes, water=.true., heat=.true., press=.true.)
@@ -278,8 +280,10 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
       call wind_forcing_const(sfc_state, forces, 0., 0., day_center, G, US, CS)
     elseif (trim(CS%wind_config) == "const") then
       call wind_forcing_const(sfc_state, forces, CS%tau_x0, CS%tau_y0, day_center, G, US, CS)
-    elseif (trim(CS%wind_config) == "Neverland") then
-      call Neverland_wind_forcing(sfc_state, forces, day_center, G, US, CS%Neverland_forcing_CSp)
+    elseif (trim(CS%wind_config) == "Neverworld" .or. trim(CS%wind_config) == "Neverland") then
+      call Neverworld_wind_forcing(sfc_state, forces, day_center, G, US, CS)
+    elseif (trim(CS%wind_config) == "scurves") then
+      call scurve_wind_forcing(sfc_state, forces, day_center, G, US, CS)
     elseif (trim(CS%wind_config) == "ideal_hurr") then
       call idealized_hurricane_wind_forcing(sfc_state, forces, day_center, G, US, CS%idealized_hurricane_CSp)
     elseif (trim(CS%wind_config) == "SCM_ideal_hurr") then
@@ -298,6 +302,12 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
   endif
 
   ! calls to various buoyancy forcing options
+  if (CS%restorebuoy .and. .not.CS%variable_buoyforce) then
+    call MOM_error(FATAL, "With RESTOREBUOY = True, VARIABLE_BUOYFORCE = True should be used. "//&
+                          "Otherwise, this can lead to diverging solutions when a simulation "//&
+                          "is continued using a restart file.")
+  endif
+
   if ((CS%variable_buoyforce .or. CS%first_call_set_forcing) .and. &
       (.not.CS%adiabatic)) then
     if (trim(CS%buoy_config) == "file") then
@@ -307,13 +317,11 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
     elseif (trim(CS%buoy_config) == "zero") then
       call buoyancy_forcing_zero(sfc_state, fluxes, day_center, dt, G, CS)
     elseif (trim(CS%buoy_config) == "const") then
-      call buoyancy_forcing_const(sfc_state, fluxes, day_center, dt, G, CS)
+      call buoyancy_forcing_const(sfc_state, fluxes, day_center, dt, G, US, CS)
     elseif (trim(CS%buoy_config) == "linear") then
       call buoyancy_forcing_linear(sfc_state, fluxes, day_center, dt, G, US, CS)
     elseif (trim(CS%buoy_config) == "MESO") then
       call MESO_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, US, CS%MESO_forcing_CSp)
-    elseif (trim(CS%buoy_config) == "Neverland") then
-      call Neverland_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, US, CS%Neverland_forcing_CSp)
     elseif (trim(CS%buoy_config) == "SCM_CVmix_tests") then
       call SCM_CVmix_tests_buoyancy_forcing(sfc_state, fluxes, day_center, G, US, CS%SCM_CVmix_tests_CSp)
     elseif (trim(CS%buoy_config) == "USER") then
@@ -381,7 +389,6 @@ subroutine wind_forcing_const(sfc_state, forces, tau_x0, tau_y0, day, G, US, CS)
   Pa_conversion = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z
 
   !set steady surface wind stresses, in units of Pa.
-  !### mag_tau = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * sqrt( tau_x0**2 + tau_y0**2)
   mag_tau = Pa_conversion * sqrt( tau_x0**2 + tau_y0**2)
 
   do j=js,je ; do I=is-1,Ieq
@@ -525,6 +532,136 @@ subroutine wind_forcing_gyres(sfc_state, forces, day, G, US, CS)
   call callTree_leave("wind_forcing_gyres")
 end subroutine wind_forcing_gyres
 
+!> Sets the surface wind stresses, forces%taux and forces%tauy for the
+!! Neverworld forcing configuration.
+subroutine Neverworld_wind_forcing(sfc_state, forces, day, G, US, CS)
+  type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
+  type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
+  type(time_type),          intent(in)    :: day    !< Time used for determining the fluxes.
+  type(ocean_grid_type),    intent(inout) :: G      !< Grid structure.
+  type(unit_scale_type),    intent(in)    :: US     !< A dimensional unit scaling type
+  type(surface_forcing_CS), pointer       :: CS     !< pointer to control struct returned by
+                                                    !! a previous surface_forcing_init call
+  ! Local variables
+  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+  real :: PI, I_rho, y
+  real :: tau_max  ! The magnitude of the wind stress [R Z L T-2 ~> Pa]
+  real :: off
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  ! Allocate the forcing arrays, if necessary.
+  call allocate_mech_forcing(G, forces, stress=.true.)
+
+  !  Set the surface wind stresses, in units of Pa.  A positive taux
+  !  accelerates the ocean to the (pseudo-)east.
+
+  !  The i-loop extends to is-1 so that taux can be used later in the
+  ! calculation of ustar - otherwise the lower bound would be Isq.
+  PI = 4.0*atan(1.0)
+  forces%taux(:,:) = 0.0
+  tau_max = 0.2 * US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z
+  off = 0.02
+  do j=js,je ; do I=is-1,Ieq
+    y = (G%geoLatT(i,j)-G%south_lat)/G%len_lat
+
+    if (y <= 0.29) then
+      forces%taux(I,j) = forces%taux(I,j) + tau_max * ( (1/0.29)*y - ( 1/(2*PI) )*sin( (2*PI*y) / 0.29 ) )
+    endif
+    if ((y > 0.29) .and. (y <= (0.8-off))) then
+      forces%taux(I,j) = forces%taux(I,j) + tau_max *(0.35+0.65*cos(PI*(y-0.29)/(0.51-off))  )
+    endif
+    if ((y > (0.8-off)) .and. (y <= (1-off))) then
+      forces%taux(I,j) = forces%taux(I,j) + tau_max *( 1.5*( (y-1+off) - (0.1/PI)*sin(10.0*PI*(y-0.8+off)) ) )
+    endif
+    forces%taux(I,j) = G%mask2dCu(I,j) * forces%taux(I,j)
+  enddo ; enddo
+
+  do J=js-1,Jeq ; do i=is,ie
+    forces%tauy(i,J) = G%mask2dCv(i,J) * 0.0
+  enddo ; enddo
+
+  ! Set the surface friction velocity, in units of m s-1.  ustar is always positive.
+  if (associated(forces%ustar)) then
+    I_rho = US%L_to_Z / CS%Rho0
+    do j=js,je ; do i=is,ie
+      forces%ustar(i,j) = sqrt( (CS%gust_const + &
+            sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
+                      (forces%taux(I-1,j)**2 + forces%taux(I,j)**2))) ) * I_rho )
+    enddo ; enddo
+  endif
+
+end subroutine Neverworld_wind_forcing
+
+!> Sets the zonal wind stresses to a piecewise series of s-curves.
+subroutine scurve_wind_forcing(sfc_state, forces, day, G, US, CS)
+  type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
+  type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
+  type(time_type),          intent(in)    :: day    !< Time used for determining the fluxes.
+  type(ocean_grid_type),    intent(inout) :: G      !< Grid structure.
+  type(unit_scale_type),    intent(in)    :: US     !< A dimensional unit scaling type
+  type(surface_forcing_CS), pointer       :: CS     !< pointer to control struct returned by
+                                                    !! a previous surface_forcing_init call
+  ! Local variables
+  integer :: i, j, kseg
+  real :: lon, lat, I_rho, y, L
+! real :: ydata(7) = (/ -70., -45., -15., 0., 15., 45., 70. /)
+! real :: taudt(7) = (/ 0., 0.2, -0.1, -0.02, -0.1, 0.1, 0. /)
+
+  ! Allocate the forcing arrays, if necessary.
+  call allocate_mech_forcing(G, forces, stress=.true.)
+
+  kseg = 1
+  do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+    lon = G%geoLonCu(I,j)
+    lat = G%geoLatCu(I,j)
+
+    ! Find segment k s.t. ydata(k)<= lat < ydata(k+1)
+    do while (lat>=CS%scurves_ydata(kseg+1) .and. kseg<6)
+      kseg = kseg+1
+    enddo
+    do while (lat<CS%scurves_ydata(kseg) .and. kseg>1)
+      kseg = kseg-1
+    enddo
+
+    y = lat - CS%scurves_ydata(kseg)
+    L = CS%scurves_ydata(kseg+1) - CS%scurves_ydata(kseg)
+    forces%taux(I,j) = CS%scurves_taux(kseg) +  &
+                       ( CS%scurves_taux(kseg+1) - CS%scurves_taux(kseg) ) * scurve(y, L)
+    forces%taux(I,j) = G%mask2dCu(I,j) * forces%taux(I,j)
+  enddo ; enddo
+
+  do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+    forces%tauy(i,J) = G%mask2dCv(i,J) * 0.0
+  enddo ; enddo
+
+  ! Set the surface friction velocity, in units of m s-1.  ustar is always positive.
+  if (associated(forces%ustar)) then
+    I_rho = US%L_to_Z / CS%Rho0
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      forces%ustar(i,j) = sqrt( (CS%gust_const + &
+            sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
+                      (forces%taux(I-1,j)**2 + forces%taux(I,j)**2))) ) * I_rho )
+    enddo ; enddo
+  endif
+
+end subroutine scurve_wind_forcing
+
+!> Returns the value of a cosine-bell function evaluated at x/L
+real function scurve(x,L)
+  real , intent(in) :: x       !< non-dimensional position
+  real , intent(in) :: L       !< non-dimensional width
+  real :: s
+
+  s = x/L
+  scurve = (3. - 2.*s) * (s*s)
+end function scurve
 
 ! Sets the surface wind stresses from input files.
 subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
@@ -775,7 +912,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
 
   real :: kg_m2_s_conversion  ! A combination of unit conversion factors for rescaling
                               ! mass fluxes [R Z s m2 kg-1 T-1 ~> 1].
-  real :: rhoXcp ! reference density times heat capacity [J m-3 degC-1]
+  real :: rhoXcp ! reference density times heat capacity [Q R degC-1 ~> J m-3 degC-1]
 
   integer :: time_lev_daily     ! time levels to read for fields with daily cycle
   integer :: time_lev_monthly   ! time levels to read for fields with monthly cycle
@@ -787,9 +924,9 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
   call callTree_enter("buoyancy_forcing_from_files, MOM_surface_forcing.F90")
 
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je = G%jec
-  kg_m2_s_conversion = US%kg_m3_to_R*US%m_to_Z*US%T_to_s
+  kg_m2_s_conversion = US%kg_m2s_to_RZ_T
 
-  if (CS%use_temperature) rhoXcp = US%R_to_kg_m3*CS%Rho0 * fluxes%C_p
+  if (CS%use_temperature) rhoXcp = CS%Rho0 * fluxes%C_p
 
   ! Read the buoyancy forcing file
   call get_time(day, seconds, days)
@@ -821,11 +958,11 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       case (365)   ; time_lev = time_lev_daily
       case default ; time_lev = 1
     end select
-    call MOM_read_data(CS%longwave_file, CS%LW_var, fluxes%LW(:,:), &
-                   G%Domain, timelevel=time_lev)
+    call MOM_read_data(CS%longwave_file, CS%LW_var, fluxes%lw(:,:), &
+                       G%Domain, timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
     if (CS%archaic_OMIP_file) then
       call MOM_read_data(CS%longwaveup_file, "lwup_sfc", temp(:,:), G%Domain, &
-                         timelevel=time_lev)
+                         timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
       do j=js,je ; do i=is,ie ; fluxes%LW(i,j) = fluxes%LW(i,j) - temp(i,j) ; enddo ; enddo
     endif
     CS%LW_last_lev = time_lev
@@ -837,11 +974,10 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       case default ; time_lev = 1
     end select
     if (CS%archaic_OMIP_file) then
-      call MOM_read_data(CS%evaporation_file, CS%evap_var, temp(:,:), &
-                     G%Domain, timelevel=time_lev)
+      call MOM_read_data(CS%evaporation_file, CS%evap_var, fluxes%evap(:,:), &
+                     G%Domain, timelevel=time_lev, scale=-kg_m2_s_conversion)
       do j=js,je ; do i=is,ie
-        fluxes%latent(i,j)           = -CS%latent_heat_vapor*temp(i,j)
-        fluxes%evap(i,j)             = -kg_m2_s_conversion*temp(i,j)
+        fluxes%latent(i,j)           = CS%latent_heat_vapor*fluxes%evap(i,j)
         fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
       enddo ; enddo
     else
@@ -857,7 +993,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
     end select
     if (.not.CS%archaic_OMIP_file) then
       call MOM_read_data(CS%latentheat_file, CS%latent_var, fluxes%latent(:,:), &
-                     G%Domain, timelevel=time_lev)
+                     G%Domain, timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
       do j=js,je ; do i=is,ie
         fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
       enddo ; enddo
@@ -870,12 +1006,11 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       case default ; time_lev = 1
     end select
     if (CS%archaic_OMIP_file) then
-      call MOM_read_data(CS%sensibleheat_file, CS%sens_var, temp(:,:), &
-                     G%Domain, timelevel=time_lev)
-      do j=js,je ; do i=is,ie ; fluxes%sens(i,j) = -temp(i,j) ; enddo ; enddo
+      call MOM_read_data(CS%sensibleheat_file, CS%sens_var, fluxes%sens(:,:), &
+                     G%Domain, timelevel=time_lev, scale=-US%W_m2_to_QRZ_T)
     else
       call MOM_read_data(CS%sensibleheat_file, CS%sens_var, fluxes%sens(:,:), &
-                     G%Domain, timelevel=time_lev)
+                     G%Domain, timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
     endif
     CS%sens_last_lev = time_lev
 
@@ -884,11 +1019,11 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       case (365)   ; time_lev = time_lev_daily
       case default ; time_lev = 1
     end select
-    call MOM_read_data(CS%shortwave_file, CS%SW_var, fluxes%sw(:,:), &
-             G%Domain, timelevel=time_lev)
+    call MOM_read_data(CS%shortwave_file, CS%SW_var, fluxes%sw(:,:), G%Domain, &
+                       timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
     if (CS%archaic_OMIP_file) then
-      call MOM_read_data(CS%shortwaveup_file, "swup_sfc", temp(:,:), &
-               G%Domain, timelevel=time_lev)
+      call MOM_read_data(CS%shortwaveup_file, "swup_sfc", temp(:,:), G%Domain, &
+                         timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
       do j=js,je ; do i=is,ie
         fluxes%sw(i,j) = fluxes%sw(i,j) - temp(i,j)
       enddo ; enddo
@@ -969,7 +1104,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       fluxes%fprec(i,j)   = fluxes%fprec(i,j)   * G%mask2dT(i,j)
       fluxes%lrunoff(i,j) = fluxes%lrunoff(i,j) * G%mask2dT(i,j)
       fluxes%frunoff(i,j) = fluxes%frunoff(i,j) * G%mask2dT(i,j)
-      fluxes%LW(i,j)      = fluxes%LW(i,j)      * G%mask2dT(i,j)
+      fluxes%lw(i,j)      = fluxes%lw(i,j)      * G%mask2dT(i,j)
       fluxes%sens(i,j)    = fluxes%sens(i,j)    * G%mask2dT(i,j)
       fluxes%sw(i,j)      = fluxes%sw(i,j)      * G%mask2dT(i,j)
       fluxes%latent(i,j)  = fluxes%latent(i,j)  * G%mask2dT(i,j)
@@ -1001,7 +1136,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
     else
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
-          fluxes%buoy(i,j) = US%kg_m3_to_R * (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
+          fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
                              (CS%G_Earth * CS%Flux_const / CS%Rho0)
         else
           fluxes%buoy(i,j) = 0.0
@@ -1054,7 +1189,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
                   ! anomalies [ppt].
   real :: kg_m2_s_conversion  ! A combination of unit conversion factors for rescaling
                               ! mass fluxes [R Z s m2 kg-1 T-1 ~> 1].
-  real :: rhoXcp ! The mean density times the heat capacity [J m-3 degC-1].
+  real :: rhoXcp ! The mean density times the heat capacity [Q R degC-1 ~> J m-3 degC-1].
 
   integer :: time_lev_daily     ! The time levels to read for fields with
   integer :: time_lev_monthly   ! daily and montly cycles.
@@ -1068,7 +1203,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
 
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  kg_m2_s_conversion = US%kg_m3_to_R*US%m_to_Z*US%T_to_s
+  kg_m2_s_conversion = US%kg_m2s_to_RZ_T
 
   if (CS%use_temperature) rhoXcp = CS%Rho0 * fluxes%C_p
 
@@ -1082,19 +1217,22 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
   js_in = G%jsc - G%jsd + 1
   je_in = G%jec - G%jsd + 1
 
-  call data_override('OCN', 'lw', fluxes%LW(:,:), day, &
-       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+  call data_override('OCN', 'lw', fluxes%lw(:,:), day, &
+       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in) ! scale=US%W_m2_to_QRZ_T
+  if (US%QRZ_T_to_W_m2 /= 1.0) then ; do j=js,je ; do i=is,ie
+    fluxes%lw(i,j) = fluxes%lw(i,j) * US%W_m2_to_QRZ_T
+  enddo ; enddo ; endif
   call data_override('OCN', 'evap', fluxes%evap(:,:), day, &
        is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
 
   ! note the sign convention
   do j=js,je ; do i=is,ie
-    ! This is dangerous because it is not clear whether the data files have been read!
-    fluxes%evap(i,j) = -fluxes%evap(i,j)  ! Normal convention is positive into the ocean
-                                          ! but evap is normally a positive quantity in the files
+    ! The normal convention is that fluxes%evap positive into the ocean
+    ! but evap is normally a positive quantity in the files
+    ! This conversion is dangerous because it is not clear whether the data files have been read!
+    fluxes%evap(i,j) = -kg_m2_s_conversion*fluxes%evap(i,j)
     fluxes%latent(i,j)           = CS%latent_heat_vapor*fluxes%evap(i,j)
     fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
-    fluxes%evap(i,j) = kg_m2_s_conversion*fluxes%evap(i,j)
   enddo ; enddo
 
   call data_override('OCN', 'sens', fluxes%sens(:,:), day, &
@@ -1102,12 +1240,15 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
 
   ! note the sign convention
   do j=js,je ; do i=is,ie
-     fluxes%sens(i,j) = -fluxes%sens(i,j)  ! Normal convention is positive into the ocean
+     fluxes%sens(i,j) = -US%W_m2_to_QRZ_T * fluxes%sens(i,j)  ! Normal convention is positive into the ocean
                                            ! but sensible is normally a positive quantity in the files
   enddo ; enddo
 
   call data_override('OCN', 'sw', fluxes%sw(:,:), day, &
-       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in) ! scale=US%W_m2_to_QRZ_T
+  if (US%QRZ_T_to_W_m2 /= 1.0) then ; do j=js,je ; do i=is,ie
+    fluxes%sw(i,j) = fluxes%sw(i,j) * US%W_m2_to_QRZ_T
+  enddo ; enddo ; endif
 
   call data_override('OCN', 'snow', fluxes%fprec(:,:), day, &
        is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in) ! scale=kg_m2_s_conversion
@@ -1150,13 +1291,13 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
               (0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j)))
         else
           fluxes%heat_added(i,j) = 0.0
-          fluxes%vprec(i,j)        = 0.0
+          fluxes%vprec(i,j)      = 0.0
         endif
       enddo ; enddo
     else
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
-          fluxes%buoy(i,j) = US%kg_m3_to_R * (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
+          fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
                              (CS%G_Earth * CS%Flux_const / CS%Rho0)
         else
           fluxes%buoy(i,j) = 0.0
@@ -1183,7 +1324,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
     fluxes%fprec(i,j)   = fluxes%fprec(i,j)   * G%mask2dT(i,j)
     fluxes%lrunoff(i,j) = fluxes%lrunoff(i,j) * G%mask2dT(i,j)
     fluxes%frunoff(i,j) = fluxes%frunoff(i,j) * G%mask2dT(i,j)
-    fluxes%LW(i,j)      = fluxes%LW(i,j)      * G%mask2dT(i,j)
+    fluxes%lw(i,j)      = fluxes%lw(i,j)      * G%mask2dT(i,j)
     fluxes%latent(i,j)  = fluxes%latent(i,j)  * G%mask2dT(i,j)
     fluxes%sens(i,j)    = fluxes%sens(i,j)    * G%mask2dT(i,j)
     fluxes%sw(i,j)      = fluxes%sw(i,j)      * G%mask2dT(i,j)
@@ -1251,7 +1392,7 @@ end subroutine buoyancy_forcing_zero
 
 
 !> Sets up spatially and temporally constant surface heat fluxes.
-subroutine buoyancy_forcing_const(sfc_state, fluxes, day, dt, G, CS)
+subroutine buoyancy_forcing_const(sfc_state, fluxes, day, dt, G, US, CS)
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(forcing),         intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
@@ -1259,6 +1400,7 @@ subroutine buoyancy_forcing_const(sfc_state, fluxes, day, dt, G, CS)
   real,                  intent(in)    :: dt   !< The amount of time over which
                                                !! the fluxes apply [s]
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
+  type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   type(surface_forcing_CS), pointer    :: CS   !< pointer to control struct returned by
                                                !! a previous surface_forcing_init call
   ! Local variables
@@ -1341,14 +1483,14 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, US, CS)
         T_restore = CS%T_south + (CS%T_north-CS%T_south)*y
         S_restore = CS%S_south + (CS%S_north-CS%S_south)*y
         if (G%mask2dT(i,j) > 0) then
-          fluxes%heat_added(i,j) = G%mask2dT(i,j) * (US%R_to_kg_m3*US%Z_to_m*US%s_to_T) * &
+          fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
               ((T_Restore - sfc_state%SST(i,j)) * ((CS%Rho0 * fluxes%C_p) * CS%Flux_const))
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
               (S_Restore - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + S_Restore))
         else
           fluxes%heat_added(i,j) = 0.0
-          fluxes%vprec(i,j)        = 0.0
+          fluxes%vprec(i,j)      = 0.0
         endif
       enddo ; enddo
     else
@@ -1356,7 +1498,7 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, US, CS)
                      "RESTOREBUOY to linear not written yet.")
      !do j=js,je ; do i=is,ie
      !  if (G%mask2dT(i,j) > 0) then
-     !    fluxes%buoy(i,j) = US%kg_m3_to_R * (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
+     !    fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
      !                       (CS%G_Earth * CS%Flux_const / CS%Rho0)
      !  else
      !    fluxes%buoy(i,j) = 0.0
@@ -1453,7 +1595,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   call get_param(param_file, mdl, "BUOY_CONFIG", CS%buoy_config, &
                  "The character string that indicates how buoyancy forcing "//&
                  "is specified. Valid options include (file), (zero), "//&
-                 "(linear), (USER), (BFB) and (NONE).", fail_if_missing=.true.)
+                 "(linear), (USER), (BFB) and (NONE).", default="zero")
   if (trim(CS%buoy_config) == "file") then
     call get_param(param_file, mdl, "ARCHAIC_OMIP_FORCING_FILE", CS%archaic_OMIP_file, &
                  "If true, use the forcing variable decomposition from "//&
@@ -1590,12 +1732,12 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
     call get_param(param_file, mdl, "SENSIBLE_HEAT_FLUX", CS%constantHeatForcing, &
                  "A constant heat forcing (positive into ocean) applied "//&
                  "through the sensible heat flux field. ", &
-                 units='W/m2', fail_if_missing=.true.)
+                 units='W/m2', scale=US%W_m2_to_QRZ_T, fail_if_missing=.true.)
   endif
   call get_param(param_file, mdl, "WIND_CONFIG", CS%wind_config, &
                  "The character string that indicates how wind forcing "//&
                  "is specified. Valid options include (file), (2gyre), "//&
-                 "(1gyre), (gyres), (zero), and (USER).", fail_if_missing=.true.)
+                 "(1gyre), (gyres), (zero), and (USER).", default="zero")
   if (trim(CS%wind_config) == "file") then
     call get_param(param_file, mdl, "WIND_FILE", CS%wind_file, &
                  "The file in which the wind stresses are found in "//&
@@ -1606,10 +1748,10 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
     call get_param(param_file, mdl, "WINDSTRESS_Y_VAR", CS%stress_y_var, &
                  "The name of the y-wind stress variable in WIND_FILE.", &
                  default="STRESS_Y")
-    call get_param(param_file, mdl, "WINDSTRESS_STAGGER",CS%wind_stagger, &
+    call get_param(param_file, mdl, "WIND_STAGGER",CS%wind_stagger, &
                  "A character indicating how the wind stress components "//&
                  "are staggered in WIND_FILE.  This may be A or C for now.", &
-                 default="A")
+                 default="C")
     call get_param(param_file, mdl, "WINDSTRESS_SCALE", CS%wind_scale, &
                  "A value by which the wind stresses in WIND_FILE are rescaled.", &
                  default=1.0, units="nondim")
@@ -1642,7 +1784,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
                  units="nondim", default=0.0)
     call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
     call get_param(param_file, mdl, "WIND_GYRES_2018_ANSWERS", CS%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the answers "//&
                  "from the end of 2018.  Otherwise, use expressions for the gyre friction velocities "//&
@@ -1651,6 +1793,16 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   else
     CS%answers_2018 = .false.
   endif
+  if (trim(CS%wind_config) == "scurves") then
+    call get_param(param_file, mdl, "WIND_SCURVES_LATS", CS%scurves_ydata, &
+                 "A list of latitudes defining a piecewise scurve profile "//&
+                 "for zonal wind stress.", &
+                 units="degrees N", fail_if_missing=.true.)
+    call get_param(param_file, mdl, "WIND_SCURVES_TAUX", CS%scurves_taux, &
+                 "A list of zonal wind stress values at latitudes "//&
+                 "WIND_SCURVES_LATS defining a piecewise scurve profile.", &
+                 units="Pa", fail_if_missing=.true.)
+  endif
   if ((trim(CS%wind_config) == "2gyre") .or. &
       (trim(CS%wind_config) == "1gyre") .or. &
       (trim(CS%wind_config) == "gyres") .or. &
@@ -1658,6 +1810,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
     CS%south_lat = G%south_lat
     CS%len_lat = G%len_lat
   endif
+
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
                  "calculate accelerations and the mass for conservation "//&
@@ -1670,38 +1823,31 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
                  "given by FLUXCONST.", default= .false.)
   call get_param(param_file, mdl, "LATENT_HEAT_FUSION", CS%latent_heat_fusion, &
                  "The latent heat of fusion.", default=hlf, &
-                 units="J/kg", scale=US%R_to_kg_m3*US%Z_to_m*US%s_to_T)
+                 units="J/kg", scale=US%J_kg_to_Q)
   call get_param(param_file, mdl, "LATENT_HEAT_VAPORIZATION", CS%latent_heat_vapor, &
-                 "The latent heat of fusion.", units="J/kg", default=hlv)
+                 "The latent heat of fusion.", default=hlv, units="J/kg", scale=US%J_kg_to_Q)
   if (CS%restorebuoy) then
+    ! These three variables use non-standard time units, but are rescaled as they are read.
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
-                 "The constant that relates the restoring surface fluxes "//&
-                 "to the relative surface anomalies (akin to a piston "//&
-                 "velocity).  Note the non-MKS units.", &
-                 units="m day-1", scale=US%m_to_Z*US%T_to_s, &
-                 fail_if_missing=.true., unscaled=flux_const_default)
+                 "The constant that relates the restoring surface fluxes to the relative "//&
+                 "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
+                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s/86400.0, &
+                 unscaled=flux_const_default)
 
     if (CS%use_temperature) then
       call get_param(param_file, mdl, "FLUXCONST_T", CS%Flux_const_T, &
            "The constant that relates the restoring surface temperature "//&
            "flux to the relative surface anomaly (akin to a piston "//&
            "velocity).  Note the non-MKS units.", &
-           units="m day-1", scale=1.0, & ! scale=US%m_to_Z*US%T_to_s,
+           units="m day-1", scale=US%m_to_Z*US%T_to_s/86400.0, &
            default=flux_const_default)
       call get_param(param_file, mdl, "FLUXCONST_S", CS%Flux_const_S, &
            "The constant that relates the restoring surface salinity "//&
            "flux to the relative surface anomaly (akin to a piston "//&
            "velocity).  Note the non-MKS units.", &
-           units="m day-1", scale=US%m_to_Z*US%T_to_s, &
+           units="m day-1", scale=US%m_to_Z*US%T_to_s/86400.0, &
            default=flux_const_default)
     endif
-
-    !### Convert flux constants from m day-1 to m s-1.  Folding these into the scaling
-    ! factors above could change a division into a multiply by a reciprocal, which could
-    ! change answers at the level of roundoff.
-    CS%Flux_const = CS%Flux_const / 86400.0
-    CS%Flux_const_T = CS%Flux_const_T / 86400.0
-    CS%Flux_const_S = CS%Flux_const_S / 86400.0
 
     if (trim(CS%buoy_config) == "linear") then
       call get_param(param_file, mdl, "SST_NORTH", CS%T_north, &
@@ -1728,7 +1874,10 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
 
   call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
                  "The background gustiness in the winds.", &
-                 units="Pa", default=0.02, scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z)
+                 units="Pa", default=0.0, scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z)
+  call get_param(param_file, mdl, "FIX_USTAR_GUSTLESS_BUG", CS%fix_ustar_gustless_bug, &
+                 "If true correct a bug in the time-averaging of the gustless wind friction velocity", &
+                 default=.true.)
   call get_param(param_file, mdl, "READ_GUST_2D", CS%read_gust_2d, &
                  "If true, use a 2-dimensional gustiness supplied from "//&
                  "an input file", default=.false.)
@@ -1752,8 +1901,6 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
     call dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS%dumbbell_forcing_CSp)
   elseif (trim(CS%wind_config) == "MESO" .or. trim(CS%buoy_config) == "MESO" ) then
     call MESO_surface_forcing_init(Time, G, US, param_file, diag, CS%MESO_forcing_CSp)
-  elseif (trim(CS%wind_config) == "Neverland") then
-    call Neverland_surface_forcing_init(Time, G, US, param_file, diag, CS%Neverland_forcing_CSp)
   elseif (trim(CS%wind_config) == "ideal_hurr" .or.&
           trim(CS%wind_config) == "SCM_ideal_hurr") then
     call idealized_hurricane_wind_init(Time, G, US, param_file, CS%idealized_hurricane_CSp)
@@ -1767,7 +1914,6 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   elseif (trim(CS%wind_config) == "SCM_CVmix_tests" .or. &
           trim(CS%buoy_config) == "SCM_CVmix_tests") then
     call SCM_CVmix_tests_surface_forcing_init(Time, G, param_file, CS%SCM_CVmix_tests_CSp)
-    CS%SCM_CVmix_tests_CSp%Rho0 = US%R_to_kg_m3*CS%Rho0 !copy reference density for pass
   endif
 
   call register_forcing_type_diags(Time, diag, US, CS%use_temperature, CS%handles)

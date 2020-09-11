@@ -66,6 +66,7 @@ program MOM_main
   use ensemble_manager_mod, only : ensemble_pelist_setup
   use mpp_mod, only : set_current_pelist => mpp_set_current_pelist
   use time_interp_external_mod, only : time_interp_external_init
+  use fms_affinity_mod,     only : fms_affinity_init, fms_affinity_set,fms_affinity_get
 
   use MOM_ice_shelf, only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
   use MOM_ice_shelf, only : shelf_calc_flux, add_shelf_forces, ice_shelf_save_restart
@@ -133,12 +134,15 @@ program MOM_main
                                   ! if Time_step_ocean is not an exact
                                   ! representation of dt_forcing.
   real :: dt_forcing              ! The coupling time step [s].
-  real :: dt                      ! The baroclinic dynamics time step [s].
+  real :: dt                      ! The nominal baroclinic dynamics time step [s].
   real :: dt_off                  ! Offline time step [s].
   integer :: ntstep               ! The number of baroclinic dynamics time steps
                                   ! within dt_forcing.
-  real :: dt_therm
-  real :: dt_dyn, dtdia, t_elapsed_seg
+  real :: dt_therm                ! The thermodynamic timestep [s]
+  real :: dt_dyn                  ! The actual dynamic timestep used [s].  The value of dt_dyn is
+                                  ! chosen so that dt_forcing is an integer multiple of dt_dyn.
+  real :: dtdia                   ! The diabatic timestep [s]
+  real :: t_elapsed_seg           ! The elapsed time in this run segment [s]
   integer :: n, n_max, nts, n_last_thermo
   logical :: diabatic_first, single_step_call
   type(time_type) :: Time2, time_chg
@@ -204,11 +208,10 @@ program MOM_main
   character(len=40)  :: mod_name = "MOM_main (MOM_driver)" ! This module's name.
 
   integer :: ocean_nthreads = 1
-  integer :: ncores_per_node = 36
   logical :: use_hyper_thread = .false.
-  integer :: omp_get_num_threads,omp_get_thread_num,get_cpu_affinity,adder,base_cpu
+  integer :: omp_get_num_threads,omp_get_thread_num
   namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds,&
-                            ocean_nthreads, ncores_per_node, use_hyper_thread
+                            ocean_nthreads, use_hyper_thread
 
   !=====================================================================
 
@@ -249,20 +252,11 @@ program MOM_main
     endif
   endif
 
+!$  call fms_affinity_init
+!$  call fms_affinity_set('OCEAN', use_hyper_thread, ocean_nthreads)
 !$  call omp_set_num_threads(ocean_nthreads)
-!$  base_cpu = get_cpu_affinity()
-!$OMP PARALLEL private(adder)
-!$  if (use_hyper_thread) then
-!$     if (mod(omp_get_thread_num(),2) == 0) then
-!$        adder = omp_get_thread_num()/2
-!$     else
-!$        adder = ncores_per_node + omp_get_thread_num()/2
-!$     endif
-!$  else
-!$     adder = omp_get_thread_num()
-!$  endif
-!$  call set_cpu_affinity (base_cpu + adder)
-!$  write(6,*) " ocean ", base_cpu, get_cpu_affinity(), adder, omp_get_thread_num(), omp_get_num_threads()
+!$OMP PARALLEL
+!$  write(6,*) "ocean_solo OMPthreading ", fms_affinity_get(), omp_get_thread_num(), omp_get_num_threads()
 !$  call flush(6)
 !$OMP END PARALLEL
 
@@ -315,7 +309,7 @@ program MOM_main
                         tracer_flow_CSp=tracer_flow_CSp)
   endif
 
-  call get_MOM_state_elements(MOM_CSp, G=grid, GV=GV, US=US, C_p=fluxes%C_p)
+  call get_MOM_state_elements(MOM_CSp, G=grid, GV=GV, US=US, C_p_scaled=fluxes%C_p)
   Master_Time = Time
 
   call callTree_waypoint("done initialize_MOM")
@@ -453,7 +447,7 @@ program MOM_main
     call close_file(unit)
   endif
 
-  if (cpu_steps > 0) call write_cputime(Time, 0, nmax, write_CPU_CSp)
+  if (cpu_steps > 0) call write_cputime(Time, 0, write_CPU_CSp)
 
   if (((.not.BTEST(Restart_control,1)) .and. (.not.BTEST(Restart_control,0))) &
       .or. (Restart_control < 0)) permit_incr_restart = .false.
@@ -491,7 +485,7 @@ program MOM_main
       call add_shelf_forces(grid, US, Ice_shelf_CSp, forces)
     endif
     fluxes%fluxes_used = .false.
-    fluxes%dt_buoy_accum = dt_forcing
+    fluxes%dt_buoy_accum = US%s_to_T*dt_forcing
 
     if (use_waves) then
       call Update_Surface_Waves(grid, GV, US, time, time_step_ocean, waves_csp)
@@ -570,19 +564,15 @@ program MOM_main
     Time = Master_Time
 
     if (cpu_steps > 0) then ; if (MOD(ns, cpu_steps) == 0) then
-      call write_cputime(Time, ns+ntstep-1, nmax, write_CPU_CSp)
+      call write_cputime(Time, ns+ntstep-1, write_CPU_CSp, nmax)
     endif ; endif
 
-    call enable_averaging(dt_forcing, Time, diag)
-    call mech_forcing_diags(forces, dt_forcing, grid, diag, surface_forcing_CSp%handles)
-    call disable_averaging(diag)
+    call mech_forcing_diags(forces, dt_forcing, grid, Time, diag, surface_forcing_CSp%handles)
 
     if (.not. offline_tracer_mode) then
       if (fluxes%fluxes_used) then
-        call enable_averaging(fluxes%dt_buoy_accum, Time, diag)
-        call forcing_diagnostics(fluxes, sfc_state, fluxes%dt_buoy_accum, grid, US, &
+        call forcing_diagnostics(fluxes, sfc_state, grid, US, Time, &
                                  diag, surface_forcing_CSp%handles)
-        call disable_averaging(diag)
       else
         call MOM_error(FATAL, "The solo MOM_driver is not yet set up to handle "//&
                "thermodynamic time steps that are longer than the coupling timestep.")
@@ -662,6 +652,7 @@ program MOM_main
 
   call callTree_waypoint("End MOM_main")
   call diag_mediator_end(Time, diag, end_diag_manager=.true.)
+  if (cpu_steps > 0) call write_cputime(Time, ns-1, write_CPU_CSp, call_end=.true.)
   call cpu_clock_end(termClock)
 
   call io_infra_end ; call MOM_infra_end

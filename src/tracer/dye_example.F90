@@ -189,7 +189,7 @@ subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_C
   type(time_type), target,            intent(in) :: day  !< Time of the start of the run.
   type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h !< Layer thicknesses [H ~> m or kg m-2]
   type(diag_ctrl), target,            intent(in) :: diag !< Structure used to regulate diagnostic output.
   type(ocean_OBC_type),               pointer    :: OBC  !< This open boundary condition type specifies
                                                          !! whether, where, and what open boundary
@@ -326,11 +326,11 @@ end subroutine dye_tracer_column_physics
 !! returning the number of stocks it has calculated.  If the stock_index
 !! is present, only the stock corresponding to that coded index is returned.
 function dye_stock(h, stocks, G, GV, CS, names, units, stock_index)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(:),                 intent(out)   :: stocks !< the mass-weighted integrated amount of
-                                                            !! each tracer, in kg times concentration units [kg conc].
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h  !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(:),                 intent(out)   :: stocks !< the mass-weighted integrated amount of
+                                                            !! each tracer, in kg times concentration units [kg conc].
   type(dye_tracer_CS),                pointer       :: CS   !< The control structure returned by a
                                                             !! previous call to register_dye_tracer.
   character(len=*), dimension(:),     intent(out)   :: names !< the names of the stocks calculated.
@@ -372,9 +372,9 @@ end function dye_stock
 !> This subroutine extracts the surface fields from this tracer package that
 !! are to be shared with the atmosphere in coupled configurations.
 !! This particular tracer package does not report anything back to the coupler.
-subroutine dye_tracer_surface_state(state, h, G, CS)
+subroutine dye_tracer_surface_state(sfc_state, h, G, CS)
   type(ocean_grid_type),  intent(in)    :: G  !< The ocean's grid structure.
-  type(surface),          intent(inout) :: state !< A structure containing fields that
+  type(surface),          intent(inout) :: sfc_state !< A structure containing fields that
                                               !! describe the surface state of the ocean.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                           intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2].
@@ -395,7 +395,7 @@ subroutine dye_tracer_surface_state(state, h, G, CS)
       !   This call loads the surface values into the appropriate array in the
       ! coupler-type structure.
       call coupler_type_set_data(CS%tr(:,:,1,m), CS%ind_tr(m), ind_csurf, &
-                   state%tr_fields, idim=(/isd, is, ie, ied/), &
+                   sfc_state%tr_fields, idim=(/isd, is, ie, ied/), &
                    jdim=(/jsd, js, je, jed/) )
     enddo
   endif

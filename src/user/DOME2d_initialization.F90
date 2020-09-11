@@ -257,9 +257,9 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
                  default=0.3, do_not_log=.true.)
   call get_param(param_file, mdl, "DOME2D_SHELF_DEPTH", dome2d_depth_bay, &
                  default=0.2, do_not_log=.true.)
-  call get_param(param_file, mdl,"S_REF",S_ref,'Reference salinity',units='1e-3', &
-                fail_if_missing=.not.just_read, do_not_log=just_read)
-  call get_param(param_file, mdl,"T_REF",T_ref,'Refernce temperature',units='C', &
+  call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', &
+                 default=35.0, units='1e-3', do_not_log=just_read)
+  call get_param(param_file, mdl,"T_REF",T_ref,'Reference temperature', units='degC', &
                 fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl,"S_RANGE",S_range,'Initial salinity range', &
                 units='1e-3', default=2.0, do_not_log=just_read)
@@ -353,9 +353,10 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
 end subroutine DOME2d_initialize_temperature_salinity
 
 !> Set up sponges in 2d DOME configuration
-subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
-  type(ocean_grid_type),   intent(in) :: G !< Ocean grid structure
+subroutine DOME2d_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, ACSp)
+  type(ocean_grid_type),   intent(in) :: G  !< Ocean grid structure
   type(verticalGrid_type), intent(in) :: GV !< Vertical grid structure
+  type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
   type(thermo_var_ptrs),   intent(in) :: tv !< Thermodynamics structure
   type(param_file_type),   intent(in) :: param_file !< Parameter file structure
   logical,                 intent(in) :: use_ALE !< If true, indicates model is in ALE mode
@@ -364,10 +365,9 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
   ! Local variables
   real :: T(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for temp [degC]
   real :: S(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for salt [ppt]
-  real :: RHO(SZI_(G),SZJ_(G),SZK_(G)) ! A temporary array for RHO [kg m-3]
   real :: h(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for thickness [H ~> m or kg m-2].
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for thickness [Z ~> m]
-  real :: Idamp(SZI_(G),SZJ_(G))       ! The inverse damping rate [s-1].
+  real :: Idamp(SZI_(G),SZJ_(G))       ! The inverse damping rate [T-1 ~> s-1].
   real :: S_ref, T_ref                 ! Reference salinity and temerature within surface layer
   real :: S_range, T_range             ! Range of salinities and temperatures over the vertical
   real :: e0(SZK_(G)+1)             ! The resting interface heights [Z ~> m],
@@ -376,7 +376,7 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
                                     ! positive upward [Z ~> m].
   real :: d_eta(SZK_(G))            ! The layer thickness in a column [Z ~> m].
   real :: dome2d_width_bay, dome2d_width_bottom, dome2d_depth_bay
-  real :: dome2d_west_sponge_time_scale, dome2d_east_sponge_time_scale
+  real :: dome2d_west_sponge_time_scale, dome2d_east_sponge_time_scale ! Sponge timescales [T ~> s]
   real :: dome2d_west_sponge_width, dome2d_east_sponge_width
   real :: dummy1, x, z
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
@@ -387,11 +387,11 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
   call get_param(param_file, mdl, "DOME2D_WEST_SPONGE_TIME_SCALE", dome2d_west_sponge_time_scale, &
                  'The time-scale on the west edge of the domain for restoring T/S '//&
                  'in the sponge. If zero, the western sponge is disabled', &
-                 units='s', default=0.)
+                 units='s', default=0., scale=US%s_to_T)
   call get_param(param_file, mdl, "DOME2D_EAST_SPONGE_TIME_SCALE", dome2d_east_sponge_time_scale, &
                  'The time-scale on the east edge of the domain for restoring T/S '//&
                  'in the sponge. If zero, the eastern sponge is disabled', &
-                 units='s', default=0.)
+                 units='s', default=0., scale=US%s_to_T)
   call get_param(param_file, mdl, "DOME2D_WEST_SPONGE_WIDTH", dome2d_west_sponge_width, &
                  'The fraction of the domain in which the western sponge for restoring T/S '//&
                  'is active.', &
@@ -415,10 +415,10 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
                  default=0.3, do_not_log=.true.)
   call get_param(param_file, mdl, "DOME2D_SHELF_DEPTH", dome2d_depth_bay, &
                  default=0.2, do_not_log=.true.)
-  call get_param(param_file, mdl,"S_REF",S_ref)
-  call get_param(param_file, mdl,"T_REF",T_ref)
-  call get_param(param_file, mdl,"S_RANGE",S_range,default=2.0)
-  call get_param(param_file, mdl,"T_RANGE",T_range,default=0.0)
+  call get_param(param_file, mdl, "S_REF", S_ref, default=35.0)
+  call get_param(param_file, mdl, "T_REF", T_ref)
+  call get_param(param_file, mdl, "S_RANGE", S_range, default=2.0)
+  call get_param(param_file, mdl, "T_RANGE", T_range, default=0.0)
 
 
   ! Set the inverse damping rate as a function of position

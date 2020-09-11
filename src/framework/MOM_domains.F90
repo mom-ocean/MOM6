@@ -3,6 +3,7 @@ module MOM_domains
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_array_transform, only : rotate_array
 use MOM_coms, only : PE_here, root_PE, num_PEs, MOM_infra_init, MOM_infra_end
 use MOM_coms, only : broadcast, sum_across_PEs, min_across_PEs, max_across_PEs
 use MOM_cpu_clock, only : cpu_clock_begin, cpu_clock_end
@@ -25,10 +26,12 @@ use mpp_domains_mod, only : mpp_reset_group_update_field
 use mpp_domains_mod, only : mpp_group_update_initialized
 use mpp_domains_mod, only : mpp_start_group_update, mpp_complete_group_update
 use mpp_domains_mod, only : compute_block_extent => mpp_compute_block_extent
-use mpp_parameter_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
-use mpp_parameter_mod, only : To_East => WUPDATE, To_West => EUPDATE, Omit_Corners => EDGEUPDATE
-use mpp_parameter_mod, only : To_North => SUPDATE, To_South => NUPDATE, CENTER
-use fms_io_mod,        only : file_exist, parse_mask_table
+use mpp_domains_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM
+use mpp_domains_mod, only : To_East => WUPDATE, To_West => EUPDATE, Omit_Corners => EDGEUPDATE
+use mpp_domains_mod, only : To_North => SUPDATE, To_South => NUPDATE
+use mpp_domains_mod, only : CENTER, CORNER, NORTH_FACE => NORTH, EAST_FACE => EAST
+use fms_io_mod,      only : file_exist, parse_mask_table
+use fms_affinity_mod, only : fms_affinity_init, fms_affinity_set, fms_affinity_get
 
 implicit none ; private
 
@@ -38,12 +41,14 @@ public :: pass_var, pass_vector, PE_here, root_PE, num_PEs
 public :: pass_var_start, pass_var_complete, fill_symmetric_edges, broadcast
 public :: pass_vector_start, pass_vector_complete
 public :: global_field_sum, sum_across_PEs, min_across_PEs, max_across_PEs
-public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER, CENTER
+public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM
+public :: CORNER, CENTER, NORTH_FACE, EAST_FACE
 public :: To_East, To_West, To_North, To_South, To_All, Omit_Corners
 public :: create_group_pass, do_group_pass, group_pass_type
 public :: start_group_pass, complete_group_pass
 public :: compute_block_extent, get_global_shape
 public :: get_simple_array_i_ind, get_simple_array_j_ind
+public :: domain2D
 
 !> Do a halo update on an array
 interface pass_var
@@ -150,8 +155,8 @@ subroutine pass_var_3d(array, MOM_dom, sideflag, complete, position, halo, &
                                                     !! progress resumes. Omitting complete is the
                                                     !! same as setting complete to .true.
   integer,      optional, intent(in)    :: position !< An optional argument indicating the position.
-                                                    !! This is usally CORNER, but is CENTER by
-                                                    !! default.
+                                                    !! This is CENTER by default and is often CORNER,
+                                                    !! but could also be EAST_FACE or NORTH_FACE.
   integer,      optional, intent(in)    :: halo     !< The size of the halo to update - the full
                                                     !! halo by default.
   integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
@@ -195,8 +200,8 @@ subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position, halo, inner
                                                    !! progress resumes.  Omitting complete is the
                                                    !! same as setting complete to .true.
   integer,     optional, intent(in)    :: position !< An optional argument indicating the position.
-                                                   !!  This is usally CORNER, but is CENTER
-                                                   !! by default.
+                                                   !! This is CENTER by default and is often CORNER,
+                                                   !! but could also be EAST_FACE or NORTH_FACE.
   integer,     optional, intent(in)    :: halo     !< The size of the halo to update - the full halo
                                                    !! by default.
   integer,     optional, intent(in)    :: inner_halo !< The size of an inner halo to avoid updating,
@@ -264,6 +269,24 @@ subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position, halo, inner
       elseif (size(array,2) == jed+1) then
         jsfs = jsc - j_halo ; jefs = jsc+1 ; jsfn = jec+1 ; jefn = min(jec + 1 + j_halo, jed+1)
       else ; call MOM_error(FATAL, "pass_var_2d: wrong j-size for CORNER array.") ; endif
+    elseif (pos == NORTH_FACE) then
+      if (size(array,1) == ied) then
+        isfw = isc - i_halo ; iefw = isc ; isfe = iec ; iefe = iec + i_halo
+      else ; call MOM_error(FATAL, "pass_var_2d: wrong i-size for NORTH_FACE array.") ; endif
+      if (size(array,2) == jed) then
+        jsfs = max(jsc - (j_halo+1), 1) ; jefs = jsc ; jsfn = jec ; jefn = jec + j_halo
+      elseif (size(array,2) == jed+1) then
+        jsfs = jsc - j_halo ; jefs = jsc+1 ; jsfn = jec+1 ; jefn = min(jec + 1 + j_halo, jed+1)
+      else ; call MOM_error(FATAL, "pass_var_2d: wrong j-size for NORTH_FACE array.") ; endif
+    elseif (pos == EAST_FACE) then
+      if (size(array,1) == ied) then
+        isfw = max(isc - (i_halo+1), 1) ; iefw = isc ; isfe = iec ; iefe = iec + i_halo
+      elseif (size(array,1) == ied+1) then
+        isfw = isc - i_halo ; iefw = isc+1 ; isfe = iec+1 ; iefe = min(iec + 1 + i_halo, ied+1)
+      else ; call MOM_error(FATAL, "pass_var_2d: wrong i-size for EAST_FACE array.") ; endif
+      if (size(array,2) == jed) then
+        isfw = isc - i_halo ; iefw = isc ; isfe = iec ; iefe = iec + i_halo
+      else ; call MOM_error(FATAL, "pass_var_2d: wrong j-size for EAST_FACE array.") ; endif
     else
       call MOM_error(FATAL, "pass_var_2d: Unrecognized position")
     endif
@@ -294,8 +317,8 @@ function pass_var_start_2d(array, MOM_dom, sideflag, position, complete, halo, &
       !! TO_NORTH, and TO_SOUTH.  For example, TO_EAST sends the data to the processor to the east,
       !! so the halos on the western side are filled.  TO_ALL is the default if sideflag is omitted.
   integer,      optional, intent(in)    :: position !< An optional argument indicating the position.
-                                                    !! This is usally CORNER, but is CENTER
-                                                    !! by default.
+                                                    !! This is CENTER by default and is often CORNER,
+                                                    !! but could also be EAST_FACE or NORTH_FACE.
   logical,      optional, intent(in)    :: complete !< An optional argument indicating whether the
                                                     !! halo updates should be completed before
                                                     !! progress resumes.  Omitting complete is the
@@ -339,8 +362,8 @@ function pass_var_start_3d(array, MOM_dom, sideflag, position, complete, halo, &
       !! TO_NORTH, and TO_SOUTH.  For example, TO_EAST sends the data to the processor to the east,
       !! so the halos on the western side are filled.  TO_ALL is the default if sideflag is omitted.
   integer,      optional, intent(in)    :: position !< An optional argument indicating the position.
-                                                    !! This is usally CORNER, but is CENTER
-                                                    !! by default.
+                                                    !! This is CENTER by default and is often CORNER,
+                                                    !! but could also be EAST_FACE or NORTH_FACE.
   logical,      optional, intent(in)    :: complete !< An optional argument indicating whether the
                                                     !! halo updates should be completed before
                                                     !! progress resumes.  Omitting complete is the
@@ -387,8 +410,8 @@ subroutine pass_var_complete_2d(id_update, array, MOM_dom, sideflag, position, h
       !! TO_NORTH, and TO_SOUTH.  For example, TO_EAST sends the data to the processor to the east,
       !! so the halos on the western side are filled.  TO_ALL is the default if sideflag is omitted.
   integer,      optional, intent(in)    :: position !< An optional argument indicating the position.
-                                                    !! This is usally CORNER, but is CENTER
-                                                    !! by default.
+                                                    !! This is CENTER by default and is often CORNER,
+                                                    !! but could also be EAST_FACE or NORTH_FACE.
   integer,      optional, intent(in)    :: halo     !< The size of the halo to update - the full
                                                     !! halo by default.
   integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
@@ -430,8 +453,8 @@ subroutine pass_var_complete_3d(id_update, array, MOM_dom, sideflag, position, h
       !! TO_NORTH, and TO_SOUTH.  For example, TO_EAST sends the data to the processor to the east,
       !! so the halos on the western side are filled.  TO_ALL is the default if sideflag is omitted.
   integer,      optional, intent(in)    :: position !< An optional argument indicating the position.
-                                                    !! This is usally CORNER, but is CENTER
-                                                    !! by default.
+                                                    !! This is CENTER by default and is often CORNER,
+                                                    !! but could also be EAST_FACE or NORTH_FACE.
   integer,      optional, intent(in)    :: halo     !< The size of the halo to update - the full
                                                     !! halo by default.
   integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
@@ -898,8 +921,8 @@ subroutine create_var_group_pass_2d(group, array, MOM_dom, sideflag, position, &
       !! TO_NORTH, and TO_SOUTH.  For example, TO_EAST sends the data to the processor to the east,
       !! so the halos on the western side are filled.  TO_ALL is the default if sideflag is omitted.
   integer,      optional, intent(in)    :: position !< An optional argument indicating the position.
-                                                    !! This is usally CORNER, but is CENTER
-                                                    !! by default.
+                                                    !! This is CENTER by default and is often CORNER,
+                                                    !! but could also be EAST_FACE or NORTH_FACE.
   integer,      optional, intent(in)    :: halo     !< The size of the halo to update - the full
                                                     !! halo by default.
   integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
@@ -943,8 +966,8 @@ subroutine create_var_group_pass_3d(group, array, MOM_dom, sideflag, position, h
       !! TO_NORTH, and TO_SOUTH.  For example, TO_EAST sends the data to the processor to the east,
       !! so the halos on the western side are filled.  TO_ALL is the default if sideflag is omitted.
   integer,      optional, intent(in)    :: position !< An optional argument indicating the position.
-                                                    !! This is usally CORNER, but is CENTER
-                                                    !! by default.
+                                                    !! This is CENTER by default and is often CORNER,
+                                                    !! but could also be EAST_FACE or NORTH_FACE.
   integer,      optional, intent(in)    :: halo     !< The size of the halo to update - the full
                                                     !! halo by default.
   integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
@@ -1190,7 +1213,6 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   integer, dimension(4) :: global_indices
 !$ integer :: ocean_nthreads       ! Number of Openmp threads
 !$ integer :: get_cpu_affinity, omp_get_thread_num, omp_get_num_threads
-!$ integer :: omp_cores_per_node, adder, base_cpu
 !$ logical :: ocean_omp_hyper_thread
   integer :: nihalo_dflt, njhalo_dflt
   integer :: pe, proc_used
@@ -1260,7 +1282,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mdl, version, "")
+  call log_version(param_file, mdl, version, "", log_to_all=.true., layout=.true.)
   call get_param(param_file, mdl, "REENTRANT_X", reentrant_x, &
                  "If true, the domain is zonally reentrant.", default=.true.)
   call get_param(param_file, mdl, "REENTRANT_Y", reentrant_y, &
@@ -1272,6 +1294,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  default=.false.)
 
 #ifndef NOT_SET_AFFINITY
+!$  call fms_affinity_init
 !$OMP PARALLEL
 !$OMP master
 !$ ocean_nthreads = omp_get_num_threads()
@@ -1283,27 +1306,10 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 !$              default = 1, layoutParam=.true.)
 !$   call get_param(param_file, mdl, "OCEAN_OMP_HYPER_THREAD", ocean_omp_hyper_thread, &
 !$              "If True, use hyper-threading.", default = .false., layoutParam=.true.)
-!$   if (ocean_omp_hyper_thread) then
-!$     call get_param(param_file, mdl, "OMP_CORES_PER_NODE", omp_cores_per_node, &
-!$              "Number of cores per node needed for hyper-threading.", &
-!$              fail_if_missing=.true., layoutParam=.true.)
-!$   endif
+!$   call fms_affinity_set('OCEAN', ocean_omp_hyper_thread, ocean_nthreads)
 !$   call omp_set_num_threads(ocean_nthreads)
-!$   base_cpu = get_cpu_affinity()
-!$OMP PARALLEL private(adder)
-!$   if (ocean_omp_hyper_thread) then
-!$     if (mod(omp_get_thread_num(),2) == 0) then
-!$       adder = omp_get_thread_num()/2
-!$     else
-!$       adder = omp_cores_per_node + omp_get_thread_num()/2
-!$     endif
-!$   else
-!$     adder = omp_get_thread_num()
-!$   endif
-!$   call set_cpu_affinity(base_cpu + adder)
-!!$     write(6,*) " ocean  ", base_cpu, get_cpu_affinity(), adder, omp_get_thread_num(), omp_get_num_threads()
-!!$     call flush(6)
-!$OMP END PARALLEL
+!$   write(6,*) "MOM_domains_mod OMPthreading ", fms_affinity_get(), omp_get_thread_num(), omp_get_num_threads()
+!$   call flush(6)
 !$ endif
 #endif
   call log_param(param_file, mdl, "!SYMMETRIC_MEMORY_", MOM_dom%symmetric, &
@@ -1335,26 +1341,6 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "at run time.  This can only be set at compile time.",&
                  layoutParam=.true.)
 
-  call get_param(param_file, mdl, trim(nihalo_nm), MOM_dom%nihalo, &
-                 "The number of halo points on each side in the "//&
-                 "x-direction.  With STATIC_MEMORY_ this is set as NIHALO_ "//&
-                 "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ "//&
-                 "the default is NIHALO_ in "//trim(inc_nm)//" (if defined) or 2.", &
-                 default=4, static_value=nihalo_dflt, layoutParam=.true.)
-  call get_param(param_file, mdl, trim(njhalo_nm), MOM_dom%njhalo, &
-                 "The number of halo points on each side in the "//&
-                 "y-direction.  With STATIC_MEMORY_ this is set as NJHALO_ "//&
-                 "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ "//&
-                 "the default is NJHALO_ in "//trim(inc_nm)//" (if defined) or 2.", &
-                 default=4, static_value=njhalo_dflt, layoutParam=.true.)
-  if (present(min_halo)) then
-    MOM_dom%nihalo = max(MOM_dom%nihalo, min_halo(1))
-    min_halo(1) = MOM_dom%nihalo
-    MOM_dom%njhalo = max(MOM_dom%njhalo, min_halo(2))
-    min_halo(2) = MOM_dom%njhalo
-    call log_param(param_file, mdl, "!NIHALO min_halo", MOM_dom%nihalo, layoutParam=.true.)
-    call log_param(param_file, mdl, "!NJHALO min_halo", MOM_dom%nihalo, layoutParam=.true.)
-  endif
   if (is_static) then
     call get_param(param_file, mdl, "NIGLOBAL", MOM_dom%niglobal, &
                  "The total number of thickness grid points in the "//&
@@ -1371,12 +1357,6 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
     if (MOM_dom%njglobal /= NJGLOBAL) call MOM_error(FATAL,"MOM_domains_init: " // &
      "static mismatch for NJGLOBAL_ domain size. Header file does not match input namelist")
 
-    if (.not.present(min_halo)) then
-      if (MOM_dom%nihalo /= NIHALO) call MOM_error(FATAL,"MOM_domains_init: " // &
-             "static mismatch for "//trim(nihalo_nm)//" domain size")
-      if (MOM_dom%njhalo /= NJHALO) call MOM_error(FATAL,"MOM_domains_init: " // &
-             "static mismatch for "//trim(njhalo_nm)//" domain size")
-    endif
   else
     call get_param(param_file, mdl, "NIGLOBAL", MOM_dom%niglobal, &
                  "The total number of thickness grid points in the "//&
@@ -1388,6 +1368,30 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "y-direction in the physical domain. With STATIC_MEMORY_ "//&
                  "this is set in "//trim(inc_nm)//" at compile time.", &
                  fail_if_missing=.true.)
+  endif
+
+  call get_param(param_file, mdl, trim(nihalo_nm), MOM_dom%nihalo, &
+                 "The number of halo points on each side in the x-direction.  How this is set "//&
+                 "varies with the calling component and static or dynamic memory configuration.", &
+                 default=nihalo_dflt, static_value=nihalo_dflt)
+  call get_param(param_file, mdl, trim(njhalo_nm), MOM_dom%njhalo, &
+                 "The number of halo points on each side in the y-direction.  How this is set "//&
+                 "varies with the calling component and static or dynamic memory configuration.", &
+                 default=njhalo_dflt, static_value=njhalo_dflt)
+  if (present(min_halo)) then
+    MOM_dom%nihalo = max(MOM_dom%nihalo, min_halo(1))
+    min_halo(1) = MOM_dom%nihalo
+    MOM_dom%njhalo = max(MOM_dom%njhalo, min_halo(2))
+    min_halo(2) = MOM_dom%njhalo
+    ! These are generally used only with static memory, so they are considerd layout params.
+    call log_param(param_file, mdl, "!NIHALO min_halo", MOM_dom%nihalo, layoutParam=.true.)
+    call log_param(param_file, mdl, "!NJHALO min_halo", MOM_dom%nihalo, layoutParam=.true.)
+  endif
+  if (is_static .and. .not.present(min_halo)) then
+    if (MOM_dom%nihalo /= NIHALO) call MOM_error(FATAL,"MOM_domains_init: " // &
+           "static mismatch for "//trim(nihalo_nm)//" domain size")
+    if (MOM_dom%njhalo /= NJHALO) call MOM_error(FATAL,"MOM_domains_init: " // &
+           "static mismatch for "//trim(njhalo_nm)//" domain size")
   endif
 
   global_indices(1) = 1 ; global_indices(2) = MOM_dom%niglobal
@@ -1599,7 +1603,7 @@ end subroutine MOM_domains_init
 !> clone_MD_to_MD copies one MOM_domain_type into another, while allowing
 !! some properties of the new type to differ from the original one.
 subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
-                          domain_name)
+                          domain_name, turns)
   type(MOM_domain_type), intent(in)    :: MD_in  !< An existing MOM_domain
   type(MOM_domain_type), pointer       :: MOM_dom !< A pointer to a MOM_domain that will be
                                   !! allocated if it is unassociated, and will have data
@@ -1617,10 +1621,15 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
   character(len=*), &
                optional, intent(in)    :: domain_name !< A name for the new domain, "MOM"
                                   !! if missing.
+  integer, optional, intent(in) :: turns   !< Number of quarter turns
 
   integer :: global_indices(4)
   logical :: mask_table_exists
   character(len=64) :: dom_name
+  integer :: qturns
+
+  qturns = 0
+  if (present(turns)) qturns = turns
 
   if (.not.associated(MOM_dom)) then
     allocate(MOM_dom)
@@ -1629,19 +1638,37 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
   endif
 
 ! Save the extra data for creating other domains of different resolution that overlay this domain
-  MOM_dom%niglobal = MD_in%niglobal ; MOM_dom%njglobal = MD_in%njglobal
-  MOM_dom%nihalo = MD_in%nihalo ; MOM_dom%njhalo = MD_in%njhalo
-
   MOM_dom%symmetric = MD_in%symmetric
   MOM_dom%nonblocking_updates = MD_in%nonblocking_updates
+  MOM_dom%thin_halo_updates = MD_in%thin_halo_updates
 
-  MOM_dom%X_FLAGS = MD_in%X_FLAGS ; MOM_dom%Y_FLAGS = MD_in%Y_FLAGS
-  MOM_dom%layout(:) = MD_in%layout(:) ; MOM_dom%io_layout(:) = MD_in%io_layout(:)
+  if (modulo(qturns, 2) /= 0) then
+    MOM_dom%niglobal = MD_in%njglobal ; MOM_dom%njglobal = MD_in%niglobal
+    MOM_dom%nihalo = MD_in%njhalo ; MOM_dom%njhalo = MD_in%nihalo
+
+    MOM_dom%X_FLAGS = MD_in%Y_FLAGS ; MOM_dom%Y_FLAGS = MD_in%X_FLAGS
+    MOM_dom%layout(:) = MD_in%layout(2:1:-1)
+    MOM_dom%io_layout(:) = MD_in%io_layout(2:1:-1)
+  else
+    MOM_dom%niglobal = MD_in%niglobal ; MOM_dom%njglobal = MD_in%njglobal
+    MOM_dom%nihalo = MD_in%nihalo ; MOM_dom%njhalo = MD_in%njhalo
+
+    MOM_dom%X_FLAGS = MD_in%X_FLAGS ; MOM_dom%Y_FLAGS = MD_in%Y_FLAGS
+    MOM_dom%layout(:) = MD_in%layout(:)
+    MOM_dom%io_layout(:) = MD_in%io_layout(:)
+  endif
+
+  global_indices(1) = 1 ; global_indices(2) = MOM_dom%niglobal
+  global_indices(3) = 1 ; global_indices(4) = MOM_dom%njglobal
 
   if (associated(MD_in%maskmap)) then
     mask_table_exists = .true.
     allocate(MOM_dom%maskmap(MOM_dom%layout(1), MOM_dom%layout(2)))
-    MOM_dom%maskmap(:,:) = MD_in%maskmap(:,:)
+    if (qturns /= 0) then
+      call rotate_array(MD_in%maskmap(:,:), qturns, MOM_dom%maskmap(:,:))
+    else
+      MOM_dom%maskmap(:,:) = MD_in%maskmap(:,:)
+    endif
   else
     mask_table_exists = .false.
   endif
@@ -1665,19 +1692,34 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
   dom_name = "MOM"
   if (present(domain_name)) dom_name = trim(domain_name)
 
-  global_indices(1) = 1 ; global_indices(2) = MOM_dom%niglobal
-  global_indices(3) = 1 ; global_indices(4) = MOM_dom%njglobal
   if (mask_table_exists) then
-    call MOM_define_domain( global_indices, MOM_dom%layout, MOM_dom%mpp_domain, &
+    call MOM_define_domain(global_indices, MOM_dom%layout, MOM_dom%mpp_domain, &
                 xflags=MOM_dom%X_FLAGS, yflags=MOM_dom%Y_FLAGS, &
                 xhalo=MOM_dom%nihalo, yhalo=MOM_dom%njhalo, &
-                symmetry = MOM_dom%symmetric, name=dom_name, &
-                maskmap=MOM_dom%maskmap )
+                symmetry=MOM_dom%symmetric, name=dom_name, &
+                maskmap=MOM_dom%maskmap)
+
+    global_indices(2) = global_indices(2) / 2
+    global_indices(4) = global_indices(4) / 2
+    call MOM_define_domain(global_indices, MOM_dom%layout, &
+                MOM_dom%mpp_domain_d2, &
+                xflags=MOM_dom%X_FLAGS, yflags=MOM_dom%Y_FLAGS, &
+                xhalo=(MOM_dom%nihalo/2), yhalo=(MOM_dom%njhalo/2), &
+                symmetry=MOM_dom%symmetric, name=dom_name, &
+                maskmap=MOM_dom%maskmap)
   else
-    call MOM_define_domain( global_indices, MOM_dom%layout, MOM_dom%mpp_domain, &
+    call MOM_define_domain(global_indices, MOM_dom%layout, MOM_dom%mpp_domain, &
                 xflags=MOM_dom%X_FLAGS, yflags=MOM_dom%Y_FLAGS, &
                 xhalo=MOM_dom%nihalo, yhalo=MOM_dom%njhalo, &
-                symmetry = MOM_dom%symmetric, name=dom_name)
+                symmetry=MOM_dom%symmetric, name=dom_name)
+
+    global_indices(2) = global_indices(2) / 2
+    global_indices(4) = global_indices(4) / 2
+    call MOM_define_domain(global_indices, MOM_dom%layout, &
+                MOM_dom%mpp_domain_d2, &
+                xflags=MOM_dom%X_FLAGS, yflags=MOM_dom%Y_FLAGS, &
+                xhalo=(MOM_dom%nihalo/2), yhalo=(MOM_dom%njhalo/2), &
+                symmetry=MOM_dom%symmetric, name=dom_name)
   endif
 
   if ((MOM_dom%io_layout(1) + MOM_dom%io_layout(2) > 0) .and. &
@@ -1691,7 +1733,7 @@ end subroutine clone_MD_to_MD
 !! domain2d type, while allowing some properties of the new type to differ from
 !! the original one.
 subroutine clone_MD_to_d2D(MD_in, mpp_domain, min_halo, halo_size, symmetric, &
-                           domain_name)
+                           domain_name, turns)
   type(MOM_domain_type), intent(in)    :: MD_in !< An existing MOM_domain to be cloned
   type(domain2d),        intent(inout) :: mpp_domain !< The new mpp_domain to be set up
   integer, dimension(2), &
@@ -1707,11 +1749,15 @@ subroutine clone_MD_to_d2D(MD_in, mpp_domain, min_halo, halo_size, symmetric, &
   character(len=*), &
                optional, intent(in)    :: domain_name !< A name for the new domain, "MOM"
                                   !! if missing.
+  integer, optional, intent(in) :: turns   !< If true, swap X and Y axes
 
   integer :: global_indices(4), layout(2), io_layout(2)
   integer :: X_FLAGS, Y_FLAGS, niglobal, njglobal, nihalo, njhalo
   logical :: symmetric_dom
   character(len=64) :: dom_name
+
+  if (present(turns)) &
+    call MOM_error(FATAL, "Rotation not supported for MOM_domain to domain2d")
 
 ! Save the extra data for creating other domains of different resolution that overlay this domain
   niglobal = MD_in%niglobal ; njglobal = MD_in%njglobal

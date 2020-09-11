@@ -3,11 +3,11 @@ module MOM_tracer_Z_init
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!use MOM_diag_to_Z, only : find_overlap, find_limited_slope
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 ! use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : MOM_read_data
+use MOM_EOS, only : EOS_type, calculate_density, calculate_density_derivs, EOS_domain
 use MOM_unit_scaling, only : unit_scale_type
 
 use netcdf
@@ -16,7 +16,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public tracer_Z_init
+public tracer_Z_init, tracer_Z_init_array, determine_temperature
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -30,7 +30,7 @@ contains
 function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
   logical :: tracer_Z_init !< A return code indicating if the initialization has been successful
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
-  type(unit_scale_type), intent(in)    :: US !< A dimensional unit scaling type
+  type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                          intent(out)   :: tr   !< The tracer to initialize
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -73,7 +73,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
 
   logical :: has_edges, use_missing, zero_surface
   character(len=80) :: loc_msg
-  integer :: k_top, k_bot, k_bot_prev
+  integer :: k_top, k_bot, k_bot_prev, k_start
   integer :: i, j, k, kz, is, ie, js, je, nz, nz_in
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -140,7 +140,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
         e(nz+1) = -G%bathyT(i,j)
         do k=nz,1,-1 ; e(K) = e(K+1) + dilate * h(i,j,k) ; enddo
 
-        ! Create a single-column copy of tr_in.  ### CHANGE THIS LATER?
+        ! Create a single-column copy of tr_in.  Efficiency is not an issue here.
         do k=1,nz_in ; tr_1d(k) = tr_in(i,j,k) ; enddo
         k_bot = 1 ; k_bot_prev = -1
         do k=1,nz
@@ -149,18 +149,18 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
           elseif (e(K) < z_edges(nz_in+1)) then
             tr(i,j,k) = tr_1d(nz_in)
           else
+            k_start = k_bot ! The starting point for this search
             call find_overlap(z_edges, e(K), e(K+1), nz_in, &
-                              k_bot, k_top, k_bot, wt, z1, z2)
+                              k_start, k_top, k_bot, wt, z1, z2)
             kz = k_top
             if (kz /= k_bot_prev) then
               ! Calculate the intra-cell profile.
               sl_tr = 0.0 ! ; cur_tr = 0.0
-              if ((kz < nz_in) .and. (kz > 1)) call &
-                find_limited_slope(tr_1d, z_edges, sl_tr, kz)
+              if ((kz < nz_in) .and. (kz > 1)) &
+                sl_tr = find_limited_slope(tr_1d, z_edges, kz)
             endif
             ! This is the piecewise linear form.
-            tr(i,j,k) = wt(kz) * &
-                (tr_1d(kz) + 0.5*sl_tr*(z2(kz) + z1(kz)))
+            tr(i,j,k) = wt(kz) * (tr_1d(kz) + 0.5*sl_tr*(z2(kz) + z1(kz)))
             ! For the piecewise parabolic form add the following...
             !     + C1_3*cur_tr*(z2(kz)**2 + z2(kz)*z1(kz) + z1(kz)**2))
             do kz=k_top+1,k_bot-1
@@ -170,8 +170,8 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
               kz = k_bot
               ! Calculate the intra-cell profile.
               sl_tr = 0.0 ! ; cur_tr = 0.0
-              if ((kz < nz_in) .and. (kz > 1)) call &
-                find_limited_slope(tr_1d, z_edges, sl_tr, kz)
+              if ((kz < nz_in) .and. (kz > 1)) &
+                sl_tr = find_limited_slope(tr_1d, z_edges, kz)
               ! This is the piecewise linear form.
               tr(i,j,k) = tr(i,j,k) + wt(kz) * &
                   (tr_1d(kz) + 0.5*sl_tr*(z2(kz) + z1(kz)))
@@ -215,7 +215,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
         e(nz+1) = -G%bathyT(i,j)
         do k=nz,1,-1 ; e(K) = e(K+1) + dilate * h(i,j,k) ; enddo
 
-        ! Create a single-column copy of tr_in.  ### CHANGE THIS LATER?
+        ! Create a single-column copy of tr_in.  Efficiency is not an issue here.
         do k=1,nz_in ; tr_1d(k) = tr_in(i,j,k) ; enddo
         k_bot = 1
         do k=1,nz
@@ -224,8 +224,9 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
           elseif (z_edges(nz_in) > e(K)) then
             tr(i,j,k) = tr_1d(nz_in)
           else
+            k_start = k_bot ! The starting point for this search
             call find_overlap(z_edges, e(K), e(K+1), nz_in-1, &
-                              k_bot, k_top, k_bot, wt, z1, z2)
+                              k_start, k_top, k_bot, wt, z1, z2)
 
             kz = k_top
             if (k_top < nz_in) then
@@ -273,6 +274,109 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
   tracer_Z_init = .true.
 
 end function tracer_Z_init
+
+!> Layer model routine for remapping tracers from pseudo-z coordinates into layers defined
+!! by target interface positions.
+subroutine tracer_z_init_array(tr_in, z_edges, nk_data, e, land_fill, G, nlay, nlevs, &
+                               eps_z, tr)
+  type(ocean_grid_type),      intent(in)  :: G     !< The ocean's grid structure
+  integer,                    intent(in)  :: nk_data !< The number of levels in the input data
+  real, dimension(SZI_(G),SZJ_(G),nk_data), &
+                              intent(in)  :: tr_in !< The z-space array of tracer concentrations that is read in.
+  real, dimension(nk_data+1), intent(in)  :: z_edges !< The depths of the cell edges in the input z* data
+                                                          !! [Z ~> m or m]
+  integer,                    intent(in)  :: nlay !< The number of vertical layers in the target grid
+  real, dimension(SZI_(G),SZJ_(G),nlay+1), &
+                              intent(in)  :: e !< The depths of the target layer interfaces [Z ~> m or m]
+  real,                       intent(in)  :: land_fill !< fill in data over land (1)
+  integer, dimension(SZI_(G),SZJ_(G)), &
+                              intent(in)  :: nlevs !< The number of input levels with valid data
+  real,                       intent(in)  :: eps_z !< A negligibly thin layer thickness [Z ~> m].
+  real, dimension(SZI_(G),SZJ_(G),nlay), &
+                              intent(out) :: tr !< tracers in layer space
+
+  ! Local variables
+  real, dimension(nk_data) :: tr_1d !< a copy of the input tracer concentrations in a column.
+  real, dimension(nlay+1)  :: e_1d  ! A 1-d column of intreface heights, in the same units as e.
+  real, dimension(nlay)    :: tr_   ! A 1-d column of output tracer concentrations
+  integer :: k_top, k_bot, k_bot_prev, kstart
+  real    :: sl_tr    ! The tracer concentration slope times the layer thickness, in tracer units.
+  real, dimension(nk_data) :: wt !< The fractional weight for each layer in the range between z1 and z2
+  real, dimension(nk_data) :: z1, z2 ! z1 and z2 are the fractional depths of the top and bottom
+                                  ! limits of the part of a z-cell that contributes to a layer, relative
+                                  ! to the cell center and normalized by the cell thickness [nondim].
+                                  ! Note that -1/2 <= z1 <= z2 <= 1/2.
+  integer :: i, j, k, kz, is, ie, js, je
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  do j=js,je
+    i_loop: do i=is,ie
+      if (nlevs(i,j) == 0 .or. G%mask2dT(i,j) == 0.) then
+        tr(i,j,:) = land_fill
+        cycle i_loop
+      endif
+
+      do k=1,nk_data
+        tr_1d(k) = tr_in(i,j,k)
+      enddo
+
+      do k=1,nlay+1
+        e_1d(k) = e(i,j,k)
+      enddo
+      k_bot = 1 ; k_bot_prev = -1
+      do k=1,nlay
+        if (e_1d(k+1) > z_edges(1)) then
+          tr(i,j,k) = tr_1d(1)
+        elseif (e_1d(k) < z_edges(nlevs(i,j)+1)) then
+          tr(i,j,k) = tr_1d(nlevs(i,j))
+
+        else
+          kstart = k_bot
+          call find_overlap(z_edges, e_1d(k), e_1d(k+1), nlevs(i,j), &
+                            kstart, k_top, k_bot, wt, z1, z2)
+          kz = k_top
+          sl_tr = 0.0 ! ; cur_tr=0.0
+          if (kz /= k_bot_prev) then
+            ! Calculate the intra-cell profile.
+            if ((kz < nlevs(i,j)) .and. (kz > 1)) then
+              sl_tr = find_limited_slope(tr_1d, z_edges, kz)
+            endif
+          endif
+          if (kz > nlevs(i,j)) kz = nlevs(i,j)
+          ! This is the piecewise linear form.
+          tr(i,j,k) = wt(kz) * (tr_1d(kz) + 0.5*sl_tr*(z2(kz) + z1(kz)))
+          ! For the piecewise parabolic form add the following...
+          !     + C1_3*wt(kz) * cur_tr*(z2(kz)**2 + z2(kz)*z1(kz) + z1(kz)**2))
+          do kz=k_top+1,k_bot-1
+            tr(i,j,k) = tr(i,j,k) + wt(kz)*tr_1d(kz)
+          enddo
+
+          if (k_bot > k_top) then
+            kz = k_bot
+            ! Calculate the intra-cell profile.
+            sl_tr = 0.0 ! ; cur_tr = 0.0
+            if ((kz < nlevs(i,j)) .and. (kz > 1)) then
+              sl_tr = find_limited_slope(tr_1d, z_edges, kz)
+            endif
+            ! This is the piecewise linear form.
+            tr(i,j,k) = tr(i,j,k) + wt(kz) * (tr_1d(kz) + 0.5*sl_tr*(z2(kz) + z1(kz)))
+            ! For the piecewise parabolic form add the following...
+            !     + C1_3*cur_tr*(z2(kz)**2 + z2(kz)*z1(kz) + z1(kz)**2))
+          endif
+          k_bot_prev = k_bot
+
+        endif
+      enddo ! k-loop
+
+      do k=2,nlay  ! simply fill vanished layers with adjacent value
+        if (e_1d(k)-e_1d(k+1) <= eps_z) tr(i,j,k) = tr(i,j,k-1)
+      enddo
+
+    enddo i_loop
+  enddo
+
+end subroutine tracer_z_init_array
 
 !> This subroutine reads the vertical coordinate data for a field from a NetCDF file.
 !! It also might read the missing value attribute for that same field.
@@ -410,20 +514,16 @@ end subroutine read_Z_edges
 !! with the depth range between Z_top and Z_bot, and the fractional weights
 !! of each layer. It also calculates the normalized relative depths of the range
 !! of each layer that overlaps that depth range.
-
-! ### TODO: Merge with midas_vertmap.F90:find_overlap()
 subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z2)
-  real, dimension(:), intent(in)    :: e      !< Column interface heights, in arbitrary units.
-  real,               intent(in)    :: Z_top  !< Top of range being mapped to, in the units of e.
-  real,               intent(in)    :: Z_bot  !< Bottom of range being mapped to, in the units of e.
-  integer,            intent(in)    :: k_max  !< Number of valid layers.
-  integer,            intent(in)    :: k_start !< Layer at which to start searching.
-  integer,            intent(inout) :: k_top  !< Indices of top layers that overlap with the depth
-                                              !! range.
-  integer,            intent(inout) :: k_bot  !< Indices of bottom layers that overlap with the
-                                              !! depth range.
-  real, dimension(:), intent(out)   :: wt     !< Relative weights of each layer from k_top to k_bot.
-  real, dimension(:), intent(out)   :: z1     !< Depth of the top limits of the part of
+  real, dimension(:), intent(in)  :: e      !< Column interface heights, [Z ~> m] or other units.
+  real,               intent(in)  :: Z_top  !< Top of range being mapped to, in the units of e [Z ~> m].
+  real,               intent(in)  :: Z_bot  !< Bottom of range being mapped to, in the units of e [Z ~> m].
+  integer,            intent(in)  :: k_max  !< Number of valid layers.
+  integer,            intent(in)  :: k_start !< Layer at which to start searching.
+  integer,            intent(out) :: k_top  !< Indices of top layers that overlap with the depth range.
+  integer,            intent(out) :: k_bot  !< Indices of bottom layers that overlap with the depth range.
+  real, dimension(:), intent(out) :: wt     !< Relative weights of each layer from k_top to k_bot [nondim].
+  real, dimension(:), intent(out) :: z1     !< Depth of the top limits of the part of
        !! a layer that contributes to a depth level, relative to the cell center and normalized
        !! by the cell thickness [nondim].  Note that -1/2 <= z1 < z2 <= 1/2.
   real, dimension(:), intent(out)   :: z2     !< Depths of the bottom limit of the part of
@@ -433,17 +533,19 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
   real    :: Ih, e_c, tot_wt, I_totwt
   integer :: k
 
-  do k=k_start,k_max ; if (e(K+1)<Z_top) exit ; enddo
+  wt(:) = 0.0 ; z1(:) = 0.0 ; z2(:) = 0.0 ; k_bot = k_max
+
+  do k=k_start,k_max ; if (e(K+1) < Z_top) exit ; enddo
   k_top = k
-  if (k>k_max) return
+  if (k_top > k_max) return
 
   ! Determine the fractional weights of each layer.
   ! Note that by convention, e and Z_int decrease with increasing k.
-  if (e(K+1)<=Z_bot) then
+  if (e(K+1) <= Z_bot) then
     wt(k) = 1.0 ; k_bot = k
     Ih = 0.0 ; if (e(K) /= e(K+1)) Ih = 1.0 / (e(K)-e(K+1))
     e_c = 0.5*(e(K)+e(K+1))
-    z1(k) = (e_c - MIN(e(K),Z_top)) * Ih
+    z1(k) = (e_c - MIN(e(K), Z_top)) * Ih
     z2(k) = (e_c - Z_bot) * Ih
   else
     wt(k) = MIN(e(K),Z_top) - e(K+1) ; tot_wt = wt(k) ! These are always > 0.
@@ -453,7 +555,7 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
     z2(k) = 0.5
     k_bot = k_max
     do k=k_top+1,k_max
-      if (e(K+1)<=Z_bot) then
+      if (e(K+1) <= Z_bot) then
         k_bot = k
         wt(k) = e(K) - Z_bot ; z1(k) = -0.5
         if (e(K) /= e(K+1)) then
@@ -466,7 +568,7 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
       if (k>=k_bot) exit
     enddo
 
-    I_totwt = 1.0 / tot_wt
+    I_totwt = 0.0 ; if (tot_wt > 0.0) I_totwt = 1.0 / tot_wt
     do k=k_top,k_bot ; wt(k) = I_totwt*wt(k) ; enddo
   endif
 
@@ -474,30 +576,154 @@ end subroutine find_overlap
 
 !> This subroutine determines a limited slope for val to be advected with
 !! a piecewise limited scheme.
-! ### TODO: Merge with midas_vertmap.F90:find_limited_slope()
-subroutine find_limited_slope(val, e, slope, k)
-  real, dimension(:), intent(in)  :: val !< A column of values that are being interpolated.
-  real, dimension(:), intent(in)  :: e   !< Column interface heights in arbitrary units
-  real,               intent(out) :: slope !< Normalized slope in the intracell distribution of val.
-  integer,            intent(in)  :: k   !< Layer whose slope is being determined.
+function find_limited_slope(val, e, k) result(slope)
+  real, dimension(:), intent(in) :: val !< An column the values that are being interpolated.
+  real, dimension(:), intent(in) :: e   !< A column's interface heights [Z ~> m] or other units.
+  integer,            intent(in) :: k   !< The layer whose slope is being determined.
+  real :: slope !< The normalized slope in the intracell distribution of val.
   ! Local variables
-  real :: d1, d2  ! Thicknesses in the units of e.
+  real :: amn, cmn
+  real :: d1, d2
 
-  d1 = 0.5*(e(K-1)-e(K+1)) ; d2 = 0.5*(e(K)-e(K+2))
-  if (((val(k)-val(k-1)) * (val(k)-val(k+1)) >= 0.0) .or. (d1*d2 <= 0.0)) then
+  if ((val(k)-val(k-1)) * (val(k)-val(k+1)) >= 0.0) then
     slope = 0.0 ! ; curvature = 0.0
   else
-    slope = (d1**2*(val(k+1) - val(k)) + d2**2*(val(k) - val(k-1))) * &
-            ((e(K) - e(K+1)) / (d1*d2*(d1+d2)))
-    ! slope = 0.5*(val(k+1) - val(k-1))
-    ! This is S.J. Lin's form of the PLM limiter.
-    slope = sign(1.0,slope) * min(abs(slope), &
-        2.0*(max(val(k-1),val(k),val(k+1)) - val(k)), &
-        2.0*(val(k) - min(val(k-1),val(k),val(k+1))))
-    ! curvature = 0.0
+    d1 = 0.5*(e(K-1)-e(K+1)) ; d2 = 0.5*(e(K)-e(K+2))
+    if (d1*d2 > 0.0) then
+      slope = ((d1**2)*(val(k+1) - val(k)) + (d2**2)*(val(k) - val(k-1))) * &
+              (e(K) - e(K+1)) / (d1*d2*(d1+d2))
+      ! slope = 0.5*(val(k+1) - val(k-1))
+      ! This is S.J. Lin's form of the PLM limiter.
+      amn = min(abs(slope), 2.0*(max(val(k-1), val(k), val(k+1)) - val(k)))
+      cmn = 2.0*(val(k) - min(val(k-1), val(k), val(k+1)))
+      slope = sign(1.0, slope) * min(amn, cmn)
+
+      ! min(abs(slope), 2.0*(max(val(k-1),val(k),val(k+1)) - val(k)), &
+      !                 2.0*(val(k) - min(val(k-1),val(k),val(k+1))))
+      ! curvature = 0.0
+    else
+      slope = 0.0 ! ; curvature = 0.0
+    endif
   endif
 
-end subroutine find_limited_slope
+end function find_limited_slope
 
+!> This subroutine determines the potential temperature and salinity that
+!! is consistent with the target density using provided initial guess
+subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, k_start, G, US, eos, h_massless)
+  type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                 intent(inout) :: temp !< potential temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                 intent(inout) :: salt !< salinity [PSU]
+  real, dimension(SZK_(G)),      intent(in)    :: R_tgt !< desired potential density [R ~> kg m-3].
+  real,                          intent(in)    :: p_ref !< reference pressure [R L2 T-2 ~> Pa].
+  integer,                       intent(in)    :: niter !< maximum number of iterations
+  integer,                       intent(in)    :: k_start !< starting index (i.e. below the buffer layer)
+  real,                          intent(in)    :: land_fill !< land fill value
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                 intent(in)    :: h   !< layer thickness, used only to avoid working on
+                                                      !! massless layers [H ~> m or kg m-2]
+  type(unit_scale_type),         intent(in)    :: US  !< A dimensional unit scaling type
+  type(eos_type),                pointer       :: eos !< seawater equation of state control structure
+  real,                optional, intent(in)    :: h_massless !< A threshold below which a layer is
+                                                      !! determined to be massless [H ~> m or kg m-2]
+
+  real, parameter :: T_max = 31.0, T_min = -2.0
+  ! Local variables (All of which need documentation!)
+  real, dimension(SZI_(G),SZK_(G)) :: &
+    T, S, dT, dS, &
+    rho, & ! Layer densities [R ~> kg m-3]
+    hin, & ! Input layer thicknesses [H ~> m or kg m-2]
+    drho_dT, & ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
+    drho_dS    ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
+  real, dimension(SZI_(G)) :: press ! Reference pressures [R L2 T-2 ~> Pa]
+  real    :: dT_dS_gauge  ! The relative penalizing of temperature to salinity changes when
+                          ! minimizing property changes while correcting density [degC ppt-1].
+  real    :: I_denom      ! The inverse of the magnitude squared of the density gradient in
+                          ! T-S space streched with dT_dS_gauge [ppt2 R-2 ~> ppt2 m6 kg-2]
+  logical :: adjust_salt, old_fit
+  real :: S_min, S_max
+  real :: tol_T    ! The tolerance for temperature matches [degC]
+  real :: tol_S    ! The tolerance for salinity matches [ppt]
+  real :: tol_rho  ! The tolerance for density matches [R ~> kg m-3]
+  real :: max_t_adj, max_s_adj
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
+  integer :: i, j, k, kz, is, ie, js, je, nz, itt
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  ! These hard coded parameters need to be set properly.
+  S_min = 0.5 ; S_max = 65.0
+  max_t_adj = 1.0 ; max_s_adj = 0.5
+  tol_T=1.e-4 ; tol_S=1.e-4 ; tol_rho = 1.e-4*US%kg_m3_to_R
+  old_fit = .true.   ! reproduces siena behavior
+
+  ! ### The whole determine_temperature subroutine needs to be reexamined, both the algorithms
+  !     and the extensive use of hard-coded dimensional parameters.
+
+  ! We will switch to the newer method which simultaneously adjusts
+  ! temp and salt based on the ratio of the thermal and haline coefficients, once it is tested.
+
+  press(:) = p_ref
+  EOSdom(:) = EOS_domain(G%HI)
+
+  do j=js,je
+    dS(:,:) = 0. ! Needs to be zero everywhere since there is a maxval(abs(dS)) later...
+    T(:,:) = temp(:,j,:)
+    S(:,:) = salt(:,j,:)
+    hin(:,:) = h(:,j,:)
+    dT(:,:) = 0.0
+    adjust_salt = .true.
+    iter_loop: do itt = 1,niter
+      do k=1,nz
+        call calculate_density(T(:,k), S(:,k), press, rho(:,k), eos, EOSdom )
+        call calculate_density_derivs(T(:,k), S(:,k), press, drho_dT(:,k), drho_dS(:,k), &
+                                      eos, EOSdom )
+      enddo
+      do k=k_start,nz ; do i=is,ie
+!       if (abs(rho(i,k)-R_tgt(k))>tol_rho .and. hin(i,k)>h_massless .and. abs(T(i,k)-land_fill) < epsln) then
+        if (abs(rho(i,k)-R_tgt(k))>tol_rho) then
+          if (old_fit) then
+            dT(i,k) = max(min((R_tgt(k)-rho(i,k)) / drho_dT(i,k), max_t_adj), -max_t_adj)
+            T(i,k) = max(min(T(i,k)+dT(i,k), T_max), T_min)
+          else
+            dT_dS_gauge = 10.0  ! 10 degC is weighted equivalently to 1 ppt.
+            I_denom = 1.0 / (drho_dS(i,k)**2 + dT_dS_gauge**2*drho_dT(i,k)**2)
+            dS(i,k) = (R_tgt(k)-rho(i,k)) * drho_dS(i,k) * I_denom
+            dT(i,k) = (R_tgt(k)-rho(i,k)) * dT_dS_gauge**2*drho_dT(i,k) * I_denom
+
+            T(i,k) = max(min(T(i,k)+dT(i,k), T_max), T_min)
+            S(i,k) = max(min(S(i,k)+dS(i,k), S_max), S_min)
+          endif
+        endif
+      enddo ; enddo
+      if (maxval(abs(dT)) < tol_T) then
+        adjust_salt = .false.
+        exit iter_loop
+      endif
+    enddo iter_loop
+
+    if (adjust_salt .and. old_fit) then ; do itt = 1,niter
+      do k=1,nz
+        call calculate_density(T(:,k), S(:,k), press, rho(:,k), eos, EOSdom )
+        call calculate_density_derivs(T(:,k), S(:,k), press, drho_dT(:,k), drho_dS(:,k), &
+                                      eos, EOSdom )
+      enddo
+      do k=k_start,nz ; do i=is,ie
+!       if (abs(rho(i,k)-R_tgt(k))>tol_rho .and. hin(i,k)>h_massless .and. abs(T(i,k)-land_fill) < epsln ) then
+        if (abs(rho(i,k)-R_tgt(k)) > tol_rho) then
+          dS(i,k) = max(min((R_tgt(k)-rho(i,k)) / drho_dS(i,k), max_s_adj), -max_s_adj)
+          S(i,k) = max(min(S(i,k)+dS(i,k), S_max), S_min)
+        endif
+      enddo ; enddo
+      if (maxval(abs(dS)) < tol_S) exit
+    enddo ; endif
+
+    temp(:,j,:) = T(:,:)
+    salt(:,j,:) = S(:,:)
+  enddo
+
+end subroutine determine_temperature
 
 end module MOM_tracer_Z_init

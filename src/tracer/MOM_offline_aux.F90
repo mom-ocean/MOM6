@@ -4,7 +4,6 @@ module MOM_offline_aux
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use mpp_domains_mod,      only : CENTER, CORNER, NORTH, EAST
 use data_override_mod,    only : data_override_init, data_override
 use MOM_time_manager,     only : time_type, operator(-)
 use MOM_debugging,        only : check_column_integrals
@@ -12,7 +11,7 @@ use MOM_domains,          only : pass_var, pass_vector, To_All
 use MOM_diag_vkernels,    only : reintegrate_column
 use MOM_error_handler,    only : callTree_enter, callTree_leave, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_grid,             only : ocean_grid_type
-use MOM_io,               only : MOM_read_data, MOM_read_vector
+use MOM_io,               only : MOM_read_data, MOM_read_vector, CENTER
 use MOM_verticalGrid,     only : verticalGrid_type
 use MOM_file_parser,      only : get_param, log_version, param_file_type
 use astronomy_mod,        only : orbital_time, diurnal_solar, daily_mean_solar
@@ -733,15 +732,15 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     ! Need to double check, but set_opacity seems to only need the sum of the diffuse and
     ! direct fluxes in the visible and near-infrared bands. For convenience, we store the
     ! sum of the direct and diffuse fluxes in the 'dir' field and set the 'dif' fields to zero
-    call MOM_read_data(mean_file,'sw_vis',fluxes%sw_vis_dir, G%Domain, &
-        timelevel=ridx_sum)
-    call MOM_read_data(mean_file,'sw_nir',fluxes%sw_nir_dir, G%Domain, &
-        timelevel=ridx_sum)
+    call MOM_read_data(mean_file,'sw_vis', fluxes%sw_vis_dir, G%Domain, &
+                       timelevel=ridx_sum, scale=G%US%W_m2_to_QRZ_T)
+    call MOM_read_data(mean_file,'sw_nir', fluxes%sw_nir_dir, G%Domain, &
+                       timelevel=ridx_sum, scale=G%US%W_m2_to_QRZ_T)
     fluxes%sw_vis_dir(:,:) = fluxes%sw_vis_dir(:,:)*0.5
-    fluxes%sw_vis_dif(:,:) = fluxes%sw_vis_dir
+    fluxes%sw_vis_dif(:,:) = fluxes%sw_vis_dir(:,:)
     fluxes%sw_nir_dir(:,:) = fluxes%sw_nir_dir(:,:)*0.5
-    fluxes%sw_nir_dif(:,:) = fluxes%sw_nir_dir
-    fluxes%sw = fluxes%sw_vis_dir + fluxes%sw_vis_dif + fluxes%sw_nir_dir + fluxes%sw_nir_dif
+    fluxes%sw_nir_dif(:,:) = fluxes%sw_nir_dir(:,:)
+    fluxes%sw = (fluxes%sw_vis_dir + fluxes%sw_vis_dif) + (fluxes%sw_nir_dir + fluxes%sw_nir_dif)
     do j=js,je ; do i=is,ie
       if (G%mask2dT(i,j)<1.0) then
         fluxes%sw(i,j) = 0.0

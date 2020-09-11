@@ -77,6 +77,8 @@ public ocean_model_restart
 public ice_ocn_bnd_type_chksum
 public ocean_public_type_chksum
 public ocean_model_data_get
+public get_ocean_grid
+public ocean_model_get_UV_surf
 
 !> This interface extracts a named scalar field or array from the ocean surface or public type
 interface ocean_model_data_get
@@ -222,7 +224,7 @@ contains
 !!   This subroutine initializes both the ocean state and the ocean surface type.
 !! Because of the way that indicies and domains are handled, Ocean_sfc must have
 !! been used in a previous call to initialize_ocean_type.
-subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
+subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas_fields_ocn)
   type(ocean_public_type), target, &
                        intent(inout) :: Ocean_sfc !< A structure containing various publicly
                                 !! visible ocean surface properties after initialization,
@@ -232,6 +234,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
                                 !! contain all information about the ocean's interior state.
   type(time_type),     intent(in)    :: Time_init !< The start time for the coupled model's calendar
   type(time_type),     intent(in)    :: Time_in   !< The time at which to initialize the ocean model.
+  integer, optional,   intent(in)    :: wind_stagger !< If present, the staggering of the winds that are
+                                                     !! being provided in calls to update_ocean_model
   type(coupler_1d_bc_type), &
              optional, intent(in)    :: gas_fields_ocn !< If present, this type describes the
                                               !! ocean and surface-ice fields that will participate
@@ -271,8 +275,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
                       OS%restart_CSp, Time_in, offline_tracer_mode=OS%offline_tracer_mode, &
                       diag_ptr=OS%diag, count_calls=.true.)
   call get_MOM_state_elements(OS%MOM_CSp, G=OS%grid, GV=OS%GV, US=OS%US, C_p=OS%C_p, &
-                              use_temp=use_temperature)
-  OS%fluxes%C_p = OS%C_p
+                              C_p_scaled=OS%fluxes%C_p, use_temp=use_temperature)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -355,8 +358,13 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   call allocate_surface_state(OS%sfc_state, OS%grid, use_temperature, do_integrals=.true., &
                               gas_fields_ocn=gas_fields_ocn, use_meltpot=use_melt_pot)
 
-  call surface_forcing_init(Time_in, OS%grid, OS%US, param_file, OS%diag, &
-                            OS%forcing_CSp)
+  if (present(wind_stagger)) then
+    call surface_forcing_init(Time_in, OS%grid, OS%US, param_file, OS%diag, &
+                              OS%forcing_CSp, wind_stagger)
+  else
+    call surface_forcing_init(Time_in, OS%grid, OS%US, param_file, OS%diag, &
+                              OS%forcing_CSp)
+  endif
 
   if (OS%use_ice_shelf)  then
     call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
@@ -513,7 +521,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
 
   if (do_thermo) then
     if (OS%fluxes%fluxes_used) then
-      call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
+      call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, dt_coupling, &
                                  OS%grid, OS%US, OS%forcing_CSp, OS%sfc_state)
 
       ! Add ice shelf fluxes
@@ -528,14 +536,11 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
       call MOM_generic_tracer_fluxes_accumulate(OS%fluxes, 1.0) ! Here weight=1, so just store the current fluxes
       call disable_averaging(OS%diag)
 #endif
-      ! Indicate that there are new unused fluxes.
-      OS%fluxes%fluxes_used = .false.
-      OS%fluxes%dt_buoy_accum = dt_coupling
     else
       ! The previous fluxes have not been used yet, so translate the input fluxes
       ! into a temporary type and then accumulate them in about 20 lines.
       OS%flux_tmp%C_p = OS%fluxes%C_p
-      call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, &
+      call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, dt_coupling, &
                                  OS%grid, OS%US, OS%forcing_CSp, OS%sfc_state)
 
       if (OS%use_ice_shelf) &
@@ -544,7 +549,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
         call iceberg_fluxes(OS%grid, OS%US, OS%flux_tmp, OS%use_ice_shelf, &
                             OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
 
-      call fluxes_accumulate(OS%flux_tmp, OS%fluxes, dt_coupling, OS%grid, weight)
+      call fluxes_accumulate(OS%flux_tmp, OS%fluxes, OS%grid, weight)
 #ifdef _USE_GENERIC_TRACER
        ! Incorporate the current tracer fluxes into the running averages
       call MOM_generic_tracer_fluxes_accumulate(OS%flux_tmp, weight)
@@ -646,16 +651,11 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
   if (do_thermo) OS%nstep_thermo = OS%nstep_thermo + 1
 
   if (do_dyn) then
-    call enable_averaging(dt_coupling, OS%Time_dyn, OS%diag)
-    call mech_forcing_diags(OS%forces, dt_coupling, OS%grid, OS%diag, OS%forcing_CSp%handles)
-    call disable_averaging(OS%diag)
+    call mech_forcing_diags(OS%forces, dt_coupling, OS%grid, OS%Time_dyn, OS%diag, OS%forcing_CSp%handles)
   endif
 
   if (OS%fluxes%fluxes_used .and. do_thermo) then
-    call enable_averaging(OS%fluxes%dt_buoy_accum, OS%Time, OS%diag)
-    call forcing_diagnostics(OS%fluxes, OS%sfc_state, OS%fluxes%dt_buoy_accum, &
-                             OS%grid, OS%US, OS%diag, OS%forcing_CSp%handles)
-    call disable_averaging(OS%diag)
+    call forcing_diagnostics(OS%fluxes, OS%sfc_state, OS%grid, OS%US, OS%Time, OS%diag, OS%forcing_CSp%handles)
   endif
 
 ! Translate state into Ocean.
@@ -796,13 +796,13 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
              Ocean_sfc%area   (isc:iec,jsc:jec), &
              Ocean_sfc%frazil (isc:iec,jsc:jec))
 
-  Ocean_sfc%t_surf  = 0.0  ! time averaged sst (Kelvin) passed to atmosphere/ice model
-  Ocean_sfc%s_surf  = 0.0  ! time averaged sss (psu) passed to atmosphere/ice models
-  Ocean_sfc%u_surf  = 0.0  ! time averaged u-current (m/sec) passed to atmosphere/ice models
-  Ocean_sfc%v_surf  = 0.0  ! time averaged v-current (m/sec)  passed to atmosphere/ice models
-  Ocean_sfc%sea_lev = 0.0  ! time averaged thickness of top model grid cell (m) plus patm/rho0/grav
-  Ocean_sfc%frazil  = 0.0  ! time accumulated frazil (J/m^2) passed to ice model
-  Ocean_sfc%area    = 0.0
+  Ocean_sfc%t_surf(:,:)  = 0.0  ! time averaged sst (Kelvin) passed to atmosphere/ice model
+  Ocean_sfc%s_surf(:,:)  = 0.0  ! time averaged sss (psu) passed to atmosphere/ice models
+  Ocean_sfc%u_surf(:,:)  = 0.0  ! time averaged u-current (m/sec) passed to atmosphere/ice models
+  Ocean_sfc%v_surf(:,:)  = 0.0  ! time averaged v-current (m/sec)  passed to atmosphere/ice models
+  Ocean_sfc%sea_lev(:,:) = 0.0  ! time averaged thickness of top model grid cell (m) plus patm/rho0/grav
+  Ocean_sfc%frazil(:,:)  = 0.0  ! time accumulated frazil (J/m^2) passed to ice model
+  Ocean_sfc%area(:,:)    = 0.0
   Ocean_sfc%axes    = diag%axesT1%handles !diag axes to be used by coupler tracer flux diagnostics
 
   if (present(gas_fields_ocn)) then
@@ -871,40 +871,40 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, US, patm, press_
 
   if (present(patm)) then
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-      Ocean_sfc%sea_lev(i,j) = sfc_state%sea_lev(i+i0,j+j0) + patm(i,j) * press_to_z
-      Ocean_sfc%area(i,j) = US%L_to_m**2*G%areaT(i+i0,j+j0)
+      Ocean_sfc%sea_lev(i,j) = US%Z_to_m * sfc_state%sea_lev(i+i0,j+j0) + patm(i,j) * press_to_z
+      Ocean_sfc%area(i,j) = US%L_to_m**2 * G%areaT(i+i0,j+j0)
     enddo ; enddo
   else
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-      Ocean_sfc%sea_lev(i,j) = sfc_state%sea_lev(i+i0,j+j0)
-      Ocean_sfc%area(i,j) = US%L_to_m**2*G%areaT(i+i0,j+j0)
+      Ocean_sfc%sea_lev(i,j) = US%Z_to_m * sfc_state%sea_lev(i+i0,j+j0)
+      Ocean_sfc%area(i,j) = US%L_to_m**2 * G%areaT(i+i0,j+j0)
     enddo ; enddo
   endif
 
-  if (associated(sfc_state%frazil)) then
+  if (allocated(sfc_state%frazil)) then
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-      Ocean_sfc%frazil(i,j) = sfc_state%frazil(i+i0,j+j0)
+      Ocean_sfc%frazil(i,j) = US%Q_to_J_kg*US%RZ_to_kg_m2 * sfc_state%frazil(i+i0,j+j0)
     enddo ; enddo
   endif
 
   if (Ocean_sfc%stagger == AGRID) then
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-      Ocean_sfc%u_surf(i,j) = G%mask2dT(i+i0,j+j0) * &
+      Ocean_sfc%u_surf(i,j) = G%mask2dT(i+i0,j+j0) * US%L_T_to_m_s * &
                 0.5*(sfc_state%u(I+i0,j+j0)+sfc_state%u(I-1+i0,j+j0))
-      Ocean_sfc%v_surf(i,j) = G%mask2dT(i+i0,j+j0) * &
+      Ocean_sfc%v_surf(i,j) = G%mask2dT(i+i0,j+j0) * US%L_T_to_m_s * &
                 0.5*(sfc_state%v(i+i0,J+j0)+sfc_state%v(i+i0,J-1+j0))
     enddo ; enddo
   elseif (Ocean_sfc%stagger == BGRID_NE) then
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-      Ocean_sfc%u_surf(i,j) = G%mask2dBu(I+i0,J+j0) * &
+      Ocean_sfc%u_surf(i,j) = G%mask2dBu(I+i0,J+j0) * US%L_T_to_m_s * &
                 0.5*(sfc_state%u(I+i0,j+j0)+sfc_state%u(I+i0,j+j0+1))
-      Ocean_sfc%v_surf(i,j) = G%mask2dBu(I+i0,J+j0) * &
+      Ocean_sfc%v_surf(i,j) = G%mask2dBu(I+i0,J+j0) * US%L_T_to_m_s * &
                 0.5*(sfc_state%v(i+i0,J+j0)+sfc_state%v(i+i0+1,J+j0))
     enddo ; enddo
   elseif (Ocean_sfc%stagger == CGRID_NE) then
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-      Ocean_sfc%u_surf(i,j) = G%mask2dCu(I+i0,j+j0)*sfc_state%u(I+i0,j+j0)
-      Ocean_sfc%v_surf(i,j) = G%mask2dCv(i+i0,J+j0)*sfc_state%v(i+i0,J+j0)
+      Ocean_sfc%u_surf(i,j) = G%mask2dCu(I+i0,j+j0)*US%L_T_to_m_s * sfc_state%u(I+i0,j+j0)
+      Ocean_sfc%v_surf(i,j) = G%mask2dCv(i+i0,J+j0)*US%L_T_to_m_s * sfc_state%v(i+i0,J+j0)
     enddo ; enddo
   else
     write(val_str, '(I8)') Ocean_sfc%stagger
@@ -1054,6 +1054,16 @@ subroutine ocean_model_data2D_get(OS, Ocean, name, array2D, isc, jsc)
      array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
   case('btfHeat')
      array2D(isc:,jsc:) = 0
+  case('cos_rot')
+     array2D(isc:,jsc:) = OS%grid%cos_rot(g_isc:g_iec,g_jsc:g_jec) ! =1
+  case('sin_rot')
+     array2D(isc:,jsc:) = OS%grid%sin_rot(g_isc:g_iec,g_jsc:g_jec) ! =0
+  case('s_surf')
+     array2D(isc:,jsc:) = Ocean%s_surf(isc:,jsc:)
+  case('sea_lev')
+     array2D(isc:,jsc:) = Ocean%sea_lev(isc:,jsc:)
+  case('frazil')
+     array2D(isc:,jsc:) = Ocean%frazil(isc:,jsc:)
   case default
      call MOM_error(FATAL,'get_ocean_grid_data2D: unknown argument name='//name)
   end select
@@ -1074,9 +1084,9 @@ subroutine ocean_model_data1D_get(OS, Ocean, name, value)
 
   select case(name)
   case('c_p')
-     value = OS%C_p
+    value = OS%C_p
   case default
-     call MOM_error(FATAL,'get_ocean_grid_data1D: unknown argument name='//name)
+    call MOM_error(FATAL,'get_ocean_grid_data1D: unknown argument name='//name)
   end select
 
 end subroutine ocean_model_data1D_get
@@ -1104,5 +1114,77 @@ subroutine ocean_public_type_chksum(id, timestep, ocn)
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 
 end subroutine ocean_public_type_chksum
+
+!> This subroutine gives a handle to the grid from ocean state
+subroutine get_ocean_grid(OS, Gridp)
+  ! Obtain the ocean grid.
+  type(ocean_state_type) :: OS              !< A structure containing the
+                                            !! internal ocean state
+  type(ocean_grid_type) , pointer :: Gridp  !< The ocean's grid structure
+
+  Gridp => OS%grid
+  return
+end subroutine get_ocean_grid
+
+!> This subroutine extracts a named (u- or v-) 2-D surface current from ocean internal state
+subroutine ocean_model_get_UV_surf(OS, Ocean, name, array2D, isc, jsc)
+
+  type(ocean_state_type),     pointer    :: OS    !< A pointer to the structure containing the
+                                                  !! internal ocean state (intent in).
+  type(ocean_public_type),    intent(in) :: Ocean !< A structure containing various publicly
+                                                  !! visible ocean surface fields.
+  character(len=*)          , intent(in) :: name  !< The name of the current (ua or va) to extract
+  real, dimension(isc:,jsc:), intent(out):: array2D !< The values of the named field, it must
+                                                  !! cover only the computational domain
+  integer                   , intent(in) :: isc   !< The starting i-index of array2D
+  integer                   , intent(in) :: jsc   !< The starting j-index of array2D
+
+  type(ocean_grid_type) , pointer :: G            !< The ocean's grid structure
+  type(surface),          pointer :: sfc_state    !< A structure containing fields that
+                                                  !! describe the surface state of the ocean.
+
+  integer :: isc_bnd, iec_bnd, jsc_bnd, jec_bnd
+  integer :: i, j, i0, j0
+  integer :: is, ie, js, je
+
+  if (.not.associated(OS)) return
+  if (.not.OS%is_ocean_pe) return
+
+  G => OS%grid
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  call mpp_get_compute_domain(Ocean%Domain, isc_bnd, iec_bnd, &
+                              jsc_bnd, jec_bnd)
+
+  i0 = is - isc_bnd ; j0 = js - jsc_bnd
+
+  sfc_state => OS%sfc_state
+
+  select case(name)
+  case('ua')
+    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
+      array2D(i,j) = G%mask2dT(i+i0,j+j0) * &
+                0.5*(sfc_state%u(I+i0,j+j0)+sfc_state%u(I-1+i0,j+j0))
+    enddo ; enddo
+  case('va')
+    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
+      array2D(i,j) = G%mask2dT(i+i0,j+j0) * &
+                0.5*(sfc_state%v(i+i0,J+j0)+sfc_state%v(i+i0,J-1+j0))
+    enddo ; enddo
+  case('ub')
+    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
+      array2D(i,j) = G%mask2dBu(I+i0,J+j0) * &
+                0.5*(sfc_state%u(I+i0,j+j0)+sfc_state%u(I+i0,j+j0+1))
+    enddo ; enddo
+  case('vb')
+    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
+      array2D(i,j) = G%mask2dBu(I+i0,J+j0) * &
+                0.5*(sfc_state%v(i+i0,J+j0)+sfc_state%v(i+i0+1,J+j0))
+    enddo ; enddo
+  case default
+     call MOM_error(FATAL,'ocean_model_get_UV_surf: unknown argument name='//name)
+  end select
+
+end subroutine ocean_model_get_UV_surf
 
 end module ocean_model_mod

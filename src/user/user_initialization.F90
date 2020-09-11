@@ -38,17 +38,15 @@ contains
 
 !> Set vertical coordinates.
 subroutine USER_set_coord(Rlay, g_prime, GV, US, param_file, eqn_of_state)
-  type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid
-                                                     !! structure.
-  real, dimension(:),      intent(out) :: Rlay       !< Layer potential density [R ~> kg m-3].
-  real, dimension(:),      intent(out) :: g_prime    !< The reduced gravity at
-                                                     !! each interface [L2 Z-1 T-2 ~> m s-2].
-  type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
-  type(param_file_type),   intent(in)  :: param_file !< A structure indicating the
-                                                     !! open file to parse for model
-                                                     !! parameter values.
-  type(EOS_type),          pointer     :: eqn_of_state !< Integer that selects the
-                                                     !! equation of state.
+  type(verticalGrid_type),  intent(in)  :: GV      !< The ocean's vertical grid structure
+  real, dimension(GV%ke),   intent(out) :: Rlay    !< Layer potential density [R ~> kg m-3].
+  real, dimension(GV%ke+1), intent(out) :: g_prime !< The reduced gravity at each
+                                                   !! interface [L2 Z-1 T-2 ~> m s-2].
+  type(unit_scale_type),    intent(in)  :: US      !< A dimensional unit scaling type
+  type(param_file_type),    intent(in)  :: param_file !< A structure indicating the
+                                                   !! open file to parse for model
+                                                   !! parameter values.
+  type(EOS_type),           pointer     :: eqn_of_state !< Equation of state structure
 
   call MOM_error(FATAL, &
     "USER_initialization.F90, USER_set_coord: " // &
@@ -144,8 +142,7 @@ subroutine USER_init_temperature_salinity(T, S, G, param_file, eqn_of_state, jus
   type(param_file_type),                     intent(in)  :: param_file !< A structure indicating the
                                                             !! open file to parse for model
                                                             !! parameter values.
-  type(EOS_type),                            pointer     :: eqn_of_state !< Integer that selects the
-                                                            !! equation of state.
+  type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will only
                                                            !! read parameters without changing T & S.
 
@@ -242,10 +239,10 @@ end subroutine write_user_log
 !!
 !!  This subroutine initializes the fields for the simulations.
 !!  The one argument passed to initialize, Time, is set to the
-!!  current time of the simulation.  The fields which are initialized
+!!  current time of the simulation.  The fields which might be initialized
 !!  here are:
-!!  - u - Zonal velocity [m s-1].
-!!  - v - Meridional velocity [m s-1].
+!!  - u - Zonal velocity [Z T-1 ~> m s-1].
+!!  - v - Meridional velocity [Z T-1 ~> m s-1].
 !!  - h - Layer thickness [H ~> m or kg m-2].  (Must be positive.)
 !!  - G%bathyT - Basin depth [Z ~> m].  (Must be positive.)
 !!  - G%CoriolisBu - The Coriolis parameter [T-1 ~> s-1].
@@ -255,7 +252,7 @@ end subroutine write_user_log
 !!  - T - Temperature [degC].
 !!  - S - Salinity [psu].
 !!  If BULKMIXEDLAYER is defined:
-!!  - Rml - Mixed layer and buffer layer potential densities [kg m-3].
+!!  - Rml - Mixed layer and buffer layer potential densities [R ~> kg m-3].
 !!  If SPONGE is defined:
 !!  - A series of subroutine calls are made to set up the damping
 !!    rates and reference profiles for all variables that are damped
