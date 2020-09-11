@@ -120,7 +120,7 @@ type, public :: tracer_type
 
   integer :: diag_form = 1  !< An integer indicating which template is to be used to label diagnostics.
   !>@{ Diagnostic IDs
-  integer :: id_tr = -1
+  integer :: id_tr = -1, id_tr_post_horzn = -1
   integer :: id_adx = -1, id_ady = -1, id_dfx = -1, id_dfy = -1
   integer :: id_lbd_bulk_dfx = -1, id_lbd_bulk_dfy = -1, id_lbd_dfx = -1, id_lbd_dfy = -1
   integer :: id_lbd_dfx_2d = -1  , id_lbd_dfy_2d = -1
@@ -408,6 +408,10 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
         cmor_long_name=cmor_longname, cmor_units=Tr%cmor_units, &
         cmor_standard_name=cmor_long_std(cmor_longname))
     endif
+    Tr%id_tr_post_horzn = register_diag_field("ocean_model",                &
+      trim(name)//"_post_horzn", diag%axesTL, Time,                         &
+      trim(longname)//" after horizontal transport (advection/diffusion) "//&
+      "has occurred", trim(units))
     if (Tr%diag_form == 1) then
       Tr%id_adx = register_diag_field("ocean_model", trim(shortnm)//"_adx", &
           diag%axesCuL, Time, trim(flux_longname)//" advective zonal flux" , &
@@ -779,6 +783,7 @@ subroutine post_tracer_transport_diagnostics(G, GV, Reg, h_diag, diag)
 
   do m=1,Reg%ntr ; if (Reg%Tr(m)%registry_diags) then
     Tr => Reg%Tr(m)
+    if (Tr%id_tr_post_horzn> 0) call post_data(Tr%id_tr_post_horzn, Tr%t, diag)
     if (Tr%id_adx > 0) call post_data(Tr%id_adx, Tr%ad_x, diag, alt_h=h_diag)
     if (Tr%id_ady > 0) call post_data(Tr%id_ady, Tr%ad_y, diag, alt_h=h_diag)
     if (Tr%id_dfx > 0) call post_data(Tr%id_dfx, Tr%df_x, diag, alt_h=h_diag)
