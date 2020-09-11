@@ -1588,9 +1588,17 @@ subroutine open_boundary_init(G, GV, US, param_file, OBC, restart_CSp)
   if (OBC%oblique_BCs_exist_globally) call pass_vector(OBC%rx_oblique, OBC%ry_oblique, G%Domain, &
                      To_All+Scalar_Pair)
   if (associated(OBC%cff_normal)) call pass_var(OBC%cff_normal, G%Domain, position=CORNER)
-  if (associated(OBC%tres_x) .or. associated(OBC%tres_y)) then
+  if (associated(OBC%tres_x) .and. associated(OBC%tres_y)) then
     do m=1,OBC%ntr
       call pass_vector(OBC%tres_x(:,:,:,m), OBC%tres_y(:,:,:,m), G%Domain, To_All+Scalar_Pair)
+    enddo
+  elseif (associated(OBC%tres_x)) then
+    do m=1,OBC%ntr
+      call pass_var(OBC%tres_x(:,:,:,m), G%Domain, position=EAST_FACE)
+    enddo
+  elseif (associated(OBC%tres_y)) then
+    do m=1,OBC%ntr
+      call pass_var(OBC%tres_y(:,:,:,m), G%Domain, position=NORTH_FACE)
     enddo
   endif
 
@@ -4717,8 +4725,7 @@ subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart
   endif
 
   ! Still painfully inefficient, now in four dimensions.
-  ! Allocating both for now so that the pass_vector works.
-  if (any(OBC%tracer_x_reservoirs_used) .or. any(OBC%tracer_y_reservoirs_used)) then
+  if (any(OBC%tracer_x_reservoirs_used)) then
     allocate(OBC%tres_x(HI%isdB:HI%iedB,HI%jsd:HI%jed,GV%ke,OBC%ntr))
     OBC%tres_x(:,:,:,:) = 0.0
     do m=1,OBC%ntr
@@ -4734,8 +4741,8 @@ subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart
         endif
       endif
     enddo
-! endif
-! if (any(OBC%tracer_y_reservoirs_used)) then
+  endif
+  if (any(OBC%tracer_y_reservoirs_used)) then
     allocate(OBC%tres_y(HI%isd:HI%ied,HI%jsdB:HI%jedB,GV%ke,OBC%ntr))
     OBC%tres_y(:,:,:,:) = 0.0
     do m=1,OBC%ntr
