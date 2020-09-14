@@ -119,7 +119,9 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   integer                 :: year, month, day, hour, minute, seconds, seconds_n, seconds_d, rc
   character(len=240)      :: runid                !< Run ID
   character(len=32)       :: runtype              !< Run type
-  character(len=240)      :: restartfile          !< Path/Name of restart file
+  character(len=512)      :: restartfile          !< Path/Name of restart file
+  character(len=2048)     :: restartfiles         !< Path/Name of restart files.
+                                                  !! (same as restartfile if a single restart file is to be read in)
   integer                 :: nu                   !< i/o unit to read pointer file
   character(len=240)      :: restart_pointer_file !< File name for restart pointer file
   character(len=240)      :: restartpath          !< Path of the restart file
@@ -164,6 +166,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   !logical :: lsend_precip_fact      !< If T,send precip_fact to cpl for use in fw balance
                                     !! (partially-coupled option)
   character(len=128) :: err_msg     !< Error message
+  integer :: iostat
 
   ! set the cdata pointers:
   call seq_cdata_setptrs(cdata_o, id=MOM_MCT_ID, mpicom=mpicom_ocn, &
@@ -296,15 +299,27 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
     nu = shr_file_getUnit()
     restart_pointer_file = trim(glb%pointer_filename)
     if (is_root_pe()) write(glb%stdout,*) 'Reading ocn pointer file: ',restart_pointer_file
+    restartfile = ""; restartfiles = "";
     open(nu, file=restart_pointer_file, form='formatted', status='unknown')
-    read(nu,'(a)') restartfile
+    do
+      read(nu,'(a)', iostat=iostat) restartfile
+      if (len(trim(restartfiles))>1 .and. iostat<0) then
+        exit ! done reading restart files list.
+      else if (iostat/=0) then
+        call MOM_error(FATAL, 'Error reading rpointer.ocn')
+      endif
+      ! check if the length of restartfiles variable is sufficient:
+      if (len(restartfiles)-len(trim(restartfiles)) < len(trim(restartfile))) then
+        call MOM_error(FATAL, "Restart file name(s) too long.")
+      endif
+      restartfiles = trim(restartfiles) // " " // trim(restartfile)
+    enddo
     close(nu)
-    !restartfile = trim(restartpath) // trim(restartfile)
     if (is_root_pe()) then
-      write(glb%stdout,*) 'Reading restart file: ',trim(restartfile)
+      write(glb%stdout,*) 'Reading restart file(s): ',trim(restartfiles)
     end if
     call shr_file_freeUnit(nu)
-    call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time_start, input_restart_file=trim(restartfile))
+    call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time_start, input_restart_file=trim(restartfiles))
   endif
   if (is_root_pe()) then
     write(glb%stdout,'(/12x,a/)') '======== COMPLETED MOM INITIALIZATION ========'
@@ -434,6 +449,9 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   integer                   :: ocn_cpl_dt   !< one ocn coupling interval in seconds. (to be received from cesm)
   real (kind=8)             :: mom_cpl_dt   !< one ocn coupling interval in seconds. (internal)
   integer                   :: ncouple_per_day !< number of ocean coupled call in one day (non-dim)
+  integer                   :: num_rest_files !< number of restart files written
+  integer                   :: i
+  character(len=8)          :: suffix
 
   ! reset shr logging to ocn log file:
   if (is_root_pe()) then
@@ -534,7 +552,8 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
     write(restartname,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5)') trim(runid), year, month, day, seconds
 
     call save_restart(glb%ocn_state%dirs%restart_output_dir, glb%ocn_state%Time, glb%grid, &
-                      glb%ocn_state%restart_CSp, .false., filename=restartname, GV=glb%ocn_state%GV)
+                      glb%ocn_state%restart_CSp, .false., filename=restartname, GV=glb%ocn_state%GV, &
+                      num_rest_files=num_rest_files)
 
     ! write name of restart file in the rpointer file
     nu = shr_file_getUnit()
@@ -542,6 +561,19 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
       restart_pointer_file = trim(glb%pointer_filename)
       open(nu, file=restart_pointer_file, form='formatted', status='unknown')
       write(nu,'(a)') trim(restartname) //'.nc'
+
+      if (num_rest_files > 1) then
+        ! append i.th restart file name to rpointer
+        do i=1, num_rest_files-1
+          if (i < 10) then
+            write(suffix,'("_",I1)') i
+          else
+            write(suffix,'("_",I2)') i
+          endif
+          write(nu,'(a)') trim(restartname) // trim(suffix) // '.nc'
+        enddo
+      endif
+
       close(nu)
       write(glb%stdout,*) 'ocn restart pointer file written: ',trim(restartname)
     endif

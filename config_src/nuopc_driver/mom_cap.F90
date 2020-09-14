@@ -15,7 +15,6 @@ use mpp_io_mod,               only: mpp_open, MPP_RDONLY, MPP_ASCII, MPP_OVERWR,
 use mpp_mod,                  only: stdlog, stdout, mpp_root_pe, mpp_clock_id
 use mpp_mod,                  only: mpp_clock_begin, mpp_clock_end, MPP_CLOCK_SYNC
 use mpp_mod,                  only: MPP_CLOCK_DETAILED, CLOCK_COMPONENT, MAXPES
-use time_interp_external_mod, only: time_interp_external_init
 use time_manager_mod,         only: set_calendar_type, time_type, increment_date
 use time_manager_mod,         only: set_time, set_date, get_time, get_date, month_name
 use time_manager_mod,         only: GREGORIAN, JULIAN, NOLEAP, THIRTY_DAY_MONTHS, NO_CALENDAR
@@ -1559,6 +1558,7 @@ subroutine ModelAdvance(gcomp, rc)
               return
            endif
            write(writeunit,'(a)') trim(restartname)//'.nc'
+
            if (num_rest_files > 1) then
               ! append i.th restart file name to rpointer
               do i=1, num_rest_files-1
@@ -1737,7 +1737,6 @@ subroutine ModelSetRunClock(gcomp, rc)
                    line=__LINE__, file=__FILE__, rcToReturn=rc)
               return
             endif
-        
             ! not used in nems
             call NUOPC_CompAttributeGet(gcomp, name="restart_ymd", value=cvalue, &
                  isPresent=isPresent, isSet=isSet, rc=rc)
@@ -1811,6 +1810,8 @@ subroutine ocean_model_finalize(gcomp, rc)
   type(TIME_TYPE)                        :: Time
   type(ESMF_Clock)                       :: clock
   type(ESMF_Time)                        :: currTime
+  type(ESMF_Alarm), allocatable          :: alarmList(:)
+  integer                                :: alarmCount
   character(len=64)                      :: timestamp
   logical                                :: write_restart
   character(len=*),parameter  :: subname='(MOM_cap:ocean_model_finalize)'
