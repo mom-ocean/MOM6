@@ -204,7 +204,7 @@ build/%/Makefile: ../ac/configure ../ac/Makefile.in $(DEPS)/lib/libFMS.a $(MKMF)
 
 
 # Fetch the regression target codebase
-build/target/Makefile: $(TARGET_CODEBASE)/configure build/fms/libFMS.a $(MKMF) $(LIST_PATHS)
+build/target/Makefile: $(TARGET_CODEBASE)/configure $(DEPS)/lib/fms/libFMS.a $(MKMF) $(LIST_PATHS)
 	mkdir -p $(@D)
 	cd $(@D) \
 	  && $(MOM_ENV) ../../$(TARGET_CODEBASE)/configure $(MOM_ACFLAGS) \
