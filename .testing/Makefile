@@ -169,7 +169,7 @@ build/symmetric/Makefile: MOM_ACFLAGS=--enable-symmetric
 build/asymmetric/Makefile: MOM_ACFLAGS=
 build/repro/Makefile: MOM_ACFLAGS=--enable-symmetric
 build/openmp/Makefile: MOM_ACFLAGS=--enable-symmetric --enable-openmp
-build/target/Makefile: MOM_ACFLAGS=--srcdir=../../$(TARGET_CODEBASE) --enable-symmetric
+build/target/Makefile: MOM_ACFLAGS=--enable-symmetric
 
 
 # Fetch regression target source code
@@ -204,24 +204,23 @@ build/%/Makefile: ../ac/configure ../ac/Makefile.in $(DEPS)/lib/libFMS.a $(MKMF)
 
 
 # Fetch the regression target codebase
-build/target/Makefile: $(TARGET_CODEBASE)/configure $(DEPS)/lib/libFMS.a $(MKMF) $(LIST_PATHS)
+build/target/Makefile: $(TARGET_CODEBASE)/ac/configure $(DEPS)/lib/libFMS.a $(MKMF) $(LIST_PATHS)
 	mkdir -p $(@D)
 	cd $(@D) \
-	  && $(MOM_ENV) ../../$(TARGET_CODEBASE)/configure $(MOM_ACFLAGS) \
+	  && $(MOM_ENV) ../../$(TARGET_CODEBASE)/ac/configure $(MOM_ACFLAGS) \
 	  || (cat config.log && false)
 
 
-$(TARGET_CODEBASE)/configure: $(TARGET_CODEBASE)
-	autoreconf -i $<
+$(TARGET_CODEBASE)/ac/configure: $(TARGET_CODEBASE)
+	autoreconf -i $</ac
 
 
 $(TARGET_CODEBASE):
 	git clone --recursive $(MOM_TARGET_URL) $@
 	cd $@ && git checkout $(MOM_TARGET_BRANCH)
 	# Copy modern autoconf files to target?
-	cp ../ac/configure.ac $(TARGET_CODEBASE)/
-	cp ../ac/Makefile.in $(TARGET_CODEBASE)/
-	cp -r ../ac/m4 $(TARGET_CODEBASE)/
+	mkdir -p $(TARGET_CODEBASE)/ac
+	cp -r ../ac/{configure.ac,Makefile.in,m4} $(TARGET_CODEBASE)/ac
 
 
 #---
