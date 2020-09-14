@@ -20,11 +20,11 @@ addons:
 # Environment variables
 env:
   global:
-    - TIMEFORMAT="Time: %lR  (user: %lU, sys: %lS)"
-    - FCFLAGS_DEBUG="-g -O0 -Wextra -Wno-compare-reals -fbacktrace -ffpe-trap=invalid,zero,overflow -fcheck=bounds"
-    - FCFLAGS_REPRO="-g -O2 -fbacktrace"
-    - FCFLAGS_INIT="-finit-real=snan -finit-integer=2147483647 -finit-derived"
-    - FCFLAGS_COVERAGE="--coverage"
+    - TIMEFORMAT: "\"Time: %lR  (user: %lU, sys: %lS)\""
+    - FCFLAGS_DEBUG: "\"-g -O0 -Wextra -Wno-compare-reals -fbacktrace -ffpe-trap=invalid,zero,overflow -fcheck=bounds\""
+    - FCFLAGS_REPRO: "\"-g -O2 -fbacktrace\""
+    - FCFLAGS_INIT: "\"-finit-real=snan -finit-integer=2147483647 -finit-derived\""
+    - FCFLAGS_COVERAGE: "\"--coverage\""
 
 jobs:
   include:
