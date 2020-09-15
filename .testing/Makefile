@@ -236,7 +236,7 @@ $(DEPS)/fms/build/libFMS.a: $(DEPS)/fms/build/Makefile
 $(DEPS)/fms/build/Makefile: $(DEPS)/fms/src/configure $(DEPS)/Makefile.fms.in $(MKMF) $(LIST_PATHS)
 	PATH_ENV="${PATH}:../../bin" FCFLAGS_ENV="$(FCFLAGS_DEBUG)" $(MAKE) -C $(DEPS) fms/build/Makefile
 
-$(DEPS)/Makefile.fms.in: ../ac/deps/Makefile.fms.in
+$(DEPS)/Makefile.fms.in: ../ac/deps/Makefile.fms.in $(DEPS)/Makefile
 	cp $< $(DEPS)
 
 # TODO: m4 dependencies?
