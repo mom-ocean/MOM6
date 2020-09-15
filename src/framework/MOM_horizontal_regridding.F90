@@ -732,6 +732,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   allocate(z_in(kd),z_edges_in(kd+1))
 
   allocate(tr_z(isd:ied,jsd:jed,kd), mask_z(isd:ied,jsd:jed,kd))
+  tr_z(:,:,:)=0.0;mask_z(:,:,:)=0.0
 
   call mpp_get_axis_data(axes_data(3), z_in)
 
@@ -770,7 +771,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
     allocate(mask_in(id,jdp)) ; mask_in(:,:)=0.0
     allocate(last_row(id))    ; last_row(:)=0.0
   else
-    allocate(data_in(isd:ied,jsd:jed,kd))
+    allocate(data_in(isd:ied,jsd:jed,kd)); data_in(:,:,:)=0.0
   endif
   ! construct level cell boundaries as the mid-point between adjacent centers
   z_edges_in(1) = 0.0
