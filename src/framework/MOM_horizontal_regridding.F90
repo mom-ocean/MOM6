@@ -911,15 +911,16 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
     enddo ! kd
   else
-      call time_interp_external(fms_id, Time, data_in, verbose=.true., turns=turns)
-      do k=1,kd
-        do j=js,je
-          do i=is,ie
-            tr_z(i,j,k)=data_in(i,j,k)
-            if (abs(tr_z(i,j,k)-missing_value) < abs(roundoff*missing_value)) mask_z(i,j,k) = 0.
-          enddo
+    call time_interp_external(fms_id, Time, data_in, verbose=.true., turns=turns)
+    do k=1,kd
+      do j=js,je
+        do i=is,ie
+          tr_z(i,j,k)=data_in(i,j,k)
+          mask_z(i,j,k)=1.0
+          if (abs(tr_z(i,j,k)-missing_value) < abs(roundoff*missing_value)) mask_z(i,j,k) = 0.
         enddo
       enddo
+    enddo
   endif
 
 end subroutine horiz_interp_and_extrap_tracer_fms_id
