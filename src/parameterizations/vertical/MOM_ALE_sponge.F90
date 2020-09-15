@@ -847,11 +847,11 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
           ! Build the source grid
           zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0; hsrc(:) = 0.0; tmpT1d(:) = -99.9
           do k=1,nz_data
-             if (mask_z(CS%col_i(c),CS%col_j(c),k) == 1.0) then
-                zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(CS%col_i(c),CS%col_j(c)) )
-                tmpT1d(k) = sp_val(CS%col_i(c),CS%col_j(c),k)
+             if (mask_z(i,j,k) == 1.0) then
+                zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
+                tmpT1d(k) = sp_val(i,j,k)
              elseif (k>1) then
-                zBottomOfCell = -G%bathyT(CS%col_i(c),CS%col_j(c))
+                zBottomOfCell = -G%bathyT(i,j)
                 tmpT1d(k) = tmpT1d(k-1)
              else ! This next block should only ever be reached over land
                 tmpT1d(k) = -99.9
@@ -861,9 +861,9 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
              zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
           enddo
           ! In case data is deeper than model
-          hsrc(nz_data) = hsrc(nz_data) + ( zTopOfCell + G%bathyT(CS%col_i(c),CS%col_j(c)) )
-          CS%Ref_val(CS%fldno)%h(1:nz_data,c) = GV%Z_to_H*hsrc(1:nz_data)
-          CS%Ref_val(CS%fldno)%p(1:nz_data,c) = tmpT1d(1:nz_data)
+          hsrc(nz_data) = hsrc(nz_data) + ( zTopOfCell + G%bathyT(i,j) )
+          CS%Ref_val(m)%h(1:nz_data,c) = GV%Z_to_H*hsrc(1:nz_data)
+          CS%Ref_val(m)%p(1:nz_data,c) = tmpT1d(1:nz_data)
           do k=2,nz_data
              !          if (mask_z(i,j,k)==0.) &
              if (CS%Ref_val(m)%h(k,c) <= 0.001*GV%m_to_H) &
@@ -895,7 +895,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
                               CS%nz, h(i,j,:), tmp_val1, h_neglect, h_neglect_edge)
       endif
       !Backward Euler method
-      CS%var(m)%p(i,j,1:CS%nz) = I1pdamp * (CS%var(m)%p(i,j,1:CS%nz) + tmp_val1 * damp)
+      CS%var(m)%p(i,j,1:CS%nz) = I1pdamp * (CS%var(m)%p(i,j,1:CS%nz) + tmp_val1(1:CS%nz) * damp)
     enddo
   enddo
 
@@ -1185,7 +1185,7 @@ subroutine ALE_sponge_end(CS)
   if (associated(CS%Iresttime_col_v)) deallocate(CS%Iresttime_col_v)
 
   do m=1,CS%fldno
-    if (associated(CS%Ref_val(CS%fldno)%p)) deallocate(CS%Ref_val(CS%fldno)%p)
+    if (associated(CS%Ref_val(m)%p)) deallocate(CS%Ref_val(m)%p)
   enddo
 
   deallocate(CS)
