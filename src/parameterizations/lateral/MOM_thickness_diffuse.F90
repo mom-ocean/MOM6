@@ -675,7 +675,11 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   real :: G_rho0        ! g/Rho0 [L2 R-1 Z-1 T-2 ~> m4 kg-1 s-2].
   real :: N2_floor      ! A floor for N2 to avoid degeneracy in the elliptic solver
                         ! times unit conversion factors [T-2 L2 Z-2 ~> s-2]
-  real :: dTdi2, dTdj2  ! pot. temp. differences, squared.
+  real :: Tl(5)         ! copy and T in local stencil [degC]
+  real :: mn_T          ! mean of T in local stencil [degC]
+  real :: mn_T2         ! mean of T**2 in local stencil [degC]
+  real :: hl(5)         ! Copy of local stencil of H [H ~> m]
+  real :: r_sm_H        ! Reciprocal of sum of H in local stencil [H-1 ~> m-1]
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: Tsgs2 ! Sub-grid temperature variance [degC2]
 
   real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: diag_sfn_x, diag_sfn_unlim_x ! Diagnostics
@@ -689,8 +693,6 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   logical :: use_Stanley
   integer :: is, ie, js, je, nz, IsdB, halo
   integer :: i, j, k
-  real :: Tl(5), mn_T, mn_T2 ! copy and moment of local stencil of T [degC or degC2]
-  real :: Hl(5), mn_H        ! Copy of local stencil of H [H ~> m]
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke ; IsdB = G%IsdB
 
   I4dt = 0.25 / dt
@@ -732,7 +734,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 !$OMP parallel default(none) shared(is,ie,js,je,h_avail_rsum,pres,h_avail,I4dt, use_Stanley, &
 !$OMP                               CS,G,GV,tv,h,h_frac,nz,uhtot,Work_u,vhtot,Work_v,Tsgs2,T, &
 !$OMP                               diag_sfn_x, diag_sfn_y, diag_sfn_unlim_x, diag_sfn_unlim_y ) &
-!$OMP          private(dTdi2,dTdj2)
+!$OMP          private(hl,r_sm_H,Tl,mn_T,mn_T2)
   ! Find the maximum and minimum permitted streamfunction.
 !$OMP do
   do j=js-1,je+1 ; do i=is-1,ie+1
@@ -765,17 +767,16 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
       hl(3) = h(i+1,j,k) * G%mask2dCu(I,j)
       hl(4) = h(i,j-1,k) * G%mask2dCv(i,J-1)
       hl(5) = h(i,j+1,k) * G%mask2dCv(i,J)
-      mn_H = ( hl(1) + ( ( hl(2) + hl(3) ) + ( hl(4) + hl(5) ) ) ) + GV%H_subroundoff
-      mn_H = 1. / mn_H ! Hereafter, mn_H is the reciprocal of mean h for the stencil
+      r_sm_H = 1. / ( ( hl(1) + ( ( hl(2) + hl(3) ) + ( hl(4) + hl(5) ) ) ) + GV%H_subroundoff )
       ! Mean of T
       Tl(1) = T(i,j,k) ; Tl(2) = T(i-1,j,k) ; Tl(3) = T(i+1,j,k)
       Tl(4) = T(i,j-1,k) ; Tl(5) = T(i,j+1,k)
-      mn_T = ( hl(1)*Tl(1) + ( ( hl(2)*Tl(2) + hl(3)*Tl(3) ) + ( hl(4)*Tl(4) + hl(5)*Tl(5) ) ) ) * mn_H
+      mn_T = ( hl(1)*Tl(1) + ( ( hl(2)*Tl(2) + hl(3)*Tl(3) ) + ( hl(4)*Tl(4) + hl(5)*Tl(5) ) ) ) * r_sm_H
       ! Adjust T vectors to have zero mean
       Tl(:) = Tl(:) - mn_T ; mn_T = 0.
       ! Variance of T
       mn_T2 = ( hl(1)*Tl(1)*Tl(1) + ( ( hl(2)*Tl(2)*Tl(2) + hl(3)*Tl(3)*Tl(3) ) &
-                                    + ( hl(4)*Tl(4)*Tl(4) + hl(5)*Tl(5)*Tl(5) ) ) ) * mn_H
+                                    + ( hl(4)*Tl(4)*Tl(4) + hl(5)*Tl(5)*Tl(5) ) ) ) * r_sm_H
       ! Variance should be positive but round-off can violate this. Calculating
       ! variance directly would fix this but requires more operations.
       Tsgs2(i,j,k) = CS%Stanley_det_coeff * max(0., mn_T2)
