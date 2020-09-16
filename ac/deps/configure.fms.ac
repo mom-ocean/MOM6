@@ -13,8 +13,44 @@ AC_PROG_CC
 AX_MPI
 CC=$MPICC
 
-# FMS: Check if Linux gettid is avaiable
-AC_CHECK_FUNCS([gettid])
+# FMS configuration
+
+# Linux and OSX have a gettid system call, but it is not implemented in older
+# glibc implementations.  When unavailable, a native syscall is used.
+#
+# On Linux, this is defined in unistd.h as __NR_gettid, and FMS is hard-coded
+# to use this value.  In OS X, this is defined in sys/syscall.h as SYS_gettid,
+# so we override this macro if __NR_gettid is unavailable.
+AC_CHECK_FUNCS([gettid], [], [
+  AC_MSG_CHECKING([if __NR_gettid must be redefined])
+  AC_CACHE_VAL([ac_cv_cc_nr_gettid], [
+    ac_cv_cc_nr_gettid='unknown'
+    for nr_gettid in __NR_gettid SYS_gettid; do
+      AC_COMPILE_IFELSE([
+        AC_LANG_PROGRAM([
+#include <unistd.h>
+#include <sys/syscall.h>
+          ], [syscall($nr_gettid)]
+        )], [ac_cv_cc_nr_gettid=$nr_gettid]
+      )
+      AS_IF([test "$ac_cv_cc_nr_gettid" != unknown], [break])
+    done
+  ])
+  AS_CASE([ac_cv_cc_nr_gettid],
+    [__NR_gettid], [AC_MSG_RESULT([none needed])],
+    [AC_MSG_RESULT([$ac_cv_cc_nr_gettid])]
+  )
+  AS_IF([test "$ac_cv_cc_nr_gettid" != unknown], [
+    AS_IF([test "$ac_cv_cc_nr_gettid" != __NR_gettid],
+      [AC_DEFINE_UNQUOTED([__NR_gettid], [$ac_cv_cc_nr_gettid])]
+    )], [
+    AC_MSG_ERROR(["Could not find the gettid syscall ID"])
+  ])
+])
+
+
+# FMS 2019.01.03 uses __APPLE__ to disable Linux CPU affinity calls.
+AC_CHECK_FUNCS([sched_getaffinity], [], [AC_DEFINE([__APPLE__])])
 
 
 # Standard Fortran configuration
@@ -53,6 +89,7 @@ AC_DEFINE([use_netCDF])
 # Enable Cray pointers
 AX_FC_CRAY_POINTER
 
+
 # Force 8-byte reals
 AX_FC_REAL8
 AS_IF(
@@ -74,6 +111,7 @@ AC_FC_LINE_LENGTH([unlimited])
 # Allow invaliz BOZ assignment
 AX_FC_ALLOW_INVALID_BOZ
 FCFLAGS="$FCFLAGS $ALLOW_INVALID_BOZ_FCFLAGS"
+
 
 # Allow argument mismatch (for functions lacking interfaces)
 AX_FC_ALLOW_ARG_MISMATCH

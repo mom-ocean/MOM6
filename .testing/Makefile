@@ -25,7 +25,7 @@ FCFLAGS_COVERAGE ?=
 # - These flags should be configured outside of the Makefile, either with
 #   config.mk or as environment variables.
 #
-# - FMS cannot be build with the same aggressive initialization flags as MOM6,
+# - FMS cannot be built with the same aggressive initialization flags as MOM6,
 #   so FCFLAGS_INIT is used to provide additional MOM6 configuration.
 
 
@@ -125,7 +125,7 @@ endif
 # Rules
 
 .PHONY: all build.regressions
-all: $(foreach b,$(BUILDS),build/$(b)/MOM6) $(VENV_PATH)
+all: $(foreach b,$(BUILDS),build/$(b)/MOM6)
 build.regressions: $(foreach b,symmetric target,build/$(b)/MOM6)
 
 # Executable
@@ -371,11 +371,11 @@ $(eval $(call CMP_RULE,regression,symmetric target))
 # $(5): Environment variables
 # $(6): Number of MPI ranks
 define STAT_RULE
-work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6
+work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6 $(VENV_PATH)
 	@echo "Running test $$*.$(1)..."
 	if [ $(3) ]; then find build/$(2) -name *.gcda -exec rm -f '{}' \; ; fi
 	mkdir -p $$(@D)
-	cp -rL $$*/* $$(@D)
+	cp -RL $$*/* $$(@D)
 	if [ -f $$(@D)/Makefile ]; then \
 	  $$(VENV_ACTIVATE) \
 	    && cd $$(@D) \
@@ -425,10 +425,10 @@ $(eval $(call STAT_RULE,dim.r,symmetric,,R_RESCALE_POWER=11,,1))
 
 
 # Restart tests require significant preprocessing, and are handled separately.
-work/%/restart/ocean.stats: build/symmetric/MOM6
+work/%/restart/ocean.stats: build/symmetric/MOM6 $(VENV_PATH)
 	rm -rf $(@D)
 	mkdir -p $(@D)
-	cp -rL $*/* $(@D)
+	cp -RL $*/* $(@D)
 	if [ -f $(@D)/Makefile ]; then \
 	  $(VENV_ACTIVATE) \
 	    && cd work/$*/restart \
