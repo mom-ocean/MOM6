@@ -304,12 +304,14 @@ run.openmp: $(foreach c,$(CONFIGS),work/$(c)/openmp/ocean.stats)
 
 # Color highlights for test results
 RED=\033[0;31m
+YELLOW=\033[0;33m
 GREEN=\033[0;32m
 MAGENTA=\033[0;35m
 RESET=\033[0m
 
 DONE=${GREEN}DONE${RESET}
 PASS=${GREEN}PASS${RESET}
+WARN=${YELLOW}WARN${RESET}
 FAIL=${RED}FAIL${RESET}
 
 # Comparison rules
@@ -321,18 +323,18 @@ define CMP_RULE
 	@cmp $$^ || !( \
 	  mkdir -p results/$$*; \
 	  (diff $$^ | tee results/$$*/ocean.stats.$(1).diff | head) ; \
-	  echo -e "${FAIL}: Solutions $$*.$(1) have changed." \
+	  echo -e "$(FAIL): Solutions $$*.$(1) have changed." \
 	)
-	@echo -e "${PASS}: Solutions $$*.$(1) agree."
+	@echo -e "$(PASS): Solutions $$*.$(1) agree."
 
 .PRECIOUS: $(foreach b,$(2),work/%/$(b)/chksum_diag)
 %.$(1).diag: $(foreach b,$(2),work/%/$(b)/chksum_diag)
 	@cmp $$^ || !( \
 	  mkdir -p results/$$*; \
 	  (diff $$^ | tee results/$$*/chksum_diag.$(1).diff | head) ; \
-	  echo -e "${FAIL}: Diagnostics $$*.$(1).diag have changed." \
+	  echo -e "$(FAIL): Diagnostics $$*.$(1).diag have changed." \
 	)
-	@echo -e "${PASS}: Diagnostics $$*.$(1).diag agree."
+	@echo -e "$(PASS): Diagnostics $$*.$(1).diag agree."
 endef
 
 $(eval $(call CMP_RULE,grid,symmetric asymmetric))
@@ -342,7 +344,7 @@ $(eval $(call CMP_RULE,repro,symmetric repro))
 $(eval $(call CMP_RULE,openmp,symmetric openmp))
 $(eval $(call CMP_RULE,nan,symmetric nan))
 $(foreach d,$(DIMS),$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
-$(eval $(call CMP_RULE,regression,symmetric target))
+#$(eval $(call CMP_RULE,regression,symmetric target))
 
 # Custom comparison rules
 
@@ -352,12 +354,32 @@ $(eval $(call CMP_RULE,regression,symmetric target))
 	@cmp $(foreach f,$^,<(tr -s ' ' < $(f) | cut -d ' ' -f3- | tail -n 1)) \
 	  || !( \
 	    mkdir -p results/$*; \
-	    (diff $$^ | tee results/$*/chksum_diag.restart.diff | head) ; \
-	    echo -e "${FAIL}: Solutions $*.restart have changed." \
+	    (diff $^ | tee results/$*/chksum_diag.restart.diff | head) ; \
+	    echo -e "$(FAIL): Solutions $*.restart have changed." \
 	  )
-	@echo -e "${PASS}: Solutions $*.restart agree."
+	@echo -e "$(PASS): Solutions $*.restart agree."
 
 # TODO: chksum_diag parsing of restart files
+
+# stats rule is unchanged, but we cannot use CMP_RULE to generate it.
+%.regression: $(foreach b,symmetric target,work/%/$(b)/ocean.stats)
+	@cmp $^ || !( \
+	  mkdir -p results/$*; \
+	  (diff $^ | tee results/$*/ocean.stats.regression.diff | head) ; \
+	  echo -e "$(FAIL): Solutions $*.regression have changed." \
+	)
+	@echo -e "$(PASS): Solutions $*.regression agree."
+
+# Regression testing only checks for changes in existing diagnostics
+%.regression.diag: $(foreach b,symmetric target,work/%/$(b)/chksum_diag)
+	@! diff $^ | grep "^[<>]" | grep "^>" \
+	  || ! (\
+	    mkdir -p results/$*; \
+	    (diff $^ | tee results/$*/chksum_diag.regression.diff | head) ; \
+	    echo -e "$(FAIL): Diagnostics $*.regression.diag have changed." \
+	  )
+	diff $^ || echo -e "$(WARN): New diagnostics in $<"
+	@echo -e "$(PASS): Diagnostics $*.regression.diag agree."
 
 
 #---
@@ -392,9 +414,9 @@ work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6 $(VENV_PATH)
 	    cat std.out | tee ../../../results/$$*/std.$(1).out | tail -20 ; \
 	    cat std.err | tee ../../../results/$$*/std.$(1).err | tail -20 ; \
 	    rm ocean.stats chksum_diag ; \
-	    echo -e "${FAIL}: $$*.$(1) failed at runtime." \
+	    echo -e "$(FAIL): $$*.$(1) failed at runtime." \
 	  )
-	@echo -e "${DONE}: $$*.$(1); no runtime errors."
+	@echo -e "$(DONE): $$*.$(1); no runtime errors."
 	if [ $(3) ]; then \
 	  mkdir -p results/$$* ; \
 	  bash <(curl -s https://codecov.io/bash) -n $$@ \
@@ -451,7 +473,7 @@ work/%/restart/ocean.stats: build/symmetric/MOM6 $(VENV_PATH)
 	  || !( \
 	    cat std1.out | tee ../../../results/$*/std.restart1.out | tail ; \
 	    cat std1.err | tee ../../../results/$*/std.restart1.err | tail ; \
-	    echo -e "${FAIL}: $*.restart failed at runtime." \
+	    echo -e "$(FAIL): $*.restart failed at runtime." \
 	  )
 	# Setup the next inputs
 	cd $(@D) && rm -rf INPUT && mv RESTART INPUT
@@ -462,7 +484,7 @@ work/%/restart/ocean.stats: build/symmetric/MOM6 $(VENV_PATH)
 	  || !( \
 	    cat std2.out | tee ../../../results/$*/std.restart2.out | tail ; \
 	    cat std2.err | tee ../../../results/$*/std.restart2.err | tail ; \
-	    echo -e "${FAIL}: $*.restart failed at runtime." \
+	    echo -e "$(FAIL): $*.restart failed at runtime." \
 	  )
 
 # TODO: Restart checksum diagnostics
@@ -490,7 +512,7 @@ test.summary:
 	  fi; \
 	  false ; \
 	else \
-	  echo -e "${PASS}: All tests passed!"; \
+	  echo -e "$(PASS): All tests passed!"; \
 	fi
 
 
