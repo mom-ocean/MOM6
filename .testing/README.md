@@ -11,11 +11,9 @@ This section gives a very brief overview of the test suite and how to use it.
 
 To build and run the model tests:
 ```
-make
-make test
+make -j
+make -j test
 ```
-Users may wish to use `make -j` in place of `make` to enable parallel builds.
-
 For new users, the default configuration should be suitable for most platforms.
 If not, then the following options may need to be configured.
 
@@ -33,12 +31,12 @@ If not, then the following options may need to be configured.
   Set to `true` to compare DEBUG and REPRO builds, which typically correspond
   to unoptimized and optimized builds.  See TODO for more information.
 
-These settings can either be specified at the command line, as shown below.
+These settings can either be specified at the command line, as shown below
 ```
 make DO_REGRESSION_TESTS=true
 make test DO_REGRESSION_TESTS=true
 ```
-or saved to `config.mk`.
+or saved in a configuration file, `config.mk`.
 
 To run individual classes of tests, use the subclass name:
 ```
@@ -58,7 +56,7 @@ names and descriptions of the test classes and configurations.
 
 ## Testing overview
 
-The test suite checks for numerical consistency of the model output of
+The test suite checks for numerical consistency of the model output across
 different model configurations when subjected to relevant numerical and
 mathematical transformations, such as grid layout or dimensional rescaling.  If
 the model state is unchanged after each transformation, then the test is
@@ -67,14 +65,11 @@ fail.
 
 Model state is currently defined by the `ocean.stats` output file, which
 reports the total energy (per unit mass) at machine precision alongside similar
-global metrics, such as mass or mean sea level, at lower precision.
+global metrics at lower precision, such as mass or mean sea level.
 
 Diagnostics are based on the MOM checksum function, which includes the mean,
-minimum, and maximum values as well as a bitcount in the physical domain (i.e.
-excluding halos), as saved to the `chksum_diag` output file.
-
-Additional diagnostics do not report as a fail, and are not tracked by any CIs,
-but the test will report a warning to the user.
+minimum, and maximum values, alongside a bitcount checksum, in the physical
+domain, which are saved in the `chksum_diag` output file.
 
 
 ## Build configuration
@@ -97,16 +92,18 @@ The following options are provided to configure your compiler flags.
   library.
 
   These should be used to enable settings favorable to debugging, such as no
-  optimizations, backtraces, range checking, and warning.
+  optimizations, backtraces, range checking, and warnings.
 
-  For more aggressive flags which cannot be used with FMS, see `FCFLAGS_INIT`.
+  For more aggressive debugging flags which cannot be used with FMS, see
+  `FCFLAGS_INIT`.
 
 `FCFLAGS_REPRO:` (*default:* `-g -O2`)
 
   Specify the optimized reproducible run, typically used in production runs.
 
   Ideally, this should consist of optimization flags which improve peformance
-  but do not change model output.  In practice, this is difficult to achieve.
+  but do not change model output.  In practice, this is difficult to achieve,
+  and should only used in certain environments.
 
 `FCFLAGS_INIT` (*default: none*)
 
@@ -122,7 +119,7 @@ The following options are provided to configure your compiler flags.
   This flag is used to define a build which supports some sort of code
   coverage, often one which is handled by the CI.
 
-  For many compilers, this is `--coverage`, and is applied to both the
+  For many compilers, this is set to `--coverage`, and is applied to both the
   compiler (`FCFLAGS`) and linker (`LDFLAGS`).
 
 Example values used by GFDL and Travis for the GFortran compiler are shown
@@ -139,6 +136,7 @@ ensure compatibility over the largest possible range of compilers.
 
 Like all configuration variables, these can be specified in a `config.mk` file.
 
+
 ## Building the executables
 
 Run `make` to build the test executables.
@@ -149,7 +147,7 @@ This will fetch the MKMF build toolchain, fetch and compile the FMS framework
 library, and compile the executables used in the test suite.  The default
 configuration uses the symmetric grid in the debug-compile mode, with
 optimizations disabled and stronger quality controls.  The following
-executables will be created:
+executables will be created.
 
 - `build/symmetric/MOM6`: Symmetric grid configuration (i.e. extended grids
   along western and/or southern boundaries for selected fields).  This is the
@@ -165,6 +163,7 @@ executables will be created:
 
 The `target` and `repro` builds are only created when their respective tests
 are set to `true`.
+
 
 ### Regression testing
 
@@ -188,6 +187,9 @@ branch.
 
 Currently the target can only be specifed by branch name, rather than hash.
 
+New diagnostics do not report as a fail, and are not tracked by any CIs, but
+the test will report a warning to the user.
+
 
 ## Tests
 
@@ -205,7 +207,8 @@ The tests are gathered into the following groups.
 - `test.nans`: NaN initialization of allocated arrays
 - `test.dims`: Dimensional scaling (length, time, thickness, depth)
 
-Each group of tests can also be run individually.
+Each group of tests can also be run individually, such as in the following
+example.
 ```
 make test.grids
 ```
@@ -216,7 +219,8 @@ fail if the answers differ from this build.
 
 ## Test configurations
 
-The following model test configurations (TCs) are supported:
+The following model test configurations (TCs) are supported, and are based on
+configurations in the MOM6-examples repository.
 
 - `tc0`: Unit testing of various model components, based on `unit_tests`
 - `tc1`: A low-resolution version of the `benchmark` configuration
@@ -229,13 +233,13 @@ The following model test configurations (TCs) are supported:
 
 ## Code coverage
 
-Code coverage reports the lines of code which have been tested, and can
-explicitly demonstrate when a particular operation is untested.
+Code coverage reports the lines of code which have been tested, and can be used
+to determine if a particular section is untested.
 
 Coverage is measured using `gcov` and is reported for TCs using the `symmetric`
 executable.
 
-Coverage reporting is optionally sent to the `codecov.io` site.
+Coverage reporting is optionally uploaded to the `codecov.io` site.
 ```
 https://codecov.io/gh/NOAA-GFDL/MOM6
 ```
@@ -243,7 +247,7 @@ This is disabled on default, but can be enabled by the `REPORT_COVERAGE` flag.
 ```
 make test REPORT_COVERAGE=true
 ```
-Note that any uploads will require a valid token generated by CodeCov.
+Note that any uploads will require a valid CodeCov token.
 
 
 ## Running on Travis

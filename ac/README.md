@@ -1,7 +1,7 @@
 # Autoconf Build Configuration
 
 This directory contains the configuration files required to build MOM6 using
-autoconf.
+Autoconf.
 
 Note that a top-level `./configure` is not contained in the repository, and the
 instruction below will generate this script in the `ac` directory.
@@ -11,13 +11,13 @@ instruction below will generate this script in the `ac` directory.
 
 The following tools and libraries must be installed on your system.
 
-* autoconf
-* Fortran compiler (e.g. gfortran)
+* Autoconf
+* Fortran compiler (e.g. GFortran)
 * MPI (e.g. Open MPI, MPICH)
 * netCDF, with Fortran support
 
-On some platforms, such as macOS, the autoconf package may also require an
-installation of automake.
+On some platforms, such as macOS, the Autoconf package may also require an
+installation of Automake.
 
 Some packages such as netCDF may require an additional packages for Fortran
 support.
@@ -28,38 +28,41 @@ support.
 The following instructions will allow a new user to quickly create a MOM6
 executable for ocean-only simulations.
 
+Each set of instructions is meant to be run from the root directory of the
+repository.
+
 A separate Makefile in `ac/deps/` is provided to gather and build any GFDL
 dependencies.
 ```
-cd ac/deps
-make -j
+$ cd ac/deps
+$ make -j
 ```
-This will fetch the `mkmf` tool and build the `libFMS` library.
+This will fetch the `mkmf` tool and build the FMS library.
 
-To build MOM6, first generate the autconf `configure` script.
+To build MOM6, first generate the Autoconf `configure` script.
 ```
-cd ac
-autoreconf
+$ cd ac
+$ autoreconf
 ```
 Then select your build directory, e.g. `./build`, run the configure script, and
 build the model.
 ```
-mkdir -p build
-cd build
-../ac/configure
-make -j
+$ mkdir -p build
+$ cd build
+$ ../ac/configure
+$ make -j
 ```
 This will create the MOM6 executable in the build directory.
 
-This executable is only useable for ocean-only simulations, and still requires
-the necessary experiment configuration files, such as `input.nml` and
-`MOM_input`.  For more information, consult the
+This executable is only useable for ocean-only simulations, and cannot be used
+for coupled modeling.  It also requires the necessary experiment configuration
+files, such as `input.nml` and `MOM_input`.  For more information, consult the
 [MOM6-examples wiki](https://github.com/NOAA-GFDL/MOM6-examples/wiki).
 
 
 # Build rules
 
-The Makefile produced by autoconf provides the following rules.
+The Makefile produced by Autoconf provides the following rules.
 
 ``make``
 
@@ -68,7 +71,7 @@ The Makefile produced by autoconf provides the following rules.
 ``make clean``
 
   Delete the executable and any object and module files, but preserve the
-  autoconf output.
+  Autoconf output.
 
 ``make distclean``
 
@@ -78,27 +81,27 @@ The Makefile produced by autoconf provides the following rules.
 ``make ac-clean``
 
   Delete all of the files above, including `./configure` and any other files
-  created by `autoconf`.  As with `make distclean`, this will also delete the
+  created by `autoreconf`.  As with `make distclean`, this will also delete the
   Makefile containing this rule.
 
 
 # Build configuration settings
 
-Autoconf will resolve most model depenencies, and includes the standard set
-of configuration options, such as `FC` or `FCFLAGS`.  The MOM6-specific 
-`configure` script settings are described below.
+Autoconf will resolve most model dependencies, and includes the standard set of
+configuration options, such as `FC` or `FCFLAGS`.  The `configure` settings
+specific to MOM6 are described below.
 
 `--enable-asymmetric`
   
   The MOM6 executable is configured to use symmetric grids by default.
 
-  Use the flag above to compile using uniform asymmetric grids.
+  Use the flag above to compile using uniform (asymmetric) grids.
 
   Symmetric grids are defined such that the fields for every C-grid cell are 
   fully specified by their local values.  In particular, quantities such as 
-  velocities or vorticity will be defined along the boundaries of the domain.
+  velocities or vorticity are defined along the boundaries of the domain.
 
-  Use of symmetric grids simplifies calculations, but also results in
+  Use of symmetric grids simplifies many calculations, but also results in
   nonuniform domain sizes for different fields, and slightly greater storage
   since the additional values can be considered redundant.
 
@@ -108,12 +111,13 @@ of configuration options, such as `FC` or `FCFLAGS`.  The MOM6-specific
 
 `--disable-real-8`
 
-  While MOM6 does not explicitly use double-precision reals, most of the
-  algorithms are designed and tested under this assumption.
+  While MOM6 does not explicitly use double precision reals, most of the
+  algorithms are designed and tested under this assumption, and the default
+  configuration is to enforce 8-byte reals.
 
-  This flag may be used to disable these flags, causing the compiler to use the
-  default size (usually single-precision), although there is no guarantee that
-  the model will be useable.
+  This flag may be used to relax this requirement, causing the compiler to use
+  the default size (usually single precision reals), although there is no
+  guarantee that the model will be usable.
 
 For the complete list of settings, run `./configure --help`.
 
@@ -123,10 +127,10 @@ For the complete list of settings, run `./configure --help`.
 This section briefly describes the management of GFDL dependencies `mkmf` and
 FMS.
 
-The `configure` script will first check if the compiler flags (`FCFLAGS`,
-`LDFLAGS`, etc.) can find `mkmf` and the FMS library.  If unavailable, then it
-will search in the local `ac/deps` library.  If still unavailable, because it
-has not yet been built, then the build will abort.
+The `configure` script will first check if the compiler and its configured
+flags (`FCFLAGS`, `LDFLAGS`, etc.) can find `mkmf` and the FMS library.  If
+unavailable, then it will search in the local `ac/deps` library.  If still
+unavailable, then the build will abort.
 
 Running `make -C ac/deps` will ensure that the libraries are available.  But if
 the user wishes to target an external FMS library, then they should add the 
@@ -143,7 +147,7 @@ Some configuration options are provided by the `ac/deps` Makefile:
 
 `FCFLAGS_ENV`
 
-  Used to override the default autoconf flags, `-g -O2`.  This is useful if,
+  Used to override the default Autoconf flags, `-g -O2`.  This is useful if,
   for example, one wants to build with `-O0` to speed up the build time.
 
 `MKMF_URL` (*default:* https://github.com/NOAA-GFDL/mkmf.git)
@@ -154,24 +158,27 @@ Some configuration options are provided by the `ac/deps` Makefile:
     These are used to specify where to check out the source code for each 
     respective project.
 
+Additional hooks for FMS builds do not yet exist, but can be added if
+necessary.
+
 
 # Known issues / Future development
 
 ## MPI configuration
 
-There are minor issues with the MPI configuration macro, where it may locate an
-MPI launcher based on a compiler which does not match the corresponding
-compiler, `FC`, which will tend to default to GFortran.
+There are minor issues with the MPI configuration macro, where it may use an
+MPI build wrapper (e.g. `mpifort`)  whose underlying compiler does not match
+the `FC` compiler, which will often be auto-configured to `gfortran`.
 
-This is usually not an issue, but can cause confusion when the `FCFLAGS` were
-configured for the launcher but do not work with `FC`, whose value is only used
-in the initial `configure` testing.
+This is usually not an issue, but can cause confusion if `FCFLAGS` is
+configured for the MPI wrapper but is incompatible with the `FC` compiler.
 
 To resolve this, ensure that `FC` and `FCFLAGS` are specified for the same
 compiler.
 
+
 ## Coupled builds
 
-The autoconf build is currently only capable of building ocean-only
-executables, and cannot yet be build as a standalone library.  This is planned
-to be addressed in a future release.
+The Autoconf build is currently only capable of building ocean-only
+executables, and cannot yet be build as part of a coupled more, nor as a
+standalone library.  This is planned to be addressed in a future release.
