@@ -73,6 +73,6 @@ distclean: clean
 #   Don't be surprised if the name changes or if it disappears someday.
 .PHONY: ac-clean
 ac-clean: distclean
-	rm -f aclocal.m4
-	rm -rf autom4te.cache
-	rm -f configure
+	rm -f @srcdir@/ac/aclocal.m4
+	rm -rf @srcdir@/ac/autom4te.cache
+	rm -f @srcdir@/ac/configure
