@@ -28,7 +28,7 @@ AC_INIT(
 # to srcdir and point AC_CONFIG_SRCDIR to the parent directory.
 #
 # Someday we may revert this and work from the top-level directory.  But for
-# now we will compartment autoconf to a subdirectory.
+# now we will isolate autoconf to a subdirectory.
 #---
 
 # Validate srdcir and configure input
@@ -37,14 +37,14 @@ AC_CONFIG_MACRO_DIR([m4])
 srcdir=$srcdir/..
 
 
-# Default to asymmetric grid
+# Default to symmetric grid
 # NOTE: --enable is more properly used to add a feature, rather than to select
 #   a compile-time mode, so this is not exactly being used as intended.
-MEM_LAYOUT=${srcdir}/config_src/dynamic
-AC_ARG_ENABLE([symmetric],
-  AS_HELP_STRING([--enable-symmetric], [Enable symmetric grid]))
-AS_IF([test "$enable_symmetric" = yes],
-  [MEM_LAYOUT=${srcdir}/config_src/dynamic_symmetric])
+MEM_LAYOUT=${srcdir}/config_src/dynamic_symmetric
+AC_ARG_ENABLE([asymmetric],
+  AS_HELP_STRING([--enable-asymmetric], [Use the asymmetric grid]))
+AS_IF([test "$enable_asymmetric" = yes],
+  [MEM_LAYOUT=${srcdir}/config_src/dynamic])
 
 
 # TODO: Rather than point to a pre-configured header file, autoconf could be

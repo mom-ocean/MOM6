@@ -7,10 +7,6 @@ SHELL = bash
 # Set the MPI launcher here
 MPIRUN ?= mpirun
 
-# Many compilers (Intel, GCC on ARM64) do not yet produce identical results
-# across DEBUG and REPRO builds.  For these platforms, set to false
-DO_REPRO_TESTS ?= true
-
 # Default target compiler flags
 # NOTE: FMS will be built using FCFLAGS_DEBUG
 FCFLAGS_DEBUG ?= -g -O0
@@ -20,7 +16,7 @@ FCFLAGS_COVERAGE ?=
 # Additional notes:
 #
 # - The default values are simple, minimalist flags, supported by nearly all
-#   compilers and meant to represent GFDL's canonical DEBUG and REPRO builds.
+#   compilers which are comparable to GFDL's canonical DEBUG and REPRO builds.
 #
 # - These flags should be configured outside of the Makefile, either with
 #   config.mk or as environment variables.
@@ -28,6 +24,11 @@ FCFLAGS_COVERAGE ?=
 # - FMS cannot be built with the same aggressive initialization flags as MOM6,
 #   so FCFLAGS_INIT is used to provide additional MOM6 configuration.
 
+# Set to `true` to require identical results from DEBUG and REPRO builds
+DO_REPRO_TESTS ?=
+
+# Many compilers (Intel, GCC on ARM64) do not yet produce identical results
+# across DEBUG and REPRO builds (as defined below), so we disable on default.
 
 #---
 # Dependencies
@@ -165,11 +166,11 @@ build/target/Makefile: MOM_ENV=$(PATH_FMS) $(TARGET_FCFLAGS) $(MOM_LDFLAGS)
 
 
 # Configure script flags
-build/symmetric/Makefile: MOM_ACFLAGS=--enable-symmetric
-build/asymmetric/Makefile: MOM_ACFLAGS=
-build/repro/Makefile: MOM_ACFLAGS=--enable-symmetric
-build/openmp/Makefile: MOM_ACFLAGS=--enable-symmetric --enable-openmp
-build/target/Makefile: MOM_ACFLAGS=--enable-symmetric
+build/symmetric/Makefile: MOM_ACFLAGS=
+build/asymmetric/Makefile: MOM_ACFLAGS=--enable-asymmetric
+build/repro/Makefile: MOM_ACFLAGS=
+build/openmp/Makefile: MOM_ACFLAGS=--enable-openmp
+build/target/Makefile: MOM_ACFLAGS=
 
 
 # Fetch regression target source code
@@ -378,7 +379,7 @@ $(foreach d,$(DIMS),$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 	    (diff $^ | tee results/$*/chksum_diag.regression.diff | head) ; \
 	    echo -e "$(FAIL): Diagnostics $*.regression.diag have changed." \
 	  )
-	diff $^ || echo -e "$(WARN): New diagnostics in $<"
+	@diff $^ || echo -e "$(WARN): New diagnostics in $<"
 	@echo -e "$(PASS): Diagnostics $*.regression.diag agree."
 
 

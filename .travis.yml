@@ -25,6 +25,7 @@ env:
     - FCFLAGS_REPRO: "\"-g -O2 -fbacktrace\""
     - FCFLAGS_INIT: "\"-finit-real=snan -finit-integer=2147483647 -finit-derived\""
     - FCFLAGS_COVERAGE: "\"--coverage\""
+    - DO_REPRO_TESTS: true
 
 jobs:
   include:
