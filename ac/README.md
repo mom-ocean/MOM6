@@ -180,5 +180,5 @@ compiler.
 ## Coupled builds
 
 The Autoconf build is currently only capable of building ocean-only
-executables, and cannot yet be build as part of a coupled more, nor as a
+executables, and cannot yet be build as part of a coupled model, nor as a
 standalone library.  This is planned to be addressed in a future release.
