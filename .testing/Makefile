@@ -4,36 +4,40 @@ SHELL = bash
 # User-defined configuration
 -include config.mk
 
-# Default configurations
+# Set the MPI launcher here
 MPIRUN ?= mpirun
-DO_REPRO_TESTS ?= true
+
+# Default target compiler flags
+# NOTE: FMS will be built using FCFLAGS_DEBUG
+FCFLAGS_DEBUG ?= -g -O0
+FCFLAGS_REPRO ?= -g -O2
+FCFLAGS_INIT ?=
+FCFLAGS_COVERAGE ?=
+# Additional notes:
+#
+# - The default values are simple, minimalist flags, supported by nearly all
+#   compilers which are comparable to GFDL's canonical DEBUG and REPRO builds.
+#
+# - These flags should be configured outside of the Makefile, either with
+#   config.mk or as environment variables.
+#
+# - FMS cannot be built with the same aggressive initialization flags as MOM6,
+#   so FCFLAGS_INIT is used to provide additional MOM6 configuration.
+
+# Set to `true` to require identical results from DEBUG and REPRO builds
+DO_REPRO_TESTS ?=
+
+# Many compilers (Intel, GCC on ARM64) do not yet produce identical results
+# across DEBUG and REPRO builds (as defined below), so we disable on default.
 
 #---
 # Dependencies
 DEPS = deps
 
 # mkmf, list_paths (GFDL build toolchain)
-MKMF_URL ?= https://github.com/NOAA-GFDL/mkmf.git
-MKMF_COMMIT ?= master
-LIST_PATHS := $(abspath $(DEPS)/mkmf/bin/list_paths)
-MKMF := $(abspath $(DEPS)/mkmf/bin/mkmf)
+LIST_PATHS := $(DEPS)/bin/list_paths
+MKMF := $(DEPS)/bin/mkmf
 
-# FMS framework
-FMS_URL ?= https://github.com/NOAA-GFDL/FMS.git
-FMS_COMMIT ?= 2019.01.03
-FMS := $(DEPS)/fms
-
-#---
-# Build configuration
-
-# Build settings
-MKMF_CPP = "-Duse_libMPI -Duse_netCDF -DSPMD"
-
-# Environment
-# TODO: This info ought to be determined by CMake, automake, etc.
-#MKMF_TEMPLATE ?= linux-ubuntu-xenial-gnu.mk
-MKMF_TEMPLATE ?= deps/mkmf/templates/ncrc-gnu.mk
-#MKMF_TEMPLATE ?= deps/mkmf/templates/ncrc-intel.mk
 
 #---
 # Test configuration
@@ -78,6 +82,7 @@ else
   TARGET_CODEBASE =
 endif
 
+
 # List of source files to link this Makefile's dependencies to model Makefiles
 # Assumes a depth of two, and the following extensions: F90 inc c h
 # (1): Root directory
@@ -85,12 +90,14 @@ endif
 SOURCE = \
   $(foreach ext,F90 inc c h,$(wildcard $(1)/*/*.$(ext) $(1)/*/*/*.$(ext)))
 
-MOM_SOURCE = $(call SOURCE,../src) $(wildcard ../config_src/solo_driver/*.F90) \
-             $(wildcard ../config_src/ext*/*/*.F90)
+MOM_SOURCE = $(call SOURCE,../src) \
+  $(wildcard ../config_src/solo_driver/*.F90) \
+  $(wildcard ../config_src/ext*/*/*.F90)
 TARGET_SOURCE = $(call SOURCE,build/target_codebase/src) \
   $(wildcard build/target_codebase/config_src/solo_driver/*.F90) \
   $(wildcard build/target_codebase/config_src/ext*/*.F90)
 FMS_SOURCE = $(call SOURCE,$(DEPS)/fms/src)
+
 
 #---
 # Python preprocessing environment configuration
@@ -119,93 +126,140 @@ endif
 # Rules
 
 .PHONY: all build.regressions
-all: $(foreach b,$(BUILDS),build/$(b)/MOM6) $(VENV_PATH)
+all: $(foreach b,$(BUILDS),build/$(b)/MOM6)
 build.regressions: $(foreach b,symmetric target,build/$(b)/MOM6)
 
 # Executable
 BUILD_TARGETS = MOM6 Makefile path_names
 .PRECIOUS: $(foreach b,$(BUILDS),$(foreach f,$(BUILD_TARGETS),build/$(b)/$(f)))
 
+# Compiler flags
+
 # Conditionally build symmetric with coverage support
-COVFLAG=$(if $(REPORT_COVERAGE),COVERAGE=1,)
+COVERAGE=$(if $(REPORT_COVERAGE),"$(FCFLAGS_COVERAGE)",)
 
-build/target/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 INIT=1
-build/symmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 INIT=1 $(COVFLAG)
-build/asymmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 INIT=1
-build/repro/MOM6: MOMFLAGS=NETCDF=3 REPRO=1
-build/openmp/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 OPENMP=1 INIT=1
+# .testing dependencies
+# TODO: We should probably build TARGET with the FMS that it was configured
+#   to use.  But for now we use the same FMS over all builds.
+FCFLAGS_FMS = -I../../$(DEPS)/include
+LDFLAGS_FMS = -L../../$(DEPS)/lib
+PATH_FMS = PATH="${PATH}:../../$(DEPS)/bin"
 
-build/asymmetric/path_names: GRID_SRC=config_src/dynamic
-build/%/path_names: GRID_SRC=config_src/dynamic_symmetric
 
-build/%/MOM6: build/%/Makefile $(FMS)/lib/libfms.a
-	$(MAKE) -C $(@D) $(MOMFLAGS) $(@F)
+# Define the build targets in terms of the traditional DEBUG/REPRO/etc labels
+SYMMETRIC_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(COVERAGE) $(FCFLAGS_FMS)"
+ASYMMETRIC_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_FMS)"
+REPRO_FCFLAGS := FCFLAGS="$(FCFLAGS_REPRO) $(FCFLAGS_FMS)"
+OPENMP_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_FMS)"
+TARGET_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_FMS)"
 
-build/%/Makefile: build/%/path_names
-	cp $(MKMF_TEMPLATE) $(@D)
-	cd $(@D) && $(MKMF) \
-	  -t $(notdir $(MKMF_TEMPLATE)) \
-	  -o '-I ../../$(DEPS)/fms/build' \
-	  -p MOM6 \
-	  -l '../../$(DEPS)/fms/lib/libfms.a' \
-	  -c $(MKMF_CPP) \
-	  path_names
+MOM_LDFLAGS := LDFLAGS="$(LDFLAGS_FMS)"
+SYMMETRIC_LDFLAGS := LDFLAGS="$(COVERAGE) $(LDFLAGS_FMS)"
 
-# NOTE: These path_names rules could be merged
 
-build/target/path_names: $(LIST_PATHS) $(TARGET_CODEBASE) $(TARGET_SOURCE)
+# Environment variable configuration
+build/symmetric/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(SYMMETRIC_LDFLAGS)
+build/asymmetric/Makefile: MOM_ENV=$(PATH_FMS) $(ASYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
+build/repro/Makefile: MOM_ENV=$(PATH_FMS) $(REPRO_FCFLAGS) $(MOM_LDFLAGS)
+build/openmp/Makefile: MOM_ENV=$(PATH_FMS) $(OPENMP_FCFLAGS) $(MOM_LDFLAGS)
+build/target/Makefile: MOM_ENV=$(PATH_FMS) $(TARGET_FCFLAGS) $(MOM_LDFLAGS)
+
+
+# Configure script flags
+build/symmetric/Makefile: MOM_ACFLAGS=
+build/asymmetric/Makefile: MOM_ACFLAGS=--enable-asymmetric
+build/repro/Makefile: MOM_ACFLAGS=
+build/openmp/Makefile: MOM_ACFLAGS=--enable-openmp
+build/target/Makefile: MOM_ACFLAGS=
+
+
+# Fetch regression target source code
+build/target/Makefile: | $(TARGET_CODEBASE)
+
+
+# Define source code dependencies
+# NOTE: ./configure is too much, but Makefile is not enough!
+#   Ideally we would want to re-run both Makefile and mkmf, but our mkmf call
+#   is inside ./configure, so we must re-run ./configure as well.
+$(foreach b,$(filter-out target,$(BUILDS)),build/$(b)/Makefile): $(MOM_SOURCE)
+build/target/configure: $(TARGET_SOURCE)
+
+
+# Build MOM6
+.PRECIOUS: $(foreach b,$(BUILDS),build/$(b)/MOM6)
+build/%/MOM6: build/%/Makefile
+	cd $(@D) && time $(MAKE) -j
+
+
+# Use autoconf to construct the Makefile for each target
+.PRECIOUS: $(foreach b,$(BUILDS),build/$(b)/Makefile)
+build/%/Makefile: ../ac/configure ../ac/Makefile.in $(DEPS)/lib/libFMS.a $(MKMF) $(LIST_PATHS)
 	mkdir -p $(@D)
-	cd $(@D) && $(LIST_PATHS) -l \
-	  ../../$(TARGET_CODEBASE)/src \
-	  ../../$(TARGET_CODEBASE)/config_src/solo_driver \
-	  ../../$(TARGET_CODEBASE)/config_src/ext* \
-	  ../../$(TARGET_CODEBASE)/$(GRID_SRC)
+	cd $(@D) \
+	  && $(MOM_ENV) ../../../ac/configure $(MOM_ACFLAGS) \
+	  || (cat config.log && false)
 
-build/%/path_names: $(LIST_PATHS) $(MOM_SOURCE)
+
+../ac/configure: ../ac/configure.ac ../ac/m4
+	autoreconf -i $<
+
+
+# Fetch the regression target codebase
+build/target/Makefile: $(TARGET_CODEBASE)/ac/configure $(DEPS)/lib/libFMS.a $(MKMF) $(LIST_PATHS)
 	mkdir -p $(@D)
-	cd $(@D) && $(LIST_PATHS) -l \
-	  ../../../src \
-	  ../../../config_src/solo_driver \
-	  ../../../config_src/ext* \
-	  ../../../$(GRID_SRC)
+	cd $(@D) \
+	  && $(MOM_ENV) ../../$(TARGET_CODEBASE)/ac/configure $(MOM_ACFLAGS) \
+	  || (cat config.log && false)
 
-# Target repository for regression tests
+
+$(TARGET_CODEBASE)/ac/configure: $(TARGET_CODEBASE)
+	autoreconf -i $</ac
+
+
 $(TARGET_CODEBASE):
 	git clone --recursive $(MOM_TARGET_URL) $@
 	cd $@ && git checkout $(MOM_TARGET_BRANCH)
-
-
-#----
-# FMS build
-
-$(FMS)/lib/libfms.a: $(FMS)/build/Makefile
-	mkdir -p $(FMS)/lib
-	cd $(FMS)/build && $(MAKE) NETCDF=3 DEBUG=1 ../lib/libfms.a
-
-$(FMS)/build/Makefile: $(FMS)/build/path_names
-	cp $(MKMF_TEMPLATE) $(@D)
-	cd $(@D) && $(MKMF) \
-	  -t $(notdir $(MKMF_TEMPLATE)) \
-	  -p ../lib/libfms.a \
-	  -c $(MKMF_CPP) \
-	  path_names
-
-$(FMS)/build/path_names: $(LIST_PATHS) $(FMS)/src $(FMS_SOURCE)
-	mkdir -p $(@D)
-	cd $(@D) && $(LIST_PATHS) -l ../src
-
-$(FMS)/src:
-	git clone $(FMS_URL) $@
-	cd $@; git checkout $(FMS_COMMIT)
+	# Copy modern autoconf files to target?
+	mkdir -p $(TARGET_CODEBASE)/ac
+	cp -r ../ac/{configure.ac,Makefile.in,m4} $(TARGET_CODEBASE)/ac
 
 
 #---
-# Build Toolchain
+# FMS
 
-$(LIST_PATHS) $(MKMF):
-	git clone $(MKMF_URL) $(DEPS)/mkmf
-	cd $(DEPS)/mkmf; git checkout $(MKMF_COMMIT)
+# TODO: *.mod dependencies?
+$(DEPS)/lib/libFMS.a: $(DEPS)/fms/build/libFMS.a
+	$(MAKE) -C $(DEPS) lib/libFMS.a
 
+$(DEPS)/fms/build/libFMS.a: $(DEPS)/fms/build/Makefile
+	$(MAKE) -C $(DEPS) fms/build/libFMS.a
+
+$(DEPS)/fms/build/Makefile: $(DEPS)/fms/src/configure $(DEPS)/Makefile.fms.in $(MKMF) $(LIST_PATHS)
+	PATH_ENV="${PATH}:../../bin" FCFLAGS_ENV="$(FCFLAGS_DEBUG)" $(MAKE) -C $(DEPS) fms/build/Makefile
+
+$(DEPS)/Makefile.fms.in: ../ac/deps/Makefile.fms.in $(DEPS)/Makefile
+	cp $< $(DEPS)
+
+# TODO: m4 dependencies?
+$(DEPS)/fms/src/configure: ../ac/deps/configure.fms.ac $(DEPS)/Makefile $(FMS_SOURCE) | $(DEPS)/fms/src
+	cp ../ac/deps/configure.fms.ac $(DEPS)
+	cp -r ../ac/deps/m4 $(DEPS)
+	$(MAKE) -C $(DEPS) fms/src/configure
+
+$(DEPS)/fms/src: $(DEPS)/Makefile
+	make -C $(DEPS) fms/src
+
+# mkmf
+$(MKMF) $(LIST_PATHS): $(DEPS)/mkmf
+	$(MAKE) -C $(DEPS) bin/$(@F)
+
+$(DEPS)/mkmf: $(DEPS)/Makefile
+	$(MAKE) -C $(DEPS) mkmf
+
+# Dependency init
+$(DEPS)/Makefile: ../ac/deps/Makefile
+	mkdir -p $(@D)
+	cp $< $@
 
 #---
 # Python preprocessing
@@ -219,7 +273,7 @@ work/local-env:
 	  && pip3 install numpy \
 	  && pip3 install netCDF4
 
-#----
+#---
 # Testing
 
 .PHONY: test
@@ -253,6 +307,7 @@ run.openmp: $(foreach c,$(CONFIGS),work/$(c)/openmp/ocean.stats)
 RED=\033[0;31m
 YELLOW=\033[0;33m
 GREEN=\033[0;32m
+MAGENTA=\033[0;35m
 RESET=\033[0m
 
 DONE=${GREEN}DONE${RESET}
@@ -324,7 +379,7 @@ $(foreach d,$(DIMS),$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 	    (diff $^ | tee results/$*/chksum_diag.regression.diff | head) ; \
 	    echo -e "$(FAIL): Diagnostics $*.regression.diag have changed." \
 	  )
-	diff $^ || echo -e "$(WARN): New diagnostics in $<"
+	@diff $^ || echo -e "$(WARN): New diagnostics in $<"
 	@echo -e "$(PASS): Diagnostics $*.regression.diag agree."
 
 
@@ -339,11 +394,11 @@ $(foreach d,$(DIMS),$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 # $(5): Environment variables
 # $(6): Number of MPI ranks
 define STAT_RULE
-work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6
+work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6 $(VENV_PATH)
 	@echo "Running test $$*.$(1)..."
 	if [ $(3) ]; then find build/$(2) -name *.gcda -exec rm -f '{}' \; ; fi
 	mkdir -p $$(@D)
-	cp -rL $$*/* $$(@D)
+	cp -RL $$*/* $$(@D)
 	if [ -f $$(@D)/Makefile ]; then \
 	  $$(VENV_ACTIVATE) \
 	    && cd $$(@D) \
@@ -354,7 +409,7 @@ work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6
 	mkdir -p $$(@D)/RESTART
 	echo -e "$(4)" > $$(@D)/MOM_override
 	cd $$(@D) \
-	  && $(5) $(MPIRUN) -n $(6) ../../../$$< 2> std.err > std.out \
+	  && time $(5) $(MPIRUN) -n $(6) ../../../$$< 2> std.err > std.out \
 	  || !( \
 	    mkdir -p ../../../results/$$*/ ; \
 	    cat std.out | tee ../../../results/$$*/std.$(1).out | tail -20 ; \
@@ -367,7 +422,8 @@ work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6
 	  mkdir -p results/$$* ; \
 	  bash <(curl -s https://codecov.io/bash) -n $$@ \
 	    > work/$$*/codecov.$(1).out \
-	    2> work/$$*/codecov.$(1).err ; \
+	    2> work/$$*/codecov.$(1).err \
+	    && echo -e "${MAGENTA}Report uploaded to codecov.${RESET}"; \
 	fi
 endef
 
@@ -392,10 +448,10 @@ $(eval $(call STAT_RULE,dim.r,symmetric,,R_RESCALE_POWER=11,,1))
 
 
 # Restart tests require significant preprocessing, and are handled separately.
-work/%/restart/ocean.stats: build/symmetric/MOM6
+work/%/restart/ocean.stats: build/symmetric/MOM6 $(VENV_PATH)
 	rm -rf $(@D)
 	mkdir -p $(@D)
-	cp -rL $*/* $(@D)
+	cp -RL $*/* $(@D)
 	if [ -f $(@D)/Makefile ]; then \
 	  $(VENV_ACTIVATE) \
 	    && cd work/$*/restart \
@@ -414,7 +470,7 @@ work/%/restart/ocean.stats: build/symmetric/MOM6
 	  && halfperiod=$$(printf "%.f" $$(bc <<< "scale=10; 0.5 * $${daymax} * $${timeunit_int}")) \
 	  && printf "\n&ocean_solo_nml\n    seconds = $${halfperiod}\n/\n" >> input.nml
 	# Run the first half-period
-	cd $(@D) && $(MPIRUN) -n 1 ../../../$< 2> std1.err > std1.out \
+	cd $(@D) && time $(MPIRUN) -n 1 ../../../$< 2> std1.err > std1.out \
 	  || !( \
 	    cat std1.out | tee ../../../results/$*/std.restart1.out | tail ; \
 	    cat std1.err | tee ../../../results/$*/std.restart1.err | tail ; \
@@ -425,7 +481,7 @@ work/%/restart/ocean.stats: build/symmetric/MOM6
 	mkdir $(@D)/RESTART
 	cd $(@D) && sed -i -e "s/input_filename *= *'n'/input_filename = 'r'/g" input.nml
 	# Run the second half-period
-	cd $(@D) && $(MPIRUN) -n 1 ../../../$< 2> std2.err > std2.out \
+	cd $(@D) && time $(MPIRUN) -n 1 ../../../$< 2> std2.err > std2.out \
 	  || !( \
 	    cat std2.out | tee ../../../results/$*/std.restart2.out | tail ; \
 	    cat std2.err | tee ../../../results/$*/std.restart2.err | tail ; \
@@ -468,6 +524,7 @@ test.summary:
 clean: clean.stats
 	@[ $$(basename $$(pwd)) = .testing ]
 	rm -rf build
+
 
 .PHONY: clean.stats
 clean.stats:
