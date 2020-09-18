@@ -84,7 +84,7 @@ type, public :: ice_shelf_CS ; private
   type(hor_index_type), pointer :: HI => NULL()  !< Pointer to a horizontal indexing structure for
                                                  !! incoming data which has not been rotated.
   logical :: rotate_index = .false.   !< True if index map is rotated
-  integer :: turns                    ! The number of quarter turns for rotation testing.
+  integer :: turns                    !< The number of quarter turns for rotation testing.
   type(ocean_grid_type), pointer :: Grid => NULL() !< Grid for the ice-shelf model
   type(unit_scale_type), pointer :: &
     US => NULL()       !< A structure containing various unit conversion factors
