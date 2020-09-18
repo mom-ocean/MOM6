@@ -749,7 +749,7 @@ subroutine initialize_segment_data(G, OBC, PF)
       call MOM_error(FATAL, mesg)
     endif
 
-    call parse_segment_data_str(trim(segstr), fields=fields, num_fields=num_fields)
+    call parse_segment_manifest_str(trim(segstr), num_fields, fields)
     if (num_fields == 0) then
       call MOM_mesg('initialize_segment_data: num_fields = 0')
       cycle ! cycle to next segment
@@ -770,7 +770,8 @@ subroutine initialize_segment_data(G, OBC, PF)
     JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
 
     do m=1,num_fields
-      call parse_segment_data_str(trim(segstr), var=trim(fields(m)), value=value, filenam=filename, fieldnam=fieldname)
+      call parse_segment_data_str(trim(segstr), m, trim(fields(m)), &
+          value, filename, fieldname)
       if (trim(filename) /= 'none') then
         OBC%update_OBC = .true. ! Data is assumed to be time-dependent if we are reading from file
         OBC%needs_IO_for_data = .true. ! At least one segment is using I/O for OBC data
@@ -1563,92 +1564,73 @@ subroutine parse_segment_str(ni_global, nj_global, segment_str, l, m, n, action_
   end function interpret_int_expr
 end subroutine parse_segment_str
 
+
+!> Parse an OBC_SEGMENT_%%%_DATA string and determine its fields
+subroutine parse_segment_manifest_str(segment_str, num_fields, fields)
+  character(len=*), intent(in) :: segment_str   !< A string in form of
+                                        !< "VAR1=file:foo1.nc(varnam1),VAR2=file:foo2.nc(varnam2),..."
+  integer, intent(out) :: num_fields    !< The number of fields in the segment data
+  character(len=*), dimension(MAX_OBC_FIELDS), intent(out) :: fields
+                                        !< List of fieldnames for each segment
+
+  ! Local variables
+  character(len=128) :: word1, word2
+
+  num_fields = 0
+  do
+    word1 = extract_word(segment_str, ',', num_fields+1)
+    if (trim(word1) == '') exit
+    num_fields = num_fields + 1
+    word2 = extract_word(word1, '=', 1)
+    fields(num_fields) = trim(word2)
+  enddo
+end subroutine parse_segment_manifest_str
+
+
 !> Parse an OBC_SEGMENT_%%%_DATA string
- subroutine parse_segment_data_str(segment_str, var, value, filenam, fieldnam, fields, num_fields, debug )
-   character(len=*),           intent(in)   :: segment_str !< A string in form of
-                                                          !! "VAR1=file:foo1.nc(varnam1),VAR2=file:foo2.nc(varnam2),..."
-   character(len=*), optional, intent(in)   :: var        !< The name of the variable for which parameters are needed
-   character(len=*), optional, intent(out)  :: filenam    !< The name of the input file if using "file" method
-   character(len=*), optional, intent(out)  :: fieldnam   !< The name of the variable in the input file if using
-                                                          !! "file" method
-   real,             optional, intent(out)  :: value      !< A constant value if using the "value" method
-   character(len=*), dimension(MAX_OBC_FIELDS), &
-                     optional, intent(out)  :: fields     !< List of fieldnames for each segment
-   integer, optional, intent(out)           :: num_fields !< The number of fields in the segment data
-   logical, optional, intent(in)            :: debug      !< If present and true, write verbose debugging messages
-   ! Local variables
-   character(len=128) :: word1, word2, word3, method
-   integer :: lword, nfields, n, m
-   logical :: continue,dbg
-   character(len=32), dimension(MAX_OBC_FIELDS) :: flds
+subroutine parse_segment_data_str(segment_str, idx, var, value, filename, fieldname)
+  character(len=*), intent(in) :: segment_str   !< A string in form of
+      !! "VAR1=file:foo1.nc(varnam1),VAR2=file:foo2.nc(varnam2),..."
+  integer, intent(in) :: idx                    !< Index of segment_str record
+  character(len=*), intent(in) :: var           !< The name of the variable for which parameters are needed
+  character(len=*), intent(out) :: filename     !< The name of the input file if using "file" method
+  character(len=*), intent(out) :: fieldname    !< The name of the variable in the input file if using
+                                                !! "file" method
+  real, optional, intent(out)  :: value         !< A constant value if using the "value" method
 
-   nfields=0
-   continue=.true.
-   dbg=.false.
-   if (PRESENT(debug)) dbg=debug
+  ! Local variables
+  character(len=128) :: word1, word2, word3, method
+  integer :: lword
 
-   do while (continue)
-      word1 = extract_word(segment_str,',',nfields+1)
-      if (trim(word1) == '') exit
-      nfields=nfields+1
-      word2 = extract_word(word1,'=',1)
-      flds(nfields) = trim(word2)
-   enddo
-
-   if (PRESENT(fields)) then
-     do n=1,nfields
-       fields(n) = flds(n)
-     enddo
-   endif
-
-   if (PRESENT(num_fields)) then
-      num_fields=nfields
-      return
-   endif
-
-   m=0
-   if (PRESENT(var)) then
-     do n=1,nfields
-       if (trim(var)==trim(flds(n))) then
-          m=n
-          exit
-       endif
-     enddo
-     if (m==0) then
-        call abort()
-     endif
-
-    ! Process first word which will start with the fieldname
-     word3 = extract_word(segment_str,',',m)
-     word1 = extract_word(word3,':',1)
-!     if (trim(word1) == '') exit
-     word2 = extract_word(word1,'=',1)
-     if (trim(word2) == trim(var)) then
-        method=trim(extract_word(word1,'=',2))
-        lword=len_trim(method)
-        if (method(lword-3:lword) == 'file') then
-           ! raise an error id filename/fieldname not in argument list
-           word1 = extract_word(word3,':',2)
-           filenam = extract_word(word1,'(',1)
-           fieldnam = extract_word(word1,'(',2)
-           lword=len_trim(fieldnam)
-           fieldnam = fieldnam(1:lword-1)  ! remove trailing parenth
-           value=-999.
-        elseif (method(lword-4:lword) == 'value') then
-           filenam = 'none'
-           fieldnam = 'none'
-           word1 = extract_word(word3,':',2)
-           lword=len_trim(word1)
-           read(word1(1:lword),*,end=986,err=987) value
-        endif
-      endif
+  ! Process first word which will start with the fieldname
+  word3 = extract_word(segment_str, ',', idx)
+  word1 = extract_word(word3, ':', 1)
+  !if (trim(word1) == '') exit
+  word2 = extract_word(word1, '=', 1)
+  if (trim(word2) == trim(var)) then
+    method = trim(extract_word(word1, '=', 2))
+    lword = len_trim(method)
+    if (method(lword-3:lword) == 'file') then
+      ! raise an error id filename/fieldname not in argument list
+      word1 = extract_word(word3, ':', 2)
+      filename = extract_word(word1, '(', 1)
+      fieldname = extract_word(word1, '(', 2)
+      lword = len_trim(fieldname)
+      fieldname = fieldname(1:lword-1)  ! remove trailing parenth
+      value = -999.
+    elseif (method(lword-4:lword) == 'value') then
+      filename = 'none'
+      fieldname = 'none'
+      word1 = extract_word(word3, ':', 2)
+      lword = len_trim(word1)
+      read(word1(1:lword), *, end=986, err=987) value
     endif
+  endif
 
-   return
- 986 call MOM_error(FATAL,'End of record while parsing segment data specification! '//trim(segment_str))
- 987 call MOM_error(FATAL,'Error while parsing segment data specification! '//trim(segment_str))
-
- end subroutine parse_segment_data_str
+  return
+986 call MOM_error(FATAL,'End of record while parsing segment data specification! '//trim(segment_str))
+987 call MOM_error(FATAL,'Error while parsing segment data specification! '//trim(segment_str))
+end subroutine parse_segment_data_str
 
 
 !> Parse all the OBC_SEGMENT_%%%_DATA strings again
@@ -1678,12 +1660,13 @@ end subroutine parse_segment_str
     call get_param(PF, mdl, segnam, segstr)
     if (segstr == '') cycle
 
-    call parse_segment_data_str(trim(segstr), fields=fields, num_fields=num_fields)
+    call parse_segment_manifest_str(trim(segstr), num_fields, fields)
     if (num_fields == 0) cycle
 
     ! At this point, just search for TEMP and SALT as tracers 1 and 2.
     do m=1,num_fields
-      call parse_segment_data_str(trim(segstr), var=trim(fields(m)), value=value, filenam=filename, fieldnam=fieldname)
+      call parse_segment_data_str(trim(segstr), m, trim(fields(m)), &
+          value, filename, fieldname)
       if (trim(filename) /= 'none') then
         if (fields(m) == 'TEMP') then
           if (segment%is_E_or_W_2) then
@@ -1825,9 +1808,17 @@ subroutine open_boundary_init(G, GV, US, param_file, OBC, restart_CSp)
   if (OBC%oblique_BCs_exist_globally) call pass_vector(OBC%rx_oblique, OBC%ry_oblique, G%Domain, &
                      To_All+Scalar_Pair)
   if (associated(OBC%cff_normal)) call pass_var(OBC%cff_normal, G%Domain, position=CORNER)
-  if (associated(OBC%tres_x) .or. associated(OBC%tres_y)) then
+  if (associated(OBC%tres_x) .and. associated(OBC%tres_y)) then
     do m=1,OBC%ntr
       call pass_vector(OBC%tres_x(:,:,:,m), OBC%tres_y(:,:,:,m), G%Domain, To_All+Scalar_Pair)
+    enddo
+  elseif (associated(OBC%tres_x)) then
+    do m=1,OBC%ntr
+      call pass_var(OBC%tres_x(:,:,:,m), G%Domain, position=EAST_FACE)
+    enddo
+  elseif (associated(OBC%tres_y)) then
+    do m=1,OBC%ntr
+      call pass_var(OBC%tres_y(:,:,:,m), G%Domain, position=NORTH_FACE)
     enddo
   endif
 
@@ -5021,8 +5012,7 @@ subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart
   endif
 
   ! Still painfully inefficient, now in four dimensions.
-  ! Allocating both for now so that the pass_vector works.
-  if (any(OBC%tracer_x_reservoirs_used) .or. any(OBC%tracer_y_reservoirs_used)) then
+  if (any(OBC%tracer_x_reservoirs_used)) then
     allocate(OBC%tres_x(HI%isdB:HI%iedB,HI%jsd:HI%jed,GV%ke,OBC%ntr))
     OBC%tres_x(:,:,:,:) = 0.0
     do m=1,OBC%ntr
@@ -5038,8 +5028,8 @@ subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart
         endif
       endif
     enddo
-! endif
-! if (any(OBC%tracer_y_reservoirs_used)) then
+  endif
+  if (any(OBC%tracer_y_reservoirs_used)) then
     allocate(OBC%tres_y(HI%isd:HI%ied,HI%jsdB:HI%jedB,GV%ke,OBC%ntr))
     OBC%tres_y(:,:,:,:) = 0.0
     do m=1,OBC%ntr

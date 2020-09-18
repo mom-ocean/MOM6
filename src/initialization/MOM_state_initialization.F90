@@ -1558,7 +1558,7 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P
   type(unit_scale_type),   intent(in)  :: US           !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file   !< A structure to parse for run-time
                                                        !! parameters.
-  type(EOS_type),          pointer     :: eqn_of_state !< Integer that selects the equatio of state.
+  type(EOS_type),          pointer     :: eqn_of_state !< Equation of state structure
   real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure
                                                        !! [R L2 T-2 ~> Pa].
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -2335,7 +2335,12 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
     ! Rb contains the layer interface densities
     allocate(Rb(nz+1))
     do k=2,nz ; Rb(k) = 0.5*(GV%Rlay(k-1)+GV%Rlay(k)) ; enddo
-    Rb(1) = 0.0 ;  Rb(nz+1) = 2.0*GV%Rlay(nz) - GV%Rlay(nz-1)
+    Rb(1) = 0.0
+    if (nz>1) then
+      Rb(nz+1) = 2.0*GV%Rlay(nz) - GV%Rlay(nz-1)
+    else
+      Rb(nz+1) = 2.0 * GV%Rlay(1)
+    endif
 
     nkml = 0 ; if (separate_mixed_layer) nkml = GV%nkml
 

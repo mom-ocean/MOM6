@@ -353,7 +353,7 @@ program Shelf_main
     call close_file(unit)
   endif
 
-  if (cpu_steps > 0) call write_cputime(Time, 0, nmax, write_CPU_CSp)
+  if (cpu_steps > 0) call write_cputime(Time, 0, write_CPU_CSp)
 
   if (((.not.BTEST(Restart_control,1)) .and. (.not.BTEST(Restart_control,0))) &
       .or. (Restart_control < 0)) permit_incr_restart = .false.
@@ -403,7 +403,7 @@ program Shelf_main
     Time = Master_Time
 
     if (cpu_steps > 0) then ; if (MOD(ns, cpu_steps) == 0) then
-      call write_cputime(Time, ns, nmax, write_CPU_CSp)
+      call write_cputime(Time, ns, write_CPU_CSp, nmax)
     endif ; endif
 
 !  See if it is time to write out a restart file - timestamped or not.
@@ -459,6 +459,7 @@ program Shelf_main
 
   call callTree_waypoint("End Shelf_main")
   call diag_mediator_end(Time, diag, end_diag_manager=.true.)
+  if (cpu_steps > 0) call write_cputime(Time, ns-1, write_CPU_CSp, call_end=.true.)
   call cpu_clock_end(termClock)
 
   call io_infra_end ; call MOM_infra_end
