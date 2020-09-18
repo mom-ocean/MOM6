@@ -589,13 +589,17 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
 
 
               if (dS_it < 0.0) then ! Sbdry is now the upper bound.
-                if (Sb_max_set .and. (Sbdry(i,j) > Sb_max)) &
-                  call MOM_error(FATAL,"shelf_calc_flux: Irregular iteration for Sbdry (max).")
+                if (Sb_max_set) then
+                  if (Sbdry(i,j) > Sb_max) &
+                    call MOM_error(FATAL,"shelf_calc_flux: Irregular iteration for Sbdry (max).")
+                endif
                 Sb_max = Sbdry(i,j) ; dS_max = dS_it ; Sb_max_set = .true.
               else ! Sbdry is now the lower bound.
-                if (Sb_min_set .and. (Sbdry(i,j) < Sb_min)) &
-                   call MOM_error(FATAL, "shelf_calc_flux: Irregular iteration for Sbdry (min).")
-                 Sb_min = Sbdry(i,j) ; dS_min = dS_it ; Sb_min_set = .true.
+                if (Sb_min_set) then
+                  if (Sbdry(i,j) < Sb_min) &
+                    call MOM_error(FATAL, "shelf_calc_flux: Irregular iteration for Sbdry (min).")
+                endif
+                Sb_min = Sbdry(i,j) ; dS_min = dS_it ; Sb_min_set = .true.
               endif ! dS_it < 0.0
 
               if (Sb_min_set .and. Sb_max_set) then
