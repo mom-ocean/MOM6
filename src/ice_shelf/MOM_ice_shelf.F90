@@ -804,8 +804,9 @@ subroutine add_shelf_forces(US, CS, forces_in, do_shelf_area, external_call)
   type(ice_shelf_CS),    pointer       :: CS   !< This module's control structure.
   type(mech_forcing),    pointer       :: forces_in !< A structure with the driving mechanical forces
   logical, optional,     intent(in)    :: do_shelf_area !< If true find the shelf-covered areas.
-  logical, optional,     intent(in)    :: external_call !< If true the incoming forcing type is using the input grid metric
-
+  logical, optional,     intent(in)    :: external_call !< If true the incoming forcing type
+                                               !! is using the input grid metric and needs
+                                               !! to be rotated.
   type(ocean_grid_type), pointer :: G => NULL()   !< A pointer to the ocean grid metric.
   type(mech_forcing),    pointer :: forces => NULL() !< A structure with the driving mechanical forces
   real :: kv_rho_ice ! The viscosity of ice divided by its density [L4 T-1 R-1 Z-2 ~> m5 kg-1 s-1].
