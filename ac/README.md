@@ -151,12 +151,15 @@ Some configuration options are provided by the `ac/deps` Makefile:
   for example, one wants to build with `-O0` to speed up the build time.
 
 `MKMF_URL` (*default:* https://github.com/NOAA-GFDL/mkmf.git)
+
 `MKMF_COMMIT`(*default:* `master`)
+
 `FMS_URL` (*default:* https://github.com/NOAA-GFDL/FMS.git)
+
 `FMS_COMMIT` (*default:* `2019.01.03`)
   
-    These are used to specify where to check out the source code for each 
-    respective project.
+  These are used to specify where to check out the source code for each 
+  respective project.
 
 Additional hooks for FMS builds do not yet exist, but can be added if
 necessary.
@@ -180,5 +183,5 @@ compiler.
 ## Coupled builds
 
 The Autoconf build is currently only capable of building ocean-only
-executables, and cannot yet be built as part of a coupled model, nor as a
+executables, and cannot yet be used as part of a coupled model, nor as a
 standalone library.  This is planned to be addressed in a future release.
