@@ -1352,7 +1352,8 @@ subroutine build_rho_grid( G, GV, US, h, tv, dzInterface, remapCS, CS , frac_she
                                                                     !! [H ~> m or kg m-2]
   type(remapping_CS),                           intent(in)    :: remapCS !< The remapping control structure
   type(regridding_CS),                          intent(in)    :: CS !< Regridding control structure
-  real, dimension(SZI_(G),SZJ_(G)),            optional, intent(in)       :: frac_shelf_h !< Fractional ice shelf coverage [nondim].
+  real, dimension(SZI_(G),SZJ_(G)), optional,   intent(in)    :: frac_shelf_h !< Fractional ice shelf
+                                                                    !! coverage [nondim].
 
   ! Local variables
   integer :: nz
