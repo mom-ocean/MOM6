@@ -80,22 +80,22 @@ program MOM_main
 #include <MOM_memory.h>
 
   ! A structure with the driving mechanical surface forces
-  type(mech_forcing) :: forces
+  type(mech_forcing), pointer :: forces => NULL()
   ! A structure containing pointers to the thermodynamic forcing fields
   ! at the ocean surface.
-  type(forcing) :: fluxes
+  type(forcing), pointer :: fluxes => NULL()
 
   ! A structure containing pointers to the ocean surface state fields.
-  type(surface) :: sfc_state
+  type(surface), pointer :: sfc_state => NULL()
 
   ! A pointer to a structure containing metrics and related information.
-  type(ocean_grid_type), pointer :: grid
-  type(verticalGrid_type), pointer :: GV
+  type(ocean_grid_type), pointer :: grid => NULL()
+  type(verticalGrid_type), pointer :: GV => NULL()
   ! A pointer to a structure containing dimensional unit scaling factors.
-  type(unit_scale_type), pointer :: US
+  type(unit_scale_type), pointer :: US => NULL()
 
   ! If .true., use the ice shelf model for part of the domain.
-  logical :: use_ice_shelf
+  logical :: use_ice_shelf = .false.
 
   ! If .true., use surface wave coupling
   logical :: use_waves = .false.
@@ -218,6 +218,8 @@ program MOM_main
   call write_cputime_start_clock(write_CPU_CSp)
 
   call MOM_infra_init() ; call io_infra_init()
+
+  allocate(forces,fluxes,sfc_state)
 
   ! Initialize the ensemble manager.  If there are no settings for ensemble_size
   ! in input.nml(ensemble.nml), these should not do anything.  In coupled
@@ -482,7 +484,7 @@ program MOM_main
 
     if (use_ice_shelf) then
       call shelf_calc_flux(sfc_state, fluxes, Time, dt_forcing, ice_shelf_CSp)
-      call add_shelf_forces(grid, US, Ice_shelf_CSp, forces)
+      call add_shelf_forces(US, Ice_shelf_CSp, forces, external_call=.true.)
     endif
     fluxes%fluxes_used = .false.
     fluxes%dt_buoy_accum = US%s_to_T*dt_forcing

@@ -11,37 +11,31 @@ DT = 1200.0                      !   [s]
                                 ! The (baroclinic) dynamics time step.  The time-step that is actually used will
                                 ! be an integer fraction of the forcing time-step (DT_FORCING in ocean-only mode
                                 ! or the coupling timestep in coupled mode.)
-DT_THERM = 3600.0                !   [s] default = 300.0
+DT_THERM = 1200.0                !   [s] default = 300.0
                                 ! The thermodynamic and tracer advection time step. Ideally DT_THERM should be
                                 ! an integer multiple of DT and less than the forcing or coupling time-step,
                                 ! unless THERMO_SPANS_COUPLING is true, in which case DT_THERM can be an integer
-                                ! multiple of the coupling timestep.  By default DT_THERM is set to DT.				
-C_P = 3925.0                    !   [J kg-1 K-1] default = 3991.86795711963
-                                ! The heat capacity of sea water, approximated as a constant. This is only used
-                                ! if ENABLE_THERMODYNAMICS is true. The default value is from the TEOS-10
-                                ! definition of conservative temperature.
+                                ! multiple of the coupling timestep.  By default DT_THERM is set to DT.
+INTERPOLATE_P_SURF = False       !   [Boolean] default = False
+                                ! If true, linearly interpolate the surface pressure over the coupling time
+                                ! step, using the specified value at the end of the step.
 SAVE_INITIAL_CONDS = False      !   [Boolean] default = False
                                 ! If true, write the initial conditions to a file given by IC_OUTPUT_FILE.
-
+ICE_THICKNESS_FILE = "shelf.nc" !
+                                ! The file from which the ice bathymetry and area are read.
+ICE_AREA_VARNAME = "area"       !
+                                ! The name of the area variable in ICE_THICKNESS_FILE.
 ! === module MOM_domains ===
 REENTRANT_X = False             !   [Boolean] default = True
                                 ! If true, the domain is zonally reentrant.
-NIGLOBAL = 14                   !
+REENTRANT_Y = True              !   [Boolean] default = False
+                                ! If true, the domain is meridionally reentrant.
+NIGLOBAL = 10                   !
                                 ! The total number of thickness grid points in the x-direction in the physical
                                 ! domain. With STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-NJGLOBAL = 10                   !
+NJGLOBAL = 8                    !
                                 ! The total number of thickness grid points in the y-direction in the physical
                                 ! domain. With STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-
-! === module MOM_hor_index ===
-! Sets the horizontal array index types.
-
-! === module MOM_verticalGrid ===
-! Parameters providing information about the vertical grid.
-NK = 2                          !   [nondim]
-                                ! The number of model layers.
-
-! === module MOM_fixed_initialization ===
 
 ! === module MOM_grid_init ===
 GRID_CONFIG = "mosaic"          !
@@ -65,8 +59,9 @@ TOPO_CONFIG = "file"            !
                                 !       wall at the southern face.
                                 !     halfpipe - a zonally uniform channel with a half-sine
                                 !       profile in the meridional direction.
+                                !     bbuilder - build topography from list of functions.
                                 !     benchmark - use the benchmark test case topography.
-                                !     Neverland - use the Neverland test case topography.
+                                !     Neverworld - use the Neverworld test case topography.
                                 !     DOME - use a slope and channel configuration for the
                                 !       DOME sill-overflow test case.
                                 !     ISOMIP - use a slope and channel configuration for the
@@ -80,38 +75,62 @@ TOPO_CONFIG = "file"            !
                                 !     Phillips - ACC-like idealized topography used in the Phillips config.
                                 !     dense - Denmark Strait-like dense water formation and overflow.
                                 !     USER - call a user modified routine.
-!MAXIMUM_DEPTH = 100.0          !   [m]
-                                ! The (diagnosed) maximum depth of the ocean.
-
-! === module MOM_open_boundary ===
-! Controls where open boundaries are located, what kind of boundary condition to impose, and what data to apply,
-! if any.
 ROTATION = "betaplane"          ! default = "2omegasinlat"
                                 ! This specifies how the Coriolis parameter is specified:
                                 !     2omegasinlat - Use twice the planetary rotation rate
                                 !       times the sine of latitude.
                                 !     betaplane - Use a beta-plane or f-plane.
                                 !     USER - call a user modified routine.
-F_0 = 1.0E-04                   !   [s-1] default = 0.0
-                                ! The reference value of the Coriolis parameter with the betaplane option.
 
-! === module MOM_tracer_registry ===
+! === module MOM_open_boundary ===
+! Controls where open boundaries are located, what kind of boundary condition to impose, and what data to apply, if any.
+OBC_NUMBER_OF_SEGMENTS = 0      ! default = 0
+                                ! The number of open boundary segments.
+OBC_FREESLIP_VORTICITY = True   !   [Boolean] default = False
+                                ! If true, sets the normal gradient of tangential velocity to
+                                ! zero in the relative vorticity on open boundaries. This cannot
+                                ! be true if OBC_ZERO_VORTICITY is True.
+OBC_FREESLIP_STRAIN = True      !   [Boolean] default = False
+                                ! If true, sets the normal gradient of tangential velocity to
+                                ! zero in the strain use in the stress tensor on open boundaries. This cannot
+                                ! be true if OBC_ZERO_STRAIN is True.
+OBC_ZERO_BIHARMONIC = True      !   [Boolean] default = False
+                                ! If true, zeros the Laplacian of flow on open boundaries in the biharmonic
+                                ! viscosity term.
+OBC_SEGMENT_001 = "I=N,J=N:0,FLATHER,ORLANSKI" !
+OBC_SEGMENT_001_DATA = "U=value:0.0,V=value:0.0,TEMP=value:0.0,SALT=value:35.0,SSH=value:0.0"
+MASK_OUTSIDE_OBCS = False        !   [Boolean] default = False
+                                ! If true, set the areas outside open boundaries to be land.
+
+! === module MOM_verticalGrid ===
+! Parameters providing information about the vertical grid.
+RHO_0 = 1000.0                  !   [kg m-3] default = 1035.0
+                                ! The mean ocean density used with BOUSSINESQ true to calculate accelerations
+                                ! and the mass for conservation properties, or with BOUSSINSEQ false to convert
+                                ! some parameters from vertical units of m to kg m-2.
+ANGSTROM = 1.0E-15              !   [m] default = 1.0E-10
+                                ! The minimum layer thickness, usually one-Angstrom.
+NK = 2                          !   [nondim]
+                                ! The number of model layers.
 
 ! === module MOM_EOS ===
 EQN_OF_STATE = "LINEAR"         ! default = "WRIGHT"
                                 ! EQN_OF_STATE determines which ocean equation of state should be used.
                                 ! Currently, the valid choices are "LINEAR", "UNESCO", "WRIGHT", "NEMO" and
                                 ! "TEOS10". This is only used if USE_EOS is true.
+RHO_T0_S0 = 1000.0              !   [kg m-3] default = 1000.0
+                                ! When EQN_OF_STATE=LINEAR, this is the density at T=0, S=0.
+DRHO_DT = -0.2                  !   [kg m-3 K-1] default = -0.2
+                                ! When EQN_OF_STATE=LINEAR, this is the partial derivative of density with
+                                ! temperature.
 DRHO_DS = 0.0                   !   [kg m-3 PSU-1] default = 0.8
                                 ! When EQN_OF_STATE=LINEAR, this is the partial derivative of density with
                                 ! salinity.
 
-! === module MOM_restart ===
-
 ! === module MOM_tracer_flow_control ===
 
 ! === module MOM_coord_initialization ===
-COORD_CONFIG = "linear"         !
+COORD_CONFIG = "linear"         ! default = "none"
                                 ! This specifies how layers are to be defined:
                                 !     ALE or none - used to avoid defining layers in ALE mode
                                 !     file - read coordinate information from the file
@@ -129,7 +148,7 @@ COORD_CONFIG = "linear"         !
                                 !     ts_profile - use temperature and salinity profiles
                                 !       (read from COORD_FILE) to set layer densities.
                                 !     USER - call a user modified routine.
-REGRIDDING_COORDINATE_MODE = "Z*" ! default = "LAYER"
+REGRIDDING_COORDINATE_MODE = "RHO" ! default = "LAYER"
                                 ! Coordinate mode for vertical regridding. Choose among the following
                                 ! possibilities:  LAYER - Isopycnal or stacked shallow water layers
                                 !  ZSTAR, Z* - stretched geopotential z*
@@ -139,13 +158,19 @@ REGRIDDING_COORDINATE_MODE = "Z*" ! default = "LAYER"
                                 !  HYCOM1 - HyCOM-like hybrid coordinate
                                 !  SLIGHT - stretched coordinates above continuous isopycnal
                                 !  ADAPTIVE - optimize for smooth neutral density surfaces
-!ALE_RESOLUTION = 2*50.0        !   [m]
+REGRIDDING_COORDINATE_UNITS = "kg m^-3" ! default = "m"
+                                ! Units of the regridding coordinate.
+!ALE_RESOLUTION = 2*1.0         !   [m]
                                 ! The distribution of vertical resolution for the target
                                 ! grid used for Eulerian-like coordinates. For example,
                                 ! in z-coordinate mode, the parameter is a list of level
                                 ! thicknesses (in m). In sigma-coordinate mode, the list
                                 ! is of non-dimensional fractions of the water column.
-REMAPPING_SCHEME = "PPM_IH4"    ! default = "PLM"
+!TARGET_DENSITIES = 1000.0, 1001.0, 1002.0 !   [kg m^-3]
+                                ! RHO target densities for interfaces
+MIN_THICKNESS = 1.0E-12         !   [m] default = 0.001
+                                ! When regridding, this is the minimum layer thickness allowed.
+REMAPPING_SCHEME = "PLM"     ! default = "PLM"
                                 ! This sets the reconstruction scheme used for vertical remapping for all
                                 ! variables. It can be one of the following schemes: PCM         (1st-order
                                 ! accurate)
@@ -154,6 +179,10 @@ REMAPPING_SCHEME = "PPM_IH4"    ! default = "PLM"
                                 ! PPM_IH4     (3rd-order accurate)
                                 ! PQM_IH4IH3  (4th-order accurate)
                                 ! PQM_IH6IH5  (5th-order accurate)
+REMAP_AFTER_INITIALIZATION = False !   [Boolean] default = True
+                                ! If true, applies regridding and remapping immediately after initialization so
+                                ! that the state is ALE consistent. This is a legacy step and should not be
+                                ! needed if the initialization is consistent with the coordinate mode.
 
 ! === module MOM_grid ===
 ! Parameters providing information about the lateral grid.
@@ -168,11 +197,54 @@ TEMP_SALT_Z_INIT_FILE = "temp_salt_ic.nc" ! default = "temp_salt_z.nc"
                                 ! The name of the z-space input file used to initialize temperatures (T) and
                                 ! salinities (S). If T and S are not in the same file, TEMP_Z_INIT_FILE and
                                 ! SALT_Z_INIT_FILE must be set.
+TEMP_Z_INIT_FILE = "temp_salt_ic.nc" ! default = "temp_salt_ic.nc"
+                                ! The name of the z-space input file used to initialize temperatures, only.
+SALT_Z_INIT_FILE = "temp_salt_ic.nc" ! default = "temp_salt_ic.nc"
+                                ! The name of the z-space input file used to initialize temperatures, only.
+Z_INIT_FILE_PTEMP_VAR = "ptemp" ! default = "ptemp"
+                                ! The name of the potential temperature variable in TEMP_Z_INIT_FILE.
+Z_INIT_FILE_SALT_VAR = "salt"   ! default = "salt"
+                                ! The name of the salinity variable in SALT_Z_INIT_FILE.
+Z_INIT_HOMOGENIZE = True        !   [Boolean] default = False
+                                ! If True, then horizontally homogenize the interpolated initial conditions.
 Z_INIT_ALE_REMAPPING = True     !   [Boolean] default = False
                                 ! If True, then remap straight to model coordinate from file.
-SPONGE = True                   !   [Boolean] default = False
+Z_INIT_REMAPPING_SCHEME = "PPM_IH4" ! default = "PPM_IH4"
+                                ! The remapping scheme to use if using Z_INIT_ALE_REMAPPING is True.
+Z_INIT_REMAP_GENERAL = True    !   [Boolean] default = False
+                                ! If false, only initializes to z* coordinates. If true, allows initialization
+                                ! directly to general coordinates.
+TEMP_SALT_INIT_VERTICAL_REMAP_ONLY = True !   [Boolean] default = False
+                                ! If true, initial conditions are on the model horizontal grid. Extrapolation
+                                ! over missing ocean values is done using an ICE-9 procedure with vertical ALE
+                                ! remapping .
+TRIM_IC_FOR_P_SURF = True       !   [Boolean] default = False
+                                ! If true, cuts way the top of the column for initial conditions at the depth
+                                ! where the hydrostatic pressure matches the imposed surface pressure which is
+                                ! read from file.
+SURFACE_PRESSURE_FILE = "shelf.nc" !
+                                ! The initial condition file for the surface pressure exerted by ice.
+SURFACE_PRESSURE_VAR = "thick"  !   [Pa] default = ""
+                                ! The initial condition variable for the surface pressure exerted by ice.
+SURFACE_PRESSURE_SCALE = 9800.    !   [file dependent] default = 1.0
+                                ! A scaling factor to convert SURFACE_PRESSURE_VAR from file
+                                ! SURFACE_PRESSURE_FILE into a surface pressure.
+TRIMMING_USES_REMAPPING = True  !   [Boolean] default = False
+                                ! When trimming the column, also remap T and S.
+SPONGE = False                   !   [Boolean] default = False
                                 ! If true, sponges may be applied anywhere in the domain. The exact location and
                                 ! properties of those sponges are specified via SPONGE_CONFIG.
+SPONGE_CONFIG = "file"          ! default = "file"
+                                ! A string that sets how the sponges are configured:
+                                !     file - read sponge properties from the file
+                                !       specified by (SPONGE_FILE).
+                                !     ISOMIP - apply ale sponge in the ISOMIP case
+                                !     RGC - apply sponge in the rotating_gravity_current case
+                                !     DOME - use a slope and channel configuration for the
+                                !       DOME sill-overflow test case.
+                                !     BFB - Sponge at the southern boundary of the domain
+                                !       for buoyancy-forced basin case.
+                                !     USER - call a user modified routine.
 SPONGE_DAMPING_FILE = "sponge.nc" !
                                 ! The name of the file with the sponge damping rates.
 SPONGE_STATE_FILE = "temp_salt_ic.nc" ! default = "sponge.nc"
@@ -181,6 +253,10 @@ SPONGE_PTEMP_VAR = "ptemp"      ! default = "PTEMP"
                                 ! The name of the potential temperature variable in SPONGE_STATE_FILE.
 SPONGE_SALT_VAR = "salt"        ! default = "SALT"
                                 ! The name of the salinity variable in SPONGE_STATE_FILE.
+SPONGE_ETA_VAR = "ETA"          ! default = "ETA"
+                                ! The name of the interface height variable in SPONGE_STATE_FILE.
+SPONGE_IDAMP_VAR = "IDAMP"      ! default = "IDAMP"
+                                ! The name of the inverse damping rate variable in SPONGE_DAMPING_FILE.
 NEW_SPONGES = True              !   [of sponge restoring data.] default = False
                                 ! Set True if using the newer sponging code which performs on-the-fly regridding
                                 ! in lat-lon-time.
@@ -188,8 +264,6 @@ NEW_SPONGES = True              !   [of sponge restoring data.] default = False
 ! === module MOM_sponge ===
 SPONGE_DATA_ONGRID = True       !   [Boolean] default = False
                                 ! When defined, the incoming sponge data are assumed to be on the model grid
-!Total sponge columns at h points = 100 !
-                                ! The total number of columns where sponges are applied at h points.
 
 ! === module MOM_diag_mediator ===
 
@@ -256,13 +330,10 @@ BOUND_CORIOLIS = True           !   [Boolean] default = False
                                 ! option is always effectively false with CORIOLIS_EN_DIS defined and
                                 ! CORIOLIS_SCHEME set to SADOURNY75_ENERGY.
 
-! === module MOM_PressureForce ===
+DYNAMIC_SURFACE_PRESSURE = False !   [Boolean] default = False
+                                ! If true, add a dynamic pressure due to a viscous ice shelf, for instance.
 
-! === module MOM_PressureForce_AFV ===
-RECONSTRUCT_FOR_PRESSURE = False !   [Boolean] default = True
-                                ! If True, use vertical reconstruction of T & S within the integrals of the FV
-                                ! pressure gradient calculation. If False, use the constant-by-layer algorithm.
-                                ! The default is set by USE_REGRIDDING.
+! === module MOM_PressureForce ===
 
 ! === module MOM_hor_visc ===
 SMAGORINSKY_AH = True           !   [Boolean] default = False
@@ -297,7 +368,7 @@ BEBT = 0.2                      !   [nondim] default = 0.1
                                 ! from 0 (for a forward-backward treatment of nonrotating gravity waves) to 1
                                 ! (for a backward Euler treatment). In practice, BEBT must be greater than about
                                 ! 0.05.
-DTBT = 10.0                     !   [s or nondim] default = -0.98
+DTBT = -0.9                     !   [s or nondim] default = -0.98
                                 ! The barotropic time step, in s. DTBT is only used with the split explicit time
                                 ! stepping. To set the time step automatically based the maximum stable value
                                 ! use 0, or a negative value gives the fraction of the stable value. Setting
@@ -308,18 +379,12 @@ DTBT = 10.0                     !   [s or nondim] default = -0.98
 
 ! === module MOM_diabatic_driver ===
 ! The following parameters are used for diabatic processes.
-
-! === module MOM_CVMix_KPP ===
-! This is the MOM wrapper to CVMix:KPP
-! See http://cvmix.github.io/
-
-! === module MOM_tidal_mixing ===
-! Vertical Tidal Mixing Parameterization
-
-! === module MOM_CVMix_conv ===
-! Parameterization of enhanced mixing due to convection via CVMix
-
-! === module MOM_entrain_diffusive ===
+USE_LEGACY_DIABATIC_DRIVER = False !   [Boolean] default = True
+                                ! If true, use a legacy version of the diabatic subroutine. This is temporary
+                                ! and is needed to avoid change in answers.
+ENERGETICS_SFC_PBL = True       !   [Boolean] default = False
+                                ! If true, use an implied energetics planetary boundary layer scheme to
+                                ! determine the diffusivity and viscosity in the surface boundary layer.
 
 ! === module MOM_set_diffusivity ===
 BBL_EFFIC = 0.0                 !   [nondim] default = 0.2
@@ -356,12 +421,19 @@ KD = 0.0                        !   [m2 s-1]
 ! This module implements neutral diffusion of tracers
 
 ! === module MOM_sum_output ===
+CALCULATE_APE = False           !   [Boolean] default = True
+                                ! If true, calculate the available potential energy of the interfaces.  Setting
+                                ! this to false reduces the memory footprint of high-PE-count models
+                                ! dramatically.
 MAXTRUNC = 5000                 !   [truncations save_interval-1] default = 0
                                 ! The run will be stopped, and the day set to a very large value if the velocity
                                 ! is truncated more than MAXTRUNC times between energy saves.  Set MAXTRUNC to 0
                                 ! to stop if there is any truncation of velocities.
 DATE_STAMPED_STDOUT = False     !   [Boolean] default = True
                                 ! If true, use dates (not times) in messages to stdout
+ENERGYSAVEDAYS = 0.125          !   [days] default = 1.0
+                                ! The interval in units of TIMEUNIT between saves of the energies of the run and
+                                ! other globally summed diagnostics.
 
 ! === module MOM_surface_forcing ===
 VARIABLE_WINDS = False          !   [Boolean] default = True
@@ -377,18 +449,107 @@ WIND_CONFIG = "zero"            !
                                 ! options include (file), (2gyre), (1gyre), (gyres), (zero), and (USER).
 
 ! === module MOM_restart ===
+ICE_SHELF = True                !   [Boolean] default = False
+                                ! If true, enables the ice shelf model.
 
+! === module MOM_domains min_halo ===
+
+! === module MOM_grid ===
+! Parameters providing information about the lateral grid.
+
+! === module MOM_hor_index ===
+! Sets the horizontal array index types.
+
+! === module MOM_grid_init ===
+
+! === module MOM_ice_shelf ===
+DEBUG_IS = True                !   [Boolean] default = False
+                                ! If true, write verbose debugging messages for the ice shelf.
+DYNAMIC_SHELF_MASS = False      !   [Boolean] default = False
+                                ! If true, the ice sheet mass can evolve with time.
+SHELF_THERMO = True             !   [Boolean] default = False
+                                ! If true, use a thermodynamically interactive ice shelf.
+SHELF_THREE_EQN = True          !   [Boolean] default = True
+                                ! If true, use the three equation expression of consistency to calculate the
+                                ! fluxes at the ice-ocean interface.
+SHELF_INSULATOR = False         !   [Boolean] default = False
+                                ! If true, the ice shelf is a perfect insulatior (no conduction).
+MELTING_CUTOFF_DEPTH = 0.0      !   [m] default = 0.0
+                                ! Depth above which the melt is set to zero (it must be >= 0) Default value
+                                ! won't affect the solution.
+CONST_SEA_LEVEL = False         !   [Boolean] default = False
+                                ! If true, apply evaporative, heat and salt fluxes in the sponge region. This
+                                ! will avoid a large increase in sea level. This option is needed for some of
+                                ! the ISOMIP+ experiments (Ocean3 and Ocean4). IMPORTANT: it is not currently
+                                ! possible to do prefect restarts using this flag.
+SHELF_3EQ_GAMMA = True          !   [Boolean] default = False
+                                ! If true, user specifies a constant nondimensional heat-transfer coefficient
+                                ! (GAMMA_T_3EQ), from which the default salt-transfer coefficient is set as
+                                ! GAMMA_T_3EQ/35. This is used with SHELF_THREE_EQN.
+SHELF_2EQ_GAMMA_T = 0.1         !   [m s-1]
+                                ! If SHELF_THREE_EQN is false, this the fixed turbulent exchange velocity at the
+                                ! ice-ocean interface.
+SHELF_3EQ_GAMMA_T = 0.22        !   [nondim] default = 0.022
+                                ! Nondimensional heat-transfer coefficient.
+SHELF_3EQ_GAMMA_S = 0.0062857142857143 !   [nondim] default = 0.0062857142857143
+                                ! Nondimensional salt-transfer coefficient.
+ICE_SHELF_MASS_FROM_FILE = False !   [Boolean] default = False
+                                ! Read the mass of the ice shelf (every time step) from a file.
+C_P_ICE = 2100.0                !   [J kg-1 K-1] default = 2100.0
+                                ! The heat capacity of ice.
+ICE_SHELF_FLUX_FACTOR = 1.0     !   [none] default = 1.0
+                                ! Non-dimensional factor applied to shelf thermodynamic fluxes.
+KV_ICE = 1.0E+10                !   [m2 s-1] default = 1.0E+10
+                                ! The viscosity of the ice.
+KV_MOLECULAR = 1.95E-06         !   [m2 s-1] default = 1.95E-06
+                                ! The molecular kinimatic viscosity of sea water at the freezing temperature.
+ICE_SHELF_SALINITY = 0.0        !   [psu] default = 0.0
+                                ! The salinity of the ice inside the ice shelf.
+ICE_SHELF_TEMPERATURE = -15.0   !   [degC] default = -15.0
+                                ! The temperature at the center of the ice shelf.
+KD_SALT_MOLECULAR = 8.02E-10    !   [m2 s-1] default = 8.02E-10
+                                ! The molecular diffusivity of salt in sea water at the freezing point.
+KD_TEMP_MOLECULAR = 1.41E-07    !   [m2 s-1] default = 1.41E-07
+                                ! The molecular diffusivity of heat in sea water at the freezing point.
+COL_THICK_MELT_THRESHOLD = 0.0  !   [m] default = 0.0
+                                ! The minimum ocean column thickness where melting is allowed.
+READ_TIDEAMP = False            !   [Boolean] default = False
+                                ! If true, read a file (given by TIDEAMP_FILE) containing the tidal amplitude
+                                ! with INT_TIDE_DISSIPATION.
+UTIDE = 0.0                     !   [m s-1] default = 0.0
+                                ! The constant tidal amplitude used with INT_TIDE_DISSIPATION.
+
+! === module MOM_EOS ===
+DENSITY_ICE = 1000.0            !   [kg m-3] default = 900.0
+                                ! A typical density of ice.
+MIN_THICKNESS_SIMPLE_CALVE = 0.0 !   [m] default = 0.0
+                                ! Min thickness rule for the very simple calving law
+USTAR_SHELF_BG = 0.0            !   [m s-1] default = 0.0
+                                ! The minimum value of ustar under ice shelves.
+CDRAG_SHELF = 0.003             !   [nondim] default = 0.003
+                                ! CDRAG is the drag coefficient relating the magnitude of the velocity field to
+                                ! the surface stress.
+DRAG_BG_VEL_SHELF = 0.01         !   [m s-1] default = 0.0
+                                ! DRAG_BG_VEL is either the assumed bottom velocity (with LINEAR_DRAG) or an
+                                ! unresolved  velocity that is combined with the resolved velocity to estimate
+                                ! the velocity magnitude.
+
+! === module MOM_restart ===
+ICE_PROFILE_CONFIG = "FILE"     !
+                                ! This specifies how the initial ice profile is specified. Valid values are:
+                                ! CHANNEL, FILE, and USER.
+LEN_SIDE_STRESS = 0.0           !   [axis_units] default = 0.0
+                                ! position past which shelf sides are stress free.
+ICE_THICKNESS_VARNAME = "thick" ! default = "h_shelf"
+                                ! The name of the thickness variable in ICE_THICKNESS_FILE.
+SHELF_IC_OUTPUT_FILE = "MOM_Shelf_IC" ! default = "MOM_Shelf_IC"
+                                ! The name-root of the output file for the ice shelf initial conditions.
 ! === module MOM_main (MOM_driver) ===
-DAYMAX = 0.25                    !   [days]
+DAYMAX = 2.                   !   [days]
                                 ! The final time of the whole simulation, in units of TIMEUNIT seconds.  This
                                 ! also sets the potential end time of the present run segment if the end time is
                                 ! not set via ocean_solo_nml in input.nml.
-				
-ENERGYSAVEDAYS = 0.125          !   [days] default = 1.44E+04
-                                ! The interval in units of TIMEUNIT between saves of the
-                                ! energies of the run and other globally summed diagnostics.
-				
-RESTART_CONTROL = 3             ! default = 1
+RESTART_CONTROL = 0             ! default = 1
                                 ! An integer whose bits encode which restart files are written. Add 2 (bit 1)
                                 ! for a time-stamped file, and odd (bit 0) for a non-time-stamped file. A
                                 ! non-time-stamped restart file is saved at the end of the run segment for any
@@ -402,25 +563,5 @@ MAXCPU = 2.88E+04               !   [wall-clock seconds] default = -1.0
                                 ! not desired, use a negative value for MAXCPU.  MAXCPU has units of wall-clock
                                 ! seconds, so the actual CPU time used is larger by a factor of the number of
                                 ! processors used.
-
-! === module MOM_file_parser ===
-
 DIAG_AS_CHKSUM = True
 DEBUG = True
-
-USE_PSURF_IN_EOS = False        !   [Boolean] default = False
-DEFAULT_2018_ANSWERS = True     !   [Boolean] default = True
-GRID_ROTATION_ANGLE_BUGS = True !   [Boolean] default = True
-INTERPOLATE_RES_FN = True       !   [Boolean] default = True
-GILL_EQUATORIAL_LD = False      !   [Boolean] default = False
-USE_GM_WORK_BUG = True          !   [Boolean] default = True
-FIX_UNSPLIT_DT_VISC_BUG = False !   [Boolean] default = False
-REMAP_UV_USING_OLD_ALG = True   !   [Boolean] default = True
-USE_LAND_MASK_FOR_HVISC = False !   [Boolean] default = False
-KAPPA_SHEAR_ITER_BUG = True     !   [Boolean] default = True
-KAPPA_SHEAR_ALL_LAYER_TKE_BUG = True !   [Boolean] default = True
-USE_MLD_ITERATION = False       !   [Boolean] default = False
-PEN_SW_ABSORB_MINTHICK = 0.001  !   [m] default = 0.001
-GUST_CONST = 0.02               !   [Pa] default = 0.02
-FIX_USTAR_GUSTLESS_BUG = False  !   [Boolean] default = False
-

@@ -457,7 +457,7 @@ subroutine rotate_surface_state(sfc_state_in, G_in, sfc_state, G, turns)
     if (use_temperature) then
       call rotate_array(sfc_state_in%ocean_heat, turns, sfc_state%ocean_heat)
       call rotate_array(sfc_state_in%ocean_salt, turns, sfc_state%ocean_salt)
-      call rotate_array(sfc_state_in%SSS, turns, sfc_state%TempxPmE)
+      call rotate_array(sfc_state_in%SSS, turns, sfc_state%SSS)
       call rotate_array(sfc_state_in%salt_deficit, turns, sfc_state%salt_deficit)
       call rotate_array(sfc_state_in%internal_heat, turns, sfc_state%internal_heat)
     endif
@@ -468,9 +468,9 @@ subroutine rotate_surface_state(sfc_state_in, G_in, sfc_state, G, turns)
         sfc_state%taux_shelf, sfc_state%tauy_shelf)
   endif
 
-  if (use_temperature .and. allocated(sfc_state_in%frazil)) &
+  if (use_temperature .and. allocated(sfc_state_in%frazil)) then
     call rotate_array(sfc_state_in%frazil, turns, sfc_state%frazil)
-
+  endif
   ! Scalar transfers
   sfc_state%T_is_conT = sfc_state_in%T_is_conT
   sfc_state%S_is_absS = sfc_state_in%S_is_absS

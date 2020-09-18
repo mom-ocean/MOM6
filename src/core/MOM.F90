@@ -259,8 +259,7 @@ type, public :: MOM_control_struct ; private
                                      !! calculated, and if it is 0, dtbt is calculated every step.
   type(time_type) :: dtbt_reset_interval !< A time_time representation of dtbt_reset_period.
   type(time_type) :: dtbt_reset_time !< The next time DTBT should be calculated.
-
-
+  real, dimension(:,:), pointer :: frac_shelf_h => NULL() ! fraction of total area occupied by ice shelf [nondim]
   real, dimension(:,:,:), pointer :: &
     h_pre_dyn => NULL(), &      !< The thickness before the transports [H ~> m or kg m-2].
     T_pre_dyn => NULL(), &      !< Temperature before the transports [degC].
@@ -574,6 +573,8 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
     !---------- Initiate group halo pass of the forcing fields
     call cpu_clock_begin(id_clock_pass)
+    if (.not.associated(forces%taux) .or. .not.associated(forces%tauy)) &
+         call MOM_error(FATAL,'step_MOM:forces%taux,tauy not associated')
     call create_group_pass(pass_tau_ustar_psurf, forces%taux, forces%tauy, G%Domain)
     if (associated(forces%ustar)) &
       call create_group_pass(pass_tau_ustar_psurf, forces%ustar, G%Domain)
@@ -927,10 +928,9 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   ! De-rotate fluxes and copy back to the input, since they can be changed.
   if (CS%rotate_index) then
     call rotate_forcing(fluxes, fluxes_in, -turns)
-
+    call rotate_mech_forcing(forces, -turns, forces_in)
     call deallocate_mech_forcing(forces)
     deallocate(forces)
-
     call deallocate_forcing_type(fluxes)
     deallocate(fluxes)
   endif
@@ -1242,7 +1242,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   if (showCallTree) call callTree_enter("step_MOM_thermo(), MOM.F90")
 
   use_ice_shelf = .false.
-  if (associated(fluxes%frac_shelf_h)) use_ice_shelf = .true.
+  if (associated(CS%frac_shelf_h)) use_ice_shelf = .true.
 
   call enable_averages(dtdia, Time_end_thermo, CS%diag)
 
@@ -1315,7 +1315,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
       call cpu_clock_begin(id_clock_ALE)
       if (use_ice_shelf) then
         call ALE_main(G, GV, US, h, u, v, tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC, &
-                      dtdia, fluxes%frac_shelf_h)
+                      dtdia, CS%frac_shelf_h)
       else
         call ALE_main(G, GV, US, h, u, v, tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC, dtdia)
       endif
@@ -1633,6 +1633,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   ! Initial state on the input index map
   real, allocatable, dimension(:,:,:) :: u_in, v_in, h_in
+  real, allocatable, dimension(:,:), target :: frac_shelf_in
   real, allocatable, dimension(:,:,:), target :: T_in, S_in
   type(ocean_OBC_type), pointer :: OBC_in => NULL()
   type(sponge_CS), pointer :: sponge_in_CSp => NULL()
@@ -1646,9 +1647,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   real    :: dtbt        ! The barotropic timestep [s]
 
   real, allocatable, dimension(:,:)   :: eta ! free surface height or column mass [H ~> m or kg m-2]
-  real, allocatable, dimension(:,:)   :: area_shelf_h ! area occupied by ice shelf [L2 ~> m2]
-  real, dimension(:,:), allocatable, target  :: frac_shelf_h ! fraction of total area occupied by ice shelf [nondim]
-  real, dimension(:,:), pointer :: shelf_area => NULL()
+  real, allocatable, dimension(:,:)   :: area_shelf_in ! area occupied by ice shelf [L2 ~> m2]
+!  real, dimension(:,:), pointer :: shelf_area => NULL()
   type(MOM_restart_CS),  pointer      :: restart_CSp_tmp => NULL()
   type(group_pass_type) :: tmp_pass_uv_T_S_h, pass_uv_T_S_h
 
@@ -2345,9 +2345,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     call copy_dyngrid_to_MOM_grid(dG, G, US)
     call destroy_dyn_horgrid(dG)
   endif
+
   call MOM_grid_init(G_in, param_file, US, HI_in, bathymetry_at_vel=bathy_at_vel)
   call copy_dyngrid_to_MOM_grid(dG_in, G_in, US)
   call destroy_dyn_horgrid(dG_in)
+
+  if (.not. CS%rotate_index) G=>G_in
 
   ! Set a few remaining fields that are specific to the ocean grid type.
   call set_first_direction(G, first_direction)
@@ -2365,6 +2368,26 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     allocate(u_in(G_in%IsdB:G_in%IedB, G_in%jsd:G_in%jed, nz))
     allocate(v_in(G_in%isd:G_in%ied, G_in%JsdB:G_in%JedB, nz))
     allocate(h_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed, nz))
+
+
+    if (use_ice_shelf) then
+       allocate(frac_shelf_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed))
+       allocate(area_shelf_in(G_in%isd:G_in%ied,G_in%jsd:G_in%jed))
+       if (.not.file_exists(ice_shelf_file, G_in%Domain)) call MOM_error(FATAL, &
+            "MOM_initialize_state: Unable to open shelf file "//trim(ice_shelf_file))
+       call MOM_read_data(ice_shelf_file, trim(area_varname), area_shelf_in, G_in%Domain, scale=US%m_to_L**2)
+       ! Initialize frac_shelf_h with zeros (open water everywhere)
+       frac_shelf_in(:,:) = 0.0
+       ! Compute fractional ice shelf coverage of h
+       do j=G_in%jsd,G_in%jed ; do i=G_in%isd,G_in%ied
+         if (G_in%areaT(i,j) > 0.0) &
+              frac_shelf_in(i,j) = area_shelf_in(i,j) / G_in%areaT(i,j)
+       enddo; enddo
+       call pass_var(frac_shelf_in,G_in%Domain)
+       deallocate(area_shelf_in)
+    endif
+
+
     u_in(:,:,:) = 0.0
     v_in(:,:,:) = 0.0
     h_in(:,:,:) = GV%Angstrom_H
@@ -2379,9 +2402,15 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       CS%tv%S => S_in
     endif
 
-    call MOM_initialize_state(u_in, v_in, h_in, CS%tv, Time, G_in, GV, US, &
+    if (use_ice_shelf) then
+       call MOM_initialize_state(u_in, v_in, h_in, CS%tv, Time, G_in, GV, US, &
+            param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
+            sponge_in_CSp, ALE_sponge_in_CSp, OBC_in, Time_in,frac_shelf_in)
+    else
+       call MOM_initialize_state(u_in, v_in, h_in, CS%tv, Time, G_in, GV, US, &
         param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
         sponge_in_CSp, ALE_sponge_in_CSp, OBC_in, Time_in)
+    endif
 
     if (use_temperature) then
       CS%tv%T => CS%T
@@ -2394,6 +2423,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     if (associated(sponge_in_CSp)) then
       ! TODO: Implementation and testing of non-ALE spong rotation
       call MOM_error(FATAL, "Index rotation of non-ALE sponge is not yet implemented.")
+    endif
+
+    if (use_ice_shelf ) then
+       allocate(CS%frac_shelf_h(isd:ied,jsd:jed))
+       CS%frac_shelf_h(:,:)=0.0
+       call rotate_array(frac_shelf_in, turns, CS%frac_shelf_h)
+       call pass_var(CS%frac_shelf_h,G%Domain)
     endif
 
     if (associated(ALE_sponge_in_CSp)) then
@@ -2412,10 +2448,35 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       deallocate(T_in)
       deallocate(S_in)
     endif
-  else
-    call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, US, &
-        param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
-        CS%sponge_CSp, CS%ALE_sponge_CSp, CS%OBC, Time_in)
+    if (use_ice_shelf) deallocate(frac_shelf_in)
+ else
+    if (use_ice_shelf) then
+       allocate(CS%frac_shelf_h(isd:ied,jsd:jed))
+       allocate(area_shelf_in(isd:ied,jsd:jed))
+       if (.not.file_exists(ice_shelf_file, G%Domain)) call MOM_error(FATAL, &
+            "MOM_initialize_state: Unable to open shelf file "//trim(ice_shelf_file))
+       call MOM_read_data(ice_shelf_file, trim(area_varname), area_shelf_in, G%Domain, scale=US%m_to_L**2)
+       ! Initialize frac_shelf_h with zeros (open water everywhere)
+       CS%frac_shelf_h(:,:) = 0.0
+       ! Compute fractional ice shelf coverage of h
+       do j=jsd,jed; do i=isd,ied
+         if (G%areaT(i,j) > 0.0) &
+              CS%frac_shelf_h(i,j) = area_shelf_in(i,j) / G%areaT(i,j)
+       enddo; enddo
+       call pass_var(CS%frac_shelf_h,G%Domain)
+       deallocate(area_shelf_in)
+       call hchksum(CS%frac_shelf_h,"MOM:frac_shelf_h", G%HI, haloshift=0, scale=GV%H_to_m)
+
+       call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, US, &
+            param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
+            CS%sponge_CSp, CS%ALE_sponge_CSp, CS%OBC, Time_in, frac_shelf_h=CS%frac_shelf_h)
+    else
+       call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, US, &
+            param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
+            CS%sponge_CSp, CS%ALE_sponge_CSp, CS%OBC, Time_in)
+    endif
+
+
   endif
 
   call cpu_clock_end(id_clock_MOM_init)
@@ -2469,24 +2530,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     call adjustGridForIntegrity(CS%ALE_CSp, G, GV, CS%h )
     call callTree_waypoint("Calling ALE_main() to remap initial conditions (initialize_MOM)")
     if (use_ice_shelf) then
-      filename = trim(inputdir)//trim(ice_shelf_file)
-      if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
-        "MOM: Unable to open "//trim(filename))
-
-      allocate(area_shelf_h(isd:ied,jsd:jed))
-      allocate(frac_shelf_h(isd:ied,jsd:jed))
-      call MOM_read_data(filename, trim(area_varname), area_shelf_h, G%Domain, scale=US%m_to_L**2)
-      ! initialize frac_shelf_h with zeros (open water everywhere)
-      frac_shelf_h(:,:) = 0.0
-      ! compute fractional ice shelf coverage of h
-      do j=jsd,jed ; do i=isd,ied
-        if (G%areaT(i,j) > 0.0) &
-          frac_shelf_h(i,j) = area_shelf_h(i,j) / G%areaT(i,j)
-      enddo ; enddo
-      ! pass to the pointer
-      shelf_area => frac_shelf_h
       call ALE_main(G, GV, US, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, &
-                    CS%OBC, frac_shelf_h=shelf_area)
+                    CS%OBC, frac_shelf_h=CS%frac_shelf_h)
     else
       call ALE_main( G, GV, US, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC)
     endif
@@ -3015,8 +3060,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
   type(verticalGrid_type), pointer :: GV => NULL() !< structure containing vertical grid info
   type(unit_scale_type),   pointer :: US => NULL() !< structure containing various unit conversion factors
   type(surface),           pointer :: sfc_state => NULL()  ! surface state on the model grid
-  real, dimension(:,:,:),  pointer :: &
-    h => NULL()    !< h : layer thickness [H ~> m or kg m-2]
+  real, dimension(:,:,:),  pointer :: h => NULL()    !< h : layer thickness [H ~> m or kg m-2]
   real :: depth(SZI_(CS%G))  !< Distance from the surface in depth units [Z ~> m] or [H ~> m or kg m-2]
   real :: depth_ml           !< Depth over which to average to determine mixed
                              !! layer properties [Z ~> m] or [H ~> m or kg m-2]
@@ -3051,16 +3095,27 @@ subroutine extract_surface_state(CS, sfc_state_in)
   if (CS%rotate_index) &
     turns = G%HI%turns
 
-  if (.not.sfc_state_in%arrays_allocated) &
+  if (.not.sfc_state_in%arrays_allocated)  then
     !  Consider using a run-time flag to determine whether to do the vertical
     ! integrals, since the 3-d sums are not negligible in cost.
-    call allocate_surface_state(sfc_state_in, G_in, use_temperature, &
-        do_integrals=.true., omit_frazil=.not.associated(CS%tv%frazil))
+    if (associated(CS%frac_shelf_h)) then
+       call allocate_surface_state(sfc_state_in, G_in, use_temperature, &
+           do_integrals=.true., omit_frazil=.not.associated(CS%tv%frazil),use_iceshelves=.true.)
+    else
+       call allocate_surface_state(sfc_state_in, G_in, use_temperature, &
+            do_integrals=.true., omit_frazil=.not.associated(CS%tv%frazil))
+    endif
+  endif
 
   if (CS%rotate_index) then
     allocate(sfc_state)
-    call allocate_surface_state(sfc_state, G, use_temperature, &
-        do_integrals=.true., omit_frazil=.not.associated(CS%tv%frazil))
+    if (associated(CS%frac_shelf_h)) then
+      call allocate_surface_state(sfc_state, G, use_temperature, &
+           do_integrals=.true., omit_frazil=.not.associated(CS%tv%frazil),use_iceshelves=.true.)
+    else
+      call allocate_surface_state(sfc_state, G, use_temperature, &
+           do_integrals=.true., omit_frazil=.not.associated(CS%tv%frazil))
+    endif
   else
     sfc_state => sfc_state_in
   endif

@@ -837,7 +837,7 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
   type(thermo_var_ptrs),                      intent(inout) :: tv     !< Thermodynamical variables (T, S, ...)
   real, dimension(SZI_(G),SZJ_(G), CS%nk),    intent(inout) :: h_new  !< New 3D grid consistent with target coordinate
   real, dimension(SZI_(G),SZJ_(G), CS%nk+1),  intent(inout) :: dzInterface !< The change in position of each interface
-  real, dimension(:,:),             optional, pointer       :: frac_shelf_h !< Fractional ice shelf coverage
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in   ) :: frac_shelf_h !< Fractional ice shelf coverage
   logical,                          optional, intent(in   ) :: conv_adjust !< If true, do convective adjustment
   ! Local variables
   real :: trickGnuCompiler
@@ -849,7 +849,7 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
 
   use_ice_shelf = .false.
   if (present(frac_shelf_h)) then
-    if (associated(frac_shelf_h)) use_ice_shelf = .true.
+    use_ice_shelf = .true.
   endif
 
   select case ( CS%regridding_scheme )
@@ -871,8 +871,12 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_RHO )
-      if (do_convective_adjustment) call convective_adjustment(G, GV, h, tv)
-      call build_rho_grid( G, GV, G%US, h, tv, dzInterface, remapCS, CS )
+       if (do_convective_adjustment) call convective_adjustment(G, GV, h, tv)
+       if (use_ice_shelf) then
+          call build_rho_grid( G, GV, G%US, h, tv, dzInterface, remapCS, CS, frac_shelf_h )
+       else
+          call build_rho_grid( G, GV, G%US, h, tv, dzInterface, remapCS, CS)
+       endif
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_ARBITRARY )
@@ -1164,7 +1168,7 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G), CS%nk+1), intent(inout) :: dzInterface !< The change in interface depth
                                                                  !! [H ~> m or kg m-2].
-  real, dimension(:,:),            optional, pointer       :: frac_shelf_h !< Fractional ice shelf coverage [nondim].
+  real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: frac_shelf_h !< Fractional ice shelf coverage [nondim].
   ! Local variables
   real    :: nominalDepth, totalThickness, dh  ! Depths and thicknesses [H ~> m or kg m-2]
   real, dimension(SZK_(GV)+1) :: zOld, zNew    ! Coordinate interface heights [H ~> m or kg m-2]
@@ -1173,9 +1177,7 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h)
 
   nz = GV%ke
   ice_shelf = .false.
-  if (present(frac_shelf_h)) then
-    if (associated(frac_shelf_h)) ice_shelf = .true.
-  endif
+  if (present(frac_shelf_h)) ice_shelf = .true.
 
 !$OMP parallel do default(none) shared(G,GV,dzInterface,CS,nz,h,frac_shelf_h,ice_shelf) &
 !$OMP                          private(nominalDepth,totalThickness,zNew,dh,zOld)
@@ -1324,7 +1326,7 @@ end subroutine build_sigma_grid
 ! Build grid based on target interface densities
 !------------------------------------------------------------------------------
 !> This routine builds a new grid based on a given set of target interface densities.
-subroutine build_rho_grid( G, GV, US, h, tv, dzInterface, remapCS, CS )
+subroutine build_rho_grid( G, GV, US, h, tv, dzInterface, remapCS, CS , frac_shelf_h)
 !------------------------------------------------------------------------------
 ! This routine builds a new grid based on a given set of target interface
 ! densities (these target densities are computed by taking the mean value
@@ -1350,6 +1352,7 @@ subroutine build_rho_grid( G, GV, US, h, tv, dzInterface, remapCS, CS )
                                                                     !! [H ~> m or kg m-2]
   type(remapping_CS),                           intent(in)    :: remapCS !< The remapping control structure
   type(regridding_CS),                          intent(in)    :: CS !< Regridding control structure
+  real, dimension(SZI_(G),SZJ_(G)),            optional, intent(in)       :: frac_shelf_h !< Fractional ice shelf coverage [nondim].
 
   ! Local variables
   integer :: nz
@@ -1357,10 +1360,11 @@ subroutine build_rho_grid( G, GV, US, h, tv, dzInterface, remapCS, CS )
   real    :: nominalDepth   ! Depth of the bottom of the ocean, positive downward [H ~> m or kg m-2]
   real, dimension(SZK_(GV)+1) :: zOld, zNew ! Old and new interface heights [H ~> m or kg m-2]
   real :: h_neglect, h_neglect_edge ! Negligible thicknesses [H ~> m or kg m-2]
+  real    :: totalThickness ! Total thicknesses [H ~> m or kg m-2]
 #ifdef __DO_SAFETY_CHECKS__
-  real    :: totalThickness
   real    :: dh
 #endif
+  logical :: ice_shelf
 
   if (.not.CS%remap_answers_2018) then
     h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
@@ -1371,6 +1375,8 @@ subroutine build_rho_grid( G, GV, US, h, tv, dzInterface, remapCS, CS )
   endif
 
   nz = GV%ke
+  ice_shelf = .false.
+  if (present(frac_shelf_h)) ice_shelf = .true.
 
   if (.not.CS%target_density_set) call MOM_error(FATAL, "build_rho_grid: "//&
         "Target densities must be set before build_rho_grid is called.")
@@ -1384,13 +1390,31 @@ subroutine build_rho_grid( G, GV, US, h, tv, dzInterface, remapCS, CS )
         cycle
       endif
 
-
       ! Local depth (G%bathyT is positive)
       nominalDepth = G%bathyT(i,j)*GV%Z_to_H
 
-      call build_rho_column(CS%rho_CS, nz, nominalDepth, h(i, j, :), &
-                            tv%T(i, j, :), tv%S(i, j, :), tv%eqn_of_state, zNew, &
-                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+      ! Determine water column thickness
+      totalThickness = 0.0
+      do k = 1,nz
+        totalThickness = totalThickness + h(i,j,k)
+      enddo
+
+      zOld(nz+1) = - nominalDepth
+      do k = nz,1,-1
+        zOld(k) = zOld(k+1) + h(i,j,k)
+      enddo
+
+      if (ice_shelf) then
+         call build_rho_column(CS%rho_CS, nz, nominalDepth, h(i, j, :), &
+              tv%T(i, j, :), tv%S(i, j, :), tv%eqn_of_state, zNew, &
+              z_rigid_top = totalThickness-nominalDepth, &
+              eta_orig=zOld(1), &
+              h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+      else
+         call build_rho_column(CS%rho_CS, nz, nominalDepth, h(i, j, :), &
+              tv%T(i, j, :), tv%S(i, j, :), tv%eqn_of_state, zNew, &
+              h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+      endif
 
       if (CS%integrate_downward_for_e) then
         zOld(1) = 0.

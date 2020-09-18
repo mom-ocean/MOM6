@@ -2,14 +2,13 @@ import netCDF4 as nc
 from netCDF4 import stringtochar
 import numpy as np
 
-nx, ny = 14, 10     # Grid size
+nx, ny = 10, 8     # Grid size
 depth0 = 100.       # Uniform depth
 ds = 0.01           # grid resolution at the equator in degrees
 Re = 6.378e6        # Radius of earth
 
 topo_ = np.zeros((ny, nx)) + depth0
 f_topo = nc.Dataset('topog.nc', 'w', format='NETCDF3_CLASSIC')
-ny, nx = topo_.shape
 f_topo.createDimension('ny', ny)
 f_topo.createDimension('nx', nx)
 f_topo.createDimension('ntiles', 1)
@@ -26,8 +25,9 @@ x, y = np.meshgrid(x_, y_)
 dx = np.zeros((2*ny + 1, 2*nx))
 dy = np.zeros((2*ny, 2*nx + 1))
 rad_deg = np.pi / 180.
-dx[:] = (rad_deg * Re * (x[:, 1:] - x[:, 0:-1])
-         * np.cos(0.5*rad_deg*(y[:, 0:-1] + y[:, 1:])))
+#dx[:] = (rad_deg * Re * (x[:, 1:] - x[:, 0:-1])
+#         * np.cos(0.5*rad_deg*(y[:, 0:-1] + y[:, 1:])))
+dx[:] = (rad_deg * Re * (x[:, 1:] - x[:, 0:-1]))
 dy[:] = rad_deg * Re * (y[1:, :] - y[0:-1, :])
 
 f_sg = nc.Dataset('ocean_hgrid.nc', 'w', format='NETCDF3_CLASSIC')
@@ -74,3 +74,17 @@ str_ = stringtochar(np.array(['tile1'], dtype='S5'))
 f_sg.variables['tile'][:] = str_
 f_sg.sync()
 f_sg.close()
+
+thick_ = np.zeros((ny, nx))
+area_  = area[::2,::2]+area[::2,1::2]+area[1::2,::2]+area[1::2,1::2]
+thick_[:,:int(nx/2)]=0.5*depth0
+area_[thick_==0.]=0.
+f_thick = nc.Dataset('shelf.nc', 'w', format='NETCDF3_CLASSIC')
+f_thick.createDimension('ny', ny)
+f_thick.createDimension('nx', nx)
+f_thick.createVariable('thick', 'f8', ('ny', 'nx'))
+f_thick.createVariable('area', 'f8', ('ny', 'nx'))
+f_thick.variables['thick'][:] = thick_
+f_thick.variables['area'][:] = area_
+f_thick.sync()
+f_thick.close()
