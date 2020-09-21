@@ -259,7 +259,8 @@ type, public :: MOM_control_struct ; private
                                      !! calculated, and if it is 0, dtbt is calculated every step.
   type(time_type) :: dtbt_reset_interval !< A time_time representation of dtbt_reset_period.
   type(time_type) :: dtbt_reset_time !< The next time DTBT should be calculated.
-  real, dimension(:,:), pointer :: frac_shelf_h => NULL() ! fraction of total area occupied by ice shelf [nondim]
+  real, dimension(:,:), pointer :: frac_shelf_h => NULL() !< fraction of total area occupied
+                                     !! by ice shelf [nondim]
   real, dimension(:,:,:), pointer :: &
     h_pre_dyn => NULL(), &      !< The thickness before the transports [H ~> m or kg m-2].
     T_pre_dyn => NULL(), &      !< Temperature before the transports [degC].

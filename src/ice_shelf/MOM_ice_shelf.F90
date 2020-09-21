@@ -26,10 +26,10 @@ use MOM_fixed_initialization, only : MOM_initialize_topography
 use MOM_fixed_initialization, only : MOM_initialize_rotation
 use user_initialization, only : user_initialize_topography
 use MOM_io, only : field_exists, file_exists, MOM_read_data, write_version_number
-use MOM_io, only : slasher, fieldtype
+use MOM_io, only : slasher, fieldtype, vardesc, var_desc
 use MOM_io, only : write_field, close_file, SINGLE_FILE, MULTIPLE
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
-use MOM_restart, only : restart_init, restore_state, MOM_restart_CS
+use MOM_restart, only : restart_init, restore_state, MOM_restart_CS, register_restart_pair
 use MOM_time_manager, only : time_type, time_type_to_real, real_to_time, operator(>), operator(-)
 use MOM_transcribe_grid, only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid
 use MOM_transcribe_grid,       only : rotate_dyngrid
@@ -84,7 +84,7 @@ type, public :: ice_shelf_CS ; private
   type(hor_index_type), pointer :: HI => NULL()  !< Pointer to a horizontal indexing structure for
                                                  !! incoming data which has not been rotated.
   logical :: rotate_index = .false.   !< True if index map is rotated
-  integer :: turns                    ! The number of quarter turns for rotation testing.
+  integer :: turns                    !< The number of quarter turns for rotation testing.
   type(ocean_grid_type), pointer :: Grid => NULL() !< Grid for the ice-shelf model
   type(unit_scale_type), pointer :: &
     US => NULL()       !< A structure containing various unit conversion factors
@@ -1138,15 +1138,19 @@ end subroutine add_shelf_flux
 
 
 !> Initializes shelf model data, parameters and diagnostics
-subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in, fluxes_in, Time_in, solo_ice_sheet_in)
+subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in, &
+                                fluxes_in, sfc_state_in, Time_in, solo_ice_sheet_in)
   type(param_file_type),        intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(ocean_grid_type),        pointer       :: ocn_grid   !< The calling ocean model's horizontal grid structure
   type(time_type),              intent(inout) :: Time !< The clock that that will indicate the model time
   type(ice_shelf_CS),           pointer       :: CS   !< A pointer to the ice shelf control structure
   type(diag_ctrl),    target,   intent(in)    :: diag !< A structure that is used to regulate the diagnostic output.
+  type(mech_forcing), optional, pointer       :: forces_in !< A structure with the driving mechanical forces
   type(forcing),      optional, pointer       :: fluxes_in !< A structure containing pointers to any possible
-                                                   !! thermodynamic or mass-flux forcing fields.
-  type(mech_forcing), optional, pointer :: forces_in !< A structure with the driving mechanical forces
+                                                           !! thermodynamic or mass-flux forcing fields.
+  type(surface), target, optional, intent(inout) :: sfc_state_in !< A structure containing fields that
+                                                !! describe the surface state of the ocean.  The
+                                                !! intent is only inout to allow for halo updates.
   type(time_type),    optional, intent(in)    :: Time_in !< The time at initialization.
   logical,            optional, intent(in)    :: solo_ice_sheet_in !< If present, this indicates whether
                                                    !! a solo ice-sheet driver.
@@ -1187,6 +1191,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 
   type(mech_forcing), pointer :: forces => NULL()
   type(forcing), pointer :: fluxes =>  NULL()
+  type(surface), pointer :: sfc_state => NULL()
+  type(vardesc) :: u_desc, v_desc
 
   if (associated(CS)) then
     call MOM_error(FATAL, "MOM_ice_shelf.F90, initialize_ice_shelf: "// &
@@ -1445,6 +1451,17 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
                  "the same index. This does not work with static memory.", &
                  default=.false., layoutParam=.true.)
 
+
+  if (PRESENT(sfc_state_in)) then
+     if (CS%rotate_index) then
+        allocate(sfc_state)
+        call rotate_surface_state(sfc_state_in,CS%Grid_in, sfc_state,CS%Grid,CS%turns)
+     else
+        sfc_state=>sfc_state_in
+     endif
+  endif
+
+
   call safe_alloc_ptr(CS%utide,isd,ied,jsd,jed)   ; CS%utide(:,:) = 0.0
 
   if (read_TIDEAMP) then
@@ -1571,6 +1588,19 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   call register_restart_field(ISS%area_shelf_h, "shelf_area", .true., CS%restart_CSp, &
                               "Ice shelf area in cell", "m2")
   call register_restart_field(ISS%h_shelf, "h_shelf", .true., CS%restart_CSp, &
+                              "ice sheet/shelf thickness", "m")
+  if (PRESENT(sfc_state_in)) then
+    if (allocated(sfc_state%taux_shelf) .and. allocated(sfc_state%tauy_shelf)) then
+       u_desc = var_desc("taux_shelf", "Pa", "the zonal stress on the ocean under ice shelves", &
+            hor_grid='Cu',z_grid='1')
+       v_desc = var_desc("tauy_shelf", "Pa", "the meridional stress on the ocean under ice shelves", &
+            hor_grid='Cv',z_grid='1')
+       call register_restart_pair(sfc_state%taux_shelf, sfc_state%tauy_shelf, u_desc,v_desc, &
+            .false., CS%restart_CSp)
+    endif
+  endif
+
+  call register_restart_field(ISS%h_shelf, "_shelf", .true., CS%restart_CSp, &
                               "ice sheet/shelf thickness", "m")
   call register_restart_field(US%m_to_Z_restart, "m_to_Z", .false., CS%restart_CSp, &
                               "Height unit conversion factor", "Z meter-1")

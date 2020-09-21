@@ -328,7 +328,7 @@ program MOM_main
     ! These arrays are not initialized in most solo cases, but are needed
     ! when using an ice shelf
     call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, &
-                              diag, forces, fluxes)
+                              diag, forces, fluxes, sfc_state)
   endif
 
   call get_param(param_file,mod_name,"USE_WAVES",Use_Waves,&
