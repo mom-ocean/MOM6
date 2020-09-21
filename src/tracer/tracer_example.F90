@@ -29,7 +29,7 @@ implicit none ; private
 public USER_register_tracer_example, USER_initialize_tracer, USER_tracer_stock
 public tracer_column_physics, USER_tracer_surface_state, USER_tracer_example_end
 
-integer, parameter :: NTR = 1 !< The number of tracers in this module.
+integer, parameter :: NTR = 2 !< The number of tracers in this module.
 
 !> The control structure for the USER_tracer_example module
 type, public :: USER_tracer_example_CS ; private
