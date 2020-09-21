@@ -2219,8 +2219,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
          "Bryan-Lewis and internal tidal dissipation are both enabled. Choose one.")
 
   CS%useKappaShear = kappa_shear_init(Time, G, GV, US, param_file, CS%diag, CS%kappaShear_CSp)
-  CS%Vertex_Shear = .false.
-  if (CS%useKappaShear) CS%Vertex_Shear = kappa_shear_at_vertex(param_file)
+  CS%Vertex_Shear = kappa_shear_at_vertex(param_file)
 
   if (CS%useKappaShear) &
     id_clock_kappaShear = cpu_clock_id('(Ocean kappa_shear)', grain=CLOCK_MODULE)
