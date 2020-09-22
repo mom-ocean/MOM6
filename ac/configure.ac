@@ -8,6 +8,8 @@
 # - We would probably run this inside of a script to avoid the explicit
 #   dependency on git.
 
+AC_PREREQ([2.63])
+
 AC_INIT(
   [MOM6],
   [ ],
@@ -102,11 +104,22 @@ AS_IF(
 
 
 # OpenMP configuration
+
+# NOTE: AC_OPENMP fails on `Fortran` for Autoconf <2.69 due to a m4 bug.
+#   For older versions, we test against CC and use the result for FC.
+m4_version_prereq([2.69], [], [AC_LANG_PUSH([C])])
 AC_OPENMP
+m4_version_prereq([2.69], [], [
+  AC_LANG_POP([C])
+  OPENMP_FCFLAGS="$OPENMP_CFLAGS"
+])
+
+# NOTE: Only apply OpenMP flags if explicitly enabled.
 AS_IF(
-  [test "$enable_openmp" = yes],
-  [FCFLAGS="$FCFLAGS $OPENMP_FCFLAGS"
-  LDFLAGS="$LDFLAGS $OPENMP_FCFLAGS"])
+  [test "$enable_openmp" = yes], [
+  FCFLAGS="$FCFLAGS $OPENMP_FCFLAGS"
+  LDFLAGS="$LDFLAGS $OPENMP_FCFLAGS"
+])
 
 
 # FMS support
