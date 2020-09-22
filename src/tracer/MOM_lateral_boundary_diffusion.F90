@@ -11,19 +11,22 @@ use MOM_domains,               only : pass_var
 use MOM_diag_mediator,         only : diag_ctrl, time_type
 use MOM_diag_mediator,         only : post_data, register_diag_field
 use MOM_error_handler,         only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
-use MOM_file_parser,           only : get_param, log_version, param_file_type
+use MOM_file_parser,           only : get_param, log_version, param_file_type, log_param
 use MOM_file_parser,           only : openParameterBlock, closeParameterBlock
+use MOM_io,                    only : file_exists, field_size, MOM_read_data, slasher, field_exists
 use MOM_grid,                  only : ocean_grid_type
 use MOM_remapping,             only : remapping_CS, initialize_remapping
 use MOM_remapping,             only : extract_member_remapping_CS, build_reconstructions_1d
 use MOM_remapping,             only : average_value_ppoly, remappingSchemesDoc, remappingDefaultScheme
 use MOM_remapping,             only : remapping_core_h
+use MOM_regridding,            only : check_grid_def
 use MOM_tracer_registry,       only : tracer_registry_type, tracer_type
 use MOM_unit_scaling,          only : unit_scale_type
 use MOM_verticalGrid,          only : verticalGrid_type
 use MOM_CVMix_KPP,             only : KPP_get_BLD, KPP_CS
 use MOM_energetic_PBL,         only : energetic_PBL_get_MLD, energetic_PBL_CS
 use MOM_diabatic_driver,       only : diabatic_CS, extract_diabatic_member
+use MOM_string_functions,      only : extract_integer, extract_real, extractWord
 use iso_fortran_env,           only : stdout=>output_unit, stderr=>error_unit
 
 implicit none ; private
@@ -43,14 +46,15 @@ type, public :: lbd_CS ; private
                                              !! 1. Along layer
                                              !! 2. Bulk-layer approach (not recommended)
   integer :: deg                             !< Degree of polynomial reconstruction
+  integer :: nk                              !< Number of layers in dz_top
   integer :: surface_boundary_scheme         !< Which boundary layer scheme to use
                                              !! 1. ePBL; 2. KPP
   logical :: limiter                         !< Controls wether a flux limiter is applied.
                                              !! Only valid when method = 2.
   logical :: linear                          !< If True, apply a linear transition at the base/top of the boundary.
                                              !! The flux will be fully applied at k=k_min and zero at k=k_max.
-  real, dimension(500)             :: zgrid_top !< top vertical grid to remap the state before applying lateral diffusion
-  real, dimension(500)             :: zgrid_bot !< bot vertical grid to remap the state before applying lateral diffusion
+  real, dimension(:), allocatable  :: dz_top !< top vertical grid to remap the state before applying lateral diffusion
+  real, dimension(:), allocatable  :: dz_bot !< bot vertical grid to remap the state before applying lateral diffusion
   type(remapping_CS)              :: remap_CS                     !< Control structure to hold remapping configuration
   type(KPP_CS),           pointer :: KPP_CSp => NULL()            !< KPP control structure needed to get BLD
   type(energetic_PBL_CS), pointer :: energetic_PBL_CSp => NULL()  !< ePBL control structure needed to get BLD
@@ -75,9 +79,17 @@ logical function lateral_boundary_diffusion_init(Time, G, param_file, diag, diab
   type(lbd_CS),                     pointer       :: CS            !< Lateral boundary mixing control structure
 
   ! local variables
-  character(len=80)  :: string  ! Temporary strings
-  logical :: boundary_extrap
-
+  character(len=80)  :: string, varName    ! Temporary strings
+  character(len=200) :: inputdir, fileName ! Temporary strings
+  character(len=320) :: message            ! Temporary strings
+  character(len=12)  :: expected_units     ! Temporary strings
+  integer :: ke, nk ! Number of levels in the LBD and native grids, respectively
+  logical :: boundary_extrap ! controls if boundary extrapolation is used in the LBD code
+  logical :: ierr
+  real    :: tmpReal
+  integer :: nzf(4)
+  real, dimension(:), allocatable :: z_max  ! Maximum interface depths [H ~> m or kg m-2] or other
+                                            ! units depending on the coordinate
   if (ASSOCIATED(CS)) then
     call MOM_error(FATAL, "lateral_boundary_diffusion_init called with associated control structure.")
     return
@@ -121,8 +133,7 @@ logical function lateral_boundary_diffusion_init(Time, G, param_file, diag, diab
   call get_param(param_file, mdl, "LBD_BOUNDARY_EXTRAP", boundary_extrap, &
                  "Use boundary extrapolation in LBD code", &
                  default=.false.)
-  CS%zgrid_top(:) = 1.0
-  CS%zgrid_bot(:) = 1.0
+  CS%dz_bot(:) = 1.0
   call get_param(param_file, mdl, "LBD_REMAPPING_SCHEME", string, &
                  "This sets the reconstruction scheme used "//&
                  "for vertical remapping for all variables. "//&
@@ -130,7 +141,93 @@ logical function lateral_boundary_diffusion_init(Time, G, param_file, diag, diab
                  trim(remappingSchemesDoc), default=remappingDefaultScheme)
   call initialize_remapping( CS%remap_CS, string, boundary_extrapolation = boundary_extrap )
   call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
+  ! set dz_top
+  call get_param(param_file, mdl, "LBD_DIAG_COORD_TOP", string, &
+                 "Determines how to specify the vertical resolution "//&
+                 "to apply lateral diffusion near the surface. Valid options are:\n"//&
+                 " PARAM       - use the vector-parameter LBD_DZ_TOP \n"//&
+                 " UNIFORM[:N] - uniformly distributed\n"//&
+                 " FILE:string - read from a file. The string specifies\n"//&
+                 "               the filename and variable name, separated\n"//&
+                 "               by a comma or space, e.g. FILE:lev.nc,dz\n"//&
+                 "               or FILE:lev.nc,interfaces=zw\n",&
+                 default="UNIFORM:500,500")
+  message = "The distribution of vertical resolution used to \n"//&
+            "apply lateral diffusion near boundaries."
+  call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".", do_not_log=.true.)
+  inputdir = slasher(inputdir)
+  call get_param(param_file, mdl, "NK", nk, &
+                 "The number of model layers.", units="nondim", fail_if_missing=.true., &
+                 do_not_log=.true.)
+  if (index(trim(string),'UNIFORM')==1) then
+    call get_param(param_file, "MOM", "MAXIMUM_DEPTH", tmpReal, &
+                 "The maximum depth of the ocean.", units="m", default=4000.0, do_not_log=.true.)
+    if (len_trim(string)==7) then
+      ke = nk ! Use model nk by default
+    elseif (index(trim(string),'UNIFORM:')==1 .and. len_trim(string)>8) then
+      ! Format is "UNIFORM:N" or "UNIFORM:N,MAX_DEPTH"
+      ke = extract_integer(string(9:len_trim(string)),'',1)
+      tmpReal = extract_real(string(9:len_trim(string)),',',2,missing_value=tmpReal)
+    else
+      call MOM_error(FATAL,trim(mdl)//', lateral_boundary_diffusion_init: '// &
+          'Unable to interpret "'//trim(string)//'".')
+    endif
+    allocate(CS%dz_top(ke))
+    CS%dz_top(:) = tmpReal / real(ke)
+    call log_param(param_file, mdl, "!LBD_DZ_TOP", CS%dz_top, &
+                   trim(message), units='m')
+  elseif (trim(string)=='PARAM') then
+    ke = nk ! Use model nk by default
+    allocate(CS%dz_top(ke))
+    call get_param(param_file, mdl, 'LBD_DZ_TOP', CS%dz_top, &
+                   trim(message), units='m', fail_if_missing=.true.)
+  elseif (index(trim(string),'FILE:')==1) then
+    ! FILE:filename,var_name is assumed to be reading level thickness variables
+    ! FILE:filename,interfaces=var_name reads positions
+    if (string(6:6)=='.' .or. string(6:6)=='/') then
+      ! If we specified "FILE:./xyz" or "FILE:/xyz" then we have a relative or absolute path
+      fileName = trim( extractWord(trim(string(6:80)), 1) )
+    else
+      ! Otherwise assume we should look for the file in INPUTDIR
+      fileName = trim(inputdir) // trim( extractWord(trim(string(6:80)), 1) )
+    endif
+    if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", lateral_boundary_diffusion_init: "// &
+            "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
 
+    varName = trim( extractWord(trim(string(6:)), 2) )
+    if (len_trim(varName)==0) then
+      if (field_exists(fileName,'dz')) then; varName = 'dz'
+      else ;  call MOM_error(FATAL,trim(mdl)//", lateral_boundary_diffusion_init: "// &
+                    "Coordinate variable (dz) not specified and none could be guessed.")
+      endif
+    endif
+    expected_units = 'meters'
+    if (index(trim(varName),'interfaces=')==1) then
+      varName=trim(varName(12:))
+      call check_grid_def(filename, varName, expected_units, message, ierr)
+      if (ierr) call MOM_error(FATAL,trim(mdl)//", lateral_boundary_diffusion_init: "//&
+                  "Unsupported format in grid definition '"//trim(filename)//"'. Error message "//trim(message))
+      call field_size(trim(fileName), trim(varName), nzf)
+      ke = nzf(1)-1
+      allocate(CS%dz_top(ke))
+      allocate(z_max(ke+1))
+      call MOM_read_data(trim(fileName), trim(varName), z_max)
+      CS%dz_top(:) = abs(z_max(1:ke) - z_max(2:ke+1))
+      deallocate(z_max)
+    else
+      ! Assume reading resolution
+      call field_size(trim(fileName), trim(varName), nzf)
+      ke = nzf(1)
+      allocate(CS%dz_top(ke))
+      call MOM_read_data(trim(fileName), trim(varName), CS%dz_top)
+    endif
+    call log_param(param_file, mdl, "!LBD_DZ_TOP", CS%dz_top, &
+                   trim(message), units='m')
+  else
+    call MOM_error(FATAL,trim(mdl)//", lateral_boundary_diffusion_init: "// &
+      "Unrecognized coordinate configuration"//trim(string))
+  endif
+  CS%nk = ke
 end function lateral_boundary_diffusion_init
 
 !> Driver routine for calculating lateral diffusive fluxes near the top and bottom boundaries.
@@ -152,21 +249,20 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   type(lbd_CS),                         pointer       :: CS     !< Control structure for this module
 
   ! Local variables
-  integer, parameter :: nk_z = SIZE(CS%zgrid_top)                   !< Number of layers in zgrid
   real, dimension(SZI_(G),SZJ_(G)) :: hbl                           !< bnd. layer depth [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G),CS%deg+1) :: ppoly0_coefs !< Coefficients of polynomial
   real, dimension(SZI_(G),SZJ_(G),SZK_(G),2)        :: ppoly0_E     !< Edge values from reconstructions
   real, dimension(SZK_(G),CS%deg+1)                 :: ppoly_S      !< Slopes from reconstruction (placeholder)
   !real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: uFlx       !< Zonal flux of tracer [conc m^3]
-  real, dimension(SZIB_(G),SZJ_(G),nk_z)    :: uFlx        !< Zonal flux of tracer in z-space [conc m^3]
+  real, dimension(SZIB_(G),SZJ_(G),CS%nk)   :: uFlx        !< Zonal flux of tracer in z-space [conc m^3]
   real, dimension(SZIB_(G),SZJ_(G))         :: uFLx_bulk   !< Total calculated bulk-layer u-flux for the tracer
   !real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vFlx       !< Meridional flux of tracer [conc m^3]
-  real, dimension(SZI_(G),SZJB_(G),nk_z)    :: vFlx        !< Meridional flux of tracer in z-space [conc m^3]
+  real, dimension(SZI_(G),SZJB_(G),CS%nk)   :: vFlx        !< Meridional flux of tracer in z-space [conc m^3]
   real, dimension(SZI_(G),SZJB_(G))         :: vFlx_bulk   !< Total calculated bulk-layer v-flux for the tracer
   real, dimension(SZIB_(G),SZJ_(G))         :: uwork_2d    !< Layer summed u-flux transport
   real, dimension(SZI_(G),SZJB_(G))         :: vwork_2d    !< Layer summed v-flux transport
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: tendency    !< tendency array for diag in the zgrid
-  real, dimension(SZI_(G),SZJ_(G),nk_z)     :: tracer_z    !< Tracer in the zgrid
+  real, dimension(SZI_(G),SZJ_(G),CS%nk)    :: tracer_z    !< Tracer in the zgrid
   real, dimension(SZI_(G),SZJ_(G))          :: tendency_2d !< depth integrated content tendency for diagn
   type(tracer_type), pointer                :: tracer => NULL() !< Pointer to the current tracer
   !type(tracer_type)                         :: tracer_old  !< Local tracer copy,
@@ -198,8 +294,7 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
 
     ! remap tracer to zgrid
     do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
-
-      call remapping_core_h(CS%remap_cs, G%ke, h(i,j,:), tracer%t(i,j,:), nk_z, CS%zgrid_top(:), tracer_z(i,j,:))
+      call remapping_core_h(CS%remap_cs, G%ke, h(i,j,:), tracer%t(i,j,:), CS%nk, CS%dz_top(:), tracer_z(i,j,:))
       !call build_reconstructions_1d( CS%remap_CS, G%ke, h(i,j,:), tracer%t(i,j,:), ppoly0_coefs(i,j,:,:), &
       !                               ppoly0_E(i,j,:,:), ppoly_S, remap_method, GV%H_subroundoff, GV%H_subroundoff)
     enddo ; enddo
@@ -215,11 +310,11 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       do j=G%jsc,G%jec
         do i=G%isc-1,G%iec
           if (G%mask2dCu(I,j)>0.) then
-            !call fluxes_layer_method(SURFACE, GV%ke, nk_z, CS%deg, h(I,j,:), h(I+1,j,:), hbl(I,j), hbl(I+1,j),  &
+            !call fluxes_layer_method(SURFACE, GV%ke, CS%nk, CS%deg, h(I,j,:), h(I+1,j,:), hbl(I,j), hbl(I+1,j),  &
             !  G%areaT(I,j), G%areaT(I+1,j), tracer%t(I,j,:), tracer%t(I+1,j,:), ppoly0_coefs(I,j,:,:),    &
             !  ppoly0_coefs(I+1,j,:,:), ppoly0_E(I,j,:,:), ppoly0_E(I+1,j,:,:), remap_method, Coef_x(I,j), &
             !  uFlx(I,j,:), CS)
-            call fluxes_layer_method1(SURFACE, nk_z, hbl(I,j), hbl(I+1,j),  &
+            call fluxes_layer_method1(SURFACE, CS%nk, hbl(I,j), hbl(I+1,j),  &
               G%areaT(I,j), G%areaT(I+1,j), tracer_z(I,j,:), tracer_z(I+1,j,:), &
               remap_method, Coef_x(I,j), uFlx(I,j,:), CS)
           endif
@@ -228,11 +323,11 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       do J=G%jsc-1,G%jec
         do i=G%isc,G%iec
           if (G%mask2dCv(i,J)>0.) then
-            !call fluxes_layer_method(SURFACE, GV%ke, nk_z, CS%deg, h(i,J,:), h(i,J+1,:), hbl(i,J), hbl(i,J+1),  &
+            !call fluxes_layer_method(SURFACE, GV%ke, CS%nk, CS%deg, h(i,J,:), h(i,J+1,:), hbl(i,J), hbl(i,J+1),  &
             !  G%areaT(i,J), G%areaT(i,J+1), tracer%t(i,J,:), tracer%t(i,J+1,:), ppoly0_coefs(i,J,:,:),    &
             !  ppoly0_coefs(i,J+1,:,:), ppoly0_E(i,J,:,:), ppoly0_E(i,J+1,:,:), remap_method, Coef_y(i,J), &
             !  vFlx(i,J,:), CS)
-            call fluxes_layer_method1(SURFACE, nk_z, hbl(i,J), hbl(i,J+1),  &
+            call fluxes_layer_method1(SURFACE, CS%nk, hbl(i,J), hbl(i,J+1),  &
               G%areaT(i,J), G%areaT(i,J+1), tracer_z(i,J,:), tracer_z(i,J+1,:), &
               remap_method, Coef_y(i,J), vFlx(i,J,:), CS)
           endif
@@ -269,12 +364,12 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     endif
 
     ! Update the tracer fluxes
-    do k=1,nk_z ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
+    do k=1,CS%nk ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
       if (G%mask2dT(i,j)>0.) then
         !tracer%t(i,j,k) = tracer%t(i,j,k) + (( (uFlx(I-1,j,k)-uFlx(I,j,k)) ) + ( (vFlx(i,J-1,k)-vFlx(i,J,k) ) ))* &
         !                  (G%IareaT(i,j)/( h(i,j,k) + GV%H_subroundoff))
         tracer_z(i,j,k) = tracer_z(i,j,k) + (( (uFlx(I-1,j,k)-uFlx(I,j,k)) ) + ( (vFlx(i,J-1,k)-vFlx(i,J,k) ) ))* &
-                          (G%IareaT(i,j)/( CS%zgrid_top(k) + GV%H_subroundoff))
+                          (G%IareaT(i,j)/( CS%dz_top(k) + GV%H_subroundoff))
 
 
       endif
@@ -282,7 +377,7 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
 
     ! remap tracer back to native grid
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      call remapping_core_h(CS%remap_cs, nk_z, CS%zgrid_top, tracer_z(i,j,:), G%ke, h(i,j,:),tracer%t(i,j,:))
+      call remapping_core_h(CS%remap_cs, CS%nk, CS%dz_top, tracer_z(i,j,:), G%ke, h(i,j,:),tracer%t(i,j,:))
     enddo ; enddo
 
     if (tracer%id_lbdxy_conc > 0  .or. tracer%id_lbdxy_cont > 0 .or. tracer%id_lbdxy_cont_2d > 0 ) then
@@ -471,23 +566,23 @@ end subroutine boundary_k_range
 
 !> Calculate the lateral boundary diffusive fluxes using the layer by layer method.
 !! See \ref section_method1
-subroutine fluxes_layer_method1(boundary, nk_z, hbl_L, hbl_R, area_L, area_R, phi_L, phi_R, &
+subroutine fluxes_layer_method1(boundary, nk, hbl_L, hbl_R, area_L, area_R, phi_L, phi_R, &
                               method, khtr_u, F_layer, CS)
 
   integer,                      intent(in   )    :: boundary !< Which boundary layer SURFACE or BOTTOM  [nondim]
-  integer,                      intent(in   )    :: nk_z     !< Number of layers in the local z-grid    [nondim]
+  integer,                      intent(in   )    :: nk       !< Number of layers in the local z-grid    [nondim]
   real,                         intent(in   )    :: hbl_L    !< Thickness of the boundary boundary
                                                                        !! layer (left)              [H ~> m or kg m-2]
   real,                         intent(in   )    :: hbl_R    !< Thickness of the boundary boundary
                                                              !! layer (right)                       [H ~> m or kg m-2]
   real,                         intent(in   )    :: area_L   !< Area of the horizontal grid (left)  [L2 ~> m2]
   real,                         intent(in   )    :: area_R   !< Area of the horizontal grid (right) [L2 ~> m2]
-  real, dimension(nk_z),        intent(in   )    :: phi_L    !< Tracer values (left)                [conc]
-  real, dimension(nk_z),        intent(in   )    :: phi_R    !< Tracer values (right)               [conc]
+  real, dimension(nk),        intent(in   )      :: phi_L    !< Tracer values (left)                [conc]
+  real, dimension(nk),        intent(in   )      :: phi_R    !< Tracer values (right)               [conc]
   integer,                   intent(in   )       :: method   !< Method of polynomial integration    [nondim]
   real,                      intent(in   )       :: khtr_u   !< Horizontal diffusivities times delta t
                                                              !! at a velocity point [L2 ~> m2]
-  real, dimension(nk_z),     intent(  out)       :: F_layer  !< Layerwise diffusive flux at U- or V-point in the local
+  real, dimension(nk),     intent(  out)         :: F_layer  !< Layerwise diffusive flux at U- or V-point in the local
                                                              !! z-grid [H L2 conc ~> m3 conc]
   type(lbd_CS),              pointer             :: CS       !< Lateral diffusion control structure
                                                              !! the boundary layer
@@ -521,9 +616,9 @@ subroutine fluxes_layer_method1(boundary, nk_z, hbl_L, hbl_R, area_L, area_R, ph
     return
   endif
 
-  ! Calculate vertical indices containing the boundary layer in zgrid_top
-  call boundary_k_range(boundary, nk_z, CS%zgrid_top, hbl_L, k_top_L, zeta_top_L, k_bot_L, zeta_bot_L)
-  call boundary_k_range(boundary, nk_z, CS%zgrid_top, hbl_R, k_top_R, zeta_top_R, k_bot_R, zeta_bot_R)
+  ! Calculate vertical indices containing the boundary layer in dz_top
+  call boundary_k_range(boundary, nk, CS%dz_top, hbl_L, k_top_L, zeta_top_L, k_bot_L, zeta_bot_L)
+  call boundary_k_range(boundary, nk, CS%dz_top, hbl_R, k_top_R, zeta_top_R, k_bot_R, zeta_bot_R)
 
   if (boundary == SURFACE) then
     k_bot_min = MIN(k_bot_L, k_bot_R)
@@ -540,12 +635,12 @@ subroutine fluxes_layer_method1(boundary, nk_z, hbl_L, hbl_R, area_L, area_R, ph
       zeta_bot_R = 1.0
     endif
 
-    h_work_L = (CS%zgrid_top(k_bot_L) * zeta_bot_L)
-    h_work_R = (CS%zgrid_top(k_bot_R) * zeta_bot_R)
+    h_work_L = (CS%dz_top(k_bot_L) * zeta_bot_L)
+    h_work_R = (CS%dz_top(k_bot_R) * zeta_bot_R)
 
     ! GMM, the following needs to be modified. We need to calculate ppoly0_E_L and ppoly0_coefs_L here...
-    !phi_L_avg = average_value_ppoly( nk_z, phi_L_local, ppoly0_E_L, ppoly0_coefs_L, method, k_bot_L, 0., zeta_bot_L)
-    !phi_R_avg = average_value_ppoly( nk_z, phi_R_local, ppoly0_E_R, ppoly0_coefs_R, method, k_bot_R, 0., zeta_bot_R)
+    !phi_L_avg = average_value_ppoly( nk, phi_L_local, ppoly0_E_L, ppoly0_coefs_L, method, k_bot_L, 0., zeta_bot_L)
+    !phi_R_avg = average_value_ppoly( nk, phi_R_local, ppoly0_E_R, ppoly0_coefs_R, method, k_bot_R, 0., zeta_bot_R)
     !heff = harmonic_mean(h_work_L, h_work_R)
 
     ! tracer flux where the minimum BLD intersets layer
@@ -554,26 +649,26 @@ subroutine fluxes_layer_method1(boundary, nk_z, hbl_L, hbl_R, area_L, area_R, ph
       ! apply linear decay at the base of hbl
       do k = k_bot_min-1,1,-1
         !heff = harmonic_mean(h_L(k), h_R(k))
-        F_layer(k) = -(CS%zgrid_top(k) * khtr_u) * (phi_R(k) - phi_L(k))
+        F_layer(k) = -(CS%dz_top(k) * khtr_u) * (phi_R(k) - phi_L(k))
       enddo
       htot = 0.0
       do k = k_bot_min+1,k_bot_max, 1
-        htot = htot + CS%zgrid_top(k)
+        htot = htot + CS%dz_top(k)
       enddo
 
       a = -1.0/htot
       htot = 0.0
       do k = k_bot_min,k_bot_max, 1
         !heff = harmonic_mean(h_L(k), h_R(k))
-        wgt = (a*(htot + (CS%zgrid_top(k) * 0.5))) + 1.0
-        F_layer(k) = -(CS%zgrid_top(k) * khtr_u) * (phi_R(k) - phi_L(k)) * wgt
-        htot = htot + CS%zgrid_top(k)
+        wgt = (a*(htot + (CS%dz_top(k) * 0.5))) + 1.0
+        F_layer(k) = -(CS%dz_top(k) * khtr_u) * (phi_R(k) - phi_L(k)) * wgt
+        htot = htot + CS%dz_top(k)
       enddo
     else
       !!F_layer(k_bot_min) = -(heff * khtr_u) * (phi_R_avg - phi_L_avg)
       do k = k_bot_min-1,1,-1
         !heff = harmonic_mean(h_L(k), h_R(k))
-        F_layer(k) = -(CS%zgrid_top(k) * khtr_u) * (phi_R(k) - phi_L(k))
+        F_layer(k) = -(CS%dz_top(k) * khtr_u) * (phi_R(k) - phi_L(k))
       enddo
     endif
   endif
@@ -591,8 +686,8 @@ subroutine fluxes_layer_method1(boundary, nk_z, hbl_L, hbl_R, area_L, area_R, ph
 !      zeta_top_R = 1.0
 !    endif
 !
-!    h_work_L = (CS%zgrid_bot(k_top_L) * zeta_top_L)
-!    h_work_R = (CS%zgrid_bot(k_top_R) * zeta_top_R)
+!    h_work_L = (CS%dz_bot(k_top_L) * zeta_top_L)
+!    h_work_R = (CS%dz_bot(k_top_R) * zeta_top_R)
 !
 !    phi_L_avg = average_value_ppoly( nk, phi_L, ppoly0_E_L, ppoly0_coefs_L, method, k_top_L, 1.0-zeta_top_L, 1.0)
 !    phi_R_avg = average_value_ppoly( nk, phi_R, ppoly0_E_R, ppoly0_coefs_R, method, k_top_R, 1.0-zeta_top_R, 1.0)
@@ -682,12 +777,12 @@ subroutine fluxes_layer_method(boundary, nk, nk_z, deg, h_L, h_R, hbl_L, hbl_R, 
   ! Calculate vertical indices containing the boundary layer in the zgrid
   call boundary_k_range(boundary, nk, h_L, hbl_L, k_top_L, zeta_top_L, k_bot_L, zeta_bot_L)
   call boundary_k_range(boundary, nk, h_R, hbl_R, k_top_R, zeta_top_R, k_bot_R, zeta_bot_R)
-  ! Calculate vertical indices containing the boundary layer in zgrid_top
-  call boundary_k_range(boundary, nk_z, CS%zgrid_top, hbl_L, k_top_zgrid_L, zeta_top_zgrid_L, k_bot_zgrid_L, zeta_bot_zgrid_L)
-  call boundary_k_range(boundary, nk_z, CS%zgrid_top, hbl_R, k_top_zgrid_R, zeta_top_zgrid_R, k_bot_zgrid_R, zeta_bot_zgrid_R)
+  ! Calculate vertical indices containing the boundary layer in dz_top
+  call boundary_k_range(boundary, nk_z, CS%dz_top, hbl_L, k_top_zgrid_L, zeta_top_zgrid_L, k_bot_zgrid_L, zeta_bot_zgrid_L)
+  call boundary_k_range(boundary, nk_z, CS%dz_top, hbl_R, k_top_zgrid_R, zeta_top_zgrid_R, k_bot_zgrid_R, zeta_bot_zgrid_R)
 
-  call remapping_core_h(CS%remap_cs, nk, h_L, phi_L, nk_z, CS%zgrid_top, phi_L_local)
-  call remapping_core_h(CS%remap_cs, nk, h_R, phi_R, nk_z, CS%zgrid_top, phi_R_local)
+  call remapping_core_h(CS%remap_cs, nk, h_L, phi_L, nk_z, CS%dz_top, phi_L_local)
+  call remapping_core_h(CS%remap_cs, nk, h_R, phi_R, nk_z, CS%dz_top, phi_R_local)
 
   if (boundary == SURFACE) then
     k_bot_min = MIN(k_bot_zgrid_L, k_bot_zgrid_R)
@@ -704,8 +799,8 @@ subroutine fluxes_layer_method(boundary, nk, nk_z, deg, h_L, h_R, hbl_L, hbl_R, 
       zeta_bot_zgrid_R = 1.0
     endif
 
-    h_work_L = (CS%zgrid_top(k_bot_zgrid_L) * zeta_bot_zgrid_L)
-    h_work_R = (CS%zgrid_top(k_bot_zgrid_R) * zeta_bot_zgrid_R)
+    h_work_L = (CS%dz_top(k_bot_zgrid_L) * zeta_bot_zgrid_L)
+    h_work_R = (CS%dz_top(k_bot_zgrid_R) * zeta_bot_zgrid_R)
 
     ! GMM, the following needs to be modified. We need to calculate ppoly0_E_L and ppoly0_coefs_L here...
     !phi_L_avg = average_value_ppoly( nk_z, phi_L_local, ppoly0_E_L, ppoly0_coefs_L, method, k_bot_L, 0., zeta_bot_L)
@@ -718,26 +813,26 @@ subroutine fluxes_layer_method(boundary, nk, nk_z, deg, h_L, h_R, hbl_L, hbl_R, 
       ! apply linear decay at the base of hbl
       do k = k_bot_min-1,1,-1
         !heff = harmonic_mean(h_L(k), h_R(k))
-        F_layer(k) = -(CS%zgrid_top(k) * khtr_u) * (phi_R_local(k) - phi_L_local(k))
+        F_layer(k) = -(CS%dz_top(k) * khtr_u) * (phi_R_local(k) - phi_L_local(k))
       enddo
       htot = 0.0
       do k = k_bot_min+1,k_bot_max, 1
-        htot = htot + CS%zgrid_top(k)
+        htot = htot + CS%dz_top(k)
       enddo
 
       a = -1.0/htot
       htot = 0.0
       do k = k_bot_min,k_bot_max, 1
         !heff = harmonic_mean(h_L(k), h_R(k))
-        wgt = (a*(htot + (CS%zgrid_top(k) * 0.5))) + 1.0
-        F_layer(k) = -(CS%zgrid_top(k) * khtr_u) * (phi_R_local(k) - phi_L_local(k)) * wgt
-        htot = htot + CS%zgrid_top(k)
+        wgt = (a*(htot + (CS%dz_top(k) * 0.5))) + 1.0
+        F_layer(k) = -(CS%dz_top(k) * khtr_u) * (phi_R_local(k) - phi_L_local(k)) * wgt
+        htot = htot + CS%dz_top(k)
       enddo
     else
       F_layer(k_bot_min) = -(heff * khtr_u) * (phi_R_avg - phi_L_avg)
       do k = k_bot_min-1,1,-1
         !heff = harmonic_mean(h_L(k), h_R(k))
-        F_layer(k) = -(CS%zgrid_top(k) * khtr_u) * (phi_R_local(k) - phi_L_local(k))
+        F_layer(k) = -(CS%dz_top(k) * khtr_u) * (phi_R_local(k) - phi_L_local(k))
       enddo
     endif
   endif
