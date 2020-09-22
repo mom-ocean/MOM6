@@ -827,7 +827,7 @@ subroutine add_shelf_forces(US, CS, forces_in, do_shelf_area, external_call)
   if (CS%rotate_index .and. rotate) then
      allocate(forces)
      call allocate_mech_forcing(forces_in, CS%Grid, forces)
-     call rotate_mech_forcing(forces_in,CS%turns,forces)
+     call rotate_mech_forcing(forces_in, CS%turns, forces)
   else
      forces=>forces_in
   endif
@@ -890,16 +890,18 @@ subroutine add_shelf_forces(US, CS, forces_in, do_shelf_area, external_call)
             kv_rho_ice * min(ISS%mass_shelf(i,j), ISS%mass_shelf(i,j+1))
   enddo ; enddo
 
-
-  if (CS%rotate_index .and. rotate) then
-     call rotate_mech_forcing(forces,-CS%turns,forces_in)
+  if (CS%debug) then
+    call uvchksum("rigidity_ice_[uv]", forces%rigidity_ice_u, &
+        forces%rigidity_ice_v, CS%Grid%HI, symmetric=.true., &
+        scale=US%L_to_m**3*US%L_to_Z*US%s_to_T, scalar_pair=.true.)
+    call uvchksum("frac_shelf_[uv]", forces%frac_shelf_u, &
+        forces%frac_shelf_v, CS%Grid%HI, symmetric=.true., &
+        scalar_pair=.true.)
   endif
 
-  if (CS%debug) then
-    call uvchksum("rigidity_ice_[uv]", forces_in%rigidity_ice_u, forces_in%rigidity_ice_v, &
-                  CS%Grid_in%HI, symmetric=.true., scale=US%L_to_m**3*US%L_to_Z*US%s_to_T)
-    call uvchksum("frac_shelf_[uv]", forces_in%frac_shelf_u, forces_in%frac_shelf_v, &
-                  CS%Grid_in%HI, symmetric=.true.)
+  if (CS%rotate_index .and. rotate) then
+     call rotate_mech_forcing(forces, -CS%turns, forces_in)
+     ! TODO: deallocate mech forcing?
   endif
 
 end subroutine add_shelf_forces
@@ -1820,9 +1822,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   endif
 
   if (present(fluxes_in) .and. CS%rotate_index) &
-     call rotate_forcing(fluxes,fluxes_in,-CS%turns)
+     call rotate_forcing(fluxes, fluxes_in, -CS%turns)
   if (present(forces_in) .and. CS%rotate_index) &
-     call rotate_mech_forcing(forces,-CS%turns,forces_in)
+     call rotate_mech_forcing(forces, -CS%turns, forces_in)
 
 end subroutine initialize_ice_shelf
 
