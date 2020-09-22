@@ -103,9 +103,9 @@ AS_IF(
 
 # NOTE: AC_OPENMP fails in  Autoconf <2.69 when LANG is Fortran or Fortran 77.
 #   For older versions, we test against CC and use the result for FC.
-m4_version_prereq([2.69], [], [AC_LANG_PUSH([C])])
-AC_OPENMP
-m4_version_prereq([2.69], [], [
+m4_version_prereq([2.69], [AC_OPENMP], [
+  AC_LANG_PUSH([C])
+  AC_OPENMP
   AC_LANG_POP([C])
   OPENMP_FCFLAGS="$OPENMP_CFLAGS"
 ])
