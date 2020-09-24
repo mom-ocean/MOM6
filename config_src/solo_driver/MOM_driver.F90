@@ -299,16 +299,29 @@ program MOM_main
     ! In this case, the segment starts at a time fixed by ocean_solo.res
     segment_start_time = set_date(date(1),date(2),date(3),date(4),date(5),date(6))
     Time = segment_start_time
-    call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, restart_CSp, &
-                        segment_start_time, offline_tracer_mode=offline_tracer_mode, &
-                        diag_ptr=diag, tracer_flow_CSp=tracer_flow_CSp)
   else
     ! In this case, the segment starts at a time read from the MOM restart file
     ! or left as Start_time by MOM_initialize.
     Time = Start_time
+  endif
+
+  call get_param(param_file, mod_name, "ICE_SHELF", use_ice_shelf, &
+                 "If true, enables the ice shelf model.", default=.false.)
+  if (use_ice_shelf) then
+    ! These arrays are not initialized in most solo cases, but are needed
+    ! when using an ice shelf
+    call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, &
+                              diag, forces, fluxes, sfc_state)
+  endif
+
+  if (sum(date) >= 0) then
+    call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, restart_CSp, &
+                        segment_start_time, offline_tracer_mode=offline_tracer_mode, &
+                        diag_ptr=diag, tracer_flow_CSp=tracer_flow_CSp,ice_shelf_CSp=ice_shelf_CSp)
+  else
     call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, restart_CSp, &
                         offline_tracer_mode=offline_tracer_mode, diag_ptr=diag, &
-                        tracer_flow_CSp=tracer_flow_CSp)
+                        tracer_flow_CSp=tracer_flow_CSp,ice_shelf_CSp=ice_shelf_CSp)
   endif
 
   call get_MOM_state_elements(MOM_CSp, G=grid, GV=GV, US=US, C_p_scaled=fluxes%C_p)
@@ -322,14 +335,6 @@ program MOM_main
                             surface_forcing_CSp, tracer_flow_CSp)
   call callTree_waypoint("done surface_forcing_init")
 
-  call get_param(param_file, mod_name, "ICE_SHELF", use_ice_shelf, &
-                 "If true, enables the ice shelf model.", default=.false.)
-  if (use_ice_shelf) then
-    ! These arrays are not initialized in most solo cases, but are needed
-    ! when using an ice shelf
-    call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, &
-                              diag, forces, fluxes)
-  endif
 
   call get_param(param_file,mod_name,"USE_WAVES",Use_Waves,&
        "If true, enables surface wave modules.",default=.false.)
