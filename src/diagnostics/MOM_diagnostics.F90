@@ -305,7 +305,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       vsq(i,J,k) = v(i,J,k) * v(i,J,k)
     enddo ; enddo ; enddo
-    call post_data(CS%id_usq, usq, CS%diag)
+    call post_data(CS%id_vsq, vsq, CS%diag)
   endif
 
   if (CS%id_uv > 0) then
