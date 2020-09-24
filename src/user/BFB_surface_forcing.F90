@@ -47,8 +47,8 @@ end type BFB_surface_forcing_CS
 contains
 
 !> Bouyancy forcing for the boundary-forced-basin (BFB) configuration
-subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
-  type(surface),                intent(inout) :: state  !< A structure containing fields that
+subroutine BFB_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
+  type(surface),                intent(inout) :: sfc_state  !< A structure containing fields that
                                                       !! describe the surface state of the ocean.
   type(forcing),                intent(inout) :: fluxes !< A structure containing pointers to any
                                                       !! possible forcing fields. Unused fields
@@ -136,9 +136,9 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
         Salin_restore = 0.0
 
         fluxes%heat_added(i,j) = (G%mask2dT(i,j) * (rhoXcp * CS%Flux_const)) * &
-            (Temp_restore - state%SST(i,j))
+            (Temp_restore - sfc_state%SST(i,j))
         fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
-            ((Salin_restore - state%SSS(i,j)) / (0.5 * (Salin_restore + state%SSS(i,j))))
+            ((Salin_restore - sfc_state%SSS(i,j)) / (0.5 * (Salin_restore + sfc_state%SSS(i,j))))
       enddo ; enddo
     else
       !   When modifying the code, comment out this error message.  It is here
@@ -164,7 +164,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
         density_restore = Temp_restore*CS%drho_dt + CS%Rho0
 
         fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &
-                          (density_restore - US%kg_m3_to_R*state%sfc_density(i,j))
+                          (density_restore - sfc_state%sfc_density(i,j))
       enddo ; enddo
     endif
   endif                                             ! end RESTOREBUOY
@@ -195,8 +195,7 @@ subroutine BFB_surface_forcing_init(Time, G, US, param_file, diag, CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
-                 "If true, Temperature and salinity are used as state "//&
-                 "variables.", default=.true.)
+                 "If true, Temperature and salinity are used as state variables.", default=.true.)
 
   call get_param(param_file, mdl, "G_EARTH", CS%G_Earth, &
                  "The gravitational acceleration of the Earth.", &
@@ -223,8 +222,7 @@ subroutine BFB_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "The rate of change of density with temperature.", &
                  units="kg m-3 K-1", default=-0.2, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
-                 "The background gustiness in the winds.", units="Pa", &
-                 default=0.02)
+                 "The background gustiness in the winds.", units="Pa", default=0.0)
 
   call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
                  "If true, the buoyancy fluxes drive the model back "//&
@@ -232,10 +230,9 @@ subroutine BFB_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "given by FLUXCONST.", default= .false.)
   if (CS%restorebuoy) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
-                 "The constant that relates the restoring surface fluxes "//&
-                 "to the relative surface anomalies (akin to a piston "//&
-                 "velocity).  Note the non-MKS units.", &
-                 units="m day-1", scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
+                 "The constant that relates the restoring surface fluxes to the relative "//&
+                 "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
+                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s)
     ! Convert CS%Flux_const from m day-1 to m s-1.
     CS%Flux_const = CS%Flux_const / 86400.0
   endif

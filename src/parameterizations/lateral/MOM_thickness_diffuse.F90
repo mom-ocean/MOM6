@@ -9,7 +9,8 @@ use MOM_diag_mediator,         only : register_diag_field, safe_alloc_ptr, time_
 use MOM_diag_mediator,         only : diag_update_remap_grids
 use MOM_domains,               only : pass_var, CORNER, pass_vector
 use MOM_error_handler,         only : MOM_error, FATAL, WARNING, is_root_pe
-use MOM_EOS,                   only : calculate_density, calculate_density_derivs
+use MOM_EOS,                   only : calculate_density, calculate_density_derivs, EOS_domain
+use MOM_EOS,                   only : calculate_density_second_derivs
 use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
 use MOM_interface_heights,     only : find_eta
@@ -19,7 +20,6 @@ use MOM_MEKE_types,            only : MEKE_type
 use MOM_unit_scaling,          only : unit_scale_type
 use MOM_variables,             only : thermo_var_ptrs, cont_diag_ptrs
 use MOM_verticalGrid,          only : verticalGrid_type
-
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -77,6 +77,10 @@ type, public :: thickness_diffuse_CS ; private
                                  !! than the streamfunction for the GM source term.
   logical :: use_GM_work_bug     !< If true, use the incorrect sign for the
                                  !! top-level work tendency on the top layer.
+  real :: Stanley_det_coeff      !< The coefficient correlating SGS temperature variance with the mean
+                                 !! temperature gradient in the deterministic part of the Stanley parameterization.
+                                 !! Negative values disable the scheme." [nondim]
+
   type(diag_ctrl), pointer :: diag => NULL() !< structure used to regulate timing of diagnostics
   real, pointer :: GMwork(:,:)       => NULL()  !< Work by thickness diffusivity [R Z L2 T-3 ~> W m-2]
   real, pointer :: diagSlopeX(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope [nondim]
@@ -422,7 +426,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   endif
 
   if (CS%debug) then
-    call uvchksum("Kh_[uv]", Kh_u, Kh_v, G%HI, haloshift=0, scale=US%L_to_m**2*US%s_to_T)
+    call uvchksum("Kh_[uv]", Kh_u, Kh_v, G%HI, haloshift=0, &
+                  scale=(US%L_to_m**2)*US%s_to_T, scalar_pair=.true.)
     call uvchksum("int_slope_[uv]", int_slope_u, int_slope_v, G%HI, haloshift=0)
     call hchksum(h, "thickness_diffuse_1 h", G%HI, haloshift=1, scale=GV%H_to_m)
     call hchksum(e, "thickness_diffuse_1 e", G%HI, haloshift=1, scale=US%Z_to_m)
@@ -594,24 +599,27 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
     hN2_x_PE       ! thickness in m times Brunt-Vaisala freqeuncy at u-points [L2 Z-1 T-2 ~> m s-2],
                    ! used for calculating PE release
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
-    pres, &       ! The pressure at an interface [Pa].
+    pres, &       ! The pressure at an interface [R L2 T-2 ~> Pa].
     h_avail_rsum  ! The running sum of h_avail above an interface [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIB_(G)) :: &
     drho_dT_u, &  ! The derivative of density with temperature at u points [R degC-1 ~> kg m-3 degC-1]
-    drho_dS_u     ! The derivative of density with salinity at u points [R ppt-1 ~> kg m-3 ppt-1].
+    drho_dS_u, &  ! The derivative of density with salinity at u points [R ppt-1 ~> kg m-3 ppt-1].
+    drho_dT_dT_u  ! The second derivative of density with temperature at u points [R degC-2 ~> kg m-3 degC-2]
+  real, dimension(SZIB_(G)) :: scrap ! An array to pass to calculate_density_second_derivs() that will be ingored.
   real, dimension(SZI_(G)) :: &
     drho_dT_v, &  ! The derivative of density with temperature at v points [R degC-1 ~> kg m-3 degC-1]
-    drho_dS_v     ! The derivative of density with salinity at v points [R ppt-1 ~> kg m-3 ppt-1].
+    drho_dS_v, &  ! The derivative of density with salinity at v points [R ppt-1 ~> kg m-3 ppt-1].
+    drho_dT_dT_v  ! The second derivative of density with temperature at v points [R degC-2 ~> kg m-3 degC-2]
   real :: uhtot(SZIB_(G), SZJ_(G))  ! The vertical sum of uhD [H L2 T-1 ~> m3 s-1 or kg s-1].
   real :: vhtot(SZI_(G), SZJB_(G))  ! The vertical sum of vhD [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIB_(G)) :: &
     T_u, &        ! Temperature on the interface at the u-point [degC].
     S_u, &        ! Salinity on the interface at the u-point [ppt].
-    pres_u        ! Pressure on the interface at the u-point [Pa].
+    pres_u        ! Pressure on the interface at the u-point [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G)) :: &
     T_v, &        ! Temperature on the interface at the v-point [degC].
     S_v, &        ! Salinity on the interface at the v-point [ppt].
-    pres_v        ! Pressure on the interface at the v-point [Pa].
+    pres_v        ! Pressure on the interface at the v-point [R L2 T-2 ~> Pa].
   real :: Work_u(SZIB_(G), SZJ_(G)) ! The work being done by the thickness
   real :: Work_v(SZI_(G), SZJB_(G)) ! diffusion integrated over a cell [R Z L4 T-3  ~> W ]
   real :: Work_h        ! The work averaged over an h-cell [R Z L2 T-3 ~> W m-2].
@@ -667,11 +675,23 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   real :: G_rho0        ! g/Rho0 [L2 R-1 Z-1 T-2 ~> m4 kg-1 s-2].
   real :: N2_floor      ! A floor for N2 to avoid degeneracy in the elliptic solver
                         ! times unit conversion factors [T-2 L2 Z-2 ~> s-2]
+  real :: Tl(5)         ! copy and T in local stencil [degC]
+  real :: mn_T          ! mean of T in local stencil [degC]
+  real :: mn_T2         ! mean of T**2 in local stencil [degC]
+  real :: hl(5)         ! Copy of local stencil of H [H ~> m]
+  real :: r_sm_H        ! Reciprocal of sum of H in local stencil [H-1 ~> m-1]
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: Tsgs2 ! Sub-grid temperature variance [degC2]
+
   real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: diag_sfn_x, diag_sfn_unlim_x ! Diagnostics
   real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: diag_sfn_y, diag_sfn_unlim_y ! Diagnostics
   logical :: present_int_slope_u, present_int_slope_v
   logical :: present_slope_x, present_slope_y, calc_derivatives
-  integer :: is, ie, js, je, nz, IsdB
+  integer, dimension(2) ::  EOSdom_u ! The shifted i-computational domain to use for equation of
+                                     ! state calculations at u-points.
+  integer, dimension(2) ::  EOSdom_v ! The shifted I-computational domain to use for equation of
+                                     ! state calculations at v-points.
+  logical :: use_Stanley
+  integer :: is, ie, js, je, nz, IsdB, halo
   integer :: i, j, k
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke ; IsdB = G%IsdB
 
@@ -689,6 +709,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   present_int_slope_v = PRESENT(int_slope_v)
   present_slope_x = PRESENT(slope_x)
   present_slope_y = PRESENT(slope_y)
+  use_Stanley = CS%Stanley_det_coeff >= 0.
 
   nk_linear = max(GV%nkml, 1)
 
@@ -702,26 +723,65 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   find_work = (associated(CS%GMwork) .or. find_work)
 
   if (use_EOS) then
-    call vert_fill_TS(h, tv%T, tv%S, CS%kappa_smooth*dt, T, S, G, GV, 1, larger_h_denom=.true.)
+    halo = 1 ! Default halo to fill is 1
+    if (use_Stanley) halo = 2 ! Need wider valid halo for gradients of T
+    call vert_fill_TS(h, tv%T, tv%S, CS%kappa_smooth*dt, T, S, G, GV, halo, larger_h_denom=.true.)
   endif
 
   if (CS%use_FGNV_streamfn .and. .not. associated(cg1)) call MOM_error(FATAL, &
        "cg1 must be associated when using FGNV streamfunction.")
 
-!$OMP parallel default(none) shared(is,ie,js,je,h_avail_rsum,pres,h_avail,I4dt, &
-!$OMP                               G,GV,h,h_frac,nz,uhtot,Work_u,vhtot,Work_v, &
-!$OMP                               diag_sfn_x, diag_sfn_y, diag_sfn_unlim_x, diag_sfn_unlim_y )
+!$OMP parallel default(none) shared(is,ie,js,je,h_avail_rsum,pres,h_avail,I4dt, use_Stanley, &
+!$OMP                               CS,G,GV,tv,h,h_frac,nz,uhtot,Work_u,vhtot,Work_v,Tsgs2,T, &
+!$OMP                               diag_sfn_x, diag_sfn_y, diag_sfn_unlim_x, diag_sfn_unlim_y ) &
+!$OMP          private(hl,r_sm_H,Tl,mn_T,mn_T2)
   ! Find the maximum and minimum permitted streamfunction.
 !$OMP do
   do j=js-1,je+1 ; do i=is-1,ie+1
     h_avail_rsum(i,j,1) = 0.0
-    pres(i,j,1) = 0.0  ! ### This should be atmospheric pressure.
+    pres(i,j,1) = 0.0
+    if (associated(tv%p_surf)) then ; pres(i,j,1) = tv%p_surf(i,j) ; endif
 
     h_avail(i,j,1) = max(I4dt*G%areaT(i,j)*(h(i,j,1)-GV%Angstrom_H),0.0)
     h_avail_rsum(i,j,2) = h_avail(i,j,1)
     h_frac(i,j,1) = 1.0
-    pres(i,j,2) = pres(i,j,1) + GV%H_to_Pa*h(i,j,1)
+    pres(i,j,2) = pres(i,j,1) + (GV%g_Earth*GV%H_to_RZ) * h(i,j,1)
   enddo ; enddo
+  if (use_Stanley) then
+!$OMP do
+    do k=1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
+      !! SGS variance in i-direction [degC2]
+      !dTdi2 = ( ( G%mask2dCu(I  ,j) * G%IdxCu(I  ,j) * ( T(i+1,j,k) - T(i,j,k) ) &
+      !          + G%mask2dCu(I-1,j) * G%IdxCu(I-1,j) * ( T(i,j,k) - T(i-1,j,k) ) &
+      !          ) * G%dxT(i,j) * 0.5 )**2
+      !! SGS variance in j-direction [degC2]
+      !dTdj2 = ( ( G%mask2dCv(i,J  ) * G%IdyCv(i,J  ) * ( T(i,j+1,k) - T(i,j,k) ) &
+      !          + G%mask2dCv(i,J-1) * G%IdyCv(i,J-1) * ( T(i,j,k) - T(i,j-1,k) ) &
+      !          ) * G%dyT(i,j) * 0.5 )**2
+      !Tsgs2(i,j,k) = CS%Stanley_det_coeff * 0.5 * ( dTdi2 + dTdj2 )
+      ! This block does a thickness weighted variance calculation and helps control for
+      ! extreme gradients along layers which are vanished against topography. It is
+      ! still a poor approximation in the interior when coordinates are strongly tilted.
+      hl(1) = h(i,j,k) * G%mask2dT(i,j)
+      hl(2) = h(i-1,j,k) * G%mask2dCu(I-1,j)
+      hl(3) = h(i+1,j,k) * G%mask2dCu(I,j)
+      hl(4) = h(i,j-1,k) * G%mask2dCv(i,J-1)
+      hl(5) = h(i,j+1,k) * G%mask2dCv(i,J)
+      r_sm_H = 1. / ( ( hl(1) + ( ( hl(2) + hl(3) ) + ( hl(4) + hl(5) ) ) ) + GV%H_subroundoff )
+      ! Mean of T
+      Tl(1) = T(i,j,k) ; Tl(2) = T(i-1,j,k) ; Tl(3) = T(i+1,j,k)
+      Tl(4) = T(i,j-1,k) ; Tl(5) = T(i,j+1,k)
+      mn_T = ( hl(1)*Tl(1) + ( ( hl(2)*Tl(2) + hl(3)*Tl(3) ) + ( hl(4)*Tl(4) + hl(5)*Tl(5) ) ) ) * r_sm_H
+      ! Adjust T vectors to have zero mean
+      Tl(:) = Tl(:) - mn_T ; mn_T = 0.
+      ! Variance of T
+      mn_T2 = ( hl(1)*Tl(1)*Tl(1) + ( ( hl(2)*Tl(2)*Tl(2) + hl(3)*Tl(3)*Tl(3) ) &
+                                    + ( hl(4)*Tl(4)*Tl(4) + hl(5)*Tl(5)*Tl(5) ) ) ) * r_sm_H
+      ! Variance should be positive but round-off can violate this. Calculating
+      ! variance directly would fix this but requires more operations.
+      Tsgs2(i,j,k) = CS%Stanley_det_coeff * max(0., mn_T2)
+     enddo ; enddo ; enddo
+  endif
 !$OMP do
   do j=js-1,je+1
     do k=2,nz ; do i=is-1,ie+1
@@ -729,7 +789,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
       h_avail_rsum(i,j,k+1) = h_avail_rsum(i,j,k) + h_avail(i,j,k)
       h_frac(i,j,k) = 0.0 ; if (h_avail(i,j,k) > 0.0) &
         h_frac(i,j,k) = h_avail(i,j,k) / h_avail_rsum(i,j,k+1)
-      pres(i,j,K+1) = pres(i,j,K) + GV%H_to_Pa*h(i,j,k)
+      pres(i,j,K+1) = pres(i,j,K) + (GV%g_Earth*GV%H_to_RZ) * h(i,j,k)
     enddo ; enddo
   enddo
 !$OMP do
@@ -746,15 +806,18 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   enddo ; enddo
 !$OMP end parallel
 
+    EOSdom_u(1) = (is-1) - (G%IsdB-1) ; EOSdom_u(2) = ie - (G%IsdB-1)
 !$OMP parallel do default(none) shared(nz,is,ie,js,je,find_work,use_EOS,G,GV,US,pres,T,S, &
 !$OMP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,  &
 !$OMP                                  I_slope_max2,h_neglect2,present_int_slope_u, &
 !$OMP                                  int_slope_u,KH_u,uhtot,h_frac,h_avail_rsum,  &
 !$OMP                                  uhD,h_avail,G_scale,Work_u,CS,slope_x,cg1,   &
-!$OMP                                  diag_sfn_x, diag_sfn_unlim_x,N2_floor,       &
+!$OMP                                  diag_sfn_x, diag_sfn_unlim_x,N2_floor,EOSdom_u, &
+!$OMP                                  use_stanley, Tsgs2,                          &
 !$OMP                                  present_slope_x,G_rho0,Slope_x_PE,hN2_x_PE)  &
 !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
 !$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
+!$OMP                                  drho_dT_dT_u,scrap,                          &
 !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
 !$OMP                                  drdx,mag_grad2,Slope,slope2_Ratio_u,hN2_u,   &
 !$OMP                                  Sfn_unlim_u,drdi_u,drdkDe_u,h_harm,c2_h_u,   &
@@ -768,7 +831,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
       endif
 
       calc_derivatives = use_EOS .and. (k >= nk_linear) .and. &
-                  (find_work .or. .not. present_slope_x .or. CS%use_FGNV_streamfn)
+         (find_work .or. .not. present_slope_x .or. CS%use_FGNV_streamfn .or. use_Stanley)
 
       ! Calculate the zonal fluxes and gradients.
       if (calc_derivatives) then
@@ -777,8 +840,15 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           T_u(I) = 0.25*((T(i,j,k) + T(i+1,j,k)) + (T(i,j,k-1) + T(i+1,j,k-1)))
           S_u(I) = 0.25*((S(i,j,k) + S(i+1,j,k)) + (S(i,j,k-1) + S(i+1,j,k-1)))
         enddo
-        call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u, &
-                     drho_dS_u, (is-IsdB+1)-1, ie-is+2, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u, drho_dS_u, &
+                                      tv%eqn_of_state, EOSdom_u)
+      endif
+      if (use_Stanley) then
+        ! The second line below would correspond to arguments
+        !            drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, drho_dT_dP, &
+        call calculate_density_second_derivs(T_u, S_u, pres_u, &
+                     scrap, scrap, drho_dT_dT_u, scrap, scrap, &
+                     (is-IsdB+1)-1, ie-is+2, tv%eqn_of_state)
       endif
 
       do I=is-1,ie
@@ -798,7 +868,12 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
         elseif (find_work) then ! This is used in pure stacked SW mode
           drdkDe_u(I,K) = drdkR * e(i+1,j,K) - drdkL * e(i,j,K)
         endif
-
+        if (use_Stanley) then
+          ! Correction to the horizontal density gradient due to nonlinearity in
+          ! the EOS rectifying SGS temperature anomalies
+          drdiA = drdiA + drho_dT_dT_u(I) * 0.5 * ( Tsgs2(i+1,j,k-1)-Tsgs2(i,j,k-1) )
+          drdiB = drdiB + drho_dT_dT_u(I) * 0.5 * ( Tsgs2(i+1,j,k)-Tsgs2(i,j,k) )
+        endif
         if (find_work) drdi_u(I,k) = drdiB
 
         if (k > nk_linear) then
@@ -999,15 +1074,18 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   enddo ! end of j-loop
 
     ! Calculate the meridional fluxes and gradients.
+    EOSdom_v(:) = EOS_domain(G%HI)
 !$OMP parallel do default(none) shared(nz,is,ie,js,je,find_work,use_EOS,G,GV,US,pres,T,S, &
 !$OMP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,  &
 !$OMP                                  I_slope_max2,h_neglect2,present_int_slope_v, &
 !$OMP                                  int_slope_v,KH_v,vhtot,h_frac,h_avail_rsum,  &
 !$OMP                                  vhD,h_avail,G_scale,Work_v,CS,slope_y,cg1,   &
-!$OMP                                  diag_sfn_y, diag_sfn_unlim_y,N2_floor,       &
-!$OMP                                  present_slope_y,G_rho0,Slope_y_PE,hN2_y_PE) &
+!$OMP                                  diag_sfn_y,diag_sfn_unlim_y,N2_floor,EOSdom_v,&
+!$OMP                                  use_stanley, Tsgs2,                          &
+!$OMP                                  present_slope_y,G_rho0,Slope_y_PE,hN2_y_PE)  &
 !$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
 !$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
+!$OMP                                  drho_dT_dT_v,scrap,                          &
 !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
 !$OMP                                  drdy,mag_grad2,Slope,slope2_Ratio_v,hN2_v,   &
 !$OMP                                  Sfn_unlim_v,drdj_v,drdkDe_v,h_harm,c2_h_v,   &
@@ -1020,7 +1098,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
       endif
 
       calc_derivatives = use_EOS .and. (k >= nk_linear) .and. &
-                  (find_work .or. .not. present_slope_y)
+         (find_work .or. .not. present_slope_y .or. CS%use_FGNV_streamfn .or. use_Stanley)
 
       if (calc_derivatives) then
         do i=is,ie
@@ -1028,8 +1106,15 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           T_v(i) = 0.25*((T(i,j,k) + T(i,j+1,k)) + (T(i,j,k-1) + T(i,j+1,k-1)))
           S_v(i) = 0.25*((S(i,j,k) + S(i,j+1,k)) + (S(i,j,k-1) + S(i,j+1,k-1)))
         enddo
-        call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, &
-                     drho_dS_v, is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, drho_dS_v, &
+                                      tv%eqn_of_state, EOSdom_v)
+      endif
+      if (use_Stanley) then
+        ! The second line below would correspond to arguments
+        !            drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, drho_dT_dP, &
+        call calculate_density_second_derivs(T_v, S_v, pres_v, &
+                     scrap, scrap, drho_dT_dT_v, scrap, scrap, &
+                     is, ie-is+1, tv%eqn_of_state)
       endif
       do i=is,ie
         if (calc_derivatives) then
@@ -1047,6 +1132,12 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           drdkDe_v(i,K) =  drdkR * e(i,j+1,K) - drdkL * e(i,j,K)
         elseif (find_work) then ! This is used in pure stacked SW mode
           drdkDe_v(i,K) =  drdkR * e(i,j+1,K) - drdkL * e(i,j,K)
+        endif
+        if (use_Stanley) then
+          ! Correction to the horizontal density gradient due to nonlinearity in
+          ! the EOS rectifying SGS temperature anomalies
+          drdjA = drdjA + drho_dT_dT_v(I) * 0.5 * ( Tsgs2(i,j+1,k-1)-Tsgs2(i,j,k-1) )
+          drdjB = drdjB + drho_dT_dT_v(I) * 0.5 * ( Tsgs2(i,j+1,k)-Tsgs2(i,j,k) )
         endif
 
         if (find_work) drdj_v(i,k) = drdjB
@@ -1252,6 +1343,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
     do j=js,je ; do I=is-1,ie ; uhD(I,j,1) = -uhtot(I,j) ; enddo ; enddo
     do J=js-1,je ; do i=is,ie ; vhD(i,J,1) = -vhtot(i,J) ; enddo ; enddo
   else
+    EOSdom_u(1) = (is-1) - (G%IsdB-1) ; EOSdom_u(2) = ie - (G%IsdB-1)
     !$OMP parallel do default(shared) private(pres_u,T_u,S_u,drho_dT_u,drho_dS_u,drdiB)
     do j=js,je
       if (use_EOS) then
@@ -1260,8 +1352,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           T_u(I) = 0.5*(T(i,j,1) + T(i+1,j,1))
           S_u(I) = 0.5*(S(i,j,1) + S(i+1,j,1))
         enddo
-        call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u, &
-                   drho_dS_u, (is-IsdB+1)-1, ie-is+2, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u, drho_dS_u, &
+                                      tv%eqn_of_state, EOSdom_u )
       endif
       do I=is-1,ie
         uhD(I,j,1) = -uhtot(I,j)
@@ -1282,6 +1374,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
       enddo
     enddo
 
+    EOSdom_v(:) = EOS_domain(G%HI)
     !$OMP parallel do default(shared) private(pres_v,T_v,S_v,drho_dT_v,drho_dS_v,drdjB)
     do J=js-1,je
       if (use_EOS) then
@@ -1290,8 +1383,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           T_v(i) = 0.5*(T(i,j,1) + T(i,j+1,1))
           S_v(i) = 0.5*(S(i,j,1) + S(i,j+1,1))
         enddo
-        call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, &
-                   drho_dS_v, is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, drho_dS_v, &
+                                      tv%eqn_of_state, EOSdom_v)
       endif
       do i=is,ie
         vhD(i,J,1) = -vhtot(i,J)
@@ -1877,6 +1970,10 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
                  "streamfunction formulation, expressed as a fraction of planetary "//&
                  "rotation, OMEGA. This should be tiny but non-zero to avoid degeneracy.", &
                  default=1.e-15, units="nondim", do_not_log=.not.CS%use_FGNV_streamfn)
+  call get_param(param_file, mdl, "STANLEY_PRM_DET_COEFF", CS%Stanley_det_coeff, &
+                 "The coefficient correlating SGS temperature variance with the mean "//&
+                 "temperature gradient in the deterministic part of the Stanley parameterization. "//&
+                 "Negative values disable the scheme.", units="nondim", default=-1.0)
   call get_param(param_file, mdl, "OMEGA", omega, &
                  "The rotation rate of the earth.", &
                  default=7.2921e-5, units="s-1", scale=US%T_to_s, do_not_log=.not.CS%use_FGNV_streamfn)
@@ -1901,7 +1998,7 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
 
     call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
     call get_param(param_file, mdl, "MEKE_GEOMETRIC_2018_ANSWERS", CS%MEKE_GEOM_answers_2018, &
                  "If true, use expressions in the MEKE_GEOMETRIC calculation that recover the "//&
                  "answers from the original implementation.  Otherwise, use expressions that "//&
@@ -1919,7 +2016,7 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
   call get_param(param_file, mdl, "USE_GM_WORK_BUG", CS%use_GM_work_bug, &
                  "If true, compute the top-layer work tendency on the u-grid "//&
                  "with the incorrect sign, for legacy reproducibility.", &
-                 default=.true.)
+                 default=.false.)
 
   if (CS%use_GME_thickness_diffuse) then
     call safe_alloc_ptr(CS%KH_u_GME,G%IsdB,G%IedB,G%jsd,G%jed,G%ke+1)

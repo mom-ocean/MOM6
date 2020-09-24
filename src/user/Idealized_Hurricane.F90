@@ -170,7 +170,7 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
                  "wind profile.", units='m', default=50.e3, scale=US%m_to_L)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(param_file, mdl, "IDL_HURR_2018_ANSWERS", CS%answers_2018, &
                  "If true, use expressions driving the idealized hurricane test case that recover "//&
                  "the answers from the end of 2018.  Otherwise use expressions that are rescalable "//&
@@ -189,7 +189,6 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
                  "The background gustiness in the winds.", units="Pa", &
                  default=0.0, scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z, do_not_log=.true.)
 
-
   if (CS%BR_BENCH) then
     CS%rho_a = 1.2*US%kg_m3_to_R
   endif
@@ -206,8 +205,8 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
 end subroutine idealized_hurricane_wind_init
 
 !> Computes the surface wind for the idealized hurricane test cases
-subroutine idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
-  type(surface),                intent(in)    :: state  !< Surface state structure
+subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
+  type(surface),                intent(in)    :: sfc_state  !< Surface state structure
   type(mech_forcing),           intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),              intent(in)    :: day    !< Time in days
   type(ocean_grid_type),        intent(inout) :: G      !< Grid structure
@@ -263,13 +262,13 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
   !> Computes taux
   do j=js,je
     do I=is-1,Ieq
-      Uocn = US%m_s_to_L_T * state%u(I,j)*REL_TAU_FAC
+      Uocn = sfc_state%u(I,j) * REL_TAU_FAC
       if (CS%answers_2018) then
-        Vocn = US%m_s_to_L_T * 0.25*(state%v(i,J)+state%v(i+1,J-1)&
-               +state%v(i+1,J)+state%v(i,J-1))*REL_TAU_FAC
+        Vocn = 0.25*(sfc_state%v(i,J)+sfc_state%v(i+1,J-1)&
+                    +sfc_state%v(i+1,J)+sfc_state%v(i,J-1))*REL_TAU_FAC
       else
-        Vocn = US%m_s_to_L_T * 0.25*((state%v(i,J)+state%v(i+1,J-1)) +&
-                                     (state%v(i+1,J)+state%v(i,J-1))) * REL_TAU_FAC
+        Vocn =0.25*((sfc_state%v(i,J)+sfc_state%v(i+1,J-1)) +&
+                    (sfc_state%v(i+1,J)+sfc_state%v(i,J-1))) * REL_TAU_FAC
       endif
       f_local = abs(0.5*(G%CoriolisBu(I,J)+G%CoriolisBu(I,J-1)))*fbench_fac + fbench
       ! Calculate position as a function of time.
@@ -288,13 +287,13 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
   do J=js-1,Jeq
     do i=is,ie
       if (CS%answers_2018) then
-        Uocn = US%m_s_to_L_T * 0.25*(state%u(I,j)+state%u(I-1,j+1) + &
-                                     state%u(I-1,j)+state%u(I,j+1))*REL_TAU_FAC
+        Uocn = 0.25*(sfc_state%u(I,j)+sfc_state%u(I-1,j+1) + &
+                     sfc_state%u(I-1,j)+sfc_state%u(I,j+1))*REL_TAU_FAC
       else
-        Uocn = US%m_s_to_L_T * 0.25*((state%u(I,j)+state%u(I-1,j+1)) + &
-                                     (state%u(I-1,j)+state%u(I,j+1))) * REL_TAU_FAC
+        Uocn = 0.25*((sfc_state%u(I,j)+sfc_state%u(I-1,j+1)) + &
+                     (sfc_state%u(I-1,j)+sfc_state%u(I,j+1))) * REL_TAU_FAC
       endif
-      Vocn = US%m_s_to_L_T * state%v(i,J)*REL_TAU_FAC
+      Vocn = sfc_state%v(i,J) * REL_TAU_FAC
       f_local = abs(0.5*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)))*fbench_fac + fbench
       ! Calculate position as a function of time.
       if (CS%SCM_mode) then
@@ -471,8 +470,8 @@ end subroutine idealized_hurricane_wind_profile
 !! It is included as an additional subroutine rather than padded into the previous
 !! routine with flags to ease its eventual removal.  Its functionality is replaced
 !! with the new routines and it can be deleted when answer changes are acceptable.
-subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
-  type(surface),                intent(in)    :: state  !< Surface state structure
+subroutine SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
+  type(surface),                intent(in)    :: sfc_state  !< Surface state structure
   type(mech_forcing),           intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),              intent(in)    :: day    !< Time in days
   type(ocean_grid_type),        intent(inout) :: G      !< Grid structure
@@ -604,9 +603,9 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
     !/BR
     ! Turn off surface current for stress calculation to be
     ! consistent with test case.
-    Uocn = 0. ! state%u(I,j)
-    Vocn = 0. ! 0.25*( (state%v(i,J) + state%v(i+1,J-1)) &
-              !       +(state%v(i+1,J) + state%v(i,J-1)) )
+    Uocn = 0. ! sfc_state%u(I,j)
+    Vocn = 0. ! 0.25*( (sfc_state%v(i,J) + sfc_state%v(i+1,J-1)) + &
+              !        (sfc_state%v(i+1,J) + sfc_state%v(i,J-1)) )
     !/BR
     ! Wind vector calculated from location/direction (sin/cos flipped b/c
     ! cyclonic wind is 90 deg. phase shifted from position angle).
@@ -633,9 +632,9 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
   !/BR
   ! See notes above
   do J=js-1,Jeq ; do i=is,ie
-    Uocn = 0. ! 0.25*( (state%u(I,j) + state%u(I-1,j+1)) &
-              !     +(state%u(I-1,j) + state%u(I,j+1)) )
-    Vocn = 0. ! state%v(i,J)
+    Uocn = 0. ! 0.25*( (sfc_state%u(I,j) + sfc_state%u(I-1,j+1)) + &
+              !        (sfc_state%u(I-1,j) + sfc_state%u(I,j+1)) )
+    Vocn = 0. ! sfc_state%v(i,J)
     dU = U10*sin(Adir-pie-Alph) - Uocn + U_TS
     dV = U10*cos(Adir-Alph) - Vocn + V_TS
     du10=sqrt(du**2+dv**2)

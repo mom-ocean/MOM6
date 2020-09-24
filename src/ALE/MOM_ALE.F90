@@ -52,6 +52,7 @@ use MOM_verticalGrid,     only : get_thickness_units, verticalGrid_type
 use regrid_consts,        only : coordinateUnits, coordinateMode, state_dependent
 use regrid_edge_values,   only : edge_values_implicit_h4
 use PLM_functions,        only : PLM_reconstruction, PLM_boundary_extrapolation
+use PLM_functions,        only : PLM_extrapolate_slope, PLM_monotonized_slope, PLM_slope_wa
 use PPM_functions,        only : PPM_reconstruction, PPM_boundary_extrapolation
 
 implicit none ; private
@@ -110,8 +111,9 @@ public ALE_offline_tracer_final
 public ALE_build_grid
 public ALE_regrid_accelerated
 public ALE_remap_scalar
-public pressure_gradient_plm
-public pressure_gradient_ppm
+public ALE_PLM_edge_values
+public TS_PLM_edge_values
+public TS_PPM_edge_values
 public adjustGridForIntegrity
 public ALE_initRegridding
 public ALE_getCoordinate
@@ -163,12 +165,11 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   CS%show_call_tree = callTree_showQuery()
   if (CS%show_call_tree) call callTree_enter("ALE_init(), MOM_ALE.F90")
 
-  call get_param(param_file, mdl, "REMAP_UV_USING_OLD_ALG", &
-                 CS%remap_uv_using_old_alg, &
+  call get_param(param_file, mdl, "REMAP_UV_USING_OLD_ALG", CS%remap_uv_using_old_alg, &
                  "If true, uses the old remapping-via-a-delta-z method for "//&
                  "remapping u and v. If false, uses the new method that remaps "//&
                  "between grids described by an old and new thickness.", &
-                 default=.true.)
+                 default=.false.)
 
   ! Initialize and configure regridding
   call ALE_initRegridding(GV, US, max_depth, param_file, mdl, CS%regridCS)
@@ -196,7 +197,7 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
                  "extrapolated instead of piecewise constant", default=.false.)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", CS%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
@@ -1007,12 +1008,9 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
 end subroutine ALE_remap_scalar
 
 
-!> Use plm reconstruction for pressure gradient (determine edge values)
-!! By using a PLM (limited piecewise linear method) reconstruction, this
-!! routine determines the edge values for the salinity and temperature
-!! within each layer. These edge values are returned and are used to compute
-!! the pressure gradient (by computing the densities).
-subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_extrap )
+!> Calculate edge values (top and bottom of layer) for T and S consistent with a PLM reconstruction
+!! in the vertical direction. Boundary reconstructions are PCM unless bdry_extrap is true.
+subroutine TS_PLM_edge_values( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_extrap )
   type(ocean_grid_type),   intent(in)    :: G    !< ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< Ocean vertical grid structure
   type(ALE_CS),            intent(inout) :: CS   !< module control structure
@@ -1030,12 +1028,31 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_ext
   logical,                 intent(in)    :: bdry_extrap !< If true, use high-order boundary
                                                  !! extrapolation within boundary cells
 
+  call ALE_PLM_edge_values( CS, G, GV, h, tv%S, bdry_extrap, S_t, S_b )
+  call ALE_PLM_edge_values( CS, G, GV, h, tv%T, bdry_extrap, T_t, T_b )
+
+end subroutine TS_PLM_edge_values
+
+!> Calculate edge values (top and bottom of layer) 3d scalar array.
+!! Boundary reconstructions are PCM unless bdry_extrap is true.
+subroutine ALE_PLM_edge_values( CS, G, GV, h, Q, bdry_extrap, Q_t, Q_b )
+  type(ALE_CS),            intent(in)    :: CS   !< module control structure
+  type(ocean_grid_type),   intent(in)    :: G    !< ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV   !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: h    !< layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: Q    !< 3d scalar array
+  logical,                 intent(in)    :: bdry_extrap !< If true, use high-order boundary
+                                                 !! extrapolation within boundary cells
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(inout) :: Q_t  !< Scalar at the top edge of each layer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(inout) :: Q_b  !< Scalar at the bottom edge of each layer
   ! Local variables
   integer :: i, j, k
-  real    :: hTmp(GV%ke)
-  real    :: tmp(GV%ke)
-  real, dimension(CS%nk,2) :: ppol_E     !Edge value of polynomial
-  real, dimension(CS%nk,2) :: ppol_coefs !Coefficients of polynomial
+  real :: slp(GV%ke)
+  real :: mslp
   real :: h_neglect
 
   if (.not.CS%answers_2018) then
@@ -1046,48 +1063,40 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_ext
     h_neglect = GV%kg_m2_to_H*1.0e-30
   endif
 
-  ! Determine reconstruction within each column
-  !$OMP parallel do default(shared) private(hTmp,ppol_E,ppol_coefs,tmp)
+  !$OMP parallel do default(shared) private(slp,mslp)
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
-    ! Build current grid
-    hTmp(:) = h(i,j,:)
-    tmp(:) = tv%S(i,j,:)
-    ! Reconstruct salinity profile
-    ppol_E(:,:) = 0.0
-    ppol_coefs(:,:) = 0.0
-    call PLM_reconstruction( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect )
-    if (bdry_extrap) &
-      call PLM_boundary_extrapolation( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect )
-
-    do k = 1,GV%ke
-      S_t(i,j,k) = ppol_E(k,1)
-      S_b(i,j,k) = ppol_E(k,2)
+    slp(1) = 0.
+    do k = 2, GV%ke-1
+      slp(k) = PLM_slope_wa(h(i,j,k-1), h(i,j,k), h(i,j,k+1), h_neglect, Q(i,j,k-1), Q(i,j,k), Q(i,j,k+1))
     enddo
+    slp(GV%ke) = 0.
 
-    ! Reconstruct temperature profile
-    ppol_E(:,:) = 0.0
-    ppol_coefs(:,:) = 0.0
-    tmp(:) = tv%T(i,j,:)
-    call PLM_reconstruction( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect )
-    if (bdry_extrap) &
-      call PLM_boundary_extrapolation( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect )
-
-    do k = 1,GV%ke
-      T_t(i,j,k) = ppol_E(k,1)
-      T_b(i,j,k) = ppol_E(k,2)
+    do k = 2, GV%ke-1
+      mslp = PLM_monotonized_slope(Q(i,j,k-1), Q(i,j,k), Q(i,j,k+1), slp(k-1), slp(k), slp(k+1))
+      Q_t(i,j,k) = Q(i,j,k) - 0.5 * mslp
+      Q_b(i,j,k) = Q(i,j,k) + 0.5 * mslp
     enddo
+    if (bdry_extrap) then
+      mslp = - PLM_extrapolate_slope(h(i,j,2), h(i,j,1), h_neglect, Q(i,j,2), Q(i,j,1))
+      Q_t(i,j,1) = Q(i,j,1) - 0.5 * mslp
+      Q_b(i,j,1) = Q(i,j,1) + 0.5 * mslp
+      mslp = PLM_extrapolate_slope(h(i,j,GV%ke-1), h(i,j,GV%ke), h_neglect, Q(i,j,GV%ke-1), Q(i,j,GV%ke))
+      Q_t(i,j,GV%ke) = Q(i,j,GV%ke) - 0.5 * mslp
+      Q_b(i,j,GV%ke) = Q(i,j,GV%ke) + 0.5 * mslp
+    else
+      Q_t(i,j,1) = Q(i,j,1)
+      Q_b(i,j,1) = Q(i,j,1)
+      Q_t(i,j,GV%ke) = Q(i,j,GV%ke)
+      Q_b(i,j,GV%ke) = Q(i,j,GV%ke)
+    endif
 
   enddo ; enddo
 
-end subroutine pressure_gradient_plm
+end subroutine ALE_PLM_edge_values
 
-
-!> Use ppm reconstruction for pressure gradient (determine edge values)
-!> By using a PPM (limited piecewise linear method) reconstruction, this
-!> routine determines the edge values for the salinity and temperature
-!> within each layer. These edge values are returned and are used to compute
-!> the pressure gradient (by computing the densities).
-subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_extrap )
+!> Calculate edge values (top and bottom of layer) for T and S consistent with a PPM reconstruction
+!! in the vertical direction. Boundary reconstructions are PCM unless bdry_extrap is true.
+subroutine TS_PPM_edge_values( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_extrap )
   type(ocean_grid_type),   intent(in)    :: G    !< ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< Ocean vertical grid structure
   type(ALE_CS),            intent(inout) :: CS   !< module control structure
@@ -1169,7 +1178,7 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_ext
 
   enddo ; enddo
 
-end subroutine pressure_gradient_ppm
+end subroutine TS_PPM_edge_values
 
 
 !> Initializes regridding for the main ALE algorithm

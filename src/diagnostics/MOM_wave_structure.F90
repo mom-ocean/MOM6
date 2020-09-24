@@ -109,7 +109,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real, dimension(SZK_(G)+1) :: &
     dRho_dT, &    ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
     dRho_dS, &    ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
-    pres, &       ! Interface pressure [Pa]
+    pres, &       ! Interface pressure [R L2 T-2 ~> Pa]
     T_int, &      ! Temperature interpolated to interfaces [degC]
     S_int, &      ! Salinity interpolated to interfaces [ppt]
     gprime        ! The reduced gravity across each interface [m2 Z-1 s-2 ~> m s-2].
@@ -131,7 +131,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
     htot          ! The vertical sum of the thicknesses [Z ~> m]
   real :: lam
   real :: min_h_frac
-  real :: H_to_pres
+  real :: Z_to_pres ! A conversion factor from thicknesses to pressure [R L2 T-2 Z-1 ~> Pa m-1]
   real, dimension(SZI_(G)) :: &
     hmin, &        ! Thicknesses [Z ~> m]
     H_here, &      ! A thickness [Z ~> m]
@@ -199,7 +199,8 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   cg_subRO = 1e-100*US%m_s_to_L_T  ! The hard-coded value here might need to increase.
   use_EOS = associated(tv%eqn_of_state)
 
-  H_to_pres = GV%Z_to_H*GV%H_to_Pa
+  ! Simplifying the following could change answers at roundoff.
+  Z_to_pres = GV%Z_to_H * (GV%H_to_RZ * GV%g_Earth)
   ! rescale = 1024.0**4 ; I_rescale = 1.0/rescale
 
   min_h_frac = tol1 / real(nz)
@@ -272,12 +273,12 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
         if (use_EOS) then
           pres(1) = 0.0
           do k=2,kf(i)
-            pres(k) = pres(k-1) + H_to_pres*Hf(k-1,i)
+            pres(k) = pres(k-1) + Z_to_pres*Hf(k-1,i)
             T_int(k) = 0.5*(Tf(k,i)+Tf(k-1,i))
             S_int(k) = 0.5*(Sf(k,i)+Sf(k-1,i))
           enddo
-          call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, 2, &
-                                        kf(i)-1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+          call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, &
+                                        tv%eqn_of_state, (/2,kf(i)/) )
 
           ! Sum the reduced gravities to find out how small a density difference
           ! is negligibly small.
@@ -377,7 +378,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
           ! Also, note that "K" refers to an interface, while "k" refers to the layer below.
           ! Need at least 3 layers (2 internal interfaces) to generate a matrix, also
           ! need number of layers to be greater than the mode number
-          if (kc >= ModeNum + 1) then
+          if (kc >= max(3, ModeNum + 1)) then
             ! Set depth at surface
             z_int(1) = 0.0
             ! Calculate Igu, Igl, depth, and N2 at each interior interface
@@ -484,8 +485,8 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
 
             ! Calculate terms in vertically integrated energy equation
             int_dwdz2 = 0.0 ; int_w2 = 0.0 ; int_N2w2 = 0.0
-            u_strct2(:) = u_strct(1:nzm)**2
-            w_strct2(:) = w_strct(1:nzm)**2
+            u_strct2(1:nzm) = u_strct(1:nzm)**2
+            w_strct2(1:nzm) = w_strct(1:nzm)**2
             ! vertical integration with Trapezoidal rule
             do k=1,nzm-1
               int_dwdz2 = int_dwdz2 + 0.5*(u_strct2(K)+u_strct2(K+1)) * US%m_to_Z*dz(k)
@@ -517,12 +518,12 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
             endif
 
             ! Store values in control structure
-            CS%w_strct(i,j,1:nzm)     = w_strct(:)
-            CS%u_strct(i,j,1:nzm)     = u_strct(:)
-            CS%W_profile(i,j,1:nzm)   = W_profile(:)
-            CS%Uavg_profile(i,j,1:nzm)= Uavg_profile(:)
-            CS%z_depths(i,j,1:nzm)    = US%Z_to_m*z_int(:)
-            CS%N2(i,j,1:nzm)          = N2(:)
+            CS%w_strct(i,j,1:nzm)     = w_strct(1:nzm)
+            CS%u_strct(i,j,1:nzm)     = u_strct(1:nzm)
+            CS%W_profile(i,j,1:nzm)   = W_profile(1:nzm)
+            CS%Uavg_profile(i,j,1:nzm)= Uavg_profile(1:nzm)
+            CS%z_depths(i,j,1:nzm)    = US%Z_to_m*z_int(1:nzm)
+            CS%N2(i,j,1:nzm)          = N2(1:nzm)
             CS%num_intfaces(i,j)      = nzm
           else
             ! If not enough layers, default to zero

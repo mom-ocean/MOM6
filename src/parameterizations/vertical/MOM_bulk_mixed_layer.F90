@@ -15,7 +15,7 @@ use MOM_opacity,       only : absorbRemainingSW, optics_type, extract_optics_sli
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
-use MOM_EOS, only : calculate_density, calculate_density_derivs
+use MOM_EOS,           only : calculate_density, calculate_density_derivs, EOS_domain
 
 implicit none ; private
 
@@ -110,7 +110,6 @@ type, public :: bulkmixedlayer_CS ; private
                              !! to set the heat carried by runoff, instead of
                              !! using SST for temperature of liq_runoff
   logical :: use_calving_heat_content !< Use SST for temperature of froz_runoff
-  logical :: salt_reject_below_ML !< It true, add salt below mixed layer (layer mode only)
   logical :: convect_mom_bug !< If true, use code with a bug that causes a loss of momentum
                              !! conservation during mixedlayer convection.
 
@@ -219,7 +218,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
   type(optics_type),          pointer       :: optics !< The structure containing the inverse of the
                                                       !! vertical absorption decay scale for
                                                       !! penetrating shortwave radiation [m-1].
-  real, dimension(:,:),       pointer       :: Hml    !< Active mixed layer depth [m].
+  real, dimension(:,:),       pointer       :: Hml    !< Active mixed layer depth [Z ~> m].
   logical,                    intent(in)    :: aggregate_FW_forcing !< If true, the net incoming and
                                                      !! outgoing surface freshwater fluxes are
                                                      !! combined before being applied, instead of
@@ -291,9 +290,9 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
     Net_salt, & ! The surface salt flux into the ocean over a time step, ppt H.
     Idecay_len_TKE, &  ! The inverse of a turbulence decay length scale [H-1 ~> m-1 or m2 kg-1].
     p_ref, &    !   Reference pressure for the potential density governing mixed
-                ! layer dynamics, almost always 0 (or 1e5) Pa.
+                ! layer dynamics, almost always 0 (or 1e5) [R L2 T-2 ~> Pa].
     p_ref_cv, & !   Reference pressure for the potential density which defines
-                ! the coordinate variable, set to P_Ref [Pa].
+                ! the coordinate variable, set to P_Ref [R L2 T-2 ~> Pa].
     dR0_dT, &   !   Partial derivative of the mixed layer potential density with
                 ! temperature [R degC-1 ~> kg m-3 degC-1].
     dRcv_dT, &  !   Partial derivative of the coordinate variable potential
@@ -352,6 +351,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
   real :: dt__diag  ! A recaled copy of dt_diag (if present) or dt [T ~> s].
   logical :: write_diags  ! If true, write out diagnostics with this step.
   logical :: reset_diags  ! If true, zero out the accumulated diagnostics.
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz, nkmb, n
   integer :: nsw    ! The number of bands of penetrating shortwave radiation.
 
@@ -437,6 +437,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
     do k=1,nz ; do i=is,ie ; dKE_CA(i,k) = 0.0 ; cTKE(i,k) = 0.0 ; enddo ; enddo
   endif
   max_BL_det(:) = -1
+  EOSdom(:) = EOS_domain(G%HI)
 
   !$OMP parallel default(shared) firstprivate(dKE_CA,cTKE,h_CA,max_BL_det,p_ref,p_ref_cv) &
   !$OMP                 private(h,u,v,h_orig,eps,T,S,opacity_band,d_ea,d_eb,R0,Rcv,ksort, &
@@ -461,20 +462,20 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
     enddo ; enddo
 
     if (id_clock_EOS>0) call cpu_clock_begin(id_clock_EOS)
-    ! Calculate an estimate of the mid-mixed layer pressure [Pa]
-    do i=is,ie ; p_ref(i) = 0.0 ; enddo
+    ! Calculate an estimate of the mid-mixed layer pressure [R L2 T-2 ~> Pa]
+    if (associated(tv%p_surf)) then
+      do i=is,ie ; p_ref(i) = tv%p_surf(i,j) ; enddo
+    else
+      do i=is,ie ; p_ref(i) = 0.0 ; enddo
+    endif
     do k=1,CS%nkml ; do i=is,ie
-      p_ref(i) = p_ref(i) + 0.5*GV%H_to_Pa*h(i,k)
+      p_ref(i) = p_ref(i) + 0.5*(GV%H_to_RZ*GV%g_Earth)*h(i,k)
     enddo ; enddo
-    call calculate_density_derivs(T(:,1), S(:,1), p_ref, dR0_dT, dR0_dS, &
-                                  is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
-    call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, &
-                                  is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+    call calculate_density_derivs(T(:,1), S(:,1), p_ref, dR0_dT, dR0_dS, tv%eqn_of_state, EOSdom)
+    call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, tv%eqn_of_state, EOSdom)
     do k=1,nz
-      call calculate_density(T(:,k), S(:,k), p_ref, R0(:,k), is, ie-is+1, &
-                             tv%eqn_of_state, scale=US%kg_m3_to_R)
-      call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), is, &
-                             ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density(T(:,k), S(:,k), p_ref, R0(:,k), tv%eqn_of_state, EOSdom)
+      call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), tv%eqn_of_state, EOSdom)
     enddo
     if (id_clock_EOS>0) call cpu_clock_end(id_clock_EOS)
 
@@ -590,7 +591,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
       CS%ML_depth(i,j) = h(i,0) * GV%H_to_m  ! Rescale the diagnostic.
     enddo ; endif
     if (associated(Hml)) then ; do i=is,ie
-      Hml(i,j) = G%mask2dT(i,j) * (h(i,0) * GV%H_to_m) ! Rescale the diagnostic for output.
+      Hml(i,j) = G%mask2dT(i,j) * (h(i,0) * GV%H_to_Z) ! Rescale the diagnostic for output.
     enddo ; endif
 
 ! At this point, return water to the original layers, but constrained to
@@ -3437,7 +3438,7 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
                  "BULKMIXEDLAYER is true.", units="nondim", default=2)
   call get_param(param_file, mdl, "MSTAR", CS%mstar, &
                  "The ratio of the friction velocity cubed to the TKE "//&
-                 "input to the mixed layer.", "units=nondim", default=1.2)
+                 "input to the mixed layer.", units="nondim", default=1.2)
   call get_param(param_file, mdl, "NSTAR", CS%nstar, &
                  "The portion of the buoyant potential energy imparted by "//&
                  "surface fluxes that is available to drive entrainment "//&
@@ -3577,7 +3578,7 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
                  default=.false.)
   call get_param(param_file, mdl, "BULKML_CONV_MOMENTUM_BUG", CS%convect_mom_bug, &
                  "If true, use code with a bug that causes a loss of momentum conservation "//&
-                 "during mixedlayer convection.", default=.true.)
+                 "during mixedlayer convection.", default=.false.)
 
   call get_param(param_file, mdl, "ALLOW_CLOCKS_IN_OMP_LOOPS", &
                  CS%allow_clocks_in_omp_loops, &

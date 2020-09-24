@@ -7,7 +7,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : calculate_density_derivs
+use MOM_EOS, only : calculate_density_derivs, EOS_domain
 
 implicit none ; private
 
@@ -31,7 +31,7 @@ subroutine full_convection(G, GV, US, h, tv, T_adj, S_adj, p_surf, Kddt_smooth, 
                            intent(out)   :: T_adj !< Adjusted potential temperature [degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(out)   :: S_adj !< Adjusted salinity [ppt].
-  real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface [Pa] (or NULL).
+  real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface [R L2 T-2 ~> Pa] (or NULL).
   real,                    intent(in)    :: Kddt_smooth  !< A smoothing vertical
                                                   !! diffusivity times a timestep [H2 ~> m2 or kg2 m-4].
   real,          optional, intent(in)    :: Kddt_convect !< A large convecting vertical
@@ -335,7 +335,7 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
                                                !! potential density with salinity [R degC-1 ~> kg m-3 ppt-1]
   type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
   integer,                 intent(in)  :: j    !< The j-point to work on.
-  real, dimension(:,:),    pointer     :: p_surf !< The pressure at the ocean surface [Pa].
+  real, dimension(:,:),    pointer     :: p_surf !< The pressure at the ocean surface [R L2 T-2 ~> Pa].
   integer,       optional, intent(in)  :: halo !< Halo width over which to compute
 
   ! Local variables
@@ -345,13 +345,14 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
   real :: c1(SZI_(G),SZK_(G))      ! tridiagonal solver.
   real :: T_f(SZI_(G),SZK_(G))     ! Filtered temperatures [degC]
   real :: S_f(SZI_(G),SZK_(G))     ! Filtered salinities [ppt]
-  real :: pres(SZI_(G))            ! Interface pressures [Pa].
+  real :: pres(SZI_(G))            ! Interface pressures [R L2 T-2 ~> Pa].
   real :: T_EOS(SZI_(G))           ! Filtered and vertically averaged temperatures [degC]
   real :: S_EOS(SZI_(G))           ! Filtered and vertically averaged salinities [ppt]
   real :: kap_dt_x2                ! The product of 2*kappa*dt [H2 ~> m2 or kg2 m-4].
   real :: h_neglect, h0            ! Negligible thicknesses to allow for zero thicknesses,
                                    ! [H ~> m or kg m-2].
   real :: h_tr                     ! The thickness at tracer points, plus h_neglect [H ~> m or kg m-2].
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, k, is, ie, nz
 
   if (present(halo)) then
@@ -407,21 +408,19 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
   else
     do i=is,ie ; pres(i) = 0.0 ; enddo
   endif
-  call calculate_density_derivs(T_f(:,1), S_f(:,1), pres, dR_dT(:,1), dR_dS(:,1), &
-                                is-G%isd+1, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
-  do i=is,ie ; pres(i) = pres(i) + h(i,j,1)*GV%H_to_Pa ; enddo
+  EOSdom(:) = EOS_domain(G%HI, halo)
+  call calculate_density_derivs(T_f(:,1), S_f(:,1), pres, dR_dT(:,1), dR_dS(:,1), tv%eqn_of_state, EOSdom)
+  do i=is,ie ; pres(i) = pres(i) + h(i,j,1)*(GV%H_to_RZ*GV%g_Earth) ; enddo
   do K=2,nz
     do i=is,ie
       T_EOS(i) = 0.5*(T_f(i,k-1) + T_f(i,k))
       S_EOS(i) = 0.5*(S_f(i,k-1) + S_f(i,k))
     enddo
-    call calculate_density_derivs(T_EOS, S_EOS, pres, dR_dT(:,K), dR_dS(:,K), &
-                                  is-G%isd+1, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
-    do i=is,ie ; pres(i) = pres(i) + h(i,j,k)*GV%H_to_Pa ; enddo
+    call calculate_density_derivs(T_EOS, S_EOS, pres, dR_dT(:,K), dR_dS(:,K), tv%eqn_of_state, EOSdom)
+    do i=is,ie ; pres(i) = pres(i) + h(i,j,k)*(GV%H_to_RZ*GV%g_Earth) ; enddo
   enddo
   call calculate_density_derivs(T_f(:,nz), S_f(:,nz), pres, dR_dT(:,nz+1), dR_dS(:,nz+1), &
-                                is-G%isd+1, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
-
+                                tv%eqn_of_state, EOSdom)
 
 end subroutine smoothed_dRdT_dRdS
 

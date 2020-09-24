@@ -24,22 +24,20 @@ public dumbbell_dynamic_forcing, dumbbell_buoyancy_forcing, dumbbell_surface_for
 
 !> Control structure for the dumbbell test case forcing
 type, public :: dumbbell_surface_forcing_CS ; private
-  logical :: use_temperature !< If true, temperature and salinity are used as
-                             !! state variables.
+  logical :: use_temperature !< If true, temperature and salinity are used as state variables.
   logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
   real :: Rho0               !< The density used in the Boussinesq approximation [R ~> kg m-3].
   real :: G_Earth            !< The gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
   real :: Flux_const         !< The restoring rate at the surface [Z T-1 ~> m s-1].
-  real :: gust_const         !< A constant unresolved background gustiness
-                             !! that contributes to ustar [Pa].
-  real :: slp_amplitude      !< The amplitude of pressure loading [Pa] applied
+! real :: gust_const         !< A constant unresolved background gustiness
+!                            !! that contributes to ustar [R L Z T-2 ~> Pa].
+  real :: slp_amplitude      !< The amplitude of pressure loading [R L2 T-2 ~> Pa] applied
                              !! to the reservoirs
-  real :: slp_period         !< Period of sinusoidal pressure wave
+  real :: slp_period         !< Period of sinusoidal pressure wave [days]
   real, dimension(:,:), allocatable :: &
     forcing_mask             !< A mask regulating where forcing occurs
   real, dimension(:,:), allocatable :: &
-    S_restore                !< The surface salinity field toward which to
-                             !! restore [ppt].
+    S_restore                !< The surface salinity field toward which to restore [ppt].
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate the
                              !! timing of diagnostic output.
 end type dumbbell_surface_forcing_CS
@@ -47,8 +45,8 @@ end type dumbbell_surface_forcing_CS
 contains
 
 !> Surface buoyancy (heat and fresh water) fluxes for the dumbbell test case
-subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
-  type(surface),                 intent(inout) :: state  !< A structure containing fields that
+subroutine dumbbell_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
+  type(surface),                 intent(inout) :: sfc_state  !< A structure containing fields that
                                                          !! describe the surface state of the ocean.
   type(forcing),                 intent(inout) :: fluxes !< A structure containing pointers to any
                                                          !! possible forcing fields. Unused fields
@@ -120,7 +118,7 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
     do j=js,je ; do i=is,ie
       if (CS%forcing_mask(i,j)>0.) then
         fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
-                ((CS%S_restore(i,j) - state%SSS(i,j)) /  (0.5 * (CS%S_restore(i,j) + state%SSS(i,j))))
+                ((CS%S_restore(i,j) - sfc_state%SSS(i,j)) /  (0.5 * (CS%S_restore(i,j) + sfc_state%SSS(i,j))))
 
       endif
     enddo ; enddo
@@ -129,8 +127,8 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
 end subroutine dumbbell_buoyancy_forcing
 
 !> Dynamic forcing for the dumbbell test case
-subroutine dumbbell_dynamic_forcing(state, fluxes, day, dt, G, CS)
-  type(surface),                 intent(inout) :: state  !< A structure containing fields that
+subroutine dumbbell_dynamic_forcing(sfc_state, fluxes, day, dt, G, CS)
+  type(surface),                 intent(inout) :: sfc_state  !< A structure containing fields that
                                                        !! describe the surface state of the ocean.
   type(forcing),                 intent(inout) :: fluxes !< A structure containing pointers to any
                                                        !! possible forcing fields. Unused fields
@@ -199,8 +197,7 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
-                 "If true, Temperature and salinity are used as state "//&
-                 "variables.", default=.true.)
+                 "If true, Temperature and salinity are used as state variables.", default=.true.)
 
   call get_param(param_file, mdl, "G_EARTH", CS%G_Earth, &
                  "The gravitational acceleration of the Earth.", &
@@ -213,10 +210,7 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "DUMBBELL_SLP_AMP", CS%slp_amplitude, &
                  "Amplitude of SLP forcing in reservoirs.", &
-                 units="kg m2 s-1", default = 10000.0)
-  call get_param(param_file, mdl, "DUMBBELL_SLP_PERIOD", CS%slp_period, &
-                 "Periodicity of SLP forcing in reservoirs.", &
-                 units="days", default = 1.0)
+                 units="Pa", default = 10000.0, scale=US%kg_m3_to_R*US%m_s_to_L_T**2)
   call get_param(param_file, mdl, "DUMBBELL_SLP_PERIOD", CS%slp_period, &
                  "Periodicity of SLP forcing in reservoirs.", &
                  units="days", default = 1.0)
@@ -235,10 +229,9 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "given by FLUXCONST.", default= .false.)
   if (CS%restorebuoy) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
-                 "The constant that relates the restoring surface fluxes "//&
-                 "to the relative surface anomalies (akin to a piston "//&
-                 "velocity).  Note the non-MKS units.", &
-                 units="m day-1", scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
+                 "The constant that relates the restoring surface fluxes to the relative "//&
+                 "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
+                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s)
     ! Convert CS%Flux_const from m day-1 to m s-1.
     CS%Flux_const = CS%Flux_const / 86400.0
 

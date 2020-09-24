@@ -12,7 +12,6 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : read_param, get_param, log_param, log_version, param_file_type
 use MOM_grid, only : MOM_grid_init, ocean_grid_type
 use MOM_get_input, only : directories, Get_MOM_input
-use mpp_mod, only : mpp_sum, mpp_max, mpp_min, mpp_pe, mpp_npes, mpp_sync
 use MOM_coms, only : reproducing_sum
 use MOM_checksums, only : hchksum, qchksum, chksum, uchksum, vchksum, uvchksum
 

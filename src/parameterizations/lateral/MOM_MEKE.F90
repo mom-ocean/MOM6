@@ -196,8 +196,10 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       if (associated(MEKE%GM_src)) &
         call hchksum(MEKE%GM_src, 'MEKE GM_src', G%HI, scale=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
       if (associated(MEKE%MEKE)) call hchksum(MEKE%MEKE, 'MEKE MEKE', G%HI, scale=US%L_T_to_m_s**2)
-      call uvchksum("MEKE SN_[uv]", SN_u, SN_v, G%HI, scale=US%s_to_T)
-      call uvchksum("MEKE h[uv]", hu, hv, G%HI, haloshift=1, scale=GV%H_to_m*US%L_to_m**2)
+      call uvchksum("MEKE SN_[uv]", SN_u, SN_v, G%HI, scale=US%s_to_T, &
+                    scalar_pair=.true.)
+      call uvchksum("MEKE h[uv]", hu, hv, G%HI, haloshift=1, &
+                    scale=GV%H_to_m*(US%L_to_m**2))
     endif
 
     sdt = dt*CS%MEKE_dtScale ! Scaled dt to use for time-stepping
@@ -287,7 +289,8 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     call MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, MEKE%MEKE, bottomFac2, barotrFac2, LmixScale)
     if (CS%debug) then
       if (CS%visc_drag) &
-        call uvchksum("MEKE drag_vel_[uv]", drag_vel_u, drag_vel_v, G%HI, scale=US%Z_to_m*US%s_to_T)
+        call uvchksum("MEKE drag_vel_[uv]", drag_vel_u, drag_vel_v, G%HI, &
+                      scale=US%Z_to_m*US%s_to_T, scalar_pair=.true.)
       call hchksum(mass, 'MEKE mass',G%HI,haloshift=1, scale=US%RZ_to_kg_m2)
       call hchksum(drag_rate_visc, 'MEKE drag_rate_visc', G%HI, scale=US%L_T_to_m_s)
       call hchksum(bottomFac2, 'MEKE bottomFac2', G%HI)
@@ -1004,7 +1007,8 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   ! Determine whether this module will be used
-  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "USE_MEKE", MEKE_init, default=.false., do_not_log=.true.)
+  call log_version(param_file, mdl, version, "", all_default=.not.MEKE_init)
   call get_param(param_file, mdl, "USE_MEKE", MEKE_init, &
                  "If true, turns on the MEKE scheme which calculates "// &
                  "a sub-grid mesoscale eddy kinetic energy budget.", &
@@ -1060,7 +1064,7 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
                  "If true, use an alternative formula for computing the (equilibrium)"//&
                  "initial value of MEKE.", default=.false.)
   call get_param(param_file, mdl, "MEKE_EQUILIBRIUM_RESTORING", CS%MEKE_equilibrium_restoring, &
-                 "If true, restore MEKE back to its equilibrium value, which is calculated at"//&
+                 "If true, restore MEKE back to its equilibrium value, which is calculated at "//&
                  "each time step.", default=.false.)
   if (CS%MEKE_equilibrium_restoring) then
     call get_param(param_file, mdl, "MEKE_RESTORING_TIMESCALE", MEKE_restoring_timescale, &
@@ -1151,11 +1155,11 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   call get_param(param_file, mdl, "MEKE_ALPHA_RHINES", CS%aRhines, &
                  "If positive, is a coefficient weighting the Rhines scale "//&
                  "in the expression for mixing length used in MEKE-derived diffusivity.", &
-                 units="nondim", default=0.05)
+                 units="nondim", default=0.0)
   call get_param(param_file, mdl, "MEKE_ALPHA_EADY", CS%aEady, &
                  "If positive, is a coefficient weighting the Eady length scale "//&
                  "in the expression for mixing length used in MEKE-derived diffusivity.", &
-                 units="nondim", default=0.05)
+                 units="nondim", default=0.0)
   call get_param(param_file, mdl, "MEKE_ALPHA_FRICT", CS%aFrict, &
                  "If positive, is a coefficient weighting the frictional arrest scale "//&
                  "in the expression for mixing length used in MEKE-derived diffusivity.", &
