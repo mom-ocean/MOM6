@@ -726,11 +726,13 @@ end subroutine diagnoseMLDbyDensityDifference
 
 !> Diagnose a mixed layer depth (MLD) determined by the depth a given energy value would mix.
 !> This routine is appropriate in MOM_diabatic_driver due to its position within the time stepping.
-subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, diagPtr)
+subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
+  ! Note that gravity is assumed constant everywhere and divided out of all calculations.
+  integer, dimension(3),   intent(in) :: id_MLD      !< Energy output diag IDs
   type(ocean_grid_type),   intent(in) :: G           !< Grid type
   type(verticalGrid_type), intent(in) :: GV          !< ocean vertical grid structure
   type(unit_scale_type),   intent(in) :: US          !< A dimensional unit scaling type
-  integer, dimension(3),   intent(in) :: id_MLD    !< Handle (ID) of MLD diagnostics
+  real, dimension(3),      intent(in) :: Mixing_Energy !< Energy values for up to 5 MLDs
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in) :: h           !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(in) :: tv          !< Structure containing pointers to any
@@ -745,7 +747,6 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, diagPtr)
   real :: Rho_MixedLayer, H_MixedLayer
 
   real, parameter :: Surface  = 0.0
-  real, parameter, dimension(3) :: Mixing_Energy = (/25.,2500.,250000./)
 
   real :: PE_Column_before, PE_Column_Target, PE_column_0, PE_column_N
   real :: Rho_MixedLayer_0, H_MixedLayer_0, Zc_MixedLayer_0, PE_MixedLayer_0
@@ -788,7 +789,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, diagPtr)
 
           rho_mixedlayer = 0.
           h_mixedlayer = 0.
-          PE_threshold = Mixing_Energy(iM)/GV%g_earth*1.e-4
+          PE_threshold = Mixing_Energy(iM)/GV%g_earth*1.e-4!Fixed non-dim threshold of 0.01%
 
           do k=1,NZ
 
@@ -886,6 +887,8 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, diagPtr)
             endif
             mld(i,j,iM) = H_MixedLayer
           enddo
+        else
+          mld(:,:,iM) = -1.e8 ! This shouldn't be seen, but if it is set it to something obviously wrong.
         endif
       enddo
     enddo
@@ -898,6 +901,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, diagPtr)
   return
 end subroutine diagnoseMLDbyEnergy
 
+!> Compute the integrated PE for a column, in J/m2/grav
 subroutine PE_Kernel(PE, NK, Z_L, Z_U, Rho_c )
   integer :: NK
   real, intent(in), dimension(NK) :: Z_L, Z_U, Rho_c
@@ -906,6 +910,7 @@ subroutine PE_Kernel(PE, NK, Z_L, Z_U, Rho_c )
 
   PE = 0.0
   do k=1,NK
+    !PE_layer = int rho z dz = rho_layer int z dz = rho_layer 0.5 * (Z_U^2-Z_L^2) 
     PE = PE + (Rho_c(k))*0.5*(Z_U(k)**2-Z_L(k)**2)
   enddo
 

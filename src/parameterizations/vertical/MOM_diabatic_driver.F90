@@ -166,6 +166,7 @@ type, public:: diabatic_CS; private
   real :: MLDdensityDifference       !< Density difference used to determine MLD_user [R ~> kg m-3]
   real :: dz_subML_N2                !< The distance over which to calculate a diagnostic of the
                                      !! average stratification at the base of the mixed layer [Z ~> m].
+  real :: MLD_EN_VALS(3)             !< Energy values for energy mixed layer diagnostics
 
   !>@{ Diagnostic IDs
   integer :: id_cg1      = -1                 ! diag handle for mode-1 speed (BDM)
@@ -176,7 +177,7 @@ type, public:: diabatic_CS; private
   integer :: id_Kd_heat  = -1, id_Kd_salt  = -1, id_Kd_interface = -1, id_Kd_ePBL  = -1
   integer :: id_Tdif     = -1, id_Tadv     = -1, id_Sdif         = -1, id_Sadv     = -1
   integer :: id_MLD_003  = -1, id_MLD_0125  = -1, id_MLD_user     = -1, id_mlotstsq = -1
-  integer :: id_MLD_EN25 = -1, id_MLD_EN2500 = -1, id_MLD_EN250000 = -1
+  integer :: id_MLD_EN1 = -1, id_MLD_EN2 = -1, id_MLD_EN3= -1
   integer :: id_subMLN2  = -1
 
   ! diagnostic for fields prior to applying diapycnal physics
@@ -429,9 +430,9 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   if (CS%id_MLD_user > 0) then
     call diagnoseMLDbyDensityDifference(CS%id_MLD_user, h, tv, CS%MLDdensityDifference, G, GV, US, CS%diag)
   endif
-  if ((CS%id_MLD_EN25 > 0) .or. (CS%id_MLD_EN2500 > 0) .or. (CS%id_MLD_EN250000 > 0)) then
-    call diagnoseMLDbyEnergy((/CS%id_MLD_EN25, CS%id_MLD_EN2500, CS%id_MLD_EN250000/),&
-         h, tv, G, GV, US, CS%diag)
+  if ((CS%id_MLD_EN1 > 0) .or. (CS%id_MLD_EN2 > 0) .or. (CS%id_MLD_EN3 > 0)) then
+    call diagnoseMLDbyEnergy((/CS%id_MLD_EN1, CS%id_MLD_EN2, CS%id_MLD_EN3/),&
+         h, tv, G, GV, US, CS%MLD_EN_VALS, CS%diag)
   endif
   if (CS%use_int_tides) then
     if (CS%id_cg1 > 0) call post_data(CS%id_cg1, cn_IGW(:,:,1),CS%diag)
@@ -3425,12 +3426,26 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
         units='m2', conversion=US%Z_to_m**2)
     CS%id_MLD_0125 = register_diag_field('ocean_model', 'MLD_0125', diag%axesT1, Time, &
         'Mixed layer depth (delta rho = 0.125)', 'm', conversion=US%Z_to_m)
-    CS%id_MLD_EN25 = register_diag_field('ocean_model', 'MLD_EN_25', diag%axesT1, Time, &
-        'Mixed layer depth (Energy = 25 J/m2)', 'm', conversion=US%Z_to_m)
-    CS%id_MLD_EN2500 = register_diag_field('ocean_model', 'MLD_EN_2500', diag%axesT1, Time, &
-        'Mixed layer depth (Energy = 2500 J/m2)', 'm', conversion=US%Z_to_m)
-    CS%id_MLD_EN250000 = register_diag_field('ocean_model', 'MLD_EN_250000', diag%axesT1, Time, &
-        'Mixed layer depth (Energy = 250000 J/m2)', 'm', conversion=US%Z_to_m)
+    CS%id_MLD_EN1 = register_diag_field('ocean_model', 'MLD_EN1', diag%axesT1, Time, &
+         'Mixed layer depth for energy value 1 (Energy set by MLD_EN_VALS)', &
+         'm', conversion=US%Z_to_m)
+    CS%id_MLD_EN2 = register_diag_field('ocean_model', 'MLD_EN2', diag%axesT1, Time, &
+         'Mixed layer depth for energy value 2 (Energy set by MLD_EN_VALS)', &
+         'm', conversion=US%Z_to_m)
+    CS%id_MLD_EN3 = register_diag_field('ocean_model', 'MLD_EN3', diag%axesT1, Time, &
+         'Mixed layer depth for energy value 3 (Energy set by MLD_EN_VALS)', &
+         'm', conversion=US%Z_to_m)
+    if ((CS%id_MLD_EN1>0) .or. (CS%id_MLD_EN2>0) .or.  (CS%id_MLD_EN3>0)) then
+      call get_param(param_file, mdl, "MLD_EN_VALS", CS%MLD_EN_VALS, &
+           "The energy values used to compute MLDs.  If not set (or all set to 0.), the "//&
+           "default will overwrite to 25., 2500., 250000.",units='J/m2', default=0., &
+           scale=US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**2)
+      if ((CS%MLD_EN_VALS(1)==0.).and.(CS%MLD_EN_VALS(2)==0.).and.(CS%MLD_EN_VALS(3)==0.)) then
+         CS%MLD_EN_VALS = (/25.*US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**2,&
+                            2500.*US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**2,&
+                            250000.*US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**2/)
+      endif
+    endif
     CS%id_subMLN2  = register_diag_field('ocean_model', 'subML_N2', diag%axesT1, Time, &
         'Squared buoyancy frequency below mixed layer', 's-2', conversion=US%s_to_T**2)
     CS%id_MLD_user = register_diag_field('ocean_model', 'MLD_user', diag%axesT1, Time, &
