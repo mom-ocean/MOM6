@@ -2393,33 +2393,15 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     endif
 
     if (use_ice_shelf) then
-      ! TODO: Turn this into a function?
-!      if (.not. file_exists(ice_shelf_file, G_in%Domain)) &
-!        call MOM_error(FATAL, "MOM_initialize_state: Unable to open shelf file " &
-!            // trim(ice_shelf_file))
-
-!      allocate(area_shelf_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed))
-!      call MOM_read_data(ice_shelf_file, trim(area_varname), area_shelf_in, &
-!          G_in%Domain, scale=US%m_to_L**2)
-
-      ! Initialize frac_shelf_h with zeros (open water everywhere)
       allocate(frac_shelf_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed))
       frac_shelf_in(:,:) = 0.0
       allocate(CS%frac_shelf_h(isd:ied, jsd:jed))
       CS%frac_shelf_h(:,:) = 0.0
       call ice_shelf_query(ice_shelf_CSp,G,CS%frac_shelf_h)
+      ! MOM_initialize_state is using the  unrotated metric
       call rotate_array(CS%frac_shelf_h, -turns, frac_shelf_in)
-
-
-
-      ! Compute fractional ice shelf coverage of h
-!      do j = G_in%jsd, G_in%jed ; do i = G_in%isd, G_in%ied
-!        if (G_in%areaT(i,j) > 0.0) &
-!          frac_shelf_in(i,j) = area_shelf_in(i,j) / G_in%areaT(i,j)
-!      enddo; enddo
       ! TODO: Verify that pass_var is needed here?
       call pass_var(frac_shelf_in, G_in%Domain)
-!      deallocate(area_shelf_in)
     endif
 
     if (use_ice_shelf) then
@@ -2446,15 +2428,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       call MOM_error(FATAL, "Index rotation of non-ALE sponge is not yet implemented.")
     endif
 
-!    if (use_ice_shelf ) then
-!      allocate(CS%frac_shelf_h(isd:ied, jsd:jed))
-!      CS%frac_shelf_h(:,:) = 0.0
-
-!      call rotate_array(frac_shelf_in, turns, CS%frac_shelf_h)
-      ! TODO: Verify if pass_var is needed
-!      call pass_var(CS%frac_shelf_h, G%Domain)
-!    endif
-
     if (associated(ALE_sponge_in_CSp)) then
       call rotate_ALE_sponge(ALE_sponge_in_CSp, G_in, CS%ALE_sponge_CSp, G, turns, param_file)
       call update_ALE_sponge_field(CS%ALE_sponge_CSp, T_in, G, GV, CS%T)
@@ -2475,32 +2448,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       deallocate(frac_shelf_in)
   else
     if (use_ice_shelf) then
-      ! TODO: Yes, this should be a function...
- !      if (.not.file_exists(ice_shelf_file, G%Domain)) &
-!         call MOM_error(FATAL, "MOM_initialize_state: Unable to open shelf file " &
-!             // trim(ice_shelf_file))
-
-!       allocate(area_shelf_in(isd:ied, jsd:jed))
-!       call MOM_read_data(ice_shelf_file, trim(area_varname), area_shelf_in, &
-!           G%Domain, scale=US%m_to_L**2)
-
-!       ! Initialize frac_shelf_h with zeros (open water everywhere)
-!       allocate(CS%frac_shelf_h(isd:ied, jsd:jed))
-!       CS%frac_shelf_h(:,:) = 0.0
-
-!       ! Compute fractional ice shelf coverage of h
-!       do j = jsd, jed ; do i = isd, ied
-!         if (G%areaT(i,j) > 0.0) &
-!           CS%frac_shelf_h(i,j) = area_shelf_in(i,j) / G%areaT(i,j)
-!       enddo; enddo
-!       call pass_var(CS%frac_shelf_h,G%Domain)
-!       deallocate(area_shelf_in)
-! !
       allocate(CS%frac_shelf_h(isd:ied, jsd:jed))
       CS%frac_shelf_h(:,:) = 0.0
       call ice_shelf_query(ice_shelf_CSp,G,CS%frac_shelf_h)
-!
-!
+
       call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, US, &
           param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
           CS%sponge_CSp, CS%ALE_sponge_CSp, CS%OBC, Time_in, &
@@ -2512,7 +2463,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     endif
   endif
 
-  ! TODO: Move into the function?
   if (use_ice_shelf) &
     call hchksum(CS%frac_shelf_h, "MOM:frac_shelf_h", G%HI, &
         haloshift=0, scale=GV%H_to_m)
