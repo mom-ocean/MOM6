@@ -141,6 +141,7 @@ use MOM_offline_main,          only : offline_redistribute_residual, offline_dia
 use MOM_offline_main,          only : offline_fw_fluxes_into_ocean, offline_fw_fluxes_out_ocean
 use MOM_offline_main,          only : offline_advection_layer, offline_transport_end
 use MOM_ALE,                   only : ale_offline_tracer_final, ALE_main_offline
+use MOM_ice_shelf,             only : ice_shelf_CS, ice_shelf_query
 
 implicit none ; private
 
@@ -1598,7 +1599,7 @@ end subroutine step_offline
 !! initializing the ocean state variables, and initializing subsidiary modules
 subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                           Time_in, offline_tracer_mode, input_restart_file, diag_ptr, &
-                          count_calls, tracer_flow_CSp)
+                          count_calls, tracer_flow_CSp,  ice_shelf_CSp)
   type(time_type), target,   intent(inout) :: Time        !< model time, set in this routine
   type(time_type),           intent(in)    :: Time_init   !< The start time for the coupled model's calendar
   type(param_file_type),     intent(out)   :: param_file  !< structure indicating parameter file to parse
@@ -1619,6 +1620,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   logical,         optional, intent(in)    :: count_calls !< If true, nstep_tot counts the number of
                                                           !! calls to step_MOM instead of the number of
                                                           !! dynamics timesteps.
+  type(ice_shelf_CS), optional,     pointer :: ice_shelf_CSp !< A pointer to an ice shelf control structure
   ! local variables
   type(ocean_grid_type),  pointer :: G => NULL()    ! A pointer to the metric grid use for the run
   type(ocean_grid_type),  pointer :: G_in => NULL() ! Pointer to the input grid
@@ -2030,17 +2032,22 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       "initialize_MOM: A bulk mixed layer can only be used with T & S as "//&
       "state variables. Add USE_EOS = True to MOM_input.")
 
-  call get_param(param_file, 'MOM', "ICE_SHELF", use_ice_shelf, default=.false., do_not_log=.true.)
-  if (use_ice_shelf) then
-     inputdir = "." ;  call get_param(param_file, 'MOM', "INPUTDIR", inputdir)
-     inputdir = slasher(inputdir)
-     call get_param(param_file, 'MOM', "ICE_THICKNESS_FILE", ice_shelf_file, &
-                    "The file from which the ice bathymetry and area are read.", &
-                    fail_if_missing=.true.)
-     call get_param(param_file, 'MOM', "ICE_AREA_VARNAME", area_varname, &
-                    "The name of the area variable in ICE_THICKNESS_FILE.", &
-                    fail_if_missing=.true.)
+  use_ice_shelf=.false.
+  if (present(ice_shelf_CSp)) then
+    if (associated(ice_shelf_CSp)) use_ice_shelf=.true.
   endif
+
+  ! call get_param(param_file, 'MOM', "ICE_SHELF", use_ice_shelf, default=.false., do_not_log=.true.)
+  ! if (use_ice_shelf) then
+  !    inputdir = "." ;  call get_param(param_file, 'MOM', "INPUTDIR", inputdir)
+  !    inputdir = slasher(inputdir)
+  !    call get_param(param_file, 'MOM', "ICE_THICKNESS_FILE", ice_shelf_file, &
+  !                   "The file from which the ice bathymetry and area are read.", &
+  !                   fail_if_missing=.true.)
+  !    call get_param(param_file, 'MOM', "ICE_AREA_VARNAME", area_varname, &
+  !                   "The name of the area variable in ICE_THICKNESS_FILE.", &
+  !                   fail_if_missing=.true.)
+  ! endif
 
 
   CS%ensemble_ocean=.false.
@@ -2387,26 +2394,32 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
     if (use_ice_shelf) then
       ! TODO: Turn this into a function?
-      if (.not. file_exists(ice_shelf_file, G_in%Domain)) &
-        call MOM_error(FATAL, "MOM_initialize_state: Unable to open shelf file " &
-            // trim(ice_shelf_file))
+!      if (.not. file_exists(ice_shelf_file, G_in%Domain)) &
+!        call MOM_error(FATAL, "MOM_initialize_state: Unable to open shelf file " &
+!            // trim(ice_shelf_file))
 
-      allocate(area_shelf_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed))
-      call MOM_read_data(ice_shelf_file, trim(area_varname), area_shelf_in, &
-          G_in%Domain, scale=US%m_to_L**2)
+!      allocate(area_shelf_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed))
+!      call MOM_read_data(ice_shelf_file, trim(area_varname), area_shelf_in, &
+!          G_in%Domain, scale=US%m_to_L**2)
 
       ! Initialize frac_shelf_h with zeros (open water everywhere)
       allocate(frac_shelf_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed))
       frac_shelf_in(:,:) = 0.0
+      allocate(CS%frac_shelf_h(isd:ied, jsd:jed))
+      CS%frac_shelf_h(:,:) = 0.0
+      call ice_shelf_query(ice_shelf_CSp,G,CS%frac_shelf_h)
+      call rotate_array(CS%frac_shelf_h, -turns, frac_shelf_in)
+
+
 
       ! Compute fractional ice shelf coverage of h
-      do j = G_in%jsd, G_in%jed ; do i = G_in%isd, G_in%ied
-        if (G_in%areaT(i,j) > 0.0) &
-          frac_shelf_in(i,j) = area_shelf_in(i,j) / G_in%areaT(i,j)
-      enddo; enddo
+!      do j = G_in%jsd, G_in%jed ; do i = G_in%isd, G_in%ied
+!        if (G_in%areaT(i,j) > 0.0) &
+!          frac_shelf_in(i,j) = area_shelf_in(i,j) / G_in%areaT(i,j)
+!      enddo; enddo
       ! TODO: Verify that pass_var is needed here?
       call pass_var(frac_shelf_in, G_in%Domain)
-      deallocate(area_shelf_in)
+!      deallocate(area_shelf_in)
     endif
 
     if (use_ice_shelf) then
@@ -2433,14 +2446,14 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       call MOM_error(FATAL, "Index rotation of non-ALE sponge is not yet implemented.")
     endif
 
-    if (use_ice_shelf ) then
-      allocate(CS%frac_shelf_h(isd:ied, jsd:jed))
-      CS%frac_shelf_h(:,:) = 0.0
+!    if (use_ice_shelf ) then
+!      allocate(CS%frac_shelf_h(isd:ied, jsd:jed))
+!      CS%frac_shelf_h(:,:) = 0.0
 
-      call rotate_array(frac_shelf_in, turns, CS%frac_shelf_h)
+!      call rotate_array(frac_shelf_in, turns, CS%frac_shelf_h)
       ! TODO: Verify if pass_var is needed
-      call pass_var(CS%frac_shelf_h, G%Domain)
-    endif
+!      call pass_var(CS%frac_shelf_h, G%Domain)
+!    endif
 
     if (associated(ALE_sponge_in_CSp)) then
       call rotate_ALE_sponge(ALE_sponge_in_CSp, G_in, CS%ALE_sponge_CSp, G, turns, param_file)
@@ -2463,26 +2476,31 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   else
     if (use_ice_shelf) then
       ! TODO: Yes, this should be a function...
-      if (.not.file_exists(ice_shelf_file, G%Domain)) &
-        call MOM_error(FATAL, "MOM_initialize_state: Unable to open shelf file " &
-            // trim(ice_shelf_file))
+ !      if (.not.file_exists(ice_shelf_file, G%Domain)) &
+!         call MOM_error(FATAL, "MOM_initialize_state: Unable to open shelf file " &
+!             // trim(ice_shelf_file))
 
-      allocate(area_shelf_in(isd:ied, jsd:jed))
-      call MOM_read_data(ice_shelf_file, trim(area_varname), area_shelf_in, &
-          G%Domain, scale=US%m_to_L**2)
+!       allocate(area_shelf_in(isd:ied, jsd:jed))
+!       call MOM_read_data(ice_shelf_file, trim(area_varname), area_shelf_in, &
+!           G%Domain, scale=US%m_to_L**2)
 
-      ! Initialize frac_shelf_h with zeros (open water everywhere)
+!       ! Initialize frac_shelf_h with zeros (open water everywhere)
+!       allocate(CS%frac_shelf_h(isd:ied, jsd:jed))
+!       CS%frac_shelf_h(:,:) = 0.0
+
+!       ! Compute fractional ice shelf coverage of h
+!       do j = jsd, jed ; do i = isd, ied
+!         if (G%areaT(i,j) > 0.0) &
+!           CS%frac_shelf_h(i,j) = area_shelf_in(i,j) / G%areaT(i,j)
+!       enddo; enddo
+!       call pass_var(CS%frac_shelf_h,G%Domain)
+!       deallocate(area_shelf_in)
+! !
       allocate(CS%frac_shelf_h(isd:ied, jsd:jed))
       CS%frac_shelf_h(:,:) = 0.0
-
-      ! Compute fractional ice shelf coverage of h
-      do j = jsd, jed ; do i = isd, ied
-        if (G%areaT(i,j) > 0.0) &
-          CS%frac_shelf_h(i,j) = area_shelf_in(i,j) / G%areaT(i,j)
-      enddo; enddo
-      call pass_var(CS%frac_shelf_h,G%Domain)
-      deallocate(area_shelf_in)
-
+      call ice_shelf_query(ice_shelf_CSp,G,CS%frac_shelf_h)
+!
+!
       call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, US, &
           param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
           CS%sponge_CSp, CS%ALE_sponge_CSp, CS%OBC, Time_in, &

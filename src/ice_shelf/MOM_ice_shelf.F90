@@ -65,7 +65,7 @@ implicit none ; private
 #  define GRID_SYM_ .false.
 #endif
 
-public shelf_calc_flux, initialize_ice_shelf, ice_shelf_end
+public shelf_calc_flux, initialize_ice_shelf, ice_shelf_end, ice_shelf_query
 public ice_shelf_save_restart, solo_step_ice_shelf, add_shelf_forces
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
@@ -1966,6 +1966,28 @@ subroutine update_shelf_mass(G, US, CS, ISS, Time)
 
 end subroutine update_shelf_mass
 
+!> Save the ice shelf restart file
+subroutine ice_shelf_query(CS, G, frac_shelf_h)
+  type(ice_shelf_CS),         pointer    :: CS !< ice shelf control structure
+  type(ocean_grid_type), intent(in)      :: G  !< A pointer to an ocean grid control structure.
+  real, optional, dimension(SZI_(G),SZJ_(G))  :: frac_shelf_h !<
+                                      !< Ice shelf area fraction [nodim].
+
+  logical :: do_frac=.false.
+  integer :: i,j
+
+  if (present(frac_shelf_h)) do_frac=.true.
+
+  if (do_frac) then
+     do j=G%jsd,G%jed
+       do i=G%isd,G%ied
+         frac_shelf_h(i,j)=0.0
+         if (G%areaT(i,j)>0.) frac_shelf_h(i,j) = CS%ISS%area_shelf_h(i,j) / G%areaT(i,j)
+       enddo
+     enddo
+   endif
+
+end subroutine ice_shelf_query
 !> Save the ice shelf restart file
 subroutine ice_shelf_save_restart(CS, Time, directory, time_stamped, filename_suffix)
   type(ice_shelf_CS),         pointer    :: CS !< ice shelf control structure
