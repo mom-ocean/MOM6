@@ -761,7 +761,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
   real :: Guess_Fraction, PE_Threshold
   real :: A, B, C, dz_increment
   logical :: Not_Converged
-  integer :: IT, ITT
+  integer :: IT
   real :: dz_max_incr
 
   integer :: i, j, is, ie, js, je, k, nz, id_N2, id_SQ, iM
@@ -832,12 +832,9 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
                    (/Rho_c(k)/) )
 
               PE_column_N = PE_MixedLayer_N + PE_below + PE_interior
-              ITT = 0
               do IT = 1,20 !Do the iteration up to 20 times
                 Not_Converged = (abs(PE_column_N-PE_column_target)>PE_Threshold)
                 if (Not_Converged) then
-
-                  ITT = ITT+1
 
                   A = PE_column_target - PE_column_N
                   B = PE_column_N - PE_column_0
