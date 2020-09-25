@@ -1,4 +1,3 @@
-
 !> Provides functions for some diabatic processes such as fraxil, brine rejection,
 !! tendency due to surface flux divergence.
 module MOM_diabatic_aux
@@ -758,18 +757,25 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
 
   real :: rho_c_mixed_n, zc_mixed_n
 
-  real :: Guess_Fraction, PE_Threshold
+  real :: Guess_Fraction, PE_Threshold(3), PE_Threshold_fraction
   real :: A, B, C, dz_increment
   logical :: Not_Converged
   integer :: IT
   real :: dz_max_incr
-
+  real :: igrav
   integer :: i, j, is, ie, js, je, k, nz, id_N2, id_SQ, iM
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   pRef_MLD(:) = 0.0
   mld(:,:,:) = 0.0
+  igrav = 1./GV%g_earth
+  PE_Threshold_fraction = 1.e-4 !Fixed threshold of 0.01%, could be runtime.
+
+  do iM=1,3
+    PE_threshold(iM) = Mixing_Energy(iM)*igrav*PE_Threshold_fraction
+  enddo
+
   do j=js,je
     do i=is,ie
       call calculate_density(tv%T(i,j,:), tv%S(i,j,:), pRef_MLD, rho_c, 1, nz, &
@@ -786,11 +792,11 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
         if (id_MLD(iM)>0) then
           ! Compute PE of column
           call PE_Kernel(PE_Column_before,NZ,Z_L,Z_U,Rho_c)
-          PE_Column_Target = PE_Column_before + Mixing_Energy(iM)/GV%g_earth
+          PE_Column_Target = PE_Column_before + Mixing_Energy(iM)*igrav
 
           rho_mixedlayer = 0.
           h_mixedlayer = 0.
-          PE_threshold = Mixing_Energy(iM)/GV%g_earth*1.e-4!Fixed non-dim threshold of 0.01%
+
 
           do k=1,NZ
 
@@ -832,16 +838,21 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
                    (/Rho_c(k)/) )
 
               PE_column_N = PE_MixedLayer_N + PE_below + PE_interior
+              ! There is a question if an iteration is the most efficient
+              ! way to solve this problem.  The expression for the layer fraction that
+              ! is not mixed is cubic and the iteration converges fairly rapidly.
+              ! So the answer is tbd, but this simple iteration serves the purpose
+              ! for now.
               do IT = 1,20 !Do the iteration up to 20 times
-                Not_Converged = (abs(PE_column_N-PE_column_target)>PE_Threshold)
+                Not_Converged = (abs(PE_column_N-PE_column_target)>PE_Threshold(iM))
                 if (Not_Converged) then
 
                   A = PE_column_target - PE_column_N
                   B = PE_column_N - PE_column_0
                   C = dz_mixed_N - dz_mixed_0
 
-                  if (abs(b)>PE_threshold) then
-                    dz_increment = A*C/B
+                  if (abs(b)>PE_threshold(iM)) then
+                    dz_increment = (A*C)/B
                   else
                     dz_increment = sign(dz(k)*1.e-4,A)
                   endif
@@ -908,7 +919,7 @@ subroutine PE_Kernel(PE, NK, Z_L, Z_U, Rho_c )
 
   PE = 0.0
   do k=1,NK
-    !PE_layer = int rho z dz = rho_layer int z dz = rho_layer 0.5 * (Z_U^2-Z_L^2) 
+    !PE_layer = int rho z dz = rho_layer int z dz = rho_layer 0.5 * (Z_U^2-Z_L^2)
     PE = PE + (Rho_c(k))*0.5*(Z_U(k)**2-Z_L(k)**2)
   enddo
 
