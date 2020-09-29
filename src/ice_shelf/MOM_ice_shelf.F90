@@ -1464,8 +1464,11 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 
 
   if (PRESENT(sfc_state_in)) then
+     allocate(sfc_state)
+     ! assuming frazil is enabled in ocean. This could break some configurations?
+     call allocate_surface_state(sfc_state_in, CS%Grid_in, use_temperature=.true.,&
+          do_integrals=.true.,omit_frazil=.false.,use_iceshelves=.true.)
      if (CS%rotate_index) then
-        allocate(sfc_state)
         call rotate_surface_state(sfc_state_in,CS%Grid_in, sfc_state,CS%Grid,CS%turns)
      else
         sfc_state=>sfc_state_in
