@@ -28,6 +28,7 @@ program MOM_main
   use MOM_cpu_clock,       only : CLOCK_COMPONENT
   use MOM_diag_mediator,   only : enable_averaging, disable_averaging, diag_mediator_end
   use MOM_diag_mediator,   only : diag_ctrl, diag_mediator_close_registration
+  use MOM_IS_diag_mediator,   only : diag_IS_ctrl=>diag_ctrl, diag_mediator_IS_end=>diag_mediator_end
   use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
   use MOM,                 only : extract_surface_state, finish_MOM_initialization
   use MOM,                 only : get_MOM_state_elements, MOM_state_is_synchronized
@@ -61,7 +62,7 @@ program MOM_main
   use MOM_verticalGrid,    only : verticalGrid_type
   use MOM_write_cputime,   only : write_cputime, MOM_write_cputime_init
   use MOM_write_cputime,   only : write_cputime_start_clock, write_cputime_CS
-
+  use MOM_get_input,       only : get_MOM_input
   use ensemble_manager_mod, only : ensemble_manager_init, get_ensemble_size
   use ensemble_manager_mod, only : ensemble_pelist_setup
   use mpp_mod, only : set_current_pelist => mpp_set_current_pelist
@@ -198,8 +199,10 @@ program MOM_main
   type(MOM_restart_CS),      pointer :: &
     restart_CSp => NULL()     !< A pointer to the restart control structure
                               !! that will be used for MOM restart files.
-  type(diag_ctrl), pointer :: &
-    diag => NULL()            !< A pointer to the diagnostic regulatory structure
+  type(diag_ctrl),           pointer :: &
+       diag => NULL()         !< A pointer to the diagnostic regulatory structure
+  type(diag_IS_ctrl), pointer :: &
+      diag_IS => NULL()       !< A pointer to the diagnostic regulatory structure
   !-----------------------------------------------------------------------
 
   character(len=4), parameter :: vers_num = 'v2.0'
@@ -305,14 +308,19 @@ program MOM_main
     Time = Start_time
   endif
 
+  ! Read paths and filenames from namelist and store in "dirs".
+  ! Also open the parsed input parameter file(s) and setup param_file.
+  call get_MOM_input(param_file, dirs)
+
   call get_param(param_file, mod_name, "ICE_SHELF", use_ice_shelf, &
-                 "If true, enables the ice shelf model.", default=.false.)
+       "If true, enables the ice shelf model.", default=.false.)
   if (use_ice_shelf) then
     ! These arrays are not initialized in most solo cases, but are needed
     ! when using an ice shelf
     call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, &
-                              diag, forces, fluxes, sfc_state)
+                              diag_IS, forces, fluxes, sfc_state)
   endif
+  call close_param_file(param_file)
 
   if (sum(date) >= 0) then
     call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, restart_CSp, &
@@ -440,6 +448,7 @@ program MOM_main
   ! Close the param_file.  No further parsing of input is possible after this.
   call close_param_file(param_file)
   call diag_mediator_close_registration(diag)
+
 
   ! Write out a time stamp file.
   if (calendar_type /= NO_CALENDAR) then
@@ -659,6 +668,9 @@ program MOM_main
 
   call callTree_waypoint("End MOM_main")
   call diag_mediator_end(Time, diag, end_diag_manager=.true.)
+  if (use_ice_shelf) then
+     call diag_mediator_IS_end(Time, diag_IS)
+  endif
   if (cpu_steps > 0) call write_cputime(Time, ns-1, write_CPU_CSp, call_end=.true.)
   call cpu_clock_end(termClock)
 
