@@ -675,7 +675,11 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   real :: G_rho0        ! g/Rho0 [L2 R-1 Z-1 T-2 ~> m4 kg-1 s-2].
   real :: N2_floor      ! A floor for N2 to avoid degeneracy in the elliptic solver
                         ! times unit conversion factors [T-2 L2 Z-2 ~> s-2]
-  real :: dTdi2, dTdj2  ! pot. temp. differences, squared.
+  real :: Tl(5)         ! copy and T in local stencil [degC]
+  real :: mn_T          ! mean of T in local stencil [degC]
+  real :: mn_T2         ! mean of T**2 in local stencil [degC]
+  real :: hl(5)         ! Copy of local stencil of H [H ~> m]
+  real :: r_sm_H        ! Reciprocal of sum of H in local stencil [H-1 ~> m-1]
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: Tsgs2 ! Sub-grid temperature variance [degC2]
 
   real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: diag_sfn_x, diag_sfn_unlim_x ! Diagnostics
@@ -730,7 +734,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 !$OMP parallel default(none) shared(is,ie,js,je,h_avail_rsum,pres,h_avail,I4dt, use_Stanley, &
 !$OMP                               CS,G,GV,tv,h,h_frac,nz,uhtot,Work_u,vhtot,Work_v,Tsgs2,T, &
 !$OMP                               diag_sfn_x, diag_sfn_y, diag_sfn_unlim_x, diag_sfn_unlim_y ) &
-!$OMP          private(dTdi2,dTdj2)
+!$OMP          private(hl,r_sm_H,Tl,mn_T,mn_T2)
   ! Find the maximum and minimum permitted streamfunction.
 !$OMP do
   do j=js-1,je+1 ; do i=is-1,ie+1
@@ -746,16 +750,37 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   if (use_Stanley) then
 !$OMP do
     do k=1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
-      ! SGS variance in i-direction [degC2]
-      dTdi2 = ( ( G%mask2dCu(I  ,j) * G%IdxCu(I  ,j) * ( T(i+1,j,k) - T(i,j,k) ) &
-                + G%mask2dCu(I-1,j) * G%IdxCu(I-1,j) * ( T(i,j,k) - T(i-1,j,k) ) &
-                ) * G%dxT(i,j) * 0.5 )**2
-      ! SGS variance in j-direction [degC2]
-      dTdj2 = ( ( G%mask2dCv(i,J  ) * G%IdyCv(i,J  ) * ( T(i,j+1,k) - T(i,j,k) ) &
-                + G%mask2dCv(i,J-1) * G%IdyCv(i,J-1) * ( T(i,j,k) - T(i,j-1,k) ) &
-                ) * G%dyT(i,j) * 0.5 )**2
-      Tsgs2(i,j,k) = CS%Stanley_det_coeff * 0.5 * ( dTdi2 + dTdj2 )
-    enddo ; enddo ; enddo
+      !! SGS variance in i-direction [degC2]
+      !dTdi2 = ( ( G%mask2dCu(I  ,j) * G%IdxCu(I  ,j) * ( T(i+1,j,k) - T(i,j,k) ) &
+      !          + G%mask2dCu(I-1,j) * G%IdxCu(I-1,j) * ( T(i,j,k) - T(i-1,j,k) ) &
+      !          ) * G%dxT(i,j) * 0.5 )**2
+      !! SGS variance in j-direction [degC2]
+      !dTdj2 = ( ( G%mask2dCv(i,J  ) * G%IdyCv(i,J  ) * ( T(i,j+1,k) - T(i,j,k) ) &
+      !          + G%mask2dCv(i,J-1) * G%IdyCv(i,J-1) * ( T(i,j,k) - T(i,j-1,k) ) &
+      !          ) * G%dyT(i,j) * 0.5 )**2
+      !Tsgs2(i,j,k) = CS%Stanley_det_coeff * 0.5 * ( dTdi2 + dTdj2 )
+      ! This block does a thickness weighted variance calculation and helps control for
+      ! extreme gradients along layers which are vanished against topography. It is
+      ! still a poor approximation in the interior when coordinates are strongly tilted.
+      hl(1) = h(i,j,k) * G%mask2dT(i,j)
+      hl(2) = h(i-1,j,k) * G%mask2dCu(I-1,j)
+      hl(3) = h(i+1,j,k) * G%mask2dCu(I,j)
+      hl(4) = h(i,j-1,k) * G%mask2dCv(i,J-1)
+      hl(5) = h(i,j+1,k) * G%mask2dCv(i,J)
+      r_sm_H = 1. / ( ( hl(1) + ( ( hl(2) + hl(3) ) + ( hl(4) + hl(5) ) ) ) + GV%H_subroundoff )
+      ! Mean of T
+      Tl(1) = T(i,j,k) ; Tl(2) = T(i-1,j,k) ; Tl(3) = T(i+1,j,k)
+      Tl(4) = T(i,j-1,k) ; Tl(5) = T(i,j+1,k)
+      mn_T = ( hl(1)*Tl(1) + ( ( hl(2)*Tl(2) + hl(3)*Tl(3) ) + ( hl(4)*Tl(4) + hl(5)*Tl(5) ) ) ) * r_sm_H
+      ! Adjust T vectors to have zero mean
+      Tl(:) = Tl(:) - mn_T ; mn_T = 0.
+      ! Variance of T
+      mn_T2 = ( hl(1)*Tl(1)*Tl(1) + ( ( hl(2)*Tl(2)*Tl(2) + hl(3)*Tl(3)*Tl(3) ) &
+                                    + ( hl(4)*Tl(4)*Tl(4) + hl(5)*Tl(5)*Tl(5) ) ) ) * r_sm_H
+      ! Variance should be positive but round-off can violate this. Calculating
+      ! variance directly would fix this but requires more operations.
+      Tsgs2(i,j,k) = CS%Stanley_det_coeff * max(0., mn_T2)
+     enddo ; enddo ; enddo
   endif
 !$OMP do
   do j=js-1,je+1
@@ -846,8 +871,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
         if (use_Stanley) then
           ! Correction to the horizontal density gradient due to nonlinearity in
           ! the EOS rectifying SGS temperature anomalies
-          drdiA = drdiA + drho_dT_dT_u(I) * ( Tsgs2(i+1,j,k-1)-Tsgs2(i,j,k-1) )
-          drdiB = drdiB + drho_dT_dT_u(I) * ( Tsgs2(i+1,j,k)-Tsgs2(i,j,k) )
+          drdiA = drdiA + drho_dT_dT_u(I) * 0.5 * ( Tsgs2(i+1,j,k-1)-Tsgs2(i,j,k-1) )
+          drdiB = drdiB + drho_dT_dT_u(I) * 0.5 * ( Tsgs2(i+1,j,k)-Tsgs2(i,j,k) )
         endif
         if (find_work) drdi_u(I,k) = drdiB
 
@@ -1111,8 +1136,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
         if (use_Stanley) then
           ! Correction to the horizontal density gradient due to nonlinearity in
           ! the EOS rectifying SGS temperature anomalies
-          drdjA = drdjA + drho_dT_dT_v(I) * ( Tsgs2(i,j+1,k-1)-Tsgs2(i,j,k-1) )
-          drdjB = drdjB + drho_dT_dT_v(I) * ( Tsgs2(i,j+1,k)-Tsgs2(i,j,k) )
+          drdjA = drdjA + drho_dT_dT_v(I) * 0.5 * ( Tsgs2(i,j+1,k-1)-Tsgs2(i,j,k-1) )
+          drdjB = drdjB + drho_dT_dT_v(I) * 0.5 * ( Tsgs2(i,j+1,k)-Tsgs2(i,j,k) )
         endif
 
         if (find_work) drdj_v(i,k) = drdjB

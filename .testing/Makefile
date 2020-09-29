@@ -136,7 +136,7 @@ BUILD_TARGETS = MOM6 Makefile path_names
 # Compiler flags
 
 # Conditionally build symmetric with coverage support
-COVERAGE=$(if $(REPORT_COVERAGE),"$(FCFLAGS_COVERAGE)",)
+COVERAGE=$(if $(REPORT_COVERAGE),$(FCFLAGS_COVERAGE),)
 
 # .testing dependencies
 # TODO: We should probably build TARGET with the FMS that it was configured
@@ -345,7 +345,6 @@ $(eval $(call CMP_RULE,repro,symmetric repro))
 $(eval $(call CMP_RULE,openmp,symmetric openmp))
 $(eval $(call CMP_RULE,nan,symmetric nan))
 $(foreach d,$(DIMS),$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
-#$(eval $(call CMP_RULE,regression,symmetric target))
 
 # Custom comparison rules
 
