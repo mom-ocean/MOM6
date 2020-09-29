@@ -9,9 +9,11 @@ use MOM_constants, only : hlf
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_COMPONENT, CLOCK_ROUTINE
 use MOM_coms,                 only : num_PEs
-use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : diag_mediator_init, set_diag_mediator_grid, diag_ctrl, time_type
-use MOM_diag_mediator, only : enable_averages, enable_averaging, disable_averaging
+use MOM_IS_diag_mediator, only : post_data, register_diag_field=>register_MOM_IS_diag_field, safe_alloc_ptr
+use MOM_IS_diag_mediator, only : set_axes_info
+use MOM_IS_diag_mediator, only : diag_mediator_init, set_diag_mediator_grid, diag_ctrl, time_type
+use MOM_IS_diag_mediator, only : enable_averages, enable_averaging, disable_averaging
+use MOM_IS_diag_mediator, only : diag_mediator_infrastructure_init, diag_mediator_close_registration
 use MOM_domains, only : MOM_domains_init, clone_MOM_domain
 use MOM_domains, only : pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE, CORNER
 use MOM_dyn_horgrid, only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
@@ -1146,7 +1148,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   type(ocean_grid_type),        pointer       :: ocn_grid   !< The calling ocean model's horizontal grid structure
   type(time_type),              intent(inout) :: Time !< The clock that that will indicate the model time
   type(ice_shelf_CS),           pointer       :: CS   !< A pointer to the ice shelf control structure
-  type(diag_ctrl),    target,   intent(in)    :: diag !< A structure that is used to regulate the diagnostic output.
+  type(diag_ctrl),              pointer       :: diag !< A structure that is used to regulate the diagnostic output.
   type(mech_forcing), optional, pointer       :: forces_in !< A structure with the driving mechanical forces
   type(forcing),      optional, pointer       :: fluxes_in !< A structure containing pointers to any possible
                                                            !! thermodynamic or mass-flux forcing fields.
@@ -1208,6 +1210,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   ! MOM's grid and infrastructure.
   call Get_MOM_Input(dirs=dirs)
 
+  call diag_mediator_infrastructure_init()
+
   ! Determining the internal unit scaling factors for this run.
   call unit_scaling_init(param_file, CS%US)
 
@@ -1254,7 +1258,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     call rotate_dyngrid(dG_in, dG, CS%US, CS%turns)
     call copy_dyngrid_to_MOM_grid(dG,CS%Grid,CS%US)
   else
-    ! call diag_mediator_init(CS%grid,param_file,CS%diag)
      ! this needs to be fixed - will probably break when not using coupled driver 0
     CS%Grid=>CS%Grid_in
     CS%HI=>CS%HI_in
@@ -1268,6 +1271,12 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   endif
   G=>CS%Grid
 
+  allocate(diag)
+  call diag_mediator_init(G, param_file,diag,component='MOM_IceShelf')
+  ! This call sets up the diagnostic axes. These are needed,
+  ! e.g. to generate the target grids below.
+  call set_axes_info(G, param_file, diag)
+
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
@@ -1280,7 +1289,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   ! Convenience pointers
   OG => CS%ocn_grid
   US => CS%US
-  CS%diag => diag
+  CS%diag=>diag
 
   ! Are we being called from the solo ice-sheet driver? When called by the ocean
   ! model solo_ice_sheet_in is not preset.
@@ -1779,13 +1788,13 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   endif
 
 
-  CS%id_area_shelf_h = register_diag_field('ocean_model', 'area_shelf_h', CS%diag%axesT1, CS%Time, &
+  CS%id_area_shelf_h = register_diag_field('ice_shelf_model', 'area_shelf_h', CS%diag%axesT1, CS%Time, &
      'Ice Shelf Area in cell', 'meter-2', conversion=US%L_to_m**2)
-  CS%id_shelf_mass = register_diag_field('ocean_model', 'shelf_mass', CS%diag%axesT1, CS%Time, &
+  CS%id_shelf_mass = register_diag_field('ice_shelf_model', 'shelf_mass', CS%diag%axesT1, CS%Time, &
      'mass of shelf', 'kg/m^2', conversion=US%RZ_to_kg_m2)
-  CS%id_h_shelf = register_diag_field('ocean_model', 'h_shelf', CS%diag%axesT1, CS%Time, &
+  CS%id_h_shelf = register_diag_field('ice_shelf_model', 'h_shelf', CS%diag%axesT1, CS%Time, &
        'ice shelf thickness', 'm', conversion=US%Z_to_m)
-  CS%id_mass_flux = register_diag_field('ocean_model', 'mass_flux', CS%diag%axesT1,&
+  CS%id_mass_flux = register_diag_field('ice_shelf_model', 'mass_flux', CS%diag%axesT1,&
      CS%Time, 'Total mass flux of freshwater across the ice-ocean interface.', &
      'kg/s', conversion=US%RZ_T_to_kg_m2s*US%L_to_m**2)
 
@@ -1794,32 +1803,34 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   else ! use original eq.
     meltrate_conversion = 86400.0*365.0*US%Z_to_m*US%s_to_T / CS%density_ice
   endif
-  CS%id_melt = register_diag_field('ocean_model', 'melt', CS%diag%axesT1, CS%Time, &
+  CS%id_melt = register_diag_field('ice_shelf_model', 'melt', CS%diag%axesT1, CS%Time, &
      'Ice Shelf Melt Rate', 'm yr-1', conversion= meltrate_conversion)
-  CS%id_thermal_driving = register_diag_field('ocean_model', 'thermal_driving', CS%diag%axesT1, CS%Time, &
+  CS%id_thermal_driving = register_diag_field('ice_shelf_model', 'thermal_driving', CS%diag%axesT1, CS%Time, &
      'pot. temp. in the boundary layer minus freezing pot. temp. at the ice-ocean interface.', 'Celsius')
-  CS%id_haline_driving = register_diag_field('ocean_model', 'haline_driving', CS%diag%axesT1, CS%Time, &
+  CS%id_haline_driving = register_diag_field('ice_shelf_model', 'haline_driving', CS%diag%axesT1, CS%Time, &
      'salinity in the boundary layer minus salinity at the ice-ocean interface.', 'psu')
-  CS%id_Sbdry = register_diag_field('ocean_model', 'sbdry', CS%diag%axesT1, CS%Time, &
+  CS%id_Sbdry = register_diag_field('ice_shelf_model', 'sbdry', CS%diag%axesT1, CS%Time, &
      'salinity at the ice-ocean interface.', 'psu')
-  CS%id_u_ml = register_diag_field('ocean_model', 'u_ml', CS%diag%axesCu1, CS%Time, &
+  CS%id_u_ml = register_diag_field('ice_shelf_model', 'u_ml', CS%diag%axesCu1, CS%Time, &
      'Eastward vel. in the boundary layer (used to compute ustar)', 'm s-1', conversion=US%L_T_to_m_s)
-  CS%id_v_ml = register_diag_field('ocean_model', 'v_ml', CS%diag%axesCv1, CS%Time, &
+  CS%id_v_ml = register_diag_field('ice_shelf_model', 'v_ml', CS%diag%axesCv1, CS%Time, &
      'Northward vel. in the boundary layer (used to compute ustar)', 'm s-1', conversion=US%L_T_to_m_s)
-  CS%id_exch_vel_s = register_diag_field('ocean_model', 'exch_vel_s', CS%diag%axesT1, CS%Time, &
+  CS%id_exch_vel_s = register_diag_field('ice_shelf_model', 'exch_vel_s', CS%diag%axesT1, CS%Time, &
      'Sub-shelf salinity exchange velocity', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
-  CS%id_exch_vel_t = register_diag_field('ocean_model', 'exch_vel_t', CS%diag%axesT1, CS%Time, &
+  CS%id_exch_vel_t = register_diag_field('ice_shelf_model', 'exch_vel_t', CS%diag%axesT1, CS%Time, &
      'Sub-shelf thermal exchange velocity', 'm s-1' , conversion=US%Z_to_m*US%s_to_T)
-  CS%id_tfreeze = register_diag_field('ocean_model', 'tfreeze', CS%diag%axesT1, CS%Time, &
+  CS%id_tfreeze = register_diag_field('ice_shelf_model', 'tfreeze', CS%diag%axesT1, CS%Time, &
      'In Situ Freezing point at ice shelf interface', 'degC')
-  CS%id_tfl_shelf = register_diag_field('ocean_model', 'tflux_shelf', CS%diag%axesT1, CS%Time, &
+  CS%id_tfl_shelf = register_diag_field('ice_shelf_model', 'tflux_shelf', CS%diag%axesT1, CS%Time, &
      'Heat conduction into ice shelf', 'W m-2', conversion=-US%QRZ_T_to_W_m2)
-  CS%id_ustar_shelf = register_diag_field('ocean_model', 'ustar_shelf', CS%diag%axesT1, CS%Time, &
+  CS%id_ustar_shelf = register_diag_field('ice_shelf_model', 'ustar_shelf', CS%diag%axesT1, CS%Time, &
      'Fric vel under shelf', 'm/s', conversion=US%Z_to_m*US%s_to_T)
   if (CS%active_shelf_dynamics) then
-    CS%id_h_mask = register_diag_field('ocean_model', 'h_mask', CS%diag%axesT1, CS%Time, &
+    CS%id_h_mask = register_diag_field('ice_shelf_model', 'h_mask', CS%diag%axesT1, CS%Time, &
        'ice shelf thickness mask', 'none')
   endif
+  call diag_mediator_close_registration(CS%diag)
+
 
   if (present(fluxes_in) .and. CS%rotate_index) &
      call rotate_forcing(fluxes, fluxes_in, -CS%turns)
