@@ -1042,8 +1042,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
   ! Whenever thickness changes let the diag manager know, as the
   ! target grids for vertical remapping may need to be regenerated.
-  !if (CS%id_dudt_dia > 0 .or. CS%id_dvdt_dia > 0) &
-  if (associated(ADp%du_dt_dia) .or. associated(ADp%dv_dt_dia)) & 
+  if (associated(ADp%du_dt_dia) .or. associated(ADp%dv_dt_dia)) &
     ! Remapped d[uv]dt_dia require east/north halo updates of h
     call pass_var(h, G%domain, To_West+To_South+Omit_Corners, halo=1)
   call diag_update_remap_grids(CS%diag)
@@ -2601,7 +2600,6 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
   ! Whenever thickness changes let the diag manager know, as the
   ! target grids for vertical remapping may need to be regenerated.
-  !if (CS%id_dudt_dia > 0 .or. CS%id_dvdt_dia > 0) &
   if (associated(ADp%du_dt_dia) .or. associated(ADp%dv_dt_dia)) &
     ! Remapped d[uv]dt_dia require east/north halo updates of h
     call pass_var(h, G%domain, To_West+To_South+Omit_Corners, halo=1)
