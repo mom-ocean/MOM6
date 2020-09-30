@@ -673,6 +673,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   real :: topfn   ! A function which goes from 1 at the top to 0 much more
                   ! than Htbl into the interior.
   real :: z2      ! The distance from the bottom, normalized by Hbbl, nondim.
+  real :: z2_sq   ! z2 squared, used for reproducible evaluation of z2**6.
   real :: z2_wt   ! A nondimensional (0-1) weight used when calculating z2.
   real :: z_clear ! The clearance of an interface above the surrounding topography [H ~> m or kg m-2].
   real :: a_cpl_max  ! The maximum drag doefficient across interfaces, set so that it will be
@@ -689,6 +690,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
     zi_dir   !  A trinary logical array indicating which thicknesses to use for
              !  finding z_clear.
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
 
@@ -844,7 +846,8 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
                   z2_wt = 1.0  ; if (zh(I) * I_HTbl(I) < 2.0*CS%harm_BL_val) &
                     z2_wt = max(0.0, min(1.0, zh(I) * I_HTbl(I) * I_valBL - 1.0))
                   z2 = z2_wt * (max(zh(I), Ztop_min(I) - min(zcol(i),zcol(i+1))) * I_HTbl(I))
-                  topfn = 1.0 / (1.0 + 0.09*z2**6)
+                  z2_sq = z2**2
+                  topfn = 1.0 / (1.0 + 0.09 * (z2_sq * z2_sq * z2_sq))
                   hvel_shelf(I,k) = min(hvel(I,k), (1.0-topfn)*h_arith(I,k) + topfn*h_harm(I,k))
                 endif
               endif
@@ -1012,7 +1015,8 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
                   z2_wt = 1.0  ; if (zh(i) * I_HTbl(i) < 2.0*CS%harm_BL_val) &
                     z2_wt = max(0.0, min(1.0, zh(i) * I_HTbl(i) * I_valBL - 1.0))
                   z2 = z2_wt * (max(zh(i), Ztop_min(i) - min(zcol1(i),zcol2(i))) * I_HTbl(i))
-                  topfn = 1.0 / (1.0 + 0.09*z2**6)
+                  z2_sq = z2**2
+                  topfn = 1.0 / (1.0 + 0.09 * (z2_sq * z2_sq * z2_sq))
                   hvel_shelf(i,k) = min(hvel(i,k), (1.0-topfn)*h_arith(i,k) + topfn*h_harm(i,k))
                 endif
              endif
@@ -1056,7 +1060,6 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
     endif
 
   enddo ! end of v-point j loop
-
   if (CS%debug) then
     call uvchksum("vertvisc_coef h_[uv]", CS%h_u, CS%h_v, G%HI, haloshift=0, &
                   scale=GV%H_to_m, scalar_pair=.true.)
@@ -1146,9 +1149,13 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   real :: botfn   ! A function that is 1 at the bottom and small far from it [nondim]
   real :: topfn   ! A function that is 1 at the top and small far from it [nondim]
   real :: kv_top  ! A viscosity associated with the top boundary layer [Z2 T-1 ~> m2 s-1]
+  real :: zt_sq   ! Square of elements of z_t, used for reproducible evaluation
+                  ! of z_i**6. [H2 ~> m2 or kg2 m-4] or [nondim]
   logical :: do_shelf, do_OBCs
   integer :: i, k, is, ie, max_nk
   integer :: nz
+
+  ! testing
 
   a_cpl(:,:) = 0.0
   Kv_tot(:,:) = 0.0
@@ -1294,7 +1301,8 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
 
     do K=2,nz ; do i=is,ie ;  if (do_i(i)) then
       z_t(i) = z_t(i) + hvel(i,k-1) / tbl_thick(i)
-      topfn = 1.0 / (1.0 + 0.09 * z_t(i)**6)
+      zt_sq = z_t(i)**2
+      topfn = 1.0 / (1.0 + 0.09 * (zt_sq * zt_sq * zt_sq))
 
       r = 0.5*(hvel(i,k)+hvel(i,k-1))
       if (r > tbl_thick(i)) then
