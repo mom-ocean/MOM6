@@ -903,7 +903,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
     ! Determine how long to use this value of kappa (dt_now).
 
   ! call cpu_clock_begin(id_clock_project)
-    if ((ke_kappa < ks_kappa) .or. (itt==CS%max_RiNo_it)) then
+    if ((ke_kappa < ks_kappa) .or. (itt==CS%max_KS_it)) then
       dt_now = dt_rem
     else
       ! Limit dt_now so that |k_src(k)-kappa_src(k)| < tol * local_src(k)
