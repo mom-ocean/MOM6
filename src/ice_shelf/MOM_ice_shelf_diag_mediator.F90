@@ -128,7 +128,6 @@ subroutine set_axes_info(G, param_file, diag_cs, axes_set_name)
 
   ! Local variables
   integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh, id_ct, id_ct0
-  integer :: id_xhe, id_yhe
   integer :: k
   logical :: Cartesian_grid
   character(len=80) :: grid_config, units_temp, set_name
@@ -136,7 +135,7 @@ subroutine set_axes_info(G, param_file, diag_cs, axes_set_name)
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_IS_diag_mediator" ! This module's name.
 
-  set_name = "ice" ; if (present(axes_set_name)) set_name = trim(axes_set_name)
+  set_name = "ice_shelf" ; if (present(axes_set_name)) set_name = trim(axes_set_name)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version)
@@ -170,24 +169,28 @@ subroutine set_axes_info(G, param_file, diag_cs, axes_set_name)
     Cartesian_grid = .false.
   endif
 
-  id_xq = diag_axis_init('xB', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
-            'Boundary point nominal longitude',set_name=set_name, &
-             Domain2=G%Domain%mpp_domain, domain_position=EAST)
-  id_yq = diag_axis_init('yB', G%gridLatB(G%jsgB:G%jegB), G%y_axis_units, 'y', &
-            'Boundary point nominal latitude', set_name=set_name, &
-             Domain2=G%Domain%mpp_domain, domain_position=NORTH)
+  if (G%symmetric) then
+     id_xq = diag_axis_init('xB', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
+          'Boundary point nominal longitude',set_name=set_name, &
+          Domain2=G%Domain%mpp_domain, domain_position=EAST)
+     id_yq = diag_axis_init('yB', G%gridLatB(G%jsgB:G%jegB), G%y_axis_units, 'y', &
+          'Boundary point nominal latitude', set_name=set_name, &
+          Domain2=G%Domain%mpp_domain, domain_position=NORTH)
 
-  id_xhe = diag_axis_init('xTe', G%gridLonB(G%isg-1:G%ieg), G%x_axis_units, 'x', &
-            'T-cell edge nominal longitude', set_name=set_name, &
-             Domain2=G%Domain%mpp_domain, domain_position=EAST)
-  id_yhe = diag_axis_init('yTe', G%gridLatB(G%jsg-1:G%jeg), G%y_axis_units, 'y', &
-            'T-cell edge nominal latitude', set_name=set_name, &
-            Domain2=G%Domain%mpp_domain, domain_position=NORTH)
+  else
+     id_xq = diag_axis_init('xB', G%gridLonB(G%isg:G%ieg), G%x_axis_units, 'x', &
+          'Boundary point nominal longitude',set_name=set_name, &
+          Domain2=G%Domain%mpp_domain, domain_position=EAST)
+     id_yq = diag_axis_init('yB', G%gridLatB(G%jsg:G%jeg), G%y_axis_units, 'y', &
+          'Boundary point nominal latitude', set_name=set_name, &
+          Domain2=G%Domain%mpp_domain, domain_position=NORTH)
+
+  endif
   id_xh = diag_axis_init('xT', G%gridLonT(G%isg:G%ieg), G%x_axis_units, 'x', &
-              'T point nominal longitude', set_name=set_name, edges=id_xhe, &
+              'T point nominal longitude', set_name=set_name, &
               Domain2=G%Domain%mpp_domain)
   id_yh = diag_axis_init('yT', G%gridLatT(G%jsg:G%jeg), G%y_axis_units, 'y', &
-              'T point nominal latitude', set_name=set_name, edges=id_yhe, &
+              'T point nominal latitude', set_name=set_name, &
               Domain2=G%Domain%mpp_domain)
 
   ! Axis groupings for 2-D arrays.
