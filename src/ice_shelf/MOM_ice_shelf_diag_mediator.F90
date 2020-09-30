@@ -6,7 +6,7 @@ module MOM_IS_diag_mediator
 use MOM_grid, only : ocean_grid_type
 
 use MOM_coms, only : PE_here
-use MOM_error_handler, only : MOM_error, FATAL, is_root_pe
+use MOM_error_handler, only : MOM_error, FATAL, is_root_pe, assert
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_safe_alloc, only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_string_functions, only : lowercase, uppercase, slasher
@@ -187,17 +187,17 @@ subroutine set_axes_info(G, param_file, diag_cs, axes_set_name)
 
   endif
   id_xh = diag_axis_init('xT', G%gridLonT(G%isg:G%ieg), G%x_axis_units, 'x', &
-              'T point nominal longitude', set_name=set_name, &
-              Domain2=G%Domain%mpp_domain)
+          'T point nominal longitude', set_name=set_name, &
+          Domain2=G%Domain%mpp_domain)
   id_yh = diag_axis_init('yT', G%gridLatT(G%jsg:G%jeg), G%y_axis_units, 'y', &
-              'T point nominal latitude', set_name=set_name, &
-              Domain2=G%Domain%mpp_domain)
+          'T point nominal latitude', set_name=set_name, &
+          Domain2=G%Domain%mpp_domain)
 
   ! Axis groupings for 2-D arrays.
-  call defineAxes(diag_cs, (/ id_xh, id_yh /), diag_cs%axesT1)
-  call defineAxes(diag_cs, (/ id_xq, id_yq /), diag_cs%axesB1)
-  call defineAxes(diag_cs, (/ id_xq, id_yh /), diag_cs%axesCu1)
-  call defineAxes(diag_cs, (/ id_xh, id_yq /), diag_cs%axesCv1)
+  call defineAxes(diag_cs, [id_xh, id_yh], diag_cs%axesT1)
+  call defineAxes(diag_cs, [id_xq, id_yq], diag_cs%axesB1)
+  call defineAxes(diag_cs, [id_xq, id_yh], diag_cs%axesCu1)
+  call defineAxes(diag_cs, [id_xh, id_yq], diag_cs%axesCv1)
 
 end subroutine set_axes_info
 
@@ -808,17 +808,5 @@ function get_new_diag_id(diag_cs)
   diag_cs%next_free_diag_id = diag_cs%next_free_diag_id + 1
 
 end function get_new_diag_id
-
-!> Test whether a logical test is true, and write a fatal error if it is false
-subroutine assert(logical_arg, msg)
-
-  logical, intent(in) :: logical_arg !< The logical tests
-  character(len=*), intent(in) :: msg !< An identifying error message.
-
-  if (.not. logical_arg) then
-    call MOM_error(FATAL, 'Assert failed: '//msg)
-  endif
-
-end subroutine assert
 
 end module MOM_IS_diag_mediator
