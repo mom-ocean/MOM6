@@ -19,8 +19,8 @@ dnl
 AC_DEFUN([AX_FC_CRAY_POINTER], [
   AC_LANG_ASSERT([Fortran])
   AC_MSG_CHECKING([for $FC option to support Cray pointers])
-  AC_CACHE_VAL([ac_cv_prog_fc_cray_ptr], [
-    ac_cv_prog_fc_cray_ptr='unknown'
+  AC_CACHE_VAL([ac_cv_fc_cray_ptr], [
+    ac_cv_fc_cray_ptr='unknown'
     ac_save_FCFLAGS=$FCFLAGS
     for ac_option in none -fcray-pointer -Mcray=pointer; do
       test "$ac_option" != none && FCFLAGS="$ac_save_FCFLAGS $ac_option"
@@ -29,21 +29,21 @@ AC_DEFUN([AX_FC_CRAY_POINTER], [
       integer aptr(2)
       pointer (iptr, aptr)
         ])],
-        [ac_cv_prog_fc_cray_ptr=$ac_option],
+        [ac_cv_fc_cray_ptr=$ac_option],
       )
       FCFLAGS=$ac_save_FCFLAGS
-      AS_IF([test "$ac_cv_prog_fc_cray_ptr" != unknown], [break])
+      AS_IF([test "$ac_cv_fc_cray_ptr" != unknown], [break])
     done
   ])
-  AS_CASE([ac_cv_prog_fc_cray_ptr],
+  AS_CASE([ac_cv_fc_cray_ptr],
     [none], [AC_MSG_RESULT([none_needed])],
     [unknown], [AC_MSG_RESULT([unsupported])],
-    [AC_MSG_RESULT([$ac_cv_prog_fc_cray_ptr])]
+    [AC_MSG_RESULT([$ac_cv_fc_cray_ptr])]
   )
-  AS_IF([test "$ac_cv_prog_fc_cray_ptr" != unknown], [
+  AS_IF([test "$ac_cv_fc_cray_ptr" != unknown], [
     m4_default([$1], [
-      AS_IF([test "$ac_cv_prog_fc_cray_ptr" != none],
-        [FCFLAGS="$FCFLAGS $ac_cv_prog_fc_cray_ptr"]
+      AS_IF([test "$ac_cv_fc_cray_ptr" != none],
+        [FCFLAGS="$FCFLAGS $ac_cv_fc_cray_ptr"]
       )
     ])],
     [m4_default([$2], [AC_MSG_ERROR(["$FC does not support Cray pointers"])])]
