@@ -2004,8 +2004,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   real    :: eps_Z    ! A negligibly thin layer thickness [Z ~> m].
   real    :: eps_rho  ! A negligibly small density difference [R ~> kg m-3].
   real    :: PI_180   ! for conversion from degrees to radians
-
-!  real, dimension(:,:), pointer :: shelf_area => NULL()
   real    :: Hmix_default ! The default initial mixed layer depth [m].
   real    :: Hmix_depth   ! The mixed layer depth in the initial condition [Z ~> m].
   real    :: dilate       ! A dilation factor to match topography [nondim]
@@ -2033,8 +2031,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
   ! Local variables for ALE remapping
   real, dimension(:), allocatable :: hTarget ! Target thicknesses [Z ~> m].
-!  real, dimension(:,:), allocatable :: area_shelf_h ! Shelf-covered area per grid cell [L2 ~> m2]
-  !real, dimension(:,:), allocatable, target :: frac_shelf_h ! Fractional shelf area per grid cell [nondim]
   real, dimension(:,:,:), allocatable, target :: tmpT1dIn, tmpS1dIn
   real, dimension(:,:,:), allocatable :: tmp_mask_in
   real, dimension(:,:,:), allocatable :: h1 ! Thicknesses [H ~> m or kg m-2].
