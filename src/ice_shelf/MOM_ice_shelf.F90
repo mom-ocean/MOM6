@@ -839,22 +839,20 @@ subroutine add_shelf_forces(US, CS, forces_in, do_shelf_area, external_call)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
 
-!  if ((CS%grid_in%isc /= G%isc) .or. (CS%grid_in%iec /= G%iec) .or. &
-!      (CS%grid_in%jsc /= G%jsc) .or. (CS%grid_in%jec /= G%jec)) &
-!    call MOM_error(FATAL,"add_shelf_forces: Incompatible ocean and ice shelf grids.")
-
   ISS => CS%ISS
 
   find_area = .true. ; if (present(do_shelf_area)) find_area = do_shelf_area
 
   if (find_area) then
     ! The frac_shelf is set over the widest possible area. Could it be smaller?
+!     do j=js,je ; do I=is-1,ie
     do j=jsd,jed ; do I=isd,ied-1
       forces%frac_shelf_u(I,j) = 0.0
       if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%areaCu(I,j) > 0.0)) &
         forces%frac_shelf_u(I,j) = (ISS%area_shelf_h(i,j) + ISS%area_shelf_h(i+1,j)) / &
                                    (G%areaT(i,j) + G%areaT(i+1,j))
     enddo ; enddo
+!    do J=js-1,je ; do i=is,ie
     do J=jsd,jed-1 ; do i=isd,ied
       forces%frac_shelf_v(i,J) = 0.0
       if ((G%areaT(i,j) + G%areaT(i,j+1) > 0.0)) & ! .and. (G%areaCv(i,J) > 0.0)) &
