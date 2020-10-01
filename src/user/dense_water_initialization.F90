@@ -150,21 +150,24 @@ subroutine dense_water_initialize_TS(G, GV, param_file, eqn_of_state, T, S, h, j
 end subroutine dense_water_initialize_TS
 
 !> Initialize the restoring sponges for the dense water experiment
-subroutine dense_water_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
+subroutine dense_water_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, ACSp)
   type(ocean_grid_type),   intent(in) :: G !< Horizontal grid control structure
   type(verticalGrid_type), intent(in) :: GV !< Vertical grid control structure
+  type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
   type(thermo_var_ptrs),   intent(in) :: tv !< Thermodynamic variables
   type(param_file_type),   intent(in) :: param_file !< Parameter file structure
   logical,                 intent(in) :: use_ALE !< ALE flag
   type(sponge_CS),         pointer    :: CSp !< Layered sponge control structure pointer
   type(ALE_sponge_CS),     pointer    :: ACSp !< ALE sponge control structure pointer
   ! Local variables
-  real :: west_sponge_time_scale, west_sponge_width
-  real :: east_sponge_time_scale, east_sponge_width
+  real :: west_sponge_time_scale, east_sponge_time_scale ! Sponge timescales [T ~> s]
+  real :: west_sponge_width, east_sponge_width
 
-  real, dimension(SZI_(G),SZJ_(G)) :: Idamp ! inverse damping timescale
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h, T, S ! sponge thicknesses, temp and salt
-  real, dimension(SZK_(GV)+1) :: e0, eta1D ! interface positions for ALE sponge
+  real, dimension(SZI_(G),SZJ_(G)) :: Idamp ! inverse damping timescale [T-1 ~> s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h  ! sponge thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: T  ! sponge temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: S  ! sponge salinity [ppt]
+  real, dimension(SZK_(GV)+1) :: e0, eta1D ! interface positions for ALE sponge [Z ~> m]
 
   integer :: i, j, k, nz
   real :: x, zi, zmid, dist
@@ -174,13 +177,13 @@ subroutine dense_water_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, A
 
   call get_param(param_file, mdl, "DENSE_WATER_WEST_SPONGE_TIME_SCALE", west_sponge_time_scale, &
        "The time scale on the west (outflow) of the domain for restoring. If zero, the sponge is disabled.", &
-       units="s", default=0.)
+       units="s", default=0., scale=US%s_to_T)
   call get_param(param_file, mdl, "DENSE_WATER_WEST_SPONGE_WIDTH", west_sponge_width, &
        "The fraction of the domain in which the western (outflow) sponge is active.", &
        units="nondim", default=0.1)
   call get_param(param_file, mdl, "DENSE_WATER_EAST_SPONGE_TIME_SCALE", east_sponge_time_scale, &
        "The time scale on the east (outflow) of the domain for restoring. If zero, the sponge is disabled.", &
-       units="s", default=0.)
+       units="s", default=0., scale=US%s_to_T)
   call get_param(param_file, mdl, "DENSE_WATER_EAST_SPONGE_WIDTH", east_sponge_width, &
        "The fraction of the domain in which the eastern (outflow) sponge is active.", &
        units="nondim", default=0.1)

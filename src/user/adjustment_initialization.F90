@@ -88,13 +88,13 @@ subroutine adjustment_initialize_thickness ( h, G, GV, US, param_file, just_read
                  units="1e-3", fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl,"FRONT_WAVE_AMP",front_wave_amp,         &
                  "Amplitude of trans-frontal wave perturbation",         &
-                 units="same as x,y",default=0., do_not_log=just_read)
+                 units="same as x,y", default=0., do_not_log=just_read)
   call get_param(param_file, mdl,"FRONT_WAVE_LENGTH",front_wave_length,   &
                  "Wave-length of trans-frontal wave perturbation",       &
-                 units="same as x,y",default=0., do_not_log=just_read)
+                 units="same as x,y", default=0., do_not_log=just_read)
   call get_param(param_file, mdl,"FRONT_WAVE_ASYM",front_wave_asym,       &
                  "Amplitude of frontal asymmetric perturbation",         &
-                 default=0., do_not_log=just_read)
+                 units="same as x,y", default=0., do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 

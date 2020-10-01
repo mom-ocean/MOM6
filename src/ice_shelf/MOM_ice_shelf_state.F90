@@ -23,9 +23,9 @@ public ice_shelf_state_end, ice_shelf_state_init
 !> Structure that describes the ice shelf state
 type, public :: ice_shelf_state
   real, pointer, dimension(:,:) :: &
-    mass_shelf => NULL(), &    !< The mass per unit area of the ice shelf or sheet [kg m-2].
-    area_shelf_h => NULL(), &  !< The area per cell covered by the ice shelf [m2].
-    h_shelf => NULL(), &       !< the thickness of the shelf [m], redundant with mass but may
+    mass_shelf => NULL(), &    !< The mass per unit area of the ice shelf or sheet [R Z ~> kg m-2].
+    area_shelf_h => NULL(), &  !< The area per cell covered by the ice shelf [L2 ~> m2].
+    h_shelf => NULL(), &       !< the thickness of the shelf [Z ~> m], redundant with mass but may
                                !! make the code more readable
     hmask => NULL(),&          !< Mask used to indicate ice-covered or partiall-covered cells
                                !! 1: fully covered, solve for velocity here (for now all
@@ -37,14 +37,14 @@ type, public :: ice_shelf_state
                                !! NOTE: hmask will change over time and NEEDS TO BE MAINTAINED
                                !!   otherwise the wrong nodes will be included in velocity calcs.
 
-    tflux_ocn => NULL(), &     !< The UPWARD sensible ocean heat flux at the
-                               !! ocean-ice interface [m-2].
+    tflux_ocn => NULL(), &     !< The downward sensible ocean heat flux at the
+                               !! ocean-ice interface [Q R Z T-1 ~> W m-2].
     salt_flux => NULL(), &     !< The downward salt flux at the ocean-ice
-                               !! interface [kg m-2 s-1].
+                               !! interface [kgSalt kgWater-1 R Z T-1 ~> kgSalt m-2 s-1].
     water_flux => NULL(), &    !< The net downward liquid water flux at the
-                               !! ocean-ice interface [kg m-2 s-1].
-    tflux_shelf => NULL(), &   !< The UPWARD diffusive heat flux in the ice
-                               !! shelf at the ice-ocean interface [W m-2].
+                               !! ocean-ice interface [R Z T-1 ~> kg m-2 s-1].
+    tflux_shelf => NULL(), &   !< The downward diffusive heat flux in the ice
+                               !! shelf at the ice-ocean interface [Q R Z T-1 ~> W m-2].
 
     tfreeze => NULL()          !< The freezing point potential temperature
                                !! an the ice-ocean interface [degC].

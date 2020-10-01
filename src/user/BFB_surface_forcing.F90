@@ -47,8 +47,8 @@ end type BFB_surface_forcing_CS
 contains
 
 !> Bouyancy forcing for the boundary-forced-basin (BFB) configuration
-subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
-  type(surface),                intent(inout) :: state  !< A structure containing fields that
+subroutine BFB_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
+  type(surface),                intent(inout) :: sfc_state  !< A structure containing fields that
                                                       !! describe the surface state of the ocean.
   type(forcing),                intent(inout) :: fluxes !< A structure containing pointers to any
                                                       !! possible forcing fields. Unused fields
@@ -67,7 +67,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
   real :: density_restore  ! The potential density that is being restored
                          ! toward [R ~> kg m-3].
   real :: rhoXcp           ! Reference density times heat capacity times unit scaling
-                           ! factors [J T s-1 Z-1 m-2 degC-1 ~> J m-3 degC-1]
+                           ! factors [Q R degC-1 ~> J m-3 degC-1]
   real :: buoy_rest_const  ! A constant relating density anomalies to the
                            ! restoring buoyancy flux [L2 T-3 R-1 ~> m5 s-3 kg-1].
   integer :: i, j, is, ie, js, je
@@ -98,7 +98,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
     ! Set whichever fluxes are to be used here.  Any fluxes that
     ! are always zero do not need to be changed here.
     do j=js,je ; do i=is,ie
-      ! Fluxes of fresh water through the surface are in units of [kg m-2 s-1]
+      ! Fluxes of fresh water through the surface are in units of [R Z T-1 ~> kg m-2 s-1]
       ! and are positive downward - i.e. evaporation should be negative.
       fluxes%evap(i,j) = -0.0 * G%mask2dT(i,j)
       fluxes%lprec(i,j) = 0.0 * G%mask2dT(i,j)
@@ -106,7 +106,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
       ! vprec will be set later, if it is needed for salinity restoring.
       fluxes%vprec(i,j) = 0.0
 
-      ! Heat fluxes are in units of [W m-2] and are positive into the ocean.
+      ! Heat fluxes are in units of [Q R Z T-1 ~> W m-2] and are positive into the ocean.
       fluxes%lw(i,j) = 0.0 * G%mask2dT(i,j)
       fluxes%latent(i,j) = 0.0 * G%mask2dT(i,j)
       fluxes%sens(i,j) = 0.0 * G%mask2dT(i,j)
@@ -128,7 +128,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
       call MOM_error(FATAL, "User_buoyancy_surface_forcing: " // &
         "Temperature and salinity restoring used without modification." )
 
-      rhoXcp = US%R_to_kg_m3*US%Z_to_m*US%s_to_T * CS%Rho0 * fluxes%C_p
+      rhoXcp = CS%Rho0 * fluxes%C_p
       do j=js,je ; do i=is,ie
         !   Set Temp_restore and Salin_restore to the temperature (in degC) and
         ! salinity (in ppt) that are being restored toward.
@@ -136,9 +136,9 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
         Salin_restore = 0.0
 
         fluxes%heat_added(i,j) = (G%mask2dT(i,j) * (rhoXcp * CS%Flux_const)) * &
-            (Temp_restore - state%SST(i,j))
+            (Temp_restore - sfc_state%SST(i,j))
         fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
-            ((Salin_restore - state%SSS(i,j)) / (0.5 * (Salin_restore + state%SSS(i,j))))
+            ((Salin_restore - sfc_state%SSS(i,j)) / (0.5 * (Salin_restore + sfc_state%SSS(i,j))))
       enddo ; enddo
     else
       !   When modifying the code, comment out this error message.  It is here
@@ -151,7 +151,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
       Temp_restore = 0.0
       do j=js,je ; do i=is,ie
        !   Set density_restore to an expression for the surface potential
-       ! density [kg m-3] that is being restored toward.
+       ! density [R ~> kg m-3] that is being restored toward.
         if (G%geoLatT(i,j) < CS%lfrslat) then
             Temp_restore = CS%SST_s
         elseif (G%geoLatT(i,j) > CS%lfrnlat) then
@@ -164,7 +164,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
         density_restore = Temp_restore*CS%drho_dt + CS%Rho0
 
         fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &
-                          (density_restore - US%kg_m3_to_R*state%sfc_density(i,j))
+                          (density_restore - sfc_state%sfc_density(i,j))
       enddo ; enddo
     endif
   endif                                             ! end RESTOREBUOY
@@ -195,8 +195,7 @@ subroutine BFB_surface_forcing_init(Time, G, US, param_file, diag, CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
-                 "If true, Temperature and salinity are used as state "//&
-                 "variables.", default=.true.)
+                 "If true, Temperature and salinity are used as state variables.", default=.true.)
 
   call get_param(param_file, mdl, "G_EARTH", CS%G_Earth, &
                  "The gravitational acceleration of the Earth.", &
