@@ -134,7 +134,7 @@ type, public :: int_tide_CS ; private
   integer, allocatable, dimension(:,:) :: &
              id_En_ang_mode, &
              id_itidal_loss_ang_mode
-  !!@}
+  !>@}
 
 end type int_tide_CS
 
@@ -142,7 +142,7 @@ end type int_tide_CS
 type :: loop_bounds_type ; private
   !>@{ The active loop bounds
   integer :: ish, ieh, jsh, jeh
-  !!@}
+  !>@}
 end type loop_bounds_type
 
 contains
@@ -441,7 +441,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
           ! Dissipate energy if Fr>1; done here with an arbitrary time scale
           if (Fr2_max > 1.0) then
             En_initial = sum(CS%En(i,j,:,fr,m)) ! for debugging
-            ! Calculate effective decay rate [s-1] if breaking occurs over a time step
+            ! Calculate effective decay rate [T-1 ~> s-1] if breaking occurs over a time step
             loss_rate = (1.0 - Fr2_max) / (Fr2_max * dt)
             do a=1,CS%nAngle
               ! Determine effective dissipation rate (Wm-2)
@@ -558,7 +558,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     ! Output 2-D energy loss (summed over angles) for each freq and mode
     do m=1,CS%NMode ; do fr=1,CS%Nfreq
     if (CS%id_itidal_loss_mode(fr,m) > 0 .or. CS%id_allprocesses_loss_mode(fr,m) > 0) then
-      itidal_loss_mode(:,:)       = 0.0 ! wave-drag processes (could do others as well)
+      itidal_loss_mode(:,:) = 0.0 ! wave-drag processes (could do others as well)
       allprocesses_loss_mode(:,:) = 0.0 ! all processes summed together
       do a=1,CS%nAngle ; do j=js,je ; do i=is,ie
         itidal_loss_mode(i,j)       = itidal_loss_mode(i,j) + CS%TKE_itidal_loss(i,j,a,fr,m)
@@ -886,12 +886,17 @@ subroutine PPM_angular_advect(En2d, CFL_ang, Flux_En, NAngle, dt, halo_ang)
                                                       !! across angles  [R Z3 T-2 ~> J m-2].
   ! Local variables
   real :: flux
-  real :: u_ang
-  real :: Angle_size
-  real :: I_Angle_size
-  real :: I_dt
+  real :: u_ang        ! Angular propagation speed [Rad T-1 ~> Rad s-1]
+  real :: Angle_size   ! The size of each orientation wedge in radians [Rad]
+  real :: I_Angle_size ! The inverse of the the orientation wedges [Rad-1]
+  real :: I_dt         ! The inverse of the timestep [T-1 ~> s-1]
+  real :: aR, aL       ! Left and right edge estimates of energy density [R Z3 T-2 rad-1 ~> J m-2 rad-1]
+  real :: dMx, dMn
+  real :: Ep, Ec, Em   ! Mean angular energy density for three successive wedges in angular
+                       ! orientation [R Z3 T-2 rad-1 ~> J m-2 rad-1]
+  real :: dA, curv_3   ! Difference and curvature of energy density [R Z3 T-2 rad-1 ~> J m-2 rad-1]
+  real, parameter :: oneSixth = 1.0/6.0  ! One sixth [nondim]
   integer :: a
-  real :: aR, aL, dMx, dMn, Ep, Ec, Em, dA, mA, a6
 
   I_dt = 1 / dt
   Angle_size = (8.0*atan(1.0)) / (real(NAngle))
@@ -902,50 +907,55 @@ subroutine PPM_angular_advect(En2d, CFL_ang, Flux_En, NAngle, dt, halo_ang)
     u_ang = CFL_ang(A)*Angle_size*I_dt
     if (u_ang >= 0.0) then
       ! Implementation of PPM-H3
-      Ep = En2d(a+1)*I_Angle_size !MEAN ANGULAR ENERGY DENSITY FOR WEDGE (Jm-2/rad)
-      Ec = En2d(a)  *I_Angle_size !MEAN ANGULAR ENERGY DENSITY FOR WEDGE (Jm-2/rad)
-      Em = En2d(a-1)*I_Angle_size !MEAN ANGULAR ENERGY DENSITY FOR WEDGE (Jm-2/rad)
-      aL = ( 5.*Ec + ( 2.*Em - Ep ) )/6. ! H3 estimate
+      ! Convert wedge-integrated energy density into angular energy densities for three successive
+      ! wedges around the source wedge for this flux [R Z3 T-2 rad-1 ~> J m-2 rad-1].
+      Ep = En2d(a+1)*I_Angle_size
+      Ec = En2d(a)  *I_Angle_size
+      Em = En2d(a-1)*I_Angle_size
+      ! Calculate and bound edge values of energy density.
+      aL = ( 5.*Ec + ( 2.*Em - Ep ) ) * oneSixth ! H3 estimate
       aL = max( min(Ec,Em), aL) ; aL = min( max(Ec,Em), aL) ! Bound
-      aR = ( 5.*Ec + ( 2.*Ep - Em ) )/6. ! H3 estimate
+      aR = ( 5.*Ec + ( 2.*Ep - Em ) ) * oneSixth ! H3 estimate
       aR = max( min(Ec,Ep), aR) ; aR = min( max(Ec,Ep), aR) ! Bound
-      dA = aR - aL ; mA = 0.5*( aR + aL )
+      dA = aR - aL
       if ((Ep-Ec)*(Ec-Em) <= 0.) then
-        aL = Ec ; aR = Ec ! PCM for local extremum
-      elseif ( dA*(Ec-mA) > (dA*dA)/6. ) then
-        aL = 3.*Ec - 2.*aR !?
-      elseif ( dA*(Ec-mA) < - (dA*dA)/6. ) then
-        aR = 3.*Ec - 2.*aL !?
+        aL = Ec ; aR = Ec    ! use PCM for local extremum
+      elseif ( 3.0*dA*(2.*Ec - (aR + aL)) > (dA*dA) ) then
+        aL = 3.*Ec - 2.*aR   ! Flatten the profile to move the extremum to the left edge
+      elseif ( 3.0*dA*(2.*Ec - (aR + aL)) < - (dA*dA) ) then
+        aR = 3.*Ec - 2.*aL   ! Flatten the profile to move the extremum to the right edge
       endif
-      a6 = 6.*Ec - 3. * (aR + aL) ! Curvature
-      ! CALCULATE FLUX RATE (Jm-2/s)
-      flux = u_ang*( aR + 0.5 * CFL_ang(A) * ( ( aL - aR ) + a6 * ( 1. - 2./3. * CFL_ang(A) ) ) )
-      !flux = u_ang*( aR - 0.5 * CFL_ang(A) * ( ( aR - aL ) - a6 * ( 1. - 2./3. * CFL_ang(A) ) ) )
-      ! CALCULATE AMOUNT FLUXED (Jm-2)
+      curv_3 = (aR + aL) - 2.0*Ec ! Curvature
+      ! Calculate angular flux rate [R Z3 T-3 ~> W m-2]
+      flux = u_ang*( aR + CFL_ang(A) * ( 0.5*(aL - aR) + curv_3 * (CFL_ang(A) - 1.5) ) )
+      ! Calculate amount of energy fluxed between wedges [R Z3 T-2 ~> J m-2]
       Flux_En(A) = dt * flux
       !Flux_En(A) = (dt * I_Angle_size) * flux
     else
       ! Implementation of PPM-H3
-      Ep = En2d(a+2)*I_Angle_size !MEAN ANGULAR ENERGY DENSITY FOR WEDGE (Jm-2/rad)
-      Ec = En2d(a+1)*I_Angle_size !MEAN ANGULAR ENERGY DENSITY FOR WEDGE (Jm-2/rad)
-      Em = En2d(a)  *I_Angle_size !MEAN ANGULAR ENERGY DENSITY FOR WEDGE (Jm-2/rad)
-      aL = ( 5.*Ec + ( 2.*Em - Ep ) )/6. ! H3 estimate
+      ! Convert wedge-integrated energy density into angular energy densities for three successive
+      ! wedges around the source wedge for this flux [R Z3 T-2 rad-1 ~> J m-2 rad-1].
+      Ep = En2d(a+2)*I_Angle_size
+      Ec = En2d(a+1)*I_Angle_size
+      Em = En2d(a)  *I_Angle_size
+      ! Calculate and bound edge values of energy density.
+      aL = ( 5.*Ec + ( 2.*Em - Ep ) ) * oneSixth ! H3 estimate
       aL = max( min(Ec,Em), aL) ; aL = min( max(Ec,Em), aL) ! Bound
-      aR = ( 5.*Ec + ( 2.*Ep - Em ) )/6. ! H3 estimate
+      aR = ( 5.*Ec + ( 2.*Ep - Em ) ) * oneSixth ! H3 estimate
       aR = max( min(Ec,Ep), aR) ; aR = min( max(Ec,Ep), aR) ! Bound
-      dA = aR - aL ; mA = 0.5*( aR + aL )
+      dA = aR - aL
       if ((Ep-Ec)*(Ec-Em) <= 0.) then
-        aL = Ec ; aR = Ec ! PCM for local extremum
-      elseif ( dA*(Ec-mA) > (dA*dA)/6. ) then
-        aL = 3.*Ec - 2.*aR
-      elseif ( dA*(Ec-mA) < - (dA*dA)/6. ) then
-        aR = 3.*Ec - 2.*aL
+        aL = Ec ; aR = Ec    ! use PCM for local extremum
+      elseif ( 3.0*dA*(2.*Ec - (aR + aL)) > (dA*dA) ) then
+        aL = 3.*Ec - 2.*aR   ! Flatten the profile to move the extremum to the left edge
+      elseif ( 3.0*dA*(2.*Ec - (aR + aL)) < - (dA*dA) ) then
+        aR = 3.*Ec - 2.*aL   ! Flatten the profile to move the extremum to the right edge
       endif
-      a6 = 6.*Ec - 3. * (aR + aL) ! Curvature
-      ! CALCULATE FLUX RATE (Jm-2/s)
-      flux = u_ang*( aR + 0.5 * CFL_ang(A) * ( ( aL - aR ) + a6 * ( 1. - 2./3. * CFL_ang(A) ) ) )
-      !flux = u_ang*( aL + 0.5 * CFL_ang(A) * ( ( aR - aL ) + a6 * ( 1. - 2./3. * CFL_ang(A) ) ) )
-      ! CALCULATE AMOUNT FLUXED (Jm-2)
+      curv_3 = (aR + aL) - 2.0*Ec ! Curvature
+      ! Calculate angular flux rate [R Z3 T-3 ~> W m-2]
+      ! Note that CFL_ang is negative here, so it looks odd compared with equivalent expressions.
+      flux = u_ang*( aL - CFL_ang(A) * ( 0.5*(aR - aL) + curv_3 * (-CFL_ang(A) - 1.5) ) )
+      ! Calculate amount of energy fluxed between wedges [R Z3 T-2 ~> J m-2]
       Flux_En(A) = dt * flux
       !Flux_En(A) = (dt * I_Angle_size) * flux
     endif
@@ -1014,7 +1024,7 @@ subroutine propagate(En, cn, freq, dt, G, US, CS, NAngle)
     ! FIND AVERAGE GROUP VELOCITY (SPEED) AT CELL CORNERS
     ! NOTE: THIS HAS NOT BE ADAPTED FOR REFLECTION YET (BDM)!!
     ! Fix indexing here later
-    speed(:,:) = 0
+    speed(:,:) = 0.0
     do J=jsh-1,jeh ; do I=ish-1,ieh
       f2 = G%CoriolisBu(I,J)**2
       speed(I,J) = 0.25*(cn(i,j) + cn(i+1,j) + cn(i+1,j+1) + cn(i,j+1)) * &
@@ -1058,21 +1068,21 @@ subroutine propagate(En, cn, freq, dt, G, US, CS, NAngle)
 
     ! Apply propagation in x-direction (reflection included)
     LB%jsh = jsh ; LB%jeh = jeh ; LB%ish = ish ; LB%ieh = ieh
-    call propagate_x(En(:,:,:), speed_x, Cgx_av(:), dCgx(:), dt, G, US, CS%nAngle, CS, LB)
+    call propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, CS%nAngle, CS, LB)
 
     ! Check for energy conservation on computational domain (for debugging)
-    !call sum_En(G,CS,En(:,:,:),'post-propagate_x')
+    !call sum_En(G, CS, En, 'post-propagate_x')
 
     ! Update halos
-    call pass_var(En(:,:,:),G%domain)
+    call pass_var(En, G%domain)
 
     ! Apply propagation in y-direction (reflection included)
     ! LB%jsh = js ; LB%jeh = je ; LB%ish = is ; LB%ieh = ie ! Use if no teleport
     LB%jsh = jsh ; LB%jeh = jeh ; LB%ish = ish ; LB%ieh = ieh
-    call propagate_y(En(:,:,:), speed_y, Cgy_av(:), dCgy(:), dt, G, US, CS%nAngle, CS, LB)
+    call propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, CS%nAngle, CS, LB)
 
     ! Check for energy conservation on computational domain (for debugging)
-    !call sum_En(G,CS,En(:,:,:),'post-propagate_y')
+    !call sum_En(G, CS, En, 'post-propagate_y')
   endif
 
 end subroutine propagate
@@ -1084,7 +1094,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
   type(ocean_grid_type),  intent(in)    :: G     !< The ocean's grid structure.
   real, dimension(G%isd:G%ied,G%jsd:G%jed),   &
                           intent(inout) :: En    !< The energy density integrated over an angular
-                                                 !! band [R Z3 T-2 ~> J m-2], intent in/out.
+                                                 !! band [R Z3 T-2 ~> J m-2].
   real, dimension(G%IsdB:G%IedB,G%Jsd:G%Jed), &
                           intent(in)    :: speed !< The magnitude of the group velocity at the cell
                                                  !! corner points [L T-1 ~> m s-1].
@@ -1351,7 +1361,7 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, Nangle, CS, LB)
                                                !! discretized wave energy spectrum.
   real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle),   &
                            intent(inout) :: En !< The energy density integrated over an angular
-                                               !! band [R Z3 T-2 ~> J m-2], intent in/out.
+                                               !! band [R Z3 T-2 ~> J m-2].
   real, dimension(G%IsdB:G%IedB,G%jsd:G%jed),        &
                            intent(in)    :: speed_x !< The magnitude of the group velocity at the
                                                !! Cu points [L T-1 ~> m s-1].
@@ -1404,18 +1414,18 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, Nangle, CS, LB)
   enddo ! a-loop
 
   ! Only reflect newly arrived energy; existing energy in incident wedge is not reflected
-  ! and will eventually propagate out of cell. (Thid code only reflects if En > 0)
-  call reflect(Fdt_m(:,:,:), Nangle, CS, G, LB)
-  call teleport(Fdt_m(:,:,:), Nangle, CS, G, LB)
-  call reflect(Fdt_p(:,:,:), Nangle, CS, G, LB)
-  call teleport(Fdt_p(:,:,:), Nangle, CS, G, LB)
+  ! and will eventually propagate out of cell. (This code only reflects if En > 0.)
+  call reflect(Fdt_m, Nangle, CS, G, LB)
+  call teleport(Fdt_m, Nangle, CS, G, LB)
+  call reflect(Fdt_p, Nangle, CS, G, LB)
+  call teleport(Fdt_p, Nangle, CS, G, LB)
 
-  ! Update reflected energy (Jm-2)
-  do j=jsh,jeh ; do i=ish,ieh
+  ! Update reflected energy [R Z3 T-2 ~> J m-2]
+  do a=1,Nangle ; do j=jsh,jeh ; do i=ish,ieh
     !  if ((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0) & ! for debugging
     !    call MOM_error(FATAL, "propagate_x: OutFlux>Available")
-    En(i,j,:) = En(i,j,:) + G%IareaT(i,j)*(Fdt_m(i,j,:) + Fdt_p(i,j,:))
-  enddo ; enddo
+    En(i,j,a) = En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))
+  enddo ; enddo ; enddo
 
 end subroutine propagate_x
 
@@ -1426,7 +1436,7 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, Nangle, CS, LB)
                                                !! discretized wave energy spectrum.
   real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle), &
                            intent(inout) :: En !< The energy density integrated over an angular
-                                               !! band [R Z3 T-2 ~> J m-2], intent in/out.
+                                               !! band [R Z3 T-2 ~> J m-2].
   real, dimension(G%isd:G%ied,G%JsdB:G%JedB),      &
                            intent(in)    :: speed_y !< The magnitude of the group velocity at the
                                                !! Cv points [L T-1 ~> m s-1].
@@ -1486,13 +1496,13 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, Nangle, CS, LB)
   enddo ! a-loop
 
   ! Only reflect newly arrived energy; existing energy in incident wedge is not reflected
-  ! and will eventually propagate out of cell. (Thid code only reflects if En > 0)
-  call reflect(Fdt_m(:,:,:), Nangle, CS, G, LB)
-  call teleport(Fdt_m(:,:,:), Nangle, CS, G, LB)
-  call reflect(Fdt_p(:,:,:), Nangle, CS, G, LB)
-  call teleport(Fdt_p(:,:,:), Nangle, CS, G, LB)
+  ! and will eventually propagate out of cell. (This code only reflects if En > 0.)
+  call reflect(Fdt_m, Nangle, CS, G, LB)
+  call teleport(Fdt_m, Nangle, CS, G, LB)
+  call reflect(Fdt_p, Nangle, CS, G, LB)
+  call teleport(Fdt_p, Nangle, CS, G, LB)
 
-  ! Update reflected energy (Jm-2)
+  ! Update reflected energy [R Z3 T-2 ~> J m-2]
   do a=1,Nangle ; do j=jsh,jeh ; do i=ish,ieh
     !  if ((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0) & ! for debugging
     !    call MOM_error(FATAL, "propagate_y: OutFlux>Available", .true.)
@@ -1521,8 +1531,7 @@ subroutine zonal_flux_En(u, h, hL, hR, uh, dt, G, US, j, ish, ieh, vol_CFL)
                                                  !! the cell areas when estimating the CFL number.
   ! Local variables
   real :: CFL  ! The CFL number based on the local velocity and grid spacing [nondim].
-  real :: curv_3 ! A measure of the thickness curvature over a grid length,
-                 ! with the same units as h_in.
+  real :: curv_3 ! A measure of the energy density curvature over a grid length [R Z3 T-2 ~> J m-2]
   integer :: i
 
   do I=ish-1,ieh
@@ -1566,8 +1575,7 @@ subroutine merid_flux_En(v, h, hL, hR, vh, dt, G, US, J, ish, ieh, vol_CFL)
                                                         !! the CFL number.
   ! Local variables
   real :: CFL ! The CFL number based on the local velocity and grid spacing [nondim].
-  real :: curv_3 ! A measure of the thickness curvature over a grid length,
-                 ! with the same units as h_in.
+  real :: curv_3 ! A measure of the energy density curvature over a grid length [R Z3 T-2 ~> J m-2]
   integer :: i
 
   do i=ish,ieh
@@ -1603,18 +1611,18 @@ subroutine reflect(En, NAngle, CS, G, LB)
   type(loop_bounds_type), intent(in)    :: LB !< A structure with the active energy loop bounds.
   ! Local variables
   real, dimension(G%isd:G%ied,G%jsd:G%jed) :: angle_c
-                                           ! angle of boudary wrt equator
+                                           ! angle of boundary wrt equator [rad]
   real, dimension(G%isd:G%ied,G%jsd:G%jed) :: part_refl
                                            ! fraction of wave energy reflected
-                                           ! values should collocate with angle_c
+                                           ! values should collocate with angle_c [nondim]
   logical, dimension(G%isd:G%ied,G%jsd:G%jed) :: ridge
                                            ! tags of cells with double reflection
 
-  real    :: TwoPi                         ! 2*pi
-  real    :: Angle_size                    ! size of beam wedge (rad)
-  real    :: angle_wall                    ! angle of coast/ridge/shelf wrt equator
-  real, dimension(1:NAngle) :: angle_i     ! angle of incident ray wrt equator
-  real    :: angle_r                       ! angle of reflected ray wrt equator
+  real    :: TwoPi                         ! 2*pi = 6.2831853... [nondim]
+  real    :: Angle_size                    ! size of beam wedge [rad]
+  real    :: angle_wall                    ! angle of coast/ridge/shelf wrt equator [rad]
+  real, dimension(1:NAngle) :: angle_i     ! angle of incident ray wrt equator [rad]
+  real    :: angle_r                       ! angle of reflected ray wrt equator [rad]
   real, dimension(1:Nangle) :: En_reflected
   integer :: i, j, a, a_r, na
   !integer :: isd, ied, jsd, jed   ! start and end local indices on data domain
@@ -1623,7 +1631,6 @@ subroutine reflect(En, NAngle, CS, G, LB)
                                   ! (values exclude halos)
   integer :: ish, ieh, jsh, jeh   ! start and end local indices on data domain
                                   ! leaving out outdated halo points (march in)
-  integer :: id_g, jd_g           ! global (decomp-invar) indices
 
   !isd = G%isd  ; ied = G%ied  ; jsd = G%jsd  ; jed = G%jed
   isc = G%isc  ; iec = G%iec  ; jsc = G%jsc  ; jec = G%jec
@@ -1643,59 +1650,54 @@ subroutine reflect(En, NAngle, CS, G, LB)
   ridge     = CS%refl_dbl
   En_reflected(:) = 0.0
 
-  !do j=jsc-1,jec+1
-  do j=jsh,jeh
-    !do i=isc-1,iec+1
-    do i=ish,ieh
-      ! jd_g = j + G%jdg_offset ; id_g = i + G%idg_offset
-      ! redistribute energy in angular space if ray will hit boundary
-      ! i.e., if energy is in a reflecting cell
-      if (angle_c(i,j) /= CS%nullangle) then
-        do a=1,NAngle
-          if (En(i,j,a) > 0.0) then
-            ! if ray is incident, keep specified boundary angle
-            if (sin(angle_i(a) - angle_c(i,j)) >= 0.0) then
-              angle_wall = angle_c(i,j)
-            ! if ray is not incident but in ridge cell, use complementary angle
-            elseif (ridge(i,j)) then
-              angle_wall = angle_c(i,j) + 0.5*TwoPi
-              if (angle_wall > TwoPi) then
-                angle_wall = angle_wall - TwoPi*floor(abs(angle_wall)/TwoPi)
-              elseif (angle_wall < 0.0) then
-                angle_wall = angle_wall + TwoPi*ceiling(abs(angle_wall)/TwoPi)
-              endif
-            ! if ray is not incident and not in a ridge cell, keep specified angle
-            else
-              angle_wall = angle_c(i,j)
-            endif
-            ! do reflection
-            if (sin(angle_i(a) - angle_wall) >= 0.0) then
-              angle_r = 2.0*angle_wall - angle_i(a)
-              if (angle_r > TwoPi) then
-                angle_r = angle_r - TwoPi*floor(abs(angle_r)/TwoPi)
-              elseif (angle_r < 0.0) then
-                angle_r = angle_r + TwoPi*ceiling(abs(angle_r)/TwoPi)
-              endif
-              a_r = nint(angle_r/Angle_size) + 1
-              do while (a_r > Nangle) ; a_r = a_r - Nangle ; enddo
-              if (a /= a_r) then
-                En_reflected(a_r) = part_refl(i,j)*En(i,j,a)
-                En(i,j,a)   = (1.0-part_refl(i,j))*En(i,j,a)
-              endif
-            endif
+  do j=jsh,jeh ; do i=ish,ieh
+    ! redistribute energy in angular space if ray will hit boundary
+    ! i.e., if energy is in a reflecting cell
+    if (angle_c(i,j) /= CS%nullangle) then
+      do a=1,NAngle ; if (En(i,j,a) > 0.0) then
+        if (sin(angle_i(a) - angle_c(i,j)) >= 0.0) then
+          ! if ray is incident, keep specified boundary angle
+          angle_wall = angle_c(i,j)
+        elseif (ridge(i,j)) then
+         ! if ray is not incident but in ridge cell, use complementary angle
+         angle_wall = angle_c(i,j) + 0.5*TwoPi
+          if (angle_wall > TwoPi) then
+            angle_wall = angle_wall - TwoPi*floor(abs(angle_wall)/TwoPi)
+          elseif (angle_wall < 0.0) then
+            angle_wall = angle_wall + TwoPi*ceiling(abs(angle_wall)/TwoPi)
           endif
-        enddo ! a-loop
-        En(i,j,:) = En(i,j,:) + En_reflected(:)
-        En_reflected(:) = 0.0
-      endif
-    enddo ! i-loop
-  enddo ! j-loop
+        else
+          ! if ray is not incident and not in a ridge cell, keep specified angle
+          angle_wall = angle_c(i,j)
+        endif
+
+        ! do reflection
+        if (sin(angle_i(a) - angle_wall) >= 0.0) then
+          angle_r = 2.0*angle_wall - angle_i(a)
+          if (angle_r > TwoPi) then
+            angle_r = angle_r - TwoPi*floor(abs(angle_r)/TwoPi)
+          elseif (angle_r < 0.0) then
+            angle_r = angle_r + TwoPi*ceiling(abs(angle_r)/TwoPi)
+          endif
+          a_r = nint(angle_r/Angle_size) + 1
+          do while (a_r > Nangle) ; a_r = a_r - Nangle ; enddo
+          if (a /= a_r) then
+            En_reflected(a_r) = part_refl(i,j)*En(i,j,a)
+            En(i,j,a)   = (1.0-part_refl(i,j))*En(i,j,a)
+          endif
+        endif
+      endif ; enddo ! a-loop
+      do a=1,NAngle
+        En(i,j,a) = En(i,j,a) + En_reflected(a)
+        En_reflected(a) = 0.0
+      enddo ! a-loop
+    endif
+  enddo ; enddo ! i- and j-loops
 
   ! Check to make sure no energy gets onto land (only run for debugging)
   ! do a=1,NAngle ; do j=jsc,jec ; do i=isc,iec
   !   if (En(i,j,a) > 0.001 .and. G%mask2dT(i,j) == 0) then
-  !     jd_g = j + G%jdg_offset ; id_g = i + G%idg_offset
-  !     write (mesg,*) 'En=', En(i,j,a), 'a=', a, 'ig_g=',id_g, 'jg_g=',jd_g
+  !     write (mesg,*) 'En=', En(i,j,a), 'a=', a, 'ig_g=',i+G%idg_offset, 'jg_g=',j+G%jdg_offset
   !     call MOM_error(FATAL, "reflect: Energy detected out of bounds: "//trim(mesg), .true.)
   !   endif
   ! enddo ; enddo ; enddo
@@ -1717,17 +1719,17 @@ subroutine teleport(En, NAngle, CS, G, LB)
   type(loop_bounds_type), intent(in)    :: LB !< A structure with the active energy loop bounds.
   ! Local variables
   real, dimension(G%isd:G%ied,G%jsd:G%jed)    :: angle_c
-                                              ! angle of boudary wrt equator
+                                              ! angle of boundary wrt equator [rad]
   real, dimension(G%isd:G%ied,G%jsd:G%jed)    :: part_refl
                                               ! fraction of wave energy reflected
-                                              ! values should collocate with angle_c
+                                              ! values should collocate with angle_c [nondim]
   logical, dimension(G%isd:G%ied,G%jsd:G%jed) :: pref_cell
                                               ! flag for partial reflection
   logical, dimension(G%isd:G%ied,G%jsd:G%jed) :: ridge
-                                           ! tags of cells with double reflection
-  real                        :: TwoPi      ! size of beam wedge (rad)
-  real                        :: Angle_size ! size of beam wedge (rad)
-  real, dimension(1:NAngle)   :: angle_i    ! angle of incident ray wrt equator
+                                              ! tags of cells with double reflection
+  real                        :: TwoPi      ! 2*pi = 6.2831853... [nondim]
+  real                        :: Angle_size ! size of beam wedge [rad]
+  real, dimension(1:NAngle)   :: angle_i    ! angle of incident ray wrt equator [rad]
   real, dimension(1:NAngle)   :: cos_angle, sin_angle
   real                        :: En_tele    ! energy to be "teleported" [R Z3 T-2 ~> J m-2]
   character(len=160) :: mesg  ! The text of an error message
@@ -2295,8 +2297,8 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
     CS%TKE_itidal_loss(:,:,:,:,:) = 0.0
   allocate(CS%TKE_Froude_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode))
     CS%TKE_Froude_loss(:,:,:,:,:) = 0.0
-  allocate(CS%tot_leak_loss(isd:ied,jsd:jed))   ; CS%tot_leak_loss(:,:)   = 0.0
-  allocate(CS%tot_quad_loss(isd:ied,jsd:jed) )  ; CS%tot_quad_loss(:,:)   = 0.0
+  allocate(CS%tot_leak_loss(isd:ied,jsd:jed))   ; CS%tot_leak_loss(:,:) = 0.0
+  allocate(CS%tot_quad_loss(isd:ied,jsd:jed) )  ; CS%tot_quad_loss(:,:) = 0.0
   allocate(CS%tot_itidal_loss(isd:ied,jsd:jed)) ; CS%tot_itidal_loss(:,:) = 0.0
   allocate(CS%tot_Froude_loss(isd:ied,jsd:jed)) ; CS%tot_Froude_loss(:,:) = 0.0
 
@@ -2427,7 +2429,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   ! Register 2-D energy density (summed over angles, freq, modes)
   CS%id_tot_En = register_diag_field('ocean_model', 'ITide_tot_En', diag%axesT1, &
                  Time, 'Internal tide total energy density', &
-                 'J m-2', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**2)
+                 'J m-2', conversion=US%RZ3_T3_to_W_m2*US%T_to_s)
   ! Register 2-D drag scale used for quadratic bottom drag
   CS%id_itide_drag = register_diag_field('ocean_model', 'ITide_drag', diag%axesT1, &
                  Time, 'Interior and bottom drag internal tide decay timescale', 's-1', conversion=US%s_to_T)
@@ -2435,23 +2437,23 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   CS%id_TKE_itidal_input = register_diag_field('ocean_model', 'TKE_itidal_input', diag%axesT1, &
                  Time, 'Conversion from barotropic to baroclinic tide, '//&
                  'a fraction of which goes into rays', &
-                 'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+                 'W m-2', conversion=US%RZ3_T3_to_W_m2)
   ! Register 2-D energy losses (summed over angles, freq, modes)
   CS%id_tot_leak_loss = register_diag_field('ocean_model', 'ITide_tot_leak_loss', diag%axesT1, &
                 Time, 'Internal tide energy loss to background drag', &
-                'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+                'W m-2', conversion=US%RZ3_T3_to_W_m2)
   CS%id_tot_quad_loss = register_diag_field('ocean_model', 'ITide_tot_quad_loss', diag%axesT1, &
                 Time, 'Internal tide energy loss to bottom drag', &
-                'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+                'W m-2', conversion=US%RZ3_T3_to_W_m2)
   CS%id_tot_itidal_loss = register_diag_field('ocean_model', 'ITide_tot_itidal_loss', diag%axesT1, &
                 Time, 'Internal tide energy loss to wave drag', &
-                'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+                'W m-2', conversion=US%RZ3_T3_to_W_m2)
   CS%id_tot_Froude_loss = register_diag_field('ocean_model', 'ITide_tot_Froude_loss', diag%axesT1, &
                 Time, 'Internal tide energy loss to wave breaking', &
-                'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+                'W m-2', conversion=US%RZ3_T3_to_W_m2)
   CS%id_tot_allprocesses_loss = register_diag_field('ocean_model', 'ITide_tot_allprocesses_loss', diag%axesT1, &
                 Time, 'Internal tide energy loss summed over all processes', &
-                'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+                'W m-2', conversion=US%RZ3_T3_to_W_m2)
 
   allocate(CS%id_En_mode(CS%nFreq,CS%nMode)) ; CS%id_En_mode(:,:) = -1
   allocate(CS%id_En_ang_mode(CS%nFreq,CS%nMode)) ; CS%id_En_ang_mode(:,:) = -1
@@ -2474,14 +2476,14 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
     write(var_name, '("Itide_En_freq",i1,"_mode",i1)') fr, m
     write(var_descript, '("Internal tide energy density in frequency ",i1," mode ",i1)') fr, m
     CS%id_En_mode(fr,m) = register_diag_field('ocean_model', var_name, &
-                 diag%axesT1, Time, var_descript, 'J m-2', conversion=US%R_to_kg_m3*US%Z_to_m**2*US%s_to_T**3)
+                 diag%axesT1, Time, var_descript, 'J m-2', conversion=US%RZ3_T3_to_W_m2*US%T_to_s)
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
 
     ! Register 3-D (i,j,a) energy density for each freq and mode
     write(var_name, '("Itide_En_ang_freq",i1,"_mode",i1)') fr, m
     write(var_descript, '("Internal tide angular energy density in frequency ",i1," mode ",i1)') fr, m
     CS%id_En_ang_mode(fr,m) = register_diag_field('ocean_model', var_name, &
-                 axes_ang, Time, var_descript, 'J m-2 band-1', conversion=US%R_to_kg_m3*US%Z_to_m**2*US%s_to_T**3)
+                 axes_ang, Time, var_descript, 'J m-2 band-1', conversion=US%RZ3_T3_to_W_m2*US%T_to_s)
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
 
     ! Register 2-D energy loss (summed over angles) for each freq and mode
@@ -2489,13 +2491,13 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
     write(var_name, '("Itide_wavedrag_loss_freq",i1,"_mode",i1)') fr, m
     write(var_descript, '("Internal tide energy loss due to wave-drag from frequency ",i1," mode ",i1)') fr, m
     CS%id_itidal_loss_mode(fr,m) = register_diag_field('ocean_model', var_name, &
-                 diag%axesT1, Time, var_descript, 'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+                 diag%axesT1, Time, var_descript, 'W m-2', conversion=US%RZ3_T3_to_W_m2)
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
     ! all loss processes
     write(var_name, '("Itide_allprocesses_loss_freq",i1,"_mode",i1)') fr, m
     write(var_descript, '("Internal tide energy loss due to all processes from frequency ",i1," mode ",i1)') fr, m
     CS%id_allprocesses_loss_mode(fr,m) = register_diag_field('ocean_model', var_name, &
-                 diag%axesT1, Time, var_descript, 'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+                 diag%axesT1, Time, var_descript, 'W m-2', conversion=US%RZ3_T3_to_W_m2)
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
 
     ! Register 3-D (i,j,a) energy loss for each freq and mode
@@ -2503,7 +2505,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
     write(var_name, '("Itide_wavedrag_loss_ang_freq",i1,"_mode",i1)') fr, m
     write(var_descript, '("Internal tide energy loss due to wave-drag from frequency ",i1," mode ",i1)') fr, m
     CS%id_itidal_loss_ang_mode(fr,m) = register_diag_field('ocean_model', var_name, &
-                 axes_ang, Time, var_descript, 'W m-2 band-1', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
+                 axes_ang, Time, var_descript, 'W m-2 band-1', conversion=US%RZ3_T3_to_W_m2)
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
 
     ! Register 2-D period-averaged near-bottom horizonal velocity for each freq and mode

@@ -99,13 +99,13 @@ function register_advection_test_tracer(HI, GV, param_file, CS, tr_Reg, restart_
   call log_version(param_file, mdl, version, "")
 
   call get_param(param_file, mdl, "ADVECTION_TEST_X_ORIGIN", CS%x_origin, &
-        "The x-coorindate of the center of the test-functions.", default=0.)
+        "The x-coordinate of the center of the test-functions.", units="same as geoLon", default=0.)
   call get_param(param_file, mdl, "ADVECTION_TEST_Y_ORIGIN", CS%y_origin, &
-        "The y-coorindate of the center of the test-functions.", default=0.)
+        "The y-coordinate of the center of the test-functions.", units="same as geoLat", default=0.)
   call get_param(param_file, mdl, "ADVECTION_TEST_X_WIDTH", CS%x_width, &
-        "The x-width of the test-functions.", default=0.)
+        "The x-width of the test-functions.", units="same as geoLon", default=0.)
   call get_param(param_file, mdl, "ADVECTION_TEST_Y_WIDTH", CS%y_width, &
-        "The y-width of the test-functions.", default=0.)
+        "The y-width of the test-functions.", units="same as geoLat", default=0.)
   call get_param(param_file, mdl, "ADVECTION_TEST_TRACER_IC_FILE", CS%tracer_IC_file, &
                  "The name of a file from which to read the initial "//&
                  "conditions for the tracers, or blank to initialize "//&
@@ -316,9 +316,9 @@ end subroutine advection_test_tracer_column_physics
 !> This subroutine extracts the surface fields from this tracer package that
 !! are to be shared with the atmosphere in coupled configurations.
 !! This particular tracer package does not report anything back to the coupler.
-subroutine advection_test_tracer_surface_state(state, h, G, CS)
+subroutine advection_test_tracer_surface_state(sfc_state, h, G, CS)
   type(ocean_grid_type),  intent(in)    :: G  !< The ocean's grid structure.
-  type(surface),          intent(inout) :: state !< A structure containing fields that
+  type(surface),          intent(inout) :: sfc_state !< A structure containing fields that
                                               !! describe the surface state of the ocean.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                           intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2].
@@ -339,7 +339,7 @@ subroutine advection_test_tracer_surface_state(state, h, G, CS)
       !   This call loads the surface values into the appropriate array in the
       ! coupler-type structure.
       call coupler_type_set_data(CS%tr(:,:,1,m), CS%ind_tr(m), ind_csurf, &
-                   state%tr_fields, idim=(/isd, is, ie, ied/), &
+                   sfc_state%tr_fields, idim=(/isd, is, ie, ied/), &
                    jdim=(/jsd, js, je, jed/) )
     enddo
   endif

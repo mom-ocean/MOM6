@@ -28,7 +28,7 @@ use MOM_offline_aux,          only : distribute_residual_uh_barotropic, distribu
 use MOM_offline_aux,          only : distribute_residual_uh_upwards, distribute_residual_vh_upwards
 use MOM_opacity,              only : opacity_CS, optics_type
 use MOM_open_boundary,        only : ocean_OBC_type
-use MOM_time_manager,         only : time_type
+use MOM_time_manager,         only : time_type, real_to_time
 use MOM_tracer_advect,        only : tracer_advect_CS, advect_tracer
 use MOM_tracer_diabatic,      only : applyTracerBoundaryFluxesInOut
 use MOM_tracer_flow_control,  only : tracer_flow_control_CS, call_tracer_column_fns, call_tracer_stocks
@@ -79,7 +79,8 @@ type, public :: offline_transport_CS ; private
   integer :: start_index  !< Timelevel to start
   integer :: iter_no      !< Timelevel to start
   integer :: numtime      !< How many timelevels in the input fields
-  integer :: accumulated_time !< Length of time accumulated in the current offline interval
+  type(time_type) :: accumulated_time !< Length of time accumulated in the current offline interval
+  type(time_type) :: vertical_time !< The next value of accumulate_time at which to apply vertical processes
   ! Index of each of the variables to be read in with separate indices for each variable if they
   ! are set off from each other in time
   integer :: ridx_sum = -1 !< Read index offset of the summed variables
@@ -150,7 +151,7 @@ type, public :: offline_transport_CS ; private
     id_temp_regrid = -1, &
     id_salt_regrid = -1, &
     id_h_regrid = -1
-  !!@}
+  !>@}
 
   ! IDs for timings of various offline components
   integer :: id_clock_read_fields = -1   !< A CPU time clock
@@ -176,7 +177,7 @@ type, public :: offline_transport_CS ; private
 
   real, allocatable, dimension(:,:) :: netMassIn  !< Freshwater fluxes into the ocean
   real, allocatable, dimension(:,:) :: netMassOut !< Freshwater fluxes out of the ocean
-  real, allocatable, dimension(:,:) :: mld        !< Mixed layer depths at thickness points [H ~> m or kg m-2].
+  real, allocatable, dimension(:,:) :: mld        !< Mixed layer depths at thickness points [Z ~> m].
 
   ! Allocatable arrays to read in entire fields during initialization
   real, allocatable, dimension(:,:,:,:) :: uhtr_all !< Entire field of zonal transport
@@ -663,7 +664,8 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, e
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), &
                     intent(inout)      :: ebtr       !< Entrainment from layer below [H ~> m or kg m-2]
 
-  real, dimension(SZI_(CS%G),SZJ_(CS%G))    :: sw, sw_vis, sw_nir !< Save old value of shortwave radiation
+  real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: &
+    sw, sw_vis, sw_nir !< Save old values of shortwave radiation [Q R Z T-1 ~> W m-2]
   real :: hval
   integer :: i,j,k
   integer :: is, ie, js, je, nz
@@ -721,14 +723,15 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, e
 
   ! Add diurnal cycle for shortwave radiation (only used if run in ocean-only mode)
   if (CS%diurnal_SW .and. CS%read_sw) then
-    sw(:,:) = fluxes%sw
-    sw_vis(:,:) = fluxes%sw_vis_dir
-    sw_nir(:,:) = fluxes%sw_nir_dir
+    sw(:,:) = fluxes%sw(:,:)
+    sw_vis(:,:) = fluxes%sw_vis_dir(:,:)
+    sw_nir(:,:) = fluxes%sw_nir_dir(:,:)
     call offline_add_diurnal_SW(fluxes, CS%G, Time_start, Time_end)
   endif
 
   if (associated(CS%optics)) &
-    call set_pen_shortwave(CS%optics, fluxes, CS%G, CS%GV, CS%diabatic_aux_CSp, CS%opacity_CSp, CS%tracer_flow_CSp)
+    call set_pen_shortwave(CS%optics, fluxes, CS%G, CS%GV, CS%US, CS%diabatic_aux_CSp, &
+                           CS%opacity_CSp, CS%tracer_flow_CSp)
 
   ! Note that tracerBoundaryFluxesInOut within this subroutine should NOT be called
   ! as the freshwater fluxes have already been accounted for
@@ -736,9 +739,9 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, e
                               CS%G, CS%GV, CS%US, CS%tv, CS%optics, CS%tracer_flow_CSp, CS%debug)
 
   if (CS%diurnal_SW .and. CS%read_sw) then
-    fluxes%sw(:,:) = sw
-    fluxes%sw_vis_dir(:,:) = sw_vis
-    fluxes%sw_nir_dir(:,:) = sw_nir
+    fluxes%sw(:,:) = sw(:,:)
+    fluxes%sw_vis_dir(:,:) = sw_vis(:,:)
+    fluxes%sw_nir_dir(:,:) = sw_nir(:,:)
   endif
 
   if (CS%debug) then
@@ -1198,7 +1201,7 @@ end subroutine post_offline_convergence_diags
 
 !> Extracts members of the offline main control structure. All arguments are optional except
 !! the control structure itself
-subroutine extract_offline_main(CS, uhtr, vhtr, eatr, ebtr, h_end, accumulated_time, &
+subroutine extract_offline_main(CS, uhtr, vhtr, eatr, ebtr, h_end, accumulated_time, vertical_time, &
                                 dt_offline, dt_offline_vertical, skip_diffusion)
   type(offline_transport_CS), target, intent(in   ) :: CS !< Offline control structure
   ! Returned optional arguments
@@ -1210,9 +1213,10 @@ subroutine extract_offline_main(CS, uhtr, vhtr, eatr, ebtr, h_end, accumulated_t
                                                           !! one time step [H ~> m or kg m-2]
   real, dimension(:,:,:), optional, pointer       :: h_end !< Thicknesses at the end of offline timestep
                                                           !! [H ~> m or kg m-2]
-  !### Why are the following variables integers?
-  integer,                optional, pointer       :: accumulated_time !< Length of time accumulated in the
-                                                          !! current offline interval [s]
+  type(time_type),        optional, pointer       :: accumulated_time !< Length of time accumulated in the
+                                                          !! current offline interval
+  type(time_type),        optional, pointer       :: vertical_time !< The next value of accumulate_time at which to
+                                                          !! vertical processes
   real,                   optional, intent(  out) :: dt_offline !< Timestep used for offline tracers [T ~> s]
   real,                   optional, intent(  out) :: dt_offline_vertical !< Timestep used for calls to tracer
                                                           !! vertical physics [T ~> s]
@@ -1227,6 +1231,7 @@ subroutine extract_offline_main(CS, uhtr, vhtr, eatr, ebtr, h_end, accumulated_t
 
   ! Pointers to integer members which need to be modified
   if (present(accumulated_time)) accumulated_time => CS%accumulated_time
+  if (present(vertical_time)) vertical_time => CS%vertical_time
 
   ! Return value of non-modified integers
   if (present(dt_offline))  dt_offline = CS%dt_offline
@@ -1412,7 +1417,8 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV, US)
   end select
 
   ! Set the accumulated time to zero
-  CS%accumulated_time = 0
+  CS%accumulated_time = real_to_time(0.0)
+  CS%vertical_time = CS%accumulated_time
   ! Set the starting read index for time-averaged and snapshotted fields
   CS%ridx_sum = CS%start_index
   if (CS%fields_are_offset) CS%ridx_snap = next_modulo_time(CS%start_index,CS%numtime)

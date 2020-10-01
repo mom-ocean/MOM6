@@ -13,7 +13,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : calculate_density, calculate_density_derivs
+use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_domain
 
 implicit none ; private
 
@@ -31,22 +31,28 @@ type, public :: regularize_layers_CS ; private
   logical :: reg_sfc_detrain !< If true, allow the buffer layers to detrain into the
                              !! interior as a part of the restructuring when
                              !! regularize_surface_layers is true
+  real    :: density_match_tol !< A relative tolerance for how well the densities must match
+                             !! with the target densities during detrainment when regularizing
+                             !! the near-surface layers [nondim]
   real    :: h_def_tol1      !< The value of the relative thickness deficit at
                              !! which to start modifying the structure, 0.5 by
-                             !! default (or a thickness ratio of 5.83).
+                             !! default (or a thickness ratio of 5.83) [nondim].
   real    :: h_def_tol2      !< The value of the relative thickness deficit at
                              !! which to the structure modification is in full
-                             !! force, now 20% of the way from h_def_tol1 to 1.
+                             !! force, now 20% of the way from h_def_tol1 to 1 [nondim].
   real    :: h_def_tol3      !< The value of the relative thickness deficit at which to start
                              !! detrainment from the buffer layers to the interior, now 30% of
-                             !! the way from h_def_tol1 to 1.
+                             !! the way from h_def_tol1 to 1 [nondim].
   real    :: h_def_tol4      !< The value of the relative thickness deficit at which to do
                              !! detrainment from the buffer layers to the interior at full
-                             !! force, now 50% of the way from h_def_tol1 to 1.
+                             !! force, now 50% of the way from h_def_tol1 to 1 [nondim].
   real    :: Hmix_min        !< The minimum mixed layer thickness [H ~> m or kg m-2].
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                              !! regulate the timing of diagnostic output.
+  logical :: answers_2018    !< If true, use the order of arithmetic and expressions that recover the
+                             !! answers from the end of 2018.  Otherwise, use updated and more robust
+                             !! forms of the same expressions.
   logical :: debug           !< If true, do more thorough checks for debugging purposes.
 
   integer :: id_def_rat = -1 !< A diagnostic ID
@@ -62,14 +68,14 @@ type, public :: regularize_layers_CS ; private
   integer :: id_def_rat_v_2 = -1, id_def_rat_v_2b = -1
   integer :: id_def_rat_u_3 = -1, id_def_rat_u_3b = -1
   integer :: id_def_rat_v_3 = -1, id_def_rat_v_3b = -1
-  !!@}
+  !>@}
 #endif
 end type regularize_layers_CS
 
 !>@{ Clock IDs
 !! \todo Should these be global?
 integer :: id_clock_pass, id_clock_EOS
-!!@}
+!>@}
 
 contains
 
@@ -173,7 +179,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
                 ! d_ea mean a net gain in mass by a layer from downward motion.
   real, dimension(SZI_(G)) :: &
     p_ref_cv, & !   Reference pressure for the potential density which defines
-                ! the coordinate variable, set to P_Ref [Pa].
+                ! the coordinate variable, set to P_Ref [R L2 T-2 ~> Pa].
     Rcv_tol, &  !   A tolerence, relative to the target density differences
                 ! between layers, for detraining into the interior [nondim].
     h_add_tgt, h_add_tot, &
@@ -209,7 +215,8 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   logical :: debug = .false.
   logical :: fatal_error
   character(len=256) :: mesg    ! Message for error messages.
-  integer :: i, j, k, is, ie, js, je, nz, nkmb, nkml, k1, k2, k3, ks, nz_filt
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
+  integer :: i, j, k, is, ie, js, je, nz, nkmb, nkml, k1, k2, k3, ks, nz_filt, kmax_d_ea
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -235,6 +242,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   I_dtol34 = 1.0 / max(CS%h_def_tol4 - CS%h_def_tol3, 1e-40)
 
   p_ref_cv(:) = tv%P_Ref
+  EOSdom(:) = EOS_domain(G%HI)
 
   do j=js-1,je+1 ; do i=is-1,ie+1
     e(i,j,1) = 0.0
@@ -300,28 +308,17 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
 
 
   ! Now restructure the layers.
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,do_j,def_rat_h,CS,nkmb,G,GV,US, &
-!$OMP                                  e,I_dtol,h,tv,debug,h_neglect,p_ref_cv,ea, &
-!$OMP                                  eb,id_clock_EOS,nkml)                      &
-!$OMP                          private(d_ea,d_eb,max_def_rat,do_i,nz_filt,e_e,e_w,&
-!$OMP                                  e_n,e_s,wt,e_filt,e_2d,h_2d,T_2d,S_2d,     &
-!$OMP                                  h_2d_init,T_2d_init,S_2d_init,ent_any,     &
-!$OMP                                  more_ent_i,ent_i,h_add_tgt,h_add_tot,      &
-!$OMP                                  cols_left,h_add,h_prev,ks,det_any,det_i,   &
-!$OMP                                  Rcv_tol,Rcv,k1,k2,h_det_tot,Rcv_min_det,   &
-!$OMP                                  Rcv_max_det,h_deficit,h_tot3,Th_tot3,      &
-!$OMP                                  Sh_tot3,scale,int_top,int_flux,int_Rflux,  &
-!$OMP                                  int_Tflux,int_Sflux,int_bot,h_prev_1d,     &
-!$OMP                                  h_tot1,Th_tot1,Sh_tot1,h_tot2,Th_tot2,     &
-!$OMP                                  Sh_tot2,h_predicted,fatal_error,mesg )
+  !$OMP parallel do default(private) shared(is,ie,js,je,nz,do_j,def_rat_h,CS,nkmb,G,GV,US, &
+  !$OMP                                     e,I_dtol,h,tv,debug,h_neglect,p_ref_cv,ea, &
+  !$OMP                                     eb,id_clock_EOS,nkml,EOSdom)
   do j=js,je ; if (do_j(j)) then
 
 !  call cpu_clock_begin(id_clock_EOS)
-!  call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, &
-!                                is, ie-is+1, tv%eqn_of_state)
+!  call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, tv%eqn_of_state, EOSdom)
 !  call cpu_clock_end(id_clock_EOS)
 
     do k=1,nz ; do i=is,ie ; d_ea(i,k) = 0.0 ; d_eb(i,k) = 0.0 ; enddo ; enddo
+    kmax_d_ea = 0
 
     max_def_rat = 0.0
     do i=is,ie
@@ -389,13 +386,18 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
             if (e_2d(i,nkmb+1)-e_filt(i,nkmb+1) > h_2d(i,k) - GV%Angstrom_H) then
               h_add = h_2d(i,k) - GV%Angstrom_H
               h_2d(i,k) = GV%Angstrom_H
+              e_2d(i,nkmb+1) = e_2d(i,nkmb+1) - h_add
             else
-              h_add = e_2d(i,nkmb+1)-e_filt(i,nkmb+1)
+              h_add = e_2d(i,nkmb+1) - e_filt(i,nkmb+1)
               h_2d(i,k) = h_2d(i,k) - h_add
+              if (CS%answers_2018) then
+                e_2d(i,nkmb+1) = e_2d(i,nkmb+1) - h_add
+              else
+                e_2d(i,nkmb+1) = e_filt(i,nkmb+1)
+              endif
             endif
             d_eb(i,k-1) = d_eb(i,k-1) + h_add
             h_add_tot(i) = h_add_tot(i) + h_add
-            e_2d(i,nkmb+1) = e_2d(i,nkmb+1) - h_add
             h_prev = h_2d(i,nkmb)
             h_2d(i,nkmb) = h_2d(i,nkmb) + h_add
 
@@ -436,15 +438,15 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
         if (do_i(i) .and. (e_2d(i,nkmb+1) < e_filt(i,nkmb+1)) .and. &
             (def_rat_h(i,j) > CS%h_def_tol3)) then
           det_i(i) = .true. ; det_any = .true.
-          Rcv_tol(i) = min((def_rat_h(i,j) - CS%h_def_tol3), 1.0)
+          ! The CS%density_match_tol default value of 0.6 gives 20% overlap in acceptable densities.
+          Rcv_tol(i) = CS%density_match_tol * min((def_rat_h(i,j) - CS%h_def_tol3), 1.0)
         endif
       enddo
     endif
     if (det_any) then
       call cpu_clock_begin(id_clock_EOS)
       do k=1,nkmb
-        call calculate_density(T_2d(:,k),S_2d(:,k),p_ref_cv,Rcv(:,k), &
-                               is,ie-is+1,tv%eqn_of_state, scale=US%kg_m3_to_R)
+        call calculate_density(T_2d(:,k), S_2d(:,k), p_ref_cv, Rcv(:,k), tv%eqn_of_state, EOSdom)
       enddo
       call cpu_clock_end(id_clock_EOS)
 
@@ -454,12 +456,11 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
         do ! This loop is terminated by exits.
           if (k1 <= 1) exit
           if (k2 <= nkmb) exit
-          ! ### The 0.6 here should be adjustable?  It gives 20% overlap for now.
-          Rcv_min_det = (GV%Rlay(k2) + 0.6*Rcv_tol(i)*(GV%Rlay(k2-1)-GV%Rlay(k2)))
+          Rcv_min_det = (GV%Rlay(k2) + Rcv_tol(i)*(GV%Rlay(k2-1)-GV%Rlay(k2)))
           if (k2 < nz) then
-            Rcv_max_det = (GV%Rlay(k2) + 0.6*Rcv_tol(i)*(GV%Rlay(k2+1)-GV%Rlay(k2)))
+            Rcv_max_det = (GV%Rlay(k2) + Rcv_tol(i)*(GV%Rlay(k2+1)-GV%Rlay(k2)))
           else
-            Rcv_max_det = (GV%Rlay(nz) + 0.6*Rcv_tol(i)*(GV%Rlay(nz)-GV%Rlay(nz-1)))
+            Rcv_max_det = (GV%Rlay(nz) + Rcv_tol(i)*(GV%Rlay(nz)-GV%Rlay(nz-1)))
           endif
           if (Rcv(i,k1) > Rcv_max_det) &
             exit ! All shallower interior layers are too light for detrainment.
@@ -476,7 +477,8 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
                 h_2d(i,k2) = h_2d(i,k2) + h_add
                 e_2d(i,k2) = e_2d(i,k2+1) + h_2d(i,k2)
                 d_ea(i,k2) = d_ea(i,k2) + h_add
-                ! ### THIS IS UPWIND.  IT SHOULD BE HIGHER ORDER...
+                kmax_d_ea = max(kmax_d_ea, k2)
+                ! This is upwind.  It should perhaps be higher order...
                 T_2d(i,k2) = (h_prev*T_2d(i,k2) + h_add*T_2d(i,k1)) / h_2d(i,k2)
                 S_2d(i,k2) = (h_prev*S_2d(i,k2) + h_add*S_2d(i,k1)) / h_2d(i,k2)
                 h_det_tot = h_det_tot + h_add
@@ -499,6 +501,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
               h_2d(i,k2) = h_2d(i,k2) + h_add
               e_2d(i,k2) = e_2d(i,k2+1) + h_2d(i,k2)
               d_ea(i,k2) = d_ea(i,k2) + h_add
+              kmax_d_ea = max(kmax_d_ea, k2)
               T_2d(i,k2) = (h_prev*T_2d(i,k2) + h_add*T_2d(i,k1)) / h_2d(i,k2)
               S_2d(i,k2) = (h_prev*S_2d(i,k2) + h_add*S_2d(i,k1)) / h_2d(i,k2)
               h_det_tot = h_det_tot + h_add
@@ -519,8 +522,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
 
         enddo ! exit terminated loop.
       endif ; enddo
-      ! ### This could be faster if the deepest k with nonzero d_ea were kept.
-      do k=nz-1,nkmb+1,-1 ; do i=is,ie ; if (det_i(i)) then
+      do k=kmax_d_ea-1,nkmb+1,-1 ; do i=is,ie ; if (det_i(i)) then
         d_ea(i,k) = d_ea(i,k) + d_ea(i,k+1)
       endif ; enddo ; enddo
     endif  ! Detrainment to the interior.
@@ -550,7 +552,8 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
         e_filt(i,2) = e_2d(i,nkml)
       endif
 
-      ! Map the water back into the layers.
+      ! Map the water back into the layers.  There are not mixed or buffer layers that are exceedingly
+      ! small compared to the others, so the code here is less prone to roundoff than elsewhere in MOM6.
       k1 = 1 ; k2 = 1
       int_top = 0.0
       do k=1,nkmb+1
@@ -887,6 +890,7 @@ subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_regularize_layers"  ! This module's name.
   logical :: use_temperature
+  logical :: default_2018_answers
   integer :: isd, ied, jsd, jed
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
@@ -911,6 +915,17 @@ subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
                  "If true, allow the buffer layers to detrain into the "//&
                  "interior as a part of the restructuring when "//&
                  "REGULARIZE_SURFACE_LAYERS is true.", default=.true.)
+  call get_param(param_file, mdl, "REG_SFC_DENSE_MATCH_TOLERANCE", CS%density_match_tol, &
+                 "A relative tolerance for how well the densities must match with the target "//&
+                 "densities during detrainment when regularizing the near-surface layers.  The "//&
+                 "default of 0.6 gives 20% overlaps in density", units="nondim", default=0.6)
+    call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
+    call get_param(param_file, mdl, "REGULARIZE_LAYERS_2018_ANSWERS", CS%answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=default_2018_answers)
   endif
 
   call get_param(param_file, mdl, "HMIX_MIN", CS%Hmix_min, &

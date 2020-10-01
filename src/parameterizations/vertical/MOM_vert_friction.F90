@@ -175,8 +175,8 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
                    optional, pointer     :: Waves !< Container for wave/Stokes information
 
   ! Fields from forces used in this subroutine:
-  !   taux: Zonal wind stress [Pa].
-  !   tauy: Meridional wind stress [Pa].
+  !   taux: Zonal wind stress [R L Z T-2 ~> Pa].
+  !   tauy: Meridional wind stress [R L Z T-2 ~> Pa].
 
   ! Local variables
 
@@ -558,7 +558,8 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
   enddo ! end of v-component J loop
 
   if (CS%debug) then
-    call uvchksum("visc_rem_[uv]", visc_rem_u, visc_rem_v, G%HI,haloshift=0)
+    call uvchksum("visc_rem_[uv]", visc_rem_u, visc_rem_v, G%HI, haloshift=0, &
+                  scalar_pair=.true.)
   endif
 
 end subroutine vertvisc_remnant
@@ -821,13 +822,13 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
       do k=1,nz ; do I=Isq,Ieq ; if (do_i_shelf(I)) then
         ! Should we instead take the inverse of the average of the inverses?
         CS%h_u(I,j,k) = forces%frac_shelf_u(I,j)  * hvel_shelf(I,k) + &
-                   (1.0-forces%frac_shelf_u(I,j)) * hvel(I,k)
+                   (1.0-forces%frac_shelf_u(I,j)) * hvel(I,k) + h_neglect
       elseif (do_i(I)) then
-        CS%h_u(I,j,k) = hvel(I,k)
+        CS%h_u(I,j,k) = hvel(I,k) + h_neglect
       endif ; enddo ; enddo
     else
       do K=1,nz+1 ; do I=Isq,Ieq ; if (do_i(I)) CS%a_u(I,j,K) = a_cpl(I,K) ; enddo ; enddo
-      do k=1,nz ; do I=Isq,Ieq ; if (do_i(I)) CS%h_u(I,j,k) = hvel(I,k) ; enddo ; enddo
+      do k=1,nz ; do I=Isq,Ieq ; if (do_i(I)) CS%h_u(I,j,k) = hvel(I,k) + h_neglect ; enddo ; enddo
     endif
 
     ! Diagnose total Kv at u-points
@@ -989,13 +990,13 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
       do k=1,nz ; do i=is,ie ; if (do_i_shelf(i)) then
         ! Should we instead take the inverse of the average of the inverses?
         CS%h_v(i,J,k) = forces%frac_shelf_v(i,J)  * hvel_shelf(i,k) + &
-                   (1.0-forces%frac_shelf_v(i,J)) * hvel(i,k)
+                   (1.0-forces%frac_shelf_v(i,J)) * hvel(i,k) + h_neglect
       elseif (do_i(i)) then
-        CS%h_v(i,J,k) = hvel(i,k)
+        CS%h_v(i,J,k) = hvel(i,k) + h_neglect
       endif ; enddo ; enddo
     else
       do K=1,nz+1 ; do i=is,ie ; if (do_i(i)) CS%a_v(i,J,K) = a_cpl(i,K) ; enddo ; enddo
-      do k=1,nz ; do i=is,ie ; if (do_i(i)) CS%h_v(i,J,k) = hvel(i,k) ; enddo ; enddo
+      do k=1,nz ; do i=is,ie ; if (do_i(i)) CS%h_v(i,J,k) = hvel(i,k) + h_neglect ; enddo ; enddo
     endif
 
     ! Diagnose total Kv at v-points
@@ -1008,10 +1009,13 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   enddo ! end of v-point j loop
 
   if (CS%debug) then
-    call uvchksum("vertvisc_coef h_[uv]", CS%h_u, CS%h_v, G%HI, haloshift=0, scale=GV%H_to_m)
-    call uvchksum("vertvisc_coef a_[uv]", CS%a_u, CS%a_v, G%HI, haloshift=0, scale=US%Z_to_m*US%s_to_T)
+    call uvchksum("vertvisc_coef h_[uv]", CS%h_u, CS%h_v, G%HI, haloshift=0, &
+                  scale=GV%H_to_m, scalar_pair=.true.)
+    call uvchksum("vertvisc_coef a_[uv]", CS%a_u, CS%a_v, G%HI, haloshift=0, &
+                  scale=US%Z_to_m*US%s_to_T, scalar_pair=.true.)
     if (allocated(hML_u) .and. allocated(hML_v)) &
-      call uvchksum("vertvisc_coef hML_[uv]", hML_u, hML_v, G%HI, haloshift=0, scale=GV%H_to_m)
+      call uvchksum("vertvisc_coef hML_[uv]", hML_u, hML_v, G%HI, &
+                    haloshift=0, scale=GV%H_to_m, scalar_pair=.true.)
   endif
 
 ! Offer diagnostic fields for averaging.
@@ -1573,8 +1577,8 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  default=.true.)
   call get_param(param_file, mdl, "VERT_FRICTION_2018_ANSWERS", CS%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the answers "//&
-                 "from the end of 2018.  Otherwise, use expressions that do not use an arbitary "//&
-                 "and hard-coded maximum viscous coupling coefficient between layers.", &
+                 "from the end of 2018.  Otherwise, use expressions that do not use an arbitrary "//&
+                 "hard-coded maximum viscous coupling coefficient between layers.", &
                  default=default_2018_answers)
   call get_param(param_file, mdl, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
                  "If true, the bottom stress is calculated with a drag "//&
@@ -1748,10 +1752,10 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
 
   CS%id_taux_bot = register_diag_field('ocean_model', 'taux_bot', diag%axesCu1, &
      Time, 'Zonal Bottom Stress from Ocean to Earth', 'Pa', &
-     conversion=US%R_to_kg_m3*US%L_T2_to_m_s2*US%Z_to_m)
+     conversion=US%RZ_to_kg_m2*US%L_T2_to_m_s2)
   CS%id_tauy_bot = register_diag_field('ocean_model', 'tauy_bot', diag%axesCv1, &
      Time, 'Meridional Bottom Stress from Ocean to Earth', 'Pa', &
-     conversion=US%R_to_kg_m3*US%L_T2_to_m_s2*US%Z_to_m)
+     conversion=US%RZ_to_kg_m2*US%L_T2_to_m_s2)
 
   if ((len_trim(CS%u_trunc_file) > 0) .or. (len_trim(CS%v_trunc_file) > 0)) &
     call PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS%PointAccel_CSp)
