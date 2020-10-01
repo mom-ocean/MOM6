@@ -2197,8 +2197,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   do k=1,size(Z_edges_in,1) ; Z_edges_in(k) = -Z_edges_in(k) ; enddo
 
   allocate(rho_z(isd:ied,jsd:jed,kd))
-  !allocate(area_shelf_h(isd:ied,jsd:jed))
-  !allocate(frac_shelf_h(isd:ied,jsd:jed))
 
   ! Convert T&S to Absolute Salinity and Conservative Temperature if using TEOS10 or NEMO
   call convert_temp_salt_for_TEOS10(temp_z, salt_z, G%HI, kd, mask_z, eos)
