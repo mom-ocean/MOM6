@@ -2077,6 +2077,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   reentrant_x = .false. ; call get_param(PF, mdl, "REENTRANT_X", reentrant_x, default=.true.)
   tripolar_n = .false. ;  call get_param(PF, mdl, "TRIPOLAR_N", tripolar_n, default=.false.)
 
+  use_ice_shelf=.false.
+  if (present(frac_shelf_h)) use_ice_shelf=.true.
+
   call get_param(PF, mdl, "TEMP_SALT_Z_INIT_FILE",filename, &
                  "The name of the z-space input file used to initialize "//&
                  "temperatures (T) and salinities (S). If T and S are not "//&
@@ -2136,17 +2139,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
                  "If true, use the order of arithmetic for horizonal regridding that recovers "//&
                  "the answers from the end of 2018.  Otherwise, use rotationally symmetric "//&
                  "forms of the same expressions.", default=default_2018_answers)
-  call get_param(PF, mdl, "ICE_SHELF", use_ice_shelf, default=.false.)
-  ! if (use_ice_shelf) then
-  !   call get_param(PF, mdl, "ICE_THICKNESS_FILE", ice_shelf_file, &
-  !                "The file from which the ice bathymetry and area are read.", &
-  !                fail_if_missing=.not.just_read, do_not_log=just_read)
-  !   shelf_file = trim(inputdir)//trim(ice_shelf_file)
-  !   if (.not.just_read) call log_param(PF, mdl, "INPUTDIR/THICKNESS_FILE", shelf_file)
-  !   call get_param(PF, mdl, "ICE_AREA_VARNAME", area_varname, &
-  !                "The name of the area variable in ICE_THICKNESS_FILE.", &
-  !                fail_if_missing=.not.just_read, do_not_log=just_read)
-  ! endif
   if (.not.useALEremapping) then
     call get_param(PF, mdl, "ADJUST_THICKNESS", correct_thickness, &
                  "If true, all mass below the bottom removed if the "//&
@@ -2225,26 +2217,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   call pass_var(salt_z,G%Domain)
   call pass_var(mask_z,G%Domain)
   call pass_var(rho_z,G%Domain)
-
-  ! ! This is needed for building an ALE grid under ice shelves
-  ! if (use_ice_shelf) then
-  !   if (.not.file_exists(shelf_file, G%Domain)) call MOM_error(FATAL, &
-  !     "MOM_temp_salt_initialize_from_Z: Unable to open shelf file "//trim(shelf_file))
-
-  !   call MOM_read_data(shelf_file, trim(area_varname), area_shelf_h, G%Domain, scale=US%m_to_L**2)
-
-  !   ! Initialize frac_shelf_h with zeros (open water everywhere)
-  !   frac_shelf_h(:,:) = 0.0
-  !   ! Compute fractional ice shelf coverage of h
-  !   do j=js,je ; do i=is,ie
-  !     if (G%areaT(i,j) > 0.0) &
-  !       frac_shelf_h(i,j) = area_shelf_h(i,j) / G%areaT(i,j)
-  !   enddo; enddo
-  !   call pass_var(frac_shelf_h,G%Domain)
-  !   deallocate(area_shelf_h)
-  !   ! Pass to the pointer for use as an argument to regridding_main
-  !   ! shelf_area => frac_shelf_h
-  ! endif
 
   ! Done with horizontal interpolation.
   ! Now remap to model coordinates
