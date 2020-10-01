@@ -3432,13 +3432,13 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
          "default will overwrite to 25., 2500., 250000.",units='J/m2', default=0., &
          scale=US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**2)
     if ((CS%MLD_EN_VALS(1)==0.).and.(CS%MLD_EN_VALS(2)==0.).and.(CS%MLD_EN_VALS(3)==0.)) then
-      CS%MLD_EN_VALS = (/25.*US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**2,&
-           2500.*US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**2,&
-           250000.*US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**2/)
+      CS%MLD_EN_VALS = (/25.*US%kg_m3_to_R*US%m_to_Z*US%m_to_L**2*US%T_to_s**2,&
+           2500.*US%kg_m3_to_R*US%m_to_Z*US%m_to_L**2*US%T_to_s**2,&
+           250000.*US%kg_m3_to_R*US%m_to_Z*US%m_to_L**2*US%T_to_s**2/)
     endif
-    write(EN1,'(F10.2)') CS%MLD_EN_VALS(1)*US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**2
-    write(EN2,'(F10.2)') CS%MLD_EN_VALS(2)*US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**2
-    write(EN3,'(F10.2)') CS%MLD_EN_VALS(3)*US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**2
+    write(EN1,'(F10.2)') CS%MLD_EN_VALS(1)*US%R_to_kg_m3*US%Z_to_m*US%L_to_m**2*US%s_to_T**2
+    write(EN2,'(F10.2)') CS%MLD_EN_VALS(2)*US%R_to_kg_m3*US%Z_to_m*US%L_to_m**2*US%s_to_T**2
+    write(EN3,'(F10.2)') CS%MLD_EN_VALS(3)*US%R_to_kg_m3*US%Z_to_m*US%L_to_m**2*US%s_to_T**2
     CS%id_MLD_EN1 = register_diag_field('ocean_model', 'MLD_EN1', diag%axesT1, Time, &
          'Mixed layer depth for energy value set to '//trim(EN1)//' J/m2 (Energy set by 1st MLD_EN_VALS)', &
          'm', conversion=US%Z_to_m)

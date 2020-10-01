@@ -732,7 +732,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
   type(ocean_grid_type),   intent(in) :: G           !< Grid type
   type(verticalGrid_type), intent(in) :: GV          !< ocean vertical grid structure
   type(unit_scale_type),   intent(in) :: US          !< A dimensional unit scaling type
-  real, dimension(3),      intent(in) :: Mixing_Energy !< Energy values for up to 5 MLDs
+  real, dimension(3),      intent(in) :: Mixing_Energy !< Energy values for up to 3 MLDs
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in) :: h           !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(in) :: tv          !< Structure containing pointers to any
@@ -781,7 +781,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
       call calculate_density(tv%T(i,j,:), tv%S(i,j,:), pRef_MLD, rho_c, 1, nz, &
                            tv%eqn_of_state, scale=US%kg_m3_to_R)
       Z_U(1) = 0.0
-      do k=2,nz ; Z_U(k) = Z_U(k-1) - h(i,j,k-1)*GV%H_to_z ; enddo
+      do k=2,nz ; Z_U(k) = Z_U(k-1) - h(i,j,k-1)*GV%H_to_Z ; enddo
       do k=1,nz
         Z_C(k) = Z_U(k) - 0.5 * h(i,j,k) * GV%H_to_Z
         Z_L(k) = Z_U(k) - h(i,j,k) * GV%H_to_Z
@@ -896,8 +896,6 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
             endif
             mld(i,j,iM) = H_MixedLayer
           enddo
-        else
-          mld(:,:,iM) = -1.e8 ! This shouldn't be seen, but if it is set it to something obviously wrong.
         endif
       enddo
     enddo
