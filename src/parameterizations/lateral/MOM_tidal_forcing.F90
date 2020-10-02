@@ -474,7 +474,8 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
     call get_param(param_file, mdl, "TIDE_"//trim(CS%const_name(c))//"_FREQ", CS%freq(c), &
                    "Frequency of the "//trim(CS%const_name(c))//" tidal constituent. "//&
                    "This is only used if TIDES and TIDE_"//trim(CS%const_name(c))// &
-                   " are true.", units="s-1", default=freq_def(c))
+                   " are true, or if OBC_TIDE_N_CONSTITUENTS > 0 and "//trim(CS%const_name(c))// &
+                   "is in OBC_TIDE_CONSTITUENTS.", units="s-1", default=freq_def(c))
     call get_param(param_file, mdl, "TIDE_"//trim(CS%const_name(c))//"_AMP", CS%amp(c), &
                    "Amplitude of the "//trim(CS%const_name(c))//" tidal constituent. "//&
                    "This is only used if TIDES and TIDE_"//trim(CS%const_name(c))// &

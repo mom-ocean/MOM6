@@ -368,9 +368,6 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   character(len=1024) :: segment_str      ! The contents (rhs) for parameter "segment_param_str"
   character(len=200) :: config1          ! String for OBC_USER_CONFIG
   real               :: Lscale_in, Lscale_out ! parameters controlling tracer values at the boundaries [L ~> m]
-  integer, dimension(3) :: tide_ref_date, nodal_ref_date  !< Reference date (t = 0) for tidal forcing
-                                                          !! and fixed date for nodal modulation.
-  character(len=50) :: tide_constituent_str  !< List of tidal constituents to add to boundary.
   character(len=128) :: inputdir
   logical :: answers_2018, default_2018_answers
   logical :: check_reconstruction, check_remapping, force_bounds_in_subcell
@@ -462,32 +459,6 @@ subroutine open_boundary_config(G, US, param_file, OBC)
 
     if (OBC%n_tide_constituents > 0) then
       OBC%add_tide_constituents = .true.
-      call get_param(param_file, mdl, "OBC_TIDE_CONSTITUENTS", tide_constituent_str, &
-          "Names of tidal constituents being added to the open boundaries.", &
-          fail_if_missing=.true.)
-
-      call get_param(param_file, mdl, "OBC_TIDE_ADD_EQ_PHASE", OBC%add_eq_phase, &
-          "If true, add the equilibrium phase argument to the specified tidal phases.", &
-          default=.false., fail_if_missing=.false.)
-
-      call get_param(param_file, mdl, "OBC_TIDE_ADD_NODAL", OBC%add_nodal_terms, &
-          "If true, include 18.6 year nodal modulation in the boundary tidal forcing.", &
-          default=.false.)
-
-      call get_param(param_file, mdl, "OBC_TIDE_REF_DATE", tide_ref_date, &
-          "Reference date to use for tidal calculations and equilibrium phase.", &
-          fail_if_missing=.true.)
-
-      call get_param(param_file, mdl, "OBC_TIDE_NODAL_REF_DATE", nodal_ref_date, &
-          "Fixed reference date to use for nodal modulation of boundary tides.", &
-          fail_if_missing=.false., default=0)
-
-      if (.not. OBC%add_eq_phase) then
-        ! If equilibrium phase argument is not added, the input phases
-        ! should already be relative to the reference time.
-        call MOM_mesg('OBC tidal phases will *not* be corrected with equilibrium arguments.')
-      endif
-
     else
       OBC%add_tide_constituents = .false.
     endif
@@ -664,7 +635,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
        "Symmetric memory must be used when using Flather OBCs.")
   ! Need to do this last, because it depends on time_interp_external_init having already been called
   if (OBC%add_tide_constituents) then
-    call initialize_obc_tides(OBC, tide_ref_date, nodal_ref_date, tide_constituent_str)
+    call initialize_obc_tides(OBC, param_file)
     ! Tide update is done within update_OBC_segment_data, so this should be true if tides are included.
     OBC%update_OBC = .true.
   endif
@@ -988,14 +959,41 @@ subroutine initialize_segment_data(G, OBC, PF)
 
 end subroutine initialize_segment_data
 
-subroutine initialize_obc_tides(OBC, tide_ref_date, nodal_ref_date, tide_constituent_str)
+subroutine initialize_obc_tides(OBC, param_file)
   type(ocean_OBC_type), pointer       :: OBC !< Open boundary control structure
-  integer, dimension(3), intent(in) :: tide_ref_date      !< Reference date (t = 0) for tidal forcing.
-  integer, dimension(3), intent(in) :: nodal_ref_date     !< Date to calculate nodal modulation for.
-  character(len=50), intent(in) :: tide_constituent_str   !< List of tidal constituents to include on boundary.
+  type(param_file_type),   intent(in)    :: param_file !< Parameter file handle
+  integer, dimension(3) :: tide_ref_date      !< Reference date (t = 0) for tidal forcing (year, month, day).
+  integer, dimension(3) :: nodal_ref_date     !< Date to calculate nodal modulation for (year, month, day).
+  character(len=50) :: tide_constituent_str   !< List of tidal constituents to include on boundary.
   type(astro_longitudes) :: nodal_longitudes              !< Solar and lunar longitudes for tidal forcing
   type(time_type) :: nodal_time                           !< Model time to calculate nodal modulation for.
   integer :: c                                            !< Index to tidal constituent.
+
+  call get_param(param_file, mdl, "OBC_TIDE_CONSTITUENTS", tide_constituent_str, &
+      "Names of tidal constituents being added to the open boundaries.", &
+      fail_if_missing=.true.)
+
+  call get_param(param_file, mdl, "OBC_TIDE_ADD_EQ_PHASE", OBC%add_eq_phase, &
+      "If true, add the equilibrium phase argument to the specified tidal phases.", &
+      default=.false., fail_if_missing=.false.)
+
+  call get_param(param_file, mdl, "OBC_TIDE_ADD_NODAL", OBC%add_nodal_terms, &
+      "If true, include 18.6 year nodal modulation in the boundary tidal forcing.", &
+      default=.false.)
+
+  call get_param(param_file, mdl, "OBC_TIDE_REF_DATE", tide_ref_date, &
+      "Reference date to use for tidal calculations and equilibrium phase.", &
+      fail_if_missing=.true.)
+
+  call get_param(param_file, mdl, "OBC_TIDE_NODAL_REF_DATE", nodal_ref_date, &
+      "Fixed reference date to use for nodal modulation of boundary tides.", &
+      fail_if_missing=.false., default=0)
+
+  if (.not. OBC%add_eq_phase) then
+    ! If equilibrium phase argument is not added, the input phases
+    ! should already be relative to the reference time.
+    call MOM_mesg('OBC tidal phases will *not* be corrected with equilibrium arguments.')
+  endif
 
   allocate(OBC%tide_names(OBC%n_tide_constituents))
   read(tide_constituent_str, *) OBC%tide_names
@@ -1029,7 +1027,13 @@ subroutine initialize_obc_tides(OBC, tide_ref_date, nodal_ref_date, tide_constit
   allocate(OBC%tide_un(OBC%n_tide_constituents))
 
   do c=1,OBC%n_tide_constituents
-    OBC%tide_frequencies(c) = tidal_frequency(trim(OBC%tide_names(c)))
+    ! If tidal frequency is overridden by setting TIDE_*_FREQ, use that, otherwise use the
+    ! default realistic frequency for this constituent.
+    call get_param(param_file, mdl, "TIDE_"//trim(OBC%tide_names(c))//"_FREQ", OBC%tide_frequencies(c), &
+        "Frequency of the "//trim(OBC%tide_names(c))//" tidal constituent. "//&
+        "This is only used if TIDES and TIDE_"//trim(OBC%tide_names(c))// &
+        " are true, or if OBC_TIDE_N_CONSTITUENTS > 0 and "//trim(OBC%tide_names(c))//&
+        " is in OBC_TIDE_CONSTITUENTS.", units="s-1", default=tidal_frequency(trim(OBC%tide_names(c))))
 
     ! Find equilibrum phase if needed
     if (OBC%add_eq_phase) then
