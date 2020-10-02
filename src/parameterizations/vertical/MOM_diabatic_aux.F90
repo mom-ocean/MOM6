@@ -727,7 +727,27 @@ end subroutine diagnoseMLDbyDensityDifference
 !> Diagnose a mixed layer depth (MLD) determined by the depth a given energy value would mix.
 !> This routine is appropriate in MOM_diabatic_driver due to its position within the time stepping.
 subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
-  ! Note that gravity is assumed constant everywhere and divided out of all calculations.
+  ! Author: Brandon Reichl
+  ! Date: October 2, 2020
+  ! //
+  ! *Note that gravity is assumed constant everywhere and divided out of all calculations.
+  !
+  ! This code has been written to step through the columns layer by layer, summing the PE
+  ! change inferred by mixing the layer with all layers above.  When the change exceeds a
+  ! threshold (determined by input array Mixing_Energy), the code needs to solve for how far
+  ! into this layer the threshold PE change occurs (assuming constant density layers).
+  ! This is expressed here via solving the function F(X) = 0 where:
+  ! F(X) = 0.5 * ( Ca*X^3/(D1+X) + Cb*X^2/(D1+X) + Cc*X/(D1+X) + Dc/(D1+X)
+  !                + Ca2*X^2 + Cb2*X + Cc2)
+  ! where all coefficients are determined by the previous mixed layer depth, the
+  ! density of the previous mixed layer, the present layer thickness, and the present
+  ! layer density.  This equation is worked out by computing the total PE assuming constant
+  ! density in the mixed layer as well as in the remaining part of the present layer that is
+  ! not mixed.
+  ! To solve for X in this equation a Newton's method iteration is employed, which
+  ! converges extremely quickly (usually 1 guess) since this equation turns out being rather
+  ! lienar for PE change with increasing X.
+  ! Input parameters:
   integer, dimension(3),   intent(in) :: id_MLD      !< Energy output diag IDs
   type(ocean_grid_type),   intent(in) :: G           !< Grid type
   type(verticalGrid_type), intent(in) :: GV          !< ocean vertical grid structure
@@ -741,188 +761,173 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
 
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G),3) :: MLD     ! Diagnosed mixed layer depth [Z ~> m].
-  real, dimension(SZK_(G)) :: Z_L, Z_C, Z_U, dZ, Rho_c, pRef_MLD
+  real, dimension(SZK_(G)) :: Z_L, Z_U, dZ, Rho_c, pRef_MLD
+  real, dimension(3) :: PE_threshold
 
-  real :: PE_Before
-  real :: Rho_MixedLayer, H_MixedLayer
+  real :: ig, E_g
+  real :: PE_Threshold_fraction, PE, PE_Mixed, PE_Mixed_TST
+  real :: RhoDZ_ML, H_ML, RhoDZ_ML_TST, H_ML_TST
+  real :: Rho_ML
 
-  real, parameter :: Surface  = 0.0
+  real :: R1, D1, R2, D2
+  real :: Ca, Cb,D ,Cc, Cd, Ca2, Cb2, C, Cc2
+  real :: Gx, Gpx, Hx, iHx, Hpx, Ix, Ipx, Fgx, Fpx, X, X2
 
-  real :: PE_Column_before, PE_Column_Target, PE_column_0, PE_column_N
-  real :: Rho_MixedLayer_0, H_MixedLayer_0, Zc_MixedLayer_0, PE_MixedLayer_0
-  real :: Rho_MixedLayer_N, H_MixedLayer_N, Zc_MixedLayer_N, PE_MixedLayer_N
-  real :: dz_mixed_0, dz_mixed_N
-  real :: PE_interior
-  real :: dz_below, zc_below, zl_below, zu_below, rho_c_below, PE_below
-
-  real :: rho_c_mixed_n, zc_mixed_n
-
-  real :: Guess_Fraction, PE_Threshold(3), PE_Threshold_fraction
-  real :: A, B, C, dz_increment
-  logical :: Not_Converged
-  integer :: IT
-  real :: dz_max_incr
-  real :: igrav
-  integer :: i, j, is, ie, js, je, k, nz, id_N2, id_SQ, iM
+  integer :: IT, iM
+  integer :: i, j, is, ie, js, je, k, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   pRef_MLD(:) = 0.0
   mld(:,:,:) = 0.0
-  igrav = 1./GV%g_earth
   PE_Threshold_fraction = 1.e-4 !Fixed threshold of 0.01%, could be runtime.
 
   do iM=1,3
-    PE_threshold(iM) = Mixing_Energy(iM)*igrav*PE_Threshold_fraction
+    PE_threshold(iM) = Mixing_Energy(iM)/GV%g_earth
   enddo
 
-  do j=js,je
-    do i=is,ie
+  do j=js,je; do i=is,ie
+    if (G%mask2dT(i,j) > 0.0) then
+
       call calculate_density(tv%T(i,j,:), tv%S(i,j,:), pRef_MLD, rho_c, 1, nz, &
-                           tv%eqn_of_state, scale=US%kg_m3_to_R)
-      Z_U(1) = 0.0
-      do k=2,nz ; Z_U(k) = Z_U(k-1) - h(i,j,k-1)*GV%H_to_Z ; enddo
+                             tv%eqn_of_state, scale=US%kg_m3_to_R)
+
       do k=1,nz
-        Z_C(k) = Z_U(k) - 0.5 * h(i,j,k) * GV%H_to_Z
-        Z_L(k) = Z_U(k) - h(i,j,k) * GV%H_to_Z
-        dZ(k) = h(i,j,k) * GV%H_to_Z
+        DZ(k) = h(i,j,k) * GV%H_to_Z
+      enddo
+      Z_U(1) = 0.0
+      Z_L(1) = -DZ(1)
+      do k=2,nz
+        Z_U(k) = Z_L(k-1)
+        Z_L(k) = Z_L(k-1)-DZ(k)
       enddo
 
       do iM=1,3
-        if (id_MLD(iM)>0) then
-          ! Compute PE of column
-          call PE_Kernel(PE_Column_before,NZ,Z_L,Z_U,Rho_c)
-          PE_Column_Target = PE_Column_before + Mixing_Energy(iM)*igrav
 
-          rho_mixedlayer = 0.
-          h_mixedlayer = 0.
+        ! Initialize these for each columnwise calculation
+        PE = 0.0
+        RhoDZ_ML = 0.0
+        H_ML = 0.0
+        RhoDZ_ML_TST = 0.0
+        H_ML_TST = 0.0
+        PE_Mixed = 0.0
 
+        do k=1,nz
 
-          do k=1,NZ
+          ! This is the unmixed PE cummulative sum from top down
+          PE = PE + 0.5*rho_c(k)*(Z_U(k)**2-Z_L(k)**2)
 
-            !Compute the PE if the whole layer is mixed
-            Rho_MixedLayer_0 = Rho_MixedLayer + Rho_c(k)*dZ(k)
-            H_MixedLayer_0   = H_MixedLayer + dZ(k)
-            Zc_MixedLayer_0  = 0.5 * (Surface - H_MixedLayer_0)
-            PE_MixedLayer_0  = Rho_MixedLayer_0 * Zc_MixedLayer_0
+          ! This is the depth and integral of density
+          H_ML_TST = H_ML + DZ(k)
+          RhoDZ_ML_TST = RhoDZ_ML + rho_c(k)*DZ(k)
 
-            !Compute the PE of the interior layers
-            call PE_Kernel(PE_Interior,NZ-(K),Z_L(K+1:NZ),Z_U(K+1:NZ),Rho_c(K+1:NZ))
+          ! The average density assuming all layers including this were mixed
+          Rho_ML = RhoDZ_ML_TST/H_ML_TST
 
-            PE_Column_0 = PE_MixedLayer_0+PE_Interior
+          ! The PE assuming all layers including this were mixed
+          ! Note that 0. could be replaced with "Surface", which doesn't have to be 0
+          ! but 0 is a good reference value.
+          PE_Mixed_TST = 0.5*Rho_ML*(0.**2-(0.-H_ML_TST)**2)
 
-            !Check if we did not have enough energy to mix the whole layer
-            if (PE_Column_0>PE_Column_Target) then
+          ! Check if we supplied enough energy to mix to this layer
+          if (PE_Mixed_TST-PE<=PE_threshold(iM)) then
+            H_ML = H_ML_TST
+            RhoDZ_ML = RhoDZ_ML_TST
 
-              !
-              dz_mixed_0 = dz(k)
-              dz_max_incr = dz(k)*0.1
+          else ! If not, we need to solve where the energy ran out
+            ! This will be done with a Newton's method iteration:
 
-              ! Guess the thickness of the amount that can be mixed:
-              Guess_fraction = 0.5
-              dz_mixed_N = dZ(k)*Guess_fraction
+            R1 = RhoDZ_ML/H_ML ! The density of the mixed layer (not including this layer)
+            D1 = H_ML ! The thickness of the mixed layer (not including this layer)
+            R2 = rho_c(k) ! The density of this layer
+            D2 = DZ(k) ! The thickness of this layer
 
-              !Compute the PE if we mixed to the guessed thickness
-              Rho_MixedLayer_N = Rho_MixedLayer + Rho_c(k)*dz_mixed_N
-              H_MixedLayer_N   = H_MixedLayer + dz_mixed_N
-              Zc_MixedLayer_N  = 0.5 * (Surface - H_MixedLayer_N)
-              PE_MixedLayer_N  = Rho_MixedLayer_N * Zc_MixedLayer_N
+            ! This block could be used to calculate the function coefficients if
+            ! we don't reference all values to a surface designated as z=0
+            ! S = Surface
+            ! Ca  = -(R2)
+            ! Cb  = -( (R1*D1) + R2*(2.*D1-2.*S) )
+            ! D   = D1**2. - 2.*D1*S
+            ! Cc  = -( R1*D1*(2.*D1-2.*S) + R2*D )
+            ! Cd  = -(R1*D1*D)
+            ! Ca2 = R2
+            ! Cb2 = R2*(2*D1-2*S)
+            ! C   = S**2 + D2**2 + D1**2 - 2*D1*S - 2.*D2*S +2.*D1*D2
+            ! Cc2 = R2*(D+S**2-C)
+            !
+            ! If the surface is S = 0, it simplifies to:
+            Ca  = -(R2)
+            Cb  = -( R1*D1 + R2*(2.*D1) )
+            D   = D1**2.
+            Cc  = -( R1*D1*(2*D1) + R2*D )
+            Cd  = -R1*D1*D
+            Ca2 = R2
+            Cb2 = R2*(2.*D1)
+            C   = D2**2. + D1**2. + 2.*D1*D2
+            Cc2 = R2*(D-C)
 
-              ! The remaining thickness is not mixed
-              dz_below    = dz(k)*(1.-Guess_fraction)
-              Zl_below    = Z_L(k)
-              Zu_below    = Z_L(k) + dz_below
+            ! First guess for an iteration using Newton's method
+            X = DZ(k)*0.5
 
-              !Compute the PE of the fraction of the layer that wasn't mixed
-              call PE_Kernel(PE_below, 1, (/Zl_below/),(/zu_below/), &
-                   (/Rho_c(k)/) )
+            IT=0
+            do while(IT<10)!We can iterate up to 10 times
+              ! We are trying to solve the function:
+              ! F(x) = G(x)/H(x)+I(x)
+              ! for where F(x) = PE+PE_threshold, or equivalently for where
+              ! F(x) = G(x)/H(x)+I(x) - (PE+PE_threshold) = 0
+              ! We also need the derivative of this function for the Newton's method iteration
+              ! F'(x) = (G'(x)H(x)-G(x)H'(x))/H(x)^2 + I'(x)
+              ! G and its derivative
+              Gx = 0.5*(Ca*X**3+Cb*X**2+Cc*X+Cd)
+              Gpx = 0.5*(3*Ca*X**2+2*Cb*X+Cc)
+              ! H, its inverse, and its derivative
+              Hx = (D1+X)
+              iHx = 1./Hx
+              Hpx = 1.
+              ! I and its derivative
+              Ix = 0.5*(Ca2*X**2. + Cb2*X + Cc2)
+              Ipx = 0.5*(2.*Ca2*X+Cb2)
 
-              PE_column_N = PE_MixedLayer_N + PE_below + PE_interior
-              ! There is a question if an iteration is the most efficient
-              ! way to solve this problem.  The expression for the layer fraction that
-              ! is not mixed is cubic and the iteration converges fairly rapidly.
-              ! So the answer is tbd, but this simple iteration serves the purpose
-              ! for now.
-              do IT = 1,20 !Do the iteration up to 20 times
-                Not_Converged = (abs(PE_column_N-PE_column_target)>PE_Threshold(iM))
-                if (Not_Converged) then
+              ! The Function and its derivative:
+              PE_Mixed = Gx*iHx+Ix
+              Fgx = (PE_Mixed-(PE+PE_threshold(iM)))
+              Fpx = (Gpx*Hx-Hpx*Gx)*iHx**2+Ipx
 
-                  A = PE_column_target - PE_column_N
-                  B = PE_column_N - PE_column_0
-                  C = dz_mixed_N - dz_mixed_0
-
-                  if (abs(b)>PE_threshold(iM)) then
-                    dz_increment = (A*C)/B
-                  else
-                    dz_increment = sign(dz(k)*1.e-4,A)
-                  endif
-
-                  if ( (dz_mixed_N+dz_increment > dz(k)) .or. &
-                      (dz_mixed_N+dz_increment < 0.0) ) then
-                    dz_increment = min(dz_max_incr,min(dz(k)-dz_mixed_n,dz_increment))
-                    dz_increment = max(-dz_max_incr,max(0.-dz_mixed_n,dz_increment))
-                  endif
-
-                  !Reset the _0's:
-                  PE_column_0 = PE_column_N
-                  dz_mixed_0  = dz_mixed_N
-
-                  !Compute the _N's:
-                  ! Guess the thickness of the amount that can be mixed:
-                  dz_mixed_N = dz_mixed_N + dz_increment
-
-                  !Compute the PE if we mixed to the guessed thickness
-                  Rho_MixedLayer_N = Rho_MixedLayer + Rho_c(k)*dz_mixed_N
-                  H_MixedLayer_N   = H_MixedLayer + dz_mixed_N
-                  Zc_MixedLayer_N  = 0.5 * (Surface - H_MixedLayer_N)
-                  PE_MixedLayer_N  = Rho_MixedLayer_N * Zc_MixedLayer_N
-
-                  ! The remaining thickness is not mixed
-                  dz_below    = dz(k) - dz_mixed_N
-                  Zl_below    = Z_L(k)
-                  Zu_below    = Z_L(k) + dz_below
-                  !Compute the PE of the fraction of the layer that wasn't mixed
-                  call PE_Kernel(PE_below, 1, (/Zl_below/), (/zu_below/), &
-                       (/Rho_c(k)/))
-
-                  PE_column_N = PE_MixedLayer_N + PE_below + PE_interior
+              ! Check if our solution is within the threshold bounds, if not update
+              ! using Newton's method.  This appears to converge almost always in
+              ! one step because the function is very close to linear in most applications.
+              if (abs(Fgx)>PE_Threshold(iM)*PE_Threshold_fraction) then
+                X2 = X - Fgx/Fpx
+                IT = IT + 1
+                if (X2<0. .or. X2>DZ(k)) then
+                  ! The iteration seems to be robust, but we need to do something *if*
+                  ! things go wrong... How should we treat failed iteration?
+                  ! Present solution: Stop trying to compute and just say we can't mix this layer.
+                  X=0
+                  exit
+                else
+                  X = X2
                 endif
-              enddo
-
-              H_MixedLayer = H_MixedLayer + dz_mixed_N
-            else
-              Rho_MixedLayer = Rho_MixedLayer_0
-              H_MixedLayer   = H_MixedLayer_0
-            endif
-            mld(i,j,iM) = H_MixedLayer
-          enddo
-        endif
+              else
+                exit! Quit the iteration
+              endif
+            enddo
+            H_ML = H_ML+X
+            exit! Quit looping through the column
+          endif
+        enddo
+        MLD(i,j,iM) = H_ML
       enddo
-    enddo
-  enddo
+    else
+      MLD(i,j,:) = 0.0
+    endif
+  enddo ; enddo
 
   if (id_MLD(1) > 0) call post_data(id_MLD(1), MLD(:,:,1), diagPtr)
   if (id_MLD(2) > 0) call post_data(id_MLD(2), MLD(:,:,2), diagPtr)
   if (id_MLD(3) > 0) call post_data(id_MLD(3), MLD(:,:,3), diagPtr)
 
-  return
 end subroutine diagnoseMLDbyEnergy
-
-!> Compute the integrated PE for a column, in J/m2/grav
-subroutine PE_Kernel(PE, NK, Z_L, Z_U, Rho_c )
-  integer :: NK
-  real, intent(in), dimension(NK) :: Z_L, Z_U, Rho_c
-  real, intent(out) :: PE
-  integer :: k
-
-  PE = 0.0
-  do k=1,NK
-    !PE_layer = int rho z dz = rho_layer int z dz = rho_layer 0.5 * (Z_U^2-Z_L^2)
-    PE = PE + (Rho_c(k))*0.5*(Z_U(k)**2-Z_L(k)**2)
-  enddo
-
-  return
-end subroutine PE_Kernel
 
 !> Update the thickness, temperature, and salinity due to thermodynamic
 !! boundary forcing (contained in fluxes type) applied to h, tv%T and tv%S,
