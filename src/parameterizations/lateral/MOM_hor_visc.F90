@@ -1722,11 +1722,12 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE, ADp)
                  "The absolute maximum value the GME coefficient is allowed to take.", &
                  units="m2 s-1", scale=US%m_to_L**2*US%T_to_s, default=1.0e7)
   endif
-  if (CS%Laplacian .or. CS%biharmonic) &
+  if (CS%Laplacian .or. CS%biharmonic) then
     call get_param(param_file, mdl, "DT", dt, &
                  "The (baroclinic) dynamics time step.", units="s", scale=US%s_to_T, &
                  fail_if_missing=.true.)
     Idt = 1.0 / dt
+  endif
   if (CS%no_slip .and. CS%biharmonic) &
     call MOM_error(FATAL,"ERROR: NOSLIP and BIHARMONIC cannot be defined "// &
                          "at the same time in MOM.")
