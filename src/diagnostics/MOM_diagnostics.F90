@@ -99,6 +99,7 @@ type, public :: diagnostics_CS ; private
     KE        => NULL(), &  !< KE per unit mass [L2 T-2 ~> m2 s-2]
     dKE_dt    => NULL(), &  !< time derivative of the layer KE [H L2 T-3 ~> m3 s-3]
     PE_to_KE  => NULL(), &  !< potential energy to KE term [m3 s-3]
+    KE_BT     => NULL(), &  !< barotropic contribution to KE term [m3 s-3]
     KE_CorAdv => NULL(), &  !< KE source from the combined Coriolis and
                             !! advection terms [H L2 T-3 ~> m3 s-3].
                             !! The Coriolis source should be zero, but is not due to truncation
@@ -117,7 +118,8 @@ type, public :: diagnostics_CS ; private
   integer :: id_hf_du_dt_2d    = -1, id_hf_dv_dt_2d    = -1
   integer :: id_col_ht         = -1, id_dh_dt          = -1
   integer :: id_KE             = -1, id_dKEdt          = -1
-  integer :: id_PE_to_KE       = -1, id_KE_Coradv      = -1
+  integer :: id_PE_to_KE       = -1, id_KE_BT          = -1
+  integer :: id_KE_Coradv      = -1
   integer :: id_KE_adv         = -1, id_KE_visc        = -1
   integer :: id_KE_horvisc     = -1, id_KE_dia         = -1
   integer :: id_uh_Rlay        = -1, id_vh_Rlay        = -1
@@ -994,9 +996,9 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   endif
 
   if (.not.G%symmetric) then
-    if (associated(CS%dKE_dt) .OR. associated(CS%PE_to_KE) .OR. associated(CS%KE_CorAdv) .OR. &
-       associated(CS%KE_adv) .OR. associated(CS%KE_visc)  .OR. associated(CS%KE_horvisc).OR. &
-       associated(CS%KE_dia) ) then
+    if (associated(CS%dKE_dt) .OR. associated(CS%PE_to_KE) .OR. associated(CS%KE_BT) .OR. &
+       associated(CS%KE_CorAdv) .OR. associated(CS%KE_adv) .OR. associated(CS%KE_visc) .OR. &
+       associated(CS%KE_horvisc) .OR. associated(CS%KE_dia) ) then
         call create_group_pass(CS%pass_KE_uv, KE_u, KE_v, G%Domain, To_North+To_East)
     endif
   endif
@@ -1038,6 +1040,24 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
       enddo ; enddo
     enddo
     if (CS%id_PE_to_KE > 0) call post_data(CS%id_PE_to_KE, CS%PE_to_KE, CS%diag)
+  endif
+
+ if (associated(CS%KE_BT)) then
+    do k=1,nz
+      do j=js,je ; do I=Isq,Ieq
+        KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * ADp%u_accel_bt(I,j,k)
+      enddo ; enddo
+      do J=Jsq,Jeq ; do i=is,ie
+        KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * ADp%v_accel_bt(i,J,k)
+      enddo ; enddo
+      if (.not.G%symmetric) &
+         call do_group_pass(CS%pass_KE_uv, G%domain)
+      do j=js,je ; do i=is,ie
+        CS%KE_BT(i,j,k) = 0.5 * G%IareaT(i,j) &
+            * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
+      enddo ; enddo
+    enddo
+    if (CS%id_KE_BT > 0) call post_data(CS%id_KE_BT, CS%KE_BT, CS%diag)
   endif
 
   if (associated(CS%KE_CorAdv)) then
@@ -1779,6 +1799,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
   if (CS%id_PE_to_KE>0) call safe_alloc_ptr(CS%PE_to_KE,isd,ied,jsd,jed,nz)
 
+  CS%id_KE_BT = register_diag_field('ocean_model', 'KE_BT', diag%axesTL, Time, &
+      'Barotropic contribution to Kinetic Energy', &
+      'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
+  if (CS%id_KE_BT>0) call safe_alloc_ptr(CS%KE_BT,isd,ied,jsd,jed,nz)
+
   CS%id_KE_Coradv = register_diag_field('ocean_model', 'KE_Coradv', diag%axesTL, Time, &
       'Kinetic Energy Source from Coriolis and Advection', &
       'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
@@ -2192,9 +2217,9 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, CS)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (associated(CS%dKE_dt) .or. associated(CS%PE_to_KE) .or. &
-      associated(CS%KE_CorAdv) .or. associated(CS%KE_adv) .or. &
-      associated(CS%KE_visc) .or. associated(CS%KE_horvisc) .or. &
-      associated(CS%KE_dia)) &
+      associated(CS%KE_BT) .or. associated(CS%KE_CorAdv) .or. &
+      associated(CS%KE_adv) .or. associated(CS%KE_visc) .or. &
+      associated(CS%KE_horvisc) .or. associated(CS%KE_dia)) &
     call safe_alloc_ptr(CS%KE,isd,ied,jsd,jed,nz)
 
   if (associated(CS%dKE_dt)) then
@@ -2245,6 +2270,7 @@ subroutine MOM_diagnostics_end(CS, ADp)
   if (associated(CS%KE))         deallocate(CS%KE)
   if (associated(CS%dKE_dt))     deallocate(CS%dKE_dt)
   if (associated(CS%PE_to_KE))   deallocate(CS%PE_to_KE)
+  if (associated(CS%KE_BT))      deallocate(CS%KE_BT) 
   if (associated(CS%KE_Coradv))  deallocate(CS%KE_Coradv)
   if (associated(CS%KE_adv))     deallocate(CS%KE_adv)
   if (associated(CS%KE_visc))    deallocate(CS%KE_visc)
