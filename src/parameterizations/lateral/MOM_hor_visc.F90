@@ -4,6 +4,7 @@ module MOM_hor_visc
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_checksums,             only : hchksum, Bchksum
+use MOM_coms,                  only : min_across_PEs
 use MOM_diag_mediator,         only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator,         only : diag_ctrl, time_type
 use MOM_domains,               only : pass_var, CORNER, pass_vector, AGRID, BGRID_NE
@@ -1891,6 +1892,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE, ADp)
       endif
       min_grid_sp_h2 = min(grid_sp_h2, min_grid_sp_h2)
     enddo ; enddo
+    call min_across_PEs(min_grid_sp_h2)
 
     ! Calculate and store the background viscosity at q-points
     do J=js-1,Jeq ; do I=is-1,Ieq
@@ -1963,6 +1965,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE, ADp)
       endif
       min_grid_sp_h4 = min(grid_sp_h2**2, min_grid_sp_h4)
     enddo ; enddo
+    call min_across_PEs(min_grid_sp_h4)
 
     do J=js-1,Jeq ; do I=is-1,Ieq
       grid_sp_q2 = (2.0*CS%dx2q(I,J)*CS%dy2q(I,J)) / (CS%dx2q(I,J)+CS%dy2q(I,J))
