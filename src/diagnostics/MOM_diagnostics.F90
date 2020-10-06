@@ -1042,7 +1042,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
     if (CS%id_PE_to_KE > 0) call post_data(CS%id_PE_to_KE, CS%PE_to_KE, CS%diag)
   endif
 
- if (associated(CS%KE_BT)) then
+  if (associated(CS%KE_BT)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * ADp%u_accel_bt(I,j,k)
@@ -2270,7 +2270,7 @@ subroutine MOM_diagnostics_end(CS, ADp)
   if (associated(CS%KE))         deallocate(CS%KE)
   if (associated(CS%dKE_dt))     deallocate(CS%dKE_dt)
   if (associated(CS%PE_to_KE))   deallocate(CS%PE_to_KE)
-  if (associated(CS%KE_BT))      deallocate(CS%KE_BT) 
+  if (associated(CS%KE_BT))      deallocate(CS%KE_BT)
   if (associated(CS%KE_Coradv))  deallocate(CS%KE_Coradv)
   if (associated(CS%KE_adv))     deallocate(CS%KE_adv)
   if (associated(CS%KE_visc))    deallocate(CS%KE_visc)
