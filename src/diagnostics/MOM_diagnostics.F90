@@ -1539,6 +1539,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   real :: wave_speed_tol      ! The fractional tolerance for finding the wave speeds [nondim]
   logical :: better_speed_est ! If true, use a more robust estimate of the first
                               ! mode wave speed as the starting point for iterations.
+  logical :: split            ! True if using the barotropic-baroclinic split algorithm
   logical :: use_temperature, adiabatic
   logical :: default_2018_answers, remap_answers_2018
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, nkml, nkbl
@@ -1588,6 +1589,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
+  call get_param(param_file, mdl, "SPLIT", split, default=.true., do_not_log=.true.)
 
   if (GV%Boussinesq) then
     thickness_units = "m" ; flux_units = "m3 s-1" ; convert_H = GV%H_to_m
@@ -1799,10 +1801,12 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
   if (CS%id_PE_to_KE>0) call safe_alloc_ptr(CS%PE_to_KE,isd,ied,jsd,jed,nz)
 
-  CS%id_KE_BT = register_diag_field('ocean_model', 'KE_BT', diag%axesTL, Time, &
-      'Barotropic contribution to Kinetic Energy', &
-      'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
-  if (CS%id_KE_BT>0) call safe_alloc_ptr(CS%KE_BT,isd,ied,jsd,jed,nz)
+  if (split) then
+    CS%id_KE_BT = register_diag_field('ocean_model', 'KE_BT', diag%axesTL, Time, &
+        'Barotropic contribution to Kinetic Energy', &
+        'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
+    if (CS%id_KE_BT>0) call safe_alloc_ptr(CS%KE_BT,isd,ied,jsd,jed,nz)
+  endif
 
   CS%id_KE_Coradv = register_diag_field('ocean_model', 'KE_Coradv', diag%axesTL, Time, &
       'Kinetic Energy Source from Coriolis and Advection', &
