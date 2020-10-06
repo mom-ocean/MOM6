@@ -1219,6 +1219,9 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   Accel_diag%PFv   => CS%PFv
   Accel_diag%CAu   => CS%CAu
   Accel_diag%CAv   => CS%CAv
+  Accel_diag%u_accel_bt => CS%u_accel_bt
+  Accel_diag%v_accel_bt => CS%v_accel_bt
+
 
 !  Accel_diag%pbce => CS%pbce
 !  Accel_diag%u_accel_bt => CS%u_accel_bt ; Accel_diag%v_accel_bt => CS%v_accel_bt
