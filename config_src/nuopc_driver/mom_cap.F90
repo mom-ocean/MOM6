@@ -295,7 +295,7 @@ subroutine InitializeP0(gcomp, importState, exportState, clock, rc)
        isPresent=isPresent, isSet=isSet, rc=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
   if (isPresent .and. isSet) then
-     read(value, '(i)', iostat=iostat) scalar_field_count
+     read(value, *, iostat=iostat) scalar_field_count
      if (iostat /= 0) then
        call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
             msg=subname//": ScalarFieldCount not an integer: "//trim(value), &
@@ -311,7 +311,7 @@ subroutine InitializeP0(gcomp, importState, exportState, clock, rc)
        isPresent=isPresent, isSet=isSet, rc=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
   if (isPresent .and. isSet) then
-     read(value, '(i)', iostat=iostat) scalar_field_idx_grid_nx
+     read(value, *, iostat=iostat) scalar_field_idx_grid_nx
      if (iostat /= 0) then
         call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
              msg=subname//": ScalarFieldIdxGridNX not an integer: "//trim(value), &
@@ -327,7 +327,7 @@ subroutine InitializeP0(gcomp, importState, exportState, clock, rc)
        isPresent=isPresent, isSet=isSet, rc=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
   if (isPresent .and. isSet) then
-     read(value, '(i)', iostat=iostat) scalar_field_idx_grid_ny
+     read(value, *, iostat=iostat) scalar_field_idx_grid_ny
      if (iostat /= 0) then
         call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
              msg=subname//": ScalarFieldIdxGridNY not an integer: "//trim(value), &
@@ -700,16 +700,16 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"        , "will provide")
   !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"       , "will provide")
   if (ocean_state%use_waves) then
-    if (Ice_ocean_boundary%num_stk_bands > 3) then 
+    if (Ice_ocean_boundary%num_stk_bands > 3) then
       call MOM_error(FATAL, "Number of Stokes Bands > 3, NUOPC cap not set up for this")
-    endif      
+    endif
     call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_1" , "will provide")
     call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_1", "will provide")
     call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_2" , "will provide")
     call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_2", "will provide")
     call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_3" , "will provide")
     call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_3", "will provide")
-  endif 
+  endif
 
   !--------- export fields -------------
   call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocean_mask"                 , "will provide")
@@ -1746,7 +1746,7 @@ subroutine ModelSetRunClock(gcomp, rc)
                call ESMF_LogWrite(subname//" Restart_ymd = "//trim(cvalue), ESMF_LOGMSG_INFO)
             endif
           else
-            ! restart_n is zero, restarts will be written at finalize only (no alarm control) 
+            ! restart_n is zero, restarts will be written at finalize only (no alarm control)
             restart_mode = 'no_alarms'
             call ESMF_LogWrite(subname//" Restarts will be written at finalize only", ESMF_LOGMSG_INFO)
           endif
