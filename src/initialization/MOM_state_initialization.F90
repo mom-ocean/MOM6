@@ -1746,7 +1746,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, L
   character(len=200) :: filename, inputdir ! Strings for file/path and path.
 
   logical :: use_ALE ! True if ALE is being used, False if in layered mode
-  logical :: time_space_regrid_sponge ! True if using sponge data which
+  logical :: time_space_interp_sponge ! True if using sponge data which
   ! need to be interpolated from in both the horizontal dimension and in
   ! time prior to vertical remapping.
 
@@ -1777,27 +1777,27 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, L
                  "The name of the inverse damping rate variable in "//&
                  "SPONGE_DAMPING_FILE.", default="IDAMP")
   call get_param(param_file, mdl, "USE_REGRIDDING", use_ALE, do_not_log = .true.)
-  time_space_regrid_sponge = .false.
-  call get_param(param_file, mdl, "NEW_SPONGES", time_space_regrid_sponge, &
+  time_space_interp_sponge = .false.
+  call get_param(param_file, mdl, "NEW_SPONGES", time_space_interp_sponge, &
                  "Set True if using the newer sponging code which "//&
                  "performs on-the-fly regridding in lat-lon-time.",&
                  "of sponge restoring data.", default=.false.)
-  if (time_space_regrid_sponge) then
+  if (time_space_interp_sponge) then
      call MOM_error(WARNING, " initialize_sponges:  NEW_SPONGES has been deprecated"//&
-          "Please use TIME_SPACE_REGRID_SPONGE instead. Setting "//&
-          "TIME_SPACE_REGRID_SPONGE = True.")
+          "Please use INTERPOLATE_SPONGE_TIME_SPACE instead. Setting "//&
+          "INTERPOLATE_SPONGE_TIME_SPACE = True.")
   endif
-  call get_param(param_file, mdl, "TIME_SPACE_REGRID_SPONGE", time_space_regrid_sponge, &
+  call get_param(param_file, mdl, "INTERPOLATE_SPONGE_TIME_SPACE", time_space_interp_sponge, &
                  "Set True if using the newer sponging code which "//&
                  "performs on-the-fly regridding in lat-lon-time.",&
-                 "of sponge restoring data.", default=time_space_regrid_sponge)
+                 "of sponge restoring data.", default=time_space_interp_sponge)
 
   filename = trim(inputdir)//trim(damping_file)
   call log_param(param_file, mdl, "INPUTDIR/SPONGE_DAMPING_FILE", filename)
   if (.not.file_exists(filename, G%Domain)) &
     call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
 
-  if (time_space_regrid_sponge .and. .not. use_ALE) &
+  if (time_space_interp_sponge .and. .not. use_ALE) &
     call MOM_error(FATAL, " initialize_sponges: Newer sponges are currently unavailable in layered mode ")
 
   call MOM_read_data(filename, "Idamp", Idamp(:,:), G%Domain, scale=US%T_to_s)
@@ -1863,7 +1863,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, L
 
 
   if  (use_ALE) then
-    if (.not. time_space_regrid_sponge) then ! ALE mode
+    if (.not. time_space_interp_sponge) then ! ALE mode
       call field_size(filename,eta_var,siz,no_domain=.true.)
       if (siz(1) /= G%ieg-G%isg+1 .or. siz(2) /= G%jeg-G%jsg+1) &
         call MOM_error(FATAL,"initialize_sponge_file: Array size mismatch for sponge data.")
