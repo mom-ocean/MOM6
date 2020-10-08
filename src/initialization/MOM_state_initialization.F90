@@ -1783,7 +1783,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, L
                  "performs on-the-fly regridding in lat-lon-time.",&
                  "of sponge restoring data.", default=.false.)
   if (time_space_interp_sponge) then
-     call MOM_error(WARNING, " initialize_sponges:  NEW_SPONGES has been deprecated"//&
+     call MOM_error(WARNING, " initialize_sponges:  NEW_SPONGES has been deprecated. "//&
           "Please use INTERPOLATE_SPONGE_TIME_SPACE instead. Setting "//&
           "INTERPOLATE_SPONGE_TIME_SPACE = True.")
   endif
