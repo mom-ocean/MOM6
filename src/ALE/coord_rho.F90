@@ -117,17 +117,14 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
   real, dimension(CS%nk) :: h_new ! New thicknesses [H ~> m or kg m-2]
   real, dimension(CS%nk+1) :: x1  ! Interface heights [H ~> m or kg m-2]
   real :: z0_top, eta ! Thicknesses or heights [Z ~> m] or [H ~> m or kg m-2]
-  logical :: new_rho_def
 
   ! Construct source column with vanished layers removed (stored in h_nv)
   call copy_finite_thicknesses(nz, h, CS%min_thickness, count_nonzero_layers, h_nv, mapping)
 
-  new_rho_def=.false.
   z0_top = 0.
   eta=0.0
   if (present(z_rigid_top)) then
     z0_top = z_rigid_top
-    new_rho_def = .true.
     eta=z0_top
     if (present(eta_orig)) then
        eta=eta_orig
