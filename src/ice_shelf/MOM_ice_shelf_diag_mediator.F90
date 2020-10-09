@@ -49,7 +49,6 @@ type, private :: diag_type
   real :: conversion_factor = 0. !< A factor to multiply data by before posting to FMS, if non-zero.
   real, pointer, dimension(:,:)   :: mask2d => null()      !< A 2-d mask on the data domain for this diagnostic
   real, pointer, dimension(:,:)   :: mask2d_comp => null() !< A 2-d mask on the computational domain for this diagnostic
-  real, pointer, dimension(:,:,:) :: mask3d => null()      !< A 3-d mask for this diagnostic
 end type diag_type
 
 !>   The SIS_diag_ctrl data type contains times to regulate diagnostics along with masks and
@@ -83,33 +82,18 @@ type, public :: diag_ctrl
   type(axesType) :: axesBc0, axesTc0, axesCuc0, axesCvc0
   type(axesType) :: axesB1, axesT1, axesCu1, axesCv1
   !!@}
-  type(axesType) :: axesZi !< A 1-D z-space axis at interfaces
-  type(axesType) :: axesZL !< A 1-D z-space axis at layer centers
 
   ! Mask arrays for diagnostics
   real, dimension(:,:),   pointer :: mask2dT   => null() !< 2D mask array for cell-center points
   real, dimension(:,:),   pointer :: mask2dBu  => null() !< 2D mask array for cell-corners
   real, dimension(:,:),   pointer :: mask2dCu  => null() !< 2D mask array for east-faces
   real, dimension(:,:),   pointer :: mask2dCv  => null() !< 2D mask array for north-faces
-  real, dimension(:,:,:), pointer :: mask3dTL  => null() !< 3D mask array for layer cell-centers
-  real, dimension(:,:,:), pointer :: mask3dBuL => null() !< 3D mask array for layer cell-corners
-  real, dimension(:,:,:), pointer :: mask3dCuL => null() !< 3D mask array for layer east-faces
-  real, dimension(:,:,:), pointer :: mask3dCvL => null() !< 3D mask array for layer north-faces
-  real, dimension(:,:,:), pointer :: mask3dTi  => null() !< 3D mask array for interface cell-centers
-  real, dimension(:,:,:), pointer :: mask3dBui => null() !< 3D mask array for interface cell-corners
-  real, dimension(:,:,:), pointer :: mask3dCui => null() !< 3D mask array for interface east-faces
-  real, dimension(:,:,:), pointer :: mask3dCvi => null() !< 3D mask array for interface north-faces
-  real, dimension(:,:,:), pointer :: mask3dTC  => null() !< 3D mask array for category cell-centers
-  real, dimension(:,:,:), pointer :: mask3dBuC => null() !< 3D mask array for category cell-corners
-  real, dimension(:,:,:), pointer :: mask3dCuC => null() !< 3D mask array for category east-faces
-  real, dimension(:,:,:), pointer :: mask3dCvC => null() !< 3D mask array for category north-faces
   !> Computational domain mask arrays for diagnostics.
   real, dimension(:,:),   pointer :: mask2dT_comp => null()
 
 #define DIAG_ALLOC_CHUNK_SIZE 15
   type(diag_type), dimension(:), allocatable :: diags !< The array of diagnostics
   integer :: next_free_diag_id !< The next unused diagnostic ID
-
   !> default missing value to be sent to ALL diagnostics registerations
   real :: missing_value = -1.0e34
 
@@ -500,47 +484,9 @@ function register_MOM_IS_diag_field(module_name, field_name, axes, init_time, &
   !Decide what mask to use based on the axes info
   if (primary_id > 0) then
   !3d masks
-    if (axes%rank == 3) then
-      diag%mask2d => null() ; diag%mask2d_comp => null() ; diag%mask3d => null()
-      if (axes%id == diag_cs%axesTL%id) then
-        diag%mask3d =>  diag_cs%mask3dTL
-      elseif (axes%id == diag_cs%axesBL%id) then
-        diag%mask3d =>  diag_cs%mask3dBuL
-      elseif (axes%id == diag_cs%axesCuL%id ) then
-        diag%mask3d =>  diag_cs%mask3dCuL
-      elseif (axes%id == diag_cs%axesCvL%id) then
-        diag%mask3d =>  diag_cs%mask3dCvL
-      elseif (axes%id == diag_cs%axesTi%id) then
-        diag%mask3d =>  diag_cs%mask3dTi
-      elseif (axes%id == diag_cs%axesBi%id) then
-        diag%mask3d =>  diag_cs%mask3dBui
-      elseif (axes%id == diag_cs%axesCui%id ) then
-        diag%mask3d =>  diag_cs%mask3dCui
-      elseif (axes%id == diag_cs%axesCvi%id) then
-        diag%mask3d =>  diag_cs%mask3dCvi
-      elseif (axes%id == diag_cs%axesTc%id) then
-        diag%mask3d =>  diag_cs%mask3dTC(:,:,1:)
-      elseif (axes%id == diag_cs%axesBc%id) then
-        diag%mask3d =>  diag_cs%mask3dBuC(:,:,1:)
-      elseif (axes%id == diag_cs%axesCuc%id ) then
-        diag%mask3d =>  diag_cs%mask3dCuC(:,:,1:)
-      elseif (axes%id == diag_cs%axesCvc%id) then
-        diag%mask3d =>  diag_cs%mask3dCvC(:,:,1:)
-      elseif (axes%id == diag_cs%axesTc0%id) then
-        diag%mask3d =>  diag_cs%mask3dTC(:,:,0:)
-      elseif (axes%id == diag_cs%axesBc0%id) then
-        diag%mask3d =>  diag_cs%mask3dBuC(:,:,0:)
-      elseif (axes%id == diag_cs%axesCuc0%id ) then
-        diag%mask3d =>  diag_cs%mask3dCuC(:,:,0:)
-      elseif (axes%id == diag_cs%axesCvc0%id) then
-        diag%mask3d =>  diag_cs%mask3dCvC(:,:,0:)
-  !   else
-  !       call SIS_error(FATAL, "SIS_diag_mediator:register_diag_field: " // &
-  !            "unknown axes for diagnostic variable "//trim(field_name))
-      endif
     !2d masks
-    elseif (axes%rank == 2) then
-      diag%mask2d => null() ; diag%mask2d_comp => null() ; diag%mask3d => null()
+    if (axes%rank == 2) then
+      diag%mask2d => null() ; diag%mask2d_comp => null()
       if (axes%id == diag_cs%axesT1%id) then
         diag%mask2d =>  diag_cs%mask2dT
         diag%mask2d_comp => diag_cs%mask2dT_comp
