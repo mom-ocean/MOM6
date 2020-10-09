@@ -3066,6 +3066,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
   integer :: isd, ied, jsd, jed
   integer :: iscB, iecB, jscB, jecB, isdB, iedB, jsdB, jedB
   logical :: localError
+  logical :: use_iceshelves
   character(240) :: msg
   integer :: turns    ! Number of quarter turns
 
@@ -3079,6 +3080,9 @@ subroutine extract_surface_state(CS, sfc_state_in)
 
   use_temperature = associated(CS%tv%T)
 
+  use_iceshelves=.false.
+  if (associated(CS%frac_shelf_h)) use_iceshelves = .true.
+
   turns = 0
   if (CS%rotate_index) &
     turns = G%HI%turns
@@ -3086,24 +3090,16 @@ subroutine extract_surface_state(CS, sfc_state_in)
   if (.not.sfc_state_in%arrays_allocated)  then
     !  Consider using a run-time flag to determine whether to do the vertical
     ! integrals, since the 3-d sums are not negligible in cost.
-    if (associated(CS%frac_shelf_h)) then
-       call allocate_surface_state(sfc_state_in, G_in, use_temperature, &
-           do_integrals=.true., omit_frazil=.not.associated(CS%tv%frazil),use_iceshelves=.true.)
-    else
-       call allocate_surface_state(sfc_state_in, G_in, use_temperature, &
-            do_integrals=.true., omit_frazil=.not.associated(CS%tv%frazil))
-    endif
+    call allocate_surface_state(sfc_state_in, G_in, use_temperature, &
+          do_integrals=.true., omit_frazil=.not.associated(CS%tv%frazil),&
+          use_iceshelves=use_iceshelves)
   endif
 
   if (CS%rotate_index) then
     allocate(sfc_state)
-    if (associated(CS%frac_shelf_h)) then
-      call allocate_surface_state(sfc_state, G, use_temperature, &
-           do_integrals=.true., omit_frazil=.not.associated(CS%tv%frazil),use_iceshelves=.true.)
-    else
-      call allocate_surface_state(sfc_state, G, use_temperature, &
-           do_integrals=.true., omit_frazil=.not.associated(CS%tv%frazil))
-    endif
+    call allocate_surface_state(sfc_state, G, use_temperature, &
+         do_integrals=.true., omit_frazil=.not.associated(CS%tv%frazil),&
+         use_iceshelves=use_iceshelves)
   else
     sfc_state => sfc_state_in
   endif
