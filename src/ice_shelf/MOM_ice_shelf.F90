@@ -1691,8 +1691,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
       endif
     enddo ; enddo
     if (CS%debug) then
-       call hchksum(ISS%mass_shelf, "IS init: mass_shelf", G%HI, haloshift=0)
-       call hchksum(ISS%area_shelf_h, "IS init: area_shelf", G%HI, haloshift=0)
+       call hchksum(ISS%mass_shelf, "IS init: mass_shelf", G%HI, haloshift=0, scale=US%RZ_to_kg_m2)
+       call hchksum(ISS%area_shelf_h, "IS init: area_shelf", G%HI, haloshift=0, scale=US%L_to_m*US%L_to_m)
        call hchksum(ISS%hmask, "IS init: hmask", G%HI, haloshift=0)
     endif
 
@@ -1757,8 +1757,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 
   if (CS%debug) then
     call hchksum(fluxes%frac_shelf_h, "IS init: frac_shelf_h", G%HI, haloshift=0)
-    call hchksum(ISS%area_shelf_h, "IS init: area_shelf_h", G%HI, haloshift=0)
-    call hchksum(G%areaT, "IS init: areaT", G%HI, haloshift=0)
+    call hchksum(ISS%area_shelf_h, "IS init: area_shelf_h", G%HI, haloshift=0, scale=US%L_to_m*US%L_to_m)
   endif
 
   if (present(forces_in)) &
