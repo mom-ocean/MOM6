@@ -1159,8 +1159,8 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
   call enable_averages(CS%t_dyn_rel_adv, Time_local, CS%diag)
 
   ! GMM, turn off advection
-!  call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, CS%t_dyn_rel_adv, G, GV, US, &
-!                     CS%tracer_adv_CSp, CS%tracer_Reg)
+  call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, CS%t_dyn_rel_adv, G, GV, US, &
+                     CS%tracer_adv_CSp, CS%tracer_Reg)
   call tracer_hordiff(h, CS%t_dyn_rel_adv, CS%MEKE, CS%VarMix, G, GV, US, &
                       CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
   if (showCallTree) call callTree_waypoint("finished tracer advection/diffusion (step_MOM)")

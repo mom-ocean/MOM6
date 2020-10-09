@@ -112,9 +112,9 @@ logical function lateral_boundary_diffusion_init(Time, G, GV, param_file, diag, 
 
   CS%surface_boundary_scheme = -1
   !GMM, uncomment below
-!  if ( .not. ASSOCIATED(CS%energetic_PBL_CSp) .and. .not. ASSOCIATED(CS%KPP_CSp) ) then
-!    call MOM_error(FATAL,"Lateral boundary diffusion is true, but no valid boundary layer scheme was found")
-!  endif
+  if ( .not. ASSOCIATED(CS%energetic_PBL_CSp) .and. .not. ASSOCIATED(CS%KPP_CSp) ) then
+    call MOM_error(FATAL,"Lateral boundary diffusion is true, but no valid boundary layer scheme was found")
+  endif
 
   ! Read all relevant parameters and write them to the model log.
   call get_param(param_file, mdl, "LBD_LINEAR_TRANSITION", CS%linear, &
@@ -183,10 +183,8 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   real    :: tmpReal, tmp1, tmp2
 
   Idt = 1./dt
-  hbl(:,:) = 100.
-  hbl(4:6,:) = 500.
-  !if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G)
-  !if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US)
+  if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G)
+  if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US)
 
   call pass_var(hbl,G%Domain)
   do m = 1,Reg%ntr
