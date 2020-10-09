@@ -341,8 +341,7 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, OBC, dt, frac_shelf_h)
 
   nk = GV%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
 
-  ice_shelf = .false.
-  if (present(frac_shelf_h)) ice_shelf = .true.
+  ice_shelf = present(frac_shelf_h)
 
   if (CS%show_call_tree) call callTree_enter("ALE_main(), MOM_ALE.F90")
 
