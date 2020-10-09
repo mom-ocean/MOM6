@@ -4,7 +4,7 @@ module USER_tracer_example
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_error_handler, only : MOM_error, FATAL, WARNING
+use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
@@ -18,6 +18,7 @@ use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
+use MOM_tracer_initialization_from_Z, only : MOM_initialize_tracer_from_Z
 
 use coupler_types_mod, only : coupler_type_set_data, ind_csurf
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
@@ -41,7 +42,7 @@ type, public :: USER_tracer_example_CS ; private
   real, pointer :: tr(:,:,:,:) => NULL()  !< The array of tracers used in this subroutine, in g m-3?
   real :: land_val(NTR) = -1.0 !< The value of tr that is used where land is masked out.
   logical :: use_sponge    !< If true, sponges may be applied somewhere in the domain.
-
+  logical :: from_z        !< if true, initialize tracers from a z file.
   integer, dimension(NTR) :: ind_tr !< Indices returned by aof_set_coupler_flux if it is used and the
                                     !! surface tracer concentrations are to be provided to the coupler.
 
@@ -101,6 +102,10 @@ function USER_register_tracer_example(HI, GV, param_file, CS, tr_Reg, restart_CS
                  "The exact location and properties of those sponges are "//&
                  "specified from MOM_initialization.F90.", default=.false.)
 
+  call get_param(param_file, mdl, "TRACER_EXAMPLE_FROM_Z", CS%from_z, &
+                 "If true, initialize tracers from a z file "//&
+                 "using MOM_initialize_tracer_from_Z.", default=.false.)
+
   allocate(CS%tr(isd:ied,jsd:jed,nz,NTR)) ; CS%tr(:,:,:,:) = 0.0
 
   do m=1,NTR
@@ -136,15 +141,18 @@ end function USER_register_tracer_example
 
 !> This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
 !! and it sets up the tracer output.
-subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
+subroutine USER_initialize_tracer(restart, day, G, GV, US, h, param_file, diag, OBC, CS, &
                                   sponge_CSp)
   logical,                            intent(in) :: restart !< .true. if the fields have already
                                                          !! been read from a restart file.
   type(time_type),            target, intent(in) :: day  !< Time of the start of the run.
-  type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
+  type(ocean_grid_type),              intent(inout) :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),              intent(in) :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                       intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  type(param_file_type),              intent(in) :: param_file !< A structure to parse for run-time parameters
+
   type(diag_ctrl),            target, intent(in) :: diag !< A structure that is used to regulate
                                                          !! diagnostic output.
   type(ocean_OBC_type),               pointer    :: OBC  !< This open boundary condition type specifies
@@ -180,14 +188,29 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 
   if (.not.restart) then
     if (len_trim(CS%tracer_IC_file) >= 1) then
-!  Read the tracer concentrations from a netcdf file.
-      if (.not.file_exists(CS%tracer_IC_file, G%Domain)) &
-        call MOM_error(FATAL, "USER_initialize_tracer: Unable to open "// &
-                        CS%tracer_IC_file)
-      do m=1,NTR
-        call query_vardesc(CS%tr_desc(m), name, caller="USER_initialize_tracer")
-        call MOM_read_data(CS%tracer_IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
-      enddo
+      if (CS%from_z) then
+        !  Read the tracer concentrations from a netcdf file on a z grid.
+        do m=1,NTR
+          call query_vardesc(CS%tr_desc(m), name, caller="USER_initialize_tracer")
+          call MOM_error(NOTE,"USER_initialize_tracer: "//&
+                             "initializing tracer "//trim(name)//&
+                             " using MOM_initialize_tracer_from_Z ")
+          tr_ptr => CS%tr(:,:,:,m)
+          call MOM_initialize_tracer_from_Z(h, tr_ptr, G, GV, US, param_file, &
+                               src_file = CS%tracer_IC_file,                          &
+                               src_var_nam = name,                                    &
+                               useALEremapping = .true. )
+        enddo
+      else
+        !  Read the tracer concentrations from a netcdf file on the native grid.
+        if (.not.file_exists(CS%tracer_IC_file, G%Domain)) &
+          call MOM_error(FATAL, "USER_initialize_tracer: Unable to open "// &
+                          CS%tracer_IC_file)
+        do m=1,NTR
+          call query_vardesc(CS%tr_desc(m), name, caller="USER_initialize_tracer")
+          call MOM_read_data(CS%tracer_IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
+        enddo
+      endif
     else
       do m=1,NTR
         do k=1,nz ; do j=js,je ; do i=is,ie
