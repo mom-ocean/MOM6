@@ -2465,7 +2465,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   if (use_ice_shelf) &
     call hchksum(CS%frac_shelf_h, "MOM:frac_shelf_h", G%HI, &
-        haloshift=0, scale=GV%H_to_m)
+        haloshift=0)
 
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("returned from MOM_initialize_state() (initialize_MOM)")
