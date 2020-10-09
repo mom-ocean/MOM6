@@ -345,7 +345,8 @@ SMAG_BI_CONST = 0.03            !   [nondim] default = 0.0
 DIRECT_STRESS = True            !   [Boolean] default = False
                                 ! If true, the wind stress is distributed over the topmost HMIX_STRESS of fluid
                                 ! (like in HYCOM), and KVML may be set to a very small value.
-HMIX_FIXED = 20.0               !   [m]
+HMIX_STRESS = 10.0
+HMIX_FIXED = 10.                !   [m]
                                 ! The prescribed depth over which the near-surface viscosity and diffusivity are
                                 ! elevated when the bulk mixed layer is not used.
 KVML = 0.01                     !   [m2 s-1] default = 1.0E-04
@@ -463,7 +464,7 @@ ICE_SHELF = True                !   [Boolean] default = False
 ! === module MOM_grid_init ===
 
 ! === module MOM_ice_shelf ===
-DEBUG_IS = True                !   [Boolean] default = False
+DEBUG_IS = True                 !   [Boolean] default = False
                                 ! If true, write verbose debugging messages for the ice shelf.
 DYNAMIC_SHELF_MASS = False      !   [Boolean] default = False
                                 ! If true, the ice sheet mass can evolve with time.
@@ -545,7 +546,7 @@ ICE_THICKNESS_VARNAME = "thick" ! default = "h_shelf"
 SHELF_IC_OUTPUT_FILE = "MOM_Shelf_IC" ! default = "MOM_Shelf_IC"
                                 ! The name-root of the output file for the ice shelf initial conditions.
 ! === module MOM_main (MOM_driver) ===
-DAYMAX = 2.                   !   [days]
+DAYMAX = 2.                     !   [days]
                                 ! The final time of the whole simulation, in units of TIMEUNIT seconds.  This
                                 ! also sets the potential end time of the present run segment if the end time is
                                 ! not set via ocean_solo_nml in input.nml.
