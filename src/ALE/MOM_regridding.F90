@@ -847,10 +847,8 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
   do_convective_adjustment = .true.
   if (present(conv_adjust)) do_convective_adjustment = conv_adjust
 
-  use_ice_shelf = .false.
-  if (present(frac_shelf_h)) then
-    use_ice_shelf = .true.
-  endif
+  use_ice_shelf = present(frac_shelf_h)
+
 
   select case ( CS%regridding_scheme )
 
@@ -884,8 +882,11 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_HYCOM1 )
-      call build_grid_HyCOM1( G, GV, G%US, h, tv, h_new, dzInterface, CS )
-
+      if (use_ice_shelf) then
+         call build_grid_HyCOM1( G, GV, G%US, h, tv, h_new, dzInterface, CS, frac_shelf_h )
+      else
+         call build_grid_HyCOM1( G, GV, G%US, h, tv, h_new, dzInterface, CS )
+      endif
     case ( REGRIDDING_SLIGHT )
       call build_grid_SLight( G, GV, G%US, h, tv, dzInterface, CS )
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
@@ -1176,8 +1177,7 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h)
   logical :: ice_shelf
 
   nz = GV%ke
-  ice_shelf = .false.
-  if (present(frac_shelf_h)) ice_shelf = .true.
+  ice_shelf = present(frac_shelf_h)
 
 !$OMP parallel do default(none) shared(G,GV,dzInterface,CS,nz,h,frac_shelf_h,ice_shelf) &
 !$OMP                          private(nominalDepth,totalThickness,zNew,dh,zOld)
@@ -1376,8 +1376,7 @@ subroutine build_rho_grid( G, GV, US, h, tv, dzInterface, remapCS, CS , frac_she
   endif
 
   nz = GV%ke
-  ice_shelf = .false.
-  if (present(frac_shelf_h)) ice_shelf = .true.
+  ice_shelf = present(frac_shelf_h)
 
   if (.not.CS%target_density_set) call MOM_error(FATAL, "build_rho_grid: "//&
         "Target densities must be set before build_rho_grid is called.")
@@ -1482,7 +1481,7 @@ end subroutine build_rho_grid
 !! \remark { Based on Bleck, 2002: An oceanice general circulation model framed in
 !! hybrid isopycnic-Cartesian coordinates, Ocean Modelling 37, 55-88.
 !! http://dx.doi.org/10.1016/S1463-5003(01)00012-9 }
-subroutine build_grid_HyCOM1( G, GV, US, h, tv, h_new, dzInterface, CS )
+subroutine build_grid_HyCOM1( G, GV, US, h, tv, h_new, dzInterface, CS , frac_shelf_h)
   type(ocean_grid_type),                     intent(in)    :: G  !< Grid structure
   type(verticalGrid_type),                   intent(in)    :: GV !< Ocean vertical grid structure
   type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
@@ -1491,6 +1490,7 @@ subroutine build_grid_HyCOM1( G, GV, US, h, tv, h_new, dzInterface, CS )
   type(regridding_CS),                       intent(in)    :: CS !< Regridding control structure
   real, dimension(SZI_(G),SZJ_(G),CS%nk),    intent(inout) :: h_new !< New layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),CS%nk+1),  intent(inout) :: dzInterface !< Changes in interface position
+  real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: frac_shelf_h !< Fractional ice shelf coverage [nondim].
 
   ! Local variables
   real, dimension(SZK_(GV)+1) :: z_col ! Source interface positions relative to the surface [H ~> m or kg m-2]
@@ -1499,8 +1499,13 @@ subroutine build_grid_HyCOM1( G, GV, US, h, tv, h_new, dzInterface, CS )
   real, dimension(SZK_(GV))   :: p_col   ! Layer center pressure [R L2 T-2 ~> Pa]
   real :: ref_pres  ! The reference pressure [R L2 T-2 ~> Pa]
   integer   :: i, j, k, nki
-  real :: depth
+  real :: depth, nominalDepth
+  real :: total_thickness
   real :: h_neglect, h_neglect_edge
+  logical :: use_ice_shelf
+  real :: z_top_col
+
+  use_ice_shelf=present(frac_shelf_h)
 
   if (.not.CS%remap_answers_2018) then
     h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
@@ -1519,19 +1524,29 @@ subroutine build_grid_HyCOM1( G, GV, US, h, tv, h_new, dzInterface, CS )
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
     if (G%mask2dT(i,j)>0.) then
 
-      depth = G%bathyT(i,j) * GV%Z_to_H
+      nominalDepth = G%bathyT(i,j) * GV%Z_to_H
 
-      z_col(1) = 0. ! Work downward rather than bottom up
+      if (use_ice_shelf) then
+        total_thickness=0.0
+        do k=1,GV%ke
+          total_thickness=total_thickness+h(i,j,k)*GV%Z_to_H
+        enddo
+        z_top_col=max(nominalDepth-total_thickness,0.)
+      else
+        z_top_col=0.
+      endif
+
+      z_col(1) =z_top_col
       do K = 1, GV%ke
         z_col(K+1) = z_col(K) + h(i,j,k)
         p_col(k) = tv%P_Ref + CS%compressibility_fraction * &
              ( 0.5 * ( z_col(K) + z_col(K+1) ) * (GV%H_to_RZ*GV%g_Earth) - tv%P_Ref )
       enddo
 
-      call build_hycom1_column(CS%hycom_CS, tv%eqn_of_state, GV%ke, depth, &
-                               h(i,j,:), tv%T(i,j,:), tv%S(i,j,:), p_col, &
-                               z_col, z_col_new, zScale=GV%Z_to_H, &
-                               h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+       call build_hycom1_column(CS%hycom_CS, tv%eqn_of_state, GV%ke, depth, &
+           h(i,j,:), tv%T(i,j,:), tv%S(i,j,:), p_col, &
+           z_col, z_col_new, zScale=GV%Z_to_H, &
+           h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
 
       ! Calculate the final change in grid position after blending new and old grids
       call filtered_grid_motion( CS, GV%ke, z_col, z_col_new, dz_col )
