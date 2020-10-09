@@ -191,7 +191,7 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     ! current tracer
     tracer => Reg%tr(m)
     call pass_var(tracer%t,G%Domain)
-    write(*,*)' ##### tracer name ######', tracer%name
+    !write(*,*)' ##### tracer name ######', tracer%name
 
     ! for diagnostics
     if (tracer%id_lbdxy_conc > 0 .or. tracer%id_lbdxy_cont > 0 .or. tracer%id_lbdxy_cont_2d > 0 .or. CS%debug) then
@@ -404,13 +404,13 @@ subroutine merge_interfaces(nk, h_L, h_R, hbl_L, hbl_R, H_subroundoff, h)
     enddo
   endif
 
-  write(*,*)'eta2, SIZE(eta2)',eta2(:), SIZE(eta2)
+  !write(*,*)'eta2, SIZE(eta2)',eta2(:), SIZE(eta2)
 
   allocate(h(nk2-1))
   do k=1,nk2-1
     h(k) = (eta2(k+1) - eta2(k)) + H_subroundoff
   enddo
-  write(*,*)'h ',h(:)
+  !write(*,*)'h ',h(:)
 
 end subroutine merge_interfaces
 
@@ -613,9 +613,9 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   call remapping_core_h(CS%remap_cs, ke, h_L(:), phi_L(:), nk, dz_top(:), phi_L_z(:))
   call remapping_core_h(CS%remap_cs, ke, h_R(:), phi_R(:), nk, dz_top(:), phi_R_z(:))
 
-  do k=1,nk
-    write(*,*)'dz_top(k), phi_L_z(k)-phi_R_z(k)',dz_top(k), (phi_L_z(k)-phi_R_z(k))
-  enddo
+  !do k=1,nk
+  !  write(*,*)'dz_top(k), phi_L_z(k)-phi_R_z(k)',dz_top(k), (phi_L_z(k)-phi_R_z(k))
+  !enddo
 
   if (CS%debug) then
     tmp1 = SUM(phi_L(:)*h_L(:))
@@ -696,9 +696,9 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
 !    enddo
 !  endif
 
-  do k=1,nk
-    write(*,*)'F_layer_z(k)',F_layer_z(k)
-  enddo
+  !do k=1,nk
+  !  write(*,*)'F_layer_z(k)',F_layer_z(k)
+  !enddo
 
   do k = 1,ke
     h_vel(k) = harmonic_mean(h_L(k), h_R(k))
@@ -707,7 +707,7 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   call reintegrate_column(nk, dz_top(:), F_layer_z(:), ke, h_vel(:), 0.0, F_layer(:))
   do k = 1,ke
     F_layer(k) = F_layer(k) !/(h_vel(k) + CS%H_subroundoff)
-    write(*,*)'F_layer(k), h_vel(k)',F_layer(k), h_vel(k)
+    !write(*,*)'F_layer(k), h_vel(k)',F_layer(k), h_vel(k)
   enddo
 
   ! deallocated arrays
