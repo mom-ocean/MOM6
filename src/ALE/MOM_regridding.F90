@@ -853,11 +853,7 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
   select case ( CS%regridding_scheme )
 
     case ( REGRIDDING_ZSTAR )
-      if (use_ice_shelf) then
-        call build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h )
-      else
-        call build_zstar_grid( CS, G, GV, h, dzInterface )
-      endif
+      call build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h )
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_SIGMA_SHELF_ZSTAR)
@@ -869,12 +865,8 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_RHO )
-       if (do_convective_adjustment) call convective_adjustment(G, GV, h, tv)
-       if (use_ice_shelf) then
-          call build_rho_grid( G, GV, G%US, h, tv, dzInterface, remapCS, CS, frac_shelf_h )
-       else
-          call build_rho_grid( G, GV, G%US, h, tv, dzInterface, remapCS, CS)
-       endif
+      if (do_convective_adjustment) call convective_adjustment(G, GV, h, tv)
+      call build_rho_grid( G, GV, G%US, h, tv, dzInterface, remapCS, CS, frac_shelf_h )
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_ARBITRARY )
@@ -882,11 +874,7 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_HYCOM1 )
-      if (use_ice_shelf) then
-         call build_grid_HyCOM1( G, GV, G%US, h, tv, h_new, dzInterface, CS, frac_shelf_h )
-      else
-         call build_grid_HyCOM1( G, GV, G%US, h, tv, h_new, dzInterface, CS )
-      endif
+      call build_grid_HyCOM1( G, GV, G%US, h, tv, h_new, dzInterface, CS, frac_shelf_h )
     case ( REGRIDDING_SLIGHT )
       call build_grid_SLight( G, GV, G%US, h, tv, dzInterface, CS )
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
