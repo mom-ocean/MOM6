@@ -43,12 +43,15 @@ public set_visc_register_restarts
 
 !> Control structure for MOM_set_visc
 type, public :: set_visc_CS ; private
-  real    :: Hbbl           !< The static bottom boundary layer thickness [H ~> m or kg m-2]
+  real    :: Hbbl           !< The static bottom boundary layer thickness [H ~> m or kg m-2].
+                            !! Runtime parameter `HBBL`.
   real    :: cdrag          !< The quadratic drag coefficient.
+                            !! Runtime parameter `CDRAG`.
   real    :: c_Smag         !< The Laplacian Smagorinsky coefficient for
                             !! calculating the drag in channels.
   real    :: drag_bg_vel    !< An assumed unresolved background velocity for
                             !! calculating the bottom drag [L T-1 ~> m s-1].
+                            !! Runtime parameter `DRAG_BG_VEL`.
   real    :: BBL_thick_min  !< The minimum bottom boundary layer thickness [H ~> m or kg m-2].
                             !! This might be Kv / (cdrag * drag_bg_vel) to give
                             !! Kv as the minimum near-bottom viscosity.
@@ -60,11 +63,13 @@ type, public :: set_visc_CS ; private
   logical :: bottomdraglaw  !< If true, the  bottom stress is calculated with a
                             !! drag law c_drag*|u|*u. The velocity magnitude
                             !! may be an assumed value or it may be based on the
-                            !! actual velocity in the bottom most HBBL, depending
+                            !! actual velocity in the bottom most `HBBL`, depending
                             !! on whether linear_drag is true.
+                            !! Runtime parameter `BOTTOMDRAGLAW`.
   logical :: BBL_use_EOS    !< If true, use the equation of state in determining
                             !! the properties of the bottom boundary layer.
-  logical :: linear_drag    !< If true, the drag law is cdrag*DRAG_BG_VEL*u.
+  logical :: linear_drag    !< If true, the drag law is cdrag*`DRAG_BG_VEL`*u.
+                            !! Runtime parameter `LINEAR_DRAG`.
   logical :: Channel_drag   !< If true, the drag is exerted directly on each
                             !! layer according to what fraction of the bottom
                             !! they overlie.
@@ -87,7 +92,7 @@ type, public :: set_visc_CS ; private
                             !! forms of the same expressions.
   logical :: debug          !< If true, write verbose checksums for debugging purposes.
   logical :: BBL_use_tidal_bg !< If true, use a tidal background amplitude for the bottom velocity
-                            !! when computing the bottom stress
+                            !! when computing the bottom stress.
   character(len=200) :: inputdir !< The directory for input files.
   type(ocean_OBC_type), pointer :: OBC => NULL() !< Open boundaries control structure
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
@@ -108,13 +113,80 @@ end type set_visc_CS
 contains
 
 !> Calculates the thickness of the bottom boundary layer and the viscosity within that layer.
-!! A drag law is used, either linearized about an assumed bottom velocity or using
-!! the actual near-bottom velocities combined with an assumed
-!! unresolved velocity.  The bottom boundary layer thickness is
-!! limited by a combination of stratification and rotation, as in the
-!! paper of Killworth and Edwards, JPO 1999.  It is not necessary to
-!! calculate the thickness and viscosity every time step; instead
-!! previous values may be used.
+!!
+!! A drag law is used, either linearized about an assumed bottom velocity or using the
+!! actual near-bottom velocities combined with an assumed unresolved velocity.  The bottom
+!! boundary layer thickness is limited by a combination of stratification and rotation, as
+!! in the paper of Killworth and Edwards, JPO 1999. It is not necessary to calculate the
+!! thickness and viscosity every time step; instead previous values may be used.
+!!
+!! \section set_viscous_BBL Viscous Bottom Boundary Layer
+!!
+!! If set_visc_cs.bottomdraglaw is True then a bottom boundary layer viscosity and thickness
+!! are calculated so that the bottom stress is
+!! \f[
+!! \mathbf{\tau}_b = C_d | U_{bbl} | \mathbf{u}_{bbl}
+!! \f]
+!! If set_visc_cs.bottomdraglaw is True then the term \f$|U_{bbl}|\f$ is set equal to the
+!! value in set_visc_cs.drag_bg_vel so that \f$C_d |U_{bbl}|\f$ becomes a Rayleigh bottom drag.
+!! Otherwise \f$|U_{bbl}|\f$ is found by averaging the flow over the bottom set_visc_cs.hbbl
+!! of the model, adding the amplitude of tides set_visc_cs.tideamp and a constant
+!! set_visc_cs.drag_bg_vel. For these calculations the vertical grid at the velocity
+!! component locations is found by
+!! \f[
+!! \begin{array}{ll}
+!! \frac{2 h^- h^+}{h^- + h^+} & u \left( h^+ - h^-\right) >= 0
+!! \\
+!! \frac{1}{2} \left( h^- + h^+ \right) &  u \left( h^+ - h^-\right) < 0
+!! \end{array}
+!! \f]
+!! which biases towards the thin cell if the thin cell is upwind. Biasing the grid toward
+!! thin upwind cells helps increase the effect of viscosity and inhibits flow out of these
+!! thin cells.
+!!
+!! After diagnosing \f$|U_{bbl}|\f$ over a fixed depth an active viscous boundary layer
+!! thickness is found using the ideas of Killworth and Edwards, 1999 (hereafter KW99).
+!! KW99 solve the equation
+!! \f[
+!! \left( \frac{h_{bbl}}{h_f} \right)^2 + \frac{h_{bbl}}{h_N} = 1
+!! \f]
+!! for the boundary layer depth \f$h_{bbl}\f$. Here
+!! \f[
+!! h_f = \frac{C_n u_*}{f}
+!! \f]
+!! is the rotation controlled boundary layer depth in the absence of stratification.
+!! \f$u_*\f$ is the surface friction speed given by
+!! \f[
+!! u_*^2 = C_d |U_{bbl}|^2
+!! \f]
+!! and is a function of near bottom model flow.
+!! \f[
+!! h_N = \frac{C_i u_*}{N} = \frac{ (C_i u_* )^2 }{g^\prime}
+!! \f]
+!! is the stratification controlled boundary layer depth. The non-dimensional parameters
+!! \f$C_n=0.5\f$ and \f$C_i=20\f$ are suggested by Zilitinkevich and Mironov, 1996.
+!!
+!! If a Richardson number dependent mixing scheme is being used, as indicated by
+!! set_visc_cs.rino_mix, then the boundary layer thickness is bounded to be no larger
+!! than a half of set_visc_cs.hbbl .
+!!
+!! \todo Channel drag needs to be explained
+!!
+!! A BBL viscosity is calculated so that the no-slip boundary condition in the vertical
+!! viscosity solver implies the stress \f$\mathbf{\tau}_b\f$.
+!!
+!! \subsection set_viscous_BBL_ref References
+!!
+!! \arg Killworth, P. D., and N. R. Edwards, 1999:
+!! A Turbulent Bottom Boundary Layer Code for Use in Numerical Ocean Models.
+!! J. Phys. Oceanogr., 29, 1221-1238,
+!! <a href="https://doi.org/10.1175/1520-0485(1999)029<1221:ATBBLC>2.0.CO;2"
+!! >doi:10.1175/1520-0485(1999)029<1221:ATBBLC>2.0.CO;2</a>
+!! \arg Zilitinkevich, S., Mironov, D.V., 1996:
+!! A multi-limit formulation for the equilibrium depth of a stably stratified boundary layer.
+!! Boundary-Layer Meteorology 81, 325-351.
+!! <a href="https://doi.org/10.1007/BF02430334">doi:10.1007/BF02430334</a>
+!!
 subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
