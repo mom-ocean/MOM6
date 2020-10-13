@@ -60,7 +60,7 @@ type, public :: set_visc_CS ; private
   logical :: bottomdraglaw  !< If true, the  bottom stress is calculated with a
                             !! drag law c_drag*|u|*u. The velocity magnitude
                             !! may be an assumed value or it may be based on the
-                            !! actual velocity in the bottommost HBBL, depending
+                            !! actual velocity in the bottom most HBBL, depending
                             !! on whether linear_drag is true.
   logical :: BBL_use_EOS    !< If true, use the equation of state in determining
                             !! the properties of the bottom boundary layer.
@@ -191,6 +191,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
                            ! the present layer [H ~> m or kg m-2].
   real :: bbl_thick        ! The thickness of the bottom boundary layer [H ~> m or kg m-2].
   real :: bbl_thick_Z      ! The thickness of the bottom boundary layer [Z ~> m].
+  real :: kv_bbl           ! The bottom boundary layer viscosity [Z2 T-1 ~> m2 s-1].
   real :: C2f              ! C2f = 2*f at velocity points [T-1 ~> s-1].
 
   real :: U_bg_sq          ! The square of an assumed background
@@ -384,6 +385,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   do j=Jsq,Jeq ; do m=1,2
 
     if (m==1) then
+      ! m=1 refers to u-points
       if (j<G%Jsc) cycle
       is = Isq ; ie = Ieq
       do i=is,ie
@@ -391,6 +393,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
         if (G%mask2dCu(I,j) > 0) do_i(i) = .true.
       enddo
     else
+      ! m=2 refers to v-points
       is = G%isc ; ie = G%iec
       do i=is,ie
         do_i(i) = .false.
@@ -398,13 +401,17 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
       enddo
     endif
 
-    if (m==1) then
+    ! Calculate thickness at velocity points (u or v depending on value of m).
+    ! Also interpolate the ML density or T/S properties.
+    if (m==1) then ! u-points
       do k=1,nz ; do I=is,ie
         if (do_i(I)) then
           if (u(I,j,k) *(h(i+1,j,k) - h(i,j,k)) >= 0) then
+            ! If the flow is from thin to thick then bias towards the thinner thickness
             h_at_vel(I,k) = 2.0*h(i,j,k)*h(i+1,j,k) / &
                             (h(i,j,k) + h(i+1,j,k) + h_neglect)
           else
+            ! If the flow is from thick to thin then use the simple average thickness
             h_at_vel(I,k) = 0.5 * (h(i,j,k) + h(i+1,j,k))
           endif
         endif
@@ -417,13 +424,15 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
       enddo ; enddo ; else ; do k=1,nkmb ; do I=is,ie
         Rml_vel(I,k) = 0.5 * (Rml(i,j,k) + Rml(i+1,j,k))
       enddo ; enddo ; endif
-    else
+    else ! v-points
       do k=1,nz ; do i=is,ie
         if (do_i(i)) then
           if (v(i,J,k) * (h(i,j+1,k) - h(i,j,k)) >= 0) then
+            ! If the flow is from thin to thick then bias towards the thinner thickness
             h_at_vel(i,k) = 2.0*h(i,j,k)*h(i,j+1,k) / &
                             (h(i,j,k) + h(i,j+1,k) + h_neglect)
           else
+            ! If the flow is from thick to thin then use the simple average thickness
             h_at_vel(i,k) = 0.5 * (h(i,j,k) + h(i,j+1,k))
           endif
         endif
@@ -503,10 +512,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
     endif ; endif
 
     if (use_BBL_EOS .or. .not.CS%linear_drag) then
+      ! Calculate the mean velocity magnitude over the bottom most CS%Hbbl of
+      ! the water column for determining the quadratic bottom drag.
+      ! Used in ustar(i)
       do i=is,ie ; if (do_i(i)) then
-!   This block of code calculates the mean velocity magnitude over
-! the bottommost CS%Hbbl of the water column for determining
-! the quadratic bottom drag.
         htot_vel = 0.0 ; hwtot = 0.0 ; hutot = 0.0
         Thtot = 0.0 ; Shtot = 0.0
         do k=nz,1,-1
@@ -543,6 +552,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
           endif
         enddo ! end of k loop
 
+        ! Set u* based on u*^2 = Cdrag u_bbl^2
         if (.not.CS%linear_drag .and. (hwtot > 0.0)) then
           ustar(i) = cdrag_sqrt_Z*hutot/hwtot
         else
@@ -555,6 +565,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
           T_EOS(i) = 0.0 ; S_EOS(i) = 0.0
         endif ; endif
 
+        ! Diagnostic BBL flow speed at u- and v-points.
         if (CS%id_bbl_u>0 .and. m==1) then
           if (hwtot > 0.0) CS%bbl_u(I,j) = hutot/hwtot
         elseif (CS%id_bbl_v>0 .and. m==2) then
@@ -581,35 +592,51 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
                                     (/is-G%IsdB+1,ie-G%IsdB+1/) )
     endif
 
+    ! Find a BBL thickness given by equation 2.20 of Killworth and Edwards, 1999:
+    !    ( f h / Cn u* )^2 + ( N h / Ci u* ) = 1
+    ! where Cn=0.5 and Ci=20 (constants suggested by Zilitinkevich and Mironov, 1996).
+    ! Eq. 2.20 can be expressed in terms of boundary layer thicknesses limited by
+    ! rotation (h_f) and stratification (h_N):
+    !    ( h / h_f )^2 + ( h / h_N ) = 1
+    ! When stratification dominates h_N<<h_f, and vice versa.
     do i=is,ie ; if (do_i(i)) then
-!  The 400.0 in this expression is the square of a constant proposed
-!  by Killworth and Edwards, 1999, in equation (2.20).
-      ustarsq = Rho0x400_G * ustar(i)**2
+      ! The 400.0 in this expression is the square of a Ci introduced in KW99, eq. 2.22.
+      ustarsq = Rho0x400_G * ustar(i)**2 ! Note not in units of u*^2 but [H R]
       htot = 0.0
 
-!   This block of code calculates the thickness of a stratification
-! limited bottom boundary layer, using the prescription from
-! Killworth and Edwards, 1999, as described in Stephens and Hallberg
-! 2000 (unpublished and lost manuscript).
+      ! Calculate the thickness of a stratification limited BBL ignoring rotation:
+      !   h_N = Ci u* / N          (limit of KW99 eq. 2.20 for |f|->0)
+      ! For layer mode, N^2 = g'/h. Since (Ci u*)^2 = (h_N N)^2 = h_N g' then
+      !   h_N = (Ci u*)^2 / g'     (KW99, eq, 2.22)
+      ! Starting from the bottom, integrate the stratification upward until h_N N balances Ci u*
+      ! or in layer mode
+      !   h_N Delta rho ~ (Ci u*)^2 rho0 / g
+      ! where the rhs is stored in variable ustarsq.
+      ! The method was described in Stephens and Hallberg 2000 (unpublished and lost manuscript).
       if (use_BBL_EOS) then
         Thtot = 0.0 ; Shtot = 0.0 ; oldfn = 0.0
         do k=nz,2,-1
           if (h_at_vel(i,k) <= 0.0) cycle
 
+          ! Delta rho * h_bbl assuming everything below is homogenized
           oldfn = dR_dT(i)*(Thtot - T_vel(i,k)*htot) + &
                   dR_dS(i)*(Shtot - S_vel(i,k)*htot)
           if (oldfn >= ustarsq) exit
 
+          ! Local Delta rho * h_bbl  at interface
           Dfn = (dR_dT(i)*(T_vel(i,k) - T_vel(i,k-1)) + &
                  dR_dS(i)*(S_vel(i,k) - S_vel(i,k-1))) * &
                 (h_at_vel(i,k) + htot)
 
           if ((oldfn + Dfn) <= ustarsq) then
+            ! Use whole layer
             Dh = h_at_vel(i,k)
           else
+            ! Use only part of the layer
             Dh = h_at_vel(i,k) * sqrt((ustarsq-oldfn) / (Dfn))
           endif
 
+          ! Increment total BBL thickness and cumulative T and S
           htot = htot + Dh
           Thtot = Thtot + T_vel(i,k)*Dh ; Shtot = Shtot + S_vel(i,k)*Dh
         enddo
@@ -658,13 +685,21 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
         endif
       endif ! use_BBL_EOS
 
-! The Coriolis limit is 0.5*ustar/f. The buoyancy limit here is htot.
-! The  bottom boundary layer thickness is found by solving the same
-! equation as in Killworth and Edwards:    (h/h_f)^2 + h/h_N = 1.
-
+      ! Value of 2*f at u- or v-points.
       if (m==1) then ; C2f = G%CoriolisBu(I,J-1) + G%CoriolisBu(I,J)
       else ; C2f = G%CoriolisBu(I-1,J) + G%CoriolisBu(I,J) ; endif
 
+      ! The thickness of a rotation limited BBL ignoring stratification is
+      !   h_f ~ Cn u* / f        (limit of KW99 eq. 2.20 for N->0).
+      ! The buoyancy limit of BBL thickness (h_N) is already in the variable htot from above.
+      ! Substituting x = h_N/h into KW99 eq. 2.20 yields the quadratic
+      !   x^2 - x = (h_N / h_f)^2
+      ! for which the positive root is
+      !   xp = 1/2 + sqrt( 1/4 + (h_N/h_f)^2 )
+      ! and thus h_bbl = h_N / xp . Since h_f = Cn u*/f and Cn=0.5
+      !   xp = 1/2 + sqrt( 1/4 + (2 f h_N/u*)^2 )
+      ! To avoid dividing by zero if u*=0 then
+      !   xp u* = 1/2 u* + sqrt( 1/4 u*^2 + (2 f h_N)^2 )
       if (CS%cdrag * U_bg_sq <= 0.0) then
         ! This avoids NaNs and overflows, and could be used in all cases,
         ! but is not bitwise identical to the current code.
@@ -672,23 +707,32 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
         if (htot*ustH <= (CS%BBL_thick_min+h_neglect) * (0.5*ustH + root)) then
           bbl_thick = CS%BBL_thick_min
         else
+          ! The following expression reads
+          !   h_bbl = h_N u* / ( 1/2 u* + sqrt( 1/4 u*^2 + ( 2 f h_N )^2 ) )
+          ! which is h_bbl = h_N u*/(xp u*) as described above.
           bbl_thick = (htot * ustH) / (0.5*ustH + root)
         endif
       else
+        ! The following expression reads
+        !   h_bbl = h_N / ( 1/2 + sqrt( 1/4 + ( 2 f h_N / u* )^2 ) )
+        ! which is h_bbl = h_N/xp as described above.
         bbl_thick = htot / (0.5 + sqrt(0.25 + htot*htot*C2f*C2f/ &
                                        ((ustar(i)*ustar(i)) * (GV%Z_to_H**2)) ) )
 
         if (bbl_thick < CS%BBL_thick_min) bbl_thick = CS%BBL_thick_min
       endif
-! If there is Richardson number dependent mixing, that determines
-! the vertical extent of the bottom boundary layer, and there is no
-! need to set that scale here.  In fact, viscously reducing the
-! shears over an excessively large region reduces the efficacy of
-! the Richardson number dependent mixing.
+
+      ! If there is Richardson number dependent mixing, that determines
+      ! the vertical extent of the bottom boundary layer, and there is no
+      ! need to set that scale here.  In fact, viscously reducing the
+      ! shears over an excessively large region reduces the efficacy of
+      ! the Richardson number dependent mixing.
+      ! In other words, if using RiNo_mix then CS%Hbbl acts as an upper bound on
+      ! bbl_thick.
       if ((bbl_thick > 0.5*CS%Hbbl) .and. (CS%RiNo_mix)) bbl_thick = 0.5*CS%Hbbl
 
       if (CS%Channel_drag) then
-        ! The drag within the bottommost bbl_thick is applied as a part of
+        ! The drag within the bottom most bbl_thick is applied as a part of
         ! an enhanced bottom viscosity, while above this the drag is applied
         ! directly to the layers in question as a Rayleigh drag term.
         if (m==1) then
@@ -900,28 +944,38 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
 
         enddo ! k loop to determine L(K).
 
+        ! Set the near-bottom viscosity to a value which will give
+        ! the correct stress when the shear occurs over bbl_thick.
+        ! See next block for explanation.
         bbl_thick_Z = bbl_thick * GV%H_to_Z
-        if (m==1) then
-          visc%Kv_bbl_u(I,j) = max(CS%Kv_BBL_min, &
-                                   cdrag_sqrt*ustar(i)*bbl_thick_Z*BBL_visc_frac)
-          visc%bbl_thick_u(I,j) = bbl_thick_Z
-        else
-          visc%Kv_bbl_v(i,J) = max(CS%Kv_BBL_min, &
-                                   cdrag_sqrt*ustar(i)*bbl_thick_Z*BBL_visc_frac)
-          visc%bbl_thick_v(i,J) = bbl_thick_Z
-        endif
+        kv_bbl = cdrag_sqrt*ustar(i)*bbl_thick_Z*BBL_visc_frac
 
       else ! Not Channel_drag.
-!   Here the near-bottom viscosity is set to a value which will give
-! the correct stress when the shear occurs over bbl_thick.
+        ! Set the near-bottom viscosity to a value which will give
+        ! the correct stress when the shear occurs over bbl_thick.
+        ! - The bottom stress is tau_b = Cdrag * u_bbl^2
+        ! - u_bbl was calculated by averaging flow over CS%Hbbl
+        !   (and includes unresolved tidal components)
+        ! - u_bbl is embedded in u* since u*^2 = Cdrag u_bbl^2
+        ! - The average shear in the BBL is du/dz = 2 * u_bbl / h_bbl
+        !   (which assumes a linear profile, hence the "2")
+        ! - bbl_thick was bounded to <= 0.5 * CS%Hbbl
+        ! - The viscous stress kv_bbl du/dz should balance tau_b
+        !      Cdrag u_bbl^2 = kv_bbl du/dz
+        !                    = 2 kv_bbl u_bbl
+        ! so
+        !      kv_bbl = 0.5 h_bbl Cdrag u_bbl
+        !             = 0.5 h_bbl sqrt(Cdrag) u*
         bbl_thick_Z = bbl_thick * GV%H_to_Z
-        if (m==1) then
-          visc%Kv_bbl_u(I,j) = max(CS%Kv_BBL_min, cdrag_sqrt*ustar(i)*bbl_thick_Z)
-          visc%bbl_thick_u(I,j) = bbl_thick_Z
-        else
-          visc%Kv_bbl_v(i,J) = max(CS%Kv_BBL_min, cdrag_sqrt*ustar(i)*bbl_thick_Z)
-          visc%bbl_thick_v(i,J) = bbl_thick_Z
-        endif
+        kv_bbl = cdrag_sqrt*ustar(i)*bbl_thick_Z
+      endif
+      kv_bbl = max(CS%Kv_BBL_min, kv_bbl)
+      if (m==1) then
+        visc%Kv_bbl_u(I,j) = kv_bbl
+        visc%bbl_thick_u(I,j) = bbl_thick_Z
+      else
+        visc%Kv_bbl_v(i,J) = kv_bbl
+        visc%bbl_thick_v(i,J) = bbl_thick_Z
       endif
     endif ; enddo ! end of i loop
   enddo ; enddo ! end of m & j loops
