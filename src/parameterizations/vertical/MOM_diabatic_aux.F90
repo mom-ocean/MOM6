@@ -1,4 +1,3 @@
-
 !> Provides functions for some diabatic processes such as fraxil, brine rejection,
 !! tendency due to surface flux divergence.
 module MOM_diabatic_aux
@@ -33,6 +32,7 @@ implicit none ; private
 public diabatic_aux_init, diabatic_aux_end
 public make_frazil, adjust_salt, differential_diffuse_T_S, triDiagTS
 public find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut, set_pen_shortwave
+public diagnoseMLDbyEnergy
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -723,6 +723,211 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   if (id_SQ > 0)  call post_data(id_SQ, MLD2, diagPtr)
 
 end subroutine diagnoseMLDbyDensityDifference
+
+!> Diagnose a mixed layer depth (MLD) determined by the depth a given energy value would mix.
+!> This routine is appropriate in MOM_diabatic_driver due to its position within the time stepping.
+subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
+  ! Author: Brandon Reichl
+  ! Date: October 2, 2020
+  ! //
+  ! *Note that gravity is assumed constant everywhere and divided out of all calculations.
+  !
+  ! This code has been written to step through the columns layer by layer, summing the PE
+  ! change inferred by mixing the layer with all layers above.  When the change exceeds a
+  ! threshold (determined by input array Mixing_Energy), the code needs to solve for how far
+  ! into this layer the threshold PE change occurs (assuming constant density layers).
+  ! This is expressed here via solving the function F(X) = 0 where:
+  ! F(X) = 0.5 * ( Ca*X^3/(D1+X) + Cb*X^2/(D1+X) + Cc*X/(D1+X) + Dc/(D1+X)
+  !                + Ca2*X^2 + Cb2*X + Cc2)
+  ! where all coefficients are determined by the previous mixed layer depth, the
+  ! density of the previous mixed layer, the present layer thickness, and the present
+  ! layer density.  This equation is worked out by computing the total PE assuming constant
+  ! density in the mixed layer as well as in the remaining part of the present layer that is
+  ! not mixed.
+  ! To solve for X in this equation a Newton's method iteration is employed, which
+  ! converges extremely quickly (usually 1 guess) since this equation turns out being rather
+  ! lienar for PE change with increasing X.
+  ! Input parameters:
+  integer, dimension(3),   intent(in) :: id_MLD      !< Energy output diag IDs
+  type(ocean_grid_type),   intent(in) :: G           !< Grid type
+  type(verticalGrid_type), intent(in) :: GV          !< ocean vertical grid structure
+  type(unit_scale_type),   intent(in) :: US          !< A dimensional unit scaling type
+  real, dimension(3),      intent(in) :: Mixing_Energy !< Energy values for up to 3 MLDs
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: h           !< Layer thickness [H ~> m or kg m-2]
+  type(thermo_var_ptrs),   intent(in) :: tv          !< Structure containing pointers to any
+                                                     !! available thermodynamic fields.
+  type(diag_ctrl),         pointer    :: diagPtr     !< Diagnostics structure
+
+  ! Local variables
+  real, dimension(SZI_(G), SZJ_(G),3) :: MLD     ! Diagnosed mixed layer depth [Z ~> m].
+  real, dimension(SZK_(G)) :: Z_L, Z_U, dZ, Rho_c, pRef_MLD
+  real, dimension(3) :: PE_threshold
+
+  real :: ig, E_g
+  real :: PE_Threshold_fraction, PE, PE_Mixed, PE_Mixed_TST
+  real :: RhoDZ_ML, H_ML, RhoDZ_ML_TST, H_ML_TST
+  real :: Rho_ML
+
+  real :: R1, D1, R2, D2
+  real :: Ca, Cb,D ,Cc, Cd, Ca2, Cb2, C, Cc2
+  real :: Gx, Gpx, Hx, iHx, Hpx, Ix, Ipx, Fgx, Fpx, X, X2
+
+  integer :: IT, iM
+  integer :: i, j, is, ie, js, je, k, nz
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  pRef_MLD(:) = 0.0
+  mld(:,:,:) = 0.0
+  PE_Threshold_fraction = 1.e-4 !Fixed threshold of 0.01%, could be runtime.
+
+  do iM=1,3
+    PE_threshold(iM) = Mixing_Energy(iM)/GV%g_earth
+  enddo
+
+  do j=js,je; do i=is,ie
+    if (G%mask2dT(i,j) > 0.0) then
+
+      call calculate_density(tv%T(i,j,:), tv%S(i,j,:), pRef_MLD, rho_c, 1, nz, &
+                             tv%eqn_of_state, scale=US%kg_m3_to_R)
+
+      do k=1,nz
+        DZ(k) = h(i,j,k) * GV%H_to_Z
+      enddo
+      Z_U(1) = 0.0
+      Z_L(1) = -DZ(1)
+      do k=2,nz
+        Z_U(k) = Z_L(k-1)
+        Z_L(k) = Z_L(k-1)-DZ(k)
+      enddo
+
+      do iM=1,3
+
+        ! Initialize these for each columnwise calculation
+        PE = 0.0
+        RhoDZ_ML = 0.0
+        H_ML = 0.0
+        RhoDZ_ML_TST = 0.0
+        H_ML_TST = 0.0
+        PE_Mixed = 0.0
+
+        do k=1,nz
+
+          ! This is the unmixed PE cummulative sum from top down
+          PE = PE + 0.5*rho_c(k)*(Z_U(k)**2-Z_L(k)**2)
+
+          ! This is the depth and integral of density
+          H_ML_TST = H_ML + DZ(k)
+          RhoDZ_ML_TST = RhoDZ_ML + rho_c(k)*DZ(k)
+
+          ! The average density assuming all layers including this were mixed
+          Rho_ML = RhoDZ_ML_TST/H_ML_TST
+
+          ! The PE assuming all layers including this were mixed
+          ! Note that 0. could be replaced with "Surface", which doesn't have to be 0
+          ! but 0 is a good reference value.
+          PE_Mixed_TST = 0.5*Rho_ML*(0.**2-(0.-H_ML_TST)**2)
+
+          ! Check if we supplied enough energy to mix to this layer
+          if (PE_Mixed_TST-PE<=PE_threshold(iM)) then
+            H_ML = H_ML_TST
+            RhoDZ_ML = RhoDZ_ML_TST
+
+          else ! If not, we need to solve where the energy ran out
+            ! This will be done with a Newton's method iteration:
+
+            R1 = RhoDZ_ML/H_ML ! The density of the mixed layer (not including this layer)
+            D1 = H_ML ! The thickness of the mixed layer (not including this layer)
+            R2 = rho_c(k) ! The density of this layer
+            D2 = DZ(k) ! The thickness of this layer
+
+            ! This block could be used to calculate the function coefficients if
+            ! we don't reference all values to a surface designated as z=0
+            ! S = Surface
+            ! Ca  = -(R2)
+            ! Cb  = -( (R1*D1) + R2*(2.*D1-2.*S) )
+            ! D   = D1**2. - 2.*D1*S
+            ! Cc  = -( R1*D1*(2.*D1-2.*S) + R2*D )
+            ! Cd  = -(R1*D1*D)
+            ! Ca2 = R2
+            ! Cb2 = R2*(2*D1-2*S)
+            ! C   = S**2 + D2**2 + D1**2 - 2*D1*S - 2.*D2*S +2.*D1*D2
+            ! Cc2 = R2*(D+S**2-C)
+            !
+            ! If the surface is S = 0, it simplifies to:
+            Ca  = -(R2)
+            Cb  = -( R1*D1 + R2*(2.*D1) )
+            D   = D1**2.
+            Cc  = -( R1*D1*(2*D1) + R2*D )
+            Cd  = -R1*D1*D
+            Ca2 = R2
+            Cb2 = R2*(2.*D1)
+            C   = D2**2. + D1**2. + 2.*D1*D2
+            Cc2 = R2*(D-C)
+
+            ! First guess for an iteration using Newton's method
+            X = DZ(k)*0.5
+
+            IT=0
+            do while(IT<10)!We can iterate up to 10 times
+              ! We are trying to solve the function:
+              ! F(x) = G(x)/H(x)+I(x)
+              ! for where F(x) = PE+PE_threshold, or equivalently for where
+              ! F(x) = G(x)/H(x)+I(x) - (PE+PE_threshold) = 0
+              ! We also need the derivative of this function for the Newton's method iteration
+              ! F'(x) = (G'(x)H(x)-G(x)H'(x))/H(x)^2 + I'(x)
+              ! G and its derivative
+              Gx = 0.5*(Ca*X**3+Cb*X**2+Cc*X+Cd)
+              Gpx = 0.5*(3*Ca*X**2+2*Cb*X+Cc)
+              ! H, its inverse, and its derivative
+              Hx = (D1+X)
+              iHx = 1./Hx
+              Hpx = 1.
+              ! I and its derivative
+              Ix = 0.5*(Ca2*X**2. + Cb2*X + Cc2)
+              Ipx = 0.5*(2.*Ca2*X+Cb2)
+
+              ! The Function and its derivative:
+              PE_Mixed = Gx*iHx+Ix
+              Fgx = (PE_Mixed-(PE+PE_threshold(iM)))
+              Fpx = (Gpx*Hx-Hpx*Gx)*iHx**2+Ipx
+
+              ! Check if our solution is within the threshold bounds, if not update
+              ! using Newton's method.  This appears to converge almost always in
+              ! one step because the function is very close to linear in most applications.
+              if (abs(Fgx)>PE_Threshold(iM)*PE_Threshold_fraction) then
+                X2 = X - Fgx/Fpx
+                IT = IT + 1
+                if (X2<0. .or. X2>DZ(k)) then
+                  ! The iteration seems to be robust, but we need to do something *if*
+                  ! things go wrong... How should we treat failed iteration?
+                  ! Present solution: Stop trying to compute and just say we can't mix this layer.
+                  X=0
+                  exit
+                else
+                  X = X2
+                endif
+              else
+                exit! Quit the iteration
+              endif
+            enddo
+            H_ML = H_ML+X
+            exit! Quit looping through the column
+          endif
+        enddo
+        MLD(i,j,iM) = H_ML
+      enddo
+    else
+      MLD(i,j,:) = 0.0
+    endif
+  enddo ; enddo
+
+  if (id_MLD(1) > 0) call post_data(id_MLD(1), MLD(:,:,1), diagPtr)
+  if (id_MLD(2) > 0) call post_data(id_MLD(2), MLD(:,:,2), diagPtr)
+  if (id_MLD(3) > 0) call post_data(id_MLD(3), MLD(:,:,3), diagPtr)
+
+end subroutine diagnoseMLDbyEnergy
 
 !> Update the thickness, temperature, and salinity due to thermodynamic
 !! boundary forcing (contained in fluxes type) applied to h, tv%T and tv%S,
