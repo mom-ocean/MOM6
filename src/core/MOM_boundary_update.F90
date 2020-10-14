@@ -145,7 +145,7 @@ subroutine update_OBC_data(OBC, G, GV, US, tv, h, CS, Time)
       call shelfwave_set_OBC_data(OBC, CS%shelfwave_OBC_CSp, G, h, Time)
   if (CS%use_dyed_channel) &
       call dyed_channel_update_flow(OBC, CS%dyed_channel_OBC_CSp, G, Time)
-  if (OBC%needs_IO_for_data)  &
+  if (OBC%needs_IO_for_data .or. OBC%add_tide_constituents)  &
       call update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
 
 end subroutine update_OBC_data
