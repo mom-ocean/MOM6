@@ -1773,7 +1773,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
                  "SPONGE_STATE_FILE.", default="ETA")
   call get_param(param_file, mdl, "SPONGE_IDAMP_VAR", Idamp_var, &
                  "The name of the inverse damping rate variable in "//&
-                 "SPONGE_DAMPING_FILE.", default="IDAMP")
+                 "SPONGE_DAMPING_FILE.", default="Idamp")
   call get_param(param_file, mdl, "USE_REGRIDDING", use_ALE, do_not_log = .true.)
 
   call get_param(param_file, mdl, "NEW_SPONGES", new_sponges, &
