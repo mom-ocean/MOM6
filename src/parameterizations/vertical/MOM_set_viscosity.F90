@@ -63,7 +63,7 @@ type, public :: set_visc_CS ; private
   logical :: bottomdraglaw  !< If true, the  bottom stress is calculated with a
                             !! drag law c_drag*|u|*u. The velocity magnitude
                             !! may be an assumed value or it may be based on the
-                            !! actual velocity in the bottom most `HBBL`, depending
+                            !! actual velocity in the bottommost `HBBL`, depending
                             !! on whether linear_drag is true.
                             !! Runtime parameter `BOTTOMDRAGLAW`.
   logical :: BBL_use_EOS    !< If true, use the equation of state in determining
@@ -584,7 +584,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
     endif ; endif
 
     if (use_BBL_EOS .or. .not.CS%linear_drag) then
-      ! Calculate the mean velocity magnitude over the bottom most CS%Hbbl of
+      ! Calculate the mean velocity magnitude over the bottommost CS%Hbbl of
       ! the water column for determining the quadratic bottom drag.
       ! Used in ustar(i)
       do i=is,ie ; if (do_i(i)) then
@@ -804,7 +804,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
       if ((bbl_thick > 0.5*CS%Hbbl) .and. (CS%RiNo_mix)) bbl_thick = 0.5*CS%Hbbl
 
       if (CS%Channel_drag) then
-        ! The drag within the bottom most bbl_thick is applied as a part of
+        ! The drag within the bottommost bbl_thick is applied as a part of
         ! an enhanced bottom viscosity, while above this the drag is applied
         ! directly to the layers in question as a Rayleigh drag term.
         if (m==1) then
