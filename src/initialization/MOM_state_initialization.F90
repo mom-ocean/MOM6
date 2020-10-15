@@ -1731,6 +1731,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, L
     tmp, tmp2 ! A temporary array for tracers.
   real, dimension (SZI_(G),SZJ_(G)) :: &
     tmp_2d ! A temporary array for tracers.
+  real, allocatable, dimension(:,:,:) :: tmp_tr ! A temporary array for reading sponge fields
 
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
   real :: pres(SZI_(G))     ! An array of the reference pressure [R L2 T-2 ~> Pa].
@@ -1798,7 +1799,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, L
     call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
 
   if (time_space_interp_sponge .and. .not. use_ALE) &
-    call MOM_error(FATAL, " initialize_sponges: Newer sponges are currently unavailable in layered mode ")
+    call MOM_error(FATAL, " initialize_sponges: Time-varying sponges are currently unavailable in layered mode ")
 
   call MOM_read_data(filename, "Idamp", Idamp(:,:), G%Domain, scale=US%T_to_s)
 
@@ -1811,9 +1812,9 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, L
   if (.not.file_exists(filename, G%Domain)) &
     call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
 
-  ! The first call to set_up_sponge_field is for the interface heights if in layered mode.!
 
   if (.not. use_ALE) then
+    ! The first call to set_up_sponge_field is for the interface heights if in layered mode.
     allocate(eta(isd:ied,jsd:jed,nz+1)); eta(:,:,:) = 0.0
     call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
 
@@ -1846,9 +1847,9 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, L
       call set_up_sponge_ML_density(tmp_2d, G, Layer_CSp)
     endif
 
-  ! Now register all of the tracer fields which are damped in the
-  ! sponge. By default, momentum is advected vertically within the
-  ! sponge, but momentum is typically not damped within the sponge.
+   ! Now register all of the tracer fields which are damped in the
+   ! sponge. By default, momentum is advected vertically within the
+   ! sponge, but momentum is typically not damped within the sponge.
 
 
     ! The remaining calls to set_up_sponge_field can be in any order.
@@ -1870,13 +1871,10 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, L
       nz_data = siz(3)-1
       allocate(eta(isd:ied,jsd:jed,nz_data+1))
       allocate(h(isd:ied,jsd:jed,nz_data))
-
       call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
-
       do j=js,je ; do i=is,ie
         eta(i,j,nz+1) = -G%bathyT(i,j)
       enddo ; enddo
-
       do k=nz,1,-1 ; do j=js,je ; do i=is,ie
         if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_Z)) &
           eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_Z
@@ -1887,17 +1885,25 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, L
       call initialize_ALE_sponge(Idamp, G, param_file, ALE_CSp, h, nz_data)
       deallocate(eta)
       deallocate(h)
+      if (use_temperature) then
+        allocate(tmp_tr(isd:ied,jsd:jed,nz_data))
+        call MOM_read_data(filename, potemp_var, tmp_tr(:,:,:), G%Domain)
+        call set_up_ALE_sponge_field(tmp_tr, G, tv%T, ALE_CSp)
+        call MOM_read_data(filename, salin_var, tmp_tr(:,:,:), G%Domain)
+        call set_up_ALE_sponge_field(tmp_tr, G, tv%S, ALE_CSp)
+        deallocate(tmp_tr)
+      endif
     else
       ! Initialize sponges without supplying sponge grid
       call initialize_ALE_sponge(Idamp, G, param_file, ALE_CSp)
+      ! The remaining calls to set_up_sponge_field can be in any order.
+      if ( use_temperature) then
+        call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, US, tv%T, ALE_CSp)
+        call set_up_ALE_sponge_field(filename, salin_var, Time, G, GV, US, tv%S, ALE_CSp)
+      endif
     endif
 
 
-    ! The remaining calls to set_up_sponge_field can be in any order.
-    if ( use_temperature) then
-      call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, US, tv%T, ALE_CSp)
-      call set_up_ALE_sponge_field(filename, salin_var, Time, G, GV, US, tv%S, ALE_CSp)
-    endif
 
   endif
 
