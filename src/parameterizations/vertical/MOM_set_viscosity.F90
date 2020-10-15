@@ -73,6 +73,8 @@ type, public :: set_visc_CS ; private
   logical :: Channel_drag   !< If true, the drag is exerted directly on each
                             !! layer according to what fraction of the bottom
                             !! they overlie.
+  logical :: correct_BBL_bounds !< If true, uses the correct bounds on the BBL thickness and
+                            !! viscosity so that the bottom layer feels the intended drag.
   logical :: RiNo_mix       !< If true, use Richardson number dependent mixing.
   logical :: dynamic_viscous_ML !< If true, use a bulk Richardson number criterion to
                             !! determine the mixed layer thickness for viscosity.
@@ -1020,7 +1022,20 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
         ! the correct stress when the shear occurs over bbl_thick.
         ! See next block for explanation.
         bbl_thick_Z = bbl_thick * GV%H_to_Z
-        kv_bbl = cdrag_sqrt*ustar(i)*bbl_thick_Z*BBL_visc_frac
+        if (CS%correct_BBL_bounds .and. &
+            cdrag_sqrt*ustar(i)*bbl_thick_Z*BBL_visc_frac <= CS%Kv_BBL_min) then
+          ! If the bottom stress implies less viscosity than Kv_BBL_min then
+          ! set kv_bbl to the bound and recompute bbl_thick to be consistent
+          ! but with a ridiculously large upper bound on thickness (for Cd u*=0)
+          kv_bbl = CS%Kv_BBL_min
+          if (cdrag_sqrt*ustar(i)*BBL_visc_frac*G%Rad_Earth*US%m_to_Z > kv_bbl) then
+            bbl_thick_Z = kv_bbl / ( cdrag_sqrt*ustar(i)*BBL_visc_frac )
+          else
+            bbl_thick_Z = G%Rad_Earth * US%m_to_Z
+          endif
+        else
+          kv_bbl = cdrag_sqrt*ustar(i)*bbl_thick_Z*BBL_visc_frac
+        endif
 
       else ! Not Channel_drag.
         ! Set the near-bottom viscosity to a value which will give
@@ -1039,7 +1054,20 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
         !      kv_bbl = 0.5 h_bbl Cdrag u_bbl
         !             = 0.5 h_bbl sqrt(Cdrag) u*
         bbl_thick_Z = bbl_thick * GV%H_to_Z
-        kv_bbl = cdrag_sqrt*ustar(i)*bbl_thick_Z
+        if (CS%correct_BBL_bounds .and. &
+            cdrag_sqrt*ustar(i)*bbl_thick_Z <= CS%Kv_BBL_min) then
+          ! If the bottom stress implies less viscosity than Kv_BBL_min then
+          ! set kv_bbl to the bound and recompute bbl_thick to be consistent
+          ! but with a ridiculously large upper bound on thickness (for Cd u*=0)
+          kv_bbl = CS%Kv_BBL_min
+          if (cdrag_sqrt*ustar(i)*G%Rad_Earth*US%m_to_Z > kv_bbl) then
+            bbl_thick_Z = kv_bbl / ( cdrag_sqrt*ustar(i) )
+          else
+            bbl_thick_Z = G%Rad_Earth * US%m_to_Z
+          endif
+        else
+          kv_bbl = cdrag_sqrt*ustar(i)*bbl_thick_Z
+        endif
       endif
       kv_bbl = max(CS%Kv_BBL_min, kv_bbl)
       if (m==1) then
@@ -2163,6 +2191,10 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   call get_param(param_file, mdl, "KV_TBL_MIN", CS%KV_TBL_min, &
                  "The minimum viscosities in the top boundary layer.", &
                  units="m2 s-1", default=Kv_background, scale=US%m2_s_to_Z2_T)
+  call get_param(param_file, mdl, "CORRECT_BBL_BOUNDS", CS%correct_BBL_bounds, &
+                 "If true, uses the correct bounds on the BBL thickness and "//&
+                 "viscosity so that the bottom layer feels the intended drag.", &
+                 default=.false.)
 
   if (CS%Channel_drag) then
     call get_param(param_file, mdl, "SMAG_LAP_CONST", smag_const1, default=-1.0)
