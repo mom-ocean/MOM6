@@ -111,7 +111,6 @@ logical function lateral_boundary_diffusion_init(Time, G, GV, param_file, diag, 
   call extract_diabatic_member(diabatic_CSp, energetic_PBL_CSp=CS%energetic_PBL_CSp)
 
   CS%surface_boundary_scheme = -1
-  !GMM, uncomment below
   if ( .not. ASSOCIATED(CS%energetic_PBL_CSp) .and. .not. ASSOCIATED(CS%KPP_CSp) ) then
     call MOM_error(FATAL,"Lateral boundary diffusion is true, but no valid boundary layer scheme was found")
   endif
@@ -129,7 +128,7 @@ logical function lateral_boundary_diffusion_init(Time, G, GV, param_file, diag, 
                  "It can be one of the following schemes: "//&
                  trim(remappingSchemesDoc), default=remappingDefaultScheme)
   call initialize_remapping( CS%remap_CS, string, boundary_extrapolation = boundary_extrap ,&
-       check_reconstruction = .true., check_remapping = .true.)
+       check_reconstruction = .false., check_remapping = .false.)
   call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
   call get_param(param_file, mdl, "LBD_DEBUG", CS%debug, &
                  "If true, write out verbose debugging data in the LBD module.", &
@@ -191,7 +190,6 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     ! current tracer
     tracer => Reg%tr(m)
     call pass_var(tracer%t,G%Domain)
-    !write(*,*)' ##### tracer name ######', tracer%name
 
     ! for diagnostics
     if (tracer%id_lbdxy_conc > 0 .or. tracer%id_lbdxy_cont > 0 .or. tracer%id_lbdxy_cont_2d > 0 .or. CS%debug) then
@@ -318,6 +316,77 @@ real function harmonic_mean(h1,h2)
   endif
 end function harmonic_mean
 
+!> Returns the location of the minimum value in a 1D array
+!! between indices s and e.
+integer function  find_minimum(x, s, e)
+  integer,                intent(in) :: s, e     !< start and end indices
+  real,    dimension(e),  intent(in) :: x        !< 1D array to be checked
+
+  ! local variables
+  integer                            :: minimum
+  integer                            :: location
+  integer                            :: i
+
+  minimum  = x(s)   ! assume the first is the min
+  location = s      ! record its position
+  do i = s+1, e     ! start with next elements
+    if (x(i) < minimum) then !   if x(i) less than the min?
+      minimum  = x(i)   !      Yes, a new minimum found
+      location = i                !      record its position
+    end if
+  enddo
+  find_minimum = location          ! return the position
+end function  find_minimum
+
+!> Swaps the values of its two formal arguments.
+subroutine swap(a, b)
+  real, intent(inout) :: a, b !< values to be swaped
+
+  ! local variables
+  integer                :: tmp
+  tmp = a
+  a    = b
+  b    = tmp
+end subroutine swap
+
+!> Receives a 1D array x and sorts it into ascending order.
+subroutine sort(x, n)
+  real, dimension(n),  intent(inout) :: x        !< 1D array to be sorted
+  integer,             intent(in   ) :: n        !< # of pts in the array
+
+  ! local variables
+  integer :: i, location
+
+  do i = 1, n-1
+    location = find_minimum(x, i, n) ! find min from this to last
+    call swap(x(i), x(location))     ! swap this and the minimum
+  enddo
+end subroutine sort
+
+!> Returns the unique values in a 1D array.
+subroutine unique(val, n, val_unique)
+  integer,                         intent(in   ) :: n          !< # of pts in the array
+  real, dimension(n),              intent(in   ) :: val        !< 1D array to be checked
+  real, dimension(:), allocatable, intent(inout) :: val_unique !< Returned 1D array with unique values
+
+  ! local variables
+  real, dimension(n) :: tmp
+  integer :: i
+  real :: min_val, max_val
+
+  tmp(:) = 0.
+  min_val = minval(val)-1
+  max_val = maxval(val)
+  i = 0
+  do while (min_val<max_val)
+      i = i+1
+      min_val = minval(val, mask=val>min_val)
+      tmp(i) = min_val
+  enddo
+  allocate(val_unique(i), source=tmp(1:i))
+end subroutine unique
+
+
 !> Given layer thicknesses (and corresponding interfaces) and BLDs in two adjacent columns,
 !! return a set of 1-d layer thicknesses whose interfaces cover all interfaces in the left
 !! and right columns plus the two BLDs. This can be used to accurately remap tracer tendencies
@@ -334,153 +403,43 @@ subroutine merge_interfaces(nk, h_L, h_R, hbl_L, hbl_R, H_subroundoff, h)
   real, dimension(:), allocatable, intent(inout) :: h     !< Combined thicknesses                     [H ~> m or kg m-2]
 
   ! Local variables
-  real, dimension(nk+1) :: eta_L, eta_R      !< Interfaces in the left and right coloumns
-  real, dimension(:), allocatable :: eta1    !< Combined interfaces (eta_L, eta_R), possibly hbl_L and hbl_R
-  real, dimension(:), allocatable :: eta2    !< Combined interfaces (eta1), plus hbl_L and hbl_R
-  integer :: k, nk1, nk2
-  logical :: add_hbl_L, add_hbl_R
+  integer                         :: n           !< Number of layers in eta_all
+  real, dimension(nk+1)           :: eta_L, eta_R!< Interfaces in the left and right coloumns
+  real, dimension(:), allocatable :: eta_all     !< Combined interfaces in the left/right columns + hbl_L and hbl_R
+  real, dimension(:), allocatable :: eta_unique  !< Combined interfaces (eta_L, eta_R), possibly hbl_L and hbl_R
+  integer :: k, kk, nk1                          !< loop indices (k and kk) and array size (nk1)
 
-  add_hbl_L = .true.; add_hbl_R = .true.
+  n = (2*nk)+3
+  allocate(eta_all(n))
 
-  ! compute interfaces
-  eta_L(:) = 0.0; eta_R(:) = 0.0
+  ! compute and merge interfaces
+  eta_L(:) = 0.0; eta_R(:) = 0.0; eta_all(:) = 0.0
+  kk = 0
   do k=2,nk+1
     eta_L(k) = eta_L(k-1) + h_L(k-1)
     eta_R(k) = eta_R(k-1) + h_R(k-1)
+    kk = kk + 2
+    eta_all(kk)   = eta_L(k)
+    eta_all(kk+1) = eta_R(k)
   enddo
 
-  ! build array with interfaces from eta_L and eta_R
-  allocate(eta1(1))
-  eta1(1) = 0.0
-  do k=2,nk+1
-    if (eta_L(k) == eta_R(k)) then
-      ! add just one of them
-      if (eta_L(k) /= eta_L(k-1)) call add_to_list(eta1, eta_L(k))
-    elseif (eta_L(k) > eta_R(k)) then
-      ! add eta_R first
-      if (eta_R(k) /= eta_R(k-1)) call add_to_list(eta1, eta_R(k))
-      if (eta_L(k) /= eta_L(k-1)) call add_to_list(eta1, eta_L(k))
-    else
-      ! add eta_L first
-      if (eta_L(k) /= eta_L(k-1)) call add_to_list(eta1, eta_L(k))
-      if (eta_R(k) /= eta_R(k-1)) call add_to_list(eta1, eta_R(k))
-    endif
+  ! add hbl_L and hbl_R into eta_all
+  eta_all(kk+2) = hbl_L
+  eta_all(kk+3) = hbl_R
+
+  ! sort eta_all
+  call sort(eta_all, n)
+
+  ! remove duplicates from eta_all
+  call unique(eta_all, n, eta_unique)
+
+  nk1 = SIZE(eta_unique)
+  allocate(h(nk1-1))
+  do k=1,nk1-1
+    h(k) = (eta_unique(k+1) - eta_unique(k)) + H_subroundoff
   enddo
-
-  !write(*,*)'eta1, SIZE(eta1)',eta1(:), SIZE(eta1)
-  ! check if hbl_L and hbl_R exist in eta1. If not, add them.
-  nk1 = SIZE(eta1)
-
-  do k=1,nk1
-    if (eta1(k) == hbl_L) add_hbl_L = .false.
-    if (eta1(k) == hbl_R) add_hbl_R = .false.
-  enddo
-  if (hbl_L == hbl_R) then
-    ! only add hbl_L
-    add_hbl_R = .false.
-  endif
-
-  if (add_hbl_L .and. add_hbl_R) then
-    ! add both hbl_L and hbl_R
-    nk2 = nk1 + 2
-    allocate(eta2(nk2))
-    call add_two_interfaces(nk1, eta1, hbl_L, hbl_R, eta2)
-  elseif (add_hbl_L) then
-    ! only add hbl_L
-    nk2 = nk1 + 1
-    allocate(eta2(nk2))
-    call add_one_interface(nk1, eta1, hbl_L, eta2)
-  elseif (add_hbl_R) then
-    ! only add hbl_R
-    nk2 = nk1 + 1
-    allocate(eta2(nk2))
-    call add_one_interface(nk1, eta1, hbl_R, eta2)
-  else
-    ! both hbl_L and hbl_R already exist
-    nk2 = nk1
-    allocate(eta2(nk2))
-    do k=1,nk2
-      eta2(k) = eta1(k)
-    enddo
-  endif
-
-  !write(*,*)'eta2, SIZE(eta2)',eta2(:), SIZE(eta2)
-
-  allocate(h(nk2-1))
-  do k=1,nk2-1
-    h(k) = (eta2(k+1) - eta2(k)) + H_subroundoff
-  enddo
-  !write(*,*)'h ',h(:)
 
 end subroutine merge_interfaces
-
-subroutine add_two_interfaces(nk, eta, val1, val2, new_eta)
-  integer,                       intent(in   ) :: nk       !< number of layers in eta
-  real, dimension(nk),           intent(in   ) :: eta      !< intial interfaces
-  real,                          intent(in   ) :: val1     !< first interface to be added
-  real,                          intent(in   ) :: val2     !< second interface to be added
-  real, dimension(nk+2),         intent(inout) :: new_eta  !< final interfaces
-
-  ! local variables
-  integer               :: k, k_new
-  real, dimension(nk+1) :: eta_tmp
-
-  call add_one_interface(nk, eta, val1, eta_tmp)
-  call add_one_interface(nk+1, eta_tmp, val2, new_eta)
-
-end subroutine add_two_interfaces
-
-subroutine add_one_interface(nk, eta, new_val, new_eta)
-  integer,                       intent(in   ) :: nk       !< number of layers in eta
-  real, dimension(nk),           intent(in   ) :: eta      !< intial interfaces
-  real,                          intent(in   ) :: new_val  !< interface to be added
-  real, dimension(nk+1),         intent(inout) :: new_eta  !< final interfaces
-
-  ! local variables
-  integer :: k, k_new
-
-  new_eta(:) = 0.0
-  k_new = 1
-  do k=1,nk-1
-    if ((new_val > eta(k)) .and. (new_val < eta(k+1))) then
-      new_eta(k_new) = eta(k)
-      new_eta(k_new+1) = new_val
-      k_new = k_new + 2
-    else
-      new_eta(k_new) = eta(k)
-      k_new = k_new + 1
-    endif
-  enddo
-  new_eta(nk+1) = eta(nk)
-
-end subroutine add_one_interface
-
-subroutine add_to_list(list, element)
-  real,                            intent(in)    :: element
-  real, dimension(:), allocatable, intent(inout) :: list
-
-  ! local variables
-  integer :: i, isize
-  real, dimension(:), allocatable :: clist
-
-
-  if(allocated(list)) then
-      isize = size(list)
-      allocate(clist(isize+1))
-      do i=1,isize
-      clist(i) = list(i)
-      end do
-      clist(isize+1) = element
-
-      deallocate(list)
-      call move_alloc(clist, list)
-
-  else
-      allocate(list(1))
-      list(1) = element
-  end if
-
-end subroutine add_to_list
 
 !> Find the k-index range corresponding to the layers that are within the boundary-layer region
 subroutine boundary_k_range(boundary, nk, h, hbl, k_top, zeta_top, k_bot, zeta_bot)
@@ -613,10 +572,6 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   call remapping_core_h(CS%remap_cs, ke, h_L(:), phi_L(:), nk, dz_top(:), phi_L_z(:))
   call remapping_core_h(CS%remap_cs, ke, h_R(:), phi_R(:), nk, dz_top(:), phi_R_z(:))
 
-  !do k=1,nk
-  !  write(*,*)'dz_top(k), phi_L_z(k)-phi_R_z(k)',dz_top(k), (phi_L_z(k)-phi_R_z(k))
-  !enddo
-
   if (CS%debug) then
     tmp1 = SUM(phi_L(:)*h_L(:))
     tmp2 = SUM(phi_L_z(:)*dz_top(:))
@@ -696,10 +651,6 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
 !    enddo
 !  endif
 
-  !do k=1,nk
-  !  write(*,*)'F_layer_z(k)',F_layer_z(k)
-  !enddo
-
   do k = 1,ke
     h_vel(k) = harmonic_mean(h_L(k), h_R(k))
   enddo
@@ -707,7 +658,6 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   call reintegrate_column(nk, dz_top(:), F_layer_z(:), ke, h_vel(:), 0.0, F_layer(:))
   do k = 1,ke
     F_layer(k) = F_layer(k) !/(h_vel(k) + CS%H_subroundoff)
-    !write(*,*)'F_layer(k), h_vel(k)',F_layer(k), h_vel(k)
   enddo
 
   ! deallocated arrays
@@ -724,32 +674,18 @@ logical function near_boundary_unit_tests( verbose )
 
   ! Local variables
   integer, parameter    :: nk = 2               ! Number of layers
-  integer, parameter    :: deg = 1              ! Degree of reconstruction (linear here)
-  integer, parameter    :: method = 1           ! Method used for integrating polynomials
-  real, dimension(nk+2) :: eta1                 ! Updated interfaces with one extra value           [m]
-  real, dimension(nk+3) :: eta2                 ! Updated interfaces with two extra values          [m]
+  real, dimension(nk+1) :: eta1                 ! Updated interfaces with one extra value           [m]
   real, dimension(:), allocatable :: h1         ! Upates layer thicknesses                          [m]
   real, dimension(nk)   :: phi_L, phi_R         ! Tracer values (left and right column)             [ nondim m^-3 ]
-  real, dimension(nk)   :: phi_L_avg, phi_R_avg ! Bulk, thickness-weighted tracer averages (left and right column)
-  real, dimension(nk,deg+1) :: phi_pp_L, phi_pp_R   ! Coefficients for the linear pseudo-reconstructions
-                                                !                                                   [ nondim m^-3 ]
-
-  real, dimension(nk,2) :: ppoly0_E_L, ppoly0_E_R! Polynomial edge values (left and right)          [concentration]
   real, dimension(nk)   :: h_L, h_R             ! Layer thickness (left and right)                  [m]
   real                  :: khtr_u               ! Horizontal diffusivities at U-point               [m^2 s^-1]
   real                  :: hbl_L, hbl_R         ! Depth of the boundary layer (left and right)      [m]
-  real                  :: F_bulk               ! Total diffusive flux across the U point           [nondim s^-1]
   real, dimension(nk)   :: F_layer              ! Diffusive flux within each layer at U-point       [nondim s^-1]
-  real                  :: h_u, hblt_u          ! Thickness at the u-point                          [m]
-  real                  :: khtr_avg             ! Thickness-weighted diffusivity at the u-point     [m^2 s^-1]
-  real                  :: heff                 ! Harmonic mean of layer thicknesses                [m]
-  real                  :: inv_heff             ! Inverse of the harmonic mean of layer thicknesses [m^[-1]
   character(len=120)    :: test_name            ! Title of the unit test
   integer               :: k_top                ! Index of cell containing top of boundary
   real                  :: zeta_top             ! Nondimension position
   integer               :: k_bot                ! Index of cell containing bottom of boundary
   real                  :: zeta_bot             ! Nondimension position
-  real                  :: area_L,area_R        ! Area of grid cell [m^2]
   type(lbd_CS), pointer :: CS
 
   allocate(CS)
@@ -759,9 +695,7 @@ logical function near_boundary_unit_tests( verbose )
        check_reconstruction = .true., check_remapping = .true.)
   call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
   CS%H_subroundoff = 1.0E-20
-  CS%debug=.true.
-
-  area_L = 1.; area_R = 1. ! Set to unity for all unit tests
+  CS%debug=.false.
 
   near_boundary_unit_tests = .false.
   write(stdout,*) '==== MOM_lateral_boundary_diffusion ======================='
@@ -823,18 +757,20 @@ logical function near_boundary_unit_tests( verbose )
 
   if (.not. near_boundary_unit_tests) write(stdout,*) 'Passed boundary_k_range'
 
-  ! unit tests for adding interfaces
-  test_name = 'Add one interface'
-  call add_one_interface(nk+1, (/0., 2., 4./), 1., eta1)
+  ! unit tests for sorting array and finding unique values
+  test_name = 'Sorting array'
+  eta1 = (/1., 0., 0.1/)
+  call sort(eta1, nk+1)
   near_boundary_unit_tests = near_boundary_unit_tests .or. &
-                             test_layer_fluxes( verbose, nk+2, test_name, eta1, (/0., 1., 2., 4./) )
+                             test_layer_fluxes( verbose, nk+1, test_name, eta1, (/0., 0.1, 1./) )
 
-  test_name = 'Add two interfaces'
-  call add_two_interfaces(nk+1, (/0., 2., 4./), 1., 3., eta2)
+  test_name = 'Unique values'
+  call unique((/0., 1., 1., 2./), nk+2, h1)
   near_boundary_unit_tests = near_boundary_unit_tests .or. &
-                             test_layer_fluxes( verbose, nk+3, test_name, eta2, (/0., 1., 2., 3., 4./) )
+                             test_layer_fluxes( verbose, nk+1, test_name, h1, (/0., 1., 2./) )
+  deallocate(h1)
 
-  if (.not. near_boundary_unit_tests) write(stdout,*) 'Passed add interfaces'
+  if (.not. near_boundary_unit_tests) write(stdout,*) 'Passed sort and unique'
 
   ! unit tests for merge_interfaces
   test_name = 'h_L = h_R and BLD_L = BLD_R'
@@ -891,6 +827,17 @@ logical function near_boundary_unit_tests( verbose )
                              test_layer_fluxes( verbose, nk+1, test_name, h1, (/1., 1., 2./) )
   deallocate(h1)
 
+  test_name = 'Right deeper than left, h_L /= h_R and BLD_L = BLD_R'
+  call merge_interfaces(nk+1, (/2., 2., 0./), (/2., 2., 1./), 2.0, 2.0, CS%H_subroundoff, h1)
+  near_boundary_unit_tests = near_boundary_unit_tests .or. &
+                             test_layer_fluxes( verbose, nk+1, test_name, h1, (/2., 2., 1./) )
+  deallocate(h1)
+
+  test_name = 'Right and left small values at bottom, h_L /= h_R and BLD_L = BLD_R'
+  call merge_interfaces(nk+2, (/2., 2., 1., 1./), (/1., 1., .5, .5/), 2.0, 2.0, CS%H_subroundoff, h1)
+  near_boundary_unit_tests = near_boundary_unit_tests .or. &
+                             test_layer_fluxes( verbose, nk+5, test_name, h1, (/1., 1., .5, .5, 1., 1., 1./) )
+  deallocate(h1)
   if (.not. near_boundary_unit_tests) write(stdout,*) 'Passed merge interfaces'
 
   ! All cases in this section have hbl which are equal to the column thicknesses
@@ -933,16 +880,6 @@ logical function near_boundary_unit_tests( verbose )
                              khtr_u, F_layer, CS)
   near_boundary_unit_tests = near_boundary_unit_tests .or. &
                              test_layer_fluxes( verbose, nk, test_name, F_layer, (/0.,0./) )
-
-  test_name = 'Different hbl and different column thicknesses (gradient from right to left)'
-  hbl_L = 12; hbl_R = 20
-  h_L = (/6.,6./) ; h_R = (/10.,10./)
-  phi_L = (/0.,0./) ; phi_R = (/1.,1./)
-  khtr_u = 1.
-  call fluxes_layer_method(SURFACE, nk, hbl_L, hbl_R, h_L, h_R, phi_L, phi_R, &
-                             khtr_u, F_layer, CS)
-  !near_boundary_unit_tests = near_boundary_unit_tests .or. &
-  !                           test_layer_fluxes( verbose, nk, test_name, F_layer, (/-7.5,-7.5/) )
 
   test_name = 'Different hbl and different column thicknesses (gradient from left to right)'
 
