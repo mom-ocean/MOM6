@@ -1776,7 +1776,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, L
                  "SPONGE_STATE_FILE.", default="ETA")
   call get_param(param_file, mdl, "SPONGE_IDAMP_VAR", Idamp_var, &
                  "The name of the inverse damping rate variable in "//&
-                 "SPONGE_DAMPING_FILE.", default="IDAMP")
+                 "SPONGE_DAMPING_FILE.", default="Idamp")
   call get_param(param_file, mdl, "USE_REGRIDDING", use_ALE, do_not_log = .true.)
   time_space_interp_sponge = .false.
   call get_param(param_file, mdl, "NEW_SPONGES", time_space_interp_sponge, &
@@ -1801,7 +1801,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, L
   if (time_space_interp_sponge .and. .not. use_ALE) &
     call MOM_error(FATAL, " initialize_sponges: Time-varying sponges are currently unavailable in layered mode ")
 
-  call MOM_read_data(filename, "Idamp", Idamp(:,:), G%Domain, scale=US%T_to_s)
+  call MOM_read_data(filename, Idamp_var, Idamp(:,:), G%Domain, scale=US%T_to_s)
 
   ! Now register all of the fields which are damped in the sponge.
   ! By default, momentum is advected vertically within the sponge, but
