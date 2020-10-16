@@ -805,7 +805,8 @@ end subroutine change_thickness_using_melt
 
 !> This subroutine adds the mechanical forcing fields and perhaps shelf areas, based on
 !! the ice state in ice_shelf_CS.
-subroutine add_shelf_forces(US, CS, forces_in, do_shelf_area, external_call)
+subroutine add_shelf_forces(Ocn_grid, US, CS, forces_in, do_shelf_area, external_call)
+  type(ocean_grid_type), intent(in)    :: Ocn_grid !< The ocean's grid structure.
   type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   type(ice_shelf_CS),    pointer       :: CS   !< This module's control structure.
   type(mech_forcing),    pointer       :: forces_in !< A structure with the driving mechanical forces
@@ -827,14 +828,24 @@ subroutine add_shelf_forces(US, CS, forces_in, do_shelf_area, external_call)
   if (present(external_call)) rotate=external_call
 
   if (CS%rotate_index .and. rotate) then
-     allocate(forces)
-     call allocate_mech_forcing(forces_in, CS%Grid, forces)
-     call rotate_mech_forcing(forces_in, CS%turns, forces)
+    if ((Ocn_grid%isc /= CS%Grid_in%isc) .or. (Ocn_grid%iec /= CS%Grid_in%iec) .or. &
+        (Ocn_grid%jsc /= CS%Grid_in%jsc) .or. (Ocn_grid%jec /= CS%Grid_in%jec)) &
+      call MOM_error(FATAL,"add_shelf_forces: Incompatible Ocean and Ice shelf grids.")
+
+    allocate(forces)
+    call allocate_mech_forcing(forces_in, CS%Grid, forces)
+    call rotate_mech_forcing(forces_in, CS%turns, forces)
   else
-     forces=>forces_in
+    if ((Ocn_grid%isc /= CS%Grid%isc) .or. (Ocn_grid%iec /= CS%Grid%iec) .or. &
+        (Ocn_grid%jsc /= CS%Grid%jsc) .or. (Ocn_grid%jec /= CS%Grid%jec)) &
+      call MOM_error(FATAL,"add_shelf_forces: Incompatible Ocean and Ice shelf grids.")
+
+    forces=>forces_in
   endif
 
   G=>CS%Grid
+
+
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
@@ -907,13 +918,13 @@ subroutine add_shelf_forces(US, CS, forces_in, do_shelf_area, external_call)
 end subroutine add_shelf_forces
 
 !> This subroutine adds the ice shelf pressure to the fluxes type.
-subroutine add_shelf_pressure(US, CS, fluxes)
-!  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
-  type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
-  type(ice_shelf_CS),    intent(in)    :: CS   !< This module's control structure.
+subroutine add_shelf_pressure(Ocn_grid, US, CS, fluxes)
+  type(ocean_grid_type), intent(in) :: Ocn_grid  !< The ocean's grid structure.
+  type(unit_scale_type), intent(in)    :: US     !< A dimensional unit scaling type
+  type(ice_shelf_CS),    intent(in)    :: CS     !< This module's control structure.
   type(forcing), pointer              :: fluxes  !< A structure of surface fluxes that may be updated.
 
-  type(ocean_grid_type), pointer :: G => NULL()    ! A pointer to  ocean's grid structure.
+  type(ocean_grid_type), pointer :: G => NULL()  ! A pointer to  ocean's grid structure.
   real :: press_ice       !< The pressure of the ice shelf per unit area of ocean (not ice) [R L2 T-2 ~> Pa].
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
 
@@ -921,9 +932,9 @@ subroutine add_shelf_pressure(US, CS, fluxes)
   G=>CS%Grid
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-!  if ((CS%grid%isc /= G%isc) .or. (CS%grid%iec /= G%iec) .or. &
-!      (CS%grid%jsc /= G%jsc) .or. (CS%grid%jec /= G%jec)) &
-!    call MOM_error(FATAL,"add_shelf_pressure: Incompatible ocean and ice shelf grids.")
+  if ((CS%grid%isc /= G%isc) .or. (CS%grid%iec /= G%iec) .or. &
+      (CS%grid%jsc /= G%jsc) .or. (CS%grid%jec /= G%jec)) &
+    call MOM_error(FATAL,"add_shelf_pressure: Incompatible ocean and ice shelf grids.")
 
 
   do j=js,je ; do i=is,ie
@@ -983,7 +994,7 @@ subroutine add_shelf_flux(G, US, CS, sfc_state, fluxes)
   ISS => CS%ISS
 
 
-  call add_shelf_pressure(US, CS, fluxes)
+  call add_shelf_pressure(G, US, CS, fluxes)
 
   ! Determine ustar and the square magnitude of the velocity in the
   ! bottom boundary layer. Together these give the TKE source and
@@ -1761,9 +1772,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   endif
 
   if (present(forces_in)) &
-    call add_shelf_forces(US, CS, forces, do_shelf_area=.not.CS%solo_ice_sheet)
+    call add_shelf_forces(G, US, CS, forces, do_shelf_area=.not.CS%solo_ice_sheet)
 
-  if (present(fluxes_in)) call add_shelf_pressure(US, CS, fluxes)
+  if (present(fluxes_in)) call add_shelf_pressure(ocn_grid, US, CS, fluxes)
 
   if (CS%active_shelf_dynamics .and. .not.CS%isthermo) then
     ISS%water_flux(:,:) = 0.0

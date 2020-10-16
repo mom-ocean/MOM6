@@ -71,7 +71,6 @@ program MOM_main
 
   use MOM_ice_shelf, only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
   use MOM_ice_shelf, only : shelf_calc_flux, add_shelf_forces, ice_shelf_save_restart
-! , add_shelf_flux_forcing, add_shelf_flux_IOB
 
   use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
   use MOM_wave_interface, only: MOM_wave_interface_init_lite, Update_Surface_Waves
@@ -498,7 +497,7 @@ program MOM_main
 
     if (use_ice_shelf) then
       call shelf_calc_flux(sfc_state, fluxes, Time, dt_forcing, ice_shelf_CSp)
-      call add_shelf_forces(US, Ice_shelf_CSp, forces, external_call=.true.)
+      call add_shelf_forces(grid, US, Ice_shelf_CSp, forces, external_call=.true.)
     endif
     fluxes%fluxes_used = .false.
     fluxes%dt_buoy_accum = US%s_to_T*dt_forcing
