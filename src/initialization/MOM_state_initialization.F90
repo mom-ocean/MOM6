@@ -1714,7 +1714,7 @@ end subroutine initialize_temp_salt_linear
 !! number of tracers should be restored within each sponge. The
 !! interface height is always subject to damping, and must always be
 !! the first registered field.
-subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, CSp, ALE_CSp, Time)
+subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, Layer_CSp, ALE_CSp, Time)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in) :: US  !< A dimensional unit scaling type
@@ -1722,7 +1722,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic
                                               !! variables.
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters.
-  type(sponge_CS),         pointer    :: CSp  !< A pointer that is set to point to the control
+  type(sponge_CS),         pointer    :: Layer_CSp  !< A pointer that is set to point to the control
                                               !! structure for this module (in layered mode).
   type(ALE_sponge_CS),     pointer    :: ALE_CSp  !< A pointer that is set to point to the control
                                                   !! structure for this module (in ALE mode).
@@ -1736,6 +1736,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
     tmp, tmp2 ! A temporary array for tracers.
   real, dimension (SZI_(G),SZJ_(G)) :: &
     tmp_2d ! A temporary array for tracers.
+  real, allocatable, dimension(:,:,:) :: tmp_tr ! A temporary array for reading sponge fields
 
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
   real :: pres(SZI_(G))     ! An array of the reference pressure [R L2 T-2 ~> Pa].
@@ -1751,8 +1752,10 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   character(len=200) :: filename, inputdir ! Strings for file/path and path.
 
   logical :: use_ALE ! True if ALE is being used, False if in layered mode
-  logical :: new_sponges ! True if using the newer sponges which do not
-                         ! need to reside on the model horizontal grid.
+  logical :: time_space_interp_sponge ! True if using sponge data which
+  ! need to be interpolated from in both the horizontal dimension and in
+  ! time prior to vertical remapping.
+
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -1778,29 +1781,32 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
                  "SPONGE_STATE_FILE.", default="ETA")
   call get_param(param_file, mdl, "SPONGE_IDAMP_VAR", Idamp_var, &
                  "The name of the inverse damping rate variable in "//&
-                 "SPONGE_DAMPING_FILE.", default="IDAMP")
+                 "SPONGE_DAMPING_FILE.", default="Idamp")
   call get_param(param_file, mdl, "USE_REGRIDDING", use_ALE, do_not_log = .true.)
-
-  call get_param(param_file, mdl, "NEW_SPONGES", new_sponges, &
+  time_space_interp_sponge = .false.
+  call get_param(param_file, mdl, "NEW_SPONGES", time_space_interp_sponge, &
                  "Set True if using the newer sponging code which "//&
                  "performs on-the-fly regridding in lat-lon-time.",&
                  "of sponge restoring data.", default=.false.)
-
-!  if (use_ALE) then
-!    call get_param(param_file, mdl, "SPONGE_RESTORE_ETA", restore_eta, &
-!                 "If true, then restore the interface positions towards "//&
-!                 "target values (in ALE mode)", default = .false.)
-!  endif
+  if (time_space_interp_sponge) then
+     call MOM_error(WARNING, " initialize_sponges:  NEW_SPONGES has been deprecated. "//&
+          "Please use INTERPOLATE_SPONGE_TIME_SPACE instead. Setting "//&
+          "INTERPOLATE_SPONGE_TIME_SPACE = True.")
+  endif
+  call get_param(param_file, mdl, "INTERPOLATE_SPONGE_TIME_SPACE", time_space_interp_sponge, &
+                 "Set True if using the newer sponging code which "//&
+                 "performs on-the-fly regridding in lat-lon-time.",&
+                 "of sponge restoring data.", default=time_space_interp_sponge)
 
   filename = trim(inputdir)//trim(damping_file)
   call log_param(param_file, mdl, "INPUTDIR/SPONGE_DAMPING_FILE", filename)
   if (.not.file_exists(filename, G%Domain)) &
     call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
 
-  if (new_sponges .and. .not. use_ALE) &
-    call MOM_error(FATAL, " initialize_sponges: Newer sponges are currently unavailable in layered mode ")
+  if (time_space_interp_sponge .and. .not. use_ALE) &
+    call MOM_error(FATAL, " initialize_sponges: Time-varying sponges are currently unavailable in layered mode ")
 
-  call MOM_read_data(filename, "Idamp", Idamp(:,:), G%Domain, scale=US%T_to_s)
+  call MOM_read_data(filename, Idamp_var, Idamp(:,:), G%Domain, scale=US%T_to_s)
 
   ! Now register all of the fields which are damped in the sponge.
   ! By default, momentum is advected vertically within the sponge, but
@@ -1811,9 +1817,9 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   if (.not.file_exists(filename, G%Domain)) &
     call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
 
-  ! The first call to set_up_sponge_field is for the interface heights if in layered mode.!
 
   if (.not. use_ALE) then
+    ! The first call to set_up_sponge_field is for the interface heights if in layered mode.
     allocate(eta(isd:ied,jsd:jed,nz+1)); eta(:,:,:) = 0.0
     call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
 
@@ -1826,72 +1832,86 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
     enddo ; enddo ; enddo
     ! Set the inverse damping rates so that the model will know where to
     ! apply the sponges, along with the interface heights.
-    call initialize_sponge(Idamp, eta, G, param_file, CSp, GV)
+    call initialize_sponge(Idamp, eta, G, param_file, Layer_CSp, GV)
     deallocate(eta)
-  elseif (.not. new_sponges) then ! ALE mode
 
-    call field_size(filename,eta_var,siz,no_domain=.true.)
-    if (siz(1) /= G%ieg-G%isg+1 .or. siz(2) /= G%jeg-G%jsg+1) &
-      call MOM_error(FATAL,"initialize_sponge_file: Array size mismatch for sponge data.")
+    if ( GV%nkml>0) then
+      ! This call to set_up_sponge_ML_density registers the target values of the
+      ! mixed layer density, which is used in determining which layers can be
+      ! inflated without causing static instabilities.
+      do i=is-1,ie ; pres(i) = tv%P_Ref ; enddo
+      EOSdom(:) = EOS_domain(G%HI)
 
-!   ALE_CSp%time_dependent_target = .false.
-!   if (siz(4) > 1) ALE_CSp%time_dependent_target = .true.
-    nz_data = siz(3)-1
-    allocate(eta(isd:ied,jsd:jed,nz_data+1))
-    allocate(h(isd:ied,jsd:jed,nz_data))
+      call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain)
+      call MOM_read_data(filename, salin_var, tmp2(:,:,:), G%Domain)
 
-    call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
+      do j=js,je
+        call calculate_density(tmp(:,j,1), tmp2(:,j,1), pres, tmp_2d(:,j), tv%eqn_of_state, EOSdom)
+      enddo
 
-    do j=js,je ; do i=is,ie
-      eta(i,j,nz+1) = -G%bathyT(i,j)
-    enddo ; enddo
+      call set_up_sponge_ML_density(tmp_2d, G, Layer_CSp)
+    endif
 
-    do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-      if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_Z)) &
-        eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_Z
-    enddo ; enddo ; enddo
-    do k=1,nz; do j=js,je ; do i=is,ie
-      h(i,j,k) = GV%Z_to_H*(eta(i,j,k)-eta(i,j,k+1))
-    enddo ; enddo ; enddo
-    call initialize_ALE_sponge(Idamp, G, param_file, ALE_CSp, h, nz_data)
-    deallocate(eta)
-    deallocate(h)
-  else
-    ! Initialize sponges without supplying sponge grid
-    call initialize_ALE_sponge(Idamp, G, param_file, ALE_CSp)
+   ! Now register all of the tracer fields which are damped in the
+   ! sponge. By default, momentum is advected vertically within the
+   ! sponge, but momentum is typically not damped within the sponge.
+
+
+    ! The remaining calls to set_up_sponge_field can be in any order.
+    if ( use_temperature) then
+      call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain)
+      call set_up_sponge_field(tmp, tv%T, G, nz, Layer_CSp)
+      call MOM_read_data(filename, salin_var, tmp(:,:,:), G%Domain)
+      call set_up_sponge_field(tmp, tv%S, G, nz, Layer_CSp)
+    endif
+
   endif
 
-  ! Now register all of the tracer fields which are damped in the
-  ! sponge. By default, momentum is advected vertically within the
-  ! sponge, but momentum is typically not damped within the sponge.
 
-  if ( GV%nkml>0 .and. .not. new_sponges) then
-    ! This call to set_up_sponge_ML_density registers the target values of the
-    ! mixed layer density, which is used in determining which layers can be
-    ! inflated without causing static instabilities.
-    do i=is-1,ie ; pres(i) = tv%P_Ref ; enddo
-    EOSdom(:) = EOS_domain(G%HI)
+  if  (use_ALE) then
+    if (.not. time_space_interp_sponge) then ! ALE mode
+      call field_size(filename,eta_var,siz,no_domain=.true.)
+      if (siz(1) /= G%ieg-G%isg+1 .or. siz(2) /= G%jeg-G%jsg+1) &
+        call MOM_error(FATAL,"initialize_sponge_file: Array size mismatch for sponge data.")
+      nz_data = siz(3)-1
+      allocate(eta(isd:ied,jsd:jed,nz_data+1))
+      allocate(h(isd:ied,jsd:jed,nz_data))
+      call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
+      do j=js,je ; do i=is,ie
+        eta(i,j,nz+1) = -G%bathyT(i,j)
+      enddo ; enddo
+      do k=nz,1,-1 ; do j=js,je ; do i=is,ie
+        if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_Z)) &
+          eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_Z
+      enddo ; enddo ; enddo
+      do k=1,nz; do j=js,je ; do i=is,ie
+        h(i,j,k) = GV%Z_to_H*(eta(i,j,k)-eta(i,j,k+1))
+      enddo ; enddo ; enddo
+      call initialize_ALE_sponge(Idamp, G, param_file, ALE_CSp, h, nz_data)
+      deallocate(eta)
+      deallocate(h)
+      if (use_temperature) then
+        allocate(tmp_tr(isd:ied,jsd:jed,nz_data))
+        call MOM_read_data(filename, potemp_var, tmp_tr(:,:,:), G%Domain)
+        call set_up_ALE_sponge_field(tmp_tr, G, tv%T, ALE_CSp)
+        call MOM_read_data(filename, salin_var, tmp_tr(:,:,:), G%Domain)
+        call set_up_ALE_sponge_field(tmp_tr, G, tv%S, ALE_CSp)
+        deallocate(tmp_tr)
+      endif
+    else
+      ! Initialize sponges without supplying sponge grid
+      call initialize_ALE_sponge(Idamp, G, param_file, ALE_CSp)
+      ! The remaining calls to set_up_sponge_field can be in any order.
+      if ( use_temperature) then
+        call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, US, tv%T, ALE_CSp)
+        call set_up_ALE_sponge_field(filename, salin_var, Time, G, GV, US, tv%S, ALE_CSp)
+      endif
+    endif
 
-    call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain)
-    call MOM_read_data(filename, salin_var, tmp2(:,:,:), G%Domain)
 
-    do j=js,je
-      call calculate_density(tmp(:,j,1), tmp2(:,j,1), pres, tmp_2d(:,j), tv%eqn_of_state, EOSdom)
-    enddo
 
-    call set_up_sponge_ML_density(tmp_2d, G, CSp)
   endif
 
-  ! The remaining calls to set_up_sponge_field can be in any order.
-  if ( use_temperature .and. .not. new_sponges) then
-    call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain)
-    call set_up_sponge_field(tmp, tv%T, G, nz, CSp)
-    call MOM_read_data(filename, salin_var, tmp(:,:,:), G%Domain)
-    call set_up_sponge_field(tmp, tv%S, G, nz, CSp)
-  elseif (use_temperature) then
-    call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, US, tv%T, ALE_CSp)
-    call set_up_ALE_sponge_field(filename, salin_var, Time, G, GV, US, tv%S, ALE_CSp)
-  endif
 
 end subroutine initialize_sponges_file
 
