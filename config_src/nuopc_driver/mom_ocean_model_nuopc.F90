@@ -690,13 +690,8 @@ subroutine ocean_model_restart(OS, timestamp, restartname, num_rest_files)
       "restart files can only be created after the buoyancy forcing is applied.")
 
   if (present(restartname)) then
-     if (present(num_rest_files)) then
-       call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-            OS%restart_CSp, GV=OS%GV, filename=restartname, num_rest_files=num_rest_files)
-     else
-       call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-            OS%restart_CSp, GV=OS%GV, filename=restartname)
-     endif
+     call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
+          OS%restart_CSp, GV=OS%GV, filename=restartname, num_rest_files=num_rest_files)
      call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
           OS%dirs%restart_output_dir) ! Is this needed?
      if (OS%use_ice_shelf) then

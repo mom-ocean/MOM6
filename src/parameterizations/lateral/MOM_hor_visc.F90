@@ -515,7 +515,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     enddo ; enddo
 
     ! Components for the shearing strain
-    do J=js-2,Jeq+2 ; do I=is-2,Ieq+2
+    do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
       dvdx(I,J) = CS%DY_dxBu(I,J)*(v(i+1,J,k)*G%IdyCv(i+1,J) - v(i,J,k)*G%IdyCv(i,J))
       dudy(I,J) = CS%DX_dyBu(I,J)*(u(I,j+1,k)*G%IdxCu(I,j+1) - u(I,j,k)*G%IdxCu(I,j))
     enddo ; enddo
@@ -636,7 +636,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       elseif (OBC%segment(n)%direction == OBC_DIRECTION_S) then
         if ((J >= js-1) .and. (J <= je+1)) then
           do I = max(Isq-1,OBC%segment(n)%HI%isd), min(Ieq+1,OBC%segment(n)%HI%ied)
-            h_u(I,j) = h_u(i,j+1)
+            h_u(I,j) = h_u(I,j+1)
           enddo
         endif
       elseif (OBC%segment(n)%direction == OBC_DIRECTION_E) then
@@ -694,11 +694,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
     ! Vorticity
     if (CS%no_slip) then
-      do J=js-2,Jeq+2 ; do I=is-2,Ieq+2
+      do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
         vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
       enddo ; enddo
     else
-      do J=js-2,Jeq+2 ; do I=is-2,Ieq+2
+      do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
         vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
       enddo ; enddo
     endif
@@ -711,22 +711,23 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
 
       ! Vorticity gradient
-      do J=js-2,Jeq+2 ; do i=is-1,Ieq+2
+      do J=Jsq-1,Jeq+1 ; do i=Isq-1,Ieq+2
         DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
         vort_xy_dx(i,J) = DY_dxBu * (vort_xy(I,J) * G%IdyCu(I,j) - vort_xy(I-1,J) * G%IdyCu(I-1,j))
       enddo ; enddo
 
-      do j=js-1,Jeq+2 ; do I=is-2,Ieq+2
+      do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+1
         DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
         vort_xy_dy(I,j) = DX_dyBu * (vort_xy(I,J) * G%IdxCv(i,J) - vort_xy(I,J-1) * G%IdxCv(i,J-1))
       enddo ; enddo
 
       ! Laplacian of vorticity
       do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
-        DY_dxCv = G%dyCv(i,J) * G%IdxCv(i,J)
-        DX_dyCu = G%dyCu(I,j) * G%IdyCu(I,j)
-        Del2vort_q(I,J) = DY_dxCv * (vort_xy_dx(i+1,J) * G%IdyT(i+1,j) - vort_xy_dx(i,J) * G%IdyT(i,j)) + &
-                        DX_dyCu * (vort_xy_dy(I,j+1) * G%IdyT(i,j+1) - vort_xy_dy(I,j) * G%IdyT(i,j))
+        DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
+        DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
+
+        Del2vort_q(I,J) = DY_dxBu * (vort_xy_dx(i+1,J) * G%IdyCv(i+1,J) - vort_xy_dx(i,J) * G%IdyCv(i,J)) + &
+                        DX_dyBu * (vort_xy_dy(I,j+1) * G%IdyCu(I,j+1) - vort_xy_dy(I,j) * G%IdyCu(I,j))
       enddo ; enddo
       do J=Jsq,Jeq+1 ; do I=Isq,Ieq+1
         Del2vort_h(i,j) = 0.25*(Del2vort_q(I,J) + Del2vort_q(I-1,J) + Del2vort_q(I,J-1) + Del2vort_q(I-1,J-1))
@@ -1086,12 +1087,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         endif ! Smagorinsky_Ah or Leith_Ah
 
         if (use_MEKE_Au) then ! *Add* the MEKE contribution
-          Ah = Ah + 0.25*( (MEKE%Au(I,J) + MEKE%Au(I+1,J+1)) +  &
-                           (MEKE%Au(I+1,J) + MEKE%Au(I,J+1)) )
+          Ah = Ah + 0.25*( (MEKE%Au(i,j) + MEKE%Au(i+1,j+1)) +  &
+                           (MEKE%Au(i+1,j) + MEKE%Au(i,j+1)) )
         endif
 
         if (CS%Re_Ah > 0.0) then
-          KE = 0.125*((u(I,j,k)+u(I-1,j,k))**2 + (v(i,J,k)+v(i,J-1,k))**2)
+          KE = 0.125*((u(I,j,k)+u(I,j+1,k))**2 + (v(i,J,k)+v(i+1,J,k))**2)
           Ah = sqrt(KE) * CS%Re_Ah_const_xy(i,j)
         endif
 
@@ -1193,7 +1194,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                                      CS%dy2h(i+1,j)*str_xx(i+1,j)) + &
                        G%IdxCu(I,j)*(CS%dx2q(I,J-1)*str_xy(I,J-1) - &
                                      CS%dx2q(I,J) *str_xy(I,J))) * &
-                     G%IareaCu(I,j)) / (h_u(i,j) + h_neglect)
+                     G%IareaCu(I,j)) / (h_u(I,j) + h_neglect)
 
     enddo ; enddo
     if (apply_OBC) then
@@ -1922,7 +1923,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
         endif
       endif
       if (CS%Leith_Ah) then
-         CS%biharm6_const_xy(i,j) = Leith_bi_const * (grid_sp_q3 * grid_sp_q3)
+         CS%biharm6_const_xy(I,J) = Leith_bi_const * (grid_sp_q3 * grid_sp_q3)
       endif
       CS%Ah_bg_xy(I,J) = MAX(Ah, Ah_vel_scale * grid_sp_q2 * sqrt(grid_sp_q2))
       if (CS%Re_Ah > 0.0) CS%Re_Ah_const_xy(i,j) = grid_sp_q3 / CS%Re_Ah
