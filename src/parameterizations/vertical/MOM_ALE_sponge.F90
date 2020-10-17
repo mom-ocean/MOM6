@@ -1020,7 +1020,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       mask_z(:,:,:) = 0.0
       ! Interpolate from the external horizontal grid and in time
       call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id, Time, 1.0, G, sp_val, mask_z, z_in, &
-                                          z_edges_in, missing_value, .true., .false., .false., &
+                                          z_edges_in, missing_value, CS%reentrant_x, CS%tripolar_N, .false., &
                                           spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z,&
                                           answers_2018=CS%hor_regrid_answers_2018)
  
@@ -1044,7 +1044,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         do k=1,nz_data
           if (mask_z(i,j,k) == 1.0) then
             zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
-            tmpT1d(k) = sp_val(i,j,k)
+            tmpT1d(k) = sp_val_u(i,j,k)
           elseif (k>1) then
             zBottomOfCell = -G%bathyT(i,j)
             tmpT1d(k) = tmpT1d(k-1)
@@ -1079,7 +1079,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       mask_z(:,:,:) = 0.0
       ! Interpolate from the external horizontal grid and in time
       call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id, Time, 1.0, G, sp_val, mask_z, z_in, &
-                                          z_edges_in, missing_value, .true., .false., .false., &
+                                          z_edges_in, missing_value, CS%reentrant_x, CS%tripolar_N, .false., &
                                           spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z,& 
                                           answers_2018=CS%hor_regrid_answers_2018)
       call pass_var(sp_val,G%Domain)
@@ -1099,7 +1099,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         do k=1,nz_data
           if (mask_z(i,j,k) == 1.0) then
             zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
-            tmpT1d(k) = sp_val(i,j,k)
+            tmpT1d(k) = sp_val_v(i,j,k)
           elseif (k>1) then
             zBottomOfCell = -G%bathyT(i,j)
             tmpT1d(k) = tmpT1d(k-1)
