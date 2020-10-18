@@ -3,8 +3,14 @@ module MOM_set_diffusivity
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_bkgnd_mixing,        only : calculate_bkgnd_mixing, bkgnd_mixing_init, bkgnd_mixing_cs
+use MOM_bkgnd_mixing,        only : bkgnd_mixing_end
 use MOM_cpu_clock,           only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,           only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
+use MOM_CVMix_ddiff,         only : CVMix_ddiff_init, CVMix_ddiff_end, CVMix_ddiff_cs
+use MOM_CVMix_ddiff,         only : compute_ddiff_coeffs
+use MOM_CVMix_shear,         only : calculate_CVMix_shear, CVMix_shear_init, CVMix_shear_cs
+use MOM_CVMix_shear,         only : CVMix_shear_end
 use MOM_diag_mediator,       only : diag_ctrl, time_type
 use MOM_diag_mediator,       only : post_data, register_diag_field
 use MOM_debugging,           only : hchksum, uvchksum, Bchksum, hchksum_pair
@@ -17,22 +23,16 @@ use MOM_forcing_type,        only : forcing, optics_type
 use MOM_full_convection,     only : full_convection
 use MOM_grid,                only : ocean_grid_type
 use MOM_internal_tides,      only : int_tide_CS, get_lowmode_loss
-use MOM_isopycnal_slopes,    only : vert_fill_TS
-use MOM_tidal_mixing,        only : tidal_mixing_CS, calculate_tidal_mixing
-use MOM_tidal_mixing,        only : setup_tidal_diagnostics, post_tidal_diagnostics
 use MOM_intrinsic_functions, only : invcosh
 use MOM_io,                  only : slasher, MOM_read_data
+use MOM_isopycnal_slopes,    only : vert_fill_TS
 use MOM_kappa_shear,         only : calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
 use MOM_kappa_shear,         only : calc_kappa_shear_vertex, kappa_shear_at_vertex
-use MOM_CVMix_shear,         only : calculate_CVMix_shear, CVMix_shear_init, CVMix_shear_cs
-use MOM_CVMix_shear,         only : CVMix_shear_end
-use MOM_CVMix_ddiff,         only : CVMix_ddiff_init, CVMix_ddiff_end, CVMix_ddiff_cs
-use MOM_CVMix_ddiff,         only : compute_ddiff_coeffs
-use MOM_bkgnd_mixing,        only : calculate_bkgnd_mixing, bkgnd_mixing_init, bkgnd_mixing_cs
-use MOM_bkgnd_mixing,        only : bkgnd_mixing_end, sfc_bkgnd_mixing
 use MOM_open_boundary,       only : ocean_OBC_type, OBC_segment_type, OBC_NONE
 use MOM_open_boundary,       only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_string_functions,    only : uppercase
+use MOM_tidal_mixing,        only : tidal_mixing_CS, calculate_tidal_mixing
+use MOM_tidal_mixing,        only : setup_tidal_diagnostics, post_tidal_diagnostics
 use MOM_unit_scaling,        only : unit_scale_type
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, p3d
 use MOM_verticalGrid,        only : verticalGrid_type
@@ -165,6 +165,7 @@ type, public :: set_diffusivity_CS ; private
   integer :: id_maxTKE     = -1, id_TKE_to_Kd   = -1, id_Kd_user    = -1
   integer :: id_Kd_layer   = -1, id_Kd_BBL      = -1, id_N2         = -1
   integer :: id_Kd_Work    = -1, id_KT_extra    = -1, id_KS_extra   = -1
+  integer :: id_kd_bkgnd   = -1, id_kv_bkgnd    = -1
   !>@}
 
 end type set_diffusivity_CS
@@ -246,6 +247,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   real, dimension(SZI_(G),SZK_(G)) :: &
     N2_lay, &     !< squared buoyancy frequency associated with layers [T-2 ~> s-2]
+    Kd_lay_2d, &  !< The layer diffusivities [Z2 T-1 ~> m2 s-1
     maxTKE, &     !< energy required to entrain to h_max [Z3 T-3 ~> m3 s-3]
     TKE_to_Kd     !< conversion rate (~1.0 / (G_Earth + dRho_lay)) between
                   !< TKE dissipated within a layer and Kd in that layer
@@ -296,7 +298,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   ! Set Kd_lay, Kd_int and Kv_slow to constant values.
   ! If nothing else is specified, this will be the value used.
   Kd_lay(:,:,:) = CS%Kd
-  Kd_int(:,:,:) = CS%Kd
+  if (present(Kd_int)) Kd_int(:,:,:) = CS%Kd
   if (associated(visc%Kv_slow)) visc%Kv_slow(:,:,:) = CS%Kv
 
   ! Set up arrays for diagnostics.
@@ -388,10 +390,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   ! the appropriate place to add a depth-dependent parameterization or
   ! another explicit parameterization of Kd.
 
-  ! set surface diffusivities (CS%bkgnd_mixing_csp%Kd_sfc)
-  call sfc_bkgnd_mixing(G, US, CS%bkgnd_mixing_csp)
 
-  !$OMP parallel do default(shared) private(dRho_int, N2_lay, N2_int, N2_bot, KT_extra, &
+  !$OMP parallel do default(shared) private(dRho_int, N2_lay, Kd_lay_2d, N2_int, N2_bot, KT_extra, &
   !$OMP                                     KS_extra, TKE_to_Kd, maxTKE, dissip, kb)
   do j=js,je
 
@@ -403,7 +403,10 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     endif
 
     ! Add background mixing
-    call calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, visc%Kv_slow, j, G, GV, US, CS%bkgnd_mixing_csp)
+    call calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay_2d, visc%Kv_slow, j, G, GV, US, CS%bkgnd_mixing_csp)
+    do k=1,nz ; do i=is,ie
+      Kd_lay(i,j,k) = Kd_lay_2d(i,k)
+    enddo ; enddo
 
     ! Double-diffusion (old method)
     if (CS%double_diffusion) then
@@ -477,7 +480,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
     ! Add the ML_Rad diffusivity.
     if (CS%ML_radiation) &
-      call add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd, Kd_int)
+      call add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, TKE_to_Kd, Kd_lay, Kd_int)
 
     ! Add the Nikurashin and / or tidal bottom-driven mixing
     call calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, maxTKE, G, GV, US, CS%tm_csp, &
@@ -488,7 +491,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     if (CS%bottomdraglaw .and. (CS%BBL_effic>0.0)) then
       if (CS%use_LOTW_BBL_diffusivity) then
         call add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, GV, US, CS,  &
-                                      Kd_lay, Kd_int, dd%Kd_BBL)
+                                      dd%Kd_BBL, Kd_lay, Kd_int)
       else
         call add_drag_diffusivity(h, u, v,  tv, fluxes, visc, j, TKE_to_Kd, &
                                   maxTKE, kb, G, GV, US, CS, Kd_lay, Kd_int, dd%Kd_BBL)
@@ -577,10 +580,10 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   ! post diagnostics
 
   ! background mixing
-  if (CS%bkgnd_mixing_csp%id_kd_bkgnd > 0) &
-    call post_data(CS%bkgnd_mixing_csp%id_kd_bkgnd, CS%bkgnd_mixing_csp%kd_bkgnd, CS%bkgnd_mixing_csp%diag)
-  if (CS%bkgnd_mixing_csp%id_kv_bkgnd > 0) &
-    call post_data(CS%bkgnd_mixing_csp%id_kv_bkgnd, CS%bkgnd_mixing_csp%kv_bkgnd, CS%bkgnd_mixing_csp%diag)
+  if (CS%id_kd_bkgnd > 0) &
+    call post_data(CS%id_kd_bkgnd, CS%bkgnd_mixing_csp%kd_bkgnd, CS%diag)
+  if (CS%id_kv_bkgnd > 0) &
+    call post_data(CS%id_kv_bkgnd, CS%bkgnd_mixing_csp%kv_bkgnd, CS%diag)
 
   ! double diffusive mixing
   if (CS%CVMix_ddiff_csp%id_KT_extra > 0) &
@@ -1130,10 +1133,10 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
                                                           !! layer, or -1 without a bulk mixed layer
   type(set_diffusivity_CS),         pointer       :: CS   !< Diffusivity control structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                    intent(inout) :: Kd_lay !< The diapycnal diffusvity in layers,
+                                    intent(inout) :: Kd_lay !< The diapycnal diffusivity in layers,
                                                             !! [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
-                                    intent(inout) :: Kd_int !< The diapycnal diffusvity at interfaces,
+                          optional, intent(inout) :: Kd_int !< The diapycnal diffusivity at interfaces,
                                                             !! [Z2 T-1 ~> m2 s-1].
   real, dimension(:,:,:),           pointer       :: Kd_BBL !< Interface BBL diffusivity [Z2 T-1 ~> m2 s-1].
 
@@ -1285,8 +1288,10 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
             else
               Kd_lay(i,j,k) = (TKE_to_layer + TKE_Ray) * TKE_to_Kd(i,k)
             endif
-            Kd_int(i,j,K)   = Kd_int(i,j,K)   + 0.5 * delta_Kd
-            Kd_int(i,j,K+1) = Kd_int(i,j,K+1) + 0.5 * delta_Kd
+            if (present(Kd_int)) then
+              Kd_int(i,j,K)   = Kd_int(i,j,K)   + 0.5 * delta_Kd
+              Kd_int(i,j,K+1) = Kd_int(i,j,K+1) + 0.5 * delta_Kd
+            endif
             if (do_diag_Kd_BBL) then
               Kd_BBL(i,j,K) = Kd_BBL(i,j,K) + 0.5 * delta_Kd
               Kd_BBL(i,j,K+1) = Kd_BBL(i,j,K+1) + 0.5 * delta_Kd
@@ -1310,8 +1315,10 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
             delta_Kd = TKE_here * TKE_to_Kd(i,k)
             if (CS%Kd_max >= 0.0) delta_Kd = min(delta_Kd, CS%Kd_max)
             Kd_lay(i,j,k) = Kd_lay(i,j,k) + delta_Kd
-            Kd_int(i,j,K)   = Kd_int(i,j,K)   + 0.5 * delta_Kd
-            Kd_int(i,j,K+1) = Kd_int(i,j,K+1) + 0.5 * delta_Kd
+            if (present(Kd_int)) then
+              Kd_int(i,j,K)   = Kd_int(i,j,K)   + 0.5 * delta_Kd
+              Kd_int(i,j,K+1) = Kd_int(i,j,K+1) + 0.5 * delta_Kd
+            endif
             if (do_diag_Kd_BBL) then
               Kd_BBL(i,j,K) = Kd_BBL(i,j,K) + 0.5 * delta_Kd
               Kd_BBL(i,j,K+1) = Kd_BBL(i,j,K+1) + 0.5 * delta_Kd
@@ -1334,11 +1341,11 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
 
 end subroutine add_drag_diffusivity
 
-!> Calculates a BBL diffusivity use a Prandtl number 1 diffusivitiy with a law of the
+!> Calculates a BBL diffusivity use a Prandtl number 1 diffusivity with a law of the
 !! wall turbulent viscosity, up to a BBL height where the energy used for mixing has
 !! consumed the mechanical TKE input.
 subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
-                                    G, GV, US, CS, Kd_lay, Kd_int, Kd_BBL)
+                                    G, GV, US, CS, Kd_BBL, Kd_lay, Kd_int)
   type(ocean_grid_type),    intent(in)    :: G  !< Grid structure
   type(verticalGrid_type),  intent(in)    :: GV !< Vertical grid structure
   type(unit_scale_type),    intent(in)    :: US !< A dimensional unit scaling type
@@ -1357,11 +1364,11 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
   real, dimension(SZI_(G),SZK_(G)+1), &
                             intent(in)    :: N2_int !< Square of Brunt-Vaisala at interfaces [T-2 ~> s-2]
   type(set_diffusivity_CS), pointer       :: CS !< Diffusivity control structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                            intent(inout) :: Kd_lay !< Layer net diffusivity [Z2 T-1 ~> m2 s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
-                            intent(inout) :: Kd_int !< Interface net diffusivity [Z2 T-1 ~> m2 s-1]
   real, dimension(:,:,:),   pointer       :: Kd_BBL !< Interface BBL diffusivity [Z2 T-1 ~> m2 s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                  optional, intent(inout) :: Kd_lay !< Layer net diffusivity [Z2 T-1 ~> m2 s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                  optional, intent(inout) :: Kd_int !< Interface net diffusivity [Z2 T-1 ~> m2 s-1]
 
   ! Local variables
   real :: TKE_column       ! net TKE input into the column [Z3 T-3 ~> m3 s-3]
@@ -1488,9 +1495,9 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
       TKE_remaining = TKE_remaining - TKE_consumed ! Note this will be non-negative
 
       ! Add this BBL diffusivity to the model net diffusivity.
-      Kd_int(i,j,K) = Kd_int(i,j,K) + Kd_wall
-      Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5 * (Kd_wall + Kd_lower)
-      Kd_lower = Kd_wall ! Store for next level up.
+      if (present(Kd_int)) Kd_int(i,j,K) = Kd_int(i,j,K) + Kd_wall
+      if (present(Kd_lay)) Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5 * (Kd_wall + Kd_lower)
+      Kd_lower = Kd_wall ! Store for next layer up.
       if (do_diag_Kd_BBL) Kd_BBL(i,j,K) = Kd_wall
     enddo ! k
   enddo ! i
@@ -1498,24 +1505,24 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
 end subroutine add_LOTW_BBL_diffusivity
 
 !> This routine adds effects of mixed layer radiation to the layer diffusivities.
-subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd, Kd_int)
+subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, TKE_to_Kd, Kd_lay, Kd_int)
   type(ocean_grid_type),            intent(in)    :: G      !< The ocean's grid structure
   type(verticalGrid_type),          intent(in)    :: GV     !< The ocean's vertical grid structure
   type(unit_scale_type),            intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                     intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2]
   type(forcing),                    intent(in)    :: fluxes !< Surface fluxes structure
-  type(set_diffusivity_CS),         pointer       :: CS     !< Diffusivity control structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                    intent(inout) :: Kd_lay !< The diapycnal diffusvity in layers [Z2 T-1 ~> m2 s-1].
   integer,                          intent(in)    :: j      !< The j-index to work on
+  type(set_diffusivity_CS),         pointer       :: CS     !< Diffusivity control structure
   real, dimension(SZI_(G),SZK_(G)), intent(in)    :: TKE_to_Kd !< The conversion rate between the TKE
                                                             !! TKE dissipated within  a layer and the
                                                             !! diapycnal diffusivity witin that layer,
                                                             !! usually (~Rho_0 / (G_Earth * dRho_lay))
                                                             !! [Z2 T-1 / Z3 T-3 = T2 Z-1 ~> s2 m-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                          optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity in layers [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
-                          optional, intent(inout) :: Kd_int !< The diapycnal diffusvity at interfaces
+                          optional, intent(inout) :: Kd_int !< The diapycnal diffusivity at interfaces
                                                             !! [Z2 T-1 ~> m2 s-1].
 
 ! This routine adds effects of mixed layer radiation to the layer diffusivities.
@@ -1585,9 +1592,11 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd,
     TKE_ml_flux(i) = TKE_ml_flux(i) * exp(-z1)
   endif ; enddo
 
-  do k=1,kml+1 ; do i=is,ie ; if (do_i(i)) then
-    Kd_lay(i,j,k) = Kd_lay(i,j,k) + Kd_mlr_ml(i)
-  endif ; enddo ; enddo
+  if (present(Kd_lay)) then
+    do k=1,kml+1 ; do i=is,ie ; if (do_i(i)) then
+      Kd_lay(i,j,k) = Kd_lay(i,j,k) + Kd_mlr_ml(i)
+    endif ; enddo ; enddo
+  endif
   if (present(Kd_int)) then
     do K=2,kml+1 ; do i=is,ie ; if (do_i(i)) then
       Kd_int(i,j,K) = Kd_int(i,j,K) + Kd_mlr_ml(i)
@@ -1620,7 +1629,9 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd,
         endif
       endif
       Kd_mlr = min(Kd_mlr, CS%ML_rad_kd_max)
-      Kd_lay(i,j,k) = Kd_lay(i,j,k) + Kd_mlr
+      if (present(Kd_lay)) then
+        Kd_lay(i,j,k) = Kd_lay(i,j,k) + Kd_mlr
+      endif
       if (present(Kd_int)) then
         Kd_int(i,j,K)   = Kd_int(i,j,K)   + 0.5 * Kd_mlr
         Kd_int(i,j,K+1) = Kd_int(i,j,K+1) + 0.5 * Kd_mlr
@@ -1955,6 +1966,8 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_set_diffusivity"  ! This module's name.
   real :: omega_frac_dflt
+  logical :: Bryan_Lewis_diffusivity ! If true, the background diapycnal diffusivity uses
+                                     ! the Bryan-Lewis (1979) style tanh profile.
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
 
@@ -2099,7 +2112,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  "calculates Kd/TKE and bounds based on exact energetics "//&
                  "for an isopycnal layer-formulation.", default=.false.)
 
-  ! set params releted to the background mixing
+  ! set params related to the background mixing
   call bkgnd_mixing_init(Time, G, GV, US, param_file, CS%diag, CS%bkgnd_mixing_csp)
 
   call get_param(param_file, mdl, "KV", CS%Kv, &
@@ -2163,9 +2176,13 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   if (CS%FluxRi_max > 0.0) &
     CS%dissip_N2 = CS%dissip_Kd_min * GV%Rho0 / CS%FluxRi_max
 
+  CS%id_kd_bkgnd = register_diag_field('ocean_model', 'Kd_bkgnd', diag%axesTi, Time, &
+      'Background diffusivity added by MOM_bkgnd_mixing module', 'm2/s', conversion=US%Z2_T_to_m2_s)
+  CS%id_kv_bkgnd = register_diag_field('ocean_model', 'Kv_bkgnd', diag%axesTi, Time, &
+      'Background viscosity added by MOM_bkgnd_mixing module', 'm2/s', conversion=US%Z2_T_to_m2_s)
+
   CS%id_Kd_layer = register_diag_field('ocean_model', 'Kd_layer', diag%axesTL, Time, &
       'Diapycnal diffusivity of layers (as set)', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
-
 
   if (CS%tm_csp%Int_tide_dissipation .or. CS%tm_csp%Lee_wave_dissipation .or. &
       CS%tm_csp%Lowmode_itidal_dissipation) then
@@ -2214,7 +2231,11 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
     call user_change_diff_init(Time, G, GV, US, param_file, diag, CS%user_change_diff_CSp)
   endif
 
-  if (CS%tm_csp%Int_tide_dissipation .and. CS%bkgnd_mixing_csp%Bryan_Lewis_diffusivity) &
+  call get_param(param_file, mdl, "BRYAN_LEWIS_DIFFUSIVITY", Bryan_Lewis_diffusivity, &
+                 "If true, use a Bryan & Lewis (JGR 1979) like tanh "//&
+                 "profile of background diapycnal diffusivity with depth. "//&
+                 "This is done via CVMix.", default=.false., do_not_log=.true.)
+  if (CS%tm_csp%Int_tide_dissipation .and. Bryan_Lewis_diffusivity) &
     call MOM_error(FATAL,"MOM_Set_Diffusivity: "// &
          "Bryan-Lewis and internal tidal dissipation are both enabled. Choose one.")
 
