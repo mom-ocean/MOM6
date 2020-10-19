@@ -1250,10 +1250,13 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     call apply_oda_tracer_increments(US%T_to_s*dtdia,G,tv,h,CS%odaCS)
   endif
 
-  if (associated(fluxes%p_surf)) then
+  if (associated(fluxes%p_surf) .or. associated(fluxes%p_surf_full)) then
     call extract_diabatic_member(CS%diabatic_CSp, diabatic_halo=halo_sz)
     if (halo_sz > 0) then
-      call pass_var(fluxes%p_surf, G%Domain, clock=id_clock_pass, halo=halo_sz)
+      if (associated(fluxes%p_surf_full)) &
+        call pass_var(fluxes%p_surf_full, G%Domain, &
+                      clock=id_clock_pass, halo=halo_sz, complete=.not.associated(fluxes%p_surf))
+      call pass_var(fluxes%p_surf, G%Domain, clock=id_clock_pass, halo=halo_sz, complete=.true.)
     endif
   endif
 

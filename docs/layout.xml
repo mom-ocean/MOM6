@@ -12,24 +12,24 @@
     <!--
     <tab type="interfaces" visible="yes" title="">
       <tab type="interfacelist" visible="yes" title="" intro=""/>
-      <tab type="interfaceindex" visible="$ALPHABETICAL_INDEX" title=""/> 
+      <tab type="interfaceindex" visible="$ALPHABETICAL_INDEX" title=""/>
       <tab type="interfacehierarchy" visible="yes" title="" intro=""/>
     </tab>
     -->
     <tab type="classes" visible="yes" title="F90 modules">
       <tab type="classlist" visible="yes" title="F90 module list" intro="This is the list of all F90 modules. Some are expandable which shows the defined types that are provided by that module."/>
-      <tab type="classindex" visible="no" title=""/> 
+      <tab type="classindex" visible="no" title=""/>
       <tab type="hierarchy" visible="yes" title="Hierarchy" intro=""/>
       <tab type="classmembers" visible="yes" title="Module functions and variables" intro=""/>
     </tab>
     <!--
     <tab type="structs" visible="yes" title="">
       <tab type="structlist" visible="yes" title="" intro=""/>
-      <tab type="structindex" visible="$ALPHABETICAL_INDEX" title=""/> 
+      <tab type="structindex" visible="$ALPHABETICAL_INDEX" title=""/>
     </tab>
     <tab type="exceptions" visible="yes" title="">
       <tab type="exceptionlist" visible="yes" title="" intro=""/>
-      <tab type="exceptionindex" visible="$ALPHABETICAL_INDEX" title=""/> 
+      <tab type="exceptionindex" visible="$ALPHABETICAL_INDEX" title=""/>
       <tab type="exceptionhierarchy" visible="yes" title="" intro=""/>
     </tab>
     -->
@@ -37,7 +37,7 @@
       <tab type="filelist" visible="yes" title="File list" intro=""/>
       <tab type="globals" visible="yes" title="Globals" intro=""/>
     </tab>
-    <tab type="examples" visible="yes" title="Examples" intro=""/>  
+    <tab type="examples" visible="yes" title="Examples" intro=""/>
   </navindex>
 
   <!-- Layout definition for a class page -->
@@ -62,7 +62,7 @@
       <protectedslots title="protectedslots"/>
       <protectedmethods title="protectedmethods"/>
       <protectedstaticmethods title="protectedstaticmethods"/>
-      <protectedattributes title="protectedattributs"/>
+      <protectedattributes title="protectedattributes"/>
       <protectedstaticattributes title="protectedstaticattributes"/>
       <packagetypes title="packagetypes"/>
       <packagemethods title="packagemethods"/>

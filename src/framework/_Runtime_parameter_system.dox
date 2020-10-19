@@ -39,7 +39,7 @@ Some illustrations:
 \code{.unparsed}
 DO_THIS = True	! Set the Boolean to .TRUE.
 DO_THAT = False	! Set the Boolean to .FALSE.
-NXYZ = 5	! Set the value ot NXYZ to 5
+NXYZ = 5	! Set the value to NXYZ to 5
 HALF = 0.5	! Set the value of HALF to 0.5
 NAME = "abc"	! Set the string NAME to 'abc'
 VECTOR = 1.0,2.0	! Set the array VECTOR to [1.0, 2.0]

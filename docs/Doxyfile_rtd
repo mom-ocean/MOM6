@@ -717,7 +717,7 @@ FILE_VERSION_FILTER    =
 LAYOUT_FILE            =
 
 # The CITE_BIB_FILES tag can be used to specify one or more bib files containing
-# the refernce definitions. This must be a list of .bib files. The .bib
+# the reference definitions. This must be a list of .bib files. The .bib
 # extension is automatically appended if omitted. This requires the bibtex tool
 # to be installed. See also http://en.wikipedia.org/wiki/BibTeX for more info.
 # For LaTeX the style of the bibliography can be controlled using
