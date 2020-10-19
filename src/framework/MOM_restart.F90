@@ -1057,7 +1057,9 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
     num_files = num_files+1
 
   enddo
+
   if (present(num_rest_files)) num_rest_files = num_files
+
 end subroutine save_restart
 
 !> restore_state reads the model state from previously generated files.  All

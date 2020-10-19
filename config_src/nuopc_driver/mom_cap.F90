@@ -15,7 +15,6 @@ use mpp_io_mod,               only: mpp_open, MPP_RDONLY, MPP_ASCII, MPP_OVERWR,
 use mpp_mod,                  only: stdlog, stdout, mpp_root_pe, mpp_clock_id
 use mpp_mod,                  only: mpp_clock_begin, mpp_clock_end, MPP_CLOCK_SYNC
 use mpp_mod,                  only: MPP_CLOCK_DETAILED, CLOCK_COMPONENT, MAXPES
-use time_interp_external_mod, only: time_interp_external_init
 use time_manager_mod,         only: set_calendar_type, time_type, increment_date
 use time_manager_mod,         only: set_time, set_date, get_time, get_date, month_name
 use time_manager_mod,         only: GREGORIAN, JULIAN, NOLEAP, THIRTY_DAY_MONTHS, NO_CALENDAR
@@ -296,7 +295,7 @@ subroutine InitializeP0(gcomp, importState, exportState, clock, rc)
        isPresent=isPresent, isSet=isSet, rc=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
   if (isPresent .and. isSet) then
-     read(value, '(i)', iostat=iostat) scalar_field_count
+     read(value, *, iostat=iostat) scalar_field_count
      if (iostat /= 0) then
        call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
             msg=subname//": ScalarFieldCount not an integer: "//trim(value), &
@@ -312,7 +311,7 @@ subroutine InitializeP0(gcomp, importState, exportState, clock, rc)
        isPresent=isPresent, isSet=isSet, rc=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
   if (isPresent .and. isSet) then
-     read(value, '(i)', iostat=iostat) scalar_field_idx_grid_nx
+     read(value, *, iostat=iostat) scalar_field_idx_grid_nx
      if (iostat /= 0) then
         call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
              msg=subname//": ScalarFieldIdxGridNX not an integer: "//trim(value), &
@@ -328,7 +327,7 @@ subroutine InitializeP0(gcomp, importState, exportState, clock, rc)
        isPresent=isPresent, isSet=isSet, rc=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
   if (isPresent .and. isSet) then
-     read(value, '(i)', iostat=iostat) scalar_field_idx_grid_ny
+     read(value, *, iostat=iostat) scalar_field_idx_grid_ny
      if (iostat /= 0) then
         call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
              msg=subname//": ScalarFieldIdxGridNY not an integer: "//trim(value), &
@@ -701,16 +700,16 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"        , "will provide")
   !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"       , "will provide")
   if (ocean_state%use_waves) then
-    if (Ice_ocean_boundary%num_stk_bands > 3) then 
+    if (Ice_ocean_boundary%num_stk_bands > 3) then
       call MOM_error(FATAL, "Number of Stokes Bands > 3, NUOPC cap not set up for this")
-    endif      
+    endif
     call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_1" , "will provide")
     call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_1", "will provide")
     call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_2" , "will provide")
     call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_2", "will provide")
     call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_3" , "will provide")
     call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_3", "will provide")
-  endif 
+  endif
 
   !--------- export fields -------------
   call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocean_mask"                 , "will provide")
@@ -1559,6 +1558,7 @@ subroutine ModelAdvance(gcomp, rc)
               return
            endif
            write(writeunit,'(a)') trim(restartname)//'.nc'
+
            if (num_rest_files > 1) then
               ! append i.th restart file name to rpointer
               do i=1, num_rest_files-1
@@ -1737,7 +1737,6 @@ subroutine ModelSetRunClock(gcomp, rc)
                    line=__LINE__, file=__FILE__, rcToReturn=rc)
               return
             endif
-        
             ! not used in nems
             call NUOPC_CompAttributeGet(gcomp, name="restart_ymd", value=cvalue, &
                  isPresent=isPresent, isSet=isSet, rc=rc)
@@ -1747,7 +1746,7 @@ subroutine ModelSetRunClock(gcomp, rc)
                call ESMF_LogWrite(subname//" Restart_ymd = "//trim(cvalue), ESMF_LOGMSG_INFO)
             endif
           else
-            ! restart_n is zero, restarts will be written at finalize only (no alarm control) 
+            ! restart_n is zero, restarts will be written at finalize only (no alarm control)
             restart_mode = 'no_alarms'
             call ESMF_LogWrite(subname//" Restarts will be written at finalize only", ESMF_LOGMSG_INFO)
           endif
@@ -1811,6 +1810,8 @@ subroutine ocean_model_finalize(gcomp, rc)
   type(TIME_TYPE)                        :: Time
   type(ESMF_Clock)                       :: clock
   type(ESMF_Time)                        :: currTime
+  type(ESMF_Alarm), allocatable          :: alarmList(:)
+  integer                                :: alarmCount
   character(len=64)                      :: timestamp
   logical                                :: write_restart
   character(len=*),parameter  :: subname='(MOM_cap:ocean_model_finalize)'
