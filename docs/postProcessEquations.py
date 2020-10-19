@@ -173,7 +173,7 @@ class equationRenumber:
 
                     fullText = "%s%s" % (node.text, node.tail)
                     for m in re.finditer('\\\label{(.*?)}', fullText):
-                        # If first label begins with html: then skip 
+                        # If first label begins with html: then skip
                         tag_string = m.groups()[0]
                         if tag_string.find('html:') == 0:
                             break
@@ -187,7 +187,7 @@ class equationRenumber:
                             self.meta['fixtarget'][tag] = []
                         if not(htmlFile in self.meta['fixtarget'][tag]):
                             self.meta['fixtarget'][tag].append(htmlFile)
-                            
+
             #import pdb; pdb.set_trace()
 
             # fixanchor: Convert lone anchors in front of equations to formal targets
@@ -265,10 +265,10 @@ class equationRenumber:
 
             # Anchors (sphinx)
             # <div class="math notranslate nohighlight" id="equation-eq-coriolis-abcd">
-            # <span class="eqno">(1)<a class="headerlink" href="#equation-eq-coriolis-abcd" 
+            # <span class="eqno">(1)<a class="headerlink" href="#equation-eq-coriolis-abcd"
             # title="Permalink to this equation">¶</a></span>\[**MATH**\]</div>
 
-            # NOTE: Some anchors do not have <span> as above.  
+            # NOTE: Some anchors do not have <span> as above.
             # <div class="math" id="tag">\[**MATH**\]</div>
             # For sphinx, transform to <div><span><a></a></span>\[**MATH**\]</div>
             nodes = tree.xpath("//div[contains(@class,'math')]")
@@ -296,7 +296,7 @@ class equationRenumber:
                             self.meta['fixdiv'][tag] = []
                         if not(htmlFile in self.meta['fixdiv'][tag]):
                             self.meta['fixdiv'][tag].append(htmlFile)
-                        # if we do not have an equation- prefix, add one 
+                        # if we do not have an equation- prefix, add one
                         if tag.find('equation-') != 0:
                             tag = "equation-%s" % (tag)
 
@@ -400,7 +400,7 @@ class equationRenumber:
                         x.text = txhead
                     else:
                         x.text = ''
-                    if txtail and len(txtail)>0:    
+                    if txtail and len(txtail)>0:
                         span.tail = txtail
                     #import pdb; pdb.set_trace()
                     #aatext = 0
@@ -573,6 +573,8 @@ class equationRenumber:
             if node:
                 node = node[0]
                 txt = node.text
+                if txt == None:
+                    continue
                 if txt.find('(') == 0:
                     try:
                         eqno = self.meta['targets'].index(target)+1
@@ -837,7 +839,7 @@ class equationRenumber:
                     scanText = True
                     while scanText:
                         fullText = "%s%s" % (node.text, node.tail)
-                        # Set to False unless an update is detected 
+                        # Set to False unless an update is detected
                         scanText = False
                         m = re.search('\\\label{(html:.*?)}', fullText)
                         if m:

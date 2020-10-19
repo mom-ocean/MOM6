@@ -1,6 +1,6 @@
 /*! \page CVMix_KPP The K-Profile Parameterization
 
- The K-Profile Parameterization (KPP) of cite large1994, (http://dx.doi.org/10.1029/94RG01872) is
+ The K-Profile Parameterization (KPP) of \cite large1994 is
  implemented via the Community Vertical Mixing package, [CVMix](http://cvmix.github.io/),
  which is called directly by this module.
 
@@ -9,7 +9,7 @@
 
  \section section_KPP_nutshell KPP in a nutshell
 
- \cite large1994, decompose the parameterized boundary layer turbulent flux of a scalar, \f$ s \f$, as
+ Large et al., \cite large1994, decompose the parameterized boundary layer turbulent flux of a scalar, \f$ s \f$, as
  \f[ \overline{w^\prime s^\prime} = -K \partial_z s + K \gamma_s(\sigma), \f]
  where \f$ \sigma = -z/h \f$ is a non-dimensional coordinate within the boundary layer of depth \f$ h \f$.
  \f$ K \f$ is the eddy diffusivity and is a function of position within the boundary layer as well as a
