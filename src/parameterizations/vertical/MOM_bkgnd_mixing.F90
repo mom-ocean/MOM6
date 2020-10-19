@@ -34,7 +34,7 @@ public calculate_bkgnd_mixing
 ! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
 !> Control structure including parameters for this module.
-type, public :: bkgnd_mixing_cs  ! TODO: private
+type, public :: bkgnd_mixing_cs ; private
 
   ! Parameters
   real    :: Bryan_Lewis_c1         !< The vertical diffusivity values for  Bryan-Lewis profile
@@ -97,10 +97,6 @@ type, public :: bkgnd_mixing_cs  ! TODO: private
   logical :: debug !< If true, turn on debugging in this module
   ! Diagnostic handles and pointers
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that regulates diagnostic output
-
-  ! Diagnostics arrays
-  real, allocatable, dimension(:,:,:) :: kd_bkgnd !< Background diffusivity [Z2 T-1 ~> m2 s-1]
-  real, allocatable, dimension(:,:,:) :: kv_bkgnd !< Background viscosity  [Z2 s-1 ~> m2 s-1]
 
   character(len=40)  :: bkgnd_scheme_str = "none" !< Background scheme identifier
 
@@ -298,17 +294,10 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
 
 !  call closeParameterBlock(param_file)
 
-  ! allocate arrays and set them to zero
-  allocate(CS%Kd_bkgnd(SZI_(G), SZJ_(G), SZK_(G)+1)); CS%kd_bkgnd(:,:,:) = 0.
-  allocate(CS%kv_bkgnd(SZI_(G), SZJ_(G), SZK_(G)+1)); CS%kv_bkgnd(:,:,:) = 0.
-
-  ! Register diagnostics
-  CS%diag => diag
-
 end subroutine bkgnd_mixing_init
 
 !> Calculates the vertical background diffusivities/viscosities
-subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kv, j, G, GV, US, CS)
+subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G, GV, US, CS)
 
   type(ocean_grid_type),                    intent(in)    :: G   !< Grid structure.
   type(verticalGrid_type),                  intent(in)    :: GV  !< Vertical grid structure.
@@ -317,11 +306,13 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kv, j, G, GV, US, CS)
   type(thermo_var_ptrs),                    intent(in)    :: tv  !< Thermodynamics structure.
   real, dimension(SZI_(G),SZK_(G)),         intent(in)    :: N2_lay !< squared buoyancy frequency associated
                                                                  !! with layers [T-2 ~> s-2]
-  real, dimension(SZI_(G),SZK_(G)),         intent(out)   :: Kd_lay !< Diapycnal diffusivity of each layer
-                                                                 !! [Z2 T-1 ~> m2 s-1].
-  real, dimension(:,:,:),                   pointer       :: Kv  !< The "slow" vertical viscosity at each interface
-                                                                 !! (not layer!) [Z2 T-1 ~> m2 s-1]
-  integer,                                  intent(in)    :: j   !< Meridional grid index
+  real, dimension(SZI_(G),SZK_(G)),         intent(out)   :: Kd_lay !< The background diapycnal diffusivity
+                                                                 !! of each layer [Z2 T-1 ~> m2 s-1].
+  real, dimension(SZI_(G),SZK_(G)+1),       intent(out)   :: Kd_int !< The background diapycnal diffusivity
+                                                                 !! of each interface [Z2 T-1 ~> m2 s-1].
+  real, dimension(SZI_(G),SZK_(G)+1),       intent(out)   :: Kv_bkgnd !< The background vertical viscosity at
+                                                                 !! each interface [Z2 T-1 ~> m2 s-1]
+  integer,                                  intent(in)    :: j   !< MKeridional grid index
   type(bkgnd_mixing_cs),                    pointer       :: CS  !< The control structure returned by
                                                                  !! a previous call to bkgnd_mixing_init.
 
@@ -352,6 +343,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kv, j, G, GV, US, CS)
 
   ! Start with a constant value that may be replaced below.
   Kd_lay(:,:) = CS%Kd
+  Kv_bkgnd(:,:) = 0.0
 
   if (.not. (CS%Bryan_Lewis_diffusivity .or. CS%horiz_varying_background)) then
     do i=is,ie
@@ -399,8 +391,8 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kv, j, G, GV, US, CS)
 
       ! Update Kd and Kv.
       do K=1,nz+1
-        CS%Kv_bkgnd(i,j,K) = US%m2_s_to_Z2_T*Kv_col(K)
-        CS%Kd_bkgnd(i,j,K) = US%m2_s_to_Z2_T*Kd_col(K)
+        Kv_bkgnd(i,K) = US%m2_s_to_Z2_T*Kv_col(K)
+        Kd_int(i,K) = US%m2_s_to_Z2_T*Kd_col(K)
       enddo
       do k=1,nz
         Kd_lay(i,k) = Kd_lay(i,k) + 0.5 * US%m2_s_to_Z2_T * (Kd_col(K) + Kd_col(K+1))
@@ -412,52 +404,55 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kv, j, G, GV, US, CS)
     do i=is,ie
       bckgrnd_vdc_psis = CS%bckgrnd_vdc_psim * exp(-(0.4*(G%geoLatT(i,j)+28.9))**2)
       bckgrnd_vdc_psin = CS%bckgrnd_vdc_psim * exp(-(0.4*(G%geoLatT(i,j)-28.9))**2)
-      CS%Kd_bkgnd(i,j,:) = (CS%bckgrnd_vdc_eq + bckgrnd_vdc_psin) + bckgrnd_vdc_psis
+      Kd_int(i,1) = (CS%bckgrnd_vdc_eq + bckgrnd_vdc_psin) + bckgrnd_vdc_psis
 
       if (G%geoLatT(i,j) < -10.0) then
-        CS%Kd_bkgnd(i,j,:) = CS%Kd_bkgnd(i,j,:) + CS%bckgrnd_vdc1
+        Kd_int(i,1) = Kd_int(i,1) + CS%bckgrnd_vdc1
       elseif (G%geoLatT(i,j) <= 10.0) then
-        CS%Kd_bkgnd(i,j,:) = CS%Kd_bkgnd(i,j,:) + CS%bckgrnd_vdc1 * (G%geoLatT(i,j)/10.0)**2
+        Kd_int(i,1) = Kd_int(i,1) + CS%bckgrnd_vdc1 * (G%geoLatT(i,j)/10.0)**2
       else
-        CS%Kd_bkgnd(i,j,:) = CS%Kd_bkgnd(i,j,:) + CS%bckgrnd_vdc1
+        Kd_int(i,1) = Kd_int(i,1) + CS%bckgrnd_vdc1
       endif
 
       ! North Banda Sea
       if ( (G%geoLatT(i,j) < -1.0)  .and. (G%geoLatT(i,j) > -4.0) .and. &
            ( mod(G%geoLonT(i,j)+360.0,360.0) > 103.0) .and. &
            ( mod(G%geoLonT(i,j)+360.0,360.0) < 134.0) ) then
-        CS%Kd_bkgnd(i,j,:) = CS%bckgrnd_vdc_Banda
+        Kd_int(i,1) = CS%bckgrnd_vdc_Banda
       endif
 
       ! Middle Banda Sea
       if ( (G%geoLatT(i,j) <= -4.0) .and. (G%geoLatT(i,j) > -7.0) .and. &
            ( mod(G%geoLonT(i,j)+360.0,360.0) > 106.0) .and. &
            ( mod(G%geoLonT(i,j)+360.0,360.0) < 140.0) ) then
-        CS%Kd_bkgnd(i,j,:) = CS%bckgrnd_vdc_Banda
+        Kd_int(i,1) = CS%bckgrnd_vdc_Banda
       endif
 
       ! South Banda Sea
       if ( (G%geoLatT(i,j) <= -7.0) .and. (G%geoLatT(i,j) > -8.3) .and. &
            ( mod(G%geoLonT(i,j)+360.0,360.0) > 111.0) .and. &
            ( mod(G%geoLonT(i,j)+360.0,360.0) < 142.0) ) then
-        CS%Kd_bkgnd(i,j,:) = CS%bckgrnd_vdc_Banda
+        Kd_int(i,1) = CS%bckgrnd_vdc_Banda
       endif
 
-      ! Compute kv_bkgnd
-      CS%kv_bkgnd(i,j,:) = CS%Kd_bkgnd(i,j,:) * CS%prandtl_bkgnd
-
-      ! Update Kd (uniform profile; no interpolation needed)
-      Kd_lay(i,:) = CS%Kd_bkgnd(i,j,1)
-
     enddo
+    ! Update interior values of Kd and Kv (uniform profile; no interpolation needed)
+    do K=1,nz+1 ; do i=is,ie
+      Kd_int(i,K) = Kd_int(i,1)
+      Kv_bkgnd(i,K) = Kd_int(i,1) * CS%prandtl_bkgnd
+    enddo ; enddo
+    do k=1,nz ; do i=is,ie
+      Kd_lay(i,k) = Kd_int(i,1)
+    enddo ; enddo
 
   elseif ((.not.CS%bulkmixedlayer) .and. (CS%Kd /= CS%Kdml)) then
     I_Hmix = 1.0 / (CS%Hmix + GV%H_subroundoff*GV%H_to_Z)
     do i=is,ie ; depth(i) = 0.0 ; enddo
     do k=1,nz ; do i=is,ie
       depth_c = depth(i) + 0.5*GV%H_to_Z*h(i,j,k)
-      if (depth_c <= CS%Hmix) then ; CS%Kd_bkgnd(i,j,k) = CS%Kdml
-      elseif (depth_c >= 2.0*CS%Hmix) then ; CS%Kd_bkgnd(i,j,k) = Kd_sfc(i)
+!### These two lines should update Kd_int, not Kd_lay, but correcting this could change answers.
+      if (depth_c <= CS%Hmix) then ; Kd_int(i,K) = CS%Kdml
+      elseif (depth_c >= 2.0*CS%Hmix) then ; Kd_int(i,K) = Kd_sfc(i)
       else
         Kd_lay(i,k) = ((Kd_sfc(i) - CS%Kdml) * I_Hmix) * depth_c + &
                         (2.0*CS%Kdml - Kd_sfc(i))
@@ -483,27 +478,17 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kv, j, G, GV, US, CS)
     enddo ; enddo
   endif
 
-  ! Update CS%kd_bkgnd and CS%kv_bkgnd for diagnostic purposes
+  ! Update Kd_int and Kv_bkgnd, which might be just used for diagnostic purposes
   if (.not. (CS%Bryan_Lewis_diffusivity .or. CS%horiz_varying_background)) then
     do i=is,ie
-      CS%kd_bkgnd(i,j,1) = 0.0; CS%kv_bkgnd(i,j,1) = 0.0
-      CS%kd_bkgnd(i,j,nz+1) = 0.0; CS%kv_bkgnd(i,j,nz+1) = 0.0
+      Kd_int(i,1) = 0.0; Kv_bkgnd(i,1) = 0.0
+      Kd_int(i,nz+1) = 0.0; Kv_bkgnd(i,nz+1) = 0.0
       do K=2,nz
-        CS%Kd_bkgnd(i,j,K) = 0.5*(Kd_lay(i,k-1) + Kd_lay(i,k))
-        CS%Kv_bkgnd(i,j,K) = CS%Kd_bkgnd(i,j,K) * CS%prandtl_bkgnd
+        Kd_int(i,K) = 0.5*(Kd_lay(i,k-1) + Kd_lay(i,k))
+        Kv_bkgnd(i,K) = Kd_int(i,K) * CS%prandtl_bkgnd
       enddo
     enddo
   endif
-
-  ! Update Kv
-  if (associated(kv)) then
-    do K=1,nz+1 ; do i=is,ie
-      Kv(i,j,K) = Kv(i,j,K) + CS%Kv_bkgnd(i,j,K)
-    enddo ; enddo
-  endif
-
-  ! TODO: In both CS%Bryan_Lewis_diffusivity and CS%horiz_varying_background, KV and KD at surface
-  ! and bottom interfaces are set to be nonzero. Make sure this is not problematic.
 
 end subroutine calculate_bkgnd_mixing
 
@@ -539,9 +524,6 @@ subroutine bkgnd_mixing_end(CS)
                                        !! will be deallocated in this subroutine
 
   if (.not. associated(CS)) return
-
-  deallocate(CS%kd_bkgnd)
-  deallocate(CS%kv_bkgnd)
   deallocate(CS)
 
 end subroutine bkgnd_mixing_end

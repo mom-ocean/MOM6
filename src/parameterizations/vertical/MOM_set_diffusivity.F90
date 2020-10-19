@@ -165,7 +165,7 @@ type, public :: set_diffusivity_CS ; private
   integer :: id_maxTKE     = -1, id_TKE_to_Kd   = -1, id_Kd_user    = -1
   integer :: id_Kd_layer   = -1, id_Kd_BBL      = -1, id_N2         = -1
   integer :: id_Kd_Work    = -1, id_KT_extra    = -1, id_KS_extra   = -1
-  integer :: id_kd_bkgnd   = -1, id_kv_bkgnd    = -1
+  integer :: id_Kd_bkgnd   = -1, id_Kv_bkgnd    = -1
   !>@}
 
 end type set_diffusivity_CS
@@ -178,6 +178,8 @@ type diffusivity_diags
     Kd_BBL   => NULL(), & !< BBL diffusivity at interfaces [Z2 T-1 ~> m2 s-1]
     Kd_work  => NULL(), & !< layer integrated work by diapycnal mixing [R Z3 T-3 ~> W m-2]
     maxTKE   => NULL(), & !< energy required to entrain to h_max [Z3 T-3 ~> m3 s-3]
+    Kd_bkgnd => NULL(), & !< Background diffusivity at interfaces [Z2 T-1 ~> m2 s-1]
+    Kv_bkgnd => NULL(), & !< Viscosity from ackground diffusivity at interfaces [Z2 T-1 ~> m2 s-1]
     KT_extra => NULL(), & !< double diffusion diffusivity for temp [Z2 T-1 ~> m2 s-1].
     KS_extra => NULL()    !< double diffusion diffusivity for saln [Z2 T-1 ~> m2 s-1].
   real, pointer, dimension(:,:,:) :: TKE_to_Kd => NULL()
@@ -247,7 +249,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   real, dimension(SZI_(G),SZK_(G)) :: &
     N2_lay, &     !< squared buoyancy frequency associated with layers [T-2 ~> s-2]
-    Kd_lay_2d, &  !< The layer diffusivities [Z2 T-1 ~> m2 s-1
+    Kd_lay_2d, &  !< The layer diffusivities [Z2 T-1 ~> m2 s-1]
     maxTKE, &     !< energy required to entrain to h_max [Z3 T-3 ~> m3 s-3]
     TKE_to_Kd     !< conversion rate (~1.0 / (G_Earth + dRho_lay)) between
                   !< TKE dissipated within a layer and Kd in that layer
@@ -255,6 +257,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   real, dimension(SZI_(G),SZK_(G)+1) :: &
     N2_int,   &   !< squared buoyancy frequency associated at interfaces [T-2 ~> s-2]
+    Kd_int_2d, &  !< The interface diffusivities [Z2 T-1 ~> m2 s-1]
+    Kv_bkgnd, &   !< The background diffusion related interface viscosities [Z2 T-1 ~> m2 s-1]
     dRho_int, &   !< locally ref potential density difference across interfaces [R ~> kg m-3]
     KT_extra, &   !< double difusion diffusivity of temperature [Z2 T-1 ~> m2 s-1]
     KS_extra      !< double difusion diffusivity of salinity [Z2 T-1 ~> m2 s-1]
@@ -326,6 +330,13 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   endif
   if (CS%id_Kd_BBL > 0) then
     allocate(dd%Kd_BBL(isd:ied,jsd:jed,nz+1)) ; dd%Kd_BBL(:,:,:) = 0.0
+  endif
+
+  if (CS%id_Kd_bkgnd > 0) then
+    allocate(dd%Kd_bkgnd(isd:ied,jsd:jed,nz+1)) ; dd%Kd_bkgnd(:,:,:) = 0.
+  endif
+  if (CS%id_Kv_bkgnd > 0) then
+    allocate(dd%Kv_bkgnd(isd:ied,jsd:jed,nz+1)) ; dd%Kv_bkgnd(:,:,:) = 0.
   endif
 
   ! set up arrays for tidal mixing diagnostics
@@ -403,10 +414,20 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     endif
 
     ! Add background mixing
-    call calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay_2d, visc%Kv_slow, j, G, GV, US, CS%bkgnd_mixing_csp)
+    call calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay_2d, Kd_int_2d, Kv_bkgnd, j, G, GV, US, CS%bkgnd_mixing_csp)
     do k=1,nz ; do i=is,ie
       Kd_lay(i,j,k) = Kd_lay_2d(i,k)
     enddo ; enddo
+    ! Update Kv and 3-d diffusivity diagnostics.
+    if (associated(visc%Kv_slow)) then ; do K=1,nz+1 ; do i=is,ie
+      visc%Kv_slow(i,j,K) = visc%Kv_slow(i,j,K) + Kv_bkgnd(i,K)
+    enddo ; enddo ; endif
+    if (CS%id_Kv_bkgnd > 0) then ; do K=1,nz+1 ; do i=is,ie
+      dd%Kv_bkgnd(i,j,K) = Kv_bkgnd(i,K)
+    enddo ; enddo ; endif
+    if (CS%id_Kd_bkgnd > 0) then ; do K=1,nz+1 ; do i=is,ie
+      dd%Kd_bkgnd(i,j,K) = Kd_int_2d(i,K)
+    enddo ; enddo ; endif
 
     ! Double-diffusion (old method)
     if (CS%double_diffusion) then
@@ -580,10 +601,10 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   ! post diagnostics
 
   ! background mixing
-  if (CS%id_kd_bkgnd > 0) &
-    call post_data(CS%id_kd_bkgnd, CS%bkgnd_mixing_csp%kd_bkgnd, CS%diag)
-  if (CS%id_kv_bkgnd > 0) &
-    call post_data(CS%id_kv_bkgnd, CS%bkgnd_mixing_csp%kv_bkgnd, CS%diag)
+  if (CS%id_Kd_bkgnd > 0) &
+    call post_data(CS%id_Kd_bkgnd, dd%Kd_bkgnd, CS%diag)
+  if (CS%id_Kv_bkgnd > 0) &
+    call post_data(CS%id_Kv_bkgnd, dd%Kv_bkgnd, CS%diag)
 
   ! double diffusive mixing
   if (CS%CVMix_ddiff_csp%id_KT_extra > 0) &
@@ -2176,9 +2197,9 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   if (CS%FluxRi_max > 0.0) &
     CS%dissip_N2 = CS%dissip_Kd_min * GV%Rho0 / CS%FluxRi_max
 
-  CS%id_kd_bkgnd = register_diag_field('ocean_model', 'Kd_bkgnd', diag%axesTi, Time, &
+  CS%id_Kd_bkgnd = register_diag_field('ocean_model', 'Kd_bkgnd', diag%axesTi, Time, &
       'Background diffusivity added by MOM_bkgnd_mixing module', 'm2/s', conversion=US%Z2_T_to_m2_s)
-  CS%id_kv_bkgnd = register_diag_field('ocean_model', 'Kv_bkgnd', diag%axesTi, Time, &
+  CS%id_Kv_bkgnd = register_diag_field('ocean_model', 'Kv_bkgnd', diag%axesTi, Time, &
       'Background viscosity added by MOM_bkgnd_mixing module', 'm2/s', conversion=US%Z2_T_to_m2_s)
 
   CS%id_Kd_layer = register_diag_field('ocean_model', 'Kd_layer', diag%axesTL, Time, &
