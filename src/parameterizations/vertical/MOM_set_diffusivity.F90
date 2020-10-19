@@ -164,7 +164,7 @@ type, public :: set_diffusivity_CS ; private
   !>@{ Diagnostic IDs
   integer :: id_maxTKE     = -1, id_TKE_to_Kd   = -1, id_Kd_user    = -1
   integer :: id_Kd_layer   = -1, id_Kd_BBL      = -1, id_N2         = -1
-  integer :: id_Kd_Work    = -1, id_KT_extra    = -1, id_KS_extra   = -1
+  integer :: id_Kd_Work    = -1, id_KT_extra    = -1, id_KS_extra   = -1, id_R_rho = -1
   integer :: id_Kd_bkgnd   = -1, id_Kv_bkgnd    = -1
   !>@}
 
@@ -181,7 +181,8 @@ type diffusivity_diags
     Kd_bkgnd => NULL(), & !< Background diffusivity at interfaces [Z2 T-1 ~> m2 s-1]
     Kv_bkgnd => NULL(), & !< Viscosity from ackground diffusivity at interfaces [Z2 T-1 ~> m2 s-1]
     KT_extra => NULL(), & !< double diffusion diffusivity for temp [Z2 T-1 ~> m2 s-1].
-    KS_extra => NULL()    !< double diffusion diffusivity for saln [Z2 T-1 ~> m2 s-1].
+    KS_extra => NULL(), & !< double diffusion diffusivity for saln [Z2 T-1 ~> m2 s-1].
+    drho_rat => NULL()    !< The density difference ratio used in double diffusion [nondim].
   real, pointer, dimension(:,:,:) :: TKE_to_Kd => NULL()
                           !< conversion rate (~1.0 / (G_Earth + dRho_lay)) between TKE
                           !! dissipated within a layer and Kd in that layer
@@ -322,11 +323,14 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   if (CS%id_TKE_to_Kd > 0) then
     allocate(dd%TKE_to_Kd(isd:ied,jsd:jed,nz)) ; dd%TKE_to_Kd(:,:,:) = 0.0
   endif
-  if (CS%id_KT_extra > 0) then
+  if ((CS%double_diffusion) .and. (CS%id_KT_extra > 0)) then
     allocate(dd%KT_extra(isd:ied,jsd:jed,nz+1)) ; dd%KT_extra(:,:,:) = 0.0
   endif
-  if (CS%id_KS_extra > 0) then
+  if ((CS%double_diffusion) .and. (CS%id_KS_extra > 0)) then
     allocate(dd%KS_extra(isd:ied,jsd:jed,nz+1)) ; dd%KS_extra(:,:,:) = 0.0
+  endif
+  if (CS%id_R_rho > 0) then
+    allocate(dd%drho_rat(isd:ied,jsd:jed,nz+1)) ; dd%drho_rat(:,:,:) = 0.0
   endif
   if (CS%id_Kd_BBL > 0) then
     allocate(dd%Kd_BBL(isd:ied,jsd:jed,nz+1)) ; dd%Kd_BBL(:,:,:) = 0.0
@@ -340,7 +344,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   endif
 
   ! set up arrays for tidal mixing diagnostics
-  call setup_tidal_diagnostics(G,CS%tm_csp)
+  call setup_tidal_diagnostics(G, CS%tm_csp)
 
   ! Smooth the properties through massless layers.
   if (use_EOS) then
@@ -461,7 +465,12 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     ! GMM, we need to pass HBL to compute_ddiff_coeffs, but it is not yet available.
     if (CS%use_CVMix_ddiff) then
       call cpu_clock_begin(id_clock_CVMix_ddiff)
-      call compute_ddiff_coeffs(h, tv, G, GV, US, j, visc%Kd_extra_T, visc%Kd_extra_S, CS%CVMix_ddiff_csp)
+      if (associated(dd%drho_rat)) then
+        call compute_ddiff_coeffs(h, tv, G, GV, US, j, visc%Kd_extra_T, visc%Kd_extra_S, &
+                                  CS%CVMix_ddiff_csp, dd%drho_rat)
+      else
+        call compute_ddiff_coeffs(h, tv, G, GV, US, j, visc%Kd_extra_T, visc%Kd_extra_S, CS%CVMix_ddiff_csp)
+      endif
       call cpu_clock_end(id_clock_CVMix_ddiff)
     endif
 
@@ -606,14 +615,6 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   if (CS%id_Kv_bkgnd > 0) &
     call post_data(CS%id_Kv_bkgnd, dd%Kv_bkgnd, CS%diag)
 
-  ! double diffusive mixing
-  if (CS%CVMix_ddiff_csp%id_KT_extra > 0) &
-    call post_data(CS%CVMix_ddiff_csp%id_KT_extra, visc%Kd_extra_T, CS%CVMix_ddiff_csp%diag)
-  if (CS%CVMix_ddiff_csp%id_KS_extra > 0) &
-    call post_data(CS%CVMix_ddiff_csp%id_KS_extra, visc%Kd_extra_S, CS%CVMix_ddiff_csp%diag)
-  if (CS%CVMix_ddiff_csp%id_R_rho > 0) &
-    call post_data(CS%CVMix_ddiff_csp%id_R_rho, CS%CVMix_ddiff_csp%R_rho, CS%CVMix_ddiff_csp%diag)
-
   if (CS%id_Kd_layer > 0) call post_data(CS%id_Kd_layer, Kd_lay, CS%diag)
 
   ! tidal mixing
@@ -629,8 +630,15 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     if (CS%id_TKE_to_Kd > 0)  call post_data(CS%id_TKE_to_Kd, dd%TKE_to_Kd, CS%diag)
   endif
 
-  if (CS%id_KT_extra > 0) call post_data(CS%id_KT_extra, dd%KT_extra, CS%diag)
-  if (CS%id_KS_extra > 0) call post_data(CS%id_KS_extra, dd%KS_extra, CS%diag)
+  ! double diffusive mixing
+  if (CS%double_diffusion) then
+    if (CS%id_KT_extra > 0) call post_data(CS%id_KT_extra, dd%KT_extra, CS%diag)
+    if (CS%id_KS_extra > 0) call post_data(CS%id_KS_extra, dd%KS_extra, CS%diag)
+  else
+    if (CS%id_KT_extra > 0) call post_data(CS%id_KT_extra, visc%Kd_extra_T, CS%diag)
+    if (CS%id_KS_extra > 0) call post_data(CS%id_KS_extra, visc%Kd_extra_S, CS%diag)
+    if (CS%id_R_rho > 0) call post_data(CS%id_R_rho, dd%drho_rat, CS%diag)
+  endif
   if (CS%id_Kd_BBL > 0)   call post_data(CS%id_Kd_BBL, dd%Kd_BBL, CS%diag)
 
   if (associated(dd%N2_3d)) deallocate(dd%N2_3d)
@@ -640,6 +648,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   if (associated(dd%TKE_to_Kd)) deallocate(dd%TKE_to_Kd)
   if (associated(dd%KT_extra)) deallocate(dd%KT_extra)
   if (associated(dd%KS_extra)) deallocate(dd%KS_extra)
+  if (associated(dd%drho_rat)) deallocate(dd%drho_rat)
   if (associated(dd%Kd_BBL)) deallocate(dd%Kd_BBL)
 
   if (showCallTree) call callTree_leave("set_diffusivity()")
@@ -2240,12 +2249,6 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  "Molecular viscosity for calculation of fluxes under double-diffusive "//&
                  "convection.", default=1.5e-6, units="m2 s-1", scale=US%m2_s_to_Z2_T)
     ! The default molecular viscosity follows the CCSM4.0 and MOM4p1 defaults.
-
-    CS%id_KT_extra = register_diag_field('ocean_model', 'KT_extra', diag%axesTi, Time, &
-         'Double-diffusive diffusivity for temperature', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
-
-    CS%id_KS_extra = register_diag_field('ocean_model', 'KS_extra', diag%axesTi, Time, &
-         'Double-diffusive diffusivity for salinity', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
   endif ! old double-diffusion
 
   if (CS%user_change_diff) then
@@ -2273,6 +2276,17 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   CS%use_CVMix_ddiff = CVMix_ddiff_init(Time, G, GV, US, param_file, CS%diag, CS%CVMix_ddiff_csp)
   if (CS%use_CVMix_ddiff) &
     id_clock_CVMix_ddiff = cpu_clock_id('(Double diffusion via CVMix)', grain=CLOCK_MODULE)
+
+  if (CS%double_diffusion .or. CS%use_CVMix_ddiff) then
+    CS%id_KT_extra = register_diag_field('ocean_model', 'KT_extra', diag%axesTi, Time, &
+         'Double-diffusive diffusivity for temperature', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
+    CS%id_KS_extra = register_diag_field('ocean_model', 'KS_extra', diag%axesTi, Time, &
+         'Double-diffusive diffusivity for salinity', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
+  endif
+  if (CS%use_CVMix_ddiff) then
+    CS%id_R_rho = register_diag_field('ocean_model', 'R_rho', diag%axesTi, Time, &
+         'Double-diffusion density ratio', 'nondim')
+  endif
 
   if (present(halo_TS)) then
     halo_TS = 0
