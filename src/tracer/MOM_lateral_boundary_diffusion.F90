@@ -47,6 +47,7 @@ type, public :: lbd_CS ; private
   integer :: deg             !< Degree of polynomial reconstruction.
   integer :: surface_boundary_scheme !< Which boundary layer scheme to use
                                      !! 1. ePBL; 2. KPP
+  logical :: limiter                 !< Controls whether a flux limiter is applied (default is true).
   logical :: linear                  !< If True, apply a linear transition at the base/top of the boundary.
                                      !! The flux will be fully applied at k=k_min and zero at k=k_max.
   real    :: H_subroundoff           !< A thickness that is so small that it can be added to a thickness of
@@ -119,6 +120,8 @@ logical function lateral_boundary_diffusion_init(Time, G, GV, param_file, diag, 
   call get_param(param_file, mdl, "LBD_LINEAR_TRANSITION", CS%linear, &
                  "If True, apply a linear transition at the base/top of the boundary. \n"//&
                  "The flux will be fully applied at k=k_min and zero at k=k_max.", default=.false.)
+  call get_param(param_file, mdl, "APPLY_LIMITER", CS%limiter, &
+                   "If True, apply a flux limiter to the LBD.", default=.true.)
   call get_param(param_file, mdl, "LBD_BOUNDARY_EXTRAP", boundary_extrap, &
                  "Use boundary extrapolation in LBD code", &
                  default=.false.)
@@ -209,7 +212,7 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
         if (G%mask2dCu(I,j)>0.) then
           call fluxes_layer_method(SURFACE, G%ke, hbl(I,j), hbl(I+1,j),  &
             h(I,j,:), h(I+1,j,:), tracer%t(I,j,:), tracer%t(I+1,j,:), &
-            Coef_x(I,j), uFlx(I,j,:), CS)
+            Coef_x(I,j), uFlx(I,j,:), G%areaT(I,j), G%areaT(I+1,j), CS)
         endif
       enddo
     enddo
@@ -218,7 +221,7 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
         if (G%mask2dCv(i,J)>0.) then
           call fluxes_layer_method(SURFACE, GV%ke, hbl(i,J), hbl(i,J+1),  &
             h(i,J,:), h(i,J+1,:), tracer%t(i,J,:), tracer%t(i,J+1,:), &
-            Coef_y(i,J), vFlx(i,J,:), CS)
+            Coef_y(i,J), vFlx(i,J,:), G%areaT(i,J), G%areaT(i,J+1), CS)
         endif
       enddo
     enddo
@@ -442,6 +445,34 @@ subroutine merge_interfaces(nk, h_L, h_R, hbl_L, hbl_R, H_subroundoff, h)
 
 end subroutine merge_interfaces
 
+!> Calculates the maximum flux that can leave a cell and uses that to apply a
+!! limiter to F_layer.
+subroutine flux_limiter(F_layer, area_L, area_R, phi_L, phi_R, h_L, h_R)
+
+  real,  intent(inout) :: F_layer        !< Tracer flux to be checked
+  real,  intent(in   ) :: area_L, area_R !< Area of left and right cells   [H ~> m or kg m-2]
+  real,  intent(in   ) :: h_L, h_R       !< Thickness of left and right cells   [H ~> m or kg m-2]
+  real,  intent(in   ) :: phi_L, phi_R   !< Tracer concentration in the left and right cells
+
+  ! local variables
+  real :: F_max !< maximum flux allowed
+  ! limit the flux to 0.2 of the tracer *gradient*
+  ! Why 0.2?
+  !  t=0         t=inf
+  !   0           .2
+  ! 0 1 0       .2.2.2
+  !   0           .2
+  !
+  F_max = -0.2 * ((area_R*(phi_R*h_R))-(area_L*(phi_L*h_R)))
+
+  ! Apply flux limiter calculated above
+  if (F_max >= 0.) then
+    F_layer = MIN(F_layer,F_max)
+  else
+    F_layer = MAX(F_layer,F_max)
+  endif
+end subroutine flux_limiter
+
 !> Find the k-index range corresponding to the layers that are within the boundary-layer region
 subroutine boundary_k_range(boundary, nk, h, hbl, k_top, zeta_top, k_bot, zeta_bot)
   integer,             intent(in   ) :: boundary !< SURFACE or BOTTOM                       [nondim]
@@ -510,23 +541,25 @@ end subroutine boundary_k_range
 !> Calculate the lateral boundary diffusive fluxes using the layer by layer method.
 !! See \ref section_method
 subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_R, &
-                              khtr_u, F_layer, CS)
+                              khtr_u, F_layer, area_L, area_R, CS)
 
-  integer,               intent(in   )    :: boundary !< Which boundary layer SURFACE or BOTTOM           [nondim]
-  integer,               intent(in   )    :: ke       !< Number of layers in the native grid              [nondim]
-  real,                  intent(in   )    :: hbl_L    !< Thickness of the boundary boundary
-                                                      !! layer (left)                           [H ~> m or kg m-2]
-  real,                  intent(in   )    :: hbl_R    !< Thickness of the boundary boundary
-                                                      !! layer (right)                          [H ~> m or kg m-2]
-  real, dimension(ke),   intent(in   )    :: h_L      !< Thicknesses in the native grid (left)  [H ~> m or kg m-2]
-  real, dimension(ke),   intent(in   )    :: h_R      !< Thicknesses in the native grid (right) [H ~> m or kg m-2]
-  real, dimension(ke),   intent(in   )    :: phi_L    !< Tracer values in the native grid (left)            [conc]
-  real, dimension(ke),   intent(in   )    :: phi_R    !< Tracer values in the native grid (right)           [conc]
-  real,                  intent(in   )    :: khtr_u   !< Horizontal diffusivities times delta t
-                                                      !! at a velocity point                            [L2 ~> m2]
-  real, dimension(ke),   intent(  out)    :: F_layer  !< Layerwise diffusive flux at U- or V-point in the native
-                                                      !! grid                               [H L2 conc ~> m3 conc]
-  type(lbd_CS),              pointer      :: CS       !< Lateral diffusion control structure
+  integer,               intent(in   ) :: boundary !< Which boundary layer SURFACE or BOTTOM           [nondim]
+  integer,               intent(in   ) :: ke       !< Number of layers in the native grid              [nondim]
+  real,                  intent(in   ) :: hbl_L    !< Thickness of the boundary boundary
+                                                   !! layer (left)                           [H ~> m or kg m-2]
+  real,                  intent(in   ) :: hbl_R    !< Thickness of the boundary boundary
+                                                   !! layer (right)                          [H ~> m or kg m-2]
+  real, dimension(ke),   intent(in   ) :: h_L      !< Thicknesses in the native grid (left)  [H ~> m or kg m-2]
+  real, dimension(ke),   intent(in   ) :: h_R      !< Thicknesses in the native grid (right) [H ~> m or kg m-2]
+  real, dimension(ke),   intent(in   ) :: phi_L    !< Tracer values in the native grid (left)            [conc]
+  real, dimension(ke),   intent(in   ) :: phi_R    !< Tracer values in the native grid (right)           [conc]
+  real,                  intent(in   ) :: khtr_u   !< Horizontal diffusivities times delta t
+                                                   !! at a velocity point                            [L2 ~> m2]
+  real, dimension(ke),   intent(  out) :: F_layer  !< Layerwise diffusive flux at U- or V-point in the native
+                                                   !! grid                               [H L2 conc ~> m3 conc]
+  real,                  intent(in   ) :: area_L   !< Area of the horizontal grid (left)  [L2 ~> m2]
+  real,                  intent(in   ) :: area_R   !< Area of the horizontal grid (right) [L2 ~> m2]
+  type(lbd_CS),          pointer       :: CS       !< Lateral diffusion control structure
                                                       !! the boundary layer
   ! Local variables
   real, dimension(:), allocatable ::  dz_top
@@ -560,8 +593,8 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   endif
 
   ! Define vertical grid, dz_top
-  call merge_interfaces(ke, h_L(:), h_R(:), hbl_L, hbl_R, CS%H_subroundoff, dz_top)
-  !allocate(dz_top(1000)); dz_top(:) = 0.5
+  !call merge_interfaces(ke, h_L(:), h_R(:), hbl_L, hbl_R, CS%H_subroundoff, dz_top)
+  allocate(dz_top(50)); dz_top(:) = 10.0
   nk = SIZE(dz_top)
 
   ! allocate arrays
@@ -611,6 +644,8 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
       ! apply linear decay at the base of hbl
       do k = k_bot_min-1,1,-1
         F_layer_z(k) = -(dz_top(k) * khtr_u) * (phi_R_z(k) - phi_L_z(k))
+        if (CS%limiter) call flux_limiter(F_layer_z(k), area_L, area_R, phi_L_z(k), &
+                                          phi_R_z(k), dz_top(k), dz_top(k))
       enddo
       htot = 0.0
       do k = k_bot_min+1,k_bot_max, 1
@@ -623,10 +658,14 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
         wgt = (a*(htot + (dz_top(k) * 0.5))) + 1.0
         F_layer_z(k) = -(dz_top(k) * khtr_u) * (phi_R_z(k) - phi_L_z(k)) * wgt
         htot = htot + dz_top(k)
+        if (CS%limiter) call flux_limiter(F_layer_z(k), area_L, area_R, phi_L_z(k), &
+                                          phi_R_z(k), dz_top(k), dz_top(k))
       enddo
     else
       do k = k_bot_min,1,-1
         F_layer_z(k) = -(dz_top(k) * khtr_u) * (phi_R_z(k) - phi_L_z(k))
+        if (CS%limiter) call flux_limiter(F_layer_z(k), area_L, area_R, phi_L_z(k), &
+                                          phi_R_z(k), dz_top(k), dz_top(k))
       enddo
     endif
   endif
@@ -657,9 +696,12 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   enddo
   ! remap flux to native grid
   call reintegrate_column(nk, dz_top(:), F_layer_z(:), ke, h_vel(:), 0.0, F_layer(:))
-  do k = 1,ke
-    F_layer(k) = F_layer(k) !/(h_vel(k) + CS%H_subroundoff)
-  enddo
+  if (CS%limiter) then
+    do k = 1,ke
+      call flux_limiter(F_layer(k), area_L, area_R, phi_L(k), &
+                                          phi_R(k), h_L(k), h_R(k))
+    enddo
+  endif
 
   ! deallocated arrays
   deallocate(dz_top)
@@ -697,6 +739,7 @@ logical function near_boundary_unit_tests( verbose )
   call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
   CS%H_subroundoff = 1.0E-20
   CS%debug=.false.
+  CS%limiter=.false.
 
   near_boundary_unit_tests = .false.
   write(stdout,*) '==== MOM_lateral_boundary_diffusion ======================='
@@ -848,7 +891,7 @@ logical function near_boundary_unit_tests( verbose )
   phi_L = (/0.,0./) ; phi_R = (/1.,1./)
   khtr_u = 1.
   call fluxes_layer_method(SURFACE, nk, hbl_L, hbl_R, h_L, h_R, phi_L, phi_R, &
-                             khtr_u, F_layer, CS)
+                             khtr_u, F_layer, 1., 1., CS)
   near_boundary_unit_tests = near_boundary_unit_tests .or. &
                              test_layer_fluxes( verbose, nk, test_name, F_layer, (/-2.0,0.0/) )
 
@@ -858,7 +901,7 @@ logical function near_boundary_unit_tests( verbose )
   phi_L = (/2.,1./) ; phi_R = (/1.,1./)
   khtr_u = 0.5
   call fluxes_layer_method(SURFACE, nk, hbl_L, hbl_R, h_L, h_R, phi_L, phi_R, &
-                             khtr_u, F_layer, CS)
+                             khtr_u, F_layer, 1., 1., CS)
   near_boundary_unit_tests = near_boundary_unit_tests .or. &
                              test_layer_fluxes( verbose, nk, test_name, F_layer, (/1.0,0.0/) )
 
@@ -868,7 +911,7 @@ logical function near_boundary_unit_tests( verbose )
   phi_L = (/0.,0./) ; phi_R = (/0.5,2./)
   khtr_u = 2.
   call fluxes_layer_method(SURFACE, nk, hbl_L, hbl_R, h_L, h_R, phi_L, phi_R, &
-                             khtr_u, F_layer, CS)
+                             khtr_u, F_layer, 1., 1., CS)
   near_boundary_unit_tests = near_boundary_unit_tests .or. &
                              test_layer_fluxes( verbose, nk, test_name, F_layer, (/-1.0,-3.0/) )
 
@@ -878,7 +921,7 @@ logical function near_boundary_unit_tests( verbose )
   phi_L = (/1.,1./) ; phi_R = (/1.,1./)
   khtr_u = 1.
   call fluxes_layer_method(SURFACE, nk, hbl_L, hbl_R, h_L, h_R, phi_L, phi_R, &
-                             khtr_u, F_layer, CS)
+                             khtr_u, F_layer, 1., 1., CS)
   near_boundary_unit_tests = near_boundary_unit_tests .or. &
                              test_layer_fluxes( verbose, nk, test_name, F_layer, (/0.,0./) )
 
@@ -889,7 +932,7 @@ logical function near_boundary_unit_tests( verbose )
   phi_L = (/1.,1./) ; phi_R = (/0.,0./)
   khtr_u = 1.
   call fluxes_layer_method(SURFACE, nk, hbl_L, hbl_R, h_L, h_R, phi_L, phi_R, &
-                             khtr_u, F_layer, CS)
+                             khtr_u, F_layer, 1., 1., CS)
 
   near_boundary_unit_tests = near_boundary_unit_tests .or. &
                              test_layer_fluxes( verbose, nk, test_name, F_layer, (/10.,0.0/) )
