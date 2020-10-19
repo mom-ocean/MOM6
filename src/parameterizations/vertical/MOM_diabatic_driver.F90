@@ -179,6 +179,7 @@ type, public:: diabatic_CS; private
   integer :: id_MLD_003  = -1, id_MLD_0125  = -1, id_MLD_user     = -1, id_mlotstsq = -1
   integer :: id_MLD_EN1 = -1, id_MLD_EN2 = -1, id_MLD_EN3= -1
   integer :: id_subMLN2  = -1
+  integer :: id_hf_dudt_dia_2d = -1, id_hf_dvdt_dia_2d = -1
 
   ! diagnostic for fields prior to applying diapycnal physics
   integer :: id_u_predia = -1, id_v_predia = -1, id_h_predia = -1
@@ -516,6 +517,9 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
     Sdif_flx, & ! diffusive diapycnal salt flux across interfaces [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
     Sadv_flx    ! advective diapycnal salt flux across interfaces [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
+
+  real, allocatable, dimension(:,:) :: &
+    hf_dudt_dia_2d, hf_dvdt_dia_2d ! Depth sum of diapycnal mixing accelaration * fract. thickness [L T-2 ~> m s-2].
 
   logical :: in_boundary(SZI_(G)) ! True if there are no massive layers below,
                                   ! where massive is defined as sufficiently thick that
@@ -1045,7 +1049,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
   ! Whenever thickness changes let the diag manager know, as the
   ! target grids for vertical remapping may need to be regenerated.
-  if (CS%id_dudt_dia > 0 .or. CS%id_dvdt_dia > 0) &
+  if (associated(ADp%du_dt_dia) .or. associated(ADp%dv_dt_dia)) &
     ! Remapped d[uv]dt_dia require east/north halo updates of h
     call pass_var(h, G%domain, To_West+To_South+Omit_Corners, halo=1)
   call diag_update_remap_grids(CS%diag)
@@ -1220,6 +1224,27 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   if (CS%id_Sdif > 0) call post_data(CS%id_Sdif, Sdif_flx, CS%diag)
   if (CS%id_Sadv > 0) call post_data(CS%id_Sadv, Sadv_flx, CS%diag)
 
+  !! Diagnostics for terms multiplied by fractional thicknesses
+  if (CS%id_hf_dudt_dia_2d > 0) then
+    allocate(hf_dudt_dia_2d(G%IsdB:G%IedB,G%jsd:G%jed))
+    hf_dudt_dia_2d(:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      hf_dudt_dia_2d(I,j) = hf_dudt_dia_2d(I,j) + ADp%du_dt_dia(I,j,k) * ADp%diag_hfrac_u(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_hf_dudt_dia_2d, hf_dudt_dia_2d, CS%diag)
+    deallocate(hf_dudt_dia_2d)
+  endif
+
+  if (CS%id_hf_dvdt_dia_2d > 0) then
+    allocate(hf_dvdt_dia_2d(G%isd:G%ied,G%JsdB:G%JedB))
+    hf_dvdt_dia_2d(:,:) = 0.0
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      hf_dvdt_dia_2d(i,J) = hf_dvdt_dia_2d(i,J) + ADp%dv_dt_dia(i,J,k) * ADp%diag_hfrac_v(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_hf_dvdt_dia_2d, hf_dvdt_dia_2d, CS%diag)
+    deallocate(hf_dvdt_dia_2d)
+  endif
+
   call disable_averaging(CS%diag)
 
   if (showCallTree) call callTree_leave("diabatic_ALE_legacy()")
@@ -1297,6 +1322,9 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
     Sdif_flx, & ! diffusive diapycnal salt flux across interfaces [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
     Sadv_flx    ! advective diapycnal salt flux across interfaces [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
+
+  real, allocatable, dimension(:,:) :: &
+    hf_dudt_dia_2d, hf_dvdt_dia_2d ! Depth sum of diapycnal mixing accelaration * fract. thickness [L T-2 ~> m s-2].
 
   logical :: in_boundary(SZI_(G)) ! True if there are no massive layers below,
                                   ! where massive is defined as sufficiently thick that
@@ -1901,6 +1929,27 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   if (CS%id_Sdif > 0) call post_data(CS%id_Sdif, Sdif_flx, CS%diag)
   if (CS%id_Sadv > 0) call post_data(CS%id_Sadv, Sadv_flx, CS%diag)
 
+  !! Diagnostics for terms multiplied by fractional thicknesses
+  if (CS%id_hf_dudt_dia_2d > 0) then
+    allocate(hf_dudt_dia_2d(G%IsdB:G%IedB,G%jsd:G%jed))
+    hf_dudt_dia_2d(:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      hf_dudt_dia_2d(I,j) = hf_dudt_dia_2d(I,j) + ADp%du_dt_dia(I,j,k) * ADp%diag_hfrac_u(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_hf_dudt_dia_2d, hf_dudt_dia_2d, CS%diag)
+    deallocate(hf_dudt_dia_2d)
+  endif
+
+  if (CS%id_hf_dvdt_dia_2d > 0) then
+    allocate(hf_dvdt_dia_2d(G%isd:G%ied,G%JsdB:G%JedB))
+    hf_dvdt_dia_2d(:,:) = 0.0
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      hf_dvdt_dia_2d(i,J) = hf_dvdt_dia_2d(i,J) + ADp%dv_dt_dia(i,J,k) * ADp%diag_hfrac_v(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_hf_dvdt_dia_2d, hf_dvdt_dia_2d, CS%diag)
+    deallocate(hf_dvdt_dia_2d)
+  endif
+
   call disable_averaging(CS%diag)
 
   if (showCallTree) call callTree_leave("diabatic_ALE()")
@@ -1972,6 +2021,9 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
     Sdif_flx, & ! diffusive diapycnal salt flux across interfaces [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
     Sadv_flx    ! advective diapycnal salt flux across interfaces [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
+
+  real, allocatable, dimension(:,:) :: &
+    hf_dudt_dia_2d, hf_dvdt_dia_2d ! Depth sum of diapycnal mixing accelaration * fract. thickness [L T-2 ~> m s-2].
 
   ! The following 5 variables are only used with a bulk mixed layer.
   real, pointer, dimension(:,:,:) :: &
@@ -2555,7 +2607,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
   ! Whenever thickness changes let the diag manager know, as the
   ! target grids for vertical remapping may need to be regenerated.
-  if (CS%id_dudt_dia > 0 .or. CS%id_dvdt_dia > 0) &
+  if (associated(ADp%du_dt_dia) .or. associated(ADp%dv_dt_dia)) &
     ! Remapped d[uv]dt_dia require east/north halo updates of h
     call pass_var(h, G%domain, To_West+To_South+Omit_Corners, halo=1)
   call diag_update_remap_grids(CS%diag)
@@ -2849,6 +2901,27 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   if (CS%id_Tadv > 0) call post_data(CS%id_Tadv, Tadv_flx, CS%diag)
   if (CS%id_Sdif > 0) call post_data(CS%id_Sdif, Sdif_flx, CS%diag)
   if (CS%id_Sadv > 0) call post_data(CS%id_Sadv, Sadv_flx, CS%diag)
+
+  !! Diagnostics for terms multiplied by fractional thicknesses
+  if (CS%id_hf_dudt_dia_2d > 0) then
+    allocate(hf_dudt_dia_2d(G%IsdB:G%IedB,G%jsd:G%jed))
+    hf_dudt_dia_2d(:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      hf_dudt_dia_2d(I,j) = hf_dudt_dia_2d(I,j) + ADp%du_dt_dia(I,j,k) * ADp%diag_hfrac_u(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_hf_dudt_dia_2d, hf_dudt_dia_2d, CS%diag)
+    deallocate(hf_dudt_dia_2d)
+  endif
+
+  if (CS%id_hf_dvdt_dia_2d > 0) then
+    allocate(hf_dvdt_dia_2d(G%isd:G%ied,G%JsdB:G%JedB))
+    hf_dvdt_dia_2d(:,:) = 0.0
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      hf_dvdt_dia_2d(i,J) = hf_dvdt_dia_2d(i,J) + ADp%dv_dt_dia(i,J,k) * ADp%diag_hfrac_v(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_hf_dvdt_dia_2d, hf_dvdt_dia_2d, CS%diag)
+    deallocate(hf_dvdt_dia_2d)
+  endif
 
   call disable_averaging(CS%diag)
 
@@ -3391,6 +3464,22 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   CS%id_dvdt_dia = register_diag_field('ocean_model', 'dvdt_dia', diag%axesCvL, Time, &
       'Meridional Acceleration from Diapycnal Mixing', 'm s-2', conversion=US%L_T2_to_m_s2)
 
+  CS%id_hf_dudt_dia_2d = register_diag_field('ocean_model', 'hf_dudt_dia_2d', diag%axesCu1, Time, &
+      'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Diapycnal Mixing', 'm s-2', &
+      conversion=US%L_T2_to_m_s2)
+  if (CS%id_hf_dudt_dia_2d > 0) then
+    call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(ADp%du_dt_dia,IsdB,IedB,jsd,jed,nz)
+  endif
+
+  CS%id_hf_dvdt_dia_2d = register_diag_field('ocean_model', 'hf_dvdt_dia_2d', diag%axesCv1, Time, &
+      'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Diapycnal Mixing', 'm s-2', &
+      conversion=US%L_T2_to_m_s2)
+  if (CS%id_hf_dvdt_dia_2d > 0) then
+    call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+    call safe_alloc_ptr(ADp%dv_dt_dia,isd,ied,JsdB,JedB,nz)
+  endif
+
   if (CS%use_int_tides) then
     CS%id_cg1 = register_diag_field('ocean_model', 'cn1', diag%axesT1, &
                  Time, 'First baroclinic mode (eigen) speed', 'm s-1', conversion=US%L_T_to_m_s)
@@ -3604,8 +3693,8 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
         units='m', conversion=GV%H_to_m, v_extensive=.true.)
     CS%id_boundary_forcing_h_tendency = register_diag_field('ocean_model',   &
         'boundary_forcing_h_tendency', diag%axesTL, Time,                &
-        'Cell thickness tendency due to boundary forcing', 'm s-1', conversion=US%s_to_T, &
-         v_extensive = .true.)
+        'Cell thickness tendency due to boundary forcing', 'm s-1', &
+        conversion=GV%H_to_m*US%s_to_T, v_extensive=.true.)
     if (CS%id_boundary_forcing_h_tendency > 0) then
       CS%boundary_forcing_tendency_diag = .true.
     endif
