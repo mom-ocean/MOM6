@@ -62,7 +62,7 @@ set aside to be skipped by this algorithm.
 
 \subsection Epineutral_Sorting Sorting
 
-The epineutral surfaces have contant density, where we use this equation:
+The epineutral surfaces have constant density, where we use this equation:
 
 \f[
     \Delta \rho = \rho_1 - \rho_2 = \frac{\alpha_1 + \alpha_2}{2} (T_1 -
