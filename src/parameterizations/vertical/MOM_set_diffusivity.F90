@@ -31,7 +31,7 @@ use MOM_kappa_shear,         only : calc_kappa_shear_vertex, kappa_shear_at_vert
 use MOM_open_boundary,       only : ocean_OBC_type, OBC_segment_type, OBC_NONE
 use MOM_open_boundary,       only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_string_functions,    only : uppercase
-use MOM_tidal_mixing,        only : tidal_mixing_CS, calculate_tidal_mixing
+use MOM_tidal_mixing,        only : tidal_mixing_CS, calculate_tidal_mixing, tidal_mixing_h_amp
 use MOM_tidal_mixing,        only : setup_tidal_diagnostics, post_tidal_diagnostics
 use MOM_unit_scaling,        only : unit_scale_type
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, p3d
@@ -142,6 +142,7 @@ type, public :: set_diffusivity_CS ; private
                               !! shear-driven diapycnal diffusivity.
   logical :: double_diffusion !< If true, enable double-diffusive mixing using an old method.
   logical :: use_CVMix_ddiff  !< If true, enable double-diffusive mixing via CVMix.
+  logical :: get_tidal_h_amp  !< If true, use the tidal mixing module to set the topographic roughness amplitude.
   logical :: simple_TKE_to_Kd !< If true, uses a simple estimate of Kd/TKE that
                               !! does not rely on a layer-formulation.
   real    :: Max_Rrho_salt_fingers      !< max density ratio for salt fingering
@@ -619,16 +620,12 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   ! tidal mixing
   call post_tidal_diagnostics(G,GV,h,CS%tm_csp)
+  if (CS%id_N2 > 0)         call post_data(CS%id_N2,        dd%N2_3d,     CS%diag)
+  if (CS%id_Kd_Work > 0)    call post_data(CS%id_Kd_Work,   dd%Kd_Work,   CS%diag)
+  if (CS%id_maxTKE > 0)     call post_data(CS%id_maxTKE,    dd%maxTKE,    CS%diag)
+  if (CS%id_TKE_to_Kd > 0)  call post_data(CS%id_TKE_to_Kd, dd%TKE_to_Kd, CS%diag)
 
-  if (CS%tm_csp%Int_tide_dissipation .or. CS%tm_csp%Lee_wave_dissipation .or. &
-      CS%tm_csp%Lowmode_itidal_dissipation) then
-
-    if (CS%id_N2 > 0)         call post_data(CS%id_N2,        dd%N2_3d,     CS%diag)
-    if (CS%id_Kd_user > 0)    call post_data(CS%id_Kd_user,   dd%Kd_user,   CS%diag)
-    if (CS%id_Kd_Work > 0)    call post_data(CS%id_Kd_Work,   dd%Kd_Work,   CS%diag)
-    if (CS%id_maxTKE > 0)     call post_data(CS%id_maxTKE,    dd%maxTKE,    CS%diag)
-    if (CS%id_TKE_to_Kd > 0)  call post_data(CS%id_TKE_to_Kd, dd%TKE_to_Kd, CS%diag)
-  endif
+  if (CS%id_Kd_user > 0)    call post_data(CS%id_Kd_user,   dd%Kd_user,   CS%diag)
 
   ! double diffusive mixing
   if (CS%double_diffusion) then
@@ -971,17 +968,11 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
 
   ! Find the bottom boundary layer stratification, and use this in the deepest layers.
   do i=is,ie
-    hb(i) = 0.0 ; dRho_bot(i) = 0.0
+    hb(i) = 0.0 ; dRho_bot(i) = 0.0 ; h_amp(i) = 0.0
     z_from_bot(i) = 0.5*GV%H_to_Z*h(i,j,nz)
     do_i(i) = (G%mask2dT(i,j) > 0.5)
-
-    if ( (CS%tm_csp%Int_tide_dissipation .or. CS%tm_csp%Lee_wave_dissipation) .and. &
-          .not. CS%tm_csp%use_CVMix_tidal ) then
-      h_amp(i) = sqrt(CS%tm_csp%h2(i,j)) ! for computing Nb
-    else
-      h_amp(i) = 0.0
-    endif
   enddo
+  if (CS%get_tidal_h_amp) call tidal_mixing_h_amp(h_amp, G, j, CS%tm_csp)
 
   do k=nz,2,-1
     do_any = .false.
@@ -1996,6 +1987,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_set_diffusivity"  ! This module's name.
   real :: omega_frac_dflt
+  logical :: use_CVMix_tidal, int_tide_dissipation   ! Indicate whether tidal mixing schemes are in use.
   logical :: Bryan_Lewis_diffusivity ! If true, the background diapycnal diffusivity uses
                                      ! the Bryan-Lewis (1979) style tanh profile.
   integer :: i, j, is, ie, js, je
@@ -2214,9 +2206,20 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   CS%id_Kd_layer = register_diag_field('ocean_model', 'Kd_layer', diag%axesTL, Time, &
       'Diapycnal diffusivity of layers (as set)', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
 
-  if (CS%tm_csp%Int_tide_dissipation .or. CS%tm_csp%Lee_wave_dissipation .or. &
-      CS%tm_csp%Lowmode_itidal_dissipation) then
 
+
+  ! These parameters are read to determine whether diagnostics related to internal tide mixing
+  ! should be used.
+  call get_param(param_file, mdl, "USE_CVMix_TIDAL", use_CVMix_tidal, &
+                 "If true, turns on tidal mixing via CVMix", &
+                 default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "INT_TIDE_DISSIPATION", int_tide_dissipation, &
+                 "If true, use an internal tidal dissipation scheme to drive diapycnal mixing, "//&
+                 "along the lines of St. Laurent et al. (2002) and Simmons et al. (2004).", &
+                 default=use_CVMix_tidal, do_not_log=.true.)
+  CS%get_tidal_h_amp = Int_tide_dissipation .and. (.not. use_CVMix_tidal)
+
+  if (Int_tide_dissipation) then
     CS%id_Kd_Work = register_diag_field('ocean_model', 'Kd_Work', diag%axesTL, Time, &
          'Work done by Diapycnal Mixing', 'W m-2', conversion=US%RZ3_T3_to_W_m2)
     CS%id_maxTKE = register_diag_field('ocean_model', 'maxTKE', diag%axesTL, Time, &
@@ -2227,11 +2230,11 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
          'Buoyancy frequency squared', 's-2', conversion=US%s_to_T**2, cmor_field_name='obvfsq', &
           cmor_long_name='Square of seawater buoyancy frequency', &
           cmor_standard_name='square_of_brunt_vaisala_frequency_in_sea_water')
-
-    if (CS%user_change_diff) &
-      CS%id_Kd_user = register_diag_field('ocean_model', 'Kd_user', diag%axesTi, Time, &
-           'User-specified Extra Diffusivity', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
   endif
+
+  if (CS%user_change_diff) &
+    CS%id_Kd_user = register_diag_field('ocean_model', 'Kd_user', diag%axesTi, Time, &
+         'User-specified Extra Diffusivity', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
 
   call get_param(param_file, mdl, "DOUBLE_DIFFUSION", CS%double_diffusion, &
                  "If true, increase diffusivites for temperature or salt "//&
@@ -2259,7 +2262,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  "If true, use a Bryan & Lewis (JGR 1979) like tanh "//&
                  "profile of background diapycnal diffusivity with depth. "//&
                  "This is done via CVMix.", default=.false., do_not_log=.true.)
-  if (CS%tm_csp%Int_tide_dissipation .and. Bryan_Lewis_diffusivity) &
+  if (int_tide_dissipation .and. Bryan_Lewis_diffusivity) &
     call MOM_error(FATAL,"MOM_Set_Diffusivity: "// &
          "Bryan-Lewis and internal tidal dissipation are both enabled. Choose one.")
 

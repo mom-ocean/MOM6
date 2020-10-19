@@ -32,6 +32,7 @@ public tidal_mixing_init
 public setup_tidal_diagnostics
 public calculate_tidal_mixing
 public post_tidal_diagnostics
+public tidal_mixing_h_amp
 public tidal_mixing_end
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
@@ -68,8 +69,7 @@ type, public :: tidal_mixing_diags ; private
 end type
 
 !> Control structure with parameters for the tidal mixing module.
-type, public :: tidal_mixing_cs
-  ! TODO: private
+type, public :: tidal_mixing_cs ; private
   logical :: debug = .true.   !< If true, do more extensive debugging checks.  This is hard-coded.
 
   ! Parameters
@@ -1557,6 +1557,24 @@ subroutine post_tidal_diagnostics(G, GV, h ,CS)
   if (associated(dd%tidal_qe_md)) deallocate(dd%tidal_qe_md)
 
 end subroutine post_tidal_diagnostics
+
+!> This subroutine returns a zonal slice of the topographic roughness amplitudes
+subroutine tidal_mixing_h_amp(h_amp, G, j, CS)
+  type(ocean_grid_type),    intent(in)  :: G     !< The ocean's grid structure
+  real, dimension(SZI_(G)), intent(out) :: h_amp !< The topographic roughness amplitude [Z ~> m]
+  integer,                  intent(in)  :: j     !< j-index of the row to work on
+  type(tidal_mixing_cs),    pointer     :: CS    !< The control structure for this module
+
+  integer :: i
+
+  h_amp(:) = 0.0
+  if ( CS%Int_tide_dissipation .and. .not. CS%use_CVMix_tidal ) then
+    do i=G%isc,G%iec
+      h_amp(i) = sqrt(CS%h2(i,j))
+    enddo
+  endif
+
+end subroutine tidal_mixing_h_amp
 
 ! TODO: move this subroutine to MOM_internal_tide_input module (?)
 !> This subroutine read tidal energy inputs from a file.
