@@ -34,7 +34,7 @@ jobs:
         # Whitespace
         - ./.testing/trailer.py -e TEOS10 -l 120 src config_src
         # API Documentation
-        - cd docs && doxygen Doxyfile_nortd
+        - cd docs && mkdir _build && doxygen Doxyfile_nortd
         - grep -v "config_src/solo_driver/coupler_types.F90" _build/doxygen_warn_nortd_log.txt | tee doxy_errors
         - test ! -s  doxy_errors
 
