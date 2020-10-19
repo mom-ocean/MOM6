@@ -22,7 +22,7 @@ with the following properties:
 \li Has no need for regularization or tapering (such as needed by rotated mixing
 tensors)
 
-The algorithm used in MOM6 is described by \cite Shao2020 and will be
+The algorithm used in MOM6 is described by \cite shao2019-in-review and will be
 introduced here. The aim is to allow lateral mixing of tracers within
 isopycnal layers. It is appropriate for the adiabatic interior of the ocean
 while a lateral mixing scheme for the surface boundary layer is described below.
