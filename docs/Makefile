@@ -1,15 +1,22 @@
 # Makefile for Sphinx documentation
-#
 
 # You can set these variables from the command line.
-SPHINXOPTS    =
-SPHINXBUILD   = sphinx-build
-PAPER         =
-BUILDDIR      = _build
+SPHINXOPTS        =
+SPHINXBUILD       = sphinx-build
+PAPER             =
+BUILDDIR          = _build
+FINDDOXYGENBIN    = doxygen
 
 # User-friendly check for sphinx-build
 ifeq ($(shell which $(SPHINXBUILD) >/dev/null 2>&1; echo $$?), 1)
-$(error The '$(SPHINXBUILD)' command was not found. Make sure you have Sphinx installed, then set the SPHINXBUILD environment variable to point to the full path of the '$(SPHINXBUILD)' executable. Alternatively you can add the directory with the executable to your PATH. If you don't have Sphinx installed, grab it from http://sphinx-doc.org/)
+$(error The '$(SPHINXBUILD)' command was not found. Make sure you have Sphinx installed, then set the SPHINXBUILD environment variable to point to the full path of the '$(SPHINXBUILD)' executable. Alternatively you can add the directory with the executable to your PATH. If you don\'t have Sphinx installed, grab it from http://sphinx-doc.org/)
+endif
+
+# Set DOXYGENBIN variable if the executable is found.  If it is not found, then we set it to a makefile rule that will attempt to build it.
+ifeq ($(shell which $(FINDDOXYGENBIN) >/dev/null 2>&1; echo $$?), 0)
+DOXYGENBIN = $(shell which $(FINDDOXYGENBIN))
+else
+DOXYGENBIN = doxygen/bin/doxygen
 endif
 
 # Internal variables.
@@ -19,7 +26,7 @@ ALLSPHINXOPTS   = -d $(BUILDDIR)/doctrees $(PAPEROPT_$(PAPER)) $(SPHINXOPTS) .
 # the i18n builder cannot share the environment and doctrees with the others
 I18NSPHINXOPTS  = $(PAPEROPT_$(PAPER)) $(SPHINXOPTS) .
 
-.PHONY: help clean html dirhtml singlehtml pickle json htmlhelp qthelp devhelp epub latex latexpdf text man changes linkcheck doctest gettext
+.PHONY: help clean html dirhtml singlehtml pickle json htmlhelp qthelp devhelp epub latex latexpdf text man changes linkcheck doctest gettext nortd nortd_latex all
 
 help:
 	@echo "Please use \`make <target>' where <target> is one of"
@@ -45,13 +52,22 @@ help:
 	@echo "  pseudoxml  to make pseudoxml-XML files for display purposes"
 	@echo "  linkcheck  to check all external links for integrity"
 	@echo "  doctest    to run all doctests embedded in the documentation (if enabled)"
+	@echo "  nortd      to run the doxygen html version of the APIs manual"
+	@echo "  nortd_latex to run the doxygen pdf version of the APIs manual"
 
 clean:
 	rm -rf $(BUILDDIR)/*
 
+$(BUILDDIR):
+	mkdir -p $@
+
 html:
 	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) $(BUILDDIR)/html
 	@echo
+ifeq ($(UPDATEHTMLEQS), Y)
+	@echo "Post processing equations."
+	@python ./postProcessEquations.py -d $(BUILDDIR) -p html -b sphinx -s index.html $(UPDATEHTMLEQSVERBOSE)
+endif
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."
 
 dirhtml:
@@ -113,7 +129,7 @@ latex:
 latexpdf:
 	$(SPHINXBUILD) -b latex $(ALLSPHINXOPTS) $(BUILDDIR)/latex
 	@echo "Running LaTeX files through pdflatex..."
-	$(MAKE) -C $(BUILDDIR)/latex all-pdf
+	$(MAKE) -C $(BUILDDIR)/latex all-pdf LATEXMKOPTS="-silent"
 	@echo "pdflatex finished; the PDF files are in $(BUILDDIR)/latex."
 
 latexpdfja:
@@ -178,13 +194,26 @@ pseudoxml:
 
 doxygen:
 	git clone https://github.com/doxygen/doxygen
+
 doxygen/bin/doxygen: doxygen
 	(cd $(<); cmake -G "Unix Makefiles" .)
 	(cd $(<); make)
-nortd: doxygen/bin/doxygen
+
+nortd: $(DOXYGENBIN) $(BUILDDIR)
 	$< Doxyfile_nortd
+ifeq ($(UPDATEHTMLEQS), Y)
+	@echo "Post processing equations."
+	@python ./postProcessEquations.py -d $(BUILDDIR) -p APIs -b doxygen -s index.html $(UPDATEHTMLEQSVERBOSE)
+endif
+	@echo "Build finished. The html files are in $(BUILDDIR)/APIs."
+
+nortd_latex: $(DOXYGENBIN) $(BUILDDIR)
+	$< Doxyfile_nortd_latex
+	make -C $(BUILDDIR)/doxygen_latex LATEX_CMD="pdflatex -interaction=batchmode"
+
 Clean: clean
-	rm -rf _build APIs xml doxygen.log
+	rm -rf $(BUILDDIR) xml MOM6.tags
+
 CLEAN: Clean
-	rm -rf doxygen src
-	rm -rf _build APIs src xml doxygen doxygen.log
+	rm -rf doxygen
+	rm -rf $(BUILDDIR) xml doxygen

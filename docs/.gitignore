@@ -2,6 +2,7 @@
 doxygen
 doxygen.log
 APIs
+MOM6.tags
 # Ignore sphinx-build output
 _build
 api
