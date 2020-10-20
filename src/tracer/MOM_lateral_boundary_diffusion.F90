@@ -872,7 +872,7 @@ logical function near_boundary_unit_tests( verbose )
   test_name = 'Left deeper than right, h_L /= h_R and BLD_L = BLD_R'
   call merge_interfaces(nk, (/2., 3./), (/2., 2./), 1.0, 1.0, CS%H_subroundoff, h1)
   near_boundary_unit_tests = near_boundary_unit_tests .or. &
-                             test_layer_fluxes( verbose, nk+2, test_name, h1, (/1., 1., 2., 1./) )
+                             test_layer_fluxes( verbose, nk+1, test_name, h1, (/1., 1., 2./) )
   deallocate(h1)
 
   test_name = 'Left has zero thickness, h_L /= h_R and BLD_L = BLD_R'
@@ -900,15 +900,15 @@ logical function near_boundary_unit_tests( verbose )
   deallocate(h1)
 
   test_name = 'Right deeper than left, h_L /= h_R and BLD_L = BLD_R'
-  call merge_interfaces(nk+1, (/2., 2., 0./), (/2., 2., 1./), 2.0, 2.0, CS%H_subroundoff, h1)
+  call merge_interfaces(nk+1, (/2., 2., 0./), (/2., 2., 1./), 2., 2., CS%H_subroundoff, h1)
   near_boundary_unit_tests = near_boundary_unit_tests .or. &
-                             test_layer_fluxes( verbose, nk+1, test_name, h1, (/2., 2., 1./) )
+                             test_layer_fluxes( verbose, nk, test_name, h1, (/2., 2./) )
   deallocate(h1)
 
   test_name = 'Right and left small values at bottom, h_L /= h_R and BLD_L = BLD_R'
-  call merge_interfaces(nk+2, (/2., 2., 1., 1./), (/1., 1., .5, .5/), 2.0, 2.0, CS%H_subroundoff, h1)
+  call merge_interfaces(nk+2, (/2., 2., 1., 1./), (/1., 1., .5, .5/), 2., 2., CS%H_subroundoff, h1)
   near_boundary_unit_tests = near_boundary_unit_tests .or. &
-                             test_layer_fluxes( verbose, nk+5, test_name, h1, (/1., 1., .5, .5, 1., 1., 1./) )
+                             test_layer_fluxes( verbose, nk+2, test_name, h1, (/1., 1., .5, .5/) )
   deallocate(h1)
   if (.not. near_boundary_unit_tests) write(stdout,*) 'Passed merge interfaces'
 
