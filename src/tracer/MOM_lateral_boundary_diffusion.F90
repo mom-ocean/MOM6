@@ -463,13 +463,17 @@ subroutine flux_limiter(F_layer, area_L, area_R, phi_L, phi_R, h_L, h_R)
   ! 0 1 0       .2.2.2
   !   0           .2
   !
-  F_max = -0.2 * ((area_R*(phi_R*h_R))-(area_L*(phi_L*h_R)))
+  F_max = -0.2 * ((area_R*(phi_R*h_R))-(area_L*(phi_L*h_L)))
 
-  ! Apply flux limiter calculated above
-  if (F_max >= 0.) then
-    F_layer = MIN(F_layer,F_max)
+  if ( SIGN(1.,F_layer) == SIGN(1., F_max)) then
+    ! Apply flux limiter calculated above
+    if (F_max >= 0.) then
+      F_layer = MIN(F_layer,F_max)
+    else
+      F_layer = MAX(F_layer,F_max)
+    endif
   else
-    F_layer = MAX(F_layer,F_max)
+    F_layer = 0.0
   endif
 end subroutine flux_limiter
 
@@ -593,8 +597,8 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   endif
 
   ! Define vertical grid, dz_top
-  !call merge_interfaces(ke, h_L(:), h_R(:), hbl_L, hbl_R, CS%H_subroundoff, dz_top)
-  allocate(dz_top(50)); dz_top(:) = 10.0
+  call merge_interfaces(ke, h_L(:), h_R(:), hbl_L, hbl_R, CS%H_subroundoff, dz_top)
+  !allocate(dz_top(100)); dz_top(:) = 5.0
   nk = SIZE(dz_top)
 
   ! allocate arrays
@@ -606,18 +610,18 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   call remapping_core_h(CS%remap_cs, ke, h_L(:), phi_L(:), nk, dz_top(:), phi_L_z(:))
   call remapping_core_h(CS%remap_cs, ke, h_R(:), phi_R(:), nk, dz_top(:), phi_R_z(:))
 
-  if (CS%debug) then
-    tmp1 = SUM(phi_L(:)*h_L(:))
-    tmp2 = SUM(phi_L_z(:)*dz_top(:))
-    call sum_across_PEs(tmp1)
-    call sum_across_PEs(tmp2)
-    if (is_root_pe()) write(*,*)'Total tracer, native and z (L):', tmp1, tmp2
-    tmp1 = SUM(phi_R(:)*h_R(:))
-    tmp2 = SUM(phi_R_z(:)*dz_top(:))
-    call sum_across_PEs(tmp1)
-    call sum_across_PEs(tmp2)
-    if (is_root_pe()) write(*,*)'Total tracer, native and z (R):', tmp1, tmp2
-  endif
+  !if (CS%debug) then
+  !  tmp1 = SUM(phi_L(:)*h_L(:))
+  !  tmp2 = SUM(phi_L_z(:)*dz_top(:))
+  !  call sum_across_PEs(tmp1)
+  !  call sum_across_PEs(tmp2)
+  !  if (is_root_pe()) write(*,*)'Total tracer, native and z (L):', tmp1, tmp2
+  !  tmp1 = SUM(phi_R(:)*h_R(:))
+  !  tmp2 = SUM(phi_R_z(:)*dz_top(:))
+  !  call sum_across_PEs(tmp1)
+  !  call sum_across_PEs(tmp2)
+  !  if (is_root_pe()) write(*,*)'Total tracer, native and z (R):', tmp1, tmp2
+  !endif
 
   ! Calculate vertical indices containing the boundary layer in dz_top
   call boundary_k_range(boundary, nk, dz_top, hbl_L, k_top_L, zeta_top_L, k_bot_L, zeta_bot_L)
@@ -698,8 +702,9 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   call reintegrate_column(nk, dz_top(:), F_layer_z(:), ke, h_vel(:), 0.0, F_layer(:))
   if (CS%limiter) then
     do k = 1,ke
-      call flux_limiter(F_layer(k), area_L, area_R, phi_L(k), &
-                                          phi_R(k), h_L(k), h_R(k))
+      if (F_layer(k) /= 0.) call flux_limiter(F_layer(k), area_L, area_R, phi_L(k), &
+                                              phi_R(k), h_L(k), h_R(k))
+      !F_layer(k) = 0.
     enddo
   endif
 
