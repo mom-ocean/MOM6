@@ -7,7 +7,7 @@ module MOM_lateral_boundary_diffusion
 
 use MOM_cpu_clock,             only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,             only : CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_checksums,             only : hchksum_pair, hchksum
+use MOM_checksums,             only : hchksum
 use MOM_domains,               only : pass_var, sum_across_PEs
 use MOM_diag_mediator,         only : diag_ctrl, time_type
 use MOM_diag_mediator,         only : post_data, register_diag_field
@@ -139,10 +139,7 @@ logical function lateral_boundary_diffusion_init(Time, G, GV, param_file, diag, 
 end function lateral_boundary_diffusion_init
 
 !> Driver routine for calculating lateral diffusive fluxes near the top and bottom boundaries.
-!! Two different methods are available:
-!! Method 1: more straight forward, diffusion is applied layer by layer using only information
-!! from neighboring cells.
-!! Method 2: lower order representation, calculate fluxes from bulk layer integrated quantities.
+!! Diffusion is applied layer by layer using only information from neighboring cells.
 subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   type(ocean_grid_type),                intent(inout) :: G   !< Grid type
   type(verticalGrid_type),              intent(in)    :: GV  !< ocean vertical grid structure
@@ -161,44 +158,40 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G),CS%deg+1) :: ppoly0_coefs !< Coefficients of polynomial
   real, dimension(SZI_(G),SZJ_(G),SZK_(G),2)        :: ppoly0_E     !< Edge values from reconstructions
   real, dimension(SZK_(G),CS%deg+1)                 :: ppoly_S      !< Slopes from reconstruction (placeholder)
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: uFlx       !< Zonal flux of tracer [conc m^3]
-  !real, dimension(SZIB_(G),SZJ_(G),CS%nk)   :: uFlx        !< Zonal flux of tracer in z-space [conc m^3]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vFlx       !< Meridional flux of tracer [conc m^3]
-  !real, dimension(SZI_(G),SZJB_(G),CS%nk)   :: vFlx        !< Meridional flux of tracer in z-space [conc m^3]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: uFlx        !< Zonal flux of tracer [conc m^3]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vFlx        !< Meridional flux of tracer [conc m^3]
   real, dimension(SZIB_(G),SZJ_(G))         :: uwork_2d    !< Layer summed u-flux transport
   real, dimension(SZI_(G),SZJB_(G))         :: vwork_2d    !< Layer summed v-flux transport
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: tendency    !< tendency array for diagnostic
-!  real, dimension(SZI_(G),SZJ_(G),CS%nk)    :: tracer_z    !< Tracer in the zgrid
   real, dimension(SZI_(G),SZJ_(G))          :: tendency_2d !< depth integrated content tendency for diagn
   type(tracer_type), pointer                :: tracer => NULL() !< Pointer to the current tracer
   real, dimension(SZK_(GV)) :: tracer_1d                   !< 1d-array used to remap tracer change to native grid
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: tracer_old  !< local copy of the initial tracer concentration,
                                                            !! only used to compute tendencies.
-!  real, dimension(SZI_(G),SZJ_(G),CS%nk)    :: diff_z      !< Used to store difference in tracer concentration in
-!                                                           !! z-space after applying diffusion.
   real, dimension(SZI_(G),SZJ_(G))          :: tracer_int, tracer_end
                                                            !< integrated tracer in the native grid, before and after
                                                            ! LBD is applied.
   integer :: remap_method !< Reconstruction method
   integer :: i, j, k, m   !< indices to loop over
   real    :: Idt          !< inverse of the time step [s-1]
-  real    :: tmpReal, tmp1, tmp2
+  real    :: tmpReal, tmp1, tmp2 !< temporary variables
 
   Idt = 1./dt
   if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G, US, m_to_BLD_units=GV%m_to_H)
   if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US, &
                                                                    m_to_MLD_units=GV%m_to_H)
-
   call pass_var(hbl,G%Domain)
   do m = 1,Reg%ntr
     ! current tracer
     tracer => Reg%tr(m)
-    call pass_var(tracer%t,G%Domain)
+
+    if (CS%debug) then
+      call hchksum(tracer%t, "before LBD "//tracer%name,G%HI)
+    endif
 
     ! for diagnostics
     if (tracer%id_lbdxy_conc > 0 .or. tracer%id_lbdxy_cont > 0 .or. tracer%id_lbdxy_cont_2d > 0 .or. CS%debug) then
       tendency(:,:,:) = 0.0
-      tracer_old(:,:,:) = 0.0
       tracer_old(:,:,:) = tracer%t(:,:,:)
     endif
 
@@ -231,10 +224,14 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       if (G%mask2dT(i,j)>0.) then
         tracer%t(i,j,k) = tracer%t(i,j,k) + (( (uFlx(I-1,j,k)-uFlx(I,j,k)) ) + ( (vFlx(i,J-1,k)-vFlx(i,J,k) ) ))* &
                           G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff )
+        if (tracer%id_lbdxy_conc > 0  .or. tracer%id_lbdxy_cont > 0 .or. tracer%id_lbdxy_cont_2d > 0 ) then
+          tendency(i,j,k) = (tracer%t(i,j,k)-tracer_old(i,j,k)) * Idt
+        endif
       endif
     enddo ; enddo ; enddo
 
     if (CS%debug) then
+      call hchksum(tracer%t, "after LBD "//tracer%name,G%HI)
       tracer_int(:,:) = 0.0; tracer_end(:,:) = 0.0
       ! tracer (native grid) before and after LBD
       do j=G%jsc,G%jec ; do i=G%isc,G%iec
@@ -250,13 +247,7 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       tmp2 = SUM(tracer_end)
       call sum_across_PEs(tmp1)
       call sum_across_PEs(tmp2)
-      if (is_root_pe()) write(*,*)'Total tracer, before/after:', tmp1, tmp2
-    endif
-
-    if (tracer%id_lbdxy_conc > 0  .or. tracer%id_lbdxy_cont > 0 .or. tracer%id_lbdxy_cont_2d > 0 ) then
-      do k=1,GV%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
-        tendency(i,j,k) = (tracer%t(i,j,k)-tracer_old(i,j,k)) * Idt
-      enddo ; enddo ; enddo
+      if (is_root_pe()) write(*,*)'Total '//tracer%name//' before/after:', tmp1, tmp2
     endif
 
     ! Post the tracer diagnostics
@@ -450,13 +441,10 @@ subroutine merge_interfaces(nk, h_L, h_R, hbl_L, hbl_R, H_subroundoff, h)
 
   ! find the minimum depth
   min_depth = MIN(MAXVAL(eta_L), MAXVAL(eta_R))
-  !if (is_root_pe()) write(*,*)'min_depth, MAXVAL(eta_L), MAXVAL(eta_R)', min_depth, MAXVAL(eta_L), MAXVAL(eta_R)
   ! sort eta_all
   call sort(eta_all, n)
-  !if (is_root_pe()) write(*,*)'eta_all',eta_all(:)
   ! remove duplicates from eta_all and sets maximum depth
   call unique(eta_all, n, eta_unique, min_depth)
-  !if (is_root_pe()) write(*,*)'eta_unique',eta_unique(:)
 
   nk1 = SIZE(eta_unique)
   allocate(h(nk1-1))
@@ -468,11 +456,11 @@ end subroutine merge_interfaces
 !> Calculates the maximum flux that can leave a cell and uses that to apply a
 !! limiter to F_layer.
 subroutine flux_limiter(F_layer, area_L, area_R, phi_L, phi_R, h_L, h_R)
-
-  real,  intent(inout) :: F_layer        !< Tracer flux to be checked
-  real,  intent(in   ) :: area_L, area_R !< Area of left and right cells   [H ~> m or kg m-2]
-  real,  intent(in   ) :: h_L, h_R       !< Thickness of left and right cells   [H ~> m or kg m-2]
+  real,  intent(inout) :: F_layer        !< Tracer flux to be checked          [H L2 conc ~> m3 conc]
+  real,  intent(in   ) :: area_L, area_R !< Area of left and right cells       [L2 ~> m2]
+  real,  intent(in   ) :: h_L, h_R       !< Thickness of left and right cells  [H ~> m or kg m-2]
   real,  intent(in   ) :: phi_L, phi_R   !< Tracer concentration in the left and right cells
+                                         !!                                    [conc]
 
   ! local variables
   real :: F_max !< maximum flux allowed
@@ -630,22 +618,6 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   call remapping_core_h(CS%remap_cs, ke, h_L(:), phi_L(:), nk, dz_top(:), phi_L_z(:))
   call remapping_core_h(CS%remap_cs, ke, h_R(:), phi_R(:), nk, dz_top(:), phi_R_z(:))
 
-  !if (is_root_pe()) write(*,*)'dz_top',dz_top(:)
-  !if (is_root_pe()) write(*,*)'phi_L',phi_L(:)
-  !if (is_root_pe()) write(*,*)'phi_L_z',phi_L_z(:)
-  !if (CS%debug) then
-  !  tmp1 = SUM(phi_L(:)*h_L(:))
-  !  tmp2 = SUM(phi_L_z(:)*dz_top(:))
-  !  call sum_across_PEs(tmp1)
-  !  call sum_across_PEs(tmp2)
-  !  if (is_root_pe()) write(*,*)'Total tracer, native and z (L):', tmp1, tmp2
-  !  tmp1 = SUM(phi_R(:)*h_R(:))
-  !  tmp2 = SUM(phi_R_z(:)*dz_top(:))
-  !  call sum_across_PEs(tmp1)
-  !  call sum_across_PEs(tmp2)
-  !  if (is_root_pe()) write(*,*)'Total tracer, native and z (R):', tmp1, tmp2
-  !endif
-
   ! Calculate vertical indices containing the boundary layer in dz_top
   call boundary_k_range(boundary, nk, dz_top, hbl_L, k_top_L, zeta_top_L, k_bot_L, zeta_bot_L)
   call boundary_k_range(boundary, nk, dz_top, hbl_R, k_top_R, zeta_top_R, k_bot_R, zeta_bot_R)
@@ -655,24 +627,14 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
     k_bot_max = MAX(k_bot_L, k_bot_R)
     k_bot_diff = (k_bot_max - k_bot_min)
 
-    ! make sure left and right k indices span same range
-    if (k_bot_min .ne. k_bot_L) then
-      k_bot_L = k_bot_min
-      zeta_bot_L = 1.0
-    endif
-    if (k_bot_min .ne. k_bot_R) then
-      k_bot_R= k_bot_min
-      zeta_bot_R = 1.0
-    endif
-
     ! tracer flux where the minimum BLD intersets layer
     ! GMM, khtr_avg should be computed once khtr is 3D
     if ((CS%linear) .and. (k_bot_diff .gt. 1)) then
       ! apply linear decay at the base of hbl
       do k = k_bot_min-1,1,-1
         F_layer_z(k) = -(dz_top(k) * khtr_u) * (phi_R_z(k) - phi_L_z(k))
-        if (CS%limiter) call flux_limiter(F_layer_z(k), area_L, area_R, phi_L_z(k), &
-                                          phi_R_z(k), dz_top(k), dz_top(k))
+        !if (CS%limiter) call flux_limiter(F_layer_z(k), area_L, area_R, phi_L_z(k), &
+        !                                  phi_R_z(k), dz_top(k), dz_top(k))
       enddo
       htot = 0.0
       do k = k_bot_min+1,k_bot_max, 1
@@ -685,18 +647,19 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
         wgt = (a*(htot + (dz_top(k) * 0.5))) + 1.0
         F_layer_z(k) = -(dz_top(k) * khtr_u) * (phi_R_z(k) - phi_L_z(k)) * wgt
         htot = htot + dz_top(k)
-        if (CS%limiter) call flux_limiter(F_layer_z(k), area_L, area_R, phi_L_z(k), &
-                                          phi_R_z(k), dz_top(k), dz_top(k))
+        !if (CS%limiter) call flux_limiter(F_layer_z(k), area_L, area_R, phi_L_z(k), &
+        !                                  phi_R_z(k), dz_top(k), dz_top(k))
       enddo
     else
       do k = k_bot_min,1,-1
         F_layer_z(k) = -(dz_top(k) * khtr_u) * (phi_R_z(k) - phi_L_z(k))
-        if (CS%limiter) call flux_limiter(F_layer_z(k), area_L, area_R, phi_L_z(k), &
-                                          phi_R_z(k), dz_top(k), dz_top(k))
+        !if (CS%limiter) call flux_limiter(F_layer_z(k), area_L, area_R, phi_L_z(k), &
+        !                                  phi_R_z(k), dz_top(k), dz_top(k))
       enddo
     endif
   endif
 
+! TODO, boundary == BOTTOM
 !  if (boundary == BOTTOM) then
 !    ! TODO: GMM add option to apply linear decay
 !    k_top_max = MAX(k_top_L, k_top_R)
@@ -723,11 +686,11 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   enddo
   ! remap flux to native grid
   call reintegrate_column(nk, dz_top(:), F_layer_z(:), ke, h_vel(:), 0.0, F_layer(:))
+  ! apply flux_limiter in the native grid
   if (CS%limiter) then
     do k = 1,ke
       if (F_layer(k) /= 0.) call flux_limiter(F_layer(k), area_L, area_R, phi_L(k), &
                                               phi_R(k), h_L(k), h_R(k))
-      !F_layer(k) = 0.
     enddo
   endif
 
