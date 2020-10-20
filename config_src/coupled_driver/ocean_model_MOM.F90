@@ -179,13 +179,13 @@ type, public :: ocean_state_type ; private
                               !! processes before time stepping the dynamics.
 
   type(directories) :: dirs   !< A structure containing several relevant directory paths.
-  type(mech_forcing) :: forces !< A structure with the driving mechanical surface forces
-  type(forcing)   :: fluxes   !< A structure containing pointers to
-                              !! the thermodynamic ocean forcing fields.
-  type(forcing)   :: flux_tmp !< A secondary structure containing pointers to the
+  type(mech_forcing), pointer :: forces => NULL() !< A structure with the driving mechanical surface forces
+  type(forcing), pointer      :: fluxes => NULL()   !< A structure containing pointers to
+                                                    !! the thermodynamic ocean forcing fields.
+  type(forcing), pointer      :: flux_tmp => NULL() !< A secondary structure containing pointers to the
                               !! ocean forcing fields for when multiple coupled
                               !! timesteps are taken per thermodynamic step.
-  type(surface)   :: sfc_state !< A structure containing pointers to
+  type(surface), pointer      :: sfc_state => NULL() !< A structure containing pointers to
                               !! the ocean surface state fields.
   type(ocean_grid_type), pointer :: &
     grid => NULL()            !< A pointer to a grid structure containing metrics
@@ -266,6 +266,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
     return
   endif
   allocate(OS)
+
+  allocate(OS%fluxes)
+  allocate(OS%flux_tmp)
 
   OS%is_ocean_pe = Ocean_sfc%is_ocean_pe
   if (.not.OS%is_ocean_pe) return
@@ -355,6 +358,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
     use_melt_pot=.false.
   endif
 
+  allocate(OS%sfc_state)
   call allocate_surface_state(OS%sfc_state, OS%grid, use_temperature, do_integrals=.true., &
                               gas_fields_ocn=gas_fields_ocn, use_meltpot=use_melt_pot)
 
@@ -365,6 +369,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
     call surface_forcing_init(Time_in, OS%grid, OS%US, param_file, OS%diag, &
                               OS%forcing_CSp)
   endif
+
+  allocate(OS%forces)
 
   if (OS%use_ice_shelf)  then
     call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
