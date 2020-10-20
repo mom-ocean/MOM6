@@ -689,7 +689,7 @@ subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US, C
   real, dimension(SZI_(G),SZK_(G)), intent(in)    :: max_TKE !< The energy required to for a layer to entrain
                                                             !! to its maximum realizable thickness [Z3 T-3 ~> m3 s-3]
   type(tidal_mixing_cs),            pointer       :: CS     !< The control structure for this module
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZK_(G)), &
                           optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity in layers [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
                           optional, intent(inout) :: Kd_int !< The diapycnal diffusivity at interfaces,
@@ -724,7 +724,7 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kd_int, Kv
                                                   !! frequency at the interfaces [T-2 ~> s-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZK_(G)), &
                  optional, intent(inout) :: Kd_lay!< The diapycnal diffusivity in the layers [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
                  optional, intent(inout) :: Kd_int!< The diapycnal diffusivity at interfaces [Z2 T-1 ~> m2 s-1].
@@ -805,7 +805,7 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kd_int, Kv
       ! Update diffusivity
       if (present(Kd_lay)) then
         do k=1,G%ke
-          Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5 * US%m2_s_to_Z2_T * (Kd_tidal(k) + Kd_tidal(k+1))
+          Kd_lay(i,k) = Kd_lay(i,k) + 0.5 * US%m2_s_to_Z2_T * (Kd_tidal(k) + Kd_tidal(k+1))
         enddo
       endif
       if (present(Kd_int)) then
@@ -907,7 +907,7 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kd_int, Kv
       ! Update diffusivity
       if (present(Kd_lay)) then
         do k=1,G%ke
-          Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5 * US%m2_s_to_Z2_T * (Kd_tidal(k) + Kd_tidal(k+1))
+          Kd_lay(i,k) = Kd_lay(i,k) + 0.5 * US%m2_s_to_Z2_T * (Kd_tidal(k) + Kd_tidal(k+1))
         enddo
       endif
       if (present(Kd_int)) then
@@ -977,7 +977,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
   real, dimension(SZI_(G),SZK_(G)), intent(in)    :: max_TKE !< The energy required to for a layer to entrain
                                                             !! to its maximum realizable thickness [Z3 T-3 ~> m3 s-3]
   type(tidal_mixing_cs),            pointer       :: CS     !< The control structure for this module
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZK_(G)), &
                           optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity in layers [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
                           optional, intent(inout) :: Kd_int !< The diapycnal diffusivity at interfaces
@@ -1262,7 +1262,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
 
       if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
       if (present(Kd_lay)) then
-        Kd_lay(i,j,k) = Kd_lay(i,j,k) + Kd_add
+        Kd_lay(i,k) = Kd_lay(i,k) + Kd_add
       endif
 
       if (present(Kd_int)) then
@@ -1359,7 +1359,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
 
       if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
       if (present(Kd_lay)) then
-        Kd_lay(i,j,k) = Kd_lay(i,j,k) + Kd_add
+        Kd_lay(i,k) = Kd_lay(i,k) + Kd_add
       endif
 
       if (present(Kd_int)) then
