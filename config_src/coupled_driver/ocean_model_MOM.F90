@@ -48,6 +48,7 @@ use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_ice_shelf, only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
 use MOM_ice_shelf, only : add_shelf_forces, ice_shelf_end, ice_shelf_save_restart
+use MOM_IS_diag_mediator, only : diag_IS_ctrl => diag_ctrl, diag_mediator_IS_end=>diag_mediator_end
 use coupler_types_mod, only : coupler_1d_bc_type, coupler_2d_bc_type
 use coupler_types_mod, only : coupler_type_spawn, coupler_type_write_chksums
 use coupler_types_mod, only : coupler_type_initialized, coupler_type_copy_data
@@ -213,7 +214,10 @@ type, public :: ocean_state_type ; private
     restart_CSp => NULL()     !< A pointer set to the restart control structure
                               !! that will be used for MOM restart files.
   type(diag_ctrl), pointer :: &
-    diag => NULL()            !< A pointer to the diagnostic regulatory structure
+       diag => NULL()            !< A pointer to the diagnostic regulatory structure
+  type(diag_IS_ctrl), pointer :: &
+       diag_IS => NULL()            !< A pointer to the diagnostic regulatory structure
+                                    !! for the ice shelf module.
 end type ocean_state_type
 
 contains
@@ -374,7 +378,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
 
   if (OS%use_ice_shelf)  then
     call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
-                              OS%diag, OS%forces, OS%fluxes)
+                              OS%diag_IS, OS%forces, OS%fluxes)
   endif
   if (OS%icebergs_alter_ocean)  then
     call marine_ice_init(OS%Time, OS%grid, param_file, OS%diag, OS%marine_ice_CSp)
@@ -723,6 +727,8 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
 
   call ocean_model_save_restart(Ocean_state, Time)
   call diag_mediator_end(Time, Ocean_state%diag)
+  if (Ocean_state%use_ice_shelf) &
+    call diag_mediator_IS_end(Time, Ocean_state%diag_IS)
   call MOM_end(Ocean_state%MOM_CSp)
   if (Ocean_state%use_ice_shelf) call ice_shelf_end(Ocean_state%Ice_shelf_CSp)
 end subroutine ocean_model_end
