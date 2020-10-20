@@ -131,7 +131,7 @@ logical function lateral_boundary_diffusion_init(Time, G, GV, param_file, diag, 
                  "It can be one of the following schemes: "//&
                  trim(remappingSchemesDoc), default=remappingDefaultScheme)
   call initialize_remapping( CS%remap_CS, string, boundary_extrapolation = boundary_extrap ,&
-       check_reconstruction = .false., check_remapping = .false.)
+       check_reconstruction = .false., check_remapping = .false., answers_2018 = .false.)
   call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
   call get_param(param_file, mdl, "LBD_DEBUG", CS%debug, &
                  "If true, write out verbose debugging data in the LBD module.", &
@@ -327,7 +327,7 @@ integer function  find_minimum(x, s, e)
   real,    dimension(e),  intent(in) :: x        !< 1D array to be checked
 
   ! local variables
-  integer                            :: minimum
+  real                               :: minimum
   integer                            :: location
   integer                            :: i
 
@@ -347,7 +347,7 @@ subroutine swap(a, b)
   real, intent(inout) :: a, b !< values to be swaped
 
   ! local variables
-  integer                :: tmp
+  real                :: tmp
   tmp = a
   a    = b
   b    = tmp
@@ -368,25 +368,42 @@ subroutine sort(x, n)
 end subroutine sort
 
 !> Returns the unique values in a 1D array.
-subroutine unique(val, n, val_unique)
-  integer,                         intent(in   ) :: n          !< # of pts in the array
-  real, dimension(n),              intent(in   ) :: val        !< 1D array to be checked
-  real, dimension(:), allocatable, intent(inout) :: val_unique !< Returned 1D array with unique values
-
+subroutine unique(val, n, val_unique, val_max)
+  integer,                         intent(in   ) :: n          !< # of pts in the array.
+  real, dimension(n),              intent(in   ) :: val        !< 1D array to be checked.
+  real, dimension(:), allocatable, intent(inout) :: val_unique !< Returned 1D array with unique values.
+  real,                  optional, intent(in   ) :: val_max    !< sets the maximum value in val_unique to
+                                                               !! this value.
   ! local variables
   real, dimension(n) :: tmp
-  integer :: i
+  integer :: i, j, ii
   real :: min_val, max_val
+  logical :: limit
+
+  limit = .false.
+  if (present(val_max)) then
+    limit = .true.
+    if (val_max > MAXVAL(val)) then
+      if (is_root_pe()) write(*,*)'val_max, MAXVAL(val)',val_max, MAXVAL(val)
+      call MOM_error(FATAL,"Houston, we've had a problem in unique (val_max cannot be > MAXVAL(val))")
+    endif
+  endif
 
   tmp(:) = 0.
-  min_val = minval(val)-1
-  max_val = maxval(val)
+  min_val = MINVAL(val)-1
+  max_val = MAXVAL(val)
   i = 0
   do while (min_val<max_val)
       i = i+1
-      min_val = minval(val, mask=val>min_val)
+      min_val = MINVAL(val, mask=val>min_val)
       tmp(i) = min_val
   enddo
+  ii = i
+  if (limit) then
+    do j=1,ii
+      if (tmp(j) <= val_max) i = j
+    enddo
+  endif
   allocate(val_unique(i), source=tmp(1:i))
 end subroutine unique
 
@@ -411,11 +428,11 @@ subroutine merge_interfaces(nk, h_L, h_R, hbl_L, hbl_R, H_subroundoff, h)
   real, dimension(nk+1)           :: eta_L, eta_R!< Interfaces in the left and right coloumns
   real, dimension(:), allocatable :: eta_all     !< Combined interfaces in the left/right columns + hbl_L and hbl_R
   real, dimension(:), allocatable :: eta_unique  !< Combined interfaces (eta_L, eta_R), possibly hbl_L and hbl_R
+  real                            :: min_depth   !< Minimum depth
   integer :: k, kk, nk1                          !< loop indices (k and kk) and array size (nk1)
 
   n = (2*nk)+3
   allocate(eta_all(n))
-
   ! compute and merge interfaces
   eta_L(:) = 0.0; eta_R(:) = 0.0; eta_all(:) = 0.0
   kk = 0
@@ -431,18 +448,21 @@ subroutine merge_interfaces(nk, h_L, h_R, hbl_L, hbl_R, H_subroundoff, h)
   eta_all(kk+2) = hbl_L
   eta_all(kk+3) = hbl_R
 
+  ! find the minimum depth
+  min_depth = MIN(MAXVAL(eta_L), MAXVAL(eta_R))
+  !if (is_root_pe()) write(*,*)'min_depth, MAXVAL(eta_L), MAXVAL(eta_R)', min_depth, MAXVAL(eta_L), MAXVAL(eta_R)
   ! sort eta_all
   call sort(eta_all, n)
-
-  ! remove duplicates from eta_all
-  call unique(eta_all, n, eta_unique)
+  !if (is_root_pe()) write(*,*)'eta_all',eta_all(:)
+  ! remove duplicates from eta_all and sets maximum depth
+  call unique(eta_all, n, eta_unique, min_depth)
+  !if (is_root_pe()) write(*,*)'eta_unique',eta_unique(:)
 
   nk1 = SIZE(eta_unique)
   allocate(h(nk1-1))
   do k=1,nk1-1
     h(k) = (eta_unique(k+1) - eta_unique(k)) + H_subroundoff
   enddo
-
 end subroutine merge_interfaces
 
 !> Calculates the maximum flux that can leave a cell and uses that to apply a
@@ -610,6 +630,9 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   call remapping_core_h(CS%remap_cs, ke, h_L(:), phi_L(:), nk, dz_top(:), phi_L_z(:))
   call remapping_core_h(CS%remap_cs, ke, h_R(:), phi_R(:), nk, dz_top(:), phi_R_z(:))
 
+  !if (is_root_pe()) write(*,*)'dz_top',dz_top(:)
+  !if (is_root_pe()) write(*,*)'phi_L',phi_L(:)
+  !if (is_root_pe()) write(*,*)'phi_L_z',phi_L_z(:)
   !if (CS%debug) then
   !  tmp1 = SUM(phi_L(:)*h_L(:))
   !  tmp2 = SUM(phi_L_z(:)*dz_top(:))
