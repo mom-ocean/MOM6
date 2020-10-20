@@ -47,7 +47,10 @@ type, public :: lbd_CS ; private
   integer :: deg             !< Degree of polynomial reconstruction.
   integer :: surface_boundary_scheme !< Which boundary layer scheme to use
                                      !! 1. ePBL; 2. KPP
-  logical :: limiter                 !< Controls whether a flux limiter is applied (default is true).
+  logical :: limiter                 !< Controls whether a flux limiter is applied in the
+                                     !! native grid (default is true).
+  logical :: limiter_remap           !< Controls whether a flux limiter is applied in the
+                                     !! remapped grid (default is false).
   logical :: linear                  !< If True, apply a linear transition at the base/top of the boundary.
                                      !! The flux will be fully applied at k=k_min and zero at k=k_max.
   real    :: H_subroundoff           !< A thickness that is so small that it can be added to a thickness of
@@ -121,7 +124,9 @@ logical function lateral_boundary_diffusion_init(Time, G, GV, param_file, diag, 
                  "If True, apply a linear transition at the base/top of the boundary. \n"//&
                  "The flux will be fully applied at k=k_min and zero at k=k_max.", default=.false.)
   call get_param(param_file, mdl, "APPLY_LIMITER", CS%limiter, &
-                   "If True, apply a flux limiter to the LBD.", default=.true.)
+                   "If True, apply a flux limiter in the native grid.", default=.true.)
+  call get_param(param_file, mdl, "APPLY_LIMITER_REMAP", CS%limiter_remap, &
+                   "If True, apply a flux limiter in the remapped grid.", default=.false.)
   call get_param(param_file, mdl, "LBD_BOUNDARY_EXTRAP", boundary_extrap, &
                  "Use boundary extrapolation in LBD code", &
                  default=.false.)
@@ -633,8 +638,8 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
       ! apply linear decay at the base of hbl
       do k = k_bot_min-1,1,-1
         F_layer_z(k) = -(dz_top(k) * khtr_u) * (phi_R_z(k) - phi_L_z(k))
-        !if (CS%limiter) call flux_limiter(F_layer_z(k), area_L, area_R, phi_L_z(k), &
-        !                                  phi_R_z(k), dz_top(k), dz_top(k))
+        if (CS%limiter_remap) call flux_limiter(F_layer_z(k), area_L, area_R, phi_L_z(k), &
+                                          phi_R_z(k), dz_top(k), dz_top(k))
       enddo
       htot = 0.0
       do k = k_bot_min+1,k_bot_max, 1
@@ -647,14 +652,14 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
         wgt = (a*(htot + (dz_top(k) * 0.5))) + 1.0
         F_layer_z(k) = -(dz_top(k) * khtr_u) * (phi_R_z(k) - phi_L_z(k)) * wgt
         htot = htot + dz_top(k)
-        !if (CS%limiter) call flux_limiter(F_layer_z(k), area_L, area_R, phi_L_z(k), &
-        !                                  phi_R_z(k), dz_top(k), dz_top(k))
+        if (CS%limiter_remap) call flux_limiter(F_layer_z(k), area_L, area_R, phi_L_z(k), &
+                                          phi_R_z(k), dz_top(k), dz_top(k))
       enddo
     else
       do k = k_bot_min,1,-1
         F_layer_z(k) = -(dz_top(k) * khtr_u) * (phi_R_z(k) - phi_L_z(k))
-        !if (CS%limiter) call flux_limiter(F_layer_z(k), area_L, area_R, phi_L_z(k), &
-        !                                  phi_R_z(k), dz_top(k), dz_top(k))
+        if (CS%limiter_remap) call flux_limiter(F_layer_z(k), area_L, area_R, phi_L_z(k), &
+                                          phi_R_z(k), dz_top(k), dz_top(k))
       enddo
     endif
   endif
