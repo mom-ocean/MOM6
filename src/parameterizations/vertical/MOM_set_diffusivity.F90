@@ -33,6 +33,7 @@ use MOM_open_boundary,       only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECT
 use MOM_string_functions,    only : uppercase
 use MOM_tidal_mixing,        only : tidal_mixing_CS, calculate_tidal_mixing, tidal_mixing_h_amp
 use MOM_tidal_mixing,        only : setup_tidal_diagnostics, post_tidal_diagnostics
+use MOM_tidal_mixing,        only : tidal_mixing_init, tidal_mixing_end
 use MOM_unit_scaling,        only : unit_scale_type
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, p3d
 use MOM_verticalGrid,        only : verticalGrid_type
@@ -143,7 +144,6 @@ type, public :: set_diffusivity_CS ; private
   logical :: double_diffusion !< If true, enable double-diffusive mixing using an old method.
   logical :: use_CVMix_ddiff  !< If true, enable double-diffusive mixing via CVMix.
   logical :: use_tidal_mixing !< If true, activate tidal mixing diffusivity.
-  logical :: get_tidal_h_amp  !< If true, use the tidal mixing module to set the topographic roughness amplitude.
   logical :: simple_TKE_to_Kd !< If true, uses a simple estimate of Kd/TKE that
                               !! does not rely on a layer-formulation.
   real    :: Max_Rrho_salt_fingers      !< max density ratio for salt fingering
@@ -161,7 +161,7 @@ type, public :: set_diffusivity_CS ; private
   type(CVMix_ddiff_cs),      pointer :: CVMix_ddiff_csp      => NULL() !< Control structure for a child module
   type(bkgnd_mixing_cs),     pointer :: bkgnd_mixing_csp     => NULL() !< Control structure for a child module
   type(int_tide_CS),         pointer :: int_tide_CSp         => NULL() !< Control structure for a child module
-  type(tidal_mixing_cs),     pointer :: tm_csp               => NULL() !< Control structure for a child module
+  type(tidal_mixing_cs),     pointer :: tidal_mixing_CSp     => NULL() !< Control structure for a child module
 
   !>@{ Diagnostic IDs
   integer :: id_maxTKE     = -1, id_TKE_to_Kd   = -1, id_Kd_user    = -1
@@ -349,7 +349,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   endif
 
   ! set up arrays for tidal mixing diagnostics
-  call setup_tidal_diagnostics(G, CS%tm_csp)
+  call setup_tidal_diagnostics(G, CS%tidal_mixing_CSp)
 
   ! Smooth the properties through massless layers.
   if (use_EOS) then
@@ -518,7 +518,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
       ! Add the Nikurashin and / or tidal bottom-driven mixing
       if (CS%use_tidal_mixing) &
-        call calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, maxTKE, G, GV, US, CS%tm_csp, &
+        call calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, maxTKE, G, GV, US, CS%tidal_mixing_CSp, &
                                     N2_lay, N2_int, Kd_lay_2d, Kd_int_2d, CS%Kd_max, visc%Kv_slow)
 
       ! This adds the diffusion sustained by the energy extracted from the flow by the bottom drag.
@@ -565,7 +565,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
       ! Add the Nikurashin and / or tidal bottom-driven mixing
       if (CS%use_tidal_mixing) &
-        call calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, maxTKE, G, GV, US, CS%tm_csp, &
+        call calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, maxTKE, G, GV, US, CS%tidal_mixing_CSp, &
                                     N2_lay, N2_int, Kd_lay_2d, Kd_max=CS%Kd_max, Kv=visc%Kv_slow)
 
       ! This adds the diffusion sustained by the energy extracted from the flow by the bottom drag.
@@ -657,7 +657,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   if (CS%id_Kv_bkgnd > 0) call post_data(CS%id_Kv_bkgnd, dd%Kv_bkgnd, CS%diag)
 
   ! tidal mixing
-  call post_tidal_diagnostics(G,GV,h,CS%tm_csp)
+  call post_tidal_diagnostics(G, GV, h, CS%tidal_mixing_CSp)
   if (CS%id_N2 > 0)         call post_data(CS%id_N2,        dd%N2_3d,     CS%diag)
   if (CS%id_Kd_Work > 0)    call post_data(CS%id_Kd_Work,   dd%Kd_Work,   CS%diag)
   if (CS%id_maxTKE > 0)     call post_data(CS%id_maxTKE,    dd%maxTKE,    CS%diag)
@@ -1010,7 +1010,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
     z_from_bot(i) = 0.5*GV%H_to_Z*h(i,j,nz)
     do_i(i) = (G%mask2dT(i,j) > 0.5)
   enddo
-  if (CS%get_tidal_h_amp) call tidal_mixing_h_amp(h_amp, G, j, CS%tm_csp)
+  if (CS%use_tidal_mixing) call tidal_mixing_h_amp(h_amp, G, j, CS%tidal_mixing_CSp)
 
   do k=nz,2,-1
     do_any = .false.
@@ -1998,8 +1998,7 @@ subroutine set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1, rho_0)
 
 end subroutine set_density_ratios
 
-subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_CSp, &
-                                tm_CSp, halo_TS)
+subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_CSp, halo_TS)
   type(time_type),          intent(in)    :: Time !< The current model time
   type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
@@ -2009,9 +2008,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   type(diag_ctrl), target,  intent(inout) :: diag !< A structure used to regulate diagnostic output.
   type(set_diffusivity_CS), pointer       :: CS   !< pointer set to point to the module control
                                                   !! structure.
-  type(int_tide_CS),        pointer       :: int_tide_CSp  !< pointer to the internal tides control
-                                                  !! structure (BDM)
-  type(tidal_mixing_cs),    pointer       :: tm_csp  !< pointer to tidal mixing control
+  type(int_tide_CS),        pointer       :: int_tide_CSp !< A pointer to the internal tides control
                                                   !! structure
   integer,        optional, intent(out)   :: halo_TS !< The halo size of tracer points that must be
                                                   !! valid for the calculations in set_diffusivity.
@@ -2024,7 +2021,6 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_set_diffusivity"  ! This module's name.
   real :: omega_frac_dflt
-  logical :: use_CVMix_tidal         ! Indicates whether the CVMix tidal mixing schemes is in use.
   logical :: Bryan_Lewis_diffusivity ! If true, the background diapycnal diffusivity uses
                                      ! the Bryan-Lewis (1979) style tanh profile.
   integer :: i, j, is, ie, js, je
@@ -2042,7 +2038,6 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
 
   CS%diag => diag
   if (associated(int_tide_CSp))  CS%int_tide_CSp  => int_tide_CSp
-  if (associated(tm_csp))        CS%tm_csp  => tm_csp
 
   ! These default values always need to be set.
   CS%BBL_mixing_as_max = .true.
@@ -2069,6 +2064,10 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
+
+  ! CS%use_tidal_mixing is set to True if an internal tidal dissipation scheme is to be used.
+  CS%use_tidal_mixing = tidal_mixing_init(Time, G, GV, US, param_file, diag, &
+                                          CS%tidal_mixing_CSp)
 
   call get_param(param_file, mdl, "ML_RADIATION", CS%ML_radiation, &
                  "If true, allow a fraction of TKE available from wind "//&
@@ -2243,19 +2242,6 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   CS%id_Kd_layer = register_diag_field('ocean_model', 'Kd_layer', diag%axesTL, Time, &
       'Diapycnal diffusivity of layers (as set)', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
 
-
-
-  ! These parameters are read to determine whether diagnostics related to internal tide mixing
-  ! should be used.
-  call get_param(param_file, mdl, "USE_CVMix_TIDAL", use_CVMix_tidal, &
-                 "If true, turns on tidal mixing via CVMix", &
-                 default=.false., do_not_log=.true.)
-  call get_param(param_file, mdl, "INT_TIDE_DISSIPATION", CS%use_tidal_mixing, &
-                 "If true, use an internal tidal dissipation scheme to drive diapycnal mixing, "//&
-                 "along the lines of St. Laurent et al. (2002) and Simmons et al. (2004).", &
-                 default=use_CVMix_tidal, do_not_log=.true.)
-  CS%get_tidal_h_amp = CS%use_tidal_mixing .and. (.not. use_CVMix_tidal)
-
   if (CS%use_tidal_mixing) then
     CS%id_Kd_Work = register_diag_field('ocean_model', 'Kd_Work', diag%axesTL, Time, &
          'Work done by Diapycnal Mixing', 'W m-2', conversion=US%RZ3_T3_to_W_m2)
@@ -2343,14 +2329,13 @@ subroutine set_diffusivity_end(CS)
 
   call bkgnd_mixing_end(CS%bkgnd_mixing_csp)
 
-  if (CS%user_change_diff) &
-    call user_change_diff_end(CS%user_change_diff_CSp)
+  if (CS%use_tidal_mixing) call tidal_mixing_end(CS%tidal_mixing_CSp)
 
-  if (CS%use_CVMix_shear) &
-    call CVMix_shear_end(CS%CVMix_shear_csp)
+  if (CS%user_change_diff) call user_change_diff_end(CS%user_change_diff_CSp)
 
-  if (CS%use_CVMix_ddiff) &
-    call CVMix_ddiff_end(CS%CVMix_ddiff_csp)
+  if (CS%use_CVMix_shear)  call CVMix_shear_end(CS%CVMix_shear_csp)
+
+  if (CS%use_CVMix_ddiff)  call CVMix_ddiff_end(CS%CVMix_ddiff_csp)
 
   if (associated(CS)) deallocate(CS)
 

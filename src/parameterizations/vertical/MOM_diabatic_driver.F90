@@ -28,8 +28,6 @@ use MOM_CVMix_conv,          only : CVMix_conv_init, CVMix_conv_cs
 use MOM_CVMix_conv,          only : CVMix_conv_end, calculate_CVMix_conv
 use MOM_domains,             only : pass_var, To_West, To_South, To_All, Omit_Corners
 use MOM_domains,             only : create_group_pass, do_group_pass, group_pass_type
-use MOM_tidal_mixing,        only : tidal_mixing_init, tidal_mixing_cs
-use MOM_tidal_mixing,        only : tidal_mixing_end
 use MOM_energetic_PBL,       only : energetic_PBL, energetic_PBL_init
 use MOM_energetic_PBL,       only : energetic_PBL_end, energetic_PBL_CS
 use MOM_energetic_PBL,       only : energetic_PBL_get_MLD
@@ -107,7 +105,6 @@ type, public:: diabatic_CS; private
   logical :: use_CVMix_shear         !< If true, use the CVMix module to find the
                                      !! shear-driven diapycnal diffusivity.
   logical :: use_CVMix_ddiff         !< If true, use the CVMix double diffusion module.
-  logical :: use_tidal_mixing        !< If true, activate tidal mixing diffusivity.
   logical :: use_CVMix_conv          !< If true, use the CVMix module to get enhanced
                                      !! mixing due to convection.
   logical :: use_sponge              !< If true, sponges may be applied anywhere in the
@@ -169,8 +166,8 @@ type, public:: diabatic_CS; private
   real :: MLD_EN_VALS(3)             !< Energy values for energy mixed layer diagnostics
 
   !>@{ Diagnostic IDs
-  integer :: id_cg1      = -1                 ! diag handle for mode-1 speed (BDM)
-  integer, allocatable, dimension(:) :: id_cn ! diag handle for all mode speeds (BDM)
+  integer :: id_cg1      = -1                 ! diag handle for mode-1 speed
+  integer, allocatable, dimension(:) :: id_cn ! diag handle for all mode speeds
   integer :: id_wd       = -1, id_ea       = -1, id_eb           = -1 ! used by layer diabatic
   integer :: id_dudt_dia = -1, id_dvdt_dia = -1, id_ea_s         = -1, id_eb_s     = -1
   integer :: id_ea_t     = -1, id_eb_t     = -1
@@ -230,7 +227,6 @@ type, public:: diabatic_CS; private
   type(tracer_flow_control_CS), pointer :: tracer_flow_CSp       => NULL() !< Control structure for a child module
   type(optics_type),            pointer :: optics                => NULL() !< Control structure for a child module
   type(KPP_CS),                 pointer :: KPP_CSp               => NULL() !< Control structure for a child module
-  type(tidal_mixing_cs),        pointer :: tidal_mixing_csp      => NULL() !< Control structure for a child module
   type(CVMix_conv_cs),          pointer :: CVMix_conv_csp        => NULL() !< Control structure for a child module
   type(diapyc_energy_req_CS),   pointer :: diapyc_en_rec_CSp     => NULL() !< Control structure for a child module
 
@@ -357,7 +353,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   if (CS%debugConservation) call MOM_state_stats('1st make_frazil', u, v, h, tv%T, tv%S, G, GV, US)
 
   if (CS%use_int_tides) then
-    ! This block provides an interface for the unresolved low-mode internal tide module (BDM).
+    ! This block provides an interface for the unresolved low-mode internal tide module.
     call set_int_tide_input(u, v, h, tv, fluxes, CS%int_tide_input, dt, G, GV, US, &
                             CS%int_tide_input_CSp)
     cn_IGW(:,:,:) = 0.0
@@ -1274,15 +1270,12 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   real :: b1(SZIB_(G)), d1(SZIB_(G)) ! b1, c1, and d1 are variables used by the
   real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
 
-  real :: Ent_int ! The diffusive entrainment rate at an interface [H ~> m or kg m-2]
+  real :: Kd_add_here    ! An added diffusivity [Z2 T-1 ~> m2 s-1].
   real :: Idt     ! The inverse time step [T-1 ~> s-1]
 
   integer :: dir_flag     ! An integer encoding the directions in which to do halo updates.
   logical :: showCallTree ! If true, show the call tree
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb, m, halo
-
-  integer :: ig, jg      ! global indices for testing testing itide point source (BDM)
-  real :: Kd_add_here    ! An added diffusivity [Z2 T-1 ~> m2 s-1].
 
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -1982,7 +1975,6 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   real :: b1(SZIB_(G)), d1(SZIB_(G)) ! b1, c1, and d1 are variables used by the
   real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
 
-  real :: Ent_int ! The diffusive entrainment rate at an interface [H ~> m or kg m-2]
   real :: dt_mix  ! The amount of time over which to apply mixing [T ~> s]
   real :: Idt     ! The inverse time step [T-1 ~> s-1]
   real :: Idt_accel  ! The inverse time step times rescaling factors [T-1 ~> s-1]
@@ -1991,9 +1983,6 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   logical :: showCallTree ! If true, show the call tree
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb, m, halo
-
-  integer :: ig, jg      ! global indices for testing testing itide point source (BDM)
-  real :: Kd_add_here    ! An added diffusivity [Z2 T-1 ~> m2 s-1].
 
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -3704,12 +3693,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
     allocate(CS%frazil_heat_diag(isd:ied,jsd:jed,nz) ) ; CS%frazil_heat_diag(:,:,:) = 0.
   endif
 
-  ! CS%use_tidal_mixing is set to True if an internal tidal dissipation scheme is to be used.
-  CS%use_tidal_mixing = tidal_mixing_init(Time, G, GV, US, param_file, diag, &
-                                          CS%tidal_mixing_CSp)
-
-  ! CS%use_CVMix_conv is set to True if CVMix convection will be used, otherwise
-  ! False.
+  ! CS%use_CVMix_conv is set to True if CVMix convection will be used, otherwise it is False.
   CS%use_CVMix_conv = CVMix_conv_init(Time, G, GV, US, param_file, diag, CS%CVMix_conv_csp)
 
   call entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS%entrain_diffusive_CSp, &
@@ -3728,7 +3712,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 
   ! initialize module for setting diffusivities
   call set_diffusivity_init(Time, G, GV, US, param_file, diag, CS%set_diff_CSp, &
-                            CS%int_tide_CSp, CS%tidal_mixing_CSp, CS%halo_TS_diff)
+                            CS%int_tide_CSp, CS%halo_TS_diff)
 
   ! set up the clocks for this module
   id_clock_entrain = cpu_clock_id('(Ocean diabatic entrain)', grain=CLOCK_MODULE)
@@ -3796,8 +3780,6 @@ subroutine diabatic_driver_end(CS)
     deallocate( CS%KPP_NLTscalar )
     call KPP_end(CS%KPP_CSp)
   endif
-
-  if (CS%use_tidal_mixing) call tidal_mixing_end(CS%tidal_mixing_CSp)
 
   if (CS%use_CVMix_conv) call CVMix_conv_end(CS%CVMix_conv_csp)
 
