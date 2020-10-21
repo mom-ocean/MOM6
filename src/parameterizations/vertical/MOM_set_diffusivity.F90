@@ -244,17 +244,14 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   type(diffusivity_diags)  :: dd ! structure with arrays of available diags
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    T_f, S_f      ! Temperature and salinity [degC] and [ppt] with
-                  ! massless layers filled vertically by diffusion.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    T_adj, S_adj  ! Temperature and salinity [degC] and [ppt]
-                  ! after full convective adjustment.
+    T_f, S_f      ! Temperature and salinity [degC] and [ppt] with properties in massless layers
+                  ! filled vertically by diffusion or the properties after full convective adjustment.
 
   real, dimension(SZI_(G),SZK_(G)) :: &
-    N2_lay, &     !< squared buoyancy frequency associated with layers [T-2 ~> s-2]
+    N2_lay, &     !< Squared buoyancy frequency associated with layers [T-2 ~> s-2]
     Kd_lay_2d, &  !< The layer diffusivities [Z2 T-1 ~> m2 s-1]
-    maxTKE, &     !< energy required to entrain to h_max [Z3 T-3 ~> m3 s-3]
-    TKE_to_Kd     !< conversion rate (~1.0 / (G_Earth + dRho_lay)) between
+    maxTKE, &     !< Energy required to entrain to h_max [Z3 T-3 ~> m3 s-3]
+    TKE_to_Kd     !< Conversion rate (~1.0 / (G_Earth + dRho_lay)) between
                   !< TKE dissipated within a layer and Kd in that layer
                   !< [Z2 T-1 / Z3 T-3 = T2 Z-1 ~> s2 m-1]
 
@@ -262,9 +259,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     N2_int,   &   !< squared buoyancy frequency associated at interfaces [T-2 ~> s-2]
     Kd_int_2d, &  !< The interface diffusivities [Z2 T-1 ~> m2 s-1]
     Kv_bkgnd, &   !< The background diffusion related interface viscosities [Z2 T-1 ~> m2 s-1]
-    dRho_int, &   !< locally ref potential density difference across interfaces [R ~> kg m-3]
-    KT_extra, &   !< double difusion diffusivity of temperature [Z2 T-1 ~> m2 s-1]
-    KS_extra      !< double difusion diffusivity of salinity [Z2 T-1 ~> m2 s-1]
+    dRho_int, &   !< Locally referenced potential density difference across interfaces [R ~> kg m-3]
+    KT_extra, &   !< Double difusion diffusivity of temperature [Z2 T-1 ~> m2 s-1]
+    KS_extra      !< Double difusion diffusivity of salinity [Z2 T-1 ~> m2 s-1]
 
   real :: dissip        ! local variable for dissipation calculations [Z2 R T-3 ~> W m-3]
   real :: Omega2        ! squared absolute rotation rate [T-2 ~> s-2]
@@ -275,8 +272,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                             ! buffer layer, or -1 without a bulk mixed layer.
   logical   :: showCallTree ! If true, show the call tree.
 
-  integer :: i, j, k, is, ie, js, je, nz
-  integer :: isd, ied, jsd, jed
+  integer :: i, j, k, is, ie, js, je, nz, isd, ied, jsd, jed
 
   real      :: kappa_dt_fill ! diffusivity times a timestep used to fill massless layers [Z2 ~> m2]
 
@@ -294,7 +290,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   else
     kappa_dt_fill = CS%Kd_smooth * dt
   endif
-  Omega2     = CS%omega * CS%omega
+  Omega2 = CS%omega * CS%omega
 
   use_EOS = associated(tv%eqn_of_state)
 
@@ -351,31 +347,16 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   ! set up arrays for tidal mixing diagnostics
   call setup_tidal_diagnostics(G, CS%tidal_mixing_CSp)
 
-  ! Smooth the properties through massless layers.
-  if (use_EOS) then
-    if (CS%debug) then
-      call hchksum(tv%T, "before vert_fill_TS tv%T",G%HI)
-      call hchksum(tv%S, "before vert_fill_TS tv%S",G%HI)
-      call hchksum(h, "before vert_fill_TS h",G%HI, scale=GV%H_to_m)
-    endif
-    call vert_fill_TS(h, tv%T, tv%S, kappa_dt_fill, T_f, S_f, G, GV, larger_h_denom=.true.)
-    if (CS%debug) then
-      call hchksum(tv%T, "after vert_fill_TS tv%T",G%HI)
-      call hchksum(tv%S, "after vert_fill_TS tv%S",G%HI)
-      call hchksum(h, "after vert_fill_TS h",G%HI, scale=GV%H_to_m)
-    endif
-  endif
-
   if (CS%useKappaShear) then
     if (CS%debug) then
       call hchksum_pair("before calc_KS [uv]_h", u_h, v_h, G%HI, scale=US%L_T_to_m_s)
     endif
     call cpu_clock_begin(id_clock_kappaShear)
     if (CS%Vertex_shear) then
-      call full_convection(G, GV, US, h, tv, T_adj, S_adj, fluxes%p_surf, &
+      call full_convection(G, GV, US, h, tv, T_f, S_f, fluxes%p_surf, &
                            (GV%Z_to_H**2)*kappa_dt_fill, halo=1)
 
-      call calc_kappa_shear_vertex(u, v, h, T_adj, S_adj, tv, fluxes%p_surf, visc%Kd_shear, &
+      call calc_kappa_shear_vertex(u, v, h, T_f, S_f, tv, fluxes%p_surf, visc%Kd_shear, &
                                    visc%TKE_turb, visc%Kv_shear_Bu, dt, G, GV, US, CS%kappaShear_CSp)
       if (associated(visc%Kv_shear)) visc%Kv_shear(:,:,:) = 0.0 ! needed for other parameterizations
       if (CS%debug) then
@@ -404,6 +385,21 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     endif
   elseif (associated(visc%Kv_shear)) then
     visc%Kv_shear(:,:,:) = 0.0 ! needed if calculate_kappa_shear is not enabled
+  endif
+
+  ! Smooth the properties through massless layers.
+  if (use_EOS) then
+    if (CS%debug) then
+      call hchksum(tv%T, "before vert_fill_TS tv%T",G%HI)
+      call hchksum(tv%S, "before vert_fill_TS tv%S",G%HI)
+      call hchksum(h, "before vert_fill_TS h",G%HI, scale=GV%H_to_m)
+    endif
+    call vert_fill_TS(h, tv%T, tv%S, kappa_dt_fill, T_f, S_f, G, GV, larger_h_denom=.true.)
+    if (CS%debug) then
+      call hchksum(tv%T, "after vert_fill_TS tv%T",G%HI)
+      call hchksum(tv%S, "after vert_fill_TS tv%S",G%HI)
+      call hchksum(h, "after vert_fill_TS h",G%HI, scale=GV%H_to_m)
+    endif
   endif
 
   !   Calculate the diffusivities, Kd_lay and Kd_int, for each layer and interface.  This would
