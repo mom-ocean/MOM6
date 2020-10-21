@@ -570,7 +570,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     enddo ; enddo ; enddo
 
     call cpu_clock_begin(id_clock_geothermal)
-    call geothermal(h, tv, dt, eatr, ebtr, G, GV, US, CS%geothermal_CSp, halo=CS%halo_TS_diff)
+    call geothermal(h, tv, dt, G, GV, US, CS%geothermal_CSp, halo=CS%halo_TS_diff)
     call cpu_clock_end(id_clock_geothermal)
     if (showCallTree) call callTree_waypoint("geothermal (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('geothermal', u, v, h, tv%T, tv%S, G, GV, US)
@@ -1301,7 +1301,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     enddo ; enddo ; enddo
 
     call cpu_clock_begin(id_clock_geothermal)
-    call geothermal(h, tv, dt, eatr, ebtr, G, GV, US, CS%geothermal_CSp, halo=CS%halo_TS_diff)
+    call geothermal(h, tv, dt, G, GV, US, CS%geothermal_CSp, halo=CS%halo_TS_diff)
     call cpu_clock_end(id_clock_geothermal)
     if (showCallTree) call callTree_waypoint("geothermal (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('geothermal', u, v, h, tv%T, tv%S, G, GV, US)

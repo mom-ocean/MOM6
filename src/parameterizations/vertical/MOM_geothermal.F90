@@ -42,6 +42,13 @@ type, public :: geothermal_CS ; private
 
 end type geothermal_CS
 
+!> Apply geothermal heating to the bottommost part of the water column, either by directly
+!! heating water in place, or by also including the movement of water between isopycal layers,
+!! depending on which arguments that are supplied.
+interface geothermal
+  module procedure geothermal_in_place, isopycnal_geothermal
+end interface geothermal
+
 contains
 
 !> Applies geothermal heating, including the movement of water
@@ -50,7 +57,7 @@ contains
 !! the partial derivative of the coordinate density with temperature is positive
 !! or very small, the layers are simply heated in place.  Any heat that can not
 !! be applied to the ocean is returned (WHERE)?
-subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
+subroutine isopycnal_geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
   type(ocean_grid_type),                    intent(inout) :: G  !< The ocean's grid structure.
   type(verticalGrid_type),                  intent(in)    :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thicknesses [H ~> m or kg m-2]
@@ -120,7 +127,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
   logical :: do_i(SZI_(G))
   logical :: compute_h_old, compute_T_old
   integer :: i, j, k, is, ie, js, je, nz, k2, i2
-  integer :: isj, iej, num_start, num_left, nkmb, k_tgt
+  integer :: isj, iej, num_left, nkmb, k_tgt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   if (present(halo)) then
@@ -157,11 +164,11 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
   if (compute_h_old) h_old(:,:,:) = 0.0
   if (compute_T_old) T_old(:,:,:) = 0.0
 
-!$OMP parallel do default(none) shared(is,ie,js,je,G,GV,US,CS,dt,Irho_cp,nkmb,tv,    &
+!$OMP parallel do default(none) shared(is,ie,js,je,G,GV,US,CS,dt,Irho_cp,nkmb,tv, &
 !$OMP                                  p_Ref,h,Angstrom,nz,H_neglect,eb,          &
 !$OMP                                  compute_h_old,compute_T_old,h_old,T_old,   &
 !$OMP                                  work_3d,Idt)                               &
-!$OMP                          private(num_start,heat_rem,do_i,h_geo_rem,num_left,&
+!$OMP                          private(heat_rem,do_i,h_geo_rem,num_left, &
 !$OMP                                  isj,iej,Rcv_BL,h_heated,heat_avail,k_tgt,  &
 !$OMP                                  Rcv_tgt,Rcv,dRcv_dT,T2,S2,dRcv_dT_,        &
 !$OMP                                  dRcv_dS_,heat_in_place,heat_trans,         &
@@ -183,15 +190,14 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
     ! 6. If there is not enough mass in the ocean, pass some of the heat up
     !    from the ocean via the frazil field?
 
-    num_start = 0
+    num_left = 0
     do i=is,ie
       heat_rem(i) = G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp))
       do_i(i) = .true. ; if (heat_rem(i) <= 0.0) do_i(i) = .false.
-      if (do_i(i)) num_start = num_start + 1
+      if (do_i(i)) num_left = num_left + 1
       h_geo_rem(i) = CS%Geothermal_thick
     enddo
-    if (num_start == 0) cycle
-    num_left = num_start
+    if (num_left == 0) cycle
 
     ! Find the first and last columns that need to be worked on.
     isj = ie+1 ; do i=is,ie ; if (do_i(i)) then ; isj = i ; exit ; endif ; enddo
@@ -322,16 +328,12 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
           if (heat_rem(i) <= 0.0) then
             do_i(i) = .false. ; num_left = num_left-1
             ! For efficiency, uncomment these?
-            ! if ((i==isj) .and. (num_left > 0)) then
-            !   do i2=isj+1,iej ; if (do_i(i2)) then
-            !     isj = i2 ; exit ! Set the new starting value.
-            !   endif ; enddo
-            ! endif
-            ! if ((i==iej) .and. (num_left > 0)) then
-            !   do i2=iej-1,isj,-1 ; if (do_i(i2)) then
-            !     iej = i2 ; exit ! Set the new ending value.
-            !   endif ; enddo
-            ! endif
+            ! if ((i==isj) .and. (num_left > 0)) then ; do i2=isj+1,iej ; if (do_i(i2)) then
+            !   isj = i2 ; exit ! Set the new starting value.
+            ! endif ; enddo ; endif
+            ! if ((i==iej) .and. (num_left > 0)) then ; do i2=iej-1,isj,-1 ; if (do_i(i2)) then
+            !   iej = i2 ; exit ! Set the new ending value.
+            ! endif ; enddo ; endif
           endif
         endif
 
@@ -372,7 +374,174 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
 !           (G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp)))
 !  enddo ; enddo
 
-end subroutine geothermal
+end subroutine isopycnal_geothermal
+
+!> Applies geothermal heating to the bottommost layers that occur within GEOTHERMAL_THICKNESS of
+!! the bottom, by simply heating the water in place.  Any heat that can not be applied to the ocean
+!! is returned (WHERE)?
+subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
+  type(ocean_grid_type),                    intent(inout) :: G  !< The ocean's grid structure.
+  type(verticalGrid_type),                  intent(in)    :: GV !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
+  type(thermo_var_ptrs),                    intent(inout) :: tv !< A structure containing pointers
+                                                                !! to any available thermodynamic
+                                                                !! fields. Absent fields have NULL
+                                                                !! ptrs.
+  real,                                     intent(in)    :: dt !< Time increment [T ~> s].
+  type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
+  type(geothermal_CS),                      pointer       :: CS !< The control structure returned by
+                                                                !! a previous call to
+                                                                !! geothermal_init.
+  integer,                        optional, intent(in)    :: halo !< Halo width over which to work
+
+  ! Local variables
+  real, dimension(SZI_(G)) :: &
+    heat_rem,  & ! remaining heat [H degC ~> m degC or kg degC m-2]
+    h_geo_rem    ! remaining thickness to apply geothermal heating [H ~> m or kg m-2]
+
+
+  real :: Angstrom, H_neglect  ! small thicknesses [H ~> m or kg m-2]
+  real :: h_heated      ! thickness that is being heated [H ~> m or kg m-2]
+  real :: heat_avail    ! heating available for the present layer [degC H ~> degC m or degC kg m-2]
+  real :: dTemp         ! temperature increase in a layer [degC]
+  real :: Irho_cp       ! inverse of heat capacity per unit layer volume
+                        ! [degC H Q-1 R-1 Z-1 ~> degC m3 J-1 or degC kg J-1]
+
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: T_old   ! Temperature of each layer
+                                                      ! before any heat is added,
+                                                      ! for diagnostics [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: work_3d ! Scratch variable used to
+                                                      ! calculate change in heat
+                                                      ! due to geothermal
+  real :: Idt           ! inverse of the timestep [T-1 ~> s-1]
+
+  logical :: do_i(SZI_(G))
+  logical :: compute_T_old
+  integer :: i, j, k, is, ie, js, je, nz, i2, isj, iej, num_left
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  if (present(halo)) then
+    is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
+  endif
+
+  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_geothermal: "//&
+         "Module must be initialized before it is used.")
+  if (.not.CS%apply_geothermal) return
+
+  Irho_cp   = 1.0 / (GV%H_to_RZ * tv%C_p)
+  Angstrom  = GV%Angstrom_H
+  H_neglect = GV%H_subroundoff
+  Idt       = 1.0 / dt
+
+  if (.not.associated(tv%T)) call MOM_error(FATAL, "MOM geothermal: "//&
+      "Geothermal heating can only be applied if T & S are state variables.")
+
+!  do i=is,ie ; do j=js,je
+!    resid(i,j) = tv%internal_heat(i,j)
+!  enddo ; enddo
+
+  ! Conditionals for tracking diagnostic depdendencies
+  compute_T_old = (CS%id_internal_heat_heat_tendency > 0) .or. (CS%id_internal_heat_temp_tendency > 0)
+
+  if (CS%id_internal_heat_heat_tendency > 0) work_3d(:,:,:) = 0.0
+  if (compute_T_old) T_old(:,:,:) = 0.0
+
+  !$OMP parallel do default(none) shared(is,ie,js,je,G,GV,US,CS,dt,Irho_cp,tv,h,Angstrom,&
+  !$OMP                                  nz,H_neglect,compute_T_old,T_old,work_3d,Idt) &
+  !$OMP                          private(heat_rem,do_i,h_geo_rem,num_left,&
+  !$OMP                                  isj,iej,h_heated,heat_avail,dTemp)
+  do j=js,je
+    ! Only work on columns that are being heated, and heat the near-bottom water.
+
+    ! If there is not enough mass in the ocean, pass some of the heat up
+    ! from the ocean via the frazil field?
+
+    num_left = 0
+    do i=is,ie
+      heat_rem(i) = G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp))
+      do_i(i) = (heat_rem(i) > 0.0)
+      if (do_i(i)) num_left = num_left + 1
+      h_geo_rem(i) = CS%Geothermal_thick
+    enddo
+    if (num_left == 0) cycle
+
+    ! Find the first and last columns that need to be worked on.
+    isj = ie+1 ; do i=is,ie ; if (do_i(i)) then ; isj = i ; exit ; endif ; enddo
+    iej = is-1 ; do i=ie,is,-1 ; if (do_i(i)) then ; iej = i ; exit ; endif ; enddo
+
+    do k=nz,1,-1
+      do i=isj,iej ; if (do_i(i)) then
+
+        ! Save temperature and thickness before any changes are made (for diagnostic)
+        if (compute_T_old) then
+          T_old(i,j,k) = tv%T(i,j,k)
+        endif
+
+        if (h(i,j,k) > Angstrom) then
+          ! Simply heat the layer; convective adjustment occurs later if necessary.
+          if ((h(i,j,k)-Angstrom) >= h_geo_rem(i)) then
+            h_heated = h_geo_rem(i)
+            heat_avail = heat_rem(i)
+            h_geo_rem(i) = 0.0
+            heat_rem(i) = 0.0
+          else
+            h_heated = (h(i,j,k)-Angstrom)
+            heat_avail = heat_rem(i) * (h_heated / (h_geo_rem(i) + H_neglect))
+            h_geo_rem(i) = h_geo_rem(i) - h_heated
+            heat_rem(i) = heat_rem(i) - heat_avail
+          endif
+
+          if (heat_avail > 0.0) then
+            dTemp = heat_avail / (h(i,j,k) + H_neglect)
+            tv%T(i,j,k) = tv%T(i,j,k) + dTemp
+          endif
+
+          if (heat_rem(i) <= 0.0) then
+            do_i(i) = .false. ; num_left = num_left-1
+            ! For efficiency, uncomment these?
+            ! if ((i==isj) .and. (num_left > 0)) then ; do i2=isj+1,iej ; if (do_i(i2)) then
+            !   isj = i2 ; exit ! Set the new starting value.
+            ! endif ; enddo ; endif
+            ! if ((i==iej) .and. (num_left > 0)) then ; do i2=iej-1,isj,-1 ; if (do_i(i2)) then
+            !   iej = i2 ; exit ! Set the new ending value.
+            ! endif ; enddo ; endif
+          endif
+        endif
+
+        !### In this case, calculate dTemp_dT first, then heating for efficiency, but diagnostics
+        !    will be changed at roundoff.
+        ! Calculate heat tendency due to addition and transfer of internal heat
+        if (CS%id_internal_heat_heat_tendency > 0) then
+          work_3d(i,j,k) = ((GV%H_to_RZ*tv%C_p) * Idt) * (h(i,j,k) * tv%T(i,j,k) - h(i,j,k) * T_old(i,j,k))
+        endif
+
+      endif ; enddo
+      if (num_left <= 0) exit
+    enddo ! k-loop
+
+    if (associated(tv%internal_heat)) then ; do i=is,ie
+      tv%internal_heat(i,j) = tv%internal_heat(i,j) + GV%H_to_RZ * &
+           (G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp)) - heat_rem(i))
+    enddo ; endif
+  enddo ! j-loop
+
+  ! Post diagnostic of 3D tendencies (heat, temperature, and thickness) due to internal heat
+  if (CS%id_internal_heat_heat_tendency > 0) then
+    call post_data(CS%id_internal_heat_heat_tendency, work_3d, CS%diag, alt_h=h)
+  endif
+  if (CS%id_internal_heat_temp_tendency > 0) then
+    do j=js,je; do i=is,ie; do k=nz,1,-1
+      work_3d(i,j,k) = Idt * (tv%T(i,j,k) - T_old(i,j,k))
+    enddo; enddo; enddo
+    call post_data(CS%id_internal_heat_temp_tendency, work_3d, CS%diag, alt_h=h)
+  endif
+
+!  do i=is,ie ; do j=js,je
+!    resid(i,j) = tv%internal_heat(i,j) - resid(i,j) - GV%H_to_RZ * &
+!           (G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp)))
+!  enddo ; enddo
+
+end subroutine geothermal_in_place
 
 !> Initialize parameters and allocate memory associated with the geothermal heating module.
 subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS)
@@ -470,6 +639,7 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS)
         'internal_heat_temp_tendency', diag%axesTL, Time,              &
         'Temperature tendency (in 3D) due to internal (geothermal) sources', &
         'degC s-1', conversion=US%s_to_T, v_extensive=.true.)
+!### Do not do this if heating will be in place.
   CS%id_internal_heat_h_tendency=register_diag_field('ocean_model',    &
         'internal_heat_h_tendency', diag%axesTL, Time,                &
         'Thickness tendency (in 3D) due to internal (geothermal) sources', &
