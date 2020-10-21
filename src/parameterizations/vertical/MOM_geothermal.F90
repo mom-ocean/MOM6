@@ -399,7 +399,6 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
     heat_rem,  & ! remaining heat [H degC ~> m degC or kg degC m-2]
     h_geo_rem    ! remaining thickness to apply geothermal heating [H ~> m or kg m-2]
 
-
   real :: Angstrom, H_neglect  ! small thicknesses [H ~> m or kg m-2]
   real :: h_heated      ! thickness that is being heated [H ~> m or kg m-2]
   real :: heat_avail    ! heating available for the present layer [degC H ~> degC m or degC kg m-2]
@@ -544,7 +543,7 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
 end subroutine geothermal_in_place
 
 !> Initialize parameters and allocate memory associated with the geothermal heating module.
-subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS)
+subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS, useALEalgorithm)
   type(time_type), target, intent(in)    :: Time !< Current model time.
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
@@ -554,6 +553,8 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS)
   type(diag_ctrl), target, intent(inout) :: diag !< Structure used to regulate diagnostic output.
   type(geothermal_CS),     pointer       :: CS   !< Pointer pointing to the module control
                                                  !! structure.
+  logical,       optional, intent(in)    :: useALEalgorithm  !< logical for whether to use ALE remapping
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_geothermal"  ! module name
@@ -639,11 +640,13 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS)
         'internal_heat_temp_tendency', diag%axesTL, Time,              &
         'Temperature tendency (in 3D) due to internal (geothermal) sources', &
         'degC s-1', conversion=US%s_to_T, v_extensive=.true.)
-!### Do not do this if heating will be in place.
-  CS%id_internal_heat_h_tendency=register_diag_field('ocean_model',    &
+  if (present(useALEalgorithm)) then ; if (.not.useALEalgorithm) then
+    ! Do not offer this diagnostic if heating will be in place.
+    CS%id_internal_heat_h_tendency=register_diag_field('ocean_model',    &
         'internal_heat_h_tendency', diag%axesTL, Time,                &
         'Thickness tendency (in 3D) due to internal (geothermal) sources', &
         trim(thickness_units), conversion=GV%H_to_MKS*US%s_to_T, v_extensive=.true.)
+  endif ; endif
 
 end subroutine geothermal_init
 

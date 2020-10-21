@@ -442,7 +442,6 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 end subroutine diabatic
 
 
-
 !> Applies diabatic forcing and diapycnal mixing of temperature, salinity and other tracers for use
 !! with an ALE algorithm.  This version uses an older set of algorithms compared with diabatic_ALE.
 subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
@@ -489,7 +488,6 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     u_h,    &    ! zonal and meridional velocities at thickness points after
     v_h          ! entrainment [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    Rcv_ml, &   ! coordinate density of mixed layer, used for applying sponges
     SkinBuoyFlux! 2d surface buoyancy flux [Z2 T-3 ~> m2 s-3], used by ePBL
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: h_diag                ! diagnostic array for thickness
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: temp_diag             ! diagnostic array for temp
@@ -545,14 +543,13 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
   integer :: dir_flag     ! An integer encoding the directions in which to do halo updates.
   logical :: showCallTree ! If true, show the call tree
-  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb, m, halo
+  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, m
 
   integer :: ig, jg      ! global indices for testing testing itide point source (BDM)
   real :: Kd_add_here    ! An added diffusivity [Z2 T-1 ~> m2 s-1].
 
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  nkmb = GV%nk_rho_varies
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect*h_neglect
   Kd_heat(:,:,:) = 0.0 ; Kd_salt(:,:,:) = 0.0
 
@@ -563,12 +560,6 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   call enable_averages(dt, Time_end, CS%diag)
 
   if (CS%use_geothermal) then
-    halo = CS%halo_TS_diff
-    !$OMP parallel do default(shared)
-    do k=1,nz ; do j=js-halo,je+halo ; do i=is-halo,ie+halo
-      h_orig(i,j,k) = h(i,j,k) ; eatr(i,j,k) = 0.0 ; ebtr(i,j,k) = 0.0
-    enddo ; enddo ; enddo
-
     call cpu_clock_begin(id_clock_geothermal)
     call geothermal(h, tv, dt, G, GV, US, CS%geothermal_CSp, halo=CS%halo_TS_diff)
     call cpu_clock_end(id_clock_geothermal)
@@ -590,11 +581,10 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
   if (CS%use_kappa_shear .or. CS%use_CVMix_shear) then
     if (CS%use_geothermal) then
-      call find_uv_at_h(u, v, h_orig, u_h, v_h, G, GV, US, eatr, ebtr)
-      if (CS%debug) then
-        call hchksum(eatr, "after find_uv_at_h eatr", G%HI, scale=GV%H_to_m)
-        call hchksum(ebtr, "after find_uv_at_h ebtr", G%HI, scale=GV%H_to_m)
-      endif
+      ! The presence of eatr and ebtr causes find_uv_at_h to use a tridiagonal solver,
+      ! which changes answers at the level of roundoff because ((A*B / A) /= B).
+      eatr(:,:,:) = 0.0 ; ebtr(:,:,:) = 0.0
+      call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, eatr, ebtr)
     else
       call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
     endif
@@ -1071,7 +1061,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     enddo
 
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-    ! so hold should be h_orig
+    ! so h_prebound is used for the old thickness.
     call call_tracer_column_fns(h_prebound, h, ea_s, eb_s, fluxes, Hml, dt, G, GV, US, tv, &
                               CS%optics, CS%tracer_flow_CSp, CS%debug, &
                               evap_CFL_limit = CS%evap_CFL_limit, &
@@ -1211,7 +1201,6 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
                  ! one time step  [H ~> m or kg m-2]
     eb_t,     &  ! amount of fluid entrained from the layer below within
                  ! one time step  [H ~> m or kg m-2]
-    h_orig, &    ! initial layer thicknesses [H ~> m or kg m-2]
     h_prebound, & ! initial layer thicknesses [H ~> m or kg m-2]
     dSV_dT, &    ! The partial derivative of specific volume with temperature [R-1 degC-1 ~> m3 kg-1 degC-1]
     dSV_dS, &    ! The partial derivative of specific volume with salinity [R-1 ppt-1 ~> m3 kg-1 ppt-1].
@@ -1219,7 +1208,6 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     u_h,    &    ! zonal and meridional velocities at thickness points after
     v_h          ! entrainment [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    Rcv_ml, &   ! coordinate density of mixed layer, used for applying sponges
     SkinBuoyFlux! 2d surface buoyancy flux [Z2 T-3 ~> m2 s-3], used by ePBL
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: h_diag                ! diagnostic array for thickness
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: temp_diag             ! diagnostic array for temp
@@ -1275,11 +1263,10 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
   integer :: dir_flag     ! An integer encoding the directions in which to do halo updates.
   logical :: showCallTree ! If true, show the call tree
-  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb, m, halo
+  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, m
 
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  nkmb = GV%nk_rho_varies
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect*h_neglect
   Kd_heat(:,:,:) = 0.0 ; Kd_salt(:,:,:) = 0.0
   ea_s(:,:,:) = 0.0; eb_s(:,:,:) = 0.0; ea_t(:,:,:) = 0.0; eb_t(:,:,:) = 0.0
@@ -1294,12 +1281,6 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   call enable_averages(dt, Time_end, CS%diag)
 
   if (CS%use_geothermal) then
-    halo = CS%halo_TS_diff
-    !$OMP parallel do default(shared)
-    do k=1,nz ; do j=js-halo,je+halo ; do i=is-halo,ie+halo
-      h_orig(i,j,k) = h(i,j,k) ; eatr(i,j,k) = 0.0 ; ebtr(i,j,k) = 0.0
-    enddo ; enddo ; enddo
-
     call cpu_clock_begin(id_clock_geothermal)
     call geothermal(h, tv, dt, G, GV, US, CS%geothermal_CSp, halo=CS%halo_TS_diff)
     call cpu_clock_end(id_clock_geothermal)
@@ -1321,11 +1302,10 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
   if (CS%use_kappa_shear .or. CS%use_CVMix_shear) then
     if (CS%use_geothermal) then
-      call find_uv_at_h(u, v, h_orig, u_h, v_h, G, GV, US, eatr, ebtr)
-      if (CS%debug) then
-        call hchksum(eatr, "after find_uv_at_h eatr", G%HI, scale=GV%H_to_m)
-        call hchksum(ebtr, "after find_uv_at_h ebtr", G%HI, scale=GV%H_to_m)
-      endif
+      ! The presence of eatr and ebtr causes find_uv_at_h to use a tridiagonal solver,
+      ! which changes answers at the level of roundoff because ((A*B / A) /= B).
+      eatr(:,:,:) = 0.0 ; ebtr(:,:,:) = 0.0
+      call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, eatr, ebtr)
     else
       call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
     endif
@@ -1753,7 +1733,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     enddo
 
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-    ! so h_prebound should be h_orig
+    ! so use h_prebound as the old value.
     call call_tracer_column_fns(h_prebound, h, ea_s, eb_s, fluxes, Hml, dt, G, GV, US, tv, &
                               CS%optics, CS%tracer_flow_CSp, CS%debug, &
                               evap_CFL_limit = CS%evap_CFL_limit, &
@@ -3701,7 +3681,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 
   ! initialize the geothermal heating module
   if (CS%use_geothermal) &
-    call geothermal_init(Time, G, GV, US, param_file, diag, CS%geothermal_CSp)
+    call geothermal_init(Time, G, GV, US, param_file, diag, CS%geothermal_CSp, useALEalgorithm)
 
   ! initialize module for internal tide induced mixing
   if (CS%use_int_tides) then
