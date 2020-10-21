@@ -152,7 +152,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
 
   ! The following is needed to set one of the choices of vertical background mixing
 
-  ! BULKMIXEDLAYER is not always defined (e.g., CM2G63L), so the following by pass
+  ! BULKMIXEDLAYER is not always defined (e.g., CM2G63L), so the following line by passes
   ! the need to include BULKMIXEDLAYER in MOM_input
   CS%bulkmixedlayer = (GV%nkml > 0)
   if (CS%bulkmixedlayer) then
@@ -161,8 +161,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
     if (CS%Kdml>0.) call MOM_error(FATAL, &
                  "bkgnd_mixing_init: KDML cannot be set when using"// &
                  "bulk mixed layer.")
-    CS%Kdml = CS%Kd ! This is not used with a bulk mixed layer, but also
-                    ! cannot be a NaN.
+    CS%Kdml = CS%Kd ! This is not used with a bulk mixed layer, but also cannot be a NaN.
   else
     call get_param(param_file, mdl, "KDML", CS%Kdml, &
                  "If BULKMIXEDLAYER is false, KDML is the elevated "//&
@@ -345,30 +344,6 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
   Kd_lay(:,:) = CS%Kd
   Kv_bkgnd(:,:) = 0.0
 
-  if (.not. (CS%Bryan_Lewis_diffusivity .or. CS%horiz_varying_background)) then
-    do i=is,ie
-      Kd_sfc(i) = CS%Kd
-    enddo
-
-    if (CS%Henyey_IGW_background) then
-      I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
-      do i=is,ie
-        abs_sinlat = abs(sin(G%geoLatT(i,j)*deg_to_rad))
-        Kd_sfc(i) = max(CS%Kd_min, CS%Kd * &
-             ((abs_sinlat * invcosh(CS%N0_2Omega / max(min_sinlat, abs_sinlat))) * I_x30) )
-      enddo
-    endif
-    if (CS%Kd_tanh_lat_fn) then
-      do i=is,ie
-        !   The transition latitude and latitude range are hard-scaled here, since
-        ! this is not really intended for wide-spread use, but rather for
-        ! comparison with CM2M / CM2.1 settings.
-        Kd_sfc(i) = max(CS%Kd_min, CS%Kd * (1.0 + &
-            CS%Kd_tanh_lat_scale * 0.5*tanh((abs(G%geoLatT(i,j)) - 35.0)/5.0) ))
-      enddo
-    endif
-  endif
-
   ! Set up the background diffusivity.
   if (CS%Bryan_Lewis_diffusivity) then
 
@@ -445,22 +420,6 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
       Kd_lay(i,k) = Kd_int(i,1)
     enddo ; enddo
 
-  elseif ((.not.CS%bulkmixedlayer) .and. (CS%Kd /= CS%Kdml)) then
-    I_Hmix = 1.0 / (CS%Hmix + GV%H_subroundoff*GV%H_to_Z)
-    do i=is,ie ; depth(i) = 0.0 ; enddo
-    do k=1,nz ; do i=is,ie
-      depth_c = depth(i) + 0.5*GV%H_to_Z*h(i,j,k)
-!### These two lines should update Kd_int, not Kd_lay, but correcting this could change answers.
-      if (depth_c <= CS%Hmix) then ; Kd_int(i,K) = CS%Kdml
-      elseif (depth_c >= 2.0*CS%Hmix) then ; Kd_int(i,K) = Kd_sfc(i)
-      else
-        Kd_lay(i,k) = ((Kd_sfc(i) - CS%Kdml) * I_Hmix) * depth_c + &
-                        (2.0*CS%Kdml - Kd_sfc(i))
-      endif
-
-      depth(i) = depth(i) + GV%H_to_Z*h(i,j,k)
-    enddo ; enddo
-
   elseif (CS%Henyey_IGW_background_new) then
     I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
     I_2Omega = 0.5 / CS%omega
@@ -471,23 +430,74 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
       Kd_lay(i,k) = max(CS%Kd_min, CS%Kd * &
            ((abs_sinlat * invcosh(N_2Omega/abs_sinlat)) * I_x30)*N02_N2)
     enddo ; enddo
-
-  else
-    do k=1,nz ; do i=is,ie
-      Kd_lay(i,k) = Kd_sfc(i)
-    enddo ; enddo
-  endif
-
-  ! Update Kd_int and Kv_bkgnd, which might be just used for diagnostic purposes
-  if (.not. (CS%Bryan_Lewis_diffusivity .or. CS%horiz_varying_background)) then
+    ! Update Kd_int and Kv_bkgnd, based on Kd_lay.  These might be just used for diagnostic purposes.
     do i=is,ie
       Kd_int(i,1) = 0.0; Kv_bkgnd(i,1) = 0.0
       Kd_int(i,nz+1) = 0.0; Kv_bkgnd(i,nz+1) = 0.0
-      do K=2,nz
-        Kd_int(i,K) = 0.5*(Kd_lay(i,k-1) + Kd_lay(i,k))
-        Kv_bkgnd(i,K) = Kd_int(i,K) * CS%prandtl_bkgnd
-      enddo
     enddo
+    do K=2,nz ; do i=is,ie
+      Kd_int(i,K) = 0.5*(Kd_lay(i,k-1) + Kd_lay(i,k))
+      Kv_bkgnd(i,K) = Kd_int(i,K) * CS%prandtl_bkgnd
+    enddo ; enddo
+  else
+    ! Set a potentially spatially varying surface value of diffusivity.
+    if (CS%Henyey_IGW_background) then
+      I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
+      do i=is,ie
+        abs_sinlat = abs(sin(G%geoLatT(i,j)*deg_to_rad))
+        Kd_sfc(i) = max(CS%Kd_min, CS%Kd * &
+             ((abs_sinlat * invcosh(CS%N0_2Omega / max(min_sinlat, abs_sinlat))) * I_x30) )
+      enddo
+    elseif (CS%Kd_tanh_lat_fn) then
+      do i=is,ie
+        !   The transition latitude and latitude range are hard-scaled here, since
+        ! this is not really intended for wide-spread use, but rather for
+        ! comparison with CM2M / CM2.1 settings.
+        Kd_sfc(i) = max(CS%Kd_min, CS%Kd * (1.0 + &
+            CS%Kd_tanh_lat_scale * 0.5*tanh((abs(G%geoLatT(i,j)) - 35.0)/5.0) ))
+      enddo
+    else ! Use a spatially constant surface value.
+      do i=is,ie
+        Kd_sfc(i) = CS%Kd
+      enddo
+    endif
+
+    ! Now set background diffusivies based on these surface values, possibly with vertical structure.
+    if ((.not.CS%bulkmixedlayer) .and. (CS%Kd /= CS%Kdml)) then
+      ! This is a crude way to put in a diffusive boundary layer without an explicit boundary
+      ! layer turbulence scheme.  It should not be used for any realistic ocean models.
+      I_Hmix = 1.0 / (CS%Hmix + GV%H_subroundoff*GV%H_to_Z)
+      do i=is,ie ; depth(i) = 0.0 ; enddo
+      do k=1,nz ; do i=is,ie
+        depth_c = depth(i) + 0.5*GV%H_to_Z*h(i,j,k)
+        !### These two lines should update Kd_lay, not Kd_int, but correcting them could change answers.
+        ! They were correctly working on the same variables until MOM6 commit 7a818716, which was
+        ! a part of PR#750 from March 26, 2018.  The fact that this bug was not detected when it
+        ! was introduced suggests that this code is not exercised very much.
+        if (depth_c <= CS%Hmix) then ; Kd_int(i,K) = CS%Kdml !### Should be Kd_lay(i,k) = CS%Kdml
+        elseif (depth_c >= 2.0*CS%Hmix) then ; Kd_int(i,K) = Kd_sfc(i) !### Kd_lay(i,k) = Kd_sfc(i)
+        else
+          Kd_lay(i,k) = ((Kd_sfc(i) - CS%Kdml) * I_Hmix) * depth_c + (2.0*CS%Kdml - Kd_sfc(i))
+        endif
+
+        depth(i) = depth(i) + GV%H_to_Z*h(i,j,k)
+      enddo ; enddo
+
+    else ! There is no vertical structure to the background diffusivity.
+      do k=1,nz ; do i=is,ie
+        Kd_lay(i,k) = Kd_sfc(i)
+      enddo ; enddo
+    endif
+
+    ! Update Kd_int and Kv_bkgnd, based on Kd_lay.  These might be just used for diagnostic purposes.
+    do i=is,ie
+      Kd_int(i,1) = 0.0; Kv_bkgnd(i,1) = 0.0
+      Kd_int(i,nz+1) = 0.0; Kv_bkgnd(i,nz+1) = 0.0
+    enddo
+    do K=2,nz ; do i=is,ie
+      Kd_int(i,K) = 0.5*(Kd_lay(i,k-1) + Kd_lay(i,k))
+      Kv_bkgnd(i,K) = Kd_int(i,K) * CS%prandtl_bkgnd
+    enddo ; enddo
   endif
 
 end subroutine calculate_bkgnd_mixing
