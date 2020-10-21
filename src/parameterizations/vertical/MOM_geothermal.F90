@@ -148,7 +148,7 @@ subroutine isopycnal_geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
   if (.not.associated(tv%T)) call MOM_error(FATAL, "MOM geothermal: "//&
       "Geothermal heating can only be applied if T & S are state variables.")
 
-!  do i=is,ie ; do j=js,je
+!  do j=js,je ; do i=is,ie
 !    resid(i,j) = tv%internal_heat(i,j)
 !  enddo ; enddo
 
@@ -363,13 +363,13 @@ subroutine isopycnal_geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
     call post_data(CS%id_internal_heat_temp_tendency, work_3d, CS%diag, alt_h=h_old)
   endif
   if (CS%id_internal_heat_h_tendency > 0) then
-    do j=js,je; do i=is,ie; do k=nz,1,-1
+    do k=1,nz ; do j=js,je ; do i=is,ie
       work_3d(i,j,k) = Idt * (h(i,j,k) - h_old(i,j,k))
-    enddo; enddo; enddo
+    enddo ; enddo ; enddo
     call post_data(CS%id_internal_heat_h_tendency, work_3d, CS%diag, alt_h=h_old)
   endif
 
-!  do i=is,ie ; do j=js,je
+!  do j=js,je ; do i=is,ie
 !    resid(i,j) = tv%internal_heat(i,j) - resid(i,j) - GV%H_to_RZ * &
 !           (G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp)))
 !  enddo ; enddo
@@ -390,8 +390,7 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
   real,                                     intent(in)    :: dt !< Time increment [T ~> s].
   type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
   type(geothermal_CS),                      pointer       :: CS !< The control structure returned by
-                                                                !! a previous call to
-                                                                !! geothermal_init.
+                                                                !! a previous call togeothermal_init.
   integer,                        optional, intent(in)    :: halo !< Halo width over which to work
 
   ! Local variables
@@ -400,23 +399,18 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
     h_geo_rem    ! remaining thickness to apply geothermal heating [H ~> m or kg m-2]
 
   real :: Angstrom, H_neglect  ! small thicknesses [H ~> m or kg m-2]
-  real :: h_heated      ! thickness that is being heated [H ~> m or kg m-2]
-  real :: heat_avail    ! heating available for the present layer [degC H ~> degC m or degC kg m-2]
+  real :: heat_here     ! heating applied to the present layer [degC H ~> degC m or degC kg m-2]
   real :: dTemp         ! temperature increase in a layer [degC]
   real :: Irho_cp       ! inverse of heat capacity per unit layer volume
                         ! [degC H Q-1 R-1 Z-1 ~> degC m3 J-1 or degC kg J-1]
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: T_old   ! Temperature of each layer
-                                                      ! before any heat is added,
-                                                      ! for diagnostics [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: work_3d ! Scratch variable used to
-                                                      ! calculate change in heat
-                                                      ! due to geothermal
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+    dTdt_diag           ! Diagnostic of temperature tendency [degC T-1 ~> degC s-1] which might be
+                        ! converted into a layer-integrated heat tendency [Q R Z T-1 ~> W m-2]
   real :: Idt           ! inverse of the timestep [T-1 ~> s-1]
-
-  logical :: do_i(SZI_(G))
-  logical :: compute_T_old
-  integer :: i, j, k, is, ie, js, je, nz, i2, isj, iej, num_left
+  logical :: do_any     ! True if there is more to be done on the current j-row.
+  logical :: calc_diags ! True if diagnostic tendencies are needed.
+  integer :: i, j, k, is, ie, js, je, nz, i2, isj, iej
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   if (present(halo)) then
@@ -440,82 +434,54 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
 !  enddo ; enddo
 
   ! Conditionals for tracking diagnostic depdendencies
-  compute_T_old = (CS%id_internal_heat_heat_tendency > 0) .or. (CS%id_internal_heat_temp_tendency > 0)
+  calc_diags = (CS%id_internal_heat_heat_tendency > 0) .or. (CS%id_internal_heat_temp_tendency > 0)
 
-  if (CS%id_internal_heat_heat_tendency > 0) work_3d(:,:,:) = 0.0
-  if (compute_T_old) T_old(:,:,:) = 0.0
+  if (calc_diags) dTdt_diag(:,:,:) = 0.0
 
-  !$OMP parallel do default(none) shared(is,ie,js,je,G,GV,US,CS,dt,Irho_cp,tv,h,Angstrom,&
-  !$OMP                                  nz,H_neglect,compute_T_old,T_old,work_3d,Idt) &
-  !$OMP                          private(heat_rem,do_i,h_geo_rem,num_left,&
-  !$OMP                                  isj,iej,h_heated,heat_avail,dTemp)
+  !$OMP parallel do default(shared) private(heat_rem,do_any,h_geo_rem,isj,iej,heat_here,dTemp)
   do j=js,je
     ! Only work on columns that are being heated, and heat the near-bottom water.
 
     ! If there is not enough mass in the ocean, pass some of the heat up
     ! from the ocean via the frazil field?
 
-    num_left = 0
+    do_any = .false.
     do i=is,ie
       heat_rem(i) = G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp))
-      do_i(i) = (heat_rem(i) > 0.0)
-      if (do_i(i)) num_left = num_left + 1
+      if (heat_rem(i) > 0.0) do_any = .true.
       h_geo_rem(i) = CS%Geothermal_thick
     enddo
-    if (num_left == 0) cycle
+    if (.not.do_any) cycle
 
     ! Find the first and last columns that need to be worked on.
-    isj = ie+1 ; do i=is,ie ; if (do_i(i)) then ; isj = i ; exit ; endif ; enddo
-    iej = is-1 ; do i=ie,is,-1 ; if (do_i(i)) then ; iej = i ; exit ; endif ; enddo
+    isj = ie+1 ; do i=is,ie ; if (heat_rem(i) > 0.0) then ; isj = i ; exit ; endif ; enddo
+    iej = is-1 ; do i=ie,is,-1 ; if (heat_rem(i) > 0.0) then ; iej = i ; exit ; endif ; enddo
 
     do k=nz,1,-1
-      do i=isj,iej ; if (do_i(i)) then
-
-        ! Save temperature and thickness before any changes are made (for diagnostic)
-        if (compute_T_old) then
-          T_old(i,j,k) = tv%T(i,j,k)
-        endif
-
-        if (h(i,j,k) > Angstrom) then
-          ! Simply heat the layer; convective adjustment occurs later if necessary.
+      do_any = .false.
+      do i=isj,iej
+        if ((heat_rem(i) > 0.0) .and. (h(i,j,k) > Angstrom)) then
+          ! Apply some or all of the remaining heat to this layer.
+          ! Convective adjustment occurs outside of this module if necessary.
           if ((h(i,j,k)-Angstrom) >= h_geo_rem(i)) then
-            h_heated = h_geo_rem(i)
-            heat_avail = heat_rem(i)
+            heat_here = heat_rem(i)
             h_geo_rem(i) = 0.0
             heat_rem(i) = 0.0
           else
-            h_heated = (h(i,j,k)-Angstrom)
-            heat_avail = heat_rem(i) * (h_heated / (h_geo_rem(i) + H_neglect))
-            h_geo_rem(i) = h_geo_rem(i) - h_heated
-            heat_rem(i) = heat_rem(i) - heat_avail
+            heat_here = heat_rem(i) * ((h(i,j,k)-Angstrom) / (h_geo_rem(i) + H_neglect))
+            h_geo_rem(i) = h_geo_rem(i) - (h(i,j,k)-Angstrom)
+            heat_rem(i) = heat_rem(i) - heat_here
           endif
 
-          if (heat_avail > 0.0) then
-            dTemp = heat_avail / (h(i,j,k) + H_neglect)
-            tv%T(i,j,k) = tv%T(i,j,k) + dTemp
-          endif
-
-          if (heat_rem(i) <= 0.0) then
-            do_i(i) = .false. ; num_left = num_left-1
-            ! For efficiency, uncomment these?
-            ! if ((i==isj) .and. (num_left > 0)) then ; do i2=isj+1,iej ; if (do_i(i2)) then
-            !   isj = i2 ; exit ! Set the new starting value.
-            ! endif ; enddo ; endif
-            ! if ((i==iej) .and. (num_left > 0)) then ; do i2=iej-1,isj,-1 ; if (do_i(i2)) then
-            !   iej = i2 ; exit ! Set the new ending value.
-            ! endif ; enddo ; endif
-          endif
+          dTemp = heat_here / (h(i,j,k) + H_neglect)
+          tv%T(i,j,k) = tv%T(i,j,k) + dTemp
+          if (calc_diags) dTdt_diag(i,j,k) = dTemp * Idt
         endif
 
-        !### In this case, calculate dTemp_dT first, then heating for efficiency, but diagnostics
-        !    will be changed at roundoff.
-        ! Calculate heat tendency due to addition and transfer of internal heat
-        if (CS%id_internal_heat_heat_tendency > 0) then
-          work_3d(i,j,k) = ((GV%H_to_RZ*tv%C_p) * Idt) * (h(i,j,k) * tv%T(i,j,k) - h(i,j,k) * T_old(i,j,k))
-        endif
+        if (heat_rem(i) > 0.0) do_any= .true.
+      enddo
 
-      endif ; enddo
-      if (num_left <= 0) exit
+      if (.not.do_any) exit
     enddo ! k-loop
 
     if (associated(tv%internal_heat)) then ; do i=is,ie
@@ -524,18 +490,20 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
     enddo ; endif
   enddo ! j-loop
 
-  ! Post diagnostic of 3D tendencies (heat, temperature, and thickness) due to internal heat
-  if (CS%id_internal_heat_heat_tendency > 0) then
-    call post_data(CS%id_internal_heat_heat_tendency, work_3d, CS%diag, alt_h=h)
-  endif
+  ! Post diagnostics of 3D tendencies of heat and temperature due to geothermal heat
   if (CS%id_internal_heat_temp_tendency > 0) then
-    do j=js,je; do i=is,ie; do k=nz,1,-1
-      work_3d(i,j,k) = Idt * (tv%T(i,j,k) - T_old(i,j,k))
-    enddo; enddo; enddo
-    call post_data(CS%id_internal_heat_temp_tendency, work_3d, CS%diag, alt_h=h)
+    call post_data(CS%id_internal_heat_temp_tendency, dTdt_diag, CS%diag, alt_h=h)
+  endif
+  if (CS%id_internal_heat_heat_tendency > 0) then
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      ! Dangerously reuse dTdt_diag for a related variable with different units, going from
+      ! units of [degC T-1 ~> degC s-1] to units of [Q R Z T-1 ~> W m-2]
+      dTdt_diag(i,j,k) = (GV%H_to_RZ*tv%C_p) * (h(i,j,k) * dTdt_diag(i,j,k))
+    enddo ; enddo ; enddo
+    call post_data(CS%id_internal_heat_heat_tendency, dTdt_diag, CS%diag, alt_h=h)
   endif
 
-!  do i=is,ie ; do j=js,je
+!  do j=js,je ; do i=is,ie
 !    resid(i,j) = tv%internal_heat(i,j) - resid(i,j) - GV%H_to_RZ * &
 !           (G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp)))
 !  enddo ; enddo
