@@ -117,6 +117,8 @@ type, public:: diabatic_CS; private
   logical :: ePBL_is_additive        !< If true, the diffusivity from ePBL is added to all
                                      !! other diffusivities. Otherwise, the larger of kappa-
                                      !! shear and ePBL diffusivities are used.
+  real    :: ePBL_Prandtl            !< The Prandtl number used by ePBL to convert vertical
+                                     !! diffusivities into viscosities.
   integer :: nMode = 1               !< Number of baroclinic modes to consider
   real    :: uniform_test_cg         !< Uniform group velocity of internal tide
                                      !! for testing internal tides [L T-1 ~> m s-1]
@@ -825,13 +827,12 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
     ! Augment the diffusivities and viscosity due to those diagnosed in energetic_PBL.
     do K=2,nz ; do j=js,je ; do i=is,ie
-      !### These expressions assume a Prandtl number of 1.
       if (CS%ePBL_is_additive) then
         Kd_add_here = Kd_ePBL(i,j,K)
-        visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + Kd_ePBL(i,j,K)
+        visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + CS%ePBL_Prandtl*Kd_ePBL(i,j,K)
       else
         Kd_add_here = max(Kd_ePBL(i,j,K) - visc%Kd_shear(i,j,K), 0.0)
-        visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), Kd_ePBL(i,j,K))
+        visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), CS%ePBL_Prandtl*Kd_ePBL(i,j,K))
       endif
 
       Ent_int = Kd_add_here * (GV%Z_to_H**2 * dt) / &
@@ -1512,13 +1513,12 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
     ! Augment the diffusivities and viscosity due to those diagnosed in energetic_PBL.
     do K=2,nz ; do j=js,je ; do i=is,ie
-      !### These expressions assume a Prandtl number of 1.
       if (CS%ePBL_is_additive) then
         Kd_add_here = Kd_ePBL(i,j,K)
-        visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + Kd_ePBL(i,j,K)
+        visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + CS%ePBL_Prandtl*Kd_ePBL(i,j,K)
       else
         Kd_add_here = max(Kd_ePBL(i,j,K) - visc%Kd_shear(i,j,K), 0.0)
-        visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), Kd_ePBL(i,j,K))
+        visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), CS%ePBL_Prandtl*Kd_ePBL(i,j,K))
       endif
 
       Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_add_here
@@ -3223,6 +3223,9 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
                  "If true, the diffusivity from ePBL is added to all "//&
                  "other diffusivities. Otherwise, the larger of kappa-shear "//&
                  "and ePBL diffusivities are used.", default=.true.)
+  call get_param(param_file, mdl, "PRANDTL_EPBL", CS%ePBL_Prandtl, &
+                 "The Prandtl number used by ePBL to convert vertical diffusivities into "//&
+                 "viscosities.", default=1.0, units="nondim", do_not_log=.not.CS%use_energetic_PBL)
   call get_param(param_file, mdl, "DOUBLE_DIFFUSION", differentialDiffusion, &
                  "If true, apply parameterization of double-diffusion.", &
                  default=.false. )
