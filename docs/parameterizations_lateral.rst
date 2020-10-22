@@ -20,6 +20,8 @@ scaling.
 A model of sub-grid scale Mesoscale Eddy Kinetic Energy (MEKE) is implement in MOM_MEKE and the associated diffusivity added in MOM_thickness_diffuse.
 See :cite:`jansen2015` and :cite:`marshall2010`.
 
+   :ref:`namespacemom__meke_1section_MEKE`
+
 Backscatter
 -----------
 

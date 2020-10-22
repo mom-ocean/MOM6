@@ -810,7 +810,8 @@ INPUT                  = ../src \
                          ../src/ALE/MOM_ALE.F90 \
                          ../src/equation_of_state/MOM_EOS.F90 \
                          ../src/framework/MOM_unit_scaling.F90 \
-                         ../src/ice_shelf/MOM_ice_shelf.F90
+                         ../src/ice_shelf/MOM_ice_shelf.F90 \
+                         ../src/parameterizations/lateral/MOM_MEKE.F90
 
 # Basic testing units below
 
