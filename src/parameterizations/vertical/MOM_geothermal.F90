@@ -161,14 +161,17 @@ subroutine isopycnal_geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
                   .or. CS%id_internal_heat_temp_tendency > 0
 
   if (CS%id_internal_heat_heat_tendency > 0) work_3d(:,:,:) = 0.0
-  if (compute_h_old) h_old(:,:,:) = 0.0
-  if (compute_T_old) T_old(:,:,:) = 0.0
+
+  if (compute_h_old .or. compute_T_old) then ; do k=1,nz ; do j=js,je ; do i=is,ie
+    ! Save temperature and thickness before any changes are made (for diagnostics)
+    h_old(i,j,k) = h(i,j,k)
+    T_old(i,j,k) = tv%T(i,j,k)
+  enddo ; enddo ; enddo ; endif
 
 !$OMP parallel do default(none) shared(is,ie,js,je,G,GV,US,CS,dt,Irho_cp,nkmb,tv, &
 !$OMP                                  p_Ref,h,Angstrom,nz,H_neglect,eb,          &
-!$OMP                                  compute_h_old,compute_T_old,h_old,T_old,   &
-!$OMP                                  work_3d,Idt)                               &
-!$OMP                          private(heat_rem,do_i,h_geo_rem,num_left, &
+!$OMP                                  h_old,T_old,work_3d,Idt)                   &
+!$OMP                          private(heat_rem,do_i,h_geo_rem,num_left,          &
 !$OMP                                  isj,iej,Rcv_BL,h_heated,heat_avail,k_tgt,  &
 !$OMP                                  Rcv_tgt,Rcv,dRcv_dT,T2,S2,dRcv_dT_,        &
 !$OMP                                  dRcv_dS_,heat_in_place,heat_trans,         &
@@ -212,14 +215,6 @@ subroutine isopycnal_geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
 
     do k=nz,1,-1
       do i=isj,iej ; if (do_i(i)) then
-
-        ! Save temperature and thickness before any changes are made (for diagnostic)
-        if (compute_h_old) then
-          h_old(i,j,k) = h(i,j,k)
-        endif
-        if (compute_T_old) then
-          T_old(i,j,k) = tv%T(i,j,k)
-        endif
 
         if (h(i,j,k) > Angstrom) then
           if ((h(i,j,k)-Angstrom) >= h_geo_rem(i)) then
@@ -357,7 +352,7 @@ subroutine isopycnal_geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
     call post_data(CS%id_internal_heat_heat_tendency, work_3d, CS%diag, alt_h=h_old)
   endif
   if (CS%id_internal_heat_temp_tendency > 0) then
-    do j=js,je; do i=is,ie; do k=nz,1,-1
+    do k=1,nz ; do j=js,je ; do i=is,ie
       work_3d(i,j,k) = Idt * (tv%T(i,j,k) - T_old(i,j,k))
     enddo; enddo; enddo
     call post_data(CS%id_internal_heat_temp_tendency, work_3d, CS%diag, alt_h=h_old)
