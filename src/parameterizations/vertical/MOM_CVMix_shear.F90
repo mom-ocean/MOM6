@@ -221,8 +221,11 @@ logical function CVMix_shear_init(Time, G, GV, US, param_file, diag, CS)
   allocate(CS)
 
 ! Set default, read and log parameters
+  call get_param(param_file, mdl, "USE_LMD94", CS%use_LMD94, default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "USE_PP81", CS%use_PP81, default=.false., do_not_log=.true.)
   call log_version(param_file, mdl, version, &
-    "Parameterization of shear-driven turbulence via CVMix (various options)")
+           "Parameterization of shear-driven turbulence via CVMix (various options)", &
+            all_default=.not.(CS%use_PP81.or.CS%use_LMD94))
   call get_param(param_file, mdl, "USE_LMD94", CS%use_LMD94, &
                  "If true, use the Large-McWilliams-Doney (JGR 1994) "//&
                  "shear mixing parameterization.", default=.false.)

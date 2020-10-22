@@ -118,10 +118,12 @@ subroutine dense_water_initialize_TS(G, GV, param_file, eqn_of_state, T, S, h, j
   call get_param(param_file, mdl, "DENSE_WATER_MLD", mld, &
        "Depth of unstratified mixed layer as a fraction of the water column.", &
        units="nondim", default=default_mld, do_not_log=just_read)
-
-  call get_param(param_file, mdl, "S_REF", S_ref, do_not_log=.true.)
-  call get_param(param_file, mdl, "S_RANGE", S_range, do_not_log=.true.)
-  call get_param(param_file, mdl, "T_REF", T_ref, do_not_log=.true.)
+  call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', &
+                 default=35.0, units='1e-3', do_not_log=just_read)
+  call get_param(param_file, mdl,"T_REF", T_ref, 'Reference temperature', units='degC', &
+                fail_if_missing=.not.just_read, do_not_log=just_read)
+  call get_param(param_file, mdl,"S_RANGE", S_range, 'Initial salinity range', &
+                units='1e-3', default=2.0, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -195,7 +197,7 @@ subroutine dense_water_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CS
   call get_param(param_file, mdl, "DENSE_WATER_MLD", mld, default=default_mld, do_not_log=.true.)
   call get_param(param_file, mdl, "DENSE_WATER_SILL_HEIGHT", sill_height, default=default_sill, do_not_log=.true.)
 
-  call get_param(param_file, mdl, "S_REF", S_ref, do_not_log=.true.)
+  call get_param(param_file, mdl, "S_REF", S_ref, default=35.0, do_not_log=.true.)
   call get_param(param_file, mdl, "S_RANGE", S_range, do_not_log=.true.)
   call get_param(param_file, mdl, "T_REF", T_ref, do_not_log=.true.)
 
