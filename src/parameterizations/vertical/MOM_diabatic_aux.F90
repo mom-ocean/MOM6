@@ -31,7 +31,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public diabatic_aux_init, diabatic_aux_end
-public make_frazil, adjust_salt, insert_brine, differential_diffuse_T_S, triDiagTS
+public make_frazil, adjust_salt, differential_diffuse_T_S, triDiagTS
 public find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut, set_pen_shortwave
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
@@ -195,14 +195,14 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
           endif
 
           hc = (tv%C_p*GV%H_to_RZ) * h(i,j,k)
-          if (h(i,j,k) <= 10.0*GV%Angstrom_H) then
+          if (h(i,j,k) <= 10.0*(GV%Angstrom_H + GV%H_subroundoff)) then
             ! Very thin layers should not be cooled by the frazil flux.
             if (tv%T(i,j,k) < T_freeze(i)) then
               fraz_col(i) = fraz_col(i) + hc * (T_freeze(i) - tv%T(i,j,k))
               tv%T(i,j,k) = T_freeze(i)
             endif
-          else
-            if (fraz_col(i) + hc * (T_freeze(i) - tv%T(i,j,k)) <= 0.0) then
+          elseif ((fraz_col(i) > 0.0) .or. (tv%T(i,j,k) < T_freeze(i))) then
+            if (fraz_col(i) + hc * (T_freeze(i) - tv%T(i,j,k)) < 0.0) then
               tv%T(i,j,k) = tv%T(i,j,k) - fraz_col(i) / hc
               fraz_col(i) = 0.0
             else
@@ -382,130 +382,6 @@ subroutine adjust_salt(h, tv, G, GV, CS, halo)
 !  call cpu_clock_end(id_clock_adjust_salt)
 
 end subroutine adjust_salt
-
-!> Insert salt from brine rejection into the first layer below the mixed layer
-!! which both contains mass and in which the change in layer density remains
-!! stable after the addition of salt via brine rejection.
-subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt, id_brine_lay)
-  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
-  type(thermo_var_ptrs),   intent(inout) :: tv   !< Structure containing pointers to any
-                                                 !! available thermodynamic fields
-  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
-  type(forcing),           intent(in)    :: fluxes !< A structure of thermodynamic surface fluxes
-  integer,                 intent(in)    :: nkmb !< The number of layers in the mixed and buffer layers
-  type(diabatic_aux_CS),   intent(in)    :: CS   !< The control structure returned by a previous
-                                                 !! call to diabatic_aux_init
-  real,                    intent(in)    :: dt   !< The thermodynamic time step [T ~> s].
-  integer,                 intent(in)    :: id_brine_lay !< The handle for a diagnostic of
-                                                 !! which layer receivees the brine.
-
-  ! local variables
-  real :: salt(SZI_(G)) ! The amount of salt rejected from sea ice [ppt R Z ~> gramSalt m-2]
-  real :: dzbr(SZI_(G)) ! Cumulative depth over which brine is distributed [H ~> m to kg m-2]
-  real :: inject_layer(SZI_(G),SZJ_(G)) ! diagnostic
-
-  real :: p_ref_cv(SZI_(G))       ! The pressure used to calculate the coordinate density [R L2 T-2 ~> Pa]
-  real :: T(SZI_(G),SZK_(G))
-  real :: S(SZI_(G),SZK_(G))
-  real :: h_2d(SZI_(G),SZK_(G))   ! A 2-d slice of h with a minimum thickness [H ~> m to kg m-2]
-  real :: Rcv(SZI_(G),SZK_(G))    ! The coordinate density [R ~> kg m-3]
-  real :: s_new,R_new,t0,scale, cdz
-  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
-  integer :: i, j, k, is, ie, js, je, nz, ks
-
-  real :: brine_dz      ! minumum thickness over which to distribute brine [H ~> m or kg m-2]
-  real, parameter :: s_max = 45.0    ! salinity bound
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-
-  if (.not.associated(fluxes%salt_flux)) return
-
-  !### Injecting the brine into a single layer with a prescribed thickness seems problematic,
-  ! because it is not convergent when resolution becomes very fine. I think that this whole
-  ! subroutine needs to be revisited.- RWH
-
-  p_ref_cv(:) = tv%P_Ref
-  EOSdom(:) = EOS_domain(G%HI)
-  brine_dz = 1.0*GV%m_to_H
-
-  inject_layer(:,:) = nz
-
-  do j=js,je
-
-    salt(:)=0.0 ; dzbr(:)=0.0
-
-    do i=is,ie ; if (G%mask2dT(i,j) > 0.) then
-      salt(i) = dt * (1000. * fluxes%salt_flux(i,j))
-    endif ; enddo
-
-    do k=1,nz
-      do i=is,ie
-        T(i,k) = tv%T(i,j,k) ; S(i,k) = tv%S(i,j,k)
-        ! avoid very small thickness
-        h_2d(i,k) = MAX(h(i,j,k), GV%Angstrom_H)
-      enddo
-
-      call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), tv%eqn_of_state, EOSdom)
-    enddo
-
-    ! First, try to find an interior layer where inserting all the salt
-    ! will not cause the layer to become statically unstable.
-    ! Bias towards deeper layers.
-
-    do k=nkmb+1,nz-1 ; do i=is,ie
-      if ((G%mask2dT(i,j) > 0.0) .and. dzbr(i) < brine_dz .and. salt(i) > 0.) then
-        s_new = S(i,k) + salt(i) / (GV%H_to_RZ * h_2d(i,k))
-        t0 = T(i,k)
-        call calculate_density(t0, s_new, tv%P_Ref, R_new, tv%eqn_of_state)
-        if (R_new < 0.5*(Rcv(i,k)+Rcv(i,k+1)) .and. s_new<s_max) then
-          dzbr(i) = dzbr(i)+h_2d(i,k)
-          inject_layer(i,j) = min(inject_layer(i,j),real(k))
-        endif
-      endif
-    enddo ; enddo
-
-    ! Then try to insert into buffer layers if they exist
-    do k=nkmb,GV%nkml+1,-1 ; do i=is,ie
-      if ((G%mask2dT(i,j) > 0.0) .and. dzbr(i) < brine_dz .and. salt(i) > 0.) then
-        dzbr(i) = dzbr(i) + h_2d(i,k)
-        inject_layer(i,j) = min(inject_layer(i,j), real(k))
-      endif
-    enddo ; enddo
-
-    ! finally if unable to find a layer to insert, then place in mixed layer
-
-    do k=1,GV%nkml ; do i=is,ie
-      if ((G%mask2dT(i,j) > 0.0) .and. dzbr(i) < brine_dz .and. salt(i) > 0.) then
-        dzbr(i) = dzbr(i) + h_2d(i,k)
-        inject_layer(i,j) = min(inject_layer(i,j), real(k))
-      endif
-    enddo ; enddo
-
-
-    do i=is,ie
-      if ((G%mask2dT(i,j) > 0.0) .and. salt(i) > 0.) then
-    !   if (dzbr(i)< brine_dz) call MOM_error(FATAL,"insert_brine: failed")
-        ks = inject_layer(i,j)
-        cdz = 0.0
-        do k=ks,nz
-          scale = h_2d(i,k) / dzbr(i)
-          cdz = cdz + h_2d(i,k)
-          !### I think that the logic of this line is wrong. Moving it down a line
-          ! would seem to make more sense. - RWH
-          if (cdz > brine_dz) exit
-          tv%S(i,j,k) = tv%S(i,j,k) + scale*salt(i) / (GV%H_to_RZ * h_2d(i,k))
-        enddo
-      endif
-    enddo
-
-  enddo
-
-  if (CS%id_brine_lay > 0) call post_data(CS%id_brine_lay, inject_layer, CS%diag)
-
-end subroutine insert_brine
 
 !> This is a simple tri-diagonal solver for T and S.
 !! "Simple" means it only uses arrays hold, ea and eb.
@@ -946,19 +822,18 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  ! Only apply forcing if fluxes%sw is associated.
-  if (.not.associated(fluxes%sw)) return
-
-#define _OLD_ALG_
   Idt = 1.0 / dt
 
   calculate_energetics = (present(cTKE) .and. present(dSV_dT) .and. present(dSV_dS))
   calculate_buoyancy = present(SkinBuoyFlux)
   if (calculate_buoyancy) SkinBuoyFlux(:,:) = 0.0
+  if (present(cTKE)) cTKE(:,:,:) = 0.0
   g_Hconv2 = (US%L_to_Z**2*GV%g_Earth * GV%H_to_RZ) * GV%H_to_RZ
   EOSdom(:) = EOS_domain(G%HI)
 
-  if (present(cTKE)) cTKE(:,:,:) = 0.0
+  ! Only apply forcing if fluxes%sw is associated.
+  if (.not.associated(fluxes%sw) .and. .not.calculate_energetics) return
+
   if (calculate_buoyancy) then
     SurfPressure(:) = 0.0
     GoRho = US%L_to_Z**2*GV%g_Earth / GV%Rho0
@@ -998,7 +873,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
       h2d(i,k) = h(i,j,k)
       T2d(i,k) = tv%T(i,j,k)
     enddo ; enddo
-    if (nsw>0) call extract_optics_slice(optics, j, G, GV, opacity=opacityBand, opacity_scale=(1.0/GV%m_to_H))
 
     if (calculate_energetics) then
       ! The partial derivatives of specific volume with temperature and
@@ -1021,6 +895,11 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
       enddo
       pen_TKE_2d(:,:) = 0.0
     endif
+
+    ! Nothing more is done on this j-slice if there is no buoyancy forcing.
+    if (.not.associated(fluxes%sw)) cycle
+
+    if (nsw>0) call extract_optics_slice(optics, j, G, GV, opacity=opacityBand, opacity_scale=(1.0/GV%m_to_H))
 
     ! The surface forcing is contained in the fluxes type.
     ! We aggregate the thermodynamic forcing for a time step into the following:

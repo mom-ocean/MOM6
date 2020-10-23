@@ -91,8 +91,7 @@ subroutine benchmark_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
                            intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
-  type(EOS_type),          pointer     :: eqn_of_state !< integer that selects the
-                                                      !! equation of state.
+  type(EOS_type),          pointer     :: eqn_of_state !< Equation of state structure
   real,                    intent(in)  :: P_Ref       !< The coordinate-density
                                                       !! reference pressure [R L2 T-2 ~> Pa].
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -217,16 +216,15 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, US, param_file, &
                eqn_of_state, P_Ref, just_read_params)
   type(ocean_grid_type),               intent(in)  :: G            !< The ocean's grid structure.
   type(verticalGrid_type),             intent(in)  :: GV           !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T      !< The potential temperature
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T       !< The potential temperature
                                                                    !! that is being initialized.
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S      !< The salinity that is being
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S       !< The salinity that is being
                                                                    !! initialized.
   type(unit_scale_type),                     intent(in)  :: US     !< A dimensional unit scaling type
   type(param_file_type),               intent(in)  :: param_file   !< A structure indicating the
                                                                    !! open file to parse for
                                                                    !! model parameter values.
-  type(EOS_type),                      pointer     :: eqn_of_state !< integer that selects the
-                                                                   !! equation of state.
+  type(EOS_type),                      pointer     :: eqn_of_state !< Equation of state structure
   real,                                intent(in)  :: P_Ref        !< The coordinate-density
                                                                    !! reference pressure [R L2 T-2 ~> Pa].
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will

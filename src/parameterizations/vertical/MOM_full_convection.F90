@@ -408,7 +408,7 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
   else
     do i=is,ie ; pres(i) = 0.0 ; enddo
   endif
-  EOSdom(:) = EOS_domain(G%HI)
+  EOSdom(:) = EOS_domain(G%HI, halo)
   call calculate_density_derivs(T_f(:,1), S_f(:,1), pres, dR_dT(:,1), dR_dS(:,1), tv%eqn_of_state, EOSdom)
   do i=is,ie ; pres(i) = pres(i) + h(i,j,1)*(GV%H_to_RZ*GV%g_Earth) ; enddo
   do K=2,nz

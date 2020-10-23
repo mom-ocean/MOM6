@@ -191,7 +191,7 @@ type, public :: energetic_PBL_CS ; private
     Velocity_Scale, & !< The velocity scale used in getting Kd [Z T-1 ~> m s-1]
     Mixing_Length     !< The length scale used in getting Kd [Z ~> m]
   !>@{ Diagnostic IDs
-  integer :: id_ML_depth = -1, id_TKE_wind = -1, id_TKE_mixing = -1
+  integer :: id_ML_depth = -1, id_hML_depth = -1, id_TKE_wind = -1, id_TKE_mixing = -1
   integer :: id_TKE_MKE = -1, id_TKE_conv = -1, id_TKE_forcing = -1
   integer :: id_TKE_mech_decay = -1, id_TKE_conv_decay = -1
   integer :: id_Mixing_Length = -1, id_Velocity_Scale = -1
@@ -515,6 +515,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
 
   if (write_diags) then
     if (CS%id_ML_depth > 0) call post_data(CS%id_ML_depth, CS%ML_depth, CS%diag)
+    if (CS%id_hML_depth > 0) call post_data(CS%id_hML_depth, CS%ML_depth, CS%diag)
     if (CS%id_TKE_wind > 0) call post_data(CS%id_TKE_wind, CS%diag_TKE_wind, CS%diag)
     if (CS%id_TKE_MKE > 0)  call post_data(CS%id_TKE_MKE, CS%diag_TKE_MKE, CS%diag)
     if (CS%id_TKE_conv > 0) call post_data(CS%id_TKE_conv, CS%diag_TKE_conv, CS%diag)
@@ -772,7 +773,8 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   integer :: OBL_it        ! Iteration counter
 
   real :: Surface_Scale ! Surface decay scale for vstar
-
+  logical :: calc_dT_expect ! If true calculate the expected changes in temperature and salinity.
+  logical :: calc_Te        ! If true calculate the expected final temperature and salinity values.
   logical :: debug=.false.  ! Change this hard-coded value for debugging.
 
   !  The following arrays are used only for debugging purposes.
@@ -788,7 +790,8 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   if (.not. associated(CS)) call MOM_error(FATAL, "energetic_PBL: "//&
          "Module must be initialized before it is used.")
 
-  debug = .false. ; if (allocated(eCD%dT_expect) .or. allocated(eCD%dS_expect)) debug = .true.
+  calc_dT_expect = debug ; if (allocated(eCD%dT_expect) .or. allocated(eCD%dS_expect)) calc_dT_expect = .true.
+  calc_Te = (calc_dT_expect .or. (.not.CS%orig_PE_calc))
 
   h_neglect = GV%H_subroundoff
 
@@ -1285,7 +1288,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
                          dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), dT_to_dPE(k), dS_to_dPE(k), &
                          pres_Z(K), dT_to_dColHt_a(k-1), dS_to_dColHt_a(k-1), &
                          dT_to_dColHt(k), dS_to_dColHt(k), &
-                         PE_chg=dPE_conv)
+                         PE_chg=dPE_conv, dPEc_dKd=dPEc_dKd)
               endif
               MKE_src = dMKE_max * (1.0 - exp(-MKE2_Hharm * Kddt_h_guess))
               dMKE_src_dK = dMKE_max * MKE2_Hharm * exp(-MKE2_Hharm * Kddt_h_guess)
@@ -1381,7 +1384,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
           htot  = htot + h(k)
         endif
 
-        if (debug) then
+        if (calc_Te) then
           if (k==2) then
             Te(1) = b1*(h(1)*T0(1))
             Se(1) = b1*(h(1)*S0(1))
@@ -1393,7 +1396,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
       enddo
       Kd(nz+1) = 0.0
 
-      if (debug) then
+      if (calc_dT_expect) then
         ! Complete the tridiagonal solve for Te.
         b1 = 1.0 / hp_a
         Te(nz) = b1 * (h(nz) * T0(nz) + Kddt_h(nz) * Te(nz-1))
@@ -1404,7 +1407,9 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
           Se(k) = Se(k) + c1(K+1)*Se(k+1)
           eCD%dT_expect(k) = Te(k) - T0(k) ; eCD%dS_expect(k) = Se(k) - S0(k)
         enddo
+      endif
 
+      if (debug) then
         dPE_debug = 0.0
         do k=1,nz
           dPE_debug = dPE_debug + (dT_to_dPE(k) * (Te(k) - T0(k)) + &
@@ -2023,7 +2028,7 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  "decreases the PBL diffusivity.", units="nondim", default=1.0)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(param_file, mdl, "EPBL_2018_ANSWERS", CS%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
@@ -2150,11 +2155,10 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  units="nondim", default=0.0)
 
 !/ Mixing Length Options
-  !### THIS DEFAULT SHOULD BECOME TRUE.
   call get_param(param_file, mdl, "USE_MLD_ITERATION", CS%Use_MLD_iteration, &
                  "A logical that specifies whether or not to use the "//&
                  "distance to the bottom of the actively turbulent boundary "//&
-                 "layer to help set the EPBL length scale.", default=.false.)
+                 "layer to help set the EPBL length scale.", default=.true.)
   call get_param(param_file, mdl, "EPBL_TRANSITION_SCALE", CS%transLay_scale, &
                  "A scale for the mixing length in the transition layer "//&
                  "at the edge of the boundary layer as a fraction of the "//&
@@ -2335,15 +2339,19 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
 !/ Logging parameters
   ! This gives a minimum decay scale that is typically much less than Angstrom.
   CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_Z + GV%H_to_Z*GV%H_subroundoff)
-  call log_param(param_file, mdl, "EPBL_USTAR_MIN", CS%ustar_min*US%Z_to_m*US%s_to_T, &
+  call log_param(param_file, mdl, "!EPBL_USTAR_MIN", CS%ustar_min*US%Z_to_m*US%s_to_T, &
                  "The (tiny) minimum friction velocity used within the "//&
-                 "ePBL code, derived from OMEGA and ANGSTROM.", units="m s-1")
+                 "ePBL code, derived from OMEGA and ANGSTROM.", units="m s-1", &
+                 like_default=.true.)
 
 
 !/ Checking output flags
   CS%id_ML_depth = register_diag_field('ocean_model', 'ePBL_h_ML', diag%axesT1, &
       Time, 'Surface boundary layer depth', 'm', conversion=US%Z_to_m, &
       cmor_long_name='Ocean Mixed Layer Thickness Defined by Mixing Scheme')
+  ! This is an alias for the same variable as ePBL_h_ML
+  CS%id_hML_depth = register_diag_field('ocean_model', 'h_ML', diag%axesT1, &
+      Time, 'Surface mixed layer depth based on active turbulence', 'm', conversion=US%Z_to_m)
   CS%id_TKE_wind = register_diag_field('ocean_model', 'ePBL_TKE_wind', diag%axesT1, &
       Time, 'Wind-stirring source of mixed layer TKE', 'W m-2', conversion=US%RZ3_T3_to_W_m2)
   CS%id_TKE_MKE = register_diag_field('ocean_model', 'ePBL_TKE_MKE', diag%axesT1, &
