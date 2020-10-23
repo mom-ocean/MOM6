@@ -27,6 +27,8 @@ FCFLAGS_COVERAGE ?=
 # Set to `true` to require identical results from DEBUG and REPRO builds
 DO_REPRO_TESTS ?=
 
+TIME ?= time
+
 # Many compilers (Intel, GCC on ARM64) do not yet produce identical results
 # across DEBUG and REPRO builds (as defined below), so we disable on default.
 
@@ -188,7 +190,7 @@ build/target/configure: $(TARGET_SOURCE)
 # Build MOM6
 .PRECIOUS: $(foreach b,$(BUILDS),build/$(b)/MOM6)
 build/%/MOM6: build/%/Makefile
-	cd $(@D) && time $(MAKE) -j
+	cd $(@D) && $(TIME) $(MAKE) -j
 
 
 # Use autoconf to construct the Makefile for each target
@@ -408,7 +410,7 @@ work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6 $(VENV_PATH)
 	mkdir -p $$(@D)/RESTART
 	echo -e "$(4)" > $$(@D)/MOM_override
 	cd $$(@D) \
-	  && time $(5) $(MPIRUN) -n $(6) ../../../$$< 2> std.err > std.out \
+	  && $(TIME) $(5) $(MPIRUN) -n $(6) ../../../$$< 2> std.err > std.out \
 	  || !( \
 	    mkdir -p ../../../results/$$*/ ; \
 	    cat std.out | tee ../../../results/$$*/std.$(1).out | tail -20 ; \
@@ -469,7 +471,7 @@ work/%/restart/ocean.stats: build/symmetric/MOM6 $(VENV_PATH)
 	  && halfperiod=$$(printf "%.f" $$(bc <<< "scale=10; 0.5 * $${daymax} * $${timeunit_int}")) \
 	  && printf "\n&ocean_solo_nml\n    seconds = $${halfperiod}\n/\n" >> input.nml
 	# Run the first half-period
-	cd $(@D) && time $(MPIRUN) -n 1 ../../../$< 2> std1.err > std1.out \
+	cd $(@D) && $(TIME) $(MPIRUN) -n 1 ../../../$< 2> std1.err > std1.out \
 	  || !( \
 	    cat std1.out | tee ../../../results/$*/std.restart1.out | tail ; \
 	    cat std1.err | tee ../../../results/$*/std.restart1.err | tail ; \
@@ -480,7 +482,7 @@ work/%/restart/ocean.stats: build/symmetric/MOM6 $(VENV_PATH)
 	mkdir $(@D)/RESTART
 	cd $(@D) && sed -i -e "s/input_filename *= *'n'/input_filename = 'r'/g" input.nml
 	# Run the second half-period
-	cd $(@D) && time $(MPIRUN) -n 1 ../../../$< 2> std2.err > std2.out \
+	cd $(@D) && $(TIME) $(MPIRUN) -n 1 ../../../$< 2> std2.err > std2.out \
 	  || !( \
 	    cat std2.out | tee ../../../results/$*/std.restart2.out | tail ; \
 	    cat std2.err | tee ../../../results/$*/std.restart2.err | tail ; \
