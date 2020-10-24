@@ -7,7 +7,6 @@ module ocean_da_types_mod
 
   private
 
-
   !> Example type for ocean ensemble DA state
   type, public :: OCEAN_CONTROL_STRUCT
      integer :: ensemble_size
@@ -54,7 +53,8 @@ module ocean_da_types_mod
      real, dimension(:,:,:), pointer :: analysis => NULL() !< ensemble member analysis
      type(forward_operator_type), pointer :: obs_def => NULL() !< observation forward operator
      type(time_type) :: time !< profile time type
-     real :: i_index, j_index !< model longitude and latitude indices respectively
+     real :: i_index !< model longitude indices respectively
+     real :: j_index !< model latitude indices respectively
      real, dimension(:,:), pointer :: k_index !< model depth indices
      type(time_type) :: tdiff !< difference between model time and observation time
      character(len=128) :: filename
