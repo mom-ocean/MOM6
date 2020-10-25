@@ -89,7 +89,7 @@ subroutine sloshing_initialize_thickness ( h, G, GV, US, param_file, just_read_p
                  units='m', default=75.0, scale=US%m_to_Z, do_not_log=just_read)
   call get_param(param_file, mdl, "SLOSHING_IC_BUG", use_IC_bug, &
                  "If true, use code with a bug to set the sloshing initial conditions.", &
-                 default=.true., do_not_log=just_read)
+                 default=.false., do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -207,17 +207,16 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, GV, param_file
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
-  call get_param(param_file, mdl,"S_REF",S_ref,'Reference value for salinity', &
-                 units='1e-3', fail_if_missing=.not.just_read, do_not_log=just_read)
-  call get_param(param_file, mdl,"T_REF",T_ref,'Refernce value for temperature', &
-                 units='C', fail_if_missing=.not.just_read, do_not_log=just_read)
+  call get_param(param_file, mdl, "S_REF", S_ref, 'Reference value for salinity', &
+                 default=35.0, units='1e-3', do_not_log=just_read)
+  call get_param(param_file, mdl, "T_REF", T_ref, 'Reference value for temperature', &
+                 units='degC', fail_if_missing=.not.just_read, do_not_log=just_read)
 
-  ! The default is to assume an increase by 2 for the salinity and a uniform
-  ! temperature
+  ! The default is to assume an increase by 2 ppt for the salinity and a uniform temperature.
   call get_param(param_file, mdl,"S_RANGE",S_range,'Initial salinity range.', &
                  units='1e-3', default=2.0, do_not_log=just_read)
   call get_param(param_file, mdl,"T_RANGE",T_range,'Initial temperature range', &
-                 units='C', default=0.0, do_not_log=just_read)
+                 units='degC', default=0.0, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 

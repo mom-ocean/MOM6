@@ -7,6 +7,7 @@ use MOM_debugging, only : hchksum
 use MOM_coms, only : max_across_PEs, min_across_PEs
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only :  CLOCK_ROUTINE, CLOCK_LOOP
+use MOM_density_integrals, only : int_specific_vol_dp
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
 use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE, AGRID
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
@@ -24,7 +25,6 @@ use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type, setVerticalGridAxes
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
-use MOM_EOS, only : int_specific_vol_dp
 use MOM_ALE, only : ALE_remap_scalar
 
 implicit none ; private
@@ -114,7 +114,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
                  default="PLM")
   call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
   if (useALE) then
     call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
