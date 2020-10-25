@@ -12,6 +12,8 @@ The instructions for generation of MOM6 documentation is divided into three sect
 
 To assist with writing of this documentation, we use several abbreviations.
 
+**DOX**: [Doxygen](https://www.doxygen.nl/manual/markdown.html) refers to the markdown language used by doxygen or a doxygen file.
+
 **RST**: [reStructuredText](https://docutils.sourceforge.io/rst.html); a markdown language leveraged by sphinx via [docutils](https://docutils.sourceforge.io/).
 
 **RTD**: [Read the Docs](https://readthedocs.org/)
@@ -91,6 +93,9 @@ The content of the additional documents and source code should conform to usage
 as defined by the doxygen user and reference
 [manuals](https://www.doxygen.nl/manual/index.html).  Further guidance is provided
 on the [MOM6 developer's wiki](https://github.com/NOAA-GFDL/MOM6/wiki/Doxygen).
+[Troubleshooting](details/Details.md) guides are provided with most commonly reported problems with MOM6 documentation.
+
+NOTE: Not all doxygen commands are supported through the sphinx documentation processor.  Support can be added by adding an [issue](https://github.com/NOAA-GFDL/MOM6/issues) to the github repository.
 
 For the API documentation, the tree will look like this:
 ```
@@ -145,133 +150,10 @@ The RTD site can be configured to watch for updates on a github repository.  A d
 
 NOTE: There is a rough execution time limit of about 900 seconds.  Trying to do more than that will cause a "timeout" error.
 
-# Documentation syntax
+# Special Cases
 
-This section will highlight some common special cases to the documentation syntax not found in the user manuals for Doxygen or Sphinx.  Please
-refer to the user manual for documentation syntax.
-
-## Doxygen
-
-Doxygen user and reference [manuals](https://www.doxygen.nl/manual/index.html) should be consulted for general syntax for embedding documentation in source code and `*.dox` files.  An additional style guide when applying doxygen syntax can be found [here](https://github.com/NOAA-GFDL/MOM6/wiki/Doxygen).  A [troubleshooting](#troubleshooting) guide is provided with most commonly reported problems.
-
-NOTE: Not all doxygen commands are supported through the sphinx documentation processor.  Support can be added by adding an [issue](https://github.com/NOAA-GFDL/MOM6/issues) to the github repository.
-
-### Equation References
-
-*Syntax:* `\eqref{tag}`
-
-A [custom command](https://www.doxygen.nl/manual/custcmd.html) is created to process the tag for use in latex and html.  For latex, `\eqref` is intercepted and changed to `\ref`.  For html, it is unchanged and intercepted by [MathJax](#mathjax).
-
-**Why?** For latex, all references to equations use the `\ref` tag.  For MathJax, once the html page is loaded, the javascript hunts for `\eqref` tags and replaces them with links to equations.
-
-### Complicated Equation References
-
-These refer to multi-line named equations that need to be referred to from other html pages.  If you do not need to link to these
-equations from other html pages, then you do not need to use this custom command.  You can use the `\eqref{tag}` instead.
-
-*Syntax:* `\eqref{tagA,tagB,tagC}`
-
-Large formulas with column formatting using `&` generally are wrapped in a `\f{eqnarray}`:
-```
-\f{eqnarray}
-\label{html:ale-equations} \\
-h^\dagger &= h^{(n)} - \Delta t \left[ \nabla_r \cdot \left( h \, \mathbf{u} \right) \right]
-&\mbox{thickness} \label{eq:ale-thickness-equation} \\
-\theta^\dagger \, h^\dagger &= \theta^{(n)} \, h^{(n)} - \Delta t \left[ \nabla_r \cdot \left( \theta h \, \mathbf{u} \right) - h \boldsymbol{\mathcal{N}}_\theta^\gamma + \delta_r J_\theta^{(z)} \right]
-&\;\;\;\;\mbox{potential temp} \label{eq:ale-temperature-equation} \\
-h^{(n+1)} &= h^\dagger - \Delta t \, \delta_r \left( z_r \dot{r} \right)
-&\mbox{move grid} \label{eq:ale-new-grid} \\
-\theta^{(n+1)} h^{(n+1)} &= \theta^\dagger h^\dagger - \Delta t \, \delta_r \left( z_r \dot{r} \, \theta^\dagger  \right)
-&\mbox{remap temperature.} \label{eq:ale-remap-temperature}
-\f}
-```
-
-A *special* label is added right after the `\f{eqnarray}` opening.  This helps produce an implicit label and allows the formula to be linked to from external pages.  Notice that each line of the formula has its own `\mbox` and `\label`.   The combination of the html link and the mbox and label tags form the arguments to the `\eqref` command.
-
-To create a reference link to the first line of the formula, you would use:
-`\eqref{eq:ale-thickness-equation,ale-equations,thickness}`.  For latex, this is translated into `\ref{eq:ale-thickness-equation}` and all the references work out as usual.  For html, the second argument should match the special label placed after the opening `\f{eqnarray}`.  The allows generation of a html link back to the entire formula block.  The last argument informs the reader which line of the formula is of interest.
-
-**Why?** MathJax is unable to maintain a list of formula references that span multiple html pages. Restructured text also only supports one label per large `:math:` block.  Restructured text cannot uniquely number equations across pages.
-
-**Sphinx**: NOTE: In the example above, the reference `ale-equations` is translated by sphinx into `equation-ale-equations`.  The prefix `equation-` is added to the tag used for this purpose.
-
-NOTE: A post-processor, `postProcessEquations.py` has been written to renumber equations for sphinx and doxygen generated html.
-
-### Footnotes
-
-*Syntax:* `\footnote{text}`
-
-The footnote command is split between latex and html.  For latex, it is passed through unchanged and latex generates footnotes appropriately.  For html(doxygen), a superscript `[*]` is created with a title attrbute equalling the text.  For html(sphinx), the footnote is translated into footnote RST syntax.  Footnotes are automatically numbered and numbering is restarted for individual pages.
-
-NOTE: Currently the footnote text is not processed.  Any embedded citations currently do not function properly for html(doxygen).  They were recently fixed in html(sphinx) and pdf(sphinx).
-
-## Sphinx
-
-## MathJax
-
-The `\mathbold` command is not supported.  See [troubleshooting](#troubleshooting) for common problems with MathJax.
-
-## Troubleshooting
-
-### Doxygen
-
-#### Commands
-
-*anchor*
-- To add a label to a figure, the `\anchor` should appear just prior to the image, figure or text you want to link to.  If you
-add an anchor prior to a paragraph, it has a side effect of making it a block paragraph.
-
-*image*
-- The text associated with an `\image` command should not have any line breaks.  The text or caption must be surrounded in quotes
-which are stripped prior to publication.  A fourth optional argument may be used to control width or height of the image.
-See doxygen [image](https://www.doxygen.nl/manual/commands.html#cmdimage) command.  See [image example](details#Images) for a detailed example of usage.
-
-#### Tables
-
-To reference tables, be sure the `id=` argument is in quotes.  Example:
-
-```
-<caption id="scale_factors">
-```
-
-A reference to this table is now possible using `\ref scale_factors`.
-
-#### Arguments
-
-This snippet will not properly document the MEKE argument.
-```
-!> Integrates forward-in-time the MEKE eddy energy equation.
-!! See \ref section_MEKE_equations
-subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
-type(MEKE_type),                       pointer       :: MEKE !< MEKE
-```
-
-**This is better**
-```
-type(MEKE_type),                       pointer       :: MEKE !< MEKE data
-```
-
-### Latex math
-
-Good locations to test equations for both latex and MathJax:
-- [LaTex Base](https://latexbase.com/)
-- [MathJax](https://www.mathjax.org/#demo)
-
-*eqnarray*
-- Use of `\mbox{}` requires surrounding braces as in {\mbox{}}
-- If a formula needs formatting using `&` you must use eqnarray
-- MathJax does not handle backslashes (`\`) within `\mbox{}`
-  - Wrong (ok in latex): `\mbox{nonpen\_SW}`
-  - Correct: `\mbox{nonpen}\_\mbox{SW}`
-
-*formula*
-- Math elements within `\mbox{}` requires `$` escaping
-
-#### Equation references and formatting
-
-MathJax is only able to number equations on a single page.  It is unable to keep track of numbering across multiple pages like latex.  A little bit of tickery involved to maintain links across html pages as produced by sphinx.  A post processor will need to be written for html generated by doxygen.  In general, this method of documentation is only needed if formulas need to be referenced from external pages and the formulas require `&` for alignment.
-
-Single equations that need to be referenced from other pages should utilize the doxygen `\anchor` command.
+Please see the [details](details/Details.md) for special cases to the documentation syntax not found
+in any of the user manuals for Doxygen or Sphinx.
 
 # Software operation
 
@@ -364,21 +246,9 @@ doxygen executable needs to be available in the system path.
 
 Use this option to specify a custom configuration file to doxygen.
 
-##### DOXYGEN_API
+#### DOXYGEN_RELEASE
 
-Setting this variable will cause doxygen to run the `Doxyfile_nortd` configuration file.  This will attempt to
-compile the `APIs` html version of the MOM6 documentation and add it to the RTD output.  The default location is
-the `APIs` directory.
-
-NOTE: Do not run both API and APIPDF.  RTD will not have sufficient time to complete the job.
-
-##### DOXYGEN_APIPDF
-
-Setting this variable will cause doxygen to run the `Doxyfile_nortd` configuration file.  This will attempt to
-compile the `APIs` pdf version of the MOM6 documentation and add it to the RTD output.  The default location of the
-resultant PDF is `APIs/latex/refman.pdf`.
-
-NOTE: This option will generate the html and PDF versions of the APIs.
+This option allows selection of a doxygen version from https://github.com/doxygen.  The default is `Release_1_8_19`.
 
 ##### NCAR_FORK
 
@@ -474,16 +344,15 @@ renaming `doxygen` to `doxygen-1.8.19` within `/usr/local/bin`.
 
 ### Read the Docs
 
-The [Read the Docs](https://readthedocs.org/) (RTD) site uses a virtual machine (VM) for processing documentation.  The VM is of
-os architecture type x86\_64.  A doxygen binary can be compiled and included in our git repo
-for use in RTD.  The defualt doxygen in use is 1.8.13 which produces XML that does not work for our use.  We
-supply a compiled binary version 1.8.19 that provide better XML.  However, there are still some shortcomings.
+The [Read the Docs](https://readthedocs.org/) (RTD) site uses a virtual
+machine (VM) for processing documentation.  The VM architecture is type x86\_64.
+The defualt doxygen in use is 1.8.13 which produces XML that does not work for our use.
 
-NOTE: Using modified python modules on RTD is possible through careful crafting of the requirements.txt file.  It is impossible to replace system binaries or compile code on RTD.  It is possible to ship replacement binaries that can be run from the repo.
+NOTE: Using modified python modules on RTD is possible through careful crafting of the requirements.txt file.  It is impossible to replace system binaries or compile code on RTD.  It is possible to ship replacement binaries that can be run from the repo.  For security reasons, a binary cannot be included in the MOM6 repository.
 
 #### Logfiles
 
-See Sphinx run options below.  We capture up to three logfiles for RTD.  The main default logfile is `LOGS/doxygen_warn_rtd_log.txt`.  If the API or APIPDF runs are enabled, then `doxygen_warn_nortd_log.txt` or `doxygen_warn_nortd_latex_log.txt` may also be available.
+See Sphinx run options below.  We capture up to three logfiles for RTD.  The main default logfile is `LOGS/doxygen_warn_rtd_log.txt`.
 
 Logfiles were renamed to `*.txt` to allow easier access and viewing from most websites.
 Most websites force download of `*.log` files.

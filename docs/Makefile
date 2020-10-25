@@ -1,11 +1,13 @@
 # Makefile for Sphinx documentation
 
 # You can set these variables from the command line.
-SPHINXOPTS        =
+SPHINXOPTS       ?=
 SPHINXBUILD       = sphinx-build
-PAPER             =
-BUILDDIR          = _build
-FINDDOXYGENBIN    = doxygen
+PAPER            ?=
+BUILDDIR         ?= _build
+DOXYGEN_BIN      ?= doxygen
+FINDDOXYGENBIN    = $(DOXYGEN_BIN)
+DOXYGEN_RELEASE  ?= Release_1_8_19
 
 # User-friendly check for sphinx-build
 ifeq ($(shell which $(SPHINXBUILD) >/dev/null 2>&1; echo $$?), 1)
@@ -56,7 +58,7 @@ help:
 	@echo "  nortd_latex to run the doxygen pdf version of the APIs manual"
 
 clean:
-	rm -rf $(BUILDDIR)/*
+	rm -rf $(BUILDDIR)/* api/generated/* MOM6.tags xml
 
 $(BUILDDIR):
 	mkdir -p $@
@@ -193,7 +195,7 @@ pseudoxml:
 	@echo "Build finished. The pseudo-XML files are in $(BUILDDIR)/pseudoxml."
 
 doxygen:
-	git clone https://github.com/doxygen/doxygen
+	git clone -b $(DOXYGEN_RELEASE) --depth 1 https://github.com/doxygen/doxygen
 
 doxygen/bin/doxygen: doxygen
 	(cd $(<); cmake -G "Unix Makefiles" .)
@@ -216,4 +218,3 @@ Clean: clean
 
 CLEAN: Clean
 	rm -rf doxygen
-	rm -rf $(BUILDDIR) xml doxygen
