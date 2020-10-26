@@ -298,29 +298,29 @@ end subroutine bkgnd_mixing_init
 !> Calculates the vertical background diffusivities/viscosities
 subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G, GV, US, CS)
 
-  type(ocean_grid_type),                    intent(in)    :: G   !< Grid structure.
-  type(verticalGrid_type),                  intent(in)    :: GV  !< Vertical grid structure.
-  type(unit_scale_type),                    intent(in)    :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h   !< Layer thickness [H ~> m or kg m-2].
-  type(thermo_var_ptrs),                    intent(in)    :: tv  !< Thermodynamics structure.
-  real, dimension(SZI_(G),SZK_(G)),         intent(in)    :: N2_lay !< squared buoyancy frequency associated
-                                                                 !! with layers [T-2 ~> s-2]
-  real, dimension(SZI_(G),SZK_(G)),         intent(out)   :: Kd_lay !< The background diapycnal diffusivity
-                                                                 !! of each layer [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZK_(G)+1),       intent(out)   :: Kd_int !< The background diapycnal diffusivity
-                                                                 !! of each interface [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZK_(G)+1),       intent(out)   :: Kv_bkgnd !< The background vertical viscosity at
-                                                                 !! each interface [Z2 T-1 ~> m2 s-1]
-  integer,                                  intent(in)    :: j   !< MKeridional grid index
-  type(bkgnd_mixing_cs),                    pointer       :: CS  !< The control structure returned by
-                                                                 !! a previous call to bkgnd_mixing_init.
+  type(ocean_grid_type),                     intent(in)    :: G   !< Grid structure.
+  type(verticalGrid_type),                   intent(in)    :: GV  !< Vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h   !< Layer thickness [H ~> m or kg m-2].
+  type(thermo_var_ptrs),                     intent(in)    :: tv  !< Thermodynamics structure.
+  real, dimension(SZI_(G),SZK_(GV)),         intent(in)    :: N2_lay !< squared buoyancy frequency associated
+                                                                  !! with layers [T-2 ~> s-2]
+  real, dimension(SZI_(G),SZK_(GV)),         intent(out)   :: Kd_lay !< The background diapycnal diffusivity
+                                                                  !! of each layer [Z2 T-1 ~> m2 s-1].
+  real, dimension(SZI_(G),SZK_(GV)+1),       intent(out)   :: Kd_int !< The background diapycnal diffusivity
+                                                                  !! of each interface [Z2 T-1 ~> m2 s-1].
+  real, dimension(SZI_(G),SZK_(GV)+1),       intent(out)   :: Kv_bkgnd !< The background vertical viscosity at
+                                                                  !! each interface [Z2 T-1 ~> m2 s-1]
+  integer,                                   intent(in)    :: j   !< Meridional grid index
+  type(unit_scale_type),                     intent(in)    :: US  !< A dimensional unit scaling type
+  type(bkgnd_mixing_cs),                     pointer       :: CS  !< The control structure returned by
+                                                                  !! a previous call to bkgnd_mixing_init.
 
   ! local variables
-  real, dimension(SZK_(G)+1) :: depth_int  !< Distance from surface of the interfaces [m]
-  real, dimension(SZK_(G)+1) :: Kd_col     !< Diffusivities at the interfaces [m2 s-1]
-  real, dimension(SZK_(G)+1) :: Kv_col     !< Viscosities at the interfaces [m2 s-1]
-  real, dimension(SZI_(G))   :: Kd_sfc     !< Surface value of the diffusivity [Z2 T-1 ~> m2 s-1]
-  real, dimension(SZI_(G))   :: depth      !< Distance from surface of an interface [Z ~> m]
+  real, dimension(SZK_(GV)+1) :: depth_int  !< Distance from surface of the interfaces [m]
+  real, dimension(SZK_(GV)+1) :: Kd_col     !< Diffusivities at the interfaces [m2 s-1]
+  real, dimension(SZK_(GV)+1) :: Kv_col     !< Viscosities at the interfaces [m2 s-1]
+  real, dimension(SZI_(G))    :: Kd_sfc     !< Surface value of the diffusivity [Z2 T-1 ~> m2 s-1]
+  real, dimension(SZI_(G))    :: depth      !< Distance from surface of an interface [Z ~> m]
   real :: depth_c    !< depth of the center of a layer [Z ~> m]
   real :: I_Hmix     !< inverse of fixed mixed layer thickness [Z-1 ~> m-1]
   real :: I_2Omega   !< 1/(2 Omega) [T ~> s]

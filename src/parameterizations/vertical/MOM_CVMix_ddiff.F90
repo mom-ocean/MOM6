@@ -143,22 +143,22 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS, R_rho)
 
   type(ocean_grid_type),                      intent(in)    :: G    !< Grid structure.
   type(verticalGrid_type),                    intent(in)    :: GV   !< Vertical grid structure.
-  type(unit_scale_type),                      intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h    !< Layer thickness [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h    !< Layer thickness [H ~> m or kg m-2].
   type(thermo_var_ptrs),                      intent(in)    :: tv   !< Thermodynamics structure.
+  type(unit_scale_type),                      intent(in)    :: US   !< A dimensional unit scaling type
+  integer,                                    intent(in)    :: j    !< Meridional grid index to work on.
   ! Kd_T and Kd_S are intent inout because only one j-row is set here, but they are essentially outputs.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kd_T !< Interface double diffusion diapycnal
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: Kd_T !< Interface double diffusion diapycnal
                                                                     !! diffusivity for temp [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kd_S !< Interface double diffusion diapycnal
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: Kd_S !< Interface double diffusion diapycnal
                                                                     !! diffusivity for salt [Z2 T-1 ~> m2 s-1].
   type(CVMix_ddiff_cs),                       pointer       :: CS   !< The control structure returned
                                                                     !! by a previous call to CVMix_ddiff_init.
-  integer,                                    intent(in)    :: j    !< Meridional grid index to work on.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                                     optional, intent(inout) :: R_rho !< The density ratios at interfaces [nondim].
 
   ! Local variables
-  real, dimension(SZK_(G)) :: &
+  real, dimension(SZK_(GV)) :: &
     cellHeight, &  !< Height of cell centers [m]
     dRho_dT,    &  !< partial derivatives of density wrt temp [R degC-1 ~> kg m-3 degC-1]
     dRho_dS,    &  !< partial derivatives of density wrt saln [R ppt-1 ~> kg m-3 ppt-1]
@@ -169,11 +169,11 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS, R_rho)
     beta_dS,    &  !< beta*dS across interfaces [kg m-3]
     dT,         &  !< temp. difference between adjacent layers [degC]
     dS             !< salt difference between adjacent layers [ppt]
-  real, dimension(SZK_(G)+1) :: &
+  real, dimension(SZK_(GV)+1) :: &
     Kd1_T,      &  !< Diapycanal diffusivity of temperature [m2 s-1].
     Kd1_S          !< Diapycanal diffusivity of salinity [m2 s-1].
 
-  real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces [m]
+  real, dimension(SZK_(GV)+1) :: iFaceHeight !< Height of interfaces [m]
   integer :: kOBL                        !< level of OBL extent
   real :: dh, hcorr
   integer :: i, k
