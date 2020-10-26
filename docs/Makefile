@@ -215,7 +215,7 @@ ifdef DOXYGEN_CONF
 	$< $(DOXYGEN_CONF)
 else
 	$< Doxyfile_nortd_latex
-endif 
+endif
 	# Make sure we are in nonstopmode for generating the pdf by patching the Makefile
 	grep -q "pdflatex refman" $(BUILDDIR)/doxygen_latex/Makefile && sed -i.bak 's/pdflatex refman/pdflatex -interaction=nonstopmode refman/' $(BUILDDIR)/doxygen_latex/Makefile
 	make -C $(BUILDDIR)/doxygen_latex

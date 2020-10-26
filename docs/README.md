@@ -219,7 +219,7 @@ The doxygen generated HTML can be obtained locally (and slightly more quickly) w
 ```bash
 make nortd
 ```
-which will generate html in `docs/APIs/`. Start at `docs/APIs/index.html`. 
+which will generate html in `docs/APIs/`. Start at `docs/APIs/index.html`.
 If doxygen is not already available this will install a local copy of doxygen.
 
 ##### SPHINXOPTS
