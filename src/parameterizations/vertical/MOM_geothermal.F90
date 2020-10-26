@@ -19,7 +19,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public geothermal, geothermal_init, geothermal_end
+public geothermal_entraining, geothermal_in_place, geothermal_init, geothermal_end
 
 !> Control structure for geothermal heating
 type, public :: geothermal_CS ; private
@@ -42,13 +42,6 @@ type, public :: geothermal_CS ; private
 
 end type geothermal_CS
 
-!> Apply geothermal heating to the bottommost part of the water column, either by directly
-!! heating water in place, or by also including the movement of water between isopycal layers,
-!! depending on which arguments that are supplied.
-interface geothermal
-  module procedure geothermal_in_place, isopycnal_geothermal
-end interface geothermal
-
 contains
 
 !> Applies geothermal heating, including the movement of water
@@ -57,7 +50,7 @@ contains
 !! the partial derivative of the coordinate density with temperature is positive
 !! or very small, the layers are simply heated in place.  Any heat that can not
 !! be applied to the ocean is returned (WHERE)?
-subroutine isopycnal_geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
+subroutine geothermal_entraining(h, tv, dt, ea, eb, G, GV, US, CS, halo)
   type(ocean_grid_type),                    intent(inout) :: G  !< The ocean's grid structure.
   type(verticalGrid_type),                  intent(in)    :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thicknesses [H ~> m or kg m-2]
@@ -145,7 +138,7 @@ subroutine isopycnal_geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
   p_ref(:)  = tv%P_Ref
   Idt       = 1.0 / dt
 
-  if (.not.associated(tv%T)) call MOM_error(FATAL, "MOM geothermal: "//&
+  if (.not.associated(tv%T)) call MOM_error(FATAL, "MOM geothermal_entraining: "//&
       "Geothermal heating can only be applied if T & S are state variables.")
 
 !  do j=js,je ; do i=is,ie
@@ -369,7 +362,7 @@ subroutine isopycnal_geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
 !           (G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp)))
 !  enddo ; enddo
 
-end subroutine isopycnal_geothermal
+end subroutine geothermal_entraining
 
 !> Applies geothermal heating to the bottommost layers that occur within GEOTHERMAL_THICKNESS of
 !! the bottom, by simply heating the water in place.  Any heat that can not be applied to the ocean
@@ -385,7 +378,7 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
   real,                                     intent(in)    :: dt !< Time increment [T ~> s].
   type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
   type(geothermal_CS),                      pointer       :: CS !< The control structure returned by
-                                                                !! a previous call togeothermal_init.
+                                                                !! a previous call to geothermal_init.
   integer,                        optional, intent(in)    :: halo !< Halo width over which to work
 
   ! Local variables
@@ -421,7 +414,7 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
   H_neglect = GV%H_subroundoff
   Idt       = 1.0 / dt
 
-  if (.not.associated(tv%T)) call MOM_error(FATAL, "MOM geothermal: "//&
+  if (.not.associated(tv%T)) call MOM_error(FATAL, "MOM geothermal_in_place: "//&
       "Geothermal heating can only be applied if T & S are state variables.")
 
 !  do i=is,ie ; do j=js,je
