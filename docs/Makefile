@@ -67,10 +67,6 @@ $(BUILDDIR):
 html: $(DOXYGENBIN) $(BUILDDIR)
 	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) $(BUILDDIR)/html
 	@echo
-ifeq ($(UPDATEHTMLEQS), Y)
-	@echo "Post processing equations."
-	@python ./postProcessEquations.py -d $(BUILDDIR) -p html -b sphinx -s index.html $(UPDATEHTMLEQSVERBOSE)
-endif
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."
 
 dirhtml:
