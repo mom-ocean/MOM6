@@ -172,7 +172,17 @@ The configuration file used for doxygen is `Doxyfile_nortd`.
 From the `Makefile`, the API portion of the pipeline may be run using:
 `make nortd`
 
-NOTE: `make nortd` will attempt to install doxygen if it is not found.
+NOTE: `make nortd` will attempt to install doxygen if a binary is not found.
+
+### Makefile
+
+See below, the following Makefile options are honored:
+* BUILDDIR
+* DOXYGEN_BIN
+* DOXYGEN_CONF
+* DOXYGEN_RELEASE
+* UPDATEHTMLEQS
+* PAPER
 
 ## Sphinx
 
@@ -249,6 +259,7 @@ Use this option to specify a custom configuration file to doxygen.
 #### DOXYGEN_RELEASE
 
 This option allows selection of a doxygen version from https://github.com/doxygen.  The default is `Release_1_8_19`.
+NOTE: This command does not have any impact if an existing binary is found.
 
 ##### NCAR_FORK
 

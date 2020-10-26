@@ -6,6 +6,7 @@ SPHINXBUILD       = sphinx-build
 PAPER            ?=
 BUILDDIR         ?= _build
 DOXYGEN_BIN      ?= doxygen
+DOXYGEN_CONF     ?=
 FINDDOXYGENBIN    = $(DOXYGEN_BIN)
 DOXYGEN_RELEASE  ?= Release_1_8_19
 
@@ -202,7 +203,11 @@ doxygen/bin/doxygen: doxygen
 	(cd $(<); make)
 
 nortd: $(DOXYGENBIN) $(BUILDDIR)
+ifdef DOXYGEN_CONF
+	$< $(DOXYGEN_CONF)
+else
 	$< Doxyfile_nortd
+endif
 ifeq ($(UPDATEHTMLEQS), Y)
 	@echo "Post processing equations."
 	@python ./postProcessEquations.py -d $(BUILDDIR) -p APIs -b doxygen -s index.html $(UPDATEHTMLEQSVERBOSE)
@@ -210,7 +215,11 @@ endif
 	@echo "Build finished. The html files are in $(BUILDDIR)/APIs."
 
 nortd_latex: $(DOXYGENBIN) $(BUILDDIR)
+ifdef DOXYGEN_CONF
+	$< $(DOXYGEN_CONF)
+else
 	$< Doxyfile_nortd_latex
+endif
 	make -C $(BUILDDIR)/doxygen_latex LATEX_CMD="pdflatex -interaction=batchmode"
 
 Clean: clean

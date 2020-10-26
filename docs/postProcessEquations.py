@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import os, sys, pathlib, re
 import itertools
 from lxml import html

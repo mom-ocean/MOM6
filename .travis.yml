@@ -37,7 +37,7 @@ jobs:
         - ./.testing/trailer.py -e TEOS10 -l 120 src config_src
         # API Documentation
         - perl -e 'print "perl version $^V" . "\n"'
-        - cd docs && mkdir _build && make nortd UPDATEHTMLEQS=Y DOXYGEN_RELEASE=Release_1_8_19
+        - cd docs && mkdir _build && make nortd DOXYGEN_RELEASE=Release_1_8_19
         - grep "warning:" _build/doxygen_warn_nortd_log.txt | grep -v "as part of a" | tee doxy_errors
         - test ! -s  doxy_errors
 
