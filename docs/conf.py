@@ -116,15 +116,6 @@ if os.environ.get('DOXYGEN_CONF'):
     if os.path.exists(os.environ.get('DOXYGEN_CONF')):
         doxygen_conf = os.environ.get('DOXYGEN_CONF')
 
-# This is specific for RTD docker instance
-# RTD is os arch type x86_64
-if running_on_rtd:
-    # We want to ensure we are using the version mentioned below.  If not,
-    # attempt to use the binary shipped with our git repo
-    if doxygen_version != '1.8.19':
-        if os.path.exists('./bin/doxygen'):
-            doxygen_bin = './bin/doxygen'
-
 # -- Run the normal doxygen for the RTD sphinx run ------------------------
 
 out = check_output([doxygen_bin,"-v"])
