@@ -32,6 +32,7 @@ public tidal_mixing_init
 public setup_tidal_diagnostics
 public calculate_tidal_mixing
 public post_tidal_diagnostics
+public tidal_mixing_h_amp
 public tidal_mixing_end
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
@@ -68,8 +69,7 @@ type, public :: tidal_mixing_diags ; private
 end type
 
 !> Control structure with parameters for the tidal mixing module.
-type, public :: tidal_mixing_cs
-  ! TODO: private
+type, public :: tidal_mixing_cs ; private
   logical :: debug = .true.   !< If true, do more extensive debugging checks.  This is hard-coded.
 
   ! Parameters
@@ -689,10 +689,10 @@ subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US, C
   real, dimension(SZI_(G),SZK_(G)), intent(in)    :: max_TKE !< The energy required to for a layer to entrain
                                                             !! to its maximum realizable thickness [Z3 T-3 ~> m3 s-3]
   type(tidal_mixing_cs),            pointer       :: CS     !< The control structure for this module
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                    intent(inout) :: Kd_lay !< The diapycnal diffusvity in layers [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
-                         optional,  intent(inout) :: Kd_int !< The diapycnal diffusvity at interfaces,
+  real, dimension(SZI_(G),SZK_(G)), &
+                          optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity in layers [Z2 T-1 ~> m2 s-1].
+  real, dimension(SZI_(G),SZK_(G)+1), &
+                          optional, intent(inout) :: Kd_int !< The diapycnal diffusivity at interfaces,
                                                             !! [Z2 T-1 ~> m2 s-1].
   real,                             intent(in)    :: Kd_max !< The maximum increment for diapycnal
                                                             !! diffusivity due to TKE-based processes,
@@ -724,11 +724,10 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kd_int, Kv
                                                   !! frequency at the interfaces [T-2 ~> s-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(inout) :: Kd_lay!< The diapycnal diffusivities in the layers [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
-                optional,  intent(inout) :: Kd_int !< The diapycnal diffusvity at interfaces,
-                                                            !! [Z2 T-1 ~> m2 s-1].
+  real, dimension(SZI_(G),SZK_(G)), &
+                 optional, intent(inout) :: Kd_lay!< The diapycnal diffusivity in the layers [Z2 T-1 ~> m2 s-1].
+  real, dimension(SZI_(G),SZK_(G)+1), &
+                 optional, intent(inout) :: Kd_int!< The diapycnal diffusivity at interfaces [Z2 T-1 ~> m2 s-1].
   real, dimension(:,:,:),  pointer       :: Kv    !< The "slow" vertical viscosity at each interface
                                                   !! (not layer!) [Z2 T-1 ~> m2 s-1].
   ! Local variables
@@ -804,12 +803,14 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kd_int, Kv
                                CVMix_tidal_params_user = CS%CVMix_tidal_params)
 
       ! Update diffusivity
-      do k=1,G%ke
-        Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5 * US%m2_s_to_Z2_T * (Kd_tidal(k) + Kd_tidal(k+1))
-      enddo
+      if (present(Kd_lay)) then
+        do k=1,G%ke
+          Kd_lay(i,k) = Kd_lay(i,k) + 0.5 * US%m2_s_to_Z2_T * (Kd_tidal(k) + Kd_tidal(k+1))
+        enddo
+      endif
       if (present(Kd_int)) then
         do K=1,G%ke+1
-          Kd_int(i,j,K) = Kd_int(i,j,K) +  (US%m2_s_to_Z2_T * Kd_tidal(K))
+          Kd_int(i,K) = Kd_int(i,K) +  (US%m2_s_to_Z2_T * Kd_tidal(K))
         enddo
       endif
       ! Update viscosity with the proper unit conversion.
@@ -904,12 +905,14 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kd_int, Kv
                                           CVmix_tidal_params_user = CS%CVMix_tidal_params)
 
       ! Update diffusivity
-      do k=1,G%ke
-        Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5 * US%m2_s_to_Z2_T * (Kd_tidal(k) + Kd_tidal(k+1))
-      enddo
+      if (present(Kd_lay)) then
+        do k=1,G%ke
+          Kd_lay(i,k) = Kd_lay(i,k) + 0.5 * US%m2_s_to_Z2_T * (Kd_tidal(k) + Kd_tidal(k+1))
+        enddo
+      endif
       if (present(Kd_int)) then
         do K=1,G%ke+1
-          Kd_int(i,j,K) = Kd_int(i,j,K) +  (US%m2_s_to_Z2_T * Kd_tidal(K))
+          Kd_int(i,K) = Kd_int(i,K) +  (US%m2_s_to_Z2_T * Kd_tidal(K))
         enddo
       endif
 
@@ -974,10 +977,10 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
   real, dimension(SZI_(G),SZK_(G)), intent(in)    :: max_TKE !< The energy required to for a layer to entrain
                                                             !! to its maximum realizable thickness [Z3 T-3 ~> m3 s-3]
   type(tidal_mixing_cs),            pointer       :: CS     !< The control structure for this module
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                    intent(inout) :: Kd_lay !< The diapycnal diffusvity in layers [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
-                          optional, intent(inout) :: Kd_int !< The diapycnal diffusvity at interfaces
+  real, dimension(SZI_(G),SZK_(G)), &
+                          optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity in layers [Z2 T-1 ~> m2 s-1].
+  real, dimension(SZI_(G),SZK_(G)+1), &
+                          optional, intent(inout) :: Kd_int !< The diapycnal diffusivity at interfaces
                                                             !! [Z2 T-1 ~> m2 s-1].
   real,                             intent(in)    :: Kd_max !< The maximum increment for diapycnal
                                                             !! diffusivity due to TKE-based processes
@@ -1258,11 +1261,13 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
       Kd_add  = TKE_to_Kd(i,k) * (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay)
 
       if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
-      Kd_lay(i,j,k) = Kd_lay(i,j,k) + Kd_add
+      if (present(Kd_lay)) then
+        Kd_lay(i,k) = Kd_lay(i,k) + Kd_add
+      endif
 
       if (present(Kd_int)) then
-        Kd_int(i,j,K)   = Kd_int(i,j,K)   + 0.5 * Kd_add
-        Kd_int(i,j,K+1) = Kd_int(i,j,K+1) + 0.5 * Kd_add
+        Kd_int(i,K)   = Kd_int(i,K)   + 0.5 * Kd_add
+        Kd_int(i,K+1) = Kd_int(i,K+1) + 0.5 * Kd_add
       endif
 
       ! diagnostics
@@ -1353,11 +1358,13 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
       Kd_add  = TKE_to_Kd(i,k) * (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay)
 
       if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
-      Kd_lay(i,j,k) = Kd_lay(i,j,k) + Kd_add
+      if (present(Kd_lay)) then
+        Kd_lay(i,k) = Kd_lay(i,k) + Kd_add
+      endif
 
       if (present(Kd_int)) then
-        Kd_int(i,j,K)   = Kd_int(i,j,K)   + 0.5 * Kd_add
-        Kd_int(i,j,K+1) = Kd_int(i,j,K+1) + 0.5 * Kd_add
+        Kd_int(i,K)   = Kd_int(i,K)   + 0.5 * Kd_add
+        Kd_int(i,K+1) = Kd_int(i,K+1) + 0.5 * Kd_add
       endif
 
       ! diagnostics
@@ -1550,6 +1557,24 @@ subroutine post_tidal_diagnostics(G, GV, h ,CS)
   if (associated(dd%tidal_qe_md)) deallocate(dd%tidal_qe_md)
 
 end subroutine post_tidal_diagnostics
+
+!> This subroutine returns a zonal slice of the topographic roughness amplitudes
+subroutine tidal_mixing_h_amp(h_amp, G, j, CS)
+  type(ocean_grid_type),    intent(in)  :: G     !< The ocean's grid structure
+  real, dimension(SZI_(G)), intent(out) :: h_amp !< The topographic roughness amplitude [Z ~> m]
+  integer,                  intent(in)  :: j     !< j-index of the row to work on
+  type(tidal_mixing_cs),    pointer     :: CS    !< The control structure for this module
+
+  integer :: i
+
+  h_amp(:) = 0.0
+  if ( CS%Int_tide_dissipation .and. .not. CS%use_CVMix_tidal ) then
+    do i=G%isc,G%iec
+      h_amp(i) = sqrt(CS%h2(i,j))
+    enddo
+  endif
+
+end subroutine tidal_mixing_h_amp
 
 ! TODO: move this subroutine to MOM_internal_tide_input module (?)
 !> This subroutine read tidal energy inputs from a file.
