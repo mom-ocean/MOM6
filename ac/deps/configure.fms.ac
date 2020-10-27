@@ -81,7 +81,7 @@ AS_IF([test -n "$NC_CONFIG"],
   [AC_MSG_ERROR([Could not find nc-config.])])
 
 AX_FC_CHECK_MODULE([netcdf],
-  [], [AC_MSG_ERROR([Could not find FMS library.])])
+  [], [AC_MSG_ERROR([Could not find netcdf module.])])
 AX_FC_CHECK_LIB([netcdff], [nf_create], [netcdf],
   [], [AC_MSG_ERROR([Could not link netcdff library.])]
 )
@@ -167,6 +167,14 @@ AC_CONFIG_COMMANDS([mkmf],
   [${MKMF} -p libFMS.a -m Makefile.mkmf path_names],
   [MKMF=${MKMF}]
 )
+
+
+# Autoconf does not configure the archiver (ar), as it is handled by Automake.
+# TODO: Properly configure this tool.  For now, we hard-set this to `ar`.
+AR=ar
+ARFLAGS=rv
+AC_SUBST(AR)
+AC_SUBST(ARFLAGS)
 
 
 # Prepare output
