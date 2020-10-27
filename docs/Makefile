@@ -206,7 +206,7 @@ else
 endif
 ifeq ($(UPDATEHTMLEQS), Y)
 	@echo "Post processing equations."
-	@python ./postProcessEquations.py -d $(BUILDDIR) -p APIs -b doxygen -s index.html $(UPDATEHTMLEQSVERBOSE)
+	@python3 ./postProcessEquations.py -d $(BUILDDIR) -p APIs -b doxygen -s index.html $(UPDATEHTMLEQSVERBOSE)
 endif
 	@echo "Build finished. The html files are in $(BUILDDIR)/APIs."
 
@@ -217,8 +217,9 @@ else
 	$< Doxyfile_nortd_latex
 endif
 	# Make sure we are in nonstopmode for generating the pdf by patching the Makefile
+	# Older doxygen versions doe not have LATEX_CMD
 	-grep -q "pdflatex refman" $(BUILDDIR)/doxygen_latex/Makefile && sed -i.bak 's/pdflatex refman/pdflatex -interaction=nonstopmode refman/' $(BUILDDIR)/doxygen_latex/Makefile
-	make -C $(BUILDDIR)/doxygen_latex
+	make -C $(BUILDDIR)/doxygen_latex LATEX_CMD="pdflatex -interaction=nonstopmode"
 
 Clean: clean
 	rm -rf $(BUILDDIR) xml MOM6.tags

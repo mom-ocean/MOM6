@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import os, sys, pathlib, re
 import itertools
 from lxml import html
@@ -339,6 +337,7 @@ class equationRenumber:
             # From: \f$h(x)\f$
             # To  : <span class="math notranslate nohighlight">\(h(x)\)</span>
             self.updates = False
+            refPattern = {}
             if self.buildType == 'doxygen':
                 nodes = tree.xpath("//div[@class='caption']")
                 if len(nodes) > 0:
@@ -348,10 +347,17 @@ class equationRenumber:
                             txt = node.text
                         if node.tail != None:
                             txt = "%s%s" % (txt, node.tail)
-                        refPattern = '(\\\\f\$.*?\\\\f\$)'
-                        m = re.search(refPattern,txt)
+                        refPattern[0] = '(\\\\f\$.*?\\\\f\$)'
+                        refPattern[1] = '\\\\f\$(.*?)\\\\f\$'
+                        m = re.search(refPattern[0],txt)
                         if m:
                             self.fixCaptionMath(refPattern, node)
+                        else:
+                            refPattern[0] = '(\$.*?\$)'
+                            refPattern[1] = '\$(.*?)\$'
+                            m = re.search(refPattern[0],txt)
+                            if m:
+                                self.fixCaptionMath(refPattern, node)
 
             # Write the tree out if it was modified
             if self.updates:
@@ -361,8 +367,6 @@ class equationRenumber:
                 fo = open(htmlFile, 'wb')
                 fo.write(output)
                 fo.close()
-
-
 
     def fixCaptionMath(self, refPattern, node):
 
@@ -387,14 +391,13 @@ class equationRenumber:
                 # Check text
                 m = None
                 if x.text:
-                    m = re.search(refPattern,x.text)
+                    m = re.search(refPattern[0],x.text)
                 if m:
                     doFix = True
                     self.updates = True
                     txhead = x.text[0:m.start()]
                     txtail = x.text[m.end():]
-                    txtPattern = '\\\\f\$(.*?)\\\\f\$'
-                    m2 = re.search(txtPattern,m.groups()[0])
+                    m2 = re.search(refPattern[1],m.groups()[0])
                     span.text = "\\(%s\\)" % (m2.groups()[0])
                     # Do insert
                     x.insert(len(x.getchildren()),span)
@@ -410,14 +413,14 @@ class equationRenumber:
                 # Check tail
                 m = None
                 if x.tail:
-                    m = re.search(refPattern,x.tail)
+                    m = re.search(refPattern[0],x.tail)
                 if m:
                     doFix = True
                     self.updates = True
                     txhead = x.tail[0:m.start()]
                     txtail = x.tail[m.end():]
                     txtPattern = '\\\\f\$(.*?)\\\\f\$'
-                    m2 = re.search(txtPattern,m.groups()[0])
+                    m2 = re.search(refPattern[1],m.groups()[0])
                     span.text = "\\(%s\\)" % (m2.groups()[0])
                     # We have to add to the node and shift text around
                     node.insert(len(node.getchildren()),span)
@@ -693,7 +696,8 @@ class equationRenumber:
             ntag = target
             tag = ''
             for htmlFile in htmlFiles:
-                print("  > %s %s" % (ntag, htmlFile))
+                if self.verbose:
+                    print("  > %s %s" % (ntag, htmlFile))
                 tree = html.parse(htmlFile)
                 self.updates = False
                 nodes = tree.xpath("//p[@class='formulaDsp']")
@@ -773,7 +777,8 @@ class equationRenumber:
             htmlFiles = self.meta['fixanchor'][target]
             tag = target
             for htmlFile in htmlFiles:
-                print("  > %s %s" % (tag, htmlFile))
+                if self.verbose:
+                    print("  > %s %s" % (tag, htmlFile))
                 tree = html.parse(htmlFile)
                 self.updates = False
                 nodes = tree.xpath("//a[@class='anchor' and @id='%s']" % (tag))

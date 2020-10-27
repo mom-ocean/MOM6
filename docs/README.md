@@ -181,6 +181,7 @@ See below, the following Makefile options are honored:
 * DOXYGEN_CONF
 * DOXYGEN_RELEASE
 * UPDATEHTMLEQS
+* UPDATEHTMLEQSVERBOSE
 * PAPER
 
 ## Sphinx
@@ -231,11 +232,16 @@ This option is passed to `sphinx-build`.  See `sphinx-build --help` for more inf
 The default output directory is `_build`.  The default doxygen configuration files are expecting an output
 directory of `_build`.
 
-##### UPDATEHTMLEQS
+##### UPDATEHTMLEQS UPDATEHTMLEQSVERBOSE
 
-If this option is set to `Y`, `postProcessEquations.py` will be run to attempt to update equation numbers in the generated html.
+If `UPDATEHTMLEQS` is set to `Y`, `postProcessEquations.py` will be run
+to attempt to update equation numbers in the generated html.
 
 If `UPDATEHTMLEQSVERBOSE` is set to `-v` this will turn on verbose printing for the post processor.
+
+NOTE: These options affect solo doxygen html processing only for the `make nortd` option.  For sphinx, they are
+utilized in the sphinx python module to handle post processing and are not part of the Makefile.  This was done
+as RTD runs sphinx processing directly using `sphinx-build` and not the Makefile.
 
 ##### PAPER
 
@@ -257,7 +263,8 @@ Use this option to specify a custom configuration file to doxygen.
 
 #### DOXYGEN_RELEASE
 
-This option allows selection of a doxygen version from https://github.com/doxygen.  The default is `Release_1_8_19`.
+This option allows selection of a doxygen version from https://github.com/doxygen.
+The default is `Release_1_8_13`.
 NOTE: This command does not have any impact if an existing binary is found.
 
 ##### NCAR_FORK
@@ -425,8 +432,8 @@ to process the MOM6 documentation.  The versions are tagged and placed into the 
 
 | Source | Modified | Version | Development |
 | ------ | -------- | ------- | ----------- |
-| [sphinx](https://github.com/sphinx-doc/sphinx) | [sphinx-3.2.1mom6.1](https://github.com/jr3cermak/sphinx) | B:3.2.1mom6.2 | B:dev |
-| [sphinxcontrib-autodoc-doxygen](https://github.com/rmcgibbo/sphinxcontrib-autodoc_doxygen) | [sphinxcontrib-autodoc-doxygen](https://github.com/jr3cermak/sphinxcontrib-autodoc_doxygen) | T:0.7.8 | B:dev |
+| [sphinx](https://github.com/sphinx-doc/sphinx) | [sphinx-3.2.1mom6.1](https://github.com/jr3cermak/sphinx) | B:3.2.1mom6.3 | B:dev |
+| [sphinxcontrib-autodoc-doxygen](https://github.com/rmcgibbo/sphinxcontrib-autodoc_doxygen) | [sphinxcontrib-autodoc-doxygen](https://github.com/jr3cermak/sphinxcontrib-autodoc_doxygen) | T:0.7.9 | B:dev |
 | [sphinx-fortran](https://github.com/VACUMM/sphinx-fortran) | [sphinx-fortran](https://github.com/jr3cermak/sphinx-fortran) | T:1.2.1 | B:dev |
 | [flint](https://github.com/marshallward/flint) | [flint](https://github.com/jr3cermak/flint) | T:0.0.1 | B:dev |
 | [MOM6](https://github.com/NOAA-GFDL/MOM6) | [esmg-docs](https://github.com/ESMG/MOM6/tree/esmg-docs) | [esmg-docs](https://github.com/jr3cermak/MOM6/tree/esmg-docs) | B:[dev/rob](https://github.com/jr3cermak/MOM6/tree/dev-rob) |
