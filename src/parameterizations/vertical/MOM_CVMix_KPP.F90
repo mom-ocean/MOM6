@@ -173,7 +173,7 @@ end type KPP_CS
 
 !>@{ CPU time clocks
 integer :: id_clock_KPP_calc, id_clock_KPP_compute_BLD, id_clock_KPP_smoothing
-!!@}
+!>@}
 
 #define __DO_SAFETY_CHECKS__
 
