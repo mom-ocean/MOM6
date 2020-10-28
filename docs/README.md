@@ -149,6 +149,8 @@ The RTD site can be configured to watch for updates on a github repository.  A d
 
 NOTE: There is a rough execution time limit of about 900 seconds.  Trying to do more than that will cause a "timeout" error.
 
+NOTE: To post process equations within RTD, see `UPDATEHTMLEQS` below for more information.
+
 # Special Cases
 
 Please see the [details](details/Details.md) for special cases to the documentation syntax not found
@@ -235,7 +237,8 @@ directory of `_build`.
 ##### UPDATEHTMLEQS UPDATEHTMLEQSVERBOSE
 
 If `UPDATEHTMLEQS` is set to `Y`, `postProcessEquations.py` will be run
-to attempt to update equation numbers in the generated html.
+to attempt to update equation numbers in the generated html.  This environment variable has to be
+added to the RTD administrative interface if you want to trigger post processing of equations.
 
 If `UPDATEHTMLEQSVERBOSE` is set to `-v` this will turn on verbose printing for the post processor.
 
@@ -343,11 +346,11 @@ PDF generation requires the following packages
 
 ### doxygen
 
-Download latest [source](https://www.doxygen.nl/download.html).  Latest is `doxygen-1.8.19.src.tar.gz`.
+Download latest [source](https://www.doxygen.nl/download.html).  Latest is `doxygen-1.8.20.src.tar.gz`.
 
 ```bash
-tar xzf doxygen-1.8.19.src.tar.gz
-cd doxygen-1.8.19
+tar xzf doxygen-1.8.20.src.tar.gz
+cd doxygen-1.8.20
 mkdir build
 cd build
 cmake -G "Unix Makefiles" ..
@@ -357,13 +360,19 @@ sudo make install
 
 Make install attempts to place the compiled version into /usr/local/bin.  You can link to a
 specific executable within the virtual environment.   At this point we also recommend
-renaming `doxygen` to `doxygen-1.8.19` within `/usr/local/bin`.
+renaming `doxygen` to `doxygen-1.8.20` within `/usr/local/bin`.
+
+#### Testing
+
+Currently, the majority of testing has been done with the following versions:
+* 1.8.13
+* 1.8.19
 
 ### Read the Docs
 
 The [Read the Docs](https://readthedocs.org/) (RTD) site uses a virtual
 machine (VM) for processing documentation.  The VM architecture is type x86\_64.
-The defualt doxygen in use is 1.8.13 which produces XML that does not work for our use.
+The default version for doxygen is 1.8.13 on the RTD VM.
 
 NOTE: Using modified python modules on RTD is possible through careful crafting of the requirements.txt file.  It is impossible to replace system binaries or compile code on RTD.  It is possible to ship replacement binaries that can be run from the repo.  For security reasons, a binary cannot be included in the MOM6 repository.
 
@@ -432,9 +441,9 @@ to process the MOM6 documentation.  The versions are tagged and placed into the 
 
 | Source | Modified | Version | Development |
 | ------ | -------- | ------- | ----------- |
-| [sphinx](https://github.com/sphinx-doc/sphinx) | [sphinx-3.2.1mom6.1](https://github.com/jr3cermak/sphinx) | B:3.2.1mom6.3 | B:dev |
-| [sphinxcontrib-autodoc-doxygen](https://github.com/rmcgibbo/sphinxcontrib-autodoc_doxygen) | [sphinxcontrib-autodoc-doxygen](https://github.com/jr3cermak/sphinxcontrib-autodoc_doxygen) | T:0.7.9 | B:dev |
-| [sphinx-fortran](https://github.com/VACUMM/sphinx-fortran) | [sphinx-fortran](https://github.com/jr3cermak/sphinx-fortran) | T:1.2.1 | B:dev |
+| [sphinx](https://github.com/sphinx-doc/sphinx) | [sphinx-3.2.1mom6.4](https://github.com/jr3cermak/sphinx) | B:3.2.1mom6.4 | B:dev |
+| [sphinxcontrib-autodoc-doxygen](https://github.com/rmcgibbo/sphinxcontrib-autodoc_doxygen) | [sphinxcontrib-autodoc-doxygen](https://github.com/jr3cermak/sphinxcontrib-autodoc_doxygen) | T:0.7.11 | B:dev |
+| [sphinx-fortran](https://github.com/VACUMM/sphinx-fortran) | [sphinx-fortran](https://github.com/jr3cermak/sphinx-fortran) | T:1.2.2 | B:dev |
 | [flint](https://github.com/marshallward/flint) | [flint](https://github.com/jr3cermak/flint) | T:0.0.1 | B:dev |
 | [MOM6](https://github.com/NOAA-GFDL/MOM6) | [esmg-docs](https://github.com/ESMG/MOM6/tree/esmg-docs) | [esmg-docs](https://github.com/jr3cermak/MOM6/tree/esmg-docs) | B:[dev/rob](https://github.com/jr3cermak/MOM6/tree/dev-rob) |
 

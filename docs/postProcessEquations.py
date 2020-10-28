@@ -338,26 +338,33 @@ class equationRenumber:
             # To  : <span class="math notranslate nohighlight">\(h(x)\)</span>
             self.updates = False
             refPattern = {}
+            nodes = []
             if self.buildType == 'doxygen':
                 nodes = tree.xpath("//div[@class='caption']")
-                if len(nodes) > 0:
-                    for node in nodes:
-                        txt = ""
-                        if node.text != None:
-                            txt = node.text
-                        if node.tail != None:
-                            txt = "%s%s" % (txt, node.tail)
-                        refPattern[0] = '(\\\\f\$.*?\\\\f\$)'
-                        refPattern[1] = '\\\\f\$(.*?)\\\\f\$'
+                if len(nodes) == 0:
+                    # Older doxygen: <span class="caption-text">
+                    nodes = tree.xpath("//span[@class='caption-text']")
+            if self.buildType == 'sphinx':
+                # Older doxygen: <span class="caption-text">
+                nodes = tree.xpath("//span[@class='caption-text']")
+            if len(nodes) > 0:
+                for node in nodes:
+                    txt = ""
+                    if node.text != None:
+                        txt = node.text
+                    if node.tail != None:
+                        txt = "%s%s" % (txt, node.tail)
+                    refPattern[0] = '(\\\\f\$.*?\\\\f\$)'
+                    refPattern[1] = '\\\\f\$(.*?)\\\\f\$'
+                    m = re.search(refPattern[0],txt)
+                    if m:
+                        self.fixCaptionMath(refPattern, node)
+                    else:
+                        refPattern[0] = '(\$.*?\$)'
+                        refPattern[1] = '\$(.*?)\$'
                         m = re.search(refPattern[0],txt)
                         if m:
                             self.fixCaptionMath(refPattern, node)
-                        else:
-                            refPattern[0] = '(\$.*?\$)'
-                            refPattern[1] = '\$(.*?)\$'
-                            m = re.search(refPattern[0],txt)
-                            if m:
-                                self.fixCaptionMath(refPattern, node)
 
             # Write the tree out if it was modified
             if self.updates:

@@ -8,7 +8,7 @@ BUILDDIR         ?= _build
 DOXYGEN_BIN      ?= doxygen
 DOXYGEN_CONF     ?=
 FINDDOXYGENBIN    = $(DOXYGEN_BIN)
-DOXYGEN_RELEASE  ?= Release_1_8_19
+DOXYGEN_RELEASE  ?= Release_1_8_13
 
 # User-friendly check for sphinx-build
 ifeq ($(shell which $(SPHINXBUILD) >/dev/null 2>&1; echo $$?), 1)
