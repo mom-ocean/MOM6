@@ -15,7 +15,7 @@ module write_ocean_obs_mod
 contains
 
 !> Open a profile file
-integer function open_profile_file(name, nvar, grid_lon, grid_lat,thread,fset)
+integer function open_profile_file(name, nvar, grid_lon, grid_lat, thread, fset)
   character(len=*), intent(in) :: name !< File name
   integer, intent(in), optional :: nvar !< Number of variables
   real, dimension(:), optional, intent(in) :: grid_lon !< Longitude [degreeE]
