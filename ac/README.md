@@ -147,7 +147,7 @@ and `LDFLAGS` so that `configure` can locate them.
 Exported environment variables such as `FC` or `FCFLAGS` will be passed to the
 corresponding `configure` scripts.
 
-The following configuration options are also provided by, which can be used to
+The following configuration options are also provided, which can be used to
 specify the git URL and commit of the dependencies.
 
 `MKMF_URL` (*default:* https://github.com/NOAA-GFDL/mkmf.git)
