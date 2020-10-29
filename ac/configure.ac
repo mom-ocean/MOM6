@@ -168,11 +168,13 @@ AS_IF([test -z "$MKMF"], [
 
 
 # NOTE: MEM_LAYOUT unneeded if we shift to MOM_memory.h.in template
+# TODO: fms_layer should be configurable (and renamed)
 AC_CONFIG_COMMANDS([path_names],
   [list_paths -l \
     ${srcdir}/src \
     ${srcdir}/config_src/solo_driver \
     ${srcdir}/config_src/ext* \
+    ${srcdir}/config_src/fms_layer \
     ${MEM_LAYOUT}
 ], [MEM_LAYOUT=$MEM_LAYOUT])
 
