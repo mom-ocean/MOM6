@@ -1180,7 +1180,7 @@ end function EOS_domain
 !! integrals in pressure across layers of geopotential anomalies, which are
 !! required for calculating the finite-volume form pressure accelerations in a
 !! non-Boussinesq model.  There are essentially no free assumptions, apart from the
-!! use of Bode's rule to do the horizontal integrals, and from a truncation in the
+!! use of Boole's rule to do the horizontal integrals, and from a truncation in the
 !! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
 subroutine analytic_int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                dza, intp_dza, intx_dza, inty_dza, halo_size, &
@@ -1551,7 +1551,7 @@ subroutine convert_temp_salt_for_TEOS10(T, S, HI, kd, mask_z, EOS)
   do k=1,kd ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
     if (mask_z(i,j,k) >= 1.0) then
      S(i,j,k) = gsw_sr_from_sp(S(i,j,k))
-!     Get absolute salnity from practical salinity, converting pressures from Pascal to dbar.
+!     Get absolute salinity from practical salinity, converting pressures from Pascal to dbar.
 !     If this option is activated, pressure will need to be added as an argument, and it should be
 !     moved out into module that is not shared between components, where the ocean_grid can be used.
 !     S(i,j,k) = gsw_sa_from_sp(S(i,j,k),pres(i,j,k)*1.0e-4,G%geoLonT(i,j),G%geoLatT(i,j))
