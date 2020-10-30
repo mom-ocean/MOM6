@@ -1,0 +1,50 @@
+/*! \page ALE_Timestep ALE Timestep
+
+\section section_ALE_remap Explanation of ALE remapping
+
+The Arbitrary Lagrangian-Eulerian (ALE) remapping is not a timestep in the traditional
+sense, but rather an operation performed to bring the vertical coordinate back to the target
+specification. This remapping can be less frequent than the momentum or
+thermodynamic timesteps, but must be done before the layer interfaces become entangled
+with each other.
+
+Assuming the target vertical grid is level \f$z\f$-surfaces, the initial state is
+shown on the left in the following figure:
+
+\image html remapping1.png "The initial state with level surface (left) and the perturbed state after a wave has come through (right)."
+\image latex remapping1.png "The initial state with level surface (left) and the perturbed state after a wave has come through (right)."
+
+Some time later, a wave has perturbed the surfaces which move with the
+fluid and it has been determined that a remapping operation is needed. The
+target vertical grid is still level \f$z\f$-surfaces, so this new target
+grid is shown overlaid on the left as regrid:
+
+\image html remapping2.png "The regrid operation (left) and the remap operation (right)."
+\image latex remapping2.png "The regrid operation (left) and the remap operation (right)."
+
+The complex part of the operation is remapping the wavy field onto the new grid as
+shown on the right and again in the final frame after the old deformed coordinate
+system has been deleted:
+
+\image html remapping3.png "The final state after remapping."
+\image latex remapping3.png "The final state after remapping."
+
+Mathematically, the new layer thicknesses, \f$h_k\f$, are computed and then populated
+with the new velocities and tracers:
+
+\f[
+   h_k^{\mbox{new}} = \nabla_k z_{\mbox{coord}}
+\f]
+\f[
+  \sum h_k^{\mbox{new}} = \sum h_k^{\mbox{old}}
+\f]
+\f[
+  \vec{u}_k^{\mbox{new}} = \frac{1}{h_k} \int_{z_{k + \frac{1}{2}}}^{z_{k +
+  \frac{1}{2}} + h_k} \vec{u}^{\mbox{old}}(z')dz'
+\f]
+\f[
+  \theta^{\mbox{new}} = \frac{1}{h_k} \int_{z_{k + \frac{1}{2}}}^{z_{k +
+  \frac{1}{2}} + h_k} \theta^{\mbox{old}}(z')dz'
+\f]
+
+*/
