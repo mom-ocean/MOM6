@@ -1458,7 +1458,7 @@ end subroutine MEKE_end
 !! \subsection section_MEKE_equations MEKE equations
 !!
 !! The eddy kinetic energy equation is:
-!! \f[ \partial_\tilde{t} E =
+!! \f[ \partial_{\tilde{t}} E =
 !!   \overbrace{ \dot{E}_b + \gamma_\eta \dot{E}_\eta + \gamma_v \dot{E}_v
 !!             }^\text{sources}
 !! - \overbrace{ ( \lambda + C_d | U_d | \gamma_b^2 ) E
