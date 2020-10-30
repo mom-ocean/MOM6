@@ -229,6 +229,7 @@ configurations in the MOM6-examples repository.
 - `tc2`: An ALE configuration based on tc1 with tides
   - `tc2.a`: Use sigma, PPM_H4 and no tides
 - `tc3`: An open-boundary condition (OBC) test based on `circle_obcs`
+- `tc4`: Sponges and initialization using I/O
 
 
 ## Code coverage

@@ -34,8 +34,8 @@ module ocean_da_types_mod
                            !! 4:Arctic Ocean, 5:Indian Ocean, 6:Mediterranean Sea, 7:Black Sea,
                            !! 8:Hudson Bay, 9:Baltic Sea, 10:Red Sea, 11:Persian Gulf
      integer :: profile_flag !< an overall flag for the profile
-     real :: lat      !< latitude (degrees N)
-     real :: lon      !< longitude (degrees E)
+     real :: lat      !< latitude [degrees_N]
+     real :: lon      !< longitude [degrees_E]
      logical :: accepted !< logical flag to disable a profile
      type(time_type) :: time_window !< The time window associated with this profile [s]
      real, pointer, dimension(:) :: obs_error  !< The observation error by variable
