@@ -815,11 +815,11 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
         do k=1,nz
 
           ! This is the unmixed PE cummulative sum from top down
-          PE = PE + 0.5*rho_c(k)*(Z_U(k)**2-Z_L(k)**2)
+          PE = PE + 0.5 * rho_c(k) * (Z_U(k)**2 - Z_L(k)**2)
 
           ! This is the depth and integral of density
           H_ML_TST = H_ML + DZ(k)
-          RhoDZ_ML_TST = RhoDZ_ML + rho_c(k)*DZ(k)
+          RhoDZ_ML_TST = RhoDZ_ML + rho_c(k) * DZ(k)
 
           ! The average density assuming all layers including this were mixed
           Rho_ML = RhoDZ_ML_TST/H_ML_TST
@@ -827,17 +827,17 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
           ! The PE assuming all layers including this were mixed
           ! Note that 0. could be replaced with "Surface", which doesn't have to be 0
           ! but 0 is a good reference value.
-          PE_Mixed_TST = 0.5*Rho_ML*(0.**2-(0.-H_ML_TST)**2)
+          PE_Mixed_TST = 0.5 * Rho_ML * (0.**2 - (0. - H_ML_TST)**2)
 
           ! Check if we supplied enough energy to mix to this layer
-          if (PE_Mixed_TST-PE<=PE_threshold(iM)) then
+          if (PE_Mixed_TST - PE <= PE_threshold(iM)) then
             H_ML = H_ML_TST
             RhoDZ_ML = RhoDZ_ML_TST
 
           else ! If not, we need to solve where the energy ran out
             ! This will be done with a Newton's method iteration:
 
-            R1 = RhoDZ_ML/H_ML ! The density of the mixed layer (not including this layer)
+            R1 = RhoDZ_ML / H_ML ! The density of the mixed layer (not including this layer)
             D1 = H_ML ! The thickness of the mixed layer (not including this layer)
             R2 = rho_c(k) ! The density of this layer
             D2 = DZ(k) ! The thickness of this layer
@@ -856,18 +856,18 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
             ! Cc2 = R2*(D+S**2-C)
             !
             ! If the surface is S = 0, it simplifies to:
-            Ca  = -(R2)
-            Cb  = -( R1*D1 + R2*(2.*D1) )
-            D   = D1**2.
-            Cc  = -( R1*D1*(2*D1) + R2*D )
-            Cd  = -R1*D1*D
+            Ca  = -R2
+            Cb  = -(R1 * D1 + R2 * (2. * D1))
+            D   = D1**2
+            Cc  = -(R1 * D1 * (2. * D1) + (R2 * D))
+            Cd  = -R1 * D1 * D
             Ca2 = R2
-            Cb2 = R2*(2.*D1)
-            C   = D2**2. + D1**2. + 2.*D1*D2
-            Cc2 = R2*(D-C)
+            Cb2 = R2 * (2. * D1)
+            C   = D2**2 + D1**2 + 2. * (D1 * D2)
+            Cc2 = R2 * (D - C)
 
             ! First guess for an iteration using Newton's method
-            X = DZ(k)*0.5
+            X = DZ(k) * 0.5
 
             IT=0
             do while(IT<10)!We can iterate up to 10 times
@@ -878,28 +878,28 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
               ! We also need the derivative of this function for the Newton's method iteration
               ! F'(x) = (G'(x)H(x)-G(x)H'(x))/H(x)^2 + I'(x)
               ! G and its derivative
-              Gx = 0.5*(Ca*X**3+Cb*X**2+Cc*X+Cd)
-              Gpx = 0.5*(3*Ca*X**2+2*Cb*X+Cc)
+              Gx = 0.5 * (Ca * (X*X*X) + Cb * X**2 + Cc * X + Cd)
+              Gpx = 0.5 * (3. * Ca * X**2 + 2. * Cb * X + Cc)
               ! H, its inverse, and its derivative
-              Hx = (D1+X)
-              iHx = 1./Hx
+              Hx = D1 + X
+              iHx = 1. / Hx
               Hpx = 1.
               ! I and its derivative
-              Ix = 0.5*(Ca2*X**2. + Cb2*X + Cc2)
-              Ipx = 0.5*(2.*Ca2*X+Cb2)
+              Ix = 0.5 * (Ca2 * X**2 + Cb2 * X + Cc2)
+              Ipx = 0.5 * (2. * Ca2 * X + Cb2)
 
               ! The Function and its derivative:
-              PE_Mixed = Gx*iHx+Ix
-              Fgx = (PE_Mixed-(PE+PE_threshold(iM)))
-              Fpx = (Gpx*Hx-Hpx*Gx)*iHx**2+Ipx
+              PE_Mixed = Gx * iHx + Ix
+              Fgx = PE_Mixed - (PE + PE_threshold(iM))
+              Fpx = (Gpx * Hx - Hpx * Gx) * iHx**2 + Ipx
 
               ! Check if our solution is within the threshold bounds, if not update
               ! using Newton's method.  This appears to converge almost always in
               ! one step because the function is very close to linear in most applications.
-              if (abs(Fgx)>PE_Threshold(iM)*PE_Threshold_fraction) then
-                X2 = X - Fgx/Fpx
+              if (abs(Fgx) > PE_Threshold(iM) * PE_Threshold_fraction) then
+                X2 = X - Fgx / Fpx
                 IT = IT + 1
-                if (X2<0. .or. X2>DZ(k)) then
+                if (X2 < 0. .or. X2 > DZ(k)) then
                   ! The iteration seems to be robust, but we need to do something *if*
                   ! things go wrong... How should we treat failed iteration?
                   ! Present solution: Stop trying to compute and just say we can't mix this layer.
@@ -912,7 +912,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
                 exit! Quit the iteration
               endif
             enddo
-            H_ML = H_ML+X
+            H_ML = H_ML + X
             exit! Quit looping through the column
           endif
         enddo
