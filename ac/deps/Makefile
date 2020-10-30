@@ -1,22 +1,10 @@
 SHELL = bash
+
+# Disable implicit rules
 .SUFFIXES:
 
-# FMS build configuration
-PATH_ENV ?=
-FCFLAGS_ENV ?=
-
-# Only set FCFLAGS if an argument is provided.
-FMS_FCFLAGS =
-ifneq ($(FCFLAGS_ENV),)
-  FMS_FCFLAGS := FCFLAGS="$(FCFLAGS_ENV)"
-endif
-
-
-# Ditto for path
-FMS_PATH =
-ifneq ($(PATH_ENV),)
-  FMS_PATH := PATH="$(PATH_ENV)"
-endif
+# Disable implicit variables
+MAKEFLAGS += -R
 
 
 # mkmf, list_paths (GFDL build toolchain)
@@ -44,7 +32,6 @@ FMS_SOURCE = $(call SOURCE,fms/src)
 .PHONY: all
 all: bin/mkmf bin/list_paths lib/libFMS.a
 
-
 #---
 # mkmf checkout
 
@@ -65,6 +52,7 @@ mkmf:
 #   This is a flawed approach, since module files are untracked and could be
 #   handled more safely, but this is adequate for now.
 
+
 # TODO: track *.mod copy?
 lib/libFMS.a: fms/build/libFMS.a fms/build/Makefile
 	mkdir -p {lib,include}
@@ -76,13 +64,10 @@ fms/build/libFMS.a: fms/build/Makefile
 	make -C fms/build libFMS.a
 
 
-# TODO: Include FC, CC, CFLAGS?
-fms/build/Makefile: FMS_ENV=$(FMS_PATH) $(FMS_FCFLAGS)
-
 fms/build/Makefile: Makefile.fms.in fms/src/configure bin/mkmf bin/list_paths
 	mkdir -p fms/build
 	cp Makefile.fms.in fms/src/Makefile.in
-	cd $(@D) && $(FMS_ENV) ../src/configure --srcdir=../src
+	cd $(@D) && ../src/configure --srcdir=../src
 
 
 # TODO: Track m4 macros?
@@ -99,7 +84,6 @@ fms/src:
 .PHONY: clean
 clean:
 	rm -rf fms/build lib include bin
-
 
 .PHONY: distclean
 distclean: clean
