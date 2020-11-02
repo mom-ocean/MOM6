@@ -804,7 +804,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
 
       do iM=1,3
 
-        ! Initialize these for each columnwise calculation
+        ! Initialize these for each column-wise calculation
         PE = 0.0
         RhoDZ_ML = 0.0
         H_ML = 0.0
@@ -814,7 +814,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
 
         do k=1,nz
 
-          ! This is the unmixed PE cummulative sum from top down
+          ! This is the unmixed PE cumulative sum from top down
           PE = PE + 0.5 * rho_c(k) * (Z_U(k)**2 - Z_L(k)**2)
 
           ! This is the depth and integral of density
@@ -860,7 +860,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
             Cb  = -(R1 * D1 + R2 * (2. * D1))
             D   = D1**2
             Cc  = -(R1 * D1 * (2. * D1) + (R2 * D))
-            Cd  = -R1 * D1 * D
+            Cd  = -R1 * (D1 * D)
             Ca2 = R2
             Cb2 = R2 * (2. * D1)
             C   = D2**2 + D1**2 + 2. * (D1 * D2)
@@ -879,7 +879,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
               ! F'(x) = (G'(x)H(x)-G(x)H'(x))/H(x)^2 + I'(x)
               ! G and its derivative
               Gx = 0.5 * (Ca * (X*X*X) + Cb * X**2 + Cc * X + Cd)
-              Gpx = 0.5 * (3. * Ca * X**2 + 2. * Cb * X + Cc)
+              Gpx = 0.5 * (3. * (Ca * X**2) + 2. * (Cb * X) + Cc)
               ! H, its inverse, and its derivative
               Hx = D1 + X
               iHx = 1. / Hx
