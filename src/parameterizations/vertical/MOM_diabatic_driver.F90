@@ -744,13 +744,8 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
   ! Calculate vertical mixing due to convection (computed via CVMix)
   if (CS%use_CVMix_conv) then
-    call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_csp, Hml)
     ! Increment vertical diffusion and viscosity due to convection
-    !$OMP parallel do default(shared)
-    do K=1,nz+1 ; do j=js,je ; do i=is,ie
-      Kd_int(i,j,K) = Kd_int(i,j,K) + CS%CVMix_conv_csp%kd_conv(i,j,K)
-      visc%Kv_slow(i,j,K) = visc%Kv_slow(i,j,K) + CS%CVMix_conv_csp%kv_conv(i,j,K)
-    enddo ; enddo ; enddo
+    call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_csp, Hml, Kd=Kd_int, Kv=visc%Kv_slow)
   endif
 
   ! This block sets ea, eb from h and Kd_int.
@@ -1227,7 +1222,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     Kd_int,   & ! diapycnal diffusivity of interfaces [Z2 T-1 ~> m2 s-1]
     Kd_heat,  & ! diapycnal diffusivity of heat [Z2 T-1 ~> m2 s-1]
     Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers [Z2 T-1 ~> m2 s-1]
-    Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces [Z2 T-1 ~> m2 s-1]
+    Kd_ePBL,  & ! boundary layer or convective diapycnal diffusivities at interfaces [Z2 T-1 ~> m2 s-1]
     Tdif_flx, & ! diffusive diapycnal heat flux across interfaces [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
     Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
     Sdif_flx, & ! diffusive diapycnal salt flux across interfaces [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
@@ -1450,18 +1445,12 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
   ! Calculate vertical mixing due to convection (computed via CVMix)
   if (CS%use_CVMix_conv) then
-    call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_csp, Hml)
     ! Increment vertical diffusion and viscosity due to convection
-    !$OMP parallel do default(shared)
-    do K=1,nz+1 ; do j=js,je ; do i=is,ie
-      Kd_heat(i,j,K) = Kd_heat(i,j,K) + CS%CVMix_conv_csp%kd_conv(i,j,K)
-      Kd_salt(i,j,K) = Kd_salt(i,j,K) + CS%CVMix_conv_csp%kd_conv(i,j,K)
-      if (CS%useKPP) then
-        visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + CS%CVMix_conv_csp%kv_conv(i,j,K)
-      else
-        visc%Kv_slow(i,j,K) = visc%Kv_slow(i,j,K) + CS%CVMix_conv_csp%kv_conv(i,j,K)
-      endif
-    enddo ; enddo ; enddo
+    if (CS%useKPP) then
+      call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_csp, Hml, Kd=Kd_heat, Kv=visc%Kv_shear, Kd_aux=Kd_salt)
+    else
+      call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_csp, Hml, Kd=Kd_heat, Kv=visc%Kv_slow, Kd_aux=Kd_salt)
+    endif
   endif
 
   ! Save fields before boundary forcing is applied for tendency diagnostics
@@ -2167,12 +2156,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
   ! Add vertical diff./visc. due to convection (computed via CVMix)
   if (CS%use_CVMix_conv) then
-    call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_csp, Hml)
-
-    do K=1,nz+1 ; do j=js,je ; do i=is,ie
-      Kd_int(i,j,K) = Kd_int(i,j,K) + CS%CVMix_conv_csp%kd_conv(i,j,K)
-      visc%Kv_slow(i,j,K) = visc%Kv_slow(i,j,K) + CS%CVMix_conv_csp%kv_conv(i,j,K)
-    enddo ; enddo ; enddo
+    call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_csp, Hml, Kd=Kd_int, Kv=visc%Kv_slow)
   endif
 
   if (CS%useKPP) then
