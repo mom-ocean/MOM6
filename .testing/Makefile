@@ -391,8 +391,7 @@ FAIL = ${RED}FAIL${RESET}
 define CMP_RULE
 .PRECIOUS: $(foreach b,$(2),work/%/$(b)/ocean.stats)
 %.$(1): $(foreach b,$(2),work/%/$(b)/ocean.stats)
-	@rm -rf results/$$*/std.$(1).{out,err}
-	@test -n $$(shell ls -A results/$$*) || rm -rf results/$$*
+	@test "$$(shell ls -A results/$$* 2>/dev/null)" || rm -rf results/$$*
 	@cmp $$^ || !( \
 	  mkdir -p results/$$*; \
 	  (diff $$^ | tee results/$$*/ocean.stats.$(1).diff | head -n 20) ; \
@@ -423,8 +422,7 @@ $(foreach d,$(DIMS),$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 # Restart tests only compare the final stat record
 .PRECIOUS: $(foreach b,symmetric restart target,work/%/$(b)/ocean.stats)
 %.restart: $(foreach b,symmetric restart,work/%/$(b)/ocean.stats)
-	@rm -rf results/$*/std.restart.{out,err}
-	@test -n $(shell ls -A results/$*) || rm -rf results/$*
+	@test "$(shell ls -A results/$* 2>/dev/null)" || rm -rf results/$*
 	@cmp $(foreach f,$^,<(tr -s ' ' < $(f) | cut -d ' ' -f3- | tail -n 1)) \
 	  || !( \
 	    mkdir -p results/$*; \
@@ -437,8 +435,7 @@ $(foreach d,$(DIMS),$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 
 # stats rule is unchanged, but we cannot use CMP_RULE to generate it.
 %.regression: $(foreach b,symmetric target,work/%/$(b)/ocean.stats)
-	@rm -rf results/$*/std.regression.{out,err}
-	@test -n $(shell ls -A results/$*) || rm -rf results/$*
+	@test "$(shell ls -A results/$* 2>/dev/null)" || rm -rf results/$*
 	@cmp $^ || !( \
 	  mkdir -p results/$*; \
 	  (diff $^ | tee results/$*/ocean.stats.regression.diff | head -n 20) ; \
@@ -483,6 +480,7 @@ work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6 $(VENV_PATH)
 	fi
 	mkdir -p $$(@D)/RESTART
 	echo -e "$(4)" > $$(@D)/MOM_override
+	rm -rf results/$$*/std.$(1).{out,err}
 	cd $$(@D) \
 	  && $(TIME) $(5) $(MPIRUN) -n $(6) ../../../$$< 2> std.err > std.out \
 	  || !( \
@@ -544,6 +542,8 @@ work/%/restart/ocean.stats: build/symmetric/MOM6 $(VENV_PATH)
 	  && printf -v timeunit_int "%.f" "$${timeunit}" \
 	  && halfperiod=$$(printf "%.f" $$(bc <<< "scale=10; 0.5 * $${daymax} * $${timeunit_int}")) \
 	  && printf "\n&ocean_solo_nml\n    seconds = $${halfperiod}\n/\n" >> input.nml
+	# Remove any previous archived output
+	rm -rf results/$*/std.restart{1,2}.{out,err}
 	# Run the first half-period
 	cd $(@D) && $(TIME) $(MPIRUN) -n 1 ../../../$< 2> std1.err > std1.out \
 	  || !( \
