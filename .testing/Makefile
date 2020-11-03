@@ -374,16 +374,16 @@ run.nans: $(foreach c,$(CONFIGS),work/$(c)/nan/ocean.stats)
 run.openmp: $(foreach c,$(CONFIGS),work/$(c)/openmp/ocean.stats)
 
 # Color highlights for test results
-RED=\033[0;31m
-YELLOW=\033[0;33m
-GREEN=\033[0;32m
-MAGENTA=\033[0;35m
-RESET=\033[0m
+RED = \033[0;31m
+YELLOW = \033[0;33m
+GREEN = \033[0;32m
+MAGENTA = \033[0;35m
+RESET = \033[0m
 
-DONE=${GREEN}DONE${RESET}
-PASS=${GREEN}PASS${RESET}
-WARN=${YELLOW}WARN${RESET}
-FAIL=${RED}FAIL${RESET}
+DONE = ${GREEN}DONE${RESET}
+PASS = ${GREEN}PASS${RESET}
+WARN = ${YELLOW}WARN${RESET}
+FAIL = ${RED}FAIL${RESET}
 
 # Comparison rules
 # $(1): Test type (grid, layout, &c.)
@@ -392,7 +392,7 @@ define CMP_RULE
 .PRECIOUS: $(foreach b,$(2),work/%/$(b)/ocean.stats)
 %.$(1): $(foreach b,$(2),work/%/$(b)/ocean.stats)
 	@rm -rf results/$$*/std.$(1).{out,err}
-	@test -z $(ls -A results/$$*) && rm -rf results/$$*
+	@test -n $$(shell ls -A results/$$*) || rm -rf results/$$*
 	@cmp $$^ || !( \
 	  mkdir -p results/$$*; \
 	  (diff $$^ | tee results/$$*/ocean.stats.$(1).diff | head -n 20) ; \
@@ -423,8 +423,8 @@ $(foreach d,$(DIMS),$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 # Restart tests only compare the final stat record
 .PRECIOUS: $(foreach b,symmetric restart target,work/%/$(b)/ocean.stats)
 %.restart: $(foreach b,symmetric restart,work/%/$(b)/ocean.stats)
-	@rm -rf results/$$*/std.restart.{out,err}
-	@test -z $(ls -A results/$$*) && rm -rf results/$$*
+	@rm -rf results/$*/std.restart.{out,err}
+	@test -n $(shell ls -A results/$*) || rm -rf results/$*
 	@cmp $(foreach f,$^,<(tr -s ' ' < $(f) | cut -d ' ' -f3- | tail -n 1)) \
 	  || !( \
 	    mkdir -p results/$*; \
@@ -437,8 +437,8 @@ $(foreach d,$(DIMS),$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 
 # stats rule is unchanged, but we cannot use CMP_RULE to generate it.
 %.regression: $(foreach b,symmetric target,work/%/$(b)/ocean.stats)
-	@rm -rf results/$$*/std.regression.{out,err}
-	@test -z $(ls -A results/$$*) && rm -rf results/$$*
+	@rm -rf results/$*/std.regression.{out,err}
+	@test -n $(shell ls -A results/$*) || rm -rf results/$*
 	@cmp $^ || !( \
 	  mkdir -p results/$*; \
 	  (diff $^ | tee results/$*/ocean.stats.regression.diff | head -n 20) ; \
