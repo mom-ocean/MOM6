@@ -55,7 +55,7 @@ t\f$, the time-stepping for the continuity and temperature equation can
 be summarized as
 
 \f{eqnarray}
-\label{html:ale-equations} \\
+\label{html:ale-equations}\notag \\
 h^\dagger &= h^{(n)} - \Delta t \left[ \nabla_r \cdot \left( h \, \mathbf{u} \right) \right]
 &\mbox{thickness} \label{eq:ale-thickness-equation} \\
 \theta^\dagger \, h^\dagger &= \theta^{(n)} \, h^{(n)} - \Delta t \left[ \nabla_r \cdot \left( \theta h \, \mathbf{u} \right) - h \boldsymbol{\mathcal{N}}_\theta^\gamma + \delta_r J_\theta^{(z)} \right]
