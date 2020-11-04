@@ -2,7 +2,7 @@
 
 ## Reference Labels
 
-Reference labels are not case sensitive in Sphinx. 
+Reference labels are not case sensitive in Sphinx.
 
 The following characters are translated to dashes (`-`): colon(`:`) underscore(`_`)
 Here are examples:

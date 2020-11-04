@@ -5,7 +5,7 @@
 The VM requires latex to provide infrastructure to compile the bibliographic references for use in
 generated html and pdf documents.
 
-We currently support the use of math and formulas in figure captions.  
+We currently support the use of math and formulas in figure captions.
 The will look similar to:
 
 ```
