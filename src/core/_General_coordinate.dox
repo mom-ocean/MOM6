@@ -6,7 +6,7 @@ The Boussinesq hydrostatic equations of motion in general-coordinate
 \f$r\f$ are:
 
 \f{eqnarray}
-\label{html:r-equations} \\
+\label{html:r-equations}\notag \\
 \rho_0 \left( \frac{\partial \mathbf{u}}{\partial t} + ( f + \zeta ) \, \hat{\mathbf{z}} \times \mathbf{u} + \dot{r} \, \frac{\partial \mathbf{u}}{\partial r} + \nabla_r \, K \right) &= -\nabla_r \, p - \rho \nabla_r \, \Phi + \boldsymbol{\mathcal{F}}
 &\mbox{momentum} \label{eq:r-horz-momentum} \\
 \rho \, \frac{\partial \Phi}{\partial r} + \frac{\partial p}{\partial r} &= 0
@@ -32,7 +32,7 @@ inverse vertical stratification of the vertical coordinate surfaces.
  volume averages over each layer:
 
 \f{eqnarray}
-\label{html:h-equations} \\
+\label{html:h-equations}\notag \\
 \rho_0 \left( \frac{\partial \mathbf{u}}{\partial t} + \frac{( f + \zeta )}{h} \,
 \hat{\mathbf{z}} \times h \, \mathbf{u} + \underbrace{ \dot{r} \,
 \frac{\partial \mathbf{u}}{\partial r} } + \nabla_r K \right) &= -\nabla_r \, p -

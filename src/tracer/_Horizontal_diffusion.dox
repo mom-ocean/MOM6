@@ -121,11 +121,11 @@ where the effective thickness of the sublayer is:
 
 and as shown in this figure:
 
-\image html shao3.png "Diagram of sublayer thickness for the sublayer bounded by surfaces \f$\gamma_n\f$ and \f$\gamma_{n+1}\f$."
-\image latex shao3.png "Diagram of sublayer thickness for the sublayer bounded by surfaces \f$\gamma_n\f$ and \f$\gamma_{n+1}\f$."
+\image html shao3.png "Diagram of sublayer thickness for the sublayer bounded by surfaces \f$\\gamma_n\f$ and \f$\\gamma_{n+1}\f$."
+\imagelatex{shao3.png,Diagram of sublayer thickness for the sublayer bounded by surfaces $\gamma_n$ and $\gamma_{n+1}$.,\includegraphics[width=\textwidth\,height=\textheight/2\,keepaspectratio=true]}
 
 \image html shao4.png "Flux of tracer \f$C\f$ along the sublayer."
-\image latex shao4.png "Flux of tracer \f$C\f$ along the sublayer."
+\imagelatex{shao4.png,Flux of tracer $C$ along the sublayer.,\includegraphics[width=\textwidth\,height=\textheight/2\,keepaspectratio=true]}
 
 When updating the tracer state, one needs to accumulate all the fluxes
 through each face as shown here:

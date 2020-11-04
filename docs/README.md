@@ -442,7 +442,7 @@ to process the MOM6 documentation.  The versions are tagged and placed into the 
 | Source | Modified | Version | Development |
 | ------ | -------- | ------- | ----------- |
 | [sphinx](https://github.com/sphinx-doc/sphinx) | [sphinx-3.2.1mom6.4](https://github.com/jr3cermak/sphinx) | B:3.2.1mom6.4 | B:dev |
-| [sphinxcontrib-autodoc-doxygen](https://github.com/rmcgibbo/sphinxcontrib-autodoc_doxygen) | [sphinxcontrib-autodoc-doxygen](https://github.com/jr3cermak/sphinxcontrib-autodoc_doxygen) | T:0.7.11 | B:dev |
+| [sphinxcontrib-autodoc-doxygen](https://github.com/rmcgibbo/sphinxcontrib-autodoc_doxygen) | [sphinxcontrib-autodoc-doxygen](https://github.com/jr3cermak/sphinxcontrib-autodoc_doxygen) | T:0.7.12 | B:dev |
 | [sphinx-fortran](https://github.com/VACUMM/sphinx-fortran) | [sphinx-fortran](https://github.com/jr3cermak/sphinx-fortran) | T:1.2.2 | B:dev |
 | [flint](https://github.com/marshallward/flint) | [flint](https://github.com/jr3cermak/flint) | T:0.0.1 | B:dev |
 | [MOM6](https://github.com/NOAA-GFDL/MOM6) | [esmg-docs](https://github.com/ESMG/MOM6/tree/esmg-docs) | [esmg-docs](https://github.com/jr3cermak/MOM6/tree/esmg-docs) | B:[dev/rob](https://github.com/jr3cermak/MOM6/tree/dev-rob) |

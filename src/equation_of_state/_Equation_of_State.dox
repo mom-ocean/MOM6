@@ -17,7 +17,7 @@ DRHO_DS in MOM_input, also uses RHO_T0_S0).
 Compute the required quantities using the equation of state from \cite wright1997.
 This equation of state is in the form:
 \f[
-   \alpha(s, \theta, p) = A(s, \theta) + \frac{\lambda(s, \theta)}{P(s, \theta) + p
+   \alpha(s, \theta, p) = A(s, \theta) + \frac{\lambda(s, \theta)}{P(s, \theta) + p}
 \f]
 where \f$A, \lambda\f$ and \f$P\f$ are functions only of \f$s\f$ and \f$\theta\f$
 and \f$\alpha = 1/ \rho\f$ is the specific volume. This form is useful for the

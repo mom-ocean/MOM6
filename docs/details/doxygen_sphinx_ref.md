@@ -1,5 +1,13 @@
 # Doxygen vs Sphinix References and Labels
 
+## Reference Labels
+
+Reference labels are not case sensitive in Sphinx. 
+
+The following characters are translated to dashes (`-`): colon(`:`) underscore(`_`)
+Here are examples:
+* 1.8.13: `\eqref{eq:Coriolis_abcd}` => `equation-eq-corilolis-abcd`
+
 ## Equations
 
 *Syntax:* `\eqref{tag}`
@@ -18,7 +26,7 @@ equations from other html pages, then you do not need to use this custom command
 Large formulas with column formatting using `&` generally are wrapped in a `\f{eqnarray}`:
 ```
 \f{eqnarray}
-\label{html:ale-equations} \\
+\label{html:ale-equations}\notag \\
 h^\dagger &= h^{(n)} - \Delta t \left[ \nabla_r \cdot \left( h \, \mathbf{u} \right) \right]
 &\mbox{thickness} \label{eq:ale-thickness-equation} \\
 \theta^\dagger \, h^\dagger &= \theta^{(n)} \, h^{(n)} - \Delta t \left[ \nabla_r \cdot \left( \theta h \, \mathbf{u} \right) - h \boldsymbol{\mathcal{N}}_\theta^\gamma + \delta_r J_\theta^{(z)} \right]
@@ -37,7 +45,7 @@ To create a reference link to the first line of the formula, you would use:
 
 **Why?** MathJax is unable to maintain a list of formula references that span multiple html pages. Restructured text also only supports one label per large `:math:` block.  Restructured text cannot uniquely number equations across pages.
 
-**Sphinx**: NOTE: In the example above, the reference `ale-equations` is translated by sphinx into `equation-ale-equations`.  The prefix `equation-` is added to the tag used for this purpose.
+**Sphinx**: NOTE: In the example above, the reference `ale-equations` is translated by sphinx into `equation-ale-equations`.
 
 NOTE: A post-processor, `postProcessEquations.py` has been written to renumber equations for sphinx and doxygen generated html.
 

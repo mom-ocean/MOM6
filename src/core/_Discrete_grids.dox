@@ -7,6 +7,7 @@ The placement of model variables on the horizontal C-grid is illustrated here:
 \image html Arakawa_C_grid.png "MOM6 uses an Arakawa C grid staggering of variables with a North-East indexing convention."
 \image latex Arakawa_C_grid.png "MOM6 uses an Arakawa C grid staggering of variables with a North-East indexing convention."
 
+
 Scalars are located at the \f$h\f$-points, velocities are staggered such that
 \f$u\f$-points and \f$v\f$-points are not co-located, and vorticities
 are located at \f$q\f$-points. The indexing for points (\f$i,j\f$) in
@@ -26,7 +27,7 @@ then decomposes it into the four staggered grids, along with computing
 the grid metrics as shown here:
 
 \image html Grid_metrics.png "The grid metrics around both \f$h\f$-points and \f$q\f$-points."
-\image latex Grid_metrics.png "The grid metrics around both \f$h\f$-points and \f$q\f$-points."
+\imagelatex{Grid_metrics.png,The grid metrics around both $h$-points and $q$-points.,\includegraphics[width=\textwidth\,height=\textheight/2\,keepaspectratio=true]}
 
 The model carries both the metrics as well as their inverses, for instance,
 IdyT = 1/dyT. There are also the areas and the inverse areas for all four grid
@@ -51,7 +52,7 @@ to be turned off for regional grids.
 The placement of model variables in the vertical is illustrated here:
 
 \image html cell_3d.png "The MOM6 interfaces are at vertical location \f$e\f$ which are separated by the layer thicknesses \f$h\f$."
-\image latex cell_3d.png "The MOM6 interfaces are at vertical location \f$e\f$ which are separated by the layer thicknesses \f$h\f$."
+\imagelatex{cell_3d.png,The MOM6 interfaces are at vertical location $e$ which are separated by the layer thicknesses $h$.,\includegraphics[width=\textwidth\,height=\textheight/2\,keepaspectratio=true]}
 
 The vertical coordinate is Lagrangian in that the interfaces between the layers are
 free to move up and down with time. The interfaces have target depths or target

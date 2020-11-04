@@ -143,14 +143,14 @@ The piecewise parabolic method continuity solver uses two steps:
 \li Set up the positive-definite subgridscale profiles, \f$h_{PPM}(x)\f$.
 
 \image html h_PPM.png "Piecewise parabolic reconstructions of \f$h(x)\f$."
-\image latex h_PPM.png "Piecewise parabolic reconstructions of \f$h(x)\f$."
+\imagelatex{h_PPM.png,Piecewise parabolic reconstructions of $h(x)$.,\includegraphics[width=\textwidth\,height=\textheight/2\,keepaspectratio=true]}
 
 \li Integrating the profiles to determine \f$F\f$. Step 1 is typically
 \f$\sim 3\f$ times as expensive as step 2. \f$F(u,h)\f$ is piecewise cubic in
 \f$u\f$, but often nearly linear. Newton's method iterations converge quickly:
 
-\image html Newton_PPM.png "Newton's method iterations for finding \f$\Delta U\f$."
-\image latex Newton_PPM.png "Newton's method iterations for finding \f$\Delta U\f$."
+\image html Newton_PPM.png "Newton's method iterations for finding \f$\\Delta U\f$."
+\imagelatex{Newton_PPM.png,Newton's method iterations for finding $\Delta U$.,\includegraphics[width=\textwidth\,height=\textheight/2\,keepaspectratio=true]}
 
 In a global model the sea surface heights converge everywhere to a tolerance of
 \f$10^{-6}\f$ m within five iterations. These five iterations add \f$\sim 1.6\f$
