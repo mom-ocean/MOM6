@@ -1,7 +1,7 @@
 # Post Processing Equations
 
 Several tasks are performed with the postProcessingEquations.py python script.  The majority of
-the work is to post process equations within the HTML.  Additional details are provided below. 
+the work is to post process equations within the HTML.  Additional details are provided below.
 
 NOTE: Some of this processing may be handled by internals of sphinx!
 
@@ -10,7 +10,7 @@ NOTE: Some of this processing may be handled by internals of sphinx!
 ## Equations with image captions
 
 Here is an example of how to enable equations in an image caption.  You can use the normal `\image latex`
-if you are not using equations in the caption.  Double escapes (`\\`) are needed for any latex command in the 
+if you are not using equations in the caption.  Double escapes (`\\`) are needed for any latex command in the
 `\image html` caption.  e.g. `\\theta`
 
 ```
@@ -19,7 +19,7 @@ if you are not using equations in the caption.  Double escapes (`\\`) are needed
 \imagelatex{PG_loop.png,Schematic of the finite volume used for integrating the $u$-component of momentum. The thermodynamic variables $\theta$ and $s$ reside on the sides of the depicted volume and are considered uniform for the vertical extent of the volume but with linear variation in the horizontal. The volume is depicted in $(x\, p)$ space so $p$ is linear around the volume but $\Phi$ can vary arbitrarily along the edges.,\includegraphics[width=\textwidth\,height=\textheight/2\,keepaspectratio=true]}
 ```
 
-This is enabled through the use of the doxygen `ALIASES` command.  
+This is enabled through the use of the doxygen `ALIASES` command.
 
 ```
 ALIASES += imagelatex{3}="\latexonly\begin{DoxyImage}\n\3{\1}\n\doxyfigcaption{\2}\n\end{DoxyImage}\endlatexonly\xmlonly<image type=\"latex\" name=\"\1\">\2</image>\endxmlonly"
