@@ -2040,19 +2040,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     if (associated(ice_shelf_CSp)) use_ice_shelf=.true.
   endif
 
-  ! call get_param(param_file, 'MOM', "ICE_SHELF", use_ice_shelf, default=.false., do_not_log=.true.)
-  ! if (use_ice_shelf) then
-  !    inputdir = "." ;  call get_param(param_file, 'MOM', "INPUTDIR", inputdir)
-  !    inputdir = slasher(inputdir)
-  !    call get_param(param_file, 'MOM', "ICE_THICKNESS_FILE", ice_shelf_file, &
-  !                   "The file from which the ice bathymetry and area are read.", &
-  !                   fail_if_missing=.true.)
-  !    call get_param(param_file, 'MOM', "ICE_AREA_VARNAME", area_varname, &
-  !                   "The name of the area variable in ICE_THICKNESS_FILE.", &
-  !                   fail_if_missing=.true.)
-  ! endif
-
-
   CS%ensemble_ocean=.false.
   call get_param(param_file, "MOM", "ENSEMBLE_OCEAN", CS%ensemble_ocean, &
                  "If False, The model is being run in serial mode as a single realization. "//&

@@ -141,8 +141,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   type(ocean_OBC_type),       pointer       :: OBC   !< The open boundary condition control structure.
   type(time_type), optional,  intent(in)    :: Time_in !< Time at the start of the run segment.
   real, dimension(SZI_(G),SZJ_(G)), &
-       optional,  intent(in)   :: frac_shelf_h    !< The fraction of the grid cell covered
-                                               !! by a floating ice shelf [nondim].
+                     optional, intent(in)   :: frac_shelf_h    !< The fraction of the grid cell covered
+                                                               !! by a floating ice shelf [nondim].
   ! Local variables
   character(len=200) :: filename   ! The name of an input file.
   character(len=200) :: filename2  ! The name of an input files.
@@ -203,8 +203,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   use_EOS = associated(tv%eqn_of_state)
   use_OBC = associated(OBC)
   if (use_EOS) eos => tv%eqn_of_state
-  use_ice_shelf=.false.
-  if(PRESENT(frac_shelf_h)) use_ice_shelf=.true.
+  use_ice_shelf=PRESENT(frac_shelf_h)
 
   !====================================================================
   !    Initialize temporally evolving fields, either as initial
@@ -240,7 +239,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
        "use_temperature must be true if INIT_LAYERS_FROM_Z_FILE is true")
 
     call MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_params=just_read,&
-                            frac_shelf_h=frac_shelf_h)
+         frac_shelf_h=frac_shelf_h)
   else
     ! Initialize thickness, h.
     call get_param(PF, mdl, "THICKNESS_CONFIG", config, &
@@ -1985,8 +1984,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   logical,       optional, intent(in)    :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
   real, dimension(SZI_(G),SZJ_(G)), &
-       optional,  intent(in)   :: frac_shelf_h    !< The fraction of the grid cell covered
-                                               !! by a floating ice shelf [nondim].
+                 optional, intent(in)    :: frac_shelf_h    !< The fraction of the grid cell covered
+                                                            !! by a floating ice shelf [nondim].
 
   ! Local variables
   character(len=200) :: filename   !< The name of an input file containing temperature
