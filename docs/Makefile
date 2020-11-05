@@ -217,7 +217,7 @@ else
 	$< Doxyfile_nortd_latex
 endif
 	# Make sure we are in nonstopmode for generating the pdf by patching the Makefile
-	# Older doxygen versions doe not have LATEX_CMD
+	# Older doxygen versions do not have LATEX_CMD
 	-grep -q "pdflatex refman" $(BUILDDIR)/doxygen_latex/Makefile && sed -i.bak 's/pdflatex refman/pdflatex -interaction=nonstopmode refman/' $(BUILDDIR)/doxygen_latex/Makefile
 	make -C $(BUILDDIR)/doxygen_latex LATEX_CMD="pdflatex -interaction=nonstopmode"
 

@@ -10,10 +10,21 @@ class equationRenumber:
 
     def __init__(self, rootDir, buildType):
         '''
-        ref, target: information to transform
-        eref, etarget: existing refereces and targets
+        ref, target: targets that require checking or a transformation
+        checkFiles: list of htmlFiles that need to be checked
 
+        eref, etarget: existing references and targets
+
+        Keep a list of files with each reference tag
         eref[#tag] = [htmlFile,htmlFile,....]
+
+        etargets[#tag] = htmlFile location of the target
+          There should only be one unique target key amongst
+          any number of files.
+
+        fixanchor:
+        fixtarget:
+        fixcaption:
         '''
         if os.path.isdir(rootDir):
             os.chdir(rootDir)
@@ -103,7 +114,7 @@ class equationRenumber:
         '''List unresolved files'''
         for htmlFile in self.htmlFiles:
             if not(htmlFile) in self.parsedFiles:
-                print(" >",htmlFile)
+                print(" unresolved>",htmlFile)
 
     def collectEquationLabels(self):
         '''
@@ -126,9 +137,9 @@ class equationRenumber:
                     for m in re.finditer('\\\eqref2{(.*?)}', fullText):
                         if self.verbose:
                             ct = ct + 1
-                            #if ct == 1:
-                            #    print(htmlFile,len(nodes))
-                            #print('%03d-%03d: %s' % (m.start(), m.end(), m.group(0)))
+                            if ct == 1:
+                                print(os.path.basename(htmlFile),len(nodes))
+                            print('  found eqref2>%03d-%03d: %s' % (m.start(), m.end(), m.group(0)))
                         tag_string = m.groups()[0]
                         fc = tag_string.find(',')
                         if fc >= 0:
@@ -140,10 +151,13 @@ class equationRenumber:
                     for m in re.finditer('\\\eqref{(.*?)}', fullText):
                         if self.verbose:
                             ct = ct + 1
-                            #if ct == 1:
-                            #    print(htmlFile,len(nodes))
-                            #print('%03d-%03d: %s' % (m.start(), m.end(), m.group(0)))
+                            if ct == 1:
+                                print(os.path.basename(htmlFile),len(nodes))
+                            print('  found eqref>%03d-%03d: %s' % (m.start(), m.end(), m.group(0)))
                         tag = m.groups()[0]
+                        # Doxygen 1.8.13
+                        tag = tag.lower()
+                        tag = tag.translate(tag.maketrans(':_','--'))
                         if not(htmlFile in self.meta['ref'].keys()):
                             self.meta['ref'][htmlFile] = []
                         if not(tag in self.meta['ref'][htmlFile]):
@@ -172,7 +186,7 @@ class equationRenumber:
                         #import pdb; pdb.set_trace()
 
                     fullText = "%s%s" % (node.text, node.tail)
-                    for m in re.finditer('\\\label{(.*?)}', fullText):
+                    for m in re.finditer('\\\\label{(.*?)}', fullText):
                         # If first label begins with html: then skip
                         tag_string = m.groups()[0]
                         if tag_string.find('html:') == 0:
@@ -180,8 +194,8 @@ class equationRenumber:
                         if self.verbose:
                             ct = ct + 1
                             if ct == 1:
-                                print(htmlFile,len(nodes),'dox')
-                            print('%03d-%03d: %s' % (m.start(), m.end(), m.group(0)))
+                                print(os.path.basename(htmlFile), len(nodes), 'dox')
+                            print('  fixtarget>%03d-%03d: %s' % (m.start(), m.end(), m.group(0)))
                         tag = tag_string
                         if not(tag in self.meta['fixtarget'].keys()):
                             self.meta['fixtarget'][tag] = []
@@ -213,8 +227,8 @@ class equationRenumber:
                         if self.verbose:
                             ct = ct + 1
                             if ct == 1:
-                                print(htmlFile,len(nodes),'dox')
-                            print(tag)
+                                print(os.path.basename(htmlFile),len(nodes),'dox')
+                            print('  fixanchor>%s' % (tag))
                         if not(tag in self.meta['fixanchor'].keys()):
                             self.meta['fixanchor'][tag] = []
                         if not(htmlFile in self.meta['fixanchor'][tag]):
@@ -228,7 +242,7 @@ class equationRenumber:
                 ct = 0
                 for node in nodes:
                     fullText = "%s%s" % (node.text, node.tail)
-                    for m in re.finditer('\\\label{(html:.*?)}', fullText):
+                    for m in re.finditer('\\\\label{(html:.*?)}\\\\notag', fullText):
                         if self.verbose:
                             ct = ct + 1
                             if ct == 1:
@@ -246,7 +260,8 @@ class equationRenumber:
 
             # Link/Reference
             # <a class="reference internal" href="General_Coordinate.html#equation-h-equations">(2)</a>
-            # Some of these references will not match with actual math references
+            # Some of these references will not match with actual math references due to the use of equation-
+            # as part of the tag.
             nodes = tree.xpath("//a[contains(@class,'reference') and contains(@href,'#equation')]")
             if len(nodes) > 0:
                 for node in nodes:
@@ -257,7 +272,7 @@ class equationRenumber:
                         if not(tag in self.meta['eref']):
                             self.meta['eref'][tag] = []
                             if self.verbose:
-                                print("ref>%s" % (tag))
+                                print("check eref>%s (%s)" % (tag,os.path.basename(htmlFile)))
                         if not(htmlFile in self.meta['eref'][tag]):
                             self.meta['eref'][tag].append(htmlFile)
                             if not(htmlFile in self.meta['checkFiles']):
@@ -273,12 +288,13 @@ class equationRenumber:
             # For sphinx, transform to <div><span><a></a></span>\[**MATH**\]</div>
             nodes = tree.xpath("//div[contains(@class,'math')]")
             if len(nodes) > 0:
-                #import pdb; pdb.set_trace()
+                ct = 0
                 for node in nodes:
                     tag = node.get('id')
                     if tag is None:
                         continue
                     # Check for equation- prefix and that there is a span node with class="eqno"
+                    #import pdb; pdb.set_trace()
                     children = node.getchildren()
                     fixDiv = False
                     if len(children) == 0:
@@ -303,12 +319,15 @@ class equationRenumber:
                     #import pdb; pdb.set_trace()
                     if not(tag in self.meta['targets']):
                         self.meta['targets'].append(tag)
-                    if not(tag in self.meta['etarget']):
-                        self.meta['etarget'][tag] = []
+                    if not(tag in self.meta['etarget'].keys()):
+                        #self.meta['etarget'][tag] = []
+                        ct = ct + 1
                         if self.verbose:
+                            if ct == 1:
+                                print(os.path.basename(htmlFile))
                             print("target>%s %s" % (tag,fixDiv))
-                    if not(htmlFile in self.meta['etarget'][tag]):
-                        self.meta['etarget'][tag].append(htmlFile)
+                    if not(tag in self.meta['etarget'].keys()):
+                        self.meta['etarget'][tag] = htmlFile
                         if not(htmlFile in self.meta['checkFiles']):
                             self.meta['checkFiles'].append(htmlFile)
 
@@ -322,10 +341,13 @@ class equationRenumber:
                         continue
                     if not(tag in self.meta['targets']):
                         self.meta['targets'].append(tag)
-                    if not(tag in self.meta['etarget']):
-                        self.meta['etarget'][tag] = []
-                    if not(htmlFile in self.meta['etarget'][tag]):
-                        self.meta['etarget'][tag].append(htmlFile)
+                    #if not(tag in self.meta['etarget']):
+                    if tag in self.meta['etarget'].keys():
+                        print("ERROR: Duplicate target found in %s (%s)" % (htmlFile, tag))
+                        sys.exit(1)
+                        #self.meta['etarget'][tag] = []
+                    else:
+                        self.meta['etarget'][tag] = htmlFile
                         if not(htmlFile in self.meta['checkFiles']):
                             self.meta['checkFiles'].append(htmlFile)
 
@@ -347,6 +369,9 @@ class equationRenumber:
             if self.buildType == 'sphinx':
                 # Older doxygen: <span class="caption-text">
                 nodes = tree.xpath("//span[@class='caption-text']")
+                #if len(nodes) == 0: This was XML...
+                #    # Even older doxygen: <image type="html" name="Newton_PPM.png">
+                #    nodes = tree.xpath("//image[@type='html']")
             if len(nodes) > 0:
                 for node in nodes:
                     txt = ""
@@ -405,6 +430,7 @@ class equationRenumber:
                     txhead = x.text[0:m.start()]
                     txtail = x.text[m.end():]
                     m2 = re.search(refPattern[1],m.groups()[0])
+                    #import pdb; pdb.set_trace()
                     span.text = "\\(%s\\)" % (m2.groups()[0])
                     # Do insert
                     x.insert(len(x.getchildren()),span)
@@ -426,7 +452,6 @@ class equationRenumber:
                     self.updates = True
                     txhead = x.tail[0:m.start()]
                     txtail = x.tail[m.end():]
-                    txtPattern = '\\\\f\$(.*?)\\\\f\$'
                     m2 = re.search(refPattern[1],m.groups()[0])
                     span.text = "\\(%s\\)" % (m2.groups()[0])
                     # We have to add to the node and shift text around
@@ -444,39 +469,76 @@ class equationRenumber:
         nodect = 0
         nodetotal = len([x for x in node.iter()])
 
+        # We want to iterate over all text within the node no
+        # matter how deep
         for x in node.iter():
-            nodect = nodect + 1
 
-            # We only do one text or tail replacement at one time as it takes
-            # different techniques to handle the two cases
+            # For DOM, we have to convert
+            # from: <p>Before \eqref{aref} and after</p>
+            #   to: <p>Before <a href="">(X)</a> and after</p>
+            #
+            # For the TEXT part of a node
+            # DOM from:
+            #  <p>.text = "Before \eqref{aref} and after"
+            #  <p>.tail = None
+            #  len(<p>.getchildren()) = 0
+            #
+            # DOM to:
+            #  <p>.text = "Before"
+            #  <p>.tail = None
+            #  len(<p>.getchildren()) = 1
+            #  <p>.getchildren()[0] = <a>
+            #  <a>.text = "(X)"
+            #  <a>.tail = " and after"
+
+            # For the TAIL part of a node
+            # the manipulation is similar
+            # 
+            # from: <p>Before <a href="">(X)</a> and after \eqref{bref} iterations</p>
+            #   to: <p>Before <a href="">(X)</a> and after <a href="">(Y)</a> iterations</p>
+
+            # DOM from:
+
+            # DOM to:
 
             # Check the text portion of the node
+            # In this scenario, we always insert to the front of the
+            # node: x.insert(0, aNode), and update the tail of the new
+            # child which resides at slot [0].
             m = re.search(refPattern,x.text)
             if m:
                 if self.verbose:
                     print('%03d-%03d: %s' % (m.start(), m.end(), m.group(0)))
-                # For this match, we add a new child node and add to its tail and
-                # update the text at the head tag.
                 txhead = x.text[0:m.start()]
                 txtail = x.text[m.end():]
+                if aNode.tail and len(aNode.tail) > 0:
+                    txtail = "%s%s" % (aNode.tail, txtail)
+
+                #print('text>',html.tostring(node))
+                #import pdb; pdb.set_trace()
+
                 x.text = txhead
-                x.insert(nodect, aNode)
-                if nodect == 1:
-                    nextNode = x.getchildren()[0]
-                else:
-                    nextNode = x.getchildren()[nodect-1]
-                    #import pdb; pdb.set_trace()
-                    a = 0
-                if aNode.tail != "":
-                    nextNode.tail = "%s%s" % (aNode.tail,txtail)
-                else:
-                    nextNode.tail = txtail
-                a = 0
+                x.insert(0, aNode)
+                cNode = x.getchildren()[0]
+
+                #print(html.tostring(node))
+                #import pdb; pdb.set_trace()
+
+                # We have to adjust the tail of the child
+                # we just inserted
+                if len(txtail) > 0:
+                    cNode.tail = txtail
+
+                #print(html.tostring(node))
+                #import pdb; pdb.set_trace()
+
                 return
 
-            # Check the tail portion of the node
-            # if we are in the tail, we should just append a node
-            # and not insert a child.
+            # For the tail portion of a node, this assumes we are already
+            # a child of the node we are updating.
+            # We have to get the position of the child in the node.
+            # Insert a child after the child we found.
+            # Adjust the tail of the inserted child.
             m = re.search(refPattern,x.tail)
             if m:
                 if self.verbose:
@@ -484,25 +546,36 @@ class equationRenumber:
                 # For this match, we split the text between the two tails
                 txhead = x.tail[0:m.start()]
                 txtail = x.tail[m.end():]
-                x.tail = txhead
-                nchildren = len(x.getparent().getchildren())
-                x.getparent().insert(nchildren, aNode)
-                childNode = x.getparent()[nchildren]
-                if aNode.tail != "":
-                    childNode.tail = "%s%s" % (aNode.tail,txtail)
-                else:
-                    childNode.tail = txtail
+                if aNode.tail and len(aNode.tail) > 0:
+                    txtail = "%s%s" % (aNode.tail, txtail)
+                #print('tail>',html.tostring(x.getparent()))
                 #import pdb; pdb.set_trace()
-                a = 0
-                pass
+                x.tail = txhead
+
+                # We have to determine the position of this child in the parent
+                childpos = -1
+                if x in x.getparent().getchildren():
+                    childpos = x.getparent().getchildren().index(x)
+                x.getparent().insert(childpos+1, aNode)
+
+                #print(html.tostring(x.getparent()))
+                #import pdb; pdb.set_trace()
+
+                # Update the new childNode
+                childNode = x.getparent().getchildren()[childpos+1]
+                if len(txtail) > 0 :
+                    childNode.tail = txtail
+
+                #print('after>',html.tostring(x.getparent()))
+                #import pdb; pdb.set_trace()
 
     def updateTarget(self, node, m, fn):
         # We do not need to do crazy things here as this is typically
         # not nested within the same node.
         if self.verbose:
-            print('%03d-%03d: %s' % (m.start(), m.end(), m.group(0)))
+            print('  updateTarget>%03d-%03d: %s' % (m.start(), m.end(), m.group(0)))
         repl = m.group(0)
-        # The real item to replace is "\\label{} \\\\ "
+        # The real item to replace is "\\label{}\\notag \\\\ "
         replStr = "%s \\\\ " % (repl)
         node.text = node.text.replace(replStr, '')
         self.updates = True
@@ -529,15 +602,21 @@ class equationRenumber:
                 if self.verbose: print("WARNING: no target for %s" % (tag))
             #import pdb; pdb.set_trace()
 
-        # Doxygen updates
+        # Doxygen update targets
         if self.buildType == 'doxygen':
             tag_string = m.groups()[0]
             fc = tag_string.find(":")
             if fc >= 0:
                 tag = "equation-%s" % (tag_string[fc+1:])
+                # Doxygen 1.8.13 & to match sphinx syntax for tags
+                tag = tag.lower()
+                tag = tag.translate(tag.maketrans(':_','--'))
                 if not(tag in self.meta['targets']):
                     self.meta['targets'].append(tag)
                     self.meta['target'][tag] = fn
+                # This is now fixed and should be added to etarget now
+                if not(tag in self.meta['etarget'].keys()):
+                    self.meta['etarget'][tag] = fn
                 try:
                     eqno = self.meta['targets'].index(tag)+1
                 except:
@@ -613,7 +692,9 @@ class equationRenumber:
         # <div class="math notranslate nohighlight" id="equation-ale-equations">
         # <span class="eqno">(1)<a class="headerlink" href="#equation-ale-equations"
         # title="Permalink to this equation">¶</a></span>
-        htmlFiles = self.meta['etarget'][target]
+
+        # TODO: This is always a list of one, rework this routine
+        htmlFiles = [self.meta['etarget'][target]]
         for htmlFile in htmlFiles:
             tree = html.parse(htmlFile)
             self.updates = False
@@ -651,8 +732,10 @@ class equationRenumber:
             for htmlFile in htmlFiles:
                 tree = html.parse(htmlFile)
                 self.updates = False
-                #print("Fixing div for %s tag %s" % (htmlFile, ntag))
+                if self.verbose:
+                    print(" - %s fixdiv tag %s" % (os.path.basename(htmlFile), ntag))
                 nodes = tree.xpath("//div[@id='%s']" % (target))
+                #import pdb; pdb.set_trace()
                 for node in nodes:
                     spanNode = html.Element('span')
                     spanNode.set('class','eqno')
@@ -704,7 +787,7 @@ class equationRenumber:
             tag = ''
             for htmlFile in htmlFiles:
                 if self.verbose:
-                    print("  > %s %s" % (ntag, htmlFile))
+                    print("  fixtarget> %s %s" % (ntag, os.path.basename(htmlFile)))
                 tree = html.parse(htmlFile)
                 self.updates = False
                 nodes = tree.xpath("//p[@class='formulaDsp']")
@@ -722,14 +805,21 @@ class equationRenumber:
                 # Add <center> node and update the file
                 # Just before the <p> node
                 if tag == ntag:
-                    if tag.find('eq:') == 0:
-                        tag = tag.replace('eq:','equation-')
+                    # Maybe newer doxygen?
+                    #if tag.find('eq:') == 0:
+                    #    tag = tag.replace('eq:','equation-')
+                    # Doxygen 1.8.13 & to match sphinx syntax for tags
+                    tag = tag.lower()
+                    tag = tag.translate(tag.maketrans(':_','--'))
                     if tag.find('equation-') != 0:
                         tag = "equation-%s" % (tag)
                     if not(tag in self.meta['targets']):
                         self.meta['targets'].append(tag)
                         if not(tag in self.meta['target'].keys()):
                             self.meta['target'][tag] = htmlFile
+                    # This is now fixed and should be added to etarget now
+                    if not(tag in self.meta['etarget'].keys()):
+                        self.meta['etarget'][tag] = htmlFile
 
                     #prevNode = node.getprevious()
                     ele = html.Element("center")
@@ -785,18 +875,25 @@ class equationRenumber:
             tag = target
             for htmlFile in htmlFiles:
                 if self.verbose:
-                    print("  > %s %s" % (tag, htmlFile))
+                    print("  fixanchor> %s %s" % (tag, os.path.basename(htmlFile)))
                 tree = html.parse(htmlFile)
                 self.updates = False
                 nodes = tree.xpath("//a[@class='anchor' and @id='%s']" % (tag))
-                for node in nodes:
-                    if tag.find('equation-') != 0:
-                        tag = "equation-%s" % (tag)
-                    if not(tag in self.meta['targets']):
-                        self.meta['targets'].append(tag)
-                        if not(tag in self.meta['target'].keys()):
-                            self.meta['target'][tag] = htmlFile
 
+                # Doxygen 1.8.13 & to match sphinx syntax for tags
+                tag = tag.lower()
+                tag = tag.translate(tag.maketrans(':_','--'))
+                if tag.find('equation-') != 0:
+                    tag = "equation-%s" % (tag)
+                if not(tag in self.meta['targets']):
+                    self.meta['targets'].append(tag)
+                    if not(tag in self.meta['target'].keys()):
+                        self.meta['target'][tag] = htmlFile
+                # This is now fixed and should be added to etarget now
+                if not(tag in self.meta['etarget'].keys()):
+                    self.meta['etarget'][tag] = htmlFile
+
+                for node in nodes:
                     # Convert found node to center and then setup
                     # the rest
                     node.tag = 'center'
@@ -855,7 +952,7 @@ class equationRenumber:
                         fullText = "%s%s" % (node.text, node.tail)
                         # Set to False unless an update is detected
                         scanText = False
-                        m = re.search('\\\label{(html:.*?)}', fullText)
+                        m = re.search('\\\\label{(html:.*?)}\\\\notag', fullText)
                         if m:
                             self.updateTarget(node, m, fn)
                             scanText = True
@@ -896,7 +993,7 @@ class equationRenumber:
         for ref in self.meta['eref'].keys():
             self.checkSphinxLinks(ref)
 
-        # Update links (doxygen)
+        # Update links (doxygen & sphinx?)
         refPattern = '\\\eqref{(.*?)}'
         refPattern2 = '\\\eqref2{(.*?)}'
         for ref in self.meta['ref'].keys():
@@ -911,37 +1008,55 @@ class equationRenumber:
             while updatesFound != 0:
                 updatesFound = 0
                 npass = npass + 1
-                if self.buildType == 'doxygen':
+                if self.buildType in ('doxygen','sphinx'):
                     nodes = tree.xpath("//*[text()]")
                     if len(nodes) > 0:
                         if self.verbose:
                             print(fn,npass,len(nodes))
                         for node in nodes:
-                            fullText = "%s%s" % (node.text, node.tail)
+                            if node.text == None:
+                                continue
+                            if node.tail:
+                                fullText = "%s%s" % (node.text, node.tail)
+                            else:
+                                fullText = node.text
+
                             m = re.search(refPattern, fullText)
                             # \eqref
                             if m:
                                 if self.verbose:
-                                    print('%03d-%03d: %s' % (m.start(), m.end(), m.group(0)))
+                                    print('  eqref>%03d-%03d: %s' % (m.start(), m.end(), m.group(0)))
                                 repl = m.group(0)
                                 tag = m.groups()[0]
-                                if tag.find('eq:') != -1:
-                                    tag = tag.replace('eq:','')
+                                # Newer doxygen?
+                                #if tag.find('eq:') != -1:
+                                #    tag = tag.replace('eq:','')
+                                # Doxygen 1.8.13
+                                tag = tag.lower()
+                                tag = tag.translate(tag.maketrans(':_','--'))
+                                fullTag = tag
                                 if tag.find('equation-') != 0:
-                                    tag = "equation-%s" % (tag)
-                                computePath = os.path.relpath(os.path.dirname(self.meta['target'][tag]),os.path.dirname(fn))
+                                    fullTag = "equation-%s" % (tag)
+
+                                try:
+                                    computePath = os.path.relpath(os.path.dirname(self.meta['etarget'][fullTag]),os.path.dirname(fn))
+                                except:
+                                    print("WARNING: Target tag not found: %s" % (fullTag))
+                                    #import pdb; pdb.set_trace()
+                                    continue
+
                                 # If we are in the same directory, do not specify a path
                                 if computePath == ".":
                                     computePath = ""
                                 else:
                                     computePath = "%s/" % (computePath)
-                                computePath = "%s#%s" % (os.path.basename(self.meta['target'][tag]),tag)
+                                computePath = "%s#%s" % (os.path.basename(self.meta['etarget'][fullTag]),fullTag)
                                 # Replace \\eqref{} with <a href=""></a> that looks like sphinx
                                 try:
-                                    eqno = self.meta['targets'].index(tag)+1
+                                    eqno = self.meta['targets'].index(fullTag)+1
                                 except:
                                     self.meta['targets'].append(tag)
-                                    eqno = self.meta['targets'].index(tag)+1
+                                    eqno = self.meta['targets'].index(fullTag)+1
 
                                 aNode = html.Element('a')
                                 aNode.set('href',computePath)
@@ -951,26 +1066,44 @@ class equationRenumber:
                                 self.insertRefNode(refPattern, node, aNode)
                                 updatesFound = updatesFound + 1
                                 self.updates = True
+
+                                # This is now a cleaned up link to a target
+                                if (not fullTag in self.meta['eref'].keys()):
+                                    self.meta['eref'][fullTag] = []
+                                if (not fn in self.meta['eref'][fullTag]):
+                                    self.meta['eref'][fullTag].append(fn)
+
+
                             # \eqref2
                             m = re.search(refPattern2, fullText)
                             if m:
                                 if self.verbose:
-                                    print('%03d-%03d: %s' % (m.start(), m.end(), m.group(0)))
+                                    print('  eqref2>%03d-%03d: %s' % (m.start(), m.end(), m.group(0)))
                                 repl = m.group(0)
                                 tag_string = m.groups()[0]
                                 fc = tag_string.find(',')
                                 if fc >= 0:
-                                    tag = "equation-%s" % (tag_string[0:fc])
-                                    computePath = os.path.relpath(os.path.dirname(self.meta['target'][tag]),os.path.dirname(fn))
+                                    tag = tag_string[0:fc]
+                                    fullTag = "equation-%s" % (tag)
+                                    try:
+                                        computePath = os.path.relpath(os.path.dirname(self.meta['target'][tag]),os.path.dirname(fn))
+                                    except:
+                                        print("WARNING: Target tag not found: %s" % (tag))
+                                        #import pdb; pdb.set_trace()
+                                        continue
+
                                     # If we are in the same directory, do not specify a path
                                     if computePath == ".":
                                         computePath = ""
                                     else:
                                         computePath = "%s/" % (computePath)
-                                    computePath = "%s#%s" % (os.path.basename(self.meta['target'][tag]),tag)
-                                    # Replace \\eqref2{} with <a href=""></a> that looks like sphinx
+                                    computePath = "%s#%s" % (os.path.basename(self.meta['target'][tag]),fullTag)
+
+                                    # Replace \\eqref2{} references that translate to something similar to:
+                                    # <a href="General_Coordinate.html#equation-h-equations" 
+                                    #   class="reference internal">(7)</a> - momentum</p>
                                     try:
-                                        eqno = self.meta['targets'].index(tag)+1
+                                        eqno = self.meta['targets'].index(fullTag)+1
                                     except:
                                         eqno = 0
 
@@ -982,6 +1115,13 @@ class equationRenumber:
                                     self.insertRefNode(refPattern2, node, aNode)
                                     updatesFound = updatesFound + 1
                                     self.updates = True
+
+                                    # This is now a cleaned up link to a target
+                                    if (not fullTag in self.meta['eref'].keys()):
+                                        self.meta['eref'][fullTag] = []
+                                    if (not fn in self.meta['eref'][fullTag]):
+                                        self.meta['eref'][fullTag].append(fn)
+
             if self.updates:
                 # Write tree back out to file
                 #import pdb; pdb.set_trace()
@@ -1038,11 +1178,27 @@ if os.path.isdir(rootDirectory):
         #if verbose: print("Found project:",projectDirectory)
         mathProc = equationRenumber(projectDirectory, buildType)
         mathProc.verbose = verbose
+        if mathProc.verbose:
+            print("** getHtmlFiles")
         mathProc.getHtmlFiles()
+        if mathProc.verbose:
+            print("** htmlWalk")
         mathProc.htmlWalk(startFile)
+        if mathProc.verbose:
+            print("** collectEquationLabels")
         mathProc.collectEquationLabels()
+        if mathProc.verbose:
+            print("** fixEquationLinks")
         mathProc.fixEquationTargets()
+        if mathProc.verbose:
+            print("** updateEquationLinks")
         mathProc.updateEquationLinks()
+    else:
+        print("ERROR: Project directory not found (%s). Exiting." % (projectDirectory))
+        sys.exit(1)
+else:
+    print("ERROR: Root directory not found (%s). Exiting." % (rootDirectory))
+    sys.exit(1)
 
 if showLinks:
     #import pdb; pdb.set_trace()
@@ -1057,13 +1213,11 @@ if showLinks:
         tag = target
         # There should be only one target per tag
         pages = []
-        if tag in mathProc.meta['target'].keys():
-            pages.append(mathProc.meta['target'][tag])
         if tag in mathProc.meta['etarget'].keys():
-            [pages.append(page) for page in mathProc.meta['etarget'][tag]]
+            pages.append(mathProc.meta['etarget'][tag])
 
         for page in pages:
-            print("%s: %s" % (tag, page))
+            print("target>%s: %s" % (tag, page))
 
             linkedPages = []
             if tag in mathProc.meta['ref'].keys():
