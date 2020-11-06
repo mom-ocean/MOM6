@@ -1994,7 +1994,8 @@ subroutine set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1, rho_0)
 
 end subroutine set_density_ratios
 
-subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_CSp, halo_TS)
+subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_CSp, halo_TS, &
+                                double_diffuse)
   type(time_type),          intent(in)    :: Time !< The current model time
   type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
@@ -2008,6 +2009,8 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                                                   !! structure
   integer,        optional, intent(out)   :: halo_TS !< The halo size of tracer points that must be
                                                   !! valid for the calculations in set_diffusivity.
+  logical,        optional, intent(out)   :: double_diffuse !< If present, this indicates whether
+                                                  !! some version of double diffusion is being used.
 
   ! Local variables
   real :: decay_length
@@ -2299,6 +2302,12 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   if (CS%use_CVMix_ddiff) &
     id_clock_CVMix_ddiff = cpu_clock_id('(Double diffusion via CVMix)', grain=CLOCK_MODULE)
 
+  if (CS%double_diffusion .and. CS%use_CVMix_ddiff) then
+    call MOM_error(FATAL, 'set_diffusivity_init: '// &
+           'Multiple double-diffusion options selected (DOUBLE_DIFFUSION and'//&
+           'USE_CVMIX_DDIFF), please disable all but one option to proceed.')
+  endif
+
   if (CS%double_diffusion .or. CS%use_CVMix_ddiff) then
     CS%id_KT_extra = register_diag_field('ocean_model', 'KT_extra', diag%axesTi, Time, &
          'Double-diffusive diffusivity for temperature', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
@@ -2313,6 +2322,10 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   if (present(halo_TS)) then
     halo_TS = 0
     if (CS%Vertex_Shear) halo_TS = 1
+  endif
+
+  if (present(double_diffuse)) then
+    double_diffuse = (CS%double_diffusion .or. CS%use_CVMix_ddiff)
   endif
 
 end subroutine set_diffusivity_init

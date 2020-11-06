@@ -108,6 +108,7 @@ type, public:: diabatic_CS; private
   logical :: use_CVMix_ddiff         !< If true, use the CVMix double diffusion module.
   logical :: use_CVMix_conv          !< If true, use the CVMix module to get enhanced
                                      !! mixing due to convection.
+  logical :: double_diffuse          !< If true, some form of double-diffusive mixing is used.
   logical :: use_sponge              !< If true, sponges may be applied anywhere in the
                                      !! domain.  The exact location and properties of
                                      !! those sponges are set by calls to
@@ -613,15 +614,10 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
       Kd_heat(i,j,k) = Kd_int(i,j,K)
     enddo ; enddo ; enddo
     ! Add contribution from double diffusion
-    if (associated(visc%Kd_extra_S)) then
+    if (CS%double_diffuse) then
       !$OMP parallel do default(shared)
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
         Kd_salt(i,j,k) = Kd_salt(i,j,k) + visc%Kd_extra_S(i,j,k)
-      enddo ; enddo ; enddo
-    endif
-    if (associated(visc%Kd_extra_T)) then
-      !$OMP parallel do default(shared)
-      do k=1,nz+1 ; do j=js,je ; do i=is,ie
         Kd_heat(i,j,k) = Kd_heat(i,j,k) + visc%Kd_extra_T(i,j,k)
       enddo ; enddo ; enddo
     endif
@@ -667,15 +663,10 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
         Kd_int(i,j,K) = min( Kd_salt(i,j,k),  Kd_heat(i,j,k) )
       enddo ; enddo ; enddo
-      if (associated(visc%Kd_extra_S)) then
+      if (CS%double_diffuse) then
         !$OMP parallel do default(shared)
         do k=1,nz+1 ; do j=js,je ; do i=is,ie
           visc%Kd_extra_S(i,j,k) = (Kd_salt(i,j,k) - Kd_int(i,j,K))
-        enddo ; enddo ; enddo
-      endif
-      if (associated(visc%Kd_extra_T)) then
-        !$OMP parallel do default(shared)
-        do k=1,nz+1 ; do j=js,je ; do i=is,ie
           visc%Kd_extra_T(i,j,k) = (Kd_heat(i,j,k) - Kd_int(i,j,K))
         enddo ; enddo ; enddo
       endif
@@ -721,10 +712,10 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
   ! This is the "old" method for applying differential diffusion.
   ! Changes: tv%T, tv%S
-  if (associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S) .and. associated(tv%T)) then
+  if (CS%double_diffuse .and. associated(tv%T)) then
 
     call cpu_clock_begin(id_clock_differential_diff)
-    call differential_diffuse_T_S(h, tv, visc, dt, G, GV)
+    call differential_diffuse_T_S(h, tv%T, tv%S, visc%Kd_extra_T, visc%Kd_extra_S, dt, G, GV)
     call cpu_clock_end(id_clock_differential_diff)
 
     if (showCallTree) call callTree_waypoint("done with differential_diffuse_T_S (diabatic)")
@@ -1046,7 +1037,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
           ebtr(i,j,k-1) = eb_s(i,j,k-1) ; eatr(i,j,k) = ea_s(i,j,k)
         endif
 
-        if (associated(visc%Kd_extra_S)) then ; if (visc%Kd_extra_S(i,j,k) > 0.0) then
+        if (CS%double_diffuse) then ; if (visc%Kd_extra_S(i,j,k) > 0.0) then
           add_ent = ((dt * visc%Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
              (0.25 * ((h(i,j,k-1) + h(i,j,k)) + (hold(i,j,k-1) + hold(i,j,k))) +  h_neglect)
           ebtr(i,j,k-1) = ebtr(i,j,k-1) + add_ent
@@ -1064,7 +1055,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
                               evap_CFL_limit = CS%evap_CFL_limit, &
                               minimum_forcing_depth=CS%minimum_forcing_depth)
 
-  elseif (associated(visc%Kd_extra_S)) then  ! extra diffusivity for passive tracers
+  elseif (CS%double_diffuse) then  ! extra diffusivity for passive tracers
 
     do j=js,je ; do i=is,ie
       ebtr(i,j,nz) = eb_s(i,j,nz) ; eatr(i,j,1) = ea_s(i,j,1)
@@ -1334,15 +1325,10 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     Kd_heat(i,j,k) = Kd_int(i,j,K)
   enddo ; enddo ; enddo
   ! Add contribution from double diffusion
-  if (associated(visc%Kd_extra_S)) then
+  if (CS%double_diffuse) then
     !$OMP parallel do default(shared)
     do k=1,nz+1 ; do j=js,je ; do i=is,ie
       Kd_salt(i,j,k) = Kd_salt(i,j,k) + visc%Kd_extra_S(i,j,k)
-    enddo ; enddo ; enddo
-  endif
-  if (associated(visc%Kd_extra_T)) then
-    !$OMP parallel do default(shared)
-    do k=1,nz+1 ; do j=js,je ; do i=is,ie
       Kd_heat(i,j,k) = Kd_heat(i,j,k) + visc%Kd_extra_T(i,j,k)
     enddo ; enddo ; enddo
   endif
@@ -1421,11 +1407,10 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
   ! This is the "old" method for applying differential diffusion.
   ! Changes: tv%T, tv%S
-  if (associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S) .and. associated(tv%T) .and. &
-      (.not.CS%use_CVMix_ddiff)) then
+  if (CS%double_diffuse .and. associated(tv%T) .and. (.not.CS%use_CVMix_ddiff)) then
 
     call cpu_clock_begin(id_clock_differential_diff)
-    call differential_diffuse_T_S(h, tv, visc, dt, G, GV)
+    call differential_diffuse_T_S(h, tv%T, tv%S, visc%Kd_extra_T, visc%Kd_extra_S, dt, G, GV)
     call cpu_clock_end(id_clock_differential_diff)
 
     if (showCallTree) call callTree_waypoint("done with differential_diffuse_T_S (diabatic)")
@@ -1710,7 +1695,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
           ebtr(i,j,k-1) = eb_s(i,j,k-1) ; eatr(i,j,k) = ea_s(i,j,k)
         endif
 
-        if (associated(visc%Kd_extra_S)) then ; if (visc%Kd_extra_S(i,j,k) > 0.0) then
+        if (CS%double_diffuse) then ; if (visc%Kd_extra_S(i,j,k) > 0.0) then
           add_ent = ((dt * visc%Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
              (0.5 * (h(i,j,k-1) + h(i,j,k)) + &
               h_neglect)
@@ -1729,7 +1714,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
                               evap_CFL_limit = CS%evap_CFL_limit, &
                               minimum_forcing_depth=CS%minimum_forcing_depth)
 
-  elseif (associated(visc%Kd_extra_S)) then  ! extra diffusivity for passive tracers
+  elseif (CS%double_diffuse) then  ! extra diffusivity for passive tracers
 
     do j=js,je ; do i=is,ie
       ebtr(i,j,nz) = eb_s(i,j,nz) ; eatr(i,j,1) = ea_s(i,j,1)
@@ -2097,15 +2082,10 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
       Kd_heat(i,j,k) = Kd_int(i,j,K)
     enddo ; enddo ; enddo
     ! Add contribution from double diffusion
-    if (associated(visc%Kd_extra_S)) then
+    if (CS%double_diffuse) then
       !$OMP parallel do default(shared)
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
         Kd_salt(i,j,k) = Kd_salt(i,j,k) + visc%Kd_extra_S(i,j,k)
-      enddo ; enddo ; enddo
-    endif
-    if (associated(visc%Kd_extra_T)) then
-      !$OMP parallel do default(shared)
-      do k=1,nz+1 ; do j=js,je ; do i=is,ie
         Kd_heat(i,j,k) = Kd_heat(i,j,k) + visc%Kd_extra_T(i,j,k)
       enddo ; enddo ; enddo
     endif
@@ -2128,15 +2108,10 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
         Kd_int(i,j,K) = min( Kd_salt(i,j,k),  Kd_heat(i,j,k) )
       enddo ; enddo ; enddo
-      if (associated(visc%Kd_extra_S)) then
+      if (CS%double_diffuse) then
         !$OMP parallel do default(shared)
         do k=1,nz+1 ; do j=js,je ; do i=is,ie
           visc%Kd_extra_S(i,j,k) = (Kd_salt(i,j,k) - Kd_int(i,j,K))
-        enddo ; enddo ; enddo
-      endif
-      if (associated(visc%Kd_extra_T)) then
-        !$OMP parallel do default(shared)
-        do k=1,nz+1 ; do j=js,je ; do i=is,ie
           visc%Kd_extra_T(i,j,k) = (Kd_heat(i,j,k) - Kd_int(i,j,K))
         enddo ; enddo ; enddo
       endif
@@ -2186,10 +2161,10 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
   ! Differential diffusion done here.
   ! Changes: tv%T, tv%S
-  if (associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S) .and. associated(tv%T)) then
+  if (CS%double_diffuse .and. associated(tv%T)) then
 
     call cpu_clock_begin(id_clock_differential_diff)
-    call differential_diffuse_T_S(h, tv, visc, dt, G, GV)
+    call differential_diffuse_T_S(h, tv%T, tv%S, visc%Kd_extra_T, visc%Kd_extra_S, dt, G, GV)
     call cpu_clock_end(id_clock_differential_diff)
     if (showCallTree) call callTree_waypoint("done with differential_diffuse_T_S (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('differential_diffuse_T_S', u, v, h, tv%T, tv%S, G, GV, US)
@@ -2553,7 +2528,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
         else
           ebtr(i,j,k-1) = eb(i,j,k-1) ; eatr(i,j,k) = ea(i,j,k)
         endif
-        if (associated(visc%Kd_extra_S)) then ; if (visc%Kd_extra_S(i,j,k) > 0.0) then
+        if (CS%double_diffuse) then ; if (visc%Kd_extra_S(i,j,k) > 0.0) then
           add_ent = ((dt * visc%Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
              (0.25 * ((h(i,j,k-1) + h(i,j,k)) + (hold(i,j,k-1) + hold(i,j,k))) + &
               h_neglect)
@@ -2568,7 +2543,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, Hml, dt, G, GV, US, tv, &
                               CS%optics, CS%tracer_flow_CSp, CS%debug)
 
-  elseif (associated(visc%Kd_extra_S)) then  ! extra diffusivity for passive tracers
+  elseif (CS%double_diffuse) then  ! extra diffusivity for passive tracers
 
     do j=js,je ; do i=is,ie
       ebtr(i,j,nz) = eb(i,j,nz) ; eatr(i,j,1) = ea(i,j,1)
@@ -3220,12 +3195,6 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
                  default=.false., do_not_log=.true.)
   CS%use_CVMix_ddiff = CVMix_ddiff_is_used(param_file)
 
-  if (CS%use_CVMix_ddiff .and. differentialDiffusion) then
-    call MOM_error(FATAL, 'diabatic_driver_init: '// &
-           'Multiple double-diffusion options selected (DOUBLE_DIFFUSION and'//&
-           'USE_CVMIX_DDIFF), please disable all but one option to proceed.')
-  endif
-
   CS%use_kappa_shear = kappa_shear_is_used(param_file)
   CS%use_CVMix_shear = CVMix_shear_is_used(param_file)
 
@@ -3483,11 +3452,6 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
     allocate( CS%KPP_salt_flux(isd:ied,jsd:jed) )      ; CS%KPP_salt_flux(:,:)   = 0.
   endif
 
-  if (CS%useKPP .and. differentialDiffusion) then
-    call MOM_error(FATAL, 'diabatic_driver_init: '// &
-           'DOUBLE_DIFFUSION (old method) does not work with KPP. Please'//&
-           'set DOUBLE_DIFFUSION=False and USE_CVMIX_DDIFF=True.')
-  endif
 
   ! diagnostics for tendencies of temp and saln due to diabatic processes
   ! available only for ALE algorithm.
@@ -3679,8 +3643,12 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   endif
 
   ! initialize module for setting diffusivities
-  call set_diffusivity_init(Time, G, GV, US, param_file, diag, CS%set_diff_CSp, &
-                            CS%int_tide_CSp, CS%halo_TS_diff)
+  call set_diffusivity_init(Time, G, GV, US, param_file, diag, CS%set_diff_CSp, CS%int_tide_CSp, &
+                            halo_TS=CS%halo_TS_diff, double_diffuse=CS%double_diffuse)
+
+  if (CS%useKPP .and. (CS%double_diffuse .and. .not.CS%use_CVMix_ddiff)) &
+    call MOM_error(FATAL, 'diabatic_driver_init: DOUBLE_DIFFUSION (old method) does not work '//&
+                          'with KPP. Please set DOUBLE_DIFFUSION=False and USE_CVMIX_DDIFF=True.')
 
   ! set up the clocks for this module
   id_clock_entrain = cpu_clock_id('(Ocean diabatic entrain)', grain=CLOCK_MODULE)
@@ -3696,7 +3664,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
     id_clock_sponge = cpu_clock_id('(Ocean sponges)', grain=CLOCK_MODULE)
   id_clock_tridiag = cpu_clock_id('(Ocean diabatic tridiag)', grain=CLOCK_ROUTINE)
   id_clock_pass = cpu_clock_id('(Ocean diabatic message passing)', grain=CLOCK_ROUTINE)
-  id_clock_differential_diff = -1 ; if (differentialDiffusion) &
+  id_clock_differential_diff = -1 ; if (CS%double_diffuse .and. .not.CS%use_CVMix_ddiff) &
     id_clock_differential_diff = cpu_clock_id('(Ocean differential diffusion)', grain=CLOCK_ROUTINE)
 
   ! initialize the auxiliary diabatic driver module
