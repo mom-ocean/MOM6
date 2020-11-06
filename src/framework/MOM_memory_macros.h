@@ -3,7 +3,7 @@
 !//! Define STATIC_MEMORY_ in MOM_memory.h for static memory allocation.
 !//! Otherwise dynamic memory allocation will be assumed.
 !//!
-!//! For explanation of symmetric and non-symmetric memory modes see \ref Horizontal_indexing.
+!//! For explanation of symmetric and non-symmetric memory modes see \ref Horizontal_Indexing.
 !//! \file MOM_memory_macros.h
 
 #ifdef STATIC_MEMORY_

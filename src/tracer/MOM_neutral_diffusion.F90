@@ -1810,9 +1810,9 @@ subroutine calc_delta_rho_and_derivs(CS, T1, S1, p1_in, T2, S2, p2_in, drho, &
 end subroutine calc_delta_rho_and_derivs
 
 !> Calculate delta rho from derivatives and gradients of properties
-!! \f$ \Delta \rho$ = \frac{1}{2}\left[ (\alpha_1 + \alpha_2)*(T_1-T_2) +
+!! \f$ \Delta \rho = \frac{1}{2}\left[ (\alpha_1 + \alpha_2)*(T_1-T_2) +
 !!                                   (\beta_1 + \beta_2)*(S_1-S_2) +
-!!                                   (\gamma^{-1}_1 + \gamma%{-1}_2)*(P_1-P_2) \right] \f$
+!!                                   (\gamma^{-1}_1 + \gamma^{-1}_2)*(P_1-P_2) \right] \f$
 function delta_rho_from_derivs( T1, S1, P1, dRdT1, dRdS1, &
                                 T2, S2, P2, dRdT2, dRdS2  ) result (drho)
   real :: T1    !< Temperature at point 1 [degC]

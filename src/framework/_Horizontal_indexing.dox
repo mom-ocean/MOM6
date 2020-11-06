@@ -1,4 +1,4 @@
-/*! \page Horizontal_indexing Horizontal indexing and memory
+/*! \page Horizontal_Indexing Horizontal indexing and memory
 
 \brief Conventions for staggering of variables and loops over 2d/3d arrays
 
@@ -15,6 +15,7 @@ Staggered variables must still have integer indices and we use a north-east conv
 These means a variable with indices `i,j` will be either collocated, to the east, to the north, or to the north-east of the h-point with the same indices.
 
 \image html Arakawa_C_grid.png MOM6 uses an Arakawa C grid staggering of variables with a North-East indexing convention. "Cells" refer to the control volumes around tracer- or h-point located variables unless labelled otherwise.
+\image latex Arakawa_C_grid.png MOM6 uses an Arakawa C grid staggering of variables with a North-East indexing convention. "Cells" refer to the control volumes around tracer- or h-point located variables unless labelled otherwise.
 
 \subsection Soft_convention Soft convention for loop variables
 
@@ -35,8 +36,10 @@ In contrast, when a loop is over u-points collocated variables
 \section Memory Declaration of variables
 
 \image html Horizontal_NE_indexing_nonsym.png Non-symmetric mode: All arrays are declared with the same shape `(isd:ied,jsd:jed)`.
+\image latex Horizontal_NE_indexing_nonsym.png Non-symmetric mode: All arrays are declared with the same shape `(isd:ied,jsd:jed)`.
 
 \image html Horizontal_NE_indexing_sym.png Symmetric mode: Arrays have different shapes depending on their staggering location on the Arakawa C grid.
+\image latex Horizontal_NE_indexing_sym.png Symmetric mode: Arrays have different shapes depending on their staggering location on the Arakawa C grid.
 
 A field is described by 2D or 3D arrays which are distributed across parallel processors.
 Each processor only sees a small window of the global field.
