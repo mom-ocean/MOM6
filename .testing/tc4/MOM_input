@@ -214,7 +214,7 @@ Z_INIT_REMAPPING_SCHEME = "PPM_IH4" ! default = "PPM_IH4"
 Z_INIT_REMAP_GENERAL = False    !   [Boolean] default = False
                                 ! If false, only initializes to z* coordinates. If true, allows initialization
                                 ! directly to general coordinates.
-TEMP_SALT_INIT_VERTICAL_REMAP_ONLY = True !   [Boolean] default = False
+TEMP_SALT_INIT_VERTICAL_REMAP_ONLY = False !   [Boolean] default = False
                                 ! If true, initial conditions are on the model horizontal grid. Extrapolation
                                 ! over missing ocean values is done using an ICE-9 procedure with vertical ALE
                                 ! remapping .
@@ -335,6 +335,11 @@ DYNAMIC_SURFACE_PRESSURE = False !   [Boolean] default = False
 
 ! === module MOM_PressureForce ===
 
+ RECONSTRUCT_FOR_PRESSURE = False !   [Boolean] default = True
+                                  ! If True, use vertical reconstruction of T & S within the integrals of the FV
+
+                                 ! pressure gradient calculation. If False, use the constant-by-layer algorithm.
+				 ! The default is set by USE_REGRIDDING.
 ! === module MOM_hor_visc ===
 SMAGORINSKY_AH = True           !   [Boolean] default = False
                                 ! If true, use a biharmonic Smagorinsky nonlinear eddy viscosity.
