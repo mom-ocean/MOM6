@@ -16,7 +16,10 @@ DT_THERM = 3600.0                !   [s] default = 300.0
                                 ! an integer multiple of DT and less than the forcing or coupling time-step,
                                 ! unless THERMO_SPANS_COUPLING is true, in which case DT_THERM can be an integer
                                 ! multiple of the coupling timestep.  By default DT_THERM is set to DT.
-INTERPOLATE_P_SURF = False       !   [Boolean] default = False
+C_P = 3925.0                    !   [J kg-1 K-1] default = 3991.86795711963
+                                ! The heat capacity of sea water, approximated as a constant. This is only used
+				! if ENABLE_THERMODYNAMICS is true. The default value is from the TEOS-10
+INTERPOLATE_P_SURF = False      !   [Boolean] default = False
                                 ! If true, linearly interpolate the surface pressure over the coupling time
                                 ! step, using the specified value at the end of the step.
 SAVE_INITIAL_CONDS = False      !   [Boolean] default = False
@@ -104,10 +107,6 @@ MASK_OUTSIDE_OBCS = False        !   [Boolean] default = False
 
 ! === module MOM_verticalGrid ===
 ! Parameters providing information about the vertical grid.
-RHO_0 = 1000.0                  !   [kg m-3] default = 1035.0
-                                ! The mean ocean density used with BOUSSINESQ true to calculate accelerations
-                                ! and the mass for conservation properties, or with BOUSSINSEQ false to convert
-                                ! some parameters from vertical units of m to kg m-2.
 ANGSTROM = 1.0E-15              !   [m] default = 1.0E-10
                                 ! The minimum layer thickness, usually one-Angstrom.
 NK = 2                          !   [nondim]
@@ -126,7 +125,8 @@ DRHO_DT = -0.2                  !   [kg m-3 K-1] default = -0.2
 DRHO_DS = 0.0                   !   [kg m-3 PSU-1] default = 0.8
                                 ! When EQN_OF_STATE=LINEAR, this is the partial derivative of density with
                                 ! salinity.
-
+F_0 = 1.0E-4                    ! [s-1] default = 0.0
+                                ! The reference value of the Coriolis parameter with the betaplane option.
 ! === module MOM_tracer_flow_control ===
 
 ! === module MOM_coord_initialization ===
@@ -179,7 +179,7 @@ REMAPPING_SCHEME = "PPM_IH4"     ! default = "PLM"
                                 ! PPM_IH4     (3rd-order accurate)
                                 ! PQM_IH4IH3  (4th-order accurate)
                                 ! PQM_IH6IH5  (5th-order accurate)
-REMAP_AFTER_INITIALIZATION = False !   [Boolean] default = True
+REMAP_AFTER_INITIALIZATION = True !   [Boolean] default = True
                                 ! If true, applies regridding and remapping immediately after initialization so
                                 ! that the state is ALE consistent. This is a legacy step and should not be
                                 ! needed if the initialization is consistent with the coordinate mode.
@@ -218,7 +218,7 @@ TEMP_SALT_INIT_VERTICAL_REMAP_ONLY = True !   [Boolean] default = False
                                 ! If true, initial conditions are on the model horizontal grid. Extrapolation
                                 ! over missing ocean values is done using an ICE-9 procedure with vertical ALE
                                 ! remapping .
-TRIM_IC_FOR_P_SURF = True       !   [Boolean] default = False
+TRIM_IC_FOR_P_SURF = False      !   [Boolean] default = False
                                 ! If true, cuts way the top of the column for initial conditions at the depth
                                 ! where the hydrostatic pressure matches the imposed surface pressure which is
                                 ! read from file.
@@ -229,7 +229,7 @@ SURFACE_PRESSURE_VAR = "thick"  !   [Pa] default = ""
 SURFACE_PRESSURE_SCALE = 9800.    !   [file dependent] default = 1.0
                                 ! A scaling factor to convert SURFACE_PRESSURE_VAR from file
                                 ! SURFACE_PRESSURE_FILE into a surface pressure.
-TRIMMING_USES_REMAPPING = True  !   [Boolean] default = False
+TRIMMING_USES_REMAPPING = False !   [Boolean] default = False
                                 ! When trimming the column, also remap T and S.
 SPONGE = False                   !   [Boolean] default = False
                                 ! If true, sponges may be applied anywhere in the domain. The exact location and
@@ -379,10 +379,10 @@ DTBT = 10.0                     !   [s or nondim] default = -0.98
 
 ! === module MOM_diabatic_driver ===
 ! The following parameters are used for diabatic processes.
-USE_LEGACY_DIABATIC_DRIVER = False !   [Boolean] default = True
+USE_LEGACY_DIABATIC_DRIVER = True !   [Boolean] default = True
                                 ! If true, use a legacy version of the diabatic subroutine. This is temporary
                                 ! and is needed to avoid change in answers.
-ENERGETICS_SFC_PBL = True       !   [Boolean] default = False
+ENERGETICS_SFC_PBL = False      !   [Boolean] default = False
                                 ! If true, use an implied energetics planetary boundary layer scheme to
                                 ! determine the diffusivity and viscosity in the surface boundary layer.
 
