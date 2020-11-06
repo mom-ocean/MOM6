@@ -107,7 +107,7 @@ MASK_OUTSIDE_OBCS = False        !   [Boolean] default = False
 
 ! === module MOM_verticalGrid ===
 ! Parameters providing information about the vertical grid.
-ANGSTROM = 1.0E-15              !   [m] default = 1.0E-10
+!ANGSTROM = 1.0E-15              !   [m] default = 1.0E-10
                                 ! The minimum layer thickness, usually one-Angstrom.
 NK = 2                          !   [nondim]
                                 ! The number of model layers.
@@ -168,7 +168,7 @@ REGRIDDING_COORDINATE_UNITS = "m" ! default = "m"
                                 ! is of non-dimensional fractions of the water column.
 !TARGET_DENSITIES = 1000.0, 1001.0, 1002.0 !   [kg m^-3]
                                 ! RHO target densities for interfaces
-MIN_THICKNESS = 1.0E-12         !   [m] default = 0.001
+!MIN_THICKNESS = 1.0E-12         !   [m] default = 0.001
                                 ! When regridding, this is the minimum layer thickness allowed.
 REMAPPING_SCHEME = "PPM_IH4"     ! default = "PLM"
                                 ! This sets the reconstruction scheme used for vertical remapping for all
@@ -205,7 +205,7 @@ Z_INIT_FILE_PTEMP_VAR = "ptemp" ! default = "ptemp"
                                 ! The name of the potential temperature variable in TEMP_Z_INIT_FILE.
 Z_INIT_FILE_SALT_VAR = "salt"   ! default = "salt"
                                 ! The name of the salinity variable in SALT_Z_INIT_FILE.
-Z_INIT_HOMOGENIZE = True        !   [Boolean] default = False
+Z_INIT_HOMOGENIZE = False        !   [Boolean] default = False
                                 ! If True, then horizontally homogenize the interpolated initial conditions.
 Z_INIT_ALE_REMAPPING = True     !   [Boolean] default = False
                                 ! If True, then remap straight to model coordinate from file.
@@ -231,7 +231,7 @@ SURFACE_PRESSURE_SCALE = 9800.    !   [file dependent] default = 1.0
                                 ! SURFACE_PRESSURE_FILE into a surface pressure.
 TRIMMING_USES_REMAPPING = False !   [Boolean] default = False
                                 ! When trimming the column, also remap T and S.
-SPONGE = False                   !   [Boolean] default = False
+SPONGE = True                   !   [Boolean] default = False
                                 ! If true, sponges may be applied anywhere in the domain. The exact location and
                                 ! properties of those sponges are specified via SPONGE_CONFIG.
 SPONGE_CONFIG = "file"          ! default = "file"
