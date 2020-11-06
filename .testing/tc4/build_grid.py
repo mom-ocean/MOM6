@@ -2,7 +2,7 @@ import netCDF4 as nc
 from netCDF4 import stringtochar
 import numpy as np
 
-nx, ny = 10, 8     # Grid size
+nx, ny = 14, 10     # Grid size
 depth0 = 100.       # Uniform depth
 ds = 0.01           # grid resolution at the equator in degrees
 Re = 6.378e6        # Radius of earth
@@ -25,9 +25,9 @@ x, y = np.meshgrid(x_, y_)
 dx = np.zeros((2*ny + 1, 2*nx))
 dy = np.zeros((2*ny, 2*nx + 1))
 rad_deg = np.pi / 180.
-#dx[:] = (rad_deg * Re * (x[:, 1:] - x[:, 0:-1])
-#         * np.cos(0.5*rad_deg*(y[:, 0:-1] + y[:, 1:])))
-dx[:] = (rad_deg * Re * (x[:, 1:] - x[:, 0:-1]))
+dx[:] = (rad_deg * Re * (x[:, 1:] - x[:, 0:-1])
+         * np.cos(0.5*rad_deg*(y[:, 0:-1] + y[:, 1:])))
+#dx[:] = (rad_deg * Re * (x[:, 1:] - x[:, 0:-1]))
 dy[:] = rad_deg * Re * (y[1:, :] - y[0:-1, :])
 
 f_sg = nc.Dataset('ocean_hgrid.nc', 'w', format='NETCDF3_CLASSIC')

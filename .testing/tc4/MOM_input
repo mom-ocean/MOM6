@@ -11,7 +11,7 @@ DT = 1200.0                      !   [s]
                                 ! The (baroclinic) dynamics time step.  The time-step that is actually used will
                                 ! be an integer fraction of the forcing time-step (DT_FORCING in ocean-only mode
                                 ! or the coupling timestep in coupled mode.)
-DT_THERM = 1200.0                !   [s] default = 300.0
+DT_THERM = 3600.0                !   [s] default = 300.0
                                 ! The thermodynamic and tracer advection time step. Ideally DT_THERM should be
                                 ! an integer multiple of DT and less than the forcing or coupling time-step,
                                 ! unless THERMO_SPANS_COUPLING is true, in which case DT_THERM can be an integer
@@ -28,12 +28,12 @@ ICE_AREA_VARNAME = "area"       !
 ! === module MOM_domains ===
 REENTRANT_X = False             !   [Boolean] default = True
                                 ! If true, the domain is zonally reentrant.
-REENTRANT_Y = True              !   [Boolean] default = False
+REENTRANT_Y = False             !   [Boolean] default = False
                                 ! If true, the domain is meridionally reentrant.
-NIGLOBAL = 10                   !
+NIGLOBAL = 14                   !
                                 ! The total number of thickness grid points in the x-direction in the physical
                                 ! domain. With STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-NJGLOBAL = 8                    !
+NJGLOBAL = 10                    !
                                 ! The total number of thickness grid points in the y-direction in the physical
                                 ! domain. With STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
 
@@ -148,7 +148,7 @@ COORD_CONFIG = "linear"         ! default = "none"
                                 !     ts_profile - use temperature and salinity profiles
                                 !       (read from COORD_FILE) to set layer densities.
                                 !     USER - call a user modified routine.
-REGRIDDING_COORDINATE_MODE = "RHO" ! default = "LAYER"
+REGRIDDING_COORDINATE_MODE = "Z*" ! default = "LAYER"
                                 ! Coordinate mode for vertical regridding. Choose among the following
                                 ! possibilities:  LAYER - Isopycnal or stacked shallow water layers
                                 !  ZSTAR, Z* - stretched geopotential z*
@@ -158,7 +158,7 @@ REGRIDDING_COORDINATE_MODE = "RHO" ! default = "LAYER"
                                 !  HYCOM1 - HyCOM-like hybrid coordinate
                                 !  SLIGHT - stretched coordinates above continuous isopycnal
                                 !  ADAPTIVE - optimize for smooth neutral density surfaces
-REGRIDDING_COORDINATE_UNITS = "kg m^-3" ! default = "m"
+REGRIDDING_COORDINATE_UNITS = "m" ! default = "m"
                                 ! Units of the regridding coordinate.
 !ALE_RESOLUTION = 2*1.0         !   [m]
                                 ! The distribution of vertical resolution for the target
@@ -170,7 +170,7 @@ REGRIDDING_COORDINATE_UNITS = "kg m^-3" ! default = "m"
                                 ! RHO target densities for interfaces
 MIN_THICKNESS = 1.0E-12         !   [m] default = 0.001
                                 ! When regridding, this is the minimum layer thickness allowed.
-REMAPPING_SCHEME = "PLM"     ! default = "PLM"
+REMAPPING_SCHEME = "PPM_IH4"     ! default = "PLM"
                                 ! This sets the reconstruction scheme used for vertical remapping for all
                                 ! variables. It can be one of the following schemes: PCM         (1st-order
                                 ! accurate)
@@ -345,8 +345,7 @@ SMAG_BI_CONST = 0.03            !   [nondim] default = 0.0
 DIRECT_STRESS = True            !   [Boolean] default = False
                                 ! If true, the wind stress is distributed over the topmost HMIX_STRESS of fluid
                                 ! (like in HYCOM), and KVML may be set to a very small value.
-HMIX_STRESS = 10.0
-HMIX_FIXED = 10.                !   [m]
+HMIX_FIXED = 20.                !   [m]
                                 ! The prescribed depth over which the near-surface viscosity and diffusivity are
                                 ! elevated when the bulk mixed layer is not used.
 KVML = 0.01                     !   [m2 s-1] default = 1.0E-04
@@ -369,7 +368,7 @@ BEBT = 0.2                      !   [nondim] default = 0.1
                                 ! from 0 (for a forward-backward treatment of nonrotating gravity waves) to 1
                                 ! (for a backward Euler treatment). In practice, BEBT must be greater than about
                                 ! 0.05.
-DTBT = -0.9                     !   [s or nondim] default = -0.98
+DTBT = 10.0                     !   [s or nondim] default = -0.98
                                 ! The barotropic time step, in s. DTBT is only used with the split explicit time
                                 ! stepping. To set the time step automatically based the maximum stable value
                                 ! use 0, or a negative value gives the fraction of the stable value. Setting
@@ -450,7 +449,7 @@ WIND_CONFIG = "zero"            !
                                 ! options include (file), (2gyre), (1gyre), (gyres), (zero), and (USER).
 
 ! === module MOM_restart ===
-ICE_SHELF = True                !   [Boolean] default = False
+ICE_SHELF = False               !   [Boolean] default = False
                                 ! If true, enables the ice shelf model.
 
 ! === module MOM_domains min_halo ===
@@ -546,7 +545,7 @@ ICE_THICKNESS_VARNAME = "thick" ! default = "h_shelf"
 SHELF_IC_OUTPUT_FILE = "MOM_Shelf_IC" ! default = "MOM_Shelf_IC"
                                 ! The name-root of the output file for the ice shelf initial conditions.
 ! === module MOM_main (MOM_driver) ===
-DAYMAX = 2.                     !   [days]
+DAYMAX = 0.25                   !   [days]
                                 ! The final time of the whole simulation, in units of TIMEUNIT seconds.  This
                                 ! also sets the potential end time of the present run segment if the end time is
                                 ! not set via ocean_solo_nml in input.nml.
