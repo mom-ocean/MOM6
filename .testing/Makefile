@@ -445,13 +445,16 @@ $(foreach d,$(DIMS),$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 
 # Regression testing only checks for changes in existing diagnostics
 %.regression.diag: $(foreach b,symmetric target,work/%/$(b)/chksum_diag)
-	@! diff $^ | grep "^[<>]" | grep "^>" \
+	@! diff $^ | grep "^[<>]" | grep "^>" > /dev/null \
 	  || ! (\
 	    mkdir -p results/$*; \
 	    (diff $^ | tee results/$*/chksum_diag.regression.diff | head -n 20) ; \
 	    echo -e "$(FAIL): Diagnostics $*.regression.diag have changed." \
 	  )
-	@diff $^ || echo -e "$(WARN): New diagnostics in $<"
+	@cmp $^ || ( \
+	  diff $^ | head -n 20; \
+	  echo -e "$(WARN): New diagnostics in $<" \
+	)
 	@echo -e "$(PASS): Diagnostics $*.regression.diag agree."
 
 
@@ -480,7 +483,7 @@ work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6 $(VENV_PATH)
 	fi
 	mkdir -p $$(@D)/RESTART
 	echo -e "$(4)" > $$(@D)/MOM_override
-	rm -rf results/$$*/std.$(1).{out,err}
+	rm -f results/$$*/std.$(1).{out,err}
 	cd $$(@D) \
 	  && $(TIME) $(5) $(MPIRUN) -n $(6) ../../../$$< 2> std.err > std.out \
 	  || !( \
@@ -543,7 +546,7 @@ work/%/restart/ocean.stats: build/symmetric/MOM6 $(VENV_PATH)
 	  && halfperiod=$$(printf "%.f" $$(bc <<< "scale=10; 0.5 * $${daymax} * $${timeunit_int}")) \
 	  && printf "\n&ocean_solo_nml\n    seconds = $${halfperiod}\n/\n" >> input.nml
 	# Remove any previous archived output
-	rm -rf results/$*/std.restart{1,2}.{out,err}
+	rm -f results/$*/std.restart{1,2}.{out,err}
 	# Run the first half-period
 	cd $(@D) && $(TIME) $(MPIRUN) -n 1 ../../../$< 2> std1.err > std1.out \
 	  || !( \
