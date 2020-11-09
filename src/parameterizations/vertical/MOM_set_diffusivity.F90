@@ -437,16 +437,16 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
         if (KS_extra(i,K) > KT_extra(i,K)) then ! salt fingering
           Kd_lay_2d(i,k-1) = Kd_lay_2d(i,k-1) + 0.5 * KT_extra(i,K)
           Kd_lay_2d(i,k)   = Kd_lay_2d(i,k)   + 0.5 * KT_extra(i,K)
-          visc%Kd_extra_S(i,j,k) = (KS_extra(i,K) - KT_extra(i,K))
-          visc%Kd_extra_T(i,j,k) = 0.0
+          visc%Kd_extra_S(i,j,K) = (KS_extra(i,K) - KT_extra(i,K))
+          visc%Kd_extra_T(i,j,K) = 0.0
         elseif (KT_extra(i,K) > 0.0) then ! double-diffusive convection
           Kd_lay_2d(i,k-1) = Kd_lay_2d(i,k-1) + 0.5 * KS_extra(i,K)
           Kd_lay_2d(i,k)   = Kd_lay_2d(i,k)   + 0.5 * KS_extra(i,K)
-          visc%Kd_extra_T(i,j,k) = (KT_extra(i,K) - KS_extra(i,K))
-          visc%Kd_extra_S(i,j,k) = 0.0
+          visc%Kd_extra_T(i,j,K) = (KT_extra(i,K) - KS_extra(i,K))
+          visc%Kd_extra_S(i,j,K) = 0.0
         else ! There is no double diffusion at this interface.
-          visc%Kd_extra_T(i,j,k) = 0.0
-          visc%Kd_extra_S(i,j,k) = 0.0
+          visc%Kd_extra_T(i,j,K) = 0.0
+          visc%Kd_extra_S(i,j,K) = 0.0
         endif
       enddo ; enddo
       if (associated(dd%KT_extra)) then ; do K=1,nz+1 ; do i=is,ie

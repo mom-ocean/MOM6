@@ -608,17 +608,18 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   ! Set diffusivities for heat and salt separately
 
   if (CS%useKPP) then
-    !$OMP parallel do default(shared)
-    do k=1,nz+1 ; do j=js,je ; do i=is,ie
-      Kd_salt(i,j,k) = Kd_int(i,j,K)
-      Kd_heat(i,j,k) = Kd_int(i,j,K)
-    enddo ; enddo ; enddo
     ! Add contribution from double diffusion
     if (CS%double_diffuse) then
       !$OMP parallel do default(shared)
-      do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        Kd_salt(i,j,k) = Kd_salt(i,j,k) + visc%Kd_extra_S(i,j,k)
-        Kd_heat(i,j,k) = Kd_heat(i,j,k) + visc%Kd_extra_T(i,j,k)
+      do K=1,nz+1 ; do j=js,je ; do i=is,ie
+        Kd_salt(i,j,K) = Kd_int(i,j,K) + visc%Kd_extra_S(i,j,K)
+        Kd_heat(i,j,K) = Kd_int(i,j,K) + visc%Kd_extra_T(i,j,K)
+      enddo ; enddo ; enddo
+    else
+      !$OMP parallel do default(shared)
+      do K=1,nz+1 ; do j=js,je ; do i=is,ie
+        Kd_salt(i,j,K) = Kd_int(i,j,K)
+        Kd_heat(i,j,K) = Kd_int(i,j,K)
       enddo ; enddo ; enddo
     endif
   endif
@@ -660,14 +661,14 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
     if (.not.CS%KPPisPassive) then
       !$OMP parallel do default(shared)
-      do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        Kd_int(i,j,K) = min( Kd_salt(i,j,k),  Kd_heat(i,j,k) )
+      do K=1,nz+1 ; do j=js,je ; do i=is,ie
+        Kd_int(i,j,K) = min( Kd_salt(i,j,K),  Kd_heat(i,j,K) )
       enddo ; enddo ; enddo
       if (CS%double_diffuse) then
         !$OMP parallel do default(shared)
-        do k=1,nz+1 ; do j=js,je ; do i=is,ie
-          visc%Kd_extra_S(i,j,k) = (Kd_salt(i,j,k) - Kd_int(i,j,K))
-          visc%Kd_extra_T(i,j,k) = (Kd_heat(i,j,k) - Kd_int(i,j,K))
+        do K=1,nz+1 ; do j=js,je ; do i=is,ie
+          visc%Kd_extra_S(i,j,K) = (Kd_salt(i,j,K) - Kd_int(i,j,K))
+          visc%Kd_extra_T(i,j,K) = (Kd_heat(i,j,K) - Kd_int(i,j,K))
         enddo ; enddo ; enddo
       endif
     endif ! not passive
@@ -1050,6 +1051,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
     ! so h_prebound is used for the old thickness.
+    !### I think that in the following, ea_s and eb_s should be eatr and ebtr.
     call call_tracer_column_fns(h_prebound, h, ea_s, eb_s, fluxes, Hml, dt, G, GV, US, tv, &
                               CS%optics, CS%tracer_flow_CSp, CS%debug, &
                               evap_CFL_limit = CS%evap_CFL_limit, &
@@ -1079,6 +1081,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
                                 minimum_forcing_depth=CS%minimum_forcing_depth)
   else
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
+    !### eatr and ebtr may not be initialized or may be 0, depending on CS%geothermal.
     call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, dt, G, GV, US, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug, &
                                 evap_CFL_limit = CS%evap_CFL_limit, &
@@ -1157,7 +1160,7 @@ end subroutine diabatic_ALE_legacy
 !>  This subroutine imposes the diapycnal mass fluxes and the
 !!  accompanying diapycnal advection of momentum and tracers.
 subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
-                    G, GV, US, CS, Waves)
+                        G, GV, US, CS, Waves)
   type(ocean_grid_type),                     intent(inout) :: G         !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV        !< ocean vertical grid structure
   type(unit_scale_type),                     intent(in)    :: US        !< A dimensional unit scaling type
@@ -1319,17 +1322,18 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
   ! Set diffusivities for heat and salt separately
 
-  !$OMP parallel do default(shared)
-  do k=1,nz+1 ; do j=js,je ; do i=is,ie
-    Kd_salt(i,j,k) = Kd_int(i,j,K)
-    Kd_heat(i,j,k) = Kd_int(i,j,K)
-  enddo ; enddo ; enddo
   ! Add contribution from double diffusion
   if (CS%double_diffuse) then
     !$OMP parallel do default(shared)
-    do k=1,nz+1 ; do j=js,je ; do i=is,ie
-      Kd_salt(i,j,k) = Kd_salt(i,j,k) + visc%Kd_extra_S(i,j,k)
-      Kd_heat(i,j,k) = Kd_heat(i,j,k) + visc%Kd_extra_T(i,j,k)
+    do K=1,nz+1 ; do j=js,je ; do i=is,ie
+      Kd_salt(i,j,K) = Kd_int(i,j,K) + visc%Kd_extra_S(i,j,K)
+      Kd_heat(i,j,K) = Kd_int(i,j,K) + visc%Kd_extra_T(i,j,K)
+    enddo ; enddo ; enddo
+  else
+    !$OMP parallel do default(shared)
+    do K=1,nz+1 ; do j=js,je ; do i=is,ie
+      Kd_salt(i,j,K) = Kd_int(i,j,K)
+      Kd_heat(i,j,K) = Kd_int(i,j,K)
     enddo ; enddo ; enddo
   endif
 
@@ -1709,6 +1713,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
     ! so use h_prebound as the old value.
+    !### I think that in the following, ea_s and eb_s should be eatr and ebtr.
     call call_tracer_column_fns(h_prebound, h, ea_s, eb_s, fluxes, Hml, dt, G, GV, US, tv, &
                               CS%optics, CS%tracer_flow_CSp, CS%debug, &
                               evap_CFL_limit = CS%evap_CFL_limit, &
@@ -1739,6 +1744,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
                                 minimum_forcing_depth=CS%minimum_forcing_depth)
   else
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
+    !### eatr and ebtr may not be initialized or may be 0, depending on CS%geothermal.
     call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, dt, G, GV, US, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug, &
                                 evap_CFL_limit = CS%evap_CFL_limit, &
@@ -2076,17 +2082,18 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
     ! Set diffusivities for heat and salt separately
 
-    !$OMP parallel do default(shared)
-    do k=1,nz+1 ; do j=js,je ; do i=is,ie
-      Kd_salt(i,j,k) = Kd_int(i,j,K)
-      Kd_heat(i,j,k) = Kd_int(i,j,K)
-    enddo ; enddo ; enddo
-    ! Add contribution from double diffusion
     if (CS%double_diffuse) then
+      ! Add contribution from double diffusion
       !$OMP parallel do default(shared)
-      do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        Kd_salt(i,j,k) = Kd_salt(i,j,k) + visc%Kd_extra_S(i,j,k)
-        Kd_heat(i,j,k) = Kd_heat(i,j,k) + visc%Kd_extra_T(i,j,k)
+      do K=1,nz+1 ; do j=js,je ; do i=is,ie
+        Kd_salt(i,j,K) = Kd_int(i,j,K) + visc%Kd_extra_S(i,j,K)
+        Kd_heat(i,j,K) = Kd_int(i,j,K) + visc%Kd_extra_T(i,j,K)
+      enddo ; enddo ; enddo
+    else
+      !$OMP parallel do default(shared)
+      do K=1,nz+1 ; do j=js,je ; do i=is,ie
+        Kd_salt(i,j,K) = Kd_int(i,j,K)
+        Kd_heat(i,j,K) = Kd_int(i,j,K)
       enddo ; enddo ; enddo
     endif
 
@@ -2518,7 +2525,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
                     0.5*(ea(i,j,k) + eb(i,j,k-1))
           if (htot(i) < Tr_ea_BBL) then
             add_ent = max(0.0, add_ent, &
-                          (Tr_ea_BBL - htot(i)) - min(ea(i,j,k),eb(i,j,k-1)))
+                          (Tr_ea_BBL - htot(i)) - min(ea(i,j,k), eb(i,j,k-1)))
           elseif (add_ent < 0.0) then
             add_ent = 0.0 ; in_boundary(i) = .false.
           endif
@@ -2528,8 +2535,8 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
         else
           ebtr(i,j,k-1) = eb(i,j,k-1) ; eatr(i,j,k) = ea(i,j,k)
         endif
-        if (CS%double_diffuse) then ; if (visc%Kd_extra_S(i,j,k) > 0.0) then
-          add_ent = ((dt * visc%Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
+        if (CS%double_diffuse) then ; if (visc%Kd_extra_S(i,j,K) > 0.0) then
+          add_ent = ((dt * visc%Kd_extra_S(i,j,K)) * GV%Z_to_H**2) / &
              (0.25 * ((h(i,j,k-1) + h(i,j,k)) + (hold(i,j,k-1) + hold(i,j,k))) + &
               h_neglect)
           ebtr(i,j,k-1) = ebtr(i,j,k-1) + add_ent
@@ -2550,8 +2557,8 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     enddo ; enddo
     !$OMP parallel do default(shared) private(add_ent)
     do k=nz,2,-1 ; do j=js,je ; do i=is,ie
-      if (visc%Kd_extra_S(i,j,k) > 0.0) then
-        add_ent = ((dt * visc%Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
+      if (visc%Kd_extra_S(i,j,K) > 0.0) then
+        add_ent = ((dt * visc%Kd_extra_S(i,j,K)) * GV%Z_to_H**2) / &
            (0.25 * ((h(i,j,k-1) + h(i,j,k)) + (hold(i,j,k-1) + hold(i,j,k))) + &
             h_neglect)
       else
