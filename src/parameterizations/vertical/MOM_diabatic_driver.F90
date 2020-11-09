@@ -505,10 +505,14 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     ebtr     ! eb in that they tend to homogenize tracers in massless layers
              ! near the boundaries [H ~> m or kg m-2] (for Bous or non-Bouss)
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), target :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
     Kd_int,   & ! diapycnal diffusivity of interfaces [Z2 T-1 ~> m2 s-1]
     Kd_heat,  & ! diapycnal diffusivity of heat [Z2 T-1 ~> m2 s-1]
     Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers [Z2 T-1 ~> m2 s-1]
+    Kd_extra_T , & ! The extra diffusivity of temperature due to double diffusion relative to
+                ! Kd_int [Z2 T-1 ~> m2 s-1].
+    Kd_extra_S , & !  The extra diffusivity of salinity due to double diffusion relative to
+                ! Kd_int [Z2 T-1 ~> m2 s-1].
     Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces [Z2 T-1 ~> m2 s-1]
     Tdif_flx, & ! diffusive diapycnal heat flux across interfaces [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
     Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
@@ -596,13 +600,13 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   endif
 
   call cpu_clock_begin(id_clock_set_diffusivity)
-  ! Sets: Kd_int, visc%Kd_extra_T, visc%Kd_extra_S and visc%TKE_turb
+  ! Sets: Kd_int, Kd_extra_T, Kd_extra_S and visc%TKE_turb
   ! Also changes: visc%Kd_shear, visc%Kv_shear and visc%Kv_slow
   if (CS%debug) &
     call MOM_state_chksum("before set_diffusivity", u, v, h, G, GV, US, haloshift=CS%halo_TS_diff)
   if (CS%double_diffuse) then
     call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, US, CS%set_diff_CSp, &
-                         Kd_int=Kd_int, Kd_extra_T=visc%Kd_extra_T, Kd_extra_S=visc%Kd_extra_S)
+                         Kd_int=Kd_int, Kd_extra_T=Kd_extra_T, Kd_extra_S=Kd_extra_S)
   else
     call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, US, &
                          CS%set_diff_CSp, Kd_int=Kd_int)
@@ -617,8 +621,8 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     if (CS%double_diffuse) then
       !$OMP parallel do default(shared)
       do K=1,nz+1 ; do j=js,je ; do i=is,ie
-        Kd_salt(i,j,K) = Kd_int(i,j,K) + visc%Kd_extra_S(i,j,K)
-        Kd_heat(i,j,K) = Kd_int(i,j,K) + visc%Kd_extra_T(i,j,K)
+        Kd_salt(i,j,K) = Kd_int(i,j,K) + Kd_extra_S(i,j,K)
+        Kd_heat(i,j,K) = Kd_int(i,j,K) + Kd_extra_T(i,j,K)
       enddo ; enddo ; enddo
     else
       !$OMP parallel do default(shared)
@@ -672,8 +676,8 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
       if (CS%double_diffuse) then
         !$OMP parallel do default(shared)
         do K=1,nz+1 ; do j=js,je ; do i=is,ie
-          visc%Kd_extra_S(i,j,K) = (Kd_salt(i,j,K) - Kd_int(i,j,K))
-          visc%Kd_extra_T(i,j,K) = (Kd_heat(i,j,K) - Kd_int(i,j,K))
+          Kd_extra_S(i,j,K) = (Kd_salt(i,j,K) - Kd_int(i,j,K))
+          Kd_extra_T(i,j,K) = (Kd_heat(i,j,K) - Kd_int(i,j,K))
         enddo ; enddo ; enddo
       endif
     endif ! not passive
@@ -721,7 +725,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   if (CS%double_diffuse .and. associated(tv%T)) then
 
     call cpu_clock_begin(id_clock_differential_diff)
-    call differential_diffuse_T_S(h, tv%T, tv%S, visc%Kd_extra_T, visc%Kd_extra_S, dt, G, GV)
+    call differential_diffuse_T_S(h, tv%T, tv%S, Kd_extra_T, Kd_extra_S, dt, G, GV)
     call cpu_clock_end(id_clock_differential_diff)
 
     if (showCallTree) call callTree_waypoint("done with differential_diffuse_T_S (diabatic)")
@@ -732,8 +736,8 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     if (.not. CS%useKPP) then
       !$OMP parallel do default(shared)
       do K=2,nz ; do j=js,je ; do i=is,ie
-        Kd_heat(i,j,K) = Kd_heat(i,j,K) + visc%Kd_extra_T(i,j,K)
-        Kd_salt(i,j,K) = Kd_salt(i,j,K) + visc%Kd_extra_S(i,j,K)
+        Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_extra_T(i,j,K)
+        Kd_salt(i,j,K) = Kd_salt(i,j,K) + Kd_extra_S(i,j,K)
       enddo ; enddo ; enddo
     endif
 
@@ -1043,8 +1047,8 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
           ebtr(i,j,k-1) = eb_s(i,j,k-1) ; eatr(i,j,k) = ea_s(i,j,k)
         endif
 
-        if (CS%double_diffuse) then ; if (visc%Kd_extra_S(i,j,k) > 0.0) then
-          add_ent = ((dt * visc%Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
+        if (CS%double_diffuse) then ; if (Kd_extra_S(i,j,k) > 0.0) then
+          add_ent = ((dt * Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
              (0.25 * ((h(i,j,k-1) + h(i,j,k)) + (hold(i,j,k-1) + hold(i,j,k))) +  h_neglect)
           ebtr(i,j,k-1) = ebtr(i,j,k-1) + add_ent
           eatr(i,j,k) = eatr(i,j,k) + add_ent
@@ -1069,8 +1073,8 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     enddo ; enddo
     !$OMP parallel do default(shared) private(add_ent)
     do k=nz,2,-1 ; do j=js,je ; do i=is,ie
-      if (visc%Kd_extra_S(i,j,k) > 0.0) then
-        add_ent = ((dt * visc%Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
+      if (Kd_extra_S(i,j,k) > 0.0) then
+        add_ent = ((dt * Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
            (0.25 * ((h(i,j,k-1) + h(i,j,k)) + (hold(i,j,k-1) + hold(i,j,k))) + h_neglect)
       else
         add_ent = 0.0
@@ -1217,10 +1221,14 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     ebtr     ! eb in that they tend to homogenize tracers in massless layers
              ! near the boundaries [H ~> m or kg m-2] (for Bous or non-Bouss)
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), target :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
     Kd_int,   & ! diapycnal diffusivity of interfaces [Z2 T-1 ~> m2 s-1]
     Kd_heat,  & ! diapycnal diffusivity of heat [Z2 T-1 ~> m2 s-1]
     Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers [Z2 T-1 ~> m2 s-1]
+    Kd_extra_T , & ! The extra diffusivity of temperature due to double diffusion relative to
+                ! Kd_int [Z2 T-1 ~> m2 s-1].
+    Kd_extra_S , & !  The extra diffusivity of salinity due to double diffusion relative to
+                ! Kd_int [Z2 T-1 ~> m2 s-1].
     Kd_ePBL,  & ! boundary layer or convective diapycnal diffusivities at interfaces [Z2 T-1 ~> m2 s-1]
     Tdif_flx, & ! diffusive diapycnal heat flux across interfaces [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
     Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
@@ -1309,13 +1317,13 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   endif
 
   call cpu_clock_begin(id_clock_set_diffusivity)
-  ! Sets: Kd_int, visc%Kd_extra_T, visc%Kd_extra_S and visc%TKE_turb
+  ! Sets: Kd_int, Kd_extra_T, Kd_extra_S and visc%TKE_turb
   ! Also changes: visc%Kd_shear, visc%Kv_shear and visc%Kv_slow
   if (CS%debug) &
     call MOM_state_chksum("before set_diffusivity", u, v, h, G, GV, US, haloshift=CS%halo_TS_diff)
   if (CS%double_diffuse) then
     call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, US, CS%set_diff_CSp, &
-                         Kd_int=Kd_int, Kd_extra_T=visc%Kd_extra_T, Kd_extra_S=visc%Kd_extra_S)
+                         Kd_int=Kd_int, Kd_extra_T=Kd_extra_T, Kd_extra_S=Kd_extra_S)
   else
     call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, US, &
                          CS%set_diff_CSp, Kd_int=Kd_int)
@@ -1336,8 +1344,8 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   if (CS%double_diffuse) then
     !$OMP parallel do default(shared)
     do K=1,nz+1 ; do j=js,je ; do i=is,ie
-      Kd_salt(i,j,K) = Kd_int(i,j,K) + visc%Kd_extra_S(i,j,K)
-      Kd_heat(i,j,K) = Kd_int(i,j,K) + visc%Kd_extra_T(i,j,K)
+      Kd_salt(i,j,K) = Kd_int(i,j,K) + Kd_extra_S(i,j,K)
+      Kd_heat(i,j,K) = Kd_int(i,j,K) + Kd_extra_T(i,j,K)
     enddo ; enddo ; enddo
   else
     !$OMP parallel do default(shared)
@@ -1424,7 +1432,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   if (CS%double_diffuse .and. associated(tv%T) .and. (.not.CS%use_CVMix_ddiff)) then
 
     call cpu_clock_begin(id_clock_differential_diff)
-    call differential_diffuse_T_S(h, tv%T, tv%S, visc%Kd_extra_T, visc%Kd_extra_S, dt, G, GV)
+    call differential_diffuse_T_S(h, tv%T, tv%S, Kd_extra_T, Kd_extra_S, dt, G, GV)
     call cpu_clock_end(id_clock_differential_diff)
 
     if (showCallTree) call callTree_waypoint("done with differential_diffuse_T_S (diabatic)")
@@ -1435,8 +1443,8 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     if (.not. CS%useKPP) then
       !$OMP parallel do default(shared)
       do K=2,nz ; do j=js,je ; do i=is,ie
-        Kd_heat(i,j,K) = Kd_heat(i,j,K) + visc%Kd_extra_T(i,j,K)
-        Kd_salt(i,j,K) = Kd_salt(i,j,K) + visc%Kd_extra_S(i,j,K)
+        Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_extra_T(i,j,K)
+        Kd_salt(i,j,K) = Kd_salt(i,j,K) + Kd_extra_S(i,j,K)
       enddo ; enddo ; enddo
     endif
 
@@ -1709,8 +1717,8 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
           ebtr(i,j,k-1) = eb_s(i,j,k-1) ; eatr(i,j,k) = ea_s(i,j,k)
         endif
 
-        if (CS%double_diffuse) then ; if (visc%Kd_extra_S(i,j,k) > 0.0) then
-          add_ent = ((dt * visc%Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
+        if (CS%double_diffuse) then ; if (Kd_extra_S(i,j,k) > 0.0) then
+          add_ent = ((dt * Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
              (0.5 * (h(i,j,k-1) + h(i,j,k)) + &
               h_neglect)
           ebtr(i,j,k-1) = ebtr(i,j,k-1) + add_ent
@@ -1736,8 +1744,8 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     enddo ; enddo
     !$OMP parallel do default(shared) private(add_ent)
     do k=nz,2,-1 ; do j=js,je ; do i=is,ie
-      if (visc%Kd_extra_S(i,j,k) > 0.0) then
-        add_ent = ((dt * visc%Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
+      if (Kd_extra_S(i,j,k) > 0.0) then
+        add_ent = ((dt * Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
            (0.5 * (h(i,j,k-1) + h(i,j,k))  + &
             h_neglect)
       else
@@ -1896,10 +1904,14 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     ebtr     ! eb in that they tend to homogenize tracers in massless layers
              ! near the boundaries [H ~> m or kg m-2] (for Bous or non-Bouss)
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), target :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
     Kd_int,   & ! diapycnal diffusivity of interfaces [Z2 T-1 ~> m2 s-1]
     Kd_heat,  & ! diapycnal diffusivity of heat [Z2 T-1 ~> m2 s-1]
     Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers [Z2 T-1 ~> m2 s-1]
+    Kd_extra_T , & ! The extra diffusivity of temperature due to double diffusion relative to
+                ! Kd_int [Z2 T-1 ~> m2 s-1].
+    Kd_extra_S , & !  The extra diffusivity of salinity due to double diffusion relative to
+                ! Kd_int [Z2 T-1 ~> m2 s-1].
     Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces [Z2 T-1 ~> m2 s-1]
     Tdif_flx, & ! diffusive diapycnal heat flux across interfaces [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
     Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
@@ -2056,7 +2068,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   endif
 
   call cpu_clock_begin(id_clock_set_diffusivity)
-  ! Sets: Kd_lay, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S and visc%TKE_turb
+  ! Sets: Kd_lay, Kd_int, Kd_extra_T, Kd_extra_S and visc%TKE_turb
   ! Also changes: visc%Kd_shear and visc%Kv_shear
   if ((CS%halo_TS_diff > 0) .and. (CS%ML_mix_first > 0.0)) then
     if (associated(tv%T)) call pass_var(tv%T, G%Domain, halo=CS%halo_TS_diff, complete=.false.)
@@ -2067,7 +2079,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     call MOM_state_chksum("before set_diffusivity", u, v, h, G, GV, US, haloshift=CS%halo_TS_diff)
   if (CS%double_diffuse) then
     call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, US, CS%set_diff_CSp, &
-                         Kd_lay=Kd_lay, Kd_int=Kd_int, Kd_extra_T=visc%Kd_extra_T, Kd_extra_S=visc%Kd_extra_S)
+                         Kd_lay=Kd_lay, Kd_int=Kd_int, Kd_extra_T=Kd_extra_T, Kd_extra_S=Kd_extra_S)
   else
     call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, US, &
                          CS%set_diff_CSp, Kd_lay=Kd_lay, Kd_int=Kd_int)
@@ -2101,8 +2113,8 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
       ! Add contribution from double diffusion
       !$OMP parallel do default(shared)
       do K=1,nz+1 ; do j=js,je ; do i=is,ie
-        Kd_salt(i,j,K) = Kd_int(i,j,K) + visc%Kd_extra_S(i,j,K)
-        Kd_heat(i,j,K) = Kd_int(i,j,K) + visc%Kd_extra_T(i,j,K)
+        Kd_salt(i,j,K) = Kd_int(i,j,K) + Kd_extra_S(i,j,K)
+        Kd_heat(i,j,K) = Kd_int(i,j,K) + Kd_extra_T(i,j,K)
       enddo ; enddo ; enddo
     else
       !$OMP parallel do default(shared)
@@ -2133,8 +2145,8 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
       if (CS%double_diffuse) then
         !$OMP parallel do default(shared)
         do k=1,nz+1 ; do j=js,je ; do i=is,ie
-          visc%Kd_extra_S(i,j,k) = (Kd_salt(i,j,k) - Kd_int(i,j,K))
-          visc%Kd_extra_T(i,j,k) = (Kd_heat(i,j,k) - Kd_int(i,j,K))
+          Kd_extra_S(i,j,k) = (Kd_salt(i,j,k) - Kd_int(i,j,K))
+          Kd_extra_T(i,j,k) = (Kd_heat(i,j,k) - Kd_int(i,j,K))
         enddo ; enddo ; enddo
       endif
     endif ! not passive
@@ -2186,7 +2198,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   if (CS%double_diffuse .and. associated(tv%T)) then
 
     call cpu_clock_begin(id_clock_differential_diff)
-    call differential_diffuse_T_S(h, tv%T, tv%S, visc%Kd_extra_T, visc%Kd_extra_S, dt, G, GV)
+    call differential_diffuse_T_S(h, tv%T, tv%S, Kd_extra_T, Kd_extra_S, dt, G, GV)
     call cpu_clock_end(id_clock_differential_diff)
     if (showCallTree) call callTree_waypoint("done with differential_diffuse_T_S (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('differential_diffuse_T_S', u, v, h, tv%T, tv%S, G, GV, US)
@@ -2196,8 +2208,8 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     if (.not. CS%useKPP) then
       !$OMP parallel do default(shared)
       do K=2,nz ; do j=js,je ; do i=is,ie
-        Kd_heat(i,j,K) = Kd_heat(i,j,K) + visc%Kd_extra_T(i,j,K)
-        Kd_salt(i,j,K) = Kd_salt(i,j,K) + visc%Kd_extra_S(i,j,K)
+        Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_extra_T(i,j,K)
+        Kd_salt(i,j,K) = Kd_salt(i,j,K) + Kd_extra_S(i,j,K)
       enddo ; enddo ; enddo
     endif
 
@@ -2550,8 +2562,8 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
         else
           ebtr(i,j,k-1) = eb(i,j,k-1) ; eatr(i,j,k) = ea(i,j,k)
         endif
-        if (CS%double_diffuse) then ; if (visc%Kd_extra_S(i,j,K) > 0.0) then
-          add_ent = ((dt * visc%Kd_extra_S(i,j,K)) * GV%Z_to_H**2) / &
+        if (CS%double_diffuse) then ; if (Kd_extra_S(i,j,K) > 0.0) then
+          add_ent = ((dt * Kd_extra_S(i,j,K)) * GV%Z_to_H**2) / &
              (0.25 * ((h(i,j,k-1) + h(i,j,k)) + (hold(i,j,k-1) + hold(i,j,k))) + &
               h_neglect)
           ebtr(i,j,k-1) = ebtr(i,j,k-1) + add_ent
@@ -2572,8 +2584,8 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     enddo ; enddo
     !$OMP parallel do default(shared) private(add_ent)
     do k=nz,2,-1 ; do j=js,je ; do i=is,ie
-      if (visc%Kd_extra_S(i,j,K) > 0.0) then
-        add_ent = ((dt * visc%Kd_extra_S(i,j,K)) * GV%Z_to_H**2) / &
+      if (Kd_extra_S(i,j,K) > 0.0) then
+        add_ent = ((dt * Kd_extra_S(i,j,K)) * GV%Z_to_H**2) / &
            (0.25 * ((h(i,j,k-1) + h(i,j,k)) + (hold(i,j,k-1) + hold(i,j,k))) + &
             h_neglect)
       else
@@ -3150,7 +3162,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 
   real    :: Kd  ! A diffusivity used in the default for other tracer diffusivities, in MKS units [m2 s-1]
   integer :: num_mode
-  logical :: use_temperature, differentialDiffusion
+  logical :: use_temperature
   character(len=20) :: EN1, EN2, EN3
 
 ! This "include" declares and sets the variable "version".
@@ -3208,9 +3220,6 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   call get_param(param_file, mdl, "PRANDTL_EPBL", CS%ePBL_Prandtl, &
                  "The Prandtl number used by ePBL to convert vertical diffusivities into "//&
                  "viscosities.", default=1.0, units="nondim", do_not_log=.not.CS%use_energetic_PBL)
-  call get_param(param_file, mdl, "DOUBLE_DIFFUSION", differentialDiffusion, &
-                 "If true, apply parameterization of double-diffusion.", &
-                 default=.false. )
   call get_param(param_file, mdl, "USE_KPP", CS%use_KPP, &
                  "If true, turns on the [CVMix] KPP scheme of Large et al., 1994, "//&
                  "to calculate diffusivities and non-local transport in the OBL.", &

@@ -2271,8 +2271,8 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
          'User-specified Extra Diffusivity', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
 
   call get_param(param_file, mdl, "DOUBLE_DIFFUSION", CS%double_diffusion, &
-                 "If true, increase diffusivites for temperature or salt "//&
-                 "based on double-diffusive parameterization from MOM4/KPP.", &
+                 "If true, increase diffusivites for temperature or salinity based on the "//&
+                 "double-diffusive parameterization described in Large et al. (1994).", &
                  default=.false.)
 
   if (CS%double_diffusion) then
