@@ -600,8 +600,13 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   ! Also changes: visc%Kd_shear, visc%Kv_shear and visc%Kv_slow
   if (CS%debug) &
     call MOM_state_chksum("before set_diffusivity", u, v, h, G, GV, US, haloshift=CS%halo_TS_diff)
-  call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, &
-                       visc, dt, G, GV, US, CS%set_diff_CSp, Kd_int=Kd_int)
+  if (CS%double_diffuse) then
+    call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, US, CS%set_diff_CSp, &
+                         Kd_int=Kd_int, Kd_extra_T=visc%Kd_extra_T, Kd_extra_S=visc%Kd_extra_S)
+  else
+    call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, US, &
+                         CS%set_diff_CSp, Kd_int=Kd_int)
+  endif
   call cpu_clock_end(id_clock_set_diffusivity)
   if (showCallTree) call callTree_waypoint("done with set_diffusivity (diabatic)")
 
@@ -1308,8 +1313,13 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   ! Also changes: visc%Kd_shear, visc%Kv_shear and visc%Kv_slow
   if (CS%debug) &
     call MOM_state_chksum("before set_diffusivity", u, v, h, G, GV, US, haloshift=CS%halo_TS_diff)
-  call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, US, &
-                       CS%set_diff_CSp, Kd_int=Kd_int)
+  if (CS%double_diffuse) then
+    call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, US, CS%set_diff_CSp, &
+                         Kd_int=Kd_int, Kd_extra_T=visc%Kd_extra_T, Kd_extra_S=visc%Kd_extra_S)
+  else
+    call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, US, &
+                         CS%set_diff_CSp, Kd_int=Kd_int)
+  endif
   call cpu_clock_end(id_clock_set_diffusivity)
   if (showCallTree) call callTree_waypoint("done with set_diffusivity (diabatic)")
 
@@ -2055,8 +2065,13 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   endif
   if (CS%debug) &
     call MOM_state_chksum("before set_diffusivity", u, v, h, G, GV, US, haloshift=CS%halo_TS_diff)
-  call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, &
-                       visc, dt, G, GV, US, CS%set_diff_CSp, Kd_lay, Kd_int)
+  if (CS%double_diffuse) then
+    call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, US, CS%set_diff_CSp, &
+                         Kd_lay=Kd_lay, Kd_int=Kd_int, Kd_extra_T=visc%Kd_extra_T, Kd_extra_S=visc%Kd_extra_S)
+  else
+    call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, US, &
+                         CS%set_diff_CSp, Kd_lay=Kd_lay, Kd_int=Kd_int)
+  endif
   call cpu_clock_end(id_clock_set_diffusivity)
   if (showCallTree) call callTree_waypoint("done with set_diffusivity (diabatic)")
 

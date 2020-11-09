@@ -209,7 +209,7 @@ contains
 !! visc%Kv_slow. Vertical viscosity due to shear-driven mixing is passed via
 !! visc%Kv_shear
 subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
-                           G, GV, US, CS, Kd_lay, Kd_int)
+                           G, GV, US, CS, Kd_lay, Kd_int, Kd_extra_T, Kd_extra_S)
   type(ocean_grid_type),     intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type),   intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),     intent(in)    :: US   !< A dimensional unit scaling type
@@ -236,6 +236,14 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                    optional, intent(out)   :: Kd_lay !< Diapycnal diffusivity of each layer [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
                    optional, intent(out)   :: Kd_int !< Diapycnal diffusivity at each interface [Z2 T-1 ~> m2 s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                   optional, intent(out)   :: Kd_extra_T !< The extra diffusivity at interfaces of
+                                                     !! temperature due to double diffusion relative to
+                                                     !! the diffusivity of density [Z2 T-1 ~> m2 s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                   optional, intent(out)   :: Kd_extra_S !< The extra diffusivity at interfaces of
+                                                     !! salinity due to double diffusion relative to
+                                                     !! the diffusivity of density [Z2 T-1 ~> m2 s-1].
 
   ! local variables
   real, dimension(SZI_(G)) :: &
@@ -294,10 +302,10 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   use_EOS = associated(tv%eqn_of_state)
 
-  if ((CS%use_CVMix_ddiff .or. CS%double_diffusion) .and. .not. &
-     (associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S))) &
-     call MOM_error(FATAL, "set_diffusivity: both visc%Kd_extra_T and "//&
-         "visc%Kd_extra_S must be associated when USE_CVMIX_DDIFF or DOUBLE_DIFFUSION are true.")
+  if ((CS%use_CVMix_ddiff .or. CS%double_diffusion) .and. &
+      .not.(present(Kd_extra_T) .and. present(Kd_extra_S))) &
+     call MOM_error(FATAL, "set_diffusivity: both Kd_extra_T and Kd_extra_S must be present "//&
+                           "when USE_CVMIX_DDIFF or DOUBLE_DIFFUSION are true.")
 
   TKE_to_Kd_used = (CS%use_tidal_mixing .or. CS%ML_radiation .or. &
                    (CS%bottomdraglaw .and. .not.CS%use_LOTW_BBL_diffusivity))
@@ -305,6 +313,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   ! Set Kd_lay, Kd_int and Kv_slow to constant values, mostly to fill the halos.
   if (present(Kd_lay)) Kd_lay(:,:,:) = CS%Kd
   if (present(Kd_int)) Kd_int(:,:,:) = CS%Kd
+  if (present(Kd_extra_T)) Kd_extra_T(:,:,:) = 0.0
+  if (present(Kd_extra_S)) Kd_extra_S(:,:,:) = 0.0
   if (associated(visc%Kv_slow)) visc%Kv_slow(:,:,:) = CS%Kv
 
   ! Set up arrays for diagnostics.
@@ -433,20 +443,22 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     ! Double-diffusion (old method)
     if (CS%double_diffusion) then
       call double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, KT_extra, KS_extra)
+      ! One of Kd_extra_T and Kd_extra_S is always 0. Kd_extra_S is positive for salt fingering.
+      ! Kd_extra_T is positive for double diffusive convection.
       do K=2,nz ; do i=is,ie
         if (KS_extra(i,K) > KT_extra(i,K)) then ! salt fingering
           Kd_lay_2d(i,k-1) = Kd_lay_2d(i,k-1) + 0.5 * KT_extra(i,K)
           Kd_lay_2d(i,k)   = Kd_lay_2d(i,k)   + 0.5 * KT_extra(i,K)
-          visc%Kd_extra_S(i,j,K) = (KS_extra(i,K) - KT_extra(i,K))
-          visc%Kd_extra_T(i,j,K) = 0.0
+          Kd_extra_S(i,j,K) = (KS_extra(i,K) - KT_extra(i,K))
+          Kd_extra_T(i,j,K) = 0.0
         elseif (KT_extra(i,K) > 0.0) then ! double-diffusive convection
           Kd_lay_2d(i,k-1) = Kd_lay_2d(i,k-1) + 0.5 * KS_extra(i,K)
           Kd_lay_2d(i,k)   = Kd_lay_2d(i,k)   + 0.5 * KS_extra(i,K)
-          visc%Kd_extra_T(i,j,K) = (KT_extra(i,K) - KS_extra(i,K))
-          visc%Kd_extra_S(i,j,K) = 0.0
+          Kd_extra_T(i,j,K) = (KT_extra(i,K) - KS_extra(i,K))
+          Kd_extra_S(i,j,K) = 0.0
         else ! There is no double diffusion at this interface.
-          visc%Kd_extra_T(i,j,K) = 0.0
-          visc%Kd_extra_S(i,j,K) = 0.0
+          Kd_extra_T(i,j,K) = 0.0
+          Kd_extra_S(i,j,K) = 0.0
         endif
       enddo ; enddo
       if (associated(dd%KT_extra)) then ; do K=1,nz+1 ; do i=is,ie
@@ -463,10 +475,10 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     if (CS%use_CVMix_ddiff) then
       call cpu_clock_begin(id_clock_CVMix_ddiff)
       if (associated(dd%drho_rat)) then
-        call compute_ddiff_coeffs(h, tv, G, GV, US, j, visc%Kd_extra_T, visc%Kd_extra_S, &
+        call compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_extra_T, Kd_extra_S, &
                                   CS%CVMix_ddiff_csp, dd%drho_rat)
       else
-        call compute_ddiff_coeffs(h, tv, G, GV, US, j, visc%Kd_extra_T, visc%Kd_extra_S, CS%CVMix_ddiff_csp)
+        call compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_extra_T, Kd_extra_S, CS%CVMix_ddiff_csp)
       endif
       call cpu_clock_end(id_clock_CVMix_ddiff)
     endif
@@ -623,8 +635,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     if (CS%useKappaShear) call hchksum(visc%Kd_shear, "Turbulent Kd", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
 
     if (CS%use_CVMix_ddiff) then
-      call hchksum(visc%Kd_extra_T, "MOM_set_diffusivity: Kd_extra_T", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
-      call hchksum(visc%Kd_extra_S, "MOM_set_diffusivity: Kd_extra_S", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
+      call hchksum(Kd_extra_T, "MOM_set_diffusivity: Kd_extra_T", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
+      call hchksum(Kd_extra_S, "MOM_set_diffusivity: Kd_extra_S", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
     endif
 
     if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) then
@@ -665,9 +677,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   if (CS%double_diffusion) then
     if (CS%id_KT_extra > 0) call post_data(CS%id_KT_extra, dd%KT_extra, CS%diag)
     if (CS%id_KS_extra > 0) call post_data(CS%id_KS_extra, dd%KS_extra, CS%diag)
-  else
-    if (CS%id_KT_extra > 0) call post_data(CS%id_KT_extra, visc%Kd_extra_T, CS%diag)
-    if (CS%id_KS_extra > 0) call post_data(CS%id_KS_extra, visc%Kd_extra_S, CS%diag)
+  elseif (CS%use_CVMix_ddiff) then
+    if (CS%id_KT_extra > 0) call post_data(CS%id_KT_extra, Kd_extra_T, CS%diag)
+    if (CS%id_KS_extra > 0) call post_data(CS%id_KS_extra, Kd_extra_S, CS%diag)
     if (CS%id_R_rho > 0) call post_data(CS%id_R_rho, dd%drho_rat, CS%diag)
   endif
   if (CS%id_Kd_BBL > 0)   call post_data(CS%id_Kd_BBL, dd%Kd_BBL, CS%diag)
