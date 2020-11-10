@@ -20,7 +20,7 @@ use MOM_opacity,       only : set_opacity, opacity_CS, extract_optics_slice, ext
 use MOM_opacity,       only : optics_type, optics_nbands, absorbRemainingSW, sumSWoverBands
 use MOM_tracer_flow_control, only : get_chl_from_model, tracer_flow_control_CS
 use MOM_unit_scaling,  only : unit_scale_type
-use MOM_variables,     only : thermo_var_ptrs, vertvisc_type! , accel_diag_ptrs
+use MOM_variables,     only : thermo_var_ptrs ! , vertvisc_type, accel_diag_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
@@ -223,15 +223,23 @@ end subroutine make_frazil
 
 !> This subroutine applies double diffusion to T & S, assuming no diapycal mass
 !! fluxes, using a simple triadiagonal solver.
-subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
+subroutine differential_diffuse_T_S(h, T, S, Kd_T, Kd_S, dt, G, GV)
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
-  type(thermo_var_ptrs),   intent(inout) :: tv   !< Structure containing pointers to any
-                                                 !! available thermodynamic fields.
-  type(vertvisc_type),     intent(in)    :: visc !< Structure containing vertical viscosities, bottom
-                                                 !! boundary layer properies, and related fields.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(inout) :: T    !< Potential temperature [degC].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(inout) :: S    !< Salinity [PSU] or [gSalt/kg], generically [ppt].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                           intent(inout)    :: Kd_T !< The extra diffusivity of temperature due to
+                                                 !! double diffusion relative to the diffusivity of
+                                                 !! diffusivity of density [Z2 T-1 ~> m2 s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                           intent(in)    :: Kd_S !< The extra diffusivity of salinity due to
+                                                 !! double diffusion relative to the diffusivity of
+                                                 !! diffusivity of density [Z2 T-1 ~> m2 s-1].
   real,                    intent(in)    :: dt   !<  Time increment [T ~> s].
 
   ! local variables
@@ -250,27 +258,12 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
                        ! interface [H-1 ~> m-1 or m2 kg-1].
   real :: b_denom_T    ! The first term in the denominators for the expressions
   real :: b_denom_S    ! for b1_T and b1_S, both [H ~> m or kg m-2].
-  real, dimension(:,:,:), pointer :: T=>NULL(), S=>NULL()
-  real, dimension(:,:,:), pointer :: Kd_T=>NULL(), Kd_S=>NULL() ! Diffusivities [Z2 T-1 ~> m2 s-1].
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   h_neglect = GV%H_subroundoff
 
-  if (.not.associated(tv%T)) call MOM_error(FATAL, &
-      "differential_diffuse_T_S: Called with an unassociated tv%T")
-  if (.not.associated(tv%S)) call MOM_error(FATAL, &
-      "differential_diffuse_T_S: Called with an unassociated tv%S")
-  if (.not.associated(visc%Kd_extra_T)) call MOM_error(FATAL, &
-      "differential_diffuse_T_S: Called with an unassociated visc%Kd_extra_T")
-  if (.not.associated(visc%Kd_extra_S)) call MOM_error(FATAL, &
-      "differential_diffuse_T_S: Called with an unassociated visc%Kd_extra_S")
-
-  T => tv%T ; S => tv%S
-  Kd_T => visc%Kd_extra_T ; Kd_S => visc%Kd_extra_S
-!$OMP parallel do default(none) shared(is,ie,js,je,h,h_neglect,dt,Kd_T,Kd_S,G,GV,T,S,nz) &
-!$OMP                          private(I_h_int,mix_T,mix_S,h_tr,b1_T,b1_S, &
-!$OMP                                  d1_T,d1_S,c1_T,c1_S,b_denom_T,b_denom_S)
+  !$OMP parallel do default(private) shared(is,ie,js,je,h,h_neglect,dt,Kd_T,Kd_S,G,GV,T,S,nz)
   do j=js,je
     do i=is,ie
       I_h_int = 1.0 / (0.5 * (h(i,j,1) + h(i,j,2)) + h_neglect)
