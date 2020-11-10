@@ -9,14 +9,12 @@ use MOM_coms,             only : reproducing_sum
 use MOM_constants,        only : hlv, hlf
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_SUBCOMPONENT
-use MOM_diag_mediator,    only : diag_ctrl
-use MOM_diag_mediator,    only : safe_alloc_ptr, time_type
+use MOM_diag_mediator,    only : diag_ctrl, safe_alloc_ptr, time_type
 use MOM_domains,          only : pass_vector, pass_var, fill_symmetric_edges
-use MOM_domains,          only : global_field_sum, BITWISE_EXACT_SUM
 use MOM_domains,          only : AGRID, BGRID_NE, CGRID_NE, To_All
 use MOM_domains,          only : To_North, To_East, Omit_Corners
 use MOM_error_handler,    only : MOM_error, WARNING, FATAL, is_root_pe, MOM_mesg
-use MOM_file_parser,      only : get_param, log_version, param_file_type
+use MOM_file_parser,      only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,     only : forcing, mech_forcing
 use MOM_forcing_type,     only : forcing_diags, mech_forcing_diags, register_forcing_type_diags
 use MOM_forcing_type,     only : allocate_forcing_type, deallocate_forcing_type
@@ -1231,7 +1229,7 @@ subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
 end subroutine forcing_save_restart
 
 !> Initialize the surface forcing, including setting parameters and allocating permanent memory.
-subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
+subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   type(time_type),          intent(in)    :: Time !< The current model time
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
@@ -1240,6 +1238,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
                                                   !! diagnostic output
   type(surface_forcing_CS), pointer       :: CS   !< A pointer that is set to point to the control
                                                   !! structure for this module
+  integer, optional,        intent(in)   :: wind_stagger !< If present, the staggering of the winds that are
+                                                          !! being provided in calls to update_ocean_model
 
   ! Local variables
   real :: utide  ! The RMS tidal velocity [Z T-1 ~> m s-1].
@@ -1272,7 +1272,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
 
   call write_version_number(version)
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mdl, version, "")
+  call log_version(param_file, mdl, version, "", log_to_all=.true., debugging=.true.)
 
   call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, &
                  "The directory in which all input files are found.", &
@@ -1325,7 +1325,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
     call get_param(param_file, mdl, "USE_NET_FW_ADJUSTMENT_SIGN_BUG", &
                  CS%use_net_FW_adjustment_sign_bug, &
                    "If true, use the wrong sign for the adjustment to "//&
-                   "the net fresh-water.", default=.true.)
+                   "the net fresh-water.", default=.false.)
   call get_param(param_file, mdl, "ADJUST_NET_FRESH_WATER_BY_SCALING", &
                  CS%adjust_net_fresh_water_by_scaling, &
                  "If true, adjustments to net fresh water to achieve zero net are "//&
@@ -1347,15 +1347,28 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "the ocean dynamics.  The actual net mass source may differ "//&
                  "due to internal corrections.", default=.false.)
 
-  call get_param(param_file, mdl, "WIND_STAGGER", stagger, &
-                 "A case-insensitive character string to indicate the "//&
-                 "staggering of the input wind stress field.  Valid "//&
-                 "values are 'A', 'B', or 'C'.", default="C")
-  if (uppercase(stagger(1:1)) == 'A') then ; CS%wind_stagger = AGRID
-  elseif (uppercase(stagger(1:1)) == 'B') then ; CS%wind_stagger = BGRID_NE
-  elseif (uppercase(stagger(1:1)) == 'C') then ; CS%wind_stagger = CGRID_NE
-  else ; call MOM_error(FATAL,"surface_forcing_init: WIND_STAGGER = "// &
-                        trim(stagger)//" is invalid.") ; endif
+  if (present(wind_stagger)) then
+        if (wind_stagger == AGRID)    then ; stagger = 'AGRID'
+    elseif (wind_stagger == BGRID_NE) then ; stagger = 'BGRID_NE'
+    elseif (wind_stagger == CGRID_NE) then ; stagger = 'CGRID_NE'
+    else ; stagger = 'UNKNOWN' ; call MOM_error(FATAL,"surface_forcing_init: WIND_STAGGER = "// &
+                      trim(stagger)// "is invalid."); endif
+    call log_param(param_file, mdl, "WIND_STAGGER", stagger, &
+                   "The staggering of the input wind stress field "//&
+                   "from the coupler that is actually used.")
+    CS%wind_stagger = wind_stagger
+  else
+    call get_param(param_file, mdl, "WIND_STAGGER", stagger, &
+                   "A case-insensitive character string to indicate the "//&
+                   "staggering of the input wind stress field.  Valid "//&
+                   "values are 'A', 'B', or 'C'.", default="C")
+        if (uppercase(stagger(1:1)) == 'A') then ; CS%wind_stagger = AGRID
+    elseif (uppercase(stagger(1:1)) == 'B') then ; CS%wind_stagger = BGRID_NE
+    elseif (uppercase(stagger(1:1)) == 'C') then ; CS%wind_stagger = CGRID_NE
+    else ; call MOM_error(FATAL,"surface_forcing_init: WIND_STAGGER = "// &
+                          trim(stagger)//" is invalid.") ; endif
+  endif
+
   call get_param(param_file, mdl, "WIND_STRESS_MULTIPLIER", CS%wind_stress_multiplier, &
                  "A factor multiplying the wind-stress given to the ocean by the "//&
                  "coupler. This is used for testing and should be =1.0 for any "//&
@@ -1363,10 +1376,11 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
 
   if (CS%restore_salt) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
-                 "The constant that relates the restoring surface fluxes "//&
-                 "to the relative surface anomalies (akin to a piston "//&
-                 "velocity).  Note the non-MKS units.", &
-                 units="m day-1", scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
+                 "The constant that relates the restoring surface fluxes to the relative "//&
+                 "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
+                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s)
+    ! Convert CS%Flux_const from m day-1 to m s-1.
+    CS%Flux_const = CS%Flux_const / 86400.0
     call get_param(param_file, mdl, "SALT_RESTORE_FILE", CS%salt_restore_file, &
                  "A file in which to find the surface salinity to use for restoring.", &
                  default="salt_restore.nc")
@@ -1374,8 +1388,6 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "The name of the surface salinity variable to read from "//&
                  "SALT_RESTORE_FILE for restoring salinity.", &
                  default="salt")
-! Convert CS%Flux_const from m day-1 to m s-1.
-    CS%Flux_const = CS%Flux_const / 86400.0
 
     call get_param(param_file, mdl, "SRESTORE_AS_SFLUX", CS%salt_restore_as_sflux, &
                  "If true, the restoring of salinity is applied as a salt "//&
@@ -1411,10 +1423,11 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
 
   if (CS%restore_temp) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
-                 "The constant that relates the restoring surface fluxes "//&
-                 "to the relative surface anomalies (akin to a piston "//&
-                 "velocity).  Note the non-MKS units.", &
-                 units="m day-1", scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
+                 "The constant that relates the restoring surface fluxes to the relative "//&
+                 "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
+                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s)
+    ! Convert CS%Flux_const from m day-1 to m s-1.
+    CS%Flux_const = CS%Flux_const / 86400.0
     call get_param(param_file, mdl, "SST_RESTORE_FILE", CS%temp_restore_file, &
                  "A file in which to find the surface temperature to use for restoring.", &
                  default="temp_restore.nc")
@@ -1422,8 +1435,6 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "The name of the surface temperature variable to read from "//&
                  "SST_RESTORE_FILE for restoring sst.", &
                  default="temp")
-  ! Convert CS%Flux_const from m day-1 to m s-1.
-    CS%Flux_const = CS%Flux_const / 86400.0
 
     call get_param(param_file, mdl, "MAX_DELTA_TRESTORE", CS%max_delta_trestore, &
                  "The maximum sst difference used in restoring terms.", &
@@ -1483,7 +1494,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "an input file", default=.false.)
   call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
                "The background gustiness in the winds.", &
-               units="Pa", default=0.02, scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z)
+               units="Pa", default=0.0, scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z)
   if (CS%read_gust_2d) then
     call get_param(param_file, mdl, "GUST_2D_FILE", gust_file, &
                  "The file in which the wind gustiness is found in "//&
@@ -1496,14 +1507,14 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
   endif
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(param_file, mdl, "SURFACE_FORCING_2018_ANSWERS", CS%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the answers "//&
                  "from the end of 2018.  Otherwise, use a simpler expression to calculate gustiness.", &
                  default=default_2018_answers)
   call get_param(param_file, mdl, "FIX_USTAR_GUSTLESS_BUG", CS%fix_ustar_gustless_bug, &
                  "If true correct a bug in the time-averaging of the gustless wind friction velocity", &
-                 default=.false.)
+                 default=.true.)
 
 ! See whether sufficiently thick sea ice should be treated as rigid.
   call get_param(param_file, mdl, "USE_RIGID_SEA_ICE", CS%rigid_sea_ice, &

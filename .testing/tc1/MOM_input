@@ -574,3 +574,16 @@ ENERGYSAVEDAYS = 0.125          !   [days] default = 3600.0
                                 ! energies of the run and other globally summed diagnostics.
 DIAG_AS_CHKSUM = True
 DEBUG = True
+USE_PSURF_IN_EOS = False        !   [Boolean] default = False
+DEFAULT_2018_ANSWERS = True     !   [Boolean] default = True
+GRID_ROTATION_ANGLE_BUGS = True !   [Boolean] default = True
+INTERPOLATE_RES_FN = True       !   [Boolean] default = True
+GILL_EQUATORIAL_LD = False      !   [Boolean] default = False
+USE_GM_WORK_BUG = True          !   [Boolean] default = True
+USE_LAND_MASK_FOR_HVISC = False !   [Boolean] default = False
+KAPPA_SHEAR_ITER_BUG = True     !   [Boolean] default = True
+KAPPA_SHEAR_ALL_LAYER_TKE_BUG = True !   [Boolean] default = True
+BULKML_CONV_MOMENTUM_BUG = True !   [Boolean] default = True
+PEN_SW_ABSORB_MINTHICK = 0.001  !   [m] default = 0.001
+GUST_CONST = 0.02               !   [Pa] default = 0.02
+FIX_USTAR_GUSTLESS_BUG = False  !   [Boolean] default = False

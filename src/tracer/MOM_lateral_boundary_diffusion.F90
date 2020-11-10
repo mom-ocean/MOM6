@@ -98,15 +98,16 @@ logical function lateral_boundary_diffusion_init(Time, G, GV, param_file, diag, 
   endif
 
   ! Log this module and master switch for turning it on/off
+  call get_param(param_file, mdl, "USE_LATERAL_BOUNDARY_DIFFUSION", lateral_boundary_diffusion_init, &
+                 default=.false., do_not_log=.true.)
   call log_version(param_file, mdl, version, &
-       "This module implements lateral diffusion of tracers near boundaries")
+           "This module implements lateral diffusion of tracers near boundaries", &
+           all_default=.not.lateral_boundary_diffusion_init)
   call get_param(param_file, mdl, "USE_LATERAL_BOUNDARY_DIFFUSION", lateral_boundary_diffusion_init, &
                  "If true, enables the lateral boundary tracer's diffusion module.", &
                  default=.false.)
 
-  if (.not. lateral_boundary_diffusion_init) then
-    return
-  endif
+  if (.not. lateral_boundary_diffusion_init) return
 
   allocate(CS)
   CS%diag => diag

@@ -15,7 +15,7 @@ use MOM_domains, only       : group_pass_type, start_group_pass, complete_group_
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser, only   : read_param, get_param, log_param, log_version, param_file_type
 use MOM_grid, only          : ocean_grid_type
-use MOM_io, only            : slasher, vardesc, MOM_read_data
+use MOM_io, only            : slasher, vardesc, MOM_read_data, file_exists
 use MOM_restart, only       : register_restart_field, MOM_restart_CS, restart_init, save_restart
 use MOM_spatial_means, only : global_area_mean
 use MOM_time_manager, only  : time_type, time_type_to_real, operator(+), operator(/), operator(-)
@@ -2324,12 +2324,17 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "REFL_ANGLE_FILE", refl_angle_file, &
                "The path to the file containing the local angle of "//&
                "the coastline/ridge/shelf with respect to the equator.", &
-               fail_if_missing=.false.)
+               fail_if_missing=.false., default='')
   filename = trim(CS%inputdir) // trim(refl_angle_file)
-  call log_param(param_file, mdl, "INPUTDIR/REFL_ANGLE_FILE", filename)
   allocate(CS%refl_angle(isd:ied,jsd:jed)) ; CS%refl_angle(:,:) = CS%nullangle
-  call MOM_read_data(filename, 'refl_angle', CS%refl_angle, &
-                     G%domain, timelevel=1)
+  if (file_exists(filename, G%domain)) then
+    call log_param(param_file, mdl, "INPUTDIR/REFL_ANGLE_FILE", filename)
+    call MOM_read_data(filename, 'refl_angle', CS%refl_angle, &
+                       G%domain, timelevel=1)
+  else
+    if (trim(refl_angle_file) /= '' ) call MOM_error(FATAL, &
+                                                     "REFL_ANGLE_FILE: "//trim(filename)//" not found")
+  endif
   ! replace NANs with null value
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     if (is_NaN(CS%refl_angle(i,j))) CS%refl_angle(i,j) = CS%nullangle
@@ -2339,11 +2344,16 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   ! Read in prescribed partial reflection coefficients from file
   call get_param(param_file, mdl, "REFL_PREF_FILE", refl_pref_file, &
                "The path to the file containing the reflection coefficients.", &
-               fail_if_missing=.false.)
+               fail_if_missing=.false., default='')
   filename = trim(CS%inputdir) // trim(refl_pref_file)
-  call log_param(param_file, mdl, "INPUTDIR/REFL_PREF_FILE", filename)
   allocate(CS%refl_pref(isd:ied,jsd:jed)) ; CS%refl_pref(:,:) = 1.0
-  call MOM_read_data(filename, 'refl_pref', CS%refl_pref, G%domain, timelevel=1)
+  if (file_exists(filename, G%domain)) then
+    call log_param(param_file, mdl, "INPUTDIR/REFL_PREF_FILE", filename)
+    call MOM_read_data(filename, 'refl_pref', CS%refl_pref, G%domain, timelevel=1)
+  else
+    if (trim(refl_pref_file) /= '' ) call MOM_error(FATAL, &
+                                                    "REFL_PREF_FILE: "//trim(filename)//" not found")
+  endif
   !CS%refl_pref = CS%refl_pref*1 ! adjust partial reflection if desired
   call pass_var(CS%refl_pref,G%domain)
 
@@ -2362,11 +2372,16 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   ! Read in double-reflective (ridge) tags from file
   call get_param(param_file, mdl, "REFL_DBL_FILE", refl_dbl_file, &
                "The path to the file containing the double-reflective ridge tags.", &
-               fail_if_missing=.false.)
+               fail_if_missing=.false., default='')
   filename = trim(CS%inputdir) // trim(refl_dbl_file)
-  call log_param(param_file, mdl, "INPUTDIR/REFL_DBL_FILE", filename)
   allocate(ridge_temp(isd:ied,jsd:jed)) ; ridge_temp(:,:) = 0.0
-  call MOM_read_data(filename, 'refl_dbl', ridge_temp, G%domain, timelevel=1)
+  if (file_exists(filename, G%domain)) then
+    call log_param(param_file, mdl, "INPUTDIR/REFL_DBL_FILE", filename)
+    call MOM_read_data(filename, 'refl_dbl', ridge_temp, G%domain, timelevel=1)
+  else
+    if (trim(refl_dbl_file) /= '' ) call MOM_error(FATAL, &
+                                                   "REFL_DBL_FILE: "//trim(filename)//" not found")
+  endif
   call pass_var(ridge_temp,G%domain)
   allocate(CS%refl_dbl(isd:ied,jsd:jed)) ; CS%refl_dbl(:,:) = .false.
   do i=isd,ied; do j=jsd,jed

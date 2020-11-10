@@ -6,11 +6,13 @@
 
 This is the MOM6 source code.
 
+
 # Where to find information
 
 Start at the [MOM6-examples wiki](https://github.com/NOAA-GFDL/MOM6-examples/wiki) which has installation instructions.
 
 [Source code documentation](http://mom6.readthedocs.io/) is hosted on read the docs.
+
 
 # What files are what
 
@@ -23,7 +25,19 @@ The top level directory structure groups source code and input files as follow:
 | ```src/```        | Contains the source code for MOM6 that is always compiled. |
 | ```config_src/``` | Contains optional source code depending on mode and configuration such as dynamic-memory versus static, ocean-only versus coupled. |
 | ```pkg/```        | Contains third party (non-MOM6 or FMS) code that is compiled into MOM6. |
-| ```docs/```       | Workspace for generated documentation. |
+| ```docs/```       | Workspace for generated documentation.  See [docs/README.md](docs/README.md) |
+| ```.testing/```   | Contains the verification test suite.  See [.testing/README.md](.testing/README.md) |
+| ```ac/```         | Contains the autoconf build configuration files. See [ac/README.md](ac/README.md) |
+
+
+# Quick start guide
+
+To quickly get started and build an ocean-only MOM6 executable, see the
+[autoconf README](ac/README.md).
+
+For setting up an experiment, or building an executable for coupled modeling,
+consult the [MOM6-examples wiki](https://github.com/NOAA-GFDL/MOM6-examples/wiki).
+
 
 # Disclaimer
 
