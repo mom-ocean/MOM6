@@ -862,8 +862,8 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
           enddo
           ! In case data is deeper than model
           hsrc(nz_data) = hsrc(nz_data) + ( zTopOfCell + G%bathyT(CS%col_i(c),CS%col_j(c)) )
-          CS%Ref_val(CS%fldno)%h(1:nz_data,c) = GV%Z_to_H*hsrc(1:nz_data)
-          CS%Ref_val(CS%fldno)%p(1:nz_data,c) = tmpT1d(1:nz_data)
+          CS%Ref_val(m)%h(1:nz_data,c) = GV%Z_to_H*hsrc(1:nz_data)
+          CS%Ref_val(m)%p(1:nz_data,c) = tmpT1d(1:nz_data)
           do k=2,nz_data
              !          if (mask_z(i,j,k)==0.) &
              if (CS%Ref_val(m)%h(k,c) <= 0.001*GV%m_to_H) &
@@ -1185,7 +1185,7 @@ subroutine ALE_sponge_end(CS)
   if (associated(CS%Iresttime_col_v)) deallocate(CS%Iresttime_col_v)
 
   do m=1,CS%fldno
-    if (associated(CS%Ref_val(CS%fldno)%p)) deallocate(CS%Ref_val(CS%fldno)%p)
+    if (associated(CS%Ref_val(m)%p)) deallocate(CS%Ref_val(m)%p)
   enddo
 
   deallocate(CS)
