@@ -120,9 +120,9 @@ contains
 
     register_MOM_generic_tracer = .false.
     if (associated(CS)) then
-       call MOM_error(WARNING, "register_MOM_generic_tracer called with an "// &
+      call MOM_error(WARNING, "register_MOM_generic_tracer called with an "// &
             "associated control structure.")
-       return
+      return
     endif
     allocate(CS)
 
@@ -130,7 +130,7 @@ contains
     !Register all the generic tracers used and create the list of them.
     !This can be called by ALL PE's. No array fields allocated.
     if (.not. g_registered) then
-       call generic_tracer_register
+       call generic_tracer_register()
        g_registered = .true.
     endif
 
@@ -270,10 +270,10 @@ contains
 
     do
       if (INDEX(CS%IC_file, '_NULL_') /= 0) then
-         call MOM_error(WARNING,"The name of the IC_file "//trim(CS%IC_file)//&
+        call MOM_error(WARNING, "The name of the IC_file "//trim(CS%IC_file)//&
                               " indicates no MOM initialization was asked for the generic tracers."//&
                               "Bypassing the MOM initialization of ALL generic tracers!")
-         exit
+        exit
       endif
       call g_tracer_get_alias(g_tracer,g_tracer_name)
       call g_tracer_get_pointer(g_tracer,g_tracer_name,'field',tr_field)
@@ -296,20 +296,20 @@ contains
 
          !Check/apply the bounds for each g_tracer
          do k=1,nk ; do j=jsc,jec ; do i=isc,iec
-            if (tr_ptr(i,j,k) /= CS%tracer_land_val) then
-              if (tr_ptr(i,j,k) < g_tracer%src_var_valid_min) tr_ptr(i,j,k) = g_tracer%src_var_valid_min
-              !Jasmin does not want to apply the maximum for now
-              !if (tr_ptr(i,j,k) > g_tracer%src_var_valid_max) tr_ptr(i,j,k) = g_tracer%src_var_valid_max
-            endif
+           if (tr_ptr(i,j,k) /= CS%tracer_land_val) then
+             if (tr_ptr(i,j,k) < g_tracer%src_var_valid_min) tr_ptr(i,j,k) = g_tracer%src_var_valid_min
+             !Jasmin does not want to apply the maximum for now
+             !if (tr_ptr(i,j,k) > g_tracer%src_var_valid_max) tr_ptr(i,j,k) = g_tracer%src_var_valid_max
+           endif
          enddo ; enddo ; enddo
 
          !jgj: Reset CASED to 0 below K=1
          if ( (trim(g_tracer_name) == 'cased') .or. (trim(g_tracer_name) == 'ca13csed') ) then
-            do k=2,nk ; do j=jsc,jec ; do i=isc,iec
-               if (tr_ptr(i,j,k) /= CS%tracer_land_val) then
-                 tr_ptr(i,j,k) = 0.0
-               endif
-            enddo ; enddo ; enddo
+           do k=2,nk ; do j=jsc,jec ; do i=isc,iec
+             if (tr_ptr(i,j,k) /= CS%tracer_land_val) then
+               tr_ptr(i,j,k) = 0.0
+             endif
+           enddo ; enddo ; enddo
          endif
        elseif(.not. g_tracer%requires_restart) then
          !Do nothing for this tracer, it is initialized by the tracer package
@@ -362,10 +362,10 @@ contains
     grid_tmask(:,:,:) = 0.0
     grid_kmt(:,:) = 0
     do j = G%jsd, G%jed ; do i = G%isd, G%ied
-       if (G%mask2dT(i,j) > 0) then
-          grid_tmask(i,j,:) = 1.0
-          grid_kmt(i,j) = G%ke ! Tell the code that a layer thicker than 1m is the bottom layer.
-       endif
+      if (G%mask2dT(i,j) > 0) then
+        grid_tmask(i,j,:) = 1.0
+        grid_kmt(i,j) = G%ke ! Tell the code that a layer thicker than 1m is the bottom layer.
+      endif
     enddo ; enddo
     call g_tracer_set_common(G%isc,G%iec,G%jsc,G%jec,G%isd,G%ied,G%jsd,G%jed,&
                              GV%ke,1,CS%diag%axesTL%handles,grid_tmask,grid_kmt,day)
@@ -769,25 +769,25 @@ contains
     type(g_tracer_type), pointer :: g_tracer_list,g_tracer,g_tracer_next
 
     if (.not. g_registered) then
-       call generic_tracer_register
-       g_registered = .true.
+      call generic_tracer_register()
+      g_registered = .true.
     endif
 
     call generic_tracer_get_list(g_tracer_list)
     if (.NOT. associated(g_tracer_list)) then
-       call MOM_error(WARNING, trim(sub_name)// ": No generic tracer in the list.")
-       return
+      call MOM_error(WARNING, trim(sub_name)// ": No generic tracer in the list.")
+      return
     endif
 
     g_tracer=>g_tracer_list
     do
 
-       call g_tracer_flux_init(g_tracer) !, verbosity=verbosity) !### Add this after ocean shared is updated.
+      call g_tracer_flux_init(g_tracer) !, verbosity=verbosity) !### Add this after ocean shared is updated.
 
-       !traverse the linked list till hit NULL
-       call g_tracer_get_next(g_tracer, g_tracer_next)
-       if (.NOT. associated(g_tracer_next)) exit
-       g_tracer=>g_tracer_next
+      ! traverse the linked list till hit NULL
+      call g_tracer_get_next(g_tracer, g_tracer_next)
+      if (.NOT. associated(g_tracer_next)) exit
+      g_tracer=>g_tracer_next
 
     enddo
 
@@ -798,7 +798,7 @@ contains
                                               !! thermodynamic and tracer forcing fields.
     real,          intent(in)    :: weight    !< A weight for accumulating this flux
 
-   call generic_tracer_coupler_accumulate(flux_tmp%tr_fluxes, weight)
+    call generic_tracer_coupler_accumulate(flux_tmp%tr_fluxes, weight)
 
   end subroutine MOM_generic_tracer_fluxes_accumulate
 
@@ -821,10 +821,10 @@ contains
   subroutine end_MOM_generic_tracer(CS)
     type(MOM_generic_tracer_CS), pointer :: CS   !< Pointer to the control structure for this module.
 
-    call generic_tracer_end
+    call generic_tracer_end()
 
     if (associated(CS)) then
-       deallocate(CS)
+      deallocate(CS)
     endif
   end subroutine end_MOM_generic_tracer
 

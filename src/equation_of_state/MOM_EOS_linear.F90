@@ -445,7 +445,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
                     dRho_dS * (wtT_L*S(i,j) + wtT_R*S(i+1,j)))
         intz(m) = G_e*rho_anom*dz
       enddo
-      ! Use Bode's rule to integrate the values.
+      ! Use Boole's rule to integrate the values.
       intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
                              12.0*intz(3))
     endif
@@ -484,7 +484,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
                     dRho_dS * (wtT_L*S(i,j) + wtT_R*S(i,j+1)))
         intz(m) = G_e*rho_anom*dz
       enddo
-      ! Use Bode's rule to integrate the values.
+      ! Use Boole's rule to integrate the values.
       inty_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
                              12.0*intz(3))
     endif
@@ -623,7 +623,7 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
         alpha_anom = ((1.0-Rho_T0_S0*alpha_ref) - dRho_TS*alpha_ref) / (Rho_T0_S0 + dRho_TS)
         intp(m) = alpha_anom*dp
       enddo
-      ! Use Bode's rule to integrate the interface height anomaly values in y.
+      ! Use Boole's rule to integrate the interface height anomaly values in y.
       intx_dza(i,j) = C1_90*(7.0*(intp(1)+intp(5)) + 32.0*(intp(2)+intp(4)) + &
                              12.0*intp(3))
     endif
@@ -668,7 +668,7 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
         alpha_anom = ((1.0-Rho_T0_S0*alpha_ref) - dRho_TS*alpha_ref) / (Rho_T0_S0 + dRho_TS)
         intp(m) = alpha_anom*dp
       enddo
-      ! Use Bode's rule to integrate the interface height anomaly values in y.
+      ! Use Boole's rule to integrate the interface height anomaly values in y.
       inty_dza(i,j) = C1_90*(7.0*(intp(1)+intp(5)) + 32.0*(intp(2)+intp(4)) + &
                              12.0*intp(3))
     endif

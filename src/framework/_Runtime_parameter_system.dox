@@ -1,4 +1,4 @@
-/*! \page Runtime_parameter_system Run-time Parameter System
+/*! \page Runtime_Parameter_System Run-time Parameter System
 
 \brief How run-time parameters work in MOM6
 
@@ -39,10 +39,10 @@ Some illustrations:
 \code{.unparsed}
 DO_THIS = True	! Set the Boolean to .TRUE.
 DO_THAT = False	! Set the Boolean to .FALSE.
-NXYZ = 5	! Set the value ot NXYZ to 5
+NXYZ = 5	! Set the value to NXYZ to 5
 HALF = 0.5	! Set the value of HALF to 0.5
 NAME = "abc"	! Set the string NAME to 'abc'
-VECTOR = 1.0,2.0	! Set the array VECTOR to [1.0, 2.0] 
+VECTOR = 1.0,2.0	! Set the array VECTOR to [1.0, 2.0]
 NAMES = 'abc','xyz'	! Set the strings NAMES to 'abc','xyz'
 #override DO_THIS = False	! Set the Boolean to .FALSE., ignoring the above specification
 #override HALF = 0.25	! Set the value of HALF to 0.25, ignoring the above value

@@ -1,13 +1,75 @@
+# MOM6 Test suite Makefile
+#
+# Usage:
+#   make -j
+#       Build the FMS library and test executables
+#
+#   make -j test
+#       Run the test suite, defined in the `tc` directores.
+#
+#   make clean
+#       Wipe the MOM6 test executables
+#       (NOTE: This does not delete FMS in the `deps`)
+#
+#
+# Configuration:
+#   These settings can be provided as either command-line flags, or saved in a
+#   `config.mk` file.
+#
+# Test suite configuration:
+#
+#   MPIRUN                  MPI job launcher (mpirun, srun, etc)
+#   DO_REPRO_TESTS          Enable production ("repro") testing equivalence
+#   DO_REGRESSION_TESTS:    Enable regression tests (usually dev/gfdl)
+#   REPORT_COVERAGE         Enable code coverage and report to codecov
+#
+# Compiler configuration:
+#   (NOTE: These are environment variables and may be inherited from a shell.)
+#
+#   CC      C compiler
+#   MPICC   MPI C compiler
+#   FC      Fortran compiler
+#   MPIFC   MPI Fortran compiler
+#
+# Build configuration:
+#
+#   FCFLAGS_DEBUG       Testing ("debug") compiler flags
+#   FCFLAGS_REPRO       Production ("repro") compiler flags
+#   FCFLAGS_INIT        Variable initialization flags
+#   FCFLAGS_COVERAGE    Code coverage flags
+#
+# Regression repository ("target") configuration:
+#   (NOTE: These would typically be configured by a CI such as Travis.)
+#
+#   MOM_TARGET_SLUG             URL slug (minus domain) of the target repo
+#   MOM_TARGET_URL              Full URL of the target repo
+#   MOM_TARGET_LOCAL_BRANCH     Target branch name
+#
+#----
+
+# TODO: Bourne shell compatibility
 SHELL = bash
+
+# No implicit rules
 .SUFFIXES:
+
+# No implicit variables
+MAKEFLAGS += -R
 
 # User-defined configuration
 -include config.mk
 
 # Set the MPI launcher here
+# TODO: This needs more automated configuration
 MPIRUN ?= mpirun
 
-# Default target compiler flags
+# Generic compiler variables are pass through to the builds
+export CC
+export MPICC
+export FC
+export MPIFC
+
+# Builds are distinguished by FCFLAGS
 # NOTE: FMS will be built using FCFLAGS_DEBUG
 FCFLAGS_DEBUG ?= -g -O0
 FCFLAGS_REPRO ?= -g -O2
@@ -26,6 +88,8 @@ FCFLAGS_COVERAGE ?=
 
 # Set to `true` to require identical results from DEBUG and REPRO builds
 DO_REPRO_TESTS ?=
+
+TIME ?= time
 
 # Many compilers (Intel, GCC on ARM64) do not yet produce identical results
 # across DEBUG and REPRO builds (as defined below), so we disable on default.
@@ -60,7 +124,6 @@ endif
 #   DO_REGRESSION_TESTS: true if $(TRAVIS_PULL_REQUEST) is a PR number
 #   MOM_TARGET_SLUG: TRAVIS_REPO_SLUG
 #   MOM_TARGET_LOCAL_BRANCH: TRAVIS_BRANCH
-
 # These are set to true by our Travis configuration if testing a pull request
 DO_REGRESSION_TESTS ?=
 REPORT_COVERAGE ?=
@@ -188,7 +251,7 @@ build/target/configure: $(TARGET_SOURCE)
 # Build MOM6
 .PRECIOUS: $(foreach b,$(BUILDS),build/$(b)/MOM6)
 build/%/MOM6: build/%/Makefile
-	cd $(@D) && time $(MAKE) -j
+	cd $(@D) && $(TIME) $(MAKE) -j
 
 
 # Use autoconf to construct the Makefile for each target
@@ -227,6 +290,9 @@ $(TARGET_CODEBASE):
 #---
 # FMS
 
+# Set up the FMS build environment variables
+FMS_ENV = PATH="${PATH}:../../bin" FCFLAGS="$(FCFLAGS_DEBUG)"
+
 # TODO: *.mod dependencies?
 $(DEPS)/lib/libFMS.a: $(DEPS)/fms/build/libFMS.a
 	$(MAKE) -C $(DEPS) lib/libFMS.a
@@ -235,7 +301,8 @@ $(DEPS)/fms/build/libFMS.a: $(DEPS)/fms/build/Makefile
 	$(MAKE) -C $(DEPS) fms/build/libFMS.a
 
 $(DEPS)/fms/build/Makefile: $(DEPS)/fms/src/configure $(DEPS)/Makefile.fms.in $(MKMF) $(LIST_PATHS)
-	PATH_ENV="${PATH}:../../bin" FCFLAGS_ENV="$(FCFLAGS_DEBUG)" $(MAKE) -C $(DEPS) fms/build/Makefile
+	$(FMS_ENV) $(MAKE) -C $(DEPS) fms/build/Makefile
+	$(MAKE) -C $(DEPS) fms/build/Makefile
 
 $(DEPS)/Makefile.fms.in: ../ac/deps/Makefile.fms.in $(DEPS)/Makefile
 	cp $< $(DEPS)
@@ -261,8 +328,10 @@ $(DEPS)/Makefile: ../ac/deps/Makefile
 	mkdir -p $(@D)
 	cp $< $@
 
+
 #---
 # Python preprocessing
+
 # NOTE: Some less mature environments (e.g. Arm64 Ubuntu) require explicit
 #   installation of numpy before netCDF4, as well as wheel and cython support.
 work/local-env:
@@ -272,6 +341,7 @@ work/local-env:
 	  && pip3 install cython \
 	  && pip3 install numpy \
 	  && pip3 install netCDF4
+
 
 #---
 # Testing
@@ -304,16 +374,16 @@ run.nans: $(foreach c,$(CONFIGS),work/$(c)/nan/ocean.stats)
 run.openmp: $(foreach c,$(CONFIGS),work/$(c)/openmp/ocean.stats)
 
 # Color highlights for test results
-RED=\033[0;31m
-YELLOW=\033[0;33m
-GREEN=\033[0;32m
-MAGENTA=\033[0;35m
-RESET=\033[0m
+RED = \033[0;31m
+YELLOW = \033[0;33m
+GREEN = \033[0;32m
+MAGENTA = \033[0;35m
+RESET = \033[0m
 
-DONE=${GREEN}DONE${RESET}
-PASS=${GREEN}PASS${RESET}
-WARN=${YELLOW}WARN${RESET}
-FAIL=${RED}FAIL${RESET}
+DONE = ${GREEN}DONE${RESET}
+PASS = ${GREEN}PASS${RESET}
+WARN = ${YELLOW}WARN${RESET}
+FAIL = ${RED}FAIL${RESET}
 
 # Comparison rules
 # $(1): Test type (grid, layout, &c.)
@@ -321,9 +391,10 @@ FAIL=${RED}FAIL${RESET}
 define CMP_RULE
 .PRECIOUS: $(foreach b,$(2),work/%/$(b)/ocean.stats)
 %.$(1): $(foreach b,$(2),work/%/$(b)/ocean.stats)
+	@test "$$(shell ls -A results/$$* 2>/dev/null)" || rm -rf results/$$*
 	@cmp $$^ || !( \
 	  mkdir -p results/$$*; \
-	  (diff $$^ | tee results/$$*/ocean.stats.$(1).diff | head) ; \
+	  (diff $$^ | tee results/$$*/ocean.stats.$(1).diff | head -n 20) ; \
 	  echo -e "$(FAIL): Solutions $$*.$(1) have changed." \
 	)
 	@echo -e "$(PASS): Solutions $$*.$(1) agree."
@@ -332,7 +403,7 @@ define CMP_RULE
 %.$(1).diag: $(foreach b,$(2),work/%/$(b)/chksum_diag)
 	@cmp $$^ || !( \
 	  mkdir -p results/$$*; \
-	  (diff $$^ | tee results/$$*/chksum_diag.$(1).diff | head) ; \
+	  (diff $$^ | tee results/$$*/chksum_diag.$(1).diff | head -n 20) ; \
 	  echo -e "$(FAIL): Diagnostics $$*.$(1).diag have changed." \
 	)
 	@echo -e "$(PASS): Diagnostics $$*.$(1).diag agree."
@@ -351,10 +422,11 @@ $(foreach d,$(DIMS),$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 # Restart tests only compare the final stat record
 .PRECIOUS: $(foreach b,symmetric restart target,work/%/$(b)/ocean.stats)
 %.restart: $(foreach b,symmetric restart,work/%/$(b)/ocean.stats)
+	@test "$(shell ls -A results/$* 2>/dev/null)" || rm -rf results/$*
 	@cmp $(foreach f,$^,<(tr -s ' ' < $(f) | cut -d ' ' -f3- | tail -n 1)) \
 	  || !( \
 	    mkdir -p results/$*; \
-	    (diff $^ | tee results/$*/chksum_diag.restart.diff | head) ; \
+	    (diff $^ | tee results/$*/chksum_diag.restart.diff | head -n 20) ; \
 	    echo -e "$(FAIL): Solutions $*.restart have changed." \
 	  )
 	@echo -e "$(PASS): Solutions $*.restart agree."
@@ -363,22 +435,26 @@ $(foreach d,$(DIMS),$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 
 # stats rule is unchanged, but we cannot use CMP_RULE to generate it.
 %.regression: $(foreach b,symmetric target,work/%/$(b)/ocean.stats)
+	@test "$(shell ls -A results/$* 2>/dev/null)" || rm -rf results/$*
 	@cmp $^ || !( \
 	  mkdir -p results/$*; \
-	  (diff $^ | tee results/$*/ocean.stats.regression.diff | head) ; \
+	  (diff $^ | tee results/$*/ocean.stats.regression.diff | head -n 20) ; \
 	  echo -e "$(FAIL): Solutions $*.regression have changed." \
 	)
 	@echo -e "$(PASS): Solutions $*.regression agree."
 
 # Regression testing only checks for changes in existing diagnostics
 %.regression.diag: $(foreach b,symmetric target,work/%/$(b)/chksum_diag)
-	@! diff $^ | grep "^[<>]" | grep "^>" \
+	@! diff $^ | grep "^[<>]" | grep "^>" > /dev/null \
 	  || ! (\
 	    mkdir -p results/$*; \
-	    (diff $^ | tee results/$*/chksum_diag.regression.diff | head) ; \
+	    (diff $^ | tee results/$*/chksum_diag.regression.diff | head -n 20) ; \
 	    echo -e "$(FAIL): Diagnostics $*.regression.diag have changed." \
 	  )
-	@diff $^ || echo -e "$(WARN): New diagnostics in $<"
+	@cmp $^ || ( \
+	  diff $^ | head -n 20; \
+	  echo -e "$(WARN): New diagnostics in $<" \
+	)
 	@echo -e "$(PASS): Diagnostics $*.regression.diag agree."
 
 
@@ -407,12 +483,13 @@ work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6 $(VENV_PATH)
 	fi
 	mkdir -p $$(@D)/RESTART
 	echo -e "$(4)" > $$(@D)/MOM_override
+	rm -f results/$$*/std.$(1).{out,err}
 	cd $$(@D) \
-	  && time $(5) $(MPIRUN) -n $(6) ../../../$$< 2> std.err > std.out \
+	  && $(TIME) $(5) $(MPIRUN) -n $(6) ../../../$$< 2> std.err > std.out \
 	  || !( \
 	    mkdir -p ../../../results/$$*/ ; \
-	    cat std.out | tee ../../../results/$$*/std.$(1).out | tail -20 ; \
-	    cat std.err | tee ../../../results/$$*/std.$(1).err | tail -20 ; \
+	    cat std.out | tee ../../../results/$$*/std.$(1).out | tail -n 20 ; \
+	    cat std.err | tee ../../../results/$$*/std.$(1).err | tail -n 20 ; \
 	    rm ocean.stats chksum_diag ; \
 	    echo -e "$(FAIL): $$*.$(1) failed at runtime." \
 	  )
@@ -468,11 +545,13 @@ work/%/restart/ocean.stats: build/symmetric/MOM6 $(VENV_PATH)
 	  && printf -v timeunit_int "%.f" "$${timeunit}" \
 	  && halfperiod=$$(printf "%.f" $$(bc <<< "scale=10; 0.5 * $${daymax} * $${timeunit_int}")) \
 	  && printf "\n&ocean_solo_nml\n    seconds = $${halfperiod}\n/\n" >> input.nml
+	# Remove any previous archived output
+	rm -f results/$*/std.restart{1,2}.{out,err}
 	# Run the first half-period
-	cd $(@D) && time $(MPIRUN) -n 1 ../../../$< 2> std1.err > std1.out \
+	cd $(@D) && $(TIME) $(MPIRUN) -n 1 ../../../$< 2> std1.err > std1.out \
 	  || !( \
-	    cat std1.out | tee ../../../results/$*/std.restart1.out | tail ; \
-	    cat std1.err | tee ../../../results/$*/std.restart1.err | tail ; \
+	    cat std1.out | tee ../../../results/$*/std.restart1.out | tail -n 20 ; \
+	    cat std1.err | tee ../../../results/$*/std.restart1.err | tail -n 20 ; \
 	    echo -e "$(FAIL): $*.restart failed at runtime." \
 	  )
 	# Setup the next inputs
@@ -480,10 +559,10 @@ work/%/restart/ocean.stats: build/symmetric/MOM6 $(VENV_PATH)
 	mkdir $(@D)/RESTART
 	cd $(@D) && sed -i -e "s/input_filename *= *'n'/input_filename = 'r'/g" input.nml
 	# Run the second half-period
-	cd $(@D) && time $(MPIRUN) -n 1 ../../../$< 2> std2.err > std2.out \
+	cd $(@D) && $(TIME) $(MPIRUN) -n 1 ../../../$< 2> std2.err > std2.out \
 	  || !( \
-	    cat std2.out | tee ../../../results/$*/std.restart2.out | tail ; \
-	    cat std2.err | tee ../../../results/$*/std.restart2.err | tail ; \
+	    cat std2.out | tee ../../../results/$*/std.restart2.out | tail -n 20 ; \
+	    cat std2.err | tee ../../../results/$*/std.restart2.err | tail -n 20 ; \
 	    echo -e "$(FAIL): $*.restart failed at runtime." \
 	  )
 

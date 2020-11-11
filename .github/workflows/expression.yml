@@ -1,0 +1,27 @@
+name: Expression verification
+
+on: [push, pull_request]
+
+jobs:
+  test-repro-and-dims:
+
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .testing
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - uses: ./.github/actions/testing-setup
+
+    - name: Compile MOM6 using repro optimization
+      run: make build/repro/MOM6 -j
+
+    - name: Create validation data
+      run: make run.symmetric -k -s
+
+    - name: Run tests
+      run: make test.repros test.dims -k -s

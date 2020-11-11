@@ -2204,7 +2204,7 @@ end subroutine thickness_diffuse_end
 !! Ocean Modelling, 32, 143-156. http://doi.org/10.1016/j.ocemod.2010.01.004
 !!
 !! Viscbeck, M., J.C. Marshall, H. Jones, 1996:
-!! On he dynamics of convective "chimneys" in the ocean. J. Phys. Oceangr., 26, 1721-1734.
+!! Dynamics of isolated convective regions in the ocean. J. Phys. Oceangr., 26, 1721-1734.
 !! http://dx.doi.org/10.1175/1520-0485(1996)026%3C1721:DOICRI%3E2.0.CO;2
 
 end module MOM_thickness_diffuse
