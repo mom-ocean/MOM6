@@ -28,6 +28,7 @@ program MOM_main
   use MOM_cpu_clock,       only : CLOCK_COMPONENT
   use MOM_diag_mediator,   only : enable_averaging, disable_averaging, diag_mediator_end
   use MOM_diag_mediator,   only : diag_ctrl, diag_mediator_close_registration
+  use MOM_IS_diag_mediator,   only : diag_IS_ctrl=>diag_ctrl, diag_mediator_IS_end=>diag_mediator_end
   use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
   use MOM,                 only : extract_surface_state, finish_MOM_initialization
   use MOM,                 only : get_MOM_state_elements, MOM_state_is_synchronized
@@ -61,7 +62,7 @@ program MOM_main
   use MOM_verticalGrid,    only : verticalGrid_type
   use MOM_write_cputime,   only : write_cputime, MOM_write_cputime_init
   use MOM_write_cputime,   only : write_cputime_start_clock, write_cputime_CS
-
+  use MOM_get_input,       only : get_MOM_input
   use ensemble_manager_mod, only : ensemble_manager_init, get_ensemble_size
   use ensemble_manager_mod, only : ensemble_pelist_setup
   use mpp_mod, only : set_current_pelist => mpp_set_current_pelist
@@ -70,7 +71,6 @@ program MOM_main
 
   use MOM_ice_shelf, only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
   use MOM_ice_shelf, only : shelf_calc_flux, add_shelf_forces, ice_shelf_save_restart
-! , add_shelf_flux_forcing, add_shelf_flux_IOB
 
   use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
   use MOM_wave_interface, only: MOM_wave_interface_init_lite, Update_Surface_Waves
@@ -80,22 +80,22 @@ program MOM_main
 #include <MOM_memory.h>
 
   ! A structure with the driving mechanical surface forces
-  type(mech_forcing) :: forces
+  type(mech_forcing), pointer :: forces => NULL()
   ! A structure containing pointers to the thermodynamic forcing fields
   ! at the ocean surface.
-  type(forcing) :: fluxes
+  type(forcing), pointer :: fluxes => NULL()
 
   ! A structure containing pointers to the ocean surface state fields.
-  type(surface) :: sfc_state
+  type(surface), pointer :: sfc_state => NULL()
 
   ! A pointer to a structure containing metrics and related information.
-  type(ocean_grid_type), pointer :: grid
-  type(verticalGrid_type), pointer :: GV
+  type(ocean_grid_type), pointer :: grid => NULL()
+  type(verticalGrid_type), pointer :: GV => NULL()
   ! A pointer to a structure containing dimensional unit scaling factors.
-  type(unit_scale_type), pointer :: US
+  type(unit_scale_type), pointer :: US => NULL()
 
   ! If .true., use the ice shelf model for part of the domain.
-  logical :: use_ice_shelf
+  logical :: use_ice_shelf = .false.
 
   ! If .true., use surface wave coupling
   logical :: use_waves = .false.
@@ -198,8 +198,10 @@ program MOM_main
   type(MOM_restart_CS),      pointer :: &
     restart_CSp => NULL()     !< A pointer to the restart control structure
                               !! that will be used for MOM restart files.
-  type(diag_ctrl), pointer :: &
-    diag => NULL()            !< A pointer to the diagnostic regulatory structure
+  type(diag_ctrl),           pointer :: &
+       diag => NULL()         !< A pointer to the diagnostic regulatory structure
+  type(diag_IS_ctrl), pointer :: &
+      diag_IS => NULL()       !< A pointer to the diagnostic regulatory structure
   !-----------------------------------------------------------------------
 
   character(len=4), parameter :: vers_num = 'v2.0'
@@ -218,6 +220,8 @@ program MOM_main
   call write_cputime_start_clock(write_CPU_CSp)
 
   call MOM_infra_init() ; call io_infra_init()
+
+  allocate(forces,fluxes,sfc_state)
 
   ! Initialize the ensemble manager.  If there are no settings for ensemble_size
   ! in input.nml(ensemble.nml), these should not do anything.  In coupled
@@ -297,16 +301,34 @@ program MOM_main
     ! In this case, the segment starts at a time fixed by ocean_solo.res
     segment_start_time = set_date(date(1),date(2),date(3),date(4),date(5),date(6))
     Time = segment_start_time
-    call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, restart_CSp, &
-                        segment_start_time, offline_tracer_mode=offline_tracer_mode, &
-                        diag_ptr=diag, tracer_flow_CSp=tracer_flow_CSp)
   else
     ! In this case, the segment starts at a time read from the MOM restart file
     ! or left as Start_time by MOM_initialize.
     Time = Start_time
+  endif
+
+  ! Read paths and filenames from namelist and store in "dirs".
+  ! Also open the parsed input parameter file(s) and setup param_file.
+  call get_MOM_input(param_file, dirs)
+
+  call get_param(param_file, mod_name, "ICE_SHELF", use_ice_shelf, &
+       "If true, enables the ice shelf model.", default=.false.)
+  if (use_ice_shelf) then
+    ! These arrays are not initialized in most solo cases, but are needed
+    ! when using an ice shelf
+    call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, &
+                              diag_IS, forces, fluxes, sfc_state)
+  endif
+  call close_param_file(param_file)
+
+  if (sum(date) >= 0) then
+    call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, restart_CSp, &
+                        segment_start_time, offline_tracer_mode=offline_tracer_mode, &
+                        diag_ptr=diag, tracer_flow_CSp=tracer_flow_CSp,ice_shelf_CSp=ice_shelf_CSp)
+  else
     call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, restart_CSp, &
                         offline_tracer_mode=offline_tracer_mode, diag_ptr=diag, &
-                        tracer_flow_CSp=tracer_flow_CSp)
+                        tracer_flow_CSp=tracer_flow_CSp,ice_shelf_CSp=ice_shelf_CSp)
   endif
 
   call get_MOM_state_elements(MOM_CSp, G=grid, GV=GV, US=US, C_p_scaled=fluxes%C_p)
@@ -320,14 +342,6 @@ program MOM_main
                             surface_forcing_CSp, tracer_flow_CSp)
   call callTree_waypoint("done surface_forcing_init")
 
-  call get_param(param_file, mod_name, "ICE_SHELF", use_ice_shelf, &
-                 "If true, enables the ice shelf model.", default=.false.)
-  if (use_ice_shelf) then
-    ! These arrays are not initialized in most solo cases, but are needed
-    ! when using an ice shelf
-    call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, &
-                              diag, forces, fluxes)
-  endif
 
   call get_param(param_file,mod_name,"USE_WAVES",Use_Waves,&
        "If true, enables surface wave modules.",default=.false.)
@@ -482,7 +496,7 @@ program MOM_main
 
     if (use_ice_shelf) then
       call shelf_calc_flux(sfc_state, fluxes, Time, dt_forcing, ice_shelf_CSp)
-      call add_shelf_forces(grid, US, Ice_shelf_CSp, forces)
+      call add_shelf_forces(grid, US, Ice_shelf_CSp, forces, external_call=.true.)
     endif
     fluxes%fluxes_used = .false.
     fluxes%dt_buoy_accum = US%s_to_T*dt_forcing
@@ -652,6 +666,7 @@ program MOM_main
 
   call callTree_waypoint("End MOM_main")
   call diag_mediator_end(Time, diag, end_diag_manager=.true.)
+  if (use_ice_shelf) call diag_mediator_IS_end(Time, diag_IS)
   if (cpu_steps > 0) call write_cputime(Time, ns-1, write_CPU_CSp, call_end=.true.)
   call cpu_clock_end(termClock)
 

@@ -1135,8 +1135,9 @@ subroutine MOM_mech_forcing_chksum(mesg, forces, G, US, haloshift)
   if (associated(forces%ustar)) &
     call hchksum(forces%ustar, mesg//" forces%ustar", G%HI, haloshift=hshift, scale=US%Z_to_m*US%s_to_T)
   if (associated(forces%rigidity_ice_u) .and. associated(forces%rigidity_ice_v)) &
-    call uvchksum(mesg//" forces%rigidity_ice_[uv]", forces%rigidity_ice_u, forces%rigidity_ice_v, &
-                  G%HI, haloshift=hshift, symmetric=.true., scale=US%L_to_m**3*US%L_to_Z*US%s_to_T)
+    call uvchksum(mesg//" forces%rigidity_ice_[uv]", forces%rigidity_ice_u, &
+        forces%rigidity_ice_v, G%HI, haloshift=hshift, symmetric=.true., &
+        scale=US%L_to_m**3*US%L_to_Z*US%s_to_T, scalar_pair=.true.)
 
 end subroutine MOM_mech_forcing_chksum
 

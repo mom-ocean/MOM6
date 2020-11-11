@@ -113,7 +113,7 @@ contains
 !! conditions or by reading them from a restart (or saves) file.
 subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                                 restart_CS, ALE_CSp, tracer_Reg, sponge_CSp, &
-                                ALE_sponge_CSp, OBC, Time_in)
+                                ALE_sponge_CSp, OBC, Time_in, frac_shelf_h)
   type(ocean_grid_type),      intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),      intent(in)    :: US   !< A dimensional unit scaling type
@@ -140,7 +140,9 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   type(ALE_sponge_CS),        pointer       :: ALE_sponge_CSp !< The ALE sponge control structure.
   type(ocean_OBC_type),       pointer       :: OBC   !< The open boundary condition control structure.
   type(time_type), optional,  intent(in)    :: Time_in !< Time at the start of the run segment.
-                                                     !! Time_in overrides any value set for Time.
+  real, dimension(SZI_(G),SZJ_(G)), &
+                     optional, intent(in)   :: frac_shelf_h    !< The fraction of the grid cell covered
+                                                               !! by a floating ice shelf [nondim].
   ! Local variables
   character(len=200) :: filename   ! The name of an input file.
   character(len=200) :: filename2  ! The name of an input files.
@@ -171,6 +173,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   logical :: debug      ! If true, write debugging output.
   logical :: debug_obc  ! If true, do debugging calls related to OBCs.
   logical :: debug_layers = .false.
+  logical :: use_ice_shelf
   character(len=80) :: mesg
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -200,6 +203,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   use_EOS = associated(tv%eqn_of_state)
   use_OBC = associated(OBC)
   if (use_EOS) eos => tv%eqn_of_state
+  use_ice_shelf=PRESENT(frac_shelf_h)
 
   !====================================================================
   !    Initialize temporally evolving fields, either as initial
@@ -234,8 +238,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     if (.NOT.use_temperature) call MOM_error(FATAL,"MOM_initialize_state : "//&
        "use_temperature must be true if INIT_LAYERS_FROM_Z_FILE is true")
 
-    call MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_params=just_read)
-
+    call MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_params=just_read,&
+         frac_shelf_h=frac_shelf_h)
   else
     ! Initialize thickness, h.
     call get_param(PF, mdl, "THICKNESS_CONFIG", config, &
@@ -1967,7 +1971,7 @@ end subroutine set_velocity_depth_min
 !> This subroutine determines the isopycnal or other coordinate interfaces and
 !! layer potential temperatures and salinities directly from a z-space file on
 !! a latitude-longitude grid.
-subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_params)
+subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_params, frac_shelf_h)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(out)   :: h    !< Layer thicknesses being initialized [H ~> m or kg m-2]
@@ -1979,6 +1983,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
                                                  !! to parse for model parameter values.
   logical,       optional, intent(in)    :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
+  real, dimension(SZI_(G),SZJ_(G)), &
+                 optional, intent(in)    :: frac_shelf_h    !< The fraction of the grid cell covered
+                                                            !! by a floating ice shelf [nondim].
 
   ! Local variables
   character(len=200) :: filename   !< The name of an input file containing temperature
@@ -2012,8 +2019,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   real    :: eps_Z    ! A negligibly thin layer thickness [Z ~> m].
   real    :: eps_rho  ! A negligibly small density difference [R ~> kg m-3].
   real    :: PI_180   ! for conversion from degrees to radians
-
-  real, dimension(:,:), pointer :: shelf_area => NULL()
   real    :: Hmix_default ! The default initial mixed layer depth [m].
   real    :: Hmix_depth   ! The mixed layer depth in the initial condition [Z ~> m].
   real    :: dilate       ! A dilation factor to match topography [nondim]
@@ -2041,8 +2046,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
   ! Local variables for ALE remapping
   real, dimension(:), allocatable :: hTarget ! Target thicknesses [Z ~> m].
-  real, dimension(:,:), allocatable :: area_shelf_h ! Shelf-covered area per grid cell [L2 ~> m2]
-  real, dimension(:,:), allocatable, target :: frac_shelf_h ! Fractional shelf area per grid cell [nondim]
   real, dimension(:,:,:), allocatable, target :: tmpT1dIn, tmpS1dIn
   real, dimension(:,:,:), allocatable :: tmp_mask_in
   real, dimension(:,:,:), allocatable :: h1 ! Thicknesses [H ~> m or kg m-2].
@@ -2084,6 +2087,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
   reentrant_x = .false. ; call get_param(PF, mdl, "REENTRANT_X", reentrant_x, default=.true.)
   tripolar_n = .false. ;  call get_param(PF, mdl, "TRIPOLAR_N", tripolar_n, default=.false.)
+
+  use_ice_shelf = present(frac_shelf_h)
 
   call get_param(PF, mdl, "TEMP_SALT_Z_INIT_FILE",filename, &
                  "The name of the z-space input file used to initialize "//&
@@ -2144,17 +2149,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
                  "If true, use the order of arithmetic for horizonal regridding that recovers "//&
                  "the answers from the end of 2018.  Otherwise, use rotationally symmetric "//&
                  "forms of the same expressions.", default=default_2018_answers)
-  call get_param(PF, mdl, "ICE_SHELF", use_ice_shelf, default=.false.)
-  if (use_ice_shelf) then
-    call get_param(PF, mdl, "ICE_THICKNESS_FILE", ice_shelf_file, &
-                 "The file from which the ice bathymetry and area are read.", &
-                 fail_if_missing=.not.just_read, do_not_log=just_read)
-    shelf_file = trim(inputdir)//trim(ice_shelf_file)
-    if (.not.just_read) call log_param(PF, mdl, "INPUTDIR/THICKNESS_FILE", shelf_file)
-    call get_param(PF, mdl, "ICE_AREA_VARNAME", area_varname, &
-                 "The name of the area variable in ICE_THICKNESS_FILE.", &
-                 fail_if_missing=.not.just_read, do_not_log=just_read)
-  endif
   if (.not.useALEremapping) then
     call get_param(PF, mdl, "ADJUST_THICKNESS", correct_thickness, &
                  "If true, all mass below the bottom removed if the "//&
@@ -2217,8 +2211,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   do k=1,size(Z_edges_in,1) ; Z_edges_in(k) = -Z_edges_in(k) ; enddo
 
   allocate(rho_z(isd:ied,jsd:jed,kd))
-  allocate(area_shelf_h(isd:ied,jsd:jed))
-  allocate(frac_shelf_h(isd:ied,jsd:jed))
 
   ! Convert T&S to Absolute Salinity and Conservative Temperature if using TEOS10 or NEMO
   call convert_temp_salt_for_TEOS10(temp_z, salt_z, G%HI, kd, mask_z, eos)
@@ -2233,25 +2225,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   call pass_var(salt_z,G%Domain)
   call pass_var(mask_z,G%Domain)
   call pass_var(rho_z,G%Domain)
-
-  ! This is needed for building an ALE grid under ice shelves
-  if (use_ice_shelf) then
-    if (.not.file_exists(shelf_file, G%Domain)) call MOM_error(FATAL, &
-      "MOM_temp_salt_initialize_from_Z: Unable to open shelf file "//trim(shelf_file))
-
-    call MOM_read_data(shelf_file, trim(area_varname), area_shelf_h, G%Domain, scale=US%m_to_L**2)
-
-    ! Initialize frac_shelf_h with zeros (open water everywhere)
-    frac_shelf_h(:,:) = 0.0
-    ! Compute fractional ice shelf coverage of h
-    do j=jsd,jed ; do i=isd,ied
-      if (G%areaT(i,j) > 0.0) &
-        frac_shelf_h(i,j) = area_shelf_h(i,j) / G%areaT(i,j)
-    enddo ; enddo
-    ! Pass to the pointer for use as an argument to regridding_main
-    shelf_area => frac_shelf_h
-
-  endif
 
   ! Done with horizontal interpolation.
   ! Now remap to model coordinates
@@ -2330,7 +2303,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
       GV_loc%ke = nkd
       allocate( dz_interface(isd:ied,jsd:jed,nkd+1) ) ! Need for argument to regridding_main() but is not used
       if (use_ice_shelf) then
-        call regridding_main( remapCS, regridCS, G, GV_loc, h1, tv_loc, h, dz_interface, shelf_area )
+        call regridding_main( remapCS, regridCS, G, GV_loc, h1, tv_loc, h, dz_interface, frac_shelf_h )
       else
         call regridding_main( remapCS, regridCS, G, GV_loc, h1, tv_loc, h, dz_interface )
       endif
@@ -2436,7 +2409,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   endif
 
   deallocate(z_in, z_edges_in, temp_z, salt_z, mask_z)
-  deallocate(rho_z, area_shelf_h, frac_shelf_h)
+  deallocate(rho_z)
+
 
   call pass_var(h, G%Domain)
   call pass_var(tv%T, G%Domain)
