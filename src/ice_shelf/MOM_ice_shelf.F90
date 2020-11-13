@@ -80,7 +80,7 @@ type, public :: ice_shelf_CS ; private
   ! Parameters
   type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< A pointer to the restart control
                                                   !! structure for the ice shelves
-  type(ocean_grid_type), pointer :: Grid_in => NULL()    !< un-rotated input grid metric
+  type(ocean_grid_type)         :: Grid_in        !< un-rotated input grid metric
   type(hor_index_type), pointer :: HI_in => NULL()  !< Pointer to a horizontal indexing structure for
                                                     !! incoming data which has not been rotated.
   type(hor_index_type), pointer :: HI => NULL()  !< Pointer to a horizontal indexing structure for
@@ -1233,13 +1233,13 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 
   ! Set up the ice-shelf domain and grid
   wd_halos(:)=0
-  allocate(CS%Grid_in)
+  !allocate(CS%Grid_in)
   call MOM_domains_init(CS%Grid_in%domain, param_file, min_halo=wd_halos, symmetric=GRID_SYM_,&
        domain_name='MOM_Ice_Shelf_in')
-  allocate(CS%HI_in)
-  call hor_index_init(CS%Grid_in%Domain, CS%HI_in, param_file, &
+!  allocate(CS%Grid_in%HI)
+  call hor_index_init(CS%Grid_in%Domain, CS%Grid_in%HI, param_file, &
        local_indexing=.not.global_indexing)
-  call MOM_grid_init(CS%Grid_in, param_file, CS%US, CS%HI_in)
+  call MOM_grid_init(CS%Grid_in, param_file, CS%US, CS%Grid_in%HI)
 
   if (CS%rotate_index) then
     ! TODO: Index rotation currently only works when index rotation does not
@@ -1256,12 +1256,12 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     ! NOTE: If indices are rotated, then CS%Grid and CS%Grid_in must both be initialized.
     !   If not rotated, then CS%Grid_in and CS%Ggrid are the same grid.
     allocate(CS%Grid)
-    allocate(CS%HI)
+    !allocate(CS%HI)
     call clone_MOM_domain(CS%Grid_in%Domain, CS%Grid%Domain,turns=CS%turns)
-    call rotate_hor_index(CS%HI_in, CS%turns, CS%HI)
+    call rotate_hor_index(CS%Grid_in%HI, CS%turns, CS%Grid%HI)
     call MOM_grid_init(CS%Grid, param_file, CS%US, CS%HI)
-    call create_dyn_horgrid(dG, CS%HI)
-    call create_dyn_horgrid(dG_in, CS%HI_in)
+    call create_dyn_horgrid(dG, CS%Grid%HI)
+    call create_dyn_horgrid(dG_in, CS%Grid_in%HI)
     call clone_MOM_domain(CS%Grid_in%Domain, dG_in%Domain)
     ! Set up the bottom depth, G%D either analytically or from file
     call set_grid_metrics(dG_in,param_file,CS%US)
@@ -1270,9 +1270,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     call rotate_dyngrid(dG_in, dG, CS%US, CS%turns)
     call copy_dyngrid_to_MOM_grid(dG,CS%Grid,CS%US)
   else
-     ! this needs to be fixed - will probably break when not using coupled driver 0
     CS%Grid=>CS%Grid_in
-    CS%HI=>CS%HI_in
+    !CS%Grid%HI=>CS%Grid_in%HI
     call create_dyn_horgrid(dG, CS%Grid%HI)
     call clone_MOM_domain(CS%Grid%Domain,dG%Domain)
     call set_grid_metrics(dG,param_file,CS%US)
@@ -1494,10 +1493,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     inputdir = slasher(inputdir)
     TideAmp_file = trim(inputdir) // trim(TideAmp_file)
     if (CS%rotate_index) then
-       allocate(tmp2d(CS%HI_in%isd:CS%HI_in%ied,CS%HI_in%jsd:CS%HI_in%jed));tmp2d(:,:)=0.0
        allocate(tmp2d(CS%Grid_in%isd:CS%Grid_in%ied,CS%Grid_in%jsd:CS%Grid_in%jed));tmp2d(:,:)=0.0
-
-
        call MOM_read_data(TideAmp_file, 'tideamp', tmp2d, CS%Grid_in%domain, timelevel=1, scale=US%m_s_to_L_T)
        call rotate_array(tmp2d,CS%turns, CS%utide)
        deallocate(tmp2d)
