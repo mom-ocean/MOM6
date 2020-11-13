@@ -2390,9 +2390,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       call rotate_array(CS%frac_shelf_h, -turns, frac_shelf_in)
       ! TODO: Verify that pass_var is needed here?
       call pass_var(frac_shelf_in, G_in%Domain)
-    endif
-
-    if (use_ice_shelf) then
       call MOM_initialize_state(u_in, v_in, h_in, CS%tv, Time, G_in, GV, US, &
           param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
           sponge_in_CSp, ALE_sponge_in_CSp, OBC_in, Time_in, &

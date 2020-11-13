@@ -194,11 +194,12 @@ type, public :: ice_shelf_CS ; private
 
   logical :: debug                !< If true, write verbose checksums for debugging purposes
                                   !! and use reproducible sums
-  integer :: id_clock_shelf=-1 !< CPU Clock for the ice shelf code
-  integer :: id_clock_pass=-1 !< CPU Clock for group pass calls
 end type ice_shelf_CS
 
-
+!>@{ CPU time clock IDs
+integer :: id_clock_shelf=-1 !< CPU Clock for the ice shelf code
+integer :: id_clock_pass=-1  !< CPU Clock for ice shelf group pass calls
+!>@}
 
 contains
 
@@ -307,7 +308,7 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
 
   if (.not. associated(CS)) call MOM_error(FATAL, "shelf_calc_flux: "// &
        "initialize_ice_shelf must be called before shelf_calc_flux.")
-  call cpu_clock_begin(CS%id_clock_shelf)
+  call cpu_clock_begin(id_clock_shelf)
 
   G => CS%grid ; US => CS%US
   ISS => CS%ISS
@@ -690,10 +691,10 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
   enddo ; enddo ! i- and j-loops
 
   if (CS%active_shelf_dynamics .or. CS%override_shelf_movement) then
-    call cpu_clock_begin(CS%id_clock_pass)
+    call cpu_clock_begin(id_clock_pass)
     call pass_var(ISS%area_shelf_h, G%domain, complete=.false.)
     call pass_var(ISS%mass_shelf, G%domain)
-    call cpu_clock_end(CS%id_clock_pass)
+    call cpu_clock_end(id_clock_pass)
   endif
 
   ! Melting has been computed, now is time to update thickness and mass
@@ -744,7 +745,7 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
   call disable_averaging(CS%diag)
 
 
-  call cpu_clock_end(CS%id_clock_shelf)
+  call cpu_clock_end(id_clock_shelf)
 
   if (CS%rotate_index) then
 !     call rotate_surface_state(sfc_state,CS%Grid, sfc_state_in,CS%Grid_in,-CS%turns)
@@ -1742,16 +1743,16 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 
   CS%Time = Time
 
-  CS%id_clock_shelf = cpu_clock_id('Ice shelf', grain=CLOCK_COMPONENT)
-  CS%id_clock_pass = cpu_clock_id(' Ice shelf halo updates', grain=CLOCK_ROUTINE)
+  id_clock_shelf = cpu_clock_id('Ice shelf', grain=CLOCK_COMPONENT)
+  id_clock_pass = cpu_clock_id(' Ice shelf halo updates', grain=CLOCK_ROUTINE)
 
-  call cpu_clock_begin(CS%id_clock_pass)
+  call cpu_clock_begin(id_clock_pass)
   call pass_var(ISS%area_shelf_h, G%domain)
   call pass_var(ISS%h_shelf, G%domain)
   call pass_var(ISS%mass_shelf, G%domain)
   call pass_var(ISS%hmask, G%domain)
   call pass_var(G%bathyT, G%domain)
-  call cpu_clock_end(CS%id_clock_pass)
+  call cpu_clock_end(id_clock_pass)
 
 
   do j=jsd,jed ; do i=isd,ied
@@ -1945,9 +1946,9 @@ subroutine update_shelf_mass(G, US, CS, ISS, Time)
 
 
   if (CS%rotate_index) then
-     allocate(tmp2d(CS%Grid_in%isc:CS%Grid_in%iec,CS%Grid_in%jsc:CS%Grid_in%jec));tmp2d(:,:)=0.0
+     allocate(tmp2d(CS%Grid_in%isc:CS%Grid_in%iec,CS%Grid_in%jsc:CS%Grid_in%jec)); tmp2d(:,:) = 0.0
   else
-     allocate(tmp2d(is:ie,js:je))
+     allocate(tmp2d(is:ie,js:je)) ; tmp2d(:,:) = 0.0
   endif
 
 
