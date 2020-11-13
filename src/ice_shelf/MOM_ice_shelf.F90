@@ -1188,7 +1188,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 # include "version_variable.h"
   character(len=200) :: config
   character(len=200) :: IC_file,filename,inputdir
-  character(len=40)  :: mdl = "MOM_ice_shelf"  ! This module's name.
+  character(len=40)  :: mdl = "MOM"  ! This module's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
   integer :: wd_halos(2)
   logical :: read_TideAmp, shelf_mass_is_dynamic, debug
@@ -1224,6 +1224,12 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   call get_param(param_file, mdl, "ROTATE_INDEX", CS%rotate_index, &
       "Enable rotation of the horizontal indices.", default=.false., &
       debuggingParam=.true.)
+
+  call get_param(param_file, "MOM", "GLOBAL_INDEXING", global_indexing, &
+                 "If true, use a global lateral indexing convention, so "//&
+                 "that corresponding points on different processors have "//&
+                 "the same index. This does not work with static memory.", &
+                 default=.false., layoutParam=.true.)
 
   ! Set up the ice-shelf domain and grid
   wd_halos(:)=0
@@ -1462,11 +1468,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   call get_param(param_file, mdl, "READ_TIDEAMP", read_TIDEAMP, &
                  "If true, read a file (given by TIDEAMP_FILE) containing "//&
                  "the tidal amplitude with INT_TIDE_DISSIPATION.", default=.false.)
-  call get_param(param_file, "MOM", "GLOBAL_INDEXING", global_indexing, &
-                 "If true, use a global lateral indexing convention, so "//&
-                 "that corresponding points on different processors have "//&
-                 "the same index. This does not work with static memory.", &
-                 default=.false., layoutParam=.true.)
 
 
   if (PRESENT(sfc_state_in)) then
