@@ -1188,7 +1188,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 # include "version_variable.h"
   character(len=200) :: config
   character(len=200) :: IC_file,filename,inputdir
-  character(len=40)  :: mdl = "MOM"  ! This module's name.
+  character(len=40)  :: mdl = "MOM_ice_shelf"  ! This module's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
   integer :: wd_halos(2)
   logical :: read_TideAmp, shelf_mass_is_dynamic, debug

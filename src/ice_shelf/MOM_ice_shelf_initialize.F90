@@ -71,6 +71,7 @@ subroutine initialize_ice_thickness(h_shelf, area_shelf_h, hmask, G, G_in, US, P
      call rotate_array(tmp1_2d,turns, h_shelf)
      call rotate_array(tmp2_2d,turns, area_shelf_h)
      call rotate_array(tmp3_2d,turns, hmask)
+     deallocate(tmp1_2d,tmp2_2d,tmp3_2d)
   else
      select case ( trim(config) )
      case ("CHANNEL"); call initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, US, PF)

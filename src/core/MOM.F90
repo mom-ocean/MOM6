@@ -2451,7 +2451,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     endif
   endif
 
-  if (use_ice_shelf) &
+  if (use_ice_shelf .and. CS%debug) &
     call hchksum(CS%frac_shelf_h, "MOM:frac_shelf_h", G%HI, &
         haloshift=0)
 

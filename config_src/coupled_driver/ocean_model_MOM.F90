@@ -214,10 +214,10 @@ type, public :: ocean_state_type ; private
     restart_CSp => NULL()     !< A pointer set to the restart control structure
                               !! that will be used for MOM restart files.
   type(diag_ctrl), pointer :: &
-       diag => NULL()            !< A pointer to the diagnostic regulatory structure
+    diag => NULL()            !< A pointer to the diagnostic regulatory structure
   type(diag_IS_ctrl), pointer :: &
-       diag_IS => NULL()            !< A pointer to the diagnostic regulatory structure
-                                    !! for the ice shelf module.
+    diag_IS => NULL()         !< A pointer to the diagnostic regulatory structure
+                              !! for the ice shelf module.
 end type ocean_state_type
 
 contains
