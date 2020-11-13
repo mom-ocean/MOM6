@@ -210,7 +210,7 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
   type(surface), target,         intent(inout) :: sfc_state_in !< A structure containing fields that
                                                 !! describe the surface state of the ocean.  The
                                                 !! intent is only inout to allow for halo updates.
-  type(forcing),         pointer    :: fluxes_in !< structure containing pointers to any possible
+  type(forcing),         target        :: fluxes_in !< structure containing pointers to any possible
                                                 !! thermodynamic or mass-flux forcing fields.
   type(time_type),       intent(in)    :: Time  !< Start time of the fluxes.
   real,                  intent(in)    :: time_step !< Length of time over which these fluxes
@@ -810,7 +810,7 @@ subroutine add_shelf_forces(Ocn_grid, US, CS, forces_in, do_shelf_area, external
   type(ocean_grid_type), intent(in)    :: Ocn_grid !< The ocean's grid structure.
   type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   type(ice_shelf_CS),    pointer       :: CS   !< This module's control structure.
-  type(mech_forcing),    pointer       :: forces_in !< A structure with the driving mechanical forces
+  type(mech_forcing),    target        :: forces_in !< A structure with the driving mechanical forces
   logical, optional,     intent(in)    :: do_shelf_area !< If true find the shelf-covered areas.
   logical, optional,     intent(in)    :: external_call !< If true the incoming forcing type
                                                !! is using the input grid metric and needs
@@ -1156,8 +1156,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   type(time_type),              intent(inout) :: Time !< The clock that that will indicate the model time
   type(ice_shelf_CS),           pointer       :: CS   !< A pointer to the ice shelf control structure
   type(diag_ctrl),              pointer       :: diag !< A structure that is used to regulate the diagnostic output.
-  type(mech_forcing), optional, pointer       :: forces_in !< A structure with the driving mechanical forces
-  type(forcing),      optional, pointer       :: fluxes_in !< A structure containing pointers to any possible
+  type(mech_forcing), optional, target        :: forces_in !< A structure with the driving mechanical forces
+  type(forcing),      optional, target        :: fluxes_in !< A structure containing pointers to any possible
                                                            !! thermodynamic or mass-flux forcing fields.
   type(surface), target, optional, intent(inout) :: sfc_state_in !< A structure containing fields that
                                                 !! describe the surface state of the ocean.  The
