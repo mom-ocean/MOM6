@@ -360,7 +360,8 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
     call hchksum(fluxes_in%frac_shelf_h, "frac_shelf_h before apply melting", CS%Grid_in%HI, haloshift=0)
     call hchksum(sfc_state_in%sst, "sst before apply melting", CS%Grid_in%HI, haloshift=0)
     call hchksum(sfc_state_in%sss, "sss before apply melting", CS%Grid_in%HI, haloshift=0)
-    call uvchksum("[uv]_ml before apply melting",sfc_state_in%u, sfc_state_in%v, CS%Grid_in%HI, haloshift=0, scale=US%L_T_to_m_s)
+    call uvchksum("[uv]_ml before apply melting",sfc_state_in%u, sfc_state_in%v, &
+                  CS%Grid_in%HI, haloshift=0, scale=US%L_T_to_m_s)
     call hchksum(sfc_state_in%ocean_mass, "ocean_mass before apply melting", CS%Grid_in%HI, haloshift=0, &
                  scale=US%RZ_to_kg_m2)
   endif
