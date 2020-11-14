@@ -433,7 +433,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   endif
   if ((CS%id_MLD_EN1 > 0) .or. (CS%id_MLD_EN2 > 0) .or. (CS%id_MLD_EN3 > 0)) then
     call diagnoseMLDbyEnergy((/CS%id_MLD_EN1, CS%id_MLD_EN2, CS%id_MLD_EN3/),&
-         h, tv, G, GV, US, CS%MLD_EN_VALS, CS%diag)
+                             h, tv, G, GV, US, CS%MLD_EN_VALS, CS%diag)
   endif
   if (CS%use_int_tides) then
     if (CS%id_cg1 > 0) call post_data(CS%id_cg1, cn_IGW(:,:,1),CS%diag)
@@ -481,7 +481,6 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
                  ! one time step  [H ~> m or kg m-2]
     eb_t,     &  ! amount of fluid entrained from the layer below within
                  ! one time step  [H ~> m or kg m-2]
-    h_orig, &    ! initial layer thicknesses [H ~> m or kg m-2]
     h_prebound, & ! initial layer thicknesses [H ~> m or kg m-2]
     hold,   &    ! layer thickness before diapycnal entrainment, and later
                  ! the initial layer thicknesses (if a mixed layer is used),
@@ -513,14 +512,17 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
                 ! Kd_int [Z2 T-1 ~> m2 s-1].
     Kd_extra_S , & !  The extra diffusivity of salinity due to double diffusion relative to
                 ! Kd_int [Z2 T-1 ~> m2 s-1].
+    zeros_h,  & ! An array of zeros to handle diagnostics that should be removed.
     Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces [Z2 T-1 ~> m2 s-1]
     Tdif_flx, & ! diffusive diapycnal heat flux across interfaces [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
     Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
     Sdif_flx, & ! diffusive diapycnal salt flux across interfaces [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
     Sadv_flx    ! advective diapycnal salt flux across interfaces [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
 
-  real, allocatable, dimension(:,:) :: &
-    hf_dudt_dia_2d, hf_dvdt_dia_2d ! Depth sum of diapycnal mixing accelaration * fract. thickness [L T-2 ~> m s-2].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
+    zeros_u     ! An array of zeros for u-point diagnostics that should be removed.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
+    zeros_v     ! An array of zeros for v-point diagnostics that should be removed.
 
   logical :: in_boundary(SZI_(G)) ! True if there are no massive layers below,
                                   ! where massive is defined as sufficiently thick that
@@ -955,7 +957,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     ! In either case, tendencies should be posted on hold
     if (CS%diabatic_diff_tendency_diag) then
       call diagnose_diabatic_diff_tendency(tv, hold, temp_diag, saln_diag, dt, G, GV, US, CS)
-      if (CS%id_diabatic_diff_h > 0) call post_data(CS%id_diabatic_diff_h, hold, CS%diag, alt_h = hold)
+      if (CS%id_diabatic_diff_h > 0) call post_data(CS%id_diabatic_diff_h, hold, CS%diag, alt_h=hold)
     endif
 
     call cpu_clock_end(id_clock_tridiag)
@@ -973,12 +975,20 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
   ! Whenever thickness changes let the diag manager know, as the
   ! target grids for vertical remapping may need to be regenerated.
-  if (associated(ADp%du_dt_dia) .or. associated(ADp%dv_dt_dia)) &
-    ! Remapped d[uv]dt_dia require east/north halo updates of h
-    call pass_var(h, G%domain, To_West+To_South+Omit_Corners, halo=1)
   call diag_update_remap_grids(CS%diag)
 
-  ! diagnostics
+  ! Diagnose the diapycnal diffusivities and other related quantities.
+  if (CS%id_Kd_interface > 0) call post_data(CS%id_Kd_interface, Kd_int,  CS%diag)
+  if (CS%id_Kd_heat      > 0) call post_data(CS%id_Kd_heat,      Kd_heat, CS%diag)
+  if (CS%id_Kd_salt      > 0) call post_data(CS%id_Kd_salt,      Kd_salt, CS%diag)
+  if (CS%id_Kd_ePBL      > 0) call post_data(CS%id_Kd_ePBL,      Kd_ePBL, CS%diag)
+
+  if (CS%id_ea         > 0) call post_data(CS%id_ea,         ea_s, CS%diag)
+  if (CS%id_eb         > 0) call post_data(CS%id_eb,         eb_s, CS%diag)
+  if (CS%id_ea_t       > 0) call post_data(CS%id_ea_t,       ea_t, CS%diag)
+  if (CS%id_eb_t       > 0) call post_data(CS%id_eb_t,       eb_t, CS%diag)
+  if (CS%id_ea_s       > 0) call post_data(CS%id_ea_s,       ea_s, CS%diag)
+  if (CS%id_eb_s       > 0) call post_data(CS%id_eb_s,       eb_s, CS%diag)
   Idt = 1.0 / dt
   if ((CS%id_Tdif > 0) .or. (CS%id_Tadv > 0)) then
     do j=js,je ; do i=is,ie
@@ -992,6 +1002,8 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
       Tadv_flx(i,j,K) = (Idt * (ea_t(i,j,k) - eb_t(i,j,k-1))) * &
                     0.5*(tv%T(i,j,k-1) + tv%T(i,j,k))
     enddo ; enddo ; enddo
+    if (CS%id_Tdif > 0) call post_data(CS%id_Tdif, Tdif_flx, CS%diag)
+    if (CS%id_Tadv > 0) call post_data(CS%id_Tadv, Tadv_flx, CS%diag)
   endif
   if ((CS%id_Sdif > 0) .or. (CS%id_Sadv > 0)) then
     do j=js,je ; do i=is,ie
@@ -1005,6 +1017,8 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
       Sadv_flx(i,j,K) = (Idt * (ea_s(i,j,k) - eb_s(i,j,k-1))) * &
                     0.5*(tv%S(i,j,k-1) + tv%S(i,j,k))
     enddo ; enddo ; enddo
+    if (CS%id_Sdif > 0) call post_data(CS%id_Sdif, Sdif_flx, CS%diag)
+    if (CS%id_Sadv > 0) call post_data(CS%id_Sadv, Sadv_flx, CS%diag)
   endif
 
   ! mixing of passive tracers from massless boundary layers to interior
@@ -1100,12 +1114,9 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   call cpu_clock_end(id_clock_tracers)
 
   ! Apply ALE sponge
-  if (CS%use_sponge) then
+  if (CS%use_sponge .and. associated(CS%ALE_sponge_CSp)) then
     call cpu_clock_begin(id_clock_sponge)
-    if (associated(CS%ALE_sponge_CSp)) then
-      call apply_ALE_sponge(h, dt, G, GV, US, CS%ALE_sponge_CSp, CS%Time)
-    endif
-
+    call apply_ALE_sponge(h, dt, G, GV, US, CS%ALE_sponge_CSp, CS%Time)
     call cpu_clock_end(id_clock_sponge)
     if (CS%debug) then
       call MOM_state_chksum("apply_sponge ", u, v, h, G, GV, US, haloshift=0)
@@ -1113,51 +1124,15 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     endif
   endif ! CS%use_sponge
 
-  call disable_averaging(CS%diag)
-  ! Diagnose the diapycnal diffusivities and other related quantities.
-  call enable_averages(dt, Time_end, CS%diag)
-
-  if (CS%id_Kd_interface > 0) call post_data(CS%id_Kd_interface, Kd_int,  CS%diag)
-  if (CS%id_Kd_heat      > 0) call post_data(CS%id_Kd_heat,      Kd_heat, CS%diag)
-  if (CS%id_Kd_salt      > 0) call post_data(CS%id_Kd_salt,      Kd_salt, CS%diag)
-  if (CS%id_Kd_ePBL      > 0) call post_data(CS%id_Kd_ePBL,      Kd_ePBL, CS%diag)
-
-  if (CS%id_ea         > 0) call post_data(CS%id_ea,         ea_s, CS%diag)
-  if (CS%id_eb         > 0) call post_data(CS%id_eb,         eb_s, CS%diag)
-  if (CS%id_ea_t       > 0) call post_data(CS%id_ea_t,       ea_t, CS%diag)
-  if (CS%id_eb_t       > 0) call post_data(CS%id_eb_t,       eb_t, CS%diag)
-  if (CS%id_ea_s       > 0) call post_data(CS%id_ea_s,       ea_s, CS%diag)
-  if (CS%id_eb_s       > 0) call post_data(CS%id_eb_s,       eb_s, CS%diag)
-
-  if (CS%id_dudt_dia > 0) call post_data(CS%id_dudt_dia, ADp%du_dt_dia,  CS%diag)
-  if (CS%id_dvdt_dia > 0) call post_data(CS%id_dvdt_dia, ADp%dv_dt_dia,  CS%diag)
-  if (CS%id_wd       > 0) call post_data(CS%id_wd,       CDp%diapyc_vel, CS%diag)
-
-  if (CS%id_Tdif > 0) call post_data(CS%id_Tdif, Tdif_flx, CS%diag)
-  if (CS%id_Tadv > 0) call post_data(CS%id_Tadv, Tadv_flx, CS%diag)
-  if (CS%id_Sdif > 0) call post_data(CS%id_Sdif, Sdif_flx, CS%diag)
-  if (CS%id_Sadv > 0) call post_data(CS%id_Sadv, Sadv_flx, CS%diag)
-
-  !! Diagnostics for terms multiplied by fractional thicknesses
-  if (CS%id_hf_dudt_dia_2d > 0) then
-    allocate(hf_dudt_dia_2d(G%IsdB:G%IedB,G%jsd:G%jed))
-    hf_dudt_dia_2d(:,:) = 0.0
-    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      hf_dudt_dia_2d(I,j) = hf_dudt_dia_2d(I,j) + ADp%du_dt_dia(I,j,k) * ADp%diag_hfrac_u(I,j,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_hf_dudt_dia_2d, hf_dudt_dia_2d, CS%diag)
-    deallocate(hf_dudt_dia_2d)
-  endif
-
-  if (CS%id_hf_dvdt_dia_2d > 0) then
-    allocate(hf_dvdt_dia_2d(G%isd:G%ied,G%JsdB:G%JedB))
-    hf_dvdt_dia_2d(:,:) = 0.0
-    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      hf_dvdt_dia_2d(i,J) = hf_dvdt_dia_2d(i,J) + ADp%dv_dt_dia(i,J,k) * ADp%diag_hfrac_v(i,J,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_hf_dvdt_dia_2d, hf_dvdt_dia_2d, CS%diag)
-    deallocate(hf_dvdt_dia_2d)
-  endif
+  !! Diagnostics that are always zero and should be removed from this routine.
+  if (CS%id_wd > 0) zeros_h(:,:,:) = 0.0
+  if ((CS%id_dudt_dia > 0) .or. (CS%id_hf_dudt_dia_2d > 0)) zeros_u(:,:,:) = 0.0
+  if ((CS%id_dvdt_dia > 0) .or. (CS%id_hf_dvdt_dia_2d > 0)) zeros_v(:,:,:) = 0.0
+  if (CS%id_wd > 0) call post_data(CS%id_wd, zeros_h, CS%diag)
+  if (CS%id_dudt_dia > 0) call post_data(CS%id_dudt_dia, zeros_u,  CS%diag)
+  if (CS%id_dvdt_dia > 0) call post_data(CS%id_dvdt_dia, zeros_v,  CS%diag)
+  if (CS%id_hf_dudt_dia_2d > 0) call post_data(CS%id_hf_dudt_dia_2d, zeros_u(:,:,1), CS%diag)
+  if (CS%id_hf_dvdt_dia_2d > 0) call post_data(CS%id_hf_dvdt_dia_2d, zeros_v(:,:,1), CS%diag)
 
   call disable_averaging(CS%diag)
 
@@ -1234,9 +1209,10 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
     Sdif_flx, & ! diffusive diapycnal salt flux across interfaces [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
     Sadv_flx    ! advective diapycnal salt flux across interfaces [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
-
-  real, allocatable, dimension(:,:) :: &
-    hf_dudt_dia_2d, hf_dvdt_dia_2d ! Depth sum of diapycnal mixing accelaration * fract. thickness [L T-2 ~> m s-2].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
+    zeros_u     ! An array of zeros for u-point diagnostics that should be removed.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
+    zeros_v     ! An array of zeros for v-point diagnostics that should be removed.
 
   logical :: in_boundary(SZI_(G)) ! True if there are no massive layers below,
                                   ! where massive is defined as sufficiently thick that
@@ -1273,7 +1249,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect*h_neglect
   Kd_heat(:,:,:) = 0.0 ; Kd_salt(:,:,:) = 0.0
-  ea_s(:,:,:) = 0.0; eb_s(:,:,:) = 0.0; ea_t(:,:,:) = 0.0; eb_t(:,:,:) = 0.0
+  ea_s(:,:,:) = 0.0 ; eb_s(:,:,:) = 0.0 ; ea_t(:,:,:) = 0.0 ; eb_t(:,:,:) = 0.0
 
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("diabatic_ALE(), MOM_diabatic_driver.F90")
@@ -1648,7 +1624,17 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   ! target grids for vertical remapping may need to be regenerated.
   call diag_update_remap_grids(CS%diag)
 
-  ! diagnostics
+  ! Diagnose the diapycnal diffusivities and other related quantities.
+  if (CS%id_Kd_interface > 0) call post_data(CS%id_Kd_interface, Kd_int,  CS%diag)
+  if (CS%id_Kd_heat      > 0) call post_data(CS%id_Kd_heat,      Kd_heat, CS%diag)
+  if (CS%id_Kd_salt      > 0) call post_data(CS%id_Kd_salt,      Kd_salt, CS%diag)
+  if (CS%id_Kd_ePBL      > 0) call post_data(CS%id_Kd_ePBL,      Kd_ePBL, CS%diag)
+
+  if (CS%id_ea_t       > 0) call post_data(CS%id_ea_t,       ea_t, CS%diag)
+  if (CS%id_eb_t       > 0) call post_data(CS%id_eb_t,       eb_t, CS%diag)
+  if (CS%id_ea_s       > 0) call post_data(CS%id_ea_s,       ea_s, CS%diag)
+  if (CS%id_eb_s       > 0) call post_data(CS%id_eb_s,       eb_s, CS%diag)
+
   Idt = 1.0 / dt
   if ((CS%id_Tdif > 0) .or. (CS%id_Tadv > 0)) then
     do j=js,je ; do i=is,ie
@@ -1662,6 +1648,8 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
       Tadv_flx(i,j,K) = (Idt * (ea_t(i,j,k) - eb_t(i,j,k-1))) * &
                     0.5*(tv%T(i,j,k-1) + tv%T(i,j,k))
     enddo ; enddo ; enddo
+    if (CS%id_Tdif > 0) call post_data(CS%id_Tdif, Tdif_flx, CS%diag)
+    if (CS%id_Tadv > 0) call post_data(CS%id_Tadv, Tadv_flx, CS%diag)
   endif
   if ((CS%id_Sdif > 0) .or. (CS%id_Sadv > 0)) then
     do j=js,je ; do i=is,ie
@@ -1675,6 +1663,8 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
       Sadv_flx(i,j,K) = (Idt * (ea_s(i,j,k) - eb_s(i,j,k-1))) * &
                     0.5*(tv%S(i,j,k-1) + tv%S(i,j,k))
     enddo ; enddo ; enddo
+    if (CS%id_Sdif > 0) call post_data(CS%id_Sdif, Sdif_flx, CS%diag)
+    if (CS%id_Sadv > 0) call post_data(CS%id_Sadv, Sadv_flx, CS%diag)
   endif
 
   ! mixing of passive tracers from massless boundary layers to interior
@@ -1772,12 +1762,9 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   call cpu_clock_end(id_clock_tracers)
 
   ! Apply ALE sponge
-  if (CS%use_sponge) then
+  if (CS%use_sponge .and. associated(CS%ALE_sponge_CSp)) then
     call cpu_clock_begin(id_clock_sponge)
-    if (associated(CS%ALE_sponge_CSp)) then
-      call apply_ALE_sponge(h, dt, G, GV, US, CS%ALE_sponge_CSp, CS%Time)
-    endif
-
+    call apply_ALE_sponge(h, dt, G, GV, US, CS%ALE_sponge_CSp, CS%Time)
     call cpu_clock_end(id_clock_sponge)
     if (CS%debug) then
       call MOM_state_chksum("apply_sponge ", u, v, h, G, GV, US, haloshift=0)
@@ -1786,61 +1773,18 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   endif ! CS%use_sponge
 
   call cpu_clock_begin(id_clock_pass)
-  if (G%symmetric) then ; dir_flag = To_All+Omit_Corners
-  else ; dir_flag = To_West+To_South+Omit_Corners ; endif
-  call create_group_pass(CS%pass_hold_eb_ea, eb_t, G%Domain, dir_flag, halo=1)
-  call create_group_pass(CS%pass_hold_eb_ea, eb_s, G%Domain, dir_flag, halo=1)
-  call create_group_pass(CS%pass_hold_eb_ea, ea_t, G%Domain, dir_flag, halo=1)
-  call create_group_pass(CS%pass_hold_eb_ea, ea_s, G%Domain, dir_flag, halo=1)
-  call do_group_pass(CS%pass_hold_eb_ea, G%Domain)
   ! visc%Kv_slow is not in the group pass because it has larger vertical extent.
   if (associated(visc%Kv_slow)) &
     call pass_var(visc%Kv_slow, G%Domain, To_All+Omit_Corners, halo=1)
   call cpu_clock_end(id_clock_pass)
 
-  call disable_averaging(CS%diag)
-
-  ! Diagnose the diapycnal diffusivities and other related quantities.
-  call enable_averages(dt, Time_end, CS%diag)
-
-  if (CS%id_Kd_interface > 0) call post_data(CS%id_Kd_interface, Kd_int,  CS%diag)
-  if (CS%id_Kd_heat      > 0) call post_data(CS%id_Kd_heat,      Kd_heat, CS%diag)
-  if (CS%id_Kd_salt      > 0) call post_data(CS%id_Kd_salt,      Kd_salt, CS%diag)
-  if (CS%id_Kd_ePBL      > 0) call post_data(CS%id_Kd_ePBL,      Kd_ePBL, CS%diag)
-
-  if (CS%id_ea_t       > 0) call post_data(CS%id_ea_t,       ea_t, CS%diag)
-  if (CS%id_eb_t       > 0) call post_data(CS%id_eb_t,       eb_t, CS%diag)
-  if (CS%id_ea_s       > 0) call post_data(CS%id_ea_s,       ea_s, CS%diag)
-  if (CS%id_eb_s       > 0) call post_data(CS%id_eb_s,       eb_s, CS%diag)
-
-  if (CS%id_dudt_dia > 0) call post_data(CS%id_dudt_dia, ADp%du_dt_dia,  CS%diag)
-  if (CS%id_dvdt_dia > 0) call post_data(CS%id_dvdt_dia, ADp%dv_dt_dia,  CS%diag)
-
-  if (CS%id_Tdif > 0) call post_data(CS%id_Tdif, Tdif_flx, CS%diag)
-  if (CS%id_Tadv > 0) call post_data(CS%id_Tadv, Tadv_flx, CS%diag)
-  if (CS%id_Sdif > 0) call post_data(CS%id_Sdif, Sdif_flx, CS%diag)
-  if (CS%id_Sadv > 0) call post_data(CS%id_Sadv, Sadv_flx, CS%diag)
-
-  !! Diagnostics for terms multiplied by fractional thicknesses
-  if (CS%id_hf_dudt_dia_2d > 0) then
-    allocate(hf_dudt_dia_2d(G%IsdB:G%IedB,G%jsd:G%jed))
-    hf_dudt_dia_2d(:,:) = 0.0
-    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      hf_dudt_dia_2d(I,j) = hf_dudt_dia_2d(I,j) + ADp%du_dt_dia(I,j,k) * ADp%diag_hfrac_u(I,j,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_hf_dudt_dia_2d, hf_dudt_dia_2d, CS%diag)
-    deallocate(hf_dudt_dia_2d)
-  endif
-
-  if (CS%id_hf_dvdt_dia_2d > 0) then
-    allocate(hf_dvdt_dia_2d(G%isd:G%ied,G%JsdB:G%JedB))
-    hf_dvdt_dia_2d(:,:) = 0.0
-    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      hf_dvdt_dia_2d(i,J) = hf_dvdt_dia_2d(i,J) + ADp%dv_dt_dia(i,J,k) * ADp%diag_hfrac_v(i,J,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_hf_dvdt_dia_2d, hf_dvdt_dia_2d, CS%diag)
-    deallocate(hf_dvdt_dia_2d)
-  endif
+  !! Diagnostics that are always zero and should be removed from this routine.
+  if ((CS%id_dudt_dia > 0) .or. (CS%id_hf_dudt_dia_2d > 0)) zeros_u(:,:,:) = 0.0
+  if ((CS%id_dvdt_dia > 0) .or. (CS%id_hf_dvdt_dia_2d > 0)) zeros_v(:,:,:) = 0.0
+  if (CS%id_dudt_dia > 0) call post_data(CS%id_dudt_dia, zeros_u,  CS%diag)
+  if (CS%id_dvdt_dia > 0) call post_data(CS%id_dvdt_dia, zeros_v,  CS%diag)
+  if (CS%id_hf_dudt_dia_2d > 0) call post_data(CS%id_hf_dudt_dia_2d, zeros_u(:,:,1), CS%diag)
+  if (CS%id_hf_dvdt_dia_2d > 0) call post_data(CS%id_hf_dvdt_dia_2d, zeros_v(:,:,1), CS%diag)
 
   call disable_averaging(CS%diag)
 
@@ -1912,7 +1856,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
                 ! Kd_int [Z2 T-1 ~> m2 s-1].
     Kd_extra_S , & !  The extra diffusivity of salinity due to double diffusion relative to
                 ! Kd_int [Z2 T-1 ~> m2 s-1].
-    Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces [Z2 T-1 ~> m2 s-1]
+    zeros_h,  & ! An array of zeros to handle diagnostics that should be removed.
     Tdif_flx, & ! diffusive diapycnal heat flux across interfaces [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
     Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
     Sdif_flx, & ! diffusive diapycnal salt flux across interfaces [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
@@ -2764,14 +2708,12 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     call MOM_state_chksum("after u/v tridiag ", u, v, h, G, GV, US, haloshift=0)
   endif
 
-  call disable_averaging(CS%diag)
   ! Diagnose the diapycnal diffusivities and other related quantities.
-  call enable_averages(dt, Time_end, CS%diag)
-
   if (CS%id_Kd_interface > 0) call post_data(CS%id_Kd_interface, Kd_int,  CS%diag)
   if (CS%id_Kd_heat      > 0) call post_data(CS%id_Kd_heat,      Kd_heat, CS%diag)
   if (CS%id_Kd_salt      > 0) call post_data(CS%id_Kd_salt,      Kd_salt, CS%diag)
-  if (CS%id_Kd_ePBL      > 0) call post_data(CS%id_Kd_ePBL,      Kd_ePBL, CS%diag)
+  if (CS%id_Kd_ePBL      > 0) zeros_h(:,:,:) = 0.0
+  if (CS%id_Kd_ePBL      > 0) call post_data(CS%id_Kd_ePBL,      zeros_h, CS%diag)
 
   if (CS%id_ea       > 0) call post_data(CS%id_ea,       ea, CS%diag)
   if (CS%id_eb       > 0) call post_data(CS%id_eb,       eb, CS%diag)
@@ -3012,7 +2954,7 @@ subroutine diagnose_boundary_forcing_tendency(tv, h, temp_old, saln_old, h_old, 
       work_3d(i,j,k) = GV%H_to_RZ * tv%C_p * Idt * (h(i,j,k) * tv%T(i,j,k) - h_old(i,j,k) * temp_old(i,j,k))
     enddo ; enddo ; enddo
     if (CS%id_boundary_forcing_heat_tend > 0) then
-      call post_data(CS%id_boundary_forcing_heat_tend, work_3d, CS%diag, alt_h = h_old)
+      call post_data(CS%id_boundary_forcing_heat_tend, work_3d, CS%diag, alt_h=h_old)
     endif
     if (CS%id_boundary_forcing_heat_tend_2d > 0) then
       do j=js,je ; do i=is,ie
@@ -3030,7 +2972,7 @@ subroutine diagnose_boundary_forcing_tendency(tv, h, temp_old, saln_old, h_old, 
     do k=1,nz ; do j=js,je ; do i=is,ie
       work_3d(i,j,k) = (tv%S(i,j,k)-saln_old(i,j,k))*Idt
     enddo ; enddo ; enddo
-    call post_data(CS%id_boundary_forcing_saln_tend, work_3d, CS%diag, alt_h = h_old)
+    call post_data(CS%id_boundary_forcing_saln_tend, work_3d, CS%diag, alt_h=h_old)
   endif
 
   ! salt tendency
@@ -3039,7 +2981,7 @@ subroutine diagnose_boundary_forcing_tendency(tv, h, temp_old, saln_old, h_old, 
       work_3d(i,j,k) = GV%H_to_RZ * ppt2mks * Idt * (h(i,j,k) * tv%S(i,j,k) - h_old(i,j,k) * saln_old(i,j,k))
     enddo ; enddo ; enddo
     if (CS%id_boundary_forcing_salt_tend > 0) then
-      call post_data(CS%id_boundary_forcing_salt_tend, work_3d, CS%diag, alt_h = h_old)
+      call post_data(CS%id_boundary_forcing_salt_tend, work_3d, CS%diag, alt_h=h_old)
     endif
     if (CS%id_boundary_forcing_salt_tend_2d > 0) then
       do j=js,je ; do i=is,ie
@@ -3315,6 +3257,9 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
                  "mass loss is passed down through the column.", &
                  units="nondim", default=0.8)
 
+  if (CS%use_energetic_PBL .and. .not.CS%useALEalgorithm) &
+    call MOM_error(FATAL, "diabatic_driver_init: "//&
+                   "ENERGETICS_SFC_PBL = True is only coded to work when USE_REGRIDDING = True.")
 
   ! Register all available diagnostics for this module.
   thickness_units = get_thickness_units(GV)
@@ -3332,6 +3277,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
       'Layer entrainment from above per timestep', 'm', conversion=GV%H_to_m)
   CS%id_eb = register_diag_field('ocean_model', 'eb', diag%axesTL, Time, &
       'Layer entrainment from below per timestep', 'm', conversion=GV%H_to_m)
+  !### if (.not.CS%useALEalgorithm) then
   CS%id_wd = register_diag_field('ocean_model', 'wd', diag%axesTi, Time, &
     'Diapycnal velocity', 'm s-1', conversion=GV%H_to_m)
   if (CS%id_wd > 0) call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
@@ -3342,20 +3288,21 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
       'Meridional Acceleration from Diapycnal Mixing', 'm s-2', conversion=US%L_T2_to_m_s2)
 
   CS%id_hf_dudt_dia_2d = register_diag_field('ocean_model', 'hf_dudt_dia_2d', diag%axesCu1, Time, &
-      'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Diapycnal Mixing', 'm s-2', &
-      conversion=US%L_T2_to_m_s2)
+      'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Diapycnal Mixing', &
+      'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_dudt_dia_2d > 0) then
     call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(ADp%du_dt_dia,IsdB,IedB,jsd,jed,nz)
   endif
 
   CS%id_hf_dvdt_dia_2d = register_diag_field('ocean_model', 'hf_dvdt_dia_2d', diag%axesCv1, Time, &
-      'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Diapycnal Mixing', 'm s-2', &
-      conversion=US%L_T2_to_m_s2)
+      'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Diapycnal Mixing', &
+      'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_dvdt_dia_2d > 0) then
     call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
     call safe_alloc_ptr(ADp%dv_dt_dia,isd,ied,JsdB,JedB,nz)
   endif
+  !### endif
 
   if (CS%use_int_tides) then
     CS%id_cg1 = register_diag_field('ocean_model', 'cn1', diag%axesT1, &
