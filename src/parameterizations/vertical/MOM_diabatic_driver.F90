@@ -486,10 +486,9 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     v_h          ! entrainment [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G)) :: &
     SkinBuoyFlux! 2d surface buoyancy flux [Z2 T-3 ~> m2 s-3], used by ePBL
-  real, dimension(SZI_(G),SZJ_(G),G%ke) :: h_diag                ! diagnostic array for thickness
-  real, dimension(SZI_(G),SZJ_(G),G%ke) :: temp_diag             ! diagnostic array for temp
-  real, dimension(SZI_(G),SZJ_(G),G%ke) :: saln_diag             ! diagnostic array for salinity
-  real, dimension(SZI_(G),SZJ_(G))      :: tendency_2d           ! depth integrated content tendency for diagn
+  real, dimension(SZI_(G),SZJ_(G),G%ke) :: h_diag      ! diagnostic array for thickness
+  real, dimension(SZI_(G),SZJ_(G),G%ke) :: temp_diag   ! diagnostic array for temp
+  real, dimension(SZI_(G),SZJ_(G),G%ke) :: saln_diag   ! diagnostic array for salinity
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
     ent_s,    & ! The diffusive coupling across interfaces within one time step for
@@ -518,8 +517,6 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
                                   ! the no-flux boundary conditions have not restricted
                                   ! the entrainment - usually sqrt(Kd*dt).
 
-  real :: b_denom_1    ! The first term in the denominator of b1
-                       ! [H ~> m or kg m-2]
   real :: h_neglect    ! A thickness that is so small it is usually lost
                        ! in roundoff and can be neglected
                        ! [H ~> m or kg m-2]
@@ -532,10 +529,8 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
                        ! added to ensure positive definiteness [H ~> m or kg m-2]
   real :: Tr_ea_BBL    ! The diffusive tracer thickness in the BBL that is
                        ! coupled to the bottom within a timestep [H ~> m or kg m-2]
-
+  real :: Kd_add_here    ! An added diffusivity [Z2 T-1 ~> m2 s-1].
   real :: htot(SZIB_(G))             ! The summed thickness from the bottom [H ~> m or kg m-2].
-  real :: b1(SZIB_(G)), d1(SZIB_(G)) ! b1, c1, and d1 are variables used by the
-  real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
 
   real :: Ent_int ! The diffusive entrainment rate at an interface [H ~> m or kg m-2]
   real :: Idt     ! The inverse time step [T-1 ~> s-1]
@@ -545,7 +540,6 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, m
 
   integer :: ig, jg      ! global indices for testing testing itide point source (BDM)
-  real :: Kd_add_here    ! An added diffusivity [Z2 T-1 ~> m2 s-1].
 
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -835,7 +829,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   !  so all tendency diagnostics need to be posted on h_diag, and grids rebuilt afterwards
   if (CS%boundary_forcing_tendency_diag) then
     call diagnose_boundary_forcing_tendency(tv, h, temp_diag, saln_diag, h_diag, dt, G, GV, US, CS)
-    if (CS%id_boundary_forcing_h > 0) call post_data(CS%id_boundary_forcing_h, h, CS%diag, alt_h = h_diag)
+    if (CS%id_boundary_forcing_h > 0) call post_data(CS%id_boundary_forcing_h, h, CS%diag, alt_h=h_diag)
   endif
   ! Boundary fluxes may have changed T, S, and h
   call diag_update_remap_grids(CS%diag)
@@ -1106,7 +1100,6 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: h_diag                ! diagnostic array for thickness
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: temp_diag             ! diagnostic array for temp
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: saln_diag             ! diagnostic array for salinity
-  real, dimension(SZI_(G),SZJ_(G))      :: tendency_2d           ! depth integrated content tendency for diagn
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
     ent_s,    & ! The diffusive coupling across interfaces within one time step for
@@ -1134,8 +1127,6 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
                                   ! the no-flux boundary conditions have not restricted
                                   ! the entrainment - usually sqrt(Kd*dt).
 
-  real :: b_denom_1    ! The first term in the denominator of b1
-                       ! [H ~> m or kg m-2]
   real :: h_neglect    ! A thickness that is so small it is usually lost
                        ! in roundoff and can be neglected
                        ! [H ~> m or kg m-2]
@@ -1148,11 +1139,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
                        ! added to ensure positive definiteness [H ~> m or kg m-2]
   real :: Tr_ea_BBL    ! The diffusive tracer thickness in the BBL that is
                        ! coupled to the bottom within a timestep [H ~> m or kg m-2]
-
-  real :: htot(SZIB_(G))             ! The summed thickness from the bottom [H ~> m or kg m-2].
-  real :: b1(SZIB_(G)), d1(SZIB_(G)) ! b1, c1, and d1 are variables used by the
-  real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
-
+  real :: htot(SZIB_(G)) ! The summed thickness from the bottom [H ~> m or kg m-2].
   real :: Kd_add_here    ! An added diffusivity [Z2 T-1 ~> m2 s-1].
   real :: Idt     ! The inverse time step [T-1 ~> s-1]
 
@@ -1314,6 +1301,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   if (CS%double_diffuse .and. associated(tv%T) .and. (.not.CS%use_CVMix_ddiff)) then
 
     call cpu_clock_begin(id_clock_differential_diff)
+    !### I think that this step causes double diffusion to be double counted.
     call differential_diffuse_T_S(h, tv%T, tv%S, Kd_extra_T, Kd_extra_S, dt, G, GV)
     call cpu_clock_end(id_clock_differential_diff)
 
@@ -1420,7 +1408,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   !  so all tendency diagnostics need to be posted on h_diag, and grids rebuilt afterwards
   if (CS%boundary_forcing_tendency_diag) then
     call diagnose_boundary_forcing_tendency(tv, h, temp_diag, saln_diag, h_diag, dt, G, GV, US, CS)
-    if (CS%id_boundary_forcing_h > 0) call post_data(CS%id_boundary_forcing_h, h, CS%diag, alt_h = h_diag)
+    if (CS%id_boundary_forcing_h > 0) call post_data(CS%id_boundary_forcing_h, h, CS%diag, alt_h=h_diag)
   endif
   ! Boundary fluxes may have changed T, S, and h
   call diag_update_remap_grids(CS%diag)
@@ -1548,14 +1536,10 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
       do k=nz,2,-1 ; do i=is,ie
         if (in_boundary(i)) then
           htot(i) = htot(i) + h(i,j,k)
-          !   If diapycnal mixing has been suppressed because this is a massless
-          ! layer near the bottom, add some mixing of tracers between these
-          ! layers.  This flux is based on the harmonic mean of the two
-          ! thicknesses, as this corresponds pretty closely (to within
-          ! differences in the density jumps between layers) with what is done
-          ! in the calculation of the fluxes in the first place.  Kd_min_tr
-          ! should be much less than the values that have been set in Kd_int,
-          ! perhaps a molecular diffusivity.
+          !   If diapycnal mixing has been suppressed because this is a massless layer near the
+          ! bottom, add some mixing of tracers between these layers.  This flux is based on the
+          ! harmonic mean of the two thicknesses, following what is done in layered mode. Kd_min_tr
+          ! should be much less than the values in Kd_salt, perhaps a molecular diffusivity.
           add_ent = ((dt * CS%Kd_min_tr) * GV%Z_to_H**2) * &
                     ((h(i,j,k-1)+h(i,j,k) + h_neglect) /  (h(i,j,k-1)*h(i,j,k) + h_neglect2)) - &
                     ent_s(i,j,K)
@@ -1570,8 +1554,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
         if (CS%double_diffuse) then ; if (Kd_extra_S(i,j,k) > 0.0) then
           add_ent = ((dt * Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
-             (0.5 * (h(i,j,k-1) + h(i,j,k)) + &
-              h_neglect)
+                     (0.5 * (h(i,j,k-1) + h(i,j,k)) + h_neglect)
           ent_s(i,j,K) = ent_s(i,j,K) + add_ent
         endif ; endif
       enddo ; enddo
@@ -1674,10 +1657,8 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Rcv_ml, &   ! coordinate density of mixed layer, used for applying sponges
     SkinBuoyFlux! 2d surface buoyancy flux [Z2 T-3 ~> m2 s-3], used by ePBL
-  real, dimension(SZI_(G),SZJ_(G),G%ke) :: h_diag                ! diagnostic array for thickness
-  real, dimension(SZI_(G),SZJ_(G),G%ke) :: temp_diag             ! diagnostic array for temp
-  real, dimension(SZI_(G),SZJ_(G),G%ke) :: saln_diag             ! diagnostic array for salinity
-  real, dimension(SZI_(G),SZJ_(G))      :: tendency_2d           ! depth integrated content tendency for diagn
+  real, dimension(SZI_(G),SZJ_(G),G%ke) :: temp_diag ! diagnostic array for temp
+  real, dimension(SZI_(G),SZJ_(G),G%ke) :: saln_diag ! diagnostic array for salinity
 
   real :: net_ent  ! The net of ea-eb at an interface.
 
@@ -2019,7 +2000,6 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   ! Save fields before boundary forcing is applied for tendency diagnostics
   if (CS%boundary_forcing_tendency_diag) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      h_diag(i,j,k)    = h(i,j,k)
       temp_diag(i,j,k) = tv%T(i,j,k)
       saln_diag(i,j,k) = tv%S(i,j,k)
     enddo ; enddo ; enddo
