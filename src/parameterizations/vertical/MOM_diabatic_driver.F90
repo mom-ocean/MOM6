@@ -475,14 +475,6 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
   ! local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    ea_s,     &  ! amount of fluid entrained from the layer above within
-                 ! one time step  [H ~> m or kg m-2]
-    eb_s,     &  ! amount of fluid entrained from the layer below within
-                 ! one time step  [H ~> m or kg m-2]
-    ea_t,     &  ! amount of fluid entrained from the layer above within
-                 ! one time step  [H ~> m or kg m-2]
-    eb_t,     &  ! amount of fluid entrained from the layer below within
-                 ! one time step  [H ~> m or kg m-2]
     h_prebound, & ! initial layer thicknesses [H ~> m or kg m-2]
     hold,   &    ! layer thickness before diapycnal entrainment, and later
                  ! the initial layer thicknesses (if a mixed layer is used),
@@ -499,9 +491,11 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: saln_diag             ! diagnostic array for salinity
   real, dimension(SZI_(G),SZJ_(G))      :: tendency_2d           ! depth integrated content tendency for diagn
 
-  real :: net_ent  ! The net of ea-eb at an interface.
-
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
+    ent_s,    & ! The diffusive coupling across interfaces within one time step for
+                ! salinity and passive tracers [H ~> m or kg m-2]
+    ent_t,    & ! The diffusive coupling across interfaces within one time step for
+                ! temperature [H ~> m or kg m-2]
     Kd_int,   & ! diapycnal diffusivity of interfaces [Z2 T-1 ~> m2 s-1]
     Kd_heat,  & ! diapycnal diffusivity of heat [Z2 T-1 ~> m2 s-1]
     Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers [Z2 T-1 ~> m2 s-1]
@@ -512,9 +506,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     zeros_h,  & ! An array of zeros to handle diagnostics that should be removed.
     Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces [Z2 T-1 ~> m2 s-1]
     Tdif_flx, & ! diffusive diapycnal heat flux across interfaces [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
-    Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
-    Sdif_flx, & ! diffusive diapycnal salt flux across interfaces [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
-    Sadv_flx    ! advective diapycnal salt flux across interfaces [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
+    Sdif_flx    ! diffusive diapycnal salt flux across interfaces [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
     zeros_u     ! An array of zeros for u-point diagnostics that should be removed.
@@ -588,10 +580,10 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
   if (CS%use_kappa_shear .or. CS%use_CVMix_shear) then
     if (CS%use_geothermal) then
-      ! The presence of ea_s and eb_s causes find_uv_at_h to use a tridiagonal solver,
+      ! The presence of ea_s causes find_uv_at_h to use a tridiagonal solver,
       ! which changes answers at the level of roundoff because ((A*B / A) /= B).
-      ea_s(:,:,:) = 0.0 ; eb_s(:,:,:) = 0.0
-      call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea_s, eb_s)
+      ent_s(:,:,:) = 0.0
+      call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ent_s(:,:,1), ent_s(:,:,1))
     else
       call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
     endif
@@ -681,7 +673,6 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
       endif
     endif ! not passive
 
-    call cpu_clock_end(id_clock_kpp)
     if (showCallTree) call callTree_waypoint("done with KPP_calculate (diabatic)")
     if (CS%debug) then
       call MOM_state_chksum("after KPP", u, v, h, G, GV, US, haloshift=0)
@@ -689,14 +680,6 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
       call MOM_thermovar_chksum("after KPP", tv, G)
       call hchksum(Kd_heat, "after KPP Kd_heat", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
       call hchksum(Kd_salt, "after KPP Kd_salt", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
-    endif
-
-  endif  ! endif for KPP
-
-
-  if (CS%useKPP) then
-    call cpu_clock_begin(id_clock_kpp)
-    if (CS%debug) then
       call hchksum(CS%KPP_temp_flux, "before KPP_applyNLT netHeat", G%HI, haloshift=0, scale=GV%H_to_m)
       call hchksum(CS%KPP_salt_flux, "before KPP_applyNLT netSalt", G%HI, haloshift=0, scale=GV%H_to_m)
       call hchksum(CS%KPP_NLTheat, "before KPP_applyNLT NLTheat", G%HI, haloshift=0)
@@ -748,29 +731,24 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_csp, Hml, Kd=Kd_int, Kv=visc%Kv_slow)
   endif
 
-  ! This block sets ea, eb from h and Kd_int.
+  ! This block sets ent_t and ent_s from h and Kd_int.
   do j=js,je ; do i=is,ie
-    ea_s(i,j,1) = 0.0
+    ent_s(i,j,1) = 0.0 ; ent_s(i,j,nz+1) = 0.0
+    ent_t(i,j,1) = 0.0 ; ent_t(i,j,nz+1) = 0.0
   enddo ; enddo
   !$OMP parallel do default(shared)  private(hval)
-  do k=2,nz ; do j=js,je ; do i=is,ie
+  do K=2,nz ; do j=js,je ; do i=is,ie
     hval=1.0/(h_neglect + 0.5*(h(i,j,k-1) + h(i,j,k)))
-    ea_s(i,j,k) = (GV%Z_to_H**2) * dt * hval * Kd_int(i,j,K)
-    eb_s(i,j,k-1) = ea_s(i,j,k)
-    ea_t(i,j,k-1) = ea_s(i,j,k-1) ; eb_t(i,j,k-1) = eb_s(i,j,k-1)
+    ent_s(i,j,K) = (GV%Z_to_H**2) * dt * hval * Kd_int(i,j,K)
+    ent_t(i,j,K) = ent_s(i,j,K)
   enddo ; enddo ; enddo
-  do j=js,je ; do i=is,ie
-    eb_s(i,j,nz) = 0.0
-    ea_t(i,j,nz) = ea_s(i,j,nz) ; eb_t(i,j,nz) = eb_s(i,j,nz)
-  enddo ; enddo
-  if (showCallTree) call callTree_waypoint("done setting ea,eb from Kd_int (diabatic)")
+  if (showCallTree) call callTree_waypoint("done setting ent_s and ent_t from Kd_int (diabatic)")
 
   if (CS%debug) then
     call MOM_forcing_chksum("after calc_entrain ", fluxes, G, US, haloshift=0)
     call MOM_thermovar_chksum("after calc_entrain ", tv, G)
     call MOM_state_chksum("after calc_entrain ", u, v, h, G, GV, US, haloshift=0)
-    call hchksum(ea_s, "after calc_entrain ea_s", G%HI, haloshift=0, scale=GV%H_to_m)
-    call hchksum(eb_s, "after calc_entrain eb_s", G%HI, haloshift=0, scale=GV%H_to_m)
+    call hchksum(ent_s, "after calc_entrain ent_s", G%HI, haloshift=0, scale=GV%H_to_m)
   endif
 
   ! Save fields before boundary forcing is applied for tendency diagnostics
@@ -797,10 +775,8 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
             CS%minimum_forcing_depth, cTKE, dSV_dT, dSV_dS, SkinBuoyFlux=SkinBuoyFlux)
 
     if (CS%debug) then
-      call hchksum(ea_t, "after applyBoundaryFluxes ea_t", G%HI, haloshift=0, scale=GV%H_to_m)
-      call hchksum(eb_t, "after applyBoundaryFluxes eb_t", G%HI, haloshift=0, scale=GV%H_to_m)
-      call hchksum(ea_s, "after applyBoundaryFluxes ea_s", G%HI, haloshift=0, scale=GV%H_to_m)
-      call hchksum(eb_s, "after applyBoundaryFluxes eb_s", G%HI, haloshift=0, scale=GV%H_to_m)
+      call hchksum(ent_t, "after applyBoundaryFluxes ent_t", G%HI, haloshift=0, scale=GV%H_to_m)
+      call hchksum(ent_s, "after applyBoundaryFluxes ent_s", G%HI, haloshift=0, scale=GV%H_to_m)
       call hchksum(cTKE, "after applyBoundaryFluxes cTKE", G%HI, haloshift=0, &
                    scale=US%RZ3_T3_to_W_m2*US%T_to_s)
       call hchksum(dSV_dT, "after applyBoundaryFluxes dSV_dT", G%HI, haloshift=0, scale=US%kg_m3_to_R)
@@ -831,10 +807,8 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
         visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), CS%ePBL_Prandtl*Kd_ePBL(i,j,K))
       endif
 
-      Ent_int = Kd_add_here * (GV%Z_to_H**2 * dt) / &
-                  (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)
-      eb_s(i,j,k-1) = eb_s(i,j,k-1) + Ent_int
-      ea_s(i,j,k) = ea_s(i,j,k) + Ent_int
+      Ent_int = Kd_add_here * (GV%Z_to_H**2 * dt) / (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)
+      ent_s(i,j,K) = ent_s(i,j,K) + Ent_int
       Kd_int(i,j,K) = Kd_int(i,j,K) + Kd_add_here
 
       ! for diagnostics
@@ -844,10 +818,8 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     enddo ; enddo ; enddo
 
     if (CS%debug) then
-      call hchksum(ea_t, "after ePBL ea_t", G%HI, haloshift=0, scale=GV%H_to_m)
-      call hchksum(eb_t, "after ePBL eb_t", G%HI, haloshift=0, scale=GV%H_to_m)
-      call hchksum(ea_s, "after ePBL ea_s", G%HI, haloshift=0, scale=GV%H_to_m)
-      call hchksum(eb_s, "after ePBL eb_s", G%HI, haloshift=0, scale=GV%H_to_m)
+      call hchksum(ent_t, "after ePBL ent_t", G%HI, haloshift=0, scale=GV%H_to_m)
+      call hchksum(ent_s, "after ePBL ent_s", G%HI, haloshift=0, scale=GV%H_to_m)
       call hchksum(Kd_ePBL, "after ePBL Kd_ePBL", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
     endif
 
@@ -886,16 +858,12 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   do j=js,je
     do i=is,ie
       hold(i,j,1) = h(i,j,1)
-      ! Does nothing with ALE:  h(i,j,1) = h(i,j,1) + (eb_s(i,j,1) - ea_s(i,j,2))
       hold(i,j,nz) = h(i,j,nz)
-      ! Does nothing with ALE:  h(i,j,nz) = h(i,j,nz) + (ea_s(i,j,nz) - eb_s(i,j,nz-1))
       if (h(i,j,1) <= 0.0) h(i,j,1) = GV%Angstrom_H
       if (h(i,j,nz) <= 0.0) h(i,j,nz) = GV%Angstrom_H
     enddo
     do k=2,nz-1 ; do i=is,ie
       hold(i,j,k) = h(i,j,k)
-      ! Does nothing with ALE:  h(i,j,k) = h(i,j,k) + ((ea_s(i,j,k) - eb_s(i,j,k-1)) + &
-      !                                                (eb_s(i,j,k) - ea_s(i,j,k+1)))
       if (h(i,j,k) <= 0.0) h(i,j,k) = GV%Angstrom_H
     enddo ; enddo
   enddo
@@ -914,10 +882,8 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   if (associated(tv%T)) then
 
     if (CS%debug) then
-      call hchksum(ea_t, "before triDiagTS ea_t ", G%HI, haloshift=0, scale=GV%H_to_m)
-      call hchksum(eb_t, "before triDiagTS eb_t ", G%HI, haloshift=0, scale=GV%H_to_m)
-      call hchksum(ea_s, "before triDiagTS ea_s ", G%HI, haloshift=0, scale=GV%H_to_m)
-      call hchksum(eb_s, "before triDiagTS eb_s ", G%HI, haloshift=0, scale=GV%H_to_m)
+      call hchksum(ent_t, "before triDiagTS ent_t ", G%HI, haloshift=0, scale=GV%H_to_m)
+      call hchksum(ent_s, "before triDiagTS ent_s ", G%HI, haloshift=0, scale=GV%H_to_m)
     endif
 
     call cpu_clock_begin(id_clock_tridiag)
@@ -939,13 +905,13 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
     ! Changes T and S via the tridiagonal solver; no change to h
     do k=1,nz ; do j=js,je ; do i=is,ie
-      ea_t(i,j,k) = ea_s(i,j,k) ; eb_t(i,j,k) = eb_s(i,j,k)
+      ent_t(i,j,K) = ent_s(i,j,K) ; ent_t(i,j,K+1) = ent_s(i,j,K+1)
     enddo ; enddo ; enddo
     if (CS%tracer_tridiag) then
-      call tracer_vertdiff(hold, ea_t, eb_t, dt, tv%T, G, GV)
-      call tracer_vertdiff(hold, ea_s, eb_s, dt, tv%S, G, GV)
+      call tracer_vertdiff(hold, ent_t(:,:,1:nz), ent_t(:,:,2:nz+1), dt, tv%T, G, GV)
+      call tracer_vertdiff(hold, ent_s(:,:,1:nz), ent_s(:,:,2:nz+1), dt, tv%S, G, GV)
     else
-      call triDiagTS(G, GV, is, ie, js, je, hold, ea_s, eb_s, tv%T, tv%S)
+      call triDiagTS(G, GV, is, ie, js, je, hold, ent_s(:,:,1:nz), ent_s(:,:,2:nz+1), tv%T, tv%S)
     endif
 
     ! diagnose temperature, salinity, heat, and salt tendencies
@@ -980,42 +946,32 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   if (CS%id_Kd_salt      > 0) call post_data(CS%id_Kd_salt,      Kd_salt, CS%diag)
   if (CS%id_Kd_ePBL      > 0) call post_data(CS%id_Kd_ePBL,      Kd_ePBL, CS%diag)
 
-  if (CS%id_ea         > 0) call post_data(CS%id_ea,         ea_s, CS%diag)
-  if (CS%id_eb         > 0) call post_data(CS%id_eb,         eb_s, CS%diag)
-  if (CS%id_ea_t       > 0) call post_data(CS%id_ea_t,       ea_t, CS%diag)
-  if (CS%id_eb_t       > 0) call post_data(CS%id_eb_t,       eb_t, CS%diag)
-  if (CS%id_ea_s       > 0) call post_data(CS%id_ea_s,       ea_s, CS%diag)
-  if (CS%id_eb_s       > 0) call post_data(CS%id_eb_s,       eb_s, CS%diag)
+  if (CS%id_ea         > 0) call post_data(CS%id_ea,   ent_s(:,:,1:nz), CS%diag)
+  if (CS%id_eb         > 0) call post_data(CS%id_eb,   ent_s(:,:,2:nz+1), CS%diag)
+  if (CS%id_ea_t       > 0) call post_data(CS%id_ea_t, ent_t(:,:,1:nz), CS%diag)
+  if (CS%id_eb_t       > 0) call post_data(CS%id_eb_t, ent_t(:,:,2:nz+1), CS%diag)
+  if (CS%id_ea_s       > 0) call post_data(CS%id_ea_s, ent_s(:,:,1:nz), CS%diag)
+  if (CS%id_eb_s       > 0) call post_data(CS%id_eb_s, ent_s(:,:,2:nz+1), CS%diag)
   Idt = 1.0 / dt
-  if ((CS%id_Tdif > 0) .or. (CS%id_Tadv > 0)) then
+  if (CS%id_Tdif > 0) then
     do j=js,je ; do i=is,ie
       Tdif_flx(i,j,1) = 0.0 ; Tdif_flx(i,j,nz+1) = 0.0
-      Tadv_flx(i,j,1) = 0.0 ; Tadv_flx(i,j,nz+1) = 0.0
     enddo ; enddo
     !$OMP parallel do default(shared)
     do K=2,nz ; do j=js,je ; do i=is,ie
-      Tdif_flx(i,j,K) = (Idt * 0.5*(ea_t(i,j,k) + eb_t(i,j,k-1))) * &
-                        (tv%T(i,j,k-1) - tv%T(i,j,k))
-      Tadv_flx(i,j,K) = (Idt * (ea_t(i,j,k) - eb_t(i,j,k-1))) * &
-                    0.5*(tv%T(i,j,k-1) + tv%T(i,j,k))
+      Tdif_flx(i,j,K) = (Idt * ent_t(i,j,K)) * (tv%T(i,j,k-1) - tv%T(i,j,k))
     enddo ; enddo ; enddo
     if (CS%id_Tdif > 0) call post_data(CS%id_Tdif, Tdif_flx, CS%diag)
-    if (CS%id_Tadv > 0) call post_data(CS%id_Tadv, Tadv_flx, CS%diag)
   endif
-  if ((CS%id_Sdif > 0) .or. (CS%id_Sadv > 0)) then
+  if (CS%id_Sdif > 0) then
     do j=js,je ; do i=is,ie
       Sdif_flx(i,j,1) = 0.0 ; Sdif_flx(i,j,nz+1) = 0.0
-      Sadv_flx(i,j,1) = 0.0 ; Sadv_flx(i,j,nz+1) = 0.0
     enddo ; enddo
     !$OMP parallel do default(shared)
     do K=2,nz ; do j=js,je ; do i=is,ie
-      Sdif_flx(i,j,K) = (Idt * 0.5*(ea_s(i,j,k) + eb_s(i,j,k-1))) * &
-                        (tv%S(i,j,k-1) - tv%S(i,j,k))
-      Sadv_flx(i,j,K) = (Idt * (ea_s(i,j,k) - eb_s(i,j,k-1))) * &
-                    0.5*(tv%S(i,j,k-1) + tv%S(i,j,k))
+      Sdif_flx(i,j,K) = (Idt * ent_s(i,j,K)) * (tv%S(i,j,k-1) - tv%S(i,j,k))
     enddo ; enddo ; enddo
     if (CS%id_Sdif > 0) call post_data(CS%id_Sdif, Sdif_flx, CS%diag)
-    if (CS%id_Sadv > 0) call post_data(CS%id_Sadv, Sadv_flx, CS%diag)
   endif
 
   ! mixing of passive tracers from massless boundary layers to interior
@@ -1042,25 +998,21 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
           ! should be much less than the values that have been set in Kd_int,
           ! perhaps a molecular diffusivity.
           add_ent = ((dt * CS%Kd_min_tr) * GV%Z_to_H**2) * &
-                    ((h(i,j,k-1)+h(i,j,k)+h_neglect) / &
-                     (h(i,j,k-1)*h(i,j,k)+h_neglect2)) - &
-                    0.5*(ea_s(i,j,k) + eb_s(i,j,k-1))
+                    ((h(i,j,k-1)+h(i,j,k)+h_neglect) /  (h(i,j,k-1)*h(i,j,k)+h_neglect2)) - &
+                    0.5*(ent_s(i,j,K) + ent_s(i,j,K))
           if (htot(i) < Tr_ea_BBL) then
-            add_ent = max(0.0, add_ent, &
-                          (Tr_ea_BBL - htot(i)) - min(ea_s(i,j,k),eb_s(i,j,k-1)))
+            add_ent = max(0.0, add_ent, (Tr_ea_BBL - htot(i)) - ent_s(i,j,K))
           elseif (add_ent < 0.0) then
             add_ent = 0.0 ; in_boundary(i) = .false.
           endif
 
-          eb_s(i,j,k-1) = eb_s(i,j,k-1) + add_ent
-          ea_s(i,j,k) = ea_s(i,j,k) + add_ent
+          ent_s(i,j,K) = ent_s(i,j,K) + add_ent
         endif
 
         if (CS%double_diffuse) then ; if (Kd_extra_S(i,j,k) > 0.0) then
           add_ent = ((dt * Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
              (0.25 * ((h(i,j,k-1) + h(i,j,k)) + (hold(i,j,k-1) + hold(i,j,k))) +  h_neglect)
-          eb_s(i,j,k-1) = eb_s(i,j,k-1) + add_ent
-          ea_s(i,j,k) = ea_s(i,j,k) + add_ent
+          ent_s(i,j,K) = ent_s(i,j,K) + add_ent
         endif ; endif
       enddo ; enddo
 
@@ -1074,14 +1026,13 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
       else
         add_ent = 0.0
       endif
-      eb_s(i,j,k-1) = eb_s(i,j,k-1) + add_ent
-      ea_s(i,j,k) = ea_s(i,j,k) + add_ent
+      ent_s(i,j,K) = ent_s(i,j,K) + add_ent
     enddo ; enddo ; enddo
   endif  ! (CS%mix_boundary_tracers)
 
   ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-  call call_tracer_column_fns(h_prebound, h, ea_s, eb_s, fluxes, Hml, dt, G, GV, US, tv, &
-                              CS%optics, CS%tracer_flow_CSp, CS%debug, &
+  call call_tracer_column_fns(h_prebound, h, ent_s(:,:,1:nz), ent_s(:,:,2:nz+1), fluxes, Hml, dt, &
+                              G, GV, US, tv, CS%optics, CS%tracer_flow_CSp, CS%debug, &
                               evap_CFL_limit = CS%evap_CFL_limit, &
                               minimum_forcing_depth=CS%minimum_forcing_depth)
 
@@ -1099,10 +1050,12 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   endif ! CS%use_sponge
 
   !! Diagnostics that are always zero and should be removed from this routine.
-  if (CS%id_wd > 0) zeros_h(:,:,:) = 0.0
+  if ((CS%id_wd > 0) .or. (CS%id_Tadv > 0) .or. (CS%id_Sadv > 0)) zeros_h(:,:,:) = 0.0
   if ((CS%id_dudt_dia > 0) .or. (CS%id_hf_dudt_dia_2d > 0)) zeros_u(:,:,:) = 0.0
   if ((CS%id_dvdt_dia > 0) .or. (CS%id_hf_dvdt_dia_2d > 0)) zeros_v(:,:,:) = 0.0
   if (CS%id_wd > 0) call post_data(CS%id_wd, zeros_h, CS%diag)
+  if (CS%id_Tadv > 0) call post_data(CS%id_Tadv, zeros_h, CS%diag)
+  if (CS%id_Sadv > 0) call post_data(CS%id_Sadv, zeros_h, CS%diag)
   if (CS%id_dudt_dia > 0) call post_data(CS%id_dudt_dia, zeros_u,  CS%diag)
   if (CS%id_dvdt_dia > 0) call post_data(CS%id_dvdt_dia, zeros_v,  CS%diag)
   if (CS%id_hf_dudt_dia_2d > 0) call post_data(CS%id_hf_dudt_dia_2d, zeros_u(:,:,1), CS%diag)
@@ -1142,14 +1095,6 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
   ! local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    ea_s,     &  ! amount of fluid entrained from the layer above within
-                 ! one time step  [H ~> m or kg m-2]
-    eb_s,     &  ! amount of fluid entrained from the layer below within
-                 ! one time step  [H ~> m or kg m-2]
-    ea_t,     &  ! amount of fluid entrained from the layer above within
-                 ! one time step  [H ~> m or kg m-2]
-    eb_t,     &  ! amount of fluid entrained from the layer below within
-                 ! one time step  [H ~> m or kg m-2]
     h_prebound, & ! initial layer thicknesses [H ~> m or kg m-2]
     dSV_dT, &    ! The partial derivative of specific volume with temperature [R-1 degC-1 ~> m3 kg-1 degC-1]
     dSV_dS, &    ! The partial derivative of specific volume with salinity [R-1 ppt-1 ~> m3 kg-1 ppt-1].
@@ -1157,15 +1102,17 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     u_h,    &    ! zonal and meridional velocities at thickness points after
     v_h          ! entrainment [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    SkinBuoyFlux! 2d surface buoyancy flux [Z2 T-3 ~> m2 s-3], used by ePBL
+    SkinBuoyFlux ! 2d surface buoyancy flux [Z2 T-3 ~> m2 s-3], used by ePBL
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: h_diag                ! diagnostic array for thickness
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: temp_diag             ! diagnostic array for temp
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: saln_diag             ! diagnostic array for salinity
   real, dimension(SZI_(G),SZJ_(G))      :: tendency_2d           ! depth integrated content tendency for diagn
 
-  real :: net_ent  ! The net of ea-eb at an interface.
-
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
+    ent_s,    & ! The diffusive coupling across interfaces within one time step for
+                ! salinity and passive tracers [H ~> m or kg m-2]
+    ent_t,    & ! The diffusive coupling across interfaces within one time step for
+                ! temperature [H ~> m or kg m-2]
     Kd_int,   & ! diapycnal diffusivity of interfaces [Z2 T-1 ~> m2 s-1]
     Kd_heat,  & ! diapycnal diffusivity of heat [Z2 T-1 ~> m2 s-1]
     Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers [Z2 T-1 ~> m2 s-1]
@@ -1174,10 +1121,9 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     Kd_extra_S , & !  The extra diffusivity of salinity due to double diffusion relative to
                 ! Kd_int [Z2 T-1 ~> m2 s-1].
     Kd_ePBL,  & ! boundary layer or convective diapycnal diffusivities at interfaces [Z2 T-1 ~> m2 s-1]
+    zeros_h,  & ! An array of zeros for h-point diagnostics that should be removed.
     Tdif_flx, & ! diffusive diapycnal heat flux across interfaces [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
-    Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
-    Sdif_flx, & ! diffusive diapycnal salt flux across interfaces [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
-    Sadv_flx    ! advective diapycnal salt flux across interfaces [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
+    Sdif_flx    ! diffusive diapycnal salt flux across interfaces [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
     zeros_u     ! An array of zeros for u-point diagnostics that should be removed.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
@@ -1218,7 +1164,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect*h_neglect
   Kd_heat(:,:,:) = 0.0 ; Kd_salt(:,:,:) = 0.0
-  ea_s(:,:,:) = 0.0 ; eb_s(:,:,:) = 0.0 ; ea_t(:,:,:) = 0.0 ; eb_t(:,:,:) = 0.0
+  ent_s(:,:,:) = 0.0 ; ent_t(:,:,:) = 0.0
 
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("diabatic_ALE(), MOM_diabatic_driver.F90")
@@ -1251,10 +1197,10 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
   if (CS%use_kappa_shear .or. CS%use_CVMix_shear) then
     if (CS%use_geothermal) then
-      ! The presence of ea_s and eb_s causes find_uv_at_h to use a tridiagonal solver,
+      ! The presence of ea_s causes find_uv_at_h to use a tridiagonal solver,
       ! which changes answers at the level of roundoff because ((A*B / A) /= B).
-      ea_s(:,:,:) = 0.0 ; eb_s(:,:,:) = 0.0
-      call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea_s, eb_s)
+      ! Note that ent_s(:,:,:) = 0.0
+      call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ent_s(:,:,1:nz), ent_s(:,:,1:nz))
     else
       call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
     endif
@@ -1334,7 +1280,6 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
       if (associated(visc%MLD)) visc%MLD(:,:) = Hml(:,:)
     endif
 
-    call cpu_clock_end(id_clock_kpp)
     if (showCallTree) call callTree_waypoint("done with KPP_calculate (diabatic)")
     if (CS%debug) then
       call MOM_state_chksum("after KPP", u, v, h, G, GV, US, haloshift=0)
@@ -1342,14 +1287,6 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
       call MOM_thermovar_chksum("after KPP", tv, G)
       call hchksum(Kd_heat, "after KPP Kd_heat", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
       call hchksum(Kd_salt, "after KPP Kd_salt", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
-    endif
-
-  endif  ! endif for KPP
-
-
-  if (CS%useKPP) then
-    call cpu_clock_begin(id_clock_kpp)
-    if (CS%debug) then
       call hchksum(CS%KPP_temp_flux, "before KPP_applyNLT netHeat", G%HI, haloshift=0, scale=GV%H_to_m)
       call hchksum(CS%KPP_salt_flux, "before KPP_applyNLT netSalt", G%HI, haloshift=0, scale=GV%H_to_m)
       call hchksum(CS%KPP_NLTheat, "before KPP_applyNLT NLTheat", G%HI, haloshift=0)
@@ -1429,10 +1366,8 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
             CS%minimum_forcing_depth, cTKE, dSV_dT, dSV_dS, SkinBuoyFlux=SkinBuoyFlux)
 
     if (CS%debug) then
-      call hchksum(ea_t, "after applyBoundaryFluxes ea_t", G%HI, haloshift=0, scale=GV%H_to_m)
-      call hchksum(eb_t, "after applyBoundaryFluxes eb_t", G%HI, haloshift=0, scale=GV%H_to_m)
-      call hchksum(ea_s, "after applyBoundaryFluxes ea_s", G%HI, haloshift=0, scale=GV%H_to_m)
-      call hchksum(eb_s, "after applyBoundaryFluxes eb_s", G%HI, haloshift=0, scale=GV%H_to_m)
+      call hchksum(ent_t, "after applyBoundaryFluxes ent_t", G%HI, haloshift=0, scale=GV%H_to_m)
+      call hchksum(ent_s, "after applyBoundaryFluxes ent_s", G%HI, haloshift=0, scale=GV%H_to_m)
       call hchksum(cTKE, "after applyBoundaryFluxes cTKE", G%HI, haloshift=0, &
                    scale=US%RZ3_T3_to_W_m2*US%T_to_s)
       call hchksum(dSV_dT, "after applyBoundaryFluxes dSV_dT", G%HI, haloshift=0, scale=US%kg_m3_to_R)
@@ -1465,14 +1400,11 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
       Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_add_here
       Kd_salt(i,j,K) = Kd_salt(i,j,K) + Kd_add_here
-
     enddo ; enddo ; enddo
 
     if (CS%debug) then
-      call hchksum(ea_t, "after ePBL ea_t", G%HI, haloshift=0, scale=GV%H_to_m)
-      call hchksum(eb_t, "after ePBL eb_t", G%HI, haloshift=0, scale=GV%H_to_m)
-      call hchksum(ea_s, "after ePBL ea_s", G%HI, haloshift=0, scale=GV%H_to_m)
-      call hchksum(eb_s, "after ePBL eb_s", G%HI, haloshift=0, scale=GV%H_to_m)
+      call hchksum(ent_t, "after ePBL ent_t", G%HI, haloshift=0, scale=GV%H_to_m)
+      call hchksum(ent_s, "after ePBL ent_s", G%HI, haloshift=0, scale=GV%H_to_m)
       call hchksum(Kd_ePBL, "after ePBL Kd_ePBL", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
     endif
 
@@ -1508,10 +1440,8 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   if (associated(tv%T)) then
 
     if (CS%debug) then
-      call hchksum(ea_t, "before triDiagTS ea_t ", G%HI, haloshift=0, scale=GV%H_to_m)
-      call hchksum(eb_t, "before triDiagTS eb_t ", G%HI, haloshift=0, scale=GV%H_to_m)
-      call hchksum(ea_s, "before triDiagTS ea_s ", G%HI, haloshift=0, scale=GV%H_to_m)
-      call hchksum(eb_s, "before triDiagTS eb_s ", G%HI, haloshift=0, scale=GV%H_to_m)
+      call hchksum(ent_t, "before triDiagTS ent_t ", G%HI, haloshift=0, scale=GV%H_to_m)
+      call hchksum(ent_s, "before triDiagTS ent_s ", G%HI, haloshift=0, scale=GV%H_to_m)
     endif
 
     call cpu_clock_begin(id_clock_tridiag)
@@ -1531,46 +1461,24 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
       enddo ; enddo ; enddo
     endif
 
-    ! set ea_t=eb_t=Kd_heat and ea_s=eb_s=Kd_salt on interfaces for use in the tridiagonal solver.
+    ! set ent_t=dt*Kd_heat/h_int and est_s=dt*Kd_salt/h_int on interfaces for use in the tridiagonal solver.
     do j=js,je ; do i=is,ie
-      ea_t(i,j,1) = 0.; ea_s(i,j,1) = 0.
+      ent_t(i,j,1) = 0. ; ent_t(i,j,nz+1) = 0.
+      ent_s(i,j,1) = 0. ; ent_s(i,j,nz+1) = 0.
     enddo ; enddo
 
     !$OMP parallel do default(shared) private(hval)
-    do k=2,nz ; do j=js,je ; do i=is,ie
+    do K=2,nz ; do j=js,je ; do i=is,ie
       hval = 1.0 / (h_neglect + 0.5*(h(i,j,k-1) + h(i,j,k)))
-      ea_t(i,j,k) = (GV%Z_to_H**2) * dt * hval * Kd_heat(i,j,k)
-      eb_t(i,j,k-1) = ea_t(i,j,k)
-      ea_s(i,j,k) = (GV%Z_to_H**2) * dt * hval * Kd_salt(i,j,k)
-      eb_s(i,j,k-1) = ea_s(i,j,k)
+      ent_t(i,j,K) = (GV%Z_to_H**2) * dt * hval * Kd_heat(i,j,k)
+      ent_s(i,j,K) = (GV%Z_to_H**2) * dt * hval * Kd_salt(i,j,k)
     enddo ; enddo ; enddo
-    do j=js,je ; do i=is,ie
-      eb_t(i,j,nz) = 0. ; eb_s(i,j,nz) = 0.
-    enddo ; enddo
-    if (showCallTree) call callTree_waypoint("done setting ea_t,ea_s,eb_t,eb_s from Kd_heat" //&
-       "and Kd_salt (diabatic)")
+    if (showCallTree) call callTree_waypoint("done setting ent_t and ent_t from Kd_heat and " //&
+                                             "Kd_salt (diabatic_ALE)")
 
-    ! Initialize halo regions of ea_t, eb_t, ea_s and eb_s to default values.
-    !$OMP parallel do default(shared)
-    do k=1,nz
-      do i=is-1,ie+1
-        ea_t(i,js-1,k) = 0.0 ; eb_t(i,js-1,k) = 0.0
-        ea_s(i,js-1,k) = 0.0 ; eb_s(i,js-1,k) = 0.0
-        ea_t(i,je+1,k) = 0.0 ; eb_t(i,je+1,k) = 0.0
-        ea_s(i,je+1,k) = 0.0 ; eb_s(i,je+1,k) = 0.0
-      enddo
-      do j=js,je
-        ea_t(is-1,j,k) = 0.0 ; eb_t(is-1,j,k) = 0.0
-        ea_s(is-1,j,k) = 0.0 ; eb_s(is-1,j,k) = 0.0
-        ea_t(ie+1,j,k) = 0.0 ; eb_t(ie+1,j,k) = 0.0
-        ea_s(ie+1,j,k) = 0.0 ; eb_s(ie+1,j,k) = 0.0
-      enddo
-    enddo
-
-  ! Changes T and S via the tridiagonal solver; no change to h
-    call tracer_vertdiff(h, ea_t, eb_t, dt, tv%T, G, GV)
-    call tracer_vertdiff(h, ea_s, eb_s, dt, tv%S, G, GV)
-
+    ! Changes T and S via the tridiagonal solver; no change to h
+    call tracer_vertdiff(h, ent_t(:,:,1:nz), ent_t(:,:,2:nz+1), dt, tv%T, G, GV)
+    call tracer_vertdiff(h, ent_s(:,:,1:nz), ent_s(:,:,2:nz+1), dt, tv%S, G, GV)
 
     ! In ALE-mode, layer thicknesses do not change. Therefore, we can use h below
     if (CS%diabatic_diff_tendency_diag) then
@@ -1599,41 +1507,31 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   if (CS%id_Kd_salt      > 0) call post_data(CS%id_Kd_salt,      Kd_salt, CS%diag)
   if (CS%id_Kd_ePBL      > 0) call post_data(CS%id_Kd_ePBL,      Kd_ePBL, CS%diag)
 
-  if (CS%id_ea_t       > 0) call post_data(CS%id_ea_t,       ea_t, CS%diag)
-  if (CS%id_eb_t       > 0) call post_data(CS%id_eb_t,       eb_t, CS%diag)
-  if (CS%id_ea_s       > 0) call post_data(CS%id_ea_s,       ea_s, CS%diag)
-  if (CS%id_eb_s       > 0) call post_data(CS%id_eb_s,       eb_s, CS%diag)
+  if (CS%id_ea_t       > 0) call post_data(CS%id_ea_t, ent_t(:,:,1:nz), CS%diag)
+  if (CS%id_eb_t       > 0) call post_data(CS%id_eb_t, ent_t(:,:,2:nz+1), CS%diag)
+  if (CS%id_ea_s       > 0) call post_data(CS%id_ea_s, ent_s(:,:,1:nz), CS%diag)
+  if (CS%id_eb_s       > 0) call post_data(CS%id_eb_s, ent_s(:,:,2:nz+1), CS%diag)
 
   Idt = 1.0 / dt
-  if ((CS%id_Tdif > 0) .or. (CS%id_Tadv > 0)) then
+  if (CS%id_Tdif > 0) then
     do j=js,je ; do i=is,ie
       Tdif_flx(i,j,1) = 0.0 ; Tdif_flx(i,j,nz+1) = 0.0
-      Tadv_flx(i,j,1) = 0.0 ; Tadv_flx(i,j,nz+1) = 0.0
     enddo ; enddo
     !$OMP parallel do default(shared)
     do K=2,nz ; do j=js,je ; do i=is,ie
-      Tdif_flx(i,j,K) = (Idt * 0.5*(ea_t(i,j,k) + eb_t(i,j,k-1))) * &
-                        (tv%T(i,j,k-1) - tv%T(i,j,k))
-      Tadv_flx(i,j,K) = (Idt * (ea_t(i,j,k) - eb_t(i,j,k-1))) * &
-                    0.5*(tv%T(i,j,k-1) + tv%T(i,j,k))
+      Tdif_flx(i,j,K) = (Idt * ent_t(i,j,K)) * (tv%T(i,j,k-1) - tv%T(i,j,k))
     enddo ; enddo ; enddo
     if (CS%id_Tdif > 0) call post_data(CS%id_Tdif, Tdif_flx, CS%diag)
-    if (CS%id_Tadv > 0) call post_data(CS%id_Tadv, Tadv_flx, CS%diag)
   endif
-  if ((CS%id_Sdif > 0) .or. (CS%id_Sadv > 0)) then
+  if (CS%id_Sdif > 0) then
     do j=js,je ; do i=is,ie
       Sdif_flx(i,j,1) = 0.0 ; Sdif_flx(i,j,nz+1) = 0.0
-      Sadv_flx(i,j,1) = 0.0 ; Sadv_flx(i,j,nz+1) = 0.0
     enddo ; enddo
     !$OMP parallel do default(shared)
     do K=2,nz ; do j=js,je ; do i=is,ie
-      Sdif_flx(i,j,K) = (Idt * 0.5*(ea_s(i,j,k) + eb_s(i,j,k-1))) * &
-                        (tv%S(i,j,k-1) - tv%S(i,j,k))
-      Sadv_flx(i,j,K) = (Idt * (ea_s(i,j,k) - eb_s(i,j,k-1))) * &
-                    0.5*(tv%S(i,j,k-1) + tv%S(i,j,k))
+      Sdif_flx(i,j,K) = (Idt * ent_s(i,j,K)) * (tv%S(i,j,k-1) - tv%S(i,j,k))
     enddo ; enddo ; enddo
     if (CS%id_Sdif > 0) call post_data(CS%id_Sdif, Sdif_flx, CS%diag)
-    if (CS%id_Sadv > 0) call post_data(CS%id_Sadv, Sadv_flx, CS%diag)
   endif
 
   ! mixing of passive tracers from massless boundary layers to interior
@@ -1659,26 +1557,22 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
           ! should be much less than the values that have been set in Kd_int,
           ! perhaps a molecular diffusivity.
           add_ent = ((dt * CS%Kd_min_tr) * GV%Z_to_H**2) * &
-                    ((h(i,j,k-1)+h(i,j,k)+h_neglect) / &
-                     (h(i,j,k-1)*h(i,j,k)+h_neglect2)) - &
-                    0.5*(ea_s(i,j,k) + eb_s(i,j,k-1))
+                    ((h(i,j,k-1)+h(i,j,k) + h_neglect) /  (h(i,j,k-1)*h(i,j,k) + h_neglect2)) - &
+                    ent_s(i,j,K)
           if (htot(i) < Tr_ea_BBL) then
-            add_ent = max(0.0, add_ent, &
-                          (Tr_ea_BBL - htot(i)) - min(ea_s(i,j,k),eb_s(i,j,k-1)))
+            add_ent = max(0.0, add_ent, (Tr_ea_BBL - htot(i)) - ent_s(i,j,K))
           elseif (add_ent < 0.0) then
             add_ent = 0.0 ; in_boundary(i) = .false.
           endif
 
-          eb_s(i,j,k-1) = eb_s(i,j,k-1) + add_ent
-          ea_s(i,j,k) = ea_s(i,j,k) + add_ent
+          ent_s(i,j,K) = ent_s(i,j,K) + add_ent
         endif
 
         if (CS%double_diffuse) then ; if (Kd_extra_S(i,j,k) > 0.0) then
           add_ent = ((dt * Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
              (0.5 * (h(i,j,k-1) + h(i,j,k)) + &
               h_neglect)
-          eb_s(i,j,k-1) = eb_s(i,j,k-1) + add_ent
-          ea_s(i,j,k) = ea_s(i,j,k) + add_ent
+          ent_s(i,j,K) = ent_s(i,j,K) + add_ent
         endif ; endif
       enddo ; enddo
     enddo
@@ -1687,19 +1581,17 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     do k=nz,2,-1 ; do j=js,je ; do i=is,ie
       if (Kd_extra_S(i,j,k) > 0.0) then
         add_ent = ((dt * Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
-           (0.5 * (h(i,j,k-1) + h(i,j,k))  + &
-            h_neglect)
+           (0.5 * (h(i,j,k-1) + h(i,j,k)) + h_neglect)
       else
         add_ent = 0.0
       endif
-      eb_s(i,j,k-1) = eb_s(i,j,k-1) + add_ent
-      ea_s(i,j,k) = ea_s(i,j,k) + add_ent
+      ent_s(i,j,K) = ent_s(i,j,K) + add_ent
     enddo ; enddo ; enddo
   endif  ! (CS%mix_boundary_tracers)
 
   ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-  call call_tracer_column_fns(h_prebound, h, ea_s, eb_s, fluxes, Hml, dt, G, GV, US, tv, &
-                              CS%optics, CS%tracer_flow_CSp, CS%debug, &
+  call call_tracer_column_fns(h_prebound, h, ent_s(:,:,1:nz), ent_s(:,:,2:nz+1), fluxes, Hml, dt, &
+                              G, GV, US, tv, CS%optics, CS%tracer_flow_CSp, CS%debug, &
                               evap_CFL_limit=CS%evap_CFL_limit, &
                               minimum_forcing_depth=CS%minimum_forcing_depth)
 
@@ -1725,10 +1617,13 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   !! Diagnostics that are always zero and should be removed from this routine.
   if ((CS%id_dudt_dia > 0) .or. (CS%id_hf_dudt_dia_2d > 0)) zeros_u(:,:,:) = 0.0
   if ((CS%id_dvdt_dia > 0) .or. (CS%id_hf_dvdt_dia_2d > 0)) zeros_v(:,:,:) = 0.0
+  if ((CS%id_Tadv > 0) .or. (CS%id_Sadv > 0)) zeros_h(:,:,:) = 0.0
   if (CS%id_dudt_dia > 0) call post_data(CS%id_dudt_dia, zeros_u,  CS%diag)
   if (CS%id_dvdt_dia > 0) call post_data(CS%id_dvdt_dia, zeros_v,  CS%diag)
   if (CS%id_hf_dudt_dia_2d > 0) call post_data(CS%id_hf_dudt_dia_2d, zeros_u(:,:,1), CS%diag)
   if (CS%id_hf_dvdt_dia_2d > 0) call post_data(CS%id_hf_dvdt_dia_2d, zeros_v(:,:,1), CS%diag)
+  if (CS%id_Tadv > 0) call post_data(CS%id_Tadv, zeros_h, CS%diag)
+  if (CS%id_Sadv > 0) call post_data(CS%id_Sadv, zeros_h, CS%diag)
 
   call disable_averaging(CS%diag)
 
