@@ -139,10 +139,12 @@ type, public:: diabatic_CS; private
   integer :: NKBL                    !< The number of buffer layers (if bulk_mixed_layer)
   logical :: massless_match_targets  !< If true (the default), keep the T & S
                                      !! consistent with the target values.
-  logical :: mix_boundary_tracers    !< If true, mix the passive tracers in massless
-                                     !! layers at the bottom into the interior as though
-                                     !! a diffusivity of Kd_min_tr (see below) were
-                                     !! operating.
+  logical :: mix_boundary_tracers    !< If true, mix the passive tracers in massless layers at the
+                                     !! bottom into the interior as though a diffusivity of
+                                     !! Kd_min_tr (see below) were operating.
+  logical :: mix_boundary_tracer_ALE !< If true, in ALE mode mix the passive tracers in massless
+                                     !! layers at the bottom into the interior as though a
+                                     !! diffusivity of Kd_min_tr (see below) were operating.
   real    :: Kd_BBL_tr               !< A bottom boundary layer tracer diffusivity that
                                      !! will allow for explicitly specified bottom fluxes
                                      !! [Z2 T-1 ~> m2 s-1].  The entrainment at the bottom is at
@@ -259,7 +261,7 @@ contains
 !>  This subroutine imposes the diapycnal mass fluxes and the
 !!  accompanying diapycnal advection of momentum and tracers.
 subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
-                    G, GV, US, CS, OBC, WAVES)
+                    G, GV, US, CS, OBC, Waves)
   type(ocean_grid_type),                     intent(inout) :: G         !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV        !< ocean vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u         !< zonal velocity [L T-1 ~> m s-1]
@@ -499,11 +501,6 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
   real :: net_ent  ! The net of ea-eb at an interface.
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    eatr, &  ! The equivalent of ea and eb for tracers, which differ from ea and
-    ebtr     ! eb in that they tend to homogenize tracers in massless layers
-             ! near the boundaries [H ~> m or kg m-2] (for Bous or non-Bouss)
-
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
     Kd_int,   & ! diapycnal diffusivity of interfaces [Z2 T-1 ~> m2 s-1]
     Kd_heat,  & ! diapycnal diffusivity of heat [Z2 T-1 ~> m2 s-1]
@@ -591,10 +588,10 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
   if (CS%use_kappa_shear .or. CS%use_CVMix_shear) then
     if (CS%use_geothermal) then
-      ! The presence of eatr and ebtr causes find_uv_at_h to use a tridiagonal solver,
+      ! The presence of ea_s and eb_s causes find_uv_at_h to use a tridiagonal solver,
       ! which changes answers at the level of roundoff because ((A*B / A) /= B).
-      eatr(:,:,:) = 0.0 ; ebtr(:,:,:) = 0.0
-      call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, eatr, ebtr)
+      ea_s(:,:,:) = 0.0 ; eb_s(:,:,:) = 0.0
+      call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea_s, eb_s)
     else
       call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
     endif
@@ -1024,12 +1021,12 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   ! mixing of passive tracers from massless boundary layers to interior
   call cpu_clock_begin(id_clock_tracers)
 
-  if (CS%mix_boundary_tracers) then
+  if (CS%mix_boundary_tracer_ALE) then
     Tr_ea_BBL = GV%Z_to_H * sqrt(dt*CS%Kd_BBL_tr)
+
     !$OMP parallel do default(shared) private(htot,in_boundary,add_ent)
     do j=js,je
       do i=is,ie
-        ebtr(i,j,nz) = eb_s(i,j,nz)
         htot(i) = 0.0
         in_boundary(i) = (G%mask2dT(i,j) > 0.0)
       enddo
@@ -1055,36 +1052,20 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
             add_ent = 0.0 ; in_boundary(i) = .false.
           endif
 
-          ebtr(i,j,k-1) = eb_s(i,j,k-1) + add_ent
-          eatr(i,j,k) = ea_s(i,j,k) + add_ent
-        else
-          ebtr(i,j,k-1) = eb_s(i,j,k-1) ; eatr(i,j,k) = ea_s(i,j,k)
+          eb_s(i,j,k-1) = eb_s(i,j,k-1) + add_ent
+          ea_s(i,j,k) = ea_s(i,j,k) + add_ent
         endif
 
         if (CS%double_diffuse) then ; if (Kd_extra_S(i,j,k) > 0.0) then
           add_ent = ((dt * Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
              (0.25 * ((h(i,j,k-1) + h(i,j,k)) + (hold(i,j,k-1) + hold(i,j,k))) +  h_neglect)
-          ebtr(i,j,k-1) = ebtr(i,j,k-1) + add_ent
-          eatr(i,j,k) = eatr(i,j,k) + add_ent
+          eb_s(i,j,k-1) = eb_s(i,j,k-1) + add_ent
+          ea_s(i,j,k) = ea_s(i,j,k) + add_ent
         endif ; endif
       enddo ; enddo
-      do i=is,ie ; eatr(i,j,1) = ea_s(i,j,1) ; enddo
 
     enddo
-
-    ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-    ! so h_prebound is used for the old thickness.
-    !### I think that in the following, ea_s and eb_s should be eatr and ebtr.
-    call call_tracer_column_fns(h_prebound, h, ea_s, eb_s, fluxes, Hml, dt, G, GV, US, tv, &
-                              CS%optics, CS%tracer_flow_CSp, CS%debug, &
-                              evap_CFL_limit = CS%evap_CFL_limit, &
-                              minimum_forcing_depth=CS%minimum_forcing_depth)
-
-  elseif (CS%double_diffuse) then  ! extra diffusivity for passive tracers
-
-    do j=js,je ; do i=is,ie
-      ebtr(i,j,nz) = eb_s(i,j,nz) ; eatr(i,j,1) = ea_s(i,j,1)
-    enddo ; enddo
+  elseif (CS%double_diffuse .and. .not.CS%mix_boundary_tracers) then  ! extra diffusivity for passive tracers
     !$OMP parallel do default(shared) private(add_ent)
     do k=nz,2,-1 ; do j=js,je ; do i=is,ie
       if (Kd_extra_S(i,j,k) > 0.0) then
@@ -1093,23 +1074,16 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
       else
         add_ent = 0.0
       endif
-      ebtr(i,j,k-1) = eb_s(i,j,k-1) + add_ent
-      eatr(i,j,k) = ea_s(i,j,k) + add_ent
+      eb_s(i,j,k-1) = eb_s(i,j,k-1) + add_ent
+      ea_s(i,j,k) = ea_s(i,j,k) + add_ent
     enddo ; enddo ; enddo
-
-    ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-    call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, dt, G, GV, US, tv, &
-                                CS%optics, CS%tracer_flow_CSp, CS%debug,&
-                                evap_CFL_limit = CS%evap_CFL_limit, &
-                                minimum_forcing_depth=CS%minimum_forcing_depth)
-  else
-    ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-    !### eatr and ebtr may not be initialized or may be 0, depending on CS%geothermal.
-    call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, dt, G, GV, US, tv, &
-                                CS%optics, CS%tracer_flow_CSp, CS%debug, &
-                                evap_CFL_limit = CS%evap_CFL_limit, &
-                                minimum_forcing_depth=CS%minimum_forcing_depth)
   endif  ! (CS%mix_boundary_tracers)
+
+  ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
+  call call_tracer_column_fns(h_prebound, h, ea_s, eb_s, fluxes, Hml, dt, G, GV, US, tv, &
+                              CS%optics, CS%tracer_flow_CSp, CS%debug, &
+                              evap_CFL_limit = CS%evap_CFL_limit, &
+                              minimum_forcing_depth=CS%minimum_forcing_depth)
 
   call cpu_clock_end(id_clock_tracers)
 
@@ -1190,11 +1164,6 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   real, dimension(SZI_(G),SZJ_(G))      :: tendency_2d           ! depth integrated content tendency for diagn
 
   real :: net_ent  ! The net of ea-eb at an interface.
-
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G))  :: &
-    eatr, &  ! The equivalent of ea and eb for tracers, which differ from ea and
-    ebtr     ! eb in that they tend to homogenize tracers in massless layers
-             ! near the boundaries [H ~> m or kg m-2] (for Bous or non-Bouss)
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
     Kd_int,   & ! diapycnal diffusivity of interfaces [Z2 T-1 ~> m2 s-1]
@@ -1282,10 +1251,10 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
   if (CS%use_kappa_shear .or. CS%use_CVMix_shear) then
     if (CS%use_geothermal) then
-      ! The presence of eatr and ebtr causes find_uv_at_h to use a tridiagonal solver,
+      ! The presence of ea_s and eb_s causes find_uv_at_h to use a tridiagonal solver,
       ! which changes answers at the level of roundoff because ((A*B / A) /= B).
-      eatr(:,:,:) = 0.0 ; ebtr(:,:,:) = 0.0
-      call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, eatr, ebtr)
+      ea_s(:,:,:) = 0.0 ; eb_s(:,:,:) = 0.0
+      call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea_s, eb_s)
     else
       call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
     endif
@@ -1670,12 +1639,11 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   ! mixing of passive tracers from massless boundary layers to interior
   call cpu_clock_begin(id_clock_tracers)
 
-  if (CS%mix_boundary_tracers) then
+  if (CS%mix_boundary_tracer_ALE) then
     Tr_ea_BBL = GV%Z_to_H * sqrt(dt*CS%Kd_BBL_tr)
     !$OMP parallel do default(shared) private(htot,in_boundary,add_ent)
     do j=js,je
       do i=is,ie
-        ebtr(i,j,nz) = eb_s(i,j,nz)
         htot(i) = 0.0
         in_boundary(i) = (G%mask2dT(i,j) > 0.0)
       enddo
@@ -1701,37 +1669,20 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
             add_ent = 0.0 ; in_boundary(i) = .false.
           endif
 
-          ebtr(i,j,k-1) = eb_s(i,j,k-1) + add_ent
-          eatr(i,j,k) = ea_s(i,j,k) + add_ent
-        else
-          ebtr(i,j,k-1) = eb_s(i,j,k-1) ; eatr(i,j,k) = ea_s(i,j,k)
+          eb_s(i,j,k-1) = eb_s(i,j,k-1) + add_ent
+          ea_s(i,j,k) = ea_s(i,j,k) + add_ent
         endif
 
         if (CS%double_diffuse) then ; if (Kd_extra_S(i,j,k) > 0.0) then
           add_ent = ((dt * Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
              (0.5 * (h(i,j,k-1) + h(i,j,k)) + &
               h_neglect)
-          ebtr(i,j,k-1) = ebtr(i,j,k-1) + add_ent
-          eatr(i,j,k) = eatr(i,j,k) + add_ent
+          eb_s(i,j,k-1) = eb_s(i,j,k-1) + add_ent
+          ea_s(i,j,k) = ea_s(i,j,k) + add_ent
         endif ; endif
       enddo ; enddo
-      do i=is,ie ; eatr(i,j,1) = ea_s(i,j,1) ; enddo
-
     enddo
-
-    ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-    ! so use h_prebound as the old value.
-    !### I think that in the following, ea_s and eb_s should be eatr and ebtr.
-    call call_tracer_column_fns(h_prebound, h, ea_s, eb_s, fluxes, Hml, dt, G, GV, US, tv, &
-                              CS%optics, CS%tracer_flow_CSp, CS%debug, &
-                              evap_CFL_limit = CS%evap_CFL_limit, &
-                              minimum_forcing_depth=CS%minimum_forcing_depth)
-
-  elseif (CS%double_diffuse) then  ! extra diffusivity for passive tracers
-
-    do j=js,je ; do i=is,ie
-      ebtr(i,j,nz) = eb_s(i,j,nz) ; eatr(i,j,1) = ea_s(i,j,1)
-    enddo ; enddo
+  elseif (CS%double_diffuse .and. .not.CS%mix_boundary_tracers) then  ! extra diffusivity for passive tracers
     !$OMP parallel do default(shared) private(add_ent)
     do k=nz,2,-1 ; do j=js,je ; do i=is,ie
       if (Kd_extra_S(i,j,k) > 0.0) then
@@ -1741,23 +1692,16 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
       else
         add_ent = 0.0
       endif
-      ebtr(i,j,k-1) = eb_s(i,j,k-1) + add_ent
-      eatr(i,j,k) = ea_s(i,j,k) + add_ent
+      eb_s(i,j,k-1) = eb_s(i,j,k-1) + add_ent
+      ea_s(i,j,k) = ea_s(i,j,k) + add_ent
     enddo ; enddo ; enddo
-
-    ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-    call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, dt, G, GV, US, tv, &
-                                CS%optics, CS%tracer_flow_CSp, CS%debug,&
-                                evap_CFL_limit = CS%evap_CFL_limit, &
-                                minimum_forcing_depth=CS%minimum_forcing_depth)
-  else
-    ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-    !### eatr and ebtr may not be initialized or may be 0, depending on CS%geothermal.
-    call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, dt, G, GV, US, tv, &
-                                CS%optics, CS%tracer_flow_CSp, CS%debug, &
-                                evap_CFL_limit = CS%evap_CFL_limit, &
-                                minimum_forcing_depth=CS%minimum_forcing_depth)
   endif  ! (CS%mix_boundary_tracers)
+
+  ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
+  call call_tracer_column_fns(h_prebound, h, ea_s, eb_s, fluxes, Hml, dt, G, GV, US, tv, &
+                              CS%optics, CS%tracer_flow_CSp, CS%debug, &
+                              evap_CFL_limit=CS%evap_CFL_limit, &
+                              minimum_forcing_depth=CS%minimum_forcing_depth)
 
   call cpu_clock_end(id_clock_tracers)
 
@@ -1795,7 +1739,7 @@ end subroutine diabatic_ALE
 !> Imposes the diapycnal mass fluxes and the accompanying diapycnal advection of momentum and tracers
 !! using the original MOM6 algorithms.
 subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
-                            G, GV, US, CS, WAVES)
+                            G, GV, US, CS, Waves)
   type(ocean_grid_type),                     intent(inout) :: G         !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV        !< ocean vertical grid structure
   type(unit_scale_type),                     intent(in)    :: US        !< A dimensional unit scaling type
@@ -3227,8 +3171,12 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
                  "If true, mix the passive tracers in massless layers at "//&
                  "the bottom into the interior as though a diffusivity of "//&
                  "KD_MIN_TR were operating.", default=.true.)
+  call get_param(param_file, mdl, "MIX_BOUNDARY_TRACER_ALE", CS%mix_boundary_tracer_ALE, &
+                 "If true and in ALE mode, mix the passive tracers in massless layers at "//&
+                 "the bottom into the interior as though a diffusivity of "//&
+                 "KD_MIN_TR were operating.", default=.false., do_not_log=.not.CS%useALEalgorithm)
 
-  if (CS%mix_boundary_tracers) then
+  if (CS%mix_boundary_tracers .or. CS%mix_boundary_tracer_ALE) then
     call get_param(param_file, mdl, "KD", Kd, default=0.0)
     call get_param(param_file, mdl, "KD_MIN_TR", CS%Kd_min_tr, &
                  "A minimal diffusivity that should always be applied to "//&
