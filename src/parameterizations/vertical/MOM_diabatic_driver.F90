@@ -1106,13 +1106,13 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
                 ! salinity and passive tracers [H ~> m or kg m-2]
     ent_t,    & ! The diffusive coupling across interfaces within one time step for
                 ! temperature [H ~> m or kg m-2]
-    Kd_int,   & ! diapycnal diffusivity of interfaces [Z2 T-1 ~> m2 s-1]
-    Kd_heat,  & ! diapycnal diffusivity of heat [Z2 T-1 ~> m2 s-1]
+    Kd_heat,  & ! diapycnal diffusivity of heat or the smaller of the diapycnal diffusivities of
+                ! heat and salt [Z2 T-1 ~> m2 s-1]
     Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers [Z2 T-1 ~> m2 s-1]
     Kd_extra_T , & ! The extra diffusivity of temperature due to double diffusion relative to
-                ! Kd_int [Z2 T-1 ~> m2 s-1].
+                ! Kd_int returned from set_diffusivity [Z2 T-1 ~> m2 s-1].
     Kd_extra_S , & !  The extra diffusivity of salinity due to double diffusion relative to
-                ! Kd_int [Z2 T-1 ~> m2 s-1].
+                ! Kd_int returned from set_diffusivity [Z2 T-1 ~> m2 s-1].
     Kd_ePBL,  & ! boundary layer or convective diapycnal diffusivities at interfaces [Z2 T-1 ~> m2 s-1]
     zeros_h,  & ! An array of zeros for h-point diagnostics that should be removed.
     Tdif_flx, & ! diffusive diapycnal heat flux across interfaces [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
@@ -1194,16 +1194,16 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   endif
 
   call cpu_clock_begin(id_clock_set_diffusivity)
-  ! Sets: Kd_int, Kd_extra_T, Kd_extra_S and visc%TKE_turb
+  ! Sets: Kd_heat, Kd_extra_T, Kd_extra_S and visc%TKE_turb
   ! Also changes: visc%Kd_shear, visc%Kv_shear and visc%Kv_slow
   if (CS%debug) &
     call MOM_state_chksum("before set_diffusivity", u, v, h, G, GV, US, haloshift=CS%halo_TS_diff)
   if (CS%double_diffuse) then
     call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, US, CS%set_diff_CSp, &
-                         Kd_int=Kd_int, Kd_extra_T=Kd_extra_T, Kd_extra_S=Kd_extra_S)
+                         Kd_int=Kd_heat, Kd_extra_T=Kd_extra_T, Kd_extra_S=Kd_extra_S)
   else
     call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, US, &
-                         CS%set_diff_CSp, Kd_int=Kd_int)
+                         CS%set_diff_CSp, Kd_int=Kd_heat)
   endif
   call cpu_clock_end(id_clock_set_diffusivity)
   if (showCallTree) call callTree_waypoint("done with set_diffusivity (diabatic)")
@@ -1212,29 +1212,30 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     call MOM_state_chksum("after set_diffusivity ", u, v, h, G, GV, US, haloshift=0)
     call MOM_forcing_chksum("after set_diffusivity ", fluxes, G, US, haloshift=0)
     call MOM_thermovar_chksum("after set_diffusivity ", tv, G)
-    call hchksum(Kd_Int, "after set_diffusivity Kd_Int", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
+    call hchksum(Kd_heat, "after set_diffusivity Kd_heat", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
   endif
 
-  ! Set diffusivities for heat and salt separately
+  ! Store the diagnosed typical diffusivity at interfaces.
+  if (CS%id_Kd_interface > 0) call post_data(CS%id_Kd_interface, Kd_heat,  CS%diag)
 
-  ! Add contributions from double diffusion
+  ! Set diffusivities for heat and salt separately, and possibly change the meaning of Kd_heat.
   if (CS%double_diffuse) then
+    ! Add contributions from double diffusion
     !$OMP parallel do default(shared)
     do K=1,nz+1 ; do j=js,je ; do i=is,ie
-      Kd_salt(i,j,K) = Kd_int(i,j,K) + Kd_extra_S(i,j,K)
-      Kd_heat(i,j,K) = Kd_int(i,j,K) + Kd_extra_T(i,j,K)
+      Kd_salt(i,j,K) = Kd_heat(i,j,K) + Kd_extra_S(i,j,K)
+      Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_extra_T(i,j,K)
     enddo ; enddo ; enddo
   else
     !$OMP parallel do default(shared)
     do K=1,nz+1 ; do j=js,je ; do i=is,ie
-      Kd_salt(i,j,K) = Kd_int(i,j,K)
-      Kd_heat(i,j,K) = Kd_int(i,j,K)
+      Kd_salt(i,j,K) = Kd_heat(i,j,K)
     enddo ; enddo ; enddo
   endif
 
   if (CS%debug) then
-    call hchksum(Kd_heat, "after set_diffusivity Kd_heat", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
-    call hchksum(Kd_salt, "after set_diffusivity Kd_salt", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
+    call hchksum(Kd_heat, "after double diffuse Kd_heat", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
+    call hchksum(Kd_salt, "after double diffuse Kd_salt", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
   endif
 
   if (CS%useKPP) then
@@ -1465,7 +1466,6 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   call diag_update_remap_grids(CS%diag)
 
   ! Diagnose the diapycnal diffusivities and other related quantities.
-  if (CS%id_Kd_interface > 0) call post_data(CS%id_Kd_interface, Kd_int,  CS%diag)
   if (CS%id_Kd_heat      > 0) call post_data(CS%id_Kd_heat,      Kd_heat, CS%diag)
   if (CS%id_Kd_salt      > 0) call post_data(CS%id_Kd_salt,      Kd_salt, CS%diag)
   if (CS%id_Kd_ePBL      > 0) call post_data(CS%id_Kd_ePBL,      Kd_ePBL, CS%diag)
