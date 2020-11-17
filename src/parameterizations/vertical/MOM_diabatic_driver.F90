@@ -509,7 +509,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
     zeros_u     ! An array of zeros for u-point diagnostics that should be removed.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: &
     zeros_v     ! An array of zeros for v-point diagnostics that should be removed.
 
   logical :: in_boundary(SZI_(G)) ! True if there are no massive layers below,
@@ -1119,7 +1119,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     Sdif_flx    ! diffusive diapycnal salt flux across interfaces [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
     zeros_u     ! An array of zeros for u-point diagnostics that should be removed.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: &
     zeros_v     ! An array of zeros for v-point diagnostics that should be removed.
 
   logical :: in_boundary(SZI_(G)) ! True if there are no massive layers below,
