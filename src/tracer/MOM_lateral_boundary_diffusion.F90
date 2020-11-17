@@ -637,19 +637,19 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
     ! GMM, khtr_avg should be computed once khtr is 3D
     if ((CS%linear) .and. (k_bot_diff .gt. 1)) then
       ! apply linear decay at the base of hbl
-      do k = k_bot_min-1,1,-1
+      do k = k_bot_min,1,-1
         F_layer_z(k) = -(dz_top(k) * khtr_u) * (phi_R_z(k) - phi_L_z(k))
         if (CS%limiter_remap) call flux_limiter(F_layer_z(k), area_L, area_R, phi_L_z(k), &
                                           phi_R_z(k), dz_top(k), dz_top(k))
       enddo
       htot = 0.0
-      do k = k_bot_min+1,k_bot_max, 1
+      do k = k_bot_min,k_bot_max, 1
         htot = htot + dz_top(k)
       enddo
 
       a = -1.0/htot
-      htot = 0.0
-      do k = k_bot_min,k_bot_max, 1
+      htot = dz_top(k_bot_min)
+      do k = k_bot_min+1,k_bot_max, 1
         wgt = (a*(htot + (dz_top(k) * 0.5))) + 1.0
         F_layer_z(k) = -(dz_top(k) * khtr_u) * (phi_R_z(k) - phi_L_z(k)) * wgt
         htot = htot + dz_top(k)
