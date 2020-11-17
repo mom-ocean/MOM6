@@ -523,8 +523,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   real :: h_neglect2   ! h_neglect^2 [H2 ~> m2 or kg2 m-4]
   real :: add_ent      ! Entrainment that needs to be added when mixing tracers
                        ! [H ~> m or kg m-2]
-  real :: eaval        ! eaval is 2*ea at velocity grid points [H ~> m or kg m-2]
-  real :: hval         ! hval is 2*h at velocity grid points [H ~> m or kg m-2]
+  real :: I_hval       ! The inverse of the thicknesses averaged to interfaces [H-1 ~> m-1 or m2 kg-1]
   real :: h_tr         ! h_tr is h at tracer points with a tiny thickness
                        ! added to ensure positive definiteness [H ~> m or kg m-2]
   real :: Tr_ea_BBL    ! The diffusive tracer thickness in the BBL that is
@@ -599,8 +598,15 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   call cpu_clock_end(id_clock_set_diffusivity)
   if (showCallTree) call callTree_waypoint("done with set_diffusivity (diabatic)")
 
-  ! Set diffusivities for heat and salt separately
 
+  if (CS%debug) then
+    call MOM_state_chksum("after set_diffusivity ", u, v, h, G, GV, US, haloshift=0)
+    call MOM_forcing_chksum("after set_diffusivity ", fluxes, G, US, haloshift=0)
+    call MOM_thermovar_chksum("after set_diffusivity ", tv, G)
+    call hchksum(Kd_Int, "after set_diffusivity Kd_Int", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
+  endif
+
+  ! Set diffusivities for heat and salt separately
   if (CS%useKPP) then
     ! Add contribution from double diffusion
     if (CS%double_diffuse) then
@@ -616,18 +622,12 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
         Kd_heat(i,j,K) = Kd_int(i,j,K)
       enddo ; enddo ; enddo
     endif
-  endif
 
-  if (CS%debug) then
-    call MOM_state_chksum("after set_diffusivity ", u, v, h, G, GV, US, haloshift=0)
-    call MOM_forcing_chksum("after set_diffusivity ", fluxes, G, US, haloshift=0)
-    call MOM_thermovar_chksum("after set_diffusivity ", tv, G)
-    call hchksum(Kd_Int, "after set_diffusivity Kd_Int", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
-    call hchksum(Kd_heat, "after set_diffusivity Kd_heat", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
-    call hchksum(Kd_salt, "after set_diffusivity Kd_salt", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
-  endif
+    if (CS%debug) then
+      call hchksum(Kd_heat, "after set_diffusivity Kd_heat", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
+      call hchksum(Kd_salt, "after set_diffusivity Kd_salt", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
+    endif
 
-  if (CS%useKPP) then
     call cpu_clock_begin(id_clock_kpp)
     ! total vertical viscosity in the interior is represented via visc%Kv_shear
 
@@ -730,10 +730,10 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     ent_s(i,j,1) = 0.0 ; ent_s(i,j,nz+1) = 0.0
     ent_t(i,j,1) = 0.0 ; ent_t(i,j,nz+1) = 0.0
   enddo ; enddo
-  !$OMP parallel do default(shared)  private(hval)
+  !$OMP parallel do default(shared)  private(I_hval)
   do K=2,nz ; do j=js,je ; do i=is,ie
-    hval=1.0/(h_neglect + 0.5*(h(i,j,k-1) + h(i,j,k)))
-    ent_s(i,j,K) = (GV%Z_to_H**2) * dt * hval * Kd_int(i,j,K)
+    I_hval = 1.0 / (h_neglect + 0.5*(h(i,j,k-1) + h(i,j,k)))
+    ent_s(i,j,K) = (GV%Z_to_H**2) * dt * I_hval * Kd_int(i,j,K)
     ent_t(i,j,K) = ent_s(i,j,K)
   enddo ; enddo ; enddo
   if (showCallTree) call callTree_waypoint("done setting ent_s and ent_t from Kd_int (diabatic)")
@@ -1133,8 +1133,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   real :: h_neglect2   ! h_neglect^2 [H2 ~> m2 or kg2 m-4]
   real :: add_ent      ! Entrainment that needs to be added when mixing tracers
                        ! [H ~> m or kg m-2]
-  real :: eaval        ! eaval is 2*ea at velocity grid points [H ~> m or kg m-2]
-  real :: hval         ! hval is 2*h at velocity grid points [H ~> m or kg m-2]
+  real :: I_hval       ! The inverse of the thicknesses averaged to interfaces [H-1 ~> m-1 or m2 kg-1]
   real :: h_tr         ! h_tr is h at tracer points with a tiny thickness
                        ! added to ensure positive definiteness [H ~> m or kg m-2]
   real :: Tr_ea_BBL    ! The diffusive tracer thickness in the BBL that is
@@ -1218,7 +1217,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
   ! Set diffusivities for heat and salt separately
 
-  ! Add contribution from double diffusion
+  ! Add contributions from double diffusion
   if (CS%double_diffuse) then
     !$OMP parallel do default(shared)
     do K=1,nz+1 ; do j=js,je ; do i=is,ie
@@ -1295,30 +1294,6 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
       call MOM_thermovar_chksum("after KPP_applyNLT ", tv, G)
     endif
   endif ! endif for KPP
-
-  ! This is the "old" method for applying differential diffusion.
-  ! Changes: tv%T, tv%S
-  if (CS%double_diffuse .and. associated(tv%T) .and. (.not.CS%use_CVMix_ddiff)) then
-
-    call cpu_clock_begin(id_clock_differential_diff)
-    !### I think that this step causes double diffusion to be double counted.
-    call differential_diffuse_T_S(h, tv%T, tv%S, Kd_extra_T, Kd_extra_S, dt, G, GV)
-    call cpu_clock_end(id_clock_differential_diff)
-
-    if (showCallTree) call callTree_waypoint("done with differential_diffuse_T_S (diabatic)")
-    if (CS%debugConservation) call MOM_state_stats('differential_diffuse_T_S', u, v, h, tv%T, tv%S, G, GV, US)
-
-    ! increment heat and salt diffusivity.
-    ! CS%useKPP==.true. already has extra_T and extra_S included
-    if (.not. CS%useKPP) then
-      !$OMP parallel do default(shared)
-      do K=2,nz ; do j=js,je ; do i=is,ie
-        Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_extra_T(i,j,K)
-        Kd_salt(i,j,K) = Kd_salt(i,j,K) + Kd_extra_S(i,j,K)
-      enddo ; enddo ; enddo
-    endif
-
-  endif
 
   ! Calculate vertical mixing due to convection (computed via CVMix)
   if (CS%use_CVMix_conv) then
@@ -1455,11 +1430,11 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
       ent_s(i,j,1) = 0. ; ent_s(i,j,nz+1) = 0.
     enddo ; enddo
 
-    !$OMP parallel do default(shared) private(hval)
+    !$OMP parallel do default(shared) private(I_hval)
     do K=2,nz ; do j=js,je ; do i=is,ie
-      hval = 1.0 / (h_neglect + 0.5*(h(i,j,k-1) + h(i,j,k)))
-      ent_t(i,j,K) = (GV%Z_to_H**2) * dt * hval * Kd_heat(i,j,k)
-      ent_s(i,j,K) = (GV%Z_to_H**2) * dt * hval * Kd_salt(i,j,k)
+      I_hval = 1.0 / (h_neglect + 0.5*(h(i,j,k-1) + h(i,j,k)))
+      ent_t(i,j,K) = (GV%Z_to_H**2) * dt * I_hval * Kd_heat(i,j,k)
+      ent_s(i,j,K) = (GV%Z_to_H**2) * dt * I_hval * Kd_salt(i,j,k)
     enddo ; enddo ; enddo
     if (showCallTree) call callTree_waypoint("done setting ent_t and ent_t from Kd_heat and " //&
                                              "Kd_salt (diabatic_ALE)")
@@ -1551,26 +1526,9 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
           ent_s(i,j,K) = ent_s(i,j,K) + add_ent
         endif
-
-        if (CS%double_diffuse) then ; if (Kd_extra_S(i,j,k) > 0.0) then
-          add_ent = ((dt * Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
-                     (0.5 * (h(i,j,k-1) + h(i,j,k)) + h_neglect)
-          ent_s(i,j,K) = ent_s(i,j,K) + add_ent
-        endif ; endif
       enddo ; enddo
     enddo
-  elseif (CS%double_diffuse .and. .not.CS%mix_boundary_tracers) then  ! extra diffusivity for passive tracers
-    !$OMP parallel do default(shared) private(add_ent)
-    do k=nz,2,-1 ; do j=js,je ; do i=is,ie
-      if (Kd_extra_S(i,j,k) > 0.0) then
-        add_ent = ((dt * Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
-           (0.5 * (h(i,j,k-1) + h(i,j,k)) + h_neglect)
-      else
-        add_ent = 0.0
-      endif
-      ent_s(i,j,K) = ent_s(i,j,K) + add_ent
-    enddo ; enddo ; enddo
-  endif  ! (CS%mix_boundary_tracers)
+  endif  ! (CS%mix_boundary_tracer_ALE)
 
   ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
   call call_tracer_column_fns(h_prebound, h, ent_s(:,:,1:nz), ent_s(:,:,2:nz+1), fluxes, Hml, dt, &
