@@ -21,7 +21,6 @@ use MOM_remapping,             only : remapping_CS, initialize_remapping
 use MOM_remapping,             only : extract_member_remapping_CS, build_reconstructions_1d
 use MOM_remapping,             only : average_value_ppoly, remappingSchemesDoc, remappingDefaultScheme
 use MOM_remapping,             only : remapping_core_h
-use MOM_regridding,            only : check_grid_def
 use MOM_tracer_registry,       only : tracer_registry_type, tracer_type
 use MOM_unit_scaling,          only : unit_scale_type
 use MOM_verticalGrid,          only : verticalGrid_type

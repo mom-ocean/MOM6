@@ -140,7 +140,7 @@ public getCoordinateResolution, getCoordinateInterfaces
 public getCoordinateUnits, getCoordinateShortName, getStaticThickness
 public DEFAULT_COORDINATE_MODE
 public get_zlike_CS, get_sigma_CS, get_rho_CS
-public check_grid_def
+
 !> Documentation for coordinate options
 character(len=*), parameter, public :: regriddingCoordinateModeDoc = &
                  " LAYER - Isopycnal or stacked shallow water layers\n"//&
