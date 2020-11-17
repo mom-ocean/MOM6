@@ -37,7 +37,12 @@ The directory tree is::
   │   ├── coupled_driver
   │   ├── dynamic
   │   ├── dynamic_symmetric
+  │   ├── external
+  │   │   ├── GFDL_ocean_BGC
+  │   │   └── ODA_hooks
   │   ├── ice_solo_driver
+  │   ├── mct_driver
+  │   ├── nuopc_driver
   │   ├── solo_driver
   │   └── unit_drivers
   ├── docs
@@ -84,6 +89,14 @@ The directory tree is::
   be included at compile time. If neither is used then a `MOM_memory.h` file
   specific to the model configuration must be present - this is known as a
   "static" compile with fixed layout and domain shape.
+
+`external/`
+  Contains "null" modules providing the API to optional components to use
+  with MOM6. Currently available are ocean data assimilation (`ODA_hooks`) and
+  the GFDL ocean bio-geochemistry model (`GFDL_ocean_BGC`). When building
+  MOM6 in stand-alone ocean-only mode these modules should be compiled in.
+  To use the actual ODA or BGC, add the appropriate source to the search
+  paths .
 
 `solo_driver/`
   This driver produces an ocean-only executable with no other coupled

@@ -94,6 +94,9 @@ type, public :: bkgnd_mixing_cs ; private
              !! against gravity is uniformly distributed throughout the column. Whereas, kd=kd_0*e,
              !! as in the original version, concentrates buoyancy work in regions of strong stratification.
   logical :: bulkmixedlayer !< If true, a refined bulk mixed layer scheme is used
+  logical :: Kd_via_Kdml_bug !< If true and KDML /= KD and a number of other higher precedence
+                   !! options are not used, the background diffusivity is set incorrectly using a
+                   !! bug that was introduced in March, 2018.
   logical :: debug !< If true, turn on debugging in this module
   ! Diagnostic handles and pointers
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that regulates diagnostic output
@@ -159,8 +162,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
     ! Check that Kdml is not set when using bulk mixed layer
     call get_param(param_file, mdl, "KDML", CS%Kdml, default=-1.)
     if (CS%Kdml>0.) call MOM_error(FATAL, &
-                 "bkgnd_mixing_init: KDML cannot be set when using"// &
-                 "bulk mixed layer.")
+                 "bkgnd_mixing_init: KDML cannot be set when using bulk mixed layer.")
     CS%Kdml = CS%Kd ! This is not used with a bulk mixed layer, but also cannot be a NaN.
   else
     call get_param(param_file, mdl, "KDML", CS%Kdml, &
@@ -235,16 +237,13 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
                  units="nondim", default=1.0)
 
   if (CS%Bryan_Lewis_diffusivity .or. CS%horiz_varying_background) then
-
     prandtl_bkgnd_comp = CS%prandtl_bkgnd
-    if (CS%Kd /= 0.0) prandtl_bkgnd_comp = Kv/CS%Kd
+    if (CS%Kd /= 0.0) prandtl_bkgnd_comp = Kv / CS%Kd
 
     if ( abs(CS%prandtl_bkgnd - prandtl_bkgnd_comp)>1.e-14) then
-      call MOM_error(FATAL,"set_diffusivity_init: The provided KD, KV,"//&
-                           "and PRANDTL_BKGND values are incompatible. The following "//&
-                           "must hold: KD*PRANDTL_BKGND==KV")
+      call MOM_error(FATAL, "bkgnd_mixing_init: The provided KD, KV and PRANDTL_BKGND values "//&
+                            "are incompatible. The following must hold: KD*PRANDTL_BKGND==KV")
     endif
-
   endif
 
   call get_param(param_file, mdl, "HENYEY_IGW_BACKGROUND", CS%Henyey_IGW_background, &
@@ -262,7 +261,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
 
   if (CS%Kd>0.0 .and. (trim(CS%bkgnd_scheme_str)=="BRYAN_LEWIS_DIFFUSIVITY" .or.&
                           trim(CS%bkgnd_scheme_str)=="HORIZ_VARYING_BACKGROUND" )) then
-    call MOM_error(WARNING, "set_diffusivity_init: a nonzero constant background "//&
+    call MOM_error(WARNING, "bkgnd_mixing_init: a nonzero constant background "//&
          "diffusivity (KD) is specified along with "//trim(CS%bkgnd_scheme_str))
   endif
 
@@ -290,6 +289,16 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
 
   if (CS%Henyey_IGW_background .and. CS%Kd_tanh_lat_fn) call MOM_error(FATAL, &
     "MOM_bkgnd_mixing: KD_TANH_LAT_FN can not be used with HENYEY_IGW_BACKGROUND.")
+
+  CS%Kd_via_Kdml_bug = .false.
+  if ((CS%Kd /= CS%Kdml) .and. .not.(CS%Kd_tanh_lat_fn .or. CS%bulkmixedlayer .or. &
+                                     CS%Henyey_IGW_background .or. CS%Henyey_IGW_background_new .or. &
+                                     CS%horiz_varying_background .or. CS%Bryan_Lewis_diffusivity)) then
+    call get_param(param_file, mdl, "KD_BACKGROUND_VIA_KDML_BUG", CS%Kd_via_Kdml_bug, &
+                 "If true and KDML /= KD and several other conditions apply, the background "//&
+                 "diffusivity is set incorrectly using a bug that was introduced in March, 2018.", &
+                 default=.true.)  ! The default should be changed to false and this parameter obsoleted.
+  endif
 
 !  call closeParameterBlock(param_file)
 
@@ -470,14 +479,20 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
       do i=is,ie ; depth(i) = 0.0 ; enddo
       do k=1,nz ; do i=is,ie
         depth_c = depth(i) + 0.5*GV%H_to_Z*h(i,j,k)
-        !### These two lines should update Kd_lay, not Kd_int, but correcting them could change answers.
-        ! They were correctly working on the same variables until MOM6 commit 7a818716, which was
-        ! a part of PR#750 from March 26, 2018.  The fact that this bug was not detected when it
-        ! was introduced suggests that this code is not exercised very much.
-        if (depth_c <= CS%Hmix) then ; Kd_int(i,K) = CS%Kdml !### Should be Kd_lay(i,k) = CS%Kdml
-        elseif (depth_c >= 2.0*CS%Hmix) then ; Kd_int(i,K) = Kd_sfc(i) !### Kd_lay(i,k) = Kd_sfc(i)
+        if (CS%Kd_via_Kdml_bug) then
+          ! These two lines should update Kd_lay, not Kd_int.  They were correctly working on the
+          ! same variables until MOM6 commit 7a818716 (PR#750), which was added on March 26, 2018.
+          if (depth_c <= CS%Hmix) then ; Kd_int(i,K) = CS%Kdml
+          elseif (depth_c >= 2.0*CS%Hmix) then ; Kd_int(i,K) = Kd_sfc(i)
+          else
+            Kd_lay(i,k) = ((Kd_sfc(i) - CS%Kdml) * I_Hmix) * depth_c + (2.0*CS%Kdml - Kd_sfc(i))
+          endif
         else
-          Kd_lay(i,k) = ((Kd_sfc(i) - CS%Kdml) * I_Hmix) * depth_c + (2.0*CS%Kdml - Kd_sfc(i))
+          if (depth_c <= CS%Hmix) then ; Kd_lay(i,k) = CS%Kdml
+          elseif (depth_c >= 2.0*CS%Hmix) then ; Kd_lay(i,k) = Kd_sfc(i)
+          else
+            Kd_lay(i,k) = ((Kd_sfc(i) - CS%Kdml) * I_Hmix) * depth_c + (2.0*CS%Kdml - Kd_sfc(i))
+          endif
         endif
 
         depth(i) = depth(i) + GV%H_to_Z*h(i,j,k)
@@ -522,7 +537,7 @@ subroutine check_bkgnd_scheme(CS, str)
   if (trim(CS%bkgnd_scheme_str)=="none") then
     CS%bkgnd_scheme_str = str
   else
-    call MOM_error(FATAL, "set_diffusivity_init: Cannot activate both "//trim(str)//" and "//&
+    call MOM_error(FATAL, "bkgnd_mixing_init: Cannot activate both "//trim(str)//" and "//&
                    trim(CS%bkgnd_scheme_str)//".")
   endif
 

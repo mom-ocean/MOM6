@@ -90,7 +90,7 @@ AS_IF([test -n "$NC_CONFIG"],
   [AC_MSG_ERROR([Could not find nc-config.])])
 
 AX_FC_CHECK_MODULE([netcdf],
-  [], [AC_MSG_ERROR([Could not find FMS library.])])
+  [], [AC_MSG_ERROR([Could not find netcdf module.])])
 AX_FC_CHECK_LIB([netcdff], [nf_create], [netcdf],
   [], [AC_MSG_ERROR([Could not link netcdff library.])]
 )
