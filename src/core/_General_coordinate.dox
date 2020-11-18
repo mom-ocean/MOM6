@@ -1,0 +1,76 @@
+/*! \page General_Coordinate General coordinate equations
+
+Transforming to a vertical coordinate \f$r(z,x,y,t)\f$, with \f$\dot{r} = \frac{\partial r}{\partial t}\f$ ...
+
+The Boussinesq hydrostatic equations of motion in general-coordinate
+\f$r\f$ are:
+
+\f{eqnarray}
+\label{html:r-equations}\notag \\
+\rho_0 \left( \frac{\partial \mathbf{u}}{\partial t} + ( f + \zeta ) \, \hat{\mathbf{z}} \times \mathbf{u} + \dot{r} \, \frac{\partial \mathbf{u}}{\partial r} + \nabla_r \, K \right) &= -\nabla_r \, p - \rho \nabla_r \, \Phi + \boldsymbol{\mathcal{F}}
+&\mbox{momentum} \label{eq:r-horz-momentum} \\
+\rho \, \frac{\partial \Phi}{\partial r} + \frac{\partial p}{\partial r} &= 0
+&\mbox{hydrostatic} \label{eq:r-hydrostatic-equation} \\
+\frac{\partial z_r }{\partial t} + \nabla_r \cdot \, \left( z_r \, \mathbf{u} \right) + \frac{\partial ( z_r \, \dot{r} ) }{\partial r} &= 0
+&\mbox{thickness} \label{eq:r-non-divergence} \\
+\frac{\partial ( \theta \, z_r ) }{\partial t} + \nabla_r \cdot \left( \theta z_r \, \mathbf{u} \right) + \frac{\partial ( \theta \, z_r \, \dot{r} )}{\partial r} &= z_r \boldsymbol{\mathcal{N}}_\theta^\gamma - \frac{\partial J_\theta^{(z)}}{\partial r}
+&\mbox{potential temp} \label{eq:r-temperature-equation} \\
+\frac{\partial ( S \, z_r) }{\partial t} + \nabla_r \cdot \left( S \, z_r \, \mathbf{u} \right) + \frac{\partial ( S \, z_r \, \dot{r} )}{\partial r} &= z_r \boldsymbol{\mathcal{N}}_S^\gamma - \frac{\partial J_S^{(z)}}{\partial r}
+&\mbox{salinity} \label{eq:r-salinity-equation} \\
+\rho &= \rho\left( S, \theta, -g \rho_0 z(r) \right)
+&\mbox{equation of state.}
+\f}
+
+The time derivatives are now computed with the generalized vertical
+coordinate fixed rather than the geopotential.  We introduced the
+specific thickness, \f$z_r = \partial z/\partial r\f$, which measures the
+inverse vertical stratification of the vertical coordinate surfaces.
+
+ Similar to \cite bleck2002, MOM6 is discretized in the vertical by
+ integrating between surfaces of \f$r\f$ to yield layer equations where the
+ layer thickness is \f$h = \int z_r dr\f$ and variables are treated as finite
+ volume averages over each layer:
+
+\f{eqnarray}
+\label{html:h-equations}\notag \\
+\rho_0 \left( \frac{\partial \mathbf{u}}{\partial t} + \frac{( f + \zeta )}{h} \,
+\hat{\mathbf{z}} \times h \, \mathbf{u} + \underbrace{ \dot{r} \,
+\frac{\partial \mathbf{u}}{\partial r} } + \nabla_r K \right) &= -\nabla_r \, p -
+\rho \nabla_r \, \Phi + \boldsymbol{\mathcal{F}}
+&\mbox{momentum} \label{eq:h-horz-momentum} \\
+\rho \, \delta_r \Phi + \delta_r p &= 0
+&\mbox{hydrostatic} \label{eq:h-hydrostatic-equation} \\
+\frac{\partial h}{\partial t} + \nabla_r \cdot \left( h \, \mathbf{u} \right) +
+\underbrace{ \delta_r ( z_r \dot{r} ) } &= 0
+&\mbox{thickness} \label{eq:h-thickness-equation} \\
+\frac{\partial ( \theta \, h )}{\partial t} + \nabla_r \cdot \left( \theta h \,
+\mathbf{u} \right) + \underbrace{ \delta_r ( \theta \, z_r \dot{r} ) } &=
+h \boldsymbol{\mathcal{N}}_\theta^\gamma - \delta_r J_\theta^{(z)}
+&\mbox{potential temp} \label{eq:h-temperature-equation} \\
+\frac{\partial ( S \, h )}{\partial t} + \nabla_r \cdot \left( S \, h \,
+\mathbf{u} \right) + \underbrace{ \delta_r ( S \, z_r \dot{r} ) } &=
+h \boldsymbol{\mathcal{N}}_S^\gamma - \delta_r J_S^{(z)}
+&\mbox{salinity} \label{eq:h-salinity-equation} \\
+\rho &= \rho\left( S, \theta, -g \rho_0 z(r) \right)
+&\mbox{equation of state,} \label{eq:h-equation-of-state}
+\f}
+
+where \f$\delta_{r} = \mathrm{d}r \, (\partial/\partial r)\f$ is the discrete
+vertical difference operator. The pressure gradient accelerations
+in the momentum equation \eqref{eq:h-horz-momentum,h-equations,momentum} are written in
+continuous-in-the-vertical form for brevity; the exact discretization
+is detailed in \cite adcroft2008. The MOM6 time-stepping algorithm
+integrates the above layer-averaged equations forward allowing the
+vertical grid to follow the motion, i.e. \f$\dot{r}=0\f$, so that the underbraced
+terms are dropped. This approach is generally known as the Lagrangian
+method but here the Lagrangian method is used only in the vertical
+direction. After each Lagrangian step, a remap step is applied that
+generates a new vertical grid of the user's choosing. The ocean state is
+then mapped from the old to the new grid. The physical state is not meant
+to change during the remap step, yet truncation errors make remapping
+imperfect. We employ high-order accurate reconstructions to minimize
+errors introduced during the remap step (\cite white2008, \cite white2009). The
+connection between time-stepping and remapping is described in
+section \ref ALE_Timestep.
+
+*/
