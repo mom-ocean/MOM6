@@ -237,16 +237,13 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
                  units="nondim", default=1.0)
 
   if (CS%Bryan_Lewis_diffusivity .or. CS%horiz_varying_background) then
-
     prandtl_bkgnd_comp = CS%prandtl_bkgnd
-    if (CS%Kd /= 0.0) prandtl_bkgnd_comp = Kv/CS%Kd
+    if (CS%Kd /= 0.0) prandtl_bkgnd_comp = Kv / CS%Kd
 
     if ( abs(CS%prandtl_bkgnd - prandtl_bkgnd_comp)>1.e-14) then
-      call MOM_error(FATAL,"set_diffusivity_init: The provided KD, KV,"//&
-                           "and PRANDTL_BKGND values are incompatible. The following "//&
-                           "must hold: KD*PRANDTL_BKGND==KV")
+      call MOM_error(FATAL, "bkgnd_mixing_init: The provided KD, KV and PRANDTL_BKGND values "//&
+                            "are incompatible. The following must hold: KD*PRANDTL_BKGND==KV")
     endif
-
   endif
 
   call get_param(param_file, mdl, "HENYEY_IGW_BACKGROUND", CS%Henyey_IGW_background, &
@@ -264,7 +261,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
 
   if (CS%Kd>0.0 .and. (trim(CS%bkgnd_scheme_str)=="BRYAN_LEWIS_DIFFUSIVITY" .or.&
                           trim(CS%bkgnd_scheme_str)=="HORIZ_VARYING_BACKGROUND" )) then
-    call MOM_error(WARNING, "set_diffusivity_init: a nonzero constant background "//&
+    call MOM_error(WARNING, "bkgnd_mixing_init: a nonzero constant background "//&
          "diffusivity (KD) is specified along with "//trim(CS%bkgnd_scheme_str))
   endif
 
@@ -540,7 +537,7 @@ subroutine check_bkgnd_scheme(CS, str)
   if (trim(CS%bkgnd_scheme_str)=="none") then
     CS%bkgnd_scheme_str = str
   else
-    call MOM_error(FATAL, "set_diffusivity_init: Cannot activate both "//trim(str)//" and "//&
+    call MOM_error(FATAL, "bkgnd_mixing_init: Cannot activate both "//trim(str)//" and "//&
                    trim(CS%bkgnd_scheme_str)//".")
   endif
 
