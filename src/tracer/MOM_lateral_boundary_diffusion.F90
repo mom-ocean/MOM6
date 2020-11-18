@@ -6,28 +6,24 @@ module MOM_lateral_boundary_diffusion
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_cpu_clock,             only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
-use MOM_cpu_clock,             only : CLOCK_MODULE, CLOCK_ROUTINE
+use MOM_cpu_clock,             only : CLOCK_MODULE
 use MOM_checksums,             only : hchksum
 use MOM_domains,               only : pass_var, sum_across_PEs
 use MOM_diag_mediator,         only : diag_ctrl, time_type
 use MOM_diag_mediator,         only : post_data, register_diag_field
 use MOM_diag_vkernels,         only : reintegrate_column
-use MOM_error_handler,         only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
-use MOM_file_parser,           only : get_param, log_version, param_file_type, log_param
-use MOM_file_parser,           only : openParameterBlock, closeParameterBlock
-use MOM_io,                    only : file_exists, field_size, MOM_read_data, slasher, field_exists
+use MOM_error_handler,         only : MOM_error, FATAL, is_root_pe
+use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
 use MOM_remapping,             only : remapping_CS, initialize_remapping
-use MOM_remapping,             only : extract_member_remapping_CS, build_reconstructions_1d
-use MOM_remapping,             only : average_value_ppoly, remappingSchemesDoc, remappingDefaultScheme
-use MOM_remapping,             only : remapping_core_h
+use MOM_remapping,             only : extract_member_remapping_CS, remapping_core_h
+use MOM_remapping,             only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_tracer_registry,       only : tracer_registry_type, tracer_type
 use MOM_unit_scaling,          only : unit_scale_type
 use MOM_verticalGrid,          only : verticalGrid_type
 use MOM_CVMix_KPP,             only : KPP_get_BLD, KPP_CS
 use MOM_energetic_PBL,         only : energetic_PBL_get_MLD, energetic_PBL_CS
 use MOM_diabatic_driver,       only : diabatic_CS, extract_diabatic_member
-use MOM_string_functions,      only : extract_integer, extract_real, extractWord
 use iso_fortran_env,           only : stdout=>output_unit, stderr=>error_unit
 
 implicit none ; private
@@ -45,16 +41,16 @@ type, public :: lbd_CS ; private
   logical :: debug           !< If true, write verbose checksums for debugging.
   integer :: deg             !< Degree of polynomial reconstruction.
   integer :: surface_boundary_scheme !< Which boundary layer scheme to use
-                                     !! 1. ePBL; 2. KPP
-  logical :: limiter                 !< Controls whether a flux limiter is applied in the
-                                     !! native grid (default is true).
-  logical :: limiter_remap           !< Controls whether a flux limiter is applied in the
-                                     !! remapped grid (default is false).
-  logical :: linear                  !< If True, apply a linear transition at the base/top of the boundary.
-                                     !! The flux will be fully applied at k=k_min and zero at k=k_max.
-  real    :: H_subroundoff           !< A thickness that is so small that it can be added to a thickness of
-                        !! Angstrom or larger without changing it at the bit level [H ~> m or kg m-2].
-                        !! If Angstrom is 0 or exceedingly small, this is negligible compared to 1e-17 m.
+                             !! 1. ePBL; 2. KPP
+  logical :: limiter         !< Controls whether a flux limiter is applied in the
+                             !! native grid (default is true).
+  logical :: limiter_remap   !< Controls whether a flux limiter is applied in the
+                             !! remapped grid (default is false).
+  logical :: linear          !< If True, apply a linear transition at the base/top of the boundary.
+                             !! The flux will be fully applied at k=k_min and zero at k=k_max.
+  real    :: H_subroundoff   !< A thickness that is so small that it can be added to a thickness of
+                             !! Angstrom or larger without changing it at the bit level [H ~> m or kg m-2].
+                             !! If Angstrom is 0 or exceedingly small, this is negligible compared to 1e-17 m.
   type(remapping_CS)              :: remap_CS          !< Control structure to hold remapping configuration.
   type(KPP_CS),           pointer :: KPP_CSp => NULL() !< KPP control structure needed to get BLD.
   type(energetic_PBL_CS), pointer :: energetic_PBL_CSp => NULL()  !< ePBL control structure needed to get BLD.
@@ -64,7 +60,8 @@ end type lbd_CS
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-character(len=40) :: mdl = "MOM_lateral_boundary_diffusion"       !< Name of this module
+character(len=40) :: mdl = "MOM_lateral_boundary_diffusion" !< Name of this module
+integer :: id_clock_lbd                                     !< CPU clock for lbd
 
 contains
 
@@ -80,17 +77,10 @@ logical function lateral_boundary_diffusion_init(Time, G, GV, param_file, diag, 
   type(lbd_CS),                     pointer       :: CS            !< Lateral boundary mixing control structure
 
   ! local variables
-  character(len=80)  :: string, varName    ! Temporary strings
-  character(len=200) :: inputdir, fileName ! Temporary strings
-  character(len=320) :: message            ! Temporary strings
-  character(len=12)  :: expected_units     ! Temporary strings
-  integer :: ke, nk ! Number of levels in the LBD and native grids, respectively
-  logical :: boundary_extrap ! controls if boundary extrapolation is used in the LBD code
-  logical :: ierr
-  real    :: tmpReal
-  integer :: nzf(4)
-  real, dimension(:), allocatable :: z_max  ! Maximum interface depths [H ~> m or kg m-2] or other
-                                            ! units depending on the coordinate
+  character(len=80)  :: string ! Temporary strings
+  integer :: ke, nk            ! Number of levels in the LBD and native grids, respectively
+  logical :: boundary_extrap   ! controls if boundary extrapolation is used in the LBD code
+
   if (ASSOCIATED(CS)) then
     call MOM_error(FATAL, "lateral_boundary_diffusion_init called with associated control structure.")
     return
@@ -105,7 +95,6 @@ logical function lateral_boundary_diffusion_init(Time, G, GV, param_file, diag, 
   call get_param(param_file, mdl, "USE_LATERAL_BOUNDARY_DIFFUSION", lateral_boundary_diffusion_init, &
                  "If true, enables the lateral boundary tracer's diffusion module.", &
                  default=.false.)
-
   if (.not. lateral_boundary_diffusion_init) return
 
   allocate(CS)
@@ -141,14 +130,21 @@ logical function lateral_boundary_diffusion_init(Time, G, GV, param_file, diag, 
   call get_param(param_file, mdl, "LBD_DEBUG", CS%debug, &
                  "If true, write out verbose debugging data in the LBD module.", &
                  default=.false.)
+
+  id_clock_lbd = cpu_clock_id('(Ocean LBD)', grain=CLOCK_MODULE)
+
 end function lateral_boundary_diffusion_init
 
 !> Driver routine for calculating lateral diffusive fluxes near the top and bottom boundaries.
-!! Diffusion is applied layer by layer using only information from neighboring cells.
+!! Diffusion is applied using only information from neighboring cells, as follows:
+!! 1) remap tracer to a z* grid (LBD grid)
+!! 2) calculate diffusive tracer fluxes (F) in the LBD grid using a layer by layer approach
+!! 3) remap fluxes to the native grid
+!! 4) update tracer by adding the divergence of F
 subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
-  type(ocean_grid_type),                intent(inout) :: G   !< Grid type
-  type(verticalGrid_type),              intent(in)    :: GV  !< ocean vertical grid structure
-  type(unit_scale_type),                intent(in)    :: US  !< A dimensional unit scaling type
+  type(ocean_grid_type),                intent(inout) :: G      !< Grid type
+  type(verticalGrid_type),              intent(in)    :: GV     !< ocean vertical grid structure
+  type(unit_scale_type),                intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                         intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G)),    intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points [L2 ~> m2]
@@ -159,10 +155,7 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   type(lbd_CS),                         pointer       :: CS     !< Control structure for this module
 
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G)) :: hbl                           !< bnd. layer depth [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G),CS%deg+1) :: ppoly0_coefs !< Coefficients of polynomial
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G),2)        :: ppoly0_E     !< Edge values from reconstructions
-  real, dimension(SZK_(G),CS%deg+1)                 :: ppoly_S      !< Slopes from reconstruction (placeholder)
+  real, dimension(SZI_(G),SZJ_(G))          :: hbl         !< bnd. layer depth [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: uFlx        !< Zonal flux of tracer [conc m^3]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vFlx        !< Meridional flux of tracer [conc m^3]
   real, dimension(SZIB_(G),SZJ_(G))         :: uwork_2d    !< Layer summed u-flux transport
@@ -176,11 +169,11 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   real, dimension(SZI_(G),SZJ_(G))          :: tracer_int, tracer_end
                                                            !< integrated tracer in the native grid, before and after
                                                            ! LBD is applied.
-  integer :: remap_method !< Reconstruction method
   integer :: i, j, k, m   !< indices to loop over
   real    :: Idt          !< inverse of the time step [s-1]
-  real    :: tmpReal, tmp1, tmp2 !< temporary variables
+  real    :: tmp1, tmp2 !< temporary variables
 
+  call cpu_clock_begin(id_clock_lbd)
   Idt = 1./dt
   if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G, US, m_to_BLD_units=GV%m_to_H)
   if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US, &
@@ -252,7 +245,7 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       tmp2 = SUM(tracer_end)
       call sum_across_PEs(tmp1)
       call sum_across_PEs(tmp2)
-      if (is_root_pe()) write(*,*)'Total '//tracer%name//' before/after:', tmp1, tmp2
+      if (is_root_pe()) write(*,*)'Total '//tracer%name//' before/after LBD:', tmp1, tmp2
     endif
 
     ! Post the tracer diagnostics
@@ -301,6 +294,8 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     endif
 
   enddo
+
+  call cpu_clock_end(id_clock_lbd)
 
 end subroutine lateral_boundary_diffusion
 
@@ -579,7 +574,7 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   type(lbd_CS),          pointer       :: CS       !< Lateral diffusion control structure
                                                       !! the boundary layer
   ! Local variables
-  real, dimension(:), allocatable ::  dz_top
+  real, dimension(:), allocatable :: dz_top    !< The LBD z grid to be created                                    [L ~ m]
   real, dimension(:), allocatable :: phi_L_z   !< Tracer values in the ztop grid (left)                            [conc]
   real, dimension(:), allocatable :: phi_R_z   !< Tracer values in the ztop grid (right)                           [conc]
   real, dimension(:), allocatable :: F_layer_z !< Diffusive flux at U- or V-point in the ztop grid [H L2 conc ~> m3 conc]
@@ -601,8 +596,8 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   real    :: hbl_min                 !< minimum BLD (left and right)                          [m]
   real    :: wgt                     !< weight to be used in the linear transition to the interior [nondim]
   real    :: a                       !< coefficient to be used in the linear transition to the interior [nondim]
-  real    :: tmp1, tmp2
-  integer :: nk
+  real    :: tmp1, tmp2              !< dummy variables
+  integer :: nk                      !< number of layers in the LBD grid
 
   F_layer(:) = 0.0
   if (hbl_L == 0. .or. hbl_R == 0.) then
@@ -611,7 +606,6 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
 
   ! Define vertical grid, dz_top
   call merge_interfaces(ke, h_L(:), h_R(:), hbl_L, hbl_R, CS%H_subroundoff, dz_top)
-  !allocate(dz_top(100)); dz_top(:) = 5.0
   nk = SIZE(dz_top)
 
   ! allocate arrays
@@ -633,7 +627,6 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
     k_bot_diff = (k_bot_max - k_bot_min)
 
     ! tracer flux where the minimum BLD intersets layer
-    ! GMM, khtr_avg should be computed once khtr is 3D
     if ((CS%linear) .and. (k_bot_diff .gt. 1)) then
       ! apply linear decay at the base of hbl
       do k = k_bot_min,1,-1
@@ -1005,24 +998,28 @@ end function test_boundary_k_range
 !! The LBD framework accounts for the effects of diabatic mesoscale fluxes
 !! within surface and bottom boundary layers. Unlike the equivalent adiabatic
 !! fluxes, which is applied along neutral density surfaces, LBD is purely
-!! horizontal.
+!! horizontal. To assure that diffusive fluxes are strictly horizontal
+!! regardless of the vertical coordinate system, this method relies on
+!! regridding/remapping techniques.
 !!
-!! The bottom boundary layer fluxes remain to be implemented, although most
+!! The bottom boundary layer fluxes remain to be implemented, although some
 !! of the steps needed to do so have already been added and tested.
 !!
-!! Boundary lateral diffusion can be applied using one of the three methods:
+!! Boundary lateral diffusion is applied as follows:
 !!
-!! * [Method #1: Along layer](@ref section_method) (default);
-!! * [Method #2: Bulk layer](@ref section_method1);
+!! 1) remap tracer to a z* grid (LBD grid)
+!! 2) calculate diffusive tracer fluxes (F) in the LBD grid using a layer by layer approach (@ref section_method)
+!! 3) remap fluxes to the native grid
+!! 4) update tracer by adding the divergence of F
 !!
-!! A brief summary of these methods is provided below.
+!! \subsection section_method Along layer approach
 !!
-!! \subsection section_method1 Along layer approach (Method #1)
+!! Here diffusion is applied layer by layer using only information from neighboring cells.
 !!
-!! This is the recommended and more straight forward method where diffusion is
-!! applied layer by layer using only information from neighboring cells.
+!! Step #1: define vertical grid using interfaces and surface boundary layers from left and right
+!! columns (see merge_interfaces).
 !!
-!! Step #1: compute vertical indices containing boundary layer (boundary_k_range).
+!! Step #2: compute vertical indices containing boundary layer (boundary_k_range).
 !! For the TOP boundary layer, these are:
 !!
 !! k_top, k_bot, zeta_top, zeta_bot
@@ -1031,9 +1028,7 @@ end function test_boundary_k_range
 !!
 !! \f[ F_{k} = -KHTR \times h_{eff}(k) \times (\phi_R(k) - \phi_L(k)),  \f]
 !! where h_eff is the [harmonic mean](@ref section_harmonic_mean) of the layer thickness
-!! in the left and right columns. This method does not require a limiter since KHTR
-!! is already limted based on a diffusive CFL condition prior to the call of this
-!! module.
+!! in the left and right columns.
 !!
 !! Step #3: option to linearly decay the flux from k_bot_min to k_bot_max:
 !!
@@ -1042,44 +1037,9 @@ end function test_boundary_k_range
 !! layer depth (k_bot_min) and the lower interface of the layer containing the
 !! maximum layer depth (k_bot_max).
 !!
-!! \subsection section_method2 Bulk layer approach (Method #2)
-!!
-!! Apply the lateral boundary diffusive fluxes calculated from a 'bulk model'.This
-!! is a lower order representation (Kraus-Turner like approach) which assumes that
-!! eddies are acting along well mixed layers (i.e., eddies do not know care about
-!! vertical tracer gradients within the boundary layer).
-!!
-!! Step #1: compute vertical indices containing boundary layer (boundary_k_range).
-!! For the TOP boundary layer, these are:
-!!
-!! k_top, k_bot, zeta_top, zeta_bot
-!!
-!! Step #2: compute bulk averages (thickness weighted) tracer averages (phi_L and phi_R),
-!! then calculate the bulk diffusive flux (F_{bulk}):
-!!
-!! \f[ F_{bulk} = -KHTR \times h_{eff} \times (\phi_R - \phi_L),  \f]
-!! where h_eff is the [harmonic mean](@ref section_harmonic_mean) of the boundary layer depth
-!! in the left and right columns (\f[ HBL_L \f] and \f[ HBL_R \f], respectively).
-!!
-!! Step #3: decompose F_bulk onto individual layers:
-!!
-!! \f[ F_{layer}(k) = F_{bulk} \times h_{frac}(k) ,  \f]
-!!
-!! where h_{frac} is
-!!
-!! \f[ h_{frac}(k) = h_u(k) \times \frac{1}{\sum(h_u)}.  \f]
-!!
-!! h_u is the [harmonic mean](@ref section_harmonic_mean) of thicknesses at each layer.
-!! Special care (layer reconstruction) must be taken at k_min = min(k_botL, k_bot_R).
-!!
-!! Step #4: option to linearly decay the flux from k_bot_min to k_bot_max:
-!!
-!! If LBD_LINEAR_TRANSITION = True and k_bot_diff > 1, the diffusive flux will decay
-!! linearly between the top interface of the layer containing the minimum boundary
-!! layer depth (k_bot_min) and the lower interface of the layer containing the
-!! maximum layer depth (k_bot_max).
-!!
-!! Step #5: limit the tracer flux so that 1) only down-gradient fluxes are applied,
+!! Step #4: remap the fluxes back to the native grid. This is done at velocity points, whose vertical grid
+!! is determined using [harmonic mean](@ref section_harmonic_mean). To assure monotonicity,
+!! tracer fluxes are limited so that 1) only down-gradient fluxes are applied,
 !! and 2) the flux cannot be larger than F_max, which is defined using the tracer
 !! gradient:
 !!
