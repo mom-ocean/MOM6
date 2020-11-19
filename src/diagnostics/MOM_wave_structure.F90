@@ -58,6 +58,7 @@ type, public :: wave_structure_CS ; !private
                                    !! for internal tide for testing (BDM)
   real    :: int_tide_source_y     !< Y Location of generation site
                                    !! for internal tide for testing (BDM)
+  logical :: debug                 !! debugging prints
 
 end type wave_structure_CS
 
@@ -721,6 +722,8 @@ subroutine wave_structure_init(Time, G, param_file, diag, CS)
                  "X Location of generation site for internal tide", default=1.)
   call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
                  "Y Location of generation site for internal tide", default=1.)
+  call get_param(param_file, mdl, "DEBUG", CS%debug, &
+                 "debugging prints", default=.false.)
 
   CS%diag => diag
 
