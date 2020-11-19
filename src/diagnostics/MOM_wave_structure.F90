@@ -566,7 +566,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   if (CS%debug) call hchksum(cn, 'cn in wave_struct', G%HI, scale=US%L_T_to_m_s)
   if (CS%debug) call hchksum(CS%W_profile, 'Wprofile in wave_struct', G%HI, scale=US%L_T_to_m_s)
   if (CS%debug) call hchksum(CS%Uavg_profile, 'Uavg_profile in wave_struct', G%HI, scale=US%L_T_to_m_s)
-  
+
 end subroutine wave_structure
 
 !> Solves a tri-diagonal system Ax=y using either the standard
