@@ -58,7 +58,7 @@ type, public :: wave_structure_CS ; !private
                                    !! for internal tide for testing (BDM)
   real    :: int_tide_source_y     !< Y Location of generation site
                                    !! for internal tide for testing (BDM)
-  logical :: debug                 !! debugging prints
+  logical :: debug                 !< debugging prints
 
 end type wave_structure_CS
 
