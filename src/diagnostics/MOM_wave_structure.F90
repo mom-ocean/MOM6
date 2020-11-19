@@ -11,6 +11,7 @@ module MOM_wave_structure
 ! MOM_wave_speed by Hallberg, 2008.
 
 use MOM_debugging,     only : isnan => is_NaN
+use MOM_checksums,     only : chksum0, hchksum
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_EOS,           only : calculate_density_derivs
@@ -195,7 +196,13 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   Pi = (4.0*atan(1.0))
 
   S => tv%S ; T => tv%T
-  g_Rho0 = US%L_T_to_m_s**2 * GV%g_Earth / GV%Rho0
+  g_Rho0 = GV%g_Earth / GV%Rho0
+
+  if (CS%debug) call chksum0(g_Rho0, "g/rho0 in wave struct", &
+                             scale=US%Z_to_m*(US%s_to_T**2)*US%kg_m3_to_R)
+
+  if (CS%debug) call chksum0(freq, "freq in wave_struct", scale=US%s_to_T)
+
   cg_subRO = 1e-100*US%m_s_to_L_T  ! The hard-coded value here might need to increase.
   use_EOS = associated(tv%eqn_of_state)
 
@@ -267,7 +274,9 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
       !-----------------------------------
       if (G%mask2dT(i,j) > 0.5) then
 
-        lam = 1/(US%L_T_to_m_s**2 * cn(i,j)**2)
+        gprime(:) = 0.0 ! init gprime
+        pres(:) = 0.0 ! init pres
+        lam = 1/(cn(i,j)**2)
 
         ! Calculate drxh_sum
         if (use_EOS) then
@@ -386,7 +395,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
             do K=2,kc
               Igl(K) = 1.0/(gprime(K)*Hc(k)) ; Igu(K) = 1.0/(gprime(K)*Hc(k-1))
               z_int(K) = z_int(K-1) + Hc(k-1)
-              N2(K) = US%m_to_Z**2*gprime(K)/(0.5*(Hc(k)+Hc(k-1)))
+              N2(K) = gprime(K)/(0.5*(Hc(k)+Hc(k-1)))
             enddo
             ! Set stratification for surface and bottom (setting equal to nearest interface for now)
             N2(1) = N2(2) ; N2(kc+1) = N2(kc)
@@ -407,7 +416,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
             ! Frist, populate interior rows
             do K=3,kc-1
               row = K-1 ! indexing for TD matrix rows
-              gp_unscaled = US%m_to_Z*gprime(K)
+              gp_unscaled = gprime(K)
               lam_z(row) = lam*gp_unscaled
               a_diag(row) = gp_unscaled*(-Igu(K))
               b_diag(row) = gp_unscaled*(Igu(K)+Igl(K)) - lam_z(row)
@@ -419,14 +428,14 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
             enddo
             ! Populate top row of tridiagonal matrix
             K=2 ; row = K-1 ;
-            gp_unscaled = US%m_to_Z*gprime(K)
+            gp_unscaled = gprime(K)
             lam_z(row) = lam*gp_unscaled
             a_diag(row) = 0.0
             b_diag(row) = gp_unscaled*(Igu(K)+Igl(K)) - lam_z(row)
             c_diag(row) = gp_unscaled*(-Igl(K))
             ! Populate bottom row of tridiagonal matrix
             K=kc ; row = K-1
-            gp_unscaled = US%m_to_Z*gprime(K)
+            gp_unscaled = gprime(K)
             lam_z(row) = lam*gp_unscaled
             a_diag(row) = gp_unscaled*(-Igu(K))
             b_diag(row) = gp_unscaled*(Igu(K)+Igl(K)) - lam_z(row)
@@ -462,12 +471,11 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
                        !(including surface and bottom)
             w2avg = 0.0
             do k=1,nzm-1
-              dz(k) = US%Z_to_m*Hc(k)
+              dz(k) = Hc(k)
               w2avg = w2avg + 0.5*(w_strct(K)**2+w_strct(K+1)**2)*dz(k)
             enddo
-            !### Some mathematical cancellations could occur in the next two lines.
-            w2avg = w2avg / htot(i,j)
-            w_strct(:) = w_strct(:) / sqrt(htot(i,j)*w2avg*I_a_int)
+            ! correct renormalization:
+            w_strct(:) = w_strct(:) * sqrt(htot(i,j)*a_int/w2avg)
 
             ! Calculate vertical structure function of u (i.e. dw/dz)
             do K=2,nzm-1
@@ -478,10 +486,9 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
             u_strct(nzm) = (w_strct(nzm-1)-  w_strct(nzm))/dz(nzm-1)
 
             ! Calculate wavenumber magnitude
-            f2 = G%CoriolisBu(I,J)**2
-            !f2 = 0.25*US%s_to_T**2 *((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-            !    (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
-            Kmag2 = US%m_to_L**2 * (freq**2 - f2) / (cn(i,j)**2 + cg_subRO**2)
+            f2 = (0.25*(G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J-1) + &
+                        G%CoriolisBu(I,J-1) + G%CoriolisBu(I-1,J)))**2
+            Kmag2 = (freq**2 - f2) / (cn(i,j)**2 + cg_subRO**2)
 
             ! Calculate terms in vertically integrated energy equation
             int_dwdz2 = 0.0 ; int_w2 = 0.0 ; int_N2w2 = 0.0
@@ -489,16 +496,16 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
             w_strct2(1:nzm) = w_strct(1:nzm)**2
             ! vertical integration with Trapezoidal rule
             do k=1,nzm-1
-              int_dwdz2 = int_dwdz2 + 0.5*(u_strct2(K)+u_strct2(K+1)) * US%m_to_Z*dz(k)
-              int_w2    = int_w2    + 0.5*(w_strct2(K)+w_strct2(K+1)) * US%m_to_Z*dz(k)
-              int_N2w2  = int_N2w2  + 0.5*(w_strct2(K)*N2(K)+w_strct2(K+1)*N2(K+1)) * US%m_to_Z*dz(k)
+              int_dwdz2 = int_dwdz2 + 0.5*(u_strct2(K)+u_strct2(K+1)) * dz(k)
+              int_w2    = int_w2    + 0.5*(w_strct2(K)+w_strct2(K+1)) * dz(k)
+              int_N2w2  = int_N2w2  + 0.5*(w_strct2(K)*N2(K)+w_strct2(K+1)*N2(K+1)) * dz(k)
             enddo
 
             ! Back-calculate amplitude from energy equation
             if (present(En) .and. (freq**2*Kmag2 > 0.0)) then
               ! Units here are [R
               KE_term = 0.25*GV%Rho0*( ((freq**2 + f2) / (freq**2*Kmag2))*int_dwdz2 + int_w2 )
-              PE_term = 0.25*GV%Rho0*( int_N2w2 / (US%s_to_T*freq)**2 )
+              PE_term = 0.25*GV%Rho0*( int_N2w2 / freq**2 )
               if (En(i,j) >= 0.0) then
                 W0 = sqrt( En(i,j) / (KE_term + PE_term) )
               else
@@ -510,7 +517,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
               W_profile(:)    = W0*w_strct(:)
               ! dWdz_profile(:) = W0*u_strct(:)
               ! Calculate average magnitude of actual horizontal velocity over a period
-              Uavg_profile(:) = US%Z_to_L*abs(W0*u_strct(:)) * sqrt((freq**2 + f2) / (2.0*freq**2*Kmag2))
+              Uavg_profile(:) = abs(W0*u_strct(:)) * sqrt((freq**2 + f2) / (2.0*freq**2*Kmag2))
             else
               W_profile(:)    = 0.0
               ! dWdz_profile(:) = 0.0
@@ -522,7 +529,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
             CS%u_strct(i,j,1:nzm)     = u_strct(1:nzm)
             CS%W_profile(i,j,1:nzm)   = W_profile(1:nzm)
             CS%Uavg_profile(i,j,1:nzm)= Uavg_profile(1:nzm)
-            CS%z_depths(i,j,1:nzm)    = US%Z_to_m*z_int(1:nzm)
+            CS%z_depths(i,j,1:nzm)    = z_int(1:nzm)
             CS%N2(i,j,1:nzm)          = N2(1:nzm)
             CS%num_intfaces(i,j)      = nzm
           else
@@ -554,6 +561,11 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
     endif ; enddo ! if cn>0.0? ; i-loop
   enddo ! j-loop
 
+  if (CS%debug) call hchksum(CS%N2, 'N2 in wave_struct', G%HI, scale=US%s_to_T**2)
+  if (CS%debug) call hchksum(cn, 'cn in wave_struct', G%HI, scale=US%L_T_to_m_s)
+  if (CS%debug) call hchksum(CS%W_profile, 'Wprofile in wave_struct', G%HI, scale=US%L_T_to_m_s)
+  if (CS%debug) call hchksum(CS%Uavg_profile, 'Uavg_profile in wave_struct', G%HI, scale=US%L_T_to_m_s)
+  
 end subroutine wave_structure
 
 !> Solves a tri-diagonal system Ax=y using either the standard
