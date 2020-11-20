@@ -258,19 +258,28 @@ TAB_SIZE               = 2
 #                         "figure{4}= \anchor \1 \image html \1.png \"Fig.&nbsp;[\1]: \4\""
 
 # This allows doxygen passthrough of \eqref to html for mathjax
-ALIASES += eqref{1}="Eq. \\eqref{\1}"
+# Single reference within a math block
+ALIASES += eqref{1}="\latexonly\ref{\1}\endlatexonly\htmlonly&nbsp;\eqref{\1}\endhtmlonly\xmlonly \\eqref{\1}\endxmlonly"
 
 # Large math block with multiple references
 # TODO: We should be able to overload functions but recursion is happening? For now, the
 # second command creates a \eqref2 that is passed to sphinx for processing.  This breaks
 # the html generation for doxygen
+# Doxygen 1.8.13 requires extra help via xmlonly
+# See python sphinxcontrib-autodoc_doxygen module autodoc_doxygen/xmlutils.py
 # \eqref{eq:ale-thickness-equation,ale-equations,thickness}
-ALIASES += eqref{3}="\latexonly\ref{\1}\endlatexonly\htmlonly&nbsp;\eqref2{\2,\3}\endhtmlonly"
+ALIASES += eqref{3}="\latexonly\ref{\1}\endlatexonly\htmlonly&nbsp;\eqref2{\2,\3}\endhtmlonly\xmlonly \\eqref4{\1}\\eqref2{\2,\3}\endxmlonly"
 
 # Reference: https://stackoverflow.com/questions/25290453/how-do-i-add-a-footnote-in-doxygen
 # TODO: Use this simple js library to create actual footnotes in html
 # Reference: https://github.com/jheftmann/footnoted
-ALIASES += footnote{1}="\latexonly\footnote\{\1\}\endlatexonly\htmlonly<sup title=\"\1\"><b>[*]</b></sup>\endhtmlonly"
+ALIASES += footnote{1}="\latexonly\footnote\{\1\}\endlatexonly\htmlonly<sup title=\"\1\"><b>[*]</b></sup>\endhtmlonly\xmlonly<sup title=\"\1\"><b>[*]</b></sup>\endxmlonly"
+
+# \image latex does the wrong things to support equations in captions, this recreates
+# what it does and just passes through the string uninterpreted.
+# The image also needs to be added to LATEX_EXTRA_FILES.
+# Default 3rd argument: \includegraphics[width=\textwidth\,height=\textheight/2\,keepaspectratio=true]
+ALIASES += imagelatex{3}="\latexonly\begin{DoxyImage}\n\3{\1}\n\doxyfigcaption{\2}\n\end{DoxyImage}\endlatexonly\xmlonly<image type=\"latex\" name=\"\1\">\2</image>\endxmlonly"
 
 # This tag can be used to specify a number of word-keyword mappings (TCL only).
 # A mapping has the form "name=value". For example adding "class=itcl::class"
@@ -1863,7 +1872,15 @@ LATEX_EXTRA_STYLESHEET =
 # markers available.
 # This tag requires that the tag GENERATE_LATEX is set to YES.
 
-LATEX_EXTRA_FILES      =
+# Graphics that have math or equations in the caption need to be listed below.
+LATEX_EXTRA_FILES      = \
+        images/cell_3d.png \
+        images/Grid_metrics.png \
+        images/h_PPM.png \
+        images/Newton_PPM.png \
+        images/PG_loop.png \
+        images/shao3.png \
+        images/shao4.png
 
 # If the PDF_HYPERLINKS tag is set to YES, the LaTeX that is generated is
 # prepared for conversion to PDF (using ps2pdf or pdflatex). The PDF file will

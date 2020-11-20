@@ -38,7 +38,10 @@ jobs:
         # API Documentation
         - perl -e 'print "perl version $^V" . "\n"'
         - cd docs && mkdir _build && make nortd DOXYGEN_RELEASE=Release_1_8_13 UPDATEHTMLEQS=Y
-        - grep "warning:" _build/doxygen_warn_nortd_log.txt | grep -v "as part of a" | tee doxy_errors
+        # We can tighten up the warnings here.  Math im image captions should only generate
+        # \f warnings.  All other latex math should be double escaped (\\) like (\\Phi) for
+        # html image captions.
+        - grep "warning:" _build/doxygen_warn_nortd_log.txt | grep -v 'Illegal command f as part of a \\image' | tee doxy_errors
         - test ! -s  doxy_errors
 
     - env:
