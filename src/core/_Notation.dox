@@ -1,0 +1,35 @@
+/*! \page Notation Notation for equations
+
+\section Symbols Symbols for variables
+
+\f$z\f$ refers to elevation (or height), increasing upward so that for much of the ocean \f$z\f$ is negative.
+
+\f$x\f$ and \f$y\f$ are the Cartesian horizontal coordinates.
+
+\f$\lambda\f$ and \f$\phi\f$ are the geographic coordinates on a sphere (longitude and latitude respectively).
+
+Horizontal components of velocity are indicated by \f$u\f$ and \f$v\f$ and vertical component by \f$w\f$.
+
+\f$p\f$ is pressure and \f$\Phi\f$ is geo-potential:
+
+ \f[ \Phi = g z .\f]
+
+The thermodynamic state variables are usually salinity, \f$S\f$, and potential temperature, \f$\theta\f$ or the absolute salinity and conservative temperature, depending on the equation of state. \f$\rho\f$ is in-situ density.
+
+\section vector_notation Vector notation
+
+The three-dimensional velocity vector is denoted \f$\boldsymbol{v}\f$
+
+  \f[\boldsymbol{v} = \boldsymbol{u} + \widehat{\boldsymbol{k}} w ,\f]
+
+where \f$\widehat{\boldsymbol{k}}\f$ is the unit vector pointed in the upward vertical direction and \f$\boldsymbol{u} = (u, v, 0)\f$ is the horizontal
+component of velocity normal to the vertical.
+
+The gradient operator without a suffix is three dimensional:
+
+  \f[\boldsymbol{\nabla} = ( \boldsymbol{\nabla}_z, \partial_z  ) .\f]
+
+but a suffix indicates a lateral gradient along a surface of constant property indicated by the suffix:
+
+  \f[\boldsymbol{\nabla}_z = \left( \left. \partial_x \right|_z, \left. \partial_y \right|_z, 0 \right) .\f]
+*/

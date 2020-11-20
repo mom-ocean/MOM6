@@ -1,0 +1,65 @@
+/*! \page Discrete_Grids Discrete Horizontal and Vertical Grids
+
+\section horizontal_grids Horizontal grids
+
+The placement of model variables on the horizontal C-grid is illustrated here:
+
+\image html Arakawa_C_grid.png "MOM6 uses an Arakawa C grid staggering of variables with a North-East indexing convention."
+\image latex Arakawa_C_grid.png "MOM6 uses an Arakawa C grid staggering of variables with a North-East indexing convention."
+
+
+Scalars are located at the \f$h\f$-points, velocities are staggered such that
+\f$u\f$-points and \f$v\f$-points are not co-located, and vorticities
+are located at \f$q\f$-points. The indexing for points (\f$i,j\f$) in
+the logically-rectangular domain is such that \f$i\f$ increases in
+the \f$x\f$ direction (eastward for spherical polar coordinates), and
+\f$j\f$ increases in the \f$y\f$ direction (northward for spherical polar
+coordinates). A \f$q\f$-point with indices (\f$i,j\f$) lies to the upper
+right (northeast) of the \f$h\f$-point with the same indices. The index
+for the vertical dimension \f$k\f$ increases with depth, although the
+vertical coordinate \f$z\f$, measured from the mean surface level \f$z =
+0\f$, decreases with depth.
+
+When the horizontal grid is generated, it is actually computed on the
+\"supergrid\" at twice the nominal resolution of the model. The grid file
+contains the grid metrics and the areas of this fine grid. The model
+then decomposes it into the four staggered grids, along with computing
+the grid metrics as shown here:
+
+\image html Grid_metrics.png "The grid metrics around both \f$h\f$-points and \f$q\f$-points."
+\imagelatex{Grid_metrics.png,The grid metrics around both $h$-points and $q$-points.,\includegraphics[width=\textwidth\,height=\textheight/2\,keepaspectratio=true]}
+
+The model carries both the metrics as well as their inverses, for instance,
+IdyT = 1/dyT. There are also the areas and the inverse areas for all four grid
+locations. areaT and areaBu are the sum of the four areas from the supergrid
+surrounding each h-point and each q-point, respectively. The velocity faces can be
+partially blocked and their areas are adjusted accordingly, where \f$dy\_Cu\f$ and
+\f$dx\_Cv\f$ are the blocked distances at \f$u\f$ and \f$v\f$ points, respectively.
+
+\f{eqnarray}
+\mbox{areaCu}_{i,j} &= dxCu_{i,j} * dy\_Cu_{i,j} \\
+\mbox{areaCv}_{i,j} &= dx\_Cv_{i,j} * dyCv_{i,j} \\
+\mbox{IareaCu}_{i,j} &= 1 / \mbox{areaCu}_{i,j} \\
+\mbox{IareaCv}_{i,j} &= 1 / \mbox{areaCv}_{i,j}
+\f}
+
+The horizontal grids can be spherical, tripole, regional, or cubed sphere.
+The default is for grids to be re-entrant in the \f$x\f$-direction; this needs
+to be turned off for regional grids.
+
+\section vertical_grids Vertical grids
+
+The placement of model variables in the vertical is illustrated here:
+
+\image html cell_3d.png "The MOM6 interfaces are at vertical location \f$e\f$ which are separated by the layer thicknesses \f$h\f$."
+\imagelatex{cell_3d.png,The MOM6 interfaces are at vertical location $e$ which are separated by the layer thicknesses $h$.,\includegraphics[width=\textwidth\,height=\textheight/2\,keepaspectratio=true]}
+
+The vertical coordinate is Lagrangian in that the interfaces between the layers are
+free to move up and down with time. The interfaces have target depths or target
+densities, depending on the desired vertical coordinate system. They can even have
+target sigma values for terrain-following coordinates or you can design a hybrid
+coordinate in which different interfaces have differing behavior. In any case, the
+interfaces move with the fluid during the dynamic timesteps and then get reset during a
+remapping operation. See section \ref ALE_Timestep for details.
+
+*/
