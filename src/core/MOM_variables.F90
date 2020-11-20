@@ -241,15 +241,6 @@ type, public :: vertvisc_type
   real, pointer, dimension(:,:,:) :: &
     Ray_u => NULL(), & !< The Rayleigh drag velocity to be applied to each layer at u-points [Z T-1 ~> m s-1].
     Ray_v => NULL()    !< The Rayleigh drag velocity to be applied to each layer at v-points [Z T-1 ~> m s-1].
-  real, pointer, dimension(:,:,:) :: Kd_extra_T => NULL()
-                !< The extra diffusivity of temperature due to double diffusion relative to the
-                !! diffusivity of density [Z2 T-1 ~> m2 s-1].
-  real, pointer, dimension(:,:,:) :: Kd_extra_S => NULL()
-                !< The extra diffusivity of salinity due to double diffusion relative to the
-                !! diffusivity of density [Z2 T-1 ~> m2 s-1].
-  ! One of Kd_extra_T and Kd_extra_S is always 0. Kd_extra_S is positive for salt fingering;
-  ! Kd_extra_T is positive for double diffusive convection.  They are only allocated if
-  ! DOUBLE_DIFFUSION is true.
   real, pointer, dimension(:,:,:) :: Kd_shear => NULL()
                 !< The shear-driven turbulent diapycnal diffusivity at the interfaces between layers
                 !! in tracer columns [Z2 T-1 ~> m2 s-1].

@@ -20,7 +20,7 @@ use MOM_opacity,       only : set_opacity, opacity_CS, extract_optics_slice, ext
 use MOM_opacity,       only : optics_type, optics_nbands, absorbRemainingSW, sumSWoverBands
 use MOM_tracer_flow_control, only : get_chl_from_model, tracer_flow_control_CS
 use MOM_unit_scaling,  only : unit_scale_type
-use MOM_variables,     only : thermo_var_ptrs, vertvisc_type! , accel_diag_ptrs
+use MOM_variables,     only : thermo_var_ptrs ! , vertvisc_type, accel_diag_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
@@ -223,15 +223,23 @@ end subroutine make_frazil
 
 !> This subroutine applies double diffusion to T & S, assuming no diapycal mass
 !! fluxes, using a simple triadiagonal solver.
-subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
+subroutine differential_diffuse_T_S(h, T, S, Kd_T, Kd_S, dt, G, GV)
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
-  type(thermo_var_ptrs),   intent(inout) :: tv   !< Structure containing pointers to any
-                                                 !! available thermodynamic fields.
-  type(vertvisc_type),     intent(in)    :: visc !< Structure containing vertical viscosities, bottom
-                                                 !! boundary layer properies, and related fields.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(inout) :: T    !< Potential temperature [degC].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(inout) :: S    !< Salinity [PSU] or [gSalt/kg], generically [ppt].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                           intent(inout)    :: Kd_T !< The extra diffusivity of temperature due to
+                                                 !! double diffusion relative to the diffusivity of
+                                                 !! diffusivity of density [Z2 T-1 ~> m2 s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                           intent(in)    :: Kd_S !< The extra diffusivity of salinity due to
+                                                 !! double diffusion relative to the diffusivity of
+                                                 !! diffusivity of density [Z2 T-1 ~> m2 s-1].
   real,                    intent(in)    :: dt   !<  Time increment [T ~> s].
 
   ! local variables
@@ -250,27 +258,12 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
                        ! interface [H-1 ~> m-1 or m2 kg-1].
   real :: b_denom_T    ! The first term in the denominators for the expressions
   real :: b_denom_S    ! for b1_T and b1_S, both [H ~> m or kg m-2].
-  real, dimension(:,:,:), pointer :: T=>NULL(), S=>NULL()
-  real, dimension(:,:,:), pointer :: Kd_T=>NULL(), Kd_S=>NULL() ! Diffusivities [Z2 T-1 ~> m2 s-1].
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   h_neglect = GV%H_subroundoff
 
-  if (.not.associated(tv%T)) call MOM_error(FATAL, &
-      "differential_diffuse_T_S: Called with an unassociated tv%T")
-  if (.not.associated(tv%S)) call MOM_error(FATAL, &
-      "differential_diffuse_T_S: Called with an unassociated tv%S")
-  if (.not.associated(visc%Kd_extra_T)) call MOM_error(FATAL, &
-      "differential_diffuse_T_S: Called with an unassociated visc%Kd_extra_T")
-  if (.not.associated(visc%Kd_extra_S)) call MOM_error(FATAL, &
-      "differential_diffuse_T_S: Called with an unassociated visc%Kd_extra_S")
-
-  T => tv%T ; S => tv%S
-  Kd_T => visc%Kd_extra_T ; Kd_S => visc%Kd_extra_S
-!$OMP parallel do default(none) shared(is,ie,js,je,h,h_neglect,dt,Kd_T,Kd_S,G,GV,T,S,nz) &
-!$OMP                          private(I_h_int,mix_T,mix_S,h_tr,b1_T,b1_S, &
-!$OMP                                  d1_T,d1_S,c1_T,c1_S,b_denom_T,b_denom_S)
+  !$OMP parallel do default(private) shared(is,ie,js,je,h,h_neglect,dt,Kd_T,Kd_S,G,GV,T,S,nz)
   do j=js,je
     do i=is,ie
       I_h_int = 1.0 / (0.5 * (h(i,j,1) + h(i,j,2)) + h_neglect)
@@ -804,7 +797,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
 
       do iM=1,3
 
-        ! Initialize these for each columnwise calculation
+        ! Initialize these for each column-wise calculation
         PE = 0.0
         RhoDZ_ML = 0.0
         H_ML = 0.0
@@ -814,12 +807,12 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
 
         do k=1,nz
 
-          ! This is the unmixed PE cummulative sum from top down
-          PE = PE + 0.5*rho_c(k)*(Z_U(k)**2-Z_L(k)**2)
+          ! This is the unmixed PE cumulative sum from top down
+          PE = PE + 0.5 * rho_c(k) * (Z_U(k)**2 - Z_L(k)**2)
 
           ! This is the depth and integral of density
           H_ML_TST = H_ML + DZ(k)
-          RhoDZ_ML_TST = RhoDZ_ML + rho_c(k)*DZ(k)
+          RhoDZ_ML_TST = RhoDZ_ML + rho_c(k) * DZ(k)
 
           ! The average density assuming all layers including this were mixed
           Rho_ML = RhoDZ_ML_TST/H_ML_TST
@@ -827,17 +820,17 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
           ! The PE assuming all layers including this were mixed
           ! Note that 0. could be replaced with "Surface", which doesn't have to be 0
           ! but 0 is a good reference value.
-          PE_Mixed_TST = 0.5*Rho_ML*(0.**2-(0.-H_ML_TST)**2)
+          PE_Mixed_TST = 0.5 * Rho_ML * (0.**2 - (0. - H_ML_TST)**2)
 
           ! Check if we supplied enough energy to mix to this layer
-          if (PE_Mixed_TST-PE<=PE_threshold(iM)) then
+          if (PE_Mixed_TST - PE <= PE_threshold(iM)) then
             H_ML = H_ML_TST
             RhoDZ_ML = RhoDZ_ML_TST
 
           else ! If not, we need to solve where the energy ran out
             ! This will be done with a Newton's method iteration:
 
-            R1 = RhoDZ_ML/H_ML ! The density of the mixed layer (not including this layer)
+            R1 = RhoDZ_ML / H_ML ! The density of the mixed layer (not including this layer)
             D1 = H_ML ! The thickness of the mixed layer (not including this layer)
             R2 = rho_c(k) ! The density of this layer
             D2 = DZ(k) ! The thickness of this layer
@@ -856,18 +849,18 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
             ! Cc2 = R2*(D+S**2-C)
             !
             ! If the surface is S = 0, it simplifies to:
-            Ca  = -(R2)
-            Cb  = -( R1*D1 + R2*(2.*D1) )
-            D   = D1**2.
-            Cc  = -( R1*D1*(2*D1) + R2*D )
-            Cd  = -R1*D1*D
+            Ca  = -R2
+            Cb  = -(R1 * D1 + R2 * (2. * D1))
+            D   = D1**2
+            Cc  = -(R1 * D1 * (2. * D1) + (R2 * D))
+            Cd  = -R1 * (D1 * D)
             Ca2 = R2
-            Cb2 = R2*(2.*D1)
-            C   = D2**2. + D1**2. + 2.*D1*D2
-            Cc2 = R2*(D-C)
+            Cb2 = R2 * (2. * D1)
+            C   = D2**2 + D1**2 + 2. * (D1 * D2)
+            Cc2 = R2 * (D - C)
 
             ! First guess for an iteration using Newton's method
-            X = DZ(k)*0.5
+            X = DZ(k) * 0.5
 
             IT=0
             do while(IT<10)!We can iterate up to 10 times
@@ -878,28 +871,28 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
               ! We also need the derivative of this function for the Newton's method iteration
               ! F'(x) = (G'(x)H(x)-G(x)H'(x))/H(x)^2 + I'(x)
               ! G and its derivative
-              Gx = 0.5*(Ca*X**3+Cb*X**2+Cc*X+Cd)
-              Gpx = 0.5*(3*Ca*X**2+2*Cb*X+Cc)
+              Gx = 0.5 * (Ca * (X*X*X) + Cb * X**2 + Cc * X + Cd)
+              Gpx = 0.5 * (3. * (Ca * X**2) + 2. * (Cb * X) + Cc)
               ! H, its inverse, and its derivative
-              Hx = (D1+X)
-              iHx = 1./Hx
+              Hx = D1 + X
+              iHx = 1. / Hx
               Hpx = 1.
               ! I and its derivative
-              Ix = 0.5*(Ca2*X**2. + Cb2*X + Cc2)
-              Ipx = 0.5*(2.*Ca2*X+Cb2)
+              Ix = 0.5 * (Ca2 * X**2 + Cb2 * X + Cc2)
+              Ipx = 0.5 * (2. * Ca2 * X + Cb2)
 
               ! The Function and its derivative:
-              PE_Mixed = Gx*iHx+Ix
-              Fgx = (PE_Mixed-(PE+PE_threshold(iM)))
-              Fpx = (Gpx*Hx-Hpx*Gx)*iHx**2+Ipx
+              PE_Mixed = Gx * iHx + Ix
+              Fgx = PE_Mixed - (PE + PE_threshold(iM))
+              Fpx = (Gpx * Hx - Hpx * Gx) * iHx**2 + Ipx
 
               ! Check if our solution is within the threshold bounds, if not update
               ! using Newton's method.  This appears to converge almost always in
               ! one step because the function is very close to linear in most applications.
-              if (abs(Fgx)>PE_Threshold(iM)*PE_Threshold_fraction) then
-                X2 = X - Fgx/Fpx
+              if (abs(Fgx) > PE_Threshold(iM) * PE_Threshold_fraction) then
+                X2 = X - Fgx / Fpx
                 IT = IT + 1
-                if (X2<0. .or. X2>DZ(k)) then
+                if (X2 < 0. .or. X2 > DZ(k)) then
                   ! The iteration seems to be robust, but we need to do something *if*
                   ! things go wrong... How should we treat failed iteration?
                   ! Present solution: Stop trying to compute and just say we can't mix this layer.
@@ -912,7 +905,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
                 exit! Quit the iteration
               endif
             enddo
-            H_ML = H_ML+X
+            H_ML = H_ML + X
             exit! Quit looping through the column
           endif
         enddo
