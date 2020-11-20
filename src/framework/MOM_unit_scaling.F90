@@ -75,7 +75,7 @@ subroutine unit_scaling_init( param_file, US )
   if (present(param_file)) then
     ! Read all relevant parameters and write them to the model log.
     call log_version(param_file, mdl, version, &
-                 "Parameters for doing unit scaling of variables.")
+                 "Parameters for doing unit scaling of variables.", debugging=.true.)
     call get_param(param_file, mdl, "Z_RESCALE_POWER", Z_power, &
                  "An integer power of 2 that is used to rescale the model's "//&
                  "internal units of depths and heights.  Valid values range from -300 to 300.", &

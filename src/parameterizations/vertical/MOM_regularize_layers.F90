@@ -18,7 +18,6 @@ use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_domain
 implicit none ; private
 
 #include <MOM_memory.h>
-#undef  DEBUG_CODE
 
 public regularize_layers, regularize_layers_init
 
@@ -58,18 +57,6 @@ type, public :: regularize_layers_CS ; private
   integer :: id_def_rat = -1 !< A diagnostic ID
   logical :: allow_clocks_in_omp_loops  !< If true, clocks can be called from inside loops that
                              !! can be threaded. To run with multiple threads, set to False.
-#ifdef DEBUG_CODE
-  !>@{ Diagnostic IDs
-  integer :: id_def_rat_2 = -1, id_def_rat_3 = -1
-  integer :: id_def_rat_u = -1, id_def_rat_v = -1
-  integer :: id_e1 = -1, id_e2 = -1, id_e3 = -1
-  integer :: id_def_rat_u_1b = -1, id_def_rat_v_1b = -1
-  integer :: id_def_rat_u_2 = -1, id_def_rat_u_2b = -1
-  integer :: id_def_rat_v_2 = -1, id_def_rat_v_2b = -1
-  integer :: id_def_rat_u_3 = -1, id_def_rat_u_3b = -1
-  integer :: id_def_rat_v_3 = -1, id_def_rat_v_3b = -1
-  !>@}
-#endif
 end type regularize_layers_CS
 
 !>@{ Clock IDs
@@ -109,10 +96,8 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, US, CS)
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_regularize_layers: "//&
          "Module must be initialized before it is used.")
 
-  if (CS%regularize_surface_layers) &
-    call pass_var(h, G%Domain, clock=id_clock_pass)
-
   if (CS%regularize_surface_layers) then
+    call pass_var(h, G%Domain, clock=id_clock_pass)
     call regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   endif
 
@@ -149,17 +134,6 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
     def_rat_h   ! The ratio of the thickness deficit to the minimum depth [nondim].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
     e           ! The interface depths [H ~> m or kg m-2], positive upward.
-
-#ifdef DEBUG_CODE
-  real, dimension(SZIB_(G),SZJ_(G)) :: &
-    def_rat_u_1b, def_rat_u_2, def_rat_u_2b, def_rat_u_3, def_rat_u_3b
-  real, dimension(SZI_(G),SZJB_(G)) :: &
-    def_rat_v_1b, def_rat_v_2, def_rat_v_2b, def_rat_v_3, def_rat_v_3b
-  real, dimension(SZI_(G),SZJB_(G)) :: &
-    def_rat_h2, def_rat_h3
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
-    ef          ! The filtered interface depths [H ~> m or kg m-2], positive upward.
-#endif
 
   real, dimension(SZI_(G),SZK_(G)+1) :: &
     e_filt, e_2d  ! The interface depths [H ~> m or kg m-2], positive upward.
@@ -231,12 +205,6 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
 
   h_neglect = GV%H_subroundoff
   debug = (debug .or. CS%debug)
-#ifdef DEBUG_CODE
-  debug = .true.
-  if (CS%id_def_rat_2 > 0) then ! Calculate over a slightly larger domain.
-    is = G%isc-1 ; ie = G%iec+1 ; js = G%jsc-1 ; je = G%jec+1
-  endif
-#endif
 
   I_dtol = 1.0 / max(CS%h_def_tol2 - CS%h_def_tol1, 1e-40)
   I_dtol34 = 1.0 / max(CS%h_def_tol4 - CS%h_def_tol3, 1e-40)
@@ -251,11 +219,8 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
     e(i,j,K+1) = e(i,j,K) - h(i,j,k)
   enddo ; enddo ; enddo
 
-#ifdef DEBUG_CODE
-  call find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, def_rat_u_1b, def_rat_v_1b, 1, h)
-#else
   call find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, h=h)
-#endif
+
   ! Determine which columns are problematic
   do j=js,je ; do_j(j) = .false. ; enddo
   do j=js,je ; do i=is,ie
@@ -263,49 +228,6 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
                          def_rat_v(i,J-1), def_rat_v(i,J))
     if (def_rat_h(i,j) > CS%h_def_tol1) do_j(j) = .true.
   enddo ; enddo
-
-#ifdef DEBUG_CODE
-  if ((CS%id_def_rat_3 > 0) .or. (CS%id_e3 > 0) .or. &
-      (CS%id_def_rat_u_3 > 0) .or. (CS%id_def_rat_u_3b > 0) .or. &
-      (CS%id_def_rat_v_3 > 0) .or. (CS%id_def_rat_v_3b > 0) ) then
-    do j=js-1,je+1 ; do i=is-1,ie+1
-      ef(i,j,1) = 0.0
-    enddo ; enddo
-    do K=2,nz+1 ; do j=js,je ; do i=is,ie
-      if (G%mask2dCu(I,j) <= 0.0) then ; e_e = e(i,j,K) ; else
-        e_e = max(e(i+1,j,K) + min(e(i,j,K) - e(i+1,j,nz+1), 0.0), e(i,j,nz+1))
-      endif
-      if (G%mask2dCu(I-1,j) <= 0.0) then ; e_w = e(i,j,K) ; else
-        e_w = max(e(i-1,j,K) + min(e(i,j,K) - e(i-1,j,nz+1), 0.0), e(i,j,nz+1))
-      endif
-      if (G%mask2dCv(i,J) <= 0.0) then ; e_n = e(i,j,K) ; else
-        e_n = max(e(i,j+1,K) + min(e(i,j,K) - e(i,j+1,nz+1), 0.0), e(i,j,nz+1))
-      endif
-      if (G%mask2dCv(i,J-1) <= 0.0) then ; e_s = e(i,j,K) ; else
-        e_s = max(e(i,j-1,K) + min(e(i,j,K) - e(i,j-1,nz+1), 0.0), e(i,j,nz+1))
-      endif
-
-      wt = 1.0
-      ef(i,j,k) = (1.0 - 0.5*wt) * e(i,j,K) + &
-                  wt * 0.125 * ((e_e + e_w) + (e_n + e_s))
-    enddo ; enddo ; enddo
-    call find_deficit_ratios(ef, def_rat_u_3, def_rat_v_3, G, GV, CS, def_rat_u_3b, def_rat_v_3b)
-
-    ! Determine which columns are problematic
-    do j=js,je ; do i=is,ie
-      def_rat_h3(i,j) = max(def_rat_u_3(I-1,j), def_rat_u_3(I,j), &
-                            def_rat_v_3(i,J-1), def_rat_v_3(i,J))
-    enddo ; enddo
-
-    if (CS%id_e3 > 0) call post_data(CS%id_e3, ef, CS%diag)
-    if (CS%id_def_rat_3 > 0) call post_data(CS%id_def_rat_3, def_rat_h3, CS%diag)
-    if (CS%id_def_rat_u_3 > 0) call post_data(CS%id_def_rat_u_3, def_rat_u_3, CS%diag)
-    if (CS%id_def_rat_u_3b > 0) call post_data(CS%id_def_rat_u_3b, def_rat_u_3b, CS%diag)
-    if (CS%id_def_rat_v_3 > 0) call post_data(CS%id_def_rat_v_3, def_rat_v_3, CS%diag)
-    if (CS%id_def_rat_v_3b > 0) call post_data(CS%id_def_rat_v_3b, def_rat_v_3b, CS%diag)
-  endif
-#endif
-
 
   ! Now restructure the layers.
   !$OMP parallel do default(private) shared(is,ie,js,je,nz,do_j,def_rat_h,CS,nkmb,G,GV,US, &
@@ -684,40 +606,6 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
 
   if (CS%id_def_rat > 0) call post_data(CS%id_def_rat, def_rat_h, CS%diag)
 
-#ifdef DEBUG_CODE
-  if (CS%id_e1 > 0) call post_data(CS%id_e1, e, CS%diag)
-  if (CS%id_def_rat_u > 0) call post_data(CS%id_def_rat_u, def_rat_u, CS%diag)
-  if (CS%id_def_rat_u_1b > 0) call post_data(CS%id_def_rat_u_1b, def_rat_u_1b, CS%diag)
-  if (CS%id_def_rat_v > 0) call post_data(CS%id_def_rat_v, def_rat_v, CS%diag)
-  if (CS%id_def_rat_v_1b > 0) call post_data(CS%id_def_rat_v_1b, def_rat_v_1b, CS%diag)
-
-  if ((CS%id_def_rat_2 > 0) .or. &
-      (CS%id_def_rat_u_2 > 0) .or. (CS%id_def_rat_u_2b > 0) .or. &
-      (CS%id_def_rat_v_2 > 0) .or. (CS%id_def_rat_v_2b > 0) ) then
-    do j=js-1,je+1 ; do i=is-1,ie+1
-      e(i,j,1) = 0.0
-    enddo ; enddo
-    do K=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
-      e(i,j,K+1) = e(i,j,K) - h(i,j,k)
-    enddo ; enddo ; enddo
-
-    call find_deficit_ratios(e, def_rat_u_2, def_rat_v_2, G, GV, CS, def_rat_u_2b, def_rat_v_2b, h=h)
-
-    ! Determine which columns are problematic
-    do j=js,je ; do i=is,ie
-      def_rat_h2(i,j) = max(def_rat_u_2(I-1,j), def_rat_u_2(I,j), &
-                            def_rat_v_2(i,J-1), def_rat_v_2(i,J))
-    enddo ; enddo
-
-    if (CS%id_def_rat_2 > 0) call post_data(CS%id_def_rat_2, def_rat_h2, CS%diag)
-    if (CS%id_e2 > 0) call post_data(CS%id_e2, e, CS%diag)
-    if (CS%id_def_rat_u_2 > 0) call post_data(CS%id_def_rat_u_2, def_rat_u_2, CS%diag)
-    if (CS%id_def_rat_u_2b > 0) call post_data(CS%id_def_rat_u_2b, def_rat_u_2b, CS%diag)
-    if (CS%id_def_rat_v_2 > 0) call post_data(CS%id_def_rat_v_2, def_rat_v_2, CS%diag)
-    if (CS%id_def_rat_v_2b > 0) call post_data(CS%id_def_rat_v_2b, def_rat_v_2b, CS%diag)
-  endif
-#endif
-
 end subroutine regularize_surface
 
 !>  This subroutine determines the amount by which the harmonic mean
@@ -891,6 +779,7 @@ subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
   character(len=40)  :: mdl = "MOM_regularize_layers"  ! This module's name.
   logical :: use_temperature
   logical :: default_2018_answers
+  logical :: just_read
   integer :: isd, ied, jsd, jed
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
@@ -904,38 +793,42 @@ subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
   CS%Time => Time
 
 ! Set default, read and log parameters
-  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "REGULARIZE_SURFACE_LAYERS", CS%regularize_surface_layers, &
+                 default=.false., do_not_log=.true.)
+  call log_version(param_file, mdl, version, "", all_default=.not.CS%regularize_surface_layers)
   call get_param(param_file, mdl, "REGULARIZE_SURFACE_LAYERS", CS%regularize_surface_layers, &
                  "If defined, vertically restructure the near-surface "//&
                  "layers when they have too much lateral variations to "//&
                  "allow for sensible lateral barotropic transports.", &
                  default=.false.)
+  just_read = .not.CS%regularize_surface_layers
   if (CS%regularize_surface_layers) then
     call get_param(param_file, mdl, "REGULARIZE_SURFACE_DETRAIN", CS%reg_sfc_detrain, &
                  "If true, allow the buffer layers to detrain into the "//&
                  "interior as a part of the restructuring when "//&
-                 "REGULARIZE_SURFACE_LAYERS is true.", default=.true.)
-  call get_param(param_file, mdl, "REG_SFC_DENSE_MATCH_TOLERANCE", CS%density_match_tol, &
+                 "REGULARIZE_SURFACE_LAYERS is true.", default=.true., do_not_log=just_read)
+    call get_param(param_file, mdl, "REG_SFC_DENSE_MATCH_TOLERANCE", CS%density_match_tol, &
                  "A relative tolerance for how well the densities must match with the target "//&
                  "densities during detrainment when regularizing the near-surface layers.  The "//&
-                 "default of 0.6 gives 20% overlaps in density", units="nondim", default=0.6)
+                 "default of 0.6 gives 20% overlaps in density", &
+                 units="nondim", default=0.6, do_not_log=just_read)
     call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false., do_not_log=just_read)
     call get_param(param_file, mdl, "REGULARIZE_LAYERS_2018_ANSWERS", CS%answers_2018, &
-                 "If true, use the order of arithmetic and expressions that recover the "//&
-                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
-                 "forms of the same expressions.", default=default_2018_answers)
+                 "If true, use the order of arithmetic and expressions that recover the answers "//&
+                 "from the end of 2018.  Otherwise, use updated and more robust forms of the "//&
+                 "same expressions.", default=default_2018_answers, do_not_log=just_read)
   endif
 
   call get_param(param_file, mdl, "HMIX_MIN", CS%Hmix_min, &
-                 "The minimum mixed layer depth if the mixed layer depth "//&
-                 "is determined dynamically.", units="m", default=0.0, scale=GV%m_to_H)
+                 "The minimum mixed layer depth if the mixed layer depth is determined "//&
+                 "dynamically.", units="m", default=0.0, scale=GV%m_to_H, do_not_log=just_read)
   call get_param(param_file, mdl, "REG_SFC_DEFICIT_TOLERANCE", CS%h_def_tol1, &
                  "The value of the relative thickness deficit at which "//&
                  "to start modifying the layer structure when "//&
                  "REGULARIZE_SURFACE_LAYERS is true.", units="nondim", &
-                 default=0.5)
+                 default=0.5, do_not_log=just_read)
   CS%h_def_tol2 = 0.2 + 0.8*CS%h_def_tol1
   CS%h_def_tol3 = 0.3 + 0.7*CS%h_def_tol1
   CS%h_def_tol4 = 0.5 + 0.5*CS%h_def_tol1
@@ -943,54 +836,17 @@ subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
 !  if (.not. CS%debug) &
 !    call get_param(param_file, mdl, "DEBUG_CONSERVATION", CS%debug, &
-!                 "If true, monitor conservation and extrema.", default=.false.)
+!                 "If true, monitor conservation and extrema.", default=.false., do_not_log=just_read)
 
   call get_param(param_file, mdl, "ALLOW_CLOCKS_IN_OMP_LOOPS", CS%allow_clocks_in_omp_loops, &
                  "If true, clocks can be called from inside loops that can "//&
                  "be threaded. To run with multiple threads, set to False.", &
-                 default=.true.)
+                 default=.true., do_not_log=just_read)
+
+  if (.not.CS%regularize_surface_layers) return
 
   CS%id_def_rat = register_diag_field('ocean_model', 'deficit_ratio', diag%axesT1, &
       Time, 'Max face thickness deficit ratio', 'nondim')
-
-#ifdef DEBUG_CODE
-  CS%id_def_rat_2 = register_diag_field('ocean_model', 'deficit_rat2', diag%axesT1, &
-      Time, 'Corrected thickness deficit ratio', 'nondim')
-  CS%id_def_rat_3 = register_diag_field('ocean_model', 'deficit_rat3', diag%axesT1, &
-      Time, 'Filtered thickness deficit ratio', 'nondim')
-  CS%id_e1 = register_diag_field('ocean_model', 'er_1', diag%axesTi, &
-      Time, 'Intial interface depths before remapping', 'm')
-  CS%id_e2 = register_diag_field('ocean_model', 'er_2', diag%axesTi, &
-      Time, 'Intial interface depths after remapping', 'm')
-  CS%id_e3 = register_diag_field('ocean_model', 'er_3', diag%axesTi, &
-      Time, 'Intial interface depths filtered', 'm')
-
-  CS%id_def_rat_u = register_diag_field('ocean_model', 'defrat_u', diag%axesCu1, &
-      Time, 'U-point thickness deficit ratio', 'nondim')
-  CS%id_def_rat_u_1b = register_diag_field('ocean_model', 'defrat_u_1b', diag%axesCu1, &
-      Time, 'U-point 2-layer thickness deficit ratio', 'nondim')
-  CS%id_def_rat_u_2 = register_diag_field('ocean_model', 'defrat_u_2', diag%axesCu1, &
-      Time, 'U-point corrected thickness deficit ratio', 'nondim')
-  CS%id_def_rat_u_2b = register_diag_field('ocean_model', 'defrat_u_2b', diag%axesCu1, &
-      Time, 'U-point corrected 2-layer thickness deficit ratio', 'nondim')
-  CS%id_def_rat_u_3 = register_diag_field('ocean_model', 'defrat_u_3', diag%axesCu1, &
-      Time, 'U-point filtered thickness deficit ratio', 'nondim')
-  CS%id_def_rat_u_3b = register_diag_field('ocean_model', 'defrat_u_3b', diag%axesCu1, &
-      Time, 'U-point filtered 2-layer thickness deficit ratio', 'nondim')
-
-  CS%id_def_rat_v = register_diag_field('ocean_model', 'defrat_v', diag%axesCv1, &
-      Time, 'V-point thickness deficit ratio', 'nondim')
-  CS%id_def_rat_v_1b = register_diag_field('ocean_model', 'defrat_v_1b', diag%axesCv1, &
-      Time, 'V-point 2-layer thickness deficit ratio', 'nondim')
-  CS%id_def_rat_v_2 = register_diag_field('ocean_model', 'defrat_v_2', diag%axesCv1, &
-      Time, 'V-point corrected thickness deficit ratio', 'nondim')
-  CS%id_def_rat_v_2b = register_diag_field('ocean_model', 'defrat_v_2b', diag%axesCv1, &
-      Time, 'V-point corrected 2-layer thickness deficit ratio', 'nondim')
-  CS%id_def_rat_v_3 = register_diag_field('ocean_model', 'defrat_v_3', diag%axesCv1, &
-      Time, 'V-point filtered thickness deficit ratio', 'nondim')
-  CS%id_def_rat_v_3b = register_diag_field('ocean_model', 'defrat_v_3b', diag%axesCv1, &
-      Time, 'V-point filtered 2-layer thickness deficit ratio', 'nondim')
-#endif
 
   if (CS%allow_clocks_in_omp_loops) then
     id_clock_EOS = cpu_clock_id('(Ocean regularize_layers EOS)', grain=CLOCK_ROUTINE)
