@@ -898,7 +898,7 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, US, patm, press_
       Ocean_sfc%melt_potential(i,j) = US%Q_to_J_kg*US%RZ_to_kg_m2 * sfc_state%melt_potential(i+i0,j+j0)
     enddo ; enddo
   endif
-  
+
   if (allocated(sfc_state%Hml)) then
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
       Ocean_sfc%OBLD(i,j) = US%Z_to_m * sfc_state%Hml(i+i0,j+j0)
