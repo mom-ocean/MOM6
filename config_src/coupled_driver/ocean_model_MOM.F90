@@ -272,6 +272,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
   allocate(OS)
 
   allocate(OS%fluxes)
+  allocate(OS%forces)
   allocate(OS%flux_tmp)
 
   OS%is_ocean_pe = Ocean_sfc%is_ocean_pe
