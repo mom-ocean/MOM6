@@ -16,7 +16,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public tracer_Z_init, tracer_Z_init_array, find_interfaces, determine_temperature
+public tracer_Z_init, tracer_Z_init_array, determine_temperature
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -608,135 +608,6 @@ function find_limited_slope(val, e, k) result(slope)
 
 end function find_limited_slope
 
-!> Find interface positions corresponding to density profile
-subroutine find_interfaces(rho, zin, nk_data, Rb, depth, zi, G, US, nlevs, nkml, hml, debug, &
-                           eps_z, eps_rho)
-  type(ocean_grid_type),      intent(in) :: G     !< The ocean's grid structure
-  integer,                    intent(in) :: nk_data !< The number of levels in the input data
-  real, dimension(SZI_(G),SZJ_(G),nk_data), &
-                              intent(in) :: rho   !< Potential density in z-space [R ~> kg m-3]
-  real, dimension(nk_data),   intent(in) :: zin   !< Input data levels [Z ~> m].
-  real, dimension(SZK_(G)+1), intent(in) :: Rb    !< target interface densities [R ~> kg m-3]
-  real, dimension(SZI_(G),SZJ_(G)), &
-                              intent(in) :: depth !< ocean depth [Z ~> m].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
-                             intent(out) :: zi    !< The returned interface heights [Z ~> m]
-  type(unit_scale_type),      intent(in) :: US    !< A dimensional unit scaling type
-  integer, dimension(SZI_(G),SZJ_(G)), &
-                    optional, intent(in) :: nlevs !< number of valid points in each column
-  logical,          optional, intent(in) :: debug !< optional debug flag
-  integer,          optional, intent(in) :: nkml  !< number of mixed layer pieces to distribute over
-                                                  !! a depth of hml.
-  real,             optional, intent(in) :: hml   !< mixed layer depth [Z ~> m].
-  real,             optional, intent(in) :: eps_z !< A negligibly small layer thickness [Z ~> m].
-  real,             optional, intent(in) :: eps_rho !< A negligibly small density difference [R ~> kg m-3].
-
-  ! Local variables
-  real, dimension(SZI_(G),nk_data) :: rho_ ! A slice of densities [R ~> kg m-3]
-  logical :: unstable
-  integer :: dir
-  integer, dimension(SZI_(G),SZK_(G)+1) :: ki_
-  real, dimension(SZI_(G),SZK_(G)+1) :: zi_ ! A slice of interface heights (negative downward) [Z ~> m].
-  integer, dimension(SZI_(G),SZJ_(G)) :: nlevs_data
-  integer, dimension(SZI_(G)) :: lo, hi
-  real :: slope         ! The rate of change of height with density [Z R-1 ~> m4 kg-1]
-  real :: drhodz        ! A local vertical density gradient [R Z-1 ~> kg m-4]
-  real :: hml_          ! The depth of the mixed layer to use for the topmost nkml_ layers [Z ~> m].
-  real    :: epsln_Z    ! A negligibly thin layer thickness [m or Z ~> m].
-  real    :: epsln_rho  ! A negligibly small density change [R ~> kg m-3].
-  real, parameter :: zoff=0.999
-  integer :: nkml_
-  logical :: debug_ = .false.
-  integer :: i, j, k, m, n, is, ie, js, je, nz
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-
-  zi(:,:,:) = 0.0
-
-  if (PRESENT(debug)) debug_=debug
-
-  nlevs_data(:,:) = nz
-
-  nkml_ = 0 ;  if (PRESENT(nkml)) nkml_ = max(0, nkml)
-  hml_ = 0.0 ; if (PRESENT(hml)) hml_ = hml
-  epsln_Z = 1.0e-10*US%m_to_Z ; if (PRESENT(eps_z)) epsln_Z = eps_z
-  epsln_rho = 1.0e-10*US%kg_m3_to_R ; if (PRESENT(eps_rho)) epsln_rho = eps_rho
-
-  if (PRESENT(nlevs)) then
-    nlevs_data(:,:) = nlevs(:,:)
-  endif
-
-  do j=js,je
-    rho_(:,:) = rho(:,j,:)
-    i_loop: do i=is,ie
-      if (debug_) then
-        print *,'looking for interfaces, i,j,nlevs= ',i,j,nlevs_data(i,j)
-        print *,'initial density profile= ', rho_(i,:)
-      endif
-      unstable=.true.
-      dir=1
-      do while (unstable)
-        unstable=.false.
-        if (dir == 1) then
-          do k=2,nlevs_data(i,j)-1
-            if (rho_(i,k) - rho_(i,k-1) < 0.0 ) then
-              if (k == 2) then
-                rho_(i,k-1) = rho_(i,k)-epsln_rho
-              else
-                drhodz = (rho_(i,k+1)-rho_(i,k-1)) / (zin(k+1)-zin(k-1))
-                if (drhodz < 0.0) unstable=.true.
-                rho_(i,k) = rho_(i,k-1) + drhodz*zoff*(zin(k)-zin(k-1))
-              endif
-            endif
-          enddo
-          dir = -1*dir
-        else
-          do k=nlevs_data(i,j)-1,2,-1
-            if (rho_(i,k+1) - rho_(i,k) < 0.0) then
-              if (k == nlevs_data(i,j)-1) then
-                rho_(i,k+1) = rho_(i,k-1)+epsln_rho
-              else
-                drhodz = (rho_(i,k+1)-rho_(i,k-1))/(zin(k+1)-zin(k-1))
-                if (drhodz  < 0.0) unstable=.true.
-                rho_(i,k) = rho_(i,k+1)-drhodz*(zin(k+1)-zin(k))
-              endif
-            endif
-          enddo
-          dir = -1*dir
-        endif
-      enddo
-      if (debug_) then
-        print *,'final density profile= ', rho_(i,:)
-      endif
-    enddo i_loop
-
-    ki_(:,:) = 0
-    zi_(:,:) = 0.0
-    lo(:) = 1
-    hi(:) = nlevs_data(:,j)
-    ki_ = bisect_fast(rho_, Rb, lo, hi)
-    ki_(:,:) = max(1, ki_(:,:)-1)
-    do i=is,ie
-      do m=2,nz
-        slope = (zin(ki_(i,m)+1) - zin(ki_(i,m))) / max(rho_(i,ki_(i,m)+1) - rho_(i,ki_(i,m)),epsln_rho)
-        zi_(i,m) = -1.0*(zin(ki_(i,m)) + slope*(Rb(m)-rho_(i,ki_(i,m))))
-        zi_(i,m) = max(zi_(i,m), -depth(i,j))
-        zi_(i,m) = min(zi_(i,m), -1.0*hml_)
-      enddo
-      zi_(i,nz+1) = -depth(i,j)
-      do m=2,nkml_+1
-        zi_(i,m) = max(hml_*((1.0-real(m))/real(nkml_)), -depth(i,j))
-      enddo
-      do m=nz,nkml_+2,-1
-        if (zi_(i,m) < zi_(i,m+1) + epsln_Z) zi_(i,m) = zi_(i,m+1) + epsln_Z
-        if (zi_(i,m) > -1.0*hml_)  zi_(i,m) = max(-1.0*hml_, -depth(i,j))
-      enddo
-    enddo
-    zi(:,j,:) = zi_(:,:)
-  enddo
-
-end subroutine find_interfaces
-
 !> This subroutine determines the potential temperature and salinity that
 !! is consistent with the target density using provided initial guess
 subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, k_start, G, US, eos, h_massless)
@@ -854,53 +725,5 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
   enddo
 
 end subroutine determine_temperature
-
-!> Return the index where to insert item x in list a, assuming a is sorted.
-!! The return values [i] is such that all e in a[:i-1] have e <= x, and all e in
-!! a[i:] have e > x. So if x already appears in the list, will
-!! insert just after the rightmost x already there.
-!! Optional args lo (default 1) and hi (default len(a)) bound the
-!! slice of a to be searched.
-function bisect_fast(a, x, lo, hi) result(bi_r)
-  real, dimension(:,:), intent(in) :: a !< Sorted list
-  real, dimension(:), intent(in) :: x !< Item to be inserted
-  integer, dimension(size(a,1)), optional, intent(in) :: lo !< Lower bracket of optional range to search
-  integer, dimension(size(a,1)), optional, intent(in) :: hi !< Upper bracket of optional range to search
-  integer, dimension(size(a,1),size(x,1))  :: bi_r
-
-  integer :: mid,num_x,num_a,i
-  integer, dimension(size(a,1))  :: lo_,hi_,lo0,hi0
-  integer :: nprofs,j
-
-  lo_=1;hi_=size(a,2);num_x=size(x,1);bi_r=-1;nprofs=size(a,1)
-
-  if (PRESENT(lo)) then
-     where (lo>0) lo_=lo
-  endif
-  if (PRESENT(hi)) then
-     where (hi>0) hi_=hi
-  endif
-
-  lo0=lo_;hi0=hi_
-
-  do j=1,nprofs
-    do i=1,num_x
-      lo_=lo0;hi_=hi0
-      do while (lo_(j) < hi_(j))
-        mid = (lo_(j)+hi_(j))/2
-        if (x(i) < a(j,mid)) then
-           hi_(j) = mid
-        else
-           lo_(j) = mid+1
-        endif
-      enddo
-      bi_r(j,i)=lo_(j)
-    enddo
-  enddo
-
-
-  return
-
-end function bisect_fast
 
 end module MOM_tracer_Z_init

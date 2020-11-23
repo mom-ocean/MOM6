@@ -285,8 +285,8 @@ end function dTdy
 !! \f[ h_{ML}(y) = h_{min} + \left( h_{max} - h_{min} \right) \cos{\pi y/L} \f].
 !! The temperature in mixed layer is given by the reference temperature at \f$z=h_{ML}\f$
 !! so that
-!! \f[ \theta(y,z) =
+!! \f{eqnarray} \theta(y,z) =
 !!     \theta_0 - \Delta \theta \left( z + h_{ML} \right) & \forall & z < h_{ML}(y) T.B.D.
-!! \f]
+!! \f}
 
 end module Rossby_front_2d_initialization

@@ -17,6 +17,8 @@ use MOM_variables,      only : thermo_var_ptrs
 use MOM_verticalGrid,   only : verticalGrid_type
 use MOM_wave_interface, only : wave_parameters_CS, Get_Langmuir_Number
 use MOM_domains,        only : pass_var
+use MOM_cpu_clock,      only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
+use MOM_cpu_clock,      only : CLOCK_MODULE, CLOCK_ROUTINE
 
 use CVMix_kpp, only : CVMix_init_kpp, CVMix_put_kpp, CVMix_get_kpp_real
 use CVMix_kpp, only : CVMix_coeffs_kpp
@@ -169,6 +171,10 @@ type, public :: KPP_CS ; private
 
 end type KPP_CS
 
+!>@{ CPU time clocks
+integer :: id_clock_KPP_calc, id_clock_KPP_compute_BLD, id_clock_KPP_smoothing
+!>@}
+
 #define __DO_SAFETY_CHECKS__
 
 contains
@@ -227,11 +233,17 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
                  'The number of times the 1-1-4-1-1 Laplacian filter is applied on '//  &
                  'OBL depth.',   &
                  default=0)
+  if (CS%n_smooth > G%domain%nihalo) then
+    call MOM_error(FATAL,'KPP smoothing number (N_SMOOTH) cannot be greater than NIHALO.')
+  elseif (CS%n_smooth > G%domain%njhalo) then
+    call MOM_error(FATAL,'KPP smoothing number (N_SMOOTH) cannot be greater than NJHALO.')
+  endif
   if (CS%n_smooth > 0) then
     call get_param(paramFile, mdl, 'DEEPEN_ONLY_VIA_SMOOTHING', CS%deepen_only,  &
                    'If true, apply OBLdepth smoothing at a cell only if the OBLdepth '// &
                    'gets deeper via smoothing.',   &
                    default=.false.)
+    id_clock_KPP_smoothing = cpu_clock_id('(Ocean KPP BLD smoothing)', grain=CLOCK_ROUTINE)
   endif
   call get_param(paramFile, mdl, 'RI_CRIT', CS%Ri_crit,                            &
                  'Critical bulk Richardson number used to define depth of the '// &
@@ -580,6 +592,8 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
   if (CS%id_EnhK > 0)    allocate( CS%EnhK( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
   if (CS%id_EnhK > 0)    CS%EnhK(:,:,:) = 0.
 
+  id_clock_KPP_calc = cpu_clock_id('Ocean KPP calculate)', grain=CLOCK_MODULE)
+  id_clock_KPP_compute_BLD = cpu_clock_id('(Ocean KPP comp BLD)', grain=CLOCK_ROUTINE)
 
 end function KPP_init
 
@@ -639,6 +653,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
 
   if (CS%id_Kd_in > 0) call post_data(CS%id_Kd_in, Kt, CS%diag)
 
+  call cpu_clock_begin(id_clock_KPP_calc)
   buoy_scale = US%L_to_m**2*US%s_to_T**3
 
   !$OMP parallel do default(none) firstprivate(nonLocalTrans)                               &
@@ -859,6 +874,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
     enddo ! i
   enddo ! j
 
+  call cpu_clock_end(id_clock_KPP_calc)
 
   if (CS%debug) then
     call hchksum(Kt, "KPP out: Kt", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
@@ -955,21 +971,23 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
     call hchksum(v, "KPP in: v",G%HI,haloshift=0)
   endif
 
+  call cpu_clock_begin(id_clock_KPP_compute_BLD)
+
   ! some constants
   GoRho = US%L_T_to_m_s**2*US%m_to_Z * GV%g_Earth / GV%Rho0
   buoy_scale = US%L_to_m**2*US%s_to_T**3
 
   ! loop over horizontal points on processor
-  !GOMP parallel do default(none) private(surfFricVel, iFaceHeight, hcorr, dh, cellHeight,  &
-  !GOMP                           surfBuoyFlux, U_H, V_H, u, v, Coriolis, pRef, SLdepth_0d, &
-  !GOMP                           ksfc, surfHtemp, surfHsalt, surfHu, surfHv, surfHuS,      &
-  !GOMP                           surfHvS, hTot, delH, surftemp, surfsalt, surfu, surfv,    &
-  !GOMP                           surfUs, surfVs, Uk, Vk, deltaU2, km1, kk, pres_1D,        &
-  !GOMP                           Temp_1D, salt_1D, surfBuoyFlux2, MLD_GUESS, LA, rho_1D,   &
-  !GOMP                           deltarho, N2_1d, ws_1d, LangEnhVT2, enhvt2, wst,          &
-  !GOMP                           BulkRi_1d, zBottomMinusOffset) &
-  !GOMP                           shared(G, GV, CS, US, uStar, h, buoy_scale, buoyFlux,     &
-  !GOMP                           Temp, Salt, waves, tv, GoRho)
+  !$OMP parallel do default(none) private(surfFricVel, iFaceHeight, hcorr, dh, cellHeight,  &
+  !$OMP                           surfBuoyFlux, U_H, V_H, Coriolis, pRef, SLdepth_0d,       &
+  !$OMP                           ksfc, surfHtemp, surfHsalt, surfHu, surfHv, surfHuS,      &
+  !$OMP                           surfHvS, hTot, delH, surftemp, surfsalt, surfu, surfv,    &
+  !$OMP                           surfUs, surfVs, Uk, Vk, deltaU2, km1, kk, pres_1D,        &
+  !$OMP                           Temp_1D, salt_1D, surfBuoyFlux2, MLD_GUESS, LA, rho_1D,   &
+  !$OMP                           deltarho, N2_1d, ws_1d, LangEnhVT2, enhvt2, wst,          &
+  !$OMP                           BulkRi_1d, zBottomMinusOffset) &
+  !$OMP                           shared(G, GV, CS, US, uStar, h, buoy_scale, buoyFlux,     &
+  !$OMP                           Temp, Salt, waves, tv, GoRho, u, v)
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
 
@@ -1240,6 +1258,8 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
     enddo
   enddo
 
+  call cpu_clock_end(id_clock_KPP_compute_BLD)
+
   ! send diagnostics to post_data
   if (CS%id_BulkRi   > 0) call post_data(CS%id_BulkRi,   CS%BulkRi,          CS%diag)
   if (CS%id_N        > 0) call post_data(CS%id_N,        CS%N,               CS%diag)
@@ -1269,7 +1289,7 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer/level thicknesses [H ~> m or kg m-2]
 
   ! local
-  real, dimension(SZI_(G),SZJ_(G)) :: OBLdepth_original ! Original OBL depths computed by CVMix
+  real, dimension(SZI_(G),SZJ_(G)) :: OBLdepth_prev     ! OBLdepth before s.th smoothing iteration
   real, dimension( G%ke )          :: cellHeight        ! Cell center heights referenced to surface [m]
                                                         ! (negative in the ocean)
   real, dimension( G%ke+1 )        :: iFaceHeight       ! Interface heights referenced to surface [m]
@@ -1279,15 +1299,20 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
   real :: hcorr              ! A cumulative correction arising from inflation of vanished layers [m]
   integer :: i, j, k, s
 
+  call cpu_clock_begin(id_clock_KPP_smoothing)
+
+  ! Update halos
+  call pass_var(CS%OBLdepth, G%Domain, halo=CS%n_smooth)
+
+  if (CS%id_OBLdepth_original > 0) CS%OBLdepth_original = CS%OBLdepth
+
   do s=1,CS%n_smooth
 
-    ! Update halos
-    call pass_var(CS%OBLdepth, G%Domain)
-
-    OBLdepth_original = CS%OBLdepth
-    if (CS%id_OBLdepth_original > 0) CS%OBLdepth_original = OBLdepth_original
+    OBLdepth_prev = CS%OBLdepth
 
     ! apply smoothing on OBL depth
+    !$OMP parallel do default(none) shared(G, GV, CS, h, OBLdepth_prev) &
+    !$OMP                           private(wc, ww, we, wn, ws, dh, hcorr, cellHeight, iFaceHeight)
     do j = G%jsc, G%jec
       do i = G%isc, G%iec
 
@@ -1314,14 +1339,14 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
         wn = 0.125 * G%mask2dT(i,j+1)
         wc = 1.0 - (ww+we+wn+ws)
 
-        CS%OBLdepth(i,j) =  wc * OBLdepth_original(i,j)   &
-                          + ww * OBLdepth_original(i-1,j) &
-                          + we * OBLdepth_original(i+1,j) &
-                          + ws * OBLdepth_original(i,j-1) &
-                          + wn * OBLdepth_original(i,j+1)
+        CS%OBLdepth(i,j) =  wc * OBLdepth_prev(i,j)   &
+                          + ww * OBLdepth_prev(i-1,j) &
+                          + we * OBLdepth_prev(i+1,j) &
+                          + ws * OBLdepth_prev(i,j-1) &
+                          + wn * OBLdepth_prev(i,j+1)
 
         ! Apply OBLdepth smoothing at a cell only if the OBLdepth gets deeper via smoothing.
-        if (CS%deepen_only) CS%OBLdepth(i,j) = max(CS%OBLdepth(i,j),CS%OBLdepth_original(i,j))
+        if (CS%deepen_only) CS%OBLdepth(i,j) = max(CS%OBLdepth(i,j), OBLdepth_prev(i,j))
 
         ! prevent OBL depths deeper than the bathymetric depth
         CS%OBLdepth(i,j) = min( CS%OBLdepth(i,j), -iFaceHeight(G%ke+1) ) ! no deeper than bottom
@@ -1331,30 +1356,7 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
 
   enddo ! s-loop
 
-  ! Update kOBL for smoothed OBL depths
-  do j = G%jsc, G%jec
-    do i = G%isc, G%iec
-
-      ! skip land points
-      if (G%mask2dT(i,j)==0.) cycle
-
-      iFaceHeight(1) = 0.0 ! BBL is all relative to the surface
-      hcorr = 0.
-      do k=1,G%ke
-
-        ! cell center and cell bottom in meters (negative values in the ocean)
-        dh = h(i,j,k) * GV%H_to_m ! Nominal thickness to use for increment
-        dh = dh + hcorr ! Take away the accumulated error (could temporarily make dh<0)
-        hcorr = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
-        dh = max( dh, CS%min_thickness ) ! Limit increment dh>=min_thickness
-        cellHeight(k)    = iFaceHeight(k) - 0.5 * dh
-        iFaceHeight(k+1) = iFaceHeight(k) - dh
-      enddo
-
-      CS%kOBL(i,j) = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, CS%OBLdepth(i,j) )
-
-    enddo
-  enddo
+  call cpu_clock_end(id_clock_KPP_smoothing)
 
 end subroutine KPP_smooth_BLD
 
@@ -1375,6 +1377,7 @@ subroutine KPP_get_BLD(CS, BLD, G, US, m_to_BLD_units)
 
   scale = US%m_to_Z ; if (present(m_to_BLD_units)) scale = m_to_BLD_units
 
+  !$OMP parallel do default(none) shared(BLD, CS, G, scale)
   do j = G%jsc, G%jec ; do i = G%isc, G%iec
     BLD(i,j) = scale * CS%OBLdepth(i,j)
   enddo ; enddo
@@ -1413,6 +1416,7 @@ subroutine KPP_NonLocalTransport_temp(CS, G, GV, h, nonLocalTrans, surfFlux, &
 
   !  Update tracer due to non-local redistribution of surface flux
   if (CS%applyNonLocalTrans) then
+    !$OMP parallel do default(none) shared(dt, scalar, dtracer, G)
     do k = 1, G%ke
       do j = G%jsc, G%jec
         do i = G%isc, G%iec
@@ -1427,6 +1431,7 @@ subroutine KPP_NonLocalTransport_temp(CS, G, GV, h, nonLocalTrans, surfFlux, &
   if (CS%id_NLT_dTdt        > 0) call post_data(CS%id_NLT_dTdt, dtracer,  CS%diag)
   if (CS%id_NLT_temp_budget > 0) then
     dtracer(:,:,:) = 0.0
+    !$OMP parallel do default(none) shared(dtracer, nonLocalTrans, surfFlux, C_p, G, GV)
     do k = 1, G%ke
       do j = G%jsc, G%jec
         do i = G%isc, G%iec
@@ -1472,6 +1477,7 @@ subroutine KPP_NonLocalTransport_saln(CS, G, GV, h, nonLocalTrans, surfFlux, dt,
 
   !  Update tracer due to non-local redistribution of surface flux
   if (CS%applyNonLocalTrans) then
+    !$OMP parallel do default(none) shared(G, dt, scalar, dtracer)
     do k = 1, G%ke
       do j = G%jsc, G%jec
         do i = G%isc, G%iec
@@ -1486,6 +1492,7 @@ subroutine KPP_NonLocalTransport_saln(CS, G, GV, h, nonLocalTrans, surfFlux, dt,
   if (CS%id_NLT_dSdt        > 0) call post_data(CS%id_NLT_dSdt, dtracer,  CS%diag)
   if (CS%id_NLT_saln_budget > 0) then
     dtracer(:,:,:) = 0.0
+    !$OMP parallel do default(none) shared(G, GV, dtracer, nonLocalTrans, surfFlux)
     do k = 1, G%ke
       do j = G%jsc, G%jec
         do i = G%isc, G%iec
@@ -1512,61 +1519,4 @@ subroutine KPP_end(CS)
 
 end subroutine KPP_end
 
-!> \namespace mom_cvmix_kpp
-!!
-!! \section section_KPP The K-Profile Parameterization
-!!
-!! The K-Profile Parameterization (KPP) of Large et al., 1994, (http://dx.doi.org/10.1029/94RG01872) is
-!! implemented via the Community Vertical Mixing package, [CVMix](http://cvmix.github.io/),
-!! which is called directly by this module.
-!!
-!! The formulation and implementation of KPP is described in great detail in the
-!! [CVMix manual](https://github.com/CVMix/CVMix-description/raw/master/cvmix.pdf) (written by our own Steve Griffies).
-!!
-!! \subsection section_KPP_nutshell KPP in a nutshell
-!!
-!! Large et al., 1994, decompose the parameterized boundary layer turbulent flux of a scalar, \f$ s \f$, as
-!! \f[ \overline{w^\prime s^\prime} = -K \partial_z s + K \gamma_s(\sigma), \f]
-!! where \f$ \sigma = -z/h \f$ is a non-dimensional coordinate within the boundary layer of depth \f$ h \f$.
-!! \f$ K \f$ is the eddy diffusivity and is a function of position within the boundary layer as well as a
-!! function of the surface forcing:
-!! \f[ K = h w_s(\sigma) G(\sigma) . \f]
-!! Here, \f$ w_s \f$ is the vertical velocity scale of the boundary layer turbulence and \f$ G(\sigma) \f$ is
-!! a "shape function" which is described later.
-!! The last term is the "non-local transport" which involves a function \f$ \gamma_s(\sigma) \f$ that is matched
-!! to the forcing but is not actually needed in the final implementation.
-!! Instead, the entire non-local transport term can be equivalently written
-!! \f[ K \gamma_s(\sigma) = C_s G(\sigma) Q_s \f]
-!! where \f$ Q_s \f$ is the surface flux of \f$ s \f$ and \f$ C_s \f$ is a constant.
-!! The vertical structure of the redistribution (non-local) term is solely due  to the shape function,
-!! \f$ G(\sigma) \f$.
-!! In our implementation of KPP, we allow the shape functions used for \f$ K \f$ and for the non-local transport
-!! to be chosen independently.
-!!
-!! [google_thread_NLT]: https://groups.google.com/forum/#!msg/CVMix-dev/i6rF-eHOtKI/Ti8BeyksrhAJ
-!! "Extreme values of non-local transport"
-!!
-!! The particular shape function most widely used in the atmospheric community is
-!! \f[ G(\sigma) = \sigma (1-\sigma)^2 \f]
-!! which satisfies the boundary conditions
-!!  \f$ G(0) = 0 \f$,
-!!  \f$ G(1) = 0 \f$,
-!!  \f$ G^\prime(0) = 1 \f$, and
-!!  \f$ G^\prime(1) = 0 \f$.
-!! Large et al, 1994, alter the function so as to match interior diffusivities but we have found that this leads
-!! to inconsistencies within the formulation (see google groups thread
-!! [Extreme values of non-local transport][google_thread_NLT]).
-!! Instead, we use either the above form, or even simpler forms that use alternative upper boundary conditions.
-!!
-!! The KPP boundary layer depth is a function of the bulk Richardson number, Rib.
-!! But to compute Rib, we need the boundary layer depth.  To address this circular
-!! logic, we compute Rib for each vertical cell in a column, assuming the BL depth
-!! equals to the depth of the given grid cell.  Once we have a vertical array of Rib(k),
-!! we then call the OBLdepth routine from CVMix to compute the actual
-!! OBLdepth. We optionally then "correct" the OBLdepth by cycling through once more,
-!! this time knowing the OBLdepth from the first pass. This "correction" step is not
-!! used by NCAR. It has been found in idealized MOM6 tests to not be necessary.
-!!
-!! \sa
-!! kpp_calculate(), kpp_applynonlocaltransport()
 end module MOM_CVMix_KPP

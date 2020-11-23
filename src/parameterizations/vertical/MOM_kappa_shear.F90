@@ -80,10 +80,17 @@ type, public :: Kappa_shear_CS ; private
                              !! greater than 1.  The lower limit for the permitted fractional
                              !! decrease is (1 - 0.5/kappa_src_max_chg).  These limits could
                              !! perhaps be made dynamic with an improved iterative solver.
+  logical :: psurf_bug       !< If true, do a simple average of the cell surface pressures to get a
+                             !! surface pressure at the corner if VERTEX_SHEAR=True.  Otherwise mask
+                             !! out any land points in the average.
   logical :: all_layer_TKE_bug !< If true, report back the latest estimate of TKE instead of the
                              !! time average TKE when there is mass in all layers.  Otherwise always
                              !! report the time-averaged TKE, as is currently done when there
                              !! are some massless layers.
+  logical :: restrictive_tolerance_check !< If false, uses the less restrictive tolerance check to
+                             !! determine if a timestep is acceptable for the KS_it outer iteration
+                             !! loop, as the code was originally written.  True uses the more
+                             !! restrictive check.
 !  logical :: layer_stagger = .false. ! If true, do the calculations centered at
                              !  layers, rather than the interfaces.
   logical :: debug = .false. !< If true, write verbose debugging messages.
@@ -534,9 +541,19 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
         do k=1,nzc+1 ; kc(k) = k ; kf(k) = 0.0 ; enddo
       endif
       f2 = G%CoriolisBu(I,J)**2
-      surface_pres = 0.0 ; if (associated(p_surf)) &
-        surface_pres = 0.25 * ((p_surf(i,j) + p_surf(i+1,j+1)) + &
-                               (p_surf(i+1,j) + p_surf(i,j+1)))
+      surface_pres = 0.0
+      if (associated(p_surf)) then
+        if (CS%psurf_bug) then
+          ! This is wrong because it is averaging values from land in some places.
+          surface_pres = 0.25 * ((p_surf(i,j) + p_surf(i+1,j+1)) + &
+                                 (p_surf(i+1,j) + p_surf(i,j+1)))
+        else
+          surface_pres = ((G%mask2dT(i,j) * p_surf(i,j) + G%mask2dT(i+1,j+1) * p_surf(i+1,j+1)) + &
+                          (G%mask2dT(i+1,j) * p_surf(i+1,j) + G%mask2dT(i,j+1) * p_surf(i,j+1)) ) / &
+                         ((G%mask2dT(i,j) + G%mask2dT(i+1,j+1)) + &
+                          (G%mask2dT(i+1,j) + G%mask2dT(i,j+1)) + 1.0e-36 )
+        endif
+      endif
 
     ! ----------------------------------------------------
     ! Set the initial guess for kappa, here defined at interfaces.
@@ -643,6 +660,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
            optional, intent(out)   :: dz_Int_1d !< The extent of a finite-volume space surrounding an interface,
                                                !! as used in calculating kappa and TKE [Z ~> m].
 
+  ! Local variables
   real, dimension(nzc) :: &
     u, &        ! The zonal velocity after a timestep of mixing [L T-1 ~> m s-1].
     v, &        ! The meridional velocity after a timestep of mixing [L T-1 ~> m s-1].
@@ -885,7 +903,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
     ! Determine how long to use this value of kappa (dt_now).
 
   ! call cpu_clock_begin(id_clock_project)
-    if ((ke_kappa < ks_kappa) .or. (itt==CS%max_RiNo_it)) then
+    if ((ke_kappa < ks_kappa) .or. (itt==CS%max_KS_it)) then
       dt_now = dt_rem
     else
       ! Limit dt_now so that |k_src(k)-kappa_src(k)| < tol * local_src(k)
@@ -914,9 +932,16 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
           if (N2(K) < Ri_crit * S2(K)) then ! Equivalent to Ri < Ri_crit.
             K_src(K) = (2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
                        ((Ri_crit*S2(K) - N2(K)) / (Ri_crit*S2(K) + CS%FRi_curvature*N2(K)))
-            if ((K_src(K) > max(tol_max(K), kappa_src(K) + Idtt*tol_chg(K))) .or. &
-                (K_src(K) < min(tol_min(K), kappa_src(K) - Idtt*tol_chg(K)))) then
-              valid_dt = .false. ; exit
+            if (CS%restrictive_tolerance_check) then
+              if ((K_src(K) > min(tol_max(K), kappa_src(K) + Idtt*tol_chg(K))) .or. &
+                  (K_src(K) < max(tol_min(K), kappa_src(K) - Idtt*tol_chg(K)))) then
+                valid_dt = .false. ; exit
+              endif
+            else
+              if ((K_src(K) > max(tol_max(K), kappa_src(K) + Idtt*tol_chg(K))) .or. &
+                  (K_src(K) < min(tol_min(K), kappa_src(K) - Idtt*tol_chg(K)))) then
+                valid_dt = .false. ; exit
+              endif
             endif
           else
             if (0.0 < min(tol_min(K), kappa_src(K) - Idtt*tol_chg(K))) then
@@ -1218,7 +1243,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   real, dimension(nz+1), optional, &
                          intent(out)   :: local_src !< The sum of all local sources for kappa,
                                               !! [T-1 ~> s-1].
-!   This subroutine calculates new, consistent estimates of TKE and kappa.
+  ! This subroutine calculates new, consistent estimates of TKE and kappa.
 
   ! Local variables
   real, dimension(nz) :: &
@@ -1743,7 +1768,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
 
 end subroutine find_kappa_tke
 
-!> This subroutineinitializesthe parameters that regulate shear-driven mixing
+!> This subroutine initializes the parameters that regulate shear-driven mixing
 function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time !< The current model time.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
@@ -1759,6 +1784,7 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
 
   ! Local variables
   logical :: merge_mixedlayer
+  logical :: debug_shear
   logical :: just_read ! If true, this module is not used, so only read the parameters.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -1879,11 +1905,18 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
                  "could perhaps be made dynamic with an improved iterative solver.", &
                  default=10.0, units="nondim", do_not_log=just_read)
 
-  call get_param(param_file, mdl, "DEBUG_KAPPA_SHEAR", CS%debug, &
-                 "If true, write debugging data for the kappa-shear code. \n"//&
-                 "Caution: this option is _very_ verbose and should only "//&
-                 "be used in single-column mode!", &
+  call get_param(param_file, mdl, "DEBUG", CS%debug, &
+                 "If true, write out verbose debugging data.", &
                  default=.false., debuggingParam=.true., do_not_log=just_read)
+  call get_param(param_file, mdl, "DEBUG_KAPPA_SHEAR", debug_shear, &
+                 "If true, write debugging data for the kappa-shear code.", &
+                 default=.false., debuggingParam=.true., do_not_log=.true.)
+  if (debug_shear) CS%debug = .true.
+  call get_param(param_file, mdl, "KAPPA_SHEAR_VERTEX_PSURF_BUG", CS%psurf_bug, &
+                 "If true, do a simple average of the cell surface pressures to get a pressure "//&
+                 "at the corner if VERTEX_SHEAR=True.  Otherwise mask out any land points in "//&
+                 "the average.", default=.true., do_not_log=(just_read .or. (.not.CS%KS_at_vertex)))
+
   call get_param(param_file, mdl, "KAPPA_SHEAR_ITER_BUG", CS%dKdQ_iteration_bug, &
                  "If true, use an older, dimensionally inconsistent estimate of the "//&
                  "derivative of diffusivity with energy in the Newton's method iteration.  "//&
@@ -1893,6 +1926,10 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
                  "TKE when there is mass in all layers.  Otherwise always report the time "//&
                  "averaged TKE, as is currently done when there are some massless layers.", &
                  default=.false., do_not_log=just_read)
+  call get_param(param_file, mdl, "USE_RESTRICTIVE_TOLERANCE_CHECK", CS%restrictive_tolerance_check, &
+                 "If true, uses the more restrictive tolerance check to determine if a timestep "//&
+                 "is acceptable for the KS_it outer iteration loop.  False uses the original less "//&
+                 "restrictive check.", default=.false., do_not_log=just_read)
 !    id_clock_KQ = cpu_clock_id('Ocean KS kappa_shear', grain=CLOCK_ROUTINE)
 !    id_clock_avg = cpu_clock_id('Ocean KS avg', grain=CLOCK_ROUTINE)
 !    id_clock_project = cpu_clock_id('Ocean KS project', grain=CLOCK_ROUTINE)
@@ -1922,25 +1959,30 @@ end function kappa_shear_init
 !! parameterization will be used without needing to duplicate the log entry.
 logical function kappa_shear_is_used(param_file)
   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
-! Reads the parameter "USE_JACKSON_PARAM" and returns state.
+
+  ! Local variables
   character(len=40)  :: mdl = "MOM_kappa_shear"  ! This module's name.
+  ! This function reads the parameter "USE_JACKSON_PARAM" and returns its value.
 
   call get_param(param_file, mdl, "USE_JACKSON_PARAM", kappa_shear_is_used, &
                  default=.false., do_not_log=.true.)
 end function kappa_shear_is_used
 
-!> This function indicates to other modules whether the Jackson et al shear mixing
-!! parameterization will be used without needing to duplicate the log entry.
+!> This function indicates to other modules whether the Jackson et al shear mixing parameterization
+!! will be used at the vertices without needing to duplicate the log entry.  It returns false if
+!! the Jackson et al scheme is not used or if it is used via calculations at the tracer points.
 logical function kappa_shear_at_vertex(param_file)
   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
-! Reads the parameter "USE_JACKSON_PARAM" and returns state.
-  character(len=40)  :: mdl = "MOM_kappa_shear"  ! This module's name.
 
+  ! Local variables
+  character(len=40)  :: mdl = "MOM_kappa_shear"  ! This module's name.
   logical :: do_kappa_shear
+  ! This function returns true only if the parameters "USE_JACKSON_PARAM" and "VERTEX_SHEAR" are both true.
+
+  kappa_shear_at_vertex = .false.
 
   call get_param(param_file, mdl, "USE_JACKSON_PARAM", do_kappa_shear, &
                  default=.false., do_not_log=.true.)
-  kappa_shear_at_vertex = .false.
   if (do_Kappa_Shear) &
     call get_param(param_file, mdl, "VERTEX_SHEAR", kappa_shear_at_vertex, &
                  "If true, do the calculations of the shear-driven mixing "//&
