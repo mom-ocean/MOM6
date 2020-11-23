@@ -1264,18 +1264,6 @@ end subroutine CoriolisAdv_end
 !! Sadourny's energy conserving scheme conserves energy if the flow
 !! is nondivergent or centered difference thickness fluxes are used.
 !!
-!! Two sets of boundary conditions have been coded in the
-!! definition of relative vorticity.  These are written as:
-!! NOSLIP defined (in spherical coordinates):
-!!   relvort = dv/dx (east & west), with v = 0.
-!!   relvort = -sec(Q) * d(u cos(Q))/dy (north & south), with u = 0.
-!!
-!! NOSLIP not defined (free slip):
-!!   relvort = 0 (all boundaries)
-!!
-!! with Q temporarily defined as latitude.  The free slip boundary
-!! condition is much more natural on a C-grid.
-!!
 !! A small fragment of the grid is shown below:
 !! \verbatim
 !!
