@@ -1,0 +1,27 @@
+name: OpenMP and Restart verification
+
+on: [push, pull_request]
+
+jobs:
+  test-openmp-nan-restarts:
+
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .testing
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - uses: ./.github/actions/testing-setup
+
+    - name: Compile with openMP
+      run: make build/openmp/MOM6 -j
+
+    - name: Create validation data
+      run: make run.symmetric -k -s
+
+    - name: Run tests
+      run: make test.openmps test.nans test.restarts -k -s
