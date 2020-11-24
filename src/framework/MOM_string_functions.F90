@@ -142,13 +142,13 @@ function left_reals(r,sep)
   real, intent(in) :: r(:) !< The array of real variables to convert to a string
   character(len=*), optional, intent(in) :: sep !< The separator between
                                     !! successive values, by default it is ', '.
-  character(len=1320) :: left_reals !< The output string
+  character(len=:), allocatable :: left_reals !< The output string
 
-  integer :: j, n, b, ns
+  integer :: j, n, ns
   logical :: doWrite
   character(len=10) :: separator
 
-  n=1 ; doWrite=.true. ; left_reals='' ; b=1
+  n=1 ; doWrite=.true. ; left_reals=''
   if (present(sep)) then
     separator=sep ; ns=len(sep)
   else
@@ -163,16 +163,15 @@ function left_reals(r,sep)
       endif
     endif
     if (doWrite) then
-      if (b>1) then ! Write separator if a number has already been written
-        write(left_reals(b:),'(A)') separator
-        b=b+ns
+      if (len(left_reals)>0) then ! Write separator if a number has already been written
+        left_reals = left_reals // separator(1:ns)
       endif
       if (n>1) then
-        write(left_reals(b:),'(A,"*",A)') trim(left_int(n)),trim(left_real(r(j)))
+        left_reals = left_reals // trim(left_int(n)) // "*" // trim(left_real(r(j)))
       else
-        write(left_reals(b:),'(A)') trim(left_real(r(j)))
+        left_reals = left_reals // trim(left_real(r(j)))
       endif
-      n=1 ; b=len_trim(left_reals)+1
+      n=1
     endif
   enddo
 end function left_reals
