@@ -38,9 +38,9 @@ type, public :: wave_structure_CS ; !private
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                    !! regulate the timing of diagnostic output.
   real, allocatable, dimension(:,:,:) :: w_strct
-                                   !< Vertical structure of vertical velocity (normalized) [m s-1].
+                                   !< Vertical structure of vertical velocity (normalized) [nondim].
   real, allocatable, dimension(:,:,:) :: u_strct
-                                   !< Vertical structure of horizontal velocity (normalized) [m s-1].
+                                   !< Vertical structure of horizontal velocity (normalized) [nondim].
   real, allocatable, dimension(:,:,:) :: W_profile
                                    !< Vertical profile of w_hat(z), where
                                    !! w(x,y,z,t) = w_hat(z)*exp(i(kx+ly-freq*t)) is the full time-
@@ -49,11 +49,11 @@ type, public :: wave_structure_CS ; !private
                                    !< Vertical profile of the magnitude of horizontal velocity,
                                    !! (u^2+v^2)^0.5, averaged over a period [L T-1 ~> m s-1].
   real, allocatable, dimension(:,:,:) :: z_depths
-                                   !< Depths of layer interfaces [m].
+                                   !< Depths of layer interfaces [Z ~> m].
   real, allocatable, dimension(:,:,:) :: N2
-                                   !< Squared buoyancy frequency at each interface [s-2].
+                                   !< Squared buoyancy frequency at each interface [T-2 ~> s-2].
   integer, allocatable, dimension(:,:):: num_intfaces
-                                   !< Number of layer interfaces (including surface and bottom)
+                                   !< Number of layer interfaces (including surface and bottom) [nondim].
   real    :: int_tide_source_x     !< X Location of generation site
                                    !! for internal tide for testing (BDM)
   real    :: int_tide_source_y     !< Y Location of generation site
@@ -111,13 +111,13 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real, dimension(SZK_(G)+1) :: &
     dRho_dT, &    ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
     dRho_dS, &    ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
-    pres, &       ! Interface pressure [R L2 T-2 ~> Pa]
+    pres, &       ! Interface pressure [R L H T-2 ~> Pa]
     T_int, &      ! Temperature interpolated to interfaces [degC]
     S_int, &      ! Salinity interpolated to interfaces [ppt]
-    gprime        ! The reduced gravity across each interface [m2 Z-1 s-2 ~> m s-2].
+    gprime        ! The reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
   real, dimension(SZK_(G)) :: &
     Igl, Igu      ! The inverse of the reduced gravity across an interface times
-                  ! the thickness of the layer below (Igl) or above (Igu) it [s2 m-2].
+                  ! the thickness of the layer below (Igl) or above (Igu) it [T2 L-2 ~> s2 m-2].
   real, dimension(SZK_(G),SZI_(G)) :: &
     Hf, &         ! Layer thicknesses after very thin layers are combined [Z ~> m]
     Tf, &         ! Layer temperatures after very thin layers are combined [degC]
@@ -130,10 +130,10 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
     Rc, &         ! A column of layer densities after convective istabilities are removed [R ~> kg m-3]
     det, ddet
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    htot          ! The vertical sum of the thicknesses [Z ~> m]
-  real :: lam
-  real :: min_h_frac
-  real :: Z_to_pres ! A conversion factor from thicknesses to pressure [R L2 T-2 Z-1 ~> Pa m-1]
+    htot              ! The vertical sum of the thicknesses [Z ~> m]
+  real :: lam         ! inverse of wave speed squared [T2 L-2 ~> s2 m-2]
+  real :: min_h_frac  ! fractional (per layer) minimum thickness [nondim]
+  real :: Z_to_pres   ! A conversion factor from thicknesses to pressure [R L2 T-2 Z-1 ~> Pa m-1]
   real, dimension(SZI_(G)) :: &
     hmin, &        ! Thicknesses [Z ~> m]
     H_here, &      ! A thickness [Z ~> m]
@@ -145,32 +145,38 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real :: drxh_sum ! The sum of density diffrences across interfaces times thicknesses [R Z ~> kg m-2]
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
   real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
-  real :: g_Rho0  ! G_Earth/Rho0 in [m2 s-2 Z-1 R-1 ~> m4 s-2 kg-1].
+  real :: g_Rho0  ! G_Earth/Rho0 in [L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1].
   ! real :: rescale, I_rescale
   integer :: kf(SZI_(G))
   integer, parameter :: max_itt = 1 ! number of times to iterate in solving for eigenvector
   real :: cg_subRO        ! A tiny wave speed to prevent division by zero [L T-1 ~> m s-1]
-  real, parameter    :: a_int = 0.5 ! value of normalized integral: \int(w_strct^2)dz = a_int
-  real               :: I_a_int     ! inverse of a_int
+  real, parameter    :: a_int = 0.5 ! value of normalized integral: \int(w_strct^2)dz = a_int [nondim]
+  real               :: I_a_int     ! inverse of a_int [nondim]
   real               :: f2          ! squared Coriolis frequency [T-2 ~> s-2]
-  real               :: Kmag2       ! magnitude of horizontal wave number squared
+  real               :: Kmag2       ! magnitude of horizontal wave number squared [L-2 ~> m-2]
   logical            :: use_EOS     ! If true, density is calculated from T & S using an
                                     ! equation of state.
-  real, dimension(SZK_(G)+1) :: w_strct, u_strct, W_profile, Uavg_profile, z_int, N2
-                                        ! local representations of variables in CS; note,
-                                        ! not all rows will be filled if layers get merged!
-  real, dimension(SZK_(G)+1) :: w_strct2, u_strct2
-                                        ! squared values
-  real, dimension(SZK_(G))   :: dz      ! thicknesses of merged layers (same as Hc I hope)
+
+  ! local representations of variables in CS; note,
+  ! not all rows will be filled if layers get merged!
+  real, dimension(SZK_(G)+1) :: w_strct      ! Vertical structure of vertical velocity (normalized) [nondim].
+  real, dimension(SZK_(G)+1) :: u_strct      ! Vertical structure of horizontal velocity (normalized) [nondim].
+  real, dimension(SZK_(G)+1) :: W_profile    ! Vertical profile of w_hat(z) = W0*w_strct(z) [Z T-1 ~> m s-1].
+  real, dimension(SZK_(G)+1) :: Uavg_profile ! Vertical profile of the magnitude of horizontal velocity [L T-1 ~> m s-1].
+  real, dimension(SZK_(G)+1) :: z_int        ! Integrated depth [Z ~> m]
+  real, dimension(SZK_(G)+1) :: N2           ! Squared buoyancy frequency at each interface [T-2 ~> s-2].
+  real, dimension(SZK_(G)+1) :: w_strct2     ! squared values [nondim]
+  real, dimension(SZK_(G)+1) :: u_strct2     ! squared values [nondim]
+  real, dimension(SZK_(G))   :: dz           ! thicknesses of merged layers (same as Hc I hope) [Z ~> m]
   ! real, dimension(SZK_(G)+1) :: dWdz_profile ! profile of dW/dz
-  real                       :: w2avg   ! average of squared vertical velocity structure funtion
+  real                       :: w2avg   ! average of squared vertical velocity structure funtion [Z ~> m]
   real                       :: int_dwdz2
   real                       :: int_w2
   real                       :: int_N2w2
   real                       :: KE_term ! terms in vertically averaged energy equation
   real                       :: PE_term ! terms in vertically averaged energy equation
   real                       :: W0      ! A vertical velocity magnitude [Z T-1 ~> m s-1]
-  real                       :: gp_unscaled ! A version of gprime rescaled to [m s-2].
+  real                       :: gp_unscaled ! A version of gprime rescaled to [L T-2 ~> m s-2].
   real, dimension(SZK_(G)-1) :: lam_z   ! product of eigen value and gprime(k); one value for each
                                         ! interface (excluding surface and bottom)
   real, dimension(SZK_(G)-1) :: a_diag, b_diag, c_diag
@@ -199,8 +205,8 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   S => tv%S ; T => tv%T
   g_Rho0 = GV%g_Earth / GV%Rho0
 
-  if (CS%debug) call chksum0(g_Rho0, "g/rho0 in wave struct", &
-                             scale=US%Z_to_m*(US%s_to_T**2)*US%kg_m3_to_R)
+  !if (CS%debug) call chksum0(g_Rho0, "g/rho0 in wave struct", &
+  !                           scale=(US%L_to_m**2)*US%m_to_Z*(US%s_to_T**2)*US%kg_m3_to_R)
 
   if (CS%debug) call chksum0(freq, "freq in wave_struct", scale=US%s_to_T)
 
@@ -396,7 +402,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
             do K=2,kc
               Igl(K) = 1.0/(gprime(K)*Hc(k)) ; Igu(K) = 1.0/(gprime(K)*Hc(k-1))
               z_int(K) = z_int(K-1) + Hc(k-1)
-              N2(K) = gprime(K)/(0.5*(Hc(k)+Hc(k-1)))
+              N2(K) = US%L_to_Z**2*gprime(K)/(0.5*(Hc(k)+Hc(k-1)))
             enddo
             ! Set stratification for surface and bottom (setting equal to nearest interface for now)
             N2(1) = N2(2) ; N2(kc+1) = N2(kc)
@@ -415,6 +421,16 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
             ! [-1/H(k-1)]e(k-1) + [1/H(k-1)+1/H(k)-lam_z]e(k) + [-1/H(k)]e(k+1) = 0,
             ! where lam_z = lam*gprime is now a function of depth.
             ! Frist, populate interior rows
+
+            ! init the values in matrix: since number of layers is variable, values need
+            ! to be reset
+            lam_z(:) = 0.0
+            a_diag(:) = 0.0
+            b_diag(:) = 0.0
+            c_diag(:) = 0.0
+            e_guess(:) = 0.0
+            e_itt(:) = 0.0
+            w_strct(:) = 0.0
             do K=3,kc-1
               row = K-1 ! indexing for TD matrix rows
               gp_unscaled = gprime(K)
@@ -564,7 +580,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
 
   if (CS%debug) call hchksum(CS%N2, 'N2 in wave_struct', G%HI, scale=US%s_to_T**2)
   if (CS%debug) call hchksum(cn, 'cn in wave_struct', G%HI, scale=US%L_T_to_m_s)
-  if (CS%debug) call hchksum(CS%W_profile, 'Wprofile in wave_struct', G%HI, scale=US%L_T_to_m_s)
+  if (CS%debug) call hchksum(CS%W_profile, 'Wprofile in wave_struct', G%HI, scale=US%Z_to_L*US%L_T_to_m_s)
   if (CS%debug) call hchksum(CS%Uavg_profile, 'Uavg_profile in wave_struct', G%HI, scale=US%L_T_to_m_s)
 
 end subroutine wave_structure
@@ -653,7 +669,7 @@ subroutine tridiag_solver(a, b, c, h, y, method, x)
     ! Need to add a check for these conditions.
     do k=1,nrow-1
       if (abs(a(k+1)-c(k)) > 1.e-10*(abs(a(k+1))+abs(c(k)))) then
-        call MOM_error(WARNING, "tridiag_solver: matrix not symmetric; need symmetry when invoking TDMA_H")
+        call MOM_error(FATAL, "tridiag_solver: matrix not symmetric; need symmetry when invoking TDMA_H")
       endif
     enddo
     alpha = -c
