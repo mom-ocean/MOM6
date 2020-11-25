@@ -524,9 +524,9 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb, zero_mix)
       "in call to find_uv_at_h.")
   zero_mixing = .false. ; if (present(zero_mix)) zero_mixing = zero_mix
   if (zero_mixing) mix_vertically = .false.
-!$OMP parallel do default(none) shared(is,ie,js,je,G,GV,mix_vertically,h,h_neglect, &
-!$OMP                                  eb,u_h,u,v_h,v,nz,ea)                     &
-!$OMP                          private(sum_area,Idenom,a_w,a_e,a_s,a_n,b_denom_1,b1,d1,c1)
+  !$OMP parallel do default(none) shared(is,ie,js,je,G,GV,mix_vertically,zero_mixing,h, &
+  !$OMP                                  h_neglect,ea,eb,u_h,u,v_h,v,nz)                &
+  !$OMP                          private(sum_area,Idenom,a_w,a_e,a_s,a_n,b_denom_1,b1,d1,c1)
   do j=js,je
     do i=is,ie
       sum_area = G%areaCu(I-1,j) + G%areaCu(I,j)
