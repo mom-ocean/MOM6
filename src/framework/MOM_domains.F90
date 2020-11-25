@@ -1309,7 +1309,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 !$   call fms_affinity_set('OCEAN', ocean_omp_hyper_thread, ocean_nthreads)
 !$   call omp_set_num_threads(ocean_nthreads)
 !$   write(6,*) "MOM_domains_mod OMPthreading ", fms_affinity_get(), omp_get_thread_num(), omp_get_num_threads()
-!$   call flush(6)
+!$   flush(6)
 !$ endif
 #endif
   call log_param(param_file, mdl, "!SYMMETRIC_MEMORY_", MOM_dom%symmetric, &
