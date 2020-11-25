@@ -260,7 +260,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
 
     call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
     call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
@@ -375,6 +375,8 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
                   "Unsupported format in grid definition '"//trim(filename)//"'. Error message "//trim(message))
       call field_size(trim(fileName), trim(varName), nzf)
       ke = nzf(1)-1
+      if (ke < 1) call MOM_error(FATAL, trim(mdl)//" initialize_regridding via Var "//trim(varName)//&
+                                 "in FILE "//trim(filename)//" requires at least 2 target interface values.")
       if (CS%regridding_scheme == REGRIDDING_RHO) then
         allocate(rho_target(ke+1))
         call MOM_read_data(trim(fileName), trim(varName), rho_target)
@@ -392,7 +394,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       allocate(dz(ke))
       call MOM_read_data(trim(fileName), trim(varName), dz)
     endif
-    if (main_parameters .and. ke/=GV%ke) then
+    if (main_parameters .and. (ke/=GV%ke)) then
       call MOM_error(FATAL,trim(mdl)//', initialize_regridding: '// &
                  'Mismatch in number of model levels and "'//trim(string)//'".')
     endif
@@ -2016,17 +2018,22 @@ end subroutine setCoordinateResolution
 !> Set target densities based on the old Rlay variable
 subroutine set_target_densities_from_GV( GV, US, CS )
   type(verticalGrid_type), intent(in)    :: GV !< Ocean vertical grid structure
-  type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
+  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   type(regridding_CS),     intent(inout) :: CS !< Regridding control structure
   ! Local variables
   integer :: k, nz
 
   nz = CS%nk
-  CS%target_density(1)    = (GV%Rlay(1) + 0.5*(GV%Rlay(1)-GV%Rlay(2)))
-  CS%target_density(nz+1) = (GV%Rlay(nz) + 0.5*(GV%Rlay(nz)-GV%Rlay(nz-1)))
-  do k = 2,nz
-    CS%target_density(k) = CS%target_density(k-1) + CS%coordinateResolution(k)
-  enddo
+  if (nz == 1) then ! Set a broad range of bounds.  Regridding may not be meaningful in this case.
+    CS%target_density(1)    = 0.0
+    CS%target_density(2)    = 2.0*GV%Rlay(1)
+  else
+    CS%target_density(1)    = (GV%Rlay(1) + 0.5*(GV%Rlay(1)-GV%Rlay(2)))
+    CS%target_density(nz+1) = (GV%Rlay(nz) + 0.5*(GV%Rlay(nz)-GV%Rlay(nz-1)))
+    do k=2,nz
+      CS%target_density(k)  = CS%target_density(k-1) + CS%coordinateResolution(k)
+    enddo
+  endif
   CS%target_density_set = .true.
 
 end subroutine set_target_densities_from_GV

@@ -204,7 +204,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
                  default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", CS%remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
@@ -256,7 +256,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
                             answers_2018=CS%remap_answers_2018)
 
   call log_param(param_file, mdl, "!Total sponge columns at h points", total_sponge_cols, &
-                 "The total number of columns where sponges are applied at h points.")
+                 "The total number of columns where sponges are applied at h points.", like_default=.true.)
 
   if (CS%sponge_uv) then
 
@@ -300,7 +300,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
     total_sponge_cols_u = CS%num_col_u
     call sum_across_PEs(total_sponge_cols_u)
     call log_param(param_file, mdl, "!Total sponge columns at u points", total_sponge_cols_u, &
-                "The total number of columns where sponges are applied at u points.")
+                "The total number of columns where sponges are applied at u points.", like_default=.true.)
 
     ! v points
     CS%num_col_v = 0 ; !CS%fldno_v = 0
@@ -336,7 +336,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
     total_sponge_cols_v = CS%num_col_v
     call sum_across_PEs(total_sponge_cols_v)
     call log_param(param_file, mdl, "!Total sponge columns at v points", total_sponge_cols_v, &
-                 "The total number of columns where sponges are applied at v points.")
+                 "The total number of columns where sponges are applied at v points.", like_default=.true.)
   endif
 
 end subroutine initialize_ALE_sponge_fixed
@@ -442,7 +442,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
                  default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", CS%remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
@@ -484,7 +484,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
   call initialize_remapping(CS%remap_cs, remapScheme, boundary_extrapolation=bndExtrapolation, &
                             answers_2018=CS%remap_answers_2018)
   call log_param(param_file, mdl, "!Total sponge columns at h points", total_sponge_cols, &
-                 "The total number of columns where sponges are applied at h points.")
+                 "The total number of columns where sponges are applied at h points.", like_default=.true.)
   if (CS%sponge_uv) then
     allocate(Iresttime_u(G%isdB:G%iedB,G%jsd:G%jed)) ; Iresttime_u(:,:) = 0.0
     allocate(Iresttime_v(G%isd:G%ied,G%jsdB:G%jedB)) ; Iresttime_v(:,:) = 0.0
@@ -513,7 +513,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
     total_sponge_cols_u = CS%num_col_u
     call sum_across_PEs(total_sponge_cols_u)
     call log_param(param_file, mdl, "!Total sponge columns at u points", total_sponge_cols_u, &
-                "The total number of columns where sponges are applied at u points.")
+                "The total number of columns where sponges are applied at u points.", like_default=.true.)
     ! v points
     CS%num_col_v = 0 ; !CS%fldno_v = 0
     do J=CS%jscB,CS%jecB; do i=CS%isc,CS%iec
@@ -538,7 +538,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
     total_sponge_cols_v = CS%num_col_v
     call sum_across_PEs(total_sponge_cols_v)
     call log_param(param_file, mdl, "!Total sponge columns at v points", total_sponge_cols_v, &
-                "The total number of columns where sponges are applied at v points.")
+                "The total number of columns where sponges are applied at v points.", like_default=.true.)
   endif
 
 end subroutine initialize_ALE_sponge_varying
@@ -1047,9 +1047,11 @@ subroutine rotate_ALE_sponge(sponge_in, G_in, sponge, G, turns, param_file)
     c_i = sponge_in%col_i(c)
     c_j = sponge_in%col_j(c)
     Iresttime_in(c_i, c_j) = sponge_in%Iresttime_col(c)
-    if (fixed_sponge) then ; do k=1,nz_data
-      data_h(c_i, c_j, k) = sponge_in%Ref_h%p(k,c)
-    enddo ; endif
+    if (fixed_sponge) then
+      do k = 1, nz_data
+        data_h(c_i, c_j, k) = sponge_in%Ref_h%p(k,c)
+      enddo
+    endif
   enddo
 
   call rotate_array(Iresttime_in, turns, Iresttime)
@@ -1080,15 +1082,22 @@ subroutine rotate_ALE_sponge(sponge_in, G_in, sponge, G, turns, param_file)
   do n=1,sponge_in%fldno
     ! Assume that tracers are pointers and are remapped in other functions(?)
     sp_ptr => sponge_in%var(n)%p
-    sp_val_in(:,:,:) = 0.0
-    if (fixed_sponge) then ; do c=1,sponge_in%num_col ; do k=1,nz_data
-      sp_val_in(sponge_in%col_i(c), sponge_in%col_j(c), k) = sponge_in%Ref_val(n)%p(k,c)
-    enddo ; enddo ; endif
-
-    call rotate_array(sp_val_in, turns, sp_val)
     if (fixed_sponge) then
+      sp_val_in(:,:,:) = 0.0
+      do c = 1, sponge_in%num_col
+        c_i = sponge_in%col_i(c)
+        c_j = sponge_in%col_j(c)
+        do k = 1, nz_data
+          sp_val_in(c_i, c_j, k) = sponge_in%Ref_val(n)%p(k,c)
+        enddo
+      enddo
+
+      call rotate_array(sp_val_in, turns, sp_val)
+
       ! NOTE: This points sp_val with the unrotated field.  See note below.
       call set_up_ALE_sponge_field(sp_val, G, sp_ptr, sponge)
+
+      deallocate(sp_val_in)
     else
       ! We don't want to repeat FMS init in set_up_ALE_sponge_field_varying()
       ! (time_interp_external_init, init_external_field, etc), so we manually
@@ -1117,11 +1126,6 @@ subroutine rotate_ALE_sponge(sponge_in, G_in, sponge, G, turns, param_file)
       sponge%var(n)%p => sp_ptr
     endif
   enddo
-
-  if (fixed_sponge) then
-    deallocate(sp_val_in)
-    deallocate(sp_val)
-  endif
 
   ! TODO: var_u and var_v sponge dampling is not yet supported.
   if (associated(sponge_in%var_u%p) .or. associated(sponge_in%var_v%p)) &

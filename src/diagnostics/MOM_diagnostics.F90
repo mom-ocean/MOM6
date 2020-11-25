@@ -6,6 +6,7 @@ module MOM_diagnostics
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_coms,              only : reproducing_sum
+use MOM_density_integrals, only : int_density_dz
 use MOM_diag_mediator,     only : post_data, get_diag_time_end
 use MOM_diag_mediator,     only : register_diag_field, register_scalar_field
 use MOM_diag_mediator,     only : register_static_field, diag_register_area_ids
@@ -15,7 +16,7 @@ use MOM_diag_mediator,     only : diag_grid_storage
 use MOM_diag_mediator,     only : diag_save_grids, diag_restore_grids, diag_copy_storage_to_diag
 use MOM_domains,           only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,           only : To_North, To_East
-use MOM_EOS,               only : calculate_density, int_density_dz, EOS_domain
+use MOM_EOS,               only : calculate_density, calculate_density_derivs, EOS_domain
 use MOM_EOS,               only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_error_handler,     only : MOM_error, FATAL, WARNING
 use MOM_file_parser,       only : get_param, log_version, param_file_type
@@ -70,6 +71,9 @@ type, public :: diagnostics_CS ; private
     dv_dt => NULL(), & !< net j-acceleration [L T-2 ~> m s-2]
     dh_dt => NULL(), & !< thickness rate of change [H T-1 ~> m s-1 or kg m-2 s-1]
     p_ebt => NULL()    !< Equivalent barotropic modal structure [nondim]
+    ! hf_du_dt => NULL(), hf_dv_dt => NULL() !< du_dt, dv_dt x fract. thickness [L T-2 ~> m s-2].
+    ! 3D diagnostics hf_du(dv)_dt are commented because there is no clarity on proper remapping grid option.
+    ! The code is retained for degugging purposes in the future.
 
   real, pointer, dimension(:,:,:) :: h_Rlay => NULL() !< Layer thicknesses in potential density
                                               !! coordinates [H ~> m or kg m-2]
@@ -109,6 +113,8 @@ type, public :: diagnostics_CS ; private
   integer :: id_u = -1,   id_v = -1, id_h = -1
   integer :: id_e              = -1, id_e_D            = -1
   integer :: id_du_dt          = -1, id_dv_dt          = -1
+  ! integer :: id_hf_du_dt       = -1, id_hf_dv_dt       = -1
+  integer :: id_hf_du_dt_2d    = -1, id_hf_dv_dt_2d    = -1
   integer :: id_col_ht         = -1, id_dh_dt          = -1
   integer :: id_KE             = -1, id_dKEdt          = -1
   integer :: id_PE_to_KE       = -1, id_KE_Coradv      = -1
@@ -134,6 +140,7 @@ type, public :: diagnostics_CS ; private
   integer :: id_pbo            = -1
   integer :: id_thkcello       = -1, id_rhoinsitu      = -1
   integer :: id_rhopot0        = -1, id_rhopot2        = -1
+  integer :: id_drho_dT        = -1, id_drho_dS        = -1
   integer :: id_h_pre_sync     = -1
   !>@}
   !> The control structure for calculating wave speed.
@@ -231,6 +238,9 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   real :: work_2d(SZI_(G),SZJ_(G))         ! A 2-d temporary work array.
   real :: rho_in_situ(SZI_(G))             ! In situ density [R ~> kg m-3]
 
+  real, allocatable, dimension(:,:) :: &
+    hf_du_dt_2d, hf_dv_dt_2d ! z integeral of hf_du_dt, hf_dv_dt [L T-2 ~> m s-2].
+
   ! tmp array for surface properties
   real :: surface_field(SZI_(G),SZJ_(G))
   real :: pressure_1d(SZI_(G)) ! Temporary array for pressure when calling EOS [R L2 T-2 ~> Pa]
@@ -269,6 +279,44 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     if (CS%id_dv_dt>0) call post_data(CS%id_dv_dt, CS%dv_dt, CS%diag, alt_h = diag_pre_sync%h_state)
 
     if (CS%id_dh_dt>0) call post_data(CS%id_dh_dt, CS%dh_dt, CS%diag, alt_h = diag_pre_sync%h_state)
+
+    !! Diagnostics for terms multiplied by fractional thicknesses
+
+    ! 3D diagnostics hf_du(dv)_dt are commented because there is no clarity on proper remapping grid option.
+    ! The code is retained for degugging purposes in the future.
+    !if (CS%id_hf_du_dt > 0) then
+    !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+    !    CS%hf_du_dt(I,j,k) = CS%du_dt(I,j,k) * ADp%diag_hfrac_u(I,j,k)
+    !  enddo ; enddo ; enddo
+    !  call post_data(CS%id_hf_du_dt, CS%hf_du_dt, CS%diag, alt_h = diag_pre_sync%h_state)
+    !endif
+
+    !if (CS%id_hf_dv_dt > 0) then
+    !  do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+    !    CS%hf_dv_dt(i,J,k) = CS%dv_dt(i,J,k) * ADp%diag_hfrac_v(i,J,k)
+    !  enddo ; enddo ; enddo
+    !  call post_data(CS%id_hf_dv_dt, CS%hf_dv_dt, CS%diag, alt_h = diag_pre_sync%h_state)
+    !endif
+
+    if (CS%id_hf_du_dt_2d > 0) then
+      allocate(hf_du_dt_2d(G%IsdB:G%IedB,G%jsd:G%jed))
+      hf_du_dt_2d(:,:) = 0.0
+      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+        hf_du_dt_2d(I,j) = hf_du_dt_2d(I,j) + CS%du_dt(I,j,k) * ADp%diag_hfrac_u(I,j,k)
+      enddo ; enddo ; enddo
+      call post_data(CS%id_hf_du_dt_2d, hf_du_dt_2d, CS%diag)
+      deallocate(hf_du_dt_2d)
+    endif
+
+    if (CS%id_hf_dv_dt_2d > 0) then
+      allocate(hf_dv_dt_2d(G%isd:G%ied,G%JsdB:G%JedB))
+      hf_dv_dt_2d(:,:) = 0.0
+      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+        hf_dv_dt_2d(i,J) = hf_dv_dt_2d(i,J) + CS%dv_dt(i,J,k) * ADp%diag_hfrac_v(i,J,k)
+      enddo ; enddo ; enddo
+      call post_data(CS%id_hf_dv_dt_2d, hf_dv_dt_2d, CS%diag)
+      deallocate(hf_dv_dt_2d)
+    endif
 
     call diag_restore_grids(CS%diag)
 
@@ -619,6 +667,22 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       enddo
       if (CS%id_rhoinsitu > 0) call post_data(CS%id_rhoinsitu, Rcv, CS%diag)
     endif
+
+    if (CS%id_drho_dT > 0 .or. CS%id_drho_dS > 0) then
+      !$OMP parallel do default(shared) private(pressure_1d)
+      do j=js,je
+        pressure_1d(:) = 0. ! Start at p=0 Pa at surface
+        do k=1,nz
+          pressure_1d(:) =  pressure_1d(:) + 0.5 * h(:,j,k) * GV%H_to_Pa ! Pressure in middle of layer k
+          ! To avoid storing more arrays, put drho_dT into Rcv, and drho_dS into work3d
+          call calculate_density_derivs(tv%T(:,j,k),tv%S(:,j,k),pressure_1d, &
+                                 Rcv(:,j,k),work_3d(:,j,k),is,ie-is+1, tv%eqn_of_state)
+          pressure_1d(:) =  pressure_1d(:) + 0.5 * h(:,j,k) * GV%H_to_Pa ! Pressure at bottom of layer k
+        enddo
+      enddo
+      if (CS%id_drho_dT > 0) call post_data(CS%id_drho_dT, Rcv, CS%diag)
+      if (CS%id_drho_dS > 0) call post_data(CS%id_drho_dS, work_3d, CS%diag)
+    endif
   endif
 
   if ((CS%id_cg1>0) .or. (CS%id_Rd1>0) .or. (CS%id_cfl_cg1>0) .or. &
@@ -846,7 +910,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
             z_bot(i,j) = z_top(i,j) - GV%H_to_Z*h(i,j,k)
           enddo ; enddo
           call int_density_dz(tv%T(:,:,k), tv%S(:,:,k), z_top, z_bot, 0.0, GV%Rho0, GV%g_Earth, &
-                              G%HI, tv%eqn_of_state, dpress)
+                              G%HI, tv%eqn_of_state, US, dpress)
           do j=js,je ; do i=is,ie
             mass(i,j) = mass(i,j) + dpress(i,j) * IG_Earth
           enddo ; enddo
@@ -1478,7 +1542,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
                  do_not_log=.true.)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mdl, version)
+  call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "DIAG_EBT_MONO_N2_COLUMN_FRACTION", CS%mono_N2_column_fraction, &
                  "The lower fraction of water column over which N2 is limited as monotonic "// &
                  "for the purposes of calculating the equivalent barotropic wave speed.", &
@@ -1499,7 +1563,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
                  "starting point for iterations.", default=.false.) !### Change the default.
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
@@ -1600,6 +1664,10 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       'Potential density referenced to 2000 dbar', 'kg m-3', conversion=US%R_to_kg_m3)
   CS%id_rhoinsitu = register_diag_field('ocean_model', 'rhoinsitu', diag%axesTL, Time, &
       'In situ density', 'kg m-3', conversion=US%R_to_kg_m3)
+  CS%id_drho_dT = register_diag_field('ocean_model', 'drho_dT', diag%axesTL, Time, &
+      'Partial derivative of rhoinsitu with respect to temperature (alpha)', 'kg m-3 degC-1')
+  CS%id_drho_dS = register_diag_field('ocean_model', 'drho_dS', diag%axesTL, Time, &
+      'Partial derivative of rhoinsitu with respect to salinity (beta)', 'kg^2 g-1 m-3')
 
   CS%id_du_dt = register_diag_field('ocean_model', 'dudt', diag%axesCuL, Time, &
       'Zonal Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
@@ -1620,6 +1688,50 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   if ((CS%id_dh_dt>0) .and. .not.associated(CS%dh_dt)) then
     call safe_alloc_ptr(CS%dh_dt,isd,ied,jsd,jed,nz)
     call register_time_deriv(lbound(MIS%h), MIS%h, CS%dh_dt, CS)
+  endif
+
+  !CS%id_hf_du_dt = register_diag_field('ocean_model', 'hf_dudt', diag%axesCuL, Time, &
+  !    'Fractional Thickness-weighted Zonal Acceleration', 'm s-2', v_extensive=.true., &
+  !    conversion=US%L_T2_to_m_s2)
+  !if (CS%id_hf_du_dt > 0) then
+  !  call safe_alloc_ptr(CS%hf_du_dt,IsdB,IedB,jsd,jed,nz)
+  !  if (.not.associated(CS%du_dt)) then
+  !    call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
+  !    call register_time_deriv(lbound(MIS%u), MIS%u, CS%du_dt, CS)
+  !  endif
+  !  call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+  !endif
+
+  !CS%id_hf_dv_dt = register_diag_field('ocean_model', 'hf_dvdt', diag%axesCvL, Time, &
+  !    'Fractional Thickness-weighted Meridional Acceleration', 'm s-2', v_extensive=.true., &
+  !    conversion=US%L_T2_to_m_s2)
+  !if (CS%id_hf_dv_dt > 0) then
+  !  call safe_alloc_ptr(CS%hf_dv_dt,isd,ied,JsdB,JedB,nz)
+  !  if (.not.associated(CS%dv_dt)) then
+  !    call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
+  !    call register_time_deriv(lbound(MIS%v), MIS%v, CS%dv_dt, CS)
+  !  endif
+  !  call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+  !endif
+
+  CS%id_hf_du_dt_2d = register_diag_field('ocean_model', 'hf_dudt_2d', diag%axesCu1, Time, &
+      'Depth-sum Fractional Thickness-weighted Zonal Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
+  if (CS%id_hf_du_dt_2d > 0) then
+    if (.not.associated(CS%du_dt)) then
+      call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
+      call register_time_deriv(lbound(MIS%u), MIS%u, CS%du_dt, CS)
+    endif
+    call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+  endif
+
+  CS%id_hf_dv_dt_2d = register_diag_field('ocean_model', 'hf_dvdt_2d', diag%axesCv1, Time, &
+      'Depth-sum Fractional Thickness-weighted Meridional Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
+  if (CS%id_hf_dv_dt_2d > 0) then
+    if (.not.associated(CS%dv_dt)) then
+      call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
+      call register_time_deriv(lbound(MIS%v), MIS%v, CS%dv_dt, CS)
+    endif
+    call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
   endif
 
   ! layer thickness variables
@@ -2155,6 +2267,9 @@ subroutine MOM_diagnostics_end(CS, ADp)
   if (associated(ADp%dv_dt_dia))  deallocate(ADp%dv_dt_dia)
   if (associated(ADp%du_other))   deallocate(ADp%du_other)
   if (associated(ADp%dv_other))   deallocate(ADp%dv_other)
+
+  if (associated(ADp%diag_hfrac_u)) deallocate(ADp%diag_hfrac_u)
+  if (associated(ADp%diag_hfrac_v)) deallocate(ADp%diag_hfrac_v)
 
   do m=1,CS%num_time_deriv ; deallocate(CS%prev_val(m)%p) ; enddo
 

@@ -1048,7 +1048,7 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
 
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(param_file, mdl, "OPTICS_2018_ANSWERS", optics%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated expressions for "//&

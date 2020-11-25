@@ -4,7 +4,6 @@ module MOM_offline_main
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use mpp_domains_mod,          only : CENTER, CORNER, NORTH, EAST
 use MOM_ALE,                  only : ALE_CS, ALE_main_offline, ALE_offline_inputs
 use MOM_checksums,            only : hchksum, uvchksum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
@@ -20,7 +19,7 @@ use MOM_error_handler,        only : callTree_enter, callTree_leave
 use MOM_file_parser,          only : read_param, get_param, log_version, param_file_type
 use MOM_forcing_type,         only : forcing
 use MOM_grid,                 only : ocean_grid_type
-use MOM_io,                   only : MOM_read_data, MOM_read_vector
+use MOM_io,                   only : MOM_read_data, MOM_read_vector, CENTER
 use MOM_offline_aux,          only : update_offline_from_arrays, update_offline_from_files
 use MOM_offline_aux,          only : next_modulo_time, offline_add_diurnal_sw
 use MOM_offline_aux,          only : update_h_horizontal_flux, update_h_vertical_flux, limit_mass_flux_3d

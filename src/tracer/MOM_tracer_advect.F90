@@ -140,16 +140,15 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
 !$OMP                               hprev,domore_k,js,je,is,ie,uhtr,vhtr,G,GV,h_end,&
 !$OMP                               uh_neglect,vh_neglect,ntr,Tr,h_prev_opt)
 
-! This initializes the halos of uhr and vhr because pass_vector might do
-! calculations on them, even though they are never used.
-!$OMP do
-
+  ! This initializes the halos of uhr and vhr because pass_vector might do
+  ! calculations on them, even though they are never used.
+  !$OMP do
   do k=1,nz
     do j=jsd,jed ; do I=IsdB,IedB ; uhr(I,j,k) = 0.0 ; enddo ; enddo
     do J=jsdB,jedB ; do i=Isd,Ied ; vhr(i,J,k) = 0.0 ; enddo ; enddo
     do j=jsd,jed ; do i=Isd,Ied ; hprev(i,j,k) = 0.0 ; enddo ; enddo
     domore_k(k)=1
-!  Put the remaining (total) thickness fluxes into uhr and vhr.
+    !  Put the remaining (total) thickness fluxes into uhr and vhr.
     do j=js,je ; do I=is-1,ie ; uhr(I,j,k) = uhtr(I,j,k) ; enddo ; enddo
     do J=js-1,je ; do i=is,ie ; vhr(i,J,k) = vhtr(i,J,k) ; enddo ; enddo
     if (.not. present(h_prev_opt)) then
@@ -173,17 +172,17 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
   enddo
 
 
-!$OMP do
+  !$OMP do
   do j=jsd,jed ; do I=isd,ied-1
-    uh_neglect(I,j) = GV%H_subroundoff*MIN(G%areaT(i,j),G%areaT(i+1,j))
+    uh_neglect(I,j) = GV%H_subroundoff * MIN(G%areaT(i,j), G%areaT(i+1,j))
   enddo ; enddo
-!$OMP do
+  !$OMP do
   do J=jsd,jed-1 ; do i=isd,ied
-    vh_neglect(i,J) = GV%H_subroundoff*MIN(G%areaT(i,j),G%areaT(i,j+1))
+    vh_neglect(i,J) = GV%H_subroundoff * MIN(G%areaT(i,j), G%areaT(i,j+1))
   enddo ; enddo
 
-!$OMP do
   ! initialize diagnostic fluxes and tendencies
+  !$OMP do
   do m=1,ntr
     if (associated(Tr(m)%ad_x)) then
       do k=1,nz ; do j=jsd,jed ; do i=isd,ied
@@ -207,7 +206,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
       do J=jsd,jed ; do i=isd,ied ; Tr(m)%ad2d_y(i,J) = 0.0 ; enddo ; enddo
     endif
   enddo
-!$OMP end parallel
+  !$OMP end parallel
 
   isv = is ; iev = ie ; jsv = js ; jev = je
 
@@ -222,8 +221,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
       ! Reevaluate domore_u & domore_v unless the valid range is the same size as
       ! before.  Also, do this if there is Strang splitting.
       if ((nsten_halo > 1) .or. (itt==1)) then
-!$OMP parallel do default(none) shared(nz,domore_k,jsv,jev,domore_u,isv,iev,stencil, &
-!$OMP                                  uhr,domore_v,vhr)
+        !$OMP parallel do default(shared)
         do k=1,nz ; if (domore_k(k) > 0) then
           do j=jsv,jev ; if (.not.domore_u(j,k)) then
             do i=isv+stencil-1,iev-stencil; if (uhr(I,j,k) /= 0.0) then
@@ -256,9 +254,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
     !  for all the transport to happen.  The sum over domore_k keeps the processors
     !  synchronized.  This may not be very efficient, but it should be reliable.
 
-!$OMP parallel default(private) shared(nz,domore_k,x_first,Tr,hprev,uhr,uh_neglect,  &
-!$OMP                                  OBC,domore_u,ntr,Idt,isv,iev,jsv,jev,stencil, &
-!$OMP                                  G,GV,CS,vhr,vh_neglect,domore_v,US)
+    !$OMP parallel default(shared)
 
     if (x_first) then
 
@@ -305,7 +301,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
 
     endif ! x_first
 
-!$OMP end parallel
+    !$OMP end parallel
 
     ! If the advection just isn't finishing after max_iter, move on.
     if (itt >= max_iter) then
@@ -382,9 +378,10 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   real, dimension(SZIB_(G)) :: &
     hlst, &             ! Work variable [H L2 ~> m3 or kg].
     Ihnew, &            ! Work variable [H-1 L-2 ~> m-3 or kg-1].
-    CFL                 ! A nondimensional work variable [nondim].
+    CFL                 ! The absolute value of the advective upwind-cell CFL number [nondim].
   real :: min_h         ! The minimum thickness that can be realized during
                         ! any of the passes [H ~> m or kg m-2].
+  real :: tiny_h        ! The smallest numerically invertable thickness [H ~> m or kg m-2].
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
   logical :: do_i(SZIB_(G),SZJ_(G))     ! If true, work on given points.
@@ -406,16 +403,15 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   if (usePPM .and. .not. useHuynh) stencil = 2
 
   min_h = 0.1*GV%Angstrom_H
+  tiny_h = tiny(min_h)
   h_neglect = GV%H_subroundoff
 
-! do I=is-1,ie ; ts2(I) = 0.0 ; enddo
   do I=is-1,ie ; CFL(I) = 0.0 ; enddo
 
   do j=js,je ; if (domore_u(j,k)) then
     domore_u(j,k) = .false.
 
-    ! Calculate the i-direction profiles (slopes) of each tracer that
-    ! is being advected.
+    ! Calculate the i-direction profiles (slopes) of each tracer that is being advected.
     if (usePLMslope) then
       do m=1,ntr ; do i=is-stencil,ie+stencil
        !if (ABS(Tr(m)%t(i+1,j,k)-Tr(m)%t(i,j,k)) < &
@@ -459,13 +455,13 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                    if (segment%direction == OBC_DIRECTION_W) then
                       T_tmp(i,m) = segment%tr_Reg%Tr(m)%tres(i,j,k)
                    else
-                      T_tmp(I+1,m) = segment%tr_Reg%Tr(m)%tres(i,j,k)
+                      T_tmp(i+1,m) = segment%tr_Reg%Tr(m)%tres(i,j,k)
                    endif
                 else
                    if (segment%direction == OBC_DIRECTION_W) then
                       T_tmp(i,m) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
                    else
-                      T_tmp(I+1,m) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
+                      T_tmp(i+1,m) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
                    endif
                 endif
               enddo
@@ -490,33 +486,33 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
     ! in the cell plus whatever part of its half of the mass flux that
     ! the flux through the other side does not require.
     do I=is-1,ie
-      if (uhr(I,j,k) == 0.0) then
+      if ((uhr(I,j,k) == 0.0) .or. &
+          ((uhr(I,j,k) < 0.0) .and. (hprev(i+1,j,k) <= tiny_h)) .or. &
+          ((uhr(I,j,k) > 0.0) .and. (hprev(i,j,k) <= tiny_h)) ) then
         uhh(I) = 0.0
         CFL(I) = 0.0
       elseif (uhr(I,j,k) < 0.0) then
         hup = hprev(i+1,j,k) - G%areaT(i+1,j)*min_h
-        hlos = MAX(0.0,uhr(I+1,j,k))
+        hlos = MAX(0.0, uhr(I+1,j,k))
         if ((((hup - hlos) + uhr(I,j,k)) < 0.0) .and. &
             ((0.5*hup + uhr(I,j,k)) < 0.0)) then
-          uhh(I) = MIN(-0.5*hup,-hup+hlos,0.0)
+          uhh(I) = MIN(-0.5*hup, -hup+hlos, 0.0)
           domore_u(j,k) = .true.
         else
           uhh(I) = uhr(I,j,k)
         endif
-       !ts2(I) = 0.5*(1.0 + uhh(I) / (hprev(i+1,j,k) + h_neglect*G%areaT(i+1,j)))
-        CFL(I) = - uhh(I) / (hprev(i+1,j,k) + h_neglect*G%areaT(i+1,j)) ! CFL is positive
+        CFL(I) = - uhh(I) / (hprev(i+1,j,k))  ! CFL is positive
       else
         hup = hprev(i,j,k) - G%areaT(i,j)*min_h
-        hlos = MAX(0.0,-uhr(I-1,j,k))
+        hlos = MAX(0.0, -uhr(I-1,j,k))
         if ((((hup - hlos) - uhr(I,j,k)) < 0.0) .and. &
             ((0.5*hup - uhr(I,j,k)) < 0.0)) then
-          uhh(I) = MAX(0.5*hup,hup-hlos,0.0)
+          uhh(I) = MAX(0.5*hup, hup-hlos, 0.0)
           domore_u(j,k) = .true.
         else
           uhh(I) = uhr(I,j,k)
         endif
-       !ts2(I) = 0.5*(1.0 - uhh(I) / (hprev(i,j,k) + h_neglect*G%areaT(i,j)))
-        CFL(I) = uhh(I) / (hprev(i,j,k) + h_neglect*G%areaT(i,j)) ! CFL is positive
+        CFL(I) = uhh(I) / (hprev(i,j,k))  ! CFL is positive
       endif
     enddo
 
@@ -545,11 +541,11 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
 
         dA = aR - aL ; mA = 0.5*( aR + aL )
         if (G%mask2dCu(I_up,j)*G%mask2dCu(I_up-1,j)*(Tp-Tc)*(Tc-Tm) <= 0.) then
-           aL = Tc ; aR = Tc ! PCM for local extremum and bounadry cells
+          aL = Tc ; aR = Tc ! PCM for local extremum and bounadry cells
         elseif ( dA*(Tc-mA) > (dA*dA)/6. ) then
-           aL = 3.*Tc - 2.*aR
+          aL = 3.*Tc - 2.*aR
         elseif ( dA*(Tc-mA) < - (dA*dA)/6. ) then
-           aR = 3.*Tc - 2.*aL
+          aR = 3.*Tc - 2.*aL
         endif
 
         a6 = 6.*Tc - 3. * (aR + aL) ! Curvature
@@ -570,28 +566,17 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
          !aR = Tr(m)%t(i,j,k) + 0.5 * slope_x(i,m)
          !flux_x(I,j,m) = uhh(I)*( aR - 0.5 * (aR-aL) * CFL(I) )
           ! Alternative implementation of PLM
-         !aR = Tr(m)%t(i,j,k) + 0.5 * slope_x(i,m)
-         !flux_x(I,j,m) = uhh(I)*( aR - 0.5 * slope_x(i,m) * CFL(I) )
-          ! Alternative implementation of PLM
           Tc = T_tmp(i,m)
           flux_x(I,j,m) = uhh(I)*( Tc + 0.5 * slope_x(i,m) * ( 1. - CFL(I) ) )
-          ! Original implementation of PLM
-         !flux_x(I,j,m) = uhh(I)*(Tr(m)%t(i,j,k) + slope_x(i,m)*ts2(I))
         else
           ! Indirect implementation of PLM
          !aL = Tr(m)%t(i+1,j,k) - 0.5 * slope_x(i+1,m)
          !aR = Tr(m)%t(i+1,j,k) + 0.5 * slope_x(i+1,m)
          !flux_x(I,j,m) = uhh(I)*( aL + 0.5 * (aR-aL) * CFL(I) )
           ! Alternative implementation of PLM
-         !aL = Tr(m)%t(i+1,j,k) - 0.5 * slope_x(i+1,m)
-         !flux_x(I,j,m) = uhh(I)*( aL + 0.5 * slope_x(i+1,m) * CFL(I) )
-          ! Alternative implementation of PLM
           Tc = T_tmp(i+1,m)
           flux_x(I,j,m) = uhh(I)*( Tc - 0.5 * slope_x(i+1,m) * ( 1. - CFL(I) ) )
-          ! Original implementation of PLM
-         !flux_x(I,j,m) = uhh(I)*(Tr(m)%t(i+1,j,k) - slope_x(i+1,m)*ts2(I))
         endif
-       !ts2(I) = 0.5*(1.0 - uhh(I)/(hprev(i,j,k)+h_neglect*G%areaT(i,j)))
       enddo ; enddo
     endif ! usePPM
 
@@ -757,9 +742,10 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   real, dimension(SZIB_(G)) :: &
     hlst, &             ! Work variable [H L2 ~> m3 or kg].
     Ihnew, &            ! Work variable [H-1 L-2 ~> m-3 or kg-1].
-    CFL                 ! A nondimensional work variable.
+    CFL                 ! The absolute value of the advective upwind-cell CFL number [nondim].
   real :: min_h         ! The minimum thickness that can be realized during
                         ! any of the passes [H ~> m or kg m-2].
+  real :: tiny_h        ! The smallest numerically invertable thickness [H ~> m or kg m-2].
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
   logical :: do_j_tr(SZJ_(G))   ! If true, calculate the tracer profiles.
@@ -777,8 +763,8 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   if (usePPM .and. .not. useHuynh) stencil = 2
 
   min_h = 0.1*GV%Angstrom_H
+  tiny_h = tiny(min_h)
   h_neglect = GV%H_subroundoff
-  !do i=is,ie ; ts2(i) = 0.0 ; enddo
 
   ! We conditionally perform work on tracer points: calculating the PLM slope,
   ! and updating tracer concentration within a cell
@@ -822,7 +808,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 
   ! make a copy of the tracers in case values need to be overridden for OBCs
 
-  do j=G%jsd,G%jed; do m=1,ntr; do i=G%isd,G%ied
+  do j=G%jsd,G%jed ; do m=1,ntr ; do i=G%isd,G%ied
     T_tmp(i,m,j) = Tr(m)%t(i,j,k)
   enddo ; enddo ; enddo
 
@@ -873,33 +859,33 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
     domore_v(J,k) = .false.
 
     do i=is,ie
-      if (vhr(i,J,k) == 0.0) then
+      if ((vhr(i,J,k) == 0.0) .or. &
+          ((vhr(i,J,k) < 0.0) .and. (hprev(i,j+1,k) <= tiny_h)) .or. &
+          ((vhr(i,J,k) > 0.0) .and. (hprev(i,j,k) <= tiny_h)) ) then
         vhh(i,J) = 0.0
         CFL(i) = 0.0
       elseif (vhr(i,J,k) < 0.0) then
         hup = hprev(i,j+1,k) - G%areaT(i,j+1)*min_h
-        hlos = MAX(0.0,vhr(i,J+1,k))
+        hlos = MAX(0.0, vhr(i,J+1,k))
         if ((((hup - hlos) + vhr(i,J,k)) < 0.0) .and. &
             ((0.5*hup + vhr(i,J,k)) < 0.0)) then
-          vhh(i,J) = MIN(-0.5*hup,-hup+hlos,0.0)
+          vhh(i,J) = MIN(-0.5*hup, -hup+hlos, 0.0)
           domore_v(J,k) = .true.
         else
           vhh(i,J) = vhr(i,J,k)
         endif
-       !ts2(i) = 0.5*(1.0 + vhh(i,J) / (hprev(i,j+1,k) + h_neglect*G%areaT(i,j+1))
-        CFL(i) = - vhh(i,J) / (hprev(i,j+1,k) + h_neglect*G%areaT(i,j+1)) ! CFL is positive
+        CFL(i) = - vhh(i,J) / hprev(i,j+1,k)  ! CFL is positive
       else
         hup = hprev(i,j,k) - G%areaT(i,j)*min_h
-        hlos = MAX(0.0,-vhr(i,J-1,k))
+        hlos = MAX(0.0, -vhr(i,J-1,k))
         if ((((hup - hlos) - vhr(i,J,k)) < 0.0) .and. &
             ((0.5*hup - vhr(i,J,k)) < 0.0)) then
-          vhh(i,J) = MAX(0.5*hup,hup-hlos,0.0)
+          vhh(i,J) = MAX(0.5*hup, hup-hlos, 0.0)
           domore_v(J,k) = .true.
         else
           vhh(i,J) = vhr(i,J,k)
         endif
-       !ts2(i) = 0.5*(1.0 - vhh(i,J) / (hprev(i,j,k) + h_neglect*G%areaT(i,j)))
-        CFL(i) = vhh(i,J) / (hprev(i,j,k) + h_neglect*G%areaT(i,j)) ! CFL is positive
+        CFL(i) = vhh(i,J) / hprev(i,j,k)  ! CFL is positive
       endif
     enddo
 
@@ -913,7 +899,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         endif
 
         ! Implementation of PPM-H3
-        Tp = Tr(m)%t(i,j_up+1,k) ; Tc = Tr(m)%t(i,j_up,k) ; Tm = Tr(m)%t(i,j_up-1,k)
+        Tp = T_tmp(i,m,j_up+1) ; Tc = T_tmp(i,m,j_up) ; Tm = T_tmp(i,m,j_up-1)
 
         if (useHuynh) then
           aL = ( 5.*Tc + ( 2.*Tm - Tp ) )/6. ! H3 estimate
@@ -952,26 +938,16 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
          !aR = Tr(m)%t(i,j,k) + 0.5 * slope_y(i,m,j)
          !flux_y(i,m,J) = vhh(i,J)*( aR - 0.5 * (aR-aL) * CFL(i) )
           ! Alternative implementation of PLM
-         !aR = Tr(m)%t(i,j,k) + 0.5 * slope_y(i,m,j)
-         !flux_y(i,m,J) = vhh(i,J)*(aR - 0.5 * slope_y(i,m,j)*CFL(i))
-          ! Alternative implementation of PLM
-          Tc = Tr(m)%t(i,j,k)
+          Tc = T_tmp(i,m,j)
           flux_y(i,m,J) = vhh(i,J)*( Tc + 0.5 * slope_y(i,m,j) * ( 1. - CFL(i) ) )
-          ! Original implementation of PLM
-         !flux_y(i,m,J) = vhh(i,J)*(Tr(m)%t(i,j,k) + slope_y(i,m,j)*ts2(i))
         else
           ! Indirect implementation of PLM
          !aL = Tr(m)%t(i,j+1,k) - 0.5 * slope_y(i,m,j+1)
          !aR = Tr(m)%t(i,j+1,k) + 0.5 * slope_y(i,m,j+1)
          !flux_y(i,m,J) = vhh(i,J)*( aL + 0.5 * (aR-aL) * CFL(i) )
           ! Alternative implementation of PLM
-         !aL = Tr(m)%t(i,j+1,k) - 0.5 * slope_y(i,m,j+1)
-         !flux_y(i,m,J) = vhh(i,J)*( aL + 0.5 * slope_y(i,m,j+1)*CFL(i) )
-          ! Alternative implementation of PLM
-          Tc = Tr(m)%t(i,j+1,k)
+          Tc = T_tmp(i,m,j+1)
           flux_y(i,m,J) = vhh(i,J)*( Tc - 0.5 * slope_y(i,m,j+1) * ( 1. - CFL(i) ) )
-          ! Original implementation of PLM
-         !flux_y(i,m,J) = vhh(i,J)*(Tr(m)%t(i,j+1,k) - slope_y(i,m,j+1)*ts2(i))
         endif
       enddo ; enddo
     endif ! usePPM

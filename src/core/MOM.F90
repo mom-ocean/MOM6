@@ -57,7 +57,7 @@ use MOM_ALE_sponge,            only : rotate_ALE_sponge, update_ALE_sponge_field
 use MOM_barotropic,            only : Barotropic_CS
 use MOM_boundary_update,       only : call_OBC_register, OBC_register_end, update_OBC_CS
 use MOM_coord_initialization,  only : MOM_initialize_coord
-use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
+use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS, extract_diabatic_member
 use MOM_diabatic_driver,       only : adiabatic, adiabatic_driver_init, diabatic_driver_end
 use MOM_diagnostics,           only : calculate_diagnostic_fields, MOM_diagnostics_init
 use MOM_diagnostics,           only : register_transport_diags, post_transport_diagnostics
@@ -109,7 +109,7 @@ use MOM_tracer_advect,         only : tracer_advect_end, tracer_advect_CS
 use MOM_tracer_hor_diff,       only : tracer_hordiff, tracer_hor_diff_init
 use MOM_tracer_hor_diff,       only : tracer_hor_diff_end, tracer_hor_diff_CS
 use MOM_tracer_registry,       only : tracer_registry_type, register_tracer, tracer_registry_init
-use MOM_tracer_registry,       only : register_tracer_diagnostics, post_tracer_diagnostics
+use MOM_tracer_registry,       only : register_tracer_diagnostics, post_tracer_diagnostics_at_sync
 use MOM_tracer_registry,       only : post_tracer_transport_diagnostics
 use MOM_tracer_registry,       only : preALE_tracer_diagnostics, postALE_tracer_diagnostics
 use MOM_tracer_registry,       only : lock_tracer_registry, tracer_registry_end
@@ -406,6 +406,7 @@ integer :: id_clock_pass_init  ! also in dynamics d/r
 integer :: id_clock_ALE
 integer :: id_clock_other
 integer :: id_clock_offline_tracer
+integer :: id_clock_unit_tests
 !>@}
 
 contains
@@ -594,8 +595,9 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     dt_therm = dt ; ntstep = 1
     if (associated(fluxes%p_surf)) p_surf => fluxes%p_surf
     CS%tv%p_surf => NULL()
-    if (CS%use_p_surf_in_EOS .and. associated(forces%p_surf)) CS%tv%p_surf => fluxes%p_surf
-
+    if (associated(fluxes%p_surf)) then
+      if (CS%use_p_surf_in_EOS) CS%tv%p_surf => fluxes%p_surf
+    endif
     if (CS%UseWaves) call pass_var(fluxes%ustar, G%Domain, clock=id_clock_pass)
   endif
 
@@ -837,7 +839,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, CS%ADp,  &
                           CS%CDp, p_surf, CS%t_dyn_rel_diag, CS%diag_pre_sync,&
                           G, GV, US, CS%diagnostics_CSp)
-      call post_tracer_diagnostics(CS%Tracer_reg, h, CS%diag_pre_sync, CS%diag, G, GV, CS%t_dyn_rel_diag)
+      call post_tracer_diagnostics_at_sync(CS%Tracer_reg, h, CS%diag_pre_sync, CS%diag, G, GV, CS%t_dyn_rel_diag)
       call diag_copy_diag_to_storage(CS%diag_pre_sync, h, CS%diag)
       if (showCallTree) call callTree_waypoint("finished calculate_diagnostic_fields (step_MOM)")
       call disable_averaging(CS%diag)
@@ -994,7 +996,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     call enable_averages(dt_thermo, Time_local+real_to_time(US%T_to_s*(dt_thermo-dt)), CS%diag)
     call cpu_clock_begin(id_clock_thick_diff)
     if (associated(CS%VarMix)) &
-      call calc_slope_functions(h, CS%tv, dt, G, GV, US, CS%VarMix)
+      call calc_slope_functions(h, CS%tv, dt, G, GV, US, CS%VarMix, OBC=CS%OBC)
     call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt_thermo, G, GV, US, &
                            CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
     call cpu_clock_end(id_clock_thick_diff)
@@ -1067,7 +1069,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     if (CS%debug) call hchksum(h,"Pre-thickness_diffuse h", G%HI, haloshift=0, scale=GV%H_to_m)
 
     if (associated(CS%VarMix)) &
-      call calc_slope_functions(h, CS%tv, dt, G, GV, US, CS%VarMix)
+      call calc_slope_functions(h, CS%tv, dt, G, GV, US, CS%VarMix, OBC=CS%OBC)
     call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt, G, GV, US, &
                            CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
 
@@ -1136,6 +1138,7 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
   type(time_type),          intent(in)    :: Time_local !< The model time at the end
                                                     !! of the time step.
   type(group_pass_type) :: pass_T_S
+  integer :: halo_sz ! The size of a halo where data must be valid.
   logical :: showCallTree
   showCallTree = callTree_showQuery()
 
@@ -1184,12 +1187,19 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
   CS%t_dyn_rel_adv = 0.0
   call cpu_clock_end(id_clock_tracer) ; call cpu_clock_end(id_clock_thermo)
 
-  if (CS%diabatic_first .and. associated(CS%tv%T)) then
-    ! Temperature and salinity need halo updates because they will be used
-    ! in the dynamics before they are changed again.
-    call create_group_pass(pass_T_S, CS%tv%T, G%Domain, To_All+Omit_Corners, halo=1)
-    call create_group_pass(pass_T_S, CS%tv%S, G%Domain, To_All+Omit_Corners, halo=1)
-    call do_group_pass(pass_T_S, G%Domain, clock=id_clock_pass)
+  if (associated(CS%tv%T)) then
+    call extract_diabatic_member(CS%diabatic_CSp, diabatic_halo=halo_sz)
+    if (halo_sz > 0) then
+      call create_group_pass(pass_T_S, CS%tv%T, G%Domain, To_All, halo=halo_sz)
+      call create_group_pass(pass_T_S, CS%tv%S, G%Domain, To_All, halo=halo_sz)
+      call do_group_pass(pass_T_S, G%Domain, clock=id_clock_pass)
+    elseif (CS%diabatic_first) then
+      ! Temperature and salinity need halo updates because they will be used
+      ! in the dynamics before they are changed again.
+      call create_group_pass(pass_T_S, CS%tv%T, G%Domain, To_All+Omit_Corners, halo=1)
+      call create_group_pass(pass_T_S, CS%tv%S, G%Domain, To_All+Omit_Corners, halo=1)
+      call do_group_pass(pass_T_S, G%Domain, clock=id_clock_pass)
+    endif
   endif
 
   CS%preadv_h_stored = .false.
@@ -1224,7 +1234,8 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   type(group_pass_type) :: pass_T_S, pass_T_S_h, pass_uv_T_S_h
   integer :: dynamics_stencil  ! The computational stencil for the calculations
                                ! in the dynamic core.
-  integer :: i, j, k, is, ie, js, je, nz! , Isq, Ieq, Jsq, Jeq, n
+  integer :: halo_sz ! The size of a halo where data must be valid.
+  integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   showCallTree = callTree_showQuery()
@@ -1237,6 +1248,13 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
 
   if (associated(CS%odaCS)) then
     call apply_oda_tracer_increments(US%T_to_s*dtdia,G,tv,h,CS%odaCS)
+  endif
+
+  if (associated(fluxes%p_surf)) then
+    call extract_diabatic_member(CS%diabatic_CSp, diabatic_halo=halo_sz)
+    if (halo_sz > 0) then
+      call pass_var(fluxes%p_surf, G%Domain, clock=id_clock_pass, halo=halo_sz)
+    endif
   endif
 
   if (update_BBL) then
@@ -1265,8 +1283,8 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
 
     call cpu_clock_begin(id_clock_diabatic)
 
-    call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                  dtdia, Time_end_thermo, G, GV, US, CS%diabatic_CSp, Waves=Waves)
+    call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, dtdia, &
+                  Time_end_thermo, G, GV, US, CS%diabatic_CSp, OBC=CS%OBC, Waves=Waves)
     fluxes%fluxes_used = .true.
 
     if (showCallTree) call callTree_waypoint("finished diabatic (step_MOM_thermo)")
@@ -1277,12 +1295,14 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     if ( CS%use_ALE_algorithm ) then
       call enable_averages(dtdia, Time_end_thermo, CS%diag)
 !         call pass_vector(u, v, G%Domain)
+      call cpu_clock_begin(id_clock_pass)
       if (associated(tv%T)) &
         call create_group_pass(pass_T_S_h, tv%T, G%Domain, To_All+Omit_Corners, halo=1)
       if (associated(tv%S)) &
         call create_group_pass(pass_T_S_h, tv%S, G%Domain, To_All+Omit_Corners, halo=1)
       call create_group_pass(pass_T_S_h, h, G%Domain, To_All+Omit_Corners, halo=1)
       call do_group_pass(pass_T_S_h, G%Domain)
+      call cpu_clock_end(id_clock_pass)
 
       call preAle_tracer_diagnostics(CS%tracer_Reg, G, GV)
 
@@ -1479,7 +1499,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
             call pass_var(CS%h, G%Domain)
             call calc_resoln_function(CS%h, CS%tv, G, GV, US, CS%VarMix)
             call calc_depth_function(G, CS%VarMix)
-            call calc_slope_functions(CS%h, CS%tv, dt_offline, G, GV, US, CS%VarMix)
+            call calc_slope_functions(CS%h, CS%tv, dt_offline, G, GV, US, CS%VarMix, OBC=CS%OBC)
           endif
           call tracer_hordiff(CS%h, dt_offline, CS%MEKE, CS%VarMix, G, GV, US, &
               CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
@@ -1505,7 +1525,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
             call pass_var(CS%h, G%Domain)
             call calc_resoln_function(CS%h, CS%tv, G, GV, US, CS%VarMix)
             call calc_depth_function(G, CS%VarMix)
-            call calc_slope_functions(CS%h, CS%tv, dt_offline, G, GV, US, CS%VarMix)
+            call calc_slope_functions(CS%h, CS%tv, dt_offline, G, GV, US, CS%VarMix, OBC=CS%OBC)
           endif
           call tracer_hordiff(CS%h, dt_offline, CS%MEKE, CS%VarMix, G, GV, US, &
               CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
@@ -1705,8 +1725,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   call find_obsolete_params(param_file)
 
+  ! Determining the internal unit scaling factors for this run.
+  call unit_scaling_init(param_file, CS%US)
+  US => CS%US
+
   ! Read relevant parameters and write them to the model log.
-  call log_version(param_file, "MOM", version, "")
+  call log_version(param_file, "MOM", version, "", log_to_all=.true., layout=.true., debugging=.true.)
   call get_param(param_file, "MOM", "VERBOSITY", verbosity,  &
                  "Integer controlling level of messaging\n" // &
                  "\t0 = Only FATAL messages\n" // &
@@ -1716,13 +1740,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "If True, exercises unit tests at model start up.", &
                  default=.false., debuggingParam=.true.)
   if (do_unit_tests) then
+    id_clock_unit_tests = cpu_clock_id('(Ocean unit tests)', grain=CLOCK_MODULE)
+    call cpu_clock_begin(id_clock_unit_tests)
     call unit_tests(verbosity)
+    call cpu_clock_end(id_clock_unit_tests)
   endif
-
-  ! Determining the internal unit scaling factors for this run.
-  call unit_scaling_init(param_file, CS%US)
-
-  US => CS%US
 
   call get_param(param_file, "MOM", "SPLIT", CS%split, &
                  "Use the split time stepping if true.", default=.true.)
@@ -1897,9 +1919,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "model may ask for more salt than is available and "//&
                  "drive the salinity negative otherwise.)", default=.false.)
     call get_param(param_file, "MOM", "MIN_SALINITY", CS%tv%min_salinity, &
-                 "The minimum value of salinity when BOUND_SALINITY=True. "//&
-                 "The default is 0.01 for backward compatibility but ideally should be 0.", &
-                 units="PPT", default=0.01, do_not_log=.not.bound_salinity)
+                 "The minimum value of salinity when BOUND_SALINITY=True.", &
+                 units="PPT", default=0.0, do_not_log=.not.bound_salinity)
     call get_param(param_file, "MOM", "C_P", CS%tv%C_p, &
                  "The heat capacity of sea water, approximated as a "//&
                  "constant. This is only used if ENABLE_THERMODYNAMICS is "//&
@@ -1908,7 +1929,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  default=3991.86795711963, scale=US%J_kg_to_Q)
     call get_param(param_file, "MOM", "USE_PSURF_IN_EOS", CS%use_p_surf_in_EOS, &
                  "If true, always include the surface pressure contributions "//&
-                 "in equation of state calculations.", default=.false.) !### Change the default.
+                 "in equation of state calculations.", default=.true.)
   endif
   if (use_EOS) call get_param(param_file, "MOM", "P_REF", CS%tv%P_Ref, &
                  "The pressure that is used for calculating the coordinate "//&
@@ -1968,7 +1989,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   endif
   call get_param(param_file, "MOM", "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(param_file, "MOM", "SURFACE_2018_ANSWERS", CS%answers_2018, &
                  "If true, use expressions for the surface properties that recover the answers "//&
                  "from the end of 2018. Otherwise, use more appropriate expressions that differ "//&
@@ -2666,7 +2687,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call register_obsolete_diagnostics(param_file, CS%diag)
 
   if (use_frazil) then
-    if (query_initialized(CS%tv%frazil,"frazil",restart_CSp)) then
+    if (query_initialized(CS%tv%frazil, "frazil", restart_CSp)) then
       ! Test whether the dimensional rescaling has changed for heat content.
       if ((US%kg_m3_to_R_restart*US%m_to_Z_restart*US%J_kg_to_Q_restart /= 0.0) .and. &
           ((US%J_kg_to_Q*US%kg_m3_to_R*US%m_to_Z) /= &
@@ -3373,7 +3394,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
     endif
   endif
 
-  if (CS%debug) call MOM_surface_chksum("Post extract_sfc", sfc_state, G, US)
+  if (CS%debug) call MOM_surface_chksum("Post extract_sfc", sfc_state, G, US, haloshift=0)
 
   ! Rotate sfc_state back onto the input grid, sfc_state_in
   if (CS%rotate_index) then
