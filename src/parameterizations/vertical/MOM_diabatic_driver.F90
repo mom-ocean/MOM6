@@ -13,9 +13,8 @@ use MOM_CVMix_shear,         only : CVMix_shear_is_used
 use MOM_CVMix_ddiff,         only : CVMix_ddiff_is_used
 use MOM_diabatic_aux,        only : diabatic_aux_init, diabatic_aux_end, diabatic_aux_CS
 use MOM_diabatic_aux,        only : make_frazil, adjust_salt, differential_diffuse_T_S, triDiagTS
-use MOM_diabatic_aux,        only : find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut
-use MOM_diabatic_aux,        only : diagnoseMLDbyEnergy
-use MOM_diabatic_aux,        only : set_pen_shortwave
+use MOM_diabatic_aux,        only : triDiagTS_Eulerian, find_uv_at_h, diagnoseMLDbyDensityDifference
+use MOM_diabatic_aux,        only : applyBoundaryFluxesInOut, diagnoseMLDbyEnergy, set_pen_shortwave
 use MOM_diag_mediator,       only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator,       only : diag_ctrl, time_type, diag_update_remap_grids
 use MOM_diag_mediator,       only : diag_ctrl, query_averaging_enabled, enable_averages, disable_averaging
@@ -62,7 +61,7 @@ use MOM_sponge,              only : apply_sponge, sponge_CS
 use MOM_ALE_sponge,          only : apply_ALE_sponge, ALE_sponge_CS
 use MOM_time_manager,        only : time_type, real_to_time, operator(-), operator(<=)
 use MOM_tracer_flow_control, only : call_tracer_column_fns, tracer_flow_control_CS
-use MOM_tracer_diabatic,     only : tracer_vertdiff
+use MOM_tracer_diabatic,     only : tracer_vertdiff, tracer_vertdiff_Eulerian
 use MOM_unit_scaling,        only : unit_scale_type
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, accel_diag_ptrs
 use MOM_variables,           only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
@@ -573,10 +572,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
   if (CS%use_kappa_shear .or. CS%use_CVMix_shear) then
     if (CS%use_geothermal) then
-      ! The presence of ea_s causes find_uv_at_h to use a tridiagonal solver,
-      ! which changes answers at the level of roundoff because ((A*B / A) /= B).
-      ent_s(:,:,:) = 0.0
-      call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ent_s(:,:,1), ent_s(:,:,1))
+      call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, zero_mix=.true.)
     else
       call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
     endif
@@ -902,10 +898,10 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
       ent_t(i,j,K) = ent_s(i,j,K) ; ent_t(i,j,K+1) = ent_s(i,j,K+1)
     enddo ; enddo ; enddo
     if (CS%tracer_tridiag) then
-      call tracer_vertdiff(hold, ent_t(:,:,1:nz), ent_t(:,:,2:nz+1), dt, tv%T, G, GV)
-      call tracer_vertdiff(hold, ent_s(:,:,1:nz), ent_s(:,:,2:nz+1), dt, tv%S, G, GV)
+      call tracer_vertdiff_Eulerian(hold, ent_t, dt, tv%T, G, GV)
+      call tracer_vertdiff_Eulerian(hold, ent_s, dt, tv%S, G, GV)
     else
-      call triDiagTS(G, GV, is, ie, js, je, hold, ent_s(:,:,1:nz), ent_s(:,:,2:nz+1), tv%T, tv%S)
+      call triDiagTS_Eulerian(G, GV, is, ie, js, je, hold, ent_s, tv%T, tv%S)
     endif
 
     ! diagnose temperature, salinity, heat, and salt tendencies
@@ -940,12 +936,12 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   if (CS%id_Kd_salt      > 0) call post_data(CS%id_Kd_salt,      Kd_salt, CS%diag)
   if (CS%id_Kd_ePBL      > 0) call post_data(CS%id_Kd_ePBL,      Kd_ePBL, CS%diag)
 
-  if (CS%id_ea         > 0) call post_data(CS%id_ea,   ent_s(:,:,1:nz), CS%diag)
-  if (CS%id_eb         > 0) call post_data(CS%id_eb,   ent_s(:,:,2:nz+1), CS%diag)
-  if (CS%id_ea_t       > 0) call post_data(CS%id_ea_t, ent_t(:,:,1:nz), CS%diag)
-  if (CS%id_eb_t       > 0) call post_data(CS%id_eb_t, ent_t(:,:,2:nz+1), CS%diag)
-  if (CS%id_ea_s       > 0) call post_data(CS%id_ea_s, ent_s(:,:,1:nz), CS%diag)
-  if (CS%id_eb_s       > 0) call post_data(CS%id_eb_s, ent_s(:,:,2:nz+1), CS%diag)
+  if (CS%id_ea   > 0) call post_data(CS%id_ea,   ent_s(:,:,1:nz), CS%diag)
+  if (CS%id_eb   > 0) call post_data(CS%id_eb,   ent_s(:,:,2:nz+1), CS%diag)
+  if (CS%id_ea_t > 0) call post_data(CS%id_ea_t, ent_t(:,:,1:nz), CS%diag)
+  if (CS%id_eb_t > 0) call post_data(CS%id_eb_t, ent_t(:,:,2:nz+1), CS%diag)
+  if (CS%id_ea_s > 0) call post_data(CS%id_ea_s, ent_s(:,:,1:nz), CS%diag)
+  if (CS%id_eb_s > 0) call post_data(CS%id_eb_s, ent_s(:,:,2:nz+1), CS%diag)
   Idt = 1.0 / dt
   if (CS%id_Tdif > 0) then
     do j=js,je ; do i=is,ie
@@ -1183,10 +1179,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
   if (CS%use_kappa_shear .or. CS%use_CVMix_shear) then
     if (CS%use_geothermal) then
-      ! The presence of ea_s causes find_uv_at_h to use a tridiagonal solver,
-      ! which changes answers at the level of roundoff because ((A*B / A) /= B).
-      ! Note that ent_s(:,:,:) = 0.0
-      call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ent_s(:,:,1:nz), ent_s(:,:,1:nz))
+      call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, zero_mix=.true.)
     else
       call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
     endif
@@ -1441,8 +1434,8 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
                                              "Kd_salt (diabatic_ALE)")
 
     ! Changes T and S via the tridiagonal solver; no change to h
-    call tracer_vertdiff(h, ent_t(:,:,1:nz), ent_t(:,:,2:nz+1), dt, tv%T, G, GV)
-    call tracer_vertdiff(h, ent_s(:,:,1:nz), ent_s(:,:,2:nz+1), dt, tv%S, G, GV)
+    call tracer_vertdiff_Eulerian(h, ent_t, dt, tv%T, G, GV)
+    call tracer_vertdiff_Eulerian(h, ent_s, dt, tv%S, G, GV)
 
     ! In ALE-mode, layer thicknesses do not change. Therefore, we can use h below
     if (CS%diabatic_diff_tendency_diag) then
