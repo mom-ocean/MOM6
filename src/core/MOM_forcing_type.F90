@@ -1874,17 +1874,16 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
   handles%id_total_saltflux = register_scalar_field('ocean_model',          &
       'total_salt_flux', Time, diag,                                        &
-      long_name='Area integrated surface salt flux', units='kg',            &
+      long_name='Area integrated surface salt flux', units='kg s-1',        &
       cmor_field_name='total_sfdsi',                                        &
-      cmor_units='kg s-1',                                                  &
       cmor_standard_name='downward_sea_ice_basal_salt_flux_area_integrated',&
       cmor_long_name='Downward Sea Ice Basal Salt Flux Area Integrated')
 
   handles%id_total_saltFluxIn = register_scalar_field('ocean_model', 'total_salt_Flux_In', &
-      Time, diag, long_name='Area integrated surface salt flux at surface from coupler', units='kg')
+      Time, diag, long_name='Area integrated surface salt flux at surface from coupler', units='kg s-1')
 
   handles%id_total_saltFluxAdded = register_scalar_field('ocean_model', 'total_salt_Flux_Added', &
-      Time, diag, long_name='Area integrated surface salt flux due to restoring or flux adjustment', units='kg')
+      Time, diag, long_name='Area integrated surface salt flux due to restoring or flux adjustment', units='kg s-1')
 
 
 end subroutine register_forcing_type_diags
