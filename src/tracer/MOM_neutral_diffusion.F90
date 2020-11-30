@@ -97,7 +97,7 @@ type, public :: neutral_diffusion_CS ; private
   integer :: id_uhEff_2d = -1 !< Diagnostic IDs
   integer :: id_vhEff_2d = -1 !< Diagnostic IDs
 
-  type(EOS_type), pointer :: EOS   !< Equation of state parameters
+  type(EOS_type), pointer :: EOS => NULL()  !< Equation of state parameters
   type(remapping_CS) :: remap_CS   !< Remapping control structure used to create sublayers
   logical :: remap_answers_2018    !< If true, use the order of arithmetic and expressions that
                                    !! recover the answers for remapping from the end of 2018.

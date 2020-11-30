@@ -12,9 +12,11 @@ Contents:
   :maxdepth: 2
 
   about
-  equations/overview
+  equations
+  discrete_space
   parameterizations
   working_with_MOM6
+  testing
   apiref
 
 

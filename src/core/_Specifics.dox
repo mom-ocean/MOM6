@@ -1,0 +1,87 @@
+/*! \page Specifics Specifics
+
+\section section_Specifics Specifics of the Ocean Model Equations
+
+We here provide more details of the terms appearing  in the ocean model equations described in \ref General_Coordinate.
+
+\section Horiz_mom_eq Horizontal Momentum Equation
+
+Equation \eqref{eq:h-horz-momentum,h-equations,momentum} is the horizontal momentum
+equation written in its vector-invariant advective form\footnote{The
+vector-invariant advective form is commonly used in models such as MOM6
+using an Arakawa C-grid (e.g., see section 10 of \cite griffies2000-2).}
+with \f$\mathbf{u} = \hat{\mathbf{x}} \, u + \hat{\mathbf{y}} \, v\f$
+the horizontal velocity, \f$p\f$ the hydrostatic pressure, \f$f\f$
+the Coriolis parameter, and
+\f[
+\zeta^{(r)} = \hat{\bf z} \cdot (\nabla_{r}\times \mathbf{u})
+\f]
+the vertical component of the vorticity using \f$\nabla_{r}\f$ for the curl operator. The discretization of the Coriolis term is the enstrophy conserving scheme of \cite sadourny1975. The geopotential coordinate, \f$z\f$, has a value \f$z=0\f$ at a resting ocean surface, \f$z=\eta(x,y,t)\f$ at the ocean free surface, and \f$z=-H(x,y)\f$ at the ocean bottom. We use the Boussinesq approximation (volume conserving kinematics) with \f$\rho_{0} = 1035~\mbox{kg}~\mbox{m}^{-3}\f$ the reference density.\footnote{MOM6 has an option for compressible non-Boussinesq flow (mass conserving kinematics). We chose the Boussinesq option largely based on legacy.} Time and horizontal derivatives are computed holding the generalized vertical coordinate fixed rather than the geopotential
+\f[
+\frac{\partial}{\partial t} = \left[ \frac{\partial}{\partial t} \right]_{r} \qquad \nabla_{r} = \hat{\mathbf{x}} \left[ \frac{\partial}{\partial x} \right]_{r} + \hat{\mathbf{y}} \left[ \frac{\partial}{\partial y} \right]_{r}.
+\f]
+
+The transport of seawater crossing surfaces of constant \f$r\f$ is measured by the dia-surface velocity component (see section 6.7 of \cite SMGbook)
+\f[
+\frac{\partial z}{\partial r} \, \frac{\mathrm{D}r}{\mathrm{D}t} = z_{r} \, \dot{r},
+\f]
+with \f$z_{r}\f$ the specific thickness that is assumed one-signed throughout the ocean, and \f$\mathrm{D}/\mathrm{D}t\f$ the material time derivative operator. In the ocean interior where \f$r\f$ is aligned with isopycnals, the dia-surface velocity becomes the diapycnal velocity whose value is directly related to irreversible processes such as mixing that act on potential temperature and salinity. In the unstratified mixed layers, \f$r =z^{*}\f$ so that \f$z_{r} \dot{r} = (\partial z/\partial z^{*}) \, \mathrm{D}z^{*}/\mathrm{D}t\f$, which is close to the familiar vertical velocity component \f$\mathrm{D}z/\mathrm{D}t\f$.
+
+Viscous dissipation (Laplacian and biharmonic friction following \cite griffies2000) and mechanical boundary forces (winds, bottom stress) contribute to the divergence of the deviatoric (symmetric and trace-free) stress tensor, \f$\boldsymbol{\mathcal{F}} = \nabla \cdot \mathbf{\tau}\f$. MOM6 and the real ocean have no vertical sidewalls, and MOM6 treats all solid-earth boundaries with bottom stress parameterized as a quadratic drag.
+
+\section hydrostatic_balance Hydrostatic balance
+
+Equation \eqref{eq:h-hydrostatic-equation,h-equations,hydrostatic} is the discrete version of the hydrostatic balance. The horizontal pressure gradient force is implemented as a contact force following the method of \cite adcroft2008. These equations differ from \cite bleck2002 who uses the Montgomery potential to calculate pressure gradient accelerations.
+
+\section Thickness_and_tracer Thickness and tracer equations
+
+Volume conservation appears in the form of a prognostic flux-form layer thickness equation \eqref{eq:h-thickness-equation,h-equations,thickness}, with the non-negative layer thickness given by
+\f[
+h = \frac{\partial z}{\partial r} \, \mathrm{d}r,
+\f]
+where \f$\mathrm{d}r\f$ is the thickness of a layer in \f$r\f$-space (e.g., the
+density difference between target density classes or the thickness between
+target depths). The layer thickness increases where horizontal thickness
+fluxes converge, \f$\nabla_r \cdot \left( h_k \, \mathbf{u} \right) < 0\f$,
+and where dia-surface flow converges, \f$\delta_r (z_{r} \, \dot{r} )  <
+0\f$. The volume flux \f$h_k \mathbf{u}\f$ is computed using the quasi-third
+order PPM scheme (\cite colella1984) using a positive-definite limiter
+rather than the monotonic limiter. This last choice avoids limiting of
+positive extrema and thus retains third-order accuracy everywhere except
+near vanishing layers.
+
+Transport in the thickness equation is discretized
+compatibly with that in the flux-form potential temperature
+and salinity equations \eqref{eq:h-temperature-equation,h-equations,potential temperature} and
+\eqref{eq:h-salinity-equation,h-equations,salinity}. Compatibility is required to maintain
+global and layer integrated conservation properties for volume, heat, and
+salt. Tracer reconstruction for transport uses PPM with monotonic limiters
+but using third order interpolation for edge values. This reduces the size
+of the stencil which helps the computational efficiency of the transport
+scheme. The flux convergences, \f$\boldsymbol{\mathcal{N}}_\theta^\gamma\f$
+and \f$\boldsymbol{\mathcal{N}}_S^\gamma\f$, provide subgrid scale
+neutral diffusion for the potential temperature and salinity, whereas
+\f$\delta_{r}J_{\theta}^{(z)}\f$ and \f$\delta_{r}J_{S}^{(z)}\f$ provide subgrid
+scale vertical diffusion as well as boundary fluxes. In the interior,
+both subgrid fluxes vanish when their respective tracers are spatially
+uniform, thus ensuring that the tracer equation reduces to the thickness
+equation when the tracer is uniform.
+
+Parameterized subgrid scale advection from the submesoscale (\cite fox-kemper2011) and mesoscale (\cite gent1995) parameterizations are combined with the lateral advection of thickness and tracer, thus providing a residual mean advective transport for the scalar fields. Furthermore, we implement subgrid advective terms solely as lateral transports, thus interpreting them as layer bolus transport as appropriate for vertical Lagrangian models rather than a three-dimensional eddy-induced advection as appropriate for vertical Eulerian models (see \cite mcdougall2001 for details).
+
+\section EOS Equation of state
+
+The equation of state, \eqref{eq:h-equation-of-state,h-equations,equation of state}, determines <em>in situ</em> density as a function of potential temperature, salinity, and pressure. We evaluate the pressure in the equation of state according to \f$- g \, \rho_{0} \, z\f$. Doing so maintains energetic consistency for the Boussinesq fluid according to section 2.4.3 of \cite GVbook. We make use of the \cite wright1997 equation of state so that \f$\theta\f$ is potential temperature and \f$S\f$ is the practical salinity. Although MOM6 has the more updated equation of state from \cite TEOS2010, the required changes for thermodynamic variables were implemented only after the basic model configuration was developed. Time constraints on model development prompted us to retain usage of \cite wright1997 for OM4.
+
+The freezing point of seawater is approximated as
+\f[
+T_f = -0.054 S - 7.75\times10^{-08} p,
+\f]
+where \f$p\f$ is in units of Pascals and \f$S\f$ is in units of
+\f$1\times10^{-3}\f$. When the local temperature anywhere in the ocean
+column falls below the freezing point, the water-equivalent volume of
+ice is calculated and the fusion heat locally added back to the ocean
+to raise the liquid seawater temperature back to the freezing point. The
+frozen water and salt are sent to the sea-ice model.
+
+*/
