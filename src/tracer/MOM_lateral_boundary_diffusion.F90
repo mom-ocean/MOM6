@@ -420,6 +420,7 @@ subroutine merge_interfaces(nk, h_L, h_R, hbl_L, hbl_R, H_subroundoff, h)
   real, dimension(:), allocatable :: eta_all     !< Combined interfaces in the left/right columns + hbl_L and hbl_R
   real, dimension(:), allocatable :: eta_unique  !< Combined interfaces (eta_L, eta_R), possibly hbl_L and hbl_R
   real                            :: min_depth   !< Minimum depth
+  real                            :: max_bld     !< Deepest BLD
   integer :: k, kk, nk1                          !< loop indices (k and kk) and array size (nk1)
 
   n = (2*nk)+3
@@ -439,12 +440,15 @@ subroutine merge_interfaces(nk, h_L, h_R, hbl_L, hbl_R, H_subroundoff, h)
   eta_all(kk+2) = hbl_L
   eta_all(kk+3) = hbl_R
 
-  ! find the minimum depth
+  ! find maximum depth
   min_depth = MIN(MAXVAL(eta_L), MAXVAL(eta_R))
+  max_bld = MAX(hbl_L, hbl_R)
+  max_depth = MIN(min_depth, max_bld)
+
   ! sort eta_all
   call sort(eta_all, n)
   ! remove duplicates from eta_all and sets maximum depth
-  call unique(eta_all, n, eta_unique, min_depth)
+  call unique(eta_all, n, eta_unique, max_depth)
 
   nk1 = SIZE(eta_unique)
   allocate(h(nk1-1))
