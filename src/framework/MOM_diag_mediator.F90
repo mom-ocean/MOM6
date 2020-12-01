@@ -242,9 +242,6 @@ type, public :: diag_ctrl
                                           !! This file is open if available_diag_doc_unit is > 0.
   integer :: chksum_iounit = -1           !< The unit number of a diagnostic documentation file.
                                           !! This file is open if available_diag_doc_unit is > 0.
-  logical :: full_diag_list = .true.      !< If true, write an entry for every variant of a
-                                          !! diagnostic to the available_diags file; otherwise only
-                                          !! write an entry for the primary diagnostics.
   logical :: diag_as_chksum  !< If true, log chksums in a text file instead of posting diagnostics
   logical :: grid_space_axes !< If true, diagnostic horizontal coordinates axes are in grid space.
 ! The following fields are used for the output of the data.
@@ -1989,7 +1986,7 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
   integer :: dm_id, i, dl
   character(len=256) :: msg, cm_string
   character(len=256) :: new_module_name
-  character(len=480) :: module_list, var_list, variants
+  character(len=480) :: module_list, var_list
   integer :: num_modnm, num_varnm
   logical :: active
 
@@ -2018,7 +2015,7 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
     axes => diag_cs%axesCvi
   endif
 
-  module_list = "{$M"
+  module_list = "{"//trim(module_name)
   num_modnm = 1
 
   ! Register the native diagnostic
@@ -2033,9 +2030,9 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
              y_cell_method=y_cell_method, v_cell_method=v_cell_method, &
              conversion=conversion, v_extensive=v_extensive)
   if (associated(axes%xyave_axes)) then
-    num_varnm = 2 ; var_list = "{$V,$V_xyave"
+    num_varnm = 2 ; var_list = "{"//trim(field_name)//","//trim(field_name)//"_xyave"
   else
-    num_varnm = 1 ; var_list = "{$V"
+    num_varnm = 1 ; var_list = "{"//trim(field_name)
   endif
   if (present(cmor_field_name)) then
     if (associated(axes%xyave_axes)) then
@@ -2090,8 +2087,7 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
           if (active) then
             call diag_remap_set_active(diag_cs%diag_remap_cs(i))
           endif
-          ! module_list = trim(module_list)//","//trim(new_module_name)
-          module_list = trim(module_list)//",$M_"//trim(diag_cs%diag_remap_cs(i)%diag_module_suffix)
+          module_list = trim(module_list)//","//trim(new_module_name)
           num_modnm = num_modnm + 1
         endif ! remap_axes%needs_remapping
       endif ! associated(remap_axes)
@@ -2149,8 +2145,7 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
                 cell_methods=cell_methods, x_cell_method=x_cell_method, &
                 y_cell_method=y_cell_method, v_cell_method=v_cell_method, &
                 conversion=conversion, v_extensive=v_extensive)
-      ! module_list = trim(module_list)//","//trim(new_module_name)
-      module_list = trim(module_list)//",$M_2d"
+      module_list = trim(module_list)//","//trim(new_module_name)
       num_modnm = num_modnm + 1
     endif
 
@@ -2197,8 +2192,7 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
             if (active) then
               call diag_remap_set_active(diag_cs%diag_remap_cs(i))
             endif
-            ! module_list = trim(module_list)//","//trim(new_module_name)
-            module_list = trim(module_list)//",$M_"//trim(diag_cs%diag_remap_cs(i)%diag_module_suffix)//"_d2"
+            module_list = trim(module_list)//","//trim(new_module_name)
             num_modnm = num_modnm + 1
           endif ! remap_axes%needs_remapping
         endif ! associated(remap_axes)
@@ -2206,24 +2200,18 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
     enddo ! i
   enddo
 
-  if (is_root_pe() .and. (diag_CS%available_diag_doc_unit > 0) .and. .not.diag_CS%full_diag_list) then
+  if (is_root_pe() .and. (diag_CS%available_diag_doc_unit > 0)) then
     msg = ''
     if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'"'
     call attach_cell_methods(-1, axes, cm_string, cell_methods, &
                              x_cell_method, y_cell_method, v_cell_method, &
                              v_extensive=v_extensive)
     module_list = trim(module_list)//"}"
-    if ((num_modnm > 1) .and. (num_varnm > 1)) then
-      variants = "mod:"//trim(module_list)//", var:"//trim(var_list)
-    elseif (num_modnm > 1) then
-      variants = "mod:"//trim(module_list)
-    elseif (num_varnm > 1) then
-      variants = "var:"//trim(var_list)
-    else
-      variants = ""
-    endif
-    call log_available_diag(dm_id>0, module_name, field_name, cm_string, msg, diag_CS, &
-                            long_name, units, standard_name, variants=variants)
+    if (num_modnm <= 1) module_list = module_name
+    if (num_varnm <= 1) var_list = ""
+
+    call log_available_diag(dm_id>0, module_list, field_name, cm_string, msg, diag_CS, &
+                            long_name, units, standard_name, variants=var_list)
   endif
 
   register_diag_field = dm_id
@@ -2297,12 +2285,6 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
     call attach_cell_methods(fms_id, axes, cm_string, cell_methods, &
                              x_cell_method, y_cell_method, v_cell_method, &
                              v_extensive=v_extensive)
-  if (is_root_pe() .and. (diag_CS%available_diag_doc_unit > 0) .and. diag_CS%full_diag_list) then
-    msg = ''
-    if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'"'
-    call log_available_diag(fms_id>0, module_name, field_name, cm_string, &
-                            msg, diag_CS, long_name, units, standard_name)
-  endif
   ! Associated horizontally area-averaged diagnostic
   fms_xyave_id = DIAG_FIELD_NOT_FOUND
   if (associated(axes%xyave_axes)) then
@@ -2315,12 +2297,6 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
     if (.not. diag_cs%diag_as_chksum) &
       call attach_cell_methods(fms_xyave_id, axes%xyave_axes, cm_string, &
                                cell_methods, v_cell_method, v_extensive=v_extensive)
-    if (is_root_pe() .and. (diag_CS%available_diag_doc_unit > 0) .and. diag_CS%full_diag_list) then
-      msg = ''
-      if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'_xyave"'
-      call log_available_diag(fms_xyave_id>0, module_name, trim(field_name)//'_xyave', cm_string, &
-                              msg, diag_CS, long_name, units, standard_name)
-    endif
   endif
   this_diag => null()
   if (fms_id /= DIAG_FIELD_NOT_FOUND .or. fms_xyave_id /= DIAG_FIELD_NOT_FOUND) then
@@ -2359,12 +2335,6 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
     call attach_cell_methods(fms_id, axes, cm_string, &
                              cell_methods, x_cell_method, y_cell_method, v_cell_method, &
                              v_extensive=v_extensive)
-    if (is_root_pe() .and. (diag_CS%available_diag_doc_unit > 0) .and. diag_CS%full_diag_list) then
-      msg = 'native name is "'//trim(field_name)//'"'
-      call log_available_diag(fms_id>0, module_name, cmor_field_name, cm_string, &
-                              msg, diag_CS, posted_cmor_long_name, posted_cmor_units, &
-                              posted_cmor_standard_name)
-    endif
     ! Associated horizontally area-averaged diagnostic
     fms_xyave_id = DIAG_FIELD_NOT_FOUND
     if (associated(axes%xyave_axes)) then
@@ -2376,12 +2346,6 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
                err_msg=err_msg, interp_method=interp_method, tile_count=tile_count)
       call attach_cell_methods(fms_xyave_id, axes%xyave_axes, cm_string, &
                                cell_methods, v_cell_method, v_extensive=v_extensive)
-      if (is_root_pe() .and. (diag_CS%available_diag_doc_unit > 0) .and. diag_CS%full_diag_list) then
-        msg = 'native name is "'//trim(field_name)//'_xyave"'
-        call log_available_diag(fms_xyave_id>0, module_name, trim(cmor_field_name)//'_xyave', &
-                                cm_string, msg, diag_CS, posted_cmor_long_name, posted_cmor_units, &
-                                posted_cmor_standard_name)
-      endif
     endif
     this_diag => null()
     if (fms_id /= DIAG_FIELD_NOT_FOUND .or. fms_xyave_id /= DIAG_FIELD_NOT_FOUND) then
@@ -2797,18 +2761,13 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
 
   ! Document diagnostics in list of available diagnostics
   if (is_root_pe() .and. diag_CS%available_diag_doc_unit > 0) then
-    if (present(cmor_field_name) .and. .not.diag_CS%full_diag_list) then
+    if (present(cmor_field_name)) then
       call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
                               long_name, units, standard_name, &
-                              variants="var:{$V,"//trim(cmor_field_name)//"}")
+                              variants="{"//trim(field_name)//","//trim(cmor_field_name)//"}")
     else
       call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
                               long_name, units, standard_name)
-    endif
-    if (present(cmor_field_name) .and. diag_CS%full_diag_list) then
-      call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, &
-                              '', '', diag_CS, posted_cmor_long_name, posted_cmor_units, &
-                              posted_cmor_standard_name)
     endif
   endif
 
@@ -2950,18 +2909,13 @@ function register_static_field(module_name, field_name, axes, &
 
   ! Document diagnostics in list of available diagnostics
   if (is_root_pe() .and. diag_CS%available_diag_doc_unit > 0) then
-    if (present(cmor_field_name) .and. .not.diag_CS%full_diag_list) then
+    if (present(cmor_field_name)) then
       call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
                               long_name, units, standard_name, &
-                              variants="var:{$V,"//trim(cmor_field_name)//"}")
+                              variants="{"//trim(field_name)//","//trim(cmor_field_name)//"}")
     else
       call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
                               long_name, units, standard_name)
-    endif
-    if (present(cmor_field_name) .and. diag_CS%full_diag_list) then
-      call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, &
-                              '', '', diag_CS, posted_cmor_long_name, posted_cmor_units, &
-                              posted_cmor_standard_name)
     endif
   endif
 
@@ -3226,12 +3180,6 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
       if ((.not.opened) .or. (ios /= 0)) then
         call MOM_error(FATAL, "Failed to open available diags file "//trim(doc_path)//".")
       endif
-
-      call get_param(param_file, mdl, "FULL_AVAILABLE_DIAGS_LIST", diag_CS%full_diag_list, &
-                 "If true, write entries for every variant of a diagnostic to the available //"&
-                 "diags file; otherwise only write an entry for the primary diagnostics."//&
-                 "ocean diagnostics that can be included in a diag_table.", &
-                 default=.true.)
     endif
   endif
 
@@ -3598,15 +3546,16 @@ subroutine log_available_diag(used, module_name, field_name, cell_methods_string
   character(len=240) :: mesg
 
   if (used) then
-    mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Used]'
+    mesg = '"'//trim(field_name)//'"  [Used]'
   else
-    mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Unused]'
+    mesg = '"'//trim(field_name)//'"  [Unused]'
   endif
   if (len(trim((comment)))>0) then
     write(diag_CS%available_diag_doc_unit, '(a,x,"(",a,")")') trim(mesg),trim(comment)
   else
     write(diag_CS%available_diag_doc_unit, '(a)') trim(mesg)
   endif
+  call describe_option("modules", module_name, diag_CS)
   if (present(long_name)) call describe_option("long_name", long_name, diag_CS)
   if (present(units)) call describe_option("units", units, diag_CS)
   if (present(standard_name)) &
