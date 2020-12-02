@@ -257,7 +257,7 @@ program MOM_main
 !$  call omp_set_num_threads(ocean_nthreads)
 !$OMP PARALLEL
 !$  write(6,*) "ocean_solo OMPthreading ", fms_affinity_get(), omp_get_thread_num(), omp_get_num_threads()
-!$  call flush(6)
+!$  flush(6)
 !$OMP END PARALLEL
 
   ! Read ocean_solo restart, which can override settings from the namelist.
