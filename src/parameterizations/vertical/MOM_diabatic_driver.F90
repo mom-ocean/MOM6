@@ -184,7 +184,7 @@ type, public :: diabatic_CS ; private
   integer :: id_Kd_heat  = -1, id_Kd_salt  = -1, id_Kd_interface = -1, id_Kd_ePBL  = -1
   integer :: id_Tdif     = -1, id_Tadv     = -1, id_Sdif         = -1, id_Sadv     = -1
   integer :: id_MLD_003  = -1, id_MLD_0125  = -1, id_MLD_user     = -1, id_mlotstsq = -1
-  integer :: id_subMLN2  = -1
+  integer :: id_subMLN2  = -1, id_sppt_wts     = -1, id_t_rp1=-1,id_t_rp2=-1
 
   ! diagnostic for fields prior to applying diapycnal physics
   integer :: id_u_predia = -1, id_v_predia = -1, id_h_predia = -1
