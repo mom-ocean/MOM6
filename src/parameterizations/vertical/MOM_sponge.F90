@@ -477,8 +477,6 @@ subroutine apply_sponge(h, dt, G, GV, US, ea, eb, CS, Rcv_ml)
   endif
 
   do c=1,CS%num_col
-! c is an index for the next 3 lines but a multiplier for the rest of the loop
-! Therefore we use c as per C code and increment the index where necessary.
     i = CS%col_i(c) ; j = CS%col_j(c)
     damp = dt * CS%Iresttime_col(c)
 
