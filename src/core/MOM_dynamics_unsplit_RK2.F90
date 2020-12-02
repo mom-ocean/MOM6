@@ -194,11 +194,11 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   type(ocean_grid_type),             intent(inout) :: G       !< The ocean's grid structure.
   type(verticalGrid_type),           intent(in)    :: GV      !< The ocean's vertical grid structure.
   type(unit_scale_type),             intent(in)    :: US      !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u_in !< The input and output zonal
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u_in !< The input and output zonal
                                                               !! velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v_in !< The input and output meridional
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: v_in !< The input and output meridional
                                                               !! velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h_in !< The input and output layer thicknesses,
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h_in !< The input and output layer thicknesses,
                                                               !! [H ~> m or kg m-2], depending on whether
                                                               !! the Boussinesq approximation is made.
   type(thermo_var_ptrs),             intent(in)    :: tv      !< A structure pointing to various
@@ -216,14 +216,14 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   real, dimension(:,:),              pointer       :: p_surf_end   !< A pointer (perhaps NULL) to
                                                               !! the surface pressure at the end of
                                                               !! this dynamic step [R L2 T-2 ~> Pa].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uh !< The zonal volume or mass transport
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: uh !< The zonal volume or mass transport
                                                               !! [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vh  !< The meridional volume or mass
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: vh  !< The meridional volume or mass
                                                               !! transport [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr !< The accumulated zonal volume or
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: uhtr !< The accumulated zonal volume or
                                                               !! mass transport since the last
                                                               !! tracer advection [H L2 ~> m3 or kg].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr !< The accumulated meridional volume
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: vhtr !< The accumulated meridional volume
                                                               !! or mass transport since the last
                                                               !! tracer advection [H L2 ~> m3 or kg].
   real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: eta_av  !< The time-mean free surface height
@@ -237,9 +237,9 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
                                                               !! fields related to the Mesoscale
                                                               !! Eddy Kinetic Energy.
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_av, hp
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up ! Predicted zonal velocities [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vp ! Predicted meridional velocities [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_av, hp
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: up ! Predicted zonal velocities [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: vp ! Predicted meridional velocities [L T-1 ~> m s-1]
   real, dimension(:,:), pointer :: p_surf => NULL()
   real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping [T ~> s]
   real :: dt_visc   ! The time step for a part of the update due to viscosity [T ~> s]
@@ -508,9 +508,9 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag
   type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u    !< The zonal velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v    !< The meridional velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout) :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u   !< The zonal velocity [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: v   !< The meridional velocity [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(time_type),                   target, intent(in)    :: Time !< The current model time.
   type(param_file_type),                     intent(in)    :: param_file !< A structure to parse
                                                                          !! for run-time parameters.

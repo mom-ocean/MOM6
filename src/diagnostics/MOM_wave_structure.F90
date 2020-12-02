@@ -92,7 +92,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   type(ocean_grid_type),                    intent(in)  :: G  !< The ocean's grid structure.
   type(verticalGrid_type),                  intent(in)  :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),                    intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h  !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),                    intent(in)  :: tv !< A structure pointing to various
                                                               !! thermodynamic variables.
   real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: cn !< The (non-rotational) mode internal
@@ -106,22 +106,22 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   logical,                        optional, intent(in)  :: full_halos !< If true, do the calculation
                                                               !! over the entire computational domain.
   ! Local variables
-  real, dimension(SZK_(G)+1) :: &
+  real, dimension(SZK_(GV)+1) :: &
     dRho_dT, &    ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
     dRho_dS, &    ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
     pres, &       ! Interface pressure [R L2 T-2 ~> Pa]
     T_int, &      ! Temperature interpolated to interfaces [degC]
     S_int, &      ! Salinity interpolated to interfaces [ppt]
     gprime        ! The reduced gravity across each interface [m2 Z-1 s-2 ~> m s-2].
-  real, dimension(SZK_(G)) :: &
+  real, dimension(SZK_(GV)) :: &
     Igl, Igu      ! The inverse of the reduced gravity across an interface times
                   ! the thickness of the layer below (Igl) or above (Igu) it [s2 m-2].
-  real, dimension(SZK_(G),SZI_(G)) :: &
+  real, dimension(SZK_(GV),SZI_(G)) :: &
     Hf, &         ! Layer thicknesses after very thin layers are combined [Z ~> m]
     Tf, &         ! Layer temperatures after very thin layers are combined [degC]
     Sf, &         ! Layer salinities after very thin layers are combined [ppt]
     Rf            ! Layer densities after very thin layers are combined [R ~> kg m-3]
-  real, dimension(SZK_(G)) :: &
+  real, dimension(SZK_(GV)) :: &
     Hc, &         ! A column of layer thicknesses after convective istabilities are removed [Z ~> m]
     Tc, &         ! A column of layer temperatures after convective istabilities are removed [degC]
     Sc, &         ! A column of layer salinites after convective istabilities are removed [ppt]
@@ -154,13 +154,13 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real               :: Kmag2       ! magnitude of horizontal wave number squared
   logical            :: use_EOS     ! If true, density is calculated from T & S using an
                                     ! equation of state.
-  real, dimension(SZK_(G)+1) :: w_strct, u_strct, W_profile, Uavg_profile, z_int, N2
+  real, dimension(SZK_(GV)+1) :: w_strct, u_strct, W_profile, Uavg_profile, z_int, N2
                                         ! local representations of variables in CS; note,
                                         ! not all rows will be filled if layers get merged!
-  real, dimension(SZK_(G)+1) :: w_strct2, u_strct2
+  real, dimension(SZK_(GV)+1) :: w_strct2, u_strct2
                                         ! squared values
-  real, dimension(SZK_(G))   :: dz      ! thicknesses of merged layers (same as Hc I hope)
-  ! real, dimension(SZK_(G)+1) :: dWdz_profile ! profile of dW/dz
+  real, dimension(SZK_(GV))  :: dz      ! thicknesses of merged layers (same as Hc I hope)
+  ! real, dimension(SZK_(GV)+1) :: dWdz_profile ! profile of dW/dz
   real                       :: w2avg   ! average of squared vertical velocity structure funtion
   real                       :: int_dwdz2
   real                       :: int_w2
@@ -169,13 +169,13 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real                       :: PE_term ! terms in vertically averaged energy equation
   real                       :: W0      ! A vertical velocity magnitude [Z T-1 ~> m s-1]
   real                       :: gp_unscaled ! A version of gprime rescaled to [m s-2].
-  real, dimension(SZK_(G)-1) :: lam_z   ! product of eigen value and gprime(k); one value for each
+  real, dimension(SZK_(GV)-1) :: lam_z   ! product of eigen value and gprime(k); one value for each
                                         ! interface (excluding surface and bottom)
-  real, dimension(SZK_(G)-1) :: a_diag, b_diag, c_diag
+  real, dimension(SZK_(GV)-1) :: a_diag, b_diag, c_diag
                                         ! diagonals of tridiagonal matrix; one value for each
                                         ! interface (excluding surface and bottom)
-  real, dimension(SZK_(G)-1) :: e_guess ! guess at eigen vector with unit amplitde (for TDMA)
-  real, dimension(SZK_(G)-1) :: e_itt   ! improved guess at eigen vector (from TDMA)
+  real, dimension(SZK_(GV)-1) :: e_guess ! guess at eigen vector with unit amplitde (for TDMA)
+  real, dimension(SZK_(GV)-1) :: e_itt   ! improved guess at eigen vector (from TDMA)
   real    :: Pi
   integer :: kc
   integer :: i, j, k, k2, itt, is, ie, js, je, nz, nzm, row, ig, jg, ig_stop, jg_stop

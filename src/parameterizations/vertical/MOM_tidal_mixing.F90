@@ -672,26 +672,26 @@ subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US, C
   type(ocean_grid_type),            intent(in)    :: G      !< The ocean's grid structure
   type(verticalGrid_type),          intent(in)    :: GV     !< The ocean's vertical grid structure
   type(unit_scale_type),            intent(in)    :: US     !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G)),         intent(in)    :: N2_bot !< The near-bottom squared buoyancy
                                                             !! frequency [T-2 ~> s-2].
-  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: N2_lay !< The squared buoyancy frequency of the
+  real, dimension(SZI_(G),SZK_(GV)), intent(in)   :: N2_lay !< The squared buoyancy frequency of the
                                                             !! layers [T-2 ~> s-2].
-  real, dimension(SZI_(G),SZK_(G)+1), intent(in)  :: N2_int !< The squared buoyancy frequency at the
+  real, dimension(SZI_(G),SZK_(GV)+1), intent(in) :: N2_int !< The squared buoyancy frequency at the
                                                             !! interfaces [T-2 ~> s-2].
   integer,                          intent(in)    :: j      !< The j-index to work on
-  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: TKE_to_Kd !< The conversion rate between the TKE
+  real, dimension(SZI_(G),SZK_(GV)), intent(in)   :: TKE_to_Kd !< The conversion rate between the TKE
                                                             !! dissipated within a layer and the
                                                             !! diapycnal diffusivity within that layer,
                                                             !! usually (~Rho_0 / (G_Earth * dRho_lay))
                                                             !! [Z2 T-1 / Z3 T-3 = T2 Z-1 ~> s2 m-1]
-  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: max_TKE !< The energy required to for a layer to entrain
+  real, dimension(SZI_(G),SZK_(GV)), intent(in)   :: max_TKE !< The energy required to for a layer to entrain
                                                             !! to its maximum realizable thickness [Z3 T-3 ~> m3 s-3]
   type(tidal_mixing_cs),            pointer       :: CS     !< The control structure for this module
-  real, dimension(SZI_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZK_(GV)), &
                           optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity in layers [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZK_(GV)+1), &
                           optional, intent(inout) :: Kd_int !< The diapycnal diffusivity at interfaces,
                                                             !! [Z2 T-1 ~> m2 s-1].
   real,                             intent(in)    :: Kd_max !< The maximum increment for diapycnal
@@ -720,28 +720,28 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kd_int, Kv
   type(verticalGrid_type), intent(in)    :: GV    !< ocean vertical grid structure
   type(unit_scale_type),   intent(in)    :: US    !< A dimensional unit scaling type
   type(tidal_mixing_cs),   pointer       :: CS    !< This module's control structure.
-  real, dimension(SZI_(G),SZK_(G)+1), intent(in) :: N2_int !< The squared buoyancy
+  real, dimension(SZI_(G),SZK_(GV)+1), intent(in) :: N2_int !< The squared buoyancy
                                                   !! frequency at the interfaces [T-2 ~> s-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZK_(GV)), &
                  optional, intent(inout) :: Kd_lay!< The diapycnal diffusivity in the layers [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZK_(GV)+1), &
                  optional, intent(inout) :: Kd_int!< The diapycnal diffusivity at interfaces [Z2 T-1 ~> m2 s-1].
   real, dimension(:,:,:),  pointer       :: Kv    !< The "slow" vertical viscosity at each interface
                                                   !! (not layer!) [Z2 T-1 ~> m2 s-1].
   ! Local variables
-  real, dimension(SZK_(G)+1) :: Kd_tidal    ! tidal diffusivity [m2 s-1]
-  real, dimension(SZK_(G)+1) :: Kv_tidal    ! tidal viscosity [m2 s-1]
-  real, dimension(SZK_(G)+1) :: vert_dep    ! vertical deposition
-  real, dimension(SZK_(G)+1) :: iFaceHeight ! Height of interfaces [m]
-  real, dimension(SZK_(G)+1) :: SchmittnerSocn
-  real, dimension(SZK_(G))   :: cellHeight  ! Height of cell centers [m]
-  real, dimension(SZK_(G))   :: tidal_qe_md ! Tidal dissipation energy interpolated from 3d input
-                                            ! to model coordinates
-  real, dimension(SZK_(G)+1) :: N2_int_i    ! De-scaled interface buoyancy frequency [s-2]
-  real, dimension(SZK_(G))   :: Schmittner_coeff
-  real, dimension(SZK_(G))   :: h_m         ! Cell thickness [m]
+  real, dimension(SZK_(GV)+1) :: Kd_tidal    ! tidal diffusivity [m2 s-1]
+  real, dimension(SZK_(GV)+1) :: Kv_tidal    ! tidal viscosity [m2 s-1]
+  real, dimension(SZK_(GV)+1) :: vert_dep    ! vertical deposition
+  real, dimension(SZK_(GV)+1) :: iFaceHeight ! Height of interfaces [m]
+  real, dimension(SZK_(GV)+1) :: SchmittnerSocn
+  real, dimension(SZK_(GV))   :: cellHeight  ! Height of cell centers [m]
+  real, dimension(SZK_(GV))   :: tidal_qe_md ! Tidal dissipation energy interpolated from 3d input
+                                             ! to model coordinates
+  real, dimension(SZK_(GV)+1) :: N2_int_i    ! De-scaled interface buoyancy frequency [s-2]
+  real, dimension(SZK_(GV))   :: Schmittner_coeff
+  real, dimension(SZK_(GV))   :: h_m         ! Cell thickness [m]
   real, allocatable, dimension(:,:) :: exp_hab_zetar
 
   integer :: i, k, is, ie
@@ -959,33 +959,33 @@ end subroutine calculate_CVMix_tidal
 !! Froude-number-depending breaking, PSI, etc.).
 subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US, CS, &
                                     N2_lay, Kd_lay, Kd_int, Kd_max)
-  type(ocean_grid_type),            intent(in)    :: G      !< The ocean's grid structure
-  type(verticalGrid_type),          intent(in)    :: GV     !< The ocean's vertical grid structure
-  type(unit_scale_type),            intent(in)    :: US     !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                    intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(SZI_(G)),         intent(in)    :: N2_bot !< The near-bottom squared buoyancy frequency
-                                                            !! frequency [T-2 ~> s-2].
-  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: N2_lay !< The squared buoyancy frequency of the
-                                                            !! layers [T-2 ~> s-2].
-  integer,                          intent(in)    :: j      !< The j-index to work on
-  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: TKE_to_Kd !< The conversion rate between the TKE
-                                                            !! dissipated within a layer and the
-                                                            !! diapycnal diffusivity within that layer,
-                                                            !! usually (~Rho_0 / (G_Earth * dRho_lay))
-                                                            !! [Z2 T-1 / Z3 T-3 = T2 Z-1 ~> s2 m-1]
-  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: max_TKE !< The energy required to for a layer to entrain
-                                                            !! to its maximum realizable thickness [Z3 T-3 ~> m3 s-3]
-  type(tidal_mixing_cs),            pointer       :: CS     !< The control structure for this module
-  real, dimension(SZI_(G),SZK_(G)), &
-                          optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity in layers [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZK_(G)+1), &
-                          optional, intent(inout) :: Kd_int !< The diapycnal diffusivity at interfaces
-                                                            !! [Z2 T-1 ~> m2 s-1].
-  real,                             intent(in)    :: Kd_max !< The maximum increment for diapycnal
-                                                            !! diffusivity due to TKE-based processes
-                                                            !! [Z2 T-1 ~> m2 s-1].
-                                                            !! Set this to a negative value to have no limit.
+  type(ocean_grid_type),             intent(in)    :: G      !< The ocean's grid structure
+  type(verticalGrid_type),           intent(in)    :: GV     !< The ocean's vertical grid structure
+  type(unit_scale_type),             intent(in)    :: US     !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                                     intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G)),          intent(in)    :: N2_bot !< The near-bottom squared buoyancy frequency
+                                                             !! frequency [T-2 ~> s-2].
+  real, dimension(SZI_(G),SZK_(GV)), intent(in)    :: N2_lay !< The squared buoyancy frequency of the
+                                                             !! layers [T-2 ~> s-2].
+  integer,                           intent(in)    :: j      !< The j-index to work on
+  real, dimension(SZI_(G),SZK_(GV)), intent(in)    :: TKE_to_Kd !< The conversion rate between the TKE
+                                                             !! dissipated within a layer and the
+                                                             !! diapycnal diffusivity within that layer,
+                                                             !! usually (~Rho_0 / (G_Earth * dRho_lay))
+                                                             !! [Z2 T-1 / Z3 T-3 = T2 Z-1 ~> s2 m-1]
+  real, dimension(SZI_(G),SZK_(GV)), intent(in)    :: max_TKE !< The energy required to for a layer to entrain
+                                                             !! to its maximum realizable thickness [Z3 T-3 ~> m3 s-3]
+  type(tidal_mixing_cs),             pointer       :: CS     !< The control structure for this module
+  real, dimension(SZI_(G),SZK_(GV)), &
+                           optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity in layers [Z2 T-1 ~> m2 s-1]
+  real, dimension(SZI_(G),SZK_(GV)+1), &
+                           optional, intent(inout) :: Kd_int !< The diapycnal diffusivity at interfaces
+                                                             !! [Z2 T-1 ~> m2 s-1].
+  real,                              intent(in)    :: Kd_max !< The maximum increment for diapycnal
+                                                             !! diffusivity due to TKE-based processes
+                                                             !! [Z2 T-1 ~> m2 s-1].
+                                                             !! Set this to a negative value to have no limit.
 
   ! local
 
@@ -1498,7 +1498,7 @@ end subroutine setup_tidal_diagnostics
 subroutine post_tidal_diagnostics(G, GV, h ,CS)
   type(ocean_grid_type),    intent(in)   :: G   !< The ocean's grid structure
   type(verticalGrid_type),  intent(in)   :: GV  !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
                             intent(in)   :: h   !< Layer thicknesses [H ~> m or kg m-2].
   type(tidal_mixing_cs),    pointer      :: CS  !< The control structure for this module
 

@@ -56,9 +56,9 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, PF, use_ALE, CSp, ACSp)
                                             !! fields, potential temperature and
                                             !! salinity or mixed layer density.
                                             !! Absent fields have NULL ptrs.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                  target, intent(in) :: u    !< Array with the u velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                  target, intent(in) :: v    !< Array with the v velocity [L T-1 ~> m s-1]
   type(param_file_type), intent(in) :: PF   !< A structure indicating the
                                             !! open file to parse for model
@@ -68,20 +68,17 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, PF, use_ALE, CSp, ACSp)
   type(ALE_sponge_CS),   pointer    :: ACSp !< ALE-mode sponge structure
 
 ! Local variables
-  real :: T(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for temp
-  real :: S(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for salt
-  real :: U1(SZIB_(G),SZJ_(G),SZK_(G))  ! A temporary array for u [L T-1 ~> m s-1]
-  real :: V1(SZI_(G),SZJB_(G),SZK_(G))  ! A temporary array for v [L T-1 ~> m s-1]
-  real :: RHO(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for RHO
+  real :: T(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for temp
+  real :: S(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for salt
+  real :: U1(SZIB_(G),SZJ_(G),SZK_(GV)) ! A temporary array for u [L T-1 ~> m s-1]
+  real :: V1(SZI_(G),SZJB_(G),SZK_(GV)) ! A temporary array for v [L T-1 ~> m s-1]
+  real :: RHO(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for RHO
   real :: tmp(SZI_(G),SZJ_(G))        ! A temporary array for tracers.
-  real :: h(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for thickness at h points
+  real :: h(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for thickness at h points
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate at h points [T-1 ~> s-1].
   real :: TNUDG                     ! Nudging time scale [T ~> s]
   real :: pres(SZI_(G))             ! An array of the reference pressure [R L2 T-2 ~> Pa]
-  real :: e0(SZK_(G)+1)               ! The resting interface heights, in m, usually !
-                                    ! negative because it is positive upward.      !
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta.
-                                    ! positive upward, in m.
+  real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for eta, positive upward [m].
   logical :: sponge_uv              ! Nudge velocities (u and v) towards zero
   real :: min_depth, dummy1, z, delta_h
   real :: rho_dummy, min_thickness, rho_tmp, xi0
@@ -173,34 +170,30 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, PF, use_ALE, CSp, ACSp)
   filename = trim(inputdir)//trim(state_file)
   if (.not.file_exists(filename, G%Domain)) &
       call MOM_error(FATAL, " RGC_initialize_sponges: Unable to open "//trim(filename))
-  call read_data(filename,temp_var,T(:,:,:), domain=G%Domain%mpp_domain)
-  call read_data(filename,salt_var,S(:,:,:), domain=G%Domain%mpp_domain)
+  call read_data(filename, temp_var, T(:,:,:), domain=G%Domain%mpp_domain)
+  call read_data(filename, salt_var, S(:,:,:), domain=G%Domain%mpp_domain)
 
   if (use_ALE) then
 
-    call read_data(filename,h_var,h(:,:,:), domain=G%Domain%mpp_domain)
+    call read_data(filename, h_var, h(:,:,:), domain=G%Domain%mpp_domain)
     call pass_var(h, G%domain)
 
     call initialize_ALE_sponge(Idamp, G, GV, PF, ACSp, h, nz)
 
     !  The remaining calls to set_up_sponge_field can be in any order. !
-    if ( associated(tv%T) ) then
-      call set_up_ALE_sponge_field(T,G,tv%T,ACSp)
-    endif
-    if ( associated(tv%S) ) then
-      call set_up_ALE_sponge_field(S,G,tv%S,ACSp)
-    endif
+    if ( associated(tv%T) ) call set_up_ALE_sponge_field(T, G, GV, tv%T, ACSp)
+    if ( associated(tv%S) ) call set_up_ALE_sponge_field(S, G, GV, tv%S, ACSp)
 
     if (sponge_uv) then
-      U1(:,:,:) = 0.0; V1(:,:,:) = 0.0
-      call set_up_ALE_sponge_vel_field(U1,V1,G,u,v,ACSp)
+      U1(:,:,:) = 0.0 ; V1(:,:,:) = 0.0
+      call set_up_ALE_sponge_vel_field(U1, V1, G, GV, u, v, ACSp)
     endif
 
 
   else ! layer mode
 
     !read eta
-    call read_data(filename,eta_var,eta(:,:,:), domain=G%Domain%mpp_domain)
+    call read_data(filename, eta_var, eta(:,:,:), domain=G%Domain%mpp_domain)
 
     ! Set the inverse damping rates so that the model will know where to
     ! apply the sponges, along with the interface heights.
@@ -220,8 +213,8 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, PF, use_ALE, CSp, ACSp)
     endif
 
     ! Apply sponge in tracer fields
-    call set_up_sponge_field(T, tv%T, G, nz, CSp)
-    call set_up_sponge_field(S, tv%S, G, nz, CSp)
+    call set_up_sponge_field(T, tv%T, G, GV, nz, CSp)
+    call set_up_sponge_field(S, tv%S, G, GV, nz, CSp)
 
   endif
 

@@ -188,11 +188,11 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
   ! Local variables
 
-  real :: b1(SZIB_(G))          ! A variable used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
-  real :: c1(SZIB_(G),SZK_(G))  ! A variable used by the tridiagonal solver [nondim].
-  real :: d1(SZIB_(G))          ! d1=1-c1 is used by the tridiagonal solver [nondim].
-  real :: Ray(SZIB_(G),SZK_(G)) ! Ray is the Rayleigh-drag velocity [Z T-1 ~> m s-1].
-  real :: b_denom_1             ! The first term in the denominator of b1 [H ~> m or kg m-2].
+  real :: b1(SZIB_(G))           ! A variable used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
+  real :: c1(SZIB_(G),SZK_(GV))  ! A variable used by the tridiagonal solver [nondim].
+  real :: d1(SZIB_(G))           ! d1=1-c1 is used by the tridiagonal solver [nondim].
+  real :: Ray(SZIB_(G),SZK_(GV)) ! Ray is the Rayleigh-drag velocity [Z T-1 ~> m s-1].
+  real :: b_denom_1              ! The first term in the denominator of b1 [H ~> m or kg m-2].
 
   real :: Hmix             ! The mixed layer thickness over which stress
                            ! is applied with direct_stress [H ~> m or kg m-2].
@@ -523,10 +523,10 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
 
   ! Local variables
 
-  real :: b1(SZIB_(G))          ! A variable used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
-  real :: c1(SZIB_(G),SZK_(G))  ! A variable used by the tridiagonal solver [nondim].
-  real :: d1(SZIB_(G))          ! d1=1-c1 is used by the tridiagonal solver [nondim].
-  real :: Ray(SZIB_(G),SZK_(G)) ! Ray is the Rayleigh-drag velocity [Z T-1 ~> m s-1].
+  real :: b1(SZIB_(G))           ! A variable used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
+  real :: c1(SZIB_(G),SZK_(GV))  ! A variable used by the tridiagonal solver [nondim].
+  real :: d1(SZIB_(G))           ! d1=1-c1 is used by the tridiagonal solver [nondim].
+  real :: Ray(SZIB_(G),SZK_(GV)) ! Ray is the Rayleigh-drag velocity [Z T-1 ~> m s-1].
   real :: b_denom_1   ! The first term in the denominator of b1 [H ~> m or kg m-2].
   real :: dt_Z_to_H        ! The time step times the conversion from Z to the
                            ! units of thickness [T H Z-1 ~> s or s kg m-3].
@@ -636,14 +636,14 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
 
   ! Local variables
 
-  real, dimension(SZIB_(G),SZK_(G)) :: &
+  real, dimension(SZIB_(G),SZK_(GV)) :: &
     h_harm, &   ! Harmonic mean of the thicknesses around a velocity grid point,
                 ! given by 2*(h+ * h-)/(h+ + h-) [H ~> m or kg m-2].
     h_arith, &  ! The arithmetic mean thickness [H ~> m or kg m-2].
     h_delta, &  ! The lateral difference of thickness [H ~> m or kg m-2].
     hvel, &     ! hvel is the thickness used at a velocity grid point [H ~> m or kg m-2].
     hvel_shelf  ! The equivalent of hvel under shelves [H ~> m or kg m-2].
-  real, dimension(SZIB_(G),SZK_(G)+1) :: &
+  real, dimension(SZIB_(G),SZK_(GV)+1) :: &
     a_cpl, &    ! The drag coefficients across interfaces [Z T-1 ~> m s-1].  a_cpl times
                 ! the velocity difference gives the stress across an interface.
     a_shelf, &  ! The drag coefficients across interfaces in water columns under
@@ -1390,8 +1390,8 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
   real :: H_report         ! A thickness below which not to report truncations.
   real :: dt_Rho0          ! The timestep divided by the Boussinesq density [m2 T2 s-1 L-1 Z-1 R-1 ~> s m3 kg-1].
   real :: vel_report(SZIB_(G),SZJB_(G))   ! The velocity to report [L T-1 ~> m s-1]
-  real :: u_old(SZIB_(G),SZJ_(G),SZK_(G)) ! The previous u-velocity [L T-1 ~> m s-1]
-  real :: v_old(SZI_(G),SZJB_(G),SZK_(G)) ! The previous v-velocity [L T-1 ~> m s-1]
+  real :: u_old(SZIB_(G),SZJ_(G),SZK_(GV)) ! The previous u-velocity [L T-1 ~> m s-1]
+  real :: v_old(SZI_(G),SZJB_(G),SZK_(GV)) ! The previous v-velocity [L T-1 ~> m s-1]
   logical :: trunc_any, dowrite(SZIB_(G),SZJB_(G))
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke

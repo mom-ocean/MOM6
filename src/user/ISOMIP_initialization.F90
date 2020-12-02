@@ -144,10 +144,10 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, US, param_file, tv, just_read
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
   ! Local variables
-  real :: e0(SZK_(G)+1)   ! The resting interface heights, in depth units [Z ~> m],
+  real :: e0(SZK_(GV)+1)  ! The resting interface heights, in depth units [Z ~> m],
                           !  usually negative because it is positive upward.
-  real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface
-                          ! positive upward, in depth units [Z ~> m].
+  real :: eta1D(SZK_(GV)+1) ! Interface height relative to the sea surface
+                            ! positive upward, in depth units [Z ~> m].
   integer :: i, j, k, is, ie, js, je, nz, tmp1
   real    :: x
   real    :: min_thickness, s_sur, s_bot, t_sur, t_bot
@@ -255,9 +255,9 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
   type(ocean_grid_type),                     intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T  !< Potential temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S  !< Salinity [ppt]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T  !< Potential temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S  !< Salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -277,11 +277,12 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
   real :: rho_tmp
   logical :: just_read       ! If true, just read parameters but set nothing.
   logical :: fit_salin       ! If true, accept the prescribed temperature and fit the salinity.
-  real :: T0(SZK_(G)), S0(SZK_(G))
-  real :: drho_dT(SZK_(G))   ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
-  real :: drho_dS(SZK_(G))   ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
-  real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 [R ~> kg m-3].
-  real :: pres(SZK_(G))      ! An array of the reference pressure [R L2 T-2 ~> Pa]. (zero here)
+  real :: T0(SZK_(GV))       ! A profile of temperatures [degC]
+  real :: S0(SZK_(GV))       ! A profile of salinities [ppt]
+  real :: drho_dT(SZK_(GV))  ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
+  real :: drho_dS(SZK_(GV))  ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
+  real :: rho_guess(SZK_(GV)) ! Potential density at T0 & S0 [R ~> kg m-3].
+  real :: pres(SZK_(GV))     ! An array of the reference pressure [R L2 T-2 ~> Pa]. (zero here)
   real :: drho_dT1           ! A prescribed derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
   real :: drho_dS1           ! A prescribed derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
   real :: T_Ref, S_Ref
@@ -437,10 +438,10 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
   type(sponge_CS),   pointer    :: CSp      !< Layer-mode sponge structure
   type(ALE_sponge_CS),   pointer    :: ACSp !< ALE-mode sponge structure
   ! Local variables
-  real :: T(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for temp [degC]
-  real :: S(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for salt [ppt]
-  ! real :: RHO(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for RHO [R ~> kg m-3]
-  real :: h(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for thickness [H ~> m or kg m-2]
+  real :: T(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for temp [degC]
+  real :: S(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for salt [ppt]
+  ! real :: RHO(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for RHO [R ~> kg m-3]
+  real :: h(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for thickness [H ~> m or kg m-2]
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
   real :: TNUDG                     ! Nudging time scale [T ~> s]
   real :: S_sur, T_sur              ! Surface salinity and temerature in sponge
@@ -450,10 +451,10 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
   real :: rho_range                 ! The range of densities [R ~> kg m-3]
   real :: dT_dz, dS_dz              ! Gradients of T and S in degC/Z and PPT/Z.
 
-  real :: e0(SZK_(G)+1)             ! The resting interface heights [Z ~> m], usually
+  real :: e0(SZK_(GV)+1)            ! The resting interface heights [Z ~> m], usually
                                     ! negative because it is positive upward.
-  real :: eta1D(SZK_(G)+1)          ! Interface height relative to the sea surface, positive upward [Z ~> m].
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta [Z ~> m].
+  real :: eta1D(SZK_(GV)+1)         ! Interface height relative to the sea surface, positive upward [Z ~> m].
+  real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for interface heights [Z ~> m].
   real :: min_depth, dummy1, z
   real :: rho_dummy, min_thickness, rho_tmp, xi0
   character(len=40) :: verticalCoordinate, filename, state_file
@@ -616,10 +617,10 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
 
     !  The remaining calls to set_up_sponge_field can be in any order. !
     if ( associated(tv%T) ) then
-      call set_up_ALE_sponge_field(T, G, tv%T, ACSp)
+      call set_up_ALE_sponge_field(T, G, GV, tv%T, ACSp)
     endif
     if ( associated(tv%S) ) then
-      call set_up_ALE_sponge_field(S, G, tv%S, ACSp)
+      call set_up_ALE_sponge_field(S, G, GV, tv%S, ACSp)
     endif
 
   else ! layer mode
@@ -665,8 +666,8 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
     ! apply the sponges, along with the interface heights.
     call initialize_sponge(Idamp, eta, G, PF, CSp, GV)
     ! Apply sponge in tracer fields
-    call set_up_sponge_field(T, tv%T, G, nz, CSp)
-    call set_up_sponge_field(S, tv%S, G, nz, CSp)
+    call set_up_sponge_field(T, tv%T, G, GV, nz, CSp)
+    call set_up_sponge_field(S, tv%S, G, GV, nz, CSp)
 
   endif
 

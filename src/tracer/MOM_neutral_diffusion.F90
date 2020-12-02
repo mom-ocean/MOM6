@@ -246,24 +246,24 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
 !  call closeParameterBlock(param_file)
   if (CS%continuous_reconstruction) then
     CS%nsurf = 2*GV%ke+2 ! Continuous reconstruction means that every interface has two connections
-    allocate(CS%dRdT(SZI_(G),SZJ_(G),SZK_(G)+1)) ; CS%dRdT(:,:,:) = 0.
-    allocate(CS%dRdS(SZI_(G),SZJ_(G),SZK_(G)+1)) ; CS%dRdS(:,:,:) = 0.
+    allocate(CS%dRdT(SZI_(G),SZJ_(G),SZK_(GV)+1)) ; CS%dRdT(:,:,:) = 0.
+    allocate(CS%dRdS(SZI_(G),SZJ_(G),SZK_(GV)+1)) ; CS%dRdS(:,:,:) = 0.
   else
     CS%nsurf = 4*GV%ke   ! Discontinuous means that every interface has four connections
-    allocate(CS%T_i(SZI_(G),SZJ_(G),SZK_(G),2))    ; CS%T_i(:,:,:,:) = 0.
-    allocate(CS%S_i(SZI_(G),SZJ_(G),SZK_(G),2))    ; CS%S_i(:,:,:,:) = 0.
-    allocate(CS%P_i(SZI_(G),SZJ_(G),SZK_(G),2))    ; CS%P_i(:,:,:,:) = 0.
-    allocate(CS%dRdT_i(SZI_(G),SZJ_(G),SZK_(G),2)) ; CS%dRdT_i(:,:,:,:) = 0.
-    allocate(CS%dRdS_i(SZI_(G),SZJ_(G),SZK_(G),2)) ; CS%dRdS_i(:,:,:,:) = 0.
-    allocate(CS%ppoly_coeffs_T(SZI_(G),SZJ_(G),SZK_(G),CS%deg+1)) ; CS%ppoly_coeffs_T(:,:,:,:) = 0.
-    allocate(CS%ppoly_coeffs_S(SZI_(G),SZJ_(G),SZK_(G),CS%deg+1)) ; CS%ppoly_coeffs_S(:,:,:,:) = 0.
+    allocate(CS%T_i(SZI_(G),SZJ_(G),SZK_(GV),2))    ; CS%T_i(:,:,:,:) = 0.
+    allocate(CS%S_i(SZI_(G),SZJ_(G),SZK_(GV),2))    ; CS%S_i(:,:,:,:) = 0.
+    allocate(CS%P_i(SZI_(G),SZJ_(G),SZK_(GV),2))    ; CS%P_i(:,:,:,:) = 0.
+    allocate(CS%dRdT_i(SZI_(G),SZJ_(G),SZK_(GV),2)) ; CS%dRdT_i(:,:,:,:) = 0.
+    allocate(CS%dRdS_i(SZI_(G),SZJ_(G),SZK_(GV),2)) ; CS%dRdS_i(:,:,:,:) = 0.
+    allocate(CS%ppoly_coeffs_T(SZI_(G),SZJ_(G),SZK_(GV),CS%deg+1)) ; CS%ppoly_coeffs_T(:,:,:,:) = 0.
+    allocate(CS%ppoly_coeffs_S(SZI_(G),SZJ_(G),SZK_(GV),CS%deg+1)) ; CS%ppoly_coeffs_S(:,:,:,:) = 0.
     allocate(CS%ns(SZI_(G),SZJ_(G)))    ; CS%ns(:,:) = 0.
   endif
   ! T-points
-  allocate(CS%Tint(SZI_(G),SZJ_(G),SZK_(G)+1)) ; CS%Tint(:,:,:) = 0.
-  allocate(CS%Sint(SZI_(G),SZJ_(G),SZK_(G)+1)) ; CS%Sint(:,:,:) = 0.
-  allocate(CS%Pint(SZI_(G),SZJ_(G),SZK_(G)+1)) ; CS%Pint(:,:,:) = 0.
-  allocate(CS%stable_cell(SZI_(G),SZJ_(G),SZK_(G))) ; CS%stable_cell(:,:,:) = .true.
+  allocate(CS%Tint(SZI_(G),SZJ_(G),SZK_(GV)+1)) ; CS%Tint(:,:,:) = 0.
+  allocate(CS%Sint(SZI_(G),SZJ_(G),SZK_(GV)+1)) ; CS%Sint(:,:,:) = 0.
+  allocate(CS%Pint(SZI_(G),SZJ_(G),SZK_(GV)+1)) ; CS%Pint(:,:,:) = 0.
+  allocate(CS%stable_cell(SZI_(G),SZJ_(G),SZK_(GV))) ; CS%stable_cell(:,:,:) = .true.
   ! U-points
   allocate(CS%uPoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%uPoL(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0.
   allocate(CS%uPoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%uPoR(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0.
@@ -282,13 +282,13 @@ end function neutral_diffusion_init
 !> Calculate remapping factors for u/v columns used to map adjoining columns to
 !! a shared coordinate space.
 subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
-  type(ocean_grid_type),                    intent(in) :: G   !< Ocean grid structure
-  type(verticalGrid_type),                  intent(in) :: GV  !< ocean vertical grid structure
-  type(unit_scale_type),                    intent(in) :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h   !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: T   !< Potential temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: S   !< Salinity [ppt]
-  type(neutral_diffusion_CS),               pointer    :: CS  !< Neutral diffusion control structure
+  type(ocean_grid_type),                     intent(in) :: G   !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in) :: GV  !< ocean vertical grid structure
+  type(unit_scale_type),                     intent(in) :: US  !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h   !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: T   !< Potential temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: S   !< Salinity [ppt]
+  type(neutral_diffusion_CS),                pointer    :: CS  !< Neutral diffusion control structure
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: p_surf !< Surface pressure to include in pressures used
                                                               !! for equation of state calculations [R L2 T-2 ~> Pa]
 
@@ -296,7 +296,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k
   ! Variables used for reconstructions
-  real, dimension(SZK_(G),2) :: ppoly_r_S       ! Reconstruction slopes
+  real, dimension(SZK_(GV),2) :: ppoly_r_S      ! Reconstruction slopes
   real, dimension(SZI_(G), SZJ_(G)) :: hEff_sum ! Summed effective face thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G))  :: hbl      ! Boundary layer depth [H ~> m or kg m-2]
   integer :: iMethod
@@ -530,7 +530,7 @@ end subroutine neutral_diffusion_calc_coeffs
 subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
   type(ocean_grid_type),                     intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV     !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points [L2 ~> m2]
   real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: Coef_y !< dt * Kh * dx / dy at v-points [L2 ~> m2]
   real,                                      intent(in)    :: dt     !< Tracer time step * I_numitts [T ~> s]

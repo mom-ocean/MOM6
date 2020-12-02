@@ -411,19 +411,19 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   type(ocean_grid_type),                   intent(inout) :: G       !< The ocean's grid structure.
   type(verticalGrid_type),                   intent(in)  :: GV      !< The ocean's vertical grid structure.
   type(unit_scale_type),                     intent(in)  :: US      !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: U_in    !< The initial (3-D) zonal
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)  :: U_in    !< The initial (3-D) zonal
                                                                     !! velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: V_in    !< The initial (3-D) meridional
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: V_in    !< The initial (3-D) meridional
                                                                     !! velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: eta_in  !< The initial barotropic free surface height
                                                          !! anomaly or column mass anomaly [H ~> m or kg m-2].
   real,                                      intent(in)  :: dt      !< The time increment to integrate over [T ~> s].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: bc_accel_u !< The zonal baroclinic accelerations,
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)  :: bc_accel_u !< The zonal baroclinic accelerations,
                                                                        !! [L T-2 ~> m s-2].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: bc_accel_v !< The meridional baroclinic accelerations,
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: bc_accel_v !< The meridional baroclinic accelerations,
                                                                        !! [L T-2 ~> m s-2].
   type(mech_forcing),                        intent(in)  :: forces     !< A structure with the driving mechanical forces
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: pbce       !< The baroclinic pressure anomaly in each layer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: pbce       !< The baroclinic pressure anomaly in each layer
                                                          !! due to free surface height anomalies
                                                          !! [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: eta_PF_in  !< The 2-D eta field (either SSH anomaly or
@@ -432,13 +432,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                                                          !! eta_PF_start is provided [H ~> m or kg m-2].
                                                          !! Note: eta_in, pbce, and eta_PF_in must have up-to-date
                                                          !! values in the first point of their halos.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: U_Cor      !< The (3-D) zonal velocities used to
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)  :: U_Cor      !< The (3-D) zonal velocities used to
                                                          !! calculate the Coriolis terms in bc_accel_u [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: V_Cor      !< The (3-D) meridional velocities used to
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: V_Cor      !< The (3-D) meridional velocities used to
                                                          !! calculate the Coriolis terms in bc_accel_u [L T-1 ~> m s-1].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: accel_layer_u !< The zonal acceleration of each layer due
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(out) :: accel_layer_u !< The zonal acceleration of each layer due
                                                          !! to the barotropic calculation [L T-2 ~> m s-2].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: accel_layer_v !< The meridional acceleration of each layer
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(out) :: accel_layer_v !< The meridional acceleration of each layer
                                                          !! due to the barotropic calculation [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: eta_out       !< The final barotropic free surface
                                                          !! height anomaly or column mass anomaly [H ~> m or kg m-2].
@@ -450,13 +450,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                                                          !! [H L2 T-1 ~> m3 or kg s-1].
   type(barotropic_CS),                       pointer     :: CS            !< The control structure returned by a
                                                          !! previous call to barotropic_init.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: visc_rem_u    !< Both the fraction of the momentum
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)  :: visc_rem_u    !< Both the fraction of the momentum
                                                          !! originally in a layer that remains after a time-step of
                                                          !! viscosity, and the fraction of a time-step's worth of a
                                                          !! barotropic acceleration that a layer experiences after
                                                          !! viscosity is applied, in the zonal direction. Nondimensional
                                                          !! between 0 (at the bottom) and 1 (far above the bottom).
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: visc_rem_v    !< Ditto for meridional direction [nondim].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: visc_rem_v    !< Ditto for meridional direction [nondim].
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(out) :: etaav        !< The free surface height or column mass
                                                          !! averaged over the barotropic integration [H ~> m or kg m-2].
   type(accel_diag_ptrs),               optional, pointer :: ADp          !< Acceleration diagnostic pointers
@@ -484,8 +484,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real :: ubt_Cor(SZIB_(G),SZJ_(G)) ! The barotropic velocities that had been
   real :: vbt_Cor(SZI_(G),SZJB_(G)) ! used to calculate the input Coriolis
                                     ! terms [L T-1 ~> m s-1].
-  real :: wt_u(SZIB_(G),SZJ_(G),SZK_(G)) ! wt_u and wt_v are the
-  real :: wt_v(SZI_(G),SZJB_(G),SZK_(G)) ! normalized weights to
+  real :: wt_u(SZIB_(G),SZJ_(G),SZK_(GV)) ! wt_u and wt_v are the
+  real :: wt_v(SZI_(G),SZJB_(G),SZK_(GV)) ! normalized weights to
                 ! be used in calculating barotropic velocities, possibly with
                 ! sums less than one due to viscous losses.  Nondimensional.
   real, dimension(SZIB_(G),SZJ_(G)) :: &
@@ -2647,7 +2647,7 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
   type(barotropic_CS),          pointer       :: CS   !< Barotropic control structure.
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: eta  !< The barotropic free surface
                                                       !! height anomaly or column mass anomaly [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(in) :: pbce  !< The baroclinic pressure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), optional, intent(in) :: pbce  !< The baroclinic pressure
                                                       !! anomaly in each layer due to free surface
                                                       !! height anomalies [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
   type(BT_cont_type), optional, pointer       :: BT_cont  !< A structure with elements that describe
@@ -3183,13 +3183,13 @@ end subroutine destroy_BT_OBC
 subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   type(barotropic_CS),     pointer       :: CS   !< The control structure returned by a previous
                                                  !! call to barotropic_init.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(in)    :: h_u  !< The specified thicknesses at u-points [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                  optional, intent(in)    :: h_v  !< The specified thicknesses at v-points [H ~> m or kg m-2].
   logical,       optional, intent(in)    :: may_use_default !< An optional logical argument
                                                  !! to indicate that the default velocity point
@@ -3211,8 +3211,8 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   real :: wt_arith             ! The nondimensional weight for the arithmetic mean thickness.
                                ! The harmonic mean uses a weight of (1 - wt_arith).
   real :: Rh                   ! A ratio of summed thicknesses, nondim.
-  real :: e_u(SZIB_(G),SZK_(G)+1) !   The interface heights at u-velocity and
-  real :: e_v(SZI_(G),SZK_(G)+1)  ! v-velocity points [H ~> m or kg m-2].
+  real :: e_u(SZIB_(G),SZK_(GV)+1) !   The interface heights at u-velocity and
+  real :: e_v(SZI_(G),SZK_(GV)+1)  ! v-velocity points [H ~> m or kg m-2].
   real :: D_shallow_u(SZI_(G)) ! The shallower of the adjacent depths [H ~> m or kg m-2].
   real :: D_shallow_v(SZIB_(G))! The shallower of the adjacent depths [H ~> m or kg m-2].
   real :: htot                 ! The sum of the layer thicknesses [H ~> m or kg m-2].
@@ -4146,7 +4146,7 @@ end subroutine find_face_areas
 subroutine bt_mass_source(h, eta, set_cor, G, GV, CS)
   type(ocean_grid_type),              intent(in) :: G        !< The ocean's grid structure.
   type(verticalGrid_type),            intent(in) :: GV       !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h  !< Layer thicknesses [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h  !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G)),   intent(in) :: eta      !< The free surface height that is to be
                                                              !! corrected [H ~> m or kg m-2].
   logical,                            intent(in) :: set_cor  !< A flag to indicate whether to set the corrective
@@ -4206,11 +4206,11 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: u    !< The zonal velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(in)    :: v    !< The meridional velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G)), &
                            intent(in)    :: eta  !< Free surface height or column mass anomaly

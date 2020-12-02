@@ -188,12 +188,12 @@ end subroutine calc_depth_function
 
 !> Calculates and stores the non-dimensional resolution functions
 subroutine calc_resoln_function(h, tv, G, GV, US, CS)
-  type(ocean_grid_type),                    intent(inout) :: G  !< Ocean grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
-  type(thermo_var_ptrs),                    intent(in)    :: tv !< Thermodynamic variables
-  type(verticalGrid_type),                  intent(in)    :: GV !< Vertical grid structure
-  type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
-  type(VarMix_CS),                          pointer       :: CS !< Variable mixing coefficients
+  type(ocean_grid_type),                     intent(inout) :: G  !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
+  type(thermo_var_ptrs),                     intent(in)    :: tv !< Thermodynamic variables
+  type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
+  type(VarMix_CS),                           pointer       :: CS !< Variable mixing coefficients
 
   ! Local variables
   ! Depending on the power-function being used, dimensional rescaling may be limited, so some
@@ -434,19 +434,19 @@ end subroutine calc_resoln_function
 !> Calculates and stores functions of isopycnal slopes, e.g. Sx, Sy, S*N, mostly used in the Visbeck et al.
 !! style scaling of diffusivity
 subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS, OBC)
-  type(ocean_grid_type),                    intent(inout) :: G  !< Ocean grid structure
-  type(verticalGrid_type),                  intent(in)    :: GV !< Vertical grid structure
-  type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
-  type(thermo_var_ptrs),                    intent(in)    :: tv !< Thermodynamic variables
-  real,                                     intent(in)    :: dt !< Time increment [T ~> s]
-  type(VarMix_CS),                          pointer       :: CS !< Variable mixing coefficients
-  type(ocean_OBC_type),           optional, pointer       :: OBC !< Open boundaries control structure.
+  type(ocean_grid_type),                     intent(inout) :: G  !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV !< Vertical grid structure
+  type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
+  type(thermo_var_ptrs),                     intent(in)    :: tv !< Thermodynamic variables
+  real,                                      intent(in)    :: dt !< Time increment [T ~> s]
+  type(VarMix_CS),                           pointer       :: CS !< Variable mixing coefficients
+  type(ocean_OBC_type),            optional, pointer       :: OBC !< Open boundaries control structure.
   ! Local variables
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
+  real, dimension(SZI_(G), SZJ_(G),SZK_(GV)+1) :: &
     e             ! The interface heights relative to mean sea level [Z ~> m].
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: N2_u ! Square of Brunt-Vaisala freq at u-points [T-2 ~> s-2]
-  real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: N2_v ! Square of Brunt-Vaisala freq at v-points [T-2 ~> s-2]
+  real, dimension(SZIB_(G), SZJ_(G),SZK_(GV)+1) :: N2_u ! Square of Brunt-Vaisala freq at u-points [T-2 ~> s-2]
+  real, dimension(SZI_(G), SZJB_(G),SZK_(GV)+1) :: N2_v ! Square of Brunt-Vaisala freq at v-points [T-2 ~> s-2]
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_slope_functions:"//&
          "Module must be initialized before it is used.")
@@ -479,18 +479,18 @@ end subroutine calc_slope_functions
 
 !> Calculates factors used when setting diffusivity coefficients similar to Visbeck et al.
 subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS, OBC)
-  type(ocean_grid_type),                       intent(inout) :: G  !< Ocean grid structure
-  type(verticalGrid_type),                     intent(in)    :: GV !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: slope_x !< Zonal isoneutral slope
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: N2_u    !< Buoyancy (Brunt-Vaisala) frequency
-                                                                        !! at u-points [T-2 ~> s-2]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: slope_y !< Meridional isoneutral slope
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: N2_v    !< Buoyancy (Brunt-Vaisala) frequency
-                                                                        !! at v-points [T-2 ~> s-2]
-  type(unit_scale_type),                       intent(in)    :: US !< A dimensional unit scaling type
-  type(VarMix_CS),                             pointer       :: CS !< Variable mixing coefficients
-  type(ocean_OBC_type),              optional, pointer       :: OBC !< Open boundaries control structure.
+  type(ocean_grid_type),                        intent(inout) :: G  !< Ocean grid structure
+  type(verticalGrid_type),                      intent(in)    :: GV !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: slope_x !< Zonal isoneutral slope
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: N2_u    !< Buoyancy (Brunt-Vaisala) frequency
+                                                                         !! at u-points [T-2 ~> s-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(in)    :: slope_y !< Meridional isoneutral slope
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(in)    :: N2_v    !< Buoyancy (Brunt-Vaisala) frequency
+                                                                         !! at v-points [T-2 ~> s-2]
+  type(unit_scale_type),                        intent(in)    :: US !< A dimensional unit scaling type
+  type(VarMix_CS),                              pointer       :: CS !< Variable mixing coefficients
+  type(ocean_OBC_type),               optional, pointer       :: OBC !< Open boundaries control structure.
 
   ! Local variables
   real :: S2            ! Interface slope squared [nondim]
@@ -644,15 +644,15 @@ end subroutine calc_Visbeck_coeffs
 !> The original calc_slope_function() that calculated slopes using
 !! interface positions only, not accounting for density variations.
 subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slopes, OBC)
-  type(ocean_grid_type),                      intent(inout) :: G  !< Ocean grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
-  type(verticalGrid_type),                    intent(in)    :: GV !< Vertical grid structure
-  type(unit_scale_type),                      intent(in)    :: US !< A dimensional unit scaling type
-  type(VarMix_CS),                            pointer       :: CS !< Variable mixing coefficients
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: e  !< Interface position [Z ~> m]
-  logical,                                    intent(in)    :: calculate_slopes !< If true, calculate slopes internally
-                                                                  !! otherwise use slopes stored in CS
-  type(ocean_OBC_type),             optional, pointer       :: OBC !< Open boundaries control structure.
+  type(ocean_grid_type),                       intent(inout) :: G  !< Ocean grid structure
+  type(verticalGrid_type),                     intent(in)    :: GV !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
+  type(unit_scale_type),                       intent(in)    :: US !< A dimensional unit scaling type
+  type(VarMix_CS),                             pointer       :: CS !< Variable mixing coefficients
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: e  !< Interface position [Z ~> m]
+  logical,                                     intent(in)    :: calculate_slopes !< If true, calculate slopes
+                                                                   !! internally otherwise use slopes stored in CS
+  type(ocean_OBC_type),              optional, pointer       :: OBC !< Open boundaries control structure.
   ! Local variables
   real :: E_x(SZIB_(G), SZJ_(G))  ! X-slope of interface at u points [nondim] (for diagnostics)
   real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at v points [nondim] (for diagnostics)
@@ -667,8 +667,8 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   integer :: is, ie, js, je, nz
   integer :: i, j, k, kb_max
   integer :: l_seg
-  real    :: S2N2_u_local(SZIB_(G), SZJ_(G),SZK_(G))
-  real    :: S2N2_v_local(SZI_(G), SZJB_(G),SZK_(G))
+  real    :: S2N2_u_local(SZIB_(G), SZJ_(G),SZK_(GV))
+  real    :: S2N2_v_local(SZI_(G), SZJB_(G),SZK_(GV))
   logical :: local_open_u_BC, local_open_v_BC
 
   if (.not. associated(CS)) call MOM_error(FATAL, "calc_slope_function:"// &
@@ -809,7 +809,7 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
   type(ocean_grid_type),                     intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),                     intent(in)  :: US   !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h !< Layer thickness [H ~> m or kg m-2]
   integer,                                   intent(in)  :: k  !< Layer for which to calculate vorticity magnitude
   real, dimension(SZIB_(G),SZJ_(G)),         intent(in)  :: div_xx_dx  !< x-derivative of horizontal divergence
                                                                  !! (d/dx(du/dx + dv/dy)) [L-1 T-1 ~> m-1 s-1]

@@ -138,7 +138,7 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   type(ocean_grid_type),                intent(inout) :: G   !< Grid type
   type(verticalGrid_type),              intent(in)    :: GV  !< ocean vertical grid structure
   type(unit_scale_type),                intent(in)    :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                         intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G)),    intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points [L2 ~> m2]
   real, dimension(SZI_(G),SZJB_(G)),    intent(in)    :: Coef_y !< dt * Kh * dx / dy at v-points [L2 ~> m2]
@@ -149,12 +149,12 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: hbl                           !< bnd. layer depth [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G),CS%deg+1) :: ppoly0_coefs !< Coefficients of polynomial
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G),2)        :: ppoly0_E     !< Edge values from reconstructions
-  real, dimension(SZK_(G),CS%deg+1)                 :: ppoly_S      !< Slopes from reconstruction (placeholder)
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: uFlx        !< Zonal flux of tracer [conc m^3]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV),CS%deg+1) :: ppoly0_coefs !< Coefficients of polynomial
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV),2)        :: ppoly0_E     !< Edge values from reconstructions
+  real, dimension(SZK_(GV),CS%deg+1)                 :: ppoly_S      !< Slopes from reconstruction (placeholder)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: uFlx        !< Zonal flux of tracer [conc m^3]
   real, dimension(SZIB_(G),SZJ_(G))         :: uFLx_bulk   !< Total calculated bulk-layer u-flux for the tracer
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vFlx        !< Meridional flux of tracer [conc m^3]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: vFlx        !< Meridional flux of tracer [conc m^3]
   real, dimension(SZI_(G),SZJB_(G))         :: vFlx_bulk   !< Total calculated bulk-layer v-flux for the tracer
   real, dimension(SZIB_(G),SZJ_(G))         :: uwork_2d    !< Layer summed u-flux transport
   real, dimension(SZI_(G),SZJB_(G))         :: vwork_2d    !< Layer summed v-flux transport

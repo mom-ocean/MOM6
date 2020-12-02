@@ -105,12 +105,12 @@ contains
 !! on the acceptable time increment.
 subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online_flag, read_khdt_x, read_khdt_y)
   type(ocean_grid_type),      intent(inout) :: G       !< Grid type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  type(verticalGrid_type),    intent(in)    :: GV      !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(in)    :: h       !< Layer thickness [H ~> m or kg m-2]
   real,                       intent(in)    :: dt      !< time step [T ~> s]
   type(MEKE_type),            pointer       :: MEKE    !< MEKE type
   type(VarMix_CS),            pointer       :: VarMix  !< Variable mixing type
-  type(verticalGrid_type),    intent(in)    :: GV      !< ocean vertical grid structure
   type(unit_scale_type),      intent(in)    :: US      !< A dimensional unit scaling type
   type(tracer_hor_diff_CS),   pointer       :: CS      !< module control structure
   type(tracer_registry_type), pointer       :: Reg     !< registered tracers
@@ -588,7 +588,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
                                     GV, US, CS, tv, num_itts)
   type(ocean_grid_type),                    intent(inout) :: G          !< ocean grid structure
   type(verticalGrid_type),                  intent(in)    :: GV         !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h          !< layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)   :: h          !< layer thickness [H ~> m or kg m-2]
   real,                                     intent(in)    :: dt         !< time step [T ~> s]
   type(tracer_type),                        intent(inout) :: Tr(:)      !< tracer array
   integer,                                  intent(in)    :: ntr        !< number of tracers
@@ -626,18 +626,18 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     k0b_Lv, k0a_Lv, &  ! The original k-indices of the layers that participate
     k0b_Rv, k0a_Rv     ! in each pair of mixing at v-faces.
 
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: &
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: &
     tr_flux_conv  ! The flux convergence of tracers [conc H L2 ~> conc m3 or conc kg]
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: Tr_flux_3d, Tr_adj_vert_L, Tr_adj_vert_R
+  real, dimension(SZI_(G), SZJ_(G),SZK_(GV)) :: Tr_flux_3d, Tr_adj_vert_L, Tr_adj_vert_R
 
-  real, dimension(SZI_(G), SZK_(G), SZJ_(G)) :: &
+  real, dimension(SZI_(G),SZK_(GV), SZJ_(G)) :: &
     rho_srt, & ! The density of each layer of the sorted columns [R ~> kg m-3].
     h_srt      ! The thickness of each layer of the sorted columns [H ~> m or kg m-2].
-  integer, dimension(SZI_(G), SZK_(G), SZJ_(G)) :: &
+  integer, dimension(SZI_(G),SZK_(GV), SZJ_(G)) :: &
     k0_srt     ! The original k-index that each layer of the sorted column
                ! corresponds to.
 
-  real, dimension(SZK_(G)) :: &
+  real, dimension(SZK_(GV)) :: &
     h_demand_L, & ! The thickness in the left (_L) or right (_R) column that
     h_demand_R, & ! is demanded to match the thickness in the counterpart [H ~> m or kg m-2].
     h_used_L, &   ! The summed thickness from the left or right columns that
@@ -676,10 +676,10 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 
   ! The total number of pairings is usually much less than twice the number of layers, but
   ! the memory in these 1-d columns of pairings can be allocated generously for safety.
-  integer, dimension(SZK_(G)*2) :: &
+  integer, dimension(SZK_(GV)*2) :: &
     kbs_Lp, &   ! The sorted indices of the Left and Right columns for
     kbs_Rp      ! each pairing.
-  logical, dimension(SZK_(G)*2) :: &
+  logical, dimension(SZK_(GV)*2) :: &
     left_set, &  ! If true, the left or right point determines the density of
     right_set    ! of the trio.  If densities are exactly equal, both are true.
 

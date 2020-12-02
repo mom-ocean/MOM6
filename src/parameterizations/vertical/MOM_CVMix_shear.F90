@@ -60,14 +60,14 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
   type(ocean_grid_type),                      intent(in)  :: G   !< Grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV  !< Vertical grid structure.
   type(unit_scale_type),                      intent(in)  :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: u_H !< Initial zonal velocity on T points [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: v_H !< Initial meridional velocity on T
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: u_H !< Initial zonal velocity on T points [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: v_H !< Initial meridional velocity on T
                                                                  !! points [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thickness [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h   !< Layer thickness [H ~> m or kg m-2].
   type(thermo_var_ptrs),                      intent(in)  :: tv  !< Thermodynamics structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kd  !< The vertical diffusivity at each interface
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(out) :: kd !< The vertical diffusivity at each interface
                                                                  !! (not layer!) [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kv  !< The vertical viscosity at each interface
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(out) :: kv !< The vertical viscosity at each interface
                                                                  !! (not layer!) [Z2 T-1 ~> m2 s-1].
   type(CVMix_shear_cs),                       pointer     :: CS  !< The control structure returned by a previous
                                                                  !! call to CVMix_shear_init.
@@ -281,26 +281,26 @@ logical function CVMix_shear_init(Time, G, GV, US, param_file, diag, CS)
   CS%id_N2 = register_diag_field('ocean_model', 'N2_shear', diag%axesTi, Time, &
       'Square of Brunt-Vaisala frequency used by MOM_CVMix_shear module', '1/s2', conversion=US%s_to_T**2)
   if (CS%id_N2 > 0) then
-    allocate( CS%N2( SZI_(G), SZJ_(G), SZK_(G)+1 ) ) ; CS%N2(:,:,:) = 0.
+    allocate( CS%N2( SZI_(G), SZJ_(G),SZK_(GV)+1 ) ) ; CS%N2(:,:,:) = 0.
   endif
 
   CS%id_S2 = register_diag_field('ocean_model', 'S2_shear', diag%axesTi, Time, &
       'Square of vertical shear used by MOM_CVMix_shear module','1/s2', conversion=US%s_to_T**2)
   if (CS%id_S2 > 0) then
-    allocate( CS%S2( SZI_(G), SZJ_(G), SZK_(G)+1 ) ) ; CS%S2(:,:,:) = 0.
+    allocate( CS%S2( SZI_(G), SZJ_(G),SZK_(GV)+1 ) ) ; CS%S2(:,:,:) = 0.
   endif
 
   CS%id_ri_grad = register_diag_field('ocean_model', 'ri_grad_shear', diag%axesTi, Time, &
       'Gradient Richarson number used by MOM_CVMix_shear module','nondim')
   if (CS%id_ri_grad > 0) then !Initialize w/ large Richardson value
-    allocate( CS%ri_grad( SZI_(G), SZJ_(G), SZK_(G)+1 )) ; CS%ri_grad(:,:,:) = 1.e8
+    allocate( CS%ri_grad( SZI_(G), SZJ_(G),SZK_(GV)+1 )) ; CS%ri_grad(:,:,:) = 1.e8
   endif
 
   CS%id_ri_grad_smooth = register_diag_field('ocean_model', 'ri_grad_shear_smooth', &
        diag%axesTi, Time, &
       'Smoothed gradient Richarson number used by MOM_CVMix_shear module','nondim')
   if (CS%id_ri_grad_smooth > 0) then !Initialize w/ large Richardson value
-    allocate( CS%ri_grad_smooth( SZI_(G), SZJ_(G), SZK_(G)+1 )) ; CS%ri_grad_smooth(:,:,:) = 1.e8
+    allocate( CS%ri_grad_smooth( SZI_(G), SZJ_(G),SZK_(GV)+1 )) ; CS%ri_grad_smooth(:,:,:) = 1.e8
   endif
 
   CS%id_kd = register_diag_field('ocean_model', 'kd_shear_CVMix', diag%axesTi, Time, &

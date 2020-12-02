@@ -548,7 +548,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
   CS%id_La_SL = register_diag_field('ocean_model', 'KPP_La_SL', diag%axesT1, Time, &
       'Surface-layer Langmuir number computed in [CVMix] KPP','nondim')
 
-  allocate( CS%N( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
+  allocate( CS%N( SZI_(G), SZJ_(G),SZK_(GV)+1 ) )
   CS%N(:,:,:) = 0.
   allocate( CS%OBLdepth( SZI_(G), SZJ_(G) ) )
   CS%OBLdepth(:,:) = 0.
@@ -556,28 +556,28 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
   CS%kOBL(:,:) = 0.
   allocate( CS%La_SL( SZI_(G), SZJ_(G) ) )
   CS%La_SL(:,:) = 0.
-  allocate( CS%Vt2( SZI_(G), SZJ_(G), SZK_(G) ) )
+  allocate( CS%Vt2( SZI_(G), SZJ_(G),SZK_(GV) ) )
   CS%Vt2(:,:,:) = 0.
   if (CS%id_OBLdepth_original > 0) allocate( CS%OBLdepth_original( SZI_(G), SZJ_(G) ) )
 
   allocate( CS%OBLdepthprev( SZI_(G), SZJ_(G) ) ) ; CS%OBLdepthprev(:,:) = 0.0
-  if (CS%id_BulkDrho > 0) allocate( CS%dRho( SZI_(G), SZJ_(G), SZK_(G) ) )
+  if (CS%id_BulkDrho > 0) allocate( CS%dRho( SZI_(G), SZJ_(G),SZK_(GV) ) )
   if (CS%id_BulkDrho > 0) CS%dRho(:,:,:) = 0.
-  if (CS%id_BulkUz2 > 0)  allocate( CS%Uz2( SZI_(G), SZJ_(G), SZK_(G) ) )
+  if (CS%id_BulkUz2 > 0)  allocate( CS%Uz2( SZI_(G), SZJ_(G),SZK_(GV) ) )
   if (CS%id_BulkUz2 > 0)  CS%Uz2(:,:,:) = 0.
-  if (CS%id_BulkRi > 0)   allocate( CS%BulkRi( SZI_(G), SZJ_(G), SZK_(G) ) )
+  if (CS%id_BulkRi > 0)   allocate( CS%BulkRi( SZI_(G), SZJ_(G),SZK_(GV) ) )
   if (CS%id_BulkRi > 0)   CS%BulkRi(:,:,:) = 0.
-  if (CS%id_Sigma > 0)    allocate( CS%sigma( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
+  if (CS%id_Sigma > 0)    allocate( CS%sigma( SZI_(G), SZJ_(G),SZK_(GV)+1 ) )
   if (CS%id_Sigma > 0)    CS%sigma(:,:,:) = 0.
-  if (CS%id_Ws > 0)       allocate( CS%Ws( SZI_(G), SZJ_(G), SZK_(G) ) )
+  if (CS%id_Ws > 0)       allocate( CS%Ws( SZI_(G), SZJ_(G),SZK_(GV) ) )
   if (CS%id_Ws > 0)       CS%Ws(:,:,:) = 0.
-  if (CS%id_N2 > 0)       allocate( CS%N2( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
+  if (CS%id_N2 > 0)       allocate( CS%N2( SZI_(G), SZJ_(G),SZK_(GV)+1 ) )
   if (CS%id_N2 > 0)       CS%N2(:,:,:) = 0.
-  if (CS%id_Kt_KPP > 0)   allocate( CS%Kt_KPP( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
+  if (CS%id_Kt_KPP > 0)   allocate( CS%Kt_KPP( SZI_(G), SZJ_(G),SZK_(GV)+1 ) )
   if (CS%id_Kt_KPP > 0)   CS%Kt_KPP(:,:,:) = 0.
-  if (CS%id_Ks_KPP > 0)   allocate( CS%Ks_KPP( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
+  if (CS%id_Ks_KPP > 0)   allocate( CS%Ks_KPP( SZI_(G), SZJ_(G),SZK_(GV)+1 ) )
   if (CS%id_Ks_KPP > 0)   CS%Ks_KPP(:,:,:) = 0.
-  if (CS%id_Kv_KPP > 0)   allocate( CS%Kv_KPP( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
+  if (CS%id_Kv_KPP > 0)   allocate( CS%Kv_KPP( SZI_(G), SZJ_(G),SZK_(GV)+1 ) )
   if (CS%id_Kv_KPP > 0)   CS%Kv_KPP(:,:,:) = 0.
   if (CS%id_Tsurf > 0)    allocate( CS%Tsurf( SZI_(G), SZJ_(G)) )
   if (CS%id_Tsurf > 0)    CS%Tsurf(:,:) = 0.
@@ -587,9 +587,9 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
   if (CS%id_Usurf > 0)    CS%Usurf(:,:) = 0.
   if (CS%id_Vsurf > 0)    allocate( CS%Vsurf( SZI_(G), SZJB_(G)) )
   if (CS%id_Vsurf > 0)    CS%Vsurf(:,:) = 0.
-  if (CS%id_EnhVt2 > 0)    allocate( CS%EnhVt2( SZI_(G), SZJ_(G), SZK_(G)) )
+  if (CS%id_EnhVt2 > 0)    allocate( CS%EnhVt2( SZI_(G), SZJ_(G),SZK_(GV)) )
   if (CS%id_EnhVt2 > 0)    CS%EnhVt2(:,:,:) = 0.
-  if (CS%id_EnhK > 0)    allocate( CS%EnhK( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
+  if (CS%id_EnhK > 0)    allocate( CS%EnhK( SZI_(G), SZJ_(G),SZK_(GV)+1 ) )
   if (CS%id_EnhK > 0)    CS%EnhK(:,:,:) = 0.
 
   id_clock_KPP_calc = cpu_clock_id('Ocean KPP calculate)', grain=CLOCK_MODULE)
@@ -603,25 +603,25 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
                          nonLocalTransScalar, waves)
 
   ! Arguments
-  type(KPP_CS),                               pointer       :: CS    !< Control structure
-  type(ocean_grid_type),                      intent(in)    :: G     !< Ocean grid
-  type(verticalGrid_type),                    intent(in)    :: GV    !< Ocean vertical grid
-  type(unit_scale_type),                      intent(in)    :: US    !< A dimensional unit scaling type
-  type(wave_parameters_CS),         optional, pointer       :: Waves !< Wave CS
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h     !< Layer/level thicknesses [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: uStar !< Surface friction velocity [Z T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux [L2 T-3 ~> m2 s-3]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kt   !< (in)  Vertical diffusivity of heat w/o KPP
+  type(KPP_CS),                                pointer       :: CS    !< Control structure
+  type(ocean_grid_type),                       intent(in)    :: G     !< Ocean grid
+  type(verticalGrid_type),                     intent(in)    :: GV    !< Ocean vertical grid
+  type(unit_scale_type),                       intent(in)    :: US    !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h     !< Layer/level thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G)),            intent(in)    :: uStar !< Surface friction velocity [Z T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux [L2 T-3 ~> m2 s-3]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: Kt  !< (in)  Vertical diffusivity of heat w/o KPP
                                                                     !! (out) Vertical diffusivity including KPP
                                                                     !!       [Z2 T-1 ~> m2 s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Ks   !< (in)  Vertical diffusivity of salt w/o KPP
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: Ks  !< (in)  Vertical diffusivity of salt w/o KPP
                                                                     !! (out) Vertical diffusivity including KPP
                                                                     !!       [Z2 T-1 ~> m2 s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kv   !< (in)  Vertical viscosity w/o KPP
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: Kv  !< (in)  Vertical viscosity w/o KPP
                                                                     !! (out) Vertical viscosity including KPP
                                                                     !!       [Z2 T-1 ~> m2 s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransHeat   !< Temp non-local transport [m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransScalar !< scalar non-local transport [m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: nonLocalTransHeat   !< Temp non-local transport [m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: nonLocalTransScalar !< scalar non-local trans. [m s-1]
+  type(wave_parameters_CS),          optional, pointer       :: Waves !< Wave CS
 
 ! Local variables
   integer :: i, j, k                             ! Loop indices
@@ -907,14 +907,14 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   type(ocean_grid_type),                      intent(inout) :: G     !< Ocean grid
   type(verticalGrid_type),                    intent(in)    :: GV    !< Ocean vertical grid
   type(unit_scale_type),                      intent(in)    :: US    !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h     !< Layer/level thicknesses [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Temp  !< potential/cons temp [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Salt  !< Salinity [ppt]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  intent(in)    :: u     !< Velocity i-component [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)    :: v     !< Velocity j-component [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h     !< Layer/level thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: Temp  !< potential/cons temp [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: Salt  !< Salinity [ppt]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)    :: u     !< Velocity i-component [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)    :: v     !< Velocity j-component [L T-1 ~> m s-1]
   type(thermo_var_ptrs),                      intent(in)    :: tv    !< Thermodynamics structure.
   real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: uStar !< Surface friction velocity [Z T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux [L2 T-3 ~> m2 s-3]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux [L2 T-3 ~> m2 s-3]
   type(wave_parameters_CS),         optional, pointer       :: Waves !< Wave CS
 
   ! Local variables
@@ -1286,7 +1286,7 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
   type(KPP_CS),                           pointer       :: CS   !< Control structure
   type(ocean_grid_type),                  intent(inout) :: G    !< Ocean grid
   type(verticalGrid_type),                intent(in)    :: GV   !< Ocean vertical grid
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer/level thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Layer/level thicknesses [H ~> m or kg m-2]
 
   ! local
   real, dimension(SZI_(G),SZJ_(G)) :: OBLdepth_prev     ! OBLdepth before s.th smoothing iteration
@@ -1391,16 +1391,16 @@ subroutine KPP_NonLocalTransport_temp(CS, G, GV, h, nonLocalTrans, surfFlux, &
   type(KPP_CS),                               intent(in)    :: CS     !< Control structure
   type(ocean_grid_type),                      intent(in)    :: G      !< Ocean grid
   type(verticalGrid_type),                    intent(in)    :: GV     !< Ocean vertical grid
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h      !< Layer/level thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: nonLocalTrans !< Non-local transport [nondim]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h      !< Layer/level thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: nonLocalTrans !< Non-local transport [nondim]
   real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: surfFlux  !< Surface flux of scalar
                                                                       !! [conc H s-1 ~> conc m s-1 or conc kg m-2 s-1]
   real,                                       intent(in)    :: dt     !< Time-step [s]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: scalar !< temperature
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: scalar !< temperature
   real,                                       intent(in)    :: C_p    !< Seawater specific heat capacity [J kg-1 degC-1]
 
   integer :: i, j, k
-  real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: dtracer
+  real, dimension( SZI_(G), SZJ_(G),SZK_(GV) ) :: dtracer
 
 
   dtracer(:,:,:) = 0.0
@@ -1453,15 +1453,15 @@ subroutine KPP_NonLocalTransport_saln(CS, G, GV, h, nonLocalTrans, surfFlux, dt,
   type(KPP_CS),                               intent(in)    :: CS            !< Control structure
   type(ocean_grid_type),                      intent(in)    :: G             !< Ocean grid
   type(verticalGrid_type),                    intent(in)    :: GV            !< Ocean vertical grid
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h             !< Layer/level thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: nonLocalTrans !< Non-local transport [nondim]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h             !< Layer/level thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)   :: nonLocalTrans !< Non-local transport [nondim]
   real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: surfFlux      !< Surface flux of scalar
                                                                         !! [conc H s-1 ~> conc m s-1 or conc kg m-2 s-1]
   real,                                       intent(in)    :: dt            !< Time-step [s]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: scalar        !< Scalar (scalar units [conc])
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: scalar        !< Scalar (scalar units [conc])
 
   integer :: i, j, k
-  real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: dtracer
+  real, dimension( SZI_(G), SZJ_(G),SZK_(GV) ) :: dtracer
 
 
   dtracer(:,:,:) = 0.0

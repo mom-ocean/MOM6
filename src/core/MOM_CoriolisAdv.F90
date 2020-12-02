@@ -114,23 +114,23 @@ contains
 
 !> Calculates the Coriolis and momentum advection contributions to the acceleration.
 subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
-  type(ocean_grid_type),                     intent(in)    :: G  !< Ocen grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV !< Vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u  !< Zonal velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v  !< Meridional velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh !< Zonal transport u*h*dy
-                                                                 !! [H L2 T-1 ~> m3 s-1 or kg s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh !< Meridional transport v*h*dx
-                                                                 !! [H L2 T-1 ~> m3 s-1 or kg s-1]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: CAu !< Zonal acceleration due to Coriolis
+  type(ocean_grid_type),                      intent(in)    :: G  !< Ocen grid structure
+  type(verticalGrid_type),                    intent(in)    :: GV !< Vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)    :: u  !< Zonal velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)    :: v  !< Meridional velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)    :: uh !< Zonal transport u*h*dy
+                                                                  !! [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)    :: vh !< Meridional transport v*h*dx
+                                                                  !! [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(out)   :: CAu !< Zonal acceleration due to Coriolis
                                                                   !! and momentum advection [L T-2 ~> m s-2].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: CAv !< Meridional acceleration due to Coriolis
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(out)   :: CAv !< Meridional acceleration due to Coriolis
                                                                   !! and momentum advection [L T-2 ~> m s-2].
-  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary control structure
-  type(accel_diag_ptrs),                     intent(inout) :: AD  !< Storage for acceleration diagnostics
-  type(unit_scale_type),                     intent(in)    :: US  !< A dimensional unit scaling type
-  type(CoriolisAdv_CS),                      pointer       :: CS  !< Control structure for MOM_CoriolisAdv
+  type(ocean_OBC_type),                       pointer       :: OBC !< Open boundary control structure
+  type(accel_diag_ptrs),                      intent(inout) :: AD  !< Storage for acceleration diagnostics
+  type(unit_scale_type),                      intent(in)    :: US  !< A dimensional unit scaling type
+  type(CoriolisAdv_CS),                       pointer       :: CS  !< Control structure for MOM_CoriolisAdv
 
   ! Local variables
   real, dimension(SZIB_(G),SZJB_(G)) :: &
@@ -174,7 +174,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
     min_fvq, &  ! The minimum of the adjacent values of (-u) times absolute vorticity [L T-2 ~> m s-2].
     max_fuq, &  ! The maximum of the adjacent values of u times absolute vorticity [L T-2 ~> m s-2].
     min_fuq     ! The minimum of the adjacent values of u times absolute vorticity [L T-2 ~> m s-2].
-  real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
+  real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)) :: &
     PV, &       ! A diagnostic array of the potential vorticities [H-1 T-1 ~> m-1 s-1 or m2 kg-1 s-1].
     RV          ! A diagnostic array of the relative vorticities [T-1 ~> s-1].
   real :: fv1, fv2, fu1, fu2   ! (f+rv)*v or (f+rv)*u [L T-2 ~> m s-2].
@@ -927,9 +927,9 @@ end subroutine CorAdCalc
 subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
   type(ocean_grid_type),                      intent(in)  :: G !< Ocen grid structure
   type(verticalGrid_type),                    intent(in)  :: GV !< Vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  intent(in)  :: u !< Zonal velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)  :: v !< Meridional velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)  :: u !< Zonal velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: v !< Meridional velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G) ,SZJ_(G) ),         intent(out) :: KE !< Kinetic energy per unit mass [L2 T-2 ~> m2 s-2]
   real, dimension(SZIB_(G),SZJ_(G) ),         intent(out) :: KEx !< Zonal acceleration due to kinetic
                                                                  !! energy gradient [L T-2 ~> m s-2]

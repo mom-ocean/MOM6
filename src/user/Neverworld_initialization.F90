@@ -252,9 +252,9 @@ subroutine Neverworld_initialize_thickness(h, G, GV, US, param_file, eqn_of_stat
   real,                    intent(in) :: P_Ref                !< The coordinate-density
                                                               !! reference pressure [R L2 T-2 ~> Pa].
   ! Local variables
-  real :: e0(SZK_(G)+1)     ! The resting interface heights, in depth units [Z ~> m],
+  real :: e0(SZK_(GV)+1)    ! The resting interface heights, in depth units [Z ~> m],
                             ! usually negative because it is positive upward.
-  real, dimension(SZK_(G)) :: h_profile ! Vector of initial thickness profile [Z ~> m].
+  real, dimension(SZK_(GV)) :: h_profile ! Vector of initial thickness profile [Z ~> m].
   real :: e_interface ! Current interface position [Z ~> m].
   real :: x,y,r1,r2 ! x,y and radial coordinates for computation of initial pert.
   real :: pert_amp ! Amplitude of perturbations measured in Angstrom_H

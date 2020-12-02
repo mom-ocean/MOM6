@@ -213,15 +213,15 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   type(ocean_grid_type),     intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type),   intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),     intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                              intent(in)    :: u    !< The zonal velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                              intent(in)    :: v    !< The meridional velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                              intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                              intent(in)    :: u_h  !< Zonal velocity interpolated to h points [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                              intent(in)    :: v_h  !< Meridional velocity interpolated to h points [L T-1 ~> m s-1].
   type(thermo_var_ptrs),     intent(inout) :: tv   !< Structure with pointers to thermodynamic
                                                    !! fields. Out is for tv%TempxPmE.
@@ -232,15 +232,15 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                                                    !! boundary layer properies, and related fields.
   real,                      intent(in)    :: dt   !< Time increment [T ~> s].
   type(set_diffusivity_CS),  pointer       :: CS   !< Module control structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                    optional, intent(out)   :: Kd_lay !< Diapycnal diffusivity of each layer [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                    optional, intent(out)   :: Kd_int !< Diapycnal diffusivity at each interface [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                    optional, intent(out)   :: Kd_extra_T !< The extra diffusivity at interfaces of
                                                      !! temperature due to double diffusion relative to
                                                      !! the diffusivity of density [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                    optional, intent(out)   :: Kd_extra_S !< The extra diffusivity at interfaces of
                                                      !! salinity due to double diffusion relative to
                                                      !! the diffusivity of density [Z2 T-1 ~> m2 s-1].
@@ -251,11 +251,11 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   type(diffusivity_diags)  :: dd ! structure with arrays of available diags
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     T_f, S_f      ! Temperature and salinity [degC] and [ppt] with properties in massless layers
                   ! filled vertically by diffusion or the properties after full convective adjustment.
 
-  real, dimension(SZI_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZK_(GV)) :: &
     N2_lay, &     !< Squared buoyancy frequency associated with layers [T-2 ~> s-2]
     Kd_lay_2d, &  !< The layer diffusivities [Z2 T-1 ~> m2 s-1]
     maxTKE, &     !< Energy required to entrain to h_max [Z3 T-3 ~> m3 s-3]
@@ -263,7 +263,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                   !< TKE dissipated within a layer and Kd in that layer
                   !< [Z2 T-1 / Z3 T-3 = T2 Z-1 ~> s2 m-1]
 
-  real, dimension(SZI_(G),SZK_(G)+1) :: &
+  real, dimension(SZI_(G),SZK_(GV)+1) :: &
     N2_int,   &   !< squared buoyancy frequency associated at interfaces [T-2 ~> s-2]
     Kd_int_2d, &  !< The interface diffusivities [Z2 T-1 ~> m2 s-1]
     Kv_bkgnd, &   !< The background diffusion related interface viscosities [Z2 T-1 ~> m2 s-1]
@@ -704,28 +704,28 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   type(ocean_grid_type),            intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),          intent(in)    :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),            intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),            intent(in)    :: tv   !< Structure containing pointers to any available
                                                           !! thermodynamic fields.
-  real, dimension(SZI_(G),SZK_(G)+1), intent(in)  :: dRho_int !< Change in locally referenced potential density
+  real, dimension(SZI_(G),SZK_(GV)+1), intent(in) :: dRho_int !< Change in locally referenced potential density
                                                           !! across each interface [R ~> kg m-3].
-  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: N2_lay !< The squared buoyancy frequency of the
+  real, dimension(SZI_(G),SZK_(GV)), intent(in)   :: N2_lay !< The squared buoyancy frequency of the
                                                           !! layers [T-2 ~> s-2].
   integer,                          intent(in)    :: j    !< j-index of row to work on
   real,                             intent(in)    :: dt   !< Time increment [T ~> s].
   type(set_diffusivity_CS),         pointer       :: CS   !< Diffusivity control structure
-  real, dimension(SZI_(G),SZK_(G)), intent(out)   :: TKE_to_Kd !< The conversion rate between the
+  real, dimension(SZI_(G),SZK_(GV)), intent(out)  :: TKE_to_Kd !< The conversion rate between the
                                                           !! TKE dissipated within a layer and the
                                                           !! diapycnal diffusivity witin that layer,
                                                           !! usually (~Rho_0 / (G_Earth * dRho_lay))
                                                           !! [Z2 T-1 / Z3 T-3 = T2 Z-1 ~> s2 m-1]
-  real, dimension(SZI_(G),SZK_(G)), intent(out)   :: maxTKE !< The energy required to for a layer to entrain
+  real, dimension(SZI_(G),SZK_(GV)), intent(out)  :: maxTKE !< The energy required to for a layer to entrain
                                                           !! to its maximum realizable thickness [Z3 T-3 ~> m3 s-3]
   integer, dimension(SZI_(G)),      intent(out)   :: kb   !< Index of lightest layer denser than the buffer
                                                           !! layer, or -1 without a bulk mixed layer.
   ! Local variables
-  real, dimension(SZI_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZK_(GV)) :: &
     ds_dsp1, &    ! coordinate variable (sigma-2) difference across an
                   ! interface divided by the difference across the interface
                   ! below it [nondim]
@@ -918,29 +918,29 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
   type(ocean_grid_type),    intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),  intent(in)  :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),    intent(in)  :: US   !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),    intent(in)  :: tv   !< Structure containing pointers to any available
                                                 !! thermodynamic fields.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)  :: T_f  !< layer temperature with the values in massless layers
                                                 !! filled vertically by diffusion [degC].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)  :: S_f  !< Layer salinities with values in massless
                                                 !! layers filled vertically by diffusion [ppt].
   type(forcing),            intent(in)  :: fluxes !< A structure of thermodynamic surface fluxes
   integer,                  intent(in)  :: j    !< j-index of row to work on
   type(set_diffusivity_CS), pointer     :: CS   !< Diffusivity control structure
-  real, dimension(SZI_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZK_(GV)+1), &
                             intent(out) :: dRho_int !< Change in locally referenced potential density
                                                 !! across each interface [R ~> kg m-3].
-  real, dimension(SZI_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZK_(GV)+1), &
                             intent(out) :: N2_int !< The squared buoyancy frequency at the interfaces [T-2 ~> s-2].
-  real, dimension(SZI_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZK_(GV)), &
                             intent(out) :: N2_lay !< The squared buoyancy frequency of the layers [T-2 ~> s-2].
   real, dimension(SZI_(G)), intent(out) :: N2_bot !< The near-bottom squared buoyancy frequency [T-2 ~> s-2].
   ! Local variables
-  real, dimension(SZI_(G),SZK_(G)+1) :: &
+  real, dimension(SZI_(G),SZK_(GV)+1) :: &
     dRho_int_unfilt, & ! unfiltered density differences across interfaces [R ~> kg m-3]
     dRho_dT,         & ! partial derivative of density wrt temp [R degC-1 ~> kg m-3 degC-1]
     dRho_dS            ! partial derivative of density wrt saln [R ppt-1 ~> kg m-3 ppt-1]
@@ -1091,20 +1091,20 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
   type(unit_scale_type),    intent(in)  :: US  !< A dimensional unit scaling type
   type(thermo_var_ptrs),    intent(in)  :: tv  !< Structure containing pointers to any available
                                                !! thermodynamic fields; absent fields have NULL ptrs.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)  :: h   !< Layer thicknesses [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)  :: T_f !< layer temperatures with the values in massless layers
                                                !! filled vertically by diffusion [degC].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)  :: S_f !< Layer salinities with values in massless
                                                !! layers filled vertically by diffusion [ppt].
   integer,                  intent(in)  :: j   !< Meridional index upon which to work.
   type(set_diffusivity_CS), pointer     :: CS  !< Module control structure.
-  real, dimension(SZI_(G),SZK_(G)+1),       &
+  real, dimension(SZI_(G),SZK_(GV)+1),       &
                             intent(out) :: Kd_T_dd !< Interface double diffusion diapycnal
                                                !! diffusivity for temp [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZK_(G)+1),       &
+  real, dimension(SZI_(G),SZK_(GV)+1),       &
                             intent(out) :: Kd_S_dd !< Interface double diffusion diapycnal
                                                !! diffusivity for saln [Z2 T-1 ~> m2 s-1].
 
@@ -1177,11 +1177,11 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
   type(ocean_grid_type),            intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),          intent(in)    :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),            intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                                     intent(in)    :: u    !< The zonal velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                                     intent(in)    :: v    !< The meridional velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),            intent(in)    :: tv   !< Structure containing pointers to any available
                                                           !! thermodynamic fields.
@@ -1189,26 +1189,26 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
   type(vertvisc_type),              intent(in)    :: visc !< Structure containing vertical viscosities, bottom
                                                           !! boundary layer properies, and related fields
   integer,                          intent(in)    :: j    !< j-index of row to work on
-  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: TKE_to_Kd !< The conversion rate between the TKE
+  real, dimension(SZI_(G),SZK_(GV)), intent(in)   :: TKE_to_Kd !< The conversion rate between the TKE
                                                           !! TKE dissipated within  a layer and the
                                                           !! diapycnal diffusivity witin that layer,
                                                           !! usually (~Rho_0 / (G_Earth * dRho_lay))
                                                           !! [Z2 T-1 / Z3 T-3 = T2 Z-1 ~> s2 m-1]
-  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: maxTKE !< The energy required to for a layer to entrain
+  real, dimension(SZI_(G),SZK_(GV)), intent(in)   :: maxTKE !< The energy required to for a layer to entrain
                                                           !! to its maximum-realizable thickness [Z3 T-3 ~> m3 s-3]
   integer, dimension(SZI_(G)),      intent(in)    :: kb   !< Index of lightest layer denser than the buffer
                                                           !! layer, or -1 without a bulk mixed layer
   type(set_diffusivity_CS),         pointer       :: CS   !< Diffusivity control structure
-  real, dimension(SZI_(G),SZK_(G)), intent(inout) :: Kd_lay !< The diapycnal diffusivity in layers,
+  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: Kd_lay !< The diapycnal diffusivity in layers,
                                                             !! [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZK_(GV)+1), &
                           optional, intent(inout) :: Kd_int !< The diapycnal diffusivity at interfaces,
                                                             !! [Z2 T-1 ~> m2 s-1].
   real, dimension(:,:,:),           pointer       :: Kd_BBL !< Interface BBL diffusivity [Z2 T-1 ~> m2 s-1].
 
 ! This routine adds diffusion sustained by flow energy extracted by bottom drag.
 
-  real, dimension(SZK_(G)+1) :: &
+  real, dimension(SZK_(GV)+1) :: &
     Rint          ! coordinate density of an interface [R ~> kg m-3]
   real, dimension(SZI_(G)) :: &
     htot, &       ! total thickness above or below a layer, or the
@@ -1415,11 +1415,11 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
   type(ocean_grid_type),    intent(in)    :: G  !< Grid structure
   type(verticalGrid_type),  intent(in)    :: GV !< Vertical grid structure
   type(unit_scale_type),    intent(in)    :: US !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)    :: u  !< u component of flow [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                             intent(in)    :: v  !< v component of flow [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),    intent(in)    :: tv !< Structure containing pointers to any available
                                                 !! thermodynamic fields.
@@ -1427,13 +1427,13 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
   type(vertvisc_type),      intent(in)    :: visc !< Structure containing vertical viscosities, bottom
                                                   !! boundary layer properies, and related fields.
   integer,                  intent(in)    :: j  !< j-index of row to work on
-  real, dimension(SZI_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZK_(GV)+1), &
                             intent(in)    :: N2_int !< Square of Brunt-Vaisala at interfaces [T-2 ~> s-2]
   type(set_diffusivity_CS), pointer       :: CS !< Diffusivity control structure
   real, dimension(:,:,:),   pointer       :: Kd_BBL !< Interface BBL diffusivity [Z2 T-1 ~> m2 s-1]
-  real, dimension(SZI_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZK_(GV)), &
                   optional, intent(inout) :: Kd_lay !< Layer net diffusivity [Z2 T-1 ~> m2 s-1]
-  real, dimension(SZI_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZK_(GV)+1), &
                   optional, intent(inout) :: Kd_int !< Interface net diffusivity [Z2 T-1 ~> m2 s-1]
 
   ! Local variables
@@ -1575,19 +1575,19 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, TKE_to_Kd, Kd_lay,
   type(ocean_grid_type),            intent(in)    :: G      !< The ocean's grid structure
   type(verticalGrid_type),          intent(in)    :: GV     !< The ocean's vertical grid structure
   type(unit_scale_type),            intent(in)    :: US     !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2]
   type(forcing),                    intent(in)    :: fluxes !< Surface fluxes structure
   integer,                          intent(in)    :: j      !< The j-index to work on
   type(set_diffusivity_CS),         pointer       :: CS     !< Diffusivity control structure
-  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: TKE_to_Kd !< The conversion rate between the TKE
+  real, dimension(SZI_(G),SZK_(GV)), intent(in)   :: TKE_to_Kd !< The conversion rate between the TKE
                                                             !! TKE dissipated within  a layer and the
                                                             !! diapycnal diffusivity witin that layer,
                                                             !! usually (~Rho_0 / (G_Earth * dRho_lay))
                                                             !! [Z2 T-1 / Z3 T-3 = T2 Z-1 ~> s2 m-1]
-  real, dimension(SZI_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZK_(GV)), &
                           optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity in layers [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZK_(GV)+1), &
                           optional, intent(inout) :: Kd_int !< The diapycnal diffusivity at interfaces
                                                             !! [Z2 T-1 ~> m2 s-1].
 
@@ -1719,11 +1719,11 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS, OBC)
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)    :: u    !< The zonal velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                             intent(in)    :: v    !< The meridional velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(forcing),            intent(in)    :: fluxes !< A structure of thermodynamic surface fluxes
   type(vertvisc_type),      intent(in)    :: visc !< Structure containing vertical viscosities, bottom
@@ -1903,7 +1903,7 @@ end subroutine set_BBL_TKE
 subroutine set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1, rho_0)
   type(ocean_grid_type),            intent(in)   :: G  !< The ocean's grid structure.
   type(verticalGrid_type),          intent(in)   :: GV !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     intent(in)   :: h  !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),            intent(in)   :: tv !< Structure containing pointers to any
                                                        !! available thermodynamic fields; absent
@@ -1914,20 +1914,20 @@ subroutine set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1, rho_0)
   type(set_diffusivity_CS),         pointer      :: CS !< Control structure returned by previous
                                                        !! call to diabatic_entrain_init.
   integer,                          intent(in)   :: j  !< Meridional index upon which to work.
-  real, dimension(SZI_(G),SZK_(G)), intent(out)  :: ds_dsp1 !< Coordinate variable (sigma-2)
+  real, dimension(SZI_(G),SZK_(GV)), intent(out) :: ds_dsp1 !< Coordinate variable (sigma-2)
                                                        !! difference across an interface divided by
                                                        !! the difference across the interface below
                                                        !! it [nondim]
-  real, dimension(SZI_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZK_(GV)), &
                           optional, intent(in)   :: rho_0 !< Layer potential densities relative to
                                                        !! surface press [R ~> kg m-3].
 
   ! Local variables
   real :: g_R0                     ! g_R0 is a rescaled version of g/Rho [L2 Z-1 R-1 T-2 ~> m4 kg-1 s-2]
-  real :: eps, tmp                 ! nondimensional temproray variables
-  real :: a(SZK_(G)), a_0(SZK_(G)) ! nondimensional temporary variables
+  real :: eps, tmp                 ! nondimensional temporary variables
+  real :: a(SZK_(GV)), a_0(SZK_(GV)) ! nondimensional temporary variables
   real :: p_ref(SZI_(G))           ! an array of tv%P_Ref pressures [R L2 T-2 ~> Pa]
-  real :: Rcv(SZI_(G),SZK_(G))     ! coordinate density in the mixed and buffer layers [R ~> kg m-3]
+  real :: Rcv(SZI_(G),SZK_(GV))    ! coordinate density in the mixed and buffer layers [R ~> kg m-3]
   real :: I_Drho                   ! temporary variable [R-1 ~> m3 kg-1]
 
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state

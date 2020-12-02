@@ -1133,7 +1133,7 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
   type(ocean_grid_type),    intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV     !< ocean vertical grid structure
   type(unit_scale_type),    intent(in)    :: US     !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)    :: h      !< layer thicknesses after the transports [H ~> m or kg m-2]
   type(time_type),          intent(in)    :: Time_local !< The model time at the end
                                                     !! of the time step.
@@ -1214,11 +1214,11 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   type(ocean_grid_type),    intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),  intent(inout) :: GV     !< ocean vertical grid structure
   type(unit_scale_type),    intent(in)    :: US     !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                             intent(inout) :: u      !< zonal velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                             intent(inout) :: v      !< meridional velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(inout) :: h      !< layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),    intent(inout) :: tv     !< A structure pointing to various thermodynamic variables
   type(forcing),            intent(inout) :: fluxes !< pointers to forcing fields
@@ -1247,7 +1247,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   call enable_averages(dtdia, Time_end_thermo, CS%diag)
 
   if (associated(CS%odaCS)) then
-    call apply_oda_tracer_increments(US%T_to_s*dtdia,G,tv,h,CS%odaCS)
+    call apply_oda_tracer_increments(US%T_to_s*dtdia, G, GV, tv, h, CS%odaCS)
   endif
 
   if (associated(fluxes%p_surf) .or. associated(fluxes%p_surf_full)) then
@@ -2800,7 +2800,7 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   if (CS%write_IC) then
     allocate(restart_CSp_tmp)
     restart_CSp_tmp = restart_CSp
-    allocate(z_interface(SZI_(G),SZJ_(G),SZK_(G)+1))
+    allocate(z_interface(SZI_(G),SZJ_(G),SZK_(GV)+1))
     call find_eta(CS%h, CS%tv, G, GV, US, z_interface, eta_to_m=1.0)
     call register_restart_field(z_interface, "eta", .true., restart_CSp_tmp, &
                                 "Interface heights", "meter", z_grid='i')

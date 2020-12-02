@@ -32,11 +32,11 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   type(ocean_grid_type),                      intent(in)  :: G   !< The ocean's grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type),                      intent(in)  :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h   !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),                      intent(in)  :: tv  !< A structure pointing to various
                                                                  !! thermodynamic variables.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: eta !< layer interface heights
-                                                                 !! [Z ~> m] or 1/eta_to_m m).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(out) :: eta !< layer interface heights
+                                                                 !! [Z ~> m] or [1/eta_to_m m].
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)  :: eta_bt !< optional barotropic
              !! variable that gives the "correct" free surface height (Boussinesq) or total water
              !! column mass per unit area (non-Boussinesq).  This is used to dilate the layer.
@@ -47,9 +47,9 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
              !! the units of eta to m; by default this is US%Z_to_m.
 
   ! Local variables
-  real :: p(SZI_(G),SZJ_(G),SZK_(G)+1)    ! Hydrostatic pressure at each interface [R L2 T-2 ~> Pa]
-  real :: dz_geo(SZI_(G),SZJ_(G),SZK_(G)) ! The change in geopotential height
-                                          ! across a layer [L2 T-2 ~> m2 s-2].
+  real :: p(SZI_(G),SZJ_(G),SZK_(GV)+1)   ! Hydrostatic pressure at each interface [R L2 T-2 ~> Pa]
+  real :: dz_geo(SZI_(G),SZJ_(G),SZK_(GV)) ! The change in geopotential height
+                                           ! across a layer [L2 T-2 ~> m2 s-2].
   real :: dilate(SZI_(G))                 ! non-dimensional dilation factor
   real :: htot(SZI_(G))                   ! total thickness [H ~> m or kg m-2]
   real :: I_gEarth          ! The inverse of the gravitational acceleration times the
@@ -149,7 +149,7 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   type(ocean_grid_type),                      intent(in)  :: G   !< The ocean's grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type),                      intent(in)  :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h   !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),                      intent(in)  :: tv  !< A structure pointing to various
                                                                  !! thermodynamic variables.
   real, dimension(SZI_(G),SZJ_(G)),           intent(out) :: eta !< free surface height relative to
@@ -162,9 +162,9 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   real,                             optional, intent(in)  :: eta_to_m  !< The conversion factor from
              !! the units of eta to m; by default this is US%Z_to_m.
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: &
     p          ! Hydrostatic pressure at each interface [R L2 T-2 ~> Pa]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     dz_geo     ! The change in geopotential height across a layer [L2 T-2 ~> m2 s-2].
   real :: htot(SZI_(G))  ! The sum of all layers' thicknesses [H ~> m or kg m-2].
   real :: I_gEarth          ! The inverse of the gravitational acceleration times the

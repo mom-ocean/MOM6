@@ -480,7 +480,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
   type(ocean_grid_type),   intent(inout) :: G     !< Grid structure
   type(verticalGrid_type), intent(in)    :: GV    !< Vertical grid structure
   type(unit_scale_type),   intent(in)    :: US    !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
        intent(in)    :: h     !< Thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), &
        intent(in)    :: ustar !< Wind friction velocity [Z T-1 ~> m s-1].
@@ -904,7 +904,7 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
   real :: Dpt_LASL, ShearDirection, WaveDirection
   real :: LA_STKx, LA_STKy, LA_STK ! Stokes velocities in [m s-1]
   logical :: ContinueLoop, USE_MA
-  real, dimension(SZK_(G)) :: US_H, VS_H
+  real, dimension(SZK_(GV)) :: US_H, VS_H
   real, dimension(NumBands) :: StkBand_X, StkBand_Y
   integer :: KK, BB
 
@@ -1222,11 +1222,11 @@ subroutine StokesMixing(G, GV, dt, h, u, v, Waves )
   type(verticalGrid_type), &
        intent(in)    :: GV    !< Ocean vertical grid
   real, intent(in)   :: dt    !< Time step of MOM6 [T ~> s] for explicit solver
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),&
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
        intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
        intent(inout) :: u     !< Velocity i-component [m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
        intent(inout) :: v     !< Velocity j-component [m s-1]
   type(Wave_parameters_CS), &
        pointer       :: Waves !< Surface wave related control structure.
@@ -1290,11 +1290,11 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES, US)
   type(verticalGrid_type), &
        intent(in)   :: GV     !< Ocean vertical grid
   real, intent(in)  :: Dt     !< Time step of MOM6 [s] CHECK IF PASSING RIGHT TIMESTEP
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
        intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
        intent(inout) :: u     !< Velocity i-component [m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
        intent(inout) :: v     !< Velocity j-component [m s-1]
   type(Wave_parameters_CS), &
        pointer       :: Waves !< Surface wave related control structure.

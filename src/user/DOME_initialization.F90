@@ -157,11 +157,11 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
   type(sponge_CS),       pointer    :: CSp  !< A pointer that is set to point to the control
                                             !! structure for this module.
 
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta [Z ~> m].
-  real :: temp(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for other variables. !
+  real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for interface heights [Z ~> m].
+  real :: temp(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for other variables. !
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
 
-  real :: H0(SZK_(G))  ! Interface heights [Z ~> m].
+  real :: H0(SZK_(GV)) ! Interface heights [Z ~> m].
   real :: min_depth    ! The minimum depth at which to apply damping [Z ~> m]
   real :: damp, damp_new ! Damping rates in the sponge [days]
   real :: e_dense      ! The depth of the densest interfaces [Z ~> m]
@@ -234,9 +234,9 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
     call MOM_error(FATAL,"DOME_initialize_sponges is not set up for use with"//&
                          " a temperatures defined.")
     ! This should use the target values of T in temp.
-    call set_up_sponge_field(temp, tv%T, G, nz, CSp)
+    call set_up_sponge_field(temp, tv%T, G, GV, nz, CSp)
     ! This should use the target values of S in temp.
-    call set_up_sponge_field(temp, tv%S, G, nz, CSp)
+    call set_up_sponge_field(temp, tv%S, G, GV, nz, CSp)
   endif
 
 end subroutine DOME_initialize_sponges
@@ -260,11 +260,12 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
 
 ! Local variables
   ! The following variables are used to set the target temperature and salinity.
-  real :: T0(SZK_(G)), S0(SZK_(G))
-  real :: pres(SZK_(G))      ! An array of the reference pressure [R L2 T-2 ~> Pa].
-  real :: drho_dT(SZK_(G))   ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
-  real :: drho_dS(SZK_(G))   ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
-  real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 [R ~> kg m-3].
+  real :: T0(SZK_(GV))       ! A profile of temperatures [degC]
+  real :: S0(SZK_(GV))       ! A profile of salinities [ppt]
+  real :: pres(SZK_(GV))     ! An array of the reference pressure [R L2 T-2 ~> Pa].
+  real :: drho_dT(SZK_(GV))  ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
+  real :: drho_dS(SZK_(GV))  ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
+  real :: rho_guess(SZK_(GV)) ! Potential density at T0 & S0 [R ~> kg m-3].
   ! The following variables are used to set up the transport in the DOME example.
   real :: tr_0, y1, y2, tr_k, rst, rsb, rc, v_k, lon_im1
   real :: D_edge            ! The thickness [Z ~> m], of the dense fluid at the

@@ -39,7 +39,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
   type(ocean_grid_type),      intent(inout) :: G   !< Ocean grid structure.
   type(verticalGrid_type),    intent(in)    :: GV  !< Ocean vertical grid structure.
   type(unit_scale_type),      intent(in)    :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(in)    :: h   !< Layer thickness [H ~> m or kg m-2].
   real, dimension(:,:,:),     pointer       :: tr  !< Pointer to array to be initialized
   type(param_file_type),      intent(in)    :: PF  !< parameter file

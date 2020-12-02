@@ -225,9 +225,9 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
                      eqn_of_state, just_read_params)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity [ppt]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Potential temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -363,18 +363,20 @@ subroutine DOME2d_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, AC
   type(sponge_CS),         pointer    :: CSp !< Layer-mode sponge structure
   type(ALE_sponge_CS),     pointer    :: ACSp !< ALE-mode sponge structure
   ! Local variables
-  real :: T(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for temp [degC]
-  real :: S(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for salt [ppt]
-  real :: h(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for thickness [H ~> m or kg m-2].
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for thickness [Z ~> m]
+  real :: T(SZI_(G),SZJ_(G),SZK_(GV))  ! A temporary array for temp [degC]
+  real :: S(SZI_(G),SZJ_(G),SZK_(GV))  ! A temporary array for salt [ppt]
+  real :: h(SZI_(G),SZJ_(G),SZK_(GV))  ! A temporary array for thickness [H ~> m or kg m-2].
+  real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for interface heights [Z ~> m]
   real :: Idamp(SZI_(G),SZJ_(G))       ! The inverse damping rate [T-1 ~> s-1].
-  real :: S_ref, T_ref                 ! Reference salinity and temerature within surface layer
-  real :: S_range, T_range             ! Range of salinities and temperatures over the vertical
-  real :: e0(SZK_(G)+1)             ! The resting interface heights [Z ~> m],
+  real :: S_ref                        ! Reference salinity within the surface layer [ppt]
+  real :: T_ref                        ! Reference temerature within the surface layer [degC]
+  real :: S_range                      ! Range of salinities in the vertical [ppt]
+  real :: T_range                      ! Range of temperatures in the vertical [degC]
+  real :: e0(SZK_(GV)+1)            ! The resting interface heights [Z ~> m],
                                     ! usually negative because it is positive upward.
-  real :: eta1D(SZK_(G)+1)          ! Interface height relative to the sea surface
+  real :: eta1D(SZK_(GV)+1)         ! Interface height relative to the sea surface
                                     ! positive upward [Z ~> m].
-  real :: d_eta(SZK_(G))            ! The layer thickness in a column [Z ~> m].
+  real :: d_eta(SZK_(GV))           ! The layer thickness in a column [Z ~> m].
   real :: dome2d_width_bay, dome2d_width_bottom, dome2d_depth_bay
   real :: dome2d_west_sponge_time_scale, dome2d_east_sponge_time_scale ! Sponge timescales [T ~> s]
   real :: dome2d_west_sponge_width, dome2d_east_sponge_width
@@ -479,10 +481,10 @@ subroutine DOME2d_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, AC
     enddo ; enddo
 
     if ( associated(tv%T) ) then
-      call set_up_ALE_sponge_field(T, G, tv%T, ACSp)
+      call set_up_ALE_sponge_field(T, G, GV, tv%T, ACSp)
     endif
     if ( associated(tv%S) ) then
-      call set_up_ALE_sponge_field(S, G, tv%S, ACSp)
+      call set_up_ALE_sponge_field(S, G, GV, tv%S, ACSp)
     endif
 
   else

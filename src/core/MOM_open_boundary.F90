@@ -2117,19 +2117,19 @@ end subroutine setup_OBC_tracer_reservoirs
 
 !> Apply radiation conditions to 3D u,v at open boundaries
 subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US, dt)
-  type(ocean_grid_type),                     intent(inout) :: G     !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV    !< The ocean's vertical grid structure
-  type(ocean_OBC_type),                      pointer       :: OBC   !< Open boundary control structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u_new !< On exit, new u values on open boundaries
-                                                                    !! On entry, the old time-level v but including
-                                                                    !! barotropic accelerations [L T-1 ~> m s-1].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u_old !< Original unadjusted u [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v_new !< On exit, new v values on open boundaries.
-                                                                    !! On entry, the old time-level v but including
-                                                                    !! barotropic accelerations [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v_old !< Original unadjusted v  [L T-1 ~> m s-1]
-  type(unit_scale_type),                     intent(in)    :: US    !< A dimensional unit scaling type
-  real,                                      intent(in)    :: dt    !< Appropriate timestep [T ~> s]
+  type(ocean_grid_type),                      intent(inout) :: G     !< Ocean grid structure
+  type(verticalGrid_type),                    intent(in)    :: GV    !< The ocean's vertical grid structure
+  type(ocean_OBC_type),                       pointer       :: OBC   !< Open boundary control structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u_new !< On exit, new u values on open boundaries
+                                                                     !! On entry, the old time-level v but including
+                                                                     !! barotropic accelerations [L T-1 ~> m s-1].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)    :: u_old !< Original unadjusted u [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: v_new !< On exit, new v values on open boundaries.
+                                                                     !! On entry, the old time-level v but including
+                                                                     !! barotropic accelerations [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)    :: v_old !< Original unadjusted v  [L T-1 ~> m s-1]
+  type(unit_scale_type),                      intent(in)    :: US    !< A dimensional unit scaling type
+  real,                                       intent(in)    :: dt    !< Appropriate timestep [T ~> s]
   ! Local variables
   real :: dhdt, dhdx, dhdy  ! One-point differences in time or space [L T-1 ~> m s-1]
   real :: gamma_u, gamma_2  ! Fractional weightings of new values [nondim]
@@ -3232,9 +3232,9 @@ subroutine open_boundary_apply_normal_flow(OBC, G, GV, u, v)
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary control structure
   type(ocean_grid_type),                     intent(inout) :: G   !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV  !< The ocean's vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u   !< u field to update on open
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u   !< u field to update on open
                                                                   !! boundaries [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v   !< v field to update on open
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: v   !< v field to update on open
                                                                   !! boundaries [L T-1 ~> m s-1]
   ! Local variables
   integer :: i, j, k, n
@@ -3269,8 +3269,8 @@ subroutine open_boundary_zero_normal_flow(OBC, G, GV, u, v)
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary control structure
   type(ocean_grid_type),                     intent(inout) :: G   !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV  !< The ocean's vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u   !< u field to update on open boundaries
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v   !< v field to update on open boundaries
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u   !< u field to update on open boundaries
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: v   !< v field to update on open boundaries
   ! Local variables
   integer :: i, j, k, n
   type(OBC_segment_type), pointer :: segment => NULL()
@@ -3301,8 +3301,8 @@ subroutine gradient_at_q_points(G, GV, segment, uvel, vvel)
   type(ocean_grid_type),   intent(in) :: G !< Ocean grid structure
   type(verticalGrid_type), intent(in) :: GV  !< The ocean's vertical grid structure
   type(OBC_segment_type),  pointer    :: segment !< OBC segment structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uvel !< zonal velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vvel !< meridional velocity [L T-1 ~> m s-1]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)    :: uvel !< zonal velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)    :: vvel !< meridional velocity [L T-1 ~> m s-1]
   integer :: i,j,k
 
   if (.not. segment%on_pe) return
@@ -3427,7 +3427,7 @@ subroutine set_tracer_data(OBC, tv, h, G, GV, PF, tracer_Reg)
   type(verticalGrid_type),                   intent(in)    :: GV  !< The ocean's vertical grid structure
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
   type(thermo_var_ptrs),                     intent(inout) :: tv !< Thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h !< Thickness
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h !< Thickness
   type(param_file_type),                     intent(in)    :: PF !< Parameter file handle
   type(tracer_registry_type),                pointer       :: tracer_Reg !< Tracer registry
   ! Local variables
@@ -3741,7 +3741,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
   type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
   type(ocean_OBC_type),                      pointer       :: OBC  !< Open boundary structure
   type(thermo_var_ptrs),                     intent(in)    :: tv   !< Thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h    !< Thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h    !< Thickness [H ~> m or kg m-2]
   type(time_type),                           intent(in)    :: Time !< Model time
   ! Local variables
   integer :: c, i, j, k, is, ie, js, je, isd, ied, jsd, jed
@@ -5062,17 +5062,17 @@ end subroutine open_boundary_register_restarts
 
 !> Update the OBC tracer reservoirs after the tracers have been updated.
 subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
-  type(ocean_grid_type),                     intent(in) :: G   !< The ocean's grid structure
-  type(verticalGrid_type),                   intent(in) :: GV  !<  Ocean vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: uhr !< accumulated volume/mass flux through
-                                                               !! the zonal face [H L2 ~> m3 or kg]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: vhr !< accumulated volume/mass flux through
-                                                               !! the meridional face [H L2 ~> m3 or kg]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h   !< layer thickness after advection
-                                                               !! [H ~> m or kg m-2]
-  type(ocean_OBC_type),                      pointer    :: OBC !< Open boundary structure
-  real,                                      intent(in) :: dt  !< time increment [T ~> s]
-  type(tracer_registry_type),                pointer    :: Reg !< pointer to tracer registry
+  type(ocean_grid_type),                      intent(in) :: G   !< The ocean's grid structure
+  type(verticalGrid_type),                    intent(in) :: GV  !<  Ocean vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in) :: uhr !< accumulated volume/mass flux through
+                                                                !! the zonal face [H L2 ~> m3 or kg]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in) :: vhr !< accumulated volume/mass flux through
+                                                                !! the meridional face [H L2 ~> m3 or kg]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in) :: h   !< layer thickness after advection
+                                                                !! [H ~> m or kg m-2]
+  type(ocean_OBC_type),                       pointer    :: OBC !< Open boundary structure
+  real,                                       intent(in) :: dt  !< time increment [T ~> s]
+  type(tracer_registry_type),                 pointer    :: Reg !< pointer to tracer registry
   ! Local variables
   type(OBC_segment_type), pointer :: segment=>NULL()
   real :: u_L_in, u_L_out ! The zonal distance moved in or out of a cell [L ~> m]

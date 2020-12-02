@@ -43,18 +43,18 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, OBC, 
                       visc_rem_u, visc_rem_v, u_cor, v_cor, BT_cont)
   type(ocean_grid_type),   intent(inout) :: G   !< Ocean grid structure.
   type(verticalGrid_type), intent(in)    :: GV  !< Vertical grid structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: u   !< Zonal velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(in)    :: v   !< Meridional velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
                            intent(in)    :: hin !< Initial layer thickness [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
                            intent(inout) :: h   !< Final layer thickness [H ~> m or kg m-2].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(out)   :: uh  !< Volume flux through zonal faces =
                                                 !! u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(out)   :: vh  !< Volume flux through meridional faces =
                                                 !! v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1].
   real,                    intent(in)    :: dt  !< Time increment [T ~> s].
@@ -68,20 +68,20 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, OBC, 
                                                 !! flux through meridional faces [H L2 T-1 ~> m3 s-1 or kg s-1].
   type(ocean_OBC_type), &
                  optional, pointer       :: OBC !< Open boundaries control structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(in)    :: visc_rem_u !< Both the fraction of
           !! zonal momentum that remains after a time-step of viscosity, and the fraction of a time-step's
           !! worth of a barotropic acceleration that a layer experiences after viscosity is applied.
           !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                  optional, intent(in)    :: visc_rem_v !< Both the fraction of
           !! meridional momentum that remains after a time-step of viscosity, and the fraction of a time-step's
           !! worth of a barotropic acceleration that a layer experiences after viscosity is applied.
           !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(out)   :: u_cor !< The zonal velocities that
           !! give uhbt as the depth-integrated transport [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                  optional, intent(out)   :: v_cor !< The meridional velocities that
           !! give vhbt as the depth-integrated transport [L T-1 ~> m s-1].
   type(BT_cont_type), &

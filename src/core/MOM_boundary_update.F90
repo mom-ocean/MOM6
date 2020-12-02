@@ -111,14 +111,14 @@ end subroutine call_OBC_register
 
 !> Calls appropriate routine to update the open boundary conditions.
 subroutine update_OBC_data(OBC, G, GV, US, tv, h, CS, Time)
-  type(ocean_grid_type),                    intent(in)    :: G    !< Ocean grid structure
-  type(verticalGrid_type),                  intent(in)    :: GV   !< Ocean vertical grid structure
-  type(unit_scale_type),                    intent(in)    :: US   !< A dimensional unit scaling type
-  type(thermo_var_ptrs),                    intent(in)    :: tv   !< Thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h    !< layer thicknesses [H ~> m or kg m-2]
-  type(ocean_OBC_type),                     pointer       :: OBC  !< Open boundary structure
-  type(update_OBC_CS),                      pointer       :: CS   !< Control structure for OBCs
-  type(time_type),                          intent(in)    :: Time !< Model time
+  type(ocean_grid_type),                     intent(in)    :: G    !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !< Ocean vertical grid structure
+  type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
+  type(thermo_var_ptrs),                     intent(in)    :: tv   !< Thermodynamics structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h    !< layer thicknesses [H ~> m or kg m-2]
+  type(ocean_OBC_type),                      pointer       :: OBC  !< Open boundary structure
+  type(update_OBC_CS),                       pointer       :: CS   !< Control structure for OBCs
+  type(time_type),                           intent(in)    :: Time !< Model time
 
 ! Something here... with CS%file_OBC_CSp?
 ! if (CS%use_files) &

@@ -33,9 +33,9 @@ function tracer_Z_init(tr, h, filename, tr_name, G, GV, US, missing_val, land_va
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                          intent(out)   :: tr   !< The tracer to initialize
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                          intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   character(len=*),      intent(in)    :: filename !< The name of the file to read from
   character(len=*),      intent(in)    :: tr_name !< The name of the tracer in the file
@@ -64,7 +64,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, GV, US, missing_val, land_va
     z2      ! of a z-cell that contributes to a layer, relative to the cell
             ! center and normalized by the cell thickness, nondim.
             ! Note that -1/2 <= z1 <= z2 <= 1/2.
-  real    :: e(SZK_(G)+1)  ! The z-star interface heights [Z ~> m].
+  real    :: e(SZK_(GV)+1)  ! The z-star interface heights [Z ~> m].
   real    :: landval    ! The tracer value to use in land points.
   real    :: sl_tr      ! The normalized slope of the tracer
                         ! within the cell, in tracer units.
@@ -616,16 +616,16 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
                                  eos, h_massless)
   type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),       intent(in)    :: GV   !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                  intent(inout) :: temp !< potential temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                  intent(inout) :: salt !< salinity [PSU]
-  real, dimension(SZK_(G)),      intent(in)    :: R_tgt !< desired potential density [R ~> kg m-3].
+  real, dimension(SZK_(GV)),     intent(in)    :: R_tgt !< desired potential density [R ~> kg m-3].
   real,                          intent(in)    :: p_ref !< reference pressure [R L2 T-2 ~> Pa].
   integer,                       intent(in)    :: niter !< maximum number of iterations
   integer,                       intent(in)    :: k_start !< starting index (i.e. below the buffer layer)
   real,                          intent(in)    :: land_fill !< land fill value
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                  intent(in)    :: h   !< layer thickness, used only to avoid working on
                                                       !! massless layers [H ~> m or kg m-2]
   type(unit_scale_type),         intent(in)    :: US  !< A dimensional unit scaling type
@@ -635,7 +635,7 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
 
   real, parameter :: T_max = 31.0, T_min = -2.0
   ! Local variables (All of which need documentation!)
-  real, dimension(SZI_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZK_(GV)) :: &
     T, S, dT, dS, &
     rho, & ! Layer densities [R ~> kg m-3]
     hin, & ! Input layer thicknesses [H ~> m or kg m-2]

@@ -235,7 +235,7 @@ contains
     type(ocean_grid_type),                 intent(inout) :: G    !< The ocean's grid structure
     type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
     type(unit_scale_type),                 intent(in)    :: US   !< A dimensional unit scaling type
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
     type(param_file_type),                 intent(in) :: param_file !< A structure to parse for run-time parameters
     type(diag_ctrl),               target, intent(in) :: diag    !< Regulates diagnostic output.
     type(ocean_OBC_type),                  pointer    :: OBC     !< This open boundary condition type specifies whether,
@@ -398,14 +398,14 @@ contains
         evap_CFL_limit, minimum_forcing_depth)
     type(ocean_grid_type),   intent(in) :: G     !< The ocean's grid structure
     type(verticalGrid_type), intent(in) :: GV    !< The ocean's vertical grid structure
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                              intent(in) :: h_old !< Layer thickness before entrainment [H ~> m or kg m-2].
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                              intent(in) :: h_new !< Layer thickness after entrainment [H ~> m or kg m-2].
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                              intent(in) :: ea    !< The amount of fluid entrained from the layer
                                                  !! above during this call [H ~> m or kg m-2].
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                              intent(in) :: eb    !< The amount of fluid entrained from the layer
                                                  !! below during this call [H ~> m or kg m-2].
     type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
@@ -435,7 +435,7 @@ contains
     real :: sosga
 
     real, dimension(G%isd:G%ied,G%jsd:G%jed,GV%ke) :: rho_dzt, dzt
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G))      :: h_work
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV))      :: h_work
     integer :: i, j, k, isc, iec, jsc, jec, nk
 
     isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = GV%ke
@@ -570,7 +570,7 @@ contains
   function MOM_generic_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
     type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
     type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< Layer thicknesses [H ~> m or kg m-2]
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h !< Layer thicknesses [H ~> m or kg m-2]
     real, dimension(:),                 intent(out)   :: stocks !< The mass-weighted integrated amount of each
                                                                 !! tracer, in kg times concentration units [kg conc].
     type(MOM_generic_tracer_CS),        pointer       :: CS     !< Pointer to the control structure for this module.
@@ -721,7 +721,7 @@ contains
     type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
     type(surface),                         intent(inout) :: sfc_state !< A structure containing fields that
                                                                  !! describe the surface state of the ocean.
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
     type(MOM_generic_tracer_CS),           pointer       :: CS   !< Pointer to the control structure for this module.
 
 ! Local variables

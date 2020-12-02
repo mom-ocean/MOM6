@@ -427,10 +427,10 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
 
   type(ocean_grid_type),                      intent(in   ) :: G  !< Grid structure
   type(verticalGrid_type),                    intent(in   ) :: GV !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: Tr !< Tracer concentration on T-cell
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: Tr !< Tracer concentration on T-cell
   real,                                       intent(in   ) :: dt !< Time-step over which forcing is applied [T ~> s]
   type(forcing),                              intent(in   ) :: fluxes !< Surface fluxes container
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   real,                                       intent(in   ) :: evap_CFL_limit !< Limit on the fraction of the
                                                                   !! water that can be fluxed out of the top
                                                                   !! layer in a timestep [nondim]
@@ -454,7 +454,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
     netMassIn,    &  ! mass entering ocean surface [H ~> m or kg m-2] over a time step
     netMassOut       ! mass leaving ocean surface [H ~> m or kg m-2] over a time step
 
-  real, dimension(SZI_(G), SZK_(G)) :: h2d, Tr2d
+  real, dimension(SZI_(G),SZK_(GV)) :: h2d, Tr2d
   real, dimension(SZI_(G),SZJ_(G))  :: in_flux  ! The total time-integrated amount of tracer!
                                                    ! that enters with freshwater
   real, dimension(SZI_(G),SZJ_(G))  :: out_flux ! The total time-integrated amount of tracer!

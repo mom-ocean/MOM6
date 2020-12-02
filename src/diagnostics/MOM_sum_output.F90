@@ -299,11 +299,11 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   type(ocean_grid_type),   intent(in)    :: G   !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: u   !< The zonal velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(in)    :: v   !< The meridional velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h   !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),   intent(in)    :: tv  !< A structure pointing to various
                                                 !! thermodynamic variables.
@@ -318,22 +318,22 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
                     optional, pointer    :: OBC !< Open boundaries control structure.
   type(time_type),  optional, intent(in) :: dt_forcing !< The forcing time step
   ! Local variables
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! The height of interfaces [Z ~> m].
+  real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! The height of interfaces [Z ~> m].
   real :: areaTm(SZI_(G),SZJ_(G)) ! A masked version of areaT [L2 ~> m2].
-  real :: KE(SZK_(G))  ! The total kinetic energy of a layer [J].
-  real :: PE(SZK_(G)+1)! The available potential energy of an interface [J].
+  real :: KE(SZK_(GV)) ! The total kinetic energy of a layer [J].
+  real :: PE(SZK_(GV)+1)! The available potential energy of an interface [J].
   real :: KE_tot       ! The total kinetic energy [J].
   real :: PE_tot       ! The total available potential energy [J].
-  real :: Z_0APE(SZK_(G)+1) ! The uniform depth which overlies the same
+  real :: Z_0APE(SZK_(GV)+1) ! The uniform depth which overlies the same
                        ! volume as is below an interface [Z ~> m].
-  real :: H_0APE(SZK_(G)+1) ! A version of Z_0APE, converted to m, usually positive.
+  real :: H_0APE(SZK_(GV)+1) ! A version of Z_0APE, converted to m, usually positive.
   real :: toten        ! The total kinetic & potential energies of
                        ! all layers [J] (i.e. kg m2 s-2).
   real :: En_mass      ! The total kinetic and potential energies divided by
                        ! the total mass of the ocean [m2 s-2].
-  real :: vol_lay(SZK_(G))  ! The volume of fluid in a layer [Z L2 ~> m3].
+  real :: vol_lay(SZK_(GV)) ! The volume of fluid in a layer [Z L2 ~> m3].
   real :: volbelow     ! The volume of all layers beneath an interface [Z L2 ~> m3].
-  real :: mass_lay(SZK_(G)) ! The mass of fluid in a layer [kg].
+  real :: mass_lay(SZK_(GV)) ! The mass of fluid in a layer [kg].
   real :: mass_tot     ! The total mass of the ocean [kg].
   real :: vol_tot      ! The total ocean volume [m3].
   real :: mass_chg     ! The change in total ocean mass of fresh water since
@@ -383,9 +383,9 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   real :: CFL_lin      ! A simpler definition of the CFL number [nondim].
   real :: max_CFL(2)   ! The maxima of the CFL numbers [nondim].
   real :: Irho0        ! The inverse of the reference density [m3 kg-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     tmp1               ! A temporary array
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: &
     PE_pt              ! The potential energy at each point [J].
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Temp_int, Salt_int ! Layer and cell integrated heat and salt [J] and [g Salt].

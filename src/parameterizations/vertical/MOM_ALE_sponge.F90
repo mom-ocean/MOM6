@@ -556,13 +556,15 @@ end subroutine init_ALE_sponge_diags
 
 !> This subroutine stores the reference profile at h points for the variable
 !! whose address is given by f_ptr.
-subroutine set_up_ALE_sponge_field_fixed(sp_val, G, f_ptr, CS)
-  type(ocean_grid_type), intent(in) :: G  !< Grid structure
-  type(ALE_sponge_CS),   pointer    :: CS !< ALE sponge control structure (in/out).
+subroutine set_up_ALE_sponge_field_fixed(sp_val, G, GV, f_ptr, CS)
+  type(ocean_grid_type),   intent(in) :: G  !< Grid structure
+  type(verticalGrid_type), intent(in) :: GV !< ocean vertical grid structure
+  type(ALE_sponge_CS),     pointer    :: CS !< ALE sponge control structure (in/out).
   real, dimension(SZI_(G),SZJ_(G),CS%nz_data), &
-                         intent(in) :: sp_val !< Field to be used in the sponge, it has arbitrary number of layers.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                 target, intent(in) :: f_ptr !< Pointer to the field to be damped
+                           intent(in) :: sp_val !< Field to be used in the sponge, it can have an
+                                            !! arbitrary number of layers.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                   target, intent(in) :: f_ptr !< Pointer to the field to be damped
 
   integer :: j, k, col
   character(len=256) :: mesg ! String for error messages
@@ -658,15 +660,16 @@ end subroutine set_up_ALE_sponge_field_varying
 
 !> This subroutine stores the reference profile at u and v points for the variable
 !! whose address is given by u_ptr and v_ptr.
-subroutine set_up_ALE_sponge_vel_field_fixed(u_val, v_val, G, u_ptr, v_ptr, CS)
-  type(ocean_grid_type), intent(in) :: G  !< Grid structure (in).
-  type(ALE_sponge_CS),   pointer    :: CS !< Sponge structure (in/out).
+subroutine set_up_ALE_sponge_vel_field_fixed(u_val, v_val, G, GV, u_ptr, v_ptr, CS)
+  type(ocean_grid_type),   intent(in) :: G  !< Grid structure (in).
+  type(verticalGrid_type), intent(in) :: GV    !< ocean vertical grid structure
+  type(ALE_sponge_CS),     pointer    :: CS !< Sponge structure (in/out).
   real, dimension(SZIB_(G),SZJ_(G),CS%nz_data), &
-                         intent(in) :: u_val !< u field to be used in the sponge, it has arbritary number of layers.
+                           intent(in) :: u_val !< u field to be used in the sponge, it has arbritary number of layers.
   real, dimension(SZI_(G),SZJB_(G),CS%nz_data), &
-                         intent(in) :: v_val !< v field to be used in the sponge, it has arbritary number of layers.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(in) :: u_ptr !< u pointer to the field to be damped
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(in) :: v_ptr !< v pointer to the field to be damped
+                           intent(in) :: v_val !< v field to be used in the sponge, it has arbritary number of layers.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), target, intent(in) :: u_ptr !< u pointer to the field to be damped
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), target, intent(in) :: v_ptr !< v pointer to the field to be damped
 
   integer :: j, k, col
   character(len=256) :: mesg ! String for error messages
@@ -696,17 +699,18 @@ end subroutine set_up_ALE_sponge_vel_field_fixed
 !> This subroutine stores the reference profile at uand v points for the variable
 !! whose address is given by u_ptr and v_ptr.
 subroutine set_up_ALE_sponge_vel_field_varying(filename_u, fieldname_u, filename_v, fieldname_v, &
-                                               Time, G, US, CS, u_ptr, v_ptr)
+                                               Time, G, GV, US, CS, u_ptr, v_ptr)
   character(len=*), intent(in)    :: filename_u  !< File name for u field
   character(len=*), intent(in)    :: fieldname_u !< Name of u variable in file
   character(len=*), intent(in)    :: filename_v  !< File name for v field
   character(len=*), intent(in)    :: fieldname_v !< Name of v variable in file
   type(time_type),  intent(in)    :: Time        !< Model time
   type(ocean_grid_type), intent(inout) :: G      !< Ocean grid (in)
+  type(verticalGrid_type), intent(in)  :: GV     !< ocean vertical grid structure
   type(unit_scale_type), intent(in)    :: US     !< A dimensional unit scaling type
   type(ALE_sponge_CS), pointer    :: CS          !< Sponge structure (in/out).
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(in) :: u_ptr !< u pointer to the field to be damped (in).
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(in) :: v_ptr !< v pointer to the field to be damped (in).
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), target, intent(in) :: u_ptr !< u pointer to the field to be damped (in).
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), target, intent(in) :: v_ptr !< v pointer to the field to be damped (in).
   ! Local variables
   real, allocatable, dimension(:,:,:) :: u_val !< U field to be used in the sponge.
   real, allocatable, dimension(:,:,:) :: mask_u !< U field mask for the sponge data.
@@ -795,8 +799,8 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   real :: I1pdamp                               ! I1pdamp is 1/(1 + damp). [nondim].
   real :: m_to_Z                                ! A unit conversion factor from m to Z.
   real, allocatable, dimension(:) :: tmp_val2   ! data values on the original grid
-  real, dimension(SZK_(G)) :: tmp_val1          ! data values remapped to model grid
-  real, dimension(SZK_(G)) :: h_col             ! A column of thicknesses at h, u or v points [H ~> m or kg m-2]
+  real, dimension(SZK_(GV)) :: tmp_val1         ! data values remapped to model grid
+  real, dimension(SZK_(GV)) :: h_col            ! A column of thicknesses at h, u or v points [H ~> m or kg m-2]
   real, allocatable, dimension(:,:,:) :: sp_val ! A temporary array for fields
   real, allocatable, dimension(:,:,:) :: mask_z ! A temporary array for field mask at h pts
   real, dimension(:), allocatable :: hsrc       ! Source thicknesses [Z ~> m].
@@ -1080,7 +1084,7 @@ subroutine rotate_ALE_sponge(sponge_in, G_in, sponge, G, GV, turns, param_file)
       call rotate_array(sp_val_in, turns, sp_val)
 
       ! NOTE: This points sp_val with the unrotated field.  See note below.
-      call set_up_ALE_sponge_field(sp_val, G, sp_ptr, sponge)
+      call set_up_ALE_sponge_field(sp_val, G, GV, sp_ptr, sponge)
 
       deallocate(sp_val_in)
     else

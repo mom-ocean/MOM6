@@ -692,7 +692,7 @@ subroutine postALE_tracer_diagnostics(Reg, G, GV, diag, dt)
   type(diag_ctrl),            intent(in) :: diag !< regulates diagnostic output
   real,                       intent(in) :: dt   !< total time interval for these diagnostics [T ~> s]
 
-  real    :: work(SZI_(G),SZJ_(G),SZK_(G))
+  real    :: work(SZI_(G),SZJ_(G),SZK_(GV))
   real    :: Idt ! The inverse of the time step [T-1 ~> s-1]
   integer :: i, j, k, is, ie, js, je, nz, m, m2
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -821,14 +821,14 @@ end subroutine MOM_tracer_chksum
 
 !> Calculates and prints the global inventory of all tracers in the registry.
 subroutine MOM_tracer_chkinv(mesg, G, GV, h, Tr, ntr)
-  character(len=*),                         intent(in) :: mesg !< message that appears on the chksum lines
-  type(ocean_grid_type),                    intent(in) :: G    !< ocean grid structure
-  type(verticalGrid_type),                  intent(in) :: GV   !< The ocean's vertical grid structure
-  type(tracer_type), dimension(:),          intent(in) :: Tr   !< array of all of registered tracers
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses
-  integer,                                  intent(in) :: ntr  !< number of registered tracers
+  character(len=*),                          intent(in) :: mesg !< message that appears on the chksum lines
+  type(ocean_grid_type),                     intent(in) :: G    !< ocean grid structure
+  type(verticalGrid_type),                   intent(in) :: GV   !< The ocean's vertical grid structure
+  type(tracer_type), dimension(:),           intent(in) :: Tr   !< array of all of registered tracers
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Layer thicknesses
+  integer,                                   intent(in) :: ntr  !< number of registered tracers
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: tr_inv !< Tracer inventory
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: tr_inv !< Tracer inventory
   real :: total_inv
   integer :: is, ie, js, je, nz
   integer :: i, j, k, m

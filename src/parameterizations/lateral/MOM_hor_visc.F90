@@ -216,16 +216,16 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                                 CS, OBC, BT, TD, ADp)
   type(ocean_grid_type),         intent(in)  :: G      !< The ocean's grid structure.
   type(verticalGrid_type),       intent(in)  :: GV     !< The ocean's vertical grid structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                                  intent(in)  :: u      !< The zonal velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                                  intent(in)  :: v      !< The meridional velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                  intent(inout) :: h    !< Layer thicknesses [H ~> m or kg m-2].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                                  intent(out) :: diffu  !< Zonal acceleration due to convergence of
                                                        !! along-coordinate stress tensor [L T-2 ~> m s-2]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                                  intent(out) :: diffv  !< Meridional acceleration due to convergence
                                                        !! of along-coordinate stress tensor [L T-2 ~> m s-2].
   type(MEKE_type),               pointer     :: MEKE   !< Pointer to a structure containing fields
@@ -301,7 +301,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     grad_vel_mag_bt_q, &  ! Magnitude of the barotropic velocity gradient tensor squared at q-points [T-2 ~> s-2]
     boundary_mask_q ! A mask that zeroes out cells with at least one land edge [nondim]
 
-  real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
+  real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)) :: &
     Ah_q, &      ! biharmonic viscosity at corner points [L4 T-1 ~> m4 s-1]
     Kh_q, &      ! Laplacian viscosity at corner points [L2 T-1 ~> m2 s-1]
     vort_xy_q, & ! vertical vorticity at corner points [T-1 ~> s-1]
@@ -309,11 +309,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     GME_coeff_q, &  !< GME coeff. at q-points [L2 T-1 ~> m2 s-1]
     max_diss_rate_q ! maximum possible energy dissipated by lateral friction [L2 T-3 ~> m2 s-3]
 
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1) :: &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: &
     KH_u_GME  !< interface height diffusivities in u-columns [L2 T-1 ~> m2 s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1) :: &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1) :: &
     KH_v_GME  !< interface height diffusivities in v-columns [L2 T-1 ~> m2 s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     Ah_h, &          ! biharmonic viscosity at thickness points [L4 T-1 ~> m4 s-1]
     Kh_h, &          ! Laplacian viscosity at thickness points [L2 T-1 ~> m2 s-1]
     max_diss_rate_h, & ! maximum possible energy dissipated by lateral friction [L2 T-3 ~> m2 s-3]
@@ -321,7 +321,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     FrictWork_GME, & ! work done by GME [R L2 T-3 ~> W m-2]
     div_xx_h,      & ! horizontal divergence [T-1 ~> s-1]
     sh_xx_h          ! horizontal tension (du/dx - dv/dy) including metric terms [T-1 ~> s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     grid_Re_Kh, &    !< Grid Reynolds number for Laplacian horizontal viscosity at h points [nondim]
     grid_Re_Ah, &    !< Grid Reynolds number for Biharmonic horizontal viscosity at h points [nondim]
     GME_coeff_h      !< GME coeff. at h-points [L2 T-1 ~> m2 s-1]

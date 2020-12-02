@@ -64,12 +64,12 @@ end subroutine soliton_initialize_thickness
 
 !> Initialization of u and v in the equatorial Rossby soliton test
 subroutine soliton_initialize_velocity(u, v, h, G, GV, US)
-  type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
-  type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: u  !< i-component of velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: v  !< j-component of velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness [H ~> m or kg m-2]
-  type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
+  type(ocean_grid_type),                      intent(in)  :: G  !< Grid structure
+  type(verticalGrid_type),                    intent(in)  :: GV !< The ocean's vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(out) :: u  !< i-component of velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(out) :: v  !< j-component of velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h  !< Thickness [H ~> m or kg m-2]
+  type(unit_scale_type),                      intent(in)  :: US !< A dimensional unit scaling type
 
   ! Local variables
   real    :: x, x0 ! Positions in the same units as geoLonT.

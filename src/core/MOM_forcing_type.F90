@@ -376,9 +376,9 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
                                                             !! are scaled away [H ~> m or kg m-2]
   logical,                  intent(in)    :: useRiverHeatContent   !< logical for river heat content
   logical,                  intent(in)    :: useCalvingHeatContent !< logical for calving heat content
-  real, dimension(SZI_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZK_(GV)), &
                             intent(in)    :: h              !< layer thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZK_(GV)), &
                             intent(in)    :: T              !< layer temperatures [degC]
   real, dimension(SZI_(G)), intent(out)   :: netMassInOut   !< net mass flux (non-Bouss) or volume flux
                                                             !! (if Bouss) of water in/out of ocean over
@@ -839,9 +839,9 @@ subroutine extractFluxes2d(G, GV, US, fluxes, optics, nsw, dt, FluxRescaleDepth,
                                                                     !! are scaled away [H ~> m or kg m-2]
   logical,                          intent(in)    :: useRiverHeatContent   !< logical for river heat content
   logical,                          intent(in)    :: useCalvingHeatContent !< logical for calving heat content
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     intent(in)    :: h              !< layer thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     intent(in)    :: T              !< layer temperatures [degC]
   real, dimension(SZI_(G),SZJ_(G)), intent(out)   :: netMassInOut   !< net mass flux (non-Bouss) or volume flux
                                                                     !! (if Bouss) of water in/out of ocean over
@@ -893,12 +893,12 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   type(optics_type),                        pointer       :: optics         !< penetrating SW optics
   integer,                                  intent(in)    :: nsw            !< The number of frequency bands of
                                                                             !! penetrating shortwave radiation
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h              !< layer thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: Temp           !< prognostic temp [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: Salt           !< salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h              !< layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: Temp           !< prognostic temp [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: Salt           !< salinity [ppt]
   type(thermo_var_ptrs),                    intent(inout) :: tv             !< thermodynamics type
   integer,                                  intent(in)    :: j              !< j-row to work on
-  real, dimension(SZI_(G),SZK_(G)+1),       intent(inout) :: buoyancyFlux   !< buoyancy fluxes [L2 T-3 ~> m2 s-3]
+  real, dimension(SZI_(G),SZK_(GV)+1),      intent(inout) :: buoyancyFlux   !< buoyancy fluxes [L2 T-3 ~> m2 s-3]
   real, dimension(SZI_(G)),                 intent(inout) :: netHeatMinusSW !< surf Heat flux
                                                                       !! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
   real, dimension(SZI_(G)),                 intent(inout) :: netSalt        !< surf salt flux
@@ -917,7 +917,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   real, dimension(SZI_(G))              :: pressure   ! pressure at the surface [R L2 T-2 ~> Pa]
   real, dimension(SZI_(G))              :: dRhodT     ! density partial derivative wrt temp [R degC-1 ~> kg m-3 degC-1]
   real, dimension(SZI_(G))              :: dRhodS     ! density partial derivative wrt saln [R ppt-1 ~> kg m-3 ppt-1]
-  real, dimension(SZI_(G),SZK_(G)+1)    :: netPen     ! The net penetrating shortwave radiation at each level
+  real, dimension(SZI_(G),SZK_(GV)+1)   :: netPen     ! The net penetrating shortwave radiation at each level
                                                       ! [degC H ~> degC m or degC kg m-2]
 
   logical :: useRiverHeatContent
@@ -988,11 +988,11 @@ subroutine calculateBuoyancyFlux2d(G, GV, US, fluxes, optics, h, Temp, Salt, tv,
   type(unit_scale_type),                      intent(in)    :: US     !< A dimensional unit scaling type
   type(forcing),                              intent(inout) :: fluxes !< surface fluxes
   type(optics_type),                          pointer       :: optics !< SW ocean optics
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h      !< layer thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Temp   !< temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Salt   !< salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h      !< layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: Temp   !< temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: Salt   !< salinity [ppt]
   type(thermo_var_ptrs),                      intent(inout) :: tv     !< thermodynamics type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: buoyancyFlux   !< buoyancy fluxes [L2 T-3 ~> m2 s-3]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: buoyancyFlux   !< buoyancy fluxes [L2 T-3 ~> m2 s-3]
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(inout) :: netHeatMinusSW !< surf temp flux
                                                                               !! [degC H ~> degC m or degC kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(inout) :: netSalt        !< surf salt flux

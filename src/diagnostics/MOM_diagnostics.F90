@@ -197,16 +197,16 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: u    !< The zonal velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(in)    :: v    !< The meridional velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: uh   !< Transport through zonal faces = u*h*dy,
                                                  !! [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(in)    :: vh   !< Transport through meridional faces = v*h*dx,
                                                  !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various
@@ -233,8 +233,8 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
 
-  real :: Rcv(SZI_(G),SZJ_(G),SZK_(G))  ! Coordinate variable potential density [R ~> kg m-3].
-  real :: work_3d(SZI_(G),SZJ_(G),SZK_(G)) ! A 3-d temporary work array.
+  real :: Rcv(SZI_(G),SZJ_(G),SZK_(GV)) ! Coordinate variable potential density [R ~> kg m-3].
+  real :: work_3d(SZI_(G),SZJ_(G),SZK_(GV)) ! A 3-d temporary work array.
   real :: work_2d(SZI_(G),SZJ_(G))         ! A 2-d temporary work array.
   real :: rho_in_situ(SZI_(G))             ! In situ density [R ~> kg m-3]
 
@@ -252,7 +252,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
 
   integer :: k_list
 
-  real, dimension(SZK_(G)) :: temp_layer_ave, salt_layer_ave
+  real, dimension(SZK_(GV)) :: temp_layer_ave, salt_layer_ave
   real :: thetaoga, soga, masso, tosga, sosga
 
   is  = G%isc  ; ie   = G%iec  ; js  = G%jsc  ; je  = G%jec
@@ -833,7 +833,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various
                                                  !! thermodynamic variables.
@@ -949,16 +949,16 @@ end subroutine calculate_vertical_integrals
 subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: u    !< The zonal velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(in)    :: v    !< The meridional velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: uh   !< Transport through zonal faces=u*h*dy,
                                                  !! [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(in)    :: vh   !< Transport through merid faces=v*h*dx,
                                                  !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   type(accel_diag_ptrs),   intent(in)    :: ADp  !< Structure pointing to accelerations in momentum equation.
@@ -1408,11 +1408,11 @@ subroutine post_transport_diagnostics(G, GV, US, uhtr, vhtr, h, IDs, diag_pre_dy
   type(ocean_grid_type),    intent(inout) :: G   !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV  !< ocean vertical grid structure
   type(unit_scale_type),    intent(in)    :: US  !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: uhtr !< Accumulated zonal thickness fluxes
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in) :: uhtr !< Accumulated zonal thickness fluxes
                                                  !! used to advect tracers [H L2 ~> m3 or kg]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: vhtr !< Accumulated meridional thickness fluxes
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in) :: vhtr !< Accumulated meridional thickness fluxes
                                                  !! used to advect tracers [H L2 ~> m3 or kg]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)    :: h   !< The updated layer thicknesses [H ~> m or kg m-2]
   type(transport_diag_IDs), intent(in)    :: IDs !< A structure with the diagnostic IDs.
   type(diag_grid_storage),  intent(inout) :: diag_pre_dyn !< Stored grids from before dynamics
@@ -1423,9 +1423,9 @@ subroutine post_transport_diagnostics(G, GV, US, uhtr, vhtr, h, IDs, diag_pre_dy
   ! Local variables
   real, dimension(SZIB_(G), SZJ_(G)) :: umo2d ! Diagnostics of integrated mass transport [R Z L2 T-1 ~> kg s-1]
   real, dimension(SZI_(G), SZJB_(G)) :: vmo2d ! Diagnostics of integrated mass transport [R Z L2 T-1 ~> kg s-1]
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)) :: umo ! Diagnostics of layer mass transport [R Z L2 T-1 ~> kg s-1]
-  real, dimension(SZI_(G), SZJB_(G), SZK_(G)) :: vmo ! Diagnostics of layer mass transport [R Z L2 T-1 ~> kg s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G))    :: h_tend ! Change in layer thickness due to dynamics
+  real, dimension(SZIB_(G), SZJ_(G),SZK_(GV)) :: umo ! Diagnostics of layer mass transport [R Z L2 T-1 ~> kg s-1]
+  real, dimension(SZI_(G), SZJB_(G),SZK_(GV)) :: vmo ! Diagnostics of layer mass transport [R Z L2 T-1 ~> kg s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))   :: h_tend ! Change in layer thickness due to dynamics
                           ! [H s-1 ~> m s-1 or kg m-2 s-1].
   real :: Idt             ! The inverse of the time interval [T-1 ~> s-1]
   real :: H_to_RZ_dt   ! A conversion factor from accumulated transports to fluxes

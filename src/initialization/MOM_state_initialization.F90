@@ -117,13 +117,13 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   type(ocean_grid_type),      intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),      intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                               intent(out)   :: u    !< The zonal velocity that is being
                                                     !! initialized [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                               intent(out)   :: v    !< The meridional velocity that is being
                                                     !! initialized [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(out)   :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),      intent(inout) :: tv   !< A structure pointing to various thermodynamic
                                                     !! variables
@@ -632,7 +632,7 @@ subroutine initialize_thickness_from_file(h, G, GV, US, param_file, file_has_thi
                                                !! only read parameters without changing h.
 
   ! Local variables
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1)  ! Interface heights, in depth units.
+  real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! Interface heights, in depth units.
   integer :: inconsistent = 0
   logical :: correct_thickness
   logical :: just_read    ! If true, just read parameters but set nothing.
@@ -710,11 +710,11 @@ end subroutine initialize_thickness_from_file
 !!   @remark{There is a (hard-wired) "tolerance" parameter such that the
 !! criteria for adjustment must equal or exceed 10cm.}
 subroutine adjustEtaToFitBathymetry(G, GV, US, eta, h)
-  type(ocean_grid_type),                      intent(in)    :: G   !< The ocean's grid structure
-  type(verticalGrid_type),                    intent(in)    :: GV  !< The ocean's vertical grid structure
-  type(unit_scale_type),                      intent(in)    :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: eta !< Interface heights [Z ~> m].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h   !< Layer thicknesses [H ~> m or kg m-2]
+  type(ocean_grid_type),                       intent(in)    :: G   !< The ocean's grid structure
+  type(verticalGrid_type),                     intent(in)    :: GV  !< The ocean's vertical grid structure
+  type(unit_scale_type),                       intent(in)    :: US  !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: eta !< Interface heights [Z ~> m].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(inout) :: h   !< Layer thicknesses [H ~> m or kg m-2]
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz, contractions, dilations
   real :: hTolerance = 0.1 !<  Tolerance to exceed adjustment criteria [Z ~> m]
@@ -794,9 +794,9 @@ subroutine initialize_thickness_uniform(h, G, GV, param_file, just_read_params)
                                                       !! only read parameters without changing h.
   ! Local variables
   character(len=40)  :: mdl = "initialize_thickness_uniform" ! This subroutine's name.
-  real :: e0(SZK_(G)+1)   ! The resting interface heights, in depth units, usually
+  real :: e0(SZK_(GV)+1)  ! The resting interface heights, in depth units, usually
                           ! negative because it is positive upward.
-  real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface
+  real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface
                           ! positive upward, in depth units.
   logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, nz
@@ -850,9 +850,9 @@ subroutine initialize_thickness_list(h, G, GV, US, param_file, just_read_params)
                                                       !! only read parameters without changing h.
   ! Local variables
   character(len=40)  :: mdl = "initialize_thickness_list" ! This subroutine's name.
-  real :: e0(SZK_(G)+1)   ! The resting interface heights, in depth units [Z ~> m],
+  real :: e0(SZK_(GV)+1)  ! The resting interface heights, in depth units [Z ~> m],
                           ! usually negative because it is positive upward.
-  real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface
+  real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface
                           ! positive upward, in depth units [Z ~> m].
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=200) :: filename, eta_file, inputdir ! Strings for file/path
@@ -923,7 +923,7 @@ subroutine convert_thickness(h, G, GV, US, tv)
   type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: h  !< Input geometric layer thicknesses being converted
                                                !! to layer pressure [H ~> m or kg m-2].
   type(thermo_var_ptrs),   intent(in)    :: tv !< A structure pointing to various
@@ -998,7 +998,7 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
@@ -1007,7 +1007,7 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     eta_sfc  ! The free surface height that the model should use [Z ~> m].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: &
     eta  ! The free surface height that the model should use [Z ~> m].
   real :: dilate  ! A ratio by which layers are dilated [nondim].
   real :: scale_factor ! A scaling factor for the eta_sfc values that are read
@@ -1085,15 +1085,15 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   type(ALE_CS),            pointer       :: ALE_CSp !< ALE control structure
   type(thermo_var_ptrs),   intent(inout) :: tv !< Thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   logical,       optional, intent(in)    :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
   ! Local variables
   character(len=200) :: mdl = "trim_for_ice"
   real, dimension(SZI_(G),SZJ_(G)) :: p_surf ! Imposed pressure on ocean at surface [R L2 T-2 ~> Pa]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: S_t, S_b ! Top and bottom edge values for reconstructions
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: T_t, T_b ! of salinity [ppt] and temperature [degC] within each layer.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: S_t, S_b ! Top and bottom edge values for reconstructions
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: T_t, T_b ! of salinity [ppt] and temperature [degC] within each layer.
   character(len=200) :: inputdir, filename, p_surf_file, p_surf_var ! Strings for file/path
   real :: scale_factor   ! A file-dependent scaling factor for the input pressure.
   real :: min_thickness  ! The minimum layer thickness, recast into Z units [Z ~> m].
@@ -1271,9 +1271,9 @@ end subroutine cut_off_column_top
 subroutine initialize_velocity_from_file(u, v, G, GV, US, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure
   type(verticalGrid_type), intent(in)  :: GV !< The ocean's vertical grid structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: u  !< The zonal velocity that is being initialized [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(out) :: v  !< The meridional velocity that is being initialized [L T-1 ~> m s-1]
   type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
@@ -1313,9 +1313,9 @@ end subroutine initialize_velocity_from_file
 subroutine initialize_velocity_zero(u, v, G, GV, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure
   type(verticalGrid_type), intent(in)  :: GV !< The ocean's vertical grid structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: u  !< The zonal velocity that is being initialized [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(out) :: v  !< The meridional velocity that is being initialized [L T-1 ~> m s-1]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
                                                       !! parse for modelparameter values.
@@ -1348,9 +1348,9 @@ end subroutine initialize_velocity_zero
 subroutine initialize_velocity_uniform(u, v, G, GV, US, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure
   type(verticalGrid_type), intent(in)  :: GV !< The ocean's vertical grid structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: u  !< The zonal velocity that is being initialized [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(out) :: v  !< The meridional velocity that is being initialized [L T-1 ~> m s-1]
   type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
@@ -1390,15 +1390,15 @@ end subroutine initialize_velocity_uniform
 subroutine initialize_velocity_circular(u, v, G, GV, US, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure
   type(verticalGrid_type), intent(in)  :: GV !< The ocean's vertical grid structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: u  !< The zonal velocity that is being initialized [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(out) :: v  !< The meridional velocity that is being initialized [L T-1 ~> m s-1]
   type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
                                                       !! parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+                                                      !! only read parameters without changing u or v.
   ! Local variables
   character(len=200) :: mdl = "initialize_velocity_circular"
   real :: circular_max_u ! The amplitude of the zonal flow [L T-1 ~> m s-1]
@@ -1452,15 +1452,15 @@ end subroutine initialize_velocity_circular
 
 !> Initializes temperature and salinity from file
 subroutine initialize_temp_salt_from_file(T, S, G, GV, param_file, just_read_params)
-  type(ocean_grid_type),                  intent(in)  :: G   !< The ocean's grid structure
-  type(verticalGrid_type),                intent(in)  :: GV  !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T !< The potential temperature that is
-                                                             !! being initialized [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S !< The salinity that is
-                                                             !! being initialized [ppt]
+  type(ocean_grid_type),                     intent(in)  :: G  !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T  !< The potential temperature that is
+                                                               !! being initialized [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S  !< The salinity that is
+                                                               !! being initialized [ppt]
   type(param_file_type),                  intent(in)  :: param_file !< A structure to parse for run-time parameters
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                           !! only read parameters without changing h.
+                                                           !! only read parameters without changing T or S.
   ! Local variables
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=200) :: filename, salt_filename ! Full paths to input files
@@ -1509,17 +1509,17 @@ end subroutine initialize_temp_salt_from_file
 
 !> Initializes temperature and salinity from a 1D profile
 subroutine initialize_temp_salt_from_profile(T, S, G, GV, param_file, just_read_params)
-  type(ocean_grid_type),                    intent(in)  :: G !< The ocean's grid structure
-  type(verticalGrid_type),                  intent(in)  :: GV !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T !< The potential temperature that is
-                                                             !! being initialized [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S !< The salinity that is
-                                                             !! being initialized [ppt]
+  type(ocean_grid_type),                     intent(in)  :: G  !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T  !< The potential temperature that is
+                                                               !! being initialized [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S  !< The salinity that is
+                                                               !! being initialized [ppt]
   type(param_file_type),                    intent(in)  :: param_file !< A structure to parse for run-time parameters
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                           !! only read parameters without changing h.
+                                                           !! only read parameters without changing T or S.
   ! Local variables
-  real, dimension(SZK_(G)) :: T0, S0
+  real, dimension(SZK_(GV)) :: T0, S0
   integer :: i, j, k
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=200) :: filename, ts_file, inputdir ! Strings for file/path
@@ -1557,9 +1557,9 @@ end subroutine initialize_temp_salt_from_profile
 subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P_Ref, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G            !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV           !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T !< The potential temperature that is
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< The potential temperature that is
                                                        !! being initialized [degC].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S !< The salinity that is being
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< The salinity that is being
                                                        !! initialized [ppt].
   type(unit_scale_type),   intent(in)  :: US           !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file   !< A structure to parse for run-time
@@ -1568,16 +1568,16 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P
   real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure
                                                        !! [R L2 T-2 ~> Pa].
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                       !! only read parameters without changing h.
+                                                       !! only read parameters without changing T or S.
   ! Local variables
-  real :: T0(SZK_(G))   ! Layer potential temperatures [degC]
-  real :: S0(SZK_(G))   ! Layer salinities [degC]
+  real :: T0(SZK_(GV))  ! Layer potential temperatures [degC]
+  real :: S0(SZK_(GV))  ! Layer salinities [degC]
   real :: T_Ref         ! Reference Temperature [degC]
   real :: S_Ref         ! Reference Salinity [ppt]
-  real :: pres(SZK_(G))      ! An array of the reference pressure [R L2 T-2 ~> Pa].
-  real :: drho_dT(SZK_(G))   ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
-  real :: drho_dS(SZK_(G))   ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
-  real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 [R ~> kg m-3].
+  real :: pres(SZK_(GV))     ! An array of the reference pressure [R L2 T-2 ~> Pa].
+  real :: drho_dT(SZK_(GV))  ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
+  real :: drho_dS(SZK_(GV))  ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
+  real :: rho_guess(SZK_(GV)) ! Potential density at T0 & S0 [R ~> kg m-3].
   logical :: fit_salin       ! If true, accept the prescribed temperature and fit the salinity.
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40)  :: mdl = "initialize_temp_salt_fit" ! This subroutine's name.
@@ -1649,18 +1649,17 @@ end subroutine initialize_temp_salt_fit
 !! \remark Note that the linear distribution is set up with respect to the layer
 !! number, not the physical position).
 subroutine initialize_temp_salt_linear(T, S, G, GV, param_file, just_read_params)
-  type(ocean_grid_type),                    intent(in)  :: G  !< The ocean's grid structure
-  type(verticalGrid_type),                  intent(in)  :: GV !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T !< The potential temperature that is
-                                                             !! being initialized [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S !< The salinity that is
-                                                             !! being initialized [ppt]
-  type(param_file_type),                    intent(in)  :: param_file !< A structure to parse for
-                                                                     !! run-time parameters
-  logical,                        optional, intent(in)  :: just_read_params !< If present and true,
-                                                                      !! this call will only read
-                                                                      !! parameters without
-                                                                      !! changing h.
+  type(ocean_grid_type),                     intent(in)  :: G  !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T  !< The potential temperature that is
+                                                               !! being initialized [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S  !< The salinity that is
+                                                               !! being initialized [ppt]
+  type(param_file_type),                     intent(in)  :: param_file !< A structure to parse for
+                                                               !! run-time parameters
+  logical,                         optional, intent(in)  :: just_read_params !< If present and true,
+                                                               !! this call will only read parameters
+                                                               !! without changing T or S.
 
   integer :: k
   real  :: delta_S, delta_T
@@ -1734,7 +1733,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, L
   real, allocatable, dimension(:,:,:) :: eta ! The target interface heights [Z ~> m].
   real, allocatable, dimension(:,:,:) :: h   ! The target interface thicknesses [H ~> m or kg m-2].
 
-  real, dimension (SZI_(G),SZJ_(G),SZK_(G)) :: &
+  real, dimension (SZI_(G),SZJ_(G),SZK_(GV)) :: &
     tmp, tmp2 ! A temporary array for tracers.
   real, dimension (SZI_(G),SZJ_(G)) :: &
     tmp_2d ! A temporary array for tracers.
@@ -1862,9 +1861,9 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, L
     ! The remaining calls to set_up_sponge_field can be in any order.
     if ( use_temperature) then
       call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain)
-      call set_up_sponge_field(tmp, tv%T, G, nz, Layer_CSp)
+      call set_up_sponge_field(tmp, tv%T, G, GV, nz, Layer_CSp)
       call MOM_read_data(filename, salin_var, tmp(:,:,:), G%Domain)
-      call set_up_sponge_field(tmp, tv%S, G, nz, Layer_CSp)
+      call set_up_sponge_field(tmp, tv%S, G, GV, nz, Layer_CSp)
     endif
 
   endif
@@ -1895,9 +1894,9 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, L
       if (use_temperature) then
         allocate(tmp_tr(isd:ied,jsd:jed,nz_data))
         call MOM_read_data(filename, potemp_var, tmp_tr(:,:,:), G%Domain)
-        call set_up_ALE_sponge_field(tmp_tr, G, tv%T, ALE_CSp)
+        call set_up_ALE_sponge_field(tmp_tr, G, GV, tv%T, ALE_CSp)
         call MOM_read_data(filename, salin_var, tmp_tr(:,:,:), G%Domain)
-        call set_up_ALE_sponge_field(tmp_tr, G, tv%S, ALE_CSp)
+        call set_up_ALE_sponge_field(tmp_tr, G, GV, tv%S, ALE_CSp)
         deallocate(tmp_tr)
       endif
     else
@@ -1976,16 +1975,16 @@ end subroutine set_velocity_depth_min
 !! a latitude-longitude grid.
 subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_params)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out)   :: h    !< Layer thicknesses being initialized [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(inout) :: tv   !< A structure pointing to various thermodynamic
                                                  !! variables including temperature and salinity
-  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: PF   !< A structure indicating the open file
                                                  !! to parse for model parameter values.
   logical,       optional, intent(in)    :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+                                                 !! only read parameters without changing T or S.
 
   ! Local variables
   character(len=200) :: filename   !< The name of an input file containing temperature
@@ -2042,7 +2041,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   real, dimension(:), allocatable :: Rb  ! Interface densities [R ~> kg m-3]
   real, dimension(:,:,:), allocatable, target :: temp_z, salt_z, mask_z
   real, dimension(:,:,:), allocatable :: rho_z ! Densities in Z-space [R ~> kg m-3]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: zi   ! Interface heights [Z ~> m].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: zi   ! Interface heights [Z ~> m].
   integer, dimension(SZI_(G),SZJ_(G))  :: nlevs
   real, dimension(SZI_(G))   :: press  ! Pressures [R L2 T-2 ~> Pa].
 
@@ -2464,10 +2463,10 @@ subroutine find_interfaces(rho, zin, nk_data, Rb, depth, zi, G, GV, US, nlevs, n
   real, dimension(SZI_(G),SZJ_(G),nk_data), &
                               intent(in)  :: rho   !< Potential density in z-space [R ~> kg m-3]
   real, dimension(nk_data),   intent(in)  :: zin   !< Input data levels [Z ~> m].
-  real, dimension(SZK_(G)+1), intent(in)  :: Rb    !< target interface densities [R ~> kg m-3]
+  real, dimension(SZK_(GV)+1), intent(in)  :: Rb    !< target interface densities [R ~> kg m-3]
   real, dimension(SZI_(G),SZJ_(G)), &
                               intent(in)  :: depth !< ocean depth [Z ~> m].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                               intent(out) :: zi    !< The returned interface heights [Z ~> m]
   type(unit_scale_type),      intent(in)  :: US    !< A dimensional unit scaling type
   integer, dimension(SZI_(G),SZJ_(G)), &
@@ -2480,7 +2479,7 @@ subroutine find_interfaces(rho, zin, nk_data, Rb, depth, zi, G, GV, US, nlevs, n
 
   ! Local variables
   real, dimension(nk_data) :: rho_ ! A column of densities [R ~> kg m-3]
-  real, dimension(SZK_(G)+1) :: zi_ ! A column interface heights (negative downward) [Z ~> m].
+  real, dimension(SZK_(GV)+1) :: zi_ ! A column interface heights (negative downward) [Z ~> m].
   real    :: slope      ! The rate of change of height with density [Z R-1 ~> m4 kg-1]
   real    :: drhodz     ! A local vertical density gradient [R Z-1 ~> kg m-4]
   real, parameter :: zoff=0.999

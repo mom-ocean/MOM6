@@ -74,36 +74,36 @@ contains
 !! range before this subroutine is called:
 !!   h(isB:ie+1,jsB:je+1), T(isB:ie+1,jsB:je+1), and S(isB:ie+1,jsB:je+1).
 subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, eta)
-  type(ocean_grid_type),                     intent(in)  :: G   !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in)  :: GV  !< Vertical grid structure
-  type(unit_scale_type),                     intent(in)  :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h   !< Layer thickness [H ~> kg/m2]
-  type(thermo_var_ptrs),                     intent(in)  :: tv  !< Thermodynamic variables
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration [L T-2 ~> m s-2]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv !< Meridional acceleration [L T-2 ~> m s-2]
-  type(PressureForce_FV_CS),                 pointer     :: CS  !< Finite volume PGF control structure
-  type(ALE_CS),                              pointer     :: ALE_CSp !< ALE control structure
+  type(ocean_grid_type),                      intent(in)  :: G   !< Ocean grid structure
+  type(verticalGrid_type),                    intent(in)  :: GV  !< Vertical grid structure
+  type(unit_scale_type),                      intent(in)  :: US  !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h   !< Layer thickness [H ~> kg/m2]
+  type(thermo_var_ptrs),                      intent(in)  :: tv  !< Thermodynamic variables
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(out) :: PFu !< Zonal acceleration [L T-2 ~> m s-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(out) :: PFv !< Meridional acceleration [L T-2 ~> m s-2]
+  type(PressureForce_FV_CS),                  pointer     :: CS  !< Finite volume PGF control structure
+  type(ALE_CS),                               pointer     :: ALE_CSp !< ALE control structure
   real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
                                                            !! or atmosphere-ocean interface [R L2 T-2 ~> Pa].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(out) :: pbce !< The baroclinic pressure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), optional, intent(out) :: pbce !< The baroclinic pressure
                                                            !! anomaly in each layer due to eta anomalies
                                                            !! [L2 T-2 H-1 ~> m s-2 or m4 s-2 kg-1].
   real, dimension(SZI_(G),SZJ_(G)),          optional, intent(out) :: eta !< The bottom mass used to
                                                            !! calculate PFu and PFv [H ~> m or kg m-2], with any tidal
                                                            !! contributions or compressibility compensation.
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: p ! Interface pressure [R L2 T-2 ~> Pa].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: p ! Interface pressure [R L2 T-2 ~> Pa].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: &
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
                 ! than the mixed layer have the mixed layer's properties [degC].
     S_tmp       ! Temporary array of salinities where layers that are lighter
                 ! than the mixed layer have the mixed layer's properties [ppt].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     S_t, &      ! Top and bottom edge values for linear reconstructions
     S_b, &      ! of salinity within each layer [ppt].
     T_t, &      ! Top and bottom edge values for linear reconstructions
     T_b         ! of temperature within each layer [degC].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G))  :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     dza, &      ! The change in geopotential anomaly between the top and bottom
                 ! of a layer [L2 T-2 ~> m2 s-2].
     intp_dza    ! The vertical integral in depth of the pressure anomaly less
@@ -123,12 +123,12 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     intx_za     ! The zonal integral of the geopotential anomaly along the
                 ! interface below a layer, divided by the grid spacing [L2 T-2 ~> m2 s-2].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: &
     intx_dza    ! The change in intx_za through a layer [L2 T-2 ~> m2 s-2].
   real, dimension(SZI_(G),SZJB_(G)) :: &
     inty_za     ! The meridional integral of the geopotential anomaly along the
                 ! interface below a layer, divided by the grid spacing [L2 T-2 ~> m2 s-2].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: &
     inty_dza    ! The change in inty_za through a layer [L2 T-2 ~> m2 s-2].
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
                              ! density, [R L2 T-2 ~> Pa] (usually 2e7 Pa = 2000 dbar).
@@ -414,25 +414,25 @@ end subroutine PressureForce_FV_nonBouss
 !! range before this subroutine is called:
 !!   h(isB:ie+1,jsB:je+1), T(isB:ie+1,jsB:je+1), and S(isB:ie+1,jsB:je+1).
 subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, eta)
-  type(ocean_grid_type),                     intent(in)  :: G   !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in)  :: GV  !< Vertical grid structure
-  type(unit_scale_type),                     intent(in)  :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h   !< Layer thickness [H ~> m]
-  type(thermo_var_ptrs),                     intent(in)  :: tv  !< Thermodynamic variables
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration [L T-2 ~> m s-2]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv !< Meridional acceleration [L T-2 ~> m s-2]
-  type(PressureForce_FV_CS),                 pointer     :: CS  !< Finite volume PGF control structure
-  type(ALE_CS),                              pointer     :: ALE_CSp !< ALE control structure
+  type(ocean_grid_type),                      intent(in)  :: G   !< Ocean grid structure
+  type(verticalGrid_type),                    intent(in)  :: GV  !< Vertical grid structure
+  type(unit_scale_type),                      intent(in)  :: US  !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h   !< Layer thickness [H ~> m]
+  type(thermo_var_ptrs),                      intent(in)  :: tv  !< Thermodynamic variables
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(out) :: PFu !< Zonal acceleration [L T-2 ~> m s-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(out) :: PFv !< Meridional acceleration [L T-2 ~> m s-2]
+  type(PressureForce_FV_CS),                  pointer     :: CS  !< Finite volume PGF control structure
+  type(ALE_CS),                               pointer     :: ALE_CSp !< ALE control structure
   real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
                                                          !! or atmosphere-ocean interface [R L2 T-2 ~> Pa].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(out) :: pbce !< The baroclinic pressure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), optional, intent(out) :: pbce !< The baroclinic pressure
                                                          !! anomaly in each layer due to eta anomalies
                                                          !! [L2 T-2 H-1 ~> m s-2 or m4 s-2 kg-1].
   real, dimension(SZI_(G),SZJ_(G)),          optional, intent(out) :: eta !< The bottom mass used to
                                                          !! calculate PFu and PFv [H ~> m or kg m-2], with any
                                                          !! tidal contributions or compressibility compensation.
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: e ! Interface height in depth units [Z ~> m].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: e ! Interface height in depth units [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G))  :: &
     e_tidal, &  ! The bottom geopotential anomaly due to tidal forces from
                 ! astronomical sources and self-attraction and loading [Z ~> m].
@@ -458,12 +458,12 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
                 ! interface atop a layer, divided by the grid spacing [R L2 T-2 ~> Pa].
     inty_dpa    ! The change in inty_pa through a layer [R L2 T-2 ~> Pa].
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: &
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
                 ! than the mixed layer have the mixed layer's properties [degC].
     S_tmp       ! Temporary array of salinities where layers that are lighter
                 ! than the mixed layer have the mixed layer's properties [ppt].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     S_t, S_b, T_t, T_b ! Top and bottom edge values for linear reconstructions
                        ! of salinity and temperature within each layer.
   real :: rho_in_situ(SZI_(G)) ! The in situ density [R ~> kg m-3].

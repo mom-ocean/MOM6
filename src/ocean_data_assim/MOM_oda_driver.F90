@@ -308,7 +308,7 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
   type(time_type), intent(in)    :: Time !< The current model time
   type(ocean_grid_type), pointer :: G !< domain and grid information for ocean model
   type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h   !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),                 intent(in) :: tv   !< A structure pointing to various thermodynamic variables
 
   type(ODA_CS), pointer :: CS !< ocean DA control structure
@@ -525,11 +525,12 @@ end subroutine save_obs_diff
 
 
 !> Apply increments to tracers
-subroutine apply_oda_tracer_increments(dt,G,tv,h,CS)
+subroutine apply_oda_tracer_increments(dt, G, GV, tv, h, CS)
   real,                     intent(in)    :: dt !< The tracer timestep [s]
   type(ocean_grid_type),    intent(in)    :: G  !< ocean grid structure
+  type(verticalGrid_type),  intent(in)    :: GV !< The ocean's vertical grid structure
   type(thermo_var_ptrs),    intent(inout) :: tv !< A structure pointing to various thermodynamic variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)    :: h  !< layer thickness [H ~> m or kg m-2]
   type(ODA_CS),             intent(inout) :: CS !< the data assimilation structure
 
