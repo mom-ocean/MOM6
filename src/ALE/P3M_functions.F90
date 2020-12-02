@@ -25,11 +25,11 @@ contains
 !!
 !! It is assumed that the size of the array 'u' is equal to the number of cells
 !! defining 'grid' and 'ppoly'. No consistency check is performed here.
-subroutine P3M_interpolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect, answers_2018 )
+subroutine P3M_interpolation( N, h, u, edge_values, ppoly_S, ppoly_coef, h_neglect, answers_2018 )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
   real, dimension(:),   intent(in)    :: u !< cell averages (size N) in arbitrary units [A]
-  real, dimension(:,:), intent(inout) :: ppoly_E   !< Edge value of polynomial [A]
+  real, dimension(:,:), intent(inout) :: edge_values   !< Edge value of polynomial [A]
   real, dimension(:,:), intent(inout) :: ppoly_S   !< Edge slope of polynomial [A H-1].
   real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial [A]
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width for the
@@ -41,7 +41,7 @@ subroutine P3M_interpolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect, 
   ! This routine could be called directly instead of having to call
   ! 'P3M_interpolation' first but we do that to provide an homogeneous
   ! interface.
-  call P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect, answers_2018 )
+  call P3M_limiter( N, h, u, edge_values, ppoly_S, ppoly_coef, h_neglect, answers_2018 )
 
 end subroutine P3M_interpolation
 
@@ -58,11 +58,11 @@ end subroutine P3M_interpolation
 !!    c. If not, monotonize cubic curve and rebuild it
 !!
 !! Step 3 of the monotonization process leaves all edge values unchanged.
-subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect, answers_2018 )
+subroutine P3M_limiter( N, h, u, edge_values, ppoly_S, ppoly_coef, h_neglect, answers_2018 )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
   real, dimension(:),   intent(in)    :: u !< cell averages (size N) in arbitrary units [A]
-  real, dimension(:,:), intent(inout) :: ppoly_E  !< Edge value of polynomial [A]
+  real, dimension(:,:), intent(inout) :: edge_values !< Edge value of polynomial [A]
   real, dimension(:,:), intent(inout) :: ppoly_S  !< Edge slope of polynomial [A H-1]
   real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial [A]
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width for
@@ -86,10 +86,10 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect, answer
   eps = 1e-10
 
   ! 1. Bound edge values (boundary cells are assumed to be local extrema)
-  call bound_edge_values( N, h, u, ppoly_E, hNeglect, answers_2018 )
+  call bound_edge_values( N, h, u, edge_values, hNeglect, answers_2018 )
 
   ! 2. Systematically average discontinuous edge values
-  call average_discontinuous_edge_values( N, ppoly_E )
+  call average_discontinuous_edge_values( N, edge_values )
 
 
   ! 3. Loop on cells and do the following
@@ -99,8 +99,8 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect, answer
   do k = 1,N
 
     ! Get edge values, edge slopes and cell width
-    u0_l = ppoly_E(k,1)
-    u0_r = ppoly_E(k,2)
+    u0_l = edge_values(k,1)
+    u0_r = edge_values(k,2)
     u1_l = ppoly_S(k,1)
     u1_r = ppoly_S(k,2)
 
@@ -151,7 +151,7 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect, answer
     endif
 
     ! Build cubic interpolant (compute the coefficients)
-    call build_cubic_interpolant( h, k, ppoly_E, ppoly_S, ppoly_coef )
+    call build_cubic_interpolant( h, k, edge_values, ppoly_S, ppoly_coef )
 
     ! Check whether cubic is monotonic
     monotonic = is_cubic_monotonic( ppoly_coef, k )
@@ -168,7 +168,7 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect, answer
     ppoly_S(k,2) = u1_r
 
     ! Recompute coefficients of cubic
-    call build_cubic_interpolant( h, k, ppoly_E, ppoly_S, ppoly_coef )
+    call build_cubic_interpolant( h, k, edge_values, ppoly_S, ppoly_coef )
 
   enddo ! loop on cells
 
@@ -188,12 +188,12 @@ end subroutine P3M_limiter
 !! computing the parabola based on the cell average and the right edge value
 !! and slope. The resulting cubic is not necessarily monotonic and the slopes
 !! are subsequently modified to yield a monotonic cubic.
-subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, &
+subroutine P3M_boundary_extrapolation( N, h, u, edge_values, ppoly_S, ppoly_coef, &
                                        h_neglect, h_neglect_edge )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
   real, dimension(:),   intent(in)    :: u !< cell averages (size N) in arbitrary units [A]
-  real, dimension(:,:), intent(inout) :: ppoly_E !< Edge value of polynomial [A]
+  real, dimension(:,:), intent(inout) :: edge_values !< Edge value of polynomial [A]
   real, dimension(:,:), intent(inout) :: ppoly_S !< Edge slope of polynomial [A H-1]
   real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial [A]
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width for the
@@ -235,7 +235,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, &
 
   ! The right edge value in the boundary cell is taken to be the left
   ! edge value in the neighboring cell
-  u0_r = ppoly_E(i1,1)
+  u0_r = edge_values(i1,1)
 
   ! Given the right edge value and slope, we determine the left
   ! edge value and slope by computing the parabola as determined by
@@ -253,13 +253,13 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, &
   endif
 
   ! Store edge values and slope, build cubic and check monotonicity
-  ppoly_E(i0,1) = u0_l
-  ppoly_E(i0,2) = u0_r
+  edge_values(i0,1) = u0_l
+  edge_values(i0,2) = u0_r
   ppoly_S(i0,1) = u1_l
   ppoly_S(i0,2) = u1_r
 
   ! Store edge values and slope, build cubic and check monotonicity
-  call build_cubic_interpolant( h, i0, ppoly_E, ppoly_S, ppoly_coef )
+  call build_cubic_interpolant( h, i0, edge_values, ppoly_S, ppoly_coef )
   monotonic = is_cubic_monotonic( ppoly_coef, i0 )
 
   if ( .not.monotonic ) then
@@ -268,7 +268,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, &
     ! Rebuild cubic after monotonization
     ppoly_S(i0,1) = u1_l
     ppoly_S(i0,2) = u1_r
-    call build_cubic_interpolant( h, i0, ppoly_E, ppoly_S, ppoly_coef )
+    call build_cubic_interpolant( h, i0, edge_values, ppoly_S, ppoly_coef )
 
   endif
 
@@ -295,7 +295,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, &
 
   ! The left edge value in the boundary cell is taken to be the right
   ! edge value in the neighboring cell
-  u0_l = ppoly_E(i0,2)
+  u0_l = edge_values(i0,2)
 
   ! Given the left edge value and slope, we determine the right
   ! edge value and slope by computing the parabola as determined by
@@ -313,12 +313,12 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, &
   endif
 
   ! Store edge values and slope, build cubic and check monotonicity
-  ppoly_E(i1,1) = u0_l
-  ppoly_E(i1,2) = u0_r
+  edge_values(i1,1) = u0_l
+  edge_values(i1,2) = u0_r
   ppoly_S(i1,1) = u1_l
   ppoly_S(i1,2) = u1_r
 
-  call build_cubic_interpolant( h, i1, ppoly_E, ppoly_S, ppoly_coef )
+  call build_cubic_interpolant( h, i1, edge_values, ppoly_S, ppoly_coef )
   monotonic = is_cubic_monotonic( ppoly_coef, i1 )
 
   if ( .not.monotonic ) then
@@ -327,7 +327,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, &
     ! Rebuild cubic after monotonization
     ppoly_S(i1,1) = u1_l
     ppoly_S(i1,2) = u1_r
-    call build_cubic_interpolant( h, i1, ppoly_E, ppoly_S, ppoly_coef )
+    call build_cubic_interpolant( h, i1, edge_values, ppoly_S, ppoly_coef )
 
   endif
 
@@ -340,10 +340,10 @@ end subroutine P3M_boundary_extrapolation
 !!
 !! NOTE: edge values and slopes MUST have been properly calculated prior to
 !! calling this routine.
-subroutine build_cubic_interpolant( h, k, ppoly_E, ppoly_S, ppoly_coef )
+subroutine build_cubic_interpolant( h, k, edge_values, ppoly_S, ppoly_coef )
   real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
   integer,              intent(in)    :: k !< The index of the cell to work on
-  real, dimension(:,:), intent(in)    :: ppoly_E    !< Edge value of polynomial in arbitrary units [A]
+  real, dimension(:,:), intent(in)    :: edge_values !< Edge value of polynomial in arbitrary units [A]
   real, dimension(:,:), intent(in)    :: ppoly_S    !< Edge slope of polynomial [A H-1]
   real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial [A]
 
@@ -355,8 +355,8 @@ subroutine build_cubic_interpolant( h, k, ppoly_E, ppoly_S, ppoly_coef )
 
   h_c = h(k)
 
-  u0_l = ppoly_E(k,1)
-  u0_r = ppoly_E(k,2)
+  u0_l = edge_values(k,1)
+  u0_r = edge_values(k,2)
 
   u1_l = ppoly_S(k,1) * h_c
   u1_r = ppoly_S(k,2) * h_c

@@ -135,8 +135,8 @@ subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, GV, &
 
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
             default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
-  call get_param(param_file, mdl,"S_REF",S_ref,'Reference salinity', units='1e-3', &
-                 fail_if_missing=.not.just_read, do_not_log=just_read)
+  call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', &
+                 default=35.0, units='1e-3', do_not_log=just_read)
   call get_param(param_file, mdl,"T_REF",T_ref,'Reference temperature',units='C',&
                  fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl,"T_RANGE",T_range,'Initial temperature range',&

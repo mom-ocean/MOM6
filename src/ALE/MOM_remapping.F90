@@ -1027,11 +1027,11 @@ real function average_value_ppoly( n0, u0, ppoly0_E, ppoly0_coefs, method, i0, x
 end function average_value_ppoly
 
 !> Measure totals and bounds on source grid
-subroutine measure_input_bounds( n0, h0, u0, ppoly_E, h0tot, h0err, u0tot, u0err, u0min, u0max )
+subroutine measure_input_bounds( n0, h0, u0, edge_values, h0tot, h0err, u0tot, u0err, u0min, u0max )
   integer,               intent(in)  :: n0 !< Number of cells on source grid
   real, dimension(n0),   intent(in)  :: h0 !< Cell widths on source grid
   real, dimension(n0),   intent(in)  :: u0 !< Cell averages on source grid
-  real, dimension(n0,2), intent(in)  :: ppoly_E !< Cell edge values on source grid
+  real, dimension(n0,2), intent(in)  :: edge_values !< Cell edge values on source grid
   real,                  intent(out) :: h0tot !< Sum of cell widths
   real,                  intent(out) :: h0err !< Magnitude of round-off error in h0tot
   real,                  intent(out) :: u0tot !< Sum of cell widths times values
@@ -1047,15 +1047,15 @@ subroutine measure_input_bounds( n0, h0, u0, ppoly_E, h0tot, h0err, u0tot, u0err
   h0err = 0.
   u0tot = h0(1) * u0(1)
   u0err = 0.
-  u0min = min( ppoly_E(1,1), ppoly_E(1,2) )
-  u0max = max( ppoly_E(1,1), ppoly_E(1,2) )
+  u0min = min( edge_values(1,1), edge_values(1,2) )
+  u0max = max( edge_values(1,1), edge_values(1,2) )
   do k = 2, n0
     h0tot = h0tot + h0(k)
     h0err = h0err + eps * max(h0tot, h0(k))
     u0tot = u0tot + h0(k) * u0(k)
     u0err = u0err + eps * max(abs(u0tot), abs(h0(k) * u0(k)))
-    u0min = min( u0min, ppoly_E(k,1), ppoly_E(k,2) )
-    u0max = max( u0max, ppoly_E(k,1), ppoly_E(k,2) )
+    u0min = min( u0min, edge_values(k,1), edge_values(k,2) )
+    u0max = max( u0max, edge_values(k,1), edge_values(k,2) )
   enddo
 
 end subroutine measure_input_bounds

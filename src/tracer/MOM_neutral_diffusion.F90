@@ -134,17 +134,17 @@ logical function neutral_diffusion_init(Time, G, US, param_file, diag, EOS, diab
     return
   endif
 
-
   ! Log this module and master switch for turning it on/off
+  call get_param(param_file, mdl, "USE_NEUTRAL_DIFFUSION", neutral_diffusion_init, &
+                 default=.false., do_not_log=.true.)
   call log_version(param_file, mdl, version, &
-       "This module implements neutral diffusion of tracers")
+           "This module implements neutral diffusion of tracers", &
+           all_default=.not.neutral_diffusion_init)
   call get_param(param_file, mdl, "USE_NEUTRAL_DIFFUSION", neutral_diffusion_init, &
                  "If true, enables the neutral diffusion module.", &
                  default=.false.)
 
-  if (.not.neutral_diffusion_init) then
-    return
-  endif
+  if (.not.neutral_diffusion_init) return
 
   allocate(CS)
   CS%diag => diag
@@ -180,7 +180,7 @@ logical function neutral_diffusion_init(Time, G, US, param_file, diag, EOS, diab
                    trim(remappingSchemesDoc), default=remappingDefaultScheme)
     call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
     call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", CS%remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&

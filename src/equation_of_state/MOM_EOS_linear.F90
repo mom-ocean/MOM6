@@ -473,7 +473,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
       hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
       hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
 
-      intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
+      intz(1) = dpa(i,j) ; intz(5) = dpa(i,j+1)
       do m=2,4
         wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
         wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR

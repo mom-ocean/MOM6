@@ -222,8 +222,7 @@ subroutine BFB_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "The rate of change of density with temperature.", &
                  units="kg m-3 K-1", default=-0.2, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
-                 "The background gustiness in the winds.", units="Pa", &
-                 default=0.02)
+                 "The background gustiness in the winds.", units="Pa", default=0.0)
 
   call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
                  "If true, the buoyancy fluxes drive the model back "//&
@@ -231,10 +230,9 @@ subroutine BFB_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "given by FLUXCONST.", default= .false.)
   if (CS%restorebuoy) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
-                 "The constant that relates the restoring surface fluxes "//&
-                 "to the relative surface anomalies (akin to a piston "//&
-                 "velocity).  Note the non-MKS units.", &
-                 units="m day-1", scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
+                 "The constant that relates the restoring surface fluxes to the relative "//&
+                 "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
+                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s)
     ! Convert CS%Flux_const from m day-1 to m s-1.
     CS%Flux_const = CS%Flux_const / 86400.0
   endif

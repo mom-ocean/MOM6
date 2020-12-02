@@ -30,6 +30,8 @@ use MOM_CVMix_ddiff,         only : CVMix_ddiff_init, CVMix_ddiff_end, CVMix_ddi
 use MOM_CVMix_ddiff,         only : compute_ddiff_coeffs
 use MOM_bkgnd_mixing,        only : calculate_bkgnd_mixing, bkgnd_mixing_init, bkgnd_mixing_cs
 use MOM_bkgnd_mixing,        only : bkgnd_mixing_end, sfc_bkgnd_mixing
+use MOM_open_boundary,       only : ocean_OBC_type, OBC_segment_type, OBC_NONE
+use MOM_open_boundary,       only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_string_functions,    only : uppercase
 use MOM_unit_scaling,        only : unit_scale_type
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, p3d
@@ -1636,7 +1638,7 @@ end subroutine add_MLrad_diffusivity
 
 !> This subroutine calculates several properties related to bottom
 !! boundary layer turbulence.
-subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
+subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS, OBC)
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
@@ -1650,6 +1652,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
   type(vertvisc_type),      intent(in)    :: visc !< Structure containing vertical viscosities, bottom
                                                   !! boundary layer properies, and related fields.
   type(set_diffusivity_CS), pointer       :: CS   !< Diffusivity control structure
+  type(ocean_OBC_type), optional, pointer :: OBC  !< Open boundaries control structure.
 
   ! This subroutine calculates several properties related to bottom
   ! boundary layer turbulence.
@@ -1674,6 +1677,17 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
 
   logical :: domore, do_i(SZI_(G))
   integer :: i, j, k, is, ie, js, je, nz
+  integer :: l_seg
+  logical :: local_open_u_BC, local_open_v_BC
+  logical :: has_obc
+
+  local_open_u_BC = .false.
+  local_open_v_BC = .false.
+  if (present(OBC)) then ; if (associated(OBC)) then
+    local_open_u_BC = OBC%open_u_BCs_exist_globally
+    local_open_v_BC = OBC%open_v_BCs_exist_globally
+  endif ; endif
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.not.associated(CS)) call MOM_error(FATAL,"set_BBL_TKE: "//&
@@ -1691,10 +1705,8 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
 
   cdrag_sqrt = sqrt(CS%cdrag)
 
-!$OMP parallel default(none) shared(cdrag_sqrt,is,ie,js,je,nz,visc,CS,G,GV,US,vstar,h,v, &
-!$OMP                               v2_bbl,u) &
-!$OMP                       private(do_i,vhtot,htot,domore,hvel,uhtot,ustar,u2_bbl)
-!$OMP do
+  !$OMP parallel default(shared) private(do_i,vhtot,htot,domore,hvel,uhtot,ustar,u2_bbl)
+  !$OMP do
   do J=js-1,je
     ! Determine ustar and the square magnitude of the velocity in the
     ! bottom boundary layer. Together these give the TKE source and
@@ -1708,7 +1720,26 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
     do k=nz,1,-1
       domore = .false.
       do i=is,ie ; if (do_i(i)) then
-        hvel = 0.5*GV%H_to_Z*(h(i,j,k) + h(i,j+1,k))
+        ! Determine if grid point is an OBC
+        has_obc = .false.
+        if (local_open_v_BC) then
+          l_seg = OBC%segnum_v(i,J)
+          if (l_seg /= OBC_NONE) then
+            has_obc = OBC%segment(l_seg)%open
+          endif
+        endif
+
+        ! Compute h based on OBC state
+        if (has_obc) then
+          if (OBC%segment(l_seg)%direction == OBC_DIRECTION_N) then
+            hvel = GV%H_to_Z*h(i,j,k)
+          else
+            hvel = GV%H_to_Z*h(i,j+1,k)
+          endif
+        else
+          hvel = 0.5*GV%H_to_Z*(h(i,j,k) + h(i,j+1,k))
+        endif
+
         if ((htot(i) + hvel) >= visc%bbl_thick_v(i,J)) then
           vhtot(i) = vhtot(i) + (visc%bbl_thick_v(i,J) - htot(i))*v(i,J,k)
           htot(i) = visc%bbl_thick_v(i,J)
@@ -1727,7 +1758,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
       v2_bbl(i,J) = 0.0
     endif ; enddo
   enddo
-!$OMP do
+  !$OMP do
   do j=js,je
     do I=is-1,ie ; if ((G%mask2dCu(I,j) > 0.5) .and. (cdrag_sqrt*visc%bbl_thick_u(I,j) > 0.0))  then
       do_i(I) = .true. ; uhtot(I) = 0.0 ; htot(I) = 0.0
@@ -1737,7 +1768,26 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
     endif ; enddo
     do k=nz,1,-1 ; domore = .false.
       do I=is-1,ie ; if (do_i(I)) then
-        hvel = 0.5*GV%H_to_Z*(h(i,j,k) + h(i+1,j,k))
+        ! Determine if grid point is an OBC
+        has_obc = .false.
+        if (local_open_u_BC) then
+          l_seg = OBC%segnum_u(I,j)
+          if (l_seg /= OBC_NONE) then
+            has_obc = OBC%segment(l_seg)%open
+          endif
+        endif
+
+        ! Compute h based on OBC state
+        if (has_obc) then
+          if (OBC%segment(l_seg)%direction == OBC_DIRECTION_E) then
+            hvel = GV%H_to_Z*h(i,j,k)
+          else ! OBC_DIRECTION_W
+            hvel = GV%H_to_Z*h(i+1,j,k)
+          endif
+        else
+          hvel = 0.5*GV%H_to_Z*(h(i,j,k) + h(i+1,j,k))
+        endif
+
         if ((htot(I) + hvel) >= visc%bbl_thick_u(I,j)) then
           uhtot(I) = uhtot(I) + (visc%bbl_thick_u(I,j) - htot(I))*u(I,j,k)
           htot(I) = visc%bbl_thick_u(I,j)
@@ -1769,7 +1819,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
                     G%areaCv(i,J) * (vstar(i,J)*v2_bbl(i,J))) )*G%IareaT(i,j))
     enddo
   enddo
-!$OMP end parallel
+  !$OMP end parallel
 
 end subroutine set_BBL_TKE
 
@@ -1942,7 +1992,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
 
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(param_file, mdl, "SET_DIFF_2018_ANSWERS", CS%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
@@ -1965,7 +2015,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
     call get_param(param_file, mdl, "ML_RAD_BUG", CS%ML_rad_bug, &
                  "If true use code with a bug that reduces the energy available "//&
                  "in the transition layer by a factor of the inverse of the energy "//&
-                 "deposition lenthscale (in m).", default=.true.)
+                 "deposition lenthscale (in m).", default=.false.)
     call get_param(param_file, mdl, "ML_RAD_KD_MAX", CS%ML_rad_kd_max, &
                  "The maximum diapycnal diffusivity due to turbulence "//&
                  "radiated from the base of the mixed layer. "//&
@@ -1982,7 +2032,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  "mixed layer code. This is only used if ML_RADIATION is true.", default=.true.)
     call get_param(param_file, mdl, "MSTAR", CS%mstar, &
                  "The ratio of the friction velocity cubed to the TKE "//&
-                 "input to the mixed layer.", "units=nondim", default=1.2)
+                 "input to the mixed layer.", units="nondim", default=1.2)
     call get_param(param_file, mdl, "TKE_DECAY", CS%TKE_decay, &
                  "The ratio of the natural Ekman depth to the TKE decay scale.", &
                  units="nondim", default=2.5)
@@ -2060,8 +2110,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   call get_param(param_file, mdl, "KD", CS%Kd, &
                  "The background diapycnal diffusivity of density in the "//&
                  "interior. Zero or the molecular value, ~1e-7 m2 s-1, "//&
-                 "may be used.", units="m2 s-1", scale=US%m2_s_to_Z2_T, &
-                 fail_if_missing=.true.)
+                 "may be used.", default=0.0, units="m2 s-1", scale=US%m2_s_to_Z2_T)
   call get_param(param_file, mdl, "KD_MIN", CS%Kd_min, &
                  "The minimum diapycnal diffusivity.", &
                  units="m2 s-1", default=0.01*CS%Kd*US%Z2_T_to_m2_s, scale=US%m2_s_to_Z2_T)
@@ -2170,7 +2219,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
          "Bryan-Lewis and internal tidal dissipation are both enabled. Choose one.")
 
   CS%useKappaShear = kappa_shear_init(Time, G, GV, US, param_file, CS%diag, CS%kappaShear_CSp)
-  if (CS%useKappaShear) CS%Vertex_Shear = kappa_shear_at_vertex(param_file)
+  CS%Vertex_Shear = kappa_shear_at_vertex(param_file)
 
   if (CS%useKappaShear) &
     id_clock_kappaShear = cpu_clock_id('(Ocean kappa_shear)', grain=CLOCK_MODULE)

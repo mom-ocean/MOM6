@@ -80,7 +80,7 @@ end type surface
 type, public :: thermo_var_ptrs
   ! If allocated, the following variables have nz layers.
   real, pointer :: T(:,:,:) => NULL() !< Potential temperature [degC].
-  real, pointer :: S(:,:,:) => NULL() !< Salnity [PSU] or [gSalt/kg], generically [ppt].
+  real, pointer :: S(:,:,:) => NULL() !< Salinity [PSU] or [gSalt/kg], generically [ppt].
   real, pointer :: p_surf(:,:) => NULL() !< Ocean surface pressure used in equation of state
                          !! calculations [R L2 T-2 ~> Pa]
   type(EOS_type), pointer :: eqn_of_state => NULL() !< Type that indicates the
@@ -116,6 +116,12 @@ type, public :: thermo_var_ptrs
                          !< Any internal or geothermal heat sources that
                          !! have been applied to the ocean since the last call to
                          !! calculate_surface_state [degC R Z ~> degC kg m-2].
+  ! The following variables are most normally not used but when they are they
+  ! will be either set by parameterizations or prognostic.
+  real, pointer :: varT(:,:,:) => NULL() !< SGS variance of potential temperature [degC2].
+  real, pointer :: varS(:,:,:) => NULL() !< SGS variance of salinity [ppt2].
+  real, pointer :: covarTS(:,:,:) => NULL() !< SGS covariance of salinity and potential
+                                  !! temperature [degC ppt].
 end type thermo_var_ptrs
 
 !> Pointers to all of the prognostic variables allocated in MOM_variables.F90 and MOM.F90.
@@ -179,6 +185,8 @@ type, public :: accel_diag_ptrs
   real, pointer :: rv_x_v(:,:,:) => NULL()   !< rv_x_v = rv * v at u [L T-2 ~> m s-2]
   real, pointer :: rv_x_u(:,:,:) => NULL()   !< rv_x_u = rv * u at v [L T-2 ~> m s-2]
 
+  real, pointer :: diag_hfrac_u(:,:,:) => NULL() !< Fractional layer thickness at u points
+  real, pointer :: diag_hfrac_v(:,:,:) => NULL() !< Fractional layer thickness at v points
 end type accel_diag_ptrs
 
 !> Pointers to arrays with transports, which can later be used for derived diagnostics, like energy balances.
