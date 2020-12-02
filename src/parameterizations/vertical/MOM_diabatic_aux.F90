@@ -30,7 +30,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public diabatic_aux_init, diabatic_aux_end
-public make_frazil, adjust_salt, differential_diffuse_T_S, triDiagTS
+public make_frazil, adjust_salt, differential_diffuse_T_S, triDiagTS, triDiagTS_Eulerian
 public find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut, set_pen_shortwave
 public diagnoseMLDbyEnergy
 
@@ -395,9 +395,10 @@ subroutine triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, T, S)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: S  !< Layer salinities [ppt].
 
   ! Local variables
-  real :: b1(SZIB_(G)), d1(SZIB_(G)) ! b1, c1, and d1 are variables used by the
-  real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
-  real :: h_tr, b_denom_1
+  real :: b1(SZIB_(G))          ! A variable used by the tridiagonal solver [H-1 ~> m-2 or m2 kg-1].
+  real :: d1(SZIB_(G))          ! A variable used by the tridiagonal solver [nondim].
+  real :: c1(SZIB_(G),SZK_(G))  ! A variable used by the tridiagonal solver [nondim].
+  real :: h_tr, b_denom_1       ! Two temporary thicknesses [H ~> m or kg m-2].
   integer :: i, j, k
 
   !$OMP parallel do default(shared) private(h_tr,b1,d1,c1,b_denom_1)
@@ -425,9 +426,58 @@ subroutine triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, T, S)
   enddo
 end subroutine triDiagTS
 
+!> This is a simple tri-diagonal solver for T and S, with mixing across interfaces but no net
+!! transfer of mass.
+subroutine triDiagTS_Eulerian(G, GV, is, ie, js, je, hold, ent, T, S)
+  type(ocean_grid_type),                    intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
+  integer,                                  intent(in)    :: is   !< The start i-index to work on.
+  integer,                                  intent(in)    :: ie   !< The end i-index to work on.
+  integer,                                  intent(in)    :: js   !< The start j-index to work on.
+  integer,                                  intent(in)    :: je   !< The end j-index to work on.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: hold !< The layer thicknesses before entrainment,
+                                                                  !! [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)  :: ent  !< The amount of fluid mixed across an interface
+                                                                  !! within this time step [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: T    !< Layer potential temperatures [degC].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: S    !< Layer salinities [ppt].
+
+  ! Local variables
+  real :: b1(SZIB_(G))          ! A variable used by the tridiagonal solver [H-1 ~> m-2 or m2 kg-1].
+  real :: d1(SZIB_(G))          ! A variable used by the tridiagonal solver [nondim].
+  real :: c1(SZIB_(G),SZK_(G))  ! A variable used by the tridiagonal solver [nondim].
+  real :: h_tr, b_denom_1       ! Two temporary thicknesses [H ~> m or kg m-2].
+  integer :: i, j, k
+
+  !$OMP parallel do default(shared) private(h_tr,b1,d1,c1,b_denom_1)
+  do j=js,je
+    do i=is,ie
+      h_tr = hold(i,j,1) + GV%H_subroundoff
+      b1(i) = 1.0 / (h_tr + ent(i,j,2))
+      d1(i) = h_tr * b1(i)
+      T(i,j,1) = (b1(i)*h_tr)*T(i,j,1)
+      S(i,j,1) = (b1(i)*h_tr)*S(i,j,1)
+    enddo
+    do k=2,G%ke ; do i=is,ie
+      c1(i,k) = ent(i,j,K) * b1(i)
+      h_tr = hold(i,j,k) + GV%H_subroundoff
+      b_denom_1 = h_tr + d1(i)*ent(i,j,K)
+      b1(i) = 1.0 / (b_denom_1 + ent(i,j,K+1))
+      d1(i) = b_denom_1 * b1(i)
+      T(i,j,k) = b1(i) * (h_tr*T(i,j,k) + ent(i,j,K)*T(i,j,k-1))
+      S(i,j,k) = b1(i) * (h_tr*S(i,j,k) + ent(i,j,K)*S(i,j,k-1))
+    enddo ; enddo
+    do k=G%ke-1,1,-1 ; do i=is,ie
+      T(i,j,k) = T(i,j,k) + c1(i,k+1)*T(i,j,k+1)
+      S(i,j,k) = S(i,j,k) + c1(i,k+1)*S(i,j,k+1)
+    enddo ; enddo
+  enddo
+end subroutine triDiagTS_Eulerian
+
+
 !>   This subroutine calculates u_h and v_h (velocities at thickness
 !! points), optionally using the entrainment amounts passed in as arguments.
-subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb)
+subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb, zero_mix)
   type(ocean_grid_type),     intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),   intent(in)  :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),     intent(in)  :: US   !< A dimensional unit scaling type
@@ -449,6 +499,9 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb)
                      optional, intent(in)  :: eb !< The amount of fluid entrained from the layer
                                                  !! below within this time step [H ~> m or kg m-2].
                                                  !! Omitting eb is the same as setting it to 0.
+  logical,           optional, intent(in)  :: zero_mix !< If true, do the calculation of u_h and
+                                                 !! v_h as though ea and eb were being supplied with
+                                                 !! uniformly zero values.
 
   ! local variables
   real :: b_denom_1    ! The first term in the denominator of b1 [H ~> m or kg m-2].
@@ -459,7 +512,7 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb)
   real :: a_e(SZI_(G)), a_w(SZI_(G))  ! velocity points, ~1/2 in the open
                                       ! ocean, nondimensional.
   real :: sum_area, Idenom
-  logical :: mix_vertically
+  logical :: mix_vertically, zero_mixing
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   call cpu_clock_begin(id_clock_uv_at_h)
@@ -469,9 +522,11 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb)
   if (present(ea) .neqv. present(eb)) call MOM_error(FATAL, &
       "find_uv_at_h: Either both ea and eb or neither one must be present "// &
       "in call to find_uv_at_h.")
-!$OMP parallel do default(none) shared(is,ie,js,je,G,GV,mix_vertically,h,h_neglect, &
-!$OMP                                  eb,u_h,u,v_h,v,nz,ea)                     &
-!$OMP                          private(sum_area,Idenom,a_w,a_e,a_s,a_n,b_denom_1,b1,d1,c1)
+  zero_mixing = .false. ; if (present(zero_mix)) zero_mixing = zero_mix
+  if (zero_mixing) mix_vertically = .false.
+  !$OMP parallel do default(none) shared(is,ie,js,je,G,GV,mix_vertically,zero_mixing,h, &
+  !$OMP                                  h_neglect,ea,eb,u_h,u,v_h,v,nz)                &
+  !$OMP                          private(sum_area,Idenom,a_w,a_e,a_s,a_n,b_denom_1,b1,d1,c1)
   do j=js,je
     do i=is,ie
       sum_area = G%areaCu(I-1,j) + G%areaCu(I,j)
@@ -514,6 +569,17 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb)
       do k=nz-1,1,-1 ; do i=is,ie
         u_h(i,j,k) = u_h(i,j,k) + c1(i,k+1)*u_h(i,j,k+1)
         v_h(i,j,k) = v_h(i,j,k) + c1(i,k+1)*v_h(i,j,k+1)
+      enddo ; enddo
+    elseif (zero_mixing) then
+      do i=is,ie
+        b1(i) = 1.0 / (h(i,j,1) + h_neglect)
+        u_h(i,j,1) = (h(i,j,1)*b1(i)) * (a_e(i)*u(I,j,1) + a_w(i)*u(I-1,j,1))
+        v_h(i,j,1) = (h(i,j,1)*b1(i)) * (a_n(i)*v(i,J,1) + a_s(i)*v(i,J-1,1))
+      enddo
+      do k=2,nz ; do i=is,ie
+        b1(i) = 1.0 / (h(i,j,k) + h_neglect)
+        u_h(i,j,k) = (h(i,j,k) * (a_e(i)*u(I,j,k) + a_w(i)*u(I-1,j,k))) * b1(i)
+        v_h(i,j,k) = (h(i,j,k) * (a_n(i)*v(i,J,k) + a_s(i)*v(i,J-1,k))) * b1(i)
       enddo ; enddo
     else
       do k=1,nz ; do i=is,ie
