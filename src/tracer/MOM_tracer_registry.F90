@@ -371,7 +371,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
   type(tracer_type), pointer :: Tr=>NULL()
   integer :: i, j, k, is, ie, js, je, nz, m, m2, nTr_in
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
@@ -695,7 +695,7 @@ subroutine postALE_tracer_diagnostics(Reg, G, GV, diag, dt)
   real    :: work(SZI_(G),SZJ_(G),SZK_(G))
   real    :: Idt ! The inverse of the time step [T-1 ~> s-1]
   integer :: i, j, k, is, ie, js, je, nz, m, m2
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   ! The "if" is to avoid NaNs if the diagnostic is called for a zero length interval
   Idt = 0.0 ; if (dt /= 0.0) Idt = 1.0 / dt
@@ -729,7 +729,7 @@ subroutine post_tracer_diagnostics_at_sync(Reg, h, diag_prev, diag, G, GV, dt)
   real    :: Idt ! The inverse of the time step [T-1 ~> s-1]
   type(tracer_type), pointer :: Tr=>NULL()
   integer :: i, j, k, is, ie, js, je, nz, m
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   Idt = 0.; if (dt/=0.) Idt = 1.0 / dt ! The "if" is in case the diagnostic is called for a zero length interval
 
@@ -779,7 +779,7 @@ subroutine post_tracer_transport_diagnostics(G, GV, Reg, h_diag, diag)
   real    :: work2d(SZI_(G),SZJ_(G))
   type(tracer_type), pointer :: Tr=>NULL()
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   do m=1,Reg%ntr ; if (Reg%Tr(m)%registry_diags) then
     Tr => Reg%Tr(m)
@@ -811,10 +811,8 @@ subroutine MOM_tracer_chksum(mesg, Tr, ntr, G)
   integer,                  intent(in) :: ntr    !< number of registered tracers
   type(ocean_grid_type),    intent(in) :: G      !< ocean grid structure
 
-  integer :: is, ie, js, je, nz
-  integer :: i, j, k, m
+  integer :: m
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   do m=1,ntr
     call hchksum(Tr(m)%t, mesg//trim(Tr(m)%name), G%HI)
   enddo
@@ -822,9 +820,10 @@ subroutine MOM_tracer_chksum(mesg, Tr, ntr, G)
 end subroutine MOM_tracer_chksum
 
 !> Calculates and prints the global inventory of all tracers in the registry.
-subroutine MOM_tracer_chkinv(mesg, G, h, Tr, ntr)
+subroutine MOM_tracer_chkinv(mesg, G, GV, h, Tr, ntr)
   character(len=*),                         intent(in) :: mesg !< message that appears on the chksum lines
   type(ocean_grid_type),                    intent(in) :: G    !< ocean grid structure
+  type(verticalGrid_type),                  intent(in) :: GV   !< The ocean's vertical grid structure
   type(tracer_type), dimension(:),          intent(in) :: Tr   !< array of all of registered tracers
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses
   integer,                                  intent(in) :: ntr  !< number of registered tracers
@@ -834,7 +833,7 @@ subroutine MOM_tracer_chkinv(mesg, G, h, Tr, ntr)
   integer :: is, ie, js, je, nz
   integer :: i, j, k, m
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   do m=1,ntr
     do k=1,nz ; do j=js,je ; do i=is,ie
       tr_inv(i,j,k) = Tr(m)%t(i,j,k)*h(i,j,k)*G%US%L_to_m**2*G%areaT(i,j)*G%mask2dT(i,j)

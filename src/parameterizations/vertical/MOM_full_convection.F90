@@ -94,7 +94,7 @@ subroutine full_convection(G, GV, US, h, tv, T_adj, S_adj, p_surf, Kddt_smooth, 
   else
     is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   endif
-  nz = G%ke
+  nz = GV%ke
 
   if (.not.associated(tv%eqn_of_state)) return
 
@@ -360,7 +360,7 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
   else
     is = G%isc ; ie = G%iec
   endif
-  nz = G%ke
+  nz = GV%ke
 
   h_neglect = GV%H_subroundoff
   kap_dt_x2 = 2.0*Kddt

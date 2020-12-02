@@ -48,10 +48,10 @@ contains
 !> Sets up the the inverse restoration time, and the values towards which the interface heights,
 !! velocities and tracers should be restored within the sponges for the RGC test case.
 subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, PF, use_ALE, CSp, ACSp)
-  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
+  type(ocean_grid_type),   intent(in) :: G  !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
-  type(unit_scale_type),   intent(in) :: US  !< A dimensional unit scaling type
-  type(thermo_var_ptrs), intent(in) :: tv   !< A structure containing pointers
+  type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
+  type(thermo_var_ptrs),   intent(in) :: tv !< A structure containing pointers
                                             !! to any available thermodynamic
                                             !! fields, potential temperature and
                                             !! salinity or mixed layer density.
@@ -93,7 +93,7 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, PF, use_ALE, CSp, ACSp)
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, iscB, iecB, jscB, jecB
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   iscB = G%iscB ; iecB = G%iecB; jscB = G%jscB ; jecB = G%jecB
 
@@ -181,8 +181,7 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, PF, use_ALE, CSp, ACSp)
     call read_data(filename,h_var,h(:,:,:), domain=G%Domain%mpp_domain)
     call pass_var(h, G%domain)
 
-    !call initialize_ALE_sponge(Idamp, h, nz, G, PF, ACSp)
-    call initialize_ALE_sponge(Idamp, G, PF, ACSp, h, nz)
+    call initialize_ALE_sponge(Idamp, G, GV, PF, ACSp, h, nz)
 
     !  The remaining calls to set_up_sponge_field can be in any order. !
     if ( associated(tv%T) ) then

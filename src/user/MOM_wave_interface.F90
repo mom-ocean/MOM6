@@ -369,9 +369,9 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
 
   ! Allocate and initialize
   ! a. Stokes driftProfiles
-  allocate(CS%Us_x(G%isdB:G%IedB,G%jsd:G%jed,G%ke))
+  allocate(CS%Us_x(G%isdB:G%IedB,G%jsd:G%jed,GV%ke))
   CS%Us_x(:,:,:) = 0.0
-  allocate(CS%Us_y(G%isd:G%Ied,G%jsdB:G%jedB,G%ke))
+  allocate(CS%Us_y(G%isd:G%Ied,G%jsdB:G%jedB,GV%ke))
   CS%Us_y(:,:,:) = 0.0
   ! b. Surface Values
   allocate(CS%US0_x(G%isdB:G%iedB,G%jsd:G%jed))
@@ -385,7 +385,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
   CS%La_turb (:,:) = 0.0
   ! d. Viscosity for Stokes drift
   if (CS%StokesMixing) then
-    allocate(CS%KvS(G%isd:G%Ied,G%jsd:G%jed,G%ke))
+    allocate(CS%KvS(G%isd:G%Ied,G%jsd:G%jed,GV%ke))
     CS%KvS(:,:,:) = 0.0
   endif
 
@@ -502,7 +502,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
         IIm1 = max(1,II-1)
         Bottom = 0.0
         MidPoint = 0.0
-        do kk = 1,G%ke
+        do kk = 1,GV%ke
           Top = Bottom
           MidPoint = Bottom - GV%H_to_Z*0.25*(h(II,jj,kk)+h(IIm1,jj,kk))
           Bottom = Bottom - GV%H_to_Z*0.5*(h(II,jj,kk)+h(IIm1,jj,kk))
@@ -515,7 +515,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
         JJm1 = max(1,JJ-1)
         Bottom = 0.0
         MidPoint = 0.0
-        do kk = 1,G%ke
+        do kk = 1,GV%ke
           Top = Bottom
           MidPoint = Bottom - GV%H_to_Z*0.25*(h(ii,JJ,kk)+h(ii,JJm1,kk))
           Bottom = Bottom - GV%H_to_Z*0.5*(h(ii,JJ,kk)+h(ii,JJm1,kk))
@@ -549,7 +549,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
         enddo
         ! 2. Second compute the level averaged Stokes drift
         bottom = 0.0
-        do kk = 1,G%ke
+        do kk = 1,GV%ke
           Top = Bottom
           IIm1 = max(II-1,1)
           MidPoint = Bottom - GV%H_to_Z*0.25*(h(II,jj,kk)+h(IIm1,jj,kk))
@@ -592,7 +592,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
         enddo
         ! Compute the level averages.
         bottom = 0.0
-        do kk = 1,G%ke
+        do kk = 1,GV%ke
           Top = Bottom
           JJm1 = max(JJ-1,1)
           MidPoint = Bottom - GV%H_to_Z*0.25*(h(ii,JJ,kk)+h(ii,JJm1,kk))
@@ -624,7 +624,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
       do II = G%isdB,G%iedB
         do jj = G%jsd,G%jed
           bottom = 0.0
-          do kk = 1,G%ke
+          do kk = 1,GV%ke
             Top = Bottom
             IIm1 = max(II-1,1)
             MidPoint = Bottom - GV%H_to_Z*0.25*(h(II,jj,kk)+h(IIm1,jj,kk))
@@ -642,7 +642,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
       do ii = G%isd,G%ied
         do JJ = G%jsdB,G%jedB
           Bottom = 0.0
-          do kk=1, G%ke
+          do kk=1, GV%ke
             Top = Bottom
             JJm1 = max(JJ-1,1)
             MidPoint = Bottom - GV%H_to_Z*0.25*(h(ii,JJ,kk)+h(ii,JJm1,kk))
@@ -664,7 +664,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
       DHH85_is_set = .true.
     endif
   else! Keep this else, fallback to 0 Stokes drift
-    do kk= 1,G%ke
+    do kk= 1,GV%ke
       do II = G%isdB,G%iedB
         do jj = G%jsd,G%jed
           CS%Us_x(II,jj,kk) = 0.
@@ -921,7 +921,7 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
     endif
     ContinueLoop = .true.
     bottom = 0.0
-    do kk = 1,G%ke
+    do kk = 1,GV%ke
       Top = Bottom
       MidPoint = Bottom + GV%H_to_Z*0.5*h(kk)
       Bottom = Bottom + GV%H_to_Z*h(kk)
@@ -933,7 +933,7 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
   endif
 
   if (WaveMethod==TESTPROF) then
-    do kk = 1,G%ke
+    do kk = 1,GV%ke
       US_H(kk) = 0.5*(WAVES%US_X(I,j,kk)+WAVES%US_X(I-1,j,kk))
       VS_H(kk) = 0.5*(WAVES%US_Y(i,J,kk)+WAVES%US_Y(i,J-1,kk))
     enddo
@@ -1238,7 +1238,7 @@ subroutine StokesMixing(G, GV, dt, h, u, v, Waves )
 ! This is a template to think about down-Stokes mixing.
 ! This is not ready for use...
 
-  do k = 1, G%ke
+  do k = 1, GV%ke
     do j = G%jsc, G%jec
       do I = G%iscB, G%iecB
         h_lay = GV%H_to_Z*0.5*(h(i,j,k)+h(i+1,j,k))
@@ -1248,7 +1248,7 @@ subroutine StokesMixing(G, GV, dt, h, u, v, Waves )
                (waves%us_x(i,j,k-1)-waves%us_x(i,j,k)) / &
                (0.5*(h_lay + GV%H_to_Z*0.5*(h(i,j,k-1)+h(i+1,j,k-1)) ))
         dTauDn = 0.0
-        if (k < G%ke-1) &
+        if (k < GV%ke-1) &
           dTauDn = 0.5*(waves%Kvs(i,j,k+1)+waves%Kvs(i+1,j,k+1)) * &
                (waves%us_x(i,j,k)-waves%us_x(i,j,k+1)) / &
                (0.5*(h_lay + GV%H_to_Z*0.5*(h(i,j,k+1)+h(i+1,j,k+1)) ))
@@ -1257,7 +1257,7 @@ subroutine StokesMixing(G, GV, dt, h, u, v, Waves )
     enddo
   enddo
 
-  do k = 1, G%ke
+  do k = 1, GV%ke
     do J = G%jscB, G%jecB
       do i = G%isc, G%iec
         h_Lay = GV%H_to_Z*0.5*(h(i,j,k)+h(i,j+1,k))
@@ -1267,7 +1267,7 @@ subroutine StokesMixing(G, GV, dt, h, u, v, Waves )
                (waves%us_y(i,j,k-1)-waves%us_y(i,j,k)) / &
                (0.5*(h_lay + GV%H_to_Z*0.5*(h(i,j,k-1)+h(i,j+1,k-1)) ))
         dTauDn = 0.0
-        if (k < G%ke-1) &
+        if (k < GV%ke-1) &
           dTauDn =0.5*(waves%Kvs(i,j,k+1)+waves%Kvs(i,j+1,k+1)) * &
                (waves%us_y(i,j,k)-waves%us_y(i,j,k+1)) / &
                (0.5*(h_lay + GV%H_to_Z*0.5*(h(i,j,k+1)+h(i,j+1,k+1)) ))
@@ -1303,7 +1303,7 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES, US)
   real :: DVel ! A rescaled velocity change [m s-1 T-1 ~> m s-2]
   integer :: i,j,k
 
-  do k = 1, G%ke
+  do k = 1, GV%ke
     do j = G%jsc, G%jec
       do I = G%iscB, G%iecB
         DVel = 0.25*(WAVES%us_y(i,j+1,k)+WAVES%us_y(i-1,j+1,k))*G%CoriolisBu(i,j+1) + &
@@ -1313,7 +1313,7 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES, US)
     enddo
   enddo
 
-  do k = 1, G%ke
+  do k = 1, GV%ke
     do J = G%jscB, G%jecB
       do i = G%isc, G%iec
         DVel = 0.25*(WAVES%us_x(i+1,j,k)+WAVES%us_x(i+1,j-1,k))*G%CoriolisBu(i+1,j) + &

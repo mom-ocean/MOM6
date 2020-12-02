@@ -583,7 +583,7 @@ subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
   !Define the downsampled axes
   call set_axes_info_dsamp(G, GV, param_file, diag_cs, id_zl_native, id_zi_native)
 
-  call diag_grid_storage_init(diag_CS%diag_grid_temp, G, diag_CS)
+  call diag_grid_storage_init(diag_CS%diag_grid_temp, G, GV, diag_CS)
 
 end subroutine set_axes_info
 
@@ -3584,9 +3584,10 @@ subroutine log_chksum_diag(docunit, description, chksum)
 end subroutine log_chksum_diag
 
 !> Allocates fields necessary to store diagnostic remapping fields
-subroutine diag_grid_storage_init(grid_storage, G, diag)
+subroutine diag_grid_storage_init(grid_storage, G, GV, diag)
   type(diag_grid_storage), intent(inout) :: grid_storage !< Structure containing a snapshot of the target grids
   type(ocean_grid_type),   intent(in)    :: G           !< Horizontal grid
+  type(verticalGrid_type), intent(in)    :: GV          !< ocean vertical grid structure
   type(diag_ctrl),         intent(in)    :: diag        !< Diagnostic control structure used as the contructor
                                                         !! template for this routine
 
@@ -3597,7 +3598,7 @@ subroutine diag_grid_storage_init(grid_storage, G, diag)
   if (grid_storage%num_diag_coords < 1) return
 
   ! Allocate memory for the native space
-  allocate(grid_storage%h_state(G%isd:G%ied,G%jsd:G%jed, G%ke))
+  allocate( grid_storage%h_state(G%isd:G%ied, G%jsd:G%jed, GV%ke))
   ! Allocate diagnostic remapping structures
   allocate(grid_storage%diag_grids(diag%num_diag_coords))
   ! Loop through and allocate memory for the grid on each target coordinate

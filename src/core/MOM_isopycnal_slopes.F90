@@ -113,7 +113,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   else
     is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   endif
-  nz = G%ke ; IsdB = G%IsdB
+  nz = GV%ke ; IsdB = G%IsdB
 
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect**2
   Z_to_L = US%Z_to_L ; H_to_Z = GV%H_to_Z

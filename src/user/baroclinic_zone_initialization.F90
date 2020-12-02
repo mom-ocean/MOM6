@@ -96,7 +96,7 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, US, param_f
   real      :: PI                   ! 3.1415926... calculated as 4*atan(1)
   logical :: just_read    ! If true, just read parameters but set nothing.
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   call bcz_params(G, GV, US, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz, &

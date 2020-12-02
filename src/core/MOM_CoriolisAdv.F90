@@ -233,7 +233,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "MOM_CoriolisAdv: Module must be initialized before it is used.")
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
   h_neglect = GV%H_subroundoff
   eps_vel = 1.0e-10*US%m_s_to_L_T
   h_tiny = GV%Angstrom_H  ! Perhaps this should be set to h_neglect instead.
@@ -580,7 +580,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
     endif
 
     ! Calculate KE and the gradient of KE
-    call gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, US, CS)
+    call gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
 
     ! Calculate the tendencies of zonal velocity due to the Coriolis
     ! force and momentum advection.  On a Cartesian grid, this is
@@ -848,7 +848,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
     ! 3D diagnostics hf_gKEu etc. are commented because there is no clarity on proper remapping grid option.
     ! The code is retained for degugging purposes in the future.
     !if (CS%id_hf_gKEu > 0) then
-    !  allocate(hf_gKEu(G%IsdB:G%IedB,G%jsd:G%jed,G%ke))
+    !  allocate(hf_gKEu(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
     !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     !    hf_gKEu(I,j,k) = AD%gradKEu(I,j,k) * AD%diag_hfrac_u(I,j,k)
     !  enddo ; enddo ; enddo
@@ -856,7 +856,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
     !endif
 
     !if (CS%id_hf_gKEv > 0) then
-    !  allocate(hf_gKEv(G%isd:G%ied,G%JsdB:G%JedB,G%ke))
+    !  allocate(hf_gKEv(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
     !  do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     !    hf_gKEv(i,J,k) = AD%gradKEv(i,J,k) * AD%diag_hfrac_v(i,J,k)
     !  enddo ; enddo ; enddo
@@ -884,7 +884,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
     endif
 
     !if (CS%id_hf_rvxv > 0) then
-    !  allocate(hf_rvxv(G%IsdB:G%IedB,G%jsd:G%jed,G%ke))
+    !  allocate(hf_rvxv(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
     !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     !    hf_rvxv(I,j,k) = AD%rv_x_v(I,j,k) * AD%diag_hfrac_u(I,j,k)
     !  enddo ; enddo ; enddo
@@ -892,7 +892,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
     !endif
 
     !if (CS%id_hf_rvxu > 0) then
-    !  allocate(hf_rvxu(G%isd:G%ied,G%JsdB:G%JedB,G%ke))
+    !  allocate(hf_rvxu(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
     !  do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     !    hf_rvxu(i,J,k) = AD%rv_x_u(i,J,k) * AD%diag_hfrac_v(i,J,k)
     !  enddo ; enddo ; enddo
@@ -924,8 +924,9 @@ end subroutine CorAdCalc
 
 
 !> Calculates the acceleration due to the gradient of kinetic energy.
-subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, US, CS)
+subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
   type(ocean_grid_type),                      intent(in)  :: G !< Ocen grid structure
+  type(verticalGrid_type),                    intent(in)  :: GV !< Vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  intent(in)  :: u !< Zonal velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)  :: v !< Meridional velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
@@ -944,7 +945,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, US, CS)
   real :: um2a, up2a, vm2a, vp2a ! Temporary variables [L4 T-2 ~> m4 s-2].
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, n
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
 

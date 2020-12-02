@@ -114,7 +114,7 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, US, param_file, just_read_par
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40) :: verticalCoordinate
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -245,7 +245,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   character(len=40) :: verticalCoordinate
   real    :: dome2d_width_bay, dome2d_width_bottom, dome2d_depth_bay
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -303,9 +303,9 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
 
     case ( REGRIDDING_LAYER )
 
-      delta_S = S_range / ( G%ke - 1.0 )
+      delta_S = S_range / ( GV%ke - 1.0 )
       S(:,:,1) = S_ref
-      do k = 2,G%ke
+      do k = 2,GV%ke
         S(:,:,k) = S(:,:,k-1) + delta_S
       enddo
 
@@ -317,7 +317,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
 
   ! Modify salinity and temperature when z coordinates are used
   if ( coordinateMode(verticalCoordinate) == REGRIDDING_ZSTAR ) then
-    index_bay_z = Nint ( dome2d_depth_bay * G%ke )
+    index_bay_z = Nint ( dome2d_depth_bay * GV%ke )
     do j = G%jsc,G%jec ; do i = G%isc,G%iec
       x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
       if ( x <= dome2d_width_bay ) then
@@ -332,20 +332,20 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
     do i = G%isc,G%iec ; do j = G%jsc,G%jec
       x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
       if ( x <= dome2d_width_bay ) then
-        S(i,j,1:G%ke) = S_ref + S_range;    ! Use for sigma coordinates
-        T(i,j,1:G%ke) = 1.0;                ! Use for sigma coordinates
+        S(i,j,1:GV%ke) = S_ref + S_range;    ! Use for sigma coordinates
+        T(i,j,1:GV%ke) = 1.0;                ! Use for sigma coordinates
       endif
     enddo ; enddo
   endif
 
   ! Modify temperature when rho coordinates are used
-  T(G%isc:G%iec,G%jsc:G%jec,1:G%ke) = 0.0
+  T(G%isc:G%iec,G%jsc:G%jec,1:GV%ke) = 0.0
   if (( coordinateMode(verticalCoordinate) == REGRIDDING_RHO ) .or. &
       ( coordinateMode(verticalCoordinate) == REGRIDDING_LAYER )) then
     do i = G%isc,G%iec ; do j = G%jsc,G%jec
       x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
       if ( x <= dome2d_width_bay ) then
-        T(i,j,G%ke) = 1.0
+        T(i,j,GV%ke) = 1.0
       endif
     enddo ; enddo
   endif
@@ -381,7 +381,7 @@ subroutine DOME2d_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, AC
   real :: dummy1, x, z
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   call get_param(param_file, mdl, "DOME2D_WEST_SPONGE_TIME_SCALE", dome2d_west_sponge_time_scale, &
@@ -463,7 +463,7 @@ subroutine DOME2d_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, AC
       enddo
     enddo ; enddo
     ! Store the grid on which the T/S sponge data will reside
-    call initialize_ALE_sponge(Idamp, G, param_file, ACSp, h, nz)
+    call initialize_ALE_sponge(Idamp, G, GV, param_file, ACSp, h, nz)
 
     ! Construct temperature and salinity on the arbitrary grid
     T(:,:,:) = 0.0 ; S(:,:,:) = 0.0

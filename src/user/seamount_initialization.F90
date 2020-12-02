@@ -99,7 +99,7 @@ subroutine seamount_initialize_thickness ( h, G, GV, US, param_file, just_read_p
   logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -210,7 +210,7 @@ subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=20) :: verticalCoordinate, density_profile
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 

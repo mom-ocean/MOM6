@@ -64,8 +64,7 @@ subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, US, haloshift, sy
 
   real :: scale_vel ! The scaling factor to convert velocities to [m s-1]
   logical :: sym
-  integer :: is, ie, js, je, nz, hs
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  integer :: hs
 
   ! Note that for the chksum calls to be useful for reproducing across PE
   ! counts, there must be no redundant points, so all variables use is..ie
@@ -99,10 +98,9 @@ subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, GV, US, haloshift, symmetric)
   logical,               optional, intent(in) :: symmetric !< If true, do checksums on the fully
                                                     !! symmetric computational domain.
   real :: L_T_to_m_s ! A rescaling factor for velocities [m T s-1 L-1 ~> nondim] or [nondim]
-  integer :: is, ie, js, je, nz, hs
+  integer :: hs
   logical :: sym
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   L_T_to_m_s = 1.0 ; if (present(US)) L_T_to_m_s = US%L_T_to_m_s
 
   ! Note that for the chksum calls to be useful for reproducing across PE
@@ -125,9 +123,8 @@ subroutine MOM_thermo_chksum(mesg, tv, G, US, haloshift)
   type(unit_scale_type),    intent(in) :: US   !< A dimensional unit scaling type
   integer,        optional, intent(in) :: haloshift !< The width of halos to check (default 0).
 
-  integer :: is, ie, js, je, nz, hs
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  hs=1; if (present(haloshift)) hs=haloshift
+  integer :: hs
+  hs=1 ; if (present(haloshift)) hs=haloshift
 
   if (associated(tv%T)) call hchksum(tv%T, mesg//" T", G%HI, haloshift=hs)
   if (associated(tv%S)) call hchksum(tv%S, mesg//" S", G%HI, haloshift=hs)
@@ -214,10 +211,8 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, US, p
   logical,        optional, intent(in) :: symmetric !< If true, do checksums on the fully symmetric
                                                     !! computational domain.
 
-  integer :: is, ie, js, je, nz
   logical :: sym
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   sym=.false.; if (present(symmetric)) sym=symmetric
 
   ! Note that for the chksum calls to be useful for reproducing across PE
@@ -277,7 +272,7 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
   character(len=80) :: lMsg
   integer :: is, ie, js, je, nz, i, j, k
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   do_TS = associated(Temp) .and. associated(Salt)
 
   tmp_A(:,:) = 0.0

@@ -79,7 +79,7 @@ subroutine sloshing_initialize_thickness ( h, G, GV, US, param_file, just_read_p
 
   integer :: i, j, k, is, ie, js, je, nx, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
   if (.not.just_read) call log_version(param_file, mdl, version, "")
@@ -203,7 +203,7 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, GV, param_file
   character(len=40)  :: mdl = "initialize_temp_salt_linear" ! This subroutine's
                                                             ! name.
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -221,10 +221,10 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, GV, param_file
   if (just_read) return ! All run-time parameters have been read, so return.
 
   ! Prescribe salinity
-  !delta_S = S_range / ( G%ke - 1.0 )
+  !delta_S = S_range / ( GV%ke - 1.0 )
 
   !S(:,:,1) = S_ref
-  !do k = 2,G%ke
+  !do k = 2,GV%ke
   !  S(:,:,k) = S(:,:,k-1) + delta_S
   !enddo
 
@@ -239,14 +239,14 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, GV, param_file
   enddo ; enddo
 
   ! Prescribe temperature
-  delta_T = T_range / ( G%ke - 1.0 )
+  delta_T = T_range / ( GV%ke - 1.0 )
 
   T(:,:,1) = T_ref
-  do k = 2,G%ke
+  do k = 2,GV%ke
     T(:,:,k) = T(:,:,k-1) + delta_T
   enddo
   kdelta = 2
-  T(:,:,G%ke/2 - (kdelta-1):G%ke/2 + kdelta) = 1.0
+  T(:,:,GV%ke/2 - (kdelta-1):GV%ke/2 + kdelta) = 1.0
 
 end subroutine sloshing_initialize_temperature_salinity
 

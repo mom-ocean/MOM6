@@ -158,8 +158,8 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   real, dimension(SZI_(G),SZJB_(G))         :: vFlx_bulk   !< Total calculated bulk-layer v-flux for the tracer
   real, dimension(SZIB_(G),SZJ_(G))         :: uwork_2d    !< Layer summed u-flux transport
   real, dimension(SZI_(G),SZJB_(G))         :: vwork_2d    !< Layer summed v-flux transport
-  real, dimension(SZI_(G),SZJ_(G),G%ke)     :: tendency    !< tendency array for diagn
-  real, dimension(SZI_(G),SZJ_(G))          :: tendency_2d !< depth integrated content tendency for diagn
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: tendency    !< tendency array for diagnostics
+  real, dimension(SZI_(G),SZJ_(G))          :: tendency_2d !< depth integrated content tendency for diagnostics
   type(tracer_type), pointer                :: Tracer => NULL() !< Pointer to the current tracer
   integer :: remap_method !< Reconstruction method
   integer :: i,j,k,m      !< indices to loop over
@@ -182,7 +182,7 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
 
     ! Interpolate state to interface
     do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
-      call build_reconstructions_1d( CS%remap_CS, G%ke, h(i,j,:), tracer%t(i,j,:), ppoly0_coefs(i,j,:,:), &
+      call build_reconstructions_1d( CS%remap_CS, GV%ke, h(i,j,:), tracer%t(i,j,:), ppoly0_coefs(i,j,:,:), &
                                      ppoly0_E(i,j,:,:), ppoly_S, remap_method, GV%H_subroundoff, GV%H_subroundoff)
     enddo ; enddo
 

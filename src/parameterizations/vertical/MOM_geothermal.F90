@@ -122,7 +122,7 @@ subroutine geothermal_entraining(h, tv, dt, ea, eb, G, GV, US, CS, halo)
   integer :: i, j, k, is, ie, js, je, nz, k2, i2
   integer :: isj, iej, num_left, nkmb, k_tgt
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   if (present(halo)) then
     is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   endif
@@ -400,7 +400,7 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
   logical :: calc_diags ! True if diagnostic tendencies are needed.
   integer :: i, j, k, is, ie, js, je, nz, i2, isj, iej
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   if (present(halo)) then
     is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   endif

@@ -257,7 +257,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
 
   is  = G%isc  ; ie   = G%iec  ; js  = G%jsc  ; je  = G%jec
   Isq = G%IscB ; Ieq  = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  nz  = G%ke   ; nkmb = GV%nk_rho_varies
+  nz  = GV%ke   ; nkmb = GV%nk_rho_varies
 
   ! This value is roughly (pi / (the age of the universe) )^2.
   absurdly_small_freq2 = 1e-34*US%T_to_s**2
@@ -860,7 +860,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
   real    :: IG_Earth  ! Inverse of gravitational acceleration [T2 Z L-2 ~> s2 m-1].
 
   integer :: i, j, k, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (CS%id_mass_wt > 0) then
     do j=js,je ; do i=is,ie ; mass(i,j) = 0.0 ; enddo ; enddo
@@ -975,7 +975,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   real :: KE_h(SZI_(G),SZJ_(G))
 
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   do j=js-1,je ; do i=is-1,ie
@@ -1431,7 +1431,7 @@ subroutine post_transport_diagnostics(G, GV, US, uhtr, vhtr, h, IDs, diag_pre_dy
   real :: H_to_RZ_dt   ! A conversion factor from accumulated transports to fluxes
                           ! [R Z H-1 T-1 ~> kg m-3 s-1 or s-1].
   integer :: i, j, k, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   Idt = 1. / dt_trans
   H_to_RZ_dt = GV%H_to_RZ * Idt
@@ -1526,7 +1526,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
 
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
-  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = G%ke
+  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (associated(CS)) then
@@ -1866,7 +1866,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       long_name='Sea Water Pressure at Sea Floor', standard_name='sea_water_pressure_at_sea_floor', &
       units='Pa', conversion=US%RL2_T2_to_Pa)
 
-  call set_dependent_diagnostics(MIS, ADp, CDp, G, CS)
+  call set_dependent_diagnostics(MIS, ADp, CDp, G, GV, CS)
 
 end subroutine MOM_diagnostics_init
 
@@ -2174,7 +2174,7 @@ end subroutine write_static_fields
 
 
 !> This subroutine sets up diagnostics upon which other diagnostics depend.
-subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, CS)
+subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, GV, CS)
   type(ocean_internal_state), intent(in)    :: MIS !< For "MOM Internal State" a set of pointers to
                                                    !! the fields and accelerations making up ocean
                                                    !! internal physical state.
@@ -2183,12 +2183,13 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, CS)
   type(cont_diag_ptrs),       intent(inout) :: CDp !< Structure pointing to terms in continuity
                                                    !! equation.
   type(ocean_grid_type),      intent(in)    :: G   !< The ocean's grid structure.
+  type(verticalGrid_type),    intent(in)    :: GV   !< ocean vertical grid structure
   type(diagnostics_CS),       pointer       :: CS  !< Pointer to the control structure for this
                                                    !! module.
 
 ! This subroutine sets up diagnostics upon which other diagnostics depend.
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
-  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = G%ke
+  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (associated(CS%dKE_dt) .or. associated(CS%PE_to_KE) .or. &

@@ -284,7 +284,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   real      :: kappa_dt_fill ! diffusivity times a timestep used to fill massless layers [Z2 ~> m2]
 
-  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = G%ke
+  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("set_diffusivity(), MOM_set_diffusivity.F90")
@@ -355,7 +355,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   endif
 
   ! set up arrays for tidal mixing diagnostics
-  call setup_tidal_diagnostics(G, CS%tidal_mixing_CSp)
+  call setup_tidal_diagnostics(G, GV, CS%tidal_mixing_CSp)
 
   if (CS%useKappaShear) then
     if (CS%debug) then
@@ -760,7 +760,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
 
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, k, is, ie, nz, i_rem, kmb, kb_min
-  is = G%isc ; ie = G%iec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; nz = GV%ke
 
   I_dt      = 1.0 / dt
   Omega2    = CS%omega**2
@@ -964,7 +964,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, k, is, ie, nz
 
-  is = G%isc ; ie = G%iec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; nz = GV%ke
   G_Rho0    = (US%L_to_Z**2 * GV%g_Earth) / (GV%Rho0)
   H_neglect = GV%H_subroundoff
 
@@ -1127,7 +1127,7 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
 
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, k, is, ie, nz
-  is = G%isc ; ie = G%iec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; nz = GV%ke
 
   if (associated(tv%eqn_of_state)) then
     do i=is,ie
@@ -1239,7 +1239,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
   logical :: do_diag_Kd_BBL
 
   integer :: i, k, is, ie, nz, i_rem, kb_min
-  is = G%isc ; ie = G%iec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; nz = GV%ke
 
   do_diag_Kd_BBL = associated(Kd_BBL)
 
@@ -1510,7 +1510,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
 
     ! Work upwards from the bottom, accumulating work used until it exceeds the available TKE input
     ! at the bottom.
-    do k=G%ke,2,-1
+    do k=GV%ke,2,-1
       dh = GV%H_to_Z * h(i,j,k) ! Thickness of this level [Z ~> m].
       km1 = max(k-1, 1)
       dhm1 = GV%H_to_Z * h(i,j,km1) ! Thickness of level above [Z ~> m].
@@ -1612,7 +1612,7 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, TKE_to_Kd, Kd_lay,
 
   logical :: do_any, do_i(SZI_(G))
   integer :: i, k, is, ie, nz, kml
-  is = G%isc ; ie = G%iec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; nz = GV%ke
 
   Omega2    = CS%omega**2
   C1_6      = 1.0 / 6.0
@@ -1765,7 +1765,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS, OBC)
     local_open_v_BC = OBC%open_v_BCs_exist_globally
   endif ; endif
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.associated(CS)) call MOM_error(FATAL,"set_BBL_TKE: "//&
          "Module must be initialized before it is used.")
@@ -1932,7 +1932,7 @@ subroutine set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1, rho_0)
 
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, k, k3, is, ie, nz, kmb
-  is = G%isc ; ie = G%iec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; nz = GV%ke
 
   do k=2,nz-1
     if (GV%g_prime(k+1) /= 0.0) then

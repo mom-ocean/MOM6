@@ -145,9 +145,9 @@ contains
 !> This subroutine determines the number of points which are within sponges in this computational
 !! domain.  Only points that have positive values of Iresttime and which mask2dT indicates are ocean
 !! points are included in the sponges.  It also stores the target interface heights.
-subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_data)
-
-  type(ocean_grid_type),            intent(in) :: G !< The ocean's grid structure.
+subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h, nz_data)
+  type(ocean_grid_type),            intent(in) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type),          intent(in) :: GV   !< The ocean's vertical grid structure.
   integer,                          intent(in) :: nz_data !< The total number of sponge input layers.
   real, dimension(SZI_(G),SZJ_(G)), intent(in) :: Iresttime !< The inverse of the restoring time [T-1 ~> s-1].
   type(param_file_type),            intent(in) :: param_file !< A structure indicating the open file
@@ -213,7 +213,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
                  "forms of the same expressions.", default=default_2018_answers)
 
   CS%time_varying_sponges = .false.
-  CS%nz = G%ke
+  CS%nz = GV%ke
   CS%isc = G%isc ; CS%iec = G%iec ; CS%jsc = G%jsc ; CS%jec = G%jec
   CS%isd = G%isd ; CS%ied = G%ied ; CS%jsd = G%jsd ; CS%jed = G%jed
   CS%iscB = G%iscB ; CS%iecB = G%iecB; CS%jscB = G%jscB ; CS%jecB = G%jecB
@@ -389,8 +389,8 @@ end subroutine get_ALE_sponge_thicknesses
 !> This subroutine determines the number of points which are to be restoref in the computational
 !! domain.  Only points that have positive values of Iresttime and which mask2dT indicates are ocean
 !! points are included in the sponges.
-subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
-
+subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS)
+  type(verticalGrid_type),          intent(in) :: GV   !< The ocean's vertical grid structure.
   type(ocean_grid_type),            intent(in) :: G !< The ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G)), intent(in) :: Iresttime !< The inverse of the restoring time [T-1 ~> s-1].
   type(param_file_type),            intent(in) :: param_file !< A structure indicating the open file to parse
@@ -448,7 +448,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
                  "assumed to be on the model grid " , &
                  default=.false.)
   CS%time_varying_sponges = .true.
-  CS%nz = G%ke
+  CS%nz = GV%ke
   CS%isc = G%isc ; CS%iec = G%iec ; CS%jsc = G%jsc ; CS%jec = G%jec
   CS%isd = G%isd ; CS%ied = G%ied ; CS%jsd = G%jsd ; CS%jed = G%jed
   CS%iscB = G%iscB ; CS%iecB = G%iecB; CS%jscB = G%jscB ; CS%jecB = G%jecB
@@ -810,7 +810,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   real :: zTopOfCell, zBottomOfCell ! Heights [Z ~> m].
   integer :: nPoints
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   if (.not.associated(CS)) return
 
   if (.not.CS%remap_answers_2018) then
@@ -986,16 +986,17 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
 end subroutine apply_ALE_sponge
 
 !> Rotate the ALE sponge fields from the input to the model index map.
-subroutine rotate_ALE_sponge(sponge_in, G_in, sponge, G, turns, param_file)
-  type(ALE_sponge_CS),   intent(in) :: sponge_in !< The control structure for this module with the
-                                                 !! original grid rotation
-  type(ocean_grid_type), intent(in) :: G_in      !< The ocean's grid structure with the original rotation.
-  type(ALE_sponge_CS),   pointer    :: sponge    !< A pointer to the control that will be set up with
-                                                 !! the new grid rotation
-  type(ocean_grid_type), intent(in) :: G         !< The ocean's grid structure with the new rotation.
-  integer,               intent(in) :: turns     !< The number of 90-degree turns between grids
-  type(param_file_type), intent(in) :: param_file !< A structure indicating the open file
-                                                 !! to parse for model parameter values.
+subroutine rotate_ALE_sponge(sponge_in, G_in, sponge, G, GV, turns, param_file)
+  type(ALE_sponge_CS),     intent(in) :: sponge_in !< The control structure for this module with the
+                                                   !! original grid rotation
+  type(ocean_grid_type),   intent(in) :: G_in      !< The ocean's grid structure with the original rotation.
+  type(ALE_sponge_CS),     pointer    :: sponge    !< A pointer to the control that will be set up with
+                                                   !! the new grid rotation
+  type(ocean_grid_type),   intent(in) :: G         !< The ocean's grid structure with the new rotation.
+  type(verticalGrid_type), intent(in) :: GV        !< The ocean's vertical grid structure
+  integer,                 intent(in) :: turns     !< The number of 90-degree turns between grids
+  type(param_file_type),   intent(in) :: param_file !< A structure indicating the open file
+                                                   !! to parse for model parameter values.
 
   ! First part: Index construction
   !   1. Reconstruct Iresttime(:,:) from sponge_in
@@ -1041,10 +1042,10 @@ subroutine rotate_ALE_sponge(sponge_in, G_in, sponge, G, turns, param_file)
   call rotate_array(Iresttime_in, turns, Iresttime)
   if (fixed_sponge) then
     call rotate_array(data_h_in, turns, data_h)
-    call initialize_ALE_sponge_fixed(Iresttime, G, param_file, sponge, &
+    call initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, sponge, &
                                      data_h, nz_data)
   else
-    call initialize_ALE_sponge_varying(Iresttime, G, param_file, sponge)
+    call initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, sponge)
   endif
 
   deallocate(Iresttime_in)

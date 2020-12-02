@@ -722,10 +722,11 @@ end subroutine store_stocks
 
 !> This subroutine calls all registered tracer packages to enable them to
 !! add to the surface state returned to the coupler. These routines are optional.
-subroutine call_tracer_surface_state(sfc_state, h, G, CS)
+subroutine call_tracer_surface_state(sfc_state, h, G, GV, CS)
   type(surface),                intent(inout) :: sfc_state !< A structure containing fields that
                                                        !! describe the surface state of the ocean.
   type(ocean_grid_type),        intent(in)    :: G     !< The ocean's grid structure.
+  type(verticalGrid_type),      intent(in)    :: GV    !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                 intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
   type(tracer_flow_control_CS), pointer       :: CS    !< The control structure returned by a
@@ -752,7 +753,7 @@ subroutine call_tracer_surface_state(sfc_state, h, G, CS)
   if (CS%use_OCMIP2_CFC) &
     call OCMIP2_CFC_surface_state(sfc_state, h, G, CS%OCMIP2_CFC_CSp)
   if (CS%use_MOM_generic_tracer) &
-    call MOM_generic_tracer_surface_state(sfc_state, h, G, CS%MOM_generic_tracer_CSp)
+    call MOM_generic_tracer_surface_state(sfc_state, h, G, GV, CS%MOM_generic_tracer_CSp)
 
 end subroutine call_tracer_surface_state
 

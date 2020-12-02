@@ -336,7 +336,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
       call hchksum(h_vol,"h_vol before advect",G%HI)
       call uvchksum("[uv]htr_sub before advect", uhtr_sub, vhtr_sub, G%HI)
       write(debug_msg, '(A,I4.4)') 'Before advect ', iter
-      call MOM_tracer_chkinv(debug_msg, G, h_pre, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
+      call MOM_tracer_chkinv(debug_msg, G, GV, h_pre, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
     endif
 
     call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, CS%dt_offline, G, GV, CS%US, &
@@ -357,7 +357,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
       if (CS%debug) then
         call hchksum(h_new,"h_new before ALE",G%HI)
         write(debug_msg, '(A,I4.4)') 'Before ALE ', iter
-        call MOM_tracer_chkinv(debug_msg, G, h_new, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
+        call MOM_tracer_chkinv(debug_msg, G, GV, h_new, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
       endif
       call cpu_clock_begin(id_clock_ALE)
       call ALE_main_offline(G, GV, h_new, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC, CS%dt_offline)
@@ -366,7 +366,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
       if (CS%debug) then
         call hchksum(h_new,"h_new after ALE",G%HI)
         write(debug_msg, '(A,I4.4)') 'After ALE ', iter
-        call MOM_tracer_chkinv(debug_msg, G, h_new, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
+        call MOM_tracer_chkinv(debug_msg, G, GV, h_new, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
       endif
     endif
 
@@ -408,7 +408,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
   if (CS%debug) then
     call hchksum(h_pre,"h after offline_advection_ale",G%HI)
     call uvchksum("[uv]htr after offline_advection_ale", uhtr, vhtr, G%HI)
-    call MOM_tracer_chkinv("After offline_advection_ale", G, h_pre, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
+    call MOM_tracer_chkinv("After offline_advection_ale", G, GV, h_pre, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
   endif
 
   call cpu_clock_end(CS%id_clock_offline_adv)
@@ -476,7 +476,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
   if (converged) return
 
   if (CS%debug) then
-    call MOM_tracer_chkinv("Before redistribute ", G, h_pre, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
+    call MOM_tracer_chkinv("Before redistribute ", G, GV, h_pre, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
   endif
 
   call cpu_clock_begin(CS%id_clock_redistribute)
@@ -607,7 +607,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
   if (CS%debug) then
     call hchksum(h_pre,"h_pre after redistribute",G%HI)
     call uvchksum("uhtr after redistribute", uhtr, vhtr, G%HI)
-    call MOM_tracer_chkinv("after redistribute ", G, h_new, CS%tracer_Reg%Tr, CS%tracer_Reg%ntr)
+    call MOM_tracer_chkinv("after redistribute ", G, GV, h_new, CS%tracer_Reg%Tr, CS%tracer_Reg%ntr)
   endif
 
   call cpu_clock_end(CS%id_clock_redistribute)
@@ -683,7 +683,7 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, e
     call hchksum(h_pre,"h_pre before offline_diabatic_ale",CS%G%HI)
     call hchksum(eatr,"eatr before offline_diabatic_ale",CS%G%HI)
     call hchksum(ebtr,"ebtr before offline_diabatic_ale",CS%G%HI)
-    call MOM_tracer_chkinv("Before offline_diabatic_ale", CS%G, h_pre, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
+    call MOM_tracer_chkinv("Before offline_diabatic_ale", CS%G, CS%GV, h_pre, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
   endif
 
   eatr(:,:,:) = 0.
@@ -747,7 +747,7 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, e
     call hchksum(h_pre,"h_pre after offline_diabatic_ale",CS%G%HI)
     call hchksum(eatr,"eatr after offline_diabatic_ale",CS%G%HI)
     call hchksum(ebtr,"ebtr after offline_diabatic_ale",CS%G%HI)
-    call MOM_tracer_chkinv("After offline_diabatic_ale", CS%G, h_pre, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
+    call MOM_tracer_chkinv("After offline_diabatic_ale", CS%G, CS%GV, h_pre, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
   endif
 
   call cpu_clock_end(CS%id_clock_offline_diabatic)
@@ -786,8 +786,8 @@ subroutine offline_fw_fluxes_into_ocean(G, GV, CS, fluxes, h, in_flux_optional)
   enddo ; enddo
 
   if (CS%debug) then
-    call hchksum(h,"h before fluxes into ocean",G%HI)
-    call MOM_tracer_chkinv("Before fluxes into ocean", G, h, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
+    call hchksum(h, "h before fluxes into ocean", G%HI)
+    call MOM_tracer_chkinv("Before fluxes into ocean", G, GV, h, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
   endif
   do m = 1,CS%tracer_reg%ntr
     ! Layer thicknesses should only be updated after the last tracer is finished
@@ -796,8 +796,8 @@ subroutine offline_fw_fluxes_into_ocean(G, GV, CS, fluxes, h, in_flux_optional)
                                         CS%evap_CFL_limit, CS%minimum_forcing_depth, update_h_opt = update_h)
   enddo
   if (CS%debug) then
-    call hchksum(h,"h after fluxes into ocean",G%HI)
-    call MOM_tracer_chkinv("After fluxes into ocean", G, h, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
+    call hchksum(h, "h after fluxes into ocean", G%HI)
+    call MOM_tracer_chkinv("After fluxes into ocean", G, GV, h, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
   endif
 
   ! Now that fluxes into the ocean are done, save the negative fluxes for later
@@ -825,7 +825,7 @@ subroutine offline_fw_fluxes_out_ocean(G, GV, CS, fluxes, h, out_flux_optional)
 
   if (CS%debug) then
     call hchksum(h,"h before fluxes out of ocean",G%HI)
-    call MOM_tracer_chkinv("Before fluxes out of ocean", G, h, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
+    call MOM_tracer_chkinv("Before fluxes out of ocean", G, GV, h, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
   endif
   do m = 1, CS%tracer_reg%ntr
     ! Layer thicknesses should only be updated after the last tracer is finished
@@ -835,7 +835,7 @@ subroutine offline_fw_fluxes_out_ocean(G, GV, CS, fluxes, h, out_flux_optional)
   enddo
   if (CS%debug) then
     call hchksum(h,"h after fluxes out of ocean",G%HI)
-    call MOM_tracer_chkinv("Before fluxes out of ocean", G, h, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
+    call MOM_tracer_chkinv("Before fluxes out of ocean", G, GV, h, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
   endif
 
 end subroutine offline_fw_fluxes_out_ocean

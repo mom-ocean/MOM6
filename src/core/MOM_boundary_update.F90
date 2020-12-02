@@ -14,9 +14,9 @@ use MOM_open_boundary,         only : ocean_obc_type, update_OBC_segment_data
 use MOM_open_boundary,         only : OBC_registry_type, file_OBC_CS
 use MOM_open_boundary,         only : register_file_OBC, file_OBC_end
 use MOM_unit_scaling,          only : unit_scale_type
-use MOM_verticalGrid,          only : verticalGrid_type
 use MOM_tracer_registry,       only : tracer_registry_type
 use MOM_variables,             only : thermo_var_ptrs
+use MOM_verticalGrid,          only : verticalGrid_type
 use tidal_bay_initialization,  only : tidal_bay_set_OBC_data, register_tidal_bay_OBC
 use tidal_bay_initialization,  only : tidal_bay_OBC_end, tidal_bay_OBC_CS
 use Kelvin_initialization,     only : Kelvin_set_OBC_data, register_Kelvin_OBC
@@ -120,31 +120,17 @@ subroutine update_OBC_data(OBC, G, GV, US, tv, h, CS, Time)
   type(update_OBC_CS),                      pointer       :: CS   !< Control structure for OBCs
   type(time_type),                          intent(in)    :: Time !< Model time
 
-  ! Local variables
-  logical :: read_OBC_eta = .false.
-  logical :: read_OBC_uv = .false.
-  logical :: read_OBC_TS = .false.
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
-  integer :: isd_off, jsd_off
-  integer :: IsdB, IedB, JsdB, JedB
-  character(len=40)  :: mdl = "update_OBC_data" ! This subroutine's name.
-  character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
 ! Something here... with CS%file_OBC_CSp?
 ! if (CS%use_files) &
 !     call update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   if (CS%use_tidal_bay) &
-      call tidal_bay_set_OBC_data(OBC, CS%tidal_bay_OBC_CSp, G, h, Time)
+      call tidal_bay_set_OBC_data(OBC, CS%tidal_bay_OBC_CSp, G, GV, h, Time)
   if (CS%use_Kelvin)  &
       call Kelvin_set_OBC_data(OBC, CS%Kelvin_OBC_CSp, G, GV, US, h, Time)
   if (CS%use_shelfwave) &
-      call shelfwave_set_OBC_data(OBC, CS%shelfwave_OBC_CSp, G, h, Time)
+      call shelfwave_set_OBC_data(OBC, CS%shelfwave_OBC_CSp, G, GV, h, Time)
   if (CS%use_dyed_channel) &
-      call dyed_channel_update_flow(OBC, CS%dyed_channel_OBC_CSp, G, Time)
+      call dyed_channel_update_flow(OBC, CS%dyed_channel_OBC_CSp, G, GV, Time)
   if (OBC%needs_IO_for_data .or. OBC%add_tide_constituents)  &
       call update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
 

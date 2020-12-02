@@ -9,6 +9,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_io, only : MOM_read_data
 use MOM_EOS, only : EOS_type, calculate_density, calculate_density_derivs, EOS_domain
 use MOM_unit_scaling, only : unit_scale_type
+use MOM_verticalGrid, only : verticalGrid_type
 
 use netcdf
 
@@ -27,9 +28,10 @@ contains
 
 !>   This function initializes a tracer by reading a Z-space file, returning
 !! .true. if this appears to have been successful, and false otherwise.
-function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
+function tracer_Z_init(tr, h, filename, tr_name, G, GV, US, missing_val, land_val)
   logical :: tracer_Z_init !< A return code indicating if the initialization has been successful
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                          intent(out)   :: tr   !< The tracer to initialize
@@ -75,7 +77,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
   character(len=80) :: loc_msg
   integer :: k_top, k_bot, k_bot_prev, k_start
   integer :: i, j, k, kz, is, ie, js, je, nz, nz_in
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   landval = 0.0 ; if (present(land_val)) landval = land_val
 
@@ -610,8 +612,10 @@ end function find_limited_slope
 
 !> This subroutine determines the potential temperature and salinity that
 !! is consistent with the target density using provided initial guess
-subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, k_start, G, US, eos, h_massless)
+subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, k_start, G, GV, US, &
+                                 eos, h_massless)
   type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),       intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                  intent(inout) :: temp !< potential temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -651,7 +655,7 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, kz, is, ie, js, je, nz, itt
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   ! These hard coded parameters need to be set properly.
   S_min = 0.5 ; S_max = 65.0

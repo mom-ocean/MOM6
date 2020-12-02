@@ -345,12 +345,12 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, US, h, diag, OBC, CS, &
   if (.not.restart .or. (CS%tracers_may_reinit .and. &
       .not.query_initialized(CS%CFC11, CS%CFC11_name, CS%restart_CSp))) &
     call init_tracer_CFC(h, CS%CFC11, CS%CFC11_name, CS%CFC11_land_val, &
-                         CS%CFC11_IC_val, G, US, CS)
+                         CS%CFC11_IC_val, G, GV, US, CS)
 
   if (.not.restart .or. (CS%tracers_may_reinit .and. &
       .not.query_initialized(CS%CFC12, CS%CFC12_name, CS%restart_CSp))) &
     call init_tracer_CFC(h, CS%CFC12, CS%CFC12_name, CS%CFC12_land_val, &
-                         CS%CFC12_IC_val, G, US, CS)
+                         CS%CFC12_IC_val, G, GV, US, CS)
 
   if (associated(OBC)) then
   ! Steal from updated DOME in the fullness of time.
@@ -359,8 +359,9 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, US, h, diag, OBC, CS, &
 end subroutine initialize_OCMIP2_CFC
 
 !>This subroutine initializes a tracer array.
-subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, US, CS)
+subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, GV, US, CS)
   type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in)  :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),                    intent(in)  :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: tr   !< The tracer concentration array
@@ -374,16 +375,16 @@ subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, US, CS)
 
   logical :: OK
   integer :: i, j, k, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (len_trim(CS%IC_file) > 0) then
     !  Read the tracer concentrations from a netcdf file.
     if (.not.file_exists(CS%IC_file, G%Domain)) &
       call MOM_error(FATAL, "initialize_OCMIP2_CFC: Unable to open "//CS%IC_file)
     if (CS%Z_IC_file) then
-      OK = tracer_Z_init(tr, h, CS%IC_file, name, G, US)
+      OK = tracer_Z_init(tr, h, CS%IC_file, name, G, GV, US)
       if (.not.OK) then
-        OK = tracer_Z_init(tr, h, CS%IC_file, trim(name), G, US)
+        OK = tracer_Z_init(tr, h, CS%IC_file, trim(name), G, GV, US)
         if (.not.OK) call MOM_error(FATAL,"initialize_OCMIP2_CFC: "//&
                 "Unable to read "//trim(name)//" from "//&
                 trim(CS%IC_file)//".")

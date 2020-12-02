@@ -133,7 +133,7 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, GV, &
 
   CS%do_i_mean_sponge = present(Iresttime_i_mean)
 
-  CS%nz = G%ke
+  CS%nz = GV%ke
 !  CS%isc = G%isc ; CS%iec = G%iec ; CS%jsc = G%jsc ; CS%jec = G%jec
 !  CS%isd = G%isd ; CS%ied = G%ied ; CS%jsd = G%jsd ; CS%jed = G%jed
   ! CS%bulkmixedlayer may be set later via a call to set_up_sponge_ML_density.
@@ -169,7 +169,7 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, GV, &
 
   if (CS%do_i_mean_sponge) then
     allocate(CS%Iresttime_im(G%jsd:G%jed)) ; CS%Iresttime_im(:) = 0.0
-    allocate(CS%Ref_eta_im(G%jsd:G%jed,G%ke+1)) ; CS%Ref_eta_im(:,:) = 0.0
+    allocate(CS%Ref_eta_im(G%jsd:G%jed,GV%ke+1)) ; CS%Ref_eta_im(:,:) = 0.0
 
     do j=G%jsc,G%jec
       CS%Iresttime_im(j) = Iresttime_i_mean(j)
@@ -382,7 +382,7 @@ subroutine apply_sponge(h, dt, G, GV, US, ea, eb, CS, Rcv_ml)
   real :: damp_1pdamp ! damp_1pdamp is damp/(1 + damp). [nondim]
   real :: Idt      ! 1.0/dt times a height unit conversion factor [m H-1 T-1 ~> s-1 or m3 kg-1 s-1].
   integer :: c, m, nkmb, i, j, k, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.associated(CS)) return
   if (CS%bulkmixedlayer) nkmb = GV%nk_rho_varies

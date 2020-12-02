@@ -180,7 +180,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   integer :: kc
   integer :: i, j, k, k2, itt, is, ie, js, je, nz, nzm, row, ig, jg, ig_stop, jg_stop
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   I_a_int = 1/a_int
 
   !if (present(CS)) then
@@ -683,9 +683,10 @@ subroutine tridiag_solver(a, b, c, h, y, method, x)
 end subroutine tridiag_solver
 
 !> Allocate memory associated with the wave structure module and read parameters.
-subroutine wave_structure_init(Time, G, param_file, diag, CS)
+subroutine wave_structure_init(Time, G, GV, param_file, diag, CS)
   type(time_type),         intent(in) :: Time !< The current model time.
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV    !< The ocean's vertical grid structure.
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time
                                               !! parameters.
   type(diag_ctrl), target, intent(in) :: diag !< A structure that is used to regulate
@@ -697,7 +698,7 @@ subroutine wave_structure_init(Time, G, param_file, diag, CS)
   character(len=40)  :: mdl = "MOM_wave_structure"  ! This module's name.
   integer :: isd, ied, jsd, jed, nz
 
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
 
   if (associated(CS)) then
     call MOM_error(WARNING, "wave_structure_init called with an "// &

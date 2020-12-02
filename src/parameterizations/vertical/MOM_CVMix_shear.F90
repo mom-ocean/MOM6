@@ -81,13 +81,13 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
   real :: S2     ! Shear squared at an interface [T-2 ~> s-2]
   real :: dummy  ! A dummy variable [nondim]
   real :: dRho   ! Buoyancy differences [Z T-2 ~> m s-2]
-  real, dimension(2*(G%ke)) :: pres_1d ! A column of interface pressures [R L2 T-2 ~> Pa]
-  real, dimension(2*(G%ke)) :: temp_1d ! A column of temperatures [degC]
-  real, dimension(2*(G%ke)) :: salt_1d ! A column of salinities [ppt]
-  real, dimension(2*(G%ke)) :: rho_1d  ! A column of densities at interface pressures [R ~> kg m-3]
-  real, dimension(G%ke+1) :: Ri_Grad !< Gradient Richardson number [nondim]
-  real, dimension(G%ke+1) :: Kvisc   !< Vertical viscosity at interfaces [m2 s-1]
-  real, dimension(G%ke+1) :: Kdiff   !< Diapycnal diffusivity at interfaces [m2 s-1]
+  real, dimension(2*(GV%ke)) :: pres_1d ! A column of interface pressures [R L2 T-2 ~> Pa]
+  real, dimension(2*(GV%ke)) :: temp_1d ! A column of temperatures [degC]
+  real, dimension(2*(GV%ke)) :: salt_1d ! A column of salinities [ppt]
+  real, dimension(2*(GV%ke)) :: rho_1d  ! A column of densities at interface pressures [R ~> kg m-3]
+  real, dimension(GV%ke+1) :: Ri_Grad !< Gradient Richardson number [nondim]
+  real, dimension(GV%ke+1) :: Kvisc   !< Vertical viscosity at interfaces [m2 s-1]
+  real, dimension(GV%ke+1) :: Kdiff   !< Diapycnal diffusivity at interfaces [m2 s-1]
   real :: epsln  !< Threshold to identify vanished layers [H ~> m or kg m-2]
 
   ! some constants
@@ -103,7 +103,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
       ! Richardson number computed for each cell in a column.
       pRef = 0. ; if (associated(tv%p_surf)) pRef = tv%p_surf(i,j)
       Ri_Grad(:)=1.e8 !Initialize w/ large Richardson value
-      do k=1,G%ke
+      do k=1,GV%ke
         ! pressure, temp, and saln for EOS
         ! kk+1 = k fields
         ! kk+2 = km1 fields
@@ -126,7 +126,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
       call calculate_density(Temp_1D, Salt_1D, pres_1D, rho_1D, tv%eqn_of_state)
 
       ! N2 (can be negative) on interface
-      do k = 1, G%ke
+      do k = 1, GV%ke
         km1 = max(1, k-1)
         kk = 2*(k-1)
         DU = u_h(i,j,k) - u_h(i,j,km1)
@@ -143,22 +143,22 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
 
       enddo
 
-      Ri_grad(G%ke+1) = Ri_grad(G%ke)
+      Ri_grad(GV%ke+1) = Ri_grad(GV%ke)
 
       if (CS%id_ri_grad > 0) CS%ri_grad(i,j,:) = Ri_Grad(:)
 
       if (CS%smooth_ri) then
         ! 1) fill Ri_grad in vanished layers with adjacent value
-        do k = 2, G%ke
+        do k = 2, GV%ke
           if (h(i,j,k) <= epsln) Ri_grad(k) = Ri_grad(k-1)
         enddo
 
-        Ri_grad(G%ke+1) = Ri_grad(G%ke)
+        Ri_grad(GV%ke+1) = Ri_grad(GV%ke)
 
         ! 2) vertically smooth Ri with 1-2-1 filter
         dummy =  0.25 * Ri_grad(2)
-        Ri_grad(G%ke+1) = Ri_grad(G%ke)
-        do k = 3, G%ke
+        Ri_grad(GV%ke+1) = Ri_grad(GV%ke)
+        do k = 3, GV%ke
           Ri_Grad(k) = dummy + 0.5 * Ri_Grad(k) + 0.25 * Ri_grad(k+1)
           dummy = 0.25 * Ri_grad(k)
         enddo
@@ -166,7 +166,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
         if (CS%id_ri_grad_smooth > 0) CS%ri_grad_smooth(i,j,:) = Ri_Grad(:)
       endif
 
-      do K=1,G%ke+1
+      do K=1,GV%ke+1
         Kvisc(K) = US%Z2_T_to_m2_s * kv(i,j,K)
         Kdiff(K) = US%Z2_T_to_m2_s * kd(i,j,K)
       enddo
@@ -175,9 +175,9 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
       call  CVMix_coeffs_shear(Mdiff_out=Kvisc(:), &
                                    Tdiff_out=Kdiff(:), &
                                    RICH=Ri_Grad(:), &
-                                   nlev=G%ke,    &
-                                   max_nlev=G%ke)
-      do K=1,G%ke+1
+                                   nlev=GV%ke,    &
+                                   max_nlev=GV%ke)
+      do K=1,GV%ke+1
         kv(i,j,K) = US%m2_s_to_Z2_T * Kvisc(K)
         kd(i,j,K) = US%m2_s_to_Z2_T * Kdiff(K)
       enddo

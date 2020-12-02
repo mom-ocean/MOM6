@@ -47,7 +47,7 @@ subroutine external_gwave_initialize_thickness(h, G, GV, US, param_file, just_re
   integer :: i, j, k, is, ie, js, je, nz
   real :: PI, Xnondim
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 

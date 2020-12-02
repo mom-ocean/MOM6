@@ -110,7 +110,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
   h_scale = GV%H_to_m ; uh_scale = GV%H_to_m*US%L_T_to_m_s
 
 !  if (.not.associated(CS)) return
-  nz = G%ke
+  nz = GV%ke
   if (CS%cols_written < CS%max_writes) then
     CS%cols_written = CS%cols_written + 1
 
@@ -443,7 +443,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
   h_scale = GV%H_to_m ; uh_scale = GV%H_to_m*US%L_T_to_m_s
 
 !  if (.not.associated(CS)) return
-  nz = G%ke
+  nz = GV%ke
   if (CS%cols_written < CS%max_writes) then
     CS%cols_written = CS%cols_written + 1
 

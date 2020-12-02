@@ -264,7 +264,7 @@ subroutine Neverworld_initialize_thickness(h, G, GV, US, param_file, eqn_of_stat
   character(len=40)  :: mdl = "Neverworld_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, k1, is, ie, js, je, nz, itt
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   call MOM_mesg("  Neverworld_initialization.F90, Neverworld_initialize_thickness: setting thickness", 5)
   call get_param(param_file, mdl, "INIT_THICKNESS_PROFILE", h_profile, &

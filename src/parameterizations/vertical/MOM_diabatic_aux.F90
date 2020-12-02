@@ -127,7 +127,7 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
                        ! row of points.
   integer :: i, j, k, is, ie, js, je, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   if (present(halo)) then
     is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   endif
@@ -260,7 +260,7 @@ subroutine differential_diffuse_T_S(h, T, S, Kd_T, Kd_S, dt, G, GV)
   real :: b_denom_S    ! for b1_T and b1_S, both [H ~> m or kg m-2].
   integer :: i, j, k, is, ie, js, je, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   h_neglect = GV%H_subroundoff
 
   !$OMP parallel do default(private) shared(is,ie,js,je,h,h_neglect,dt,Kd_T,Kd_S,G,GV,T,S,nz)
@@ -336,7 +336,7 @@ subroutine adjust_salt(h, tv, G, GV, CS, halo)
   real :: mc         !< A layer's mass [R Z ~> kg m-2].
   integer :: i, j, k, is, ie, js, je, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   if (present(halo)) then
     is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   endif
@@ -410,7 +410,7 @@ subroutine triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, T, S)
       T(i,j,1) = (b1(i)*h_tr)*T(i,j,1)
       S(i,j,1) = (b1(i)*h_tr)*S(i,j,1)
     enddo
-    do k=2,G%ke ; do i=is,ie
+    do k=2,GV%ke ; do i=is,ie
       c1(i,k) = eb(i,j,k-1) * b1(i)
       h_tr = hold(i,j,k) + GV%H_subroundoff
       b_denom_1 = h_tr + d1(i)*ea(i,j,k)
@@ -419,7 +419,7 @@ subroutine triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, T, S)
       T(i,j,k) = b1(i) * (h_tr*T(i,j,k) + ea(i,j,k)*T(i,j,k-1))
       S(i,j,k) = b1(i) * (h_tr*S(i,j,k) + ea(i,j,k)*S(i,j,k-1))
     enddo ; enddo
-    do k=G%ke-1,1,-1 ; do i=is,ie
+    do k=GV%ke-1,1,-1 ; do i=is,ie
       T(i,j,k) = T(i,j,k) + c1(i,k+1)*T(i,j,k+1)
       S(i,j,k) = S(i,j,k) + c1(i,k+1)*S(i,j,k+1)
     enddo ; enddo
@@ -458,7 +458,7 @@ subroutine triDiagTS_Eulerian(G, GV, is, ie, js, je, hold, ent, T, S)
       T(i,j,1) = (b1(i)*h_tr)*T(i,j,1)
       S(i,j,1) = (b1(i)*h_tr)*S(i,j,1)
     enddo
-    do k=2,G%ke ; do i=is,ie
+    do k=2,GV%ke ; do i=is,ie
       c1(i,k) = ent(i,j,K) * b1(i)
       h_tr = hold(i,j,k) + GV%H_subroundoff
       b_denom_1 = h_tr + d1(i)*ent(i,j,K)
@@ -467,7 +467,7 @@ subroutine triDiagTS_Eulerian(G, GV, is, ie, js, je, hold, ent, T, S)
       T(i,j,k) = b1(i) * (h_tr*T(i,j,k) + ent(i,j,K)*T(i,j,k-1))
       S(i,j,k) = b1(i) * (h_tr*S(i,j,k) + ent(i,j,K)*S(i,j,k-1))
     enddo ; enddo
-    do k=G%ke-1,1,-1 ; do i=is,ie
+    do k=GV%ke-1,1,-1 ; do i=is,ie
       T(i,j,k) = T(i,j,k) + c1(i,k+1)*T(i,j,k+1)
       S(i,j,k) = S(i,j,k) + c1(i,k+1)*S(i,j,k+1)
     enddo ; enddo
@@ -699,7 +699,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   gE_rho0 = US%L_to_Z**2*GV%g_Earth / (GV%Rho0)
   dH_subML = 50.*GV%m_to_H  ; if (present(dz_subML)) dH_subML = GV%Z_to_H*dz_subML
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   pRef_MLD(:) = 0.0
   EOSdom(:) = EOS_domain(G%HI)
@@ -835,7 +835,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
   integer :: IT, iM
   integer :: i, j, is, ie, js, je, k, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   pRef_MLD(:) = 0.0
   mld(:,:,:) = 0.0
@@ -1084,7 +1084,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   integer :: i, j, is, ie, js, je, k, nz, n, nb
   character(len=45) :: mesg
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   Idt = 1.0 / dt
 
@@ -1569,7 +1569,7 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
   character(len=32)  :: chl_varname ! Name of chl_a variable in chl_file.
   logical :: use_temperature     ! True if thermodynamics are enabled.
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, nbands
-  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = G%ke
+  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (associated(CS)) then
