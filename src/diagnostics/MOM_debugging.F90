@@ -83,7 +83,7 @@ subroutine MOM_debugging_init(param_file)
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_debugging" ! This module's name.
 
-  call log_version(param_file, mdl, version)
+  call log_version(param_file, mdl, version, debugging=.true.)
   call get_param(param_file, mdl, "DEBUG", debug, &
                  "If true, write out verbose debugging data.", &
                  default=.false., debuggingParam=.true.)

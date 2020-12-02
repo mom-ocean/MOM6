@@ -561,7 +561,7 @@ subroutine initialize_grid_rotation_angle(G, PF)
                  "If true, use an older algorithm to calculate the sine and "//&
                  "cosines needed rotate between grid-oriented directions and "//&
                  "true north and east.  Differences arise at the tripolar fold.", &
-                 default=.True.)
+                 default=.false.)
 
   if (use_bugs) then
     do j=G%jsc,G%jec ; do i=G%isc,G%iec

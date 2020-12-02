@@ -452,7 +452,7 @@ subroutine Update_Surface_Waves(G, GV, US, Day, dt, CS, forces)
   type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
   type(time_type),         intent(in)  :: Day !< Current model time
   type(time_type),         intent(in)  :: dt  !< Timestep as a time-type
-  type(mech_forcing),      intent(in)  :: forces !< MOM_forcing_type
+  type(mech_forcing),      intent(in), optional  :: forces !< MOM_forcing_type
   ! Local variables
   integer :: ii, jj, kk, b
   type(time_type) :: Day_Center
