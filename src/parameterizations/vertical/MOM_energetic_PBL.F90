@@ -163,6 +163,7 @@ type, public :: energetic_PBL_CS ; private
                              !! potential energy change code.  Otherwise, it uses a newer version
                              !! that can work with successive increments to the diffusivity in
                              !! upward or downward passes.
+  logical :: do_epbl
   type(diag_ctrl), pointer :: diag=>NULL() !< A structure that is used to regulate the
                              !! timing of diagnostic output.
 
@@ -245,7 +246,7 @@ contains
 !!  mixed layer model.  It assumes that heating, cooling and freshwater fluxes
 !!  have already been applied.  All calculations are done implicitly, and there
 !!  is no stability limit on the time step.
-subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS, &
+subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, t_rp, dt, Kd_int, G, GV, US, CS, &
                          dSV_dT, dSV_dS, TKE_forced, buoy_flux, dt_diag, last_call, &
                          dT_expected, dS_expected, Waves )
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure.
@@ -282,6 +283,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
                                                    !! [Z2 s-1 ~> m2 s-1].
   type(energetic_PBL_CS),  pointer       :: CS     !< The control structure returned by a previous
                                                    !! call to mixedlayer_init.
+  real, dimension(SZI_(G),SZJ_(G),2), &
+                           intent(in)    :: t_rp !< random pattern to perturb wind
   real, dimension(SZI_(G),SZJ_(G)), &
                            intent(in)    :: buoy_flux !< The surface buoyancy flux [Z2 T-3 ~> m2 s-3].
   real,          optional, intent(in)    :: dt_diag   !< The diagnostic time step, which may be less
@@ -435,7 +438,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
       do K=1,nz+1 ; Kd(K) = 0.0 ; enddo
 
       ! Make local copies of surface forcing and process them.
-      u_star = fluxes%ustar(i,j)*(fluxes%t_rp(i,j))
+      !print*,'PJP EPBL',minval(t_rp),maxval(t_rp)
+      u_star = fluxes%ustar(i,j)!*t_rp(i,j)
       u_star_Mean = fluxes%ustar_gustless(i,j)
       B_flux = buoy_flux(i,j)
       if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
@@ -459,9 +463,10 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
 
       call ePBL_column(h, u, v, T0, S0, dSV_dT_1d, dSV_dS_1d, TKE_forcing, B_flux, absf, &
                        u_star, u_star_mean, dt, MLD_io, Kd, mixvel, mixlen, GV, &
-                       US, CS, eCD, dt_diag=dt_diag, Waves=Waves, G=G, i=i, j=j)
+                       US, CS, eCD, t_rp(i,j,1),t_rp(i,j,2), dt_diag=dt_diag, Waves=Waves, G=G, i=i, j=j)
 
-
+      ! applly stochastic perturbation to TKE generation
+     
       ! Copy the diffusivities to a 2-d array.
       do K=1,nz+1
         Kd_2d(i,K) = Kd(K)
@@ -542,7 +547,7 @@ end subroutine energetic_PBL
 !!  mixed layer model for a single column of water.
 subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, absf, &
                        u_star, u_star_mean, dt, MLD_io, Kd, mixvel, mixlen, GV, US, CS, eCD, &
-                       dt_diag, Waves, G, i, j)
+                       t_rp1,t_rp2, dt_diag, Waves, G, i, j)
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZK_(GV)), intent(in)  :: h      !< Layer thicknesses [H ~> m or kg m-2].
@@ -580,6 +585,8 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   type(energetic_PBL_CS),  pointer       :: CS     !< The control structure returned by a previous
                                                    !! call to mixedlayer_init.
   type(ePBL_column_diags), intent(inout) :: eCD    !< A container for passing around diagnostics.
+  real,                    intent(in)    :: t_rp1  !< random value to perturb TKE production
+  real,                    intent(in)    :: t_rp2  !< random value to perturb TKE production
   real,          optional, intent(in)    :: dt_diag   !< The diagnostic time step, which may be less
                                                    !! than dt if there are two calls to mixedlayer [T ~> s].
   type(wave_parameters_CS), &
@@ -878,6 +885,8 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
       else
         mech_TKE = MSTAR_total * (dt*GV%Rho0* u_star**3)
       endif
+      ! stochastically pertrub mech_TKE
+         mech_TKE=mech_TKE*t_rp1
 
       if (CS%TKE_diagnostics) then
         eCD%dTKE_conv = 0.0 ; eCD%dTKE_mixing = 0.0
@@ -959,8 +968,9 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
         exp_kh = 1.0
         if (Idecay_len_TKE > 0.0) exp_kh = exp(-h(k-1)*Idecay_len_TKE)
         if (CS%TKE_diagnostics) &
-          eCD%dTKE_mech_decay = eCD%dTKE_mech_decay + (exp_kh-1.0) * mech_TKE * I_dtdiag
-        mech_TKE = mech_TKE * exp_kh
+          !eCD%dTKE_mech_decay = eCD%dTKE_mech_decay + (exp_kh-1.0) * mech_TKE * I_dtdiag
+          eCD%dTKE_mech_decay = exp_kh
+        mech_TKE = mech_TKE * (1+(exp_kh-1) * t_rp2)
 
         !   Accumulate any convectively released potential energy to contribute
         ! to wstar and to drive penetrating convection.
