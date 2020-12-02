@@ -155,7 +155,7 @@ use MOM_offline_main,          only : offline_redistribute_residual, offline_dia
 use MOM_offline_main,          only : offline_fw_fluxes_into_ocean, offline_fw_fluxes_out_ocean
 use MOM_offline_main,          only : offline_advection_layer, offline_transport_end
 use MOM_ALE,                   only : ale_offline_tracer_final, ALE_main_offline
-use stochastic_physics,        only : init_stochastic_physics_ocn,run_stochastic_physics_ocn
+use stochastic_physics,        only : init_stochastic_physics_ocn
 
 implicit none ; private
 
@@ -828,9 +828,6 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
         enddo ; enddo
       endif
 
-      print*,'calling run_stochastic_physics_ocn',CS%do_stochy
-      if (CS%do_stochy) call run_stochastic_physics_ocn(forces%t_rp)
-
       call step_MOM_dynamics(forces, CS%p_surf_begin, CS%p_surf_end, dt, &
                              dt_therm_here, bbl_time_int, CS, &
                              Time_local, Waves=Waves)
@@ -982,7 +979,8 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     if (CS%time_in_thermo_cycle > 0.0) then
       call enable_averages(CS%time_in_thermo_cycle, Time_local, CS%diag)
       call post_surface_thermo_diags(CS%sfc_IDs, G, GV, US, CS%diag, CS%time_in_thermo_cycle, &
-                                    sfc_state, CS%tv, ssh, fluxes%t_rp, CS%ave_ssh_ibc)
+                                     sfc_state_diag, CS%tv, ssh, CS%ave_ssh_ibc)
+                                     !sfc_state_diag, CS%tv, ssh,fluxes%t_rp,fluxes%sppt_wts, CS%ave_ssh_ibc)
     endif
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_diagnostics)
@@ -1809,6 +1807,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   logical :: calc_dtbt         ! Indicates whether the dynamically adjusted barotropic
                                ! time step needs to be updated before it is used.
   logical :: debug_truncations ! If true, turn on diagnostics useful for debugging truncations.
+  logical :: do_epbl,do_sppt
   integer :: first_direction   ! An integer that indicates which direction is to be
                                ! updated first in directionally split parts of the
                                ! calculation.
@@ -1816,7 +1815,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   integer :: dynamics_stencil  ! The computational stencil for the calculations
                                ! in the dynamic core.
   integer,allocatable :: pelist(:) ! list of pes for this instance of the ocean
-  integer             :: num_procs
+  integer :: mom_comm ! list of pes for this instance of the ocean
+  integer             :: num_procs,iret
 !  model
   integer :: me                !  my pe
   integer :: master            !  root pe
@@ -2506,14 +2506,17 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   num_procs=num_PEs()
   allocate(pelist(num_procs))
-  call Get_PElist(pelist)
+  call Get_PElist(pelist,commID = mom_comm)
   me=PE_here()
   master=root_PE()
 
-  !call init_stochastic_physics_ocn(CS%dt_therm,G,me,master,pelist,CS%do_stochy)
-  print*,'callling init_stochastic_physics_ocn',maxval(G%geoLatT)
-  call init_stochastic_physics_ocn(CS%dt_therm,G%geoLonT,G%geoLatT,G%ied-G%isd+1,G%jed-G%jsd+1,nz,CS%do_stochy)
-  print*,'back from init_stochastic_physics_ocn',CS%do_stochy
+  !print*,'callling init_stochastic_physics_ocn',maxval(G%geoLatT)
+  do_epbl=.false.
+  do_sppt=.false.
+  call init_stochastic_physics_ocn(CS%dt_therm,G%geoLonT,G%geoLatT,G%ied-G%isd+1,G%jed-G%jsd+1,nz,do_epbl,do_sppt,master,mom_comm,iret)
+  if (do_sppt .eq. .true.) CS%do_stochy=.true.
+  if (do_epbl .eq. .true.) CS%do_stochy=.true.
+  !print*,'back from init_stochastic_physics_ocn',CS%do_stochy
 
   ! Set a few remaining fields that are specific to the ocean grid type.
   if (CS%rotate_index) then
@@ -2968,6 +2971,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   !### This could perhaps go here instead of in finish_MOM_initialization?
   ! call fix_restart_scaling(GV)
   ! call fix_restart_unit_scaling(US)
+
+  CS%diabatic_CSp%do_epbl=do_epbl
+  CS%diabatic_CSp%do_sppt=do_sppt
 
   call callTree_leave("initialize_MOM()")
   call cpu_clock_end(id_clock_init)

@@ -145,8 +145,10 @@ type, public :: forcing
                 !< Pressure at the top ocean interface [R L2 T-2 ~> Pa] that is used in corrections to the sea surface
                 !! height field that is passed back to the calling routines.
                 !! p_surf_SSH may point to p_surf or to p_surf_full.
-  real, pointer, dimension(:,:) :: t_rp => NULL()
-                !< random pattern at t-points
+!  real, pointer, dimension(:,:) :: t_rp => NULL()
+!                !< random pattern at t-points
+!  real, pointer, dimension(:,:) :: sppt_wts => NULL()
+!                !< random pattern at t-points
   logical :: accumulate_p_surf = .false. !< If true, the surface pressure due to the atmosphere
                                  !! and various types of ice needs to be accumulated, and the
                                  !! surface pressure explicitly reset to zero at the driver level
@@ -250,10 +252,14 @@ type, public :: mech_forcing
                 !! nondimensional from 0 to 1 [nondim]. This is only associated if ice shelves are enabled,
                 !! and is exactly 0 away from shelves or on land.
   real, pointer, dimension(:,:) :: &
-    rigidity_ice_u => NULL(), & !< Depth-integrated lateral viscosity of ice shelves or sea ice at u-points [m3 s-1]
-    rigidity_ice_v => NULL()    !< Depth-integrated lateral viscosity of ice shelves or sea ice at v-points [m3 s-1]
-  real, pointer, dimension(:,:) :: t_rp => NULL()
-                                 !< random pattern at t-points
+    rigidity_ice_u => NULL(), & !< Depth-integrated lateral viscosity of ice shelves or sea ice at
+                                !! u-points [L4 Z-1 T-1 ~> m3 s-1]
+    rigidity_ice_v => NULL()    !< Depth-integrated lateral viscosity of ice shelves or sea ice at
+                                !! v-points [L4 Z-1 T-1 ~> m3 s-1]
+!  real, pointer, dimension(:,:) :: t_rp => NULL()
+!                                 !< random pattern at t-points
+!  real, pointer, dimension(:,:) :: sppt_wts => NULL()
+!                                 !< random pattern at t-points
   real :: dt_force_accum = -1.0 !< The amount of time over which the mechanical forcing fluxes
                                 !! have been averaged [s].
   logical :: net_mass_src_set = .false. !< If true, an estimate of net_mass_src has been provided.
@@ -2128,11 +2134,17 @@ subroutine copy_common_forcing_fields(forces, fluxes, G, skip_pres)
 
   do_pres = .true. ; if (present(skip_pres)) do_pres = .not.skip_pres
 
-  if (associated(forces%t_rp) .and. associated(fluxes%t_rp)) then
-    do j=js,je ; do i=is,ie
-      fluxes%t_rp(i,j) = forces%t_rp(i,j)
-    enddo ; enddo
-  endif
+!  if (associated(forces%t_rp) .and. associated(fluxes%t_rp)) then
+!    do j=js,je ; do i=is,ie
+!      fluxes%t_rp(i,j) = forces%t_rp(i,j)
+!    enddo ; enddo
+!  endif
+!
+!  if (associated(forces%sppt_wts) .and. associated(fluxes%sppt_wts)) then
+!    do j=js,je ; do i=is,ie
+!      fluxes%sppt_wts(i,j) = forces%sppt_wts(i,j)
+!    enddo ; enddo
+!  endif
 
   if (associated(forces%ustar) .and. associated(fluxes%ustar)) then
     do j=js,je ; do i=is,ie
@@ -3096,7 +3108,8 @@ subroutine allocate_mech_forcing_by_group(G, forces, stress, ustar, shelf, &
   call myAlloc(forces%p_surf,isd,ied,jsd,jed, press)
   call myAlloc(forces%p_surf_full,isd,ied,jsd,jed, press)
   call myAlloc(forces%net_mass_src,isd,ied,jsd,jed, press)
-  call myAlloc(forces%t_rp,isd,ied,jsd,jed, press)
+!  call myAlloc(forces%t_rp,isd,ied,jsd,jed, press)
+!  call myAlloc(forces%sppt_wts,isd,ied,jsd,jed, press)
 
   call myAlloc(forces%rigidity_ice_u,IsdB,IedB,jsd,jed, shelf)
   call myAlloc(forces%rigidity_ice_v,isd,ied,JsdB,JedB, shelf)
@@ -3261,7 +3274,8 @@ subroutine deallocate_forcing_type(fluxes)
   if (associated(fluxes%netMassIn))            deallocate(fluxes%netMassIn)
   if (associated(fluxes%salt_flux))            deallocate(fluxes%salt_flux)
   if (associated(fluxes%p_surf_full))          deallocate(fluxes%p_surf_full)
-  if (associated(fluxes%t_rp))                 deallocate(fluxes%t_rp)
+!  if (associated(fluxes%t_rp))                 deallocate(fluxes%t_rp)
+!  if (associated(fluxes%sppt_wts))             deallocate(fluxes%sppt_wts)
   if (associated(fluxes%p_surf))               deallocate(fluxes%p_surf)
   if (associated(fluxes%TKE_tidal))            deallocate(fluxes%TKE_tidal)
   if (associated(fluxes%ustar_tidal))          deallocate(fluxes%ustar_tidal)
@@ -3290,7 +3304,8 @@ subroutine deallocate_mech_forcing(forces)
   if (associated(forces%ustar)) deallocate(forces%ustar)
   if (associated(forces%p_surf))         deallocate(forces%p_surf)
   if (associated(forces%p_surf_full))    deallocate(forces%p_surf_full)
-  if (associated(forces%t_rp))           deallocate(forces%t_rp)
+!  if (associated(forces%t_rp))           deallocate(forces%t_rp)
+!  if (associated(forces%sppt_wts))           deallocate(forces%sppt_wts)
   if (associated(forces%net_mass_src))   deallocate(forces%net_mass_src)
   if (associated(forces%rigidity_ice_u)) deallocate(forces%rigidity_ice_u)
   if (associated(forces%rigidity_ice_v)) deallocate(forces%rigidity_ice_v)
