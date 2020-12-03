@@ -1240,7 +1240,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
 
   ! note the sign convention
   do j=js,je ; do i=is,ie
-     fluxes%sens(i,j) = -US%W_m2_to_QRZ_T * fluxes%sens(i,j)  ! Normal convention is positive into the ocean
+    fluxes%sens(i,j) = -US%W_m2_to_QRZ_T * fluxes%sens(i,j)  ! Normal convention is positive into the ocean
                                            ! but sensible is normally a positive quantity in the files
   enddo ; enddo
 
@@ -1271,11 +1271,11 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
 
 !     Read the SST and SSS fields for damping.
   if (CS%restorebuoy) then !#CTRL# .or. associated(CS%ctrl_forcing_CSp)) then
-     call data_override('OCN', 'SST_restore', CS%T_restore(:,:), day, &
-          is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+    call data_override('OCN', 'SST_restore', CS%T_restore(:,:), day, &
+            is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
 
-     call data_override('OCN', 'SSS_restore', CS%S_restore(:,:), day, &
-          is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+    call data_override('OCN', 'SSS_restore', CS%S_restore(:,:), day, &
+            is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
 
   endif
 

@@ -314,14 +314,14 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
   ISS => CS%ISS
 
   if (CS%rotate_index) then
-     allocate(sfc_state)
-     call rotate_surface_state(sfc_state_in,CS%Grid_in, sfc_state,CS%Grid,CS%turns)
-     allocate(fluxes)
-     call allocate_forcing_type(fluxes_in,G,fluxes)
-     call rotate_forcing(fluxes_in,fluxes,CS%turns)
+    allocate(sfc_state)
+    call rotate_surface_state(sfc_state_in, CS%Grid_in, sfc_state, CS%Grid, CS%turns)
+    allocate(fluxes)
+    call allocate_forcing_type(fluxes_in, G, fluxes)
+    call rotate_forcing(fluxes_in, fluxes, CS%turns)
   else
-     sfc_state=>sfc_state_in
-     fluxes=>fluxes_in
+    sfc_state => sfc_state_in
+    fluxes => fluxes_in
   endif
   ! useful parameters
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; ied = G%ied ; jed = G%jed
@@ -748,8 +748,8 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
   call cpu_clock_end(id_clock_shelf)
 
   if (CS%rotate_index) then
-!     call rotate_surface_state(sfc_state,CS%Grid, sfc_state_in,CS%Grid_in,-CS%turns)
-     call rotate_forcing(fluxes,fluxes_in,-CS%turns)
+!   call rotate_surface_state(sfc_state,CS%Grid, sfc_state_in,CS%Grid_in,-CS%turns)
+    call rotate_forcing(fluxes,fluxes_in,-CS%turns)
   endif
 
 
@@ -911,8 +911,8 @@ subroutine add_shelf_forces(Ocn_grid, US, CS, forces_in, do_shelf_area, external
   endif
 
   if (CS%rotate_index .and. rotate) then
-     call rotate_mech_forcing(forces, -CS%turns, forces_in)
-     ! TODO: deallocate mech forcing?
+    call rotate_mech_forcing(forces, -CS%turns, forces_in)
+    ! TODO: deallocate mech forcing?
   endif
 
 end subroutine add_shelf_forces
@@ -1472,19 +1472,19 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 
 
   if (PRESENT(sfc_state_in)) then
-     allocate(sfc_state)
-     ! assuming frazil is enabled in ocean. This could break some configurations?
-     call allocate_surface_state(sfc_state_in, CS%Grid_in, use_temperature=.true.,&
-          do_integrals=.true.,omit_frazil=.false.,use_iceshelves=.true.)
-     if (CS%rotate_index) then
-        call rotate_surface_state(sfc_state_in,CS%Grid_in, sfc_state,CS%Grid,CS%turns)
-     else
-        sfc_state=>sfc_state_in
-     endif
+    allocate(sfc_state)
+    ! assuming frazil is enabled in ocean. This could break some configurations?
+    call allocate_surface_state(sfc_state_in, CS%Grid_in, use_temperature=.true., &
+          do_integrals=.true., omit_frazil=.false., use_iceshelves=.true.)
+    if (CS%rotate_index) then
+      call rotate_surface_state(sfc_state_in, CS%Grid_in, sfc_state,CS%Grid,CS%turns)
+    else
+      sfc_state=>sfc_state_in
+    endif
   endif
 
 
-  call safe_alloc_ptr(CS%utide,isd,ied,jsd,jed)   ; CS%utide(:,:) = 0.0
+  call safe_alloc_ptr(CS%utide,isd,ied,jsd,jed) ; CS%utide(:,:) = 0.0
 
   if (read_TIDEAMP) then
     call get_param(param_file, mdl, "TIDEAMP_FILE", TideAmp_file, &
@@ -1688,8 +1688,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   endif
 
   if (new_sim .and. (.not. (CS%override_shelf_movement .and. CS%mass_from_file))) then
-     ! This model is initialized internally or from a file.
-     call initialize_ice_thickness(ISS%h_shelf, ISS%area_shelf_h, ISS%hmask, CS%Grid, CS%Grid_in, US, param_file,&
+    ! This model is initialized internally or from a file.
+    call initialize_ice_thickness(ISS%h_shelf, ISS%area_shelf_h, ISS%hmask, CS%Grid, CS%Grid_in, US, param_file,&
           CS%rotate_index, CS%turns)
     ! next make sure mass is consistent with thickness
     do j=G%jsd,G%jed ; do i=G%isd,G%ied
@@ -1698,9 +1698,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
       endif
     enddo ; enddo
     if (CS%debug) then
-       call hchksum(ISS%mass_shelf, "IS init: mass_shelf", G%HI, haloshift=0, scale=US%RZ_to_kg_m2)
-       call hchksum(ISS%area_shelf_h, "IS init: area_shelf", G%HI, haloshift=0, scale=US%L_to_m*US%L_to_m)
-       call hchksum(ISS%hmask, "IS init: hmask", G%HI, haloshift=0)
+      call hchksum(ISS%mass_shelf, "IS init: mass_shelf", G%HI, haloshift=0, scale=US%RZ_to_kg_m2)
+      call hchksum(ISS%area_shelf_h, "IS init: area_shelf", G%HI, haloshift=0, scale=US%L_to_m*US%L_to_m)
+      call hchksum(ISS%hmask, "IS init: hmask", G%HI, haloshift=0)
     endif
 
   ! else ! Previous block for new_sim=.T., this block restores the state.
@@ -1840,9 +1840,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 
 
   if (present(fluxes_in) .and. CS%rotate_index) &
-     call rotate_forcing(fluxes, fluxes_in, -CS%turns)
+    call rotate_forcing(fluxes, fluxes_in, -CS%turns)
   if (present(forces_in) .and. CS%rotate_index) &
-     call rotate_mech_forcing(forces, -CS%turns, forces_in)
+    call rotate_mech_forcing(forces, -CS%turns, forces_in)
 
 end subroutine initialize_ice_shelf
 
@@ -1943,12 +1943,10 @@ subroutine update_shelf_mass(G, US, CS, ISS, Time)
 
 
   if (CS%rotate_index) then
-     allocate(tmp2d(CS%Grid_in%isc:CS%Grid_in%iec,CS%Grid_in%jsc:CS%Grid_in%jec)); tmp2d(:,:) = 0.0
+    allocate(tmp2d(CS%Grid_in%isc:CS%Grid_in%iec,CS%Grid_in%jsc:CS%Grid_in%jec)) ; tmp2d(:,:) = 0.0
   else
-     allocate(tmp2d(is:ie,js:je)) ; tmp2d(:,:) = 0.0
+    allocate(tmp2d(is:ie,js:je)) ; tmp2d(:,:) = 0.0
   endif
-
-
 
   call time_interp_external(CS%id_read_mass, Time, tmp2d)
   call rotate_array(tmp2d,CS%turns, ISS%mass_shelf)
@@ -1991,21 +1989,17 @@ subroutine ice_shelf_query(CS, G, frac_shelf_h)
   real, optional, dimension(SZI_(G),SZJ_(G))  :: frac_shelf_h !<
                                       !< Ice shelf area fraction [nodim].
 
-  logical :: do_frac=.false.
-  integer :: i,j
+  integer :: i, j
 
-  if (present(frac_shelf_h)) do_frac=.true.
-
-  if (do_frac) then
-     do j=G%jsd,G%jed
-       do i=G%isd,G%ied
-         frac_shelf_h(i,j)=0.0
-         if (G%areaT(i,j)>0.) frac_shelf_h(i,j) = CS%ISS%area_shelf_h(i,j) / G%areaT(i,j)
-       enddo
-     enddo
-   endif
+  if (present(frac_shelf_h)) then
+    do j=G%jsd,G%jed ; do i=G%isd,G%ied
+      frac_shelf_h(i,j) = 0.0
+      if (G%areaT(i,j)>0.) frac_shelf_h(i,j) = CS%ISS%area_shelf_h(i,j) / G%areaT(i,j)
+    enddo ; enddo
+  endif
 
 end subroutine ice_shelf_query
+
 !> Save the ice shelf restart file
 subroutine ice_shelf_save_restart(CS, Time, directory, time_stamped, filename_suffix)
   type(ice_shelf_CS),         pointer    :: CS !< ice shelf control structure

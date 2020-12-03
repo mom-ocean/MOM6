@@ -154,18 +154,18 @@ subroutine set_axes_info(G, param_file, diag_cs, axes_set_name)
   endif
 
   if (G%symmetric) then
-     id_xq = diag_axis_init('xB', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
+    id_xq = diag_axis_init('xB', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
           'Boundary point nominal longitude',set_name=set_name, &
           Domain2=G%Domain%mpp_domain, domain_position=EAST)
-     id_yq = diag_axis_init('yB', G%gridLatB(G%jsgB:G%jegB), G%y_axis_units, 'y', &
+    id_yq = diag_axis_init('yB', G%gridLatB(G%jsgB:G%jegB), G%y_axis_units, 'y', &
           'Boundary point nominal latitude', set_name=set_name, &
           Domain2=G%Domain%mpp_domain, domain_position=NORTH)
 
   else
-     id_xq = diag_axis_init('xB', G%gridLonB(G%isg:G%ieg), G%x_axis_units, 'x', &
+    id_xq = diag_axis_init('xB', G%gridLonB(G%isg:G%ieg), G%x_axis_units, 'x', &
           'Boundary point nominal longitude',set_name=set_name, &
           Domain2=G%Domain%mpp_domain, domain_position=EAST)
-     id_yq = diag_axis_init('yB', G%gridLatB(G%jsg:G%jeg), G%y_axis_units, 'y', &
+    id_yq = diag_axis_init('yB', G%gridLatB(G%jsg:G%jeg), G%y_axis_units, 'y', &
           'Boundary point nominal latitude', set_name=set_name, &
           Domain2=G%Domain%mpp_domain, domain_position=NORTH)
 
@@ -415,8 +415,8 @@ end function get_diag_time_end
 
 !> Returns the "MOM_IS_diag_mediator" handle for a group of diagnostics derived from one field.
 function register_MOM_IS_diag_field(module_name, field_name, axes, init_time, &
-     long_name, units, missing_value, range, mask_variant, standard_name, &
-     verbose, do_not_log, err_msg, interp_method, tile_count, conversion) result (register_diag_field)
+            long_name, units, missing_value, range, mask_variant, standard_name, &
+            verbose, do_not_log, err_msg, interp_method, tile_count, conversion) result (register_diag_field)
   integer :: register_diag_field  !< The returned diagnostic handle
   character(len=*), intent(in) :: module_name !< Name of this module, usually "ice_model"
   character(len=*), intent(in) :: field_name !< Name of the diagnostic field
@@ -512,8 +512,8 @@ end function register_MOM_IS_diag_field
 
 !> Registers a static diagnostic, returning an integer handle
 function register_static_field(module_name, field_name, axes, &
-     long_name, units, missing_value, range, mask_variant, standard_name, &
-     do_not_log, interp_method, tile_count)
+            long_name, units, missing_value, range, mask_variant, standard_name, &
+            do_not_log, interp_method, tile_count)
   integer :: register_static_field !< The returned diagnostic handle
   character(len=*), intent(in) :: module_name !< Name of this module, usually "ice_model"
   character(len=*), intent(in) :: field_name !< Name of the diagnostic field
@@ -587,8 +587,8 @@ function i2s(a, n_in)
 
   i2s = ''
   do i=1,n
-     write (i2s_temp, '(I4.4)') a(i)
-     i2s = trim(i2s) //'_'// trim(i2s_temp)
+    write (i2s_temp, '(I4.4)') a(i)
+    i2s = trim(i2s) //'_'// trim(i2s_temp)
   enddo
   i2s = adjustl(i2s)
 end function i2s
