@@ -1710,7 +1710,7 @@ end subroutine initialize_temp_salt_linear
 !! number of tracers should be restored within each sponge. The
 !! interface height is always subject to damping, and must always be
 !! the first registered field.
-subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, Layer_CSp, ALE_CSp, Time)
+subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_file, Layer_CSp, ALE_CSp, Time)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in) :: US  !< A dimensional unit scaling type
@@ -1980,9 +1980,9 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, L
   ! The remaining calls to set_up_sponge_field can be in any order.
   if ( use_temperature .and. .not. time_space_interp_sponge) then
     call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain)
-    call set_up_sponge_field(tmp, tv%T, G, nz, CSp)
+    call set_up_sponge_field(tmp, tv%T, G, nz, Layer_CSp)
     call MOM_read_data(filename, salin_var, tmp(:,:,:), G%Domain)
-    call set_up_sponge_field(tmp, tv%S, G, nz, CSp)
+    call set_up_sponge_field(tmp, tv%S, G, nz, Layer_CSp)
   elseif (use_temperature) then
     call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, US, tv%T, ALE_CSp)
     call set_up_ALE_sponge_field(filename, salin_var, Time, G, GV, US, tv%S, ALE_CSp)
