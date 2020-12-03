@@ -2052,7 +2052,6 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
           'm2 s-1', conversion=US%L_to_m**2*US%s_to_T, &
           cmor_field_name='diftrblo', &
           cmor_long_name='Ocean Tracer Diffusivity due to Parameterized Mesoscale Advection', &
-          cmor_units='m2 s-1', &
           cmor_standard_name='ocean_tracer_diffusivity_due_to_parameterized_mesoscale_advection')
 
   CS%id_KH_u1 = register_diag_field('ocean_model', 'KHTH_u1', diag%axesCu1, Time,         &

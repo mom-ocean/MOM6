@@ -390,7 +390,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
 
     write(file,'(2/)')
 
-    call flush(file)
+    flush(file)
   endif
 
 end subroutine write_u_accel
@@ -722,7 +722,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
 
     write(file,'(2/)')
 
-    call flush(file)
+    flush(file)
   endif
 
 end subroutine write_v_accel
