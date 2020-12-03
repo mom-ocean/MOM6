@@ -1,8 +1,9 @@
 version: 2
 
 # Extra formats
-formats:
-  - pdf
+# PDF generation is failing for now; disabled on 2020-12-02
+#formats:
+#  - pdf
 
 # Build documentation
 sphinx:
