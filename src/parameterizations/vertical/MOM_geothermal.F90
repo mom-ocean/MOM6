@@ -581,7 +581,7 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS, useALEalgorith
   ! post the static geothermal heating field
   id = register_static_field('ocean_model', 'geo_heat', diag%axesT1,   &
         'Geothermal heat flux into ocean', 'W m-2', conversion=US%QRZ_T_to_W_m2, &
-        cmor_field_name='hfgeou', cmor_units='W m-2',                  &
+        cmor_field_name='hfgeou', &
         cmor_standard_name='upward_geothermal_heat_flux_at_sea_floor', &
         cmor_long_name='Upward geothermal heat flux at sea floor', &
         x_cell_method='mean', y_cell_method='mean', area_cell_method='mean')
