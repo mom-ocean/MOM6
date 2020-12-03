@@ -204,7 +204,7 @@ subroutine MOM_sum_output_init(G, GV, US, param_file, directory, ntrnc, &
   !query fms_io if there is a filename_appendix (for ensemble runs)
   call get_filename_appendix(filename_appendix)
   if (len_trim(filename_appendix) > 0) then
-     energyfile = trim(energyfile) //'.'//trim(filename_appendix)
+    energyfile = trim(energyfile) //'.'//trim(filename_appendix)
   endif
 
   CS%energyfile = trim(slasher(directory))//trim(energyfile)
@@ -1299,7 +1299,7 @@ subroutine write_depth_list(G, US, CS, filename, list_size)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
       filename//" vol_below "//trim(NF90_STRERROR(status)))
   status = NF90_PUT_ATT(ncid, Vid, "long_name", "Open volume below depth")
-   if (status /= NF90_NOERR) call MOM_error(WARNING, &
+  if (status /= NF90_NOERR) call MOM_error(WARNING, &
       filename//" vol_below "//trim(NF90_STRERROR(status)))
   status = NF90_PUT_ATT(ncid, Vid, "units", "m3")
   if (status /= NF90_NOERR) call MOM_error(WARNING, &

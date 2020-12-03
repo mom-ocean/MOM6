@@ -1762,49 +1762,49 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   ALLOC_(CS%h_v(isd:ied,JsdB:JedB,nz))   ; CS%h_v(:,:,:) = 0.0
 
   CS%id_Kv_slow = register_diag_field('ocean_model', 'Kv_slow', diag%axesTi, Time, &
-     'Slow varying vertical viscosity', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
+      'Slow varying vertical viscosity', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
 
   CS%id_Kv_u = register_diag_field('ocean_model', 'Kv_u', diag%axesCuL, Time, &
-     'Total vertical viscosity at u-points', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
+      'Total vertical viscosity at u-points', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
 
   CS%id_Kv_v = register_diag_field('ocean_model', 'Kv_v', diag%axesCvL, Time, &
-     'Total vertical viscosity at v-points', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
+      'Total vertical viscosity at v-points', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
 
   CS%id_au_vv = register_diag_field('ocean_model', 'au_visc', diag%axesCui, Time, &
-     'Zonal Viscous Vertical Coupling Coefficient', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
+      'Zonal Viscous Vertical Coupling Coefficient', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
 
   CS%id_av_vv = register_diag_field('ocean_model', 'av_visc', diag%axesCvi, Time, &
-     'Meridional Viscous Vertical Coupling Coefficient', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
+      'Meridional Viscous Vertical Coupling Coefficient', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
 
   CS%id_h_u = register_diag_field('ocean_model', 'Hu_visc', diag%axesCuL, Time, &
-     'Thickness at Zonal Velocity Points for Viscosity', thickness_units, &
-     conversion=GV%H_to_m)
+      'Thickness at Zonal Velocity Points for Viscosity', thickness_units, &
+      conversion=GV%H_to_m)
 
   CS%id_h_v = register_diag_field('ocean_model', 'Hv_visc', diag%axesCvL, Time, &
-     'Thickness at Meridional Velocity Points for Viscosity', thickness_units, &
-     conversion=GV%H_to_m)
+      'Thickness at Meridional Velocity Points for Viscosity', thickness_units, &
+      conversion=GV%H_to_m)
 
   CS%id_hML_u = register_diag_field('ocean_model', 'HMLu_visc', diag%axesCu1, Time, &
-     'Mixed Layer Thickness at Zonal Velocity Points for Viscosity', thickness_units, &
-     conversion=GV%H_to_m)
+      'Mixed Layer Thickness at Zonal Velocity Points for Viscosity', thickness_units, &
+      conversion=GV%H_to_m)
 
   CS%id_hML_v = register_diag_field('ocean_model', 'HMLv_visc', diag%axesCv1, Time, &
-     'Mixed Layer Thickness at Meridional Velocity Points for Viscosity', thickness_units, &
-     conversion=GV%H_to_m)
+      'Mixed Layer Thickness at Meridional Velocity Points for Viscosity', thickness_units, &
+      conversion=GV%H_to_m)
 
   CS%id_du_dt_visc = register_diag_field('ocean_model', 'du_dt_visc', diag%axesCuL, &
-     Time, 'Zonal Acceleration from Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
+      Time, 'Zonal Acceleration from Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_du_dt_visc > 0) call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
   CS%id_dv_dt_visc = register_diag_field('ocean_model', 'dv_dt_visc', diag%axesCvL, &
-     Time, 'Meridional Acceleration from Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
+      Time, 'Meridional Acceleration from Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_dv_dt_visc > 0) call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
 
   CS%id_taux_bot = register_diag_field('ocean_model', 'taux_bot', diag%axesCu1, &
-     Time, 'Zonal Bottom Stress from Ocean to Earth', 'Pa', &
-     conversion=US%RZ_to_kg_m2*US%L_T2_to_m_s2)
+      Time, 'Zonal Bottom Stress from Ocean to Earth', 'Pa', &
+      conversion=US%RZ_to_kg_m2*US%L_T2_to_m_s2)
   CS%id_tauy_bot = register_diag_field('ocean_model', 'tauy_bot', diag%axesCv1, &
-     Time, 'Meridional Bottom Stress from Ocean to Earth', 'Pa', &
-     conversion=US%RZ_to_kg_m2*US%L_T2_to_m_s2)
+      Time, 'Meridional Bottom Stress from Ocean to Earth', 'Pa', &
+      conversion=US%RZ_to_kg_m2*US%L_T2_to_m_s2)
 
   !CS%id_hf_du_dt_visc = register_diag_field('ocean_model', 'hf_du_dt_visc', diag%axesCuL, Time, &
   !    'Fractional Thickness-weighted Zonal Acceleration from Vertical Viscosity', 'm s-2', &

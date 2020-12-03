@@ -233,7 +233,7 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, US, param_file, tv, just_read
           h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
         endif
       enddo
-   enddo ; enddo
+    enddo ; enddo
 
   case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
@@ -536,46 +536,46 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
 
     select case ( coordinateMode(verticalCoordinate) )
 
-     case ( REGRIDDING_RHO )
-       ! Construct notional interface positions
-       e0(1) = 0.
-       do K=2,nz
-         e0(k) = -G%max_depth * ( 0.5 * ( GV%Rlay(k-1) + GV%Rlay(k) ) - rho_sur ) / rho_range
-         e0(k) = min( 0., e0(k) ) ! Bound by surface
-         e0(k) = max( -G%max_depth, e0(k) ) ! Bound by possible deepest point in model
-         ! write(mesg,*) 'G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)',&
-         !       G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)
-         ! call MOM_mesg(mesg,5)
-       enddo
-       e0(nz+1) = -G%max_depth
+      case ( REGRIDDING_RHO )
+        ! Construct notional interface positions
+        e0(1) = 0.
+        do K=2,nz
+          e0(k) = -G%max_depth * ( 0.5 * ( GV%Rlay(k-1) + GV%Rlay(k) ) - rho_sur ) / rho_range
+          e0(k) = min( 0., e0(k) ) ! Bound by surface
+          e0(k) = max( -G%max_depth, e0(k) ) ! Bound by possible deepest point in model
+          ! write(mesg,*) 'G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)',&
+          !       G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)
+          ! call MOM_mesg(mesg,5)
+        enddo
+        e0(nz+1) = -G%max_depth
 
-       ! Calculate thicknesses
-       do j=js,je ; do i=is,ie
-         eta1D(nz+1) = -G%bathyT(i,j)
-         do k=nz,1,-1
-           eta1D(k) = e0(k)
-           if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_Z)) then
-             eta1D(k) = eta1D(k+1) + GV%Angstrom_Z
-             h(i,j,k) = GV%Angstrom_H
-           else
-             h(i,j,k) = GV%Z_to_H*(eta1D(k) - eta1D(k+1))
-           endif
-         enddo
-       enddo ; enddo
+        ! Calculate thicknesses
+        do j=js,je ; do i=is,ie
+          eta1D(nz+1) = -G%bathyT(i,j)
+          do k=nz,1,-1
+            eta1D(k) = e0(k)
+            if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_Z)) then
+              eta1D(k) = eta1D(k+1) + GV%Angstrom_Z
+              h(i,j,k) = GV%Angstrom_H
+            else
+              h(i,j,k) = GV%Z_to_H*(eta1D(k) - eta1D(k+1))
+            endif
+          enddo
+        enddo ; enddo
 
-     case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR )   ! Initial thicknesses for z coordinates
-       do j=js,je ; do i=is,ie
-         eta1D(nz+1) = -G%bathyT(i,j)
-         do k=nz,1,-1
-           eta1D(k) =  -G%max_depth * real(k-1) / real(nz)
-           if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
-             eta1D(k) = eta1D(k+1) + min_thickness
-             h(i,j,k) = min_thickness * GV%Z_to_H
-           else
-             h(i,j,k) = GV%Z_to_H*(eta1D(k) - eta1D(k+1))
-           endif
-         enddo
-      enddo ; enddo
+      case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR )  ! Initial thicknesses for z coordinates
+        do j=js,je ; do i=is,ie
+          eta1D(nz+1) = -G%bathyT(i,j)
+          do k=nz,1,-1
+            eta1D(k) =  -G%max_depth * real(k-1) / real(nz)
+            if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
+              eta1D(k) = eta1D(k+1) + min_thickness
+              h(i,j,k) = min_thickness * GV%Z_to_H
+            else
+              h(i,j,k) = GV%Z_to_H*(eta1D(k) - eta1D(k+1))
+            endif
+          enddo
+        enddo ; enddo
 
       case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
         do j=js,je ; do i=is,ie

@@ -1302,20 +1302,20 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
         ! This diagnostic is rescaled to MKS units when combined.
 
   handles%id_evap = register_diag_field('ocean_model', 'evap', diag%axesT1, Time, &
-       'Evaporation/condensation at ocean surface (evaporation is negative)', &
-       'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
-       standard_name='water_evaporation_flux', cmor_field_name='evs', &
-       cmor_standard_name='water_evaporation_flux', &
-       cmor_long_name='Water Evaporation Flux Where Ice Free Ocean over Sea')
+        'Evaporation/condensation at ocean surface (evaporation is negative)', &
+        'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
+        standard_name='water_evaporation_flux', cmor_field_name='evs', &
+        cmor_standard_name='water_evaporation_flux', &
+        cmor_long_name='Water Evaporation Flux Where Ice Free Ocean over Sea')
 
   ! smg: seaice_melt field requires updates to the sea ice model
   handles%id_seaice_melt = register_diag_field('ocean_model', 'seaice_melt',       &
-     diag%axesT1, Time, 'water flux to ocean from snow/sea ice melting(> 0) or formation(< 0)', &
-     'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
-      standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',     &
-      cmor_field_name='fsitherm',                                                  &
-      cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',&
-      cmor_long_name='water flux to ocean from sea ice melt(> 0) or form(< 0)')
+        diag%axesT1, Time, 'water flux to ocean from snow/sea ice melting(> 0) or formation(< 0)', &
+        'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
+        standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',     &
+        cmor_field_name='fsitherm',                                                  &
+        cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',&
+        cmor_long_name='water flux to ocean from sea ice melt(> 0) or form(< 0)')
 
   handles%id_precip = register_diag_field('ocean_model', 'precip', diag%axesT1, Time, &
         'Liquid + frozen precipitation into ocean', 'kg m-2 s-1')

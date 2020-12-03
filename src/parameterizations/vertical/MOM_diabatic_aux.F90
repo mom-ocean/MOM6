@@ -1222,7 +1222,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                   H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
                   h2d, T2d, netMassInOut, netMassOut, netHeat, netSalt,                   &
                   Pen_SW_bnd, tv, aggregate_FW_forcing, nonpenSW=nonpenSW)
-   endif
+    endif
     ! ea is for passive tracers
     do i=is,ie
     !  ea(i,j,1) = netMassInOut(i)
@@ -1580,7 +1580,7 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
     return
   else
     allocate(CS)
-   endif
+  endif
 
   CS%diag => diag
   CS%Time => Time

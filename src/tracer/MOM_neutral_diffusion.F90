@@ -356,9 +356,9 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
 
   ! Calculate pressure at interfaces and layer averaged alpha/beta
   if (present(p_surf)) then
-     do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
-       CS%Pint(i,j,1) = p_surf(i,j)
-     enddo ; enddo
+    do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
+      CS%Pint(i,j,1) = p_surf(i,j)
+    enddo ; enddo
   else
     CS%Pint(:,:,1) = 0.
   endif

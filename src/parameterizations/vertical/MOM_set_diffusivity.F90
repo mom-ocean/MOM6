@@ -304,8 +304,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   if ((CS%use_CVMix_ddiff .or. CS%double_diffusion) .and. &
       .not.(present(Kd_extra_T) .and. present(Kd_extra_S))) &
-     call MOM_error(FATAL, "set_diffusivity: both Kd_extra_T and Kd_extra_S must be present "//&
-                           "when USE_CVMIX_DDIFF or DOUBLE_DIFFUSION are true.")
+    call MOM_error(FATAL, "set_diffusivity: both Kd_extra_T and Kd_extra_S must be present "//&
+                          "when USE_CVMIX_DDIFF or DOUBLE_DIFFUSION are true.")
 
   TKE_to_Kd_used = (CS%use_tidal_mixing .or. CS%ML_radiation .or. &
                    (CS%bottomdraglaw .and. .not.CS%use_LOTW_BBL_diffusivity))

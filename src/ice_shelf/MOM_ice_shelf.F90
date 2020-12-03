@@ -1271,7 +1271,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  "ice shelf (every time step) from a file.", default=.false.)
 
   if (CS%find_salt_root) then ! read liquidus coeffs.
-     call get_param(param_file, mdl, "TFREEZE_S0_P0", CS%TFr_0_0, &
+    call get_param(param_file, mdl, "TFREEZE_S0_P0", CS%TFr_0_0, &
                  "this is the freezing potential temperature at "//&
                  "S=0, P=0.", units="degC", default=0.0, do_not_log=.true.)
     call get_param(param_file, mdl, "DTFREEZE_DS", CS%dTFr_dS, &
@@ -1592,14 +1592,14 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
 
 
   CS%id_area_shelf_h = register_diag_field('ocean_model', 'area_shelf_h', CS%diag%axesT1, CS%Time, &
-     'Ice Shelf Area in cell', 'meter-2', conversion=US%L_to_m**2)
+      'Ice Shelf Area in cell', 'meter-2', conversion=US%L_to_m**2)
   CS%id_shelf_mass = register_diag_field('ocean_model', 'shelf_mass', CS%diag%axesT1, CS%Time, &
-     'mass of shelf', 'kg/m^2', conversion=US%RZ_to_kg_m2)
+      'mass of shelf', 'kg/m^2', conversion=US%RZ_to_kg_m2)
   CS%id_h_shelf = register_diag_field('ocean_model', 'h_shelf', CS%diag%axesT1, CS%Time, &
-       'ice shelf thickness', 'm', conversion=US%Z_to_m)
-  CS%id_mass_flux = register_diag_field('ocean_model', 'mass_flux', CS%diag%axesT1,&
-     CS%Time, 'Total mass flux of freshwater across the ice-ocean interface.', &
-     'kg/s', conversion=US%RZ_T_to_kg_m2s*US%L_to_m**2)
+      'ice shelf thickness', 'm', conversion=US%Z_to_m)
+  CS%id_mass_flux = register_diag_field('ocean_model', 'mass_flux', CS%diag%axesT1, CS%Time, &
+      'Total mass flux of freshwater across the ice-ocean interface.', &
+      'kg/s', conversion=US%RZ_T_to_kg_m2s*US%L_to_m**2)
 
   if (CS%const_gamma) then ! use ISOMIP+ eq. with rho_fw = 1000. kg m-3
     meltrate_conversion = 86400.0*365.0*US%Z_to_m*US%s_to_T / (1000.0*US%kg_m3_to_R)
@@ -1607,27 +1607,27 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
     meltrate_conversion = 86400.0*365.0*US%Z_to_m*US%s_to_T / CS%density_ice
   endif
   CS%id_melt = register_diag_field('ocean_model', 'melt', CS%diag%axesT1, CS%Time, &
-     'Ice Shelf Melt Rate', 'm yr-1', conversion= meltrate_conversion)
+      'Ice Shelf Melt Rate', 'm yr-1', conversion= meltrate_conversion)
   CS%id_thermal_driving = register_diag_field('ocean_model', 'thermal_driving', CS%diag%axesT1, CS%Time, &
-     'pot. temp. in the boundary layer minus freezing pot. temp. at the ice-ocean interface.', 'Celsius')
+      'pot. temp. in the boundary layer minus freezing pot. temp. at the ice-ocean interface.', 'Celsius')
   CS%id_haline_driving = register_diag_field('ocean_model', 'haline_driving', CS%diag%axesT1, CS%Time, &
-     'salinity in the boundary layer minus salinity at the ice-ocean interface.', 'psu')
+      'salinity in the boundary layer minus salinity at the ice-ocean interface.', 'psu')
   CS%id_Sbdry = register_diag_field('ocean_model', 'sbdry', CS%diag%axesT1, CS%Time, &
-     'salinity at the ice-ocean interface.', 'psu')
+      'salinity at the ice-ocean interface.', 'psu')
   CS%id_u_ml = register_diag_field('ocean_model', 'u_ml', CS%diag%axesCu1, CS%Time, &
-     'Eastward vel. in the boundary layer (used to compute ustar)', 'm s-1', conversion=US%L_T_to_m_s)
+      'Eastward vel. in the boundary layer (used to compute ustar)', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_v_ml = register_diag_field('ocean_model', 'v_ml', CS%diag%axesCv1, CS%Time, &
-     'Northward vel. in the boundary layer (used to compute ustar)', 'm s-1', conversion=US%L_T_to_m_s)
+      'Northward vel. in the boundary layer (used to compute ustar)', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_exch_vel_s = register_diag_field('ocean_model', 'exch_vel_s', CS%diag%axesT1, CS%Time, &
-     'Sub-shelf salinity exchange velocity', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
+      'Sub-shelf salinity exchange velocity', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
   CS%id_exch_vel_t = register_diag_field('ocean_model', 'exch_vel_t', CS%diag%axesT1, CS%Time, &
-     'Sub-shelf thermal exchange velocity', 'm s-1' , conversion=US%Z_to_m*US%s_to_T)
+      'Sub-shelf thermal exchange velocity', 'm s-1' , conversion=US%Z_to_m*US%s_to_T)
   CS%id_tfreeze = register_diag_field('ocean_model', 'tfreeze', CS%diag%axesT1, CS%Time, &
-     'In Situ Freezing point at ice shelf interface', 'degC')
+      'In Situ Freezing point at ice shelf interface', 'degC')
   CS%id_tfl_shelf = register_diag_field('ocean_model', 'tflux_shelf', CS%diag%axesT1, CS%Time, &
-     'Heat conduction into ice shelf', 'W m-2', conversion=-US%QRZ_T_to_W_m2)
+      'Heat conduction into ice shelf', 'W m-2', conversion=-US%QRZ_T_to_W_m2)
   CS%id_ustar_shelf = register_diag_field('ocean_model', 'ustar_shelf', CS%diag%axesT1, CS%Time, &
-     'Fric vel under shelf', 'm/s', conversion=US%Z_to_m*US%s_to_T)
+      'Fric vel under shelf', 'm/s', conversion=US%Z_to_m*US%s_to_T)
   if (CS%active_shelf_dynamics) then
     CS%id_h_mask = register_diag_field('ocean_model', 'h_mask', CS%diag%axesT1, CS%Time, &
        'ice shelf thickness mask', 'none')

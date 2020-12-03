@@ -311,10 +311,10 @@ subroutine RGC_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, 
   in_flux(:,:,:) = 0.0
   m=1
   do j=js,je ; do i=is,ie
-     !set tracer to 1.0 in the surface of the continental shelf
-     if (G%geoLonT(i,j) <= (CS%CSL)) then
-        CS%tr(i,j,1,m) = 1.0 !first layer
-     endif
+    ! set tracer to 1.0 in the surface of the continental shelf
+    if (G%geoLonT(i,j) <= (CS%CSL)) then
+      CS%tr(i,j,1,m) = 1.0 !first layer
+    endif
   enddo ; enddo
 
   if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then

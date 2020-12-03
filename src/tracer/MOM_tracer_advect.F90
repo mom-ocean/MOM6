@@ -342,7 +342,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                                                                   !! tracer change [H L2 ~> m3 or kg]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: uhr !< accumulated volume/mass flux through
                                                                   !! the zonal face [H L2 ~> m3 or kg]
-   real, dimension(SZIB_(G),SZJ_(G)),        intent(in)    :: uh_neglect !< A tiny zonal mass flux that can
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: uh_neglect !< A tiny zonal mass flux that can
                                                                   !! be neglected [H L2 ~> m3 or kg]
   type(ocean_OBC_type),                      pointer       :: OBC !< specifies whether, where, and what OBCs are used
   logical, dimension(SZJ_(G),SZK_(GV)),      intent(inout) :: domore_u !< If true, there is more advection to be
@@ -443,41 +443,41 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
     enddo
     ! loop through open boundaries and recalculate flux terms
     if (associated(OBC)) then ; if (OBC%OBC_pe) then
-       do n=1,OBC%number_of_segments
-         segment=>OBC%segment(n)
-         if (.not. associated(segment%tr_Reg)) cycle
-         if (segment%is_E_or_W) then
-           if (j>=segment%HI%jsd .and. j<=segment%HI%jed) then
-              I = segment%HI%IsdB
-              do m = 1,ntr ! replace tracers with OBC values
-                if (associated(segment%tr_Reg%Tr(m)%tres)) then
-                   if (segment%direction == OBC_DIRECTION_W) then
-                      T_tmp(i,m) = segment%tr_Reg%Tr(m)%tres(i,j,k)
-                   else
-                      T_tmp(i+1,m) = segment%tr_Reg%Tr(m)%tres(i,j,k)
-                   endif
+      do n=1,OBC%number_of_segments
+        segment=>OBC%segment(n)
+        if (.not. associated(segment%tr_Reg)) cycle
+        if (segment%is_E_or_W) then
+          if (j>=segment%HI%jsd .and. j<=segment%HI%jed) then
+            I = segment%HI%IsdB
+            do m = 1,ntr ! replace tracers with OBC values
+              if (associated(segment%tr_Reg%Tr(m)%tres)) then
+                if (segment%direction == OBC_DIRECTION_W) then
+                  T_tmp(i,m) = segment%tr_Reg%Tr(m)%tres(i,j,k)
                 else
-                   if (segment%direction == OBC_DIRECTION_W) then
-                      T_tmp(i,m) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
-                   else
-                      T_tmp(i+1,m) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
-                   endif
+                  T_tmp(i+1,m) = segment%tr_Reg%Tr(m)%tres(i,j,k)
                 endif
+              else
+                if (segment%direction == OBC_DIRECTION_W) then
+                  T_tmp(i,m) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
+                else
+                  T_tmp(i+1,m) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
+                endif
+              endif
+            enddo
+            do m = 1,ntr ! Apply update tracer values for slope calculation
+              do i=segment%HI%IsdB-1,segment%HI%IsdB+1
+                Tp = T_tmp(i+1,m) ; Tc = T_tmp(i,m) ; Tm = T_tmp(i-1,m)
+                dMx = max( Tp, Tc, Tm ) - Tc
+                dMn= Tc - min( Tp, Tc, Tm )
+                slope_x(i,m) = G%mask2dCu(I,j)*G%mask2dCu(I-1,j) * &
+                     sign( min(0.5*abs(Tp-Tm), 2.0*dMx, 2.0*dMn), Tp-Tm )
               enddo
-              do m = 1,ntr ! Apply update tracer values for slope calculation
-                do i=segment%HI%IsdB-1,segment%HI%IsdB+1
-                  Tp = T_tmp(i+1,m) ; Tc = T_tmp(i,m) ; Tm = T_tmp(i-1,m)
-                  dMx = max( Tp, Tc, Tm ) - Tc
-                  dMn= Tc - min( Tp, Tc, Tm )
-                  slope_x(i,m) = G%mask2dCu(I,j)*G%mask2dCu(I-1,j) * &
-                       sign( min(0.5*abs(Tp-Tm), 2.0*dMx, 2.0*dMn), Tp-Tm )
-                enddo
-              enddo
+            enddo
 
-           endif
-         endif
-       enddo
-    endif; endif
+          endif
+        endif
+      enddo
+    endif ; endif
 
 
     ! Calculate the i-direction fluxes of each tracer, using as much
@@ -590,7 +590,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
               ! Tracer fluxes are set to prescribed values only for inflows from masked areas.
               ! Now changing to simply fixed inflows.
               if ((uhr(I,j,k) > 0.0) .and. (segment%direction == OBC_DIRECTION_W) .or. &
-                 (uhr(I,j,k) < 0.0) .and. (segment%direction == OBC_DIRECTION_E)) then
+                  (uhr(I,j,k) < 0.0) .and. (segment%direction == OBC_DIRECTION_E)) then
                 uhh(I) = uhr(I,j,k)
               ! should the reservoir evolve for this case Kate ?? - Nope
                 do m=1,ntr
@@ -614,7 +614,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
 
             ! Tracer fluxes are set to prescribed values only for inflows from masked areas.
             if ((uhr(I,j,k) > 0.0) .and. (G%mask2dT(i,j) < 0.5) .or. &
-               (uhr(I,j,k) < 0.0) .and. (G%mask2dT(i+1,j) < 0.5)) then
+                (uhr(I,j,k) < 0.0) .and. (G%mask2dT(i+1,j) < 0.5)) then
               uhh(I) = uhr(I,j,k)
               do m=1,ntr
                 if (associated(segment%tr_Reg%Tr(m)%tres)) then
@@ -813,42 +813,42 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 
   ! loop through open boundaries and recalculate flux terms
   if (associated(OBC)) then ; if (OBC%OBC_pe) then
-     do n=1,OBC%number_of_segments
-       segment=>OBC%segment(n)
-       if (.not. associated(segment%tr_Reg)) cycle
-       do i=is,ie
-         if (segment%is_N_or_S) then
-           if (i>=segment%HI%isd .and. i<=segment%HI%ied) then
-              J = segment%HI%JsdB
-              do m = 1,ntr ! replace tracers with OBC values
-                if (associated(segment%tr_Reg%Tr(m)%tres)) then
-                   if (segment%direction == OBC_DIRECTION_S) then
-                      T_tmp(i,m,j) = segment%tr_Reg%Tr(m)%tres(i,j,k)
-                   else
-                      T_tmp(i,m,j+1) = segment%tr_Reg%Tr(m)%tres(i,j,k)
-                   endif
+    do n=1,OBC%number_of_segments
+      segment=>OBC%segment(n)
+      if (.not. associated(segment%tr_Reg)) cycle
+      do i=is,ie
+        if (segment%is_N_or_S) then
+          if (i>=segment%HI%isd .and. i<=segment%HI%ied) then
+            J = segment%HI%JsdB
+            do m = 1,ntr ! replace tracers with OBC values
+              if (associated(segment%tr_Reg%Tr(m)%tres)) then
+                if (segment%direction == OBC_DIRECTION_S) then
+                  T_tmp(i,m,j) = segment%tr_Reg%Tr(m)%tres(i,j,k)
                 else
-                   if (segment%direction == OBC_DIRECTION_S) then
-                      T_tmp(i,m,j) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
-                   else
-                      T_tmp(i,m,j+1) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
-                   endif
+                  T_tmp(i,m,j+1) = segment%tr_Reg%Tr(m)%tres(i,j,k)
                 endif
+              else
+                if (segment%direction == OBC_DIRECTION_S) then
+                  T_tmp(i,m,j) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
+                else
+                  T_tmp(i,m,j+1) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
+                endif
+              endif
+            enddo
+            do m = 1,ntr ! Apply update tracer values for slope calculation
+              do j=segment%HI%JsdB-1,segment%HI%JsdB+1
+                Tp = T_tmp(i,m,j+1) ; Tc = T_tmp(i,m,j) ; Tm = T_tmp(i,m,j-1)
+                dMx = max( Tp, Tc, Tm ) - Tc
+                dMn= Tc - min( Tp, Tc, Tm )
+                slope_y(i,m,j) = G%mask2dCv(i,J)*G%mask2dCv(i,J-1) * &
+                     sign( min(0.5*abs(Tp-Tm), 2.0*dMx, 2.0*dMn), Tp-Tm )
               enddo
-              do m = 1,ntr ! Apply update tracer values for slope calculation
-                do j=segment%HI%JsdB-1,segment%HI%JsdB+1
-                  Tp = T_tmp(i,m,j+1) ; Tc = T_tmp(i,m,j) ; Tm = T_tmp(i,m,j-1)
-                  dMx = max( Tp, Tc, Tm ) - Tc
-                  dMn= Tc - min( Tp, Tc, Tm )
-                  slope_y(i,m,j) = G%mask2dCv(i,J)*G%mask2dCv(i,J-1) * &
-                       sign( min(0.5*abs(Tp-Tm), 2.0*dMx, 2.0*dMn), Tp-Tm )
-                enddo
-              enddo
-           endif
-         endif ! is_N_S
-       enddo ! i-loop
-     enddo ! segment loop
-  endif; endif
+            enddo
+          endif
+        endif ! is_N_S
+      enddo ! i-loop
+    enddo ! segment loop
+  endif ; endif
 
   ! Calculate the j-direction fluxes of each tracer, using as much
   ! the minimum of the remaining mass flux (vhr) and the half the mass
@@ -963,7 +963,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                 ! Tracer fluxes are set to prescribed values only for inflows from masked areas.
                 ! Now changing to simply fixed inflows.
                 if ((vhr(i,J,k) > 0.0) .and. (segment%direction == OBC_DIRECTION_S) .or. &
-                   (vhr(i,J,k) < 0.0) .and. (segment%direction == OBC_DIRECTION_N)) then
+                    (vhr(i,J,k) < 0.0) .and. (segment%direction == OBC_DIRECTION_N)) then
                   vhh(i,J) = vhr(i,J,k)
                   do m=1,ntr
                     if (associated(segment%tr_Reg%Tr(m)%t)) then
@@ -998,7 +998,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
           endif
         enddo
       endif
-    endif; endif
+    endif ; endif
 
   else ! not domore_v.
     do i=is,ie ; vhh(i,J) = 0.0 ; enddo

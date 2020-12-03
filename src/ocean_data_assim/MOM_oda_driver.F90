@@ -139,7 +139,7 @@ subroutine init_oda(Time, G, GV, CS)
   character(len=200) :: inputdir, basin_file
   logical :: reentrant_x, reentrant_y, tripolar_N, symmetric
 
-  if (associated(CS)) call mpp_error(FATAL,'Calling oda_init with associated control structure')
+  if (associated(CS)) call mpp_error(FATAL, 'Calling oda_init with associated control structure')
   allocate(CS)
 ! Use ens1 parameters , this could be changed at a later time
 ! if it were desirable to have alternate parameters, e.g. for the grid
@@ -175,14 +175,14 @@ subroutine init_oda(Time, G, GV, CS)
   inputdir = slasher(inputdir)
 
   select case(lowercase(trim(assim_method)))
-  case('eakf')
+    case('eakf')
       CS%assim_method = EAKF_ASSIM
-  case('oi')
-     CS%assim_method = OI_ASSIM
-  case('no_assim')
+    case('oi')
+      CS%assim_method = OI_ASSIM
+    case('no_assim')
       CS%assim_method = NO_ASSIM
-  case default
-      call mpp_error(FATAL,'Invalid assimilation method provided')
+    case default
+      call mpp_error(FATAL, 'Invalid assimilation method provided')
   end select
 
   ens_info = get_ensemble_size()
@@ -192,8 +192,8 @@ subroutine init_oda(Time, G, GV, CS)
   !! Switch to global pelist
   allocate(CS%ensemble_pelist(CS%ensemble_size,npes_pm))
   allocate(CS%filter_pelist(CS%ensemble_size*npes_pm))
-  call get_ensemble_pelist(CS%ensemble_pelist,'ocean')
-  call get_ensemble_filter_pelist(CS%filter_pelist,'ocean')
+  call get_ensemble_pelist(CS%ensemble_pelist, 'ocean')
+  call get_ensemble_filter_pelist(CS%filter_pelist, 'ocean')
 
   call set_current_pelist(CS%filter_pelist)
 

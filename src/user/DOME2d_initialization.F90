@@ -449,7 +449,7 @@ subroutine DOME2d_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, AC
 
     ! Construct a grid (somewhat arbitrarily) to describe  the sponge T/S on
     do k=1,nz
-     e0(k) = -G%max_depth * ( real(k-1) / real(nz) )
+      e0(k) = -G%max_depth * ( real(k-1) / real(nz) )
     enddo
     e0(nz+1) = -G%max_depth
     do j=js,je ; do i=is,ie

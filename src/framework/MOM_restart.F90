@@ -67,8 +67,8 @@ end type field_restart
 
 !> A structure to store information about restart fields that are no longer used
 type obsolete_restart
-   character(len=32) :: field_name       !< Name of restart field that is no longer in use
-   character(len=32) :: replacement_name !< Name of replacement restart field, if applicable
+  character(len=32) :: field_name       !< Name of restart field that is no longer in use
+  character(len=32) :: replacement_name !< Name of replacement restart field, if applicable
 end type obsolete_restart
 
 !> A restart registry and the control structure for restarts

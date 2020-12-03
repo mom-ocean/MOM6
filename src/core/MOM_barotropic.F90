@@ -1027,7 +1027,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   enddo
   !$OMP parallel do default(shared)
   do J=js-1,je
-     do k=1,nz ; do i=is,ie
+    do k=1,nz ; do i=is,ie
       gtot_N(i,j)   = gtot_N(i,j)   + pbce(i,j,k)   * wt_v(i,J,k)
       gtot_S(i,j+1) = gtot_S(i,j+1) + pbce(i,j+1,k) * wt_v(i,J,k)
     enddo ; enddo
@@ -3079,7 +3079,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
       endif
     endif ; enddo ; enddo
     if (OBC%Flather_u_BCs_exist_globally) then
-     do n = 1, OBC%number_of_segments
+      do n = 1, OBC%number_of_segments
         segment => OBC%segment(n)
         if (segment%is_E_or_W .and. segment%Flather) then
           do j=segment%HI%jsd,segment%HI%jed ; do I=segment%HI%IsdB,segment%HI%IedB
@@ -3133,7 +3133,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
       endif
     endif ; enddo ; enddo
     if (OBC%Flather_v_BCs_exist_globally) then
-     do n = 1, OBC%number_of_segments
+      do n = 1, OBC%number_of_segments
         segment => OBC%segment(n)
         if (segment%is_N_or_S .and. segment%Flather) then
           do J=segment%HI%JsdB,segment%HI%JedB ; do i=segment%HI%isd,segment%HI%ied

@@ -698,7 +698,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
       do k=2,nz ; do i=Isq,Ieq+1
         pbce(i,j,k) = pbce(i,j,k-1) + &
                       (GV%g_prime(K)*GV%H_to_Z) * ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i))
-     enddo ; enddo
+      enddo ; enddo
     enddo ! end of j loop
   endif ! use_EOS
 

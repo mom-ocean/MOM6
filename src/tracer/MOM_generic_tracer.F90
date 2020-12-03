@@ -67,22 +67,22 @@ module MOM_generic_tracer
 
   !> Control structure for generic tracers
   type, public :: MOM_generic_tracer_CS ; private
-     character(len = 200) :: IC_file !< The file in which the generic tracer initial values can
-                                     !! be found, or an empty string for internal initialization.
-     logical :: Z_IC_file !< If true, the generic_tracer IC_file is in Z-space.  The default is false.
-     real :: tracer_IC_val = 0.0    !< The initial value assigned to tracers.
-     real :: tracer_land_val = -1.0 !< The values of tracers used where  land is masked out.
-     logical :: tracers_may_reinit  !< If true, tracers may go through the
-                                    !! initialization code if they are not found in the restart files.
+    character(len = 200) :: IC_file !< The file in which the generic tracer initial values can
+                                    !! be found, or an empty string for internal initialization.
+    logical :: Z_IC_file !< If true, the generic_tracer IC_file is in Z-space.  The default is false.
+    real :: tracer_IC_val = 0.0    !< The initial value assigned to tracers.
+    real :: tracer_land_val = -1.0 !< The values of tracers used where  land is masked out.
+    logical :: tracers_may_reinit  !< If true, tracers may go through the
+                                   !! initialization code if they are not found in the restart files.
 
-     type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
-                                                !! regulate the timing of diagnostic output.
-     type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< Restart control structure
+    type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                                               !! regulate the timing of diagnostic output.
+    type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< Restart control structure
 
-     !> Pointer to the first element of the linked list of generic tracers.
-     type(g_tracer_type), pointer :: g_tracer_list => NULL()
+    !> Pointer to the first element of the linked list of generic tracers.
+    type(g_tracer_type), pointer :: g_tracer_list => NULL()
 
-     integer :: H_to_m !< Auxiliary to access GV%H_to_m in routines that do not have access to GV
+    integer :: H_to_m !< Auxiliary to access GV%H_to_m in routines that do not have access to GV
 
   end type MOM_generic_tracer_CS
 

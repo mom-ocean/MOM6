@@ -944,7 +944,7 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kd_int, Kv
     deallocate(exp_hab_zetar)
 
   case default
-     call MOM_error(FATAL, "tidal_mixing_init: Unrecognized setting "// &
+    call MOM_error(FATAL, "tidal_mixing_init: Unrecognized setting "// &
          "#define CVMIX_TIDAL_SCHEME found in input file.")
   end select
 

@@ -400,22 +400,22 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
        " \t USER - call a user modified routine.", default="zero", &
        do_not_log=just_read)
   select case (trim(config))
-     case ("file"); call initialize_velocity_from_file(u, v, G, GV, US, PF, &
+    case ("file"); call initialize_velocity_from_file(u, v, G, GV, US, PF, &
                              just_read_params=just_read)
-     case ("zero"); call initialize_velocity_zero(u, v, G, GV, PF, &
+    case ("zero"); call initialize_velocity_zero(u, v, G, GV, PF, &
                              just_read_params=just_read)
-     case ("uniform"); call initialize_velocity_uniform(u, v, G, GV, US, PF, &
+    case ("uniform"); call initialize_velocity_uniform(u, v, G, GV, US, PF, &
                                 just_read_params=just_read)
-     case ("circular"); call initialize_velocity_circular(u, v, G, GV, US, PF, &
+    case ("circular"); call initialize_velocity_circular(u, v, G, GV, US, PF, &
                                  just_read_params=just_read)
-     case ("phillips"); call Phillips_initialize_velocity(u, v, G, GV, US, PF, &
+    case ("phillips"); call Phillips_initialize_velocity(u, v, G, GV, US, PF, &
                                  just_read_params=just_read)
-     case ("rossby_front"); call Rossby_front_initialize_velocity(u, v, h, &
+    case ("rossby_front"); call Rossby_front_initialize_velocity(u, v, h, &
                                      G, GV, US, PF, just_read_params=just_read)
-     case ("soliton"); call soliton_initialize_velocity(u, v, h, G, GV, US)
-     case ("USER"); call user_initialize_velocity(u, v, G, GV, US, PF, &
+    case ("soliton"); call soliton_initialize_velocity(u, v, h, G, GV, US)
+    case ("USER"); call user_initialize_velocity(u, v, G, GV, US, PF, &
                              just_read_params=just_read)
-     case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
+    case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
           "Unrecognized velocity configuration "//trim(config))
   end select
 
@@ -558,7 +558,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
 
   ! This controls user code for setting open boundary data
   if (associated(OBC)) then
-     call initialize_segment_data(G, OBC, PF) !   call initialize_segment_data(G, OBC, param_file)
+    call initialize_segment_data(G, OBC, PF) !   call initialize_segment_data(G, OBC, param_file)
 !     call open_boundary_config(G, US, PF, OBC)
     ! Call this once to fill boundary arrays from fixed values
     if (.not. OBC%needs_IO_for_data)  &
@@ -1790,9 +1790,9 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, L
                  "performs on-the-fly regridding in lat-lon-time.",&
                  "of sponge restoring data.", default=.false.)
   if (time_space_interp_sponge) then
-     call MOM_error(WARNING, " initialize_sponges:  NEW_SPONGES has been deprecated. "//&
-          "Please use INTERPOLATE_SPONGE_TIME_SPACE instead. Setting "//&
-          "INTERPOLATE_SPONGE_TIME_SPACE = True.")
+    call MOM_error(WARNING, " initialize_sponges:  NEW_SPONGES has been deprecated. "//&
+                   "Please use INTERPOLATE_SPONGE_TIME_SPACE instead. Setting "//&
+                   "INTERPOLATE_SPONGE_TIME_SPACE = True.")
   endif
   call get_param(param_file, mdl, "INTERPOLATE_SPONGE_TIME_SPACE", time_space_interp_sponge, &
                  "Set True if using the newer sponging code which "//&

@@ -231,22 +231,22 @@ logical function CVMix_shear_init(Time, G, GV, US, param_file, diag, CS)
                  "If true, use the Large-McWilliams-Doney (JGR 1994) "//&
                  "shear mixing parameterization.", default=.false.)
   if (CS%use_LMD94) then
-     NumberTrue=NumberTrue + 1
-     CS%Mix_Scheme='KPP'
+    NumberTrue=NumberTrue + 1
+    CS%Mix_Scheme='KPP'
   endif
   call get_param(param_file, mdl, "USE_PP81", CS%use_PP81, &
                  "If true, use the Pacanowski and Philander (JPO 1981) "//&
                  "shear mixing parameterization.", default=.false.)
   if (CS%use_PP81) then
-     NumberTrue = NumberTrue + 1
-     CS%Mix_Scheme='PP'
+    NumberTrue = NumberTrue + 1
+    CS%Mix_Scheme='PP'
   endif
   use_JHL=kappa_shear_is_used(param_file)
   if (use_JHL) NumberTrue = NumberTrue + 1
   ! After testing for interior schemes, make sure only 0 or 1 are enabled.
   ! Otherwise, warn user and kill job.
   if ((NumberTrue) > 1) then
-     call MOM_error(FATAL, 'MOM_CVMix_shear_init: '// &
+    call MOM_error(FATAL, 'MOM_CVMix_shear_init: '// &
            'Multiple shear driven internal mixing schemes selected,'//&
            ' please disable all but one scheme to proceed.')
   endif

@@ -2034,14 +2034,14 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   call get_param(param_file, 'MOM', "ICE_SHELF", use_ice_shelf, default=.false., do_not_log=.true.)
   if (use_ice_shelf) then
-     inputdir = "." ;  call get_param(param_file, 'MOM', "INPUTDIR", inputdir)
-     inputdir = slasher(inputdir)
-     call get_param(param_file, 'MOM', "ICE_THICKNESS_FILE", ice_shelf_file, &
-                    "The file from which the ice bathymetry and area are read.", &
-                    fail_if_missing=.true.)
-     call get_param(param_file, 'MOM', "ICE_AREA_VARNAME", area_varname, &
-                    "The name of the area variable in ICE_THICKNESS_FILE.", &
-                    fail_if_missing=.true.)
+    inputdir = "." ;  call get_param(param_file, 'MOM', "INPUTDIR", inputdir)
+    inputdir = slasher(inputdir)
+    call get_param(param_file, 'MOM', "ICE_THICKNESS_FILE", ice_shelf_file, &
+                   "The file from which the ice bathymetry and area are read.", &
+                   fail_if_missing=.true.)
+    call get_param(param_file, 'MOM', "ICE_AREA_VARNAME", area_varname, &
+                   "The name of the area variable in ICE_THICKNESS_FILE.", &
+                   fail_if_missing=.true.)
   endif
 
 
@@ -2854,32 +2854,32 @@ end subroutine register_diags
 subroutine MOM_timing_init(CS)
   type(MOM_control_struct), intent(in) :: CS  !< control structure set up by initialize_MOM.
 
- id_clock_ocean    = cpu_clock_id('Ocean', grain=CLOCK_COMPONENT)
- id_clock_dynamics = cpu_clock_id('Ocean dynamics', grain=CLOCK_SUBCOMPONENT)
- id_clock_thermo   = cpu_clock_id('Ocean thermodynamics and tracers', grain=CLOCK_SUBCOMPONENT)
- id_clock_other    = cpu_clock_id('Ocean Other', grain=CLOCK_SUBCOMPONENT)
- id_clock_tracer   = cpu_clock_id('(Ocean tracer advection)', grain=CLOCK_MODULE_DRIVER)
- if (.not.CS%adiabatic) then
-   id_clock_diabatic = cpu_clock_id('(Ocean diabatic driver)', grain=CLOCK_MODULE_DRIVER)
- else
-   id_clock_adiabatic = cpu_clock_id('(Ocean adiabatic driver)', grain=CLOCK_MODULE_DRIVER)
- endif
+  id_clock_ocean    = cpu_clock_id('Ocean', grain=CLOCK_COMPONENT)
+  id_clock_dynamics = cpu_clock_id('Ocean dynamics', grain=CLOCK_SUBCOMPONENT)
+  id_clock_thermo   = cpu_clock_id('Ocean thermodynamics and tracers', grain=CLOCK_SUBCOMPONENT)
+  id_clock_other    = cpu_clock_id('Ocean Other', grain=CLOCK_SUBCOMPONENT)
+  id_clock_tracer   = cpu_clock_id('(Ocean tracer advection)', grain=CLOCK_MODULE_DRIVER)
+  if (.not.CS%adiabatic) then
+    id_clock_diabatic = cpu_clock_id('(Ocean diabatic driver)', grain=CLOCK_MODULE_DRIVER)
+  else
+    id_clock_adiabatic = cpu_clock_id('(Ocean adiabatic driver)', grain=CLOCK_MODULE_DRIVER)
+  endif
 
- id_clock_continuity = cpu_clock_id('(Ocean continuity equation *)', grain=CLOCK_MODULE)
- id_clock_BBL_visc   = cpu_clock_id('(Ocean set BBL viscosity)', grain=CLOCK_MODULE)
- id_clock_pass       = cpu_clock_id('(Ocean message passing *)', grain=CLOCK_MODULE)
- id_clock_MOM_init   = cpu_clock_id('(Ocean MOM_initialize_state)', grain=CLOCK_MODULE)
- id_clock_pass_init  = cpu_clock_id('(Ocean init message passing *)', grain=CLOCK_ROUTINE)
- if (CS%thickness_diffuse) &
-   id_clock_thick_diff = cpu_clock_id('(Ocean thickness diffusion *)', grain=CLOCK_MODULE)
-!if (CS%mixedlayer_restrat) &
-   id_clock_ml_restrat = cpu_clock_id('(Ocean mixed layer restrat)', grain=CLOCK_MODULE)
- id_clock_diagnostics  = cpu_clock_id('(Ocean collective diagnostics)', grain=CLOCK_MODULE)
- id_clock_Z_diag       = cpu_clock_id('(Ocean Z-space diagnostics)', grain=CLOCK_MODULE)
- id_clock_ALE          = cpu_clock_id('(Ocean ALE)', grain=CLOCK_MODULE)
- if (CS%offline_tracer_mode) then
-  id_clock_offline_tracer = cpu_clock_id('Ocean offline tracers', grain=CLOCK_SUBCOMPONENT)
- endif
+  id_clock_continuity = cpu_clock_id('(Ocean continuity equation *)', grain=CLOCK_MODULE)
+  id_clock_BBL_visc   = cpu_clock_id('(Ocean set BBL viscosity)', grain=CLOCK_MODULE)
+  id_clock_pass       = cpu_clock_id('(Ocean message passing *)', grain=CLOCK_MODULE)
+  id_clock_MOM_init   = cpu_clock_id('(Ocean MOM_initialize_state)', grain=CLOCK_MODULE)
+  id_clock_pass_init  = cpu_clock_id('(Ocean init message passing *)', grain=CLOCK_ROUTINE)
+  if (CS%thickness_diffuse) &
+    id_clock_thick_diff = cpu_clock_id('(Ocean thickness diffusion *)', grain=CLOCK_MODULE)
+ !if (CS%mixedlayer_restrat) &
+    id_clock_ml_restrat = cpu_clock_id('(Ocean mixed layer restrat)', grain=CLOCK_MODULE)
+  id_clock_diagnostics  = cpu_clock_id('(Ocean collective diagnostics)', grain=CLOCK_MODULE)
+  id_clock_Z_diag       = cpu_clock_id('(Ocean Z-space diagnostics)', grain=CLOCK_MODULE)
+  id_clock_ALE          = cpu_clock_id('(Ocean ALE)', grain=CLOCK_MODULE)
+  if (CS%offline_tracer_mode) then
+    id_clock_offline_tracer = cpu_clock_id('Ocean offline tracers', grain=CLOCK_SUBCOMPONENT)
+  endif
 
 end subroutine MOM_timing_init
 

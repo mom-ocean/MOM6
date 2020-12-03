@@ -211,9 +211,8 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
 
   ! Dummy Check
   if (associated(CS)) then
-     call MOM_error(FATAL, "wave_interface_init called with an associated"//&
-                             "control structure.")
-     return
+    call MOM_error(FATAL, "wave_interface_init called with an associated control structure.")
+    return
   endif
 
   PI=4.0*atan(1.0)
@@ -327,9 +326,9 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
       call get_param(param_file,mdl,"SURFBAND_STOKES_Y",CS%PrescribedSurfStkY,      &
            "Y-direction surface Stokes drift for bands.",units='m/s', &
            default=0.0)
-   case default! No method provided
-     call MOM_error(FATAL,'Check WAVE_METHOD.')
-   end select
+    case default! No method provided
+      call MOM_error(FATAL,'Check WAVE_METHOD.')
+    end select
 
   case (DHH85_STRING)!Donelan et al., 1985 spectrum
     WaveMethod = DHH85
@@ -349,8 +348,8 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
           default=.false.)
   case (LF17_STRING)!Li and Fox-Kemper 17 wind-sea Langmuir number
     WaveMethod = LF17
-   case default
-     call MOM_error(FATAL,'Check WAVE_METHOD.')
+  case default
+    call MOM_error(FATAL,'Check WAVE_METHOD.')
   end select
 
   ! Langmuir number Options
