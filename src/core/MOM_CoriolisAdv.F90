@@ -269,7 +269,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
                   (Area_h(i+1,j) + Area_h(i,j+1))
   enddo ; enddo
 
-  !$OMP parallel do default(private) shared(u,v,h,uh,vh,CAu,CAv,G,CS,AD,Area_h,Area_q,&
+  !$OMP parallel do default(private) shared(u,v,h,uh,vh,CAu,CAv,G,GV,CS,AD,Area_h,Area_q,&
   !$OMP                        RV,PV,is,ie,js,je,Isq,Ieq,Jsq,Jeq,nz,h_neglect,h_tiny,OBC,eps_vel)
   do k=1,nz
 
@@ -925,20 +925,20 @@ end subroutine CorAdCalc
 
 !> Calculates the acceleration due to the gradient of kinetic energy.
 subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
-  type(ocean_grid_type),                      intent(in)  :: G !< Ocen grid structure
-  type(verticalGrid_type),                    intent(in)  :: GV !< Vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)  :: u !< Zonal velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: v !< Meridional velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G) ,SZJ_(G) ),         intent(out) :: KE !< Kinetic energy per unit mass [L2 T-2 ~> m2 s-2]
+  type(ocean_grid_type),                      intent(in)  :: G   !< Ocen grid structure
+  type(verticalGrid_type),                    intent(in)  :: GV  !< Vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)  :: u   !< Zonal velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: v   !< Meridional velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h   !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G) ,SZJ_(G) ),         intent(out) :: KE  !< Kinetic energy per unit mass [L2 T-2 ~> m2 s-2]
   real, dimension(SZIB_(G),SZJ_(G) ),         intent(out) :: KEx !< Zonal acceleration due to kinetic
                                                                  !! energy gradient [L T-2 ~> m s-2]
   real, dimension(SZI_(G) ,SZJB_(G)),         intent(out) :: KEy !< Meridional acceleration due to kinetic
                                                                  !! energy gradient [L T-2 ~> m s-2]
-  integer,                                    intent(in)  :: k !< Layer number to calculate for
+  integer,                                    intent(in)  :: k   !< Layer number to calculate for
   type(ocean_OBC_type),                       pointer     :: OBC !< Open boundary control structure
   type(unit_scale_type),                      intent(in)  :: US  !< A dimensional unit scaling type
-  type(CoriolisAdv_CS),                       pointer     :: CS !< Control structure for MOM_CoriolisAdv
+  type(CoriolisAdv_CS),                       pointer     :: CS  !< Control structure for MOM_CoriolisAdv
   ! Local variables
   real :: um, up, vm, vp         ! Temporary variables [L T-1 ~> m s-1].
   real :: um2, up2, vm2, vp2     ! Temporary variables [L2 T-2 ~> m2 s-2].
