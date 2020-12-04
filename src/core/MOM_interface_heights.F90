@@ -76,7 +76,7 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
 
   if (GV%Boussinesq) then
 !$OMP do
-    do j=jsv,jev ; do k=nz,1,-1; do i=isv,iev
+    do j=jsv,jev ; do k=nz,1,-1 ; do i=isv,iev
       eta(i,j,K) = eta(i,j,K+1) + h(i,j,k)*H_to_eta
     enddo ; enddo ; enddo
     if (present(eta_bt)) then
@@ -119,7 +119,7 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
       enddo
     else
 !$OMP do
-      do j=jsv,jev ;  do k=nz,1,-1; do i=isv,iev
+      do j=jsv,jev ;  do k=nz,1,-1 ; do i=isv,iev
         eta(i,j,K) = eta(i,j,K+1) + H_to_rho_eta*h(i,j,k) / GV%Rlay(k)
       enddo ; enddo ; enddo
     endif

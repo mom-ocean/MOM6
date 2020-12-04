@@ -509,7 +509,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
   !  will automatically set up the sponges only where Idamp is positive
   !  and mask2dT is 1.
 
-  do i=is,ie; do j=js,je
+  do j=js,je ; do i=is,ie
     if (G%bathyT(i,j) <= min_depth) then
       Idamp(i,j) = 0.0
     elseif (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then

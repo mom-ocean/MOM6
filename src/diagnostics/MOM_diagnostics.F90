@@ -359,7 +359,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
 
   ! mass per area of grid cell (for Bouss, use Rho0)
   if (CS%id_masscello > 0) then
-    do k=1,nz; do j=js,je ; do i=is,ie
+    do k=1,nz ; do j=js,je ; do i=is,ie
       work_3d(i,j,k) = GV%H_to_kg_m2*h(i,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_masscello, work_3d, CS%diag)
@@ -381,13 +381,13 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       if (CS%id_thkcello > 0) then ; if (GV%H_to_Z == 1.0) then
         call post_data(CS%id_thkcello, h, CS%diag)
       else
-        do k=1,nz; do j=js,je ; do i=is,ie
+        do k=1,nz ; do j=js,je ; do i=is,ie
           work_3d(i,j,k) = GV%H_to_Z*h(i,j,k)
         enddo ; enddo ; enddo
         call post_data(CS%id_thkcello, work_3d, CS%diag)
       endif ; endif
       if (CS%id_volcello > 0) then ! volcello = h*area for Boussinesq
-        do k=1,nz; do j=js,je ; do i=is,ie
+        do k=1,nz ; do j=js,je ; do i=is,ie
           work_3d(i,j,k) = ( GV%H_to_Z*h(i,j,k) ) * US%Z_to_m*US%L_to_m**2*G%areaT(i,j)
         enddo ; enddo ; enddo
         call post_data(CS%id_volcello, work_3d, CS%diag)
@@ -421,7 +421,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       enddo ! j
       if (CS%id_thkcello > 0) call post_data(CS%id_thkcello, work_3d, CS%diag)
       if (CS%id_volcello > 0) then
-        do k=1,nz; do j=js,je ; do i=is,ie ! volcello = dp/(rho*g)*area for non-Boussinesq
+        do k=1,nz ; do j=js,je ; do i=is,ie ! volcello = dp/(rho*g)*area for non-Boussinesq
           work_3d(i,j,k) = US%Z_to_m*US%L_to_m**2*G%areaT(i,j) * work_3d(i,j,k)
         enddo ; enddo ; enddo
         call post_data(CS%id_volcello, work_3d, CS%diag)

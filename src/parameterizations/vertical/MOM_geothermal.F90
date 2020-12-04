@@ -340,7 +340,7 @@ subroutine geothermal_entraining(h, tv, dt, ea, eb, G, GV, US, CS, halo)
   if (CS%id_internal_heat_temp_tendency > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       work_3d(i,j,k) = Idt * (tv%T(i,j,k) - T_old(i,j,k))
-    enddo; enddo; enddo
+    enddo ; enddo ; enddo
     call post_data(CS%id_internal_heat_temp_tendency, work_3d, CS%diag, alt_h=h_old)
   endif
   if (CS%id_internal_heat_h_tendency > 0) then

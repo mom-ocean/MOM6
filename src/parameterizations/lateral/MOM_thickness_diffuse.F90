@@ -213,7 +213,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 !$OMP                               int_slope_v,khth_use_ebt_struct, Depth_scaled, &
 !$OMP                               Khth_loc_v)
 !$OMP do
-  do j=js,je; do I=is-1,ie
+  do j=js,je ; do I=is-1,ie
     Khth_loc_u(I,j) = CS%Khth
   enddo ; enddo
 
@@ -244,31 +244,31 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 
   if (Resoln_scaled) then
 !$OMP do
-    do j=js,je; do I=is-1,ie
+    do j=js,je ; do I=is-1,ie
       Khth_loc_u(I,j) = Khth_loc_u(I,j) * VarMix%Res_fn_u(I,j)
     enddo ; enddo
   endif
 
   if (Depth_scaled) then
 !$OMP do
-    do j=js,je; do I=is-1,ie
+    do j=js,je ; do I=is-1,ie
       Khth_loc_u(I,j) = Khth_loc_u(I,j) * VarMix%Depth_fn_u(I,j)
     enddo ; enddo
   endif
 
   if (CS%Khth_Max > 0) then
 !$OMP do
-    do j=js,je; do I=is-1,ie
+    do j=js,je ; do I=is-1,ie
       Khth_loc_u(I,j) = max(CS%Khth_Min, min(Khth_loc_u(I,j), CS%Khth_Max))
     enddo ; enddo
   else
 !$OMP do
-    do j=js,je; do I=is-1,ie
+    do j=js,je ; do I=is-1,ie
       Khth_loc_u(I,j) = max(CS%Khth_Min, Khth_loc_u(I,j))
     enddo ; enddo
   endif
 !$OMP do
-  do j=js,je; do I=is-1,ie
+  do j=js,je ; do I=is-1,ie
     KH_u(I,j,1) = min(KH_u_CFL(I,j), Khth_loc_u(I,j))
   enddo ; enddo
 
@@ -330,7 +330,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 
   if (Resoln_scaled) then
 !$OMP do
-    do J=js-1,je; do i=is,ie
+    do J=js-1,je ; do i=is,ie
       Khth_loc_v(i,J) = Khth_loc_v(i,J) * VarMix%Res_fn_v(i,J)
     enddo ; enddo
   endif
@@ -501,7 +501,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
         do k=1,nz
           do j=js,je ; do i=is,ie
             MEKE%Kh_diff(i,j) = MEKE%Kh_diff(i,j) + Kh_t(i,j,k) * h(i,j,k)
-          enddo; enddo
+          enddo ; enddo
         enddo
 
         do j=js,je ; do i=is,ie

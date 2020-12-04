@@ -86,16 +86,16 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   if (present(sink_rate)) sink_dist = (dt*sink_rate) * GV%m_to_H
   !$OMP parallel default(shared) private(sink,h_minus_dsink,b_denom_1,b1,d1,h_tr,c1)
   !$OMP do
-  do j=js,je; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo ; enddo
+  do j=js,je ; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo ; enddo
   if (present(sfc_flux)) then
     if (convert_flux) then
       !$OMP do
-      do j = js, je; do i = is,ie
+      do j=js,je ; do i=is,ie
         sfc_src(i,j) = (sfc_flux(i,j)*dt) * GV%kg_m2_to_H
       enddo ; enddo
     else
       !$OMP do
-      do j = js, je; do i = is,ie
+      do j=js,je ; do i=is,ie
         sfc_src(i,j) = sfc_flux(i,j)
       enddo ; enddo
     endif
@@ -103,12 +103,12 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   if (present(btm_flux)) then
     if (convert_flux) then
       !$OMP do
-      do j = js, je; do i = is,ie
+      do j=js,je ; do i=is,ie
         btm_src(i,j) = (btm_flux(i,j)*dt) * GV%kg_m2_to_H
       enddo ; enddo
     else
       !$OMP do
-      do j = js, je; do i = is,ie
+      do j=js,je ; do i=is,ie
         btm_src(i,j) = btm_flux(i,j)
       enddo ; enddo
     endif
@@ -286,16 +286,16 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
   if (present(sink_rate)) sink_dist = (dt*sink_rate) * GV%m_to_H
   !$OMP parallel default(shared) private(sink,h_minus_dsink,b_denom_1,b1,d1,h_tr,c1)
   !$OMP do
-  do j=js,je; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo ; enddo
+  do j=js,je ; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo ; enddo
   if (present(sfc_flux)) then
     if (convert_flux) then
       !$OMP do
-      do j = js, je; do i = is,ie
+      do j=js,je ; do i=is,ie
         sfc_src(i,j) = (sfc_flux(i,j)*dt) * GV%kg_m2_to_H
       enddo ; enddo
     else
       !$OMP do
-      do j = js, je; do i = is,ie
+      do j=js,je ; do i=is,ie
         sfc_src(i,j) = sfc_flux(i,j)
       enddo ; enddo
     endif
@@ -303,12 +303,12 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
   if (present(btm_flux)) then
     if (convert_flux) then
       !$OMP do
-      do j = js, je; do i = is,ie
+      do j=js,je ; do i=is,ie
         btm_src(i,j) = (btm_flux(i,j)*dt) * GV%kg_m2_to_H
       enddo ; enddo
     else
       !$OMP do
-      do j = js, je; do i = is,ie
+      do j=js,je ; do i=is,ie
         btm_src(i,j) = btm_flux(i,j)
       enddo ; enddo
     endif

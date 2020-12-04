@@ -1372,7 +1372,7 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
   enddo
 
   ! 1. Compute vertical integrals
-  do j=Jsq,Jeq+1; do i=Isq,Ieq+1
+  do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
     dp = p_b(i,j) - p_t(i,j)
     do n=1,5 ! T, S and p are linearly interpolated in the vertical.
       p5(n) = RL2_T2_to_Pa * (wt_t(n) * p_t(i,j) + wt_b(n) * p_b(i,j))

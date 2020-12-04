@@ -1311,9 +1311,9 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   call create_file(unit, trim(filepath), vars, nFlds_used, fields, &
                    file_threading, dG=G)
 
-  do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLatBu(I,J); enddo ; enddo
+  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = G%geoLatBu(I,J) ; enddo ; enddo
   call write_field(unit, fields(1), G%Domain%mpp_domain, out_q)
-  do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLonBu(I,J); enddo ; enddo
+  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = G%geoLonBu(I,J) ; enddo ; enddo
   call write_field(unit, fields(2), G%Domain%mpp_domain, out_q)
   call write_field(unit, fields(3), G%Domain%mpp_domain, G%geoLatT)
   call write_field(unit, fields(4), G%Domain%mpp_domain, G%geoLonT)

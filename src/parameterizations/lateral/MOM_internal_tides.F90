@@ -2384,7 +2384,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   endif
   call pass_var(ridge_temp,G%domain)
   allocate(CS%refl_dbl(isd:ied,jsd:jed)) ; CS%refl_dbl(:,:) = .false.
-  do i=isd,ied; do j=jsd,jed
+  do i=isd,ied ; do j=jsd,jed
     if (ridge_temp(i,j) == 1) then; CS%refl_dbl(i,j) = .true.
     else ; CS%refl_dbl(i,j) = .false. ; endif
   enddo ; enddo

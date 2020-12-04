@@ -664,7 +664,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
 
 !   U - Component
 !$OMP do
-  do j=js,je; do I=is-1,ie
+  do j=js,je ; do I=is-1,ie
     h_vel = 0.5*(htot(i,j) + htot(i+1,j)) * GV%H_to_Z
 
     u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i+1,j))
@@ -707,7 +707,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
 
     uDml_diag(I,j) = uDml(I)
     utimescale_diag(I,j) = timescale
-  enddo; enddo
+  enddo ; enddo
 
 !  V- component
 !$OMP do
@@ -753,7 +753,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
 
     vtimescale_diag(i,J) = timescale
     vDml_diag(i,J) = vDml(i)
-  enddo; enddo
+  enddo ; enddo
 
 !$OMP do
   do j=js,je ; do k=1,nkml ; do i=is,ie

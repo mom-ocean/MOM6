@@ -1105,10 +1105,10 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     if (CS%Visbeck_L_scale<0) then
       do j=js,je ; do I=is-1,Ieq
         CS%L2u(I,j) = CS%Visbeck_L_scale**2 * G%areaCu(I,j)
-      enddo; enddo
+      enddo ; enddo
       do J=js-1,Jeq ; do i=is,ie
         CS%L2v(i,J) = CS%Visbeck_L_scale**2 * G%areaCv(i,J)
-      enddo; enddo
+      enddo ; enddo
     else
       CS%L2u(:,:) = US%m_to_L**2*CS%Visbeck_L_scale**2
       CS%L2v(:,:) = US%m_to_L**2*CS%Visbeck_L_scale**2

@@ -385,7 +385,7 @@ subroutine diag_remap_do_remap(remap_cs, G, GV, h, staggered_in_x, staggered_in_
   remapped_field(:,:,:) = 0.
 
   ! Symmetric grid offset under 1-based indexing; see header for details.
-  shift = 0; if (G%symmetric) shift = 1
+  shift = 0 ; if (G%symmetric) shift = 1
 
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points
@@ -516,7 +516,7 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, h_target, staggered
   reintegrated_field(:,:,:) = 0.
 
   ! Symmetric grid offset under 1-based indexing; see header for details.
-  shift = 0; if (G%symmetric) shift = 1
+  shift = 0 ; if (G%symmetric) shift = 1
 
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points
@@ -597,7 +597,7 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
   nz_dest = remap_cs%nz
 
   ! Symmetric grid offset under 1-based indexing; see header for details.
-  shift = 0; if (G%symmetric) shift = 1
+  shift = 0 ; if (G%symmetric) shift = 1
 
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points

@@ -237,7 +237,7 @@ subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
           if (G%geoLonT(i,j) >= (CS%lenlon - CS%lensponge) .AND. G%geoLonT(i,j) <= CS%lenlon) then
             temp(i,j,k) = 0.0
           endif
-        enddo ; enddo; enddo
+        enddo ; enddo ; enddo
         do m=1,1
         ! This is needed to force the compiler not to do a copy in the sponge calls.
           tr_ptr => CS%tr(:,:,:,m)
@@ -253,7 +253,7 @@ subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
           if (G%geoLonT(i,j) >= (CS%lenlon - CS%lensponge) .AND. G%geoLonT(i,j) <= CS%lenlon) then
             temp(i,j,k) = 0.0
           endif
-        enddo ; enddo; enddo
+        enddo ; enddo ; enddo
         do m=1,1
           tr_ptr => CS%tr(:,:,:,m)
           call set_up_sponge_field(temp, tr_ptr, G, GV, nz, layer_CSp)

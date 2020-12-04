@@ -413,7 +413,7 @@ subroutine chksum_h_2d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logu
     real, intent(in)    :: scale !< A scaling factor for this array.
     integer :: i, j, bc
     subchk = 0
-    do j=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
+    do j=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
       bc = bitcount(abs(scale*array(i,j)))
       subchk = subchk + bc
     enddo ; enddo
@@ -693,7 +693,7 @@ subroutine chksum_B_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     integer :: i, j, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
-    do J=HI%jsc+dj,HI%jec+dj; do I=HI%isc+di,HI%iec+di
+    do J=HI%jsc+dj,HI%jec+dj ; do I=HI%isc+di,HI%iec+di
       bc = bitcount(abs(scale*array(I,J)))
       subchk = subchk + bc
     enddo ; enddo
@@ -983,7 +983,7 @@ subroutine chksum_u_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     integer :: i, j, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
-    do j=HI%jsc+dj,HI%jec+dj; do I=HI%isc+di,HI%iec+di
+    do j=HI%jsc+dj,HI%jec+dj ; do I=HI%isc+di,HI%iec+di
       bc = bitcount(abs(scale*array(I,j)))
       subchk = subchk + bc
     enddo ; enddo
@@ -1162,7 +1162,7 @@ subroutine chksum_v_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     integer :: i, j, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
-    do J=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
+    do J=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
       bc = bitcount(abs(scale*array(i,J)))
       subchk = subchk + bc
     enddo ; enddo

@@ -106,8 +106,8 @@ subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, GV, US, haloshift, symmetric)
   ! Note that for the chksum calls to be useful for reproducing across PE
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
-  hs=1; if (present(haloshift)) hs=haloshift
-  sym=.false.; if (present(symmetric)) sym=symmetric
+  hs = 1 ; if (present(haloshift)) hs = haloshift
+  sym = .false. ; if (present(symmetric)) sym = symmetric
   call uvchksum(mesg//" u", u, v, G%HI, haloshift=hs, symmetric=sym, scale=L_T_to_m_s)
   call hchksum(h, mesg//" h",G%HI, haloshift=hs, scale=GV%H_to_m)
 end subroutine MOM_state_chksum_3arg

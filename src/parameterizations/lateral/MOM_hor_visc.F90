@@ -425,7 +425,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
     do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
       boundary_mask_q(I,J) = (G%mask2dCv(i,J) * G%mask2dCv(i+1,J) * G%mask2dCu(I,j) * G%mask2dCu(I,j-1))
-    enddo; enddo
+    enddo ; enddo
 
     ! initialize diag. array with zeros
     GME_coeff_h(:,:,:) = 0.0
@@ -442,7 +442,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                                      G%IdyCu(I-1,j) * ubtav(I-1,j))
       dvdy_bt(i,j) = CS%DX_dyT(i,j)*(G%IdxCv(i,J) * vbtav(i,J) - &
                                      G%IdxCv(i,J-1) * vbtav(i,J-1))
-    enddo; enddo
+    enddo ; enddo
 
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       sh_xx_bt(i,j) = dudx_bt(i,j) - dvdy_bt(i,j)
@@ -688,7 +688,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         Del2v(i,J) = CS%Idxdy2v(i,J)*(CS%dy2q(I,J)*sh_xy(I,J) - CS%dy2q(I-1,J)*sh_xy(I-1,J)) - &
                      CS%Idx2dyCv(i,J)*(CS%dx2h(i,j+1)*sh_xx(i,j+1) - CS%dx2h(i,j)*sh_xx(i,j))
       enddo ; enddo
-      if (apply_OBC) then; if (OBC%zero_biharmonic) then
+      if (apply_OBC) then ; if (OBC%zero_biharmonic) then
         do n=1,OBC%number_of_segments
           I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
           if (OBC%segment(n)%is_N_or_S .and. (J >= Jsq-1) .and. (J <= Jeq+1)) then
@@ -701,7 +701,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
             enddo
           endif
         enddo
-      endif; endif
+      endif ; endif
     endif
 
     ! Vorticity
@@ -2223,7 +2223,8 @@ subroutine smooth_GME(CS,G,GME_flux_h,GME_flux_q)
                            + we * GME_flux_h_original(i+1,j) &
                            + ws * GME_flux_h_original(i,j-1) &
                            + wn * GME_flux_h_original(i,j+1)
-      enddo; enddo
+        enddo
+      enddo
     endif
     ! Update halos
     if (present(GME_flux_q)) then
@@ -2245,7 +2246,8 @@ subroutine smooth_GME(CS,G,GME_flux_h,GME_flux_q)
                            + we * GME_flux_q_original(I+1,J) &
                            + ws * GME_flux_q_original(I,J-1) &
                            + wn * GME_flux_q_original(I,J+1)
-      enddo; enddo
+        enddo
+      enddo
     endif
   enddo ! s-loop
 end subroutine smooth_GME

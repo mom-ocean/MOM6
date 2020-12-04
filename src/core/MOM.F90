@@ -3324,7 +3324,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
       sfc_state%ocean_heat(i,j) = 0.0 ; sfc_state%ocean_salt(i,j) = 0.0
     enddo ; enddo
     !$OMP parallel do default(shared) private(mass)
-    do j=js,je ; do k=1,nz; do i=is,ie
+    do j=js,je ; do k=1,nz ; do i=is,ie
       mass = GV%H_to_RZ*h(i,j,k)
       sfc_state%ocean_mass(i,j) = sfc_state%ocean_mass(i,j) + mass
       sfc_state%ocean_heat(i,j) = sfc_state%ocean_heat(i,j) + mass * CS%tv%T(i,j,k)
@@ -3365,7 +3365,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
 
   if (CS%check_bad_sfc_vals) then
     numberOfErrors=0 ! count number of errors
-    do j=js,je; do i=is,ie
+    do j=js,je ; do i=is,ie
       if (G%mask2dT(i,j)>0.) then
         localError = sfc_state%sea_lev(i,j) <= -G%bathyT(i,j) &
                 .or. sfc_state%sea_lev(i,j) >=  CS%bad_val_ssh_max  &

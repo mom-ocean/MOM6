@@ -184,7 +184,7 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
 
   H0(1) = 0.0
   do k=2,nz ; H0(k) = -(real(k-1)-0.5)*G%max_depth / real(nz-1) ; enddo
-  do i=is,ie; do j=js,je
+  do j=js,je ; do i=is,ie
     if (G%geoLonT(i,j) < 100.0) then ; damp = 10.0
     elseif (G%geoLonT(i,j) < 200.0) then
       damp = 10.0 * (200.0-G%geoLonT(i,j))/100.0

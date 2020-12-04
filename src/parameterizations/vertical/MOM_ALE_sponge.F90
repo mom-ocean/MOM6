@@ -299,7 +299,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
 
     ! v points
     CS%num_col_v = 0 ; !CS%fldno_v = 0
-    do J=CS%jscB,CS%jecB; do i=CS%isc,CS%iec
+    do J=CS%jscB,CS%jecB ; do i=CS%isc,CS%iec
       Iresttime_v(i,J) = 0.5 * (Iresttime(i,j) + Iresttime(i,j+1))
       if ((Iresttime_v(i,J)>0.0) .and. (G%mask2dCv(i,J)>0)) CS%num_col_v = CS%num_col_v + 1
     enddo ; enddo
@@ -486,7 +486,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS)
     allocate(Iresttime_v(G%isd:G%ied,G%jsdB:G%jedB)) ; Iresttime_v(:,:) = 0.0
     ! u points
     CS%num_col_u = 0 ; !CS%fldno_u = 0
-    do j=CS%jsc,CS%jec; do I=CS%iscB,CS%iecB
+    do j=CS%jsc,CS%jec ; do I=CS%iscB,CS%iecB
       Iresttime_u(I,j) = 0.5 * (Iresttime(i,j) + Iresttime(i+1,j))
       if ((Iresttime_u(I,j)>0.0) .and. (G%mask2dCu(I,j)>0)) &
         CS%num_col_u = CS%num_col_u + 1
@@ -512,7 +512,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS)
                 "The total number of columns where sponges are applied at u points.", like_default=.true.)
     ! v points
     CS%num_col_v = 0 ; !CS%fldno_v = 0
-    do J=CS%jscB,CS%jecB; do i=CS%isc,CS%iec
+    do J=CS%jscB,CS%jecB ; do i=CS%isc,CS%iec
       Iresttime_v(i,J) = 0.5 * (Iresttime(i,j) + Iresttime(i,j+1))
       if ((Iresttime_v(i,J)>0.0) .and. (G%mask2dCv(i,J)>0)) &
         CS%num_col_v = CS%num_col_v + 1

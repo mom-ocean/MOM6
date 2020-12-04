@@ -4336,12 +4336,12 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
 
       if (trim(segment%field(m)%name) == 'TEMP') then
         if (associated(segment%field(m)%buffer_dst)) then
-          do k=1,nz; do j=js_obc2, je_obc; do i=is_obc2,ie_obc
+          do k=1,nz ; do j=js_obc2,je_obc ; do i=is_obc2,ie_obc
             segment%tr_Reg%Tr(1)%t(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
           enddo ; enddo ; enddo
           if (.not. segment%tr_Reg%Tr(1)%is_initialized) then
             ! if the tracer reservoir has not yet been initialized, then set to external value.
-            do k=1,nz; do j=js_obc2, je_obc; do i=is_obc2,ie_obc
+            do k=1,nz ; do j=js_obc2,je_obc ; do i=is_obc2,ie_obc
               segment%tr_Reg%Tr(1)%tres(i,j,k) = segment%tr_Reg%Tr(1)%t(i,j,k)
             enddo ; enddo ; enddo
             segment%tr_Reg%Tr(1)%is_initialized=.true.
@@ -4351,12 +4351,12 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
         endif
       elseif (trim(segment%field(m)%name) == 'SALT') then
         if (associated(segment%field(m)%buffer_dst)) then
-          do k=1,nz; do j=js_obc2, je_obc; do i=is_obc2,ie_obc
+          do k=1,nz ; do j=js_obc2,je_obc ; do i=is_obc2,ie_obc
             segment%tr_Reg%Tr(2)%t(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
           enddo ; enddo ; enddo
           if (.not. segment%tr_Reg%Tr(2)%is_initialized) then
             !if the tracer reservoir has not yet been initialized, then set to external value.
-            do k=1,nz; do j=js_obc2, je_obc; do i=is_obc2,ie_obc
+            do k=1,nz ; do j=js_obc2,je_obc ; do i=is_obc2,ie_obc
               segment%tr_Reg%Tr(2)%tres(i,j,k) = segment%tr_Reg%Tr(2)%t(i,j,k)
             enddo ; enddo ; enddo
             segment%tr_Reg%Tr(2)%is_initialized=.true.
@@ -5226,7 +5226,7 @@ subroutine adjustSegmentEtaToFitBathymetry(G, GV, US, segment,fld)
     do k=1,nz
       segment%field(fld)%dz_src(i,j,k) = segment%field(fld)%dz_src(i,j,k)*GV%Z_to_H
     enddo
-  enddo; enddo
+  enddo ; enddo
 
   ! can not do communication call here since only PEs on the current segment are here
 

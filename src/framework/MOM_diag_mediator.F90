@@ -4270,7 +4270,7 @@ subroutine downsample_mask_2d(field_in, field_out, dl, isc_o, jsc_o, isc_d, iec_
     tot_non_zero = 0.0
     do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
       tot_non_zero = tot_non_zero + field_in(ii,jj)
-    enddo;enddo
+    enddo ; enddo
     if (tot_non_zero > 0.0) field_out(i,j)=1.0
   enddo ; enddo
 end subroutine downsample_mask_2d
@@ -4306,7 +4306,7 @@ subroutine downsample_mask_3d(field_in, field_out, dl, isc_o, jsc_o, isc_d, iec_
     tot_non_zero = 0.0
     do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
       tot_non_zero = tot_non_zero + field_in(ii,jj,k)
-    enddo;enddo
+    enddo ; enddo
     if (tot_non_zero > 0.0) field_out(i,j,k)=1.0
   enddo ; enddo ; enddo
 end subroutine downsample_mask_3d

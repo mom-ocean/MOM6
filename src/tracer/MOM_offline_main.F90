@@ -370,7 +370,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
       endif
     endif
 
-    do k=1,nz; do j=js,je ; do i=is,ie
+    do k=1,nz ; do j=js,je ; do i=is,ie
       uhtr_sub(I,j,k) = uhtr(I,j,k)
       vhtr_sub(i,J,k) = vhtr(i,J,k)
     enddo ; enddo ; enddo
@@ -633,7 +633,7 @@ real function remaining_transport_sum(CS, uhtr, vhtr)
   h_min = CS%GV%H_subroundoff
 
   remaining_transport_sum = 0.
-  do k=1,nz; do j=js,je ; do i=is,ie
+  do k=1,nz ; do j=js,je ; do i=is,ie
     uh_neglect = h_min*CS%G%US%L_to_m**2*MIN(CS%G%areaT(i,j),CS%G%areaT(i+1,j))
     vh_neglect = h_min*CS%G%US%L_to_m**2*MIN(CS%G%areaT(i,j),CS%G%areaT(i,j+1))
     if (ABS(uhtr(I,j,k))>uh_neglect) then
@@ -990,7 +990,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
     sum_abs_fluxes = 0.0
     sum_u = 0.0
     sum_v = 0.0
-    do k=1,nz; do j=js,je; do i=is,ie
+    do k=1,nz ; do j=js,je ; do i=is,ie
       sum_u = sum_u + abs(uhtr(I-1,j,k))+abs(uhtr(I,j,k))
       sum_v = sum_v + abs(vhtr(i,J-1,k))+abs(vhtr(I,J,k))
       sum_abs_fluxes = sum_abs_fluxes + abs(eatr(i,j,k)) + abs(ebtr(i,j,k)) + abs(uhtr(I-1,j,k)) + &

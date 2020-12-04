@@ -1736,7 +1736,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 
 !  do j=G%jsc,G%jec ; do i=G%isc,G%iec
 !    ISS%area_shelf_h(i,j) = ISS%area_shelf_h(i,j)*G%mask2dT(i,j)
-!  enddo; enddo
+!  enddo ; enddo
 
   CS%Time = Time
 

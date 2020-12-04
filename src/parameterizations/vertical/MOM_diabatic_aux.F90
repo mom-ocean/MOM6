@@ -847,7 +847,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
     PE_threshold(iM) = Mixing_Energy(iM)/GV%g_earth
   enddo
 
-  do j=js,je; do i=is,ie
+  do j=js,je ; do i=is,ie
     if (G%mask2dT(i,j) > 0.0) then
 
       call calculate_density(tv%T(i,j,:), tv%S(i,j,:), pRef_MLD, rho_c, 1, nz, &

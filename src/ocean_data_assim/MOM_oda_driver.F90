@@ -283,7 +283,7 @@ subroutine init_oda(Time, G, GV, CS)
 
   do k = 1, CS%nk
     call mpp_global_field(G%Domain%mpp_domain, CS%h(:,:,k), global2D)
-    do i=1, CS%ni; do j=1, CS%nj
+    do i=1,CS%ni ; do j=1,CS%nj
       if ( global2D(i,j) > 1 ) then
         T_grid%mask(i,j,k) = 1.0
       endif
@@ -337,7 +337,7 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
   allocate(T(isd:ied,jsd:jed,CS%nk))
   allocate(S(isd:ied,jsd:jed,CS%nk))
 
-  do j=js,je; do i=is,ie
+  do j=js,je ; do i=is,ie
     call remapping_core_h(CS%remapCS, GV%ke, h(i,j,:), tv%T(i,j,:), &
          CS%nk, CS%h(i,j,:), T(i,j,:))
     call remapping_core_h(CS%remapCS, GV%ke, h(i,j,:), tv%S(i,j,:), &

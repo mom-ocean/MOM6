@@ -219,7 +219,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     ! This initialization should not be needed. Certainly restricting it
     ! to the computational domain helps detect possible uninitialized
     ! data in halos which should be covered by the pass_var(h) later.
-    !do k = 1, nz; do j = js, je; do i = is, ie
+    !do k=1,nz ; do j=js,je ; do i=is,ie
     !  h(i,j,k) = 0.
     !enddo
   endif
@@ -1889,7 +1889,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, L
         if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_Z)) &
           eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_Z
       enddo ; enddo ; enddo
-      do k=1,nz; do j=js,je ; do i=is,ie
+      do k=1,nz ; do j=js,je ; do i=is,ie
         h(i,j,k) = GV%Z_to_H*(eta(i,j,k)-eta(i,j,k+1))
       enddo ; enddo ; enddo
       call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp, h, nz_data)
