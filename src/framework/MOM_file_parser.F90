@@ -238,15 +238,18 @@ end subroutine open_param_file
 
 !> Close any open input files and deallocate memory associated with this param_file_type.
 !! To use this type again, open_param_file would have to be called again.
-subroutine close_param_file(CS, quiet_close, component)
+subroutine close_param_file(CS, quiet_close, component, ignore_unused_params)
   type(param_file_type),   intent(inout) :: CS      !< The control structure for the file_parser module,
                                          !! it is also a structure to parse for run-time parameters
   logical,          optional, intent(in) :: quiet_close !< if present and true, do not do any
                                          !! logging with this call.
   character(len=*), optional, intent(in) :: component   !< If present, this component name is used
                                          !! to generate parameter documentation file names
+  logical,          optional, intent(in) :: ignore_unused_params !< if present and true, ignore any
+                                         !! unused parameter.
+
   ! Local variables
-  logical :: all_default
+  logical :: all_default, force_ignore_unused
   character(len=128) :: docfile_default
   character(len=40)  :: mdl   ! This module's name.
   ! This include declares and sets the variable "version".
@@ -268,6 +271,8 @@ subroutine close_param_file(CS, quiet_close, component)
     call doc_end(CS%doc)
     return
   endif ; endif
+
+  force_ignore_unused=.false.;if (PRESENT(ignore_unused_params)) force_ignore_unused=ignore_unused_params
 
   ! Log the parameters for the parser.
   docfile_default = "MOM_parameter_doc"
@@ -310,8 +315,8 @@ subroutine close_param_file(CS, quiet_close, component)
 
   num_unused = 0
   do i = 1, CS%nfiles
-    if (is_root_pe() .and. (CS%report_unused .or. &
-                            CS%unused_params_fatal)) then
+    if ((.not. force_ignore_unused .and. is_root_pe()) .and. &
+             (CS%report_unused .or. CS%unused_params_fatal)) then
       ! Check for unused lines.
       do n=1,CS%param_data(i)%num_lines
         if (.not.CS%param_data(i)%line_used(n)) then
@@ -333,7 +338,8 @@ subroutine close_param_file(CS, quiet_close, component)
     deallocate (CS%param_data(i)%line_used)
   enddo
 
-  if (is_root_pe() .and. (num_unused>0) .and. CS%unused_params_fatal) &
+  if ((is_root_pe() .and. .not. force_ignore_unused) .and. &
+     ((num_unused>0) .and. CS%unused_params_fatal)) &
     call MOM_error(FATAL, "Run stopped because of unused parameter lines.")
 
   CS%log_open = .false.
