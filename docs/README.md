@@ -337,7 +337,7 @@ PDF generation requires the following packages
 
 ### doxygen
 
-You may choose to download the [source](https://www.doxygen.nl/download.html).  
+You may choose to download the [source](https://www.doxygen.nl/download.html).
 
 Latest is `doxygen-1.8.20.src.tar.gz`.
 
@@ -351,8 +351,8 @@ make
 sudo make install
 ```
 
-The makefile for doxygen attempts to install the compiled version into /usr/local/bin.  
-You can link to a specific executable within the virtual environment.   At this point we 
+The makefile for doxygen attempts to install the compiled version into /usr/local/bin.
+You can link to a specific executable within the virtual environment.   At this point we
 also recommend renaming `doxygen` to `doxygen-1.8.20` within `/usr/local/bin`.
 
 NOTE: The makefile for the documentation framework will attempt to compile a local doxygen

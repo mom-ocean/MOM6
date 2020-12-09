@@ -69,7 +69,7 @@ import pdb; pdb.set_trace()
 
 Run `make html` without redirection to a log file.
 
-For only processing .dox files and some specific F90 files, edit and use the 
+For only processing .dox files and some specific F90 files, edit and use the
 `Doxyfile_rtd_dox` file.  This limits the document processing to fewer files and
 allows for rapid testing.
 
