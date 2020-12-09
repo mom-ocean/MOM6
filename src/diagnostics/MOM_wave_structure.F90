@@ -110,81 +110,81 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
                                                               !! over the entire computational domain.
   ! Local variables
   real, dimension(SZK_(G)+1) :: &
-    dRho_dT, &    ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
-    dRho_dS, &    ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
-    pres, &       ! Interface pressure [R L H T-2 ~> Pa]
-    T_int, &      ! Temperature interpolated to interfaces [degC]
-    S_int, &      ! Salinity interpolated to interfaces [ppt]
-    gprime        ! The reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
+    dRho_dT, &    !< Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
+    dRho_dS, &    !< Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
+    pres, &       !< Interface pressure [R L H T-2 ~> Pa]
+    T_int, &      !< Temperature interpolated to interfaces [degC]
+    S_int, &      !< Salinity interpolated to interfaces [ppt]
+    gprime        !< The reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
   real, dimension(SZK_(G)) :: &
-    Igl, Igu      ! The inverse of the reduced gravity across an interface times
-                  ! the thickness of the layer below (Igl) or above (Igu) it [T2 L-2 ~> s2 m-2].
+    Igl, Igu      !< The inverse of the reduced gravity across an interface times
+                  !< the thickness of the layer below (Igl) or above (Igu) it [T2 L-2 ~> s2 m-2].
   real, dimension(SZK_(G),SZI_(G)) :: &
-    Hf, &         ! Layer thicknesses after very thin layers are combined [Z ~> m]
-    Tf, &         ! Layer temperatures after very thin layers are combined [degC]
-    Sf, &         ! Layer salinities after very thin layers are combined [ppt]
-    Rf            ! Layer densities after very thin layers are combined [R ~> kg m-3]
+    Hf, &         !< Layer thicknesses after very thin layers are combined [Z ~> m]
+    Tf, &         !< Layer temperatures after very thin layers are combined [degC]
+    Sf, &         !< Layer salinities after very thin layers are combined [ppt]
+    Rf            !< Layer densities after very thin layers are combined [R ~> kg m-3]
   real, dimension(SZK_(G)) :: &
-    Hc, &         ! A column of layer thicknesses after convective istabilities are removed [Z ~> m]
-    Tc, &         ! A column of layer temperatures after convective istabilities are removed [degC]
-    Sc, &         ! A column of layer salinites after convective istabilities are removed [ppt]
-    Rc, &         ! A column of layer densities after convective istabilities are removed [R ~> kg m-3]
+    Hc, &         !< A column of layer thicknesses after convective istabilities are removed [Z ~> m]
+    Tc, &         !< A column of layer temperatures after convective istabilities are removed [degC]
+    Sc, &         !< A column of layer salinites after convective istabilities are removed [ppt]
+    Rc, &         !< A column of layer densities after convective istabilities are removed [R ~> kg m-3]
     det, ddet
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    htot              ! The vertical sum of the thicknesses [Z ~> m]
-  real :: lam         ! inverse of wave speed squared [T2 L-2 ~> s2 m-2]
-  real :: min_h_frac  ! fractional (per layer) minimum thickness [nondim]
-  real :: Z_to_pres   ! A conversion factor from thicknesses to pressure [R L2 T-2 Z-1 ~> Pa m-1]
+    htot              !< The vertical sum of the thicknesses [Z ~> m]
+  real :: lam         !< inverse of wave speed squared [T2 L-2 ~> s2 m-2]
+  real :: min_h_frac  !< fractional (per layer) minimum thickness [nondim]
+  real :: Z_to_pres   !< A conversion factor from thicknesses to pressure [R L2 T-2 Z-1 ~> Pa m-1]
   real, dimension(SZI_(G)) :: &
-    hmin, &        ! Thicknesses [Z ~> m]
-    H_here, &      ! A thickness [Z ~> m]
-    HxT_here, &    ! A layer integrated temperature [degC Z ~> degC m]
-    HxS_here, &    ! A layer integrated salinity [ppt Z ~> ppt m]
-    HxR_here       ! A layer integrated density [R Z ~> kg m-2]
+    hmin, &        !< Thicknesses [Z ~> m]
+    H_here, &      !< A thickness [Z ~> m]
+    HxT_here, &    !< A layer integrated temperature [degC Z ~> degC m]
+    HxS_here, &    !< A layer integrated salinity [ppt Z ~> ppt m]
+    HxR_here       !< A layer integrated density [R Z ~> kg m-2]
   real :: speed2_tot
-  real :: I_Hnew   ! The inverse of a new layer thickness [Z-1 ~> m-1]
-  real :: drxh_sum ! The sum of density diffrences across interfaces times thicknesses [R Z ~> kg m-2]
+  real :: I_Hnew   !< The inverse of a new layer thickness [Z-1 ~> m-1]
+  real :: drxh_sum !< The sum of density diffrences across interfaces times thicknesses [R Z ~> kg m-2]
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
   real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
-  real :: g_Rho0  ! G_Earth/Rho0 in [L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1].
+  real :: g_Rho0  !< G_Earth/Rho0 in [L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1].
   ! real :: rescale, I_rescale
   integer :: kf(SZI_(G))
-  integer, parameter :: max_itt = 1 ! number of times to iterate in solving for eigenvector
-  real :: cg_subRO        ! A tiny wave speed to prevent division by zero [L T-1 ~> m s-1]
-  real, parameter    :: a_int = 0.5 ! value of normalized integral: \int(w_strct^2)dz = a_int [nondim]
-  real               :: I_a_int     ! inverse of a_int [nondim]
-  real               :: f2          ! squared Coriolis frequency [T-2 ~> s-2]
-  real               :: Kmag2       ! magnitude of horizontal wave number squared [L-2 ~> m-2]
-  logical            :: use_EOS     ! If true, density is calculated from T & S using an
-                                    ! equation of state.
+  integer, parameter :: max_itt = 1 !< number of times to iterate in solving for eigenvector
+  real :: cg_subRO        !< A tiny wave speed to prevent division by zero [L T-1 ~> m s-1]
+  real, parameter    :: a_int = 0.5 !< value of normalized integral: \int(w_strct^2)dz = a_int [nondim]
+  real               :: I_a_int     !< inverse of a_int [nondim]
+  real               :: f2          !< squared Coriolis frequency [T-2 ~> s-2]
+  real               :: Kmag2       !< magnitude of horizontal wave number squared [L-2 ~> m-2]
+  logical            :: use_EOS     !< If true, density is calculated from T & S using an
+                                    !! equation of state.
 
   ! local representations of variables in CS; note,
   ! not all rows will be filled if layers get merged!
-  real, dimension(SZK_(G)+1) :: w_strct      ! Vertical structure of vertical velocity (normalized) [nondim].
-  real, dimension(SZK_(G)+1) :: u_strct      ! Vertical structure of horizontal velocity (normalized) [nondim].
-  real, dimension(SZK_(G)+1) :: W_profile    ! Vertical profile of w_hat(z) = W0*w_strct(z) [Z T-1 ~> m s-1].
-  real, dimension(SZK_(G)+1) :: Uavg_profile ! Vertical profile of the magnitude of horizontal velocity [L T-1 ~> m s-1].
-  real, dimension(SZK_(G)+1) :: z_int        ! Integrated depth [Z ~> m]
-  real, dimension(SZK_(G)+1) :: N2           ! Squared buoyancy frequency at each interface [T-2 ~> s-2].
-  real, dimension(SZK_(G)+1) :: w_strct2     ! squared values [nondim]
-  real, dimension(SZK_(G)+1) :: u_strct2     ! squared values [nondim]
-  real, dimension(SZK_(G))   :: dz           ! thicknesses of merged layers (same as Hc I hope) [Z ~> m]
-  ! real, dimension(SZK_(G)+1) :: dWdz_profile ! profile of dW/dz
-  real                       :: w2avg   ! average of squared vertical velocity structure funtion [Z ~> m]
+  real, dimension(SZK_(G)+1) :: w_strct      !< Vertical structure of vertical velocity (normalized) [nondim].
+  real, dimension(SZK_(G)+1) :: u_strct      !< Vertical structure of horizontal velocity (normalized) [nondim].
+  real, dimension(SZK_(G)+1) :: W_profile    !< Vertical profile of w_hat(z) = W0*w_strct(z) [Z T-1 ~> m s-1].
+  real, dimension(SZK_(G)+1) :: Uavg_profile !< Vertical profile of the magnitude of horizontal velocity [L T-1 ~> m s-1].
+  real, dimension(SZK_(G)+1) :: z_int        !< Integrated depth [Z ~> m]
+  real, dimension(SZK_(G)+1) :: N2           !< Squared buoyancy frequency at each interface [T-2 ~> s-2].
+  real, dimension(SZK_(G)+1) :: w_strct2     !< squared values [nondim]
+  real, dimension(SZK_(G)+1) :: u_strct2     !< squared values [nondim]
+  real, dimension(SZK_(G))   :: dz           !< thicknesses of merged layers (same as Hc I hope) [Z ~> m]
+  ! real, dimension(SZK_(G)+1) :: dWdz_profile !< profile of dW/dz
+  real                       :: w2avg   !< average of squared vertical velocity structure funtion [Z ~> m]
   real                       :: int_dwdz2
   real                       :: int_w2
   real                       :: int_N2w2
-  real                       :: KE_term ! terms in vertically averaged energy equation
-  real                       :: PE_term ! terms in vertically averaged energy equation
-  real                       :: W0      ! A vertical velocity magnitude [Z T-1 ~> m s-1]
-  real                       :: gp_unscaled ! A version of gprime rescaled to [L T-2 ~> m s-2].
-  real, dimension(SZK_(G)-1) :: lam_z   ! product of eigen value and gprime(k); one value for each
-                                        ! interface (excluding surface and bottom)
+  real                       :: KE_term !< terms in vertically averaged energy equation
+  real                       :: PE_term !< terms in vertically averaged energy equation
+  real                       :: W0      !< A vertical velocity magnitude [Z T-1 ~> m s-1]
+  real                       :: gp_unscaled !< A version of gprime rescaled to [L T-2 ~> m s-2].
+  real, dimension(SZK_(G)-1) :: lam_z   !< product of eigen value and gprime(k); one value for each
+                                        !< interface (excluding surface and bottom)
   real, dimension(SZK_(G)-1) :: a_diag, b_diag, c_diag
-                                        ! diagonals of tridiagonal matrix; one value for each
-                                        ! interface (excluding surface and bottom)
-  real, dimension(SZK_(G)-1) :: e_guess ! guess at eigen vector with unit amplitde (for TDMA)
-  real, dimension(SZK_(G)-1) :: e_itt   ! improved guess at eigen vector (from TDMA)
+                                        !< diagonals of tridiagonal matrix; one value for each
+                                        !< interface (excluding surface and bottom)
+  real, dimension(SZK_(G)-1) :: e_guess !< guess at eigen vector with unit amplitde (for TDMA)
+  real, dimension(SZK_(G)-1) :: e_itt   !< improved guess at eigen vector (from TDMA)
   real    :: Pi
   integer :: kc
   integer :: i, j, k, k2, itt, is, ie, js, je, nz, nzm, row, ig, jg, ig_stop, jg_stop
