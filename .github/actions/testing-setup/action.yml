@@ -22,6 +22,7 @@ runs:
       shell: bash
       run: |
         echo "::group::Install linux packages"
+        sudo apt-get update
         sudo apt-get install netcdf-bin libnetcdf-dev libnetcdff-dev mpich libmpich-dev
         echo "::endgroup::"
 
