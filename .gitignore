@@ -8,6 +8,12 @@ html
 *.o
 *.mod
 MOM6
+build/
+_build/
+deps/
+MOM6.tags
+bib*.aux
+citelist.doc*
 
 
 # Autoconf
