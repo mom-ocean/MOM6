@@ -2225,6 +2225,7 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, CS)
   if (associated(CS%KE_dia)) then
     call safe_alloc_ptr(ADp%du_dt_dia,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(ADp%dv_dt_dia,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
   endif
 
   if (associated(CS%uhGM_Rlay)) call safe_alloc_ptr(CDp%uhGM,IsdB,IedB,jsd,jed,nz)
