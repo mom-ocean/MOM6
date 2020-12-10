@@ -279,7 +279,7 @@ ALIASES += footnote{1}="\latexonly\footnote\{\1\}\endlatexonly\htmlonly<sup titl
 # what it does and just passes through the string uninterpreted.
 # The image also needs to be added to LATEX_EXTRA_FILES.
 # Default 3rd argument: \includegraphics[width=\textwidth\,height=\textheight/2\,keepaspectratio=true]
-ALIASES += imagelatex{3}="\latexonly\begin{DoxyImage}\n\3{\1}\n\doxyfigcaption{\2}\n\end{DoxyImage}\endlatexonly\xmlonly<image type=\"latex\" name=\"\1\">\2</image>\endxmlonly"
+ALIASES += imagelatex{3}="\latexonly\begin{DoxyImage}\3{\1}\doxyfigcaption{\2}\end{DoxyImage}\endlatexonly\xmlonly<image type=\"latex\" name=\"\1\">\2</image>\endxmlonly"
 
 # This tag can be used to specify a number of word-keyword mappings (TCL only).
 # A mapping has the form "name=value". For example adding "class=itcl::class"
