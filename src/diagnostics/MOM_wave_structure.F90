@@ -163,7 +163,8 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real, dimension(SZK_(G)+1) :: w_strct      !< Vertical structure of vertical velocity (normalized) [nondim].
   real, dimension(SZK_(G)+1) :: u_strct      !< Vertical structure of horizontal velocity (normalized) [nondim].
   real, dimension(SZK_(G)+1) :: W_profile    !< Vertical profile of w_hat(z) = W0*w_strct(z) [Z T-1 ~> m s-1].
-  real, dimension(SZK_(G)+1) :: Uavg_profile !< Vertical profile of the magnitude of horizontal velocity [L T-1 ~> m s-1].
+  real, dimension(SZK_(G)+1) :: Uavg_profile !< Vertical profile of the magnitude of
+                                             !! horizontal velocity [L T-1 ~> m s-1].
   real, dimension(SZK_(G)+1) :: z_int        !< Integrated depth [Z ~> m]
   real, dimension(SZK_(G)+1) :: N2           !< Squared buoyancy frequency at each interface [T-2 ~> s-2].
   real, dimension(SZK_(G)+1) :: w_strct2     !< squared values [nondim]
