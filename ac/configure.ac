@@ -83,25 +83,61 @@ AX_FC_CHECK_MODULE([mpi],
 
 # netCDF configuration
 
-# NOTE: `nf-config --flibs` combines library paths (-L) and libraries (-l),
+# Search for the Fortran netCDF module, fallback to nf-config.
+AX_FC_CHECK_MODULE([netcdf], [], [
+  AS_UNSET([ax_fc_cv_mod_netcdf])
+  AC_PATH_PROG([NF_CONFIG], [nf-config])
+  AS_IF([test -n "$NF_CONFIG"], [
+    AC_SUBST([FCFLAGS], ["$FCFLAGS $($NF_CONFIG --fflags)"])
+    ], [AC_MSG_ERROR([Could not find nf-config.])]
+  )
+  AX_FC_CHECK_MODULE([netcdf], [], [
+    AC_MSG_ERROR([Could not find netcdf module.])
+  ])
+])
+
+# NOTE: `nc-config --libs` combines library paths (-L) and libraries (-l),
 #   even though these ought to be separated in the invocation of `ld`.
 #
 # We use `sed` to strip the -l and pass the -L to LDFLAGS, and rely on autoconf
 #   to configure the -l flags.
 AC_PROG_SED
 
-AC_PATH_PROG([NF_CONFIG], [nf-config])
-AS_IF([test -n "$NF_CONFIG"],
-  [CPPFLAGS="$CPPFLAGS $($NF_CONFIG --fflags)"
-  FCFLAGS="$FCFLAGS $($NF_CONFIG --fflags)"
-  LDFLAGS="$LDFLAGS $($NF_CONFIG --flibs | $SED -e 's/-l[[^ 	]]*//g')"],
-  [AC_MSG_ERROR([Could not find nf-config.])])
+# FMS may invoke netCDF C calls, so we link to libnetcdf.
+AC_LANG_PUSH([C])
+AC_CHECK_LIB([netcdf], [nc_create], [], [
+  AS_UNSET([ac_cv_lib_netcdf_nc_create])
+  AC_PATH_PROG([NC_CONFIG], [nc-config])
+  AS_IF([test -n "$NC_CONFIG"], [
+    AC_SUBST([LDFLAGS],
+      ["$LDFLAGS $($NC_CONFIG --libs | $SED -e 's/-l[[^ 	]]*//g')"]
+    )
+    ], [AC_MSG_ERROR([Could not find nc-config.])]
+  )
+  AC_CHECK_LIB([netcdf], [nc_create], [], [
+    AC_MSG_ERROR([Could not find libnetcdf.])
+  ])
+])
+AC_LANG_POP([C])
 
-AX_FC_CHECK_MODULE([netcdf],
-  [], [AC_MSG_ERROR([Could not find netcdf module.])])
-AX_FC_CHECK_LIB([netcdff], [nf_create], [netcdf],
-  [], [AC_MSG_ERROR([Could not link netcdff library.])]
-)
+# NOTE: We test for nf_create, rather than nf90_create, because AX_FC_CHECK_LIB
+#   is currently not well-suited to probe inside modules.
+#   Testing of the nf90_* functions will require a macro update.
+
+# Link to Fortran netCDF library, netcdff
+AX_FC_CHECK_LIB([netcdff], [nf_create], [], [], [
+  AS_UNSET([ax_fc_cv_lib_netcdff_nf_create])
+  AC_PATH_PROG([NF_CONFIG], [nf-config])
+  AS_IF([test -n "$NF_CONFIG"], [
+    AC_SUBST([LDFLAGS],
+      ["$LDFLAGS $($NF_CONFIG --flibs | $SED -e 's/-l[[^ 	]]*//g')"]
+    )
+    ], [AC_MSG_ERROR([Could not find nf-config.])]
+  )
+  AX_FC_CHECK_LIB([netcdff], [nf_create], [], [], [
+    AC_MSG_ERROR([Could not find libnetcdff.])
+  ])
+])
 
 
 # Force 8-byte reals
