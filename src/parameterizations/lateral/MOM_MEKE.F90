@@ -912,7 +912,7 @@ subroutine MEKE_lengthScales_0d(CS, US, area, beta, depth, Rd_dx, SN, EKE, & ! Z
   type(MEKE_CS), pointer       :: CS         !< MEKE control structure.
   type(unit_scale_type), intent(in) :: US    !< A dimensional unit scaling type
   real,          intent(in)    :: area       !< Grid cell area [L2 ~> m2]
-  real,          intent(in)    :: beta       !< Planetary beta = |grad F| [T-1 L-1 ~> s-1 m-1]
+  real,          intent(in)    :: beta       !< Planetary beta = \f$ \nabla f\f$  [T-1 L-1 ~> s-1 m-1]
   real,          intent(in)    :: depth      !< Ocean depth [Z ~> m]
   real,          intent(in)    :: Rd_dx      !< Resolution Ld/dx [nondim].
   real,          intent(in)    :: SN         !< Eady growth rate [T-1 ~> s-1].
