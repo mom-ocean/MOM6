@@ -1,7 +1,5 @@
 /*! \page Tracer_Advection Tracer Advection
 
-\brief Tracer transport schemes
-
 MOM6 implements a generalised tracer advection scheme, which is a
 combination of the modified flux advection scheme \cite easter1993 with
 reconstructed tracer distributions. The tracer distributions may be

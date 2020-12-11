@@ -164,7 +164,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                          ! by a large surface pressure, such as with an ice sheet.
   logical :: regrid_accelerate
   integer :: regrid_iterations
-!  logical :: Analytic_FV_PGF, obsol_test
   logical :: convert
   logical :: just_read  ! If true, only read the parameters because this
                         ! is a run from a restart file; this option
@@ -1280,7 +1279,7 @@ subroutine initialize_velocity_from_file(u, v, G, US, param_file, just_read_para
                            intent(out) :: v  !< The meridional velocity that is being initialized [L T-1 ~> m s-1]
   type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
-                                                      !! parse for modelparameter values.
+                                                      !! parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
   ! Local variables
@@ -1320,7 +1319,7 @@ subroutine initialize_velocity_zero(u, v, G, param_file, just_read_params)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                            intent(out) :: v  !< The meridional velocity that is being initialized [L T-1 ~> m s-1]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
-                                                      !! parse for modelparameter values.
+                                                      !! parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
   ! Local variables
@@ -1355,7 +1354,7 @@ subroutine initialize_velocity_uniform(u, v, G, US, param_file, just_read_params
                            intent(out) :: v  !< The meridional velocity that is being initialized [L T-1 ~> m s-1]
   type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
-                                                      !! parse for modelparameter values.
+                                                      !! parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
   ! Local variables
@@ -1661,7 +1660,7 @@ subroutine initialize_temp_salt_linear(T, S, G, param_file, just_read_params)
 
   integer :: k
   real  :: delta_S, delta_T
-  real  :: S_top, T_top ! Reference salinity and temerature within surface layer
+  real  :: S_top, T_top ! Reference salinity and temperature within surface layer
   real  :: S_range, T_range ! Range of salinities and temperatures over the vertical
   real  :: delta
   logical :: just_read    ! If true, just read parameters but set nothing.
@@ -1989,13 +1988,11 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
   ! Local variables
   character(len=200) :: filename   !< The name of an input file containing temperature
-                                   !! and salinity in z-space; also used for  ice shelf area.
-  character(len=200) :: tfilename  !< The name of an input file containing only temperature
-                                   !! in z-space.
-  character(len=200) :: sfilename  !< The name of an input file containing only salinity
-                                   !! in z-space.
+                                   !! and salinity in z-space; by default it is also used for ice shelf area.
+  character(len=200) :: tfilename  !< The name of an input file containing temperature in z-space.
+  character(len=200) :: sfilename  !< The name of an input file containing salinity in z-space.
   character(len=200) :: shelf_file !< The name of an input file used for  ice shelf area.
-  character(len=200) :: inputdir   !! The directory where NetCDF input filesare.
+  character(len=200) :: inputdir   !! The directory where NetCDF input files are.
   character(len=200) :: mesg, area_varname, ice_shelf_file
 
   type(EOS_type), pointer :: eos => NULL()
@@ -2059,6 +2056,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   logical :: use_ice_shelf
   logical :: pre_gridded
   logical :: separate_mixed_layer  ! If true, handle the mixed layers differently.
+  logical :: density_extrap_bug    ! If true use an expression with a vertical indexing bug for
+                                   ! extrapolating the densities at the bottom of unstable profiles
+                                   ! from data when finding the initial interface locations in
+                                   ! layered mode from a dataset of T and S.
   character(len=10) :: remappingScheme
   real :: tempAvg, saltAvg
   integer :: nPoints, ans
@@ -2090,26 +2091,26 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
   use_ice_shelf = present(frac_shelf_h)
 
-  call get_param(PF, mdl, "TEMP_SALT_Z_INIT_FILE",filename, &
+  call get_param(PF, mdl, "TEMP_SALT_Z_INIT_FILE", filename, &
                  "The name of the z-space input file used to initialize "//&
                  "temperatures (T) and salinities (S). If T and S are not "//&
                  "in the same file, TEMP_Z_INIT_FILE and SALT_Z_INIT_FILE "//&
-                 "must be set.",default="temp_salt_z.nc",do_not_log=just_read)
-  call get_param(PF, mdl, "TEMP_Z_INIT_FILE",tfilename, &
+                 "must be set.", default="temp_salt_z.nc", do_not_log=just_read)
+  call get_param(PF, mdl, "TEMP_Z_INIT_FILE", tfilename, &
                  "The name of the z-space input file used to initialize "//&
-                 "temperatures, only.", default=trim(filename),do_not_log=just_read)
-  call get_param(PF, mdl, "SALT_Z_INIT_FILE",sfilename, &
+                 "temperatures, only.", default=trim(filename), do_not_log=just_read)
+  call get_param(PF, mdl, "SALT_Z_INIT_FILE", sfilename, &
                  "The name of the z-space input file used to initialize "//&
-                 "temperatures, only.", default=trim(filename),do_not_log=just_read)
+                 "temperatures, only.", default=trim(filename), do_not_log=just_read)
   filename = trim(inputdir)//trim(filename)
   tfilename = trim(inputdir)//trim(tfilename)
   sfilename = trim(inputdir)//trim(sfilename)
   call get_param(PF, mdl, "Z_INIT_FILE_PTEMP_VAR", potemp_var, &
                  "The name of the potential temperature variable in "//&
-                 "TEMP_Z_INIT_FILE.", default="ptemp",do_not_log=just_read)
+                 "TEMP_Z_INIT_FILE.", default="ptemp", do_not_log=just_read)
   call get_param(PF, mdl, "Z_INIT_FILE_SALT_VAR", salin_var, &
                  "The name of the salinity variable in "//&
-                 "SALT_Z_INIT_FILE.", default="salt",do_not_log=just_read)
+                 "SALT_Z_INIT_FILE.", default="salt", do_not_log=just_read)
   call get_param(PF, mdl, "Z_INIT_HOMOGENIZE", homogenize, &
                  "If True, then horizontally homogenize the interpolated "//&
                  "initial conditions.", default=.false., do_not_log=just_read)
@@ -2171,6 +2172,11 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
                  "The mixed layer depth in the initial conditions when Z_INIT_SEPARATE_MIXED_LAYER "//&
                  "is set to true.", default=Hmix_default, units="m", scale=US%m_to_Z, &
                  do_not_log=(just_read .or. .not.separate_mixed_layer))
+    call get_param(PF, mdl, "LAYER_Z_INIT_IC_EXTRAP_BUG", density_extrap_bug, &
+                 "If true use an expression with a vertical indexing bug for extrapolating the "//&
+                 "densities at the bottom of unstable profiles from data when finding the "//&
+                 "initial interface locations in layered mode from a dataset of T and S.", &
+                 default=.true., do_not_log=just_read)
     ! Reusing MINIMUM_DEPTH for the default mixed layer depth may be a strange choice, but
     ! it reproduces previous answers.
   endif
@@ -2337,8 +2343,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
     nkml = 0 ; if (separate_mixed_layer) nkml = GV%nkml
 
-    call find_interfaces(rho_z, z_in, kd, Rb, G%bathyT, zi, G, US, &
-                         nlevs, nkml, hml=Hmix_depth, eps_z=eps_z, eps_rho=eps_rho)
+    call find_interfaces(rho_z, z_in, kd, Rb, G%bathyT, zi, G, US, nlevs, nkml, Hmix_depth, &
+                         eps_z, eps_rho, density_extrap_bug)
 
     if (correct_thickness) then
       call adjustEtaToFitBathymetry(G, GV, US, zi, h)
@@ -2424,7 +2430,7 @@ end subroutine MOM_temp_salt_initialize_from_Z
 
 !> Find interface positions corresponding to interpolated depths in a density profile
 subroutine find_interfaces(rho, zin, nk_data, Rb, depth, zi, G, US, nlevs, nkml, hml, &
-                           eps_z, eps_rho)
+                           eps_z, eps_rho, density_extrap_bug)
   type(ocean_grid_type),      intent(in)  :: G     !< The ocean's grid structure
   integer,                    intent(in)  :: nk_data !< The number of levels in the input data
   real, dimension(SZI_(G),SZJ_(G),nk_data), &
@@ -2443,6 +2449,11 @@ subroutine find_interfaces(rho, zin, nk_data, Rb, depth, zi, G, US, nlevs, nkml,
   real,                       intent(in)  :: hml   !< mixed layer depth [Z ~> m].
   real,                       intent(in)  :: eps_z !< A negligibly small layer thickness [Z ~> m].
   real,                       intent(in)  :: eps_rho !< A negligibly small density difference [R ~> kg m-3].
+  logical,                    intent(in)  :: density_extrap_bug !< If true use an expression with an
+                                                   !! indexing bug for projecting the densities at
+                                                   !! the bottom of unstable profiles from data when
+                                                   !! finding the initial interface locations in
+                                                   !! layered mode from a dataset of T and S.
 
   ! Local variables
   real, dimension(nk_data) :: rho_ ! A column of densities [R ~> kg m-3]
@@ -2467,7 +2478,7 @@ subroutine find_interfaces(rho, zin, nk_data, Rb, depth, zi, G, US, nlevs, nkml,
     unstable=.true.
     work_down = .true.
     do while (unstable)
-      ! Modifiy the input profile until it no longer has densities that decrease with depth.
+      ! Modify the input profile until it no longer has densities that decrease with depth.
       unstable=.false.
       if (work_down) then
         do k=2,nlevs_data-1 ; if (rho_(k) - rho_(k-1) < 0.0 ) then
@@ -2483,7 +2494,11 @@ subroutine find_interfaces(rho, zin, nk_data, Rb, depth, zi, G, US, nlevs, nkml,
       else
         do k=nlevs_data-1,2,-1 ;  if (rho_(k+1) - rho_(k) < 0.0) then
           if (k == nlevs_data-1) then
-            rho_(k+1) = rho_(k-1) + eps_rho !### This should be rho_(k) + eps_rho
+            if (density_extrap_bug) then
+              rho_(k+1) = rho_(k-1) + eps_rho
+            else
+              rho_(k+1) = rho_(k) + eps_rho
+            endif
           else
             drhodz = (rho_(k+1)-rho_(k-1)) / (zin(k+1)-zin(k-1))
             if (drhodz  < 0.0) unstable=.true.
@@ -2585,10 +2600,10 @@ subroutine MOM_state_init_tests(G, GV, US, tv)
   write(0,*) ''
   write(0,*) ' ==================================================================== '
   write(0,*) ''
-  write(0,*) GV%H_to_m*h
+  write(0,*) GV%H_to_m*h(:)
   call cut_off_column_top(nk, tv, GV, US, GV%g_Earth, -e(nk+1), GV%Angstrom_Z, &
                           T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h, remap_CS)
-  write(0,*) GV%H_to_m*h
+  write(0,*) GV%H_to_m*h(:)
 
 end subroutine MOM_state_init_tests
 
