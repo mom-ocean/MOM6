@@ -148,16 +148,16 @@ type, public :: ALE_sponge_CS ; private
   logical :: tripolar_N !< grid is folded at its north edg
 
   !>@{ Diagnostic IDs
-  ! integer :: id_sp_val_t = -1
-  ! integer :: id_sp_val_s = -1
-  ! integer :: id_sp_val_app_t = -1
-  ! integer :: id_sp_val_app_s = -1
-  ! integer :: id_sp_val_u = -1
-  ! integer :: id_sp_val_v = -1
-  ! integer :: id_sp_val_app_u = -1
-  ! integer :: id_sp_val_app_v = -1
-  ! integer :: id_sp_val_s_presponge = -1
-  ! integer :: id_sp_val_s_postsponge = -1
+  integer :: id_sp_val_t = -1
+  integer :: id_sp_val_s = -1
+  integer :: id_sp_val_app_t = -1
+  integer :: id_sp_val_app_s = -1
+  integer :: id_sp_val_u = -1
+  integer :: id_sp_val_v = -1
+  integer :: id_sp_val_app_u = -1
+  integer :: id_sp_val_app_v = -1
+  integer :: id_sp_val_s_presponge = -1
+  integer :: id_sp_val_s_postsponge = -1
 
 end type ALE_sponge_CS
 
@@ -620,35 +620,35 @@ subroutine init_ALE_sponge_diags(Time, G, diag, CS)
 
   CS%diag => diag
 
-  ! CS%id_sp_val_t = register_diag_field('ocean_model', 'sp_val_t', diag%axesTL, Time, &
-  !       'Sponge target value for temperature at h points', 'degC')
+  CS%id_sp_val_t = register_diag_field('ocean_model', 'sp_val_t', diag%axesTL, Time, &
+        'Sponge target value for temperature at h points', 'degC')
 
-  ! CS%id_sp_val_s = register_diag_field('ocean_model', 'sp_val_s', diag%axesTL, Time, &
-  !       'Sponge target value for salinity at h points', 'psu')
+  CS%id_sp_val_s = register_diag_field('ocean_model', 'sp_val_s', diag%axesTL, Time, &
+        'Sponge target value for salinity at h points', 'psu')
 
-  ! CS%id_sp_val_app_t = register_diag_field('ocean_model', 'sp_val_app_t', diag%axesTL, Time, &
-  !       'Sponge target value for temperature at h points, only where sponge is applied', 'degC')
+  CS%id_sp_val_app_t = register_diag_field('ocean_model', 'sp_val_app_t', diag%axesTL, Time, &
+        'Sponge target value for temperature at h points, only where sponge is applied', 'degC')
 
-  ! CS%id_sp_val_app_s = register_diag_field('ocean_model', 'sp_val_app_s', diag%axesTL, Time, &
-  !       'Sponge target value for salinity at h points, only where sponge is applied', 'psu')
+  CS%id_sp_val_app_s = register_diag_field('ocean_model', 'sp_val_app_s', diag%axesTL, Time, &
+        'Sponge target value for salinity at h points, only where sponge is applied', 'psu')
 
-  ! CS%id_sp_val_u = register_diag_field('ocean_model', 'sp_val_u', diag%axesCuL, Time, &
-  !       'Sponge target value for zonal velocity at u points', 'm s-1')
+  CS%id_sp_val_u = register_diag_field('ocean_model', 'sp_val_u', diag%axesCuL, Time, &
+        'Sponge target value for zonal velocity at u points', 'm s-1')
 
-  ! CS%id_sp_val_v = register_diag_field('ocean_model', 'sp_val_v', diag%axesCvL, Time, &
-  !       'Sponge target value for meridional velocity at v points', 'm s-1')
+  CS%id_sp_val_v = register_diag_field('ocean_model', 'sp_val_v', diag%axesCvL, Time, &
+        'Sponge target value for meridional velocity at v points', 'm s-1')
 
-  ! CS%id_sp_val_app_u = register_diag_field('ocean_model', 'sp_val_app_u', diag%axesCuL, Time, &
-  !       'Sponge target value for zonal velocity at u points, only where sponge is applied', 'm s-1')
+  CS%id_sp_val_app_u = register_diag_field('ocean_model', 'sp_val_app_u', diag%axesCuL, Time, &
+        'Sponge target value for zonal velocity at u points, only where sponge is applied', 'm s-1')
 
-  ! CS%id_sp_val_app_v = register_diag_field('ocean_model', 'sp_val_app_v', diag%axesCvL, Time, &
-  !       'Sponge target value for meridional velocity at v points, only where sponge is applied', 'm s-1')
+  CS%id_sp_val_app_v = register_diag_field('ocean_model', 'sp_val_app_v', diag%axesCvL, Time, &
+        'Sponge target value for meridional velocity at v points, only where sponge is applied', 'm s-1')
 
-  ! CS%id_sp_val_s_presponge = register_diag_field('ocean_model', 'sp_val_s_presponge', diag%axesTL, Time, &
-  !       'Salinity at h points before sponge is applied', 'degC')
+  CS%id_sp_val_s_presponge = register_diag_field('ocean_model', 'sp_val_s_presponge', diag%axesTL, Time, &
+        'Salinity at h points before sponge is applied', 'degC')
 
-  ! CS%id_sp_val_s_postsponge = register_diag_field('ocean_model', 'sp_val_s_postsponge', diag%axesTL, Time, &
-  !       'Salinity at h points after sponge is applied', 'degC')
+  CS%id_sp_val_s_postsponge = register_diag_field('ocean_model', 'sp_val_s_postsponge', diag%axesTL, Time, &
+        'Salinity at h points after sponge is applied', 'degC')
 
 end subroutine init_ALE_sponge_diags
 
@@ -879,12 +879,12 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   real, allocatable, dimension(:,:,:) :: sp_val_u ! A temporary array for fields
   real, allocatable, dimension(:,:,:) :: sp_val_v ! A temporary array for fields
   real, allocatable, dimension(:,:,:) :: mask_z ! A temporary array for field mask at h pts
-!  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: tmp  !< A temporary array for thermodynamic sponge target values,
-!                                                !! only where sponge is applied
-!  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)) :: tmp_u  !< A temporary array for u sponge target values,
-!                                                !! only where sponge is applied
-!  real, dimension(SZI_(G), SZJB_(G), SZK_(G)) :: tmp_v  !< A temporary array for v sponge target values,
-!                                                !! only where sponge is applied
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: tmp  !< A temporary array for thermodynamic sponge target values,
+                                                !! only where sponge is applied
+  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)) :: tmp_u  !< A temporary array for u sponge target values,
+                                                !! only where sponge is applied
+  real, dimension(SZI_(G), SZJB_(G), SZK_(G)) :: tmp_v  !< A temporary array for v sponge target values,
+                                                !! only where sponge is applied
   real, dimension(:), allocatable :: hsrc       ! Source thicknesses [Z ~> m].
   ! Local variables for ALE remapping
   real, dimension(:), allocatable :: tmpT1d
@@ -922,13 +922,13 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
                      spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z, &
                      answers_2018=CS%hor_regrid_answers_2018)
 
-      ! if (m .EQ. 1) then
-      !   if (CS%id_sp_val_t > 0)  call post_data(CS%id_sp_val_t, sp_val, CS%diag)
-      ! endif
-      ! if (m .EQ. 2) then
-      !   if (CS%id_sp_val_s > 0)  call post_data(CS%id_sp_val_s, sp_val, CS%diag)
-      !   if (CS%id_sp_val_s_presponge > 0)  call post_data(CS%id_sp_val_s_presponge, CS%var(m)%p, CS%diag)
-      ! endif
+      if (m .EQ. 1) then
+        if (CS%id_sp_val_t > 0)  call post_data(CS%id_sp_val_t, sp_val, CS%diag)
+      endif
+      if (m .EQ. 2) then
+        if (CS%id_sp_val_s > 0)  call post_data(CS%id_sp_val_s, sp_val, CS%diag)
+        if (CS%id_sp_val_s_presponge > 0)  call post_data(CS%id_sp_val_s_presponge, CS%var(m)%p, CS%diag)
+      endif
 
       allocate( hsrc(nz_data) )
       allocate( tmpT1d(nz_data) )
@@ -973,7 +973,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   allocate(tmp_val2(nz_data))
   do m=1,CS%fldno
 
-    !tmp(:,:,:) = 0.0
+    tmp(:,:,:) = 0.0
 
     do c=1,CS%num_col
       ! c is an index for the next 3 lines but a multiplier for the rest of the loop
@@ -982,7 +982,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       damp = dt * CS%Iresttime_col(c)
       I1pdamp = 1.0 / (1.0 + damp)
       tmp_val2(1:nz_data) = CS%Ref_val(m)%p(1:nz_data,c)
-      !tmp(i,j,1:nz_data) = CS%Ref_val(m)%p(1:nz_data,c)
+      tmp(i,j,1:nz_data) = CS%Ref_val(m)%p(1:nz_data,c)
       if (CS%time_varying_sponges) then
         call remapping_core_h(CS%remap_cs, nz_data, CS%Ref_val(m)%h(1:nz_data,c), tmp_val2, &
                               CS%nz, h(i,j,:), tmp_val1, h_neglect, h_neglect_edge)
@@ -996,13 +996,13 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
 
     enddo
 
-    ! if (m .EQ. 1) then
-    !   if (CS%id_sp_val_app_t > 0)  call post_data(CS%id_sp_val_app_t, tmp, CS%diag)
-    ! endif
-    ! if (m .EQ. 2) then
-    !   if (CS%id_sp_val_app_s > 0)  call post_data(CS%id_sp_val_app_s, tmp, CS%diag)
-    !   if (CS%id_sp_val_s_postsponge > 0)  call post_data(CS%id_sp_val_s_postsponge, CS%var(m)%p, CS%diag)
-    ! endif
+    if (m .EQ. 1) then
+      if (CS%id_sp_val_app_t > 0)  call post_data(CS%id_sp_val_app_t, tmp, CS%diag)
+    endif
+    if (m .EQ. 2) then
+      if (CS%id_sp_val_app_s > 0)  call post_data(CS%id_sp_val_app_s, tmp, CS%diag)
+      if (CS%id_sp_val_s_postsponge > 0)  call post_data(CS%id_sp_val_s_postsponge, CS%var(m)%p, CS%diag)
+    endif
 
   enddo
 
@@ -1032,7 +1032,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       do j=CS%jsc,CS%jec; do I=CS%iscB,CS%iecB
        sp_val_u(I,j,1:nz_data) = 0.5*(sp_val(i,j,1:nz_data)+sp_val(i+1,j,1:nz_data))
       enddo ; enddo
-      ! if (CS%id_sp_val_u > 0)  call post_data(CS%id_sp_val_u, sp_val, CS%diag)
+      if (CS%id_sp_val_u > 0)  call post_data(CS%id_sp_val_u, sp_val, CS%diag)
 
       !call pass_var(sp_val,G%Domain)
       !call pass_var(mask_z,G%Domain)
@@ -1133,7 +1133,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       nz_data = CS%nz_data
     endif
 
-    !tmp_u(:,:,:) = 0.0
+    tmp_u(:,:,:) = 0.0
 
     do c=1,CS%num_col_u
       i = CS%col_i_u(c) ; j = CS%col_j_u(c)
@@ -1141,7 +1141,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       I1pdamp = 1.0 / (1.0 + damp)
       if (CS%time_varying_sponges) nz_data = CS%Ref_val_u%nz_data
       tmp_val2(1:nz_data) = CS%Ref_val_u%p(1:nz_data,c)
-      !tmp_u(i,j,1:nz_data) = CS%Ref_val_u%p(1:nz_data,c)
+      tmp_u(i,j,1:nz_data) = CS%Ref_val_u%p(1:nz_data,c)
       if (CS%time_varying_sponges) then
         call remapping_core_h(CS%remap_cs, nz_data, CS%Ref_val_u%h(1:nz_data,c), tmp_val2, &
                  CS%nz, hu(i,j,:), tmp_val1, h_neglect, h_neglect_edge)
@@ -1158,7 +1158,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       hv(i,J,k) = 0.5 * (h(i,j,k) + h(i,j+1,k))
     enddo ; enddo ; enddo
 
-    !tmp_v(:,:,:) = 0.0
+    tmp_v(:,:,:) = 0.0
 
     do c=1,CS%num_col_v
       i = CS%col_i_v(c) ; j = CS%col_j_v(c)
@@ -1166,7 +1166,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       I1pdamp = 1.0 / (1.0 + damp)
       if (CS%time_varying_sponges) nz_data = CS%Ref_val_v%nz_data
       tmp_val2(1:nz_data) = CS%Ref_val_v%p(1:nz_data,c)
-      !tmp_v(i,j,1:nz_data) = CS%Ref_val_v%p(1:nz_data,c)
+      tmp_v(i,j,1:nz_data) = CS%Ref_val_v%p(1:nz_data,c)
       if (CS%time_varying_sponges) then
         call remapping_core_h(CS%remap_cs, nz_data, CS%Ref_val_v%h(1:nz_data,c), tmp_val2, &
                  CS%nz, hv(i,j,:), tmp_val1, h_neglect, h_neglect_edge)
@@ -1178,13 +1178,13 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       CS%var_v%p(i,j,1:CS%nz) = I1pdamp * (CS%var_v%p(i,j,1:CS%nz) + tmp_val1 * damp)
     enddo
 
-   ! if (CS%id_sp_val_app_u > 0)  call post_data(CS%id_sp_val_app_u, tmp_u, CS%diag)
-   ! if (CS%id_sp_val_app_v > 0)  call post_data(CS%id_sp_val_app_v, tmp_v, CS%diag)
+   if (CS%id_sp_val_app_u > 0)  call post_data(CS%id_sp_val_app_u, tmp_u, CS%diag)
+   if (CS%id_sp_val_app_v > 0)  call post_data(CS%id_sp_val_app_v, tmp_v, CS%diag)
 
   endif
 
   deallocate(tmp_val2)
-  !if (associated(tmp_u)) deallocate(tmp_u,tmp_v)
+
 
 end subroutine apply_ALE_sponge
 
