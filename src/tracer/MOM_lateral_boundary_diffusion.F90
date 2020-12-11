@@ -23,7 +23,7 @@ use MOM_verticalGrid,          only : verticalGrid_type
 use MOM_CVMix_KPP,             only : KPP_get_BLD, KPP_CS
 use MOM_energetic_PBL,         only : energetic_PBL_get_MLD, energetic_PBL_CS
 use MOM_diabatic_driver,       only : diabatic_CS, extract_diabatic_member
-use iso_fortran_env,           only : stdout=>output_unit, stderr=>error_unit
+use MOM_io,                    only : stdout, stderr
 
 implicit none ; private
 
@@ -1111,16 +1111,15 @@ logical function test_layer_fluxes(verbose, nk, test_name, F_calc, F_ans)
   real, dimension(nk),        intent(in) :: F_ans     !< Fluxes of the unitless tracer calculated by hand [s^-1]
   ! Local variables
   integer :: k
-  integer, parameter :: stdunit = stdout
 
   test_layer_fluxes = .false.
   do k=1,nk
     if ( F_calc(k) /= F_ans(k) ) then
       test_layer_fluxes = .true.
-      write(stdunit,*) "MOM_lateral_boundary_diffusion, UNIT TEST FAILED: ", test_name
-      write(stdunit,10) k, F_calc(k), F_ans(k)
+      write(stdout,*) "MOM_lateral_boundary_diffusion, UNIT TEST FAILED: ", test_name
+      write(stdout,10) k, F_calc(k), F_ans(k)
     elseif (verbose) then
-      write(stdunit,10) k, F_calc(k), F_ans(k)
+      write(stdout,10) k, F_calc(k), F_ans(k)
     endif
   enddo
 
@@ -1141,19 +1140,17 @@ logical function test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, k_top_a
   character(len=80) :: test_name !< Name of the unit test
   logical :: verbose             !< If true always print output
 
-  integer, parameter :: stdunit = stdout
-
   test_boundary_k_range = k_top .ne. k_top_ans
   test_boundary_k_range = test_boundary_k_range .or. (zeta_top .ne. zeta_top_ans)
   test_boundary_k_range = test_boundary_k_range .or. (k_bot .ne. k_bot_ans)
   test_boundary_k_range = test_boundary_k_range .or. (zeta_bot .ne. zeta_bot_ans)
 
-  if (test_boundary_k_range) write(stdunit,*) "UNIT TEST FAILED: ", test_name
+  if (test_boundary_k_range) write(stdout,*) "UNIT TEST FAILED: ", test_name
   if (test_boundary_k_range .or. verbose) then
-    write(stdunit,20) "k_top", k_top, "k_top_ans", k_top_ans
-    write(stdunit,20) "k_bot", k_bot, "k_bot_ans", k_bot_ans
-    write(stdunit,30) "zeta_top", zeta_top, "zeta_top_ans", zeta_top_ans
-    write(stdunit,30) "zeta_bot", zeta_bot, "zeta_bot_ans", zeta_bot_ans
+    write(stdout,20) "k_top", k_top, "k_top_ans", k_top_ans
+    write(stdout,20) "k_bot", k_bot, "k_bot_ans", k_bot_ans
+    write(stdout,30) "zeta_top", zeta_top, "zeta_top_ans", zeta_top_ans
+    write(stdout,30) "zeta_bot", zeta_bot, "zeta_bot_ans", zeta_bot_ans
   endif
 
   20 format(A,"=",i3,X,A,"=",i3)

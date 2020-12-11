@@ -33,6 +33,7 @@ use mpp_io_mod,           only : get_file_info=>mpp_get_info, get_file_atts=>mpp
 use mpp_io_mod,           only : get_file_fields=>mpp_get_fields, get_file_times=>mpp_get_times
 use mpp_io_mod,           only : io_infra_init=>mpp_io_init
 
+use iso_fortran_env,      only : stdout_iso=>output_unit, stderr_iso=>error_unit
 use netcdf
 
 implicit none ; private
@@ -83,6 +84,9 @@ interface MOM_read_vector
   module procedure MOM_read_vector_3d
   module procedure MOM_read_vector_2d
 end interface
+
+integer, public :: stdout = stdout_iso  !< standard output unit
+integer, public :: stderr = stderr_iso  !< standard output unit
 
 contains
 
