@@ -602,6 +602,7 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   real    :: wgt                     !< weight to be used in the linear transition to the interior [nondim]
   real    :: a                       !< coefficient to be used in the linear transition to the interior [nondim]
   real    :: tmp1, tmp2              !< dummy variables
+  real    :: htot_max                !< depth below which no fluxes should be applied
   integer :: nk                      !< number of layers in the LBD grid
 
   F_layer(:) = 0.0
@@ -640,12 +641,12 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
                                           phi_R_z(k), dz_top(k), dz_top(k))
       enddo
       htot = 0.0
-      do k = k_bot_min,k_bot_max, 1
+      do k = k_bot_min+1,k_bot_max, 1
         htot = htot + dz_top(k)
       enddo
 
       a = -1.0/htot
-      htot = dz_top(k_bot_min)
+      htot = 0.
       do k = k_bot_min+1,k_bot_max, 1
         wgt = (a*(htot + (dz_top(k) * 0.5))) + 1.0
         F_layer_z(k) = -(dz_top(k) * khtr_u) * (phi_R_z(k) - phi_L_z(k)) * wgt
@@ -684,18 +685,39 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
 !    enddo
 !  endif
 
+  ! thicknesses at velocity points
   do k = 1,ke
     h_vel(k) = harmonic_mean(h_L(k), h_R(k))
   enddo
-  ! remap flux to native grid
+
+  ! remap flux to h_vel (native grid)
   call reintegrate_column(nk, dz_top(:), F_layer_z(:), ke, h_vel(:), 0.0, F_layer(:))
-  ! apply flux_limiter in the native grid
-  if (CS%limiter) then
-    do k = 1,ke
-      if (F_layer(k) /= 0.) call flux_limiter(F_layer(k), area_L, area_R, phi_L(k), &
-                                              phi_R(k), h_L(k), h_R(k))
-    enddo
+
+  ! used to avoid fluxes below hbl
+  if (CS%linear) then
+    htot_max = MAX(hbl_L, hbl_R)
+  else
+    htot_max = MIN(hbl_L, hbl_R)
   endif
+
+  tmp1 = 0.0; tmp2 = 0.0
+  do k = 1,ke
+    tmp1 = tmp1 + h_L(k)
+    tmp2 = tmp2 + h_R(k)
+
+    ! apply flux_limiter
+    if (CS%limiter .and. F_layer(k) /= 0.) then
+       call flux_limiter(F_layer(k), area_L, area_R, phi_L(k), phi_R(k), h_L(k), h_R(k))
+    endif
+
+    ! if tracer point is below htot_max, set flux to zero
+    if (MAX(tmp1+(h_L(k)*0.5), tmp2+(h_R(k)*0.5)) > htot_max) then
+      F_layer(k) = 0.
+    endif
+
+    tmp1 = tmp1 + h_L(k)
+    tmp2 = tmp2 + h_R(k)
+  enddo
 
   ! deallocated arrays
   deallocate(dz_top)
