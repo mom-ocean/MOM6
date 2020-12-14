@@ -3,15 +3,15 @@ module MOM_write_cputime
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_coms, only : sum_across_PEs, pe_here, num_pes
+use MOM_coms, only : sum_across_PEs, num_pes
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
-use MOM_io, only : open_file, APPEND_FILE, ASCII_FILE, WRITEONLY_FILE
+use MOM_io, only : open_file, close_file, APPEND_FILE, ASCII_FILE, WRITEONLY_FILE
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_time_manager, only : time_type, get_time, operator(>)
 
 implicit none ; private
 
-public write_cputime, MOM_write_cputime_init, write_cputime_start_clock
+public write_cputime, MOM_write_cputime_init, MOM_write_cputime_end, write_cputime_start_clock
 
 !-----------------------------------------------------------------------
 
@@ -33,7 +33,7 @@ type, public :: write_cputime_CS ; private
   real :: cputime2 = 0.0        !< The accumulated cpu time.
   integer :: previous_calls = 0 !< The number of times write_CPUtime has been called.
   integer :: prev_n = 0         !< The value of n from the last call.
-  integer :: fileCPU_ascii      !< The unit number of the CPU time file.
+  integer :: fileCPU_ascii= -1  !< The unit number of the CPU time file.
   character(len=200) :: CPUfile !< The name of the CPU time file.
 end type write_cputime_CS
 
@@ -101,15 +101,34 @@ subroutine MOM_write_cputime_init(param_file, directory, Input_start_time, CS)
 
 end subroutine MOM_write_cputime_init
 
-!> This subroutine assesses how much CPU time the model has taken and determines how long the model
-!! should be run before it saves a restart file and stops itself.
-subroutine write_cputime(day, n, nmax, CS)
-  type(time_type),        intent(inout) :: day !< The current model time.
-  integer,                intent(in)    :: n  !< The time step number of the current execution.
-  integer,                intent(inout) :: nmax !< The number of iterations after which to stop so
-                                              !! that the simulation will not run out of CPU time.
-  type(write_cputime_CS), pointer       :: CS !< The control structure set up by a previous
+!> Close the MOM_write_cputime module.
+subroutine MOM_write_cputime_end(CS)
+  type(write_cputime_CS), pointer    :: CS    !< The control structure set up by a previous
                                               !! call to MOM_write_cputime_init.
+
+  if (.not.associated(CS)) return
+
+  ! Flush and close the output files.
+  if (is_root_pe() .and. CS%fileCPU_ascii > 0) then
+    flush(CS%fileCPU_ascii)
+    call close_file(CS%fileCPU_ascii)
+  endif
+
+  deallocate(CS)
+
+end subroutine MOM_write_cputime_end
+
+!> This subroutine assesses how much CPU time the model has taken and determines how long the model
+!! should be run before it saves a restart file and stops itself.  Optionally this may also be used
+!! to trigger this module's end routine.
+subroutine write_cputime(day, n, CS, nmax, call_end)
+  type(time_type),        intent(inout) :: day  !< The current model time.
+  integer,                intent(in)    :: n    !< The time step number of the current execution.
+  type(write_cputime_CS), pointer       :: CS   !< The control structure set up by a previous
+                                                !! call to MOM_write_cputime_init.
+  integer,      optional, intent(inout) :: nmax !< The number of iterations after which to stop so
+                                                !! that the simulation will not run out of CPU time.
+  logical,      optional, intent(in)    :: call_end !< If true, also call MOM_write_cputime_end.
 
   ! Local variables
   real    :: d_cputime     ! The change in CPU time since the last call
@@ -145,7 +164,7 @@ subroutine write_cputime(day, n, nmax, CS)
         ((CS%dn_dcpu_min*d_cputime < (n - CS%prev_n)) .or. &
          (CS%dn_dcpu_min < 0.0))) &
       CS%dn_dcpu_min = (n - CS%prev_n) / d_cputime
-    if (CS%dn_dcpu_min >= 0.0) then
+    if (present(nmax) .and. (CS%dn_dcpu_min >= 0.0)) then
       ! Have the model stop itself after 95% of the CPU time has been used.
       nmax = n + INT( CS%dn_dcpu_min * &
           (0.95*CS%maxcpu * REAL(num_pes())*CLOCKS_PER_SEC - &
@@ -180,8 +199,14 @@ subroutine write_cputime(day, n, nmax, CS)
     write(CS%fileCPU_ascii,'(F12.3,", "I11,", ", F12.3,", ", F12.3)') &
            reday, n, (CS%cputime2 / real(CLOCKS_PER_SEC)), &
            d_cputime / real(CLOCKS_PER_SEC)
+
+    flush(CS%fileCPU_ascii)
   endif
   CS%previous_calls = CS%previous_calls + 1
+
+  if (present(call_end)) then
+    if (call_end) call MOM_write_cputime_end(CS)
+  endif
 
 end subroutine write_cputime
 

@@ -809,8 +809,6 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
   type(ocean_grid_type),                     intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),                     intent(in)  :: US   !< A dimensional unit scaling type
-! real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u  !< Zonal flow [L T-1 ~> m s-1]
-! real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v  !< Meridional flow [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h !< Layer thickness [H ~> m or kg m-2]
   integer,                                   intent(in)  :: k  !< Layer for which to calculate vorticity magnitude
   real, dimension(SZIB_(G),SZJ_(G)),         intent(in)  :: div_xx_dx  !< x-derivative of horizontal divergence
@@ -821,15 +819,6 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
                                                                  !! (d/dx(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
   real, dimension(SZIB_(G),SZJ_(G)),         intent(inout) :: vort_xy_dy !< y-derivative of vertical vorticity
                                                                  !! (d/dy(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
-!  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Kh_h !< Leith Laplacian viscosity
-                                                                 !! at h-points [L2 T-1 ~> m2 s-1]
-!  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: Leith_Kh_q !< Leith Laplacian viscosity
-                                                                 !! at q-points [L2 T-1 ~> m2 s-1]
-!  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Ah_h !< Leith bi-harmonic viscosity
-                                                                 !! at h-points [L4 T-1 ~> m4 s-1]
-!  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: Leith_Ah_q !< Leith bi-harmonic viscosity
-                                                                 !! at q-points [L4 T-1 ~> m4 s-1]
-
   ! Local variables
   real, dimension(SZI_(G),SZJB_(G)) :: &
     dslopey_dz, & ! z-derivative of y-slope at v-points [Z-1 ~> m-1]
@@ -857,16 +846,9 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
 
   inv_PI3 = 1.0/((4.0*atan(1.0))**3)
 
-  !### I believe this halo update to be unnecessary. -RWH
-  call pass_var(h, G%Domain)
-
   if ((k > 1) .and. (k < nz)) then
 
-  ! Add in stretching term for the QG Leith vsicosity
-!  if (CS%use_QG_Leith) then
-
-    !### do j=js-1,je+1 ; do I=is-2,Ieq+1
-    do j=js-2,Jeq+2 ; do I=is-2,Ieq+1
+    do j=js-1,je+1 ; do I=is-2,Ieq+1
       h_at_slope_above = 2. * ( h(i,j,k-1) * h(i+1,j,k-1) ) * ( h(i,j,k) * h(i+1,j,k) ) / &
                          ( ( h(i,j,k-1) * h(i+1,j,k-1) ) * ( h(i,j,k) + h(i+1,j,k) ) &
                          + ( h(i,j,k) * h(i+1,j,k) ) * ( h(i,j,k-1) + h(i+1,j,k-1) ) + GV%H_subroundoff )
@@ -878,8 +860,7 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
       h_at_u(I,j) = 2. * ( h_at_slope_above * h_at_slope_below ) * Ih
     enddo ; enddo
 
-    !### do J=js-2,Jeq+1 ; do i=is-1,ie+1
-    do J=js-2,Jeq+1 ; do i=is-2,Ieq+2
+    do J=js-2,Jeq+1 ; do i=is-1,ie+1
       h_at_slope_above = 2. * ( h(i,j,k-1) * h(i,j+1,k-1) ) * ( h(i,j,k) * h(i,j+1,k) ) / &
                          ( ( h(i,j,k-1) * h(i,j+1,k-1) ) * ( h(i,j,k) + h(i,j+1,k) ) &
                          + ( h(i,j,k) * h(i,j+1,k) ) * ( h(i,j,k-1) + h(i,j+1,k-1) ) + GV%H_subroundoff )
@@ -891,8 +872,7 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
       h_at_v(i,J) = 2. * ( h_at_slope_above * h_at_slope_below ) * Ih
     enddo ; enddo
 
-    !### do J=js-1,je ; do i=is-1,Ieq+1
-    do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
+    do J=js-1,je ; do i=is-1,Ieq+1
       f = 0.5 * ( G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J) )
       vort_xy_dx(i,J) = vort_xy_dx(i,J) - f * US%L_to_Z * &
             ( ( h_at_u(I,j) * dslopex_dz(I,j) + h_at_u(I-1,j+1) * dslopex_dz(I-1,j+1) ) &
@@ -900,33 +880,25 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
               ( ( h_at_u(I,j) + h_at_u(I-1,j+1) ) + ( h_at_u(I-1,j) + h_at_u(I,j+1) ) + GV%H_subroundoff)
     enddo ; enddo
 
-    !### do j=js-1,Jeq+1 ; do I=is-1,ie
-    do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
+    do j=js-1,Jeq+1 ; do I=is-1,ie
       f = 0.5 * ( G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1) )
-      !### I think that this should be vort_xy_dy(I,j) = vort_xy_dy(I,j) - f * &
-      vort_xy_dy(I,j) = vort_xy_dx(I,j) - f * US%L_to_Z * &
+      vort_xy_dy(I,j) = vort_xy_dy(I,j) - f * US%L_to_Z * &
             ( ( h_at_v(i,J) * dslopey_dz(i,J) + h_at_v(i+1,J-1) * dslopey_dz(i+1,J-1) ) &
             + ( h_at_v(i,J-1) * dslopey_dz(i,J-1) + h_at_v(i+1,J) * dslopey_dz(i+1,J) ) ) / &
               ( ( h_at_v(i,J) + h_at_v(i+1,J-1) ) + ( h_at_v(i,J-1) + h_at_v(i+1,J) ) + GV%H_subroundoff)
     enddo ; enddo
   endif ! k > 1
 
-  !### I believe this halo update to be unnecessary. -RWH
-  call pass_vector(vort_xy_dy,vort_xy_dx,G%Domain)
-
   if (CS%use_QG_Leith_GM) then
 
     do j=js,je ; do I=is-1,Ieq
-      !### These expressions are not rotationally symmetric.  Add parentheses and regroup, as in:
-    ! grad_vort_mag_u(I,j) = SQRT(vort_xy_dy(I,j)**2 + (0.25*((vort_xy_dx(i,J) + vort_xy_dx(i+1,J-1)) +
-    !                                                         (vort_xy_dx(i+1,J) + vort_xy_dx(i,J-1))))**2 )
-      grad_vort_mag_u(I,j) = SQRT(vort_xy_dy(I,j)**2  + (0.25*(vort_xy_dx(i,J) + vort_xy_dx(i+1,J) &
-                                                             + vort_xy_dx(i,J-1) + vort_xy_dx(i+1,J-1)))**2)
-      grad_div_mag_u(I,j) = SQRT(div_xx_dx(I,j)**2  + (0.25*(div_xx_dy(i,J) + div_xx_dy(i+1,J) &
-                                                           + div_xx_dy(i,J-1) + div_xx_dy(i+1,J-1)))**2)
+      grad_vort_mag_u(I,j) = SQRT(vort_xy_dy(I,j)**2  + (0.25*((vort_xy_dx(i,J) + vort_xy_dx(i+1,J-1)) &
+                                                             + (vort_xy_dx(i+1,J) + vort_xy_dx(i,J-1))))**2)
+      grad_div_mag_u(I,j) = SQRT(div_xx_dx(I,j)**2  + (0.25*((div_xx_dy(i,J) + div_xx_dy(i+1,J-1)) &
+                                                           + (div_xx_dy(i+1,J) + div_xx_dy(i,J-1))))**2)
       if (CS%use_beta_in_QG_Leith) then
-        beta_u(I,j) = sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i+1,j))**2) + &
-                                      (0.5*(G%dF_dy(i,j)+G%dF_dy(i+1,j))**2) )
+        beta_u(I,j) = sqrt((0.5*(G%dF_dx(i,j)+G%dF_dx(i+1,j))**2) + &
+                          (0.5*(G%dF_dy(i,j)+G%dF_dy(i+1,j))**2))
         CS%KH_u_QG(I,j,k) = MIN(grad_vort_mag_u(I,j) + grad_div_mag_u(I,j), 3.0*beta_u(I,j)) * &
                             CS%Laplac3_const_u(I,j) * inv_PI3
       else
@@ -936,14 +908,13 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
     enddo ; enddo
 
     do J=js-1,Jeq ; do i=is,ie
-      !### These expressions are not rotationally symmetric.  Add parentheses and regroup.
-      grad_vort_mag_v(i,J) = SQRT(vort_xy_dx(i,J)**2  + (0.25*(vort_xy_dy(I,j) + vort_xy_dy(I-1,j) &
-                                                             + vort_xy_dy(I,j+1) + vort_xy_dy(I-1,j+1)))**2)
-      grad_div_mag_v(i,J) = SQRT(div_xx_dy(i,J)**2  + (0.25*(div_xx_dx(I,j) + div_xx_dx(I-1,j) &
-                                                           + div_xx_dx(I,j+1) + div_xx_dx(I-1,j+1)))**2)
+      grad_vort_mag_v(i,J) = SQRT(vort_xy_dx(i,J)**2  + (0.25*((vort_xy_dy(I,j) + vort_xy_dy(I-1,j+1)) &
+                                                             + (vort_xy_dy(I,j+1) + vort_xy_dy(I-1,j))))**2)
+      grad_div_mag_v(i,J) = SQRT(div_xx_dy(i,J)**2  + (0.25*((div_xx_dx(I,j) + div_xx_dx(I-1,j+1)) &
+                                                           + (div_xx_dx(I,j+1) + div_xx_dx(I-1,j))))**2)
       if (CS%use_beta_in_QG_Leith) then
-        beta_v(i,J) = sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i,j+1))**2) + &
-                            (0.5*(G%dF_dy(i,j)+G%dF_dy(i,j+1))**2) )
+        beta_v(i,J) = sqrt((0.5*(G%dF_dx(i,j)+G%dF_dx(i,j+1))**2) + &
+                          (0.5*(G%dF_dy(i,j)+G%dF_dy(i,j+1))**2))
         CS%KH_v_QG(i,J,k) = MIN(grad_vort_mag_v(i,J) + grad_div_mag_v(i,J), 3.0*beta_v(i,J)) * &
                             CS%Laplac3_const_v(i,J) * inv_PI3
       else
@@ -1354,13 +1325,12 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     do j=Jsq,Jeq+1 ; do I=is-1,Ieq
       ! Static factors in the Leith schemes
       grid_sp_u2 = G%dyCu(I,j)*G%dxCu(I,j)
-      grid_sp_u3 = sqrt(grid_sp_u2)
+      grid_sp_u3 = grid_sp_u2*sqrt(grid_sp_u2)
       CS%Laplac3_const_u(I,j) = Leith_Lap_const * grid_sp_u3
     enddo ; enddo
     do j=js-1,Jeq ; do I=Isq,Ieq+1
       ! Static factors in the Leith schemes
-      !### The second factor here is wrong.  It should be G%dxCv(i,J).
-      grid_sp_v2 = G%dyCv(i,J)*G%dxCu(i,J)
+      grid_sp_v2 = G%dyCv(i,J)*G%dxCv(i,J)
       grid_sp_v3 = grid_sp_v2*sqrt(grid_sp_v2)
       CS%Laplac3_const_v(i,J) = Leith_Lap_const * grid_sp_v3
     enddo ; enddo

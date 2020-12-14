@@ -1,0 +1,68 @@
+name: 'Build-.testing-prerequisites'
+description: 'Build pre-requisites for .testing including FMS and a symmetric MOM6 executable'
+runs:
+  using: 'composite'
+  steps:
+    - name: Git info
+      shell: bash
+      run: |
+        echo "::group::Git commit info"
+        echo "git log:"
+        git log | head -60
+        echo "::endgroup::"
+
+    - name: Env
+      shell: bash
+      run: |
+        echo "::group::Environment"
+        env
+        echo "::endgroup::"
+
+    - name: Install needed packages for compiling
+      shell: bash
+      run: |
+        echo "::group::Install linux packages"
+        sudo apt-get update
+        sudo apt-get install netcdf-bin libnetcdf-dev libnetcdff-dev mpich libmpich-dev
+        echo "::endgroup::"
+
+    - name: Compile FMS library
+      shell: bash
+      run: |
+        echo "::group::Compile FMS library"
+        cd .testing
+        make deps/lib/libFMS.a -s -j
+        echo "::endgroup::"
+
+    - name: Store compiler flags used in Makefile
+      shell: bash
+      run: |
+        echo "::group::config.mk"
+        cd .testing
+        echo "FCFLAGS_DEBUG=-g -O0 -Wextra -Wno-compare-reals -fbacktrace -ffpe-trap=invalid,zero,overflow -fcheck=bounds" >> config.mk
+        echo "FCFLAGS_REPRO=-g -O2 -fbacktrace" >> config.mk
+        echo "FCFLAGS_INIT=-finit-real=snan -finit-integer=2147483647 -finit-derived" >> config.mk
+        echo "FCFLAGS_COVERAGE=--coverage" >> config.mk
+        cat config.mk
+        echo "::endgroup::"
+
+    - name: Compile MOM6 in symmetric memory mode
+      shell: bash
+      run: |
+        echo "::group::Compile MOM6 in symmetric memory mode"
+        cd .testing
+        make build/symmetric/MOM6 -j
+        echo "::endgroup::"
+
+    - name: Install local python venv for generating input data
+      shell: bash
+      run: |
+        echo "::group::Create local python env for input data generation"
+        cd .testing
+        make work/local-env
+        echo "::endgroup::"
+
+    - name: Set flags
+      shell: bash
+      run: |
+        echo "TIMEFORMAT=... completed in %lR  (user: %lU, sys: %lS)" >> $GITHUB_ENV

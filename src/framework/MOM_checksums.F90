@@ -178,7 +178,9 @@ subroutine zchksum(array, mesg, scale, logunit)
 
   subroutine subStats(array, aMean, aMin, aMax)
     real, dimension(:), intent(in) :: array !< The array to be checksummed
-    real, intent(out) :: aMean, aMin, aMax
+    real, intent(out) :: aMean !< Array mean
+    real, intent(out) :: aMin !< Array minimum
+    real, intent(out) :: aMax !< Array maximum
 
     integer :: k, n
 
@@ -422,7 +424,9 @@ subroutine chksum_h_2d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logu
   subroutine subStats(HI, array, aMean, aMin, aMax)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
     real, dimension(HI%isd:,HI%jsd:), intent(in) :: array !< The array to be checksummed
-    real, intent(out) :: aMean, aMin, aMax
+    real, intent(out) :: aMean !< Array mean
+    real, intent(out) :: aMin !< Array minimum
+    real, intent(out) :: aMax !< Array maximum
 
     integer :: i, j, n
 
@@ -702,7 +706,9 @@ subroutine chksum_B_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     real, dimension(HI%IsdB:,HI%JsdB:), intent(in) :: array !< The array to be checksummed
     logical,          intent(in) :: sym_stats !< If true, evaluate the statistics on the
                                               !! full symmetric computational domain.
-    real, intent(out) :: aMean, aMin, aMax
+    real, intent(out) :: aMean !< Array mean
+    real, intent(out) :: aMin !< Array minimum
+    real, intent(out) :: aMax !< Array maximum
 
     integer :: i, j, n, IsB, JsB
 
@@ -990,7 +996,9 @@ subroutine chksum_u_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     real, dimension(HI%IsdB:,HI%jsd:), intent(in) :: array !< The array to be checksummed
     logical,          intent(in) :: sym_stats !< If true, evaluate the statistics on the
                                               !! full symmetric computational domain.
-    real, intent(out) :: aMean, aMin, aMax
+    real, intent(out) :: aMean !< Array mean
+    real, intent(out) :: aMin !< Array minimum
+    real, intent(out) :: aMax !< Array maximum
 
     integer :: i, j, n, IsB
 
@@ -1167,7 +1175,9 @@ subroutine chksum_v_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     real, dimension(HI%isd:,HI%JsdB:), intent(in) :: array !< The array to be checksummed
     logical,          intent(in) :: sym_stats !< If true, evaluate the statistics on the
                                               !! full symmetric computational domain.
-    real, intent(out) :: aMean, aMin, aMax
+    real, intent(out) :: aMean !< Array mean
+    real, intent(out) :: aMin !< Array minimum
+    real, intent(out) :: aMax !< Array maximum
 
     integer :: i, j, n, JsB
 
@@ -1315,7 +1325,9 @@ subroutine chksum_h_3d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logu
   subroutine subStats(HI, array, aMean, aMin, aMax)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
     real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: array !< The array to be checksummed
-    real, intent(out) :: aMean, aMin, aMax
+    real, intent(out) :: aMean !<  Array mean
+    real, intent(out) :: aMin !< Array minimum
+    real, intent(out) :: aMax !< Array maximum
 
     integer :: i, j, k, n
 
@@ -1484,7 +1496,9 @@ subroutine chksum_B_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     real, dimension(HI%IsdB:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed
     logical,          intent(in) :: sym_stats !< If true, evaluate the statistics on the
                                               !! full symmetric computational domain.
-    real, intent(out) :: aMean, aMin, aMax
+    real, intent(out) :: aMean !< Array mean
+    real, intent(out) :: aMin !< Array minimum
+    real, intent(out) :: aMax !< Array maximum
 
     integer :: i, j, k, n, IsB, JsB
 
@@ -1661,7 +1675,9 @@ subroutine chksum_u_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     real, dimension(HI%IsdB:,HI%jsd:,:), intent(in) :: array !< The array to be checksummed
     logical,          intent(in) :: sym_stats !< If true, evaluate the statistics on the
                                               !! full symmetric computational domain.
-    real, intent(out) :: aMean, aMin, aMax
+    real, intent(out) :: aMean !< Array mean
+    real, intent(out) :: aMin !< Array minimum
+    real, intent(out) :: aMax !< Array maximum
 
     integer :: i, j, k, n, IsB
 
@@ -1839,7 +1855,9 @@ subroutine chksum_v_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     real, dimension(HI%isd:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed
     logical,          intent(in) :: sym_stats !< If true, evaluate the statistics on the
                                               !! full symmetric computational domain.
-    real, intent(out) :: aMean, aMin, aMax    !< Mean/min/max of array over domain
+    real, intent(out) :: aMean   !< Mean of array over domain
+    real, intent(out) :: aMin    !< Minimum of array over domain
+    real, intent(out) :: aMax    !< Maximum of array over domain
 
     integer :: i, j, k, n, JsB
 

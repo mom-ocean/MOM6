@@ -24,7 +24,7 @@ implicit none ; private
 public CVMix_conv_init, calculate_CVMix_conv, CVMix_conv_end, CVMix_conv_is_used
 
 !> Control structure including parameters for CVMix convection.
-type, public :: CVMix_conv_cs
+type, public :: CVMix_conv_cs ; private
 
   ! Parameters
   real    :: kd_conv_const !< diffusivity constant used in convective regime [m2 s-1]
@@ -39,11 +39,6 @@ type, public :: CVMix_conv_cs
   !>@{ Diagnostics handles
   integer :: id_N2 = -1, id_kd_conv = -1, id_kv_conv = -1
   !>@}
-
-  ! Diagnostics arrays
-  real, allocatable, dimension(:,:,:) :: N2      !< Squared Brunt-Vaisala frequency [s-2]
-  real, allocatable, dimension(:,:,:) :: kd_conv !< Diffusivity added by convection [Z2 T-1 ~> m2 s-1]
-  real, allocatable, dimension(:,:,:) :: kv_conv !< Viscosity added by convection [Z2 T-1 ~> m2 s-1]
 
 end type CVMix_conv_cs
 
@@ -126,15 +121,10 @@ logical function CVMix_conv_init(Time, G, GV, US, param_file, diag, CS)
   ! set kv_conv_const based on kd_conv_const and prandtl_conv
   CS%kv_conv_const = CS%kd_conv_const * prandtl_conv
 
-  ! allocate arrays and set them to zero
-  allocate(CS%N2(SZI_(G), SZJ_(G), SZK_(G)+1)); CS%N2(:,:,:) = 0.
-  allocate(CS%kd_conv(SZI_(G), SZJ_(G), SZK_(G)+1)); CS%kd_conv(:,:,:) = 0.
-  allocate(CS%kv_conv(SZI_(G), SZJ_(G), SZK_(G)+1)); CS%kv_conv(:,:,:) = 0.
-
   ! Register diagnostics
   CS%diag => diag
   CS%id_N2 = register_diag_field('ocean_model', 'N2_conv', diag%axesTi, Time, &
-      'Square of Brunt-Vaisala frequency used by MOM_CVMix_conv module', '1/s2')
+      'Square of Brunt-Vaisala frequency used by MOM_CVMix_conv module', '1/s2', conversion=US%s_to_T**2)
   CS%id_kd_conv = register_diag_field('ocean_model', 'kd_conv', diag%axesTi, Time, &
       'Additional diffusivity added by MOM_CVMix_conv module', 'm2/s', conversion=US%Z2_T_to_m2_s)
   CS%id_kv_conv = register_diag_field('ocean_model', 'kv_conv', diag%axesTi, Time, &
@@ -149,27 +139,43 @@ end function CVMix_conv_init
 
 !> Subroutine for calculating enhanced diffusivity/viscosity
 !! due to convection via CVMix
-subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl)
+subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
 
-  type(ocean_grid_type),                      intent(in)  :: G  !< Grid structure.
-  type(verticalGrid_type),                    intent(in)  :: GV !< Vertical grid structure.
-  type(unit_scale_type),                      intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2].
-  type(thermo_var_ptrs),                      intent(in)  :: tv !< Thermodynamics structure.
-  type(CVMix_conv_cs),                        pointer     :: CS !< The control structure returned
+  type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure.
+  type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure.
+  type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2].
+  type(thermo_var_ptrs),                     intent(in)  :: tv !< Thermodynamics structure.
+  type(CVMix_conv_cs),                       pointer     :: CS !< The control structure returned
                                                                 !! by a previous call to CVMix_conv_init.
-  real, dimension(SZI_(G),SZJ_(G)),           intent(in)  :: hbl !< Depth of ocean boundary layer [Z ~> m]
+  real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: hbl !< Depth of ocean boundary layer [Z ~> m]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                                   optional, intent(inout) :: Kd !< Diapycnal diffusivity at each interface that
+                                                                 !! will be incremented here [Z2 T-1 ~> m2 s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                                   optional, intent(inout) :: KV !< Viscosity at each interface that will be
+                                                                 !! incremented here [Z2 T-1 ~> m2 s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                                   optional, intent(inout) :: Kd_aux !< A second diapycnal diffusivity at each
+                                                                 !! interface that will also be incremented
+                                                                 !! here [Z2 T-1 ~> m2 s-1].
+
   ! local variables
-  real, dimension(SZK_(G)) :: rho_lwr !< Adiabatic Water Density, this is a dummy
-                                      !! variable since here convection is always
-                                      !! computed based on Brunt Vaisala.
-  real, dimension(SZK_(G)) :: rho_1d  !< water density in a column, this is also
-                                      !! a dummy variable, same reason as above.
-  real, dimension(SZK_(G)+1) :: kv_col !< Viscosities at interfaces in the column [m2 s-1]
-  real, dimension(SZK_(G)+1) :: kd_col !< Diffusivities at interfaces in the column [m2 s-1]
-  real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces [m]
-  real, dimension(SZK_(G))   :: cellHeight  !< Height of cell centers [m]
-  integer :: kOBL                        !< level of OBL extent
+  real, dimension(SZK_(GV)) :: rho_lwr !< Adiabatic Water Density, this is a dummy
+                                       !! variable since here convection is always
+                                       !! computed based on Brunt Vaisala.
+  real, dimension(SZK_(GV)) :: rho_1d  !< water density in a column, this is also
+                                       !! a dummy variable, same reason as above.
+  real, dimension(SZK_(GV)+1) :: N2    !< Squared buoyancy frequency [s-2]
+  real, dimension(SZK_(GV)+1) :: kv_col !< Viscosities at interfaces in the column [m2 s-1]
+  real, dimension(SZK_(GV)+1) :: kd_col !< Diffusivities at interfaces in the column [m2 s-1]
+  real, dimension(SZK_(GV)+1) :: iFaceHeight !< Height of interfaces [m]
+  real, dimension(SZK_(GV))   :: cellHeight  !< Height of cell centers [m]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: &
+    kd_conv, &                         !< Diffusivity added by convection for diagnostics [Z2 T-1 ~> m2 s-1]
+    kv_conv, &                         !< Viscosity added by convection for diagnostics [Z2 T-1 ~> m2 s-1]
+    N2_3d                              !< Squared buoyancy frequency for diagnostics [N-2 ~> s-2]
+  integer :: kOBL                      !< level of OBL extent
   real :: g_o_rho0  ! Gravitational acceleration divided by density times unit convserion factors
                     ! [Z s-2 R-1 ~> m4 s-2 kg-1]
   real :: pref      ! Interface pressures [R L2 T-2 ~> Pa]
@@ -182,21 +188,24 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl)
   g_o_rho0 = US%L_to_Z**2*US%s_to_T**2 * GV%g_Earth / GV%Rho0
 
   ! initialize dummy variables
-  rho_lwr(:) = 0.0; rho_1d(:) = 0.0
+  rho_lwr(:) = 0.0 ; rho_1d(:) = 0.0
+
+  ! set N2 to zero at the top- and bottom-most interfaces
+  N2(1) = 0.0 ; N2(GV%ke+1) = 0.0
+
+  if (CS%id_N2 > 0) N2_3d(:,:,:) = 0.0
+  if (CS%id_kv_conv > 0) Kv_conv(:,:,:) = 0.0
+  if (CS%id_kd_conv > 0) Kd_conv(:,:,:) = 0.0
 
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
-
-      ! set N2 to zero at the top- and bottom-most interfaces
-      CS%N2(i,j,1) = 0.
-      CS%N2(i,j,G%ke+1) = 0.
 
       ! skip calling at land points
       !if (G%mask2dT(i,j) == 0.) cycle
 
       pRef = 0. ; if (associated(tv%p_surf)) pRef = tv%p_surf(i,j)
       ! Compute Brunt-Vaisala frequency (static stability) on interfaces
-      do k=2,G%ke
+      do K=2,GV%ke
 
         ! pRef is pressure at interface between k and km1 [R L2 T-2 ~> Pa].
         pRef = pRef + (GV%H_to_RZ*GV%g_Earth) * h(i,j,k)
@@ -204,14 +213,14 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl)
         call calculate_density(tv%t(i,j,k-1), tv%s(i,j,k-1), pRef, rhokm1, tv%eqn_of_state)
 
         dz = ((0.5*(h(i,j,k-1) + h(i,j,k))+GV%H_subroundoff)*GV%H_to_Z)
-        CS%N2(i,j,k) = g_o_rho0 * (rhok - rhokm1) / dz ! Can be negative
+        N2(K) = g_o_rho0 * (rhok - rhokm1) / dz ! Can be negative
 
       enddo
 
       iFaceHeight(1) = 0.0 ! BBL is all relative to the surface
       hcorr = 0.0
       ! compute heights at cell center and interfaces
-      do k=1,G%ke
+      do k=1,GV%ke
         dh = h(i,j,k) * GV%H_to_m ! Nominal thickness to use for increment, in the units used by CVMix.
         dh = dh + hcorr ! Take away the accumulated error (could temporarily make dh<0)
         hcorr = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
@@ -226,37 +235,67 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl)
 
       kv_col(:) = 0.0 ; kd_col(:) = 0.0
       call CVMix_coeffs_conv(Mdiff_out=kv_col(:), &
-                               Tdiff_out=kd_col(:), &
-                               Nsqr=CS%N2(i,j,:), &
-                               dens=rho_1d(:), &
-                               dens_lwr=rho_lwr(:), &
-                               nlev=G%ke,    &
-                               max_nlev=G%ke, &
-                               OBL_ind=kOBL)
+                             Tdiff_out=kd_col(:), &
+                             Nsqr=N2(:), &
+                             dens=rho_1d(:), &
+                             dens_lwr=rho_lwr(:), &
+                             nlev=GV%ke,    &
+                             max_nlev=GV%ke, &
+                             OBL_ind=kOBL)
 
-      do K=1,G%ke+1
-        CS%kv_conv(i,j,K) = US%m2_s_to_Z2_T * kv_col(K)
-        CS%Kd_conv(i,j,K) = US%m2_s_to_Z2_T * kd_col(K)
-      enddo
-      ! Do not apply mixing due to convection within the boundary layer
-      do k=1,kOBL
-        CS%kv_conv(i,j,k) = 0.0
-        CS%kd_conv(i,j,k) = 0.0
-      enddo
+      if (present(Kd)) then
+        ! Increment the diffusivity outside of the boundary layer.
+        do K=max(1,kOBL+1),GV%ke+1
+          Kd(i,j,K) = Kd(i,j,K) + US%m2_s_to_Z2_T * kd_col(K)
+        enddo
+      endif
+      if (present(Kd_aux)) then
+        ! Increment the other diffusivity outside of the boundary layer.
+        do K=max(1,kOBL+1),GV%ke+1
+          Kd_aux(i,j,K) = Kd_aux(i,j,K) + US%m2_s_to_Z2_T * kd_col(K)
+        enddo
+      endif
+
+      if (present(Kv)) then
+        ! Increment the viscosity outside of the boundary layer.
+        do K=max(1,kOBL+1),GV%ke+1
+          Kv(i,j,K) = Kv(i,j,K) + US%m2_s_to_Z2_T * kv_col(K)
+        enddo
+      endif
+
+      ! Store 3-d arrays for diagnostics.
+      if (CS%id_kv_conv > 0) then
+        ! Do not apply mixing due to convection within the boundary layer
+        do K=max(1,kOBL+1),GV%ke+1
+          Kv_conv(i,j,K) = US%m2_s_to_Z2_T * kv_col(K)
+        enddo
+      endif
+      if (CS%id_kd_conv > 0) then
+        ! Do not apply mixing due to convection within the boundary layer
+        do K=max(1,kOBL+1),GV%ke+1
+          Kd_conv(i,j,K) = US%m2_s_to_Z2_T * kd_col(K)
+        enddo
+      endif
+
+      if (CS%id_N2 > 0) then ; do k=2,GV%ke ; N2_3d(i,j,K) = US%T_to_s**2*N2(K) ; enddo ; endif
 
     enddo
   enddo
 
   if (CS%debug) then
-    call hchksum(CS%N2, "MOM_CVMix_conv: N2",G%HI,haloshift=0)
-    call hchksum(CS%kd_conv, "MOM_CVMix_conv: kd_conv",G%HI,haloshift=0,scale=US%Z2_T_to_m2_s)
-    call hchksum(CS%kv_conv, "MOM_CVMix_conv: kv_conv",G%HI,haloshift=0,scale=US%m2_s_to_Z2_T)
+    ! if (CS%id_N2 > 0) call hchksum(N2_3d, "MOM_CVMix_conv: N2",G%HI,haloshift=0)
+    ! if (CS%id_kd_conv > 0) &
+    !   call hchksum(Kd_conv, "MOM_CVMix_conv: Kd_conv", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
+    ! if (CS%id_kv_conv > 0) &
+    !   call hchksum(Kv_conv, "MOM_CVMix_conv: Kv_conv", G%HI, haloshift=0, scale=US%m2_s_to_Z2_T)
+    if (present(Kd)) call hchksum(Kv, "MOM_CVMix_conv: Kd", G%HI, haloshift=0, scale=US%m2_s_to_Z2_T)
+    if (present(Kv)) call hchksum(Kv, "MOM_CVMix_conv: Kv", G%HI, haloshift=0, scale=US%m2_s_to_Z2_T)
   endif
 
   ! send diagnostics to post_data
-  if (CS%id_N2 > 0) call post_data(CS%id_N2, CS%N2, CS%diag)
-  if (CS%id_kd_conv > 0) call post_data(CS%id_kd_conv, CS%kd_conv, CS%diag)
-  if (CS%id_kv_conv > 0) call post_data(CS%id_kv_conv, CS%kv_conv, CS%diag)
+  if (CS%id_N2 > 0) call post_data(CS%id_N2, N2_3d, CS%diag)
+  if (CS%id_kd_conv > 0) call post_data(CS%id_kd_conv, Kd_conv, CS%diag)
+  if (CS%id_kv_conv > 0) call post_data(CS%id_kv_conv, Kv_conv, CS%diag)
 
 end subroutine calculate_CVMix_conv
 
@@ -277,9 +316,6 @@ subroutine CVMix_conv_end(CS)
 
   if (.not. associated(CS)) return
 
-  deallocate(CS%N2)
-  deallocate(CS%kd_conv)
-  deallocate(CS%kv_conv)
   deallocate(CS)
 
 end subroutine CVMix_conv_end

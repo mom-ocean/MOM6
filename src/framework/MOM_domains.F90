@@ -26,11 +26,12 @@ use mpp_domains_mod, only : mpp_reset_group_update_field
 use mpp_domains_mod, only : mpp_group_update_initialized
 use mpp_domains_mod, only : mpp_start_group_update, mpp_complete_group_update
 use mpp_domains_mod, only : compute_block_extent => mpp_compute_block_extent
-use mpp_parameter_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
-use mpp_parameter_mod, only : To_East => WUPDATE, To_West => EUPDATE, Omit_Corners => EDGEUPDATE
-use mpp_parameter_mod, only : To_North => SUPDATE, To_South => NUPDATE, CENTER
-use fms_io_mod,        only : file_exist, parse_mask_table
-use fms_affinity_mod,  only : fms_affinity_init, fms_affinity_set,fms_affinity_get
+use mpp_domains_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM
+use mpp_domains_mod, only : To_East => WUPDATE, To_West => EUPDATE, Omit_Corners => EDGEUPDATE
+use mpp_domains_mod, only : To_North => SUPDATE, To_South => NUPDATE
+use mpp_domains_mod, only : CENTER, CORNER, NORTH_FACE => NORTH, EAST_FACE => EAST
+use fms_io_mod,      only : file_exist, parse_mask_table
+use fms_affinity_mod, only : fms_affinity_init, fms_affinity_set, fms_affinity_get
 
 implicit none ; private
 
@@ -40,7 +41,8 @@ public :: pass_var, pass_vector, PE_here, root_PE, num_PEs
 public :: pass_var_start, pass_var_complete, fill_symmetric_edges, broadcast
 public :: pass_vector_start, pass_vector_complete
 public :: global_field_sum, sum_across_PEs, min_across_PEs, max_across_PEs
-public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER, CENTER
+public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM
+public :: CORNER, CENTER, NORTH_FACE, EAST_FACE
 public :: To_East, To_West, To_North, To_South, To_All, Omit_Corners
 public :: create_group_pass, do_group_pass, group_pass_type
 public :: start_group_pass, complete_group_pass
@@ -153,8 +155,8 @@ subroutine pass_var_3d(array, MOM_dom, sideflag, complete, position, halo, &
                                                     !! progress resumes. Omitting complete is the
                                                     !! same as setting complete to .true.
   integer,      optional, intent(in)    :: position !< An optional argument indicating the position.
-                                                    !! This is usally CORNER, but is CENTER by
-                                                    !! default.
+                                                    !! This is CENTER by default and is often CORNER,
+                                                    !! but could also be EAST_FACE or NORTH_FACE.
   integer,      optional, intent(in)    :: halo     !< The size of the halo to update - the full
                                                     !! halo by default.
   integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
@@ -198,8 +200,8 @@ subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position, halo, inner
                                                    !! progress resumes.  Omitting complete is the
                                                    !! same as setting complete to .true.
   integer,     optional, intent(in)    :: position !< An optional argument indicating the position.
-                                                   !!  This is usally CORNER, but is CENTER
-                                                   !! by default.
+                                                   !! This is CENTER by default and is often CORNER,
+                                                   !! but could also be EAST_FACE or NORTH_FACE.
   integer,     optional, intent(in)    :: halo     !< The size of the halo to update - the full halo
                                                    !! by default.
   integer,     optional, intent(in)    :: inner_halo !< The size of an inner halo to avoid updating,
@@ -267,6 +269,24 @@ subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position, halo, inner
       elseif (size(array,2) == jed+1) then
         jsfs = jsc - j_halo ; jefs = jsc+1 ; jsfn = jec+1 ; jefn = min(jec + 1 + j_halo, jed+1)
       else ; call MOM_error(FATAL, "pass_var_2d: wrong j-size for CORNER array.") ; endif
+    elseif (pos == NORTH_FACE) then
+      if (size(array,1) == ied) then
+        isfw = isc - i_halo ; iefw = isc ; isfe = iec ; iefe = iec + i_halo
+      else ; call MOM_error(FATAL, "pass_var_2d: wrong i-size for NORTH_FACE array.") ; endif
+      if (size(array,2) == jed) then
+        jsfs = max(jsc - (j_halo+1), 1) ; jefs = jsc ; jsfn = jec ; jefn = jec + j_halo
+      elseif (size(array,2) == jed+1) then
+        jsfs = jsc - j_halo ; jefs = jsc+1 ; jsfn = jec+1 ; jefn = min(jec + 1 + j_halo, jed+1)
+      else ; call MOM_error(FATAL, "pass_var_2d: wrong j-size for NORTH_FACE array.") ; endif
+    elseif (pos == EAST_FACE) then
+      if (size(array,1) == ied) then
+        isfw = max(isc - (i_halo+1), 1) ; iefw = isc ; isfe = iec ; iefe = iec + i_halo
+      elseif (size(array,1) == ied+1) then
+        isfw = isc - i_halo ; iefw = isc+1 ; isfe = iec+1 ; iefe = min(iec + 1 + i_halo, ied+1)
+      else ; call MOM_error(FATAL, "pass_var_2d: wrong i-size for EAST_FACE array.") ; endif
+      if (size(array,2) == jed) then
+        isfw = isc - i_halo ; iefw = isc ; isfe = iec ; iefe = iec + i_halo
+      else ; call MOM_error(FATAL, "pass_var_2d: wrong j-size for EAST_FACE array.") ; endif
     else
       call MOM_error(FATAL, "pass_var_2d: Unrecognized position")
     endif
@@ -297,8 +317,8 @@ function pass_var_start_2d(array, MOM_dom, sideflag, position, complete, halo, &
       !! TO_NORTH, and TO_SOUTH.  For example, TO_EAST sends the data to the processor to the east,
       !! so the halos on the western side are filled.  TO_ALL is the default if sideflag is omitted.
   integer,      optional, intent(in)    :: position !< An optional argument indicating the position.
-                                                    !! This is usally CORNER, but is CENTER
-                                                    !! by default.
+                                                    !! This is CENTER by default and is often CORNER,
+                                                    !! but could also be EAST_FACE or NORTH_FACE.
   logical,      optional, intent(in)    :: complete !< An optional argument indicating whether the
                                                     !! halo updates should be completed before
                                                     !! progress resumes.  Omitting complete is the
@@ -342,8 +362,8 @@ function pass_var_start_3d(array, MOM_dom, sideflag, position, complete, halo, &
       !! TO_NORTH, and TO_SOUTH.  For example, TO_EAST sends the data to the processor to the east,
       !! so the halos on the western side are filled.  TO_ALL is the default if sideflag is omitted.
   integer,      optional, intent(in)    :: position !< An optional argument indicating the position.
-                                                    !! This is usally CORNER, but is CENTER
-                                                    !! by default.
+                                                    !! This is CENTER by default and is often CORNER,
+                                                    !! but could also be EAST_FACE or NORTH_FACE.
   logical,      optional, intent(in)    :: complete !< An optional argument indicating whether the
                                                     !! halo updates should be completed before
                                                     !! progress resumes.  Omitting complete is the
@@ -390,8 +410,8 @@ subroutine pass_var_complete_2d(id_update, array, MOM_dom, sideflag, position, h
       !! TO_NORTH, and TO_SOUTH.  For example, TO_EAST sends the data to the processor to the east,
       !! so the halos on the western side are filled.  TO_ALL is the default if sideflag is omitted.
   integer,      optional, intent(in)    :: position !< An optional argument indicating the position.
-                                                    !! This is usally CORNER, but is CENTER
-                                                    !! by default.
+                                                    !! This is CENTER by default and is often CORNER,
+                                                    !! but could also be EAST_FACE or NORTH_FACE.
   integer,      optional, intent(in)    :: halo     !< The size of the halo to update - the full
                                                     !! halo by default.
   integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
@@ -433,8 +453,8 @@ subroutine pass_var_complete_3d(id_update, array, MOM_dom, sideflag, position, h
       !! TO_NORTH, and TO_SOUTH.  For example, TO_EAST sends the data to the processor to the east,
       !! so the halos on the western side are filled.  TO_ALL is the default if sideflag is omitted.
   integer,      optional, intent(in)    :: position !< An optional argument indicating the position.
-                                                    !! This is usally CORNER, but is CENTER
-                                                    !! by default.
+                                                    !! This is CENTER by default and is often CORNER,
+                                                    !! but could also be EAST_FACE or NORTH_FACE.
   integer,      optional, intent(in)    :: halo     !< The size of the halo to update - the full
                                                     !! halo by default.
   integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
@@ -901,8 +921,8 @@ subroutine create_var_group_pass_2d(group, array, MOM_dom, sideflag, position, &
       !! TO_NORTH, and TO_SOUTH.  For example, TO_EAST sends the data to the processor to the east,
       !! so the halos on the western side are filled.  TO_ALL is the default if sideflag is omitted.
   integer,      optional, intent(in)    :: position !< An optional argument indicating the position.
-                                                    !! This is usally CORNER, but is CENTER
-                                                    !! by default.
+                                                    !! This is CENTER by default and is often CORNER,
+                                                    !! but could also be EAST_FACE or NORTH_FACE.
   integer,      optional, intent(in)    :: halo     !< The size of the halo to update - the full
                                                     !! halo by default.
   integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
@@ -946,8 +966,8 @@ subroutine create_var_group_pass_3d(group, array, MOM_dom, sideflag, position, h
       !! TO_NORTH, and TO_SOUTH.  For example, TO_EAST sends the data to the processor to the east,
       !! so the halos on the western side are filled.  TO_ALL is the default if sideflag is omitted.
   integer,      optional, intent(in)    :: position !< An optional argument indicating the position.
-                                                    !! This is usally CORNER, but is CENTER
-                                                    !! by default.
+                                                    !! This is CENTER by default and is often CORNER,
+                                                    !! but could also be EAST_FACE or NORTH_FACE.
   integer,      optional, intent(in)    :: halo     !< The size of the halo to update - the full
                                                     !! halo by default.
   integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
@@ -1289,7 +1309,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 !$   call fms_affinity_set('OCEAN', ocean_omp_hyper_thread, ocean_nthreads)
 !$   call omp_set_num_threads(ocean_nthreads)
 !$   write(6,*) "MOM_domains_mod OMPthreading ", fms_affinity_get(), omp_get_thread_num(), omp_get_num_threads()
-!$   call flush(6)
+!$   flush(6)
 !$ endif
 #endif
   call log_param(param_file, mdl, "!SYMMETRIC_MEMORY_", MOM_dom%symmetric, &
@@ -1593,7 +1613,7 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
                                   !! minimum halo size for this domain in the i- and j-
                                   !! directions, and returns the actual halo size used.
   integer,     optional, intent(in)    :: halo_size !< If present, this sets the halo
-                                  !! size for the domian in the i- and j-directions.
+                                  !! size for the domain in the i- and j-directions.
                                   !! min_halo and halo_size can not both be present.
   logical,     optional, intent(in)    :: symmetric !< If present, this specifies
                                   !! whether the new domain is symmetric, regardless of
@@ -1721,7 +1741,7 @@ subroutine clone_MD_to_d2D(MD_in, mpp_domain, min_halo, halo_size, symmetric, &
                                   !! minimum halo size for this domain in the i- and j-
                                   !! directions, and returns the actual halo size used.
   integer,     optional, intent(in)    :: halo_size !< If present, this sets the halo
-                                  !! size for the domian in the i- and j-directions.
+                                  !! size for the domain in the i- and j-directions.
                                   !! min_halo and halo_size can not both be present.
   logical,     optional, intent(in)    :: symmetric !< If present, this specifies
                                   !! whether the new domain is symmetric, regardless of

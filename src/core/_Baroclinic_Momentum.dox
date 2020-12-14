@@ -1,0 +1,37 @@
+/*! \page Baroclinic_Momentum_Equations Baroclinic Momentum Equations
+
+\section section_BC_momentum Baroclinic Momentum Equations
+
+The baroclinic momentum equations are the stacked shallow water equations:
+
+\f[
+  \frac{\partial \vec{u}_k}{\partial t} + (f + \nabla_s \times \vec{u}_k) \hat{z}
+  \times \vec{u}_k = - \frac{\nabla_s p_k}{\rho} - \nabla_s (\phi_k + \frac{1}{2} ||
+  \vec{u}_k ||^2 ) + \frac{\nabla \cdot \tilde{\tau}_k}{\rho}
+\f]
+\f[
+  \frac{\partial h_k}{\partial t} + \nabla_s \cdot (\vec{u}h_k) = 0
+\f]
+
+The timestepping for these equations is a (quasi?) second-order Runge-Kutta step
+for the inertial oscillations and a forward-backward Euler step for the pressure
+(gravity) waves. Using the graphical notation from \cite shchepetkin2005, it looks
+like:
+
+\image html timestep_MOM6.png "Graphical notation for timestepping schemes in which the black line represents the ideal solution and the red line shows the actual solution. Phase errors are represented by the grey shapes between the bars normal to the circle."
+\image latex timestep_MOM6.png "Graphical notation for timestepping schemes in which the black line represents the ideal solution and the red line shows the actual solution. Phase errors are represented by the grey shapes between the bars normal to the circle."
+
+The timestep used in ROMS looks instead like:
+
+\image html timestep_ROMS.png "Graphical notation for the Adams-Bashforth technique used in the ROMS model."
+\image latex timestep_ROMS.png "Graphical notation for the Adams-Bashforth technique used in the ROMS model."
+
+The ROMS timestepping has smaller phase errors, strong damping at high
+frequency. The MOM6 use as a global climate model has made the phase
+errors of lower priority. However, the phase errors may become more
+problematic for future uses of MOM6. While the MOM6 use of the ALE
+remapping makes an Adams-Bashforth scheme impractical, there may be a
+better timestepping scheme out there for MOM6. Please let the MOM6
+developers know if you would like to work on this problem.
+
+*/

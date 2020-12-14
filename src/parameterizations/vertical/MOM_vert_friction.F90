@@ -122,7 +122,7 @@ type, public :: vertvisc_CS ; private
   !>@{ Diagnostic identifiers
   integer :: id_du_dt_visc = -1, id_dv_dt_visc = -1, id_au_vv = -1, id_av_vv = -1
   integer :: id_h_u = -1, id_h_v = -1, id_hML_u = -1 , id_hML_v = -1
-  integer :: id_Ray_u = -1, id_Ray_v = -1, id_taux_bot = -1, id_tauy_bot = -1
+  integer :: id_taux_bot = -1, id_tauy_bot = -1
   integer :: id_Kv_slow = -1, id_Kv_u = -1, id_Kv_v = -1
   ! integer :: id_hf_du_dt_visc    = -1, id_hf_dv_dt_visc    = -1
   integer :: id_hf_du_dt_visc_2d = -1, id_hf_dv_dt_visc_2d = -1
@@ -822,9 +822,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
       enddo
       if (do_any_shelf) then
         if (CS%harmonic_visc) then
-          call find_coupling_coef(a_shelf, hvel, do_i_shelf, h_harm, bbl_thick, &
-                                  kv_bbl, z_i, h_ml, dt, j, G, GV, US, CS, &
-                                  visc, forces, work_on_u=.true., OBC=OBC, shelf=.true.)
+          do k=1,nz ; do I=Isq,Ieq ; hvel_shelf(I,k) = hvel(I,k) ; enddo ; enddo
         else  ! Find upwind-biased thickness near the surface.
           ! Perhaps this needs to be done more carefully, via find_eta.
           do I=Isq,Ieq ; if (do_i_shelf(I)) then
@@ -850,10 +848,10 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
               endif
             endif ; enddo
           enddo
-          call find_coupling_coef(a_shelf, hvel_shelf, do_i_shelf, h_harm, &
-                                  bbl_thick, kv_bbl, z_i, h_ml, dt, j, G, GV, US, CS, &
-                                  visc, forces, work_on_u=.true., OBC=OBC, shelf=.true.)
         endif
+        call find_coupling_coef(a_shelf, hvel_shelf, do_i_shelf, h_harm, bbl_thick, &
+                                kv_bbl, z_i, h_ml, dt, j, G, GV, US, CS, visc, forces, &
+                                work_on_u=.true., OBC=OBC, shelf=.true.)
         do I=Isq,Ieq ; if (do_i_shelf(I)) CS%a1_shelf_u(I,j) = a_shelf(I,1) ; enddo
       endif
     endif
@@ -979,7 +977,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
     call find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, &
                             dt, j, G, GV, US, CS, visc, forces, work_on_u=.false., OBC=OBC)
     if ( allocated(hML_v)) then
-       do i=is,ie ; if (do_i(i)) then ; hML_v(i,J) = h_ml(i) ; endif ; enddo
+      do i=is,ie ; if (do_i(i)) then ; hML_v(i,J) = h_ml(i) ; endif ; enddo
     endif
     do_any_shelf = .false.
     if (associated(forces%frac_shelf_v)) then
@@ -990,9 +988,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
       enddo
       if (do_any_shelf) then
         if (CS%harmonic_visc) then
-          call find_coupling_coef(a_shelf, hvel, do_i_shelf, h_harm, bbl_thick, &
-                                  kv_bbl, z_i, h_ml, dt, j, G, GV, US, CS, visc, &
-                                  forces, work_on_u=.false., OBC=OBC, shelf=.true.)
+          do k=1,nz ; do i=is,ie ; hvel_shelf(i,k) = hvel(i,k) ; enddo ; enddo
         else  ! Find upwind-biased thickness near the surface.
           ! Perhaps this needs to be done more carefully, via find_eta.
           do i=is,ie ; if (do_i_shelf(i)) then
@@ -1018,10 +1014,10 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
              endif
             endif ; enddo
           enddo
-          call find_coupling_coef(a_shelf, hvel_shelf, do_i_shelf, h_harm, &
-                                  bbl_thick, kv_bbl, z_i, h_ml, dt, j, G, GV, US, CS, &
-                                  visc, forces, work_on_u=.false., OBC=OBC, shelf=.true.)
         endif
+        call find_coupling_coef(a_shelf, hvel_shelf, do_i_shelf, h_harm, bbl_thick, &
+                                kv_bbl, z_i, h_ml, dt, j, G, GV, US, CS, visc, forces, &
+                                work_on_u=.false., OBC=OBC, shelf=.true.)
         do i=is,ie ; if (do_i_shelf(i)) CS%a1_shelf_v(i,J) = a_shelf(i,1) ; enddo
       endif
     endif

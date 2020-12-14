@@ -58,7 +58,7 @@ PROJECT_LOGO           =
 # entered, it will be relative to the location where doxygen was started. If
 # left blank the current directory will be used.
 
-#OUTPUT_DIRECTORY       =
+OUTPUT_DIRECTORY       = .
 
 # If the CREATE_SUBDIRS tag is set to YES then doxygen will create 4096 sub-
 # directories (in 2 levels) under the output directory of each output format and
@@ -228,13 +228,42 @@ TAB_SIZE               = 2
 # "Side Effects:". You can put \n's in the value part of an alias to insert
 # newlines.
 
-ALIASES                =
+# Reference: https://git.ligo.org/lscsoft/lalsuite-archive/commit/e6e2dae8a73a73979a64854bbf697b077803697a
+#ALIASES                = "eqref{1}= Eq.&nbsp;\\eqref{\1}" \
+#                         "figref{1}= Fig.&nbsp;[\ref \1]" \
+#                         "tableref{1}= Table&nbsp;[\ref \1]" \
+#                         "figure{4}= \anchor \1 \image html \1.png \"Fig.&nbsp;[\1]: \4\""
+
+# This allows doxygen passthrough of \eqref to html for mathjax
+# Single reference within a math block
+ALIASES += eqref{1}="\latexonly\ref{\1}\endlatexonly\htmlonly&nbsp;\eqref{\1}\endhtmlonly\xmlonly \\eqref{\1}\endxmlonly"
+
+# Large math block with multiple references
+# TODO: We should be able to overload functions but recursion is happening? For now, the
+# second command creates a \eqref2 that is passed to sphinx for processing.  This breaks
+# the html generation for doxygen.
+# Doxygen 1.8.13 requires extra help via xmlonly
+# See python sphinxcontrib-autodoc_doxygen module autodoc_doxygen/xmlutils.py
+# \eqref{eq:ale-thickness-equation,ale-equations,thickness}
+ALIASES += eqref{3}="\latexonly\ref{\1}\endlatexonly\htmlonly&nbsp;\eqref2{\2,\3}\endhtmlonly\xmlonly \\eqref4{\1}\\eqref2{\2,\3}\endxmlonly"
+
+# Reference: https://stackoverflow.com/questions/25290453/how-do-i-add-a-footnote-in-doxygen
+# TODO: Use this simple js library to create actual footnotes in html
+# Reference: https://github.com/jheftmann/footnoted
+ALIASES += footnote{1}="\latexonly\footnote\{\1\}\endlatexonly\htmlonly<sup title=\"\1\"><b>[*]</b></sup>\endhtmlonly\xmlonly<sup title=\"\1\"><b>[*]</b></sup>\endxmlonly"
+
+# \image latex does the wrong things to support equations in captions, this recreates
+# what it does and just passes through the string uninterpreted.
+# The image also needs to be added to LATEX_EXTRA_FILES.
+# Default 3rd argument: \includegraphics[width=\textwidth\,height=\textheight/2\,keepaspectratio=true]
+ALIASES += imagelatex{3}="\latexonly\begin{DoxyImage}\3{\1}\doxyfigcaption{\2}\end{DoxyImage}\endlatexonly\xmlonly<image type=\"latex\" name=\"\1\">\2</image>\endxmlonly"
 
 # This tag can be used to specify a number of word-keyword mappings (TCL only).
 # A mapping has the form "name=value". For example adding "class=itcl::class"
 # will allow you to use the command class in the itcl::class meaning.
 
-TCL_SUBST              =
+# Obsolete
+#TCL_SUBST              =
 
 # Set the OPTIMIZE_OUTPUT_FOR_C tag to YES if your project consists of C sources
 # only. Doxygen will then generate output that is more tailored for C. For
@@ -613,7 +642,7 @@ STRICT_PROTO_MATCHING  = NO
 # list. This list is created by putting \todo commands in the documentation.
 # The default value is: YES.
 
-GENERATE_TODOLIST      = NO
+GENERATE_TODOLIST      = YES
 
 # The GENERATE_TESTLIST tag can be used to enable (YES) or disable (NO) the test
 # list. This list is created by putting \test commands in the documentation.
@@ -703,7 +732,7 @@ LAYOUT_FILE            =
 # LATEX_BIB_STYLE. To use this feature you need bibtex and perl available in the
 # search path. See also \cite for info how to create references.
 
-CITE_BIB_FILES         =
+CITE_BIB_FILES         = ocean.bib references.bib zotero.bib
 
 #---------------------------------------------------------------------------
 # Configuration options related to warning and progress messages
@@ -768,7 +797,7 @@ WARN_FORMAT            = "$file:$line: $text"
 # messages should be written. If left blank the output is written to standard
 # error (stderr).
 
-WARN_LOGFILE           = doxygen.log
+WARN_LOGFILE           = _build/doxygen_warn_rtd_log.txt
 
 #---------------------------------------------------------------------------
 # Configuration options related to the input files
@@ -859,7 +888,9 @@ EXCLUDE_SYMLINKS       = NO
 # Note that the wildcards are matched against the file with absolute path, so to
 # exclude all test directories for example use the pattern */test/*
 
-EXCLUDE_PATTERNS       = makedep.py Makefile INSTALL
+EXCLUDE_PATTERNS       = makedep.py \
+                         Makefile \
+                         INSTALL
 
 # The EXCLUDE_SYMBOLS tag can be used to specify one or more symbol names
 # (namespaces, classes, functions, etc.) that should be excluded from the
@@ -896,7 +927,8 @@ EXAMPLE_RECURSIVE      = NO
 # that contain images that are to be included in the documentation (see the
 # \image command).
 
-IMAGE_PATH             = images ../src
+IMAGE_PATH             = images \
+                         ../src
 
 # The INPUT_FILTER tag can be used to specify a program that doxygen should
 # invoke to filter for each input file. Doxygen will invoke the filter program
@@ -1081,7 +1113,7 @@ GENERATE_HTML          = NO
 # The default directory is: html.
 # This tag requires that the tag GENERATE_HTML is set to YES.
 
-HTML_OUTPUT            = APIs
+HTML_OUTPUT            = _build/APIs
 
 # The HTML_FILE_EXTENSION tag can be used to specify the file extension for each
 # generated HTML page (for example: .htm, .php, .asp).
@@ -1507,7 +1539,7 @@ MATHJAX_FORMAT         = HTML-CSS
 # The default value is: http://cdn.mathjax.org/mathjax/latest.
 # This tag requires that the tag USE_MATHJAX is set to YES.
 
-MATHJAX_RELPATH        = http://cdn.mathjax.org/mathjax/latest
+MATHJAX_RELPATH         = https://cdn.jsdelivr.net/npm/mathjax@2
 
 # The MATHJAX_EXTENSIONS tag can be used to specify one or more MathJax
 # extension names that should be enabled during MathJax rendering. For example
@@ -1625,7 +1657,7 @@ GENERATE_LATEX         = NO
 # The default directory is: latex.
 # This tag requires that the tag GENERATE_LATEX is set to YES.
 
-LATEX_OUTPUT           = latex
+LATEX_OUTPUT           = _build/doxygen_latex
 
 # The LATEX_CMD_NAME tag can be used to specify the LaTeX command name to be
 # invoked.
@@ -1660,7 +1692,7 @@ COMPACT_LATEX          = NO
 # The default value is: a4.
 # This tag requires that the tag GENERATE_LATEX is set to YES.
 
-PAPER_TYPE             = a4
+PAPER_TYPE             = letter
 
 # The EXTRA_PACKAGES tag can be used to specify one or more LaTeX package names
 # that should be included in the LaTeX output. The package can be specified just
@@ -1672,7 +1704,7 @@ PAPER_TYPE             = a4
 # If left blank no extra packages will be included.
 # This tag requires that the tag GENERATE_LATEX is set to YES.
 
-EXTRA_PACKAGES         =
+EXTRA_PACKAGES         =amsmath amstext
 
 # The LATEX_HEADER tag can be used to specify a personal LaTeX header for the
 # generated LaTeX document. The header should contain everything until the first
@@ -1718,7 +1750,15 @@ LATEX_EXTRA_STYLESHEET =
 # markers available.
 # This tag requires that the tag GENERATE_LATEX is set to YES.
 
-LATEX_EXTRA_FILES      =
+# Graphics that have math or equations in the caption need to be listed below.
+LATEX_EXTRA_FILES      = \
+        images/cell_3d.png \
+        images/Grid_metrics.png \
+        images/h_PPM.png \
+        images/Newton_PPM.png \
+        images/PG_loop.png \
+        images/shao3.png \
+        images/shao4.png
 
 # If the PDF_HYPERLINKS tag is set to YES, the LaTeX that is generated is
 # prepared for conversion to PDF (using ps2pdf or pdflatex). The PDF file will
@@ -1761,7 +1801,7 @@ LATEX_HIDE_INDICES     = NO
 # The default value is: NO.
 # This tag requires that the tag GENERATE_LATEX is set to YES.
 
-LATEX_SOURCE_CODE      = NO
+LATEX_SOURCE_CODE      = YES
 
 # The LATEX_BIB_STYLE tag can be used to specify the style to use for the
 # bibliography, e.g. plainnat, or ieeetr. See
@@ -2088,13 +2128,15 @@ SKIP_FUNCTION_MACROS   = NO
 # the path). If a tag file is not located in the directory in which doxygen is
 # run, you must also specify the path to the tagfile here.
 
+#TAGFILES               = /home/kate/ESMG/ESMG-configs/src/MOM6/docs/MOM6.tags=/home/kate/ESMG/ESMG-configs/src/MOM6/docs
+#TAGFILES               = MOM6.tags
 TAGFILES               =
 
 # When a file name is specified after GENERATE_TAGFILE, doxygen will create a
 # tag file that is based on the input files it reads. See section "Linking to
 # external documentation" for more information about the usage of tag files.
 
-GENERATE_TAGFILE       =
+GENERATE_TAGFILE       = MOM6.tags
 
 # If the ALLEXTERNALS tag is set to YES, all external class will be listed in
 # the class index. If set to NO, only the inherited external classes will be
@@ -2117,12 +2159,6 @@ EXTERNAL_GROUPS        = YES
 
 EXTERNAL_PAGES         = YES
 
-# The PERL_PATH should be the absolute path and name of the perl script
-# interpreter (i.e. the result of 'which perl').
-# The default file (with absolute path) is: /usr/bin/perl.
-
-PERL_PATH              = /usr/bin/perl
-
 #---------------------------------------------------------------------------
 # Configuration options related to the dot tool
 #---------------------------------------------------------------------------
@@ -2135,15 +2171,6 @@ PERL_PATH              = /usr/bin/perl
 # The default value is: YES.
 
 CLASS_DIAGRAMS         = YES
-
-# You can define message sequence charts within doxygen comments using the \msc
-# command. Doxygen will then run the mscgen tool (see:
-# http://www.mcternan.me.uk/mscgen/)) to produce the chart and insert it in the
-# documentation. The MSCGEN_PATH tag allows you to specify the directory where
-# the mscgen tool resides. If left empty the tool is assumed to be found in the
-# default search path.
-
-MSCGEN_PATH            =
 
 # You can include diagrams made with dia in doxygen documentation. Doxygen will
 # then run dia to produce the diagram and insert it in the documentation. The
@@ -2165,7 +2192,7 @@ HIDE_UNDOC_RELATIONS   = NO
 # set to NO
 # The default value is: NO.
 
-HAVE_DOT               = YES
+HAVE_DOT               = NO
 
 # The DOT_NUM_THREADS specifies the number of dot invocations doxygen is allowed
 # to run in parallel. When set to 0 doxygen will base this on the number of

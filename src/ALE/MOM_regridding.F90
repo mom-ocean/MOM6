@@ -375,6 +375,8 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
                   "Unsupported format in grid definition '"//trim(filename)//"'. Error message "//trim(message))
       call field_size(trim(fileName), trim(varName), nzf)
       ke = nzf(1)-1
+      if (ke < 1) call MOM_error(FATAL, trim(mdl)//" initialize_regridding via Var "//trim(varName)//&
+                                 "in FILE "//trim(filename)//" requires at least 2 target interface values.")
       if (CS%regridding_scheme == REGRIDDING_RHO) then
         allocate(rho_target(ke+1))
         call MOM_read_data(trim(fileName), trim(varName), rho_target)
@@ -392,7 +394,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       allocate(dz(ke))
       call MOM_read_data(trim(fileName), trim(varName), dz)
     endif
-    if (main_parameters .and. ke/=GV%ke) then
+    if (main_parameters .and. (ke/=GV%ke)) then
       call MOM_error(FATAL,trim(mdl)//', initialize_regridding: '// &
                  'Mismatch in number of model levels and "'//trim(string)//'".')
     endif
@@ -835,7 +837,7 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
   type(thermo_var_ptrs),                      intent(inout) :: tv     !< Thermodynamical variables (T, S, ...)
   real, dimension(SZI_(G),SZJ_(G), CS%nk),    intent(inout) :: h_new  !< New 3D grid consistent with target coordinate
   real, dimension(SZI_(G),SZJ_(G), CS%nk+1),  intent(inout) :: dzInterface !< The change in position of each interface
-  real, dimension(:,:),             optional, pointer       :: frac_shelf_h !< Fractional ice shelf coverage
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in   ) :: frac_shelf_h !< Fractional ice shelf coverage
   logical,                          optional, intent(in   ) :: conv_adjust !< If true, do convective adjustment
   ! Local variables
   real :: trickGnuCompiler
@@ -845,45 +847,31 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
   do_convective_adjustment = .true.
   if (present(conv_adjust)) do_convective_adjustment = conv_adjust
 
-  use_ice_shelf = .false.
-  if (present(frac_shelf_h)) then
-    if (associated(frac_shelf_h)) use_ice_shelf = .true.
-  endif
+  use_ice_shelf = present(frac_shelf_h)
 
   select case ( CS%regridding_scheme )
 
     case ( REGRIDDING_ZSTAR )
-      if (use_ice_shelf) then
-        call build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h )
-      else
-        call build_zstar_grid( CS, G, GV, h, dzInterface )
-      endif
+      call build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h )
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
-
     case ( REGRIDDING_SIGMA_SHELF_ZSTAR)
-      call build_zstar_grid( CS, G, GV, h, dzInterface )
+      call build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h )
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
-
     case ( REGRIDDING_SIGMA )
       call build_sigma_grid( CS, G, GV, h, dzInterface )
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
-
     case ( REGRIDDING_RHO )
       if (do_convective_adjustment) call convective_adjustment(G, GV, h, tv)
-      call build_rho_grid( G, GV, G%US, h, tv, dzInterface, remapCS, CS )
+      call build_rho_grid( G, GV, G%US, h, tv, dzInterface, remapCS, CS, frac_shelf_h )
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
-
     case ( REGRIDDING_ARBITRARY )
       call build_grid_arbitrary( G, GV, h, dzInterface, trickGnuCompiler, CS )
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
-
     case ( REGRIDDING_HYCOM1 )
-      call build_grid_HyCOM1( G, GV, G%US, h, tv, h_new, dzInterface, CS )
-
+      call build_grid_HyCOM1( G, GV, G%US, h, tv, h_new, dzInterface, CS, frac_shelf_h )
     case ( REGRIDDING_SLIGHT )
       call build_grid_SLight( G, GV, G%US, h, tv, dzInterface, CS )
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
-
     case ( REGRIDDING_ADAPTIVE )
       call build_grid_adaptive(G, GV, G%US, h, tv, dzInterface, remapCS, CS)
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
@@ -1162,21 +1150,22 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G), CS%nk+1), intent(inout) :: dzInterface !< The change in interface depth
                                                                  !! [H ~> m or kg m-2].
-  real, dimension(:,:),            optional, pointer       :: frac_shelf_h !< Fractional ice shelf coverage [nondim].
+  real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: frac_shelf_h !< Fractional
+                                                                 !! ice shelf coverage [nondim].
   ! Local variables
-  real    :: nominalDepth, totalThickness, dh  ! Depths and thicknesses [H ~> m or kg m-2]
+  real    :: nominalDepth, minThickness, totalThickness, dh  ! Depths and thicknesses [H ~> m or kg m-2]
   real, dimension(SZK_(GV)+1) :: zOld, zNew    ! Coordinate interface heights [H ~> m or kg m-2]
   integer :: i, j, k, nz
   logical :: ice_shelf
 
   nz = GV%ke
-  ice_shelf = .false.
-  if (present(frac_shelf_h)) then
-    if (associated(frac_shelf_h)) ice_shelf = .true.
-  endif
+  minThickness = CS%min_thickness
+  ice_shelf = present(frac_shelf_h)
 
-!$OMP parallel do default(none) shared(G,GV,dzInterface,CS,nz,h,frac_shelf_h,ice_shelf) &
-!$OMP                          private(nominalDepth,totalThickness,zNew,dh,zOld)
+!$OMP parallel do default(none) shared(G,GV,dzInterface,CS,nz,h,frac_shelf_h, &
+!$OMP                                  ice_shelf,minThickness) &
+!$OMP                          private(nominalDepth,totalThickness, &
+!$OMP                                  zNew,dh,zOld)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
 
@@ -1322,7 +1311,7 @@ end subroutine build_sigma_grid
 ! Build grid based on target interface densities
 !------------------------------------------------------------------------------
 !> This routine builds a new grid based on a given set of target interface densities.
-subroutine build_rho_grid( G, GV, US, h, tv, dzInterface, remapCS, CS )
+subroutine build_rho_grid( G, GV, US, h, tv, dzInterface, remapCS, CS, frac_shelf_h )
 !------------------------------------------------------------------------------
 ! This routine builds a new grid based on a given set of target interface
 ! densities (these target densities are computed by taking the mean value
@@ -1348,17 +1337,19 @@ subroutine build_rho_grid( G, GV, US, h, tv, dzInterface, remapCS, CS )
                                                                     !! [H ~> m or kg m-2]
   type(remapping_CS),                           intent(in)    :: remapCS !< The remapping control structure
   type(regridding_CS),                          intent(in)    :: CS !< Regridding control structure
-
+  real, dimension(SZI_(G),SZJ_(G)), optional,   intent(in)    :: frac_shelf_h  !< Fractional
+                                                                    !! ice shelf coverage [nodim]
   ! Local variables
   integer :: nz
   integer :: i, j, k
   real    :: nominalDepth   ! Depth of the bottom of the ocean, positive downward [H ~> m or kg m-2]
   real, dimension(SZK_(GV)+1) :: zOld, zNew ! Old and new interface heights [H ~> m or kg m-2]
   real :: h_neglect, h_neglect_edge ! Negligible thicknesses [H ~> m or kg m-2]
+  real    :: totalThickness ! Total thicknesses [H ~> m or kg m-2]
 #ifdef __DO_SAFETY_CHECKS__
-  real    :: totalThickness
   real    :: dh
 #endif
+  logical :: ice_shelf
 
   if (.not.CS%remap_answers_2018) then
     h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
@@ -1369,6 +1360,7 @@ subroutine build_rho_grid( G, GV, US, h, tv, dzInterface, remapCS, CS )
   endif
 
   nz = GV%ke
+  ice_shelf = present(frac_shelf_h)
 
   if (.not.CS%target_density_set) call MOM_error(FATAL, "build_rho_grid: "//&
         "Target densities must be set before build_rho_grid is called.")
@@ -1386,9 +1378,27 @@ subroutine build_rho_grid( G, GV, US, h, tv, dzInterface, remapCS, CS )
       ! Local depth (G%bathyT is positive)
       nominalDepth = G%bathyT(i,j)*GV%Z_to_H
 
-      call build_rho_column(CS%rho_CS, nz, nominalDepth, h(i, j, :), &
+      ! Determine total water column thickness
+      totalThickness = 0.0
+      do k=1,nz
+        totalThickness = totalThickness + h(i,j,k)
+      enddo
+      ! Determine absolute interface positions
+      zOld(nz+1) = - nominalDepth
+      do k = nz,1,-1
+        zOld(k) = zOld(k+1) + h(i,j,k)
+      enddo
+
+      if (ice_shelf) then
+         call build_rho_column(CS%rho_CS, nz, nominalDepth, h(i, j, :), &
+              tv%T(i, j, :), tv%S(i, j, :), tv%eqn_of_state, zNew, &
+              z_rigid_top = totalThickness - nominalDepth, eta_orig = zOld(1), &
+              h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+      else
+         call build_rho_column(CS%rho_CS, nz, nominalDepth, h(i, j, :), &
                             tv%T(i, j, :), tv%S(i, j, :), tv%eqn_of_state, zNew, &
                             h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+      endif
 
       if (CS%integrate_downward_for_e) then
         zOld(1) = 0.
@@ -1455,7 +1465,7 @@ end subroutine build_rho_grid
 !! \remark { Based on Bleck, 2002: An oceanice general circulation model framed in
 !! hybrid isopycnic-Cartesian coordinates, Ocean Modelling 37, 55-88.
 !! http://dx.doi.org/10.1016/S1463-5003(01)00012-9 }
-subroutine build_grid_HyCOM1( G, GV, US, h, tv, h_new, dzInterface, CS )
+subroutine build_grid_HyCOM1( G, GV, US, h, tv, h_new, dzInterface, CS, frac_shelf_h )
   type(ocean_grid_type),                     intent(in)    :: G  !< Grid structure
   type(verticalGrid_type),                   intent(in)    :: GV !< Ocean vertical grid structure
   type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
@@ -1464,16 +1474,19 @@ subroutine build_grid_HyCOM1( G, GV, US, h, tv, h_new, dzInterface, CS )
   type(regridding_CS),                       intent(in)    :: CS !< Regridding control structure
   real, dimension(SZI_(G),SZJ_(G),CS%nk),    intent(inout) :: h_new !< New layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),CS%nk+1),  intent(inout) :: dzInterface !< Changes in interface position
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)   :: frac_shelf_h !< Fractional
+                                                                    !! ice shelf coverage [nodim]
 
   ! Local variables
   real, dimension(SZK_(GV)+1) :: z_col ! Source interface positions relative to the surface [H ~> m or kg m-2]
   real, dimension(CS%nk+1) :: z_col_new ! New interface positions relative to the surface [H ~> m or kg m-2]
   real, dimension(SZK_(GV)+1) :: dz_col  ! The realized change in z_col [H ~> m or kg m-2]
-  real, dimension(SZK_(GV))   :: p_col   ! Layer center pressure [R L2 T-2 ~> Pa]
-  real :: ref_pres  ! The reference pressure [R L2 T-2 ~> Pa]
+  real, dimension(SZK_(GV))   :: p_col   ! Layer center pressure [Pa]
   integer   :: i, j, k, nki
-  real :: depth
+  real :: depth, nominalDepth
   real :: h_neglect, h_neglect_edge
+  real :: z_top_col, totalThickness
+  logical :: ice_shelf
 
   if (.not.CS%remap_answers_2018) then
     h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
@@ -1487,24 +1500,35 @@ subroutine build_grid_HyCOM1( G, GV, US, h, tv, h_new, dzInterface, CS )
         "Target densities must be set before build_grid_HyCOM1 is called.")
 
   nki = min(GV%ke, CS%nk)
+  ice_shelf = present(frac_shelf_h)
 
   ! Build grid based on target interface densities
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
     if (G%mask2dT(i,j)>0.) then
 
-      depth = G%bathyT(i,j) * GV%Z_to_H
+      nominalDepth = G%bathyT(i,j) * GV%Z_to_H
 
-      z_col(1) = 0. ! Work downward rather than bottom up
+      if (ice_shelf) then
+        totalThickness = 0.0
+        do k=1,GV%ke
+          totalThickness = totalThickness + h(i,j,k) * GV%Z_to_H
+        enddo
+        z_top_col = max(nominalDepth-totalThickness,0.0)
+      else
+        z_top_col = 0.0
+      endif
+
+      z_col(1) = z_top_col ! Work downward rather than bottom up
       do K = 1, GV%ke
         z_col(K+1) = z_col(K) + h(i,j,k)
         p_col(k) = tv%P_Ref + CS%compressibility_fraction * &
              ( 0.5 * ( z_col(K) + z_col(K+1) ) * (GV%H_to_RZ*GV%g_Earth) - tv%P_Ref )
       enddo
 
-      call build_hycom1_column(CS%hycom_CS, tv%eqn_of_state, GV%ke, depth, &
-                               h(i,j,:), tv%T(i,j,:), tv%S(i,j,:), p_col, &
-                               z_col, z_col_new, zScale=GV%Z_to_H, &
-                               h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+      call build_hycom1_column(CS%hycom_CS, tv%eqn_of_state, GV%ke, nominalDepth, &
+           h(i,j,:), tv%T(i,j,:), tv%S(i,j,:), p_col, &
+           z_col, z_col_new, zScale=GV%Z_to_H, &
+           h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
 
       ! Calculate the final change in grid position after blending new and old grids
       call filtered_grid_motion( CS, GV%ke, z_col, z_col_new, dz_col )
@@ -2016,17 +2040,22 @@ end subroutine setCoordinateResolution
 !> Set target densities based on the old Rlay variable
 subroutine set_target_densities_from_GV( GV, US, CS )
   type(verticalGrid_type), intent(in)    :: GV !< Ocean vertical grid structure
-  type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
+  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   type(regridding_CS),     intent(inout) :: CS !< Regridding control structure
   ! Local variables
   integer :: k, nz
 
   nz = CS%nk
-  CS%target_density(1)    = (GV%Rlay(1) + 0.5*(GV%Rlay(1)-GV%Rlay(2)))
-  CS%target_density(nz+1) = (GV%Rlay(nz) + 0.5*(GV%Rlay(nz)-GV%Rlay(nz-1)))
-  do k = 2,nz
-    CS%target_density(k) = CS%target_density(k-1) + CS%coordinateResolution(k)
-  enddo
+  if (nz == 1) then ! Set a broad range of bounds.  Regridding may not be meaningful in this case.
+    CS%target_density(1)    = 0.0
+    CS%target_density(2)    = 2.0*GV%Rlay(1)
+  else
+    CS%target_density(1)    = (GV%Rlay(1) + 0.5*(GV%Rlay(1)-GV%Rlay(2)))
+    CS%target_density(nz+1) = (GV%Rlay(nz) + 0.5*(GV%Rlay(nz)-GV%Rlay(nz-1)))
+    do k=2,nz
+      CS%target_density(k)  = CS%target_density(k-1) + CS%coordinateResolution(k)
+    enddo
+  endif
   CS%target_density_set = .true.
 
 end subroutine set_target_densities_from_GV

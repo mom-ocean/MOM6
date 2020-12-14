@@ -1135,8 +1135,9 @@ subroutine MOM_mech_forcing_chksum(mesg, forces, G, US, haloshift)
   if (associated(forces%ustar)) &
     call hchksum(forces%ustar, mesg//" forces%ustar", G%HI, haloshift=hshift, scale=US%Z_to_m*US%s_to_T)
   if (associated(forces%rigidity_ice_u) .and. associated(forces%rigidity_ice_v)) &
-    call uvchksum(mesg//" forces%rigidity_ice_[uv]", forces%rigidity_ice_u, forces%rigidity_ice_v, &
-                  G%HI, haloshift=hshift, symmetric=.true., scale=US%L_to_m**3*US%L_to_Z*US%s_to_T)
+    call uvchksum(mesg//" forces%rigidity_ice_[uv]", forces%rigidity_ice_u, &
+        forces%rigidity_ice_v, G%HI, haloshift=hshift, symmetric=.true., &
+        scale=US%L_to_m**3*US%L_to_Z*US%s_to_T, scalar_pair=.true.)
 
 end subroutine MOM_mech_forcing_chksum
 
@@ -1874,17 +1875,16 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
   handles%id_total_saltflux = register_scalar_field('ocean_model',          &
       'total_salt_flux', Time, diag,                                        &
-      long_name='Area integrated surface salt flux', units='kg',            &
+      long_name='Area integrated surface salt flux', units='kg s-1',        &
       cmor_field_name='total_sfdsi',                                        &
-      cmor_units='kg s-1',                                                  &
       cmor_standard_name='downward_sea_ice_basal_salt_flux_area_integrated',&
       cmor_long_name='Downward Sea Ice Basal Salt Flux Area Integrated')
 
   handles%id_total_saltFluxIn = register_scalar_field('ocean_model', 'total_salt_Flux_In', &
-      Time, diag, long_name='Area integrated surface salt flux at surface from coupler', units='kg')
+      Time, diag, long_name='Area integrated surface salt flux at surface from coupler', units='kg s-1')
 
   handles%id_total_saltFluxAdded = register_scalar_field('ocean_model', 'total_salt_Flux_Added', &
-      Time, diag, long_name='Area integrated surface salt flux due to restoring or flux adjustment', units='kg')
+      Time, diag, long_name='Area integrated surface salt flux due to restoring or flux adjustment', units='kg s-1')
 
 
 end subroutine register_forcing_type_diags
@@ -3472,15 +3472,15 @@ end subroutine rotate_mech_forcing
 !! The convergence of boundary-related heat into surface grid cell is
 !! given by the difference in the net heat entering the top of the k=1
 !! cell and the penetrative SW leaving the bottom of the cell.
-!! \f{eqnarray*}{
-!!  Q(k=1) &=& \mbox{hfds} - \mbox{pen_SW(leaving bottom of k=1)}
-!!   \\    &=& \mbox{nonpen_SW} + (\mbox{pen_SW(enter k=1)}-\mbox{pen_SW(leave k=1)})
+!! \f{eqnarray*}
+!!  Q(k=1) &=& \mbox{hfds} - \mbox{pen}\_\mbox{SW(leaving bottom of k=1)}
+!!   \\    &=& \mbox{nonpen}\_\mbox{SW} + (\mbox{pen}\_\mbox{SW(enter k=1)}-\mbox{pen}\_\mbox{SW(leave k=1)})
 !!                              + \mbox{LW+LAT+SENS+MASS+FRAZ+RES}
-!!   \\    &=& \mbox{nonpen_SW}+ \mbox{LW+LAT+SENS+MASS+FRAZ+RES}
-!!                + [\mbox{pen_SW(enter k=1)} - \mbox{pen_SW(leave k=1)}]
+!!   \\    &=& \mbox{nonpen}\_\mbox{SW}+ \mbox{LW+LAT+SENS+MASS+FRAZ+RES}
+!!                + [\mbox{pen}\_\mbox{SW(enter k=1)} - \mbox{pen}\_\mbox{SW(leave k=1)}]
 !!   \f}
 !! The convergence of the penetrative shortwave flux is given by
-!! \f$ \mbox{pen_SW (enter k)}-\mbox{pen_SW (leave k)}\f$.  This term
+!! \f$ \mbox{pen}\_\mbox{SW (enter k)}-\mbox{pen}\_\mbox{SW (leave k)}\f$.  This term
 !! appears for all cells k=1,nz.  It is diagnosed as "rsdoabsorb" inside module
 !! MOM6/src/parameterizations/vertical/MOM_diabatic_aux.F90
 !!

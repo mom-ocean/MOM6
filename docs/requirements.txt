@@ -1,2 +1,10 @@
-git+https://github.com/angus-g/sphinxcontrib-autodoc_doxygen.git#egg=sphinxcontrib-autodoc_doxygen
-git+https://github.com/angus-g/sphinx-fortran.git#egg=sphinx-fortran
+git+https://github.com/jr3cermak/sphinx.git@v3.2.1mom6.4
+git+https://github.com/jr3cermak/sphinxcontrib-autodoc_doxygen.git@0.7.13#egg=sphinxcontrib-autodoc_doxygen
+git+https://github.com/jr3cermak/sphinx-fortran.git@1.2.2#egg=sphinx-fortran
+git+https://github.com/jr3cermak/flint.git@0.0.1#egg=flint
+sphinx-rtd-theme
+sphinxcontrib-bibtex
+# requirements.txt not working from sphinx-fortran
+numpy
+six
+future

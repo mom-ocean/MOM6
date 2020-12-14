@@ -12,10 +12,22 @@ addons:
     packages:
     - tcsh pkg-config netcdf-bin libnetcdf-dev libnetcdff-dev gfortran
     - mpich libmpich-dev
-    - doxygen graphviz flex bison cmake
+    - graphviz flex bison cmake
     - python-numpy python-netcdf4
-    - python3 python3-dev python3-venv python3-pip
+    - python3 python3-dev python3-venv python3-pip python3-sphinx python3-lxml
     - bc
+    - perl
+    - texlive-binaries texlive-base bibtool tex-common texlive-bibtex-extra
+
+# Environment variables
+env:
+  global:
+    - TIMEFORMAT: "\"Time: %lR  (user: %lU, sys: %lS)\""
+    - FCFLAGS_DEBUG: "\"-g -O0 -Wextra -Wno-compare-reals -fbacktrace -ffpe-trap=invalid,zero,overflow -fcheck=bounds\""
+    - FCFLAGS_REPRO: "\"-g -O2 -fbacktrace\""
+    - FCFLAGS_INIT: "\"-finit-real=snan -finit-integer=2147483647 -finit-derived\""
+    - FCFLAGS_COVERAGE: "\"--coverage\""
+    - DO_REPRO_TESTS: true
 
 jobs:
   include:
@@ -24,49 +36,51 @@ jobs:
         # Whitespace
         - ./.testing/trailer.py -e TEOS10 -l 120 src config_src
         # API Documentation
-        - cd docs && doxygen Doxyfile_nortd
-        - grep -v "config_src/solo_driver/coupler_types.F90" doxygen.log | tee doxy_errors
+        - perl -e 'print "perl version $^V" . "\n"'
+        - cd docs && mkdir _build && make nortd DOXYGEN_RELEASE=Release_1_8_13 UPDATEHTMLEQS=Y
+        # We can tighten up the warnings here.  Math im image captions should only generate
+        # \f warnings.  All other latex math should be double escaped (\\) like (\\Phi) for
+        # html image captions.
+        - grep "warning:" _build/doxygen_warn_nortd_log.txt | grep -v 'Illegal command f as part of a \\image' | tee doxy_errors
         - test ! -s  doxy_errors
 
     - env:
-        - JOB="x86 Configuration testing"
+        - JOB="x86 verification testing"
         - DO_REGRESSION_TESTS=false
-        - MKMF_TEMPLATE=linux-ubuntu-xenial-gnu.mk
       script:
         - cd .testing
         - echo 'Build executables...' && echo -en 'travis_fold:start:script.1\\r'
-        - make all
+        - time make all
         - echo -en 'travis_fold:end:script.1\\r'
-        - make -k -s test
+        - time make -k -s test
         - make test.summary
 
     # NOTE: Code coverage upload is here to reduce load imbalance
+    # We do coverage with the regressions if part of a pull request
+    # otherwise as a separate job.
     - if: type = pull_request
       env:
         - JOB="x86 Regression testing"
         - DO_REGRESSION_TESTS=true
-        - REPORT_COVERAGE=true
-        - MKMF_TEMPLATE=linux-ubuntu-xenial-gnu.mk
         - MOM_TARGET_SLUG=${TRAVIS_REPO_SLUG}
         - MOM_TARGET_LOCAL_BRANCH=${TRAVIS_BRANCH}
       script:
         - cd .testing
         - echo 'Build executables...' && echo -en 'travis_fold:start:script.1\\r'
-        - make build.regressions
+        - time make build.regressions
         - echo -en 'travis_fold:end:script.1\\r'
-        - make -k -s test.regressions
+        - time make -k -s test.regressions
         - make test.summary
 
     - arch: arm64
       env:
-        - JOB="ARM64 Configuration testing"
+        - JOB="ARM64 verification testing"
         - DO_REGRESSION_TESTS=false
         - DO_REPRO_TESTS=false
-        - MKMF_TEMPLATE=linux-ubuntu-xenial-gnu.mk
       script:
         - cd .testing
         - echo 'Build executables...' && echo -en 'travis_fold:start:script.1\\r'
-        - make all
+        - time make all
         - echo -en 'travis_fold:end:script.1\\r'
-        - make -k -s test
+        - time make -k -s test
         - make test.summary

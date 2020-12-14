@@ -1,0 +1,27 @@
+name: Regression
+
+on: [pull_request]
+
+jobs:
+  build-test-regression:
+
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .testing
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - uses: ./.github/actions/testing-setup
+
+    - name: Compile reference model
+      run: make build.regressions MOM_TARGET_SLUG=$GITHUB_REPOSITORY MOM_TARGET_LOCAL_BRANCH=$GITHUB_BASE_REF DO_REGRESSION_TESTS=true -j
+
+    - name: Create validation data
+      run: make run.symmetric -k -s
+
+    - name: Regression test
+      run: make test.regressions DO_REGRESSION_TESTS=true -k -s

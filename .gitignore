@@ -2,7 +2,25 @@
 *.swp
 *~
 html
-*.log
+
+
+# Build output
+*.o
+*.mod
 MOM6
 build/
+_build/
 deps/
+MOM6.tags
+bib*.aux
+citelist.doc*
+
+
+# Autoconf
+aclocal.m4
+autom4te.cache/
+config.log
+config.status
+configure
+/Makefile
+Makefile.mkmf

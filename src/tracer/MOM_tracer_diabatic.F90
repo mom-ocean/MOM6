@@ -13,7 +13,7 @@ use MOM_error_handler,    only : MOM_error, FATAL, WARNING
 implicit none ; private
 
 #include <MOM_memory.h>
-public tracer_vertdiff
+public tracer_vertdiff, tracer_vertdiff_Eulerian
 public applyTracerBoundaryFluxesInOut
 
 contains
@@ -41,6 +41,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: btm_flux !< The (negative upward) bottom flux of the
                                                                      !! tracer in [CU kg m-2 T-1 ~> CU kg m-2 s-1] or
                                                                      !! [CU H ~> CU m or CU kg m-2] if
+                                                                     !! convert_flux_in is .false.
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(inout) :: btm_reservoir !< amount of tracer in a bottom reservoir
                                                                      !! [CU kg m-2]; formerly [CU m]
   real,                             optional,intent(in)    :: sink_rate !< rate at which the tracer sinks
@@ -70,7 +71,6 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
                     !! in roundoff and can be neglected [H ~> m or kg m-2].
   logical :: convert_flux = .true.
 
-
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -84,20 +84,17 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   h_neglect = GV%H_subroundoff
   sink_dist = 0.0
   if (present(sink_rate)) sink_dist = (dt*sink_rate) * GV%m_to_H
-!$OMP parallel default(none) shared(is,ie,js,je,sfc_src,btm_src,sfc_flux,dt,G,GV,btm_flux, &
-!$OMP                               sink_rate,btm_reservoir,nz,sink_dist,ea,      &
-!$OMP                               h_old,convert_flux,h_neglect,eb,tr) &
-!$OMP                       private(sink,h_minus_dsink,b_denom_1,b1,d1,h_tr,c1)
-!$OMP do
+  !$OMP parallel default(shared) private(sink,h_minus_dsink,b_denom_1,b1,d1,h_tr,c1)
+  !$OMP do
   do j=js,je; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo ; enddo
   if (present(sfc_flux)) then
     if (convert_flux) then
-!$OMP do
+      !$OMP do
       do j = js, je; do i = is,ie
         sfc_src(i,j) = (sfc_flux(i,j)*dt) * GV%kg_m2_to_H
       enddo ; enddo
     else
-!$OMP do
+      !$OMP do
       do j = js, je; do i = is,ie
         sfc_src(i,j) = sfc_flux(i,j)
       enddo ; enddo
@@ -105,12 +102,12 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   endif
   if (present(btm_flux)) then
     if (convert_flux) then
-!$OMP do
+      !$OMP do
       do j = js, je; do i = is,ie
         btm_src(i,j) = (btm_flux(i,j)*dt) * GV%kg_m2_to_H
       enddo ; enddo
     else
-!$OMP do
+      !$OMP do
       do j = js, je; do i = is,ie
         btm_src(i,j) = btm_flux(i,j)
       enddo ; enddo
@@ -118,7 +115,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   endif
 
   if (present(sink_rate)) then
-!$OMP do
+    !$OMP do
     do j=js,je
       ! Find the sinking rates at all interfaces, limiting them if necesary
       ! so that the characteristics do not cross within a timestep.
@@ -186,7 +183,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
       endif ; enddo ; enddo
     enddo
   else
-!$OMP do
+    !$OMP do
     do j=js,je
       do i=is,ie ; if (G%mask2dT(i,j) > -0.5) then
         h_tr = h_old(i,j,1) + h_neglect
@@ -217,10 +214,210 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
       endif ; enddo ; enddo
     enddo
   endif
-
-!$OMP end parallel
+  !$OMP end parallel
 
 end subroutine tracer_vertdiff
+
+
+!> This subroutine solves a tridiagonal equation for the final tracer concentrations after
+!! Eulerian mixing, and possibly sinking or surface and bottom sources, are applied.  The sinking
+!! is implemented with an fully implicit upwind advection scheme.  Alternate time units can be
+!! used for the timestep, surface and bottom fluxes and sink_rate provided they are all consistent.
+subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
+                                    sfc_flux, btm_flux, btm_reservoir, sink_rate, convert_flux_in)
+  type(ocean_grid_type),                     intent(in)    :: G      !< ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV     !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_old  !< layer thickness before entrainment
+                                                                     !! [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)  :: ent    !< Amount of fluid mixed across interfaces
+                                                                     !! [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: tr     !< tracer concentration in concentration units [CU]
+  real,                                      intent(in)    :: dt     !< amount of time covered by this call [T ~> s]
+  real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: sfc_flux !< surface flux of the tracer in units of
+                                                                     !! [CU kg m-2 T-1 ~> CU kg m-2 s-1] or
+                                                                     !! [CU H ~> CU m or CU kg m-2] if
+                                                                     !! convert_flux_in is .false.
+  real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: btm_flux !< The (negative upward) bottom flux of the
+                                                                     !! tracer in [CU kg m-2 T-1 ~> CU kg m-2 s-1] or
+                                                                     !! [CU H ~> CU m or CU kg m-2] if
+                                                                     !! convert_flux_in is .false.
+  real, dimension(SZI_(G),SZJ_(G)), optional,intent(inout) :: btm_reservoir !< amount of tracer in a bottom reservoir
+                                                                     !! [CU kg m-2]; formerly [CU m]
+  real,                             optional,intent(in)    :: sink_rate !< rate at which the tracer sinks
+                                                                     !! [m T-1 ~> m s-1]
+  logical,                          optional,intent(in)    :: convert_flux_in !< True if the specified sfc_flux needs
+                                                                     !! to be integrated in time
+
+  ! local variables
+  real :: sink_dist !< The distance the tracer sinks in a time step [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G)) :: &
+    sfc_src, &      !< The time-integrated surface source of the tracer [CU H ~> CU m or CU kg m-2].
+    btm_src         !< The time-integrated bottom source of the tracer [CU H ~> CU m or CU kg m-2].
+  real, dimension(SZI_(G)) :: &
+    b1, &           !< b1 is used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
+    d1              !! d1=1-c1 is used by the tridiagonal solver, nondimensional.
+  real :: c1(SZI_(G),SZK_(GV))    !< c1 is used by the tridiagonal solver [nondim].
+  real :: h_minus_dsink(SZI_(G),SZK_(GV)) !< The layer thickness minus the
+                    !! difference in sinking rates across the layer [H ~> m or kg m-2].
+                    !! By construction, 0 <= h_minus_dsink < h_work.
+  real :: sink(SZI_(G),SZK_(GV)+1) !< The tracer's sinking distances at the
+                    !! interfaces, limited to prevent characteristics from
+                    !! crossing within a single timestep [H ~> m or kg m-2].
+  real :: b_denom_1 !< The first term in the denominator of b1 [H ~> m or kg m-2].
+  real :: h_tr      !< h_tr is h at tracer points with a h_neglect added to
+                    !! ensure positive definiteness [H ~> m or kg m-2].
+  real :: h_neglect !< A thickness that is so small it is usually lost
+                    !! in roundoff and can be neglected [H ~> m or kg m-2].
+  logical :: convert_flux = .true.
+
+
+  integer :: i, j, k, is, ie, js, je, nz
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+
+  if (nz == 1) then
+    call MOM_error(WARNING, "MOM_tracer_diabatic.F90, tracer_vertdiff called "//&
+                            "with only one vertical level")
+    return
+  endif
+
+  if (present(convert_flux_in)) convert_flux = convert_flux_in
+  h_neglect = GV%H_subroundoff
+  sink_dist = 0.0
+  if (present(sink_rate)) sink_dist = (dt*sink_rate) * GV%m_to_H
+  !$OMP parallel default(shared) private(sink,h_minus_dsink,b_denom_1,b1,d1,h_tr,c1)
+  !$OMP do
+  do j=js,je; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo ; enddo
+  if (present(sfc_flux)) then
+    if (convert_flux) then
+      !$OMP do
+      do j = js, je; do i = is,ie
+        sfc_src(i,j) = (sfc_flux(i,j)*dt) * GV%kg_m2_to_H
+      enddo ; enddo
+    else
+      !$OMP do
+      do j = js, je; do i = is,ie
+        sfc_src(i,j) = sfc_flux(i,j)
+      enddo ; enddo
+    endif
+  endif
+  if (present(btm_flux)) then
+    if (convert_flux) then
+      !$OMP do
+      do j = js, je; do i = is,ie
+        btm_src(i,j) = (btm_flux(i,j)*dt) * GV%kg_m2_to_H
+      enddo ; enddo
+    else
+      !$OMP do
+      do j = js, je; do i = is,ie
+        btm_src(i,j) = btm_flux(i,j)
+      enddo ; enddo
+    endif
+  endif
+
+  if (present(sink_rate)) then
+    !$OMP do
+    do j=js,je
+      ! Find the sinking rates at all interfaces, limiting them if necesary
+      ! so that the characteristics do not cross within a timestep.
+      !   If a non-constant sinking rate were used, that would be incorprated
+      ! here.
+      if (present(btm_reservoir)) then
+        do i=is,ie ; sink(i,nz+1) = sink_dist ; enddo
+        do k=2,nz ; do i=is,ie
+          sink(i,K) = sink_dist ; h_minus_dsink(i,k) = h_old(i,j,k)
+        enddo ; enddo
+      else
+        do i=is,ie ; sink(i,nz+1) = 0.0 ; enddo
+        ! Find the limited sinking distance at the interfaces.
+        do k=nz,2,-1 ; do i=is,ie
+          if (sink(i,K+1) >= sink_dist) then
+            sink(i,K) = sink_dist
+            h_minus_dsink(i,k) = h_old(i,j,k) + (sink(i,K+1) - sink(i,K))
+          elseif (sink(i,K+1) + h_old(i,j,k) < sink_dist) then
+            sink(i,K) = sink(i,K+1) + h_old(i,j,k)
+            h_minus_dsink(i,k) = 0.0
+          else
+            sink(i,K) = sink_dist
+            h_minus_dsink(i,k) = (h_old(i,j,k) + sink(i,K+1)) - sink(i,K)
+          endif
+        enddo ; enddo
+      endif
+      do i=is,ie
+        sink(i,1) = 0.0 ; h_minus_dsink(i,1) = (h_old(i,j,1) + sink(i,2))
+      enddo
+
+      ! Now solve the tridiagonal equation for the tracer concentrations.
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+        b_denom_1 = h_minus_dsink(i,1) + ent(i,j,1) + h_neglect
+        b1(i) = 1.0 / (b_denom_1 + ent(i,j,2))
+        d1(i) = b_denom_1 * b1(i)
+        h_tr = h_old(i,j,1) + h_neglect
+        tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + sfc_src(i,j)
+      endif ; enddo
+      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+        c1(i,k) = ent(i,j,K) * b1(i)
+        b_denom_1 = h_minus_dsink(i,k) + d1(i) * (ent(i,j,K) + sink(i,K)) + &
+                    h_neglect
+        b1(i) = 1.0 / (b_denom_1 + ent(i,j,K+1))
+        d1(i) = b_denom_1 * b1(i)
+        h_tr = h_old(i,j,k) + h_neglect
+        tr(i,j,k) = b1(i) * (h_tr * tr(i,j,k) + &
+                             (ent(i,j,K) + sink(i,K)) * tr(i,j,k-1))
+      endif ; enddo ; enddo
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+        c1(i,nz) = ent(i,j,nz) * b1(i)
+        b_denom_1 = h_minus_dsink(i,nz) + d1(i) * (ent(i,j,nz) + sink(i,nz)) + &
+                    h_neglect
+        b1(i) = 1.0 / (b_denom_1 + ent(i,j,nz+1))
+        h_tr = h_old(i,j,nz) + h_neglect
+        tr(i,j,nz) = b1(i) * ((h_tr * tr(i,j,nz) + btm_src(i,j)) + &
+                              (ent(i,j,nz) + sink(i,nz)) * tr(i,j,nz-1))
+      endif ; enddo
+      if (present(btm_reservoir)) then ; do i=is,ie ; if (G%mask2dT(i,j)>0.5) then
+        btm_reservoir(i,j) = btm_reservoir(i,j) + &
+                             (sink(i,nz+1)*tr(i,j,nz)) * GV%H_to_kg_m2
+      endif ; enddo ; endif
+
+      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+        tr(i,j,k) = tr(i,j,k) + c1(i,k+1)*tr(i,j,k+1)
+      endif ; enddo ; enddo
+    enddo
+  else
+    !$OMP do
+    do j=js,je
+      do i=is,ie ; if (G%mask2dT(i,j) > -0.5) then
+        h_tr = h_old(i,j,1) + h_neglect
+        b_denom_1 = h_tr + ent(i,j,1)
+        b1(i) = 1.0 / (b_denom_1 + ent(i,j,2))
+        d1(i) = h_tr * b1(i)
+        tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + sfc_src(i,j)
+       endif
+      enddo
+      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > -0.5) then
+        c1(i,k) = ent(i,j,K) * b1(i)
+        h_tr = h_old(i,j,k) + h_neglect
+        b_denom_1 = h_tr + d1(i) * ent(i,j,K)
+        b1(i) = 1.0 / (b_denom_1 + ent(i,j,K+1))
+        d1(i) = b_denom_1 * b1(i)
+        tr(i,j,k) = b1(i) * (h_tr * tr(i,j,k) + ent(i,j,K) * tr(i,j,k-1))
+      endif ; enddo ; enddo
+      do i=is,ie ; if (G%mask2dT(i,j) > -0.5) then
+        c1(i,nz) = ent(i,j,nz) * b1(i)
+        h_tr = h_old(i,j,nz) + h_neglect
+        b_denom_1 = h_tr + d1(i)*ent(i,j,nz)
+        b1(i) = 1.0 / ( b_denom_1 + ent(i,j,nz+1))
+        tr(i,j,nz) = b1(i) * (( h_tr * tr(i,j,nz) + btm_src(i,j)) + &
+                              ent(i,j,nz) * tr(i,j,nz-1))
+      endif ; enddo
+      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > -0.5) then
+        tr(i,j,k) = tr(i,j,k) + c1(i,k+1)*tr(i,j,k+1)
+      endif ; enddo ; enddo
+    enddo
+  endif
+  !$OMP end parallel
+
+end subroutine tracer_vertdiff_Eulerian
+
 
 !> This routine is modeled after applyBoundaryFluxesInOut in MOM_diabatic_aux.F90
 !! NOTE: Please note that in this routine sfc_flux gets set to zero to ensure that the surface

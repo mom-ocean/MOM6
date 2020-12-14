@@ -1193,7 +1193,7 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
   !  call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
   !endif
 
-  CS%id_hf_gKEu_2d = register_diag_field('ocean_model', 'hf_gKEu_2d', diag%axesCuL, Time, &
+  CS%id_hf_gKEu_2d = register_diag_field('ocean_model', 'hf_gKEu_2d', diag%axesCu1, Time, &
      'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Grad. Kinetic Energy', &
      'm-1 s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_gKEu_2d > 0) then
@@ -1201,7 +1201,7 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
     call safe_alloc_ptr(AD%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
   endif
 
-  CS%id_hf_gKEv_2d = register_diag_field('ocean_model', 'hf_gKEv_2d', diag%axesCvL, Time, &
+  CS%id_hf_gKEv_2d = register_diag_field('ocean_model', 'hf_gKEv_2d', diag%axesCv1, Time, &
      'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Grad. Kinetic Energy', &
      'm-1 s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_gKEv_2d > 0) then
@@ -1225,7 +1225,7 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
   !  call safe_alloc_ptr(AD%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
   !endif
 
-  CS%id_hf_rvxu_2d = register_diag_field('ocean_model', 'hf_rvxu_2d', diag%axesCvL, Time, &
+  CS%id_hf_rvxu_2d = register_diag_field('ocean_model', 'hf_rvxu_2d', diag%axesCv1, Time, &
      'Fractional Thickness-weighted Meridional Acceleration from Relative Vorticity', &
      'm-1 s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_rvxu_2d > 0) then
@@ -1233,7 +1233,7 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
     call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
   endif
 
-  CS%id_hf_rvxv_2d = register_diag_field('ocean_model', 'hf_rvxv_2d', diag%axesCuL, Time, &
+  CS%id_hf_rvxv_2d = register_diag_field('ocean_model', 'hf_rvxv_2d', diag%axesCu1, Time, &
      'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Relative Vorticity', &
      'm-1 s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_rvxv_2d > 0) then
@@ -1263,18 +1263,6 @@ end subroutine CoriolisAdv_end
 !! and potential enstrophy in the limit of nondivergent flow.
 !! Sadourny's energy conserving scheme conserves energy if the flow
 !! is nondivergent or centered difference thickness fluxes are used.
-!!
-!! Two sets of boundary conditions have been coded in the
-!! definition of relative vorticity.  These are written as:
-!! NOSLIP defined (in spherical coordinates):
-!!   relvort = dv/dx (east & west), with v = 0.
-!!   relvort = -sec(Q) * d(u cos(Q))/dy (north & south), with u = 0.
-!!
-!! NOSLIP not defined (free slip):
-!!   relvort = 0 (all boundaries)
-!!
-!! with Q temporarily defined as latitude.  The free slip boundary
-!! condition is much more natural on a C-grid.
 !!
 !! A small fragment of the grid is shown below:
 !! \verbatim
