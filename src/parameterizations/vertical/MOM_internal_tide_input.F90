@@ -115,6 +115,8 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
 
   call find_N2_bottom(h, tv, T_f, S_f, itide%h2, fluxes, G, GV, US, N2_bot)
 
+  avg_enabled = query_averaging_enabled(CS%diag, time_end=time_end)
+
   !$OMP parallel do default(shared)
   do j=js,je ; do i=is,ie
     itide%Nb(i,j) = G%mask2dT(i,j) * sqrt(N2_bot(i,j))
@@ -123,7 +125,6 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
 
   if (CS%int_tide_source_test) then
     itide%TKE_itidal_input(:,:) = 0.0
-    avg_enabled = query_averaging_enabled(CS%diag, time_end=time_end)
     if (time_end <= CS%time_max_source) then
       do j=js,je ; do i=is,ie
         ! Input  an arbitrary energy point source.id_
