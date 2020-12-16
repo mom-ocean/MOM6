@@ -18,6 +18,7 @@ implicit none ; private
 
 !MJHpublic initialize_ice_shelf_boundary, initialize_ice_thickness
 public initialize_ice_thickness
+public initialize_ice_shelf_boundary_channel
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -263,6 +264,130 @@ subroutine initialize_ice_thickness_channel(h_shelf, area_shelf_h, hmask, G, US,
   endif ; enddo
 
 end subroutine initialize_ice_thickness_channel
+subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_bdry, &
+                u_flux_bdry_val, v_flux_bdry_val, u_bdry_val, v_bdry_val, h_bdry_val, &
+                thickness_bdry_val, hmask,  h_shelf, G,&   ! OVS h_shelf 11/10/20
+!                flux_bdry, &
+                US, PF )
+
+   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
+   real, dimension(SZIB_(G),SZJ_(G)), &
+                          intent(inout) :: u_face_mask_bdry !< A boundary-type mask at C-grid u faces
+   real, dimension(SZIB_(G),SZJ_(G)), &
+                          intent(inout) :: u_flux_bdry_val  !< The boundary thickness flux through
+                                                      !! C-grid u faces [L Z T-1 ~> m2 s-1].
+   real, dimension(SZI_(G),SZJB_(G)), &
+                          intent(inout) :: v_face_mask_bdry !< A boundary-type mask at C-grid v faces
+   real, dimension(SZI_(G),SZJB_(G)), &
+                          intent(inout) :: v_flux_bdry_val  !< The boundary thickness flux through
+                                                      !! C-grid v faces [L Z T-1 ~> m2 s-1].
+   real, dimension(SZIB_(G),SZJB_(G)), &
+                          intent(inout) :: u_bdry_val !< The zonal ice shelf velocity at open
+                                                       !! boundary vertices [L T-1 ~> m s-1].
+   real, dimension(SZIB_(G),SZJB_(G)), &
+                          intent(inout) :: v_bdry_val !< The meridional ice shelf velocity at open
+   real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(inout) :: thickness_bdry_val !< The ice shelf thickness at open boundaries [Z ~> m]
+                                                          !! boundary vertices [L T-1 ~> m s-1].
+   real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(inout) :: h_bdry_val !< The ice shelf thickness at open boundaries [Z ~> m]
+   real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(inout) :: hmask !< A mask indicating which tracer points are
+                                              !! partly or fully covered by an ice-shelf
+   real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(inout) :: h_shelf !< Ice-shelf thickness  OVS 11/10/20                                              
+!   logical,               intent(in)    :: flux_bdry !< If true, use mass fluxes as the boundary value.
+   type(unit_scale_type), intent(in)    :: US !< A structure containing unit conversion factors
+   type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
+
+   character(len=40)  :: mdl = "initialize_ice_shelf_boundary_channel" ! This subroutine's name.
+   integer :: i, j, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc,gisd,gjsd, isc, jsc, iec, jec, ied, jed
+ real    :: input_thick ! The input ice shelf thickness [Z ~> m]
+!   real    :: input_flux  ! The input ice flux per unit length [L Z T-1 ~> m2 s-1]
+   real    :: input_vel  ! The input ice velocity per  [L Z T-1 ~> m s-1]
+   real    :: lenlat, len_stress, westlon, lenlon, southlat
+
+
+   call get_param(PF, mdl, "LENLAT", lenlat, fail_if_missing=.true.)
+
+   call get_param(PF, mdl, "LENLON", lenlon, fail_if_missing=.true.)
+
+   call get_param(PF, mdl, "WESTLON", westlon, fail_if_missing=.true.)
+
+   call get_param(PF, mdl, "SOUTHLAT", southlat, fail_if_missing=.true.)
+
+   call get_param(PF, mdl, "INPUT_VEL_ICE_SHELF", input_vel, &
+                  "inflow ice velocity at upstream boundary", &
+                  units="m s-1", default=0., scale=US%m_s_to_L_T*US%m_to_Z)
+   call get_param(PF, mdl, "INPUT_THICK_ICE_SHELF", input_thick, &
+                  "flux thickness at upstream boundary", &
+                  units="m", default=1000., scale=US%m_to_Z)
+   call get_param(PF, mdl, "LEN_SIDE_STRESS", len_stress, &
+                  "maximum position of no-flow condition in along-flow direction", &
+                  units="km", default=0.)
+
+   call MOM_mesg(mdl//": setting boundary")
+
+   isd = G%isd ; ied = G%ied
+   jsd = G%jsd ; jed = G%jed
+   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
+   gjsd = G%Domain%njglobal ; gisd = G%Domain%niglobal
+   gisc = G%Domain%nihalo ; gjsc = G%Domain%njhalo
+   giec = G%Domain%niglobal+gisc ; gjec = G%Domain%njglobal+gjsc
+
+!-----------b.c.s based on geopositions -----------------
+   do j=jsc-1,jec+1
+     do i=isc-1,iec+1
+  ! upstream boundary - set either dirichlet or flux condition
+
+        if (G%geoLonBu(i,j) == westlon) then
+ !        if (flux_bdry) then
+ !          u_face_mask_bdry(i-1,j) = 4.0
+ !          u_flux_bdry_val(i-1,j) = input_flux
+ !        else
+           hmask(i+1,j) = 3.0
+           h_bdry_val(i+1,j) = h_shelf(i+1,j) !OVS 11/10/20 !input_thick
+           thickness_bdry_val(i+1,j) = h_bdry_val(i+1,j)
+           u_face_mask_bdry(i+1,j) = 3.0
+           u_bdry_val(i+1,j) = input_vel*(1-16.0*((G%geoLatBu(i-1,j)/lenlat-0.5))**4) !OVS 11/09/20 U b.c.
+ !          u_bdry_val(i+1,j) = (1 - ((G%geoLatBu(i,j) - 0.5*lenlat)*2./lenlat)**2) * &
+ !                  1.5 * input_flux / input_thick
+ !        endif
+       endif
+
+
+       ! side boundaries: no flow
+        if (G%geoLatBu(i,j-1) == southlat) then !bot boundary
+         if (len_stress == 0. .OR. G%geoLonCv(i,j) <= len_stress) then
+           v_face_mask_bdry(i,j+1) = 0.
+           u_face_mask_bdry(i,j-1) = 3.          !OVS 11/25/20 
+         else
+           v_face_mask_bdry(i,j+1) = 1.
+           u_face_mask_bdry(i,j-1) = 3.         !OVS 11/25/20
+           u_bdry_val(i,j) = 0.
+           !hmask(i,j) = 0.0                   !OVS 11/25/20
+         endif
+       elseif (G%geoLatBu(i,j-1) == southlat+lenlat) then !top boundary
+         if (len_stress == 0. .OR. G%geoLonCv(i,j) <= len_stress) then
+           v_face_mask_bdry(i,j-1) = 0.
+           u_face_mask_bdry(i,j-1) = 3.         !OVS 11/25/20
+         else
+           v_face_mask_bdry(i,j-1) = 1.
+           u_face_mask_bdry(i,j-1) = 3.         !OVS 11/25/20
+           !u_bdry_val(i,j) = 0.               !OVS 11/25/20
+           !hmask(i,j) = 0.0                   !OVS 11/25/20
+         endif
+       endif
+
+       ! downstream boundary - CFBC
+        if (G%geoLonBu(i,j) == westlon+lenlon) then
+         u_face_mask_bdry(i-1,j) = 2.0
+       endif
+
+     enddo
+   enddo
+
+end subroutine initialize_ice_shelf_boundary_channel
 
 !BEGIN MJH
 ! subroutine initialize_ice_shelf_boundary(u_face_mask_bdry, v_face_mask_bdry, &
