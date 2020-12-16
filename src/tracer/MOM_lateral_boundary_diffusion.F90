@@ -702,9 +702,6 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
 
   tmp1 = 0.0; tmp2 = 0.0
   do k = 1,ke
-    tmp1 = tmp1 + h_L(k)
-    tmp2 = tmp2 + h_R(k)
-
     ! apply flux_limiter
     if (CS%limiter .and. F_layer(k) /= 0.) then
        call flux_limiter(F_layer(k), area_L, area_R, phi_L(k), phi_R(k), h_L(k), h_R(k))
