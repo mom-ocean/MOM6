@@ -753,6 +753,7 @@ logical function near_boundary_unit_tests( verbose )
   CS%H_subroundoff = 1.0E-20
   CS%debug=.false.
   CS%limiter=.false.
+  CS%limiter_remap=.false.
 
   near_boundary_unit_tests = .false.
   write(stdout,*) '==== MOM_lateral_boundary_diffusion ======================='
