@@ -12,7 +12,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
-use MOM_io, only : create_file, fieldtype, flush_file, open_file, reopen_file
+use MOM_io, only : create_file, fieldtype, flush_file, open_file, reopen_file, stdout
 use MOM_io, only : file_exists, slasher, vardesc, var_desc, write_field, get_filename_appendix
 use MOM_io, only : APPEND_FILE, ASCII_FILE, SINGLE_FILE, WRITEONLY_FILE
 use MOM_open_boundary, only : ocean_OBC_type, OBC_segment_type
@@ -827,11 +827,11 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
 
   if (is_root_pe()) then
     if (CS%use_temperature) then
-        write(*,'(A," ",A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
+        write(stdout,'(A," ",A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
                 & ES18.12, ", Salt ", F15.11,", Temp ", F15.11)') &
           trim(date_str), trim(n_str), En_mass, max_CFL(1), mass_tot, salin, temp
     else
-        write(*,'(A," ",A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
+        write(stdout,'(A," ",A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
                 & ES18.12)') &
           trim(date_str), trim(n_str), En_mass, max_CFL(1), mass_tot
     endif
@@ -853,39 +853,39 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     endif
 
     if (CS%ntrunc > 0) then
-      write(*,'(A," Energy/Mass:",ES12.5," Truncations ",I0)') &
+      write(stdout,'(A," Energy/Mass:",ES12.5," Truncations ",I0)') &
         trim(date_str), En_mass, CS%ntrunc
     endif
 
     if (CS%write_stocks) then
-      write(*,'("    Total Energy: ",Z16.16,ES24.16)') toten, toten
-      write(*,'("    Total Mass: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5," (",ES8.1,")")') &
+      write(stdout,'("    Total Energy: ",Z16.16,ES24.16)') toten, toten
+      write(stdout,'("    Total Mass: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5," (",ES8.1,")")') &
             mass_tot, mass_chg, mass_anom, mass_anom/mass_tot
       if (CS%use_temperature) then
         if (Salt == 0.) then
-          write(*,'("    Total Salt: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5)') &
+          write(stdout,'("    Total Salt: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5)') &
               Salt*0.001, Salt_chg*0.001, Salt_anom*0.001
         else
-          write(*,'("    Total Salt: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5," (",ES8.1,")")') &
+          write(stdout,'("    Total Salt: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5," (",ES8.1,")")') &
               Salt*0.001, Salt_chg*0.001, Salt_anom*0.001, Salt_anom/Salt
         endif
         if (Heat == 0.) then
-          write(*,'("    Total Heat: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5)') &
+          write(stdout,'("    Total Heat: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5)') &
               Heat, Heat_chg, Heat_anom
         else
-          write(*,'("    Total Heat: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5," (",ES8.1,")")') &
+          write(stdout,'("    Total Heat: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5," (",ES8.1,")")') &
               Heat, Heat_chg, Heat_anom, Heat_anom/Heat
         endif
       endif
       do m=1,nTr_stocks
 
-         write(*,'("      Total ",a,": ",ES24.16,X,a)') &
+         write(stdout,'("      Total ",a,": ",ES24.16,X,a)') &
               trim(Tr_names(m)), Tr_stocks(m), trim(Tr_units(m))
 
          if (Tr_minmax_got(m)) then
-           write(*,'(64X,"Global Min:",ES24.16,X,"at: (", f7.2,","f7.2,","f8.2,")"  )') &
+           write(stdout,'(64X,"Global Min:",ES24.16,X,"at: (", f7.2,","f7.2,","f8.2,")"  )') &
                 Tr_min(m),Tr_min_x(m),Tr_min_y(m),Tr_min_z(m)
-           write(*,'(64X,"Global Max:",ES24.16,X,"at: (", f7.2,","f7.2,","f8.2,")"  )') &
+           write(stdout,'(64X,"Global Max:",ES24.16,X,"at: (", f7.2,","f7.2,","f8.2,")"  )') &
                 Tr_max(m),Tr_max_x(m),Tr_max_y(m),Tr_max_z(m)
         endif
 

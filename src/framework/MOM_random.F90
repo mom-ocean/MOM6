@@ -11,7 +11,7 @@ use MersenneTwister_mod, only : new_RandomNumberSequence ! Constructor/initializ
 use MersenneTwister_mod, only : getRandomReal ! Generates a random number
 use MersenneTwister_mod, only : getRandomPositiveInt ! Generates a random positive integer
 
-use iso_fortran_env, only : stdout=>output_unit, stderr=>error_unit
+use MOM_io, only : stdout, stderr
 
 implicit none ; private
 

@@ -1215,11 +1215,11 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   !---------------------------------
 
   if (len_trim(scalar_field_name) > 0) then
-     call State_SetScalar(dble(nxg),scalar_field_idx_grid_nx, exportState, localPet, &
+     call State_SetScalar(real(nxg,ESMF_KIND_R8),scalar_field_idx_grid_nx, exportState, localPet, &
          scalar_field_name, scalar_field_count, rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-     call State_SetScalar(dble(nyg),scalar_field_idx_grid_ny, exportState, localPet, &
+     call State_SetScalar(real(nyg,ESMF_KIND_R8),scalar_field_idx_grid_ny, exportState, localPet, &
           scalar_field_name, scalar_field_count, rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
   endif
