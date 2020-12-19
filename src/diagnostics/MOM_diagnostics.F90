@@ -99,6 +99,7 @@ type, public :: diagnostics_CS ; private
     KE        => NULL(), &  !< KE per unit mass [L2 T-2 ~> m2 s-2]
     dKE_dt    => NULL(), &  !< time derivative of the layer KE [H L2 T-3 ~> m3 s-3]
     PE_to_KE  => NULL(), &  !< potential energy to KE term [m3 s-3]
+    KE_BT     => NULL(), &  !< barotropic contribution to KE term [m3 s-3]
     KE_CorAdv => NULL(), &  !< KE source from the combined Coriolis and
                             !! advection terms [H L2 T-3 ~> m3 s-3].
                             !! The Coriolis source should be zero, but is not due to truncation
@@ -110,14 +111,16 @@ type, public :: diagnostics_CS ; private
     KE_dia     => NULL()    !< KE source from diapycnal diffusion [H L2 T-3 ~> m3 s-3]
 
   !>@{ Diagnostic IDs
-  integer :: id_u = -1,   id_v = -1, id_h = -1
+  integer :: id_u   = -1,   id_v   = -1, id_h = -1
+  integer :: id_usq = -1,   id_vsq = -1, id_uv = -1
   integer :: id_e              = -1, id_e_D            = -1
   integer :: id_du_dt          = -1, id_dv_dt          = -1
   ! integer :: id_hf_du_dt       = -1, id_hf_dv_dt       = -1
   integer :: id_hf_du_dt_2d    = -1, id_hf_dv_dt_2d    = -1
   integer :: id_col_ht         = -1, id_dh_dt          = -1
   integer :: id_KE             = -1, id_dKEdt          = -1
-  integer :: id_PE_to_KE       = -1, id_KE_Coradv      = -1
+  integer :: id_PE_to_KE       = -1, id_KE_BT          = -1
+  integer :: id_KE_Coradv      = -1
   integer :: id_KE_adv         = -1, id_KE_visc        = -1
   integer :: id_KE_horvisc     = -1, id_KE_dia         = -1
   integer :: id_uh_Rlay        = -1, id_vh_Rlay        = -1
@@ -230,6 +233,10 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     !! calculating interface heights [H ~> m or kg m-2].
 
   ! Local variables
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: usq ! squared eastward velocity  [L2 T-2 ~> m2 s-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vsq ! squared northward velocity [L2 T-2 ~> m2 s-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G))  :: uv  ! u x v at h-points          [L2 T-2 ~> m2 s-2]
+
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
 
@@ -336,6 +343,28 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   if (CS%id_v > 0) call post_data(CS%id_v, v, CS%diag)
 
   if (CS%id_h > 0) call post_data(CS%id_h, h, CS%diag)
+
+  if (CS%id_usq > 0) then
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      usq(I,j,k) = u(I,j,k) * u(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_usq, usq, CS%diag)
+  endif
+
+  if (CS%id_vsq > 0) then
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      vsq(i,J,k) = v(i,J,k) * v(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_vsq, vsq, CS%diag)
+  endif
+
+  if (CS%id_uv > 0) then
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      uv(i,j,k) = (0.5*(u(I-1,j,k) + u(I,j,k))) * &
+                (0.5*(v(i,J-1,k) + v(i,J,k)))
+    enddo ; enddo ; enddo
+    call post_data(CS%id_uv, uv, CS%diag)
+  endif
 
   if (associated(CS%e)) then
     call find_eta(h, tv, G, GV, US, CS%e, eta_bt)
@@ -994,9 +1023,9 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   endif
 
   if (.not.G%symmetric) then
-    if (associated(CS%dKE_dt) .OR. associated(CS%PE_to_KE) .OR. associated(CS%KE_CorAdv) .OR. &
-       associated(CS%KE_adv) .OR. associated(CS%KE_visc)  .OR. associated(CS%KE_horvisc).OR. &
-       associated(CS%KE_dia) ) then
+    if (associated(CS%dKE_dt) .OR. associated(CS%PE_to_KE) .OR. associated(CS%KE_BT) .OR. &
+       associated(CS%KE_CorAdv) .OR. associated(CS%KE_adv) .OR. associated(CS%KE_visc) .OR. &
+       associated(CS%KE_horvisc) .OR. associated(CS%KE_dia) ) then
         call create_group_pass(CS%pass_KE_uv, KE_u, KE_v, G%Domain, To_North+To_East)
     endif
   endif
@@ -1038,6 +1067,24 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
       enddo ; enddo
     enddo
     if (CS%id_PE_to_KE > 0) call post_data(CS%id_PE_to_KE, CS%PE_to_KE, CS%diag)
+  endif
+
+  if (associated(CS%KE_BT)) then
+    do k=1,nz
+      do j=js,je ; do I=Isq,Ieq
+        KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * ADp%u_accel_bt(I,j,k)
+      enddo ; enddo
+      do J=Jsq,Jeq ; do i=is,ie
+        KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * ADp%v_accel_bt(i,J,k)
+      enddo ; enddo
+      if (.not.G%symmetric) &
+         call do_group_pass(CS%pass_KE_uv, G%domain)
+      do j=js,je ; do i=is,ie
+        CS%KE_BT(i,j,k) = 0.5 * G%IareaT(i,j) &
+            * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
+      enddo ; enddo
+    enddo
+    if (CS%id_KE_BT > 0) call post_data(CS%id_KE_BT, CS%KE_BT, CS%diag)
   endif
 
   if (associated(CS%KE_CorAdv)) then
@@ -1519,6 +1566,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   real :: wave_speed_tol      ! The fractional tolerance for finding the wave speeds [nondim]
   logical :: better_speed_est ! If true, use a more robust estimate of the first
                               ! mode wave speed as the starting point for iterations.
+  logical :: split            ! True if using the barotropic-baroclinic split algorithm
   logical :: use_temperature, adiabatic
   logical :: default_2018_answers, remap_answers_2018
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, nkml, nkbl
@@ -1568,6 +1616,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
+  call get_param(param_file, mdl, "SPLIT", split, default=.true., do_not_log=.true.)
 
   if (GV%Boussinesq) then
     thickness_units = "m" ; flux_units = "m3 s-1" ; convert_H = GV%H_to_m
@@ -1641,6 +1690,13 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   CS%id_v = register_diag_field('ocean_model', 'v', diag%axesCvL, Time,                  &
       'Meridional velocity', 'm s-1', conversion=US%L_T_to_m_s, cmor_field_name='vo', &
       cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
+  CS%id_usq = register_diag_field('ocean_model', 'usq', diag%axesCuL, Time,              &
+      'Zonal velocity squared', 'm2 s-2', conversion=US%L_T_to_m_s**2)
+  CS%id_vsq = register_diag_field('ocean_model', 'vsq', diag%axesCvL, Time,                  &
+      'Meridional velocity squared', 'm2 s-2', conversion=US%L_T_to_m_s**2)
+  CS%id_uv = register_diag_field('ocean_model', 'uv', diag%axesTL, Time, &
+      'Product between zonal and meridional velocities at h-points', 'm2 s-2', &
+       conversion=US%L_T_to_m_s**2)
   CS%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &
       'Layer Thickness', thickness_units, v_extensive=.true., conversion=convert_H)
 
@@ -1778,6 +1834,13 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       'Potential to Kinetic Energy Conversion of Layer', &
       'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
   if (CS%id_PE_to_KE>0) call safe_alloc_ptr(CS%PE_to_KE,isd,ied,jsd,jed,nz)
+
+  if (split) then
+    CS%id_KE_BT = register_diag_field('ocean_model', 'KE_BT', diag%axesTL, Time, &
+        'Barotropic contribution to Kinetic Energy', &
+        'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
+    if (CS%id_KE_BT>0) call safe_alloc_ptr(CS%KE_BT,isd,ied,jsd,jed,nz)
+  endif
 
   CS%id_KE_Coradv = register_diag_field('ocean_model', 'KE_Coradv', diag%axesTL, Time, &
       'Kinetic Energy Source from Coriolis and Advection', &
@@ -2192,9 +2255,9 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, CS)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (associated(CS%dKE_dt) .or. associated(CS%PE_to_KE) .or. &
-      associated(CS%KE_CorAdv) .or. associated(CS%KE_adv) .or. &
-      associated(CS%KE_visc) .or. associated(CS%KE_horvisc) .or. &
-      associated(CS%KE_dia)) &
+      associated(CS%KE_BT) .or. associated(CS%KE_CorAdv) .or. &
+      associated(CS%KE_adv) .or. associated(CS%KE_visc) .or. &
+      associated(CS%KE_horvisc) .or. associated(CS%KE_dia)) &
     call safe_alloc_ptr(CS%KE,isd,ied,jsd,jed,nz)
 
   if (associated(CS%dKE_dt)) then
@@ -2225,6 +2288,7 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, CS)
   if (associated(CS%KE_dia)) then
     call safe_alloc_ptr(ADp%du_dt_dia,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(ADp%dv_dt_dia,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
   endif
 
   if (associated(CS%uhGM_Rlay)) call safe_alloc_ptr(CDp%uhGM,IsdB,IedB,jsd,jed,nz)
@@ -2245,6 +2309,7 @@ subroutine MOM_diagnostics_end(CS, ADp)
   if (associated(CS%KE))         deallocate(CS%KE)
   if (associated(CS%dKE_dt))     deallocate(CS%dKE_dt)
   if (associated(CS%PE_to_KE))   deallocate(CS%PE_to_KE)
+  if (associated(CS%KE_BT))      deallocate(CS%KE_BT)
   if (associated(CS%KE_Coradv))  deallocate(CS%KE_Coradv)
   if (associated(CS%KE_adv))     deallocate(CS%KE_adv)
   if (associated(CS%KE_visc))    deallocate(CS%KE_visc)

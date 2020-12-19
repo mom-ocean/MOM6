@@ -171,7 +171,9 @@ type, public :: accel_diag_ptrs
     du_dt_visc => NULL(), &!< Zonal acceleration due to vertical viscosity [L T-2 ~> m s-2]
     dv_dt_visc => NULL(), &!< Meridional acceleration due to vertical viscosity [L T-2 ~> m s-2]
     du_dt_dia => NULL(), & !< Zonal acceleration due to diapycnal  mixing [L T-2 ~> m s-2]
-    dv_dt_dia => NULL()    !< Meridional acceleration due to diapycnal  mixing [L T-2 ~> m s-2]
+    dv_dt_dia => NULL(), & !< Meridional acceleration due to diapycnal  mixing [L T-2 ~> m s-2]
+    u_accel_bt => NULL(), &!< Pointer to the zonal barotropic-solver acceleration [L T-2 ~> m s-2]
+    v_accel_bt => NULL()   !< Pointer to the meridional barotropic-solver acceleration [L T-2 ~> m s-2]
   real, pointer, dimension(:,:,:) :: du_other => NULL()
                            !< Zonal velocity changes due to any other processes that are
                            !! not due to any explicit accelerations [L T-1 ~> m s-1].
@@ -448,7 +450,7 @@ subroutine rotate_surface_state(sfc_state_in, G_in, sfc_state, G, turns)
     if (use_temperature) then
       call rotate_array(sfc_state_in%ocean_heat, turns, sfc_state%ocean_heat)
       call rotate_array(sfc_state_in%ocean_salt, turns, sfc_state%ocean_salt)
-      call rotate_array(sfc_state_in%SSS, turns, sfc_state%TempxPmE)
+      call rotate_array(sfc_state_in%SSS, turns, sfc_state%SSS)
       call rotate_array(sfc_state_in%salt_deficit, turns, sfc_state%salt_deficit)
       call rotate_array(sfc_state_in%internal_heat, turns, sfc_state%internal_heat)
     endif

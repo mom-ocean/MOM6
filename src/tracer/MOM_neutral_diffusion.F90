@@ -28,8 +28,7 @@ use MOM_CVMix_KPP,             only : KPP_get_BLD, KPP_CS
 use MOM_energetic_PBL,         only : energetic_PBL_get_MLD, energetic_PBL_CS
 use MOM_diabatic_driver,       only : diabatic_CS, extract_diabatic_member
 use MOM_lateral_boundary_diffusion, only : boundary_k_range, SURFACE, BOTTOM
-
-use iso_fortran_env, only : stdout=>output_unit, stderr=>error_unit
+use MOM_io,                    only : stdout, stderr
 
 implicit none ; private
 
@@ -228,9 +227,6 @@ logical function neutral_diffusion_init(Time, G, US, param_file, diag, EOS, diab
                    default = .true.)
   endif
 
-  ! Store a rescaling factor for use in diagnostic messages.
-  CS%R_to_kg_m3 = US%R_to_kg_m3
-
   if (CS%interior_only) then
     call extract_diabatic_member(diabatic_CSp, KPP_CSp=CS%KPP_CSp)
     call extract_diabatic_member(diabatic_CSp, energetic_PBL_CSp=CS%energetic_PBL_CSp)
@@ -238,6 +234,8 @@ logical function neutral_diffusion_init(Time, G, US, param_file, diag, EOS, diab
       call MOM_error(FATAL,"NDIFF_INTERIOR_ONLY is true, but no valid boundary layer scheme was found")
     endif
   endif
+  ! Store a rescaling factor for use in diagnostic messages.
+  CS%R_to_kg_m3 = US%R_to_kg_m3
 
 ! call get_param(param_file, mdl, "KHTR", CS%KhTr, &
 !                "The background along-isopycnal tracer diffusivity.", &
@@ -316,11 +314,10 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
 
   ! Check if hbl needs to be extracted
   if (CS%interior_only) then
-    hbl(:,:) = 0.
     if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G, US, m_to_BLD_units=GV%m_to_H)
-    if (ASSOCIATED(CS%energetic_PBL_CSp)) &
-      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US, m_to_MLD_units=GV%m_to_H)
-    call pass_var(hbl, G%Domain)
+    if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US, &
+                                                                     m_to_MLD_units=GV%m_to_H)
+    call pass_var(hbl,G%Domain)
     ! get k-indices and zeta
     do j=G%jsc-1, G%jec+1 ; do i=G%isc-1,G%iec+1
       call boundary_k_range(SURFACE, G%ke, h(i,j,:), hbl(i,j), k_top(i,j), zeta_top(i,j), k_bot(i,j), zeta_bot(i,j))
@@ -435,7 +432,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
       if (CS%interior_only) then
         if (.not. CS%stable_cell(i,j,k_bot(i,j))) zeta_bot(i,j) = -1.
         ! set values in the surface and bottom boundary layer to false.
-        do k = 1, k_bot(i,j)-1
+        do k = 1, k_bot(i,j)
           CS%stable_cell(i,j,k) = .false.
         enddo
       endif
@@ -481,7 +478,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
         call find_neutral_surface_positions_continuous(G%ke,                                              &
                 CS%Pint(i,j,:), CS%Tint(i,j,:), CS%Sint(i,j,:), CS%dRdT(i,j,:), CS%dRdS(i,j,:),           &
                 CS%Pint(i,j+1,:), CS%Tint(i,j+1,:), CS%Sint(i,j+1,:), CS%dRdT(i,j+1,:), CS%dRdS(i,j+1,:), &
-                CS%vPoL(i,J,:), CS%vPoR(i,J,:), CS%vKoL(i,J,:), CS%vKoR(i,J,:), CS%vhEff(i,J,:), &
+                CS%vPoL(i,J,:), CS%vPoR(i,J,:), CS%vKoL(i,J,:), CS%vKoR(i,J,:), CS%vhEff(i,J,:),          &
                 k_bot(i,J), k_bot(i,J+1), zeta_bot(i,J), zeta_bot(i,J+1))
       else
         call find_neutral_surface_positions_discontinuous(CS, G%ke, &

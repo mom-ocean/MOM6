@@ -11,7 +11,7 @@ use MOM_domains,               only : sum_across_PEs, max_across_PEs
 use MOM_domains,               only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,               only : pass_vector
 use MOM_debugging,             only : hchksum, uvchksum
-use MOM_diabatic_driver,              only : diabatic_CS
+use MOM_diabatic_driver,       only : diabatic_CS
 use MOM_EOS,                   only : calculate_density, EOS_type, EOS_domain
 use MOM_error_handler,         only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_error_handler,         only : MOM_set_verbosity, callTree_showQuery
@@ -23,7 +23,7 @@ use MOM_MEKE_types,            only : MEKE_type
 use MOM_neutral_diffusion,     only : neutral_diffusion_init, neutral_diffusion_end
 use MOM_neutral_diffusion,     only : neutral_diffusion_CS
 use MOM_neutral_diffusion,     only : neutral_diffusion_calc_coeffs, neutral_diffusion
-use MOM_lateral_boundary_diffusion, only : lateral_boundary_diffusion_CS, lateral_boundary_diffusion_init
+use MOM_lateral_boundary_diffusion, only : lbd_CS, lateral_boundary_diffusion_init
 use MOM_lateral_boundary_diffusion, only : lateral_boundary_diffusion
 use MOM_tracer_registry,       only : tracer_registry_type, tracer_type, MOM_tracer_chksum
 use MOM_unit_scaling,          only : unit_scale_type
@@ -60,11 +60,11 @@ type, public :: tracer_hor_diff_CS ; private
   logical :: use_neutral_diffusion !< If true, use the neutral_diffusion module from within
                                    !! tracer_hor_diff.
   logical :: use_lateral_boundary_diffusion !< If true, use the lateral_boundary_diffusion module from within
-                                         !! tracer_hor_diff.
+                                   !! tracer_hor_diff.
   logical :: recalc_neutral_surf   !< If true, recalculate the neutral surfaces if CFL has been
                                    !! exceeded
   type(neutral_diffusion_CS), pointer :: neutral_diffusion_CSp => NULL() !< Control structure for neutral diffusion.
-  type(lateral_boundary_diffusion_CS), pointer :: lateral_boundary_diffusion_CSp => NULL() !< Control structure for
+  type(lbd_CS), pointer :: lateral_boundary_diffusion_CSp => NULL() !< Control structure for
                                                                                      !! lateral boundary mixing.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                    !! regulate the timing of diagnostic output.
@@ -1430,9 +1430,10 @@ end subroutine tracer_epipycnal_ML_diff
 
 
 !> Initialize lateral tracer diffusion module
-subroutine tracer_hor_diff_init(Time, G, US, param_file, diag, EOS, diabatic_CSp, CS)
+subroutine tracer_hor_diff_init(Time, G, GV, US, param_file, diag, EOS, diabatic_CSp, CS)
   type(time_type), target,    intent(in)    :: Time       !< current model time
   type(ocean_grid_type),      intent(in)    :: G          !< ocean grid structure
+  type(verticalGrid_type),    intent(in)    :: GV         !< ocean vertical grid structure
   type(unit_scale_type),      intent(in)    :: US         !< A dimensional unit scaling type
   type(diag_ctrl), target,    intent(inout) :: diag       !< diagnostic control
   type(EOS_type),  target,    intent(in)    :: EOS        !< Equation of state CS
@@ -1511,9 +1512,9 @@ subroutine tracer_hor_diff_init(Time, G, US, param_file, diag, EOS, diabatic_CSp
                                                     diabatic_CSp, CS%neutral_diffusion_CSp )
   if (CS%use_neutral_diffusion .and. CS%Diffuse_ML_interior) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
        "USE_NEUTRAL_DIFFUSION and DIFFUSE_ML_TO_INTERIOR are mutually exclusive!")
-  CS%use_lateral_boundary_diffusion = lateral_boundary_diffusion_init(Time, G, param_file, diag, diabatic_CSp, &
+  CS%use_lateral_boundary_diffusion = lateral_boundary_diffusion_init(Time, G, GV, param_file, diag, diabatic_CSp, &
                                                                 CS%lateral_boundary_diffusion_CSp)
-  if (CS%use_neutral_diffusion .and. CS%Diffuse_ML_interior) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
+  if (CS%use_lateral_boundary_diffusion .and. CS%Diffuse_ML_interior) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
        "USE_LATERAL_BOUNDARY_DIFFUSION and DIFFUSE_ML_TO_INTERIOR are mutually exclusive!")
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)

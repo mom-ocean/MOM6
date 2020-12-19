@@ -18,11 +18,11 @@ jobs:
       continue-on-error: true
 
     - name: Install packages used when generating documentation
-      run: >
-        sudo apt-get install
-        python3-sphinx python3-lxml perl
-        texlive-binaries texlive-base bibtool tex-common texlive-bibtex-extra
-        graphviz
+      run: |
+        sudo apt-get update
+        sudo apt-get install python3-sphinx python3-lxml perl
+        sudo apt-get install texlive-binaries texlive-base bibtool tex-common texlive-bibtex-extra
+        sudo apt-get install graphviz
 
     - name: Build doxygen HTML
       run: |
