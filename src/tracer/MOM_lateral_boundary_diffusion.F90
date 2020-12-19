@@ -314,13 +314,14 @@ end function harmonic_mean
 !> Returns the location of the minimum value in a 1D array
 !! between indices s and e.
 integer function  find_minimum(x, s, e)
-  integer,                intent(in) :: s, e     !< start and end indices
-  real,    dimension(e),  intent(in) :: x        !< 1D array to be checked
+  integer, intent(in) :: s              !< start index
+  integer, intent(in) :: e              !< end index
+  real, dimension(e), intent(in) :: x   !< 1D array to be checked
 
   ! local variables
-  real                               :: minimum
-  integer                            :: location
-  integer                            :: i
+  real :: minimum
+  integer :: location
+  integer :: i
 
   minimum  = x(s)   ! assume the first is the min
   location = s      ! record its position
@@ -335,13 +336,15 @@ end function  find_minimum
 
 !> Swaps the values of its two formal arguments.
 subroutine swap(a, b)
-  real, intent(inout) :: a, b !< values to be swaped
+  real, intent(inout) :: a  !< First value to be swaped
+  real, intent(inout) :: b  !< Second value to be swaped
 
   ! local variables
-  real                :: tmp
+  real :: tmp
+
   tmp = a
-  a    = b
-  b    = tmp
+  a = b
+  b = tmp
 end subroutine swap
 
 !> Receives a 1D array x and sorts it into ascending order.
@@ -461,11 +464,13 @@ end subroutine merge_interfaces
 !> Calculates the maximum flux that can leave a cell and uses that to apply a
 !! limiter to F_layer.
 subroutine flux_limiter(F_layer, area_L, area_R, phi_L, phi_R, h_L, h_R)
-  real,  intent(inout) :: F_layer        !< Tracer flux to be checked          [H L2 conc ~> m3 conc]
-  real,  intent(in   ) :: area_L, area_R !< Area of left and right cells       [L2 ~> m2]
-  real,  intent(in   ) :: h_L, h_R       !< Thickness of left and right cells  [H ~> m or kg m-2]
-  real,  intent(in   ) :: phi_L, phi_R   !< Tracer concentration in the left and right cells
-                                         !!                                    [conc]
+  real, intent(inout) :: F_layer !< Tracer flux to be checked [H L2 conc ~> m3 conc]
+  real, intent(in) :: area_L     !< Area of left cell [L2 ~> m2]
+  real, intent(in) :: area_R     !< Area of right cell [L2 ~> m2]
+  real, intent(in) :: h_L        !< Thickness of left cell [H ~> m or kg m-2]
+  real, intent(in) :: h_R        !< Thickness of right cell [H ~> m or kg m-2]
+  real, intent(in) :: phi_L      !< Tracer concentration in the left cell [conc]
+  real, intent(in) :: phi_R      !< Tracer concentration in the right cell [conc]
 
   ! local variables
   real :: F_max !< maximum flux allowed
