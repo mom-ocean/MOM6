@@ -1406,14 +1406,13 @@ subroutine log_param_real_array(CS, modulename, varname, value, desc, &
   logical,          optional, intent(in) :: like_default !< If present and true, log this parameter as
                                          !! though it has the default value, even if there is no default.
 
-  character(len=1320) :: mesg
+  character(len=:), allocatable :: mesg
   character(len=240) :: myunits
 
  !write(mesg, '("  ",a," ",a,": ",ES19.12,99(",",ES19.12))') &
  !write(mesg, '("  ",a," ",a,": ",G,99(",",G))') &
  !  trim(modulename), trim(varname), value
-  write(mesg, '("  ",a," ",a,": ",a)') &
-    trim(modulename), trim(varname), trim(left_reals(value))
+  mesg = "  " // trim(modulename) // " " // trim(varname) // ": " // trim(left_reals(value))
   if (is_root_pe()) then
     if (CS%log_open) write(CS%stdlog,'(a)') trim(mesg)
     if (CS%log_to_stdout) write(CS%stdout,'(a)') trim(mesg)

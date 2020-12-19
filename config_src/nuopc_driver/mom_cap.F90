@@ -353,7 +353,7 @@ subroutine InitializeP0(gcomp, importState, exportState, clock, rc)
        file=__FILE__)) &
        return
   if (isPresent .and. isSet) then
-     read(value, '(i)', iostat=iostat) scalar_field_count
+     read(value, *, iostat=iostat) scalar_field_count
      if (iostat /= 0) then
        call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
             msg=subname//": ScalarFieldCount not an integer: "//trim(value), &
@@ -376,7 +376,7 @@ subroutine InitializeP0(gcomp, importState, exportState, clock, rc)
        file=__FILE__)) &
        return
   if (isPresent .and. isSet) then
-     read(value, '(i)', iostat=iostat) scalar_field_idx_grid_nx
+     read(value, *, iostat=iostat) scalar_field_idx_grid_nx
      if (iostat /= 0) then
         call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
              msg=subname//": ScalarFieldIdxGridNX not an integer: "//trim(value), &
@@ -399,7 +399,7 @@ subroutine InitializeP0(gcomp, importState, exportState, clock, rc)
        file=__FILE__)) &
        return
   if (isPresent .and. isSet) then
-     read(value, '(i)', iostat=iostat) scalar_field_idx_grid_ny
+     read(value, *, iostat=iostat) scalar_field_idx_grid_ny
      if (iostat /= 0) then
         call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
              msg=subname//": ScalarFieldIdxGridNY not an integer: "//trim(value), &
@@ -1434,14 +1434,14 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   !---------------------------------
 
   if (len_trim(scalar_field_name) > 0) then
-     call State_SetScalar(dble(nxg),scalar_field_idx_grid_nx, exportState, localPet, &
+     call State_SetScalar(real(nxg,ESMF_KIND_R8),scalar_field_idx_grid_nx, exportState, localPet, &
          scalar_field_name, scalar_field_count, rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
          return
 
-     call State_SetScalar(dble(nyg),scalar_field_idx_grid_ny, exportState, localPet, &
+     call State_SetScalar(real(nyg,ESMF_KIND_R8),scalar_field_idx_grid_ny, exportState, localPet, &
           scalar_field_name, scalar_field_count, rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
