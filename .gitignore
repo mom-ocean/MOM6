@@ -4,13 +4,7 @@
 html
 
 
-# Build output
-*.o
-*.mod
-MOM6
-
-
-# Autoconf
+# Autoconf output
 aclocal.m4
 autom4te.cache/
 config.log

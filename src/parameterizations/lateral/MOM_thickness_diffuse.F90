@@ -2052,7 +2052,6 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
           'm2 s-1', conversion=US%L_to_m**2*US%s_to_T, &
           cmor_field_name='diftrblo', &
           cmor_long_name='Ocean Tracer Diffusivity due to Parameterized Mesoscale Advection', &
-          cmor_units='m2 s-1', &
           cmor_standard_name='ocean_tracer_diffusivity_due_to_parameterized_mesoscale_advection')
 
   CS%id_KH_u1 = register_diag_field('ocean_model', 'KHTH_u1', diag%axesCu1, Time,         &
@@ -2204,7 +2203,7 @@ end subroutine thickness_diffuse_end
 !! Ocean Modelling, 32, 143-156. http://doi.org/10.1016/j.ocemod.2010.01.004
 !!
 !! Viscbeck, M., J.C. Marshall, H. Jones, 1996:
-!! On he dynamics of convective "chimneys" in the ocean. J. Phys. Oceangr., 26, 1721-1734.
+!! Dynamics of isolated convective regions in the ocean. J. Phys. Oceangr., 26, 1721-1734.
 !! http://dx.doi.org/10.1175/1520-0485(1996)026%3C1721:DOICRI%3E2.0.CO;2
 
 end module MOM_thickness_diffuse

@@ -826,12 +826,15 @@ subroutine reset_face_lengths_list(G, param_file, US)
   character(len=120) :: line
   character(len=200) :: filename, chan_file, inputdir, mesg ! Strings for file/path
   character(len=40)  :: mdl = "reset_face_lengths_list" ! This subroutine's name.
-  real, pointer, dimension(:,:) :: &
-    u_lat => NULL(), u_lon => NULL(), v_lat => NULL(), v_lon => NULL()
-  real, pointer, dimension(:) :: &
-    u_width => NULL(), v_width => NULL()
-  real    :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
-  real    :: L_to_m  ! A unit conversion factor [m L-1 ~> nondim]
+  real, allocatable, dimension(:,:) :: &
+    u_lat, u_lon, v_lat, v_lon ! The latitude and longitude ranges of faces [degrees]
+  real, allocatable, dimension(:) :: &
+    u_width, v_width      ! The open width of faces [m]
+  integer, allocatable, dimension(:) :: &
+    u_line_no, v_line_no, &  ! The line numbers in lines of u- and v-face lines
+    u_line_used, v_line_used ! The number of times each u- and v-line is used.
+  real    :: m_to_L       ! A unit conversion factor [L m-1 ~> nondim]
+  real    :: L_to_m       ! A unit conversion factor [m L-1 ~> nondim]
   real    :: lat, lon     ! The latitude and longitude of a point.
   real    :: len_lon      ! The periodic range of longitudes, usually 360 degrees.
   real    :: len_lat      ! The range of latitudes, usually 180 degrees.
@@ -840,6 +843,8 @@ subroutine reset_face_lengths_list(G, param_file, US)
                           ! +/- 360 degrees from the specified range of values.
   logical :: found_u, found_v
   logical :: unit_in_use
+  logical :: fatal_unused_lengths
+  integer :: unused
   integer :: ios, iounit, isu, isv
   integer :: last, num_lines, nl_read, ln, npt, u_pt, v_pt
   integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -860,6 +865,10 @@ subroutine reset_face_lengths_list(G, param_file, US)
   call get_param(param_file, mdl, "CHANNEL_LIST_360_LON_CHECK", check_360, &
                  "If true, the channel configuration list works for any "//&
                  "longitudes in the range of -360 to 360.", default=.true.)
+  call get_param(param_file, mdl, "FATAL_UNUSED_CHANNEL_WIDTHS", fatal_unused_lengths, &
+                 "If true, trigger a fatal error if there are any channel widths in "//&
+                 "CHANNEL_LIST_FILE that do not cause any open face widths to change.", &
+                 default=.false.)
 
   if (is_root_pe()) then
     ! Open the input file.
@@ -889,16 +898,19 @@ subroutine reset_face_lengths_list(G, param_file, US)
   call broadcast(num_lines, root_PE())
   u_pt = 0 ; v_pt = 0
   if (num_lines > 0) then
-    allocate (lines(num_lines))
-    if (num_lines > 0) then
-      allocate(u_lat(2,num_lines)) ; u_lat(:,:) = -1e34
-      allocate(u_lon(2,num_lines)) ; u_lon(:,:) = -1e34
-      allocate(u_width(num_lines)) ; u_width(:) = -1e34
+    allocate(lines(num_lines))
 
-      allocate(v_lat(2,num_lines)) ; v_lat(:,:) = -1e34
-      allocate(v_lon(2,num_lines)) ; v_lon(:,:) = -1e34
-      allocate(v_width(num_lines)) ; v_width(:) = -1e34
-    endif
+    allocate(u_lat(2,num_lines)) ; u_lat(:,:) = -1e34
+    allocate(u_lon(2,num_lines)) ; u_lon(:,:) = -1e34
+    allocate(u_width(num_lines)) ; u_width(:) = -1e34
+    allocate(u_line_used(num_lines)) ; u_line_used(:) = 0
+    allocate(u_line_no(num_lines)) ; u_line_no(:) = 0
+
+    allocate(v_lat(2,num_lines)) ; v_lat(:,:) = -1e34
+    allocate(v_lon(2,num_lines)) ; v_lon(:,:) = -1e34
+    allocate(v_width(num_lines)) ; v_width(:) = -1e34
+    allocate(v_line_used(num_lines)) ; v_line_used(:) = 0
+    allocate(v_line_no(num_lines)) ; v_line_no(:) = 0
 
     ! Actually read the lines.
     if (is_root_pe()) then
@@ -924,6 +936,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
       if (found_u) then
         u_pt = u_pt + 1
         read(line(isu+8:),*) u_lon(1:2,u_pt), u_lat(1:2,u_pt), u_width(u_pt)
+        u_line_no(u_pt) = ln
         if (is_root_PE()) then
           if (check_360) then
             if ((abs(u_lon(1,u_pt)) > len_lon) .or. (abs(u_lon(2,u_pt)) > len_lon)) &
@@ -951,6 +964,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
       elseif (found_v) then
         v_pt = v_pt + 1
         read(line(isv+8:),*) v_lon(1:2,v_pt), v_lat(1:2,v_pt), v_width(v_pt)
+        v_line_no(v_pt) = ln
         if (is_root_PE()) then
           if (check_360) then
             if ((abs(v_lon(1,v_pt)) > len_lon) .or. (abs(v_lon(2,v_pt)) > len_lon)) &
@@ -978,7 +992,6 @@ subroutine reset_face_lengths_list(G, param_file, US)
       endif
     enddo
 
-    deallocate(lines)
   endif
 
   do j=jsd,jed ; do I=IsdB,IedB
@@ -998,6 +1011,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
             write(stdout,'(A,2F8.2,A,4F8.2,A)') "read_face_lengths_list : G%mask2dCu=0 at ",lat,lon," (",&
                 u_lat(1,npt), u_lat(2,npt), u_lon(1,npt), u_lon(2,npt),") so grid metric is unmodified."
           else
+            u_line_used(npt) = u_line_used(npt) + 1
             write(stdout,'(A,2F8.2,A,4F8.2,A5,F9.2,A1)') &
                   "read_face_lengths_list : Modifying dy_Cu gridpoint at ",lat,lon," (",&
                   u_lat(1,npt), u_lat(2,npt), u_lon(1,npt), u_lon(2,npt),") to ",L_to_m*G%dy_Cu(I,j),"m"
@@ -1027,6 +1041,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
             write(stdout,'(A,2F8.2,A,4F8.2,A)') "read_face_lengths_list : G%mask2dCv=0 at ",lat,lon," (",&
                   v_lat(1,npt), v_lat(2,npt), v_lon(1,npt), v_lon(2,npt),") so grid metric is unmodified."
           else
+            v_line_used(npt) = v_line_used(npt) + 1
             write(stdout,'(A,2F8.2,A,4F8.2,A5,F9.2,A1)') &
                   "read_face_lengths_list : Modifying dx_Cv gridpoint at ",lat,lon," (",&
                   v_lat(1,npt), v_lat(2,npt), v_lon(1,npt), v_lon(2,npt),") to ",L_to_m*G%dx_Cv(I,j),"m"
@@ -1040,7 +1055,29 @@ subroutine reset_face_lengths_list(G, param_file, US)
     if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / (G%areaCv(i,J))
   enddo ; enddo
 
+  ! Verify that all channel widths have been used
+  unused = 0
+  if (u_pt > 0) call sum_across_PEs(u_line_used, u_pt)
+  if (v_pt > 0) call sum_across_PEs(v_line_used, v_pt)
+  if (is_root_PE()) then
+    unused = 0
+    do npt=1,u_pt ; if (u_line_used(npt) == 0) then
+      call MOM_error(WARNING, "reset_face_lengths_list unused u-face line: "//&
+                     trim(lines(u_line_no(npt))) )
+      unused = unused + 1
+    endif ; enddo
+    do npt=1,v_pt ; if (v_line_used(npt) == 0) then
+      call MOM_error(WARNING, "reset_face_lengths_list unused v-face line: "//&
+                     trim(lines(v_line_no(npt))) )
+      unused = unused + 1
+    endif ; enddo
+    if (fatal_unused_lengths .and. (unused > 0)) call MOM_error(FATAL, &
+      "reset_face_lengths_list causing MOM6 abort due to unused face length lines.")
+  endif
+
   if (num_lines > 0) then
+    deallocate(lines)
+    deallocate(u_line_used, v_line_used, u_line_no, v_line_no)
     deallocate(u_lat) ; deallocate(u_lon) ; deallocate(u_width)
     deallocate(v_lat) ; deallocate(v_lon) ; deallocate(v_width)
   endif

@@ -1,0 +1,10 @@
+/*! \page Timestep_Overview Timestepping Overview
+
+In MOM6, it is common to have at least four different timesteps: the barotropic
+timestep, the baroclinic (momentum dynamics) timestep, the tracer timestep, and the
+remapping interval. There can also be a forcing timestep on which model coupling occurs.
+
+\image html timesteps_4.png "Graphic representation of the various timesteps used by MOM6."
+\image latex timesteps_4.png "Graphic representation of the various timesteps used by MOM6."
+
+*/

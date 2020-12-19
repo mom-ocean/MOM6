@@ -196,8 +196,9 @@ end subroutine calculate_CVMix_shear
 
 
 !> Initialized the CVMix internal shear mixing routine.
+!! \todo Does this note require emphasis?
 !! \note *This is where we test to make sure multiple internal shear
-!!       mixing routines (including JHL) are not enabled at the same time.
+!!       mixing routines (including JHL) are not enabled at the same time.*
 !! (returns) CVMix_shear_init - True if module is to be used, False otherwise
 logical function CVMix_shear_init(Time, G, GV, US, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time !< The current time.

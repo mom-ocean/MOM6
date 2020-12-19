@@ -27,7 +27,6 @@ implicit none ; private
 public bkgnd_mixing_init
 public bkgnd_mixing_end
 public calculate_bkgnd_mixing
-public sfc_bkgnd_mixing
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -35,7 +34,7 @@ public sfc_bkgnd_mixing
 ! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
 !> Control structure including parameters for this module.
-type, public :: bkgnd_mixing_cs  ! TODO: private
+type, public :: bkgnd_mixing_cs ; private
 
   ! Parameters
   real    :: Bryan_Lewis_c1         !< The vertical diffusivity values for  Bryan-Lewis profile
@@ -95,16 +94,12 @@ type, public :: bkgnd_mixing_cs  ! TODO: private
              !! against gravity is uniformly distributed throughout the column. Whereas, kd=kd_0*e,
              !! as in the original version, concentrates buoyancy work in regions of strong stratification.
   logical :: bulkmixedlayer !< If true, a refined bulk mixed layer scheme is used
+  logical :: Kd_via_Kdml_bug !< If true and KDML /= KD and a number of other higher precedence
+                   !! options are not used, the background diffusivity is set incorrectly using a
+                   !! bug that was introduced in March, 2018.
   logical :: debug !< If true, turn on debugging in this module
-  ! Daignostic handles and pointers
+  ! Diagnostic handles and pointers
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that regulates diagnostic output
-  integer :: id_kd_bkgnd = -1 !< Diagnotic IDs
-  integer :: id_kv_bkgnd = -1 !< Diagnostic IDs
-
-  real, allocatable, dimension(:,:)   ::  Kd_sfc !< surface value of the diffusivity [Z2 T-1 ~> m2 s-1]
-  ! Diagnostics arrays
-  real, allocatable, dimension(:,:,:) :: kd_bkgnd !< Background diffusivity [Z2 T-1 ~> m2 s-1]
-  real, allocatable, dimension(:,:,:) :: kv_bkgnd !< Background viscosity  [Z2 s-1 ~> m2 s-1]
 
   character(len=40)  :: bkgnd_scheme_str = "none" !< Background scheme identifier
 
@@ -160,17 +155,15 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
 
   ! The following is needed to set one of the choices of vertical background mixing
 
-  ! BULKMIXEDLAYER is not always defined (e.g., CM2G63L), so the following by pass
+  ! BULKMIXEDLAYER is not always defined (e.g., CM2G63L), so the following line by passes
   ! the need to include BULKMIXEDLAYER in MOM_input
   CS%bulkmixedlayer = (GV%nkml > 0)
   if (CS%bulkmixedlayer) then
     ! Check that Kdml is not set when using bulk mixed layer
     call get_param(param_file, mdl, "KDML", CS%Kdml, default=-1.)
     if (CS%Kdml>0.) call MOM_error(FATAL, &
-                 "bkgnd_mixing_init: KDML cannot be set when using"// &
-                 "bulk mixed layer.")
-    CS%Kdml = CS%Kd ! This is not used with a bulk mixed layer, but also
-                    ! cannot be a NaN.
+                 "bkgnd_mixing_init: KDML cannot be set when using bulk mixed layer.")
+    CS%Kdml = CS%Kd ! This is not used with a bulk mixed layer, but also cannot be a NaN.
   else
     call get_param(param_file, mdl, "KDML", CS%Kdml, &
                  "If BULKMIXEDLAYER is false, KDML is the elevated "//&
@@ -244,16 +237,13 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
                  units="nondim", default=1.0)
 
   if (CS%Bryan_Lewis_diffusivity .or. CS%horiz_varying_background) then
-
     prandtl_bkgnd_comp = CS%prandtl_bkgnd
-    if (CS%Kd /= 0.0) prandtl_bkgnd_comp = Kv/CS%Kd
+    if (CS%Kd /= 0.0) prandtl_bkgnd_comp = Kv / CS%Kd
 
     if ( abs(CS%prandtl_bkgnd - prandtl_bkgnd_comp)>1.e-14) then
-      call MOM_error(FATAL,"set_diffusivity_init: The provided KD, KV,"//&
-                           "and PRANDTL_BKGND values are incompatible. The following "//&
-                           "must hold: KD*PRANDTL_BKGND==KV")
+      call MOM_error(FATAL, "bkgnd_mixing_init: The provided KD, KV and PRANDTL_BKGND values "//&
+                            "are incompatible. The following must hold: KD*PRANDTL_BKGND==KV")
     endif
-
   endif
 
   call get_param(param_file, mdl, "HENYEY_IGW_BACKGROUND", CS%Henyey_IGW_background, &
@@ -271,7 +261,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
 
   if (CS%Kd>0.0 .and. (trim(CS%bkgnd_scheme_str)=="BRYAN_LEWIS_DIFFUSIVITY" .or.&
                           trim(CS%bkgnd_scheme_str)=="HORIZ_VARYING_BACKGROUND" )) then
-    call MOM_error(WARNING, "set_diffusivity_init: a nonzero constant background "//&
+    call MOM_error(WARNING, "bkgnd_mixing_init: a nonzero constant background "//&
          "diffusivity (KD) is specified along with "//trim(CS%bkgnd_scheme_str))
   endif
 
@@ -285,8 +275,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
                  default=7.2921e-5, scale=US%T_to_s)
   endif
 
-  call get_param(param_file, mdl, "KD_TANH_LAT_FN", &
-                  CS%Kd_tanh_lat_fn, &
+  call get_param(param_file, mdl, "KD_TANH_LAT_FN", CS%Kd_tanh_lat_fn, &
                  "If true, use a tanh dependence of Kd_sfc on latitude, "//&
                  "like CM2.1/CM2M.  There is no physical justification "//&
                  "for this form, and it can not be used with "//&
@@ -301,99 +290,46 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
   if (CS%Henyey_IGW_background .and. CS%Kd_tanh_lat_fn) call MOM_error(FATAL, &
     "MOM_bkgnd_mixing: KD_TANH_LAT_FN can not be used with HENYEY_IGW_BACKGROUND.")
 
+  CS%Kd_via_Kdml_bug = .false.
+  if ((CS%Kd /= CS%Kdml) .and. .not.(CS%Kd_tanh_lat_fn .or. CS%bulkmixedlayer .or. &
+                                     CS%Henyey_IGW_background .or. CS%Henyey_IGW_background_new .or. &
+                                     CS%horiz_varying_background .or. CS%Bryan_Lewis_diffusivity)) then
+    call get_param(param_file, mdl, "KD_BACKGROUND_VIA_KDML_BUG", CS%Kd_via_Kdml_bug, &
+                 "If true and KDML /= KD and several other conditions apply, the background "//&
+                 "diffusivity is set incorrectly using a bug that was introduced in March, 2018.", &
+                 default=.true.)  ! The default should be changed to false and this parameter obsoleted.
+  endif
+
 !  call closeParameterBlock(param_file)
-
-  ! allocate arrays and set them to zero
-  allocate(CS%Kd_bkgnd(SZI_(G), SZJ_(G), SZK_(G)+1)); CS%kd_bkgnd(:,:,:) = 0.
-  allocate(CS%kv_bkgnd(SZI_(G), SZJ_(G), SZK_(G)+1)); CS%kv_bkgnd(:,:,:) = 0.
-  allocate(CS%Kd_sfc(SZI_(G), SZJ_(G))); CS%Kd_sfc(:,:) = 0.
-
-  ! Register diagnostics
-  CS%diag => diag
-  CS%id_kd_bkgnd = register_diag_field('ocean_model', 'Kd_bkgnd', diag%axesTi, Time, &
-      'Background diffusivity added by MOM_bkgnd_mixing module', 'm2/s', conversion=US%Z2_T_to_m2_s)
-  CS%id_kv_bkgnd = register_diag_field('ocean_model', 'Kv_bkgnd', diag%axesTi, Time, &
-      'Background viscosity added by MOM_bkgnd_mixing module', 'm2/s', conversion=US%Z2_T_to_m2_s)
 
 end subroutine bkgnd_mixing_init
 
-!> Get surface vertical background diffusivities/viscosities.
-subroutine sfc_bkgnd_mixing(G, US, CS)
-
-  type(ocean_grid_type),          intent(in)    :: G  !< Grid structure.
-  type(unit_scale_type),          intent(in)    :: US !< A dimensional unit scaling type
-  type(bkgnd_mixing_cs), pointer, intent(inout) :: CS !< The control structure returned by
-                                                      !! a previous call to bkgnd_mixing_init.
-  ! local variables
-  real :: I_x30  !< 2/acos(2) = 1/(sin(30 deg) * acosh(1/sin(30 deg)))
-  real :: deg_to_rad !< factor converting degrees to radians, pi/180.
-  real :: abs_sin    !< absolute value of sine of latitude [nondim]
-  real :: epsilon
-  integer :: i, j, k, is, ie, js, je
-
-  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
-
-  ! set some parameters
-  deg_to_rad = atan(1.0)/45.0 ! = PI/180
-  epsilon = 1.e-10
-
-
-  if (.not. (CS%Bryan_Lewis_diffusivity .or. CS%horiz_varying_background)) then
-!$OMP parallel do default(none) shared(is,ie,js,je,CS)
-    do j=js,je ; do i=is,ie
-      CS%Kd_sfc(i,j) = CS%Kd
-    enddo ; enddo
-  endif
-
-  if (CS%Henyey_IGW_background) then
-    I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
-!$OMP parallel do default(none) &
-!$OMP shared(is,ie,js,je,CS,G,deg_to_rad,epsilon,I_x30) &
-!$OMP private(abs_sin)
-    do j=js,je ; do i=is,ie
-      abs_sin = abs(sin(G%geoLatT(i,j)*deg_to_rad))
-      CS%Kd_sfc(i,j) = max(CS%Kd_min, CS%Kd_sfc(i,j) * &
-           ((abs_sin * invcosh(CS%N0_2Omega/max(epsilon,abs_sin))) * I_x30) )
-    enddo ; enddo
-  elseif (CS%Kd_tanh_lat_fn) then
-!$OMP parallel do default(none) shared(is,ie,js,je,CS,G)
-    do j=js,je ; do i=is,ie
-      !   The transition latitude and latitude range are hard-scaled here, since
-      ! this is not really intended for wide-spread use, but rather for
-      ! comparison with CM2M / CM2.1 settings.
-      CS%Kd_sfc(i,j) = max(CS%Kd_min, CS%Kd_sfc(i,j) * (1.0 + &
-          CS%Kd_tanh_lat_scale * 0.5*tanh((abs(G%geoLatT(i,j)) - 35.0)/5.0) ))
-    enddo ; enddo
-  endif
-
-  if (CS%debug) call hchksum(CS%Kd_sfc,"After sfc_bkgnd_mixing: Kd_sfc",G%HI,haloshift=0, scale=US%Z2_T_to_m2_s)
-
-end subroutine sfc_bkgnd_mixing
-
-
 !> Calculates the vertical background diffusivities/viscosities
-subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kv, j, G, GV, US, CS)
+subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G, GV, US, CS)
 
-  type(ocean_grid_type),                    intent(in)    :: G   !< Grid structure.
-  type(verticalGrid_type),                  intent(in)    :: GV  !< Vertical grid structure.
-  type(unit_scale_type),                    intent(in)    :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h   !< Layer thickness [H ~> m or kg m-2].
-  type(thermo_var_ptrs),                    intent(in)    :: tv  !< Thermodynamics structure.
-  real, dimension(SZI_(G),SZK_(G)),         intent(in)    :: N2_lay !< squared buoyancy frequency associated
-                                                                 !! with layers [T-2 ~> s-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Kd_lay !< Diapycnal diffusivity of each layer
-                                                                 !! [Z2 T-1 ~> m2 s-1].
-  real, dimension(:,:,:),                   pointer       :: Kv  !< The "slow" vertical viscosity at each interface
-                                                                 !! (not layer!) [Z2 T-1 ~> m2 s-1]
-  integer,                                  intent(in)    :: j   !< Meridional grid index
-  type(bkgnd_mixing_cs),                    pointer       :: CS  !< The control structure returned by
-                                                                 !! a previous call to bkgnd_mixing_init.
+  type(ocean_grid_type),                     intent(in)    :: G   !< Grid structure.
+  type(verticalGrid_type),                   intent(in)    :: GV  !< Vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h   !< Layer thickness [H ~> m or kg m-2].
+  type(thermo_var_ptrs),                     intent(in)    :: tv  !< Thermodynamics structure.
+  real, dimension(SZI_(G),SZK_(GV)),         intent(in)    :: N2_lay !< squared buoyancy frequency associated
+                                                                  !! with layers [T-2 ~> s-2]
+  real, dimension(SZI_(G),SZK_(GV)),         intent(out)   :: Kd_lay !< The background diapycnal diffusivity
+                                                                  !! of each layer [Z2 T-1 ~> m2 s-1].
+  real, dimension(SZI_(G),SZK_(GV)+1),       intent(out)   :: Kd_int !< The background diapycnal diffusivity
+                                                                  !! of each interface [Z2 T-1 ~> m2 s-1].
+  real, dimension(SZI_(G),SZK_(GV)+1),       intent(out)   :: Kv_bkgnd !< The background vertical viscosity at
+                                                                  !! each interface [Z2 T-1 ~> m2 s-1]
+  integer,                                   intent(in)    :: j   !< Meridional grid index
+  type(unit_scale_type),                     intent(in)    :: US  !< A dimensional unit scaling type
+  type(bkgnd_mixing_cs),                     pointer       :: CS  !< The control structure returned by
+                                                                  !! a previous call to bkgnd_mixing_init.
 
   ! local variables
-  real, dimension(SZK_(G)+1) :: depth_int  !< distance from surface of the interfaces [m]
-  real, dimension(SZK_(G)+1) :: Kd_col     !< Diffusivities at the interfaces [m2 s-1]
-  real, dimension(SZK_(G)+1) :: Kv_col     !< Viscosities at the interfaces [m2 s-1]
-  real, dimension(SZI_(G)) :: depth        !< distance from surface of an interface [Z ~> m]
+  real, dimension(SZK_(GV)+1) :: depth_int  !< Distance from surface of the interfaces [m]
+  real, dimension(SZK_(GV)+1) :: Kd_col     !< Diffusivities at the interfaces [m2 s-1]
+  real, dimension(SZK_(GV)+1) :: Kv_col     !< Viscosities at the interfaces [m2 s-1]
+  real, dimension(SZI_(G))    :: Kd_sfc     !< Surface value of the diffusivity [Z2 T-1 ~> m2 s-1]
+  real, dimension(SZI_(G))    :: depth      !< Distance from surface of an interface [Z ~> m]
   real :: depth_c    !< depth of the center of a layer [Z ~> m]
   real :: I_Hmix     !< inverse of fixed mixed layer thickness [Z-1 ~> m-1]
   real :: I_2Omega   !< 1/(2 Omega) [T ~> s]
@@ -401,8 +337,8 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kv, j, G, GV, US, CS)
   real :: N02_N2     !  The ratio a reference stratification to the actual stratification [nondim]
   real :: I_x30      !< 2/acos(2) = 1/(sin(30 deg) * acosh(1/sin(30 deg)))
   real :: deg_to_rad !< factor converting degrees to radians, pi/180.
-  real :: abs_sin    !< absolute value of sine of latitude [nondim]
-  real :: epsilon    ! The minimum value of the sine of latitude [nondim]
+  real :: abs_sinlat !< absolute value of sine of latitude [nondim]
+  real :: min_sinlat ! The minimum value of the sine of latitude [nondim]
   real :: bckgrnd_vdc_psin !< PSI diffusivity in northern hemisphere [Z2 T-1 ~> m2 s-1]
   real :: bckgrnd_vdc_psis !< PSI diffusivity in southern hemisphere [Z2 T-1 ~> m2 s-1]
   integer :: i, k, is, ie, js, je, nz
@@ -411,7 +347,11 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kv, j, G, GV, US, CS)
 
   ! set some parameters
   deg_to_rad = atan(1.0)/45.0 ! = PI/180
-  epsilon = 1.e-10
+  min_sinlat = 1.e-10
+
+  ! Start with a constant value that may be replaced below.
+  Kd_lay(:,:) = CS%Kd
+  Kv_bkgnd(:,:) = 0.0
 
   ! Set up the background diffusivity.
   if (CS%Bryan_Lewis_diffusivity) then
@@ -435,112 +375,145 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kv, j, G, GV, US, CS)
 
       ! Update Kd and Kv.
       do K=1,nz+1
-        CS%Kv_bkgnd(i,j,K) = US%m2_s_to_Z2_T*Kv_col(K)
-        CS%Kd_bkgnd(i,j,K) = US%m2_s_to_Z2_T*Kd_col(K)
+        Kv_bkgnd(i,K) = US%m2_s_to_Z2_T*Kv_col(K)
+        Kd_int(i,K) = US%m2_s_to_Z2_T*Kd_col(K)
       enddo
       do k=1,nz
-        Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5 * US%m2_s_to_Z2_T * (Kd_col(K) + Kd_col(K+1))
+        Kd_lay(i,k) = Kd_lay(i,k) + 0.5 * US%m2_s_to_Z2_T * (Kd_col(K) + Kd_col(K+1))
       enddo
     enddo ! i loop
-
-  elseif ((.not. CS%Bryan_Lewis_diffusivity) .and. (.not.CS%bulkmixedlayer) .and. &
-          (.not. CS%horiz_varying_background) .and. (CS%Kd /= CS%Kdml)) then
-    I_Hmix = 1.0 / (CS%Hmix + GV%H_subroundoff*GV%H_to_Z)
-    do i=is,ie ; depth(i) = 0.0 ; enddo
-    do k=1,nz ; do i=is,ie
-      depth_c = depth(i) + 0.5*GV%H_to_Z*h(i,j,k)
-      if (depth_c <= CS%Hmix) then ; CS%Kd_bkgnd(i,j,k) = CS%Kdml
-      elseif (depth_c >= 2.0*CS%Hmix) then ; CS%Kd_bkgnd(i,j,k) = CS%Kd_sfc(i,j)
-      else
-        Kd_lay(i,j,k) = ((CS%Kd_sfc(i,j) - CS%Kdml) * I_Hmix) * depth_c + &
-                        (2.0*CS%Kdml - CS%Kd_sfc(i,j))
-      endif
-
-      depth(i) = depth(i) + GV%H_to_Z*h(i,j,k)
-    enddo ; enddo
 
   elseif (CS%horiz_varying_background) then
     !### Note that there are lots of hard-coded parameters (mostly latitudes and longitudes) here.
     do i=is,ie
       bckgrnd_vdc_psis = CS%bckgrnd_vdc_psim * exp(-(0.4*(G%geoLatT(i,j)+28.9))**2)
       bckgrnd_vdc_psin = CS%bckgrnd_vdc_psim * exp(-(0.4*(G%geoLatT(i,j)-28.9))**2)
-      CS%Kd_bkgnd(i,j,:) = (CS%bckgrnd_vdc_eq + bckgrnd_vdc_psin) + bckgrnd_vdc_psis
+      Kd_int(i,1) = (CS%bckgrnd_vdc_eq + bckgrnd_vdc_psin) + bckgrnd_vdc_psis
 
       if (G%geoLatT(i,j) < -10.0) then
-        CS%Kd_bkgnd(i,j,:) = CS%Kd_bkgnd(i,j,:) + CS%bckgrnd_vdc1
+        Kd_int(i,1) = Kd_int(i,1) + CS%bckgrnd_vdc1
       elseif (G%geoLatT(i,j) <= 10.0) then
-        CS%Kd_bkgnd(i,j,:) = CS%Kd_bkgnd(i,j,:) + CS%bckgrnd_vdc1 * (G%geoLatT(i,j)/10.0)**2
+        Kd_int(i,1) = Kd_int(i,1) + CS%bckgrnd_vdc1 * (G%geoLatT(i,j)/10.0)**2
       else
-        CS%Kd_bkgnd(i,j,:) = CS%Kd_bkgnd(i,j,:) + CS%bckgrnd_vdc1
+        Kd_int(i,1) = Kd_int(i,1) + CS%bckgrnd_vdc1
       endif
 
       ! North Banda Sea
       if ( (G%geoLatT(i,j) < -1.0)  .and. (G%geoLatT(i,j) > -4.0) .and. &
            ( mod(G%geoLonT(i,j)+360.0,360.0) > 103.0) .and. &
            ( mod(G%geoLonT(i,j)+360.0,360.0) < 134.0) ) then
-        CS%Kd_bkgnd(i,j,:) = CS%bckgrnd_vdc_Banda
+        Kd_int(i,1) = CS%bckgrnd_vdc_Banda
       endif
 
       ! Middle Banda Sea
       if ( (G%geoLatT(i,j) <= -4.0) .and. (G%geoLatT(i,j) > -7.0) .and. &
            ( mod(G%geoLonT(i,j)+360.0,360.0) > 106.0) .and. &
            ( mod(G%geoLonT(i,j)+360.0,360.0) < 140.0) ) then
-        CS%Kd_bkgnd(i,j,:) = CS%bckgrnd_vdc_Banda
+        Kd_int(i,1) = CS%bckgrnd_vdc_Banda
       endif
 
       ! South Banda Sea
       if ( (G%geoLatT(i,j) <= -7.0) .and. (G%geoLatT(i,j) > -8.3) .and. &
            ( mod(G%geoLonT(i,j)+360.0,360.0) > 111.0) .and. &
            ( mod(G%geoLonT(i,j)+360.0,360.0) < 142.0) ) then
-        CS%Kd_bkgnd(i,j,:) = CS%bckgrnd_vdc_Banda
+        Kd_int(i,1) = CS%bckgrnd_vdc_Banda
       endif
 
-      ! Compute kv_bkgnd
-      CS%kv_bkgnd(i,j,:) = CS%Kd_bkgnd(i,j,:) * CS%prandtl_bkgnd
-
-      ! Update Kd (uniform profile; no interpolation needed)
-      Kd_lay(i,j,:) = CS%Kd_bkgnd(i,j,1)
-
     enddo
+    ! Update interior values of Kd and Kv (uniform profile; no interpolation needed)
+    do K=1,nz+1 ; do i=is,ie
+      Kd_int(i,K) = Kd_int(i,1)
+      Kv_bkgnd(i,K) = Kd_int(i,1) * CS%prandtl_bkgnd
+    enddo ; enddo
+    do k=1,nz ; do i=is,ie
+      Kd_lay(i,k) = Kd_int(i,1)
+    enddo ; enddo
 
   elseif (CS%Henyey_IGW_background_new) then
     I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
     I_2Omega = 0.5 / CS%omega
     do k=1,nz ; do i=is,ie
-      abs_sin = max(epsilon, abs(sin(G%geoLatT(i,j)*deg_to_rad)))
-      N_2Omega = max(abs_sin, sqrt(N2_lay(i,k))*I_2Omega)
+      abs_sinlat = max(min_sinlat, abs(sin(G%geoLatT(i,j)*deg_to_rad)))
+      N_2Omega = max(abs_sinlat, sqrt(N2_lay(i,k))*I_2Omega)
       N02_N2 = (CS%N0_2Omega/N_2Omega)**2
-      Kd_lay(i,j,k) = max(CS%Kd_min, CS%Kd_sfc(i,j) * &
-           ((abs_sin * invcosh(N_2Omega/abs_sin)) * I_x30)*N02_N2)
+      Kd_lay(i,k) = max(CS%Kd_min, CS%Kd * &
+           ((abs_sinlat * invcosh(N_2Omega/abs_sinlat)) * I_x30)*N02_N2)
     enddo ; enddo
-
-  else
-    do k=1,nz ; do i=is,ie
-      Kd_lay(i,j,k) = CS%Kd_sfc(i,j)
-    enddo ; enddo
-  endif
-
-  ! Update CS%kd_bkgnd and CS%kv_bkgnd for diagnostic purposes
-  if (.not. (CS%Bryan_Lewis_diffusivity .or. CS%horiz_varying_background)) then
+    ! Update Kd_int and Kv_bkgnd, based on Kd_lay.  These might be just used for diagnostic purposes.
     do i=is,ie
-      CS%kd_bkgnd(i,j,1) = 0.0; CS%kv_bkgnd(i,j,1) = 0.0
-      CS%kd_bkgnd(i,j,nz+1) = 0.0; CS%kv_bkgnd(i,j,nz+1) = 0.0
-      do k=2,nz
-        CS%Kd_bkgnd(i,j,k) = 0.5*(Kd_lay(i,j,K-1) + Kd_lay(i,j,K))
-        CS%Kv_bkgnd(i,j,k) = CS%Kd_bkgnd(i,j,k) * CS%prandtl_bkgnd
-      enddo
+      Kd_int(i,1) = 0.0; Kv_bkgnd(i,1) = 0.0
+      Kd_int(i,nz+1) = 0.0; Kv_bkgnd(i,nz+1) = 0.0
     enddo
-  endif
+    do K=2,nz ; do i=is,ie
+      Kd_int(i,K) = 0.5*(Kd_lay(i,k-1) + Kd_lay(i,k))
+      Kv_bkgnd(i,K) = Kd_int(i,K) * CS%prandtl_bkgnd
+    enddo ; enddo
+  else
+    ! Set a potentially spatially varying surface value of diffusivity.
+    if (CS%Henyey_IGW_background) then
+      I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
+      do i=is,ie
+        abs_sinlat = abs(sin(G%geoLatT(i,j)*deg_to_rad))
+        Kd_sfc(i) = max(CS%Kd_min, CS%Kd * &
+             ((abs_sinlat * invcosh(CS%N0_2Omega / max(min_sinlat, abs_sinlat))) * I_x30) )
+      enddo
+    elseif (CS%Kd_tanh_lat_fn) then
+      do i=is,ie
+        !   The transition latitude and latitude range are hard-scaled here, since
+        ! this is not really intended for wide-spread use, but rather for
+        ! comparison with CM2M / CM2.1 settings.
+        Kd_sfc(i) = max(CS%Kd_min, CS%Kd * (1.0 + &
+            CS%Kd_tanh_lat_scale * 0.5*tanh((abs(G%geoLatT(i,j)) - 35.0)/5.0) ))
+      enddo
+    else ! Use a spatially constant surface value.
+      do i=is,ie
+        Kd_sfc(i) = CS%Kd
+      enddo
+    endif
 
-  ! Update Kv
-  if (associated(kv)) then
-    do k=1,nz+1 ; do i=is,ie
-      Kv(i,j,k) = Kv(i,j,k) + CS%Kv_bkgnd(i,j,k)
+    ! Now set background diffusivies based on these surface values, possibly with vertical structure.
+    if ((.not.CS%bulkmixedlayer) .and. (CS%Kd /= CS%Kdml)) then
+      ! This is a crude way to put in a diffusive boundary layer without an explicit boundary
+      ! layer turbulence scheme.  It should not be used for any realistic ocean models.
+      I_Hmix = 1.0 / (CS%Hmix + GV%H_subroundoff*GV%H_to_Z)
+      do i=is,ie ; depth(i) = 0.0 ; enddo
+      do k=1,nz ; do i=is,ie
+        depth_c = depth(i) + 0.5*GV%H_to_Z*h(i,j,k)
+        if (CS%Kd_via_Kdml_bug) then
+          ! These two lines should update Kd_lay, not Kd_int.  They were correctly working on the
+          ! same variables until MOM6 commit 7a818716 (PR#750), which was added on March 26, 2018.
+          if (depth_c <= CS%Hmix) then ; Kd_int(i,K) = CS%Kdml
+          elseif (depth_c >= 2.0*CS%Hmix) then ; Kd_int(i,K) = Kd_sfc(i)
+          else
+            Kd_lay(i,k) = ((Kd_sfc(i) - CS%Kdml) * I_Hmix) * depth_c + (2.0*CS%Kdml - Kd_sfc(i))
+          endif
+        else
+          if (depth_c <= CS%Hmix) then ; Kd_lay(i,k) = CS%Kdml
+          elseif (depth_c >= 2.0*CS%Hmix) then ; Kd_lay(i,k) = Kd_sfc(i)
+          else
+            Kd_lay(i,k) = ((Kd_sfc(i) - CS%Kdml) * I_Hmix) * depth_c + (2.0*CS%Kdml - Kd_sfc(i))
+          endif
+        endif
+
+        depth(i) = depth(i) + GV%H_to_Z*h(i,j,k)
+      enddo ; enddo
+
+    else ! There is no vertical structure to the background diffusivity.
+      do k=1,nz ; do i=is,ie
+        Kd_lay(i,k) = Kd_sfc(i)
+      enddo ; enddo
+    endif
+
+    ! Update Kd_int and Kv_bkgnd, based on Kd_lay.  These might be just used for diagnostic purposes.
+    do i=is,ie
+      Kd_int(i,1) = 0.0; Kv_bkgnd(i,1) = 0.0
+      Kd_int(i,nz+1) = 0.0; Kv_bkgnd(i,nz+1) = 0.0
+    enddo
+    do K=2,nz ; do i=is,ie
+      Kd_int(i,K) = 0.5*(Kd_lay(i,k-1) + Kd_lay(i,k))
+      Kv_bkgnd(i,K) = Kd_int(i,K) * CS%prandtl_bkgnd
     enddo ; enddo
   endif
-
-  ! TODO: In both CS%Bryan_Lewis_diffusivity and CS%horiz_varying_background, KV and KD at surface
-  ! and bottom interfaces are set to be nonzero. Make sure this is not problematic.
 
 end subroutine calculate_bkgnd_mixing
 
@@ -556,7 +529,7 @@ end function CVMix_bkgnd_is_used
 
 !> Sets CS%bkgnd_scheme_str to check whether multiple background diffusivity schemes are activated.
 !! The string is also for error/log messages.
-subroutine check_bkgnd_scheme(CS,str)
+subroutine check_bkgnd_scheme(CS, str)
   type(bkgnd_mixing_cs), pointer :: CS  !< Control structure
   character(len=*), intent(in)   :: str !< Background scheme identifier deducted from MOM_input
                                         !! parameters
@@ -564,8 +537,8 @@ subroutine check_bkgnd_scheme(CS,str)
   if (trim(CS%bkgnd_scheme_str)=="none") then
     CS%bkgnd_scheme_str = str
   else
-     call MOM_error(FATAL, "set_diffusivity_init: Cannot activate both "//trim(str)//" and "//&
-          trim(CS%bkgnd_scheme_str)//".")
+    call MOM_error(FATAL, "bkgnd_mixing_init: Cannot activate both "//trim(str)//" and "//&
+                   trim(CS%bkgnd_scheme_str)//".")
   endif
 
 end subroutine
@@ -576,9 +549,6 @@ subroutine bkgnd_mixing_end(CS)
                                        !! will be deallocated in this subroutine
 
   if (.not. associated(CS)) return
-
-  deallocate(CS%kd_bkgnd)
-  deallocate(CS%kv_bkgnd)
   deallocate(CS)
 
 end subroutine bkgnd_mixing_end

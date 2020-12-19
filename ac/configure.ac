@@ -8,6 +8,8 @@
 # - We would probably run this inside of a script to avoid the explicit
 #   dependency on git.
 
+AC_PREREQ([2.63])
+
 AC_INIT(
   [MOM6],
   [ ],
@@ -80,18 +82,57 @@ AX_FC_CHECK_MODULE([mpi],
 
 
 # netCDF configuration
-AC_PATH_PROG([NC_CONFIG], [nc-config])
-AS_IF([test -n "$NC_CONFIG"],
-  [CPPFLAGS="$CPPFLAGS -I$($NC_CONFIG --includedir)"
-  FCFLAGS="$FCFLAGS -I$($NC_CONFIG --includedir)"
-  LDFLAGS="$LDFLAGS -L$($NC_CONFIG --libdir)"],
-  [AC_MSG_ERROR([Could not find nc-config.])])
 
-AX_FC_CHECK_MODULE([netcdf],
-  [], [AC_MSG_ERROR([Could not find FMS library.])])
-AX_FC_CHECK_LIB([netcdff], [nf_create], [netcdf],
-  [], [AC_MSG_ERROR([Could not link netcdff library.])]
-)
+# Search for the Fortran netCDF module, fallback to nf-config.
+AX_FC_CHECK_MODULE([netcdf], [], [
+  AS_UNSET([ax_fc_cv_mod_netcdf])
+  AC_PATH_PROG([NF_CONFIG], [nf-config])
+  AS_IF([test -n "$NF_CONFIG"], [
+    AC_SUBST([FCFLAGS], ["$FCFLAGS -I$($NF_CONFIG --includedir)"])
+    ], [AC_MSG_ERROR([Could not find nf-config.])]
+  )
+  AX_FC_CHECK_MODULE([netcdf], [], [
+    AC_MSG_ERROR([Could not find netcdf module.])
+  ])
+])
+
+# FMS may invoke netCDF C calls, so we link to libnetcdf.
+AC_LANG_PUSH([C])
+AC_CHECK_LIB([netcdf], [nc_create], [], [
+  AS_UNSET([ac_cv_lib_netcdf_nc_create])
+  AC_PATH_PROG([NC_CONFIG], [nc-config])
+  AS_IF([test -n "$NC_CONFIG"], [
+    AC_SUBST([LDFLAGS],
+      ["$LDFLAGS -L$($NC_CONFIG --libdir)"]
+    )
+    ], [AC_MSG_ERROR([Could not find nc-config.])]
+  )
+  AC_CHECK_LIB([netcdf], [nc_create], [], [
+    AC_MSG_ERROR([Could not find libnetcdf.])
+  ])
+])
+AC_LANG_POP([C])
+
+# NOTE: We test for nf_create, rather than nf90_create, because AX_FC_CHECK_LIB
+#   is currently not yet able to properly probe inside modules.
+#   Testing of the nf90_* functions will require a macro update.
+# NOTE: nf-config does not have a --libdir flag, so we use --prefix and assume
+#   that libraries are in the $prefix/lib directory.
+
+# Link to Fortran netCDF library, netcdff
+AX_FC_CHECK_LIB([netcdff], [nf_create], [], [], [
+  AS_UNSET([ax_fc_cv_lib_netcdff_nf_create])
+  AC_PATH_PROG([NF_CONFIG], [nf-config])
+  AS_IF([test -n "$NF_CONFIG"], [
+    AC_SUBST([LDFLAGS],
+      ["$LDFLAGS -L$($NF_CONFIG --prefix)/lib"]
+    )
+    ], [AC_MSG_ERROR([Could not find nf-config.])]
+  )
+  AX_FC_CHECK_LIB([netcdff], [nf_create], [], [], [
+    AC_MSG_ERROR([Could not find libnetcdff.])
+  ])
+])
 
 
 # Force 8-byte reals
@@ -102,11 +143,22 @@ AS_IF(
 
 
 # OpenMP configuration
-AC_OPENMP
+
+# NOTE: AC_OPENMP fails on `Fortran` for Autoconf <2.69 due to a m4 bug.
+#   For older versions, we test against CC and use the result for FC.
+m4_version_prereq([2.69], [AC_OPENMP], [
+  AC_LANG_PUSH([C])
+  AC_OPENMP
+  AC_LANG_POP([C])
+  OPENMP_FCFLAGS="$OPENMP_CFLAGS"
+])
+
+# NOTE: Only apply OpenMP flags if explicitly enabled.
 AS_IF(
-  [test "$enable_openmp" = yes],
-  [FCFLAGS="$FCFLAGS $OPENMP_FCFLAGS"
-  LDFLAGS="$LDFLAGS $OPENMP_FCFLAGS"])
+  [test "$enable_openmp" = yes], [
+  FCFLAGS="$FCFLAGS $OPENMP_FCFLAGS"
+  LDFLAGS="$LDFLAGS $OPENMP_FCFLAGS"
+])
 
 
 # FMS support

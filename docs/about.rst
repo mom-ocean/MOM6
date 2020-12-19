@@ -22,11 +22,13 @@ User guide
   The user guide is written in reStructuredText (.rst files) that reside in ``docs/`` of the `MOM6 source code <http://github.com/NOAA-GFDL/MOM6>`_.
   The rst files are processed by sphinx and hosted on `readthedocs <http://mom6.readthedocs.org>`_.
 
-  The API reference is generated documentation - we use doxygen for in-code documentation. While we could use doxygen generated pages
-  for all documentation it is rather cumbersome for writing, hence the use of rst files for the broader level documentation.
+  The API reference is generated documentation - we use doxygen for
+  in-code documentation. The Fortran doxygen format is rather cumbersome for
+  writing and we therefore use the C++ .dox files for much of this
+  documentation.
 
 Repository policies
-  Policies governing how to the repositories a organized and operated live at https://github.com/NOAA-GFDL/MOM6-examples/wiki/MOM6-repository-policies.
+  Policies governing how the repositories are organized and operated live at https://github.com/NOAA-GFDL/MOM6-examples/wiki/MOM6-repository-policies.
 
 Developer guide
   Beyond the API reference above, developer specific wiki pages are attached to the `MOM6 code repository <https://github.com/NOAA-GFDL/MOM6/wiki>`.

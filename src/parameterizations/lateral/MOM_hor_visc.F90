@@ -4,6 +4,7 @@ module MOM_hor_visc
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_checksums,             only : hchksum, Bchksum
+use MOM_coms,                  only : min_across_PEs
 use MOM_diag_mediator,         only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator,         only : diag_ctrl, time_type
 use MOM_domains,               only : pass_var, CORNER, pass_vector, AGRID, BGRID_NE
@@ -93,6 +94,10 @@ type, public :: hor_visc_CS ; private
                              !! depth is shallower than GME_H0 [Z ~> m]
   real    :: GME_efficiency  !< The nondimensional prefactor multiplying the GME coefficient [nondim]
   real    :: GME_limiter     !< The absolute maximum value the GME coefficient is allowed to take [L2 T-1 ~> m2 s-1].
+  real    :: min_grid_Kh     !< Minimum horizontal Laplacian viscosity used to
+                             !! limit the grid Reynolds number [L2 T-1 ~> m2 s-1]
+  real    :: min_grid_Ah     !< Minimun horizontal biharmonic viscosity used to
+                             !! limit grid Reynolds number [L4 T-1 ~> m4 s-1]
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Kh_bg_xx
                       !< The background Laplacian viscosity at h points [L2 T-1 ~> m2 s-1].
@@ -358,10 +363,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                     ! calculation gives the same value as if f were 0 [nondim].
   real :: H0_GME    ! Depth used to scale down GME coefficient in shallow areas [Z ~> m]
   real :: KE        ! Local kinetic energy [L2 T-2 ~> m2 s-2]
-  real, parameter :: KH_min = 1.E-30 ! This is the minimun horizontal Laplacian viscosity used to estimate the
-                    ! grid Raynolds number [L2 T-1 ~> m2 s-1]
-  real, parameter :: AH_min = 1.E-30 ! This is the minimun horizontal Biharmonic viscosity used to estimate the
-                    ! grid Raynolds number [L4 T-1 ~> m4 s-1]
 
   logical :: rescale_Kh, legacy_bound
   logical :: find_FrictWork
@@ -877,7 +878,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
         if (CS%id_grid_Re_Kh>0) then
           KE = 0.125*((u(I,j,k)+u(I-1,j,k))**2 + (v(i,J,k)+v(i,J-1,k))**2)
-          grid_Re_Kh(i,j,k) = (sqrt(KE) * sqrt(CS%grid_sp_h2(i,j)))/MAX(Kh,KH_min)
+          grid_Re_Kh(i,j,k) = (sqrt(KE) * sqrt(CS%grid_sp_h2(i,j))) &
+              / max(Kh, CS%min_grid_Kh)
         endif
 
         if (CS%id_div_xx_h>0) div_xx_h(i,j,k) = div_xx(i,j)
@@ -930,8 +932,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         if ((CS%id_Ah_h>0) .or. find_FrictWork .or. CS%debug) Ah_h(i,j,k) = Ah
 
         if (CS%id_grid_Re_Ah>0) then
-           KE = 0.125*((u(I,j,k)+u(I-1,j,k))**2 + (v(i,J,k)+v(i,J-1,k))**2)
-           grid_Re_Ah(i,j,k) = (sqrt(KE) * CS%grid_sp_h3(i,j))/MAX(Ah,AH_min)
+          KE = 0.125*((u(I,j,k)+u(I-1,j,k))**2 + (v(i,J,k)+v(i,J-1,k))**2)
+          grid_Re_Ah(i,j,k) = (sqrt(KE) * CS%grid_sp_h3(i,j)) &
+              / max(Ah, CS%min_grid_Ah)
         endif
 
         str_xx(i,j) = str_xx(i,j) + Ah * &
@@ -1430,6 +1433,8 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE, ADp)
   real :: grid_sp_h3       ! Harmonic mean of the squares of the grid^(3/2) [L3 ~> m3]
   real :: grid_sp_q2       ! spacings at h and q points [L2 ~> m2]
   real :: grid_sp_q3       ! spacings at h and q points^(3/2) [L3 ~> m3]
+  real :: min_grid_sp_h2   ! Minimum value of grid_sp_h2 [L2 ~> m2]
+  real :: min_grid_sp_h4   ! Minimum value of grid_sp_h2**2 [L4 ~> m4]
   real :: Kh_Limit         ! A coefficient [T-1 ~> s-1] used, along with the
                            ! grid spacing, to limit Laplacian viscosity.
   real :: fmax             ! maximum absolute value of f at the four
@@ -1718,10 +1723,12 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE, ADp)
                  "The absolute maximum value the GME coefficient is allowed to take.", &
                  units="m2 s-1", scale=US%m_to_L**2*US%T_to_s, default=1.0e7)
   endif
-  if (CS%bound_Kh .or. CS%bound_Ah .or. CS%better_bound_Kh .or. CS%better_bound_Ah) &
+  if (CS%Laplacian .or. CS%biharmonic) then
     call get_param(param_file, mdl, "DT", dt, &
                  "The (baroclinic) dynamics time step.", units="s", scale=US%s_to_T, &
                  fail_if_missing=.true.)
+    Idt = 1.0 / dt
+  endif
   if (CS%no_slip .and. CS%biharmonic) &
     call MOM_error(FATAL,"ERROR: NOSLIP and BIHARMONIC cannot be defined "// &
                          "at the same time in MOM.")
@@ -1860,6 +1867,8 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE, ADp)
    ! this to be less than 1/3, rather than 1/2 as before.
     if (CS%bound_Kh .or. CS%bound_Ah) Kh_Limit = 0.3 / (dt*4.0)
     ! Calculate and store the background viscosity at h-points
+
+    min_grid_sp_h2 = huge(1.)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       ! Static factors in the Smagorinsky and Leith schemes
       grid_sp_h2 = (2.0*CS%dx2h(i,j)*CS%dy2h(i,j)) / (CS%dx2h(i,j) + CS%dy2h(i,j))
@@ -1881,7 +1890,10 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE, ADp)
         CS%Kh_Max_xx(i,j) = Kh_Limit * grid_sp_h2
         CS%Kh_bg_xx(i,j) = MIN(CS%Kh_bg_xx(i,j), CS%Kh_Max_xx(i,j))
       endif
+      min_grid_sp_h2 = min(grid_sp_h2, min_grid_sp_h2)
     enddo ; enddo
+    call min_across_PEs(min_grid_sp_h2)
+
     ! Calculate and store the background viscosity at q-points
     do J=js-1,Jeq ; do I=is-1,Ieq
       ! Static factors in the Smagorinsky and Leith schemes
@@ -1925,6 +1937,8 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE, ADp)
     if (CS%better_bound_Ah .or. CS%bound_Ah) Ah_Limit = 0.3 / (dt*64.0)
     if (CS%Smagorinsky_Ah .and. CS%bound_Coriolis) &
       BoundCorConst = 1.0 / (5.0*(bound_Cor_vel*bound_Cor_vel))
+
+    min_grid_sp_h4 = huge(1.)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       grid_sp_h2 = (2.0*CS%dx2h(i,j)*CS%dy2h(i,j)) / (CS%dx2h(i,j)+CS%dy2h(i,j))
       grid_sp_h3 = grid_sp_h2*sqrt(grid_sp_h2)
@@ -1949,7 +1963,10 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE, ADp)
         CS%Ah_Max_xx(i,j) = Ah_Limit * (grid_sp_h2 * grid_sp_h2)
         CS%Ah_bg_xx(i,j) = MIN(CS%Ah_bg_xx(i,j), CS%Ah_Max_xx(i,j))
       endif
+      min_grid_sp_h4 = min(grid_sp_h2**2, min_grid_sp_h4)
     enddo ; enddo
+    call min_across_PEs(min_grid_sp_h4)
+
     do J=js-1,Jeq ; do I=is-1,Ieq
       grid_sp_q2 = (2.0*CS%dx2q(I,J)*CS%dy2q(I,J)) / (CS%dx2q(I,J)+CS%dy2q(I,J))
       grid_sp_q3 = grid_sp_q2*sqrt(grid_sp_q2)
@@ -1975,7 +1992,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE, ADp)
   endif
   ! The Laplacian bounds should avoid overshoots when CS%bound_coef < 1.
   if (CS%Laplacian .and. CS%better_bound_Kh) then
-    Idt = 1.0 / dt
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       denom = max( &
          (CS%dy2h(i,j) * CS%DY_dxT(i,j) * (G%IdyCu(I,j) + G%IdyCu(I-1,j)) * &
@@ -2004,7 +2020,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE, ADp)
   ! The biharmonic bounds should avoid overshoots when CS%bound_coef < 0.5, but
   ! empirically work for CS%bound_coef <~ 1.0
   if (CS%biharmonic .and. CS%better_bound_Ah) then
-    Idt = 1.0 / dt
     do j=js-1,Jeq+1 ; do I=Isq-1,Ieq+1
       u0u(I,j) = (CS%Idxdy2u(I,j)*(CS%dy2h(i+1,j)*CS%DY_dxT(i+1,j)*(G%IdyCu(I+1,j) + G%IdyCu(I,j))   + &
                                    CS%dy2h(i,j) * CS%DY_dxT(i,j) * (G%IdyCu(I,j) + G%IdyCu(I-1,j)) ) + &
@@ -2104,6 +2119,11 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE, ADp)
         'Biharmonic Horizontal Viscosity at q Points', 'm4 s-1', conversion=US%L_to_m**4*US%s_to_T)
     CS%id_grid_Re_Ah = register_diag_field('ocean_model', 'grid_Re_Ah', diag%axesTL, Time, &
         'Grid Reynolds number for the Biharmonic horizontal viscosity at h points', 'nondim')
+
+    if (CS%id_grid_Re_Ah > 0) &
+      ! Compute the smallest biharmonic viscosity capable of modifying the
+      ! velocity at floating point precision.
+      CS%min_grid_Ah = spacing(1.) * min_grid_sp_h4 * Idt
   endif
   if (CS%Laplacian) then
     CS%id_Kh_h = register_diag_field('ocean_model', 'Khh', diag%axesTL, Time,   &
@@ -2123,6 +2143,11 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE, ADp)
       'Shearing strain at q Points', 's-1', conversion=US%s_to_T)
     CS%id_sh_xx_h = register_diag_field('ocean_model', 'sh_xx_h', diag%axesTL, Time, &
       'Horizontal tension at h Points', 's-1', conversion=US%s_to_T)
+
+    if (CS%id_grid_Re_Kh > 0) &
+      ! Compute a smallest Laplacian viscosity capable of modifying the
+      ! velocity at floating point precision.
+      CS%min_grid_Kh = spacing(1.) * min_grid_sp_h2 * Idt
   endif
   if (CS%use_GME) then
       CS%id_GME_coeff_h = register_diag_field('ocean_model', 'GME_coeff_h', diag%axesTL, Time, &

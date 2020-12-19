@@ -1309,7 +1309,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 !$   call fms_affinity_set('OCEAN', ocean_omp_hyper_thread, ocean_nthreads)
 !$   call omp_set_num_threads(ocean_nthreads)
 !$   write(6,*) "MOM_domains_mod OMPthreading ", fms_affinity_get(), omp_get_thread_num(), omp_get_num_threads()
-!$   call flush(6)
+!$   flush(6)
 !$ endif
 #endif
   call log_param(param_file, mdl, "!SYMMETRIC_MEMORY_", MOM_dom%symmetric, &
@@ -1613,7 +1613,7 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
                                   !! minimum halo size for this domain in the i- and j-
                                   !! directions, and returns the actual halo size used.
   integer,     optional, intent(in)    :: halo_size !< If present, this sets the halo
-                                  !! size for the domian in the i- and j-directions.
+                                  !! size for the domain in the i- and j-directions.
                                   !! min_halo and halo_size can not both be present.
   logical,     optional, intent(in)    :: symmetric !< If present, this specifies
                                   !! whether the new domain is symmetric, regardless of
@@ -1741,7 +1741,7 @@ subroutine clone_MD_to_d2D(MD_in, mpp_domain, min_halo, halo_size, symmetric, &
                                   !! minimum halo size for this domain in the i- and j-
                                   !! directions, and returns the actual halo size used.
   integer,     optional, intent(in)    :: halo_size !< If present, this sets the halo
-                                  !! size for the domian in the i- and j-directions.
+                                  !! size for the domain in the i- and j-directions.
                                   !! min_halo and halo_size can not both be present.
   logical,     optional, intent(in)    :: symmetric !< If present, this specifies
                                   !! whether the new domain is symmetric, regardless of
