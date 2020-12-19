@@ -14,7 +14,7 @@ use MOM_dyn_horgrid, only : dyn_horgrid_type, set_derived_dyn_horgrid
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_io, only : MOM_read_data, read_data, slasher, file_exists
+use MOM_io, only : MOM_read_data, read_data, slasher, file_exists, stdout
 use MOM_io, only : CORNER, NORTH_FACE, EAST_FACE
 use MOM_unit_scaling, only : unit_scale_type
 
@@ -806,14 +806,14 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
     y_q = find_root(Int_dj_dy, dy_dj, GP, jd, 0.0, -1.0*PI_2, PI_2, itt2)
     G%gridLatB(J) = y_q*180.0/PI
     ! if (is_root_pe()) &
-    !   write(*, '("J, y_q = ",I4,ES14.4," itts = ",I4)')  j, y_q, itt2
+    !   write(stdout, '("J, y_q = ",I4,ES14.4," itts = ",I4)')  j, y_q, itt2
   enddo
   do j=G%jsg,G%jeg
     jd = fnRef + (j - jRef) - 0.5
     y_h = find_root(Int_dj_dy, dy_dj, GP, jd, 0.0, -1.0*PI_2, PI_2, itt1)
     G%gridLatT(j) = y_h*180.0/PI
     ! if (is_root_pe()) &
-    !   write(*, '("j, y_h = ",I4,ES14.4," itts = ",I4)')  j, y_h, itt1
+    !   write(stdout, '("j, y_h = ",I4,ES14.4," itts = ",I4)')  j, y_h, itt1
   enddo
   do J=JsdB+J_off,JedB+J_off
     jd = fnRef + (J - jRef)
