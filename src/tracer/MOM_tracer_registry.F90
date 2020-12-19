@@ -58,25 +58,26 @@ type, public :: tracer_type
   real, dimension(:,:,:), pointer :: df_y           => NULL() !< diagnostic array for y-diffusive tracer flux
                                                               !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:,:), pointer :: lbd_dfx       => NULL()  !< diagnostic array for x-diffusive tracer flux
-                                                              !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:,:), pointer :: lbd_dfy       => NULL()  !< diagnostic array for y-diffusive tracer flux
-                                                              !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:), pointer :: lbd_dfx_2d       => NULL() !< diagnostic array for x-diffusive tracer flux
-                                                              !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:), pointer :: lbd_dfy_2d       => NULL() !< diagnostic array for y-diffusive tracer flux
-                                                              !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+  !### These two arrays may be allocated but are never used.
   real, dimension(:,:), pointer :: lbd_bulk_df_x       => NULL() !< diagnostic array for x-diffusive tracer flux
-                                                              !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:), pointer :: lbd_bulk_df_y       => NULL() !< diagnostic array for y-diffusive tracer flux
-                                                              !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:),   pointer :: df2d_x         => NULL() !< diagnostic vertical sum x-diffusive flux
                                                               !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:),   pointer :: df2d_y         => NULL() !< diagnostic vertical sum y-diffusive flux
                                                               !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
 !  real, dimension(:,:),   pointer :: df2d_conc_x    => NULL() !< diagnostic vertical sum x-diffusive content flux
-!                                                              !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
+!                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
 !  real, dimension(:,:),   pointer :: df2d_conc_y    => NULL() !< diagnostic vertical sum y-diffusive content flux
-!                                                              !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
+!                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
 
   real, dimension(:,:,:), pointer :: advection_xy   => NULL() !< convergence of lateral advective tracer fluxes
                                                               !! [conc H T-1 ~> conc m s-1 or conc kg m-2 s-1]
@@ -88,6 +89,7 @@ type, public :: tracer_type
                                                               !! timestep used for diagnostics [conc]
   real, dimension(:,:,:), pointer :: Trxh_prev      => NULL() !< layer integrated tracer concentration array
                                                               !! at a previous timestep used for diagnostics
+                                                              !! [conc H ~> conc m or conc kg m-2]
 
   character(len=32)               :: name                     !< tracer name used for diagnostics and error messages
   character(len=64)               :: units                    !< Physical dimensions of the tracer concentration

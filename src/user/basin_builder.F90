@@ -94,6 +94,18 @@ subroutine basin_builder_topography(D, G, param_file, max_depth)
         lat = G%geoLatT(i,j)
         D(i,j) = min( D(i,j), NS_scurve_ridge(lon, lat, pars(1), pars(2), pars(3), pars(4), pars(5)) )
       enddo ; enddo
+    elseif (trim(lowercase(funcs)) == 'angled_coast') then
+      call get_param(param_file, mdl, pname2, pars(1:4), &
+                     "ANGLED_COAST parameters: longitude intersection with Equator, "//&
+                     "latitude intersection with Prime Meridian, footprint radius, shelf depth.", &
+                     units="degrees_E,degrees_N,degrees,m", &
+                     fail_if_missing=.true.)
+      pars(4) = pars(4) / max_depth
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        lon = G%geoLonT(i,j)
+        lat = G%geoLatT(i,j)
+        D(i,j) = min( D(i,j), angled_coast(lon, lat, pars(1), pars(2), pars(3), pars(4)) )
+      enddo ; enddo
     elseif (trim(lowercase(funcs)) == 'ew_coast') then
       call get_param(param_file, mdl, pname2, pars(1:5), &
                      "EW_COAST parameters: latitude, starting longitude, "//&
@@ -210,6 +222,21 @@ real function dist_line_fixed_y(x, y, x0, x1, y0)
 
   dist_line_fixed_y = dist_line_fixed_x(y, x, y0, x0, x1)
 end function dist_line_fixed_y
+
+!> An "angled coast profile".
+real function angled_coast(lon, lat, lon_eq, lat_mer, dr, sh)
+  real, intent(in) :: lon     !< Longitude [degrees_E]
+  real, intent(in) :: lat     !< Latitude [degrees_N]
+  real, intent(in) :: lon_eq  !< Longitude intersection with Equator [degrees_E]
+  real, intent(in) :: lat_mer !< Latitude intersection with Prime Meridian [degrees_N]
+  real, intent(in) :: dr      !< "Radius" of coast profile [degrees]
+  real, intent(in) :: sh      !< depth of shelf as fraction of full depth [nondim]
+  real :: r
+
+  r = 1/sqrt( lat_mer*lat_mer + lon_eq*lon_eq )
+  r = r * ( lat_mer*lon + lon_eq*lat - lon_eq*lat_mer)
+  angled_coast = cstprof(r, 0., dr, 0.125, 0.125, 0.5, sh)
+end function angled_coast
 
 !> A "coast profile" applied in an N-S line from lonC,lat0 to lonC,lat1.
 real function NS_coast(lon, lat, lonC, lat0, lat1, dlon, sh)

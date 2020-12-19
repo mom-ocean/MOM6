@@ -1,0 +1,10 @@
+/*! \page Parallel_IO Parallel I/O
+
+\brief Parallel I/O
+
+The model can be told to write a different output file per process. This may or may
+not save time, and is a bad idea on Lustre filesystems. If the model is writing
+individual files per process, one can combine them using the mppnccombine program from
+the [FRE-nctools package](https://github.com/NOAA-GFDL/FRE-NCtools).
+
+*/

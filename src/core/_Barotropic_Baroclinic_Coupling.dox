@@ -1,0 +1,305 @@
+/*! \page Barotropic_Baroclinic_Coupling Barotropic-Baroclinic Coupling
+
+\brief Time-averaged accelerations
+
+The barotropic equations are timestepped with a timestep to resolve the surface
+gravity waves. With care, the baroclinic timestep only need resolve the inertial
+oscillations. The barotropic accelerations are averaged over the many barotropic
+timesteps taken between baroclinic steps. At time \f$n\f$, the baroclinic
+accelerations are computed. The vertical average of that acceleration is
+subtracted off and replaced by the time-averaged acceleration from the group of
+barotropic timesteps:
+
+\f[
+   \Delta t \frac{\partial \vec{u}}{\partial t} = \Delta t \left(
+   \frac{\partial \vec{u}}{\partial t} - \frac{\partial \vec{u}_{BT}}{\partial t}
+   \right)^n + \Delta t \overline{\frac{\partial \vec{u}_{BT}}{\partial t}}^{\Delta t}
+\f]
+
+Similarly, the velocities used in the tracer equation are a careful blend of the
+barotropic and baroclinic solutions:
+
+\f[
+   \Delta t \frac{\partial \theta}{\partial t} + \Delta t \left( \tilde{\vec{u}}
+   \cdot \nabla \theta + \widetilde{w} \frac{\partial \theta}{\partial z} \right)
+\f]
+with
+\f[
+   \tilde{\vec{u}} = \vec{u}_{BC} + \overline{\vec{u}_{BT}}^{\Delta t}
+\f]
+\f[
+   \frac{\partial \widetilde{w}}{\partial z} = - \nabla \cdot \tilde{\vec{u}}
+\f]
+
+\section SSH_Estimates Two estimates of the free surface height
+
+The vertically discrete, temporally continuous layer continuity equations are:
+
+\f[
+   \frac{\partial h_k}{\partial t} = - \nabla \cdot (\vec{u} h_k) = - \nabla \cdot
+   \mathbf{F} (u_k, h_k)
+\f]
+
+The relationship between the free surface height and the layer thicknesses
+\f$h_k\f$ is:
+
+\f[
+   \eta = \sum_{k=1}^N h_k - D
+\f]
+
+We get an evolution equation for the free surface height:
+
+\f[
+   \frac{\partial \eta}{\partial t} = \sum_{k=1}^N \frac{\partial
+   h_k}{\partial t} = - \nabla \cdot \sum_{k=1}^N \mathbf{F} (u_k, h_k)
+\f]
+
+If the algorithms for the fluxes in the continuity equations are \em linear in
+the velocity, the free surface height can be rewritten as:
+
+\f[
+   \frac{\partial \eta}{\partial t} \&= - \nabla \cdot \sum_{k=1}^N \mathbf{F} (u_k, h_k)
+   = - \nabla \cdot \sum_{k=1}^N (\vec{u}_k h_k) \\
+   \&= - \nabla \cdot \left[ \sum_{k=1}^N h_k \frac{\sum_{k=1}^N (\vec{u}_k h_k)}
+   {\sum_{k=1}^M k_k} \right] \equiv - \nabla \cdot H \mathbf{U}
+\f]
+where
+
+\f[
+   \mathbf{U} \equiv \frac{\sum_{k=1}^N (\vec{u}_k h_k)} {\sum_{k=1}^M k_k}
+\f]
+\f[
+   H \equiv \sum_{k=1}^N h_k
+\f]
+However, ALE models like MOM6 require positive-definite, nonlinear continuity
+solvers (MOM6 uses \ref PPM). We need a different way to reconcile this
+estimate of free surface height with the one coming from the barotropic equations.
+After rejecting several other options, MOM6 is now using the scheme from
+\cite hallberg2009. The barotropic update of \f$\eta\f$ is given by:
+
+\f[
+   \frac{\eta^{n+1} - \eta^n}{\Delta t} + \nabla \cdot \left( \overline{UH} \right) = 0
+\f]
+
+Determine the \f$\Delta U\f$ such that:
+
+\f[
+   \sum_{k=1}^N \mathbf{F} (\tilde{u}_k, h_k) = \left( \overline{UH} \right)
+\f]
+where
+\f[
+   \tilde{u}_k = u_k + \Delta U
+\f]
+
+The layer timestep equation becomes:
+
+\f[
+   h_k^{n+1} = h_k^n - \Delta t \nabla \cdot \mathbf{F} (\tilde{u}_k, h_k)
+\f]
+
+This scheme has these properties:
+
+\li Total mass is conserved layer-wise.
+\li Layer equations retain their flux form.
+\li Total salt, heat, and other tracers are exactly conserved.
+\li Free surface heights exactly agree.
+\li Requires (very few) completely local iterations.
+\li The velocity corrections are barotropic, and more likely to correspond to the
+layers whose flow was deficient than in some older schemes.
+
+The solution is unique provided that:
+\f[
+   \frac{\partial}{\partial \tilde{u}_k} \mathbf{F}(\tilde{u}_k, h_k) > 0
+\f]
+This is a reasonable requirement for any discretization of the continuity
+equation. In the continuous limit, \f$\mathbf{F} (u,h) = uh\f$, so one
+interpretation is:
+\f[
+   \frac{\partial}{\partial \tilde{u}_k} \mathbf{F}(\tilde{u}_k, h_k) =
+   h_{k,\mbox{Marginal}}
+\f]
+With the PPM continuity scheme:
+\f[
+   F_{i+1/2} = \frac{1}{\Delta t} \int_{x_{i+1/2} - u \Delta t}^{x_{i+1/2}} h_i^n
+   (x) dx
+\f]
+leads to:
+\f[
+   \frac{\partial F_{i+1/2}}{\partial u_{i+1/2}} = h_i^n ( x_{i+1/2} - u_{i+1/2}
+   \Delta t ) \equiv h_{k, \mbox{Marginal}}
+\f]
+\f$h_i(x) > 0\f$ is already required for positive definiteness.
+
+Newton's method iterations quickly give \f$\Delta U\f$:
+\f[
+   \Delta U^{m+1} = \Delta U^m + \frac{\left( \overline{UH} \right) - \sum_{k=1}^N
+   F(u_k + \Delta U^m, h_k)}{\sum_{k=1}^N h_{k,\mbox{Marginal}}}
+\f]
+
+\subsection subsec_practical How practical is this iterative approach?
+
+The piecewise parabolic method continuity solver uses two steps:
+
+\li Set up the positive-definite subgridscale profiles, \f$h_{PPM}(x)\f$.
+
+\image html h_PPM.png "Piecewise parabolic reconstructions of \f$h(x)\f$."
+\imagelatex{h_PPM.png,Piecewise parabolic reconstructions of $h(x)$.,\includegraphics[width=\textwidth\,height=\textheight/2\,keepaspectratio=true]}
+
+\li Integrating the profiles to determine \f$F\f$. Step 1 is typically
+\f$\sim 3\f$ times as expensive as step 2. \f$F(u,h)\f$ is piecewise cubic in
+\f$u\f$, but often nearly linear. Newton's method iterations converge quickly:
+
+\image html Newton_PPM.png "Newton's method iterations for finding \f$\\Delta U\f$."
+\imagelatex{Newton_PPM.png,Newton's method iterations for finding $\Delta U$.,\includegraphics[width=\textwidth\,height=\textheight/2\,keepaspectratio=true]}
+
+In a global model the sea surface heights converge everywhere to a tolerance of
+\f$10^{-6}\f$ m within five iterations. These five iterations add \f$\sim 1.6\f$
+times more CPU time to the PPM continuity solver and the continuity solver is just
+12\% of the total model time.
+
+\subsection bottom_drag A note on bottom drag
+
+Barotropic accelerations do not lead to barotropic flows after a timestep when
+vertical viscosity is taken into account.
+
+\f[
+   u_k^{n+1} = u_k^n + \Delta t A_k + \Delta t \frac{\tau_{k-1/2} -
+   \tau_{k+1/2}}{h_k}
+\f]
+
+\f[
+   \tau_{1/2} = \tau_{Wind}
+\f]
+\f[
+   \tau_{k+1/2} = \nu_{k+1/2} \frac{u_k^{n+1} - u_{k+1}^{n+1}}{h_{k+1/2}}
+\f]
+\f[
+   \tau_{N+1/2} = \nu_{N+1/2} \frac{2 u_N^{n+1}}{h_{N+1/2}}
+\f]
+\f[
+   \gamma_k \equiv \frac{1}{\Delta t} \frac{\partial u_k^{n+1}}
+   {\overline{\partial A}}
+\f]
+
+A tridiagonal equation for \f$\gamma_k\f$ results, going from 0 for thin layers
+near the bottom to 1 far above the bottom.
+
+\f[
+   \gamma_1 = 1 + \frac{1}{h_1} \left[ - \frac{\nu_{3/2} \Delta t}{h_{3/2}}
+   (\gamma_1 - \gamma_2) \right]
+\f]
+\f[
+   \gamma_k = 1 + \frac{1}{h_k} \left[ \frac{\nu_{k-1/2} \Delta t}{h_{k-1/2}}
+   (\gamma_{k-1} - \gamma_k)  - \frac{\nu_{k+1/2} \Delta t}{h_{k+1/2}}
+   (\gamma_k - \gamma_{k+1}) \right]
+\f]
+\f[
+   \gamma_N = 1 + \frac{1}{h_N} \left[ \frac{\nu_{N-1/2} \Delta t}{h_{N-1/2}}
+   (\gamma_{N-1} - \gamma_N)  - \frac{2\nu_{N+1/2} \Delta t}{h_{N+1/2}}
+   \gamma_N \right]
+\f]
+
+In the continuous limit:
+
+\f[
+   \gamma(z) = 1 + \Delta t \frac{d}{dz} \left( \nu \frac{d \gamma}{dz} \right)
+\f]
+with boundary conditions:
+\f[
+   \frac{d \gamma}{dz} (0) = 0
+\f]
+\f[
+   \gamma(-D) = 0
+\f]
+
+For deep water and constant \f$\nu\f$, we get:
+\f[
+   \gamma (z) = 1 - \exp \left( - \sqrt{\nu \Delta t} (z + D) \right)
+\f]
+
+\image html bottom_drag.png "The continuous solution for barotropic flow plus a no-slip condition at the bottom."
+\image latex bottom_drag.png "The continuous solution for barotropic flow plus a no-slip condition at the bottom."
+
+We want a scheme in which the split model looks exactly like the unsplit
+model would if we had taken all those short 3D timesteps. Rather than
+applying a barotropic velocity, we use a barotropic acceleration and
+allow the continuity solver to determine the transports consistent with a
+no-slip bottom boundary layer and perhaps also a no-slip surface boundary
+layer under an ice shelf.
+
+From above, the barotropic equation is:
+
+\f[
+   \frac{\eta^{n+1} - \eta^n}{\Delta t} + \nabla \cdot \left( \overline{UH} \right) = 0
+\f]
+We need to determine the \f$\Delta \overline{A}\f$ such that:
+\f[
+   \sum_{k=1}^N \mathbf{F} (\tilde{u}_k, h_k) = \left( \overline{UH} \right)
+\f]
+where
+\f[
+   \tilde{u}_k = u_k + \gamma_k \Delta \overline{A} \Delta t
+\f]
+
+\section bt-bc_details Additional details about the split time stepping
+
+\li Transports are used as input and output to the barotropic solver. The continuity
+solver is inverted to determine velocities.
+
+\f[
+   \frac{\partial \eta}{\partial t} = \nabla \cdot \overline{U} + M
+\f]
+\f[
+   \overline{U} (\overline{u}) = \frac{1}{\Delta t} \int_0^{\overline{u} \Delta t}
+   H(x) dx
+\f]
+\f[
+   \overline{u}^n = \overline{U}^{-1} \left( \sum_{k=1}^N U_k^n \right)
+\f]
+\f[
+   u_k^{n+1} = \tilde{u}_k^{n+1} + \Delta \overline{u}
+\f]
+
+We need to find \f$\Delta \overline{u}\f$ such that:
+
+\f[
+   \sum_{k=1}^N U_k \left( \tilde{u}_k^{n+1} + \Delta \overline{u} \right) =
+   \overline{U}^{n+1}
+\f]
+
+\li Barotropic accelerations are treated as anomalies from the baroclinic state:
+
+\f[
+   \frac{\partial \overline{u}}{\partial t} \&= - f \hat{k} \times (\overline{u} -
+   \overline{u}_{Cor}) - \nabla \overline{g} (\eta - \eta_{PF}) - \\
+   \& \frac{c_D \left( ||u_{Bot}|| + ||u_{Shelf}|| \right)}{\sum_{k=1}^N h_k}
+   (\overline{u} - \overline{u}_{Drag}) + \frac{\sum_{k=1}^N h_k \frac{\partial
+   u_k}{\partial t}} {\sum_{k=1}^N h_k}
+\f]
+
+\li Bottom drag (and under ice surface-drag) is treated implicitly.
+\li The barotropic continuity solver uses flow-dependent thickness fits which
+approximate the sum of the layer thickness transports, to accommodate wetting and
+drying. An image of this is shown here:
+
+\image html bt_bc_thickness.png "The barotropic transports depend on the baroclinic flows and thicknesses."
+\image latex bt_bc_thickness.png "The barotropic transports depend on the baroclinic flows and thicknesses."
+
+\section time-split_summary Summary of MOM6 split time stepping
+
+\li We use an efficient approach for handling fast modes via simplified 2-d
+equations, while the 3-d baroclinic timestep is determined by baroclinic dynamics.
+
+\li The barotropic solver determines free surface height and time-averaged
+depth-integrated transports.
+
+\li By using anomalies, the MOM6 split solver gives identical answers to an
+equivalent unsplit scheme for short timesteps.
+
+\li This scheme has been demonstrated to work with wetting and drying, as well as
+under ice-shelves.
+
+\li The linear barotropic solver allows MOM6 to automatically set a stable
+barotropic timestep (e.g.\ to 98\% of maximum).
+
+*/
