@@ -466,6 +466,12 @@ subroutine Update_Surface_Waves(G, GV, US, Day, dt, CS, forces)
     if (DataSource==DATAOVR) then
       call Surface_Bands_by_data_override(day_center, G, GV, US, CS)
     elseif (DataSource==Coupler) then
+      if (.not.present(FORCES)) then 
+        call MOM_error(FATAL,"The code cannot be run with the options  "//&
+             "SURFBAND_SOURCE = COUPLER for with this driver.  If you are using a "//&
+             "wave coupled driver then check the call to update_surface_waves, otherwise"//&
+             "select another option for SURFBAND_SOURCE.")
+      endif
       if (size(CS%WaveNum_Cen).ne.size(forces%stk_wavenumbers)) then
         call MOM_error(FATAL, "Number of wavenumber bands in WW3 does not match that in MOM6. "//&
              "Make sure that STK_BAND_COUPLER in MOM6 input is equal to the number of bands in "//&
