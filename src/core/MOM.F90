@@ -1215,7 +1215,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   call diag_update_remap_grids(CS%diag)
 
   if (CS%useMEKE) call step_forward_MEKE(CS%MEKE, h, CS%VarMix%SN_u, CS%VarMix%SN_v, &
-                                         CS%visc, dt, G, GV, US, CS%MEKE_CSp, CS%uhtr, CS%vhtr)
+                                CS%visc, dt, G, GV, US, CS%MEKE_CSp, CS%uhtr, CS%vhtr, Time_local)
   call disable_averaging(CS%diag)
 
   ! Advance the dynamics time by dt.

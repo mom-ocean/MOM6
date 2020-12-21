@@ -14,11 +14,18 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, MOM_mesg
 use MOM_file_parser,   only : read_param, get_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_hor_index,     only : hor_index_type
+<<<<<<< HEAD
+=======
+use MOM_io,            only : vardesc, var_desc, slasher
+>>>>>>> 0986bc3ca (Add option to read EKE via file)
 use MOM_restart,       only : MOM_restart_CS, register_restart_field, query_initialized
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : vertvisc_type
 use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_MEKE_types,    only : MEKE_type
+
+use time_interp_external_mod, only : init_external_field, time_interp_external
+use time_interp_external_mod, only : time_interp_external_init
 
 implicit none ; private
 
@@ -43,6 +50,7 @@ type, public :: MEKE_CS ; private
   logical :: visc_drag  !< If true use the vertvisc_type to calculate bottom drag.
   logical :: MEKE_GEOMETRIC !< If true, uses the GM coefficient formulation from the GEOMETRIC
                         !! framework (Marshall et al., 2012)
+  logical :: MEKE_from_file !< If true, reads EKE from a netCDF file
   real    :: MEKE_GEOMETRIC_alpha !< The nondimensional coefficient governing the efficiency of the
                         !! GEOMETRIC thickness diffusion.
   logical :: MEKE_equilibrium_alt !< If true, use an alternative calculation for the
@@ -90,7 +98,9 @@ type, public :: MEKE_CS ; private
   logical :: kh_flux_enabled !< If true, lateral diffusive MEKE flux is enabled.
   logical :: initialize !< If True, invokes a steady state solver to calculate MEKE.
   logical :: debug      !< If true, write out checksums of data for debugging
-
+  character(len=200)  :: inputdir !< directory where NetCDF input files are
+  character(len=200)       :: eke_file !< filename for eke data
+  character(len=30)        :: eke_var_name !< name of variable in ncfile
   type(diag_ctrl), pointer :: diag => NULL() !< A type that regulates diagnostics output
   !>@{ Diagnostic handles
   integer :: id_MEKE = -1, id_Ue = -1, id_Kh = -1, id_src = -1
@@ -101,7 +111,7 @@ type, public :: MEKE_CS ; private
   integer :: id_Lrhines = -1, id_Leady = -1
   integer :: id_MEKE_equilibrium = -1
   !>@}
-
+  integer :: id_eke = -1
   ! Infrastructure
   integer :: id_clock_pass !< Clock for group pass calls
   type(group_pass_type) :: pass_MEKE !< Group halo pass handle for MEKE%MEKE and maybe MEKE%Kh_diff
@@ -112,8 +122,8 @@ contains
 
 !> Integrates forward-in-time the MEKE eddy energy equation.
 !! See \ref section_MEKE_equations.
-subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, hv)
-  type(MEKE_type),                          intent(inout) :: MEKE !< MEKE fields
+subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, hv, Time)
+  type(MEKE_type),                          pointer       :: MEKE !< MEKE data.
   type(ocean_grid_type),                    intent(inout) :: G    !< Ocean grid.
   type(verticalGrid_type),                  intent(in)    :: GV   !< Ocean vertical grid structure.
   type(unit_scale_type),                    intent(in)    :: US   !< A dimensional unit scaling type
@@ -122,12 +132,14 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   real, dimension(SZI_(G),SZJB_(G)),        intent(in)    :: SN_v !< Eady growth rate at v-points [T-1 ~> s-1].
   type(vertvisc_type),                      intent(in)    :: visc !< The vertical viscosity type.
   real,                                     intent(in)    :: dt   !< Model(baroclinic) time-step [T ~> s].
-  type(MEKE_CS),                            intent(inout) :: CS   !< MEKE control structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)  :: hu   !< Accumlated zonal mass flux [H L2 ~> m3 or kg]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: hv   !< Accumlated meridional mass flux [H L2 ~> m3 or kg]
+  type(MEKE_CS),                            pointer       :: CS   !< MEKE control structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)   :: hu   !< Accumlated zonal mass flux [H L2 ~> m3 or kg].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)   :: hv   !< Accumlated meridional mass flux [H L2 ~> m3 or kg]
+  type(time_type),                          intent(in)    :: Time !< The time used for interpolating EKE
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
+    data_eke, &     ! EKE from file
     mass, &         ! The total mass of the water column [R Z ~> kg m-2].
     I_mass, &       ! The inverse of mass [R-1 Z-1 ~> m2 kg-1].
     depth_tot, &    ! The depth of the water column [Z ~> m].
@@ -190,6 +202,8 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
 !   call MOM_error(FATAL, "MOM_MEKE: MEKE%MEKE is not associated!")
     return
   endif
+
+  if (.not. CS%MEKE_from_file) then
 
     if (CS%debug) then
       if (allocated(MEKE%mom_src)) &
@@ -569,102 +583,109 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       call hchksum(MEKE%MEKE, "MEKE post-update MEKE", G%HI, haloshift=0, scale=US%L_T_to_m_s**2)
     endif
 
-    call cpu_clock_begin(CS%id_clock_pass)
-    call do_group_pass(CS%pass_MEKE, G%Domain)
-    call cpu_clock_end(CS%id_clock_pass)
+  else ! read MEKE from file
+    call time_interp_external(CS%id_eke,Time,data_eke)
+    do j=js,je ; do i=is,ie
+      MEKE%MEKE(i,j) = data_eke(i,j) * G%mask2dT(i,j)
+    enddo; enddo
+  endif
 
-    ! Calculate diffusivity for main model to use
-    if (CS%MEKE_KhCoeff>0.) then
-      if (.not.CS%MEKE_GEOMETRIC) then
-        if (CS%use_old_lscale) then
-          if (CS%Rd_as_max_scale) then
-            !$OMP parallel do default(shared)
-            do j=js,je ; do i=is,ie
-              MEKE%Kh(i,j) = (CS%MEKE_KhCoeff * &
-                         sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j))*G%areaT(i,j)) ) * &
-                         min(MEKE%Rd_dx_h(i,j), 1.0)
-            enddo ; enddo
-          else
-            !$OMP parallel do default(shared)
-            do j=js,je ; do i=is,ie
-              MEKE%Kh(i,j) = CS%MEKE_KhCoeff * &
-                  sqrt(2.*max(0., barotrFac2(i,j)*MEKE%MEKE(i,j))*G%areaT(i,j))
-            enddo ; enddo
-          endif
+  call cpu_clock_begin(CS%id_clock_pass)
+  call do_group_pass(CS%pass_MEKE, G%Domain)
+  call cpu_clock_end(CS%id_clock_pass)
+
+  ! Calculate diffusivity for main model to use
+  if (CS%MEKE_KhCoeff>0.) then
+    if (.not.CS%MEKE_GEOMETRIC) then
+      if (CS%use_old_lscale) then
+        if (CS%Rd_as_max_scale) then
+          !$OMP parallel do default(shared)
+          do j=js,je ; do i=is,ie
+            MEKE%Kh(i,j) = (CS%MEKE_KhCoeff * &
+                       sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j))*G%areaT(i,j)) ) * &
+                       min(MEKE%Rd_dx_h(i,j), 1.0)
+          enddo ; enddo
         else
           !$OMP parallel do default(shared)
           do j=js,je ; do i=is,ie
             MEKE%Kh(i,j) = CS%MEKE_KhCoeff * &
-                sqrt(2.*max(0., barotrFac2(i,j)*MEKE%MEKE(i,j))) * LmixScale(i,j)
+                sqrt(2.*max(0., barotrFac2(i,j)*MEKE%MEKE(i,j))*G%areaT(i,j))
           enddo ; enddo
         endif
+      else
+        !$OMP parallel do default(shared)
+        do j=js,je ; do i=is,ie
+          MEKE%Kh(i,j) = CS%MEKE_KhCoeff * &
+              sqrt(2.*max(0., barotrFac2(i,j)*MEKE%MEKE(i,j))) * LmixScale(i,j)
+        enddo ; enddo
       endif
     endif
+  endif
 
-    ! Calculate viscosity for the main model to use
-    if (CS%viscosity_coeff_Ku /=0.) then
-      do j=js,je ; do i=is,ie
-        MEKE%Ku(i,j) = CS%viscosity_coeff_Ku * sqrt(2.*max(0.,MEKE%MEKE(i,j))) * LmixScale(i,j)
-      enddo ; enddo
-    endif
+  ! Calculate viscosity for the main model to use
+  if (CS%viscosity_coeff_Ku /=0.) then
+    do j=js,je ; do i=is,ie
+      MEKE%Ku(i,j) = CS%viscosity_coeff_Ku * sqrt(2.*max(0.,MEKE%MEKE(i,j))) * LmixScale(i,j)
+    enddo ; enddo
+  endif
 
-    if (CS%viscosity_coeff_Au /=0.) then
-      do j=js,je ; do i=is,ie
-        MEKE%Au(i,j) = CS%viscosity_coeff_Au * sqrt(2.*max(0.,MEKE%MEKE(i,j))) * LmixScale(i,j)**3
-      enddo ; enddo
-    endif
+  if (CS%viscosity_coeff_Au /=0.) then
+    do j=js,je ; do i=is,ie
+      MEKE%Au(i,j) = CS%viscosity_coeff_Au * sqrt(2.*max(0.,MEKE%MEKE(i,j))) * LmixScale(i,j)**3
+    enddo ; enddo
+  endif
 
-    if (allocated(MEKE%Kh) .or. allocated(MEKE%Ku) .or. allocated(MEKE%Au)) then
-      call cpu_clock_begin(CS%id_clock_pass)
-      call do_group_pass(CS%pass_Kh, G%Domain)
-      call cpu_clock_end(CS%id_clock_pass)
-    endif
+  if (associated(MEKE%Kh) .or. associated(MEKE%Ku) .or. associated(MEKE%Au)) then
+    call cpu_clock_begin(CS%id_clock_pass)
+    call do_group_pass(CS%pass_Kh, G%Domain)
+    call cpu_clock_end(CS%id_clock_pass)
+  endif
 
-    ! Offer fields for averaging.
-    if (any([CS%id_Ue, CS%id_Ub, CS%id_Ut] > 0)) &
-      tmp(:,:) = 0.
-    if (CS%id_MEKE>0) call post_data(CS%id_MEKE, MEKE%MEKE, CS%diag)
-    if (CS%id_Ue>0) then
-      do j=js,je ; do i=is,ie
-        tmp(i,j) = sqrt(max(0., 2. * MEKE%MEKE(i,j)))
-      enddo ; enddo
-      call post_data(CS%id_Ue, tmp, CS%diag)
-    endif
-    if (CS%id_Ub>0) then
-      do j=js,je ; do i=is,ie
-        tmp(i,j) = sqrt(max(0., 2. * MEKE%MEKE(i,j) * bottomFac2(i,j)))
-      enddo ; enddo
-      call post_data(CS%id_Ub, tmp, CS%diag)
-    endif
-    if (CS%id_Ut>0) then
-      do j=js,je ; do i=is,ie
-        tmp(i,j) = sqrt(max(0., 2. * MEKE%MEKE(i,j) * barotrFac2(i,j)))
-      enddo ; enddo
-      call post_data(CS%id_Ut, tmp, CS%diag)
-    endif
-    if (CS%id_Kh>0) call post_data(CS%id_Kh, MEKE%Kh, CS%diag)
-    if (CS%id_Ku>0) call post_data(CS%id_Ku, MEKE%Ku, CS%diag)
-    if (CS%id_Au>0) call post_data(CS%id_Au, MEKE%Au, CS%diag)
-    if (CS%id_KhMEKE_u>0) call post_data(CS%id_KhMEKE_u, Kh_u, CS%diag)
-    if (CS%id_KhMEKE_v>0) call post_data(CS%id_KhMEKE_v, Kh_v, CS%diag)
-    if (CS%id_src>0) call post_data(CS%id_src, src, CS%diag)
-    if (CS%id_decay>0) call post_data(CS%id_decay, MEKE_decay, CS%diag)
-    if (CS%id_GM_src>0) call post_data(CS%id_GM_src, MEKE%GM_src, CS%diag)
-    if (CS%id_mom_src>0) call post_data(CS%id_mom_src, MEKE%mom_src, CS%diag)
-    if (CS%id_GME_snk>0) call post_data(CS%id_GME_snk, MEKE%GME_snk, CS%diag)
-    if (CS%id_Le>0) call post_data(CS%id_Le, LmixScale, CS%diag)
-    if (CS%id_gamma_b>0) then
-      do j=js,je ; do i=is,ie
-        bottomFac2(i,j) = sqrt(bottomFac2(i,j))
-      enddo ; enddo
-      call post_data(CS%id_gamma_b, bottomFac2, CS%diag)
-    endif
-    if (CS%id_gamma_t>0) then
-      do j=js,je ; do i=is,ie
-        barotrFac2(i,j) = sqrt(barotrFac2(i,j))
-      enddo ; enddo
-      call post_data(CS%id_gamma_t, barotrFac2, CS%diag)
-    endif
+  ! Offer fields for averaging.
+  if (any([CS%id_Ue, CS%id_Ub, CS%id_Ut] > 0)) &
+    tmp(:,:) = 0.
+  if (CS%id_MEKE>0) call post_data(CS%id_MEKE, MEKE%MEKE, CS%diag)
+  if (CS%id_Ue>0) then
+    do j=js,je ; do i=is,ie
+      tmp(i,j) = sqrt(max(0., 2. * MEKE%MEKE(i,j)))
+    enddo ; enddo
+    call post_data(CS%id_Ue, tmp, CS%diag)
+  endif
+  if (CS%id_Ub>0) then
+    do j=js,je ; do i=is,ie
+      tmp(i,j) = sqrt(max(0., 2. * MEKE%MEKE(i,j) * bottomFac2(i,j)))
+    enddo ; enddo
+    call post_data(CS%id_Ub, tmp, CS%diag)
+  endif
+  if (CS%id_Ut>0) then
+    do j=js,je ; do i=is,ie
+      tmp(i,j) = sqrt(max(0., 2. * MEKE%MEKE(i,j) * barotrFac2(i,j)))
+    enddo ; enddo
+    call post_data(CS%id_Ut, tmp, CS%diag)
+  endif
+  if (CS%id_Kh>0) call post_data(CS%id_Kh, MEKE%Kh, CS%diag)
+  if (CS%id_Ku>0) call post_data(CS%id_Ku, MEKE%Ku, CS%diag)
+  if (CS%id_Au>0) call post_data(CS%id_Au, MEKE%Au, CS%diag)
+  if (CS%id_KhMEKE_u>0) call post_data(CS%id_KhMEKE_u, Kh_u, CS%diag)
+  if (CS%id_KhMEKE_v>0) call post_data(CS%id_KhMEKE_v, Kh_v, CS%diag)
+  if (CS%id_src>0) call post_data(CS%id_src, src, CS%diag)
+  if (CS%id_decay>0) call post_data(CS%id_decay, MEKE_decay, CS%diag)
+  if (CS%id_GM_src>0) call post_data(CS%id_GM_src, MEKE%GM_src, CS%diag)
+  if (CS%id_mom_src>0) call post_data(CS%id_mom_src, MEKE%mom_src, CS%diag)
+  if (CS%id_GME_snk>0) call post_data(CS%id_GME_snk, MEKE%GME_snk, CS%diag)
+  if (CS%id_Le>0) call post_data(CS%id_Le, LmixScale, CS%diag)
+  if (CS%id_gamma_b>0) then
+    do j=js,je ; do i=is,ie
+      bottomFac2(i,j) = sqrt(bottomFac2(i,j))
+    enddo ; enddo
+    call post_data(CS%id_gamma_b, bottomFac2, CS%diag)
+  endif
+  if (CS%id_gamma_t>0) then
+    do j=js,je ; do i=is,ie
+      barotrFac2(i,j) = sqrt(barotrFac2(i,j))
+    enddo ; enddo
+    call post_data(CS%id_gamma_t, barotrFac2, CS%diag)
+  endif
 
 end subroutine step_forward_MEKE
 
@@ -1033,6 +1054,7 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
                            ! run to the representation in a restart file.
   real    :: MEKE_restoring_timescale ! The timescale used to nudge MEKE toward its equilibrium value.
   real :: cdrag            ! The default bottom drag coefficient [nondim].
+  character(len=200) :: eke_file
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   logical :: laplacian, biharmonic, coldStart
   ! This include declares and sets the variable "version".
@@ -1054,72 +1076,95 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
 
   call MOM_mesg("MEKE_init: reading parameters ", 5)
 
-  ! Read all relevant parameters and write them to the model log.
-  call get_param(param_file, mdl, "MEKE_DAMPING", CS%MEKE_damping, &
-                 "The local depth-independent MEKE dissipation rate.", &
-                 units="s-1", default=0.0, scale=US%T_to_s)
-  call get_param(param_file, mdl, "MEKE_CD_SCALE", CS%MEKE_Cd_scale, &
-                 "The ratio of the bottom eddy velocity to the column mean "//&
-                 "eddy velocity, i.e. sqrt(2*MEKE). This should be less than 1 "//&
-                 "to account for the surface intensification of MEKE.", &
-                 units="nondim", default=0.)
-  call get_param(param_file, mdl, "MEKE_CB", CS%MEKE_Cb, &
-                 "A coefficient in the expression for the ratio of bottom projected "//&
-                 "eddy energy and mean column energy (see Jansen et al. 2015).",&
-                 units="nondim", default=25.)
-  call get_param(param_file, mdl, "MEKE_MIN_GAMMA2", CS%MEKE_min_gamma, &
-                 "The minimum allowed value of gamma_b^2.",&
-                 units="nondim", default=0.0001)
-  call get_param(param_file, mdl, "MEKE_CT", CS%MEKE_Ct, &
-                 "A coefficient in the expression for the ratio of barotropic "//&
-                 "eddy energy and mean column energy (see Jansen et al. 2015).",&
-                 units="nondim", default=50.)
-  call get_param(param_file, mdl, "MEKE_GMCOEFF", CS%MEKE_GMcoeff, &
-                 "The efficiency of the conversion of potential energy "//&
-                 "into MEKE by the thickness mixing parameterization. "//&
-                 "If MEKE_GMCOEFF is negative, this conversion is not "//&
-                 "used or calculated.", units="nondim", default=-1.0)
-  call get_param(param_file, mdl, "MEKE_GEOMETRIC", CS%MEKE_GEOMETRIC, &
-                 "If MEKE_GEOMETRIC is true, uses the GM coefficient formulation "//&
-                 "from the GEOMETRIC framework (Marshall et al., 2012).", default=.false.)
-  call get_param(param_file, mdl, "MEKE_GEOMETRIC_ALPHA", CS%MEKE_GEOMETRIC_alpha, &
-                 "The nondimensional coefficient governing the efficiency of the GEOMETRIC \n"//&
-                 "thickness diffusion.", units="nondim", default=0.05)
-  call get_param(param_file, mdl, "MEKE_EQUILIBRIUM_ALT", CS%MEKE_equilibrium_alt, &
-                 "If true, use an alternative formula for computing the (equilibrium)"//&
-                 "initial value of MEKE.", default=.false.)
-  call get_param(param_file, mdl, "MEKE_EQUILIBRIUM_RESTORING", CS%MEKE_equilibrium_restoring, &
-                 "If true, restore MEKE back to its equilibrium value, which is calculated at "//&
-                 "each time step.", default=.false.)
-  if (CS%MEKE_equilibrium_restoring) then
-    call get_param(param_file, mdl, "MEKE_RESTORING_TIMESCALE", MEKE_restoring_timescale, &
-                   "The timescale used to nudge MEKE toward its equilibrium value.", units="s", &
-                   default=1e6, scale=US%s_to_T)
-    CS%MEKE_restoring_rate = 1.0 / MEKE_restoring_timescale
-  endif
+  call get_param(param_file, mdl, "MEKE_FROM_FILE", CS%MEKE_from_file, &
+                 "If true, reads EKE from a netCDF file.", default=.false.)
+  if (CS%MEKE_from_file) then
+    call time_interp_external_init
+    call get_param(param_file, mdl, "EKE_FILE", CS%eke_file, &
+                 "A file in which to find the surface salinity to use for restoring.", &
+                 default="eke_file.nc")
+    call get_param(param_file, mdl, "EKE_VARIABLE", CS%eke_var_name, &
+                 "The name of the surface salinity variable to read from "//&
+                 "SALT_RESTORE_FILE for restoring salinity.", &
+                 default="eke")
+    call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, &
+                 "The directory in which all input files are found.", &
+                 default=".", do_not_log=.true.)
+    CS%inputdir = slasher(CS%inputdir)
 
-  call get_param(param_file, mdl, "MEKE_FRCOEFF", CS%MEKE_FrCoeff, &
-                 "The efficiency of the conversion of mean energy into "//&
-                 "MEKE.  If MEKE_FRCOEFF is negative, this conversion "//&
-                 "is not used or calculated.", units="nondim", default=-1.0)
-  call get_param(param_file, mdl, "MEKE_GMECOEFF", CS%MEKE_GMECoeff, &
-                 "The efficiency of the conversion of MEKE into mean energy "//&
-                 "by GME.  If MEKE_GMECOEFF is negative, this conversion "//&
-                 "is not used or calculated.", units="nondim", default=-1.0)
-  call get_param(param_file, mdl, "MEKE_BGSRC", CS%MEKE_BGsrc, &
-                 "A background energy source for MEKE.", units="W kg-1", &
-                 default=0.0, scale=US%m_to_L**2*US%T_to_s**3)
-  call get_param(param_file, mdl, "MEKE_KH", CS%MEKE_Kh, &
-                 "A background lateral diffusivity of MEKE. "//&
-                 "Use a negative value to not apply lateral diffusion to MEKE.", &
-                 units="m2 s-1", default=-1.0, scale=US%m_to_L**2*US%T_to_s)
-  call get_param(param_file, mdl, "MEKE_K4", CS%MEKE_K4, &
-                 "A lateral bi-harmonic diffusivity of MEKE. "//&
-                 "Use a negative value to not apply bi-harmonic diffusion to MEKE.", &
-                 units="m4 s-1", default=-1.0, scale=US%m_to_L**4*US%T_to_s)
-  call get_param(param_file, mdl, "MEKE_DTSCALE", CS%MEKE_dtScale, &
-                 "A scaling factor to accelerate the time evolution of MEKE.", &
-                 units="nondim", default=1.0)
+    eke_file = trim(CS%inputdir) // trim(CS%eke_file)
+    CS%id_eke = init_external_field(eke_file, CS%eke_var_name, domain=G%Domain%mpp_domain)
+
+  else
+    ! Read all relevant parameters and write them to the model log.
+    call get_param(param_file, mdl, "MEKE_DAMPING", CS%MEKE_damping, &
+                   "The local depth-independent MEKE dissipation rate.", &
+                   units="s-1", default=0.0, scale=US%T_to_s)
+    call get_param(param_file, mdl, "MEKE_CD_SCALE", CS%MEKE_Cd_scale, &
+                   "The ratio of the bottom eddy velocity to the column mean "//&
+                   "eddy velocity, i.e. sqrt(2*MEKE). This should be less than 1 "//&
+                   "to account for the surface intensification of MEKE.", &
+                   units="nondim", default=0.)
+    call get_param(param_file, mdl, "MEKE_CB", CS%MEKE_Cb, &
+                   "A coefficient in the expression for the ratio of bottom projected "//&
+                   "eddy energy and mean column energy (see Jansen et al. 2015).",&
+                   units="nondim", default=25.)
+    call get_param(param_file, mdl, "MEKE_MIN_GAMMA2", CS%MEKE_min_gamma, &
+                   "The minimum allowed value of gamma_b^2.",&
+                   units="nondim", default=0.0001)
+    call get_param(param_file, mdl, "MEKE_CT", CS%MEKE_Ct, &
+                   "A coefficient in the expression for the ratio of barotropic "//&
+                   "eddy energy and mean column energy (see Jansen et al. 2015).",&
+                   units="nondim", default=50.)
+    call get_param(param_file, mdl, "MEKE_GMCOEFF", CS%MEKE_GMcoeff, &
+                   "The efficiency of the conversion of potential energy "//&
+                   "into MEKE by the thickness mixing parameterization. "//&
+                   "If MEKE_GMCOEFF is negative, this conversion is not "//&
+                   "used or calculated.", units="nondim", default=-1.0)
+    call get_param(param_file, mdl, "MEKE_GEOMETRIC", CS%MEKE_GEOMETRIC, &
+                   "If MEKE_GEOMETRIC is true, uses the GM coefficient formulation "//&
+                   "from the GEOMETRIC framework (Marshall et al., 2012).", default=.false.)
+    call get_param(param_file, mdl, "MEKE_GEOMETRIC_ALPHA", CS%MEKE_GEOMETRIC_alpha, &
+                   "The nondimensional coefficient governing the efficiency of the GEOMETRIC \n"//&
+                   "thickness diffusion.", units="nondim", default=0.05)
+    call get_param(param_file, mdl, "MEKE_EQUILIBRIUM_ALT", CS%MEKE_equilibrium_alt, &
+                   "If true, use an alternative formula for computing the (equilibrium)"//&
+                   "initial value of MEKE.", default=.false.)
+    call get_param(param_file, mdl, "MEKE_EQUILIBRIUM_RESTORING", CS%MEKE_equilibrium_restoring, &
+                   "If true, restore MEKE back to its equilibrium value, which is calculated at "//&
+                   "each time step.", default=.false.)
+    if (CS%MEKE_equilibrium_restoring) then
+      call get_param(param_file, mdl, "MEKE_RESTORING_TIMESCALE", MEKE_restoring_timescale, &
+                     "The timescale used to nudge MEKE toward its equilibrium value.", units="s", &
+                     default=1e6, scale=US%T_to_s)
+      CS%MEKE_restoring_rate = 1.0 / MEKE_restoring_timescale
+    endif
+
+    call get_param(param_file, mdl, "MEKE_FRCOEFF", CS%MEKE_FrCoeff, &
+                   "The efficiency of the conversion of mean energy into "//&
+                   "MEKE.  If MEKE_FRCOEFF is negative, this conversion "//&
+                   "is not used or calculated.", units="nondim", default=-1.0)
+    call get_param(param_file, mdl, "MEKE_GMECOEFF", CS%MEKE_GMECoeff, &
+                   "The efficiency of the conversion of MEKE into mean energy "//&
+                   "by GME.  If MEKE_GMECOEFF is negative, this conversion "//&
+                   "is not used or calculated.", units="nondim", default=-1.0)
+    call get_param(param_file, mdl, "MEKE_BGSRC", CS%MEKE_BGsrc, &
+                   "A background energy source for MEKE.", units="W kg-1", &
+                   default=0.0, scale=US%m_to_L**2*US%T_to_s**3)
+    call get_param(param_file, mdl, "MEKE_KH", CS%MEKE_Kh, &
+                   "A background lateral diffusivity of MEKE. "//&
+                   "Use a negative value to not apply lateral diffusion to MEKE.", &
+                   units="m2 s-1", default=-1.0, scale=US%m_to_L**2*US%T_to_s)
+    call get_param(param_file, mdl, "MEKE_K4", CS%MEKE_K4, &
+                   "A lateral bi-harmonic diffusivity of MEKE. "//&
+                   "Use a negative value to not apply bi-harmonic diffusion to MEKE.", &
+                   units="m4 s-1", default=-1.0, scale=US%m_to_L**4*US%T_to_s)
+    call get_param(param_file, mdl, "MEKE_DTSCALE", CS%MEKE_dtScale, &
+                   "A scaling factor to accelerate the time evolution of MEKE.", &
+                   units="nondim", default=1.0)
+  endif ! MEKE_from_file
+  ! GMM, make sure all params used to calculated MEKE are within the above if
+
   call get_param(param_file, mdl, "MEKE_KHCOEFF", CS%MEKE_KhCoeff, &
                  "A scaling factor in the expression for eddy diffusivity "//&
                  "which is otherwise proportional to the MEKE velocity- "//&
