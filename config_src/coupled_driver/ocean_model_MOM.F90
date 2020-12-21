@@ -182,13 +182,13 @@ type, public :: ocean_state_type ; private
                               !! processes before time stepping the dynamics.
 
   type(directories) :: dirs   !< A structure containing several relevant directory paths.
-  type(mech_forcing)          :: forces => NULL() !< A structure with the driving mechanical surface forces
-  type(forcing)               :: fluxes => NULL()   !< A structure containing pointers to
+  type(mech_forcing)          :: forces  !< A structure with the driving mechanical surface forces
+  type(forcing)               :: fluxes  !< A structure containing pointers to
                                                     !! the thermodynamic ocean forcing fields.
-  type(forcing)               :: flux_tmp => NULL() !< A secondary structure containing pointers to the
+  type(forcing)               :: flux_tmp !< A secondary structure containing pointers to the
                               !! ocean forcing fields for when multiple coupled
                               !! timesteps are taken per thermodynamic step.
-  type(surface)               :: sfc_state => NULL() !< A structure containing pointers to
+  type(surface)               :: sfc_state   !< A structure containing pointers to
                               !! the ocean surface state fields.
   type(ocean_grid_type), pointer :: &
     grid => NULL()            !< A pointer to a grid structure containing metrics
@@ -365,7 +365,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
     use_melt_pot=.false.
   endif
 
-  allocate(OS%sfc_state)
+  !allocate(OS%sfc_state)
   call allocate_surface_state(OS%sfc_state, OS%grid, use_temperature, do_integrals=.true., &
                               gas_fields_ocn=gas_fields_ocn, use_meltpot=use_melt_pot)
 
