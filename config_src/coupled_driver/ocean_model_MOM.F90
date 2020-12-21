@@ -182,13 +182,13 @@ type, public :: ocean_state_type ; private
                               !! processes before time stepping the dynamics.
 
   type(directories) :: dirs   !< A structure containing several relevant directory paths.
-  type(mech_forcing), pointer :: forces => NULL() !< A structure with the driving mechanical surface forces
-  type(forcing), pointer      :: fluxes => NULL()   !< A structure containing pointers to
+  type(mech_forcing)          :: forces => NULL() !< A structure with the driving mechanical surface forces
+  type(forcing)               :: fluxes => NULL()   !< A structure containing pointers to
                                                     !! the thermodynamic ocean forcing fields.
-  type(forcing), pointer      :: flux_tmp => NULL() !< A secondary structure containing pointers to the
+  type(forcing)               :: flux_tmp => NULL() !< A secondary structure containing pointers to the
                               !! ocean forcing fields for when multiple coupled
                               !! timesteps are taken per thermodynamic step.
-  type(surface), pointer      :: sfc_state => NULL() !< A structure containing pointers to
+  type(surface)               :: sfc_state => NULL() !< A structure containing pointers to
                               !! the ocean surface state fields.
   type(ocean_grid_type), pointer :: &
     grid => NULL()            !< A pointer to a grid structure containing metrics
@@ -273,9 +273,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
   endif
   allocate(OS)
 
-  allocate(OS%fluxes)
-  allocate(OS%forces)
-  allocate(OS%flux_tmp)
+!  allocate(OS%fluxes)
+!  allocate(OS%forces)
+!  allocate(OS%flux_tmp)
 
   OS%is_ocean_pe = Ocean_sfc%is_ocean_pe
   if (.not.OS%is_ocean_pe) return
@@ -379,7 +379,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
 
   if (OS%use_ice_shelf)  then
     call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
-                              OS%diag_IS, OS%forces, OS%fluxes)
+                              OS%diag, OS%forces, OS%fluxes)
   endif
   if (OS%icebergs_alter_ocean)  then
     call marine_ice_init(OS%Time, OS%grid, param_file, OS%diag, OS%marine_ice_CSp)

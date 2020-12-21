@@ -1207,7 +1207,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   real    :: col_thick_melt_thresh ! An ocean column thickness below which iceshelf melting
                                    ! does not occur [Z ~> m]
   real, allocatable, dimension(:,:) :: tmp2d ! Temporary array for storing ice shelf input data
-
   type(mech_forcing), pointer :: forces => NULL()
   type(forcing), pointer :: fluxes =>  NULL()
   type(surface), pointer :: sfc_state => NULL()
@@ -1294,6 +1293,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   call MOM_initialize_topography(dG%bathyT, CS%Grid%max_depth, dG, param_file)
   call rescale_dyn_horgrid_bathymetry(dG, CS%US%Z_to_m)
   call copy_dyngrid_to_MOM_grid(dG,CS%Grid,CS%US)
+  call destroy_dyn_horgrid(dG)
 !  endif
   G=>CS%Grid
 
