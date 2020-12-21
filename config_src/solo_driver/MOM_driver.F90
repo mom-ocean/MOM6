@@ -307,20 +307,8 @@ program MOM_main
     Time = Start_time
   endif
 
-  ! Read paths and filenames from namelist and store in "dirs".
-  ! Also open the parsed input parameter file(s) and setup param_file.
-  call get_MOM_input(param_file, dirs)
-
-  call get_param(param_file, mod_name, "ICE_SHELF", use_ice_shelf, &
-       "If true, enables the ice shelf model.", default=.false.)
-  if (use_ice_shelf) then
-    ! These arrays are not initialized in most solo cases, but are needed
-    ! when using an ice shelf
-    call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, &
-                              diag_IS, forces, fluxes, sfc_state)
-  endif
-  call close_param_file(param_file)
-
+  ! Call initialize MOM with an optional Ice Shelf CS which, if present triggers
+  ! initialization of ice shelf parameters and arrays.
   if (sum(date) >= 0) then
     call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, restart_CSp, &
                         segment_start_time, offline_tracer_mode=offline_tracer_mode, &
@@ -329,6 +317,18 @@ program MOM_main
     call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, restart_CSp, &
                         offline_tracer_mode=offline_tracer_mode, diag_ptr=diag, &
                         tracer_flow_CSp=tracer_flow_CSp,ice_shelf_CSp=ice_shelf_CSp)
+  endif
+
+  call get_param(param_file, mod_name, "ICE_SHELF", use_ice_shelf, &
+       "If true, enables the ice shelf model.", default=.false.)
+
+  if (use_ice_shelf) then
+    ! These arrays are not initialized in most solo cases, but are needed
+    ! when using an ice shelf
+    ice_shelf_CSp => NULL()  ! Reset the pointer and make another call to reinitialize
+                              ! the ice shelf and associated forcing types
+    call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, &
+                              diag, forces, fluxes, sfc_state)
   endif
 
   call get_MOM_state_elements(MOM_CSp, G=grid, GV=GV, US=US, C_p_scaled=fluxes%C_p)

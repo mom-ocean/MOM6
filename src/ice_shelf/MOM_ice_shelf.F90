@@ -9,6 +9,7 @@ use MOM_constants, only : hlf
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_COMPONENT, CLOCK_ROUTINE
 use MOM_coms,                 only : num_PEs
+use MOM_diag_mediator, only    : MOM_diag_ctrl=>diag_ctrl
 use MOM_IS_diag_mediator, only : post_data, register_diag_field=>register_MOM_IS_diag_field, safe_alloc_ptr
 use MOM_IS_diag_mediator, only : set_axes_info
 use MOM_IS_diag_mediator, only : diag_mediator_init, set_diag_mediator_grid, diag_ctrl, time_type
@@ -1156,7 +1157,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   type(ocean_grid_type),        pointer       :: ocn_grid   !< The calling ocean model's horizontal grid structure
   type(time_type),              intent(inout) :: Time !< The clock that that will indicate the model time
   type(ice_shelf_CS),           pointer       :: CS   !< A pointer to the ice shelf control structure
-  type(diag_ctrl),              pointer       :: diag !< A structure that is used to regulate the diagnostic output.
+  type(MOM_diag_ctrl),              pointer       :: diag !< This is a pointer to the MOM diag CS
+                                                          !! which will be discarded
+
   type(mech_forcing), optional, target, intent(inout) :: forces_in !< A structure with the driving mechanical forces
   type(forcing),      optional, target, intent(inout) :: fluxes_in !< A structure containing pointers to any
                                                            !!  possible thermodynamic or mass-flux forcing fields.
@@ -1284,11 +1287,11 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   endif
   G=>CS%Grid
 
-  allocate(diag)
-  call diag_mediator_init(G, param_file,diag,component='MOM_IceShelf')
+  allocate(CS%diag)
+  call diag_mediator_init(G, param_file,CS%diag,component='MOM_IceShelf')
   ! This call sets up the diagnostic axes. These are needed,
   ! e.g. to generate the target grids below.
-  call set_axes_info(G, param_file, diag)
+  call set_axes_info(G, param_file, CS%diag)
 
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -1302,7 +1305,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   ! Convenience pointers
   OG => CS%ocn_grid
   US => CS%US
-  CS%diag=>diag
+  !CS%diag=>diag
 
   ! Are we being called from the solo ice-sheet driver? When called by the ocean
   ! model solo_ice_sheet_in is not preset.
@@ -1777,7 +1780,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   endif
 
   if (shelf_mass_is_dynamic) &
-    call initialize_ice_shelf_dyn(param_file, Time, ISS, CS%dCS, G, US, diag, new_sim, solo_ice_sheet_in)
+    call initialize_ice_shelf_dyn(param_file, Time, ISS, CS%dCS, G, US, CS%diag, new_sim, solo_ice_sheet_in)
 
   call fix_restart_unit_scaling(US)
 
