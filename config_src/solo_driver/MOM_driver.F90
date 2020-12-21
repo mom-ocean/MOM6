@@ -80,13 +80,12 @@ program MOM_main
 #include <MOM_memory.h>
 
   ! A structure with the driving mechanical surface forces
-  type(mech_forcing), pointer :: forces => NULL()
+  type(mech_forcing) :: forces
   ! A structure containing pointers to the thermodynamic forcing fields
   ! at the ocean surface.
-  type(forcing), pointer :: fluxes => NULL()
-
+  type(forcing) :: fluxes
   ! A structure containing pointers to the ocean surface state fields.
-  type(surface), pointer :: sfc_state => NULL()
+  type(surface) :: sfc_state
 
   ! A pointer to a structure containing metrics and related information.
   type(ocean_grid_type), pointer :: grid => NULL()
@@ -221,7 +220,7 @@ program MOM_main
 
   call MOM_infra_init() ; call io_infra_init()
 
-  allocate(forces,fluxes,sfc_state)
+  !allocate(forces,fluxes,sfc_state)
 
   ! Initialize the ensemble manager.  If there are no settings for ensemble_size
   ! in input.nml(ensemble.nml), these should not do anything.  In coupled
