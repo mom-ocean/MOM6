@@ -71,6 +71,22 @@ program MOM_main
   use MOM_write_cputime,   only : write_cputime, MOM_write_cputime_init
   use MOM_write_cputime,   only : write_cputime_start_clock, write_cputime_CS
 
+  use ensemble_manager_mod, only : ensemble_manager_init, get_ensemble_size
+  use ensemble_manager_mod, only : ensemble_pelist_setup
+  use mpp_mod, only : set_current_pelist => mpp_set_current_pelist
+  use time_interp_external_mod, only : time_interp_external_init
+  use fms_affinity_mod,     only : fms_affinity_init, fms_affinity_set,fms_affinity_get
+
+  use MOM_ice_shelf, only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
+  use MOM_ice_shelf, only : shelf_calc_flux, add_shelf_forces, ice_shelf_save_restart
+! , add_shelf_flux_forcing, add_shelf_flux_IOB
+
+  use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
+  use MOM_wave_interface, only: MOM_wave_interface_init_lite, Update_Surface_Waves
+#ifdef UFS
+  use get_stochy_pattern_mod, only: write_stoch_restart_ocn
+#endif
+
   implicit none
 
 #include <MOM_memory.h>

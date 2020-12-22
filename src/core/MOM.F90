@@ -156,7 +156,9 @@ use MOM_offline_main,          only : offline_redistribute_residual, offline_dia
 use MOM_offline_main,          only : offline_fw_fluxes_into_ocean, offline_fw_fluxes_out_ocean
 use MOM_offline_main,          only : offline_advection_layer, offline_transport_end
 use MOM_ALE,                   only : ale_offline_tracer_final, ALE_main_offline
+#ifdef UFS
 use stochastic_physics,        only : init_stochastic_physics_ocn
+#endif
 
 implicit none ; private
 
@@ -249,8 +251,6 @@ type, public :: MOM_control_struct ; private
   logical :: offline_tracer_mode = .false.
                     !< If true, step_offline() is called instead of step_MOM().
                     !! This is intended for running MOM6 in offline tracer mode
-  logical :: do_stochy = .false.
-                    !< If true, call stochastic physics pattern generator
 
   type(time_type), pointer :: Time   !< pointer to the ocean clock
   real    :: dt                      !< (baroclinic) dynamics time step [T ~> s]
@@ -2506,6 +2506,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call copy_dyngrid_to_MOM_grid(dG, G, US)
   call destroy_dyn_horgrid(dG)
 
+  do_epbl=.false.
+  do_sppt=.false.
+#ifdef UFS
   num_procs=num_PEs()
   allocate(pelist(num_procs))
   call Get_PElist(pelist,commID = mom_comm)
@@ -2513,12 +2516,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   master=root_PE()
 
   !print*,'callling init_stochastic_physics_ocn',maxval(G%geoLatT)
-  do_epbl=.false.
-  do_sppt=.false.
+  if (master) print*,'about to call init_stochastic_physics'
   call init_stochastic_physics_ocn(CS%dt_therm,G%geoLonT,G%geoLatT,G%ied-G%isd+1,G%jed-G%jsd+1,nz,do_epbl,do_sppt,master,mom_comm,iret)
-  if (do_sppt .eq. .true.) CS%do_stochy=.true.
-  if (do_epbl .eq. .true.) CS%do_stochy=.true.
-  !print*,'back from init_stochastic_physics_ocn',CS%do_stochy
+#endif
 
   ! Set a few remaining fields that are specific to the ocean grid type.
   if (CS%rotate_index) then
