@@ -69,7 +69,9 @@ use MOM_variables,           only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
 use MOM_verticalGrid,        only : verticalGrid_type, get_thickness_units
 use MOM_wave_speed,          only : wave_speeds
 use MOM_wave_interface,      only : wave_parameters_CS
+#ifdef UFS
 use stochastic_physics,      only : run_stochastic_physics_ocn
+#endif
 
 
 implicit none ; private
@@ -305,23 +307,28 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   real, dimension(SZI_(G),SZJ_(G))            :: sppt_wts
   real, dimension(SZI_(G),SZJ_(G),2)          :: t_rp
+#ifdef UFS
   real, dimension(SZI_(G),SZJ_(G),SZK_(G))   :: h_in
   real, dimension(SZI_(G),SZJ_(G),SZK_(G))   :: t_in        !< thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G))   :: s_in        !< thickness [H ~> m or kg m-2]
   real :: t_tend,s_tend,h_tend                  ! holder for tendencey needed for SPPT
   real :: t_pert,s_pert,h_pert                  ! holder for tendencey needed for SPPT
+#endif
 
   if (G%ke == 1) return
 
+#ifdef UFS
    ! save  copy of the date for SPPT
   if (CS%do_sppt) then
      h_in=h
      t_in=tv%T
      s_in=tv%S
    endif
+   print*,'calling run_stochastic_physics'
    call run_stochastic_physics_ocn(t_rp,sppt_wts)
    !print*,'in diabatic',CS%do_sppt,size(t_in,1),size(t_in,2),size(t_in,3),size(sppt_wts,1),size(sppt_wts,2)
-   !print*,'in diabatic',CS%do_sppt,minval(sppt_wts),maxval(sppt_wts)
+   print*,'in diabatic',CS%do_sppt,minval(sppt_wts),maxval(sppt_wts)
+   print*,'in diabatic',CS%do_sppt,minval(t_rp),maxval(t_rp)
   if (CS%id_t_rp1 > 0) then
      call post_data(CS%id_t_rp1, t_rp(:,:,1), CS%diag)
   endif
@@ -331,6 +338,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   if (CS%id_sppt_wts > 0) then
      call post_data(CS%id_sppt_wts, sppt_wts, CS%diag)
   endif
+#endif
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -486,6 +494,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   if (CS%debugConservation) call MOM_state_stats('leaving diabatic', u, v, h, tv%T, tv%S, G, GV, US)
 
+#ifdef UFS
   if (CS%do_sppt) then
     do k=1,nz
       do j=js,je
@@ -509,6 +518,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
       enddo
     enddo
   endif
+#endif
 
 end subroutine diabatic
 
@@ -840,7 +850,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, t_rp, visc, ADp, CDp, d
     endif
 
     call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
-    call energetic_PBL(h, u_h, v_h, tv, fluxes, t_rp, dt, Kd_ePBL, G, GV, US, &
+    call energetic_PBL(h, u_h, v_h, tv, fluxes, t_rp, CS%do_epbl, dt, Kd_ePBL, G, GV, US, &
                        CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
 
     if (associated(Hml)) then
@@ -1377,7 +1387,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, t_rp, visc, ADp, CDp, dt, Time
     endif
 
     call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
-    call energetic_PBL(h, u_h, v_h, tv, fluxes, t_rp, dt, Kd_ePBL, G, GV, US, &
+    call energetic_PBL(h, u_h, v_h, tv, fluxes, t_rp, CS%do_epbl, dt, Kd_ePBL, G, GV, US, &
                        CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
 
     if (associated(Hml)) then
