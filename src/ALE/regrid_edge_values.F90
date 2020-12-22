@@ -16,6 +16,7 @@ public bound_edge_values, average_discontinuous_edge_values, check_discontinuous
 public edge_values_explicit_h2, edge_values_explicit_h4
 public edge_values_implicit_h4, edge_values_implicit_h6
 public edge_slopes_implicit_h3, edge_slopes_implicit_h5
+public solve_diag_dominant_tridiag
 ! public solve_diag_dominant_tridiag, linear_solver
 
 ! The following parameters are used to avoid singular matrices for boundary
