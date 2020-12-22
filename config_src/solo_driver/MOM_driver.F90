@@ -28,7 +28,6 @@ program MOM_main
   use MOM_cpu_clock,       only : CLOCK_COMPONENT
   use MOM_diag_mediator,   only : enable_averaging, disable_averaging, diag_mediator_end
   use MOM_diag_mediator,   only : diag_ctrl, diag_mediator_close_registration
-  use MOM_IS_diag_mediator,   only : diag_IS_ctrl=>diag_ctrl, diag_mediator_IS_end=>diag_mediator_end
   use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
   use MOM,                 only : extract_surface_state, finish_MOM_initialization
   use MOM,                 only : get_MOM_state_elements, MOM_state_is_synchronized
@@ -199,8 +198,6 @@ program MOM_main
                               !! that will be used for MOM restart files.
   type(diag_ctrl),           pointer :: &
        diag => NULL()         !< A pointer to the diagnostic regulatory structure
-  type(diag_IS_ctrl), pointer :: &
-      diag_IS => NULL()       !< A pointer to the diagnostic regulatory structure
   !-----------------------------------------------------------------------
 
   character(len=4), parameter :: vers_num = 'v2.0'
@@ -665,7 +662,6 @@ program MOM_main
 
   call callTree_waypoint("End MOM_main")
   call diag_mediator_end(Time, diag, end_diag_manager=.true.)
-  if (use_ice_shelf) call diag_mediator_IS_end(Time, diag_IS)
   if (cpu_steps > 0) call write_cputime(Time, ns-1, write_CPU_CSp, call_end=.true.)
   call cpu_clock_end(termClock)
 

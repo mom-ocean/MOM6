@@ -15,6 +15,7 @@ use MOM_IS_diag_mediator, only : set_axes_info
 use MOM_IS_diag_mediator, only : diag_mediator_init, set_diag_mediator_grid, diag_ctrl, time_type
 use MOM_IS_diag_mediator, only : enable_averages, enable_averaging, disable_averaging
 use MOM_IS_diag_mediator, only : diag_mediator_infrastructure_init, diag_mediator_close_registration
+use MOM_IS_diag_mediator, only : diag_mediator_end
 use MOM_domains, only : MOM_domains_init, clone_MOM_domain
 use MOM_domains, only : pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE, CORNER
 use MOM_dyn_horgrid, only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
@@ -2059,6 +2060,7 @@ subroutine ice_shelf_end(CS)
 
   if (CS%active_shelf_dynamics) call ice_shelf_dyn_end(CS%dCS)
 
+  call diag_mediator_end(CS%diag)
   deallocate(CS)
 
 end subroutine ice_shelf_end

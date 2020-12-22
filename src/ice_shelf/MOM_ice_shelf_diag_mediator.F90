@@ -304,28 +304,41 @@ subroutine post_data(diag_field_id, field, diag_cs, is_static, mask)
       used = send_data(fms_diag_id, locfield, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, mask=mask)
     elseif(i_data .and. associated(diag%mask2d)) then
+!      used = send_data(fms_diag_id, locfield, &
+!           is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%mask2d)
       used = send_data(fms_diag_id, locfield, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%mask2d)
+                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
     elseif((.not.i_data) .and. associated(diag%mask2d_comp)) then
+!      used = send_data(fms_diag_id, locfield, &
+!           is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%mask2d_comp)
       used = send_data(fms_diag_id, locfield, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%mask2d_comp)
+                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
     else
       used = send_data(fms_diag_id, locfield, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
     endif
   elseif (diag_cs%ave_enabled) then
     if (present(mask)) then
+!      used = send_data(fms_diag_id, locfield, diag_cs%time_end, &
+!                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
+!                       weight=diag_cs%time_int, mask=mask)
       used = send_data(fms_diag_id, locfield, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag_cs%time_int, mask=mask)
+                       weight=diag_cs%time_int)
     elseif(i_data .and. associated(diag%mask2d)) then
+!      used = send_data(fms_diag_id, locfield, diag_cs%time_end, &
+!                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
+!                       weight=diag_cs%time_int, rmask=diag%mask2d)
       used = send_data(fms_diag_id, locfield, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag_cs%time_int, rmask=diag%mask2d)
+                       weight=diag_cs%time_int)
     elseif((.not.i_data) .and. associated(diag%mask2d_comp)) then
+!      used = send_data(fms_diag_id, locfield, diag_cs%time_end, &
+!                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
+!                       weight=diag_cs%time_int, rmask=diag%mask2d_comp)
       used = send_data(fms_diag_id, locfield, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag_cs%time_int, rmask=diag%mask2d_comp)
+                       weight=diag_cs%time_int)
     else
       used = send_data(fms_diag_id, locfield, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
@@ -483,7 +496,6 @@ function register_MOM_IS_diag_field(module_name, field_name, axes, init_time, &
 
   !Decide what mask to use based on the axes info
   if (primary_id > 0) then
-  !3d masks
     !2d masks
     if (axes%rank == 2) then
       diag%mask2d => null() ; diag%mask2d_comp => null()
@@ -682,7 +694,7 @@ subroutine diag_masks_set(G, missing_value, diag_cs)
   type(diag_ctrl),             intent(inout) :: diag_cs !< A structure that is used to regulate diagnostic output
 
   ! Local variables
-  integer :: i, j, k, NkIce, CatIce
+  integer :: i, j
 
 
   diag_cs%mask2dT  => G%mask2dT
@@ -711,8 +723,7 @@ subroutine diag_mediator_close_registration(diag_CS)
 end subroutine diag_mediator_close_registration
 
 !> Deallocate memory associated with the MOM_IS diag mediator
-subroutine diag_mediator_end(time, diag_CS)
-  type(time_type), intent(in) :: time !< The current model time
+subroutine diag_mediator_end(diag_CS)
   type(diag_ctrl), intent(inout) :: diag_CS !< A structure that is used to regulate diagnostic output
 
   if (diag_CS%doc_unit > -1) then
