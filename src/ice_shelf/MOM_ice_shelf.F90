@@ -1727,13 +1727,14 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     if (G%areaT(i,j)>0.) fluxes%frac_shelf_h(i,j) = ISS%area_shelf_h(i,j) / G%areaT(i,j)
   enddo ; enddo ; endif
 
+  if (.not. complete_initialization) return
+
+
   if (CS%debug) then
     call hchksum(fluxes%frac_shelf_h, "IS init: frac_shelf_h", G%HI, haloshift=0)
     call hchksum(ISS%area_shelf_h, "IS init: area_shelf_h", G%HI, haloshift=0, scale=US%L_to_m*US%L_to_m)
   endif
 
-
-  if (.not. complete_initialization) return
 
   ! Set up the restarts.
 
