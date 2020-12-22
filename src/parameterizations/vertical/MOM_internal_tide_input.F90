@@ -6,6 +6,7 @@ module MOM_int_tide_input
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator,    only : diag_ctrl, query_averaging_enabled
+use MOM_diag_mediator,    only : disable_averaging, enable_averages
 use MOM_diag_mediator,    only : safe_alloc_ptr, post_data, register_diag_field
 use MOM_debugging,        only : hchksum
 use MOM_error_handler,    only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
@@ -55,7 +56,7 @@ type, public :: int_tide_input_CS ; private
 
 
   !>@{ Diagnostic IDs
-  integer :: id_TKE_itidal = -1, id_Nb = -1, id_N2_bot = -1
+  integer :: id_TKE_itidal_itide = -1, id_Nb = -1, id_N2_bot = -1
   !>@}
 end type int_tide_input_CS
 
@@ -114,6 +115,8 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
 
   call find_N2_bottom(h, tv, T_f, S_f, itide%h2, fluxes, G, GV, US, N2_bot)
 
+  avg_enabled = query_averaging_enabled(CS%diag, time_end=time_end)
+
   !$OMP parallel do default(shared)
   do j=js,je ; do i=is,ie
     itide%Nb(i,j) = G%mask2dT(i,j) * sqrt(N2_bot(i,j))
@@ -122,7 +125,6 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
 
   if (CS%int_tide_source_test) then
     itide%TKE_itidal_input(:,:) = 0.0
-    avg_enabled = query_averaging_enabled(CS%diag, time_end=time_end)
     if (time_end <= CS%time_max_source) then
       do j=js,je ; do i=is,ie
         ! Input  an arbitrary energy point source.id_
@@ -140,9 +142,13 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
                  scale=US%RZ3_T3_to_W_m2)
   endif
 
-  if (CS%id_TKE_itidal > 0) call post_data(CS%id_TKE_itidal, itide%TKE_itidal_input, CS%diag)
+  call enable_averages(dt, time_end, CS%diag)
+
+  if (CS%id_TKE_itidal_itide > 0) call post_data(CS%id_TKE_itidal_itide, itide%TKE_itidal_input, CS%diag)
   if (CS%id_Nb > 0) call post_data(CS%id_Nb, itide%Nb, CS%diag)
   if (CS%id_N2_bot > 0 ) call post_data(CS%id_N2_bot, N2_bot, CS%diag)
+
+  call disable_averaging(CS%diag)
 
 end subroutine set_int_tide_input
 
@@ -409,7 +415,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   enddo ; enddo
 
 
-  CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal_itide',diag%axesT1,Time, &
+  CS%id_TKE_itidal_itide = register_diag_field('ocean_model','TKE_itidal_itide',diag%axesT1,Time, &
       'Internal Tide Driven Turbulent Kinetic Energy', &
       'W m-2', conversion=US%RZ3_T3_to_W_m2)
 
