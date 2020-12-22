@@ -319,12 +319,12 @@ subroutine post_data(diag_field_id, field, diag_cs, is_static, mask)
     endif
   elseif (diag_cs%ave_enabled) then
     if (present(mask)) then
-!      used = send_data(fms_diag_id, locfield, diag_cs%time_end, &
-!                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-!                       weight=diag_cs%time_int, mask=mask)
       used = send_data(fms_diag_id, locfield, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag_cs%time_int)
+                       weight=diag_cs%time_int, mask=mask)
+!      used = send_data(fms_diag_id, locfield, diag_cs%time_end, &
+!                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
+!                       weight=diag_cs%time_int)
     elseif(i_data .and. associated(diag%mask2d)) then
 !      used = send_data(fms_diag_id, locfield, diag_cs%time_end, &
 !                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
