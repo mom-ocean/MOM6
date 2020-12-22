@@ -82,14 +82,14 @@ type, public :: ice_shelf_CS ; private
   ! Parameters
   type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< A pointer to the restart control
                                                   !! structure for the ice shelves
-  type(ocean_grid_type)         :: Grid_in        !< un-rotated input grid metric
+  type(ocean_grid_type), pointer         :: Grid_in => NULL()        !< un-rotated input grid metric
   type(hor_index_type), pointer :: HI_in => NULL()  !< Pointer to a horizontal indexing structure for
                                                     !! incoming data which has not been rotated.
   type(hor_index_type), pointer :: HI => NULL()  !< Pointer to a horizontal indexing structure for
                                                  !! incoming data which has not been rotated.
   logical :: rotate_index = .false.   !< True if index map is rotated
   integer :: turns                    !< The number of quarter turns for rotation testing.
-  type(ocean_grid_type), pointer :: Grid => NULL() !< Grid for the ice-shelf model
+  type(ocean_grid_type), pointer                :: Grid => NULL()   !< Grid for the ice-shelf model
   type(unit_scale_type), pointer :: &
     US => NULL()       !< A structure containing various unit conversion factors
   type(ocean_grid_type), pointer :: ocn_grid => NULL() !< A pointer to the ocean model grid
@@ -1248,12 +1248,12 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 
   ! Set up the ice-shelf domain and grid
   wd_halos(:)=0
-  !allocate(CS%Grid_in)
-  call MOM_domains_init(CS%Grid_in%domain, param_file, min_halo=wd_halos, symmetric=GRID_SYM_,&
+  allocate(CS%Grid)
+  call MOM_domains_init(CS%Grid%domain, param_file, min_halo=wd_halos, symmetric=GRID_SYM_,&
        domain_name='MOM_Ice_Shelf_in')
-  call hor_index_init(CS%Grid_in%Domain, CS%Grid_in%HI, param_file, &
-       local_indexing=.not.global_indexing)
-  call MOM_grid_init(CS%Grid_in, param_file, CS%US, CS%Grid_in%HI)
+  !call hor_index_init(CS%Grid%Domain, CS%Grid%HI, param_file, &
+  !     local_indexing=.not.global_indexing)
+  call MOM_grid_init(CS%Grid, param_file, CS%US)
 
   ! if (CS%rotate_index) then
   !   ! TODO: Index rotation currently only works when index rotation does not
@@ -1284,7 +1284,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   !   call rotate_dyngrid(dG_in, dG, CS%US, CS%turns)
   !   call copy_dyngrid_to_MOM_grid(dG,CS%Grid,CS%US)
   ! else
-  CS%Grid=>CS%Grid_in
+  !CS%Grid=>CS%Grid_in
   dG=>NULL()
   !CS%Grid%HI=>CS%Grid_in%HI
   call create_dyn_horgrid(dG, CS%Grid%HI)
@@ -1296,7 +1296,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   call copy_dyngrid_to_MOM_grid(dG,CS%Grid,CS%US)
   call destroy_dyn_horgrid(dG)
 !  endif
-  G=>CS%Grid
+  G=>CS%Grid;CS%Grid_in=>CS%Grid
 
   if (complete_initialization) then
     allocate(CS%diag)
