@@ -1763,7 +1763,6 @@ subroutine ModelAdvance(gcomp, rc)
                 "ocn_stoch.res.", year, month, day, hour, minute, seconds,".nc"
         endif
         call ESMF_LogWrite("MOM_cap: Writing restart :  "//trim(restartname), ESMF_LOGMSG_INFO)
-        if (is_root_pe()) print*,'calling write_stoch_restart_ocn ',trim(restartname)
         call write_stoch_restart_ocn('RESTART/'//trim(restartname))
 #endif
      endif

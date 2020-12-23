@@ -81,9 +81,6 @@ program MOM_main
 
   use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
   use MOM_wave_interface, only: MOM_wave_interface_init_lite, Update_Surface_Waves
-#ifdef UFS
-  use get_stochy_pattern_mod, only: write_stoch_restart_ocn
-#endif
 
   implicit none
 

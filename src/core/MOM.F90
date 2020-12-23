@@ -2513,8 +2513,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   me=PE_here()
   master=root_PE()
 
-  !print*,'callling init_stochastic_physics_ocn',maxval(G%geoLatT)
-  if (master) print*,'about to call init_stochastic_physics'
   call init_stochastic_physics_ocn(CS%dt_therm,G%geoLonT,G%geoLatT,G%ied-G%isd+1,G%jed-G%jsd+1,nz,do_epbl,do_sppt,master,mom_comm,iret)
 #endif
 
