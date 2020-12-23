@@ -324,11 +324,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
      t_in=tv%T
      s_in=tv%S
    endif
-   print*,'calling run_stochastic_physics'
    call run_stochastic_physics_ocn(t_rp,sppt_wts)
-   !print*,'in diabatic',CS%do_sppt,size(t_in,1),size(t_in,2),size(t_in,3),size(sppt_wts,1),size(sppt_wts,2)
-   print*,'in diabatic',CS%do_sppt,minval(sppt_wts),maxval(sppt_wts)
-   print*,'in diabatic',CS%do_sppt,minval(t_rp),maxval(t_rp)
   if (CS%id_t_rp1 > 0) then
      call post_data(CS%id_t_rp1, t_rp(:,:,1), CS%diag)
   endif
