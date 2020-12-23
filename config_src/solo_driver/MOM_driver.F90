@@ -28,7 +28,6 @@ program MOM_main
   use MOM_cpu_clock,       only : CLOCK_COMPONENT
   use MOM_diag_mediator,   only : enable_averaging, disable_averaging, diag_mediator_end
   use MOM_diag_mediator,   only : diag_ctrl, diag_mediator_close_registration
-  use MOM_IS_diag_mediator,   only : diag_IS_ctrl=>diag_ctrl, diag_mediator_IS_end=>diag_mediator_end
   use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
   use MOM,                 only : extract_surface_state, finish_MOM_initialization
   use MOM,                 only : get_MOM_state_elements, MOM_state_is_synchronized
@@ -80,13 +79,12 @@ program MOM_main
 #include <MOM_memory.h>
 
   ! A structure with the driving mechanical surface forces
-  type(mech_forcing), pointer :: forces => NULL()
+  type(mech_forcing) :: forces
   ! A structure containing pointers to the thermodynamic forcing fields
   ! at the ocean surface.
-  type(forcing), pointer :: fluxes => NULL()
-
+  type(forcing) :: fluxes
   ! A structure containing pointers to the ocean surface state fields.
-  type(surface), pointer :: sfc_state => NULL()
+  type(surface) :: sfc_state
 
   ! A pointer to a structure containing metrics and related information.
   type(ocean_grid_type), pointer :: grid => NULL()
@@ -200,8 +198,6 @@ program MOM_main
                               !! that will be used for MOM restart files.
   type(diag_ctrl),           pointer :: &
        diag => NULL()         !< A pointer to the diagnostic regulatory structure
-  type(diag_IS_ctrl), pointer :: &
-      diag_IS => NULL()       !< A pointer to the diagnostic regulatory structure
   !-----------------------------------------------------------------------
 
   character(len=4), parameter :: vers_num = 'v2.0'
@@ -221,7 +217,7 @@ program MOM_main
 
   call MOM_infra_init() ; call io_infra_init()
 
-  allocate(forces,fluxes,sfc_state)
+  !allocate(forces,fluxes,sfc_state)
 
   ! Initialize the ensemble manager.  If there are no settings for ensemble_size
   ! in input.nml(ensemble.nml), these should not do anything.  In coupled
@@ -307,20 +303,8 @@ program MOM_main
     Time = Start_time
   endif
 
-  ! Read paths and filenames from namelist and store in "dirs".
-  ! Also open the parsed input parameter file(s) and setup param_file.
-  call get_MOM_input(param_file, dirs)
-
-  call get_param(param_file, mod_name, "ICE_SHELF", use_ice_shelf, &
-       "If true, enables the ice shelf model.", default=.false.)
-  if (use_ice_shelf) then
-    ! These arrays are not initialized in most solo cases, but are needed
-    ! when using an ice shelf
-    call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, &
-                              diag_IS, forces, fluxes, sfc_state)
-  endif
-  call close_param_file(param_file)
-
+  ! Call initialize MOM with an optional Ice Shelf CS which, if present triggers
+  ! initialization of ice shelf parameters and arrays.
   if (sum(date) >= 0) then
     call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, restart_CSp, &
                         segment_start_time, offline_tracer_mode=offline_tracer_mode, &
@@ -329,6 +313,18 @@ program MOM_main
     call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, restart_CSp, &
                         offline_tracer_mode=offline_tracer_mode, diag_ptr=diag, &
                         tracer_flow_CSp=tracer_flow_CSp,ice_shelf_CSp=ice_shelf_CSp)
+  endif
+
+  call get_param(param_file, mod_name, "ICE_SHELF", use_ice_shelf, &
+       "If true, enables the ice shelf model.", default=.false.)
+
+  if (use_ice_shelf) then
+    ! These arrays are not initialized in most solo cases, but are needed
+    ! when using an ice shelf
+    ice_shelf_CSp => NULL()  ! Reset the pointer and make another call to reinitialize
+                              ! the ice shelf and associated forcing types
+    call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, &
+                              diag, forces, fluxes, sfc_state)
   endif
 
   call get_MOM_state_elements(MOM_CSp, G=grid, GV=GV, US=US, C_p_scaled=fluxes%C_p)
@@ -666,7 +662,6 @@ program MOM_main
 
   call callTree_waypoint("End MOM_main")
   call diag_mediator_end(Time, diag, end_diag_manager=.true.)
-  if (use_ice_shelf) call diag_mediator_IS_end(Time, diag_IS)
   if (cpu_steps > 0) call write_cputime(Time, ns-1, write_CPU_CSp, call_end=.true.)
   call cpu_clock_end(termClock)
 
