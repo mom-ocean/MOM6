@@ -224,7 +224,8 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
                           G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff )
 
         if (tracer%id_lbdxy_conc > 0  .or. tracer%id_lbdxy_cont > 0 .or. tracer%id_lbdxy_cont_2d > 0 ) then
-          tendency(i,j,k) = (tracer%t(i,j,k)-tracer_old(i,j,k)) * (h(i,j,k) + GV%H_subroundoff) * Idt
+          tendency(i,j,k) = ((uFlx(I-1,j,k)-uFlx(I,j,k)) + (vFlx(i,J-1,k)-vFlx(i,J,k)))  * &
+                            G%IareaT(i,j) * Idt
         endif
       endif
     enddo ; enddo ; enddo
