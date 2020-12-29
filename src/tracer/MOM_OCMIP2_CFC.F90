@@ -126,7 +126,7 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   ! This call sets default properties for the air-sea CFC fluxes and obtains the
   ! indicies for the CFC11 and CFC12 flux coupling.
   call flux_init_OCMIP2_CFC(CS, verbosity=3)
-  if ((CS%ind_cfc_11_flux < 0) .or. (CS%ind_cfc_11_flux < 0)) then
+  if ((CS%ind_cfc_11_flux < 0) .or. (CS%ind_cfc_12_flux < 0)) then
     ! This is most likely to happen with the dummy version of aof_set_coupler_flux
     ! used in ocean-only runs.
     call MOM_ERROR(WARNING, "CFCs are currently only set up to be run in " // &
