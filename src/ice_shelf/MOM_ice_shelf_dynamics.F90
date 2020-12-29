@@ -537,21 +537,35 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
     endif
 
   ! Register diagnostics.
-    CS%id_u_shelf = register_diag_field('ocean_model','u_shelf',CS%diag%axesCu1, Time, &
+!    CS%id_u_shelf = register_diag_field('ocean_model','u_shelf',CS%diag%axesCu1, Time, &
+!       'x-velocity of ice', 'm yr-1', conversion=365.0*86400.0*US%L_T_to_m_s)
+    CS%id_u_shelf = register_diag_field('ice_shelf_model','u_shelf',CS%diag%axesCu1, Time, &
        'x-velocity of ice', 'm yr-1', conversion=365.0*86400.0*US%L_T_to_m_s)
-    CS%id_v_shelf = register_diag_field('ocean_model','v_shelf',CS%diag%axesCv1, Time, &
+!    CS%id_v_shelf = register_diag_field('ocean_model','v_shelf',CS%diag%axesCv1, Time, &
+!       'y-velocity of ice', 'm yr-1', conversion=365.0*86400.0*US%L_T_to_m_s)
+    CS%id_v_shelf = register_diag_field('ice_shelf_model','v_shelf',CS%diag%axesCv1, Time, &
        'y-velocity of ice', 'm yr-1', conversion=365.0*86400.0*US%L_T_to_m_s)
-    CS%id_u_mask = register_diag_field('ocean_model','u_mask',CS%diag%axesCu1, Time, &
+!    CS%id_u_mask = register_diag_field('ocean_model','u_mask',CS%diag%axesCu1, Time, &
+!       'mask for u-nodes', 'none')
+    CS%id_u_mask = register_diag_field('ice_shelf_model','u_mask',CS%diag%axesCu1, Time, &
        'mask for u-nodes', 'none')
-    CS%id_v_mask = register_diag_field('ocean_model','v_mask',CS%diag%axesCv1, Time, &
+!    CS%id_v_mask = register_diag_field('ocean_model','v_mask',CS%diag%axesCv1, Time, &
+!       'mask for v-nodes', 'none')
+    CS%id_v_mask = register_diag_field('ice_shelf_model','v_mask',CS%diag%axesCv1, Time, &
        'mask for v-nodes', 'none')
 !    CS%id_surf_elev = register_diag_field('ocean_model','ice_surf',CS%diag%axesT1, Time, &
 !       'ice surf elev', 'm')
-    CS%id_ground_frac = register_diag_field('ocean_model','ice_ground_frac',CS%diag%axesT1, Time, &
+!    CS%id_ground_frac = register_diag_field('ocean_model','ice_ground_frac',CS%diag%axesT1, Time, &
+!       'fraction of cell that is grounded', 'none')
+    CS%id_ground_frac = register_diag_field('ice_shelf_model','ice_ground_frac',CS%diag%axesT1, Time, &
        'fraction of cell that is grounded', 'none')
-    CS%id_col_thick = register_diag_field('ocean_model','col_thick',CS%diag%axesT1, Time, &
+!    CS%id_col_thick = register_diag_field('ocean_model','col_thick',CS%diag%axesT1, Time, &
+!       'ocean column thickness passed to ice model', 'm', conversion=US%Z_to_m)
+    CS%id_col_thick = register_diag_field('ice_shelf_model','col_thick',CS%diag%axesT1, Time, &
        'ocean column thickness passed to ice model', 'm', conversion=US%Z_to_m)
-    CS%id_OD_av = register_diag_field('ocean_model','OD_av',CS%diag%axesT1, Time, &
+!    CS%id_OD_av = register_diag_field('ocean_model','OD_av',CS%diag%axesT1, Time, &
+!       'intermediate ocean column thickness passed to ice model', 'm', conversion=US%Z_to_m)
+    CS%id_OD_av = register_diag_field('ice_shelf_model','OD_av',CS%diag%axesT1, Time, &
        'intermediate ocean column thickness passed to ice model', 'm', conversion=US%Z_to_m)
     !CS%id_h_after_uflux = register_diag_field('ocean_model','h_after_uflux',CS%diag%axesh1, Time, &
     !   'thickness after u flux ', 'none')
