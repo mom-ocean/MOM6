@@ -222,8 +222,10 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       if (G%mask2dT(i,j)>0.) then
         tracer%t(i,j,k) = tracer%t(i,j,k) + (( (uFlx(I-1,j,k)-uFlx(I,j,k)) ) + ( (vFlx(i,J-1,k)-vFlx(i,J,k) ) ))* &
                           G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff )
+
         if (tracer%id_lbdxy_conc > 0  .or. tracer%id_lbdxy_cont > 0 .or. tracer%id_lbdxy_cont_2d > 0 ) then
-          tendency(i,j,k) = (tracer%t(i,j,k)-tracer_old(i,j,k)) * Idt
+          tendency(i,j,k) = ((uFlx(I-1,j,k)-uFlx(I,j,k)) + (vFlx(i,J-1,k)-vFlx(i,J,k)))  * &
+                            G%IareaT(i,j) * Idt
         endif
       endif
     enddo ; enddo ; enddo
@@ -579,13 +581,14 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   type(lbd_CS),          pointer       :: CS       !< Lateral diffusion control structure
                                                       !! the boundary layer
   ! Local variables
-  real, dimension(:), allocatable :: dz_top    !< The LBD z grid to be created                                    [L ~ m]
-  real, dimension(:), allocatable :: phi_L_z   !< Tracer values in the ztop grid (left)                            [conc]
-  real, dimension(:), allocatable :: phi_R_z   !< Tracer values in the ztop grid (right)                           [conc]
-  real, dimension(:), allocatable :: F_layer_z !< Diffusive flux at U- or V-point in the ztop grid [H L2 conc ~> m3 conc]
+  real, dimension(:), allocatable :: dz_top    !< The LBD z grid to be created                                 [L ~ m]
+  real, dimension(:), allocatable :: phi_L_z   !< Tracer values in the ztop grid (left)                         [conc]
+  real, dimension(:), allocatable :: phi_R_z   !< Tracer values in the ztop grid (right)                        [conc]
+  real, dimension(:), allocatable :: F_layer_z !< Diffusive flux at U- or V-point in the ztop grid
+                                               !!                                               [H L2 conc ~> m3 conc]
   real, dimension(ke)             :: h_vel     !< Thicknesses at u- and v-points in the native grid
-                                               !! The harmonic mean is used to avoid zero values       [H ~> m or kg m-2]
-  real    :: khtr_avg                !< Thickness-weighted diffusivity at the u-point                         [m^2 s^-1]
+                                               !! The harmonic mean is used to avoid zero values    [H ~> m or kg m-2]
+  real    :: khtr_avg                !< Thickness-weighted diffusivity at the u-point                       [m^2 s^-1]
                                      !! This is just to remind developers that khtr_avg should be
                                      !! computed once khtr is 3D.
   real    :: htot                    !< Total column thickness [H ~> m or kg m-2]
