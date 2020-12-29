@@ -70,6 +70,7 @@ program MOM_main
 
   use MOM_ice_shelf, only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
   use MOM_ice_shelf, only : shelf_calc_flux, add_shelf_forces, ice_shelf_save_restart
+  use MOM_ice_shelf, only : initialize_ice_shelf_fluxes, initialize_ice_shelf_forces
 
   use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
   use MOM_wave_interface, only: MOM_wave_interface_init_lite, Update_Surface_Waves
@@ -308,27 +309,24 @@ program MOM_main
   if (sum(date) >= 0) then
     call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, restart_CSp, &
                         segment_start_time, offline_tracer_mode=offline_tracer_mode, &
-                        diag_ptr=diag, tracer_flow_CSp=tracer_flow_CSp,ice_shelf_CSp=ice_shelf_CSp)
+                        diag_ptr=diag, tracer_flow_CSp=tracer_flow_CSp, ice_shelf_CSp=ice_shelf_CSp)
   else
     call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, restart_CSp, &
                         offline_tracer_mode=offline_tracer_mode, diag_ptr=diag, &
-                        tracer_flow_CSp=tracer_flow_CSp,ice_shelf_CSp=ice_shelf_CSp)
-  endif
-
-  call get_param(param_file, mod_name, "ICE_SHELF", use_ice_shelf, &
-       "If true, enables the ice shelf model.", default=.false.)
-
-  if (use_ice_shelf) then
-    ! These arrays are not initialized in most solo cases, but are needed
-    ! when using an ice shelf
-    ice_shelf_CSp => NULL()  ! Reset the pointer and make another call to reinitialize
-                              ! the ice shelf and associated forcing types
-    call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, &
-                              diag, forces, fluxes, sfc_state)
+                        tracer_flow_CSp=tracer_flow_CSp, ice_shelf_CSp=ice_shelf_CSp)
   endif
 
   call get_MOM_state_elements(MOM_CSp, G=grid, GV=GV, US=US, C_p_scaled=fluxes%C_p)
   Master_Time = Time
+  use_ice_shelf = associated(ice_shelf_CSp)
+
+  if (use_ice_shelf) then
+    ! These arrays are not initialized in most solo cases, but are needed
+    ! when using an ice shelf
+    call initialize_ice_shelf_fluxes(ice_shelf_CSp, grid, US, fluxes)
+    call initialize_ice_shelf_forces(ice_shelf_CSp, grid, US, forces)
+  endif
+
 
   call callTree_waypoint("done initialize_MOM")
 
@@ -661,6 +659,7 @@ program MOM_main
   endif
 
   call callTree_waypoint("End MOM_main")
+  if (use_ice_shelf) call ice_shelf_end(ice_shelf_CSp)
   call diag_mediator_end(Time, diag, end_diag_manager=.true.)
   if (cpu_steps > 0) call write_cputime(Time, ns-1, write_CPU_CSp, call_end=.true.)
   call cpu_clock_end(termClock)
@@ -668,6 +667,5 @@ program MOM_main
   call io_infra_end ; call MOM_infra_end
 
   call MOM_end(MOM_CSp)
-  if (use_ice_shelf) call ice_shelf_end(ice_shelf_CSp)
 
 end program MOM_main
