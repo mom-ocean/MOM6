@@ -87,7 +87,7 @@ logical function register_nw2_tracers(HI, GV, param_file, CS, tr_Reg, restart_CS
     call query_vardesc(tr_desc, name=var_name, caller="register_nw2_tracers")
     ! Register the tracer for horizontal advection, diffusion, and restarts.
     call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, tr_desc=tr_desc, &
-                         registry_diags=.true., restart_CS=restart_CS, mandatory=.true.)
+                         registry_diags=.true., restart_CS=restart_CS, mandatory=.false.)
     if (m<=10) then
       CS%restore_rate(m) = 1.0 / 6.0 ! 6 years
     else
@@ -148,14 +148,13 @@ subroutine initialize_nw2_tracers(restart, day, G, GV, US, h, tv, diag, CS)
     call MOM_error(FATAL, "NW2 tracers assume Boussinesq mode")
   endif
 
-  if (.not.restart) then
+  ! Initialize only if this is not a restart or we are using a restart
+  ! in which the tracers were not present
+  if ((.not.restart) .or. &
+      (.not. query_initialized(CS%tr(:,:,:,m),'nw2_tracer',CS%restart_CSp))) then
     do m=1,CS%ntr
       do k=1,GV%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
-     !  if (G%mask2dT(i,j) < 0.5) then
-     !    CS%tr(i,j,k,m) = 0.
-     !  else
           CS%tr(i,j,k,m) = nw2_tracer_dist(m, G, GV, eta, i, j, k)
-     !  endif
       enddo ; enddo ; enddo
     enddo ! Tracer loop
   endif ! restart
