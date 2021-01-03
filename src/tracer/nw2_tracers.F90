@@ -118,6 +118,7 @@ subroutine initialize_nw2_tracers(restart, day, G, GV, US, h, tv, diag, CS)
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: eta ! Interface heights
   real :: rscl ! z* scaling factor
+  character(len=8)  :: var_name ! The variable's name.
   integer :: i, j, k, m
 
   if (.not.associated(CS)) return
@@ -147,16 +148,17 @@ subroutine initialize_nw2_tracers(restart, day, G, GV, US, h, tv, diag, CS)
     call MOM_error(FATAL, "NW2 tracers assume Boussinesq mode")
   endif
 
-  ! Initialize only if this is not a restart or we are using a restart
-  ! in which the tracers were not present
-  if ((.not.restart) .or. &
-      (.not. query_initialized(CS%tr(:,:,:,m),'nw2_tracer',CS%restart_CSp))) then
-    do m=1,CS%ntr
+  do m=1,CS%ntr
+    ! Initialize only if this is not a restart or we are using a restart
+    ! in which the tracers were not present
+    write(var_name(1:8),'(a6,i2.2)') 'tracer',m
+    if ((.not.restart) .or. &
+        (.not. query_initialized(CS%tr(:,:,:,m),var_name,CS%restart_CSp))) then
       do k=1,GV%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
           CS%tr(i,j,k,m) = nw2_tracer_dist(m, G, GV, eta, i, j, k)
       enddo ; enddo ; enddo
-    enddo ! Tracer loop
-  endif ! restart
+    endif ! restart
+  enddo ! Tracer loop
 
 end subroutine initialize_nw2_tracers
 
