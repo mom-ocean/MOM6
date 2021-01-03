@@ -9,7 +9,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
-use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc
 use MOM_restart, only : query_initialized, MOM_restart_CS
 use MOM_time_manager, only : time_type, time_type_to_real
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
@@ -84,7 +84,6 @@ logical function register_nw2_tracers(HI, GV, param_file, CS, tr_Reg, restart_CS
     ! This is needed to force the compiler not to do a copy in the registration
     ! calls.  Curses on the designers and implementers of Fortran90.
     tr_ptr => CS%tr(:,:,:,m)
-    call query_vardesc(tr_desc, name=var_name, caller="register_nw2_tracers")
     ! Register the tracer for horizontal advection, diffusion, and restarts.
     call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, tr_desc=tr_desc, &
                          registry_diags=.true., restart_CS=restart_CS, mandatory=.false.)
