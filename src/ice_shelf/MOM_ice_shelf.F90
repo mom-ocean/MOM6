@@ -1711,8 +1711,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     endif
   endif
 
-  call register_restart_field(ISS%h_shelf, "_shelf", .true., CS%restart_CSp, &
-                              "ice sheet/shelf thickness", "m")
   call register_restart_field(US%m_to_Z_restart, "m_to_Z", .false., CS%restart_CSp, &
                               "Height unit conversion factor", "Z meter-1")
   call register_restart_field(US%m_to_L_restart, "m_to_L", .false., CS%restart_CSp, &
