@@ -7,7 +7,7 @@ use horiz_interp_mod, only : horiz_interp_type
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_io, only : fieldtype, write_field
 use mpp_domains_mod, only : domain2D
-use fms_mod, only : mpp_chksum
+use mpp_mod, only : mpp_chksum
 use time_manager_mod, only : time_type
 use time_interp_external_mod, only : time_interp_external
 
