@@ -28,8 +28,7 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data
-use MOM_io, only : slasher
+use MOM_io, only : file_exists, MOM_read_data, slasher
 use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
 use MOM_sponge, only : set_up_sponge_ML_density
 use MOM_unit_scaling, only : unit_scale_type
@@ -173,12 +172,12 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, PF, use_ALE, CSp, ACSp)
   filename = trim(inputdir)//trim(state_file)
   if (.not.file_exists(filename, G%Domain)) &
       call MOM_error(FATAL, " RGC_initialize_sponges: Unable to open "//trim(filename))
-  call read_data(filename,temp_var,T(:,:,:), domain=G%Domain%mpp_domain)
-  call read_data(filename,salt_var,S(:,:,:), domain=G%Domain%mpp_domain)
+  call MOM_read_data(filename, temp_var, T(:,:,:), G%Domain)
+  call MOM_read_data(filename, salt_var, S(:,:,:), G%Domain)
 
   if (use_ALE) then
 
-    call read_data(filename,h_var,h(:,:,:), domain=G%Domain%mpp_domain)
+    call MOM_read_data(filename, h_var, h(:,:,:), G%Domain)
     call pass_var(h, G%domain)
 
     !call initialize_ALE_sponge(Idamp, h, nz, G, PF, ACSp)
@@ -201,7 +200,7 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, PF, use_ALE, CSp, ACSp)
   else ! layer mode
 
     !read eta
-    call read_data(filename,eta_var,eta(:,:,:), domain=G%Domain%mpp_domain)
+    call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain)
 
     ! Set the inverse damping rates so that the model will know where to
     ! apply the sponges, along with the interface heights.
