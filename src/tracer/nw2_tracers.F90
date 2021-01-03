@@ -244,7 +244,7 @@ subroutine nw2_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
   endif
 
   do m=1,CS%ntr
-    dt_x_rate = dt * ( CS%restore_rate(m)*((365.0*86400.0)*US%s_to_T) )
+    dt_x_rate = dt / ( CS%restore_rate(m)*((365.0*86400.0)*US%s_to_T) )
 !$OMP parallel do default(private) shared(CS,G,dt,dt_x_rate)
     do k=1,GV%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
       target_value = nw2_tracer_dist(m, G, GV, eta, i, j, k)
