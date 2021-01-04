@@ -5,13 +5,12 @@ module MOM_open_boundary
 
 use MOM_array_transform,      only : rotate_array, rotate_array_pair
 use MOM_array_transform,      only : allocate_rotated_array
-use MOM_coms,                 only : sum_across_PEs
+use MOM_coms,                 only : sum_across_PEs, Set_PElist, Get_PElist, PE_here, num_PEs
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator,        only : diag_ctrl, time_type
 use MOM_domains,              only : pass_var, pass_vector
 use MOM_domains,              only : To_All, SCALAR_PAIR, CGRID_NE, CORNER
-use MOM_error_handler,        only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
-use MOM_error_handler,        only : NOTE
+use MOM_error_handler,        only : MOM_mesg, MOM_error, FATAL, WARNING, NOTE, is_root_pe
 use MOM_file_parser,          only : get_param, log_version, param_file_type, log_param
 use MOM_grid,                 only : ocean_grid_type, hor_index_type
 use MOM_dyn_horgrid,          only : dyn_horgrid_type
@@ -651,13 +650,11 @@ end subroutine open_boundary_config
 !> Allocate space for reading OBC data from files. It sets up the required vertical
 !! remapping. In the process, it does funky stuff with the MPI processes.
 subroutine initialize_segment_data(G, OBC, PF)
-  use mpp_mod, only : mpp_pe, mpp_set_current_pelist, mpp_get_current_pelist,mpp_npes
-
   type(ocean_grid_type), intent(in)    :: G   !< Ocean grid structure
-  type(ocean_OBC_type),   intent(inout) :: OBC !< Open boundary control structure
-  type(param_file_type),  intent(in)    :: PF  !< Parameter file handle
+  type(ocean_OBC_type),  intent(inout) :: OBC !< Open boundary control structure
+  type(param_file_type), intent(in)    :: PF  !< Parameter file handle
 
-  integer :: n,m,num_fields
+  integer :: n, m, num_fields
   character(len=1024) :: segstr
   character(len=256) :: filename
   character(len=20)  :: segnam, suffix
@@ -697,11 +694,11 @@ subroutine initialize_segment_data(G, OBC, PF)
 
   !< temporarily disable communication in order to read segment data independently
 
-  allocate(saved_pelist(0:mpp_npes()-1))
-  call mpp_get_current_pelist(saved_pelist)
-  current_pe = mpp_pe()
+  allocate(saved_pelist(0:num_PEs()-1))
+  call Get_PElist(saved_pelist)
+  current_pe = PE_here()
   single_pelist(1) = current_pe
-  call mpp_set_current_pelist(single_pelist)
+  call Set_PElist(single_pelist)
 
   do n=1, OBC%number_of_segments
     segment => OBC%segment(n)
@@ -955,7 +952,7 @@ subroutine initialize_segment_data(G, OBC, PF)
     endif
   enddo
 
-  call mpp_set_current_pelist(saved_pelist)
+  call Set_PElist(saved_pelist)
 
 end subroutine initialize_segment_data
 

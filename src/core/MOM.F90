@@ -141,7 +141,7 @@ use MOM_offline_main,          only : offline_redistribute_residual, offline_dia
 use MOM_offline_main,          only : offline_fw_fluxes_into_ocean, offline_fw_fluxes_out_ocean
 use MOM_offline_main,          only : offline_advection_layer, offline_transport_end
 use MOM_ALE,                   only : ale_offline_tracer_final, ALE_main_offline
-use MOM_ice_shelf,             only : ice_shelf_CS, ice_shelf_query
+use MOM_ice_shelf,             only : ice_shelf_CS, ice_shelf_query, initialize_ice_shelf
 
 implicit none ; private
 
@@ -2379,6 +2379,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     endif
 
     if (use_ice_shelf) then
+      ! These arrays are not initialized in most solo cases, but are needed
+      ! when using an ice shelf. Passing the ice shelf diagnostics CS from MOM
+      ! for legacy reasons. The actual ice shelf diag CS is internal to the ice shelf
+      call initialize_ice_shelf(param_file, G_in, Time, ice_shelf_CSp, diag_ptr)
       allocate(frac_shelf_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed))
       frac_shelf_in(:,:) = 0.0
       allocate(CS%frac_shelf_h(isd:ied, jsd:jed))
@@ -2429,10 +2433,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       deallocate(frac_shelf_in)
   else
     if (use_ice_shelf) then
+      call initialize_ice_shelf(param_file, G, Time, ice_shelf_CSp, diag_ptr)
       allocate(CS%frac_shelf_h(isd:ied, jsd:jed))
       CS%frac_shelf_h(:,:) = 0.0
       call ice_shelf_query(ice_shelf_CSp,G,CS%frac_shelf_h)
-
       call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, US, &
           param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
           CS%sponge_CSp, CS%ALE_sponge_CSp, CS%OBC, Time_in, &

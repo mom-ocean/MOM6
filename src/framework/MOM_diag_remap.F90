@@ -80,7 +80,6 @@ use coord_zlike,          only : build_zstar_column
 use coord_sigma,          only : build_sigma_column
 use coord_rho,            only : build_rho_column
 
-use diag_axis_mod,     only : get_diag_axis_name
 use diag_manager_mod,  only : diag_axis_init
 
 use MOM_debugging,     only : check_column_integrals
