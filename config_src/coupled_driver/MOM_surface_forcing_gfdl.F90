@@ -189,12 +189,6 @@ type, public :: ice_ocean_boundary_type
                                                             !! ice-shelves, expressed as a coefficient
                                                             !! for divergence damping, as determined
                                                             !! outside of the ocean model [m3 s-1]
-  real, pointer, dimension(:,:)   :: ustk0           => NULL() !<
-  real, pointer, dimension(:,:)   :: vstk0           => NULL() !<
-  real, pointer, dimension(:)     :: stk_wavenumbers => NULL() !<
-  real, pointer, dimension(:,:,:) :: ustkb           => NULL() !<
-  real, pointer, dimension(:,:,:) :: vstkb           => NULL() !<
-
   integer :: xtype                    !< The type of the exchange - REGRID, REDIST or DIRECT
   type(coupler_2d_bc_type) :: fluxes  !< A structure that may contain an array of named fields
                                       !! used for passive tracer fluxes.
@@ -202,7 +196,6 @@ type, public :: ice_ocean_boundary_type
                                       !! This flag may be set by the flux-exchange code, based on what
                                       !! the sea-ice model is providing.  Otherwise, the value from
                                       !! the surface_forcing_CS is used.
-  integer :: num_stk_bands            !< Number of Stokes drift bands passed through the coupler
 end type ice_ocean_boundary_type
 
 integer :: id_clock_forcing !< A CPU time clock
@@ -684,7 +677,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
   real :: mass_eff      ! effective mass of sea ice for rigidity [R Z ~> kg m-2]
   real :: wt1, wt2      ! Relative weights of previous and current values of ustar, ND.
 
-  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0, istk
+  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, isr, ier, jsr, jer
   integer :: isc_bnd, iec_bnd, jsc_bnd, jec_bnd
 
@@ -724,9 +717,6 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
   if ( (associated(IOB%area_berg) .and. (.not. associated(forces%area_berg))) .or. &
        (associated(IOB%mass_berg) .and. (.not. associated(forces%mass_berg))) ) &
     call allocate_mech_forcing(G, forces, iceberg=.true.)
-
-  if ( associated(IOB%ustk0) ) &
-    call allocate_mech_forcing(G, forces, waves=.true., num_stk_bands=IOB%num_stk_bands)
 
   if (associated(IOB%ice_rigidity)) then
     rigidity_at_h(:,:) = 0.0
@@ -787,19 +777,6 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
       forces%ustar(i,j) = wt1*forces%ustar(i,j) + wt2*ustar_tmp(i,j)
     enddo ; enddo
   endif
-  forces%stk_wavenumbers(:) = IOB%stk_wavenumbers
-  do j=js,je; do i=is,ie
-     forces%ustk0(i,j) = IOB%ustk0(i-I0,j-J0) ! How to be careful here that the domains are right?
-     forces%vstk0(i,j) = IOB%vstk0(i-I0,j-J0)
-  enddo ; enddo
-  call pass_vector(forces%ustk0,forces%vstk0, G%domain )
-  do istk = 1,IOB%num_stk_bands
-    do j=js,je; do i=is,ie
-      forces%ustkb(i,j,istk) = IOB%ustkb(i-I0,j-J0,istk)
-      forces%vstkb(i,j,istk) = IOB%vstkb(i-I0,j-J0,istk)
-    enddo; enddo
-    call pass_vector(forces%ustkb(:,:,istk),forces%vstkb(:,:,istk), G%domain )
-  enddo
 
   ! Find the net mass source in the input forcing without other adjustments.
   if (CS%approx_net_mass_src .and. associated(forces%net_mass_src)) then
