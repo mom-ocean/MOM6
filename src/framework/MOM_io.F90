@@ -16,19 +16,19 @@ use MOM_verticalGrid,     only : verticalGrid_type
 use ensemble_manager_mod, only : get_ensemble_id
 use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
 use fms_io_mod,           only : file_exist, field_size, read_data
-use fms_io_mod,           only : field_exists => field_exist, io_infra_end=>fms_io_exit
-use fms_io_mod,           only : get_filename_appendix => get_filename_appendix
+use fms_io_mod,           only : field_exists=>field_exist, io_infra_end=>fms_io_exit
+use fms_io_mod,           only : get_filename_appendix=>get_filename_appendix
 use mpp_domains_mod,      only : domain1d, domain2d, mpp_get_domain_components
 use mpp_domains_mod,      only : CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
 use mpp_io_mod,           only : open_file => mpp_open, close_file => mpp_close
-use mpp_io_mod,           only : mpp_write_meta, write_field => mpp_write, mpp_get_info
-use mpp_io_mod,           only : mpp_get_atts, mpp_get_axes, get_axis_data=>mpp_get_axis_data, axistype
-use mpp_io_mod,           only : mpp_get_fields, fieldtype, axistype, flush_file => mpp_flush
+use mpp_io_mod,           only : mpp_write_meta, write_field => mpp_write
+use mpp_io_mod,           only : mpp_get_atts, mpp_attribute_exist
+use mpp_io_mod,           only : mpp_get_axes, axistype, get_axis_data=>mpp_get_axis_data
+use mpp_io_mod,           only : mpp_get_fields, fieldtype, flush_file=>mpp_flush
 use mpp_io_mod,           only : APPEND_FILE=>MPP_APPEND, ASCII_FILE=>MPP_ASCII
 use mpp_io_mod,           only : MULTIPLE=>MPP_MULTI, NETCDF_FILE=>MPP_NETCDF
 use mpp_io_mod,           only : OVERWRITE_FILE=>MPP_OVERWR, READONLY_FILE=>MPP_RDONLY
 use mpp_io_mod,           only : SINGLE_FILE=>MPP_SINGLE, WRITEONLY_FILE=>MPP_WRONLY
-use mpp_io_mod,           only : MPP_APPEND, MPP_MULTI, MPP_OVERWR, MPP_NETCDF, MPP_RDONLY
 use mpp_io_mod,           only : get_file_info=>mpp_get_info, get_file_atts=>mpp_get_atts
 use mpp_io_mod,           only : get_file_fields=>mpp_get_fields, get_file_times=>mpp_get_times
 use mpp_io_mod,           only : io_infra_init=>mpp_io_init
@@ -40,7 +40,7 @@ implicit none ; private
 
 public :: close_file, create_file, field_exists, field_size, fieldtype, get_filename_appendix
 public :: file_exists, flush_file, get_file_info, get_file_atts, get_file_fields
-public :: get_file_times, open_file, read_axis_data, read_data
+public :: get_file_times, open_file, read_axis_data, read_data, read_field_chksum
 public :: num_timelevels, MOM_read_data, MOM_read_vector, ensembler
 public :: reopen_file, slasher, write_field, write_version_number, MOM_io_init
 public :: open_namelist_file, check_nml_error, io_infra_init, io_infra_end
@@ -77,6 +77,7 @@ interface MOM_read_data
   module procedure MOM_read_data_3d
   module procedure MOM_read_data_2d
   module procedure MOM_read_data_1d
+  module procedure MOM_read_data_0d
 end interface
 
 !> Read a pair of data fields representing the two components of a vector from a file
@@ -162,9 +163,9 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
   if (domain_set) one_file = (thread == SINGLE_FILE)
 
   if (one_file) then
-    call open_file(unit, filename, MPP_OVERWR, MPP_NETCDF, threading=thread)
+    call open_file(unit, filename, OVERWRITE_FILE, NETCDF_FILE, threading=thread)
   else
-    call open_file(unit, filename, MPP_OVERWR, MPP_NETCDF, domain=Domain%mpp_domain)
+    call open_file(unit, filename, OVERWRITE_FILE, NETCDF_FILE, domain=Domain%mpp_domain)
   endif
 
 ! Define the coordinates.
@@ -404,13 +405,13 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
     if (domain_set) one_file = (thread == SINGLE_FILE)
 
     if (one_file) then
-      call open_file(unit, filename, MPP_APPEND, MPP_NETCDF, threading=thread)
+      call open_file(unit, filename, APPEND_FILE, NETCDF_FILE, threading=thread)
     else
-      call open_file(unit, filename, MPP_APPEND, MPP_NETCDF, domain=Domain%mpp_domain)
+      call open_file(unit, filename, APPEND_FILE, NETCDF_FILE, domain=Domain%mpp_domain)
     endif
     if (unit < 0) return
 
-    call mpp_get_info(unit, ndim, nvar, natt, ntime)
+    call get_file_info(unit, ndim, nvar, natt, ntime)
 
     if (nvar == -1) then
       write (mesg,*) "Reopening file ",trim(filename)," apparently had ",nvar,&
@@ -449,11 +450,11 @@ subroutine read_axis_data(filename, axis_name, var)
   type(axistype) :: time_axis
   character(len=32) :: name, units
 
-  call open_file(unit, trim(filename), action=MPP_RDONLY, form=MPP_NETCDF, &
-                 threading=MPP_MULTI, fileset=SINGLE_FILE)
+  call open_file(unit, trim(filename), action=READONLY_FILE, form=NETCDF_FILE, &
+                 threading=MULTIPLE, fileset=SINGLE_FILE)
 
 !Find the number of variables (nvar) in this file
-  call mpp_get_info(unit, ndim, nvar, natt, ntime)
+  call get_file_info(unit, ndim, nvar, natt, ntime)
 ! -------------------------------------------------------------------
 ! Allocate space for the number of axes in the data file.
 ! -------------------------------------------------------------------
@@ -462,7 +463,7 @@ subroutine read_axis_data(filename, axis_name, var)
 
   axis_found = .false.
   do i = 1, ndim
-    call mpp_get_atts(axes(i), name=name,len=len,units=units)
+    call get_file_atts(axes(i), name=name, len=len, units=units)
     if (name == axis_name) then
       axis_found = .true.
       call get_axis_data(axes(i),var)
@@ -476,6 +477,23 @@ subroutine read_axis_data(filename, axis_name, var)
   deallocate(axes)
 
 end subroutine read_axis_data
+
+subroutine read_field_chksum(field, chksum, valid_chksum)
+  type(fieldtype), intent(in)  :: field !< The field whose checksum attribute is to be read.
+  integer(kind=8), intent(out) :: chksum !< The checksum for the field.
+  logical,         intent(out) :: valid_chksum  !< If true, chksum has been successfully read.
+  ! Local variables
+  integer(kind=8), dimension(3) :: checksum_file
+
+  checksum_file(:) = -1
+  valid_chksum = mpp_attribute_exist(field, "checksum")
+  if (valid_chksum) then
+    call mpp_get_atts(field, checksum=checksum_file)
+    chksum = checksum_file(1)
+  else
+    chksum = -1
+  endif
+end subroutine read_field_chksum
 
 !> This function determines how many time levels a variable has.
 function num_timelevels(filename, varname, min_dims) result(n_time)
@@ -518,7 +536,6 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
         " There appear not to be any variables in "//trim(filename))
     return
   endif
-
 
   allocate(varids(nvars))
 
@@ -848,7 +865,26 @@ function FMS_file_exists(filename, domain, no_domain)
 
 end function FMS_file_exists
 
-!> This function uses the fms_io function read_data to read 1-D
+
+!> This function uses the fms_io function read_data to read a scalar
+!! data field named "fieldname" from file "filename".
+subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale)
+  character(len=*),       intent(in)    :: filename  !< The name of the file to read
+  character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
+  real,                   intent(inout) :: data      !< The 1-dimensional array into which the data
+  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
+  real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
+                                                     !! by before it is returned.
+
+  call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
+
+  if (present(scale)) then ; if (scale /= 1.0) then
+    data = scale*data
+  endif ; endif
+
+end subroutine MOM_read_data_0d
+
+!> This function uses the fms_io function read_data to read a 1-D
 !! data field named "fieldname" from file "filename".
 subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
@@ -879,7 +915,7 @@ subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
   integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
   integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
   real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
-                                                     !! by before they are returned.
+                                                     !! by before it is returned.
 
   integer :: is, ie, js, je
 
@@ -907,7 +943,7 @@ subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
   integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
   integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
   real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
-                                                     !! by before they are returned.
+                                                     !! by before it is returned.
 
   integer :: is, ie, js, je
 
@@ -935,7 +971,7 @@ subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
   integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
   integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
   real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
-                                                     !! by before they are returned.
+                                                     !! by before it is returned.
 
   integer :: is, ie, js, je
 

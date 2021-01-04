@@ -10,9 +10,7 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists
-use MOM_io, only : MOM_read_data
-use MOM_io, only : slasher
+use MOM_io, only : file_exists, MOM_read_data, slasher
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type

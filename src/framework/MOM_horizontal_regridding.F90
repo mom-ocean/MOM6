@@ -24,15 +24,12 @@ use MOM_time_manager, only : init_external_field
 use MOM_time_manager, only : get_external_field_axes, get_external_field_missing
 use MOM_transform_FMS, only : time_interp_external => rotated_time_interp_external
 use MOM_variables, only : thermo_var_ptrs
-use mpp_io_mod, only : axistype
-use mpp_domains_mod, only  : mpp_global_field, mpp_get_compute_domain
-use mpp_mod, only          : mpp_broadcast,mpp_root_pe,mpp_sync,mpp_sync_self
-use mpp_mod, only          : mpp_max
-use horiz_interp_mod, only : horiz_interp_new, horiz_interp,horiz_interp_type
+
+use mpp_io_mod, only : axistype, mpp_get_axis_data
+use mpp_mod, only          : mpp_broadcast, mpp_sync, mpp_sync_self, mpp_max
+use horiz_interp_mod, only : horiz_interp_new, horiz_interp, horiz_interp_type
 use horiz_interp_mod, only : horiz_interp_init, horiz_interp_del
 
-use mpp_io_mod, only : mpp_get_axis_data
-use mpp_io_mod, only : MPP_SINGLE
 use netcdf
 
 implicit none ; private
