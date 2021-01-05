@@ -51,8 +51,9 @@ end function random_01
 !! See https://arxiv.org/abs/2004.06278. Not an exact reproduction of "squares" because Fortran
 !! doesn't have a uint64 type, and not all compilers provide integers with > 64 bits...
 real function random_01_CB(ctr, key)
-  integer, parameter   :: int64 = selected_int_kind(10) ! Integer with >= 64 bits
-  integer, intent(in)  :: ctr, key ! counter & key inputs, standard integer kind
+  use iso_fortran_env, only : int64
+  integer, intent(in)  :: ctr !< ctr should be incremented each time you call the function
+  integer, intent(in)  :: key !< key is like a seed: use a different key for each random stream
   integer(kind=int64) :: x, y, z ! Follows "Squares" naming convention
 
   x = (ctr + 1) * (key + 65536) ! 65536 added because keys below that don't work.
