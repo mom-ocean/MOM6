@@ -2036,7 +2036,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       "state variables. Add USE_EOS = True to MOM_input.")
 
   use_ice_shelf = .false.
-  if (present(ice_shelf_CSp)) use_ice_shelf = associated(ice_shelf_CSp)
+  if (present(ice_shelf_CSp)) then
+    call get_param(param_file, "MOM", "ICE_SHELF", use_ice_shelf, &
+       "If true, enables the ice shelf model.", default=.false.)
+  endif
 
   CS%ensemble_ocean=.false.
   call get_param(param_file, "MOM", "ENSEMBLE_OCEAN", CS%ensemble_ocean, &
