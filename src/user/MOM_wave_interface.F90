@@ -467,10 +467,10 @@ subroutine Update_Surface_Waves(G, GV, US, Day, dt, CS, forces)
       call Surface_Bands_by_data_override(day_center, G, GV, US, CS)
     elseif (DataSource==Coupler) then
       if (.not.present(FORCES)) then 
-        call MOM_error(FATAL,"The code cannot be run with the options  "//&
-             "SURFBAND_SOURCE = COUPLER for with this driver.  If you are using a "//&
-             "wave coupled driver then check the call to update_surface_waves, otherwise"//&
-             "select another option for SURFBAND_SOURCE.")
+        call MOM_error(FATAL,"The option SURFBAND = COUPLER can not be used with "//&
+             "this driver. If you are using a coupled driver with a wave model then "//& 
+             "check the arguments in the subroutine call to Update_Surface_Waves, "//&
+             "otherwise select another option for SURFBAND_SOURCE.")
       endif
       if (size(CS%WaveNum_Cen).ne.size(forces%stk_wavenumbers)) then
         call MOM_error(FATAL, "Number of wavenumber bands in WW3 does not match that in MOM6. "//&
@@ -481,13 +481,13 @@ subroutine Update_Surface_Waves(G, GV, US, Day, dt, CS, forces)
       do b=1,CS%NumBands
         CS%WaveNum_Cen(b) = forces%stk_wavenumbers(b)
         !Interpolate from a grid to c grid
-        do II=G%iscB,G%iecB
-          do jj=G%jsc,G%jec
+        do jj=G%jsc,G%jec
+          do II=G%iscB,G%iecB
             CS%STKx0(II,jj,b) = 0.5*(forces%UStkb(ii,jj,b)+forces%UStkb(ii+1,jj,b))
           enddo
         enddo
-        do ii=G%isc,G%iec
-          do JJ=G%jscB, G%jecB
+        do JJ=G%jscB, G%jecB
+          do ii=G%isc,G%iec
             CS%STKY0(ii,JJ,b) = 0.5*(forces%VStkb(ii,jj,b)+forces%VStkb(ii,jj+1,b))
           enddo
         enddo
@@ -495,13 +495,13 @@ subroutine Update_Surface_Waves(G, GV, US, Day, dt, CS, forces)
       enddo
     elseif (DataSource==Input) then
       do b=1,CS%NumBands
-        do II=G%isdB,G%iedB
-          do jj=G%jsd,G%jed
+        do jj=G%jsd,G%jed
+          do II=G%isdB,G%iedB
             CS%STKx0(II,jj,b) = CS%PrescribedSurfStkX(b)
           enddo
         enddo
-        do ii=G%isd,G%ied
-          do JJ=G%jsdB, G%jedB
+        do JJ=G%jsdB, G%jedB
+          do ii=G%isd,G%ied
             CS%STKY0(ii,JJ,b) = CS%PrescribedSurfStkY(b)
           enddo
         enddo
@@ -537,8 +537,8 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
   !    Computing mid-point value from surface value and decay wavelength
   if (WaveMethod==TESTPROF) then
     DecayScale = 4.*PI / TP_WVL !4pi
-    do II = G%isdB,G%iedB
-      do jj = G%jsd,G%jed
+    do jj = G%jsd,G%jed
+      do II = G%isdB,G%iedB
         IIm1 = max(1,II-1)
         Bottom = 0.0
         MidPoint = 0.0
@@ -550,8 +550,8 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
         enddo
       enddo
     enddo
-    do ii = G%isd,G%ied
-      do JJ = G%jsdB,G%jedB
+    do JJ = G%jsdB,G%jedB
+      do ii = G%isd,G%ied
         JJm1 = max(1,JJ-1)
         Bottom = 0.0
         MidPoint = 0.0
@@ -572,8 +572,8 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
     CS%Us0_x(:,:) = 0.0
     CS%Us0_y(:,:) = 0.0
     ! Computing X direction Stokes drift
-    do II = G%isdB,G%iedB
-      do jj = G%jsd,G%jed
+    do jj = G%jsd,G%jed
+      do II = G%isdB,G%iedB
         ! 1. First compute the surface Stokes drift
         !    by integrating over the partitionas.
         do b = 1,CS%NumBands
@@ -630,8 +630,8 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
       enddo
     enddo
     ! Computing Y direction Stokes drift
-    do ii = G%isd,G%ied
-      do JJ = G%jsdB,G%jedB
+    do JJ = G%jsdB,G%jedB
+      do ii = G%isd,G%ied
         ! Compute the surface values.
         do b = 1,CS%NumBands
           if (PartitionMode==0) then
@@ -688,8 +688,8 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
     enddo
   elseif (WaveMethod==DHH85) then
     if (.not.(StaticWaves .and. DHH85_is_set)) then
-      do II = G%isdB,G%iedB
-        do jj = G%jsd,G%jed
+      do jj = G%jsd,G%jed
+        do II = G%isdB,G%iedB
           bottom = 0.0
           do kk = 1,G%ke
             Top = Bottom
@@ -706,8 +706,8 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
           enddo
         enddo
       enddo
-      do ii = G%isd,G%ied
-        do JJ = G%jsdB,G%jedB
+      do JJ = G%jsdB,G%jedB
+        do ii = G%isd,G%ied
           Bottom = 0.0
           do kk=1, G%ke
             Top = Bottom
@@ -732,13 +732,13 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
     endif
   else! Keep this else, fallback to 0 Stokes drift
     do kk= 1,G%ke
-      do II = G%isdB,G%iedB
-        do jj = G%jsd,G%jed
+      do jj = G%jsd,G%jed
+        do II = G%isdB,G%iedB
           CS%Us_x(II,jj,kk) = 0.
         enddo
       enddo
-      do ii = G%isd,G%ied
-        do JJ = G%jsdB,G%jedB
+      do JJ = G%jsdB,G%jedB
+        do ii = G%isd,G%ied
           CS%Us_y(ii,JJ,kk) = 0.
         enddo
       enddo
@@ -748,8 +748,8 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
   ! Turbulent Langmuir number is computed here and available to use anywhere.
   ! SL Langmuir number requires mixing layer depth, and therefore is computed
   ! in the routine it is needed by (e.g. KPP or ePBL).
-  do ii = G%isc,G%iec
-    do jj = G%jsc, G%jec
+  do jj = G%jsc, G%jec
+    do ii = G%isc,G%iec
       Top = h(ii,jj,1)*GV%H_to_Z
       call get_Langmuir_Number( La, G, GV, US, Top, ustar(ii,jj), ii, jj, &
              H(ii,jj,:),Override_MA=.false.,WAVES=CS)

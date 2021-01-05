@@ -183,11 +183,15 @@ type, public :: ice_ocean_boundary_type
                                                               !! ice-shelves, expressed as a coefficient
                                                               !! for divergence damping, as determined
                                                               !! outside of the ocean model in [m3/s]
-  real, pointer, dimension(:,:)   :: ustk0           => NULL() !<
-  real, pointer, dimension(:,:)   :: vstk0           => NULL() !<
-  real, pointer, dimension(:)     :: stk_wavenumbers => NULL() !<
-  real, pointer, dimension(:,:,:) :: ustkb           => NULL() !<
-  real, pointer, dimension(:,:,:) :: vstkb           => NULL() !<
+  real, pointer, dimension(:,:)   :: ustk0           => NULL() !< Surface Stokes drift, zonal [m/s]
+  real, pointer, dimension(:,:)   :: vstk0           => NULL() !< Surface Stokes drift, meridional [m/s]
+  real, pointer, dimension(:)     :: stk_wavenumbers => NULL() !< The central wave number of Stokes bands [rad/m]
+  real, pointer, dimension(:,:,:) :: ustkb           => NULL() !< Stokes Drift spectrum, zonal [m/s]
+                                                               !! Horizontal  - u points
+                                                               !! 3rd dimension - wavenumber
+  real, pointer, dimension(:,:,:) :: vstkb           => NULL() !< Stokes Drift spectrum, meridional [m/s]
+                                                               !! Horizontal  - v points
+                                                               !! 3rd dimension - wavenumber
   integer :: num_stk_bands            !< Number of Stokes drift bands passed through the coupler
   integer :: xtype                                            !< The type of the exchange - REGRID, REDIST or DIRECT
   type(coupler_2d_bc_type)      :: fluxes                     !< A structure that may contain an array of

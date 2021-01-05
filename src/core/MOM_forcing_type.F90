@@ -250,13 +250,17 @@ type, public :: mech_forcing
                                 !! reset to zero at the driver level when appropriate.
 
   real, pointer, dimension(:,:) :: &
-       ustk0 => NULL(), &
-       vstk0 => NULL()
+       ustk0 => NULL(), &       !< Surface Stokes drift, zonal [m/s]
+       vstk0 => NULL()          !< Surface Stokes drift, meridional [m/s]
   real, pointer, dimension(:) :: &
-       stk_wavenumbers => NULL()
+       stk_wavenumbers => NULL() !< The central wave number of Stokes bands [rad/m]
   real, pointer, dimension(:,:,:) :: &
-       ustkb => NULL(), &
-       vstkb => NULL()
+       ustkb => NULL(), &       !< Stokes Drift spectrum, zonal [m/s]
+                                !! Horizontal - u points
+                                !! 3rd dimension - wavenumber
+       vstkb => NULL()          !< Stokes Drift spectrum, meridional [m/s]
+                                !! Horizontal - v points
+                                !! 3rd dimension - wavenumber
 
   logical :: initialized = .false. !< This indicates whether the appropriate arrays have been initialized.
 end type mech_forcing
@@ -3041,12 +3045,12 @@ subroutine allocate_mech_forcing_by_group(G, forces, stress, ustar, shelf, &
     forces%stk_wavenumbers(:) = 0.0    
     allocate(forces%ustkb(isd:ied,jsd:jed,num_stk_bands)) 
     forces%ustkb(isd:ied,jsd:jed,:) = 0.0
-    endif; endif; endif
+  endif ; endif ; endif
 
   if (present(waves)) then; if (waves) then; if (.not.associated(forces%vstkb)) then    
     allocate(forces%vstkb(isd:ied,jsd:jed,num_stk_bands))
     forces%vstkb(isd:ied,jsd:jed,:) = 0.0
-  endif; endif; endif
+  endif ; endif ; endif
 
 end subroutine allocate_mech_forcing_by_group
 
