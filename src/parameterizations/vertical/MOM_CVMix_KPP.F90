@@ -1392,7 +1392,7 @@ subroutine KPP_NonLocalTransport_temp(CS, G, GV, h, nonLocalTrans, surfFlux, &
   type(ocean_grid_type),                      intent(in)    :: G      !< Ocean grid
   type(verticalGrid_type),                    intent(in)    :: GV     !< Ocean vertical grid
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h      !< Layer/level thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: nonLocalTrans !< Non-local transport [nondim]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)   :: nonLocalTrans !< Non-local transport [nondim]
   real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: surfFlux  !< Surface flux of scalar
                                                                       !! [conc H s-1 ~> conc m s-1 or conc kg m-2 s-1]
   real,                                       intent(in)    :: dt     !< Time-step [s]
@@ -1416,7 +1416,7 @@ subroutine KPP_NonLocalTransport_temp(CS, G, GV, h, nonLocalTrans, surfFlux, &
 
   !  Update tracer due to non-local redistribution of surface flux
   if (CS%applyNonLocalTrans) then
-    !$OMP parallel do default(none) shared(dt, scalar, dtracer, G)
+    !$OMP parallel do default(none) shared(dt, scalar, dtracer, G, GV)
     do k = 1, GV%ke
       do j = G%jsc, G%jec
         do i = G%isc, G%iec
