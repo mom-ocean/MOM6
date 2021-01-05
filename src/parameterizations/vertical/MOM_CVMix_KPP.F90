@@ -1477,7 +1477,7 @@ subroutine KPP_NonLocalTransport_saln(CS, G, GV, h, nonLocalTrans, surfFlux, dt,
 
   !  Update tracer due to non-local redistribution of surface flux
   if (CS%applyNonLocalTrans) then
-    !$OMP parallel do default(none) shared(G, dt, scalar, dtracer)
+    !$OMP parallel do default(none) shared(G, GV, dt, scalar, dtracer)
     do k = 1, GV%ke
       do j = G%jsc, G%jec
         do i = G%isc, G%iec
