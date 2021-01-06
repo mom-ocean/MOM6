@@ -16,6 +16,7 @@ use ESMF                  , only : ESMF_LogSetError, ESMF_LogFoundError, ESMF_LO
 use ESMF                  , only : ESMF_RC_ARG_BAD
 use ESMF                  , only : operator(<), operator(/=), operator(+), operator(-), operator(*) , operator(>=)
 use ESMF                  , only : operator(<=), operator(>), operator(==)
+use MOM_cap_methods       , only : ChkErr
 
 implicit none; private
 
@@ -335,17 +336,5 @@ subroutine date2ymd (date, year, month, day)
   day = mod(tdate,  100)
 
 end subroutine date2ymd
-
-logical function chkerr(rc, line, file)
-  integer, intent(in) :: rc
-  integer, intent(in) :: line
-  character(len=*), intent(in) :: file
-  integer :: lrc
-  chkerr = .false.
-  lrc = rc
-  if (ESMF_LogFoundError(rcToCheck=lrc, msg=ESMF_LOGERR_PASSTHRU, line=line, file=file)) then
-     chkerr = .true.
-  endif
-end function chkerr
 
 end module MOM_cap_time
