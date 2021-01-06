@@ -200,7 +200,7 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS, R_rho)
     pres_int(1) = 0. ;  if (associated(tv%p_surf)) pres_int(1) = tv%p_surf(i,j)
     ! we don't have SST and SSS, so let's use values at top-most layer
     temp_int(1) = tv%T(i,j,1); salt_int(1) = tv%S(i,j,1)
-    do K=2,G%ke
+    do K=2,GV%ke
       ! pressure at interface
       pres_int(K) = pres_int(K-1) + (GV%g_Earth * GV%H_to_RZ) * h(i,j,k-1)
       ! temp and salt at interface
@@ -217,13 +217,13 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS, R_rho)
     ! The "-1.0" below is needed so that the following criteria is satisfied:
     ! if ((alpha_dT > beta_dS) .and. (beta_dS > 0.0)) then "salt finger"
     ! if ((alpha_dT < 0.) .and. (beta_dS < 0.) .and. (alpha_dT > beta_dS)) then "diffusive convection"
-    do k=1,G%ke
+    do k=1,GV%ke
       alpha_dT(k) = -1.0*US%R_to_kg_m3*drho_dT(k) * dT(k)
       beta_dS(k)  = US%R_to_kg_m3*drho_dS(k) * dS(k)
     enddo
 
     if (present(R_rho))  then
-      do k=1,G%ke
+      do k=1,GV%ke
         ! Set R_rho using Adcroft's rule of reciprocals.
         R_rho(i,j,k) = 0.0 ; if (abs(beta_dS(k)) > 0.0) R_rho(i,j,k) = alpha_dT(k) / beta_dS(k)
         ! avoid NaN's again for safety, perhaps unnecessarily.
@@ -234,7 +234,7 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS, R_rho)
     iFaceHeight(1) = 0.0 ! BBL is all relative to the surface
     hcorr = 0.0
     ! compute heights at cell center and interfaces
-    do k=1,G%ke
+    do k=1,GV%ke
       dh = h(i,j,k) * GV%H_to_m ! Nominal thickness to use for increment
       dh = dh + hcorr ! Take away the accumulated error (could temporarily make dh<0)
       hcorr = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
@@ -251,9 +251,9 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS, R_rho)
                             Sdiff_out=Kd1_S(:), &
                             strat_param_num=alpha_dT(:), &
                             strat_param_denom=beta_dS(:), &
-                            nlev=G%ke,    &
-                            max_nlev=G%ke)
-    do K=1,G%ke+1
+                            nlev=GV%ke,    &
+                            max_nlev=GV%ke)
+    do K=1,GV%ke+1
       Kd_T(i,j,K) = US%m2_s_to_Z2_T * Kd1_T(K)
       Kd_S(i,j,K) = US%m2_s_to_Z2_T * Kd1_S(K)
     enddo

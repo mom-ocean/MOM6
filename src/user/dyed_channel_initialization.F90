@@ -131,12 +131,13 @@ subroutine dyed_channel_set_OBC_tracer_data(OBC, G, GV, param_file, tr_Reg)
 end subroutine dyed_channel_set_OBC_tracer_data
 
 !> This subroutine updates the long-channel flow
-subroutine dyed_channel_update_flow(OBC, CS, G, Time)
+subroutine dyed_channel_update_flow(OBC, CS, G, GV, Time)
   type(ocean_OBC_type),       pointer    :: OBC !< This open boundary condition type specifies
                                                 !! whether, where, and what open boundary
                                                 !! conditions are used.
   type(dyed_channel_OBC_CS),  pointer    :: CS  !< Dyed channel control structure.
   type(ocean_grid_type),      intent(in) :: G   !< The ocean's grid structure.
+  type(verticalGrid_type),    intent(in) :: GV  !< The ocean's vertical grid structure.
   type(time_type),            intent(in) :: Time !< model time.
   ! Local variables
   character(len=40)  :: mdl = "dyed_channel_update_flow" ! This subroutine's name.
@@ -166,7 +167,7 @@ subroutine dyed_channel_update_flow(OBC, CS, G, Time)
       else
         flow = G%US%m_s_to_L_T*CS%zonal_flow + CS%tidal_amp * cos(2 * PI * CS%frequency * time_sec)
       endif
-      do k=1,G%ke
+      do k=1,GV%ke
         do j=jsd,jed ; do I=IsdB,IedB
           if (segment%specified .or. segment%nudged) then
             segment%normal_vel(I,j,k) = flow

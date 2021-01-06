@@ -789,9 +789,9 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
   call mpp_get_layout(input_domain,layout)
   call mpp_get_global_domain(input_domain, xsize=xsz, ysize=ysz)
   if (PRESENT(maskmap)) then
-     call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain, maskmap=maskmap)
+    call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain, maskmap=maskmap)
   else
-     call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain)
+    call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain)
   endif
   call mpp_get_compute_domain(Ocean_sfc%Domain, isc, iec, jsc, jec)
 
@@ -1059,40 +1059,40 @@ subroutine ocean_model_data2D_get(OS, Ocean, name, array2D, isc, jsc)
 
 
   select case(name)
-  case('area')
-     array2D(isc:,jsc:) = OS%US%L_to_m**2*OS%grid%areaT(g_isc:g_iec,g_jsc:g_jec)
-  case('mask')
-     array2D(isc:,jsc:) = OS%grid%mask2dT(g_isc:g_iec,g_jsc:g_jec)
+    case('area')
+      array2D(isc:,jsc:) = OS%US%L_to_m**2*OS%grid%areaT(g_isc:g_iec,g_jsc:g_jec)
+    case('mask')
+      array2D(isc:,jsc:) = OS%grid%mask2dT(g_isc:g_iec,g_jsc:g_jec)
 !OR same result
 !     do j=g_jsc,g_jec ; do i=g_isc,g_iec
 !        array2D(isc+i-g_isc,jsc+j-g_jsc) = OS%grid%mask2dT(i,j)
 !     enddo ; enddo
-  case('t_surf')
-     array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
-  case('t_pme')
-     array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
-  case('t_runoff')
-     array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
-  case('t_calving')
-     array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
-  case('btfHeat')
-     array2D(isc:,jsc:) = 0
-  case('cos_rot')
-     array2D(isc:,jsc:) = OS%grid%cos_rot(g_isc:g_iec,g_jsc:g_jec) ! =1
-  case('sin_rot')
-     array2D(isc:,jsc:) = OS%grid%sin_rot(g_isc:g_iec,g_jsc:g_jec) ! =0
-  case('s_surf')
-     array2D(isc:,jsc:) = Ocean%s_surf(isc:,jsc:)
-  case('sea_lev')
-     array2D(isc:,jsc:) = Ocean%sea_lev(isc:,jsc:)
-  case('frazil')
-     array2D(isc:,jsc:) = Ocean%frazil(isc:,jsc:)
-  case('melt_pot')
-     array2D(isc:,jsc:) = Ocean%melt_potential(isc:,jsc:)
-  case('obld')
-     array2D(isc:,jsc:) = Ocean%OBLD(isc:,jsc:)
-  case default
-     call MOM_error(FATAL,'get_ocean_grid_data2D: unknown argument name='//name)
+    case('t_surf')
+      array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
+    case('t_pme')
+      array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
+    case('t_runoff')
+      array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
+    case('t_calving')
+      array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
+    case('btfHeat')
+      array2D(isc:,jsc:) = 0
+    case('cos_rot')
+      array2D(isc:,jsc:) = OS%grid%cos_rot(g_isc:g_iec,g_jsc:g_jec) ! =1
+    case('sin_rot')
+      array2D(isc:,jsc:) = OS%grid%sin_rot(g_isc:g_iec,g_jsc:g_jec) ! =0
+    case('s_surf')
+      array2D(isc:,jsc:) = Ocean%s_surf(isc:,jsc:)
+    case('sea_lev')
+      array2D(isc:,jsc:) = Ocean%sea_lev(isc:,jsc:)
+    case('frazil')
+      array2D(isc:,jsc:) = Ocean%frazil(isc:,jsc:)
+    case('melt_pot')
+      array2D(isc:,jsc:) = Ocean%melt_potential(isc:,jsc:)
+    case('obld')
+      array2D(isc:,jsc:) = Ocean%OBLD(isc:,jsc:)
+    case default
+      call MOM_error(FATAL,'get_ocean_grid_data2D: unknown argument name='//name)
   end select
 
 end subroutine ocean_model_data2D_get
@@ -1209,7 +1209,7 @@ subroutine ocean_model_get_UV_surf(OS, Ocean, name, array2D, isc, jsc)
                 0.5*(sfc_state%v(i+i0,J+j0)+sfc_state%v(i+i0+1,J+j0))
     enddo ; enddo
   case default
-     call MOM_error(FATAL,'ocean_model_get_UV_surf: unknown argument name='//name)
+    call MOM_error(FATAL,'ocean_model_get_UV_surf: unknown argument name='//name)
   end select
 
 end subroutine ocean_model_get_UV_surf

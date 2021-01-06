@@ -59,7 +59,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
   type(ocean_grid_type),            intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),          intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),            intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),            intent(in)  :: tv !< Thermodynamic variables
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: cg1 !< First mode internal wave speed [L T-1 ~> m s-1]
@@ -74,7 +74,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
   real,                   optional, intent(in)  :: mono_N2_depth !< A depth below which N2 is limited as
                                           !! monotonic for the purposes of calculating vertical
                                           !! modal structure [Z ~> m].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                           optional, intent(out) :: modal_structure !< Normalized model structure [nondim]
   logical, optional, intent(in) :: better_speed_est !< If true, use a more robust estimate of the first
                                      !! mode speed as the starting point for iterations.
@@ -84,7 +84,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
                                      !! wave speeds [nondim]
 
   ! Local variables
-  real, dimension(SZK_(G)+1) :: &
+  real, dimension(SZK_(GV)+1) :: &
     dRho_dT, &    ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
     dRho_dS, &    ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
     pres, &       ! Interface pressure [R L2 T-2 ~> Pa]
@@ -93,15 +93,15 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
     H_top, &      ! The distance of each filtered interface from the ocean surface [Z ~> m]
     H_bot, &      ! The distance of each filtered interface from the bottom [Z ~> m]
     gprime        ! The reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
-  real, dimension(SZK_(G)) :: &
+  real, dimension(SZK_(GV)) :: &
     Igl, Igu      ! The inverse of the reduced gravity across an interface times
                   ! the thickness of the layer below (Igl) or above (Igu) it, in [T2 L-2 ~> s2 m-2].
-  real, dimension(SZK_(G),SZI_(G)) :: &
+  real, dimension(SZK_(GV),SZI_(G)) :: &
     Hf, &         ! Layer thicknesses after very thin layers are combined [Z ~> m]
     Tf, &         ! Layer temperatures after very thin layers are combined [degC]
     Sf, &         ! Layer salinities after very thin layers are combined [ppt]
     Rf            ! Layer densities after very thin layers are combined [R ~> kg m-3]
-  real, dimension(SZK_(G)) :: &
+  real, dimension(SZK_(GV)) :: &
     Hc, &         ! A column of layer thicknesses after convective istabilities are removed [Z ~> m]
     Tc, &         ! A column of layer temperatures after convective istabilities are removed [degC]
     Sc, &         ! A column of layer salinites after convective istabilities are removed [ppt]
@@ -149,9 +149,9 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
   real :: N2min   ! A minimum buoyancy frequency [T-2 ~> s-2]
   logical :: l_use_ebt_mode, calc_modal_structure
   real :: l_mono_N2_column_fraction, l_mono_N2_depth
-  real :: mode_struct(SZK_(G)), ms_min, ms_max, ms_sq
+  real :: mode_struct(SZK_(GV)), ms_min, ms_max, ms_sq
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_wave_speed: "// &
            "Module must be initialized before it is used.")
@@ -170,7 +170,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
   calc_modal_structure = l_use_ebt_mode
   if (present(modal_structure)) calc_modal_structure = .true.
   if (calc_modal_structure) then
-    do k=1,nz; do j=js,je; do i=is,ie
+    do k=1,nz ; do j=js,je ; do i=is,ie
       modal_structure(i,j,k) = 0.0
     enddo ; enddo ; enddo
   endif
@@ -642,7 +642,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos, better_spee
   type(ocean_grid_type),                    intent(in)  :: G !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),                    intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                    intent(in)  :: tv !< Thermodynamic variables
   integer,                                  intent(in)  :: nmodes !< Number of modes
   real, dimension(G%isd:G%ied,G%jsd:G%jed,nmodes), intent(out) :: cn !< Waves speeds [L T-1 ~> m s-1]
@@ -657,7 +657,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos, better_spee
                                      !! wave speeds [nondim]
 
   ! Local variables
-  real, dimension(SZK_(G)+1) :: &
+  real, dimension(SZK_(GV)+1) :: &
     dRho_dT, &    ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
     dRho_dS, &    ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
     pres, &       ! Interface pressure [R L2 T-2 ~> Pa]
@@ -666,12 +666,12 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos, better_spee
     H_top, &      ! The distance of each filtered interface from the ocean surface [Z ~> m]
     H_bot, &      ! The distance of each filtered interface from the bottom [Z ~> m]
     gprime        ! The reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
-  real, dimension(SZK_(G),SZI_(G)) :: &
+  real, dimension(SZK_(GV),SZI_(G)) :: &
     Hf, &         ! Layer thicknesses after very thin layers are combined [Z ~> m]
     Tf, &         ! Layer temperatures after very thin layers are combined [degC]
     Sf, &         ! Layer salinities after very thin layers are combined [ppt]
     Rf            ! Layer densities after very thin layers are combined [R ~> kg m-3]
-  real, dimension(SZK_(G)) :: &
+  real, dimension(SZK_(GV)) :: &
     Igl, Igu, &   ! The inverse of the reduced gravity across an interface times
                   ! the thickness of the layer below (Igl) or above (Igu) it, in [T2 L-2 ~> s2 m-2].
     Hc, &         ! A column of layer thicknesses after convective istabilities are removed [Z ~> m]
@@ -736,7 +736,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos, better_spee
   integer :: sub, sub_it
   integer :: i, j, k, k2, itt, is, ie, js, je, nz, row, iint, m, ig, jg
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (present(CS)) then
     if (.not. associated(CS)) call MOM_error(FATAL, "MOM_wave_speed: "// &

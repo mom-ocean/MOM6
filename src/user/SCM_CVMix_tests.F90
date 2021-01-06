@@ -76,7 +76,7 @@ subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read_par
   logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
 

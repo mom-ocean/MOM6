@@ -320,14 +320,14 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
   ISS => CS%ISS
 
   if (CS%rotate_index) then
-     allocate(sfc_state)
-     call rotate_surface_state(sfc_state_in,CS%Grid_in, sfc_state,CS%Grid,CS%turns)
-     allocate(fluxes)
-     call allocate_forcing_type(fluxes_in,G,fluxes)
-     call rotate_forcing(fluxes_in,fluxes,CS%turns)
+    allocate(sfc_state)
+    call rotate_surface_state(sfc_state_in, CS%Grid_in, sfc_state, CS%Grid, CS%turns)
+    allocate(fluxes)
+    call allocate_forcing_type(fluxes_in, G, fluxes)
+    call rotate_forcing(fluxes_in, fluxes, CS%turns)
   else
-     sfc_state=>sfc_state_in
-     fluxes=>fluxes_in
+    sfc_state => sfc_state_in
+    fluxes => fluxes_in
   endif
   ! useful parameters
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; ied = G%ied ; jed = G%jed
@@ -759,8 +759,8 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
   call cpu_clock_end(id_clock_shelf)
 
   if (CS%rotate_index) then
-!     call rotate_surface_state(sfc_state,CS%Grid, sfc_state_in,CS%Grid_in,-CS%turns)
-     call rotate_forcing(fluxes,fluxes_in,-CS%turns)
+!   call rotate_surface_state(sfc_state,CS%Grid, sfc_state_in,CS%Grid_in,-CS%turns)
+    call rotate_forcing(fluxes,fluxes_in,-CS%turns)
   endif
 
 
@@ -1420,7 +1420,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
                  "ice shelf (every time step) from a file.", default=.false.)
 
   if (CS%find_salt_root) then ! read liquidus coeffs.
-     call get_param(param_file, mdl, "TFREEZE_S0_P0", CS%TFr_0_0, &
+    call get_param(param_file, mdl, "TFREEZE_S0_P0", CS%TFr_0_0, &
                  "this is the freezing potential temperature at "//&
                  "S=0, P=0.", units="degC", default=0.0, do_not_log=.true.)
     call get_param(param_file, mdl, "DTFREEZE_DS", CS%dTFr_dS, &
@@ -1487,19 +1487,20 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 
 
   if (PRESENT(sfc_state_in)) then
-     allocate(sfc_state)
-     ! assuming frazil is enabled in ocean. This could break some configurations?
-     call allocate_surface_state(sfc_state_in, CS%Grid_in, use_temperature=.true.,&
-          do_integrals=.true.,omit_frazil=.false.,use_iceshelves=.true.)
-     if (CS%rotate_index) then
-        call rotate_surface_state(sfc_state_in,CS%Grid_in, sfc_state,CS%Grid,CS%turns)
-     else
-        sfc_state=>sfc_state_in
-     endif
+    allocate(sfc_state)
+    ! assuming frazil is enabled in ocean. This could break some configurations?
+    call allocate_surface_state(sfc_state_in, CS%Grid_in, use_temperature=.true., &
+          do_integrals=.true., omit_frazil=.false., use_iceshelves=.true.)
+    if (CS%rotate_index) then
+      call rotate_surface_state(sfc_state_in, CS%Grid_in, sfc_state,CS%Grid,CS%turns)
+    else
+      sfc_state=>sfc_state_in
+    endif
   endif
 
 
-  call safe_alloc_ptr(CS%utide,isd,ied,jsd,jed)   ; CS%utide(:,:) = 0.0
+  call safe_alloc_ptr(CS%utide,isd,ied,jsd,jed) ; CS%utide(:,:) = 0.0
+
   if (read_TIDEAMP) then
     call get_param(param_file, mdl, "TIDEAMP_FILE", TideAmp_file, &
                  "The path to the file containing the spatially varying "//&
@@ -1618,8 +1619,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   endif
 
   if (new_sim .and. (.not. (CS%override_shelf_movement .and. CS%mass_from_file))) then
-     ! This model is initialized internally or from a file.
-     call initialize_ice_thickness(ISS%h_shelf, ISS%area_shelf_h, ISS%hmask, CS%Grid, CS%Grid_in, US, param_file,&
+    ! This model is initialized internally or from a file.
+    call initialize_ice_thickness(ISS%h_shelf, ISS%area_shelf_h, ISS%hmask, CS%Grid, CS%Grid_in, US, param_file,&
           CS%rotate_index, CS%turns)
     ! next make sure mass is consistent with thickness
     do j=G%jsd,G%jed ; do i=G%isd,G%ied
@@ -1628,9 +1629,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
       endif
     enddo ; enddo
     if (CS%debug) then
-       call hchksum(ISS%mass_shelf, "IS init: mass_shelf", G%HI, haloshift=0, scale=US%RZ_to_kg_m2)
-       call hchksum(ISS%area_shelf_h, "IS init: area_shelf", G%HI, haloshift=0, scale=US%L_to_m*US%L_to_m)
-       call hchksum(ISS%hmask, "IS init: hmask", G%HI, haloshift=0)
+      call hchksum(ISS%mass_shelf, "IS init: mass_shelf", G%HI, haloshift=0, scale=US%RZ_to_kg_m2)
+      call hchksum(ISS%area_shelf_h, "IS init: area_shelf", G%HI, haloshift=0, scale=US%L_to_m*US%L_to_m)
+      call hchksum(ISS%hmask, "IS init: hmask", G%HI, haloshift=0)
     endif
 
   ! else ! Previous block for new_sim=.T., this block restores the state.
@@ -1666,7 +1667,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 
 !  do j=G%jsc,G%jec ; do i=G%isc,G%iec
 !    ISS%area_shelf_h(i,j) = ISS%area_shelf_h(i,j)*G%mask2dT(i,j)
-!  enddo; enddo
+!  enddo ; enddo
 
   id_clock_shelf = cpu_clock_id('Ice shelf', grain=CLOCK_COMPONENT)
   id_clock_pass = cpu_clock_id(' Ice shelf halo updates', grain=CLOCK_ROUTINE)
@@ -1762,14 +1763,14 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 
 
   CS%id_area_shelf_h = register_diag_field('ice_shelf_model', 'area_shelf_h', CS%diag%axesT1, CS%Time, &
-     'Ice Shelf Area in cell', 'meter-2', conversion=US%L_to_m**2)
+      'Ice Shelf Area in cell', 'meter-2', conversion=US%L_to_m**2)
   CS%id_shelf_mass = register_diag_field('ice_shelf_model', 'shelf_mass', CS%diag%axesT1, CS%Time, &
-     'mass of shelf', 'kg/m^2', conversion=US%RZ_to_kg_m2)
+      'mass of shelf', 'kg/m^2', conversion=US%RZ_to_kg_m2)
   CS%id_h_shelf = register_diag_field('ice_shelf_model', 'h_shelf', CS%diag%axesT1, CS%Time, &
-       'ice shelf thickness', 'm', conversion=US%Z_to_m)
+      'ice shelf thickness', 'm', conversion=US%Z_to_m)
   CS%id_mass_flux = register_diag_field('ice_shelf_model', 'mass_flux', CS%diag%axesT1,&
-     CS%Time, 'Total mass flux of freshwater across the ice-ocean interface.', &
-     'kg/s', conversion=US%RZ_T_to_kg_m2s*US%L_to_m**2)
+      CS%Time, 'Total mass flux of freshwater across the ice-ocean interface.', &
+      'kg/s', conversion=US%RZ_T_to_kg_m2s*US%L_to_m**2)
 
   if (CS%const_gamma) then ! use ISOMIP+ eq. with rho_fw = 1000. kg m-3
     meltrate_conversion = 86400.0*365.0*US%Z_to_m*US%s_to_T / (1000.0*US%kg_m3_to_R)
@@ -1777,27 +1778,27 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     meltrate_conversion = 86400.0*365.0*US%Z_to_m*US%s_to_T / CS%density_ice
   endif
   CS%id_melt = register_diag_field('ice_shelf_model', 'melt', CS%diag%axesT1, CS%Time, &
-     'Ice Shelf Melt Rate', 'm yr-1', conversion= meltrate_conversion)
+      'Ice Shelf Melt Rate', 'm yr-1', conversion= meltrate_conversion)
   CS%id_thermal_driving = register_diag_field('ice_shelf_model', 'thermal_driving', CS%diag%axesT1, CS%Time, &
-     'pot. temp. in the boundary layer minus freezing pot. temp. at the ice-ocean interface.', 'Celsius')
+      'pot. temp. in the boundary layer minus freezing pot. temp. at the ice-ocean interface.', 'Celsius')
   CS%id_haline_driving = register_diag_field('ice_shelf_model', 'haline_driving', CS%diag%axesT1, CS%Time, &
-     'salinity in the boundary layer minus salinity at the ice-ocean interface.', 'psu')
+      'salinity in the boundary layer minus salinity at the ice-ocean interface.', 'psu')
   CS%id_Sbdry = register_diag_field('ice_shelf_model', 'sbdry', CS%diag%axesT1, CS%Time, &
-     'salinity at the ice-ocean interface.', 'psu')
+      'salinity at the ice-ocean interface.', 'psu')
   CS%id_u_ml = register_diag_field('ice_shelf_model', 'u_ml', CS%diag%axesCu1, CS%Time, &
-     'Eastward vel. in the boundary layer (used to compute ustar)', 'm s-1', conversion=US%L_T_to_m_s)
+      'Eastward vel. in the boundary layer (used to compute ustar)', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_v_ml = register_diag_field('ice_shelf_model', 'v_ml', CS%diag%axesCv1, CS%Time, &
-     'Northward vel. in the boundary layer (used to compute ustar)', 'm s-1', conversion=US%L_T_to_m_s)
+      'Northward vel. in the boundary layer (used to compute ustar)', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_exch_vel_s = register_diag_field('ice_shelf_model', 'exch_vel_s', CS%diag%axesT1, CS%Time, &
-     'Sub-shelf salinity exchange velocity', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
+      'Sub-shelf salinity exchange velocity', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
   CS%id_exch_vel_t = register_diag_field('ice_shelf_model', 'exch_vel_t', CS%diag%axesT1, CS%Time, &
-     'Sub-shelf thermal exchange velocity', 'm s-1' , conversion=US%Z_to_m*US%s_to_T)
+      'Sub-shelf thermal exchange velocity', 'm s-1' , conversion=US%Z_to_m*US%s_to_T)
   CS%id_tfreeze = register_diag_field('ice_shelf_model', 'tfreeze', CS%diag%axesT1, CS%Time, &
-     'In Situ Freezing point at ice shelf interface', 'degC')
+      'In Situ Freezing point at ice shelf interface', 'degC')
   CS%id_tfl_shelf = register_diag_field('ice_shelf_model', 'tflux_shelf', CS%diag%axesT1, CS%Time, &
-     'Heat conduction into ice shelf', 'W m-2', conversion=-US%QRZ_T_to_W_m2)
+      'Heat conduction into ice shelf', 'W m-2', conversion=-US%QRZ_T_to_W_m2)
   CS%id_ustar_shelf = register_diag_field('ice_shelf_model', 'ustar_shelf', CS%diag%axesT1, CS%Time, &
-     'Fric vel under shelf', 'm/s', conversion=US%Z_to_m*US%s_to_T)
+      'Fric vel under shelf', 'm/s', conversion=US%Z_to_m*US%s_to_T)
   if (CS%active_shelf_dynamics) then
     CS%id_h_mask = register_diag_field('ice_shelf_model', 'h_mask', CS%diag%axesT1, CS%Time, &
        'ice shelf thickness mask', 'none')
@@ -1978,12 +1979,10 @@ subroutine update_shelf_mass(G, US, CS, ISS, Time)
 
 
   if (CS%rotate_index) then
-     allocate(tmp2d(CS%Grid_in%isc:CS%Grid_in%iec,CS%Grid_in%jsc:CS%Grid_in%jec)); tmp2d(:,:) = 0.0
+    allocate(tmp2d(CS%Grid_in%isc:CS%Grid_in%iec,CS%Grid_in%jsc:CS%Grid_in%jec)) ; tmp2d(:,:) = 0.0
   else
-     allocate(tmp2d(is:ie,js:je)) ; tmp2d(:,:) = 0.0
+    allocate(tmp2d(is:ie,js:je)) ; tmp2d(:,:) = 0.0
   endif
-
-
 
   call time_interp_external(CS%id_read_mass, Time, tmp2d)
   call rotate_array(tmp2d,CS%turns, ISS%mass_shelf)
@@ -2026,21 +2025,17 @@ subroutine ice_shelf_query(CS, G, frac_shelf_h)
   real, optional, dimension(SZI_(G),SZJ_(G))  :: frac_shelf_h !<
                                       !< Ice shelf area fraction [nodim].
 
-  logical :: do_frac=.false.
-  integer :: i,j
+  integer :: i, j
 
-  if (present(frac_shelf_h)) do_frac=.true.
-
-  if (do_frac) then
-     do j=G%jsd,G%jed
-       do i=G%isd,G%ied
-         frac_shelf_h(i,j)=0.0
-         if (G%areaT(i,j)>0.) frac_shelf_h(i,j) = CS%ISS%area_shelf_h(i,j) / G%areaT(i,j)
-       enddo
-     enddo
-   endif
+  if (present(frac_shelf_h)) then
+    do j=G%jsd,G%jed ; do i=G%isd,G%ied
+      frac_shelf_h(i,j) = 0.0
+      if (G%areaT(i,j)>0.) frac_shelf_h(i,j) = CS%ISS%area_shelf_h(i,j) / G%areaT(i,j)
+    enddo ; enddo
+  endif
 
 end subroutine ice_shelf_query
+
 !> Save the ice shelf restart file
 subroutine ice_shelf_save_restart(CS, Time, directory, time_stamped, filename_suffix)
   type(ice_shelf_CS),         pointer    :: CS !< ice shelf control structure

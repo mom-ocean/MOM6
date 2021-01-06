@@ -23,12 +23,13 @@ public supercritical_set_OBC_data
 contains
 
 !> This subroutine sets the properties of flow at open boundary conditions.
-subroutine supercritical_set_OBC_data(OBC, G, param_file)
-  type(ocean_OBC_type),   pointer    :: OBC  !< This open boundary condition type specifies
-                                             !! whether, where, and what open boundary
-                                             !! conditions are used.
-  type(ocean_grid_type),  intent(in) :: G    !< The ocean's grid structure.
-  type(param_file_type),  intent(in) :: param_file !< Parameter file structure
+subroutine supercritical_set_OBC_data(OBC, G, GV, param_file)
+  type(ocean_OBC_type),    pointer    :: OBC  !< This open boundary condition type specifies
+                                              !! whether, where, and what open boundary
+                                              !! conditions are used.
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),   intent(in) :: param_file !< Parameter file structure
   ! Local variables
   character(len=40)  :: mdl = "supercritical_set_OBC_data" ! This subroutine's name.
   real :: zonal_flow ! Inflow speed [L T-1 ~> m s-1]
@@ -52,7 +53,7 @@ subroutine supercritical_set_OBC_data(OBC, G, param_file)
     if (segment%is_E_or_W) then
       jsd = segment%HI%jsd ; jed = segment%HI%jed
       IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
-      do k=1,G%ke
+      do k=1,GV%ke
         do j=jsd,jed ; do I=IsdB,IedB
           if (segment%specified .or. segment%nudged) then
             segment%normal_vel(I,j,k) = zonal_flow

@@ -30,19 +30,19 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   type(ocean_grid_type),                       intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),                       intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)    :: e    !< Interface heights [Z ~> m] or units
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: e    !< Interface heights [Z ~> m] or units
                                                                      !! given by 1/eta_to_m)
   type(thermo_var_ptrs),                       intent(in)    :: tv   !< A structure pointing to various
                                                                      !! thermodynamic variables
   real,                                        intent(in)    :: dt_kappa_smooth !< A smoothing vertical diffusivity
                                                                      !! times a smoothing timescale [Z2 ~> m2].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: slope_x !< Isopycnal slope in i-direction [nondim]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(inout) :: slope_y !< Isopycnal slope in j-direction [nondim]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: slope_x !< Isopycnal slope in i-direction [nondim]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(inout) :: slope_y !< Isopycnal slope in j-direction [nondim]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), &
                                      optional, intent(inout) :: N2_u !< Brunt-Vaisala frequency squared at
                                                                      !! interfaces between u-points [T-2 ~> s-2]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), &
                                      optional, intent(inout) :: N2_v !< Brunt-Vaisala frequency squared at
                                                                      !! interfaces between u-points [T-2 ~> s-2]
   integer,                           optional, intent(in)    :: halo !< Halo width over which to compute
@@ -51,13 +51,13 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   ! real,                              optional, intent(in)    :: eta_to_m !< The conversion factor from the units
   !  (This argument has been tested but for now serves no purpose.)  !! of eta to m; US%Z_to_m by default.
   ! Local variables
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: &
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: &
     T, &          ! The temperature [degC], with the values in
                   ! in massless layers filled vertically by diffusion.
     S !, &          ! The filled salinity [ppt], with the values in
                   ! in massless layers filled vertically by diffusion.
 !    Rho           ! Density itself, when a nonlinear equation of state is not in use [R ~> kg m-3].
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
+  real, dimension(SZI_(G), SZJ_(G),SZK_(GV)+1) :: &
     pres          ! The pressure at an interface [R L2 T-2 ~> Pa].
   real, dimension(SZIB_(G)) :: &
     drho_dT_u, &  ! The derivative of density with temperature at u points [R degC-1 ~> kg m-3 degC-1].
@@ -113,7 +113,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   else
     is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   endif
-  nz = G%ke ; IsdB = G%IsdB
+  nz = GV%ke ; IsdB = G%IsdB
 
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect**2
   Z_to_L = US%Z_to_L ; H_to_Z = GV%H_to_Z
@@ -388,27 +388,27 @@ end subroutine calc_isoneutral_slopes
 !> Returns tracer arrays (nominally T and S) with massless layers filled with
 !! sensible values, by diffusing vertically with a small but constant diffusivity.
 subroutine vert_fill_TS(h, T_in, S_in, kappa_dt, T_f, S_f, G, GV, halo_here, larger_h_denom)
-  type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                  intent(in)  :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_in !< Input temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_in !< Input salinity [ppt]
-  real,                                     intent(in)  :: kappa_dt !< A vertical diffusivity to use for smoothing
-                                                                !! times a smoothing timescale [Z2 ~> m2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T_f  !< Filled temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S_f  !< Filled salinity [ppt]
-  integer,                        optional, intent(in)  :: halo_here !< Number of halo points to work on,
-                                                                !! 0 by default
-  logical,                        optional, intent(in)  :: larger_h_denom !< Present and true, add a large
-                                                                !! enough minimal thickness in the denominator of
-                                                                !! the flux calculations so that the fluxes are
-                                                                !! never so large as eliminate the transmission
-                                                                !! of information across groups of massless layers.
+  type(ocean_grid_type),                     intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: T_in !< Input temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: S_in !< Input salinity [ppt]
+  real,                                      intent(in)  :: kappa_dt !< A vertical diffusivity to use for smoothing
+                                                                 !! times a smoothing timescale [Z2 ~> m2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T_f  !< Filled temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S_f  !< Filled salinity [ppt]
+  integer,                         optional, intent(in)  :: halo_here !< Number of halo points to work on,
+                                                                 !! 0 by default
+  logical,                         optional, intent(in)  :: larger_h_denom !< Present and true, add a large
+                                                                 !! enough minimal thickness in the denominator of
+                                                                 !! the flux calculations so that the fluxes are
+                                                                 !! never so large as eliminate the transmission
+                                                                 !! of information across groups of massless layers.
   ! Local variables
-  real :: ent(SZI_(G),SZK_(G)+1)   ! The diffusive entrainment (kappa*dt)/dz
+  real :: ent(SZI_(G),SZK_(GV)+1)  ! The diffusive entrainment (kappa*dt)/dz
                                    ! between layers in a timestep [H ~> m or kg m-2].
   real :: b1(SZI_(G)), d1(SZI_(G)) ! b1, c1, and d1 are variables used by the
-  real :: c1(SZI_(G),SZK_(G))      ! tridiagonal solver.
+  real :: c1(SZI_(G),SZK_(GV))     ! tridiagonal solver.
   real :: kap_dt_x2                ! The 2*kappa_dt converted to H units [H2 ~> m2 or kg2 m-4].
   real :: h_neglect                ! A negligible thickness [H ~> m or kg m-2], to allow for zero thicknesses.
   real :: h0                       ! A negligible thickness to allow for zero thickness layers without

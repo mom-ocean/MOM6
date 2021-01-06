@@ -86,16 +86,16 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   if (present(sink_rate)) sink_dist = (dt*sink_rate) * GV%m_to_H
   !$OMP parallel default(shared) private(sink,h_minus_dsink,b_denom_1,b1,d1,h_tr,c1)
   !$OMP do
-  do j=js,je; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo ; enddo
+  do j=js,je ; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo ; enddo
   if (present(sfc_flux)) then
     if (convert_flux) then
       !$OMP do
-      do j = js, je; do i = is,ie
+      do j=js,je ; do i=is,ie
         sfc_src(i,j) = (sfc_flux(i,j)*dt) * GV%kg_m2_to_H
       enddo ; enddo
     else
       !$OMP do
-      do j = js, je; do i = is,ie
+      do j=js,je ; do i=is,ie
         sfc_src(i,j) = sfc_flux(i,j)
       enddo ; enddo
     endif
@@ -103,12 +103,12 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   if (present(btm_flux)) then
     if (convert_flux) then
       !$OMP do
-      do j = js, je; do i = is,ie
+      do j=js,je ; do i=is,ie
         btm_src(i,j) = (btm_flux(i,j)*dt) * GV%kg_m2_to_H
       enddo ; enddo
     else
       !$OMP do
-      do j = js, je; do i = is,ie
+      do j=js,je ; do i=is,ie
         btm_src(i,j) = btm_flux(i,j)
       enddo ; enddo
     endif
@@ -286,16 +286,16 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
   if (present(sink_rate)) sink_dist = (dt*sink_rate) * GV%m_to_H
   !$OMP parallel default(shared) private(sink,h_minus_dsink,b_denom_1,b1,d1,h_tr,c1)
   !$OMP do
-  do j=js,je; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo ; enddo
+  do j=js,je ; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo ; enddo
   if (present(sfc_flux)) then
     if (convert_flux) then
       !$OMP do
-      do j = js, je; do i = is,ie
+      do j=js,je ; do i=is,ie
         sfc_src(i,j) = (sfc_flux(i,j)*dt) * GV%kg_m2_to_H
       enddo ; enddo
     else
       !$OMP do
-      do j = js, je; do i = is,ie
+      do j=js,je ; do i=is,ie
         sfc_src(i,j) = sfc_flux(i,j)
       enddo ; enddo
     endif
@@ -303,12 +303,12 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
   if (present(btm_flux)) then
     if (convert_flux) then
       !$OMP do
-      do j = js, je; do i = is,ie
+      do j=js,je ; do i=is,ie
         btm_src(i,j) = (btm_flux(i,j)*dt) * GV%kg_m2_to_H
       enddo ; enddo
     else
       !$OMP do
-      do j = js, je; do i = is,ie
+      do j=js,je ; do i=is,ie
         btm_src(i,j) = btm_flux(i,j)
       enddo ; enddo
     endif
@@ -427,10 +427,10 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
 
   type(ocean_grid_type),                      intent(in   ) :: G  !< Grid structure
   type(verticalGrid_type),                    intent(in   ) :: GV !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: Tr !< Tracer concentration on T-cell
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: Tr !< Tracer concentration on T-cell
   real,                                       intent(in   ) :: dt !< Time-step over which forcing is applied [T ~> s]
   type(forcing),                              intent(in   ) :: fluxes !< Surface fluxes container
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   real,                                       intent(in   ) :: evap_CFL_limit !< Limit on the fraction of the
                                                                   !! water that can be fluxed out of the top
                                                                   !! layer in a timestep [nondim]
@@ -454,7 +454,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
     netMassIn,    &  ! mass entering ocean surface [H ~> m or kg m-2] over a time step
     netMassOut       ! mass leaving ocean surface [H ~> m or kg m-2] over a time step
 
-  real, dimension(SZI_(G), SZK_(G)) :: h2d, Tr2d
+  real, dimension(SZI_(G),SZK_(GV)) :: h2d, Tr2d
   real, dimension(SZI_(G),SZJ_(G))  :: in_flux  ! The total time-integrated amount of tracer!
                                                    ! that enters with freshwater
   real, dimension(SZI_(G),SZJ_(G))  :: out_flux ! The total time-integrated amount of tracer!
@@ -466,7 +466,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
   integer :: i, j, is, ie, js, je, k, nz, n, nsw
   character(len=45) :: mesg
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   ! If no freshwater fluxes, nothing needs to be done in this routine
   if ( (.not. associated(fluxes%netMassIn)) .or. (.not. associated(fluxes%netMassOut)) ) return

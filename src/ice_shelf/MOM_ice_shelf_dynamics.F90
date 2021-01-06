@@ -2788,9 +2788,9 @@ subroutine update_velocity_masks(CS, G, hmask, umask, vmask, u_face_mask, v_face
   u_face_mask(:,:) = 0 ; v_face_mask(:,:) = 0
 
   if (G%symmetric) then
-   is = isd ; js = jsd
+    is = isd ; js = jsd
   else
-   is = isd+1 ; js = jsd+1
+    is = isd+1 ; js = jsd+1
   endif
 
   do j=js,G%jed

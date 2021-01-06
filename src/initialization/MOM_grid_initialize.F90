@@ -240,13 +240,13 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   global_indices(4) = SGdom%njglobal+SGdom%njhalo
   exni(:) = 2*exni(:) ; exnj(:) = 2*exnj(:)
   if (associated(G%domain%maskmap)) then
-     call MOM_define_domain(global_indices, SGdom%layout, SGdom%mpp_domain, &
+    call MOM_define_domain(global_indices, SGdom%layout, SGdom%mpp_domain, &
             xflags=G%domain%X_FLAGS, yflags=G%domain%Y_FLAGS, &
             xhalo=SGdom%nihalo, yhalo=SGdom%njhalo, &
             xextent=exni,yextent=exnj, &
             symmetry=.true., name="MOM_MOSAIC", maskmap=G%domain%maskmap)
   else
-     call MOM_define_domain(global_indices, SGdom%layout, SGdom%mpp_domain, &
+    call MOM_define_domain(global_indices, SGdom%layout, SGdom%mpp_domain, &
             xflags=G%domain%X_FLAGS, yflags=G%domain%Y_FLAGS, &
             xhalo=SGdom%nihalo, yhalo=SGdom%njhalo, &
             xextent=exni,yextent=exnj, &

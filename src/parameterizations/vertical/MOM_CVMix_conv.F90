@@ -90,7 +90,7 @@ logical function CVMix_conv_init(Time, G, GV, US, param_file, diag, CS)
   ! Warn user if EPBL is being used, since in this case mixing due to convection will
   ! be aplied in the boundary layer
   if (useEPBL) then
-     call MOM_error(WARNING, 'MOM_CVMix_conv_init: '// &
+    call MOM_error(WARNING, 'MOM_CVMix_conv_init: '// &
            'CVMix convection may not be properly applied when ENERGETICS_SFC_PBL = True'//&
            'as convective mixing might occur in the boundary layer.')
   endif
@@ -149,13 +149,13 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
   type(CVMix_conv_cs),                       pointer     :: CS !< The control structure returned
                                                                 !! by a previous call to CVMix_conv_init.
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: hbl !< Depth of ocean boundary layer [Z ~> m]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                                    optional, intent(inout) :: Kd !< Diapycnal diffusivity at each interface that
                                                                  !! will be incremented here [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                                    optional, intent(inout) :: KV !< Viscosity at each interface that will be
                                                                  !! incremented here [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                                    optional, intent(inout) :: Kd_aux !< A second diapycnal diffusivity at each
                                                                  !! interface that will also be incremented
                                                                  !! here [Z2 T-1 ~> m2 s-1].

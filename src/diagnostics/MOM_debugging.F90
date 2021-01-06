@@ -459,8 +459,8 @@ subroutine check_redundant_sT2d(mesg, array, G, is, ie, js, je)
                     & 1pe12.4," at i,j = ",2i4," on pe ",i4)') &
            array(i,j), a_nonsym(i,j),array(i,j)-a_nonsym(i,j),i,j,pe_here()
       write(0,'(A130)') trim(mesg)//trim(mesg2)
-     redundant_prints(1) = redundant_prints(1) + 1
-   endif
+      redundant_prints(1) = redundant_prints(1) + 1
+    endif
   enddo ; enddo
 
 end subroutine  check_redundant_sT2d

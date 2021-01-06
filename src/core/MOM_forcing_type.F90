@@ -376,9 +376,9 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
                                                             !! are scaled away [H ~> m or kg m-2]
   logical,                  intent(in)    :: useRiverHeatContent   !< logical for river heat content
   logical,                  intent(in)    :: useCalvingHeatContent !< logical for calving heat content
-  real, dimension(SZI_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZK_(GV)), &
                             intent(in)    :: h              !< layer thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZK_(GV)), &
                             intent(in)    :: T              !< layer temperatures [degC]
   real, dimension(SZI_(G)), intent(out)   :: netMassInOut   !< net mass flux (non-Bouss) or volume flux
                                                             !! (if Bouss) of water in/out of ocean over
@@ -460,7 +460,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
   I_Cp      = 1.0 / fluxes%C_p
   I_Cp_Hconvert = 1.0 / (GV%H_to_RZ * fluxes%C_p)
 
-  is = G%isc ; ie = G%iec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; nz = GV%ke
 
   calculate_diags = .true.
   if (present(skip_diags)) calculate_diags = .not. skip_diags
@@ -839,9 +839,9 @@ subroutine extractFluxes2d(G, GV, US, fluxes, optics, nsw, dt, FluxRescaleDepth,
                                                                     !! are scaled away [H ~> m or kg m-2]
   logical,                          intent(in)    :: useRiverHeatContent   !< logical for river heat content
   logical,                          intent(in)    :: useCalvingHeatContent !< logical for calving heat content
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     intent(in)    :: h              !< layer thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     intent(in)    :: T              !< layer temperatures [degC]
   real, dimension(SZI_(G),SZJ_(G)), intent(out)   :: netMassInOut   !< net mass flux (non-Bouss) or volume flux
                                                                     !! (if Bouss) of water in/out of ocean over
@@ -893,12 +893,12 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   type(optics_type),                        pointer       :: optics         !< penetrating SW optics
   integer,                                  intent(in)    :: nsw            !< The number of frequency bands of
                                                                             !! penetrating shortwave radiation
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h              !< layer thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: Temp           !< prognostic temp [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: Salt           !< salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h              !< layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: Temp           !< prognostic temp [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: Salt           !< salinity [ppt]
   type(thermo_var_ptrs),                    intent(inout) :: tv             !< thermodynamics type
   integer,                                  intent(in)    :: j              !< j-row to work on
-  real, dimension(SZI_(G),SZK_(G)+1),       intent(inout) :: buoyancyFlux   !< buoyancy fluxes [L2 T-3 ~> m2 s-3]
+  real, dimension(SZI_(G),SZK_(GV)+1),      intent(inout) :: buoyancyFlux   !< buoyancy fluxes [L2 T-3 ~> m2 s-3]
   real, dimension(SZI_(G)),                 intent(inout) :: netHeatMinusSW !< surf Heat flux
                                                                       !! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
   real, dimension(SZI_(G)),                 intent(inout) :: netSalt        !< surf salt flux
@@ -917,7 +917,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   real, dimension(SZI_(G))              :: pressure   ! pressure at the surface [R L2 T-2 ~> Pa]
   real, dimension(SZI_(G))              :: dRhodT     ! density partial derivative wrt temp [R degC-1 ~> kg m-3 degC-1]
   real, dimension(SZI_(G))              :: dRhodS     ! density partial derivative wrt saln [R ppt-1 ~> kg m-3 ppt-1]
-  real, dimension(SZI_(G),SZK_(G)+1)    :: netPen     ! The net penetrating shortwave radiation at each level
+  real, dimension(SZI_(G),SZK_(GV)+1)   :: netPen     ! The net penetrating shortwave radiation at each level
                                                       ! [degC H ~> degC m or degC kg m-2]
 
   logical :: useRiverHeatContent
@@ -972,7 +972,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   buoyancyFlux(G%isc:G%iec,1) = - GoRho * ( dRhodS(G%isc:G%iec) * netSalt(G%isc:G%iec) + &
                                              dRhodT(G%isc:G%iec) * netHeat(G%isc:G%iec) ) ! [L2 T-3 ~> m2 s-3]
   ! We also have a penetrative buoyancy flux associated with penetrative SW
-  do k=2, G%ke+1
+  do k=2, GV%ke+1
     buoyancyFlux(G%isc:G%iec,k) = - GoRho * ( dRhodT(G%isc:G%iec) * netPen(G%isc:G%iec,k) ) ! [L2 T-3 ~> m2 s-3]
   enddo
 
@@ -988,11 +988,11 @@ subroutine calculateBuoyancyFlux2d(G, GV, US, fluxes, optics, h, Temp, Salt, tv,
   type(unit_scale_type),                      intent(in)    :: US     !< A dimensional unit scaling type
   type(forcing),                              intent(inout) :: fluxes !< surface fluxes
   type(optics_type),                          pointer       :: optics !< SW ocean optics
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h      !< layer thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Temp   !< temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Salt   !< salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h      !< layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: Temp   !< temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: Salt   !< salinity [ppt]
   type(thermo_var_ptrs),                      intent(inout) :: tv     !< thermodynamics type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: buoyancyFlux   !< buoyancy fluxes [L2 T-3 ~> m2 s-3]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: buoyancyFlux   !< buoyancy fluxes [L2 T-3 ~> m2 s-3]
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(inout) :: netHeatMinusSW !< surf temp flux
                                                                               !! [degC H ~> degC m or degC kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(inout) :: netSalt        !< surf salt flux
@@ -1025,8 +1025,7 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, US, haloshift)
   type(unit_scale_type),   intent(in) :: US        !< A dimensional unit scaling type
   integer, optional,       intent(in) :: haloshift !< shift in halo
 
-  integer :: is, ie, js, je, nz, hshift
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  integer :: hshift
 
   hshift = 1 ; if (present(haloshift)) hshift = haloshift
 
@@ -1119,10 +1118,9 @@ subroutine MOM_mech_forcing_chksum(mesg, forces, G, US, haloshift)
   type(unit_scale_type),   intent(in) :: US        !< A dimensional unit scaling type
   integer, optional,       intent(in) :: haloshift !< shift in halo
 
-  integer :: is, ie, js, je, nz, hshift
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  integer :: hshift
 
-  hshift=1; if (present(haloshift)) hshift=haloshift
+  hshift = 1 ; if (present(haloshift)) hshift = haloshift
 
   ! Note that for the chksum calls to be useful for reproducing across PE
   ! counts, there must be no redundant points, so all variables use is..ie
@@ -1305,20 +1303,20 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
         ! This diagnostic is rescaled to MKS units when combined.
 
   handles%id_evap = register_diag_field('ocean_model', 'evap', diag%axesT1, Time, &
-       'Evaporation/condensation at ocean surface (evaporation is negative)', &
-       'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
-       standard_name='water_evaporation_flux', cmor_field_name='evs', &
-       cmor_standard_name='water_evaporation_flux', &
-       cmor_long_name='Water Evaporation Flux Where Ice Free Ocean over Sea')
+        'Evaporation/condensation at ocean surface (evaporation is negative)', &
+        'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
+        standard_name='water_evaporation_flux', cmor_field_name='evs', &
+        cmor_standard_name='water_evaporation_flux', &
+        cmor_long_name='Water Evaporation Flux Where Ice Free Ocean over Sea')
 
   ! smg: seaice_melt field requires updates to the sea ice model
   handles%id_seaice_melt = register_diag_field('ocean_model', 'seaice_melt',       &
-     diag%axesT1, Time, 'water flux to ocean from snow/sea ice melting(> 0) or formation(< 0)', &
-     'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
-      standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',     &
-      cmor_field_name='fsitherm',                                                  &
-      cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',&
-      cmor_long_name='water flux to ocean from sea ice melt(> 0) or form(< 0)')
+        diag%axesT1, Time, 'water flux to ocean from snow/sea ice melting(> 0) or formation(< 0)', &
+        'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
+        standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',     &
+        cmor_field_name='fsitherm',                                                  &
+        cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',&
+        cmor_long_name='water flux to ocean from sea ice melt(> 0) or form(< 0)')
 
   handles%id_precip = register_diag_field('ocean_model', 'precip', diag%axesT1, Time, &
         'Liquid + frozen precipitation into ocean', 'kg m-2 s-1')

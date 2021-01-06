@@ -506,7 +506,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   integer :: turns  ! Number of quarter turns from input to model indexing
 
   G => CS%G ; G_in => CS%G_in ; GV => CS%GV ; US => CS%US
-  is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
+  is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = GV%ke
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -984,7 +984,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
   G => CS%G ; GV => CS%GV ; US => CS%US ; IDs => CS%IDs
-  is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
+  is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = GV%ke
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -1135,7 +1135,7 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
   type(ocean_grid_type),    intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV     !< ocean vertical grid structure
   type(unit_scale_type),    intent(in)    :: US     !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)    :: h      !< layer thicknesses after the transports [H ~> m or kg m-2]
   type(time_type),          intent(in)    :: Time_local !< The model time at the end
                                                     !! of the time step.
@@ -1216,11 +1216,11 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   type(ocean_grid_type),    intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),  intent(inout) :: GV     !< ocean vertical grid structure
   type(unit_scale_type),    intent(in)    :: US     !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                             intent(inout) :: u      !< zonal velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                             intent(inout) :: v      !< meridional velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(inout) :: h      !< layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),    intent(inout) :: tv     !< A structure pointing to various thermodynamic variables
   type(forcing),            intent(inout) :: fluxes !< pointers to forcing fields
@@ -1239,7 +1239,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   integer :: halo_sz ! The size of a halo where data must be valid.
   integer :: i, j, k, is, ie, js, je, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("step_MOM_thermo(), MOM.F90")
 
@@ -1249,7 +1249,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   call enable_averages(dtdia, Time_end_thermo, CS%diag)
 
   if (associated(CS%odaCS)) then
-    call apply_oda_tracer_increments(US%T_to_s*dtdia,G,tv,h,CS%odaCS)
+    call apply_oda_tracer_increments(US%T_to_s*dtdia, G, GV, tv, h, CS%odaCS)
   endif
 
   if (associated(fluxes%p_surf) .or. associated(fluxes%p_surf_full)) then
@@ -2035,7 +2035,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       "initialize_MOM: A bulk mixed layer can only be used with T & S as "//&
       "state variables. Add USE_EOS = True to MOM_input.")
 
-  use_ice_shelf=.false.
+  use_ice_shelf = .false.
   if (present(ice_shelf_CSp)) then
     call get_param(param_file, "MOM", "ICE_SHELF", use_ice_shelf, &
        "If true, enables the ice shelf model.", default=.false.)
@@ -2417,7 +2417,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     endif
 
     if (associated(ALE_sponge_in_CSp)) then
-      call rotate_ALE_sponge(ALE_sponge_in_CSp, G_in, CS%ALE_sponge_CSp, G, turns, param_file)
+      call rotate_ALE_sponge(ALE_sponge_in_CSp, G_in, CS%ALE_sponge_CSp, G, GV, turns, param_file)
       call update_ALE_sponge_field(CS%ALE_sponge_CSp, T_in, G, GV, CS%T)
       call update_ALE_sponge_field(CS%ALE_sponge_CSp, S_in, G, GV, CS%S)
     endif
@@ -2553,8 +2553,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call diag_update_remap_grids(diag)
 
   ! Setup the diagnostic grid storage types
-  call diag_grid_storage_init(CS%diag_pre_sync, G, diag)
-  call diag_grid_storage_init(CS%diag_pre_dyn, G, diag)
+  call diag_grid_storage_init(CS%diag_pre_sync, G, GV, diag)
+  call diag_grid_storage_init(CS%diag_pre_dyn, G, GV, diag)
 
   ! Calculate masks for diagnostics arrays in non-native coordinates
   ! This step has to be done after set_axes_info() because the axes needed
@@ -2766,7 +2766,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   CS%nstep_tot = 0
   if (present(count_calls)) CS%count_calls = count_calls
-  call MOM_sum_output_init(G_in, US, param_file, dirs%output_directory, &
+  call MOM_sum_output_init(G_in, GV, US, param_file, dirs%output_directory, &
                            CS%ntrunc, Time_init, CS%sum_output_CSp)
 
   ! Flag whether to save initial conditions in finish_MOM_initialization() or not.
@@ -2818,7 +2818,7 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   if (CS%write_IC) then
     allocate(restart_CSp_tmp)
     restart_CSp_tmp = restart_CSp
-    allocate(z_interface(SZI_(G),SZJ_(G),SZK_(G)+1))
+    allocate(z_interface(SZI_(G),SZJ_(G),SZK_(GV)+1))
     call find_eta(CS%h, CS%tv, G, GV, US, z_interface, eta_to_m=1.0)
     call register_restart_field(z_interface, "eta", .true., restart_CSp_tmp, &
                                 "Interface heights", "meter", z_grid='i')
@@ -2872,32 +2872,32 @@ end subroutine register_diags
 subroutine MOM_timing_init(CS)
   type(MOM_control_struct), intent(in) :: CS  !< control structure set up by initialize_MOM.
 
- id_clock_ocean    = cpu_clock_id('Ocean', grain=CLOCK_COMPONENT)
- id_clock_dynamics = cpu_clock_id('Ocean dynamics', grain=CLOCK_SUBCOMPONENT)
- id_clock_thermo   = cpu_clock_id('Ocean thermodynamics and tracers', grain=CLOCK_SUBCOMPONENT)
- id_clock_other    = cpu_clock_id('Ocean Other', grain=CLOCK_SUBCOMPONENT)
- id_clock_tracer   = cpu_clock_id('(Ocean tracer advection)', grain=CLOCK_MODULE_DRIVER)
- if (.not.CS%adiabatic) then
-   id_clock_diabatic = cpu_clock_id('(Ocean diabatic driver)', grain=CLOCK_MODULE_DRIVER)
- else
-   id_clock_adiabatic = cpu_clock_id('(Ocean adiabatic driver)', grain=CLOCK_MODULE_DRIVER)
- endif
+  id_clock_ocean    = cpu_clock_id('Ocean', grain=CLOCK_COMPONENT)
+  id_clock_dynamics = cpu_clock_id('Ocean dynamics', grain=CLOCK_SUBCOMPONENT)
+  id_clock_thermo   = cpu_clock_id('Ocean thermodynamics and tracers', grain=CLOCK_SUBCOMPONENT)
+  id_clock_other    = cpu_clock_id('Ocean Other', grain=CLOCK_SUBCOMPONENT)
+  id_clock_tracer   = cpu_clock_id('(Ocean tracer advection)', grain=CLOCK_MODULE_DRIVER)
+  if (.not.CS%adiabatic) then
+    id_clock_diabatic = cpu_clock_id('(Ocean diabatic driver)', grain=CLOCK_MODULE_DRIVER)
+  else
+    id_clock_adiabatic = cpu_clock_id('(Ocean adiabatic driver)', grain=CLOCK_MODULE_DRIVER)
+  endif
 
- id_clock_continuity = cpu_clock_id('(Ocean continuity equation *)', grain=CLOCK_MODULE)
- id_clock_BBL_visc   = cpu_clock_id('(Ocean set BBL viscosity)', grain=CLOCK_MODULE)
- id_clock_pass       = cpu_clock_id('(Ocean message passing *)', grain=CLOCK_MODULE)
- id_clock_MOM_init   = cpu_clock_id('(Ocean MOM_initialize_state)', grain=CLOCK_MODULE)
- id_clock_pass_init  = cpu_clock_id('(Ocean init message passing *)', grain=CLOCK_ROUTINE)
- if (CS%thickness_diffuse) &
-   id_clock_thick_diff = cpu_clock_id('(Ocean thickness diffusion *)', grain=CLOCK_MODULE)
-!if (CS%mixedlayer_restrat) &
-   id_clock_ml_restrat = cpu_clock_id('(Ocean mixed layer restrat)', grain=CLOCK_MODULE)
- id_clock_diagnostics  = cpu_clock_id('(Ocean collective diagnostics)', grain=CLOCK_MODULE)
- id_clock_Z_diag       = cpu_clock_id('(Ocean Z-space diagnostics)', grain=CLOCK_MODULE)
- id_clock_ALE          = cpu_clock_id('(Ocean ALE)', grain=CLOCK_MODULE)
- if (CS%offline_tracer_mode) then
-  id_clock_offline_tracer = cpu_clock_id('Ocean offline tracers', grain=CLOCK_SUBCOMPONENT)
- endif
+  id_clock_continuity = cpu_clock_id('(Ocean continuity equation *)', grain=CLOCK_MODULE)
+  id_clock_BBL_visc   = cpu_clock_id('(Ocean set BBL viscosity)', grain=CLOCK_MODULE)
+  id_clock_pass       = cpu_clock_id('(Ocean message passing *)', grain=CLOCK_MODULE)
+  id_clock_MOM_init   = cpu_clock_id('(Ocean MOM_initialize_state)', grain=CLOCK_MODULE)
+  id_clock_pass_init  = cpu_clock_id('(Ocean init message passing *)', grain=CLOCK_ROUTINE)
+  if (CS%thickness_diffuse) &
+    id_clock_thick_diff = cpu_clock_id('(Ocean thickness diffusion *)', grain=CLOCK_MODULE)
+ !if (CS%mixedlayer_restrat) &
+    id_clock_ml_restrat = cpu_clock_id('(Ocean mixed layer restrat)', grain=CLOCK_MODULE)
+  id_clock_diagnostics  = cpu_clock_id('(Ocean collective diagnostics)', grain=CLOCK_MODULE)
+  id_clock_Z_diag       = cpu_clock_id('(Ocean Z-space diagnostics)', grain=CLOCK_MODULE)
+  id_clock_ALE          = cpu_clock_id('(Ocean ALE)', grain=CLOCK_MODULE)
+  if (CS%offline_tracer_mode) then
+    id_clock_offline_tracer = cpu_clock_id('Ocean offline tracers', grain=CLOCK_SUBCOMPONENT)
+  endif
 
 end subroutine MOM_timing_init
 
@@ -3331,7 +3331,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
       sfc_state%ocean_heat(i,j) = 0.0 ; sfc_state%ocean_salt(i,j) = 0.0
     enddo ; enddo
     !$OMP parallel do default(shared) private(mass)
-    do j=js,je ; do k=1,nz; do i=is,ie
+    do j=js,je ; do k=1,nz ; do i=is,ie
       mass = GV%H_to_RZ*h(i,j,k)
       sfc_state%ocean_mass(i,j) = sfc_state%ocean_mass(i,j) + mass
       sfc_state%ocean_heat(i,j) = sfc_state%ocean_heat(i,j) + mass * CS%tv%T(i,j,k)
@@ -3367,12 +3367,12 @@ subroutine extract_surface_state(CS, sfc_state_in)
   endif
 
   if (associated(CS%tracer_flow_CSp)) then
-    call call_tracer_surface_state(sfc_state, h, G, CS%tracer_flow_CSp)
+    call call_tracer_surface_state(sfc_state, h, G, GV, CS%tracer_flow_CSp)
   endif
 
   if (CS%check_bad_sfc_vals) then
     numberOfErrors=0 ! count number of errors
-    do j=js,je; do i=is,ie
+    do j=js,je ; do i=is,ie
       if (G%mask2dT(i,j)>0.) then
         localError = sfc_state%sea_lev(i,j) <= -G%bathyT(i,j) &
                 .or. sfc_state%sea_lev(i,j) >=  CS%bad_val_ssh_max  &

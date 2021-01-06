@@ -45,7 +45,7 @@ subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
   type(OBC_segment_type), pointer :: segment => NULL()
   type(tracer_type), pointer      :: tr_ptr => NULL()
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 

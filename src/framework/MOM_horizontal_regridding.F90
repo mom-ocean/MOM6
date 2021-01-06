@@ -404,15 +404,15 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   allocate(lon_in(id),lat_in(jd),z_in(kd),z_edges_in(kd+1))
   allocate(tr_z(isd:ied,jsd:jed,kd), mask_z(isd:ied,jsd:jed,kd))
 
-  start = 1; count = 1; count(1) = id
+  start = 1 ; count = 1 ; count(1) = id
   rcode = NF90_GET_VAR(ncid, dim_id(1), lon_in, start, count)
   if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 1 values for var_name "// &
                 trim(varnam)//",dim_name "//trim(dim_name(1))//" in file "// trim(filename)//" in hinterp_extrap")
-  start = 1; count = 1; count(1) = jd
+  start = 1 ; count = 1 ; count(1) = jd
   rcode = NF90_GET_VAR(ncid, dim_id(2), lat_in, start, count)
   if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 2 values for var_name "// &
                 trim(varnam)//",dim_name "//trim(dim_name(2))//" in file "// trim(filename)//" in  hinterp_extrap")
-  start = 1; count = 1; count(1) = kd
+  start = 1 ; count = 1 ; count(1) = kd
   rcode = NF90_GET_VAR(ncid, dim_id(3), z_in, start, count)
   if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 3 values for var_name "// &
                 trim(varnam//",dim_name "//trim(dim_name(3)))//" in file "// trim(filename)//" in  hinterp_extrap")
@@ -422,47 +422,45 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   if (present(m_to_Z)) then ; do k=1,kd ; z_in(k) = m_to_Z * z_in(k) ; enddo ; endif
 
   ! extrapolate the input data to the north pole using the northerm-most latitude
-  add_np=.false.
-  jdp=jd
+  add_np = .false.
+  jdp = jd
   if (.not. is_ongrid) then
-     max_lat = maxval(lat_in)
-     if (max_lat < 90.0) then
-        add_np=.true.
-        jdp=jd+1
-        allocate(lat_inp(jdp))
-        lat_inp(1:jd)=lat_in(:)
-        lat_inp(jd+1)=90.0
-        deallocate(lat_in)
-        allocate(lat_in(1:jdp))
-        lat_in(:)=lat_inp(:)
-     endif
+    max_lat = maxval(lat_in)
+    if (max_lat < 90.0) then
+      add_np = .true.
+      jdp = jd+1
+      allocate(lat_inp(jdp))
+      lat_inp(1:jd) = lat_in(:)
+      lat_inp(jd+1) = 90.0
+      deallocate(lat_in)
+      allocate(lat_in(1:jdp))
+      lat_in(:) = lat_inp(:)
+    endif
   endif
   ! construct level cell boundaries as the mid-point between adjacent centers
 
   z_edges_in(1) = 0.0
   do K=2,kd
-    z_edges_in(K)=0.5*(z_in(k-1)+z_in(k))
+    z_edges_in(K) = 0.5*(z_in(k-1)+z_in(k))
   enddo
-  z_edges_in(kd+1)=2.0*z_in(kd) - z_in(kd-1)
+  z_edges_in(kd+1) = 2.0*z_in(kd) - z_in(kd-1)
 
   if (is_ongrid) then
-     allocate(tr_in(is:ie,js:je)) ; tr_in(:,:)=0.0
-     allocate(mask_in(is:ie,js:je)) ; mask_in(:,:)=0.0
+    allocate(tr_in(is:ie,js:je)) ; tr_in(:,:)=0.0
+    allocate(mask_in(is:ie,js:je)) ; mask_in(:,:)=0.0
   else
-     call horiz_interp_init()
-     lon_in = lon_in*PI_180
-     lat_in = lat_in*PI_180
-     allocate(x_in(id,jdp),y_in(id,jdp))
-     call meshgrid(lon_in,lat_in, x_in, y_in)
-     lon_out(:,:) = G%geoLonT(:,:)*PI_180
-     lat_out(:,:) = G%geoLatT(:,:)*PI_180
-     allocate(tr_in(id,jd)) ; tr_in(:,:)=0.0
-     allocate(tr_inp(id,jdp)) ; tr_inp(:,:)=0.0
-     allocate(mask_in(id,jdp)) ; mask_in(:,:)=0.0
-     allocate(last_row(id))    ; last_row(:)=0.0
+    call horiz_interp_init()
+    lon_in = lon_in*PI_180
+    lat_in = lat_in*PI_180
+    allocate(x_in(id,jdp), y_in(id,jdp))
+    call meshgrid(lon_in, lat_in, x_in, y_in)
+    lon_out(:,:) = G%geoLonT(:,:)*PI_180
+    lat_out(:,:) = G%geoLatT(:,:)*PI_180
+    allocate(tr_in(id,jd)) ; tr_in(:,:) = 0.0
+    allocate(tr_inp(id,jdp)) ; tr_inp(:,:) = 0.0
+    allocate(mask_in(id,jdp)) ; mask_in(:,:) = 0.0
+    allocate(last_row(id))    ; last_row(:) = 0.0
   endif
-
-
 
   max_depth = maxval(G%bathyT)
   call mpp_max(max_depth)
@@ -475,7 +473,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   ! to define the layers
   do k=1,kd
     write(laynum,'(I8)') k ; laynum = adjustl(laynum)
-    mask_in=0.0
+    mask_in = 0.0
     if (is_ongrid) then
        start(1) = is+G%HI%idg_offset ; start(2) = js+G%HI%jdg_offset ; start(3) = k
        count(1) = ie-is+1 ; count(2) = je-js+1; count(3) = 1

@@ -332,9 +332,10 @@ subroutine tracer_flow_control_init(restart, day, G, GV, US, h, param_file, diag
 end subroutine tracer_flow_control_init
 
 !> This subroutine extracts the chlorophyll concentrations from the model state, if possible
-subroutine get_chl_from_model(Chl_array, G, CS)
+subroutine get_chl_from_model(Chl_array, G, GV, CS)
   type(ocean_grid_type),        intent(in)  :: G         !< The ocean's grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  type(verticalGrid_type),      intent(in)  :: GV        !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                 intent(out) :: Chl_array !< The array in which to store the model's
                                                          !! Chlorophyll-A concentrations in mg m-3.
   type(tracer_flow_control_CS), pointer     :: CS        !< The control structure returned by a
@@ -722,11 +723,12 @@ end subroutine store_stocks
 
 !> This subroutine calls all registered tracer packages to enable them to
 !! add to the surface state returned to the coupler. These routines are optional.
-subroutine call_tracer_surface_state(sfc_state, h, G, CS)
+subroutine call_tracer_surface_state(sfc_state, h, G, GV, CS)
   type(surface),                intent(inout) :: sfc_state !< A structure containing fields that
                                                        !! describe the surface state of the ocean.
   type(ocean_grid_type),        intent(in)    :: G     !< The ocean's grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  type(verticalGrid_type),      intent(in)    :: GV    !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                 intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
   type(tracer_flow_control_CS), pointer       :: CS    !< The control structure returned by a
                                                        !! previous call to call_tracer_register.
@@ -736,23 +738,23 @@ subroutine call_tracer_surface_state(sfc_state, h, G, CS)
 
 !  Add other user-provided calls here.
   if (CS%use_USER_tracer_example) &
-    call USER_tracer_surface_state(sfc_state, h, G, CS%USER_tracer_example_CSp)
+    call USER_tracer_surface_state(sfc_state, h, G, GV, CS%USER_tracer_example_CSp)
   if (CS%use_DOME_tracer) &
-    call DOME_tracer_surface_state(sfc_state, h, G, CS%DOME_tracer_CSp)
+    call DOME_tracer_surface_state(sfc_state, h, G, GV, CS%DOME_tracer_CSp)
   if (CS%use_ISOMIP_tracer) &
-    call ISOMIP_tracer_surface_state(sfc_state, h, G, CS%ISOMIP_tracer_CSp)
+    call ISOMIP_tracer_surface_state(sfc_state, h, G, GV, CS%ISOMIP_tracer_CSp)
   if (CS%use_ideal_age) &
-    call ideal_age_tracer_surface_state(sfc_state, h, G, CS%ideal_age_tracer_CSp)
+    call ideal_age_tracer_surface_state(sfc_state, h, G, GV, CS%ideal_age_tracer_CSp)
   if (CS%use_regional_dyes) &
-    call dye_tracer_surface_state(sfc_state, h, G, CS%dye_tracer_CSp)
+    call dye_tracer_surface_state(sfc_state, h, G, GV, CS%dye_tracer_CSp)
   if (CS%use_oil) &
-    call oil_tracer_surface_state(sfc_state, h, G, CS%oil_tracer_CSp)
+    call oil_tracer_surface_state(sfc_state, h, G, GV, CS%oil_tracer_CSp)
   if (CS%use_advection_test_tracer) &
-    call advection_test_tracer_surface_state(sfc_state, h, G, CS%advection_test_tracer_CSp)
+    call advection_test_tracer_surface_state(sfc_state, h, G, GV, CS%advection_test_tracer_CSp)
   if (CS%use_OCMIP2_CFC) &
-    call OCMIP2_CFC_surface_state(sfc_state, h, G, CS%OCMIP2_CFC_CSp)
+    call OCMIP2_CFC_surface_state(sfc_state, h, G, GV, CS%OCMIP2_CFC_CSp)
   if (CS%use_MOM_generic_tracer) &
-    call MOM_generic_tracer_surface_state(sfc_state, h, G, CS%MOM_generic_tracer_CSp)
+    call MOM_generic_tracer_surface_state(sfc_state, h, G, GV, CS%MOM_generic_tracer_CSp)
 
 end subroutine call_tracer_surface_state
 

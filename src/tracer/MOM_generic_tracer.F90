@@ -67,22 +67,22 @@ module MOM_generic_tracer
 
   !> Control structure for generic tracers
   type, public :: MOM_generic_tracer_CS ; private
-     character(len = 200) :: IC_file !< The file in which the generic tracer initial values can
-                                     !! be found, or an empty string for internal initialization.
-     logical :: Z_IC_file !< If true, the generic_tracer IC_file is in Z-space.  The default is false.
-     real :: tracer_IC_val = 0.0    !< The initial value assigned to tracers.
-     real :: tracer_land_val = -1.0 !< The values of tracers used where  land is masked out.
-     logical :: tracers_may_reinit  !< If true, tracers may go through the
-                                    !! initialization code if they are not found in the restart files.
+    character(len = 200) :: IC_file !< The file in which the generic tracer initial values can
+                                    !! be found, or an empty string for internal initialization.
+    logical :: Z_IC_file !< If true, the generic_tracer IC_file is in Z-space.  The default is false.
+    real :: tracer_IC_val = 0.0    !< The initial value assigned to tracers.
+    real :: tracer_land_val = -1.0 !< The values of tracers used where  land is masked out.
+    logical :: tracers_may_reinit  !< If true, tracers may go through the
+                                   !! initialization code if they are not found in the restart files.
 
-     type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
-                                                !! regulate the timing of diagnostic output.
-     type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< Restart control structure
+    type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                                               !! regulate the timing of diagnostic output.
+    type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< Restart control structure
 
-     !> Pointer to the first element of the linked list of generic tracers.
-     type(g_tracer_type), pointer :: g_tracer_list => NULL()
+    !> Pointer to the first element of the linked list of generic tracers.
+    type(g_tracer_type), pointer :: g_tracer_list => NULL()
 
-     integer :: H_to_m !< Auxiliary to access GV%H_to_m in routines that do not have access to GV
+    integer :: H_to_m !< Auxiliary to access GV%H_to_m in routines that do not have access to GV
 
   end type MOM_generic_tracer_CS
 
@@ -235,7 +235,7 @@ contains
     type(ocean_grid_type),                 intent(inout) :: G    !< The ocean's grid structure
     type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
     type(unit_scale_type),                 intent(in)    :: US   !< A dimensional unit scaling type
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
     type(param_file_type),                 intent(in) :: param_file !< A structure to parse for run-time parameters
     type(diag_ctrl),               target, intent(in) :: diag    !< Regulates diagnostic output.
     type(ocean_OBC_type),                  pointer    :: OBC     !< This open boundary condition type specifies whether,
@@ -252,14 +252,14 @@ contains
     character(len=fm_string_len)      :: g_tracer_name
     real, dimension(:,:,:,:), pointer   :: tr_field
     real, dimension(:,:,:), pointer     :: tr_ptr
-    real,    dimension(G%isd:G%ied, G%jsd:G%jed,1:G%ke) :: grid_tmask
-    integer, dimension(G%isd:G%ied, G%jsd:G%jed)        :: grid_kmt
+    real,    dimension(G%isd:G%ied, G%jsd:G%jed, 1:GV%ke) :: grid_tmask
+    integer, dimension(G%isd:G%ied, G%jsd:G%jed)          :: grid_kmt
 
     !! 2010/02/04  Add code to re-initialize Generic Tracers if needed during a model simulation
     !! By default, restart cpio should not contain a Generic Tracer IC file and step below will be skipped.
     !! Ideally, the generic tracer IC file should have the tracers on Z levels.
 
-    isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = G%ke
+    isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = GV%ke
 
     CS%diag=>diag
     !Get the tracer list
@@ -322,9 +322,9 @@ contains
           if (.not.file_exists(CS%IC_file)) call MOM_error(FATAL, &
                   "initialize_MOM_Generic_tracer: Unable to open "//CS%IC_file)
           if (CS%Z_IC_file) then
-            OK = tracer_Z_init(tr_ptr, h, CS%IC_file, g_tracer_name, G, US)
+            OK = tracer_Z_init(tr_ptr, h, CS%IC_file, g_tracer_name, G, GV, US)
             if (.not.OK) then
-              OK = tracer_Z_init(tr_ptr, h, CS%IC_file, trim(g_tracer_name), G, US)
+              OK = tracer_Z_init(tr_ptr, h, CS%IC_file, trim(g_tracer_name), G, GV, US)
               if (.not.OK) call MOM_error(FATAL,"initialize_MOM_Generic_tracer: "//&
                       "Unable to read "//trim(g_tracer_name)//" from "//&
                       trim(CS%IC_file)//".")
@@ -364,7 +364,7 @@ contains
     do j = G%jsd, G%jed ; do i = G%isd, G%ied
       if (G%mask2dT(i,j) > 0) then
         grid_tmask(i,j,:) = 1.0
-        grid_kmt(i,j) = G%ke ! Tell the code that a layer thicker than 1m is the bottom layer.
+        grid_kmt(i,j) = GV%ke ! Tell the code that a layer thicker than 1m is the bottom layer.
       endif
     enddo ; enddo
     call g_tracer_set_common(G%isc,G%iec,G%jsc,G%jec,G%isd,G%ied,G%jsd,G%jed,&
@@ -398,14 +398,14 @@ contains
         evap_CFL_limit, minimum_forcing_depth)
     type(ocean_grid_type),   intent(in) :: G     !< The ocean's grid structure
     type(verticalGrid_type), intent(in) :: GV    !< The ocean's vertical grid structure
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                              intent(in) :: h_old !< Layer thickness before entrainment [H ~> m or kg m-2].
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                              intent(in) :: h_new !< Layer thickness after entrainment [H ~> m or kg m-2].
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                              intent(in) :: ea    !< The amount of fluid entrained from the layer
                                                  !! above during this call [H ~> m or kg m-2].
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                              intent(in) :: eb    !< The amount of fluid entrained from the layer
                                                  !! below during this call [H ~> m or kg m-2].
     type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
@@ -434,11 +434,11 @@ contains
     real :: dz_ml(SZI_(G),SZJ_(G))  ! The mixed layer depth in the MKS units used for generic tracers [m]
     real :: sosga
 
-    real, dimension(G%isd:G%ied,G%jsd:G%jed,G%ke) :: rho_dzt, dzt
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G))      :: h_work
+    real, dimension(G%isd:G%ied,G%jsd:G%jed,GV%ke) :: rho_dzt, dzt
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV))      :: h_work
     integer :: i, j, k, isc, iec, jsc, jec, nk
 
-    isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = G%ke
+    isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = GV%ke
 
     !Get the tracer list
     if (.NOT. associated(CS%g_tracer_list)) call MOM_error(FATAL,&
@@ -570,7 +570,7 @@ contains
   function MOM_generic_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
     type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
     type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< Layer thicknesses [H ~> m or kg m-2]
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h !< Layer thicknesses [H ~> m or kg m-2]
     real, dimension(:),                 intent(out)   :: stocks !< The mass-weighted integrated amount of each
                                                                 !! tracer, in kg times concentration units [kg conc].
     type(MOM_generic_tracer_CS),        pointer       :: CS     !< Pointer to the control structure for this module.
@@ -588,7 +588,7 @@ contains
     character(len=128), parameter :: sub_name = 'MOM_generic_tracer_stock'
 
     integer :: i, j, k, is, ie, js, je, nz, m
-    is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+    is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
     MOM_generic_tracer_stock = 0
     if (.not.associated(CS)) return
@@ -663,10 +663,10 @@ contains
     real, dimension(:,:,:),pointer :: grid_tmask
     integer :: isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau
 
-    integer :: i, j, k, is, ie, js, je, nz, m
+    integer :: i, j, k, is, ie, js, je, m
     real, allocatable, dimension(:) :: geo_z
 
-    is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+    is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
     MOM_generic_tracer_min_max = 0
     if (.not.associated(CS)) return
@@ -716,19 +716,20 @@ contains
   !!
   !! This subroutine sets up the fields that the coupler needs to calculate the
   !! CFC fluxes between the ocean and atmosphere.
-  subroutine MOM_generic_tracer_surface_state(sfc_state, h, G, CS)
+  subroutine MOM_generic_tracer_surface_state(sfc_state, h, G, GV, CS)
     type(ocean_grid_type),                 intent(in)    :: G    !< The ocean's grid structure
+    type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
     type(surface),                         intent(inout) :: sfc_state !< A structure containing fields that
                                                                  !! describe the surface state of the ocean.
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
     type(MOM_generic_tracer_CS),           pointer       :: CS   !< Pointer to the control structure for this module.
 
 ! Local variables
     real :: sosga
 
     character(len=128), parameter :: sub_name = 'MOM_generic_tracer_surface_state'
-    real, dimension(G%isd:G%ied,G%jsd:G%jed,1:G%ke,1) :: rho0
-    real, dimension(G%isd:G%ied,G%jsd:G%jed,1:G%ke) ::  dzt
+    real, dimension(G%isd:G%ied,G%jsd:G%jed,1:GV%ke,1) :: rho0
+    real, dimension(G%isd:G%ied,G%jsd:G%jed,1:GV%ke) ::  dzt
     type(g_tracer_type), pointer :: g_tracer
 
     !Set coupler values

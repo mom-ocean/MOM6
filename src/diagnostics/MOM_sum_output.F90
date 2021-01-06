@@ -131,19 +131,20 @@ end type sum_output_CS
 contains
 
 !> MOM_sum_output_init initializes the parameters and settings for the MOM_sum_output module.
-subroutine MOM_sum_output_init(G, US, param_file, directory, ntrnc, &
+subroutine MOM_sum_output_init(G, GV, US, param_file, directory, ntrnc, &
                                Input_start_time, CS)
-  type(ocean_grid_type),  intent(in)    :: G          !< The ocean's grid structure.
-  type(unit_scale_type),  intent(in)    :: US         !< A dimensional unit scaling type
-  type(param_file_type),  intent(in)    :: param_file !< A structure to parse for run-time
-                                                      !! parameters.
-  character(len=*),       intent(in)    :: directory  !< The directory where the energy file goes.
-  integer, target,        intent(inout) :: ntrnc      !< The integer that stores the number of times
-                                                      !! the velocity has been truncated since the
-                                                      !! last call to write_energy.
-  type(time_type),        intent(in)    :: Input_start_time !< The start time of the simulation.
-  type(Sum_output_CS),    pointer       :: CS         !< A pointer that is set to point to the
-                                                      !! control structure for this module.
+  type(ocean_grid_type),   intent(in)    :: G          !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV         !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
+                                                       !! parameters.
+  character(len=*),        intent(in)    :: directory  !< The directory where the energy file goes.
+  integer, target,         intent(inout) :: ntrnc      !< The integer that stores the number of times
+                                                       !! the velocity has been truncated since the
+                                                       !! last call to write_energy.
+  type(time_type),         intent(in)    :: Input_start_time !< The start time of the simulation.
+  type(Sum_output_CS),     pointer       :: CS         !< A pointer that is set to point to the
+                                                       !! control structure for this module.
   ! Local variables
   real :: Time_unit ! The time unit in seconds for ENERGYSAVEDAYS.
   real :: Rho_0     ! A reference density [kg m-3]
@@ -203,7 +204,7 @@ subroutine MOM_sum_output_init(G, US, param_file, directory, ntrnc, &
   !query fms_io if there is a filename_appendix (for ensemble runs)
   call get_filename_appendix(filename_appendix)
   if (len_trim(filename_appendix) > 0) then
-     energyfile = trim(energyfile) //'.'//trim(filename_appendix)
+    energyfile = trim(energyfile) //'.'//trim(filename_appendix)
   endif
 
   CS%energyfile = trim(slasher(directory))//trim(energyfile)
@@ -248,8 +249,8 @@ subroutine MOM_sum_output_init(G, US, param_file, directory, ntrnc, &
                  default=.false.)
     endif
 
-    allocate(CS%lH(G%ke))
-    call depth_list_setup(G, US, CS)
+    allocate(CS%lH(GV%ke))
+    call depth_list_setup(G, GV, US, CS)
   else
     CS%list_size = 0
   endif
@@ -298,11 +299,11 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   type(ocean_grid_type),   intent(in)    :: G   !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: u   !< The zonal velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(in)    :: v   !< The meridional velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h   !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),   intent(in)    :: tv  !< A structure pointing to various
                                                 !! thermodynamic variables.
@@ -317,22 +318,22 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
                     optional, pointer    :: OBC !< Open boundaries control structure.
   type(time_type),  optional, intent(in) :: dt_forcing !< The forcing time step
   ! Local variables
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! The height of interfaces [Z ~> m].
+  real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! The height of interfaces [Z ~> m].
   real :: areaTm(SZI_(G),SZJ_(G)) ! A masked version of areaT [L2 ~> m2].
-  real :: KE(SZK_(G))  ! The total kinetic energy of a layer [J].
-  real :: PE(SZK_(G)+1)! The available potential energy of an interface [J].
+  real :: KE(SZK_(GV)) ! The total kinetic energy of a layer [J].
+  real :: PE(SZK_(GV)+1)! The available potential energy of an interface [J].
   real :: KE_tot       ! The total kinetic energy [J].
   real :: PE_tot       ! The total available potential energy [J].
-  real :: Z_0APE(SZK_(G)+1) ! The uniform depth which overlies the same
+  real :: Z_0APE(SZK_(GV)+1) ! The uniform depth which overlies the same
                        ! volume as is below an interface [Z ~> m].
-  real :: H_0APE(SZK_(G)+1) ! A version of Z_0APE, converted to m, usually positive.
+  real :: H_0APE(SZK_(GV)+1) ! A version of Z_0APE, converted to m, usually positive.
   real :: toten        ! The total kinetic & potential energies of
                        ! all layers [J] (i.e. kg m2 s-2).
   real :: En_mass      ! The total kinetic and potential energies divided by
                        ! the total mass of the ocean [m2 s-2].
-  real :: vol_lay(SZK_(G))  ! The volume of fluid in a layer [Z L2 ~> m3].
+  real :: vol_lay(SZK_(GV)) ! The volume of fluid in a layer [Z L2 ~> m3].
   real :: volbelow     ! The volume of all layers beneath an interface [Z L2 ~> m3].
-  real :: mass_lay(SZK_(G)) ! The mass of fluid in a layer [kg].
+  real :: mass_lay(SZK_(GV)) ! The mass of fluid in a layer [kg].
   real :: mass_tot     ! The total mass of the ocean [kg].
   real :: vol_tot      ! The total ocean volume [m3].
   real :: mass_chg     ! The change in total ocean mass of fresh water since
@@ -382,9 +383,9 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   real :: CFL_lin      ! A simpler definition of the CFL number [nondim].
   real :: max_CFL(2)   ! The maxima of the CFL numbers [nondim].
   real :: Irho0        ! The inverse of the reference density [m3 kg-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     tmp1               ! A temporary array
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: &
     PE_pt              ! The potential energy at each point [J].
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Temp_int, Salt_int ! Layer and cell integrated heat and salt [J] and [g Salt].
@@ -481,7 +482,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     local_open_BC = (OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally)
   endif ; endif
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isr = is - (G%isd-1) ; ier = ie - (G%isd-1) ; jsr = js - (G%jsd-1) ; jer = je - (G%jsd-1)
 
@@ -1089,11 +1090,12 @@ end subroutine accumulate_net_input
 !! cross sectional areas at each depth and the volume of fluid deeper
 !! than each depth.  This might be read from a previously created file
 !! or it might be created anew.  (For now only new creation occurs.
-subroutine depth_list_setup(G, US, CS)
-  type(ocean_grid_type), intent(in) :: G   !< The ocean's grid structure
-  type(unit_scale_type), intent(in) :: US  !< A dimensional unit scaling type
-  type(Sum_output_CS),   pointer    :: CS  !< The control structure returned by a
-                                           !! previous call to MOM_sum_output_init.
+subroutine depth_list_setup(G, GV, US, CS)
+  type(ocean_grid_type),   intent(in) :: G   !< The ocean's grid structure
+  type(verticalGrid_type), intent(in) :: GV  !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in) :: US  !< A dimensional unit scaling type
+  type(Sum_output_CS),     pointer    :: CS  !< The control structure returned by a
+                                             !! previous call to MOM_sum_output_init.
   ! Local variables
   integer :: k
 
@@ -1111,7 +1113,7 @@ subroutine depth_list_setup(G, US, CS)
     call create_depth_list(G, CS)
   endif
 
-  do k=1,G%ke
+  do k=1,GV%ke
     CS%lH(k) = CS%list_size
   enddo
 
@@ -1297,7 +1299,7 @@ subroutine write_depth_list(G, US, CS, filename, list_size)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
       filename//" vol_below "//trim(NF90_STRERROR(status)))
   status = NF90_PUT_ATT(ncid, Vid, "long_name", "Open volume below depth")
-   if (status /= NF90_NOERR) call MOM_error(WARNING, &
+  if (status /= NF90_NOERR) call MOM_error(WARNING, &
       filename//" vol_below "//trim(NF90_STRERROR(status)))
   status = NF90_PUT_ATT(ncid, Vid, "units", "m3")
   if (status /= NF90_NOERR) call MOM_error(WARNING, &

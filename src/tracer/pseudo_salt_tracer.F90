@@ -119,7 +119,7 @@ subroutine initialize_pseudo_salt_tracer(restart, day, G, GV, h, diag, OBC, CS, 
   type(time_type),            target, intent(in) :: day  !< Time of the start of the run.
   type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                       intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(diag_ctrl),            target, intent(in) :: diag !< A structure that is used to regulate
                                                          !! diagnostic output.
@@ -174,15 +174,15 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: h_old !< Layer thickness before entrainment [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: h_new !< Layer thickness after entrainment [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: ea   !< an array to which the amount of fluid entrained
                                               !! from the layer above during this call will be
                                               !! added [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: eb   !< an array to which the amount of fluid entrained
                                               !! from the layer below during this call will be
                                               !! added [H ~> m or kg m-2].
@@ -209,7 +209,7 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
   real :: year, h_total, scale, htot, Ih_limit
   integer :: secs, days
   integer :: i, j, k, is, ie, js, je, nz, k_max
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -252,7 +252,7 @@ end subroutine pseudo_salt_tracer_column_physics
 function pseudo_salt_stock(h, stocks, G, GV, CS, names, units, stock_index)
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(:),                 intent(out)   :: stocks !< the mass-weighted integrated amount of each
                                                               !! tracer, in kg times concentration units [kg conc].
   type(pseudo_salt_tracer_CS),        pointer       :: CS !< The control structure returned by a previous
@@ -298,14 +298,15 @@ end function pseudo_salt_stock
 !> This subroutine extracts the surface fields from this tracer package that
 !! are to be shared with the atmosphere in coupled configurations.
 !! This particular tracer package does not report anything back to the coupler.
-subroutine pseudo_salt_tracer_surface_state(sfc_state, h, G, CS)
-  type(ocean_grid_type),  intent(in)    :: G  !< The ocean's grid structure.
-  type(surface),          intent(inout) :: sfc_state !< A structure containing fields that
-                                              !! describe the surface state of the ocean.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                          intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2].
-  type(pseudo_salt_tracer_CS), pointer  :: CS !< The control structure returned by a previous
-                                              !! call to register_pseudo_salt_tracer.
+subroutine pseudo_salt_tracer_surface_state(sfc_state, h, G, GV, CS)
+  type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure
+  type(surface),           intent(inout) :: sfc_state !< A structure containing fields that
+                                               !! describe the surface state of the ocean.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2].
+  type(pseudo_salt_tracer_CS),  pointer  :: CS !< The control structure returned by a previous
+                                               !! call to register_pseudo_salt_tracer.
 
   ! This particular tracer package does not report anything back to the coupler.
   ! The code that is here is just a rough guide for packages that would.

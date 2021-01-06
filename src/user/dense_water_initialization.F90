@@ -249,7 +249,7 @@ subroutine dense_water_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CS
       enddo
     enddo
 
-    call initialize_ALE_sponge(Idamp, G, param_file, ACSp, h, nz)
+    call initialize_ALE_sponge(Idamp, G, GV, param_file, ACSp, h, nz)
 
     ! construct temperature and salinity for the sponge
     ! start with initial condition
@@ -278,8 +278,8 @@ subroutine dense_water_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CS
       enddo
     enddo
 
-    if (associated(tv%T)) call set_up_ALE_sponge_field(T, G, tv%T, ACSp)
-    if (associated(tv%S)) call set_up_ALE_sponge_field(S, G, tv%S, ACSp)
+    if (associated(tv%T)) call set_up_ALE_sponge_field(T, G, GV, tv%T, ACSp)
+    if (associated(tv%S)) call set_up_ALE_sponge_field(S, G, GV, tv%S, ACSp)
   else
     call MOM_error(FATAL, "dense_water_initialize_sponges: trying to use non ALE sponge")
   endif

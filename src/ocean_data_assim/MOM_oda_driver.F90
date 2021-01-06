@@ -139,7 +139,7 @@ subroutine init_oda(Time, G, GV, CS)
   character(len=200) :: inputdir, basin_file
   logical :: reentrant_x, reentrant_y, tripolar_N, symmetric
 
-  if (associated(CS)) call mpp_error(FATAL,'Calling oda_init with associated control structure')
+  if (associated(CS)) call mpp_error(FATAL, 'Calling oda_init with associated control structure')
   allocate(CS)
 ! Use ens1 parameters , this could be changed at a later time
 ! if it were desirable to have alternate parameters, e.g. for the grid
@@ -175,14 +175,14 @@ subroutine init_oda(Time, G, GV, CS)
   inputdir = slasher(inputdir)
 
   select case(lowercase(trim(assim_method)))
-  case('eakf')
+    case('eakf')
       CS%assim_method = EAKF_ASSIM
-  case('oi')
-     CS%assim_method = OI_ASSIM
-  case('no_assim')
+    case('oi')
+      CS%assim_method = OI_ASSIM
+    case('no_assim')
       CS%assim_method = NO_ASSIM
-  case default
-      call mpp_error(FATAL,'Invalid assimilation method provided')
+    case default
+      call mpp_error(FATAL, 'Invalid assimilation method provided')
   end select
 
   ens_info = get_ensemble_size()
@@ -192,8 +192,8 @@ subroutine init_oda(Time, G, GV, CS)
   !! Switch to global pelist
   allocate(CS%ensemble_pelist(CS%ensemble_size,npes_pm))
   allocate(CS%filter_pelist(CS%ensemble_size*npes_pm))
-  call get_ensemble_pelist(CS%ensemble_pelist,'ocean')
-  call get_ensemble_filter_pelist(CS%filter_pelist,'ocean')
+  call get_ensemble_pelist(CS%ensemble_pelist, 'ocean')
+  call get_ensemble_filter_pelist(CS%filter_pelist, 'ocean')
 
   call set_current_pelist(CS%filter_pelist)
 
@@ -283,7 +283,7 @@ subroutine init_oda(Time, G, GV, CS)
 
   do k = 1, CS%nk
     call mpp_global_field(G%Domain%mpp_domain, CS%h(:,:,k), global2D)
-    do i=1, CS%ni; do j=1, CS%nj
+    do i=1,CS%ni ; do j=1,CS%nj
       if ( global2D(i,j) > 1 ) then
         T_grid%mask(i,j,k) = 1.0
       endif
@@ -308,7 +308,7 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
   type(time_type), intent(in)    :: Time !< The current model time
   type(ocean_grid_type), pointer :: G !< domain and grid information for ocean model
   type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h   !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),                 intent(in) :: tv   !< A structure pointing to various thermodynamic variables
 
   type(ODA_CS), pointer :: CS !< ocean DA control structure
@@ -337,7 +337,7 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
   allocate(T(isd:ied,jsd:jed,CS%nk))
   allocate(S(isd:ied,jsd:jed,CS%nk))
 
-  do j=js,je; do i=is,ie
+  do j=js,je ; do i=is,ie
     call remapping_core_h(CS%remapCS, GV%ke, h(i,j,:), tv%T(i,j,:), &
          CS%nk, CS%h(i,j,:), T(i,j,:))
     call remapping_core_h(CS%remapCS, GV%ke, h(i,j,:), tv%S(i,j,:), &
@@ -525,11 +525,12 @@ end subroutine save_obs_diff
 
 
 !> Apply increments to tracers
-subroutine apply_oda_tracer_increments(dt,G,tv,h,CS)
+subroutine apply_oda_tracer_increments(dt, G, GV, tv, h, CS)
   real,                     intent(in)    :: dt !< The tracer timestep [s]
   type(ocean_grid_type),    intent(in)    :: G  !< ocean grid structure
+  type(verticalGrid_type),  intent(in)    :: GV !< The ocean's vertical grid structure
   type(thermo_var_ptrs),    intent(inout) :: tv !< A structure pointing to various thermodynamic variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)    :: h  !< layer thickness [H ~> m or kg m-2]
   type(ODA_CS),             intent(inout) :: CS !< the data assimilation structure
 

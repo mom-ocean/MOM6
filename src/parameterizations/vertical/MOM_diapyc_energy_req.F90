@@ -72,7 +72,7 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
   real :: tmp1  ! A temporary array.
   integer :: i, j, k, is, ie, js, je, nz, itt
   logical :: may_print
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not. associated(CS)) call MOM_error(FATAL, "diapyc_energy_req_test: "// &
          "Module must be initialized before it is used.")
@@ -260,7 +260,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   integer :: k, nz, itt, max_itt, k_cent
   logical :: surface_BL, bottom_BL, central, halves, debug
   logical :: old_PE_calc
-  nz = G%ke
+  nz = GV%ke
   h_neglect = GV%H_subroundoff
 
   debug = .true.

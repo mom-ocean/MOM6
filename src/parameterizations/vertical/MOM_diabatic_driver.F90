@@ -3352,7 +3352,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   endif
 
   ! Initialize the diagnostic grid storage
-  call diag_grid_storage_init(CS%diag_grids_prev, G, diag)
+  call diag_grid_storage_init(CS%diag_grids_prev, G, GV, diag)
 
 end subroutine diabatic_driver_init
 

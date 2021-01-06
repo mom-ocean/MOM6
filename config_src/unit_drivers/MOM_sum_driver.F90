@@ -18,8 +18,6 @@ program MOM_main
   use MOM_coms, only : EFP_type, operator(+), operator(-), assignment(=), EFP_to_real, real_to_EFP
   use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
   use MOM_cpu_clock, only : CLOCK_COMPONENT
-!  use MOM_diag_mediator, only : diag_mediator_end, diag_mediator_init
-!  use MOM_diag_mediator, only : diag_mediator_close_registration
   use MOM_domains, only : MOM_domains_init, MOM_infra_init, MOM_infra_end
   use MOM_error_handler, only : MOM_error, MOM_mesg, WARNING, FATAL, is_root_pe
   use MOM_error_handler, only : MOM_set_verbosity
@@ -39,11 +37,10 @@ program MOM_main
 
   type(param_file_type) :: param_file ! The structure indicating the file(s)
                                 ! containing all run-time parameters.
-  real    :: max_depth
+  real    :: max_depth          ! The maximum ocean depth [m]
   integer :: verbosity
   integer :: num_sums
-  integer :: n, i, j, is, ie, js, je, nz
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+  integer :: n, i, j, is, ie, js, je, isd, ied, jsd, jed
 
   integer :: unit, io_status, ierr
   logical :: unit_in_use
@@ -55,8 +52,8 @@ program MOM_main
   !-----------------------------------------------------------------------
 
   character(len=4), parameter :: vers_num = 'v2.0'
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_main (MOM_sum_driver)" ! This module's name.
   character(len=200) :: mesg
 
@@ -85,9 +82,8 @@ program MOM_main
 !  call diag_mediator_init(param_file)
   call MOM_grid_init(grid, param_file)
 
-  is = grid%isc ; ie = grid%iec ; js = grid%jsc ; je = grid%jec ; nz = grid%ke
+  is = grid%isc ; ie = grid%iec ; js = grid%jsc ; je = grid%jec
   isd = grid%isd ; ied = grid%ied ; jsd = grid%jsd ; jed = grid%jed
-  IsdB = grid%IsdB ; IedB = grid%IedB ; JsdB = grid%JsdB ; JedB = grid%JedB
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, "MOM", version, "")
@@ -165,26 +161,24 @@ program MOM_main
 
 contains
 
+!> This subroutine sets up the benchmark test case topography for debugging
 subroutine benchmark_init_topog_local(D, G, param_file, max_depth)
   type(ocean_grid_type),            intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D    !< The ocean bottom depth in m
   type(param_file_type),            intent(in)  :: param_file !< A structure to parse for run-time parameters
-  real,                             intent(in)  :: max_depth !< The maximum ocean depth in m
+  real,                             intent(in)  :: max_depth !< The maximum ocean depth [m]
 
-! This subroutine sets up the benchmark test case topography
   real :: min_depth            ! The minimum ocean depth in m.
   real :: PI                   ! 3.1415926... calculated as 4*atan(1)
   real :: D0                   ! A constant to make the maximum     !
                                ! basin depth MAXIMUM_DEPTH.         !
   real :: x, y
-! This include declares and sets the variable "version".
-#include "version_variable.h"
-  character(len=40)  :: mdl = "benchmark_initialize_topography" ! This subroutine's name.
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
+  character(len=40)  :: mdl = "benchmark_init_topog_local" ! This subroutine's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-
-  call MOM_mesg("  benchmark_initialization.F90, benchmark_initialize_topography: setting topography", 5)
 
   call log_version(param_file, mdl, version)
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &

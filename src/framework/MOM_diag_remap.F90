@@ -326,7 +326,7 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
       call build_sigma_column(get_sigma_CS(remap_cs%regrid_cs), &
                               GV%Z_to_H*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
     elseif (remap_cs%vertical_coord == coordinateMode('RHO')) then
-      call build_rho_column(get_rho_CS(remap_cs%regrid_cs), G%ke, &
+      call build_rho_column(get_rho_CS(remap_cs%regrid_cs), GV%ke, &
                             GV%Z_to_H*G%bathyT(i,j), h(i,j,:), T(i,j,:), S(i,j,:), &
                             eqn_of_state, zInterfaces, h_neglect, h_neglect_edge)
     elseif (remap_cs%vertical_coord == coordinateMode('SLIGHT')) then
@@ -384,7 +384,7 @@ subroutine diag_remap_do_remap(remap_cs, G, GV, h, staggered_in_x, staggered_in_
   remapped_field(:,:,:) = 0.
 
   ! Symmetric grid offset under 1-based indexing; see header for details.
-  shift = 0; if (G%symmetric) shift = 1
+  shift = 0 ; if (G%symmetric) shift = 1
 
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points
@@ -515,7 +515,7 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, h_target, staggered
   reintegrated_field(:,:,:) = 0.
 
   ! Symmetric grid offset under 1-based indexing; see header for details.
-  shift = 0; if (G%symmetric) shift = 1
+  shift = 0 ; if (G%symmetric) shift = 1
 
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points
@@ -596,7 +596,7 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
   nz_dest = remap_cs%nz
 
   ! Symmetric grid offset under 1-based indexing; see header for details.
-  shift = 0; if (G%symmetric) shift = 1
+  shift = 0 ; if (G%symmetric) shift = 1
 
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points

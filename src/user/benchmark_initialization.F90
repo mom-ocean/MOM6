@@ -126,7 +126,7 @@ subroutine benchmark_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
   character(len=40)  :: mdl = "benchmark_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, k1, is, ie, js, je, nz, itt
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
   if (.not.just_read) call log_version(param_file, mdl, version, "")
@@ -216,11 +216,11 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, US, param_file, &
                eqn_of_state, P_Ref, just_read_params)
   type(ocean_grid_type),               intent(in)  :: G            !< The ocean's grid structure.
   type(verticalGrid_type),             intent(in)  :: GV           !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T       !< The potential temperature
-                                                                   !! that is being initialized.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S       !< The salinity that is being
-                                                                   !! initialized.
-  type(unit_scale_type),                     intent(in)  :: US     !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T      !< The potential temperature
+                                                                   !! that is being initialized [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S      !< The salinity that is being
+                                                                   !! initialized [ppt]
+  type(unit_scale_type),               intent(in)  :: US           !< A dimensional unit scaling type
   type(param_file_type),               intent(in)  :: param_file   !< A structure indicating the
                                                                    !! open file to parse for
                                                                    !! model parameter values.
@@ -230,11 +230,12 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, US, param_file, &
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
   ! Local variables
-  real :: T0(SZK_(G)), S0(SZK_(G))
-  real :: pres(SZK_(G))      ! Reference pressure [R L2 T-2 ~> Pa].
-  real :: drho_dT(SZK_(G))   ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
-  real :: drho_dS(SZK_(G))   ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
-  real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 [R ~> kg m-3].
+  real :: T0(SZK_(GV))       ! A profile of temperatures [degC]
+  real :: S0(SZK_(GV))       ! A profile of salinities [ppt]
+  real :: pres(SZK_(GV))     ! Reference pressure [R L2 T-2 ~> Pa].
+  real :: drho_dT(SZK_(GV))  ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
+  real :: drho_dS(SZK_(GV))  ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
+  real :: rho_guess(SZK_(GV)) ! Potential density at T0 & S0 [R ~> kg m-3].
   real :: PI        ! 3.1415926... calculated as 4*atan(1)
   real :: SST       !  The initial sea surface temperature [degC].
   real :: lat
@@ -242,7 +243,7 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, US, param_file, &
   character(len=40)  :: mdl = "benchmark_init_temperature_salinity" ! This subroutine's name.
   integer :: i, j, k, k1, is, ie, js, je, nz, itt
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 

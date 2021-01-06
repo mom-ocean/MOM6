@@ -98,7 +98,7 @@ subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, para
   character(len=40)  :: mdl = "BFB_initialize_sponges_southonly" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   eta(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
@@ -128,7 +128,7 @@ subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, para
 
   max_damping = 1.0  / (86400.0*US%s_to_T)
 
-  do i=is,ie; do j=js,je
+  do j=js,je ; do i=is,ie
     if (G%bathyT(i,j) <= min_depth) then ; Idamp(i,j) = 0.0
     elseif (G%geoLatT(i,j) < slat+2.0) then ; Idamp(i,j) = max_damping
     elseif (G%geoLatT(i,j) < slat+4.0) then

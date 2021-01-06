@@ -105,10 +105,11 @@ subroutine USER_initialize_thickness(h, G, GV, param_file, just_read_params)
 end subroutine USER_initialize_thickness
 
 !> initialize velocities.
-subroutine USER_initialize_velocity(u, v, G, US, param_file, just_read_params)
+subroutine USER_initialize_velocity(u, v, G, GV, US, param_file, just_read_params)
   type(ocean_grid_type),                       intent(in)  :: G !< Ocean grid structure.
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)), intent(out) :: u !< i-component of velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G), SZJB_(G), SZK_(G)), intent(out) :: v !< j-component of velocity [L T-1 ~> m s-1]
+  type(verticalGrid_type),                     intent(in)  :: GV !< The ocean's vertical grid structure.
+  real, dimension(SZIB_(G), SZJ_(G),SZK_(GV)), intent(out) :: u !< i-component of velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G), SZJB_(G),SZK_(GV)), intent(out) :: v !< j-component of velocity [L T-1 ~> m s-1]
   type(unit_scale_type),                       intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),                       intent(in)  :: param_file !< A structure indicating the
                                                             !! open file to parse for model
@@ -135,10 +136,11 @@ end subroutine USER_initialize_velocity
 
 !> This function puts the initial layer temperatures and salinities
 !! into T(:,:,:) and S(:,:,:).
-subroutine USER_init_temperature_salinity(T, S, G, param_file, eqn_of_state, just_read_params)
+subroutine USER_init_temperature_salinity(T, S, G, GV, param_file, eqn_of_state, just_read_params)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure.
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature [degC].
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity [ppt].
+  type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Potential temperature [degC].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Salinity [ppt].
   type(param_file_type),                     intent(in)  :: param_file !< A structure indicating the
                                                             !! open file to parse for model
                                                             !! parameter values.
@@ -188,7 +190,7 @@ subroutine USER_initialize_sponges(G, GV, use_temp, tv, param_file, CSp, h)
 end subroutine USER_initialize_sponges
 
 !> This subroutine sets the properties of flow at open boundary conditions.
-subroutine USER_set_OBC_data(OBC, tv, G, param_file, tr_Reg)
+subroutine USER_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   type(ocean_OBC_type),       pointer    :: OBC   !< This open boundary condition type specifies
                                                   !! whether, where, and what open boundary
                                                   !! conditions are used.
@@ -197,6 +199,7 @@ subroutine USER_set_OBC_data(OBC, tv, G, param_file, tr_Reg)
                                        !! temperature and salinity or mixed layer density. Absent
                                        !! fields have NULL ptrs.
   type(ocean_grid_type),      intent(in) :: G     !< The ocean's grid structure.
+  type(verticalGrid_type),    intent(in) :: GV    !< The ocean's vertical grid structure.
   type(param_file_type),      intent(in) :: param_file !< A structure indicating the
                                                   !! open file to parse for model
                                                   !! parameter values.

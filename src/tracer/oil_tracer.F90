@@ -209,7 +209,7 @@ subroutine initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
   type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),              intent(in) :: US   !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                       intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(diag_ctrl),            target, intent(in) :: diag !< A structure that is used to regulate
                                                          !! diagnostic output.
@@ -265,10 +265,10 @@ subroutine initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
 
         if (CS%Z_IC_file) then
           OK = tracer_Z_init(CS%tr(:,:,:,m), h, CS%IC_file, name, &
-                             G, US, -1e34, 0.0) ! CS%land_val(m))
+                             G, GV, US, -1e34, 0.0) ! CS%land_val(m))
           if (.not.OK) then
             OK = tracer_Z_init(CS%tr(:,:,:,m), h, CS%IC_file, &
-                     trim(name), G, US, -1e34, 0.0) ! CS%land_val(m))
+                     trim(name), G, GV, US, -1e34, 0.0) ! CS%land_val(m))
             if (.not.OK) call MOM_error(FATAL,"initialize_oil_tracer: "//&
                     "Unable to read "//trim(name)//" from "//&
                     trim(CS%IC_file)//".")
@@ -300,15 +300,15 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: h_old !< Layer thickness before entrainment [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: h_new !< Layer thickness after entrainment [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: ea   !< an array to which the amount of fluid entrained
                                               !! from the layer above during this call will be
                                               !! added [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: eb   !< an array to which the amount of fluid entrained
                                               !! from the layer below during this call will be
                                               !! added [H ~> m or kg m-2].
@@ -331,7 +331,7 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
 !     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
 
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
   real :: Isecs_per_year = 1.0 / (365.0*86400.0)
   real :: year, h_total, ldecay
   integer :: i, j, k, is, ie, js, je, nz, m, k_max
@@ -407,7 +407,7 @@ end subroutine oil_tracer_column_physics
 function oil_stock(h, stocks, G, GV, CS, names, units, stock_index)
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(:),                 intent(out)   :: stocks !< the mass-weighted integrated amount of each
                                                               !! tracer, in kg times concentration units [kg conc].
   type(oil_tracer_CS),                pointer       :: CS   !< The control structure returned by a previous
@@ -454,14 +454,15 @@ end function oil_stock
 !> This subroutine extracts the surface fields from this tracer package that
 !! are to be shared with the atmosphere in coupled configurations.
 !! This particular tracer package does not report anything back to the coupler.
-subroutine oil_tracer_surface_state(sfc_state, h, G, CS)
-  type(ocean_grid_type),  intent(in)    :: G  !< The ocean's grid structure.
-  type(surface),          intent(inout) :: sfc_state !< A structure containing fields that
-                                              !! describe the surface state of the ocean.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                          intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2].
-  type(oil_tracer_CS),    pointer       :: CS !< The control structure returned by a previous
-                                              !! call to register_oil_tracer.
+subroutine oil_tracer_surface_state(sfc_state, h, G, GV, CS)
+  type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure
+  type(surface),           intent(inout) :: sfc_state !< A structure containing fields that
+                                               !! describe the surface state of the ocean.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2].
+  type(oil_tracer_CS),     pointer       :: CS !< The control structure returned by a previous
+                                               !! call to register_oil_tracer.
 
   ! This particular tracer package does not report anything back to the coupler.
   ! The code that is here is just a rough guide for packages that would.

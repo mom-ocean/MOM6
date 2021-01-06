@@ -19,8 +19,8 @@ contains
 
 !> An integer handle for a diagnostic array returned by register_diag_field()
 integer function register_diag_field_array_fms(module_name, field_name, axes, init_time, &
-     long_name, units, missing_value, range, mask_variant, standard_name,                &
-     verbose, do_not_log, err_msg, interp_method, tile_count, area, volume)
+                     long_name, units, missing_value, range, mask_variant, standard_name, &
+                     verbose, do_not_log, err_msg, interp_method, tile_count, area, volume)
   character(len=*), intent(in) :: module_name             !< Name of this module, usually "ocean_model" or
                                                           !! "ice_shelf_model"
   character(len=*), intent(in) :: field_name              !< Name of the diagnostic field
@@ -55,8 +55,8 @@ end function register_diag_field_array_fms
 
 !> An integer handle for a diagnostic scalar array returned by register_diag_field()
 integer function register_diag_field_scalar_fms(module_name, field_name, init_time, &
-     long_name, units, missing_value, range, mask_variant, standard_name,           &
-     verbose, do_not_log, err_msg, interp_method, tile_count, area, volume)
+                     long_name, units, missing_value, range, mask_variant, standard_name, &
+                     verbose, do_not_log, err_msg, interp_method, tile_count, area, volume)
   character(len=*), intent(in) :: module_name             !< Name of this module, usually "ocean_model"
                                                           !! or "ice_shelf_model"
   character(len=*), intent(in) :: field_name              !< Name of the diagnostic field

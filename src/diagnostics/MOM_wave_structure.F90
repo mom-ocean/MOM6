@@ -95,7 +95,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   type(ocean_grid_type),                    intent(in)  :: G  !< The ocean's grid structure.
   type(verticalGrid_type),                  intent(in)  :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),                    intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h  !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),                    intent(in)  :: tv !< A structure pointing to various
                                                               !! thermodynamic variables.
   real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: cn !< The (non-rotational) mode internal
@@ -109,26 +109,26 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   logical,                        optional, intent(in)  :: full_halos !< If true, do the calculation
                                                               !! over the entire computational domain.
   ! Local variables
-  real, dimension(SZK_(G)+1) :: &
+  real, dimension(SZK_(GV)+1) :: &
     dRho_dT, &    !< Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
     dRho_dS, &    !< Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
     pres, &       !< Interface pressure [R L H T-2 ~> Pa]
     T_int, &      !< Temperature interpolated to interfaces [degC]
     S_int, &      !< Salinity interpolated to interfaces [ppt]
     gprime        !< The reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
-  real, dimension(SZK_(G)) :: &
+  real, dimension(SZK_(GV)) :: &
     Igl, Igu      !< The inverse of the reduced gravity across an interface times
                   !< the thickness of the layer below (Igl) or above (Igu) it [T2 L-2 ~> s2 m-2].
-  real, dimension(SZK_(G),SZI_(G)) :: &
+  real, dimension(SZK_(GV),SZI_(G)) :: &
     Hf, &         !< Layer thicknesses after very thin layers are combined [Z ~> m]
     Tf, &         !< Layer temperatures after very thin layers are combined [degC]
     Sf, &         !< Layer salinities after very thin layers are combined [ppt]
     Rf            !< Layer densities after very thin layers are combined [R ~> kg m-3]
-  real, dimension(SZK_(G)) :: &
-    Hc, &         !< A column of layer thicknesses after convective istabilities are removed [Z ~> m]
-    Tc, &         !< A column of layer temperatures after convective istabilities are removed [degC]
-    Sc, &         !< A column of layer salinites after convective istabilities are removed [ppt]
-    Rc, &         !< A column of layer densities after convective istabilities are removed [R ~> kg m-3]
+  real, dimension(SZK_(GV)) :: &
+    Hc, &         !< A column of layer thicknesses after convective instabilities are removed [Z ~> m]
+    Tc, &         !< A column of layer temperatures after convective instabilities are removed [degC]
+    Sc, &         !< A column of layer salinites after convective instabilities are removed [ppt]
+    Rc, &         !< A column of layer densities after convective instabilities are removed [R ~> kg m-3]
     det, ddet
   real, dimension(SZI_(G),SZJ_(G)) :: &
     htot              !< The vertical sum of the thicknesses [Z ~> m]
@@ -160,37 +160,37 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
 
   ! local representations of variables in CS; note,
   ! not all rows will be filled if layers get merged!
-  real, dimension(SZK_(G)+1) :: w_strct      !< Vertical structure of vertical velocity (normalized) [nondim].
-  real, dimension(SZK_(G)+1) :: u_strct      !< Vertical structure of horizontal velocity (normalized) [nondim].
-  real, dimension(SZK_(G)+1) :: W_profile    !< Vertical profile of w_hat(z) = W0*w_strct(z) [Z T-1 ~> m s-1].
-  real, dimension(SZK_(G)+1) :: Uavg_profile !< Vertical profile of the magnitude of
+  real, dimension(SZK_(GV)+1) :: w_strct      !< Vertical structure of vertical velocity (normalized) [nondim].
+  real, dimension(SZK_(GV)+1) :: u_strct      !< Vertical structure of horizontal velocity (normalized) [nondim].
+  real, dimension(SZK_(GV)+1) :: W_profile    !< Vertical profile of w_hat(z) = W0*w_strct(z) [Z T-1 ~> m s-1].
+  real, dimension(SZK_(GV)+1) :: Uavg_profile !< Vertical profile of the magnitude of
                                              !! horizontal velocity [L T-1 ~> m s-1].
-  real, dimension(SZK_(G)+1) :: z_int        !< Integrated depth [Z ~> m]
-  real, dimension(SZK_(G)+1) :: N2           !< Squared buoyancy frequency at each interface [T-2 ~> s-2].
-  real, dimension(SZK_(G)+1) :: w_strct2     !< squared values [nondim]
-  real, dimension(SZK_(G)+1) :: u_strct2     !< squared values [nondim]
-  real, dimension(SZK_(G))   :: dz           !< thicknesses of merged layers (same as Hc I hope) [Z ~> m]
-  ! real, dimension(SZK_(G)+1) :: dWdz_profile !< profile of dW/dz
-  real                       :: w2avg   !< average of squared vertical velocity structure funtion [Z ~> m]
-  real                       :: int_dwdz2
-  real                       :: int_w2
-  real                       :: int_N2w2
-  real                       :: KE_term !< terms in vertically averaged energy equation
-  real                       :: PE_term !< terms in vertically averaged energy equation
-  real                       :: W0      !< A vertical velocity magnitude [Z T-1 ~> m s-1]
-  real                       :: gp_unscaled !< A version of gprime rescaled to [L T-2 ~> m s-2].
-  real, dimension(SZK_(G)-1) :: lam_z   !< product of eigen value and gprime(k); one value for each
-                                        !< interface (excluding surface and bottom)
-  real, dimension(SZK_(G)-1) :: a_diag, b_diag, c_diag
-                                        !< diagonals of tridiagonal matrix; one value for each
-                                        !< interface (excluding surface and bottom)
-  real, dimension(SZK_(G)-1) :: e_guess !< guess at eigen vector with unit amplitde (for TDMA)
-  real, dimension(SZK_(G)-1) :: e_itt   !< improved guess at eigen vector (from TDMA)
+  real, dimension(SZK_(GV)+1) :: z_int        !< Integrated depth [Z ~> m]
+  real, dimension(SZK_(GV)+1) :: N2           !< Squared buoyancy frequency at each interface [T-2 ~> s-2].
+  real, dimension(SZK_(GV)+1) :: w_strct2     !< squared values [nondim]
+  real, dimension(SZK_(GV)+1) :: u_strct2     !< squared values [nondim]
+  real, dimension(SZK_(GV))   :: dz           !< thicknesses of merged layers (same as Hc I hope) [Z ~> m]
+  ! real, dimension(SZK_(GV)+1) :: dWdz_profile !< profile of dW/dz
+  real                        :: w2avg   !< average of squared vertical velocity structure funtion [Z ~> m]
+  real                        :: int_dwdz2
+  real                        :: int_w2
+  real                        :: int_N2w2
+  real                        :: KE_term !< terms in vertically averaged energy equation
+  real                        :: PE_term !< terms in vertically averaged energy equation
+  real                        :: W0      !< A vertical velocity magnitude [Z T-1 ~> m s-1]
+  real                        :: gp_unscaled !< A version of gprime rescaled to [L T-2 ~> m s-2].
+  real, dimension(SZK_(GV)-1) :: lam_z   !< product of eigen value and gprime(k); one value for each
+                                         !< interface (excluding surface and bottom)
+  real, dimension(SZK_(GV)-1) :: a_diag, b_diag, c_diag
+                                         !< diagonals of tridiagonal matrix; one value for each
+                                         !< interface (excluding surface and bottom)
+  real, dimension(SZK_(GV)-1) :: e_guess !< guess at eigen vector with unit amplitde (for TDMA)
+  real, dimension(SZK_(GV)-1) :: e_itt   !< improved guess at eigen vector (from TDMA)
   real    :: Pi
   integer :: kc
   integer :: i, j, k, k2, itt, is, ie, js, je, nz, nzm, row, ig, jg, ig_stop, jg_stop
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   I_a_int = 1/a_int
 
   !if (present(CS)) then
@@ -719,9 +719,10 @@ subroutine tridiag_solver(a, b, c, h, y, method, x)
 end subroutine tridiag_solver
 
 !> Allocate memory associated with the wave structure module and read parameters.
-subroutine wave_structure_init(Time, G, param_file, diag, CS)
+subroutine wave_structure_init(Time, G, GV, param_file, diag, CS)
   type(time_type),         intent(in) :: Time !< The current model time.
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV    !< The ocean's vertical grid structure.
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time
                                               !! parameters.
   type(diag_ctrl), target, intent(in) :: diag !< A structure that is used to regulate
@@ -733,7 +734,7 @@ subroutine wave_structure_init(Time, G, param_file, diag, CS)
   character(len=40)  :: mdl = "MOM_wave_structure"  ! This module's name.
   integer :: isd, ied, jsd, jed, nz
 
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
 
   if (associated(CS)) then
     call MOM_error(WARNING, "wave_structure_init called with an "// &

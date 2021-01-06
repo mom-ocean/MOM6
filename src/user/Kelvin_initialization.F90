@@ -177,7 +177,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in) :: US    !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< layer thickness [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h !< layer thickness [H ~> m or kg m-2].
   type(time_type),         intent(in) :: Time !< model time.
 
   ! The following variables are used to set up the transport in the Kelvin example.
@@ -194,7 +194,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   real    :: val1, val2, sina, cosa
   type(OBC_segment_type), pointer :: segment => NULL()
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
