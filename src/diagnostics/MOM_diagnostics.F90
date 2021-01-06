@@ -110,7 +110,8 @@ type, public :: diagnostics_CS ; private
     KE_dia     => NULL()    !< KE source from diapycnal diffusion [H L2 T-3 ~> m3 s-3]
 
   !>@{ Diagnostic IDs
-  integer :: id_u = -1,   id_v = -1, id_h = -1
+  integer :: id_u   = -1,   id_v   = -1, id_h = -1
+  integer :: id_usq = -1,   id_vsq = -1, id_uv = -1
   integer :: id_e              = -1, id_e_D            = -1
   integer :: id_du_dt          = -1, id_dv_dt          = -1
   ! integer :: id_hf_du_dt       = -1, id_hf_dv_dt       = -1
@@ -230,6 +231,10 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     !! calculating interface heights [H ~> m or kg m-2].
 
   ! Local variables
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: usq ! squared eastward velocity  [L2 T-2 ~> m2 s-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vsq ! squared northward velocity [L2 T-2 ~> m2 s-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G))  :: uv  ! u x v at h-points          [L2 T-2 ~> m2 s-2]
+
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
 
@@ -336,6 +341,28 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   if (CS%id_v > 0) call post_data(CS%id_v, v, CS%diag)
 
   if (CS%id_h > 0) call post_data(CS%id_h, h, CS%diag)
+
+  if (CS%id_usq > 0) then
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      usq(I,j,k) = u(I,j,k) * u(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_usq, usq, CS%diag)
+  endif
+
+  if (CS%id_vsq > 0) then
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      vsq(i,J,k) = v(i,J,k) * v(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_vsq, vsq, CS%diag)
+  endif
+
+  if (CS%id_uv > 0) then
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      uv(i,j,k) = (0.5*(u(I-1,j,k) + u(I,j,k))) * &
+                (0.5*(v(i,J-1,k) + v(i,J,k)))
+    enddo ; enddo ; enddo
+    call post_data(CS%id_uv, uv, CS%diag)
+  endif
 
   if (associated(CS%e)) then
     call find_eta(h, tv, G, GV, US, CS%e, eta_bt)
@@ -1641,6 +1668,13 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   CS%id_v = register_diag_field('ocean_model', 'v', diag%axesCvL, Time,                  &
       'Meridional velocity', 'm s-1', conversion=US%L_T_to_m_s, cmor_field_name='vo', &
       cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
+  CS%id_usq = register_diag_field('ocean_model', 'usq', diag%axesCuL, Time,              &
+      'Zonal velocity squared', 'm2 s-2', conversion=US%L_T_to_m_s**2)
+  CS%id_vsq = register_diag_field('ocean_model', 'vsq', diag%axesCvL, Time,                  &
+      'Meridional velocity squared', 'm2 s-2', conversion=US%L_T_to_m_s**2)
+  CS%id_uv = register_diag_field('ocean_model', 'uv', diag%axesTL, Time, &
+      'Product between zonal and meridional velocities at h-points', 'm2 s-2', &
+       conversion=US%L_T_to_m_s**2)
   CS%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &
       'Layer Thickness', thickness_units, v_extensive=.true., conversion=convert_H)
 
