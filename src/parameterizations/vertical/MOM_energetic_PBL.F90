@@ -433,8 +433,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, t_rp, stoch_epbl, dt, Kd_
                        u_star, u_star_mean, dt, MLD_io, Kd, mixvel, mixlen, GV, &
                        US, CS, eCD, t_rp(i,j,1),t_rp(i,j,2), stoch_epbl, dt_diag=dt_diag, Waves=Waves, G=G, i=i, j=j)
 
-      ! applly stochastic perturbation to TKE generation
-
       ! Copy the diffusivities to a 2-d array.
       do K=1,nz+1
         Kd_2d(i,K) = Kd(K)
@@ -920,8 +918,8 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
         exp_kh = 1.0
         if (Idecay_len_TKE > 0.0) exp_kh = exp(-h(k-1)*Idecay_len_TKE)
         if (CS%TKE_diagnostics) &
-          !eCD%dTKE_mech_decay = eCD%dTKE_mech_decay + (exp_kh-1.0) * mech_TKE * I_dtdiag
-          eCD%dTKE_mech_decay = exp_kh
+          eCD%dTKE_mech_decay = eCD%dTKE_mech_decay + (exp_kh-1.0) * mech_TKE * I_dtdiag
+        mech_TKE = mech_TKE * exp_kh
         if (stoch_epbl) mech_TKE = mech_TKE * (1+(exp_kh-1) * t_rp2)
 
         !   Accumulate any convectively released potential energy to contribute

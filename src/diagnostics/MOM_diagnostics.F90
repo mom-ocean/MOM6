@@ -139,7 +139,7 @@ type, public :: surface_diag_IDs ; private
   integer :: id_salt_deficit = -1
   integer :: id_Heat_PmE     = -1
   integer :: id_intern_heat  = -1
-  !!@}
+  !>@}
 end type surface_diag_IDs
 
 

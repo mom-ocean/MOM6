@@ -981,7 +981,6 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       call enable_averages(CS%time_in_thermo_cycle, Time_local, CS%diag)
       call post_surface_thermo_diags(CS%sfc_IDs, G, GV, US, CS%diag, CS%time_in_thermo_cycle, &
                                      sfc_state_diag, CS%tv, ssh, CS%ave_ssh_ibc)
-                                     !sfc_state_diag, CS%tv, ssh,fluxes%t_rp,fluxes%sppt_wts, CS%ave_ssh_ibc)
     endif
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_diagnostics)
@@ -1816,9 +1815,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   integer :: dynamics_stencil  ! The computational stencil for the calculations
                                ! in the dynamic core.
   integer,allocatable :: pelist(:) ! list of pes for this instance of the ocean
-  integer :: mom_comm ! list of pes for this instance of the ocean
-  integer             :: num_procs,iret
-!  model
+  integer :: mom_comm          ! list of pes for this instance of the ocean
+  integer :: num_procs         ! number of processors to pass to stochastic physics
+  integer :: iret              ! return code from stochastic physics
   integer :: me                !  my pe
   integer :: master            !  root pe
   real :: conv2watt, conv2salt
