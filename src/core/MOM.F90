@@ -2627,7 +2627,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   endif
 
   call tracer_advect_init(Time, G, US, param_file, diag, CS%tracer_adv_CSp)
-  call tracer_hor_diff_init(Time, G, US, param_file, diag, CS%tv%eqn_of_state, CS%diabatic_CSp, &
+  call tracer_hor_diff_init(Time, G, GV, US, param_file, diag, CS%tv%eqn_of_state, CS%diabatic_CSp, &
                             CS%tracer_diff_CSp)
 
   call lock_tracer_registry(CS%tracer_Reg)
