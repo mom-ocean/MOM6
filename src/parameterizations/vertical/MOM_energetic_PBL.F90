@@ -919,8 +919,11 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
         if (Idecay_len_TKE > 0.0) exp_kh = exp(-h(k-1)*Idecay_len_TKE)
         if (CS%TKE_diagnostics) &
           eCD%dTKE_mech_decay = eCD%dTKE_mech_decay + (exp_kh-1.0) * mech_TKE * I_dtdiag
-        mech_TKE = mech_TKE * exp_kh
-        if (stoch_epbl) mech_TKE = mech_TKE * (1+(exp_kh-1) * t_rp2)
+        if (stoch_epbl) then ! perturb the TKE destruction
+           mech_TKE = mech_TKE * (1+(exp_kh-1) * t_rp2)
+        else
+           mech_TKE = mech_TKE * exp_kh
+        endif
 
         !   Accumulate any convectively released potential energy to contribute
         ! to wstar and to drive penetrating convection.
