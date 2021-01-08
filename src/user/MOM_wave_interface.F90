@@ -69,42 +69,42 @@ type, public :: wave_parameters_CS ; private
 
   ! Surface Wave Dependent 1d/2d/3d vars
   real, allocatable, dimension(:), public :: &
-       WaveNum_Cen        !< Wavenumber bands for read/coupled [m-1]
+    WaveNum_Cen        !< Wavenumber bands for read/coupled [m-1]
   real, allocatable, dimension(:), public :: &
-       Freq_Cen           !< Frequency bands for read/coupled [s-1]
+    Freq_Cen           !< Frequency bands for read/coupled [s-1]
   real, allocatable, dimension(:), public :: &
-       PrescribedSurfStkX !< Surface Stokes drift if prescribed [m s-1]
+    PrescribedSurfStkX !< Surface Stokes drift if prescribed [m s-1]
   real, allocatable, dimension(:), public :: &
-       PrescribedSurfStkY !< Surface Stokes drift if prescribed [m s-1]
+    PrescribedSurfStkY !< Surface Stokes drift if prescribed [m s-1]
   real, allocatable, dimension(:,:,:), public :: &
-       Us_x               !< 3d zonal Stokes drift profile [m s-1]
-                          !! Horizontal -> U points
-                          !! Vertical -> Mid-points
+    Us_x               !< 3d zonal Stokes drift profile [m s-1]
+                       !! Horizontal -> U points
+                       !! Vertical -> Mid-points
   real, allocatable, dimension(:,:,:), public :: &
-       Us_y               !< 3d meridional Stokes drift profile [m s-1]
-                          !! Horizontal -> V points
-                          !! Vertical -> Mid-points
+    Us_y               !< 3d meridional Stokes drift profile [m s-1]
+                       !! Horizontal -> V points
+                       !! Vertical -> Mid-points
   real, allocatable, dimension(:,:), public :: &
-       La_SL,&            !< SL Langmuir number (directionality factored later)
-                          !! Horizontal -> H points
-       La_Turb            !< Aligned Turbulent Langmuir number
-                          !! Horizontal -> H points
+    La_SL,&            !< SL Langmuir number (directionality factored later)
+                       !! Horizontal -> H points
+    La_Turb            !< Aligned Turbulent Langmuir number
+                       !! Horizontal -> H points
   real, allocatable, dimension(:,:), public :: &
-       US0_x              !< Surface Stokes Drift (zonal, m/s)
-                          !! Horizontal -> U points
+    US0_x              !< Surface Stokes Drift (zonal, m/s)
+                       !! Horizontal -> U points
   real, allocatable, dimension(:,:), public :: &
-       US0_y              !< Surface Stokes Drift (meridional, m/s)
-                          !! Horizontal -> V points
+    US0_y              !< Surface Stokes Drift (meridional, m/s)
+                       !! Horizontal -> V points
   real, allocatable, dimension(:,:,:), public :: &
-       STKx0              !< Stokes Drift spectrum (zonal, m/s)
-                          !! Horizontal -> U points
-                          !! 3rd dimension -> Freq/Wavenumber
+    STKx0              !< Stokes Drift spectrum (zonal, m/s)
+                       !! Horizontal -> U points
+                       !! 3rd dimension -> Freq/Wavenumber
   real, allocatable, dimension(:,:,:), public :: &
-       STKy0              !< Stokes Drift spectrum (meridional, m/s)
-                          !! Horizontal -> V points
-                          !! 3rd dimension -> Freq/Wavenumber
+    STKy0              !< Stokes Drift spectrum (meridional, m/s)
+                       !! Horizontal -> V points
+                       !! 3rd dimension -> Freq/Wavenumber
   real, allocatable, dimension(:,:,:), public :: &
-       KvS                !< Viscosity for Stokes Drift shear [Z2 T-1 ~> m2 s-1]
+    KvS                !< Viscosity for Stokes Drift shear [Z2 T-1 ~> m2 s-1]
 
   ! Pointers to auxiliary fields
   type(time_type), pointer, public :: Time !< A pointer to the ocean model's clock.
@@ -475,14 +475,14 @@ end subroutine Update_Surface_Waves
 !> Constructs the Stokes Drift profile on the model grid based on
 !! desired coupling options
 subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
-  type(wave_parameters_CS),  pointer     :: CS    !< Wave parameter Control structure
-  type(ocean_grid_type),   intent(inout) :: G     !< Grid structure
-  type(verticalGrid_type), intent(in)    :: GV    !< Vertical grid structure
-  type(unit_scale_type),   intent(in)    :: US    !< A dimensional unit scaling type
+  type(wave_parameters_CS), pointer       :: CS    !< Wave parameter Control structure
+  type(ocean_grid_type),    intent(inout) :: G     !< Grid structure
+  type(verticalGrid_type),  intent(in)    :: GV    !< Vertical grid structure
+  type(unit_scale_type),    intent(in)    :: US    !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-       intent(in)    :: h     !< Thickness [H ~> m or kg m-2]
+                            intent(in)    :: h     !< Thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), &
-       intent(in)    :: ustar !< Wind friction velocity [Z T-1 ~> m s-1].
+                            intent(in)    :: ustar !< Wind friction velocity [Z T-1 ~> m s-1].
   ! Local Variables
   real    :: Top, MidPoint, Bottom, one_cm
   real    :: DecayScale
