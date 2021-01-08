@@ -12,7 +12,7 @@ use MOM_file_parser, only : get_param, log_param, log_version
 use MOM_file_parser, only : param_file_type
 use MOM_string_functions, only : slasher
 
-use mpp_domains_mod, only : mpp_define_layout, mpp_get_boundary
+use mpp_domains_mod, only : MOM_define_layout => mpp_define_layout, mpp_get_boundary
 use mpp_domains_mod, only : MOM_define_io_domain => mpp_define_io_domain
 use mpp_domains_mod, only : MOM_define_domain => mpp_define_domains
 use mpp_domains_mod, only : domain2D, domain1D, mpp_get_data_domain
@@ -36,7 +36,8 @@ use fms_affinity_mod, only : fms_affinity_init, fms_affinity_set, fms_affinity_g
 implicit none ; private
 
 public :: MOM_domains_init, MOM_infra_init, MOM_infra_end, get_domain_extent, get_domain_extent_dsamp2
-public :: MOM_define_domain, MOM_define_io_domain, clone_MOM_domain
+public :: create_MOM_domain, clone_MOM_domain
+public :: MOM_define_domain, MOM_define_layout, MOM_define_io_domain
 public :: pass_var, pass_vector, PE_here, root_PE, num_PEs
 public :: pass_var_start, pass_var_complete, fill_symmetric_edges, broadcast
 public :: pass_vector_start, pass_vector_complete
@@ -47,6 +48,7 @@ public :: To_East, To_West, To_North, To_South, To_All, Omit_Corners
 public :: create_group_pass, do_group_pass, group_pass_type
 public :: start_group_pass, complete_group_pass
 public :: compute_block_extent, get_global_shape
+public :: MOM_thread_affinity_set, set_MOM_thread_affinity
 public :: get_simple_array_i_ind, get_simple_array_j_ind
 public :: domain2D
 
@@ -1169,7 +1171,7 @@ subroutine complete_group_pass(group, MOM_dom, clock)
 
 end subroutine complete_group_pass
 
-!> MOM_domains_init initalizes a MOM_domain_type variable, based on the information
+!> MOM_domains_init initializes a MOM_domain_type variable, based on the information
 !! read in from a param_file_type, and optionally returns data describing various'
 !! properties of the domain type.
 subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
@@ -1183,8 +1185,9 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                                             !! whether this domain is symmetric, regardless of
                                             !! whether the macro SYMMETRIC_MEMORY_ is defined.
   logical, optional,               intent(in)    :: static_memory !< If present and true, this
-                         !! domain type is set up for static memory and error checking of
-                         !! various input values is performed against those in the input file.
+                                            !! domain type is set up for static memory and error
+                                            !! checking of various input values is performed against
+                                            !! those in the input file.
   integer, optional,               intent(in)    :: NIHALO       !< Default halo sizes, required
                                                                  !! with static memory.
   integer, optional,               intent(in)    :: NJHALO       !< Default halo sizes, required
@@ -1198,8 +1201,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   integer, optional,               intent(in)    :: NJPROC       !< Processor counts, required with
                                                                  !! static memory.
   integer, dimension(2), optional, intent(inout) :: min_halo     !< If present, this sets the
-                                        !! minimum halo size for this domain in the i- and j-
-                                        !! directions, and returns the actual halo size used.
+                                            !! minimum halo size for this domain in the i- and j-
+                                            !! directions, and returns the actual halo size used.
   character(len=*),      optional, intent(in)    :: domain_name  !< A name for this domain, "MOM"
                                                                  !! if missing.
   character(len=*),      optional, intent(in)    :: include_name !< A name for model's include file,
@@ -1211,46 +1214,43 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   integer, dimension(2) :: layout = (/ 1, 1 /)
   integer, dimension(2) :: io_layout = (/ 0, 0 /)
   integer, dimension(4) :: global_indices
-!$ integer :: ocean_nthreads       ! Number of Openmp threads
-!$ integer :: get_cpu_affinity, omp_get_thread_num, omp_get_num_threads
-!$ logical :: ocean_omp_hyper_thread
+  !$ integer :: ocean_nthreads       ! Number of Openmp threads
+  !$ logical :: ocean_omp_hyper_thread
+  integer, dimension(2) :: n_global  ! The number of i- and j- points in the global computational domain.
+  integer, dimension(2) :: n_halo    ! The number of i- and j- points in the halos.
   integer :: nihalo_dflt, njhalo_dflt
   integer :: pe, proc_used
-  integer :: X_FLAGS, Y_FLAGS
-  logical :: reentrant_x, reentrant_y, tripolar_N, is_static
+  logical, dimension(2)   :: reentrant ! True if the x- and y- directions are periodic.
+  logical, dimension(2,2) :: tripolar ! A set of flag indicating whether there is tripolar
+                            ! connectivity for any of the four logical edges of the grid.
+                            ! Currently only tripolar_N is implemented.
+  logical :: is_static      ! If true, static memory is being used for this domain.
+  logical :: is_symmetric   ! True if the domainn being set up will use symmetric memory.
+  logical :: nonblocking    ! If true, nonblocking halo updates will be used.
+  logical :: thin_halos     ! If true, If true, optional arguments may be used to specify the
+                            ! width of the halos that are updated with each call.
   logical            :: mask_table_exists
   character(len=128) :: mask_table, inputdir
-  character(len=64)  :: dom_name, inc_nm
+  character(len=64)  :: inc_nm
   character(len=200) :: mesg
 
-  integer :: xsiz, ysiz, nip_parsed, njp_parsed
-  integer :: isc,iec,jsc,jec ! The bounding indices of the computational domain.
+  integer :: nip_parsed, njp_parsed
   character(len=8) :: char_xsiz, char_ysiz, char_niglobal, char_njglobal
   character(len=40) :: nihalo_nm, njhalo_nm, layout_nm, io_layout_nm, masktable_nm
   character(len=40) :: niproc_nm, njproc_nm
-  integer :: xhalo_d2,yhalo_d2
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl ! This module's name.
-
-  if (.not.associated(MOM_dom)) then
-    allocate(MOM_dom)
-    allocate(MOM_dom%mpp_domain)
-    allocate(MOM_dom%mpp_domain_d2)
-  endif
 
   pe = PE_here()
   proc_used = num_PEs()
 
   mdl = "MOM_domains"
 
-  MOM_dom%symmetric = .true.
-  if (present(symmetric)) then ; MOM_dom%symmetric = symmetric ; endif
+  is_symmetric = .true. ; if (present(symmetric)) is_symmetric = symmetric
   if (present(min_halo)) mdl = trim(mdl)//" min_halo"
 
-  dom_name = "MOM" ; inc_nm = "MOM_memory.h"
-  if (present(domain_name)) dom_name = trim(domain_name)
-  if (present(include_name)) inc_nm = trim(include_name)
+  inc_nm = "MOM_memory.h" ; if (present(include_name)) inc_nm = trim(include_name)
 
   nihalo_nm = "NIHALO" ; njhalo_nm = "NJHALO"
   layout_nm = "LAYOUT" ; io_layout_nm = "IO_LAYOUT" ; masktable_nm = "MASKTABLE"
@@ -1283,36 +1283,29 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "", log_to_all=.true., layout=.true.)
-  call get_param(param_file, mdl, "REENTRANT_X", reentrant_x, &
+  call get_param(param_file, mdl, "REENTRANT_X", reentrant(1), &
                  "If true, the domain is zonally reentrant.", default=.true.)
-  call get_param(param_file, mdl, "REENTRANT_Y", reentrant_y, &
+  call get_param(param_file, mdl, "REENTRANT_Y", reentrant(2), &
                  "If true, the domain is meridionally reentrant.", &
                  default=.false.)
-  call get_param(param_file, mdl, "TRIPOLAR_N", tripolar_N, &
+  tripolar(1:2,1:2) = .false.
+  call get_param(param_file, mdl, "TRIPOLAR_N", tripolar(2,2), &
                  "Use tripolar connectivity at the northern edge of the "//&
                  "domain.  With TRIPOLAR_N, NIGLOBAL must be even.", &
                  default=.false.)
 
 #ifndef NOT_SET_AFFINITY
-!$  call fms_affinity_init
-!$OMP PARALLEL
-!$OMP master
-!$ ocean_nthreads = omp_get_num_threads()
-!$OMP END MASTER
-!$OMP END PARALLEL
-!$ if(ocean_nthreads < 2 ) then
-!$   call get_param(param_file, mdl, "OCEAN_OMP_THREADS", ocean_nthreads, &
-!$              "The number of OpenMP threads that MOM6 will use.", &
-!$              default = 1, layoutParam=.true.)
-!$   call get_param(param_file, mdl, "OCEAN_OMP_HYPER_THREAD", ocean_omp_hyper_thread, &
-!$              "If True, use hyper-threading.", default = .false., layoutParam=.true.)
-!$   call fms_affinity_set('OCEAN', ocean_omp_hyper_thread, ocean_nthreads)
-!$   call omp_set_num_threads(ocean_nthreads)
-!$   write(6,*) "MOM_domains_mod OMPthreading ", fms_affinity_get(), omp_get_thread_num(), omp_get_num_threads()
-!$   flush(6)
-!$ endif
+  !$ if (.not.MOM_thread_affinity_set()) then
+  !$   call get_param(param_file, mdl, "OCEAN_OMP_THREADS", ocean_nthreads, &
+  !$              "The number of OpenMP threads that MOM6 will use.", &
+  !$              default = 1, layoutParam=.true.)
+  !$   call get_param(param_file, mdl, "OCEAN_OMP_HYPER_THREAD", ocean_omp_hyper_thread, &
+  !$              "If True, use hyper-threading.", default = .false., layoutParam=.true.)
+  !$   call set_MOM_thread_affinity(ocean_nthreads, ocean_omp_hyper_thread)
+  !$ endif
 #endif
-  call log_param(param_file, mdl, "!SYMMETRIC_MEMORY_", MOM_dom%symmetric, &
+
+  call log_param(param_file, mdl, "!SYMMETRIC_MEMORY_", is_symmetric, &
                  "If defined, the velocity point data domain includes "//&
                  "every face of the thickness points. In other words, "//&
                  "some arrays are larger than others, depending on where "//&
@@ -1320,10 +1313,10 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "index of the velocity-point arrays is usually 0, not 1. "//&
                  "This can only be set at compile time.",&
                  layoutParam=.true.)
-  call get_param(param_file, mdl, "NONBLOCKING_UPDATES", MOM_dom%nonblocking_updates, &
+  call get_param(param_file, mdl, "NONBLOCKING_UPDATES", nonblocking, &
                  "If true, non-blocking halo updates may be used.", &
                  default=.false., layoutParam=.true.)
-  call get_param(param_file, mdl, "THIN_HALO_UPDATES", MOM_dom%thin_halo_updates, &
+  call get_param(param_file, mdl, "THIN_HALO_UPDATES", thin_halos, &
                  "If true, optional arguments may be used to specify the "//&
                  "the width of the halos that are updated with each call.", &
                  default=.true., layoutParam=.true.)
@@ -1342,60 +1335,72 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  layoutParam=.true.)
 
   if (is_static) then
-    call get_param(param_file, mdl, "NIGLOBAL", MOM_dom%niglobal, &
+    call get_param(param_file, mdl, "NIGLOBAL", n_global(1), &
                  "The total number of thickness grid points in the "//&
                  "x-direction in the physical domain. With STATIC_MEMORY_ "//&
                  "this is set in "//trim(inc_nm)//" at compile time.", &
                  static_value=NIGLOBAL)
-    call get_param(param_file, mdl, "NJGLOBAL", MOM_dom%njglobal, &
+    call get_param(param_file, mdl, "NJGLOBAL", n_global(2), &
                  "The total number of thickness grid points in the "//&
                  "y-direction in the physical domain. With STATIC_MEMORY_ "//&
                  "this is set in "//trim(inc_nm)//" at compile time.", &
                  static_value=NJGLOBAL)
-    if (MOM_dom%niglobal /= NIGLOBAL) call MOM_error(FATAL,"MOM_domains_init: " // &
+    if (n_global(1) /= NIGLOBAL) call MOM_error(FATAL,"MOM_domains_init: " // &
      "static mismatch for NIGLOBAL_ domain size. Header file does not match input namelist")
-    if (MOM_dom%njglobal /= NJGLOBAL) call MOM_error(FATAL,"MOM_domains_init: " // &
+    if (n_global(2) /= NJGLOBAL) call MOM_error(FATAL,"MOM_domains_init: " // &
      "static mismatch for NJGLOBAL_ domain size. Header file does not match input namelist")
 
+    ! Check the requirement of equal sized compute domains when STATIC_MEMORY_ is used.
+    if ((MOD(NIGLOBAL, NIPROC) /= 0) .OR. (MOD(NJGLOBAL, NJPROC) /= 0)) then
+      write( char_xsiz, '(i4)' ) NIPROC
+      write( char_ysiz, '(i4)' ) NJPROC
+      write( char_niglobal, '(i4)' ) NIGLOBAL
+      write( char_njglobal, '(i4)' ) NJGLOBAL
+      call MOM_error(WARNING, 'MOM_domains: Processor decomposition (NIPROC_,NJPROC_) = (' &
+             //trim(char_xsiz)//','//trim(char_ysiz)//') does not evenly divide size '//&
+             'set by preprocessor macro ('//trim(char_niglobal)//','//trim(char_njglobal)//').')
+      call MOM_error(FATAL,'MOM_domains:  #undef STATIC_MEMORY_ in '//trim(inc_nm)//' to use '//&
+             'dynamic allocation, or change processor decomposition to evenly divide the domain.')
+    endif
   else
-    call get_param(param_file, mdl, "NIGLOBAL", MOM_dom%niglobal, &
+    call get_param(param_file, mdl, "NIGLOBAL", n_global(1), &
                  "The total number of thickness grid points in the "//&
                  "x-direction in the physical domain. With STATIC_MEMORY_ "//&
                  "this is set in "//trim(inc_nm)//" at compile time.", &
                  fail_if_missing=.true.)
-    call get_param(param_file, mdl, "NJGLOBAL", MOM_dom%njglobal, &
+    call get_param(param_file, mdl, "NJGLOBAL", n_global(2), &
                  "The total number of thickness grid points in the "//&
                  "y-direction in the physical domain. With STATIC_MEMORY_ "//&
                  "this is set in "//trim(inc_nm)//" at compile time.", &
                  fail_if_missing=.true.)
   endif
 
-  call get_param(param_file, mdl, trim(nihalo_nm), MOM_dom%nihalo, &
+  call get_param(param_file, mdl, trim(nihalo_nm), n_halo(1), &
                  "The number of halo points on each side in the x-direction.  How this is set "//&
                  "varies with the calling component and static or dynamic memory configuration.", &
                  default=nihalo_dflt, static_value=nihalo_dflt)
-  call get_param(param_file, mdl, trim(njhalo_nm), MOM_dom%njhalo, &
+  call get_param(param_file, mdl, trim(njhalo_nm), n_halo(2), &
                  "The number of halo points on each side in the y-direction.  How this is set "//&
                  "varies with the calling component and static or dynamic memory configuration.", &
                  default=njhalo_dflt, static_value=njhalo_dflt)
   if (present(min_halo)) then
-    MOM_dom%nihalo = max(MOM_dom%nihalo, min_halo(1))
-    min_halo(1) = MOM_dom%nihalo
-    MOM_dom%njhalo = max(MOM_dom%njhalo, min_halo(2))
-    min_halo(2) = MOM_dom%njhalo
+    n_halo(1) = max(n_halo(1), min_halo(1))
+    min_halo(1) = n_halo(1)
+    n_halo(2) = max(n_halo(2), min_halo(2))
+    min_halo(2) = n_halo(2)
     ! These are generally used only with static memory, so they are considerd layout params.
-    call log_param(param_file, mdl, "!NIHALO min_halo", MOM_dom%nihalo, layoutParam=.true.)
-    call log_param(param_file, mdl, "!NJHALO min_halo", MOM_dom%nihalo, layoutParam=.true.)
+    call log_param(param_file, mdl, "!NIHALO min_halo", n_halo(1), layoutParam=.true.)
+    call log_param(param_file, mdl, "!NJHALO min_halo", n_halo(2), layoutParam=.true.)
   endif
   if (is_static .and. .not.present(min_halo)) then
-    if (MOM_dom%nihalo /= NIHALO) call MOM_error(FATAL,"MOM_domains_init: " // &
+    if (n_halo(1) /= NIHALO) call MOM_error(FATAL,"MOM_domains_init: " // &
            "static mismatch for "//trim(nihalo_nm)//" domain size")
-    if (MOM_dom%njhalo /= NJHALO) call MOM_error(FATAL,"MOM_domains_init: " // &
+    if (n_halo(2) /= NJHALO) call MOM_error(FATAL,"MOM_domains_init: " // &
            "static mismatch for "//trim(njhalo_nm)//" domain size")
   endif
 
-  global_indices(1) = 1 ; global_indices(2) = MOM_dom%niglobal
-  global_indices(3) = 1 ; global_indices(4) = MOM_dom%njglobal
+  global_indices(1) = 1 ; global_indices(2) = n_global(1)
+  global_indices(3) = 1 ; global_indices(4) = n_global(2)
 
   call get_param(param_file, mdl, "INPUTDIR", inputdir, do_not_log=.true., default=".")
   inputdir = slasher(inputdir)
@@ -1447,7 +1452,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
     endif
 
     if ( layout(1)==0 .and. layout(2)==0 ) &
-      call mpp_define_layout(global_indices, proc_used, layout)
+      call MOM_define_layout(global_indices, proc_used, layout)
     if ( layout(1)/=0 .and. layout(2)==0 ) layout(2) = proc_used/layout(1)
     if ( layout(1)==0 .and. layout(2)/=0 ) layout(1) = proc_used/layout(2)
 
@@ -1471,63 +1476,125 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  layoutParam=.true.)
 
   ! Idiot check that fewer PEs than columns have been requested
-  if (layout(1)*layout(2)>MOM_dom%niglobal*MOM_dom%njglobal)  then
+  if (layout(1)*layout(2)>n_global(1)*n_global(2))  then
     write(mesg,'(a,2(i5,x,a))') 'You requested to use',layout(1)*layout(2), &
-      'PEs but there are only',MOM_dom%niglobal*MOM_dom%njglobal,'columns in the model'
+      'PEs but there are only', n_global(1)*n_global(2), 'columns in the model'
     call MOM_error(FATAL, mesg)
   endif
 
-  if (mask_table_exists) then
-    call MOM_error(NOTE, 'MOM_domains_init: reading maskmap information from '//&
-                         trim(mask_table))
-    allocate(MOM_dom%maskmap(layout(1), layout(2)))
-    call parse_mask_table(mask_table, MOM_dom%maskmap, dom_name)
-  endif
+  if (mask_table_exists) &
+    call MOM_error(NOTE, 'MOM_domains_init: reading maskmap information from '//trim(mask_table))
 
-  !   Set up the I/O layout, and check that it uses an even multiple of the
-  ! number of PEs in each direction.
+  ! Set up the I/O layout, it will be checked later that it uses an even multiple of the number of
+  ! PEs in each direction.
   io_layout(:) = (/ 1, 1 /)
   call get_param(param_file, mdl, trim(io_layout_nm), io_layout, &
                  "The processor layout to be used, or 0,0 to automatically "//&
                  "set the io_layout to be the same as the layout.", default=1, &
                  layoutParam=.true.)
 
-  if (io_layout(1) < 0) then
-    write(mesg,'("MOM_domains_init: IO_LAYOUT(1) = ",i4,".  Negative values "//&
-         &"are not allowed in ")') io_layout(1)
-    call MOM_error(FATAL, mesg//trim(IO_layout_nm))
-  elseif (io_layout(1) > 0) then ; if (modulo(layout(1), io_layout(1)) /= 0) then
-    write(mesg,'("MOM_domains_init: The i-direction I/O-layout, IO_LAYOUT(1)=",i4, &
-         &", does not evenly divide the i-direction layout, NIPROC=,",i4,".")') &
-          io_layout(1),layout(1)
-    call MOM_error(FATAL, mesg)
-  endif ; endif
+  call create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar, layout, io_layout=io_layout, &
+                         domain_name=domain_name, mask_table=mask_table, symmetric=symmetric, &
+                         thin_halos=thin_halos, nonblocking=nonblocking)
 
-  if (io_layout(2) < 0) then
-    write(mesg,'("MOM_domains_init: IO_LAYOUT(2) = ",i4,".  Negative values "//&
-         &"are not allowed in ")') io_layout(2)
-    call MOM_error(FATAL, mesg//trim(IO_layout_nm))
-  elseif (io_layout(2) /= 0) then ; if (modulo(layout(2), io_layout(2)) /= 0) then
-    write(mesg,'("MOM_domains_init: The j-direction I/O-layout, IO_LAYOUT(2)=",i4, &
-         &", does not evenly divide the j-direction layout, NJPROC=,",i4,".")') &
-          io_layout(2),layout(2)
-    call MOM_error(FATAL, mesg)
-  endif ; endif
+end subroutine MOM_domains_init
 
-  if (io_layout(2) == 0) io_layout(2) = layout(2)
-  if (io_layout(1) == 0) io_layout(1) = layout(1)
+!> create_MOM_domain creates and initializes a MOM_domain_type variables, based on the information
+!! provided in arguments.
+subroutine create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar, layout, io_layout, &
+                               domain_name, mask_table, symmetric, thin_halos, nonblocking)
+  type(MOM_domain_type),      pointer    :: MOM_dom   !< A pointer to the MOM_domain_type being defined here.
+  integer, dimension(2),      intent(in) :: n_global  !< The number of points on the global grid in
+                                                      !! the i- and j-directions
+  integer, dimension(2),      intent(in) :: n_halo    !< The number of halo points on each processor
+  logical, dimension(2),      intent(in) :: reentrant !< If true the grid is periodic in the i- and j- directions
+  logical, dimension(2,2),    intent(in) :: tripolar  !< If true the grid uses tripolar connectivity on the two
+                                                      !! ends (first index) of the i- and j-grids (second index)
+  integer, dimension(2),      intent(in) :: layout    !< The layout of logical PEs in the i- and j-directions.
+  integer, dimension(2), optional, intent(in) :: io_layout !< The layout for parallel input and output.
+  character(len=*), optional, intent(in) :: domain_name !< A name for this domain, "MOM" if missing.
+  character(len=*), optional, intent(in) :: mask_table !< The full relative or absolute path to the mask table.
+  logical,          optional, intent(in) :: symmetric !< If present, this specifies whether this domain
+                                                      !! uses symmetric memory, or true if missing.
+  logical,          optional, intent(in) :: thin_halos !< If present, this specifies whether to permit the use of
+                                                      !! thin halo updates, or true if missing.
+  logical,          optional, intent(in) :: nonblocking !< If present, this specifies whether to permit the use of
+                                                      !! nonblocking halo updates, or false if missing.
 
-  X_FLAGS = 0 ; Y_FLAGS = 0
-  if (reentrant_x) X_FLAGS = CYCLIC_GLOBAL_DOMAIN
-  if (reentrant_y) Y_FLAGS = CYCLIC_GLOBAL_DOMAIN
-  if (tripolar_N) then
-    Y_FLAGS = FOLD_NORTH_EDGE
-    if (reentrant_y) call MOM_error(FATAL,"MOM_domains: "// &
-      "TRIPOLAR_N and REENTRANT_Y may not be defined together.")
+  ! local variables
+  integer, dimension(4) :: global_indices ! The lower and upper global i- and j-index bounds
+  integer :: X_FLAGS  ! A combination of integers encoding the x-direction grid connectivity.
+  integer :: Y_FLAGS  ! A combination of integers encoding the y-direction grid connectivity.
+  integer :: xhalo_d2, yhalo_d2
+  character(len=200) :: mesg    ! A string for use in error messages
+  character(len=64) :: dom_name ! The domain name
+  logical :: mask_table_exists  ! Mask_table is present and the file it points to exists
+
+  if (.not.associated(MOM_dom)) then
+    allocate(MOM_dom)
+    allocate(MOM_dom%mpp_domain)
+    allocate(MOM_dom%mpp_domain_d2)
   endif
 
-  global_indices(1) = 1 ; global_indices(2) = MOM_dom%niglobal
-  global_indices(3) = 1 ; global_indices(4) = MOM_dom%njglobal
+  dom_name = "MOM" ; if (present(domain_name)) dom_name = trim(domain_name)
+
+  X_FLAGS = 0 ; Y_FLAGS = 0
+  if (reentrant(1)) X_FLAGS = CYCLIC_GLOBAL_DOMAIN
+  if (reentrant(2)) Y_FLAGS = CYCLIC_GLOBAL_DOMAIN
+  if (tripolar(2,2)) then
+    Y_FLAGS = FOLD_NORTH_EDGE
+    if (reentrant(2)) call MOM_error(FATAL,"MOM_domains: "// &
+      "TRIPOLAR_N and REENTRANT_Y may not be used together.")
+  endif
+
+  MOM_dom%nonblocking_updates = nonblocking
+  MOM_dom%thin_halo_updates = thin_halos
+  MOM_dom%symmetric = .true. ; if (present(symmetric)) MOM_dom%symmetric = symmetric
+  MOM_dom%niglobal = n_global(1) ; MOM_dom%njglobal = n_global(2)
+  MOM_dom%nihalo = n_halo(1) ; MOM_dom%njhalo = n_halo(2)
+
+  ! Save the extra data for creating other domains of different resolution that overlay this domain.
+  MOM_dom%X_FLAGS = X_FLAGS
+  MOM_dom%Y_FLAGS = Y_FLAGS
+  MOM_dom%layout(:) = layout(:)
+
+  ! Set up the io_layout, with error handling.
+  MOM_dom%io_layout(:) = (/ 1, 1 /)
+  if (present(io_layout)) then
+    if (io_layout(1) == 0) then
+      MOM_dom%io_layout(1) = layout(1)
+    elseif (io_layout(1) > 1) then
+      MOM_dom%layout(1) = io_layout(1)
+      if (modulo(layout(1), io_layout(1)) /= 0) then
+        write(mesg,'("MOM_domains_init: The i-direction I/O-layout, IO_LAYOUT(1)=",i4, &
+              &", does not evenly divide the i-direction layout, NIPROC=,",i4,".")') io_layout(1), layout(1)
+        call MOM_error(FATAL, mesg)
+      endif
+    endif
+
+    if (io_layout(2) == 0) then
+      MOM_dom%io_layout(2) = layout(2)
+    elseif (io_layout(2) > 1) then
+      MOM_dom%layout(2) = io_layout(2)
+      if (modulo(layout(2), io_layout(2)) /= 0) then
+        write(mesg,'("MOM_domains_init: The j-direction I/O-layout, IO_LAYOUT(2)=",i4, &
+              &", does not evenly divide the j-direction layout, NJPROC=,",i4,".")') io_layout(2), layout(2)
+        call MOM_error(FATAL, mesg)
+      endif
+    endif
+  endif
+
+  global_indices(1:4) = (/ 1, MOM_dom%niglobal, 1, MOM_dom%njglobal /)
+
+  if (present(mask_table)) then
+    mask_table_exists = file_exist(mask_table)
+    if (mask_table_exists) then
+      allocate(MOM_dom%maskmap(layout(1), layout(2)))
+      call parse_mask_table(mask_table, MOM_dom%maskmap, dom_name)
+    endif
+  else
+    mask_table_exists = .false.
+  endif
 
   if (mask_table_exists) then
     call MOM_define_domain( global_indices, layout, MOM_dom%mpp_domain, &
@@ -1542,44 +1609,16 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                 symmetry = MOM_dom%symmetric, name=dom_name)
   endif
 
-  if ((io_layout(1) > 0) .and. (io_layout(2) > 0) .and. &
-      (layout(1)*layout(2) > 1)) then
-    call MOM_define_io_domain(MOM_dom%mpp_domain, io_layout)
+  if ((MOM_dom%io_layout(1) > 0) .and. (MOM_dom%io_layout(2) > 0) .and. (layout(1)*layout(2) > 1)) then
+    call MOM_define_io_domain(MOM_dom%mpp_domain, MOM_dom%io_layout)
   endif
 
-! Save the extra data for creating other domains of different resolution that overlay this domain
-  MOM_dom%X_FLAGS = X_FLAGS
-  MOM_dom%Y_FLAGS = Y_FLAGS
-  MOM_dom%layout = layout
-  MOM_dom%io_layout = io_layout
-
-  if (is_static) then
-  !   A requirement of equal sized compute domains is necessary when STATIC_MEMORY_
-  ! is used.
-    call mpp_get_compute_domain(MOM_dom%mpp_domain,isc,iec,jsc,jec)
-    xsiz = iec - isc + 1
-    ysiz = jec - jsc + 1
-    if (xsiz*NIPROC /= MOM_dom%niglobal .OR. ysiz*NJPROC /= MOM_dom%njglobal) then
-       write( char_xsiz,'(i4)' ) NIPROC
-       write( char_ysiz,'(i4)' ) NJPROC
-       write( char_niglobal,'(i4)' ) MOM_dom%niglobal
-       write( char_njglobal,'(i4)' ) MOM_dom%njglobal
-       call MOM_error(WARNING,'MOM_domains: Processor decomposition (NIPROC_,NJPROC_) = (' &
-           //trim(char_xsiz)//','//trim(char_ysiz)// &
-           ') does not evenly divide size set by preprocessor macro ('&
-           //trim(char_niglobal)//','//trim(char_njglobal)// '). ')
-       call MOM_error(FATAL,'MOM_domains:  #undef STATIC_MEMORY_ in "//trim(inc_nm)//" to use &
-           &dynamic allocation, or change processor decomposition to evenly divide the domain.')
-    endif
-  endif
-
-  global_indices(1) = 1 ; global_indices(2) = int(MOM_dom%niglobal/2)
-  global_indices(3) = 1 ; global_indices(4) = int(MOM_dom%njglobal/2)
   !For downsampled domain, recommend a halo of 1 (or 0?) since we're not doing wide-stencil computations.
   !But that does not work because the downsampled field would not have the correct size to pass the checks, e.g., we get
   !error: downsample_diag_indices_get: peculiar size 28 in i-direction\ndoes not match one of 24 25 26 27
   xhalo_d2 = int(MOM_dom%nihalo/2)
   yhalo_d2 = int(MOM_dom%njhalo/2)
+  global_indices(1:4) = (/ 1, int(MOM_dom%niglobal/2), 1, int(MOM_dom%njglobal/2) /)
   if (mask_table_exists) then
     call MOM_define_domain( global_indices, layout, MOM_dom%mpp_domain_d2, &
                 xflags=X_FLAGS, yflags=Y_FLAGS, &
@@ -1593,12 +1632,44 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                 symmetry = MOM_dom%symmetric, name=trim("MOMc"))
   endif
 
-  if ((io_layout(1) > 0) .and. (io_layout(2) > 0) .and. &
+  if ((MOM_dom%io_layout(1) > 0) .and. (MOM_dom%io_layout(2) > 0) .and. &
       (layout(1)*layout(2) > 1)) then
-    call MOM_define_io_domain(MOM_dom%mpp_domain_d2, io_layout)
+    call MOM_define_io_domain(MOM_dom%mpp_domain_d2, MOM_dom%io_layout)
   endif
 
-end subroutine MOM_domains_init
+end subroutine create_MOM_domain
+
+
+!> MOM_thread_affinity_set returns true if the number of openMP threads have been set to a value greater than 1.
+function MOM_thread_affinity_set()
+  ! Local variables
+  !$ integer :: ocean_nthreads       ! Number of openMP threads
+  !$ integer :: omp_get_num_threads  ! An openMP function that returns the number of threads
+  logical :: MOM_thread_affinity_set
+
+  MOM_thread_affinity_set = .false.
+  !$ call fms_affinity_init()
+  !$OMP PARALLEL
+  !$OMP   MASTER
+  !$        ocean_nthreads = omp_get_num_threads()
+  !$OMP   END MASTER
+  !$OMP END PARALLEL
+  !$ MOM_thread_affinity_set = (ocean_nthreads > 1 )
+end function MOM_thread_affinity_set
+
+!> set_MOM_thread_affinity sest the number of openMP threads to use with the ocean.
+subroutine set_MOM_thread_affinity(ocean_nthreads, ocean_hyper_thread)
+  integer, intent(in) :: ocean_nthreads     !< Number of openMP threads to use for the ocean model
+  logical, intent(in) :: ocean_hyper_thread !< If true, use hyper threading
+
+  ! Local variables
+  !$ integer :: omp_get_thread_num, omp_get_num_threads !< These are the results of openMP functions
+
+  !$ call fms_affinity_set('OCEAN', ocean_hyper_thread, ocean_nthreads)
+  !$ call omp_set_num_threads(ocean_nthreads)
+  !$ write(6,*) "MOM_domains_mod OMPthreading ", fms_affinity_get(), omp_get_thread_num(), omp_get_num_threads()
+  !$ flush(6)
+end subroutine set_MOM_thread_affinity
 
 !> clone_MD_to_MD copies one MOM_domain_type into another, while allowing
 !! some properties of the new type to differ from the original one.

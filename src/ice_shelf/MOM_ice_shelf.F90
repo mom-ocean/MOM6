@@ -15,8 +15,8 @@ use MOM_IS_diag_mediator, only : set_axes_info, diag_ctrl, time_type
 use MOM_IS_diag_mediator, only : diag_mediator_init, diag_mediator_end, set_diag_mediator_grid
 use MOM_IS_diag_mediator, only : enable_averages, enable_averaging, disable_averaging
 use MOM_IS_diag_mediator, only : diag_mediator_infrastructure_init, diag_mediator_close_registration
-use MOM_domains, only : MOM_domains_init, clone_MOM_domain
-use MOM_domains, only : pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE, CORNER
+use MOM_domain_init, only : MOM_domains_init
+use MOM_domains, only : clone_MOM_domain, pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE, CORNER
 use MOM_dyn_horgrid, only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
 use MOM_dyn_horgrid, only : rescale_dyn_horgrid_bathymetry
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
