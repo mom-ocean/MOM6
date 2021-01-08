@@ -3,13 +3,13 @@ module MOM_io
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-
-use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING
+use MOM_array_transform,  only : allocate_rotated_array, rotate_array
 use MOM_domains,          only : MOM_domain_type, AGRID, BGRID_NE, CGRID_NE
 use MOM_domains,          only : get_simple_array_i_ind, get_simple_array_j_ind
+use MOM_dyn_horgrid,      only : dyn_horgrid_type
+use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING
 use MOM_file_parser,      only : log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
-use MOM_dyn_horgrid,      only : dyn_horgrid_type
 use MOM_string_functions, only : lowercase, slasher
 use MOM_verticalGrid,     only : verticalGrid_type
 
@@ -41,7 +41,7 @@ implicit none ; private
 public :: close_file, create_file, field_exists, field_size, fieldtype, get_filename_appendix
 public :: file_exists, flush_file, get_file_info, get_file_atts, get_file_fields
 public :: get_file_times, open_file, read_axis_data, read_data, read_field_chksum
-public :: num_timelevels, MOM_read_data, MOM_read_vector, ensembler
+public :: num_timelevels, MOM_read_data, MOM_read_vector, MOM_write_field, ensembler
 public :: reopen_file, slasher, write_field, write_version_number, MOM_io_init
 public :: open_namelist_file, check_nml_error, io_infra_init, io_infra_end
 public :: APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
@@ -79,6 +79,15 @@ interface MOM_read_data
   module procedure MOM_read_data_1d
   module procedure MOM_read_data_0d
 end interface
+
+!> Write a registered field to an output file
+interface MOM_write_field
+  module procedure MOM_write_field_4d
+  module procedure MOM_write_field_3d
+  module procedure MOM_write_field_2d
+  module procedure MOM_write_field_1d
+  module procedure MOM_write_field_0d
+end interface MOM_write_field
 
 !> Read a pair of data fields representing the two components of a vector from a file
 interface MOM_read_vector
@@ -621,7 +630,7 @@ function var_desc(name, units, longname, hor_grid, z_grid, t_grid, &
   character(len=*),           intent(in) :: name               !< variable name
   character(len=*), optional, intent(in) :: units              !< variable units
   character(len=*), optional, intent(in) :: longname           !< variable long name
-  character(len=*), optional, intent(in) :: hor_grid           !< variable horizonal staggering
+  character(len=*), optional, intent(in) :: hor_grid           !< variable horizontal staggering
   character(len=*), optional, intent(in) :: z_grid             !< variable vertical staggering
   character(len=*), optional, intent(in) :: t_grid             !< time description: s, p, or 1
   character(len=*), optional, intent(in) :: cmor_field_name    !< CMOR name
@@ -662,7 +671,7 @@ subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
   character(len=*), optional, intent(in)    :: name            !< name of variable
   character(len=*), optional, intent(in)    :: units           !< units of variable
   character(len=*), optional, intent(in)    :: longname        !< long name of variable
-  character(len=*), optional, intent(in)    :: hor_grid        !< horizonal staggering of variable
+  character(len=*), optional, intent(in)    :: hor_grid        !< horizontal staggering of variable
   character(len=*), optional, intent(in)    :: z_grid          !< vertical staggering of variable
   character(len=*), optional, intent(in)    :: t_grid          !< time description: s, p, or 1
   character(len=*), optional, intent(in)    :: cmor_field_name !< CMOR name
@@ -721,8 +730,8 @@ subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
   character(len=*), optional, intent(out) :: name               !< name of variable
   character(len=*), optional, intent(out) :: units              !< units of variable
   character(len=*), optional, intent(out) :: longname           !< long name of variable
-  character(len=*), optional, intent(out) :: hor_grid           !< horiz staggering of variable
-  character(len=*), optional, intent(out) :: z_grid             !< vert staggering of variable
+  character(len=*), optional, intent(out) :: hor_grid           !< horizontal staggering of variable
+  character(len=*), optional, intent(out) :: z_grid             !< verticle staggering of variable
   character(len=*), optional, intent(out) :: t_grid             !< time description: s, p, or 1
   character(len=*), optional, intent(out) :: cmor_field_name    !< CMOR name
   character(len=*), optional, intent(out) :: cmor_units         !< CMOR physical dimensions of variable
@@ -1002,7 +1011,7 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
   type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
   integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
   integer,      optional, intent(in)    :: stagger   !< A flag indicating where this vector is discretized
-  logical,      optional, intent(in)    :: scalar_pair !< If true, a pair of scalars are to be read.cretized
+  logical,      optional, intent(in)    :: scalar_pair !< If true, a pair of scalars are to be read
   real,         optional, intent(in)    :: scale     !< A scaling factor that the fields are multiplied
                                                      !! by before they are returned.
   integer :: is, ie, js, je
@@ -1078,13 +1087,126 @@ subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data
 end subroutine MOM_read_vector_3d
 
 
+!> Write a 4d field to an output file, potentially with rotation
+subroutine MOM_write_field_4d(io_unit, field_md, MOM_domain, field, tstamp, tile_count, &
+                              fill_value, turns)
+  integer,                  intent(in)    :: io_unit    !< File I/O unit handle
+  type(fieldtype),          intent(in)    :: field_md   !< Field type with metadata
+  type(MOM_domain_type),    intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
+  real, dimension(:,:,:,:), intent(inout) :: field      !< Unrotated field to write
+  real,           optional, intent(in)    :: tstamp     !< Model timestamp
+  integer,        optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
+  real,           optional, intent(in)    :: fill_value !< Missing data fill value
+  integer,        optional, intent(in)    :: turns      !< Number of quarter-turns to rotate the data
+
+  real, allocatable :: field_rot(:,:,:,:)  ! A rotated version of field, with the same units
+  integer :: qturns ! The number of quarter turns through which to rotate field
+
+  qturns = 0
+  if (present(turns)) qturns = modulo(turns, 4)
+
+  if (qturns == 0) then
+    call write_field(io_unit, field_md, MOM_domain%mpp_domain, field, tstamp=tstamp, &
+        tile_count=tile_count, default_data=fill_value)
+  else
+    call allocate_rotated_array(field, [1,1,1,1], qturns, field_rot)
+    call rotate_array(field, qturns, field_rot)
+    call write_field(io_unit, field_md, MOM_domain%mpp_domain, field_rot, tstamp=tstamp, &
+        tile_count=tile_count, default_data=fill_value)
+    deallocate(field_rot)
+  endif
+end subroutine MOM_write_field_4d
+
+!> Write a 3d field to an output file, potentially with rotation
+subroutine MOM_write_field_3d(io_unit, field_md, MOM_domain, field, tstamp, tile_count, &
+                              fill_value, turns)
+  integer,                intent(in)    :: io_unit    !< File I/O unit handle
+  type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
+  type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
+  real, dimension(:,:,:), intent(inout) :: field      !< Unrotated field to write
+  real,         optional, intent(in)    :: tstamp     !< Model timestamp
+  integer,      optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
+  real,         optional, intent(in)    :: fill_value !< Missing data fill value
+  integer,      optional, intent(in)    :: turns      !< Number of quarter-turns to rotate the data
+
+  real, allocatable :: field_rot(:,:,:)  ! A rotated version of field, with the same units
+  integer :: qturns ! The number of quarter turns through which to rotate field
+
+  qturns = 0
+  if (present(turns)) qturns = modulo(turns, 4)
+
+  if (qturns == 0) then
+    call write_field(io_unit, field_md, MOM_domain%mpp_domain, field, tstamp=tstamp, &
+                     tile_count=tile_count, default_data=fill_value)
+  else
+    call allocate_rotated_array(field, [1,1,1], qturns, field_rot)
+    call rotate_array(field, qturns, field_rot)
+    call write_field(io_unit, field_md, MOM_domain%mpp_domain, field_rot, tstamp=tstamp, &
+                     tile_count=tile_count, default_data=fill_value)
+    deallocate(field_rot)
+  endif
+end subroutine MOM_write_field_3d
+
+!> Write a 2d field to an output file, potentially with rotation
+subroutine MOM_write_field_2d(io_unit, field_md, MOM_domain, field, tstamp, tile_count, &
+                              fill_value, turns)
+  integer,                intent(in)    :: io_unit    !< File I/O unit handle
+  type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
+  type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
+  real, dimension(:,:),   intent(inout) :: field      !< Unrotated field to write
+  real,         optional, intent(in)    :: tstamp     !< Model timestamp
+  integer,      optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
+  real,         optional, intent(in)    :: fill_value !< Missing data fill value
+  integer,      optional, intent(in)    :: turns      !< Number of quarter-turns to rotate the data
+
+  real, allocatable :: field_rot(:,:)  ! A rotated version of field, with the same units
+  integer :: qturns ! The number of quarter turns through which to rotate field
+
+  qturns = 0
+  if (present(turns)) qturns = modulo(turns, 4)
+
+  if (qturns == 0) then
+    call write_field(io_unit, field_md, MOM_domain%mpp_domain, field, tstamp=tstamp, &
+                     tile_count=tile_count, default_data=fill_value)
+  else
+    call allocate_rotated_array(field, [1,1], qturns, field_rot)
+    call rotate_array(field, qturns, field_rot)
+    call write_field(io_unit, field_md, MOM_domain%mpp_domain, field_rot, tstamp=tstamp, &
+                     tile_count=tile_count, default_data=fill_value)
+    deallocate(field_rot)
+  endif
+end subroutine MOM_write_field_2d
+
+!> Write a 1d field to an output file
+subroutine MOM_write_field_1d(io_unit, field_md, field, tstamp, fill_value)
+  integer,                intent(in)    :: io_unit    !< File I/O unit handle
+  type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
+  real, dimension(:),     intent(inout) :: field      !< Field to write
+  real,         optional, intent(in)    :: tstamp     !< Model timestamp
+  real,         optional, intent(in)    :: fill_value !< Missing data fill value
+
+  call write_field(io_unit, field_md, field, tstamp=tstamp)
+end subroutine MOM_write_field_1d
+
+!> Write a 0d field to an output file
+subroutine MOM_write_field_0d(io_unit, field_md, field, tstamp, fill_value)
+  integer,                intent(in)    :: io_unit    !< File I/O unit handle
+  type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
+  real,                   intent(inout) :: field      !< Field to write
+  real,         optional, intent(in)    :: tstamp     !< Model timestamp
+  real,         optional, intent(in)    :: fill_value !< Missing data fill value
+
+  call write_field(io_unit, field_md, field, tstamp=tstamp)
+end subroutine MOM_write_field_0d
+
+
 !> Initialize the MOM_io module
 subroutine MOM_io_init(param_file)
   type(param_file_type), intent(in) :: param_file  !< structure indicating the open file to
                                                    !! parse for model parameter values.
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_io" ! This module's name.
 
   call log_version(param_file, mdl, version)

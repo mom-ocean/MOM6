@@ -9,15 +9,14 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_string_functions, only : lowercase
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : create_file, fieldtype, file_exists, open_file, close_file
-use MOM_io, only : MOM_read_data, read_data, get_filename_appendix, read_field_chksum
+use MOM_io, only : MOM_read_data, read_data, MOM_write_field, read_field_chksum
 use MOM_io, only : get_file_info, get_file_atts, get_file_fields, get_file_times
-use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc
+use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc, get_filename_appendix
 use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
 use MOM_time_manager,  only : time_type, time_type_to_real, real_to_time
 use MOM_time_manager,  only : days_in_month, get_date, set_date
 use MOM_transform_FMS, only : chksum => rotated_mpp_chksum
-use MOM_transform_FMS, only : write_field => rotated_write_field
 use MOM_verticalGrid,  only : verticalGrid_type
 
 implicit none ; private
@@ -370,7 +369,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, longname, units
   type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
   character(len=*), optional, intent(in) :: longname  !< variable long name
   character(len=*), optional, intent(in) :: units     !< variable units
-  character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
+  character(len=*), optional, intent(in) :: hor_grid  !< variable horizontal staggering, 'h' if absent
   character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
 
@@ -397,7 +396,7 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, longname, units
   type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
   character(len=*), optional, intent(in) :: longname  !< variable long name
   character(len=*), optional, intent(in) :: units     !< variable units
-  character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
+  character(len=*), optional, intent(in) :: hor_grid  !< variable horizontal staggering, 'h' if absent
   character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
 
@@ -424,7 +423,7 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, longname, units
   type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
   character(len=*), optional, intent(in) :: longname  !< variable long name
   character(len=*), optional, intent(in) :: units     !< variable units
-  character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
+  character(len=*), optional, intent(in) :: hor_grid  !< variable horizontal staggering, 'h' if absent
   character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, '1' if absent
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
 
@@ -452,7 +451,7 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, longname, units
   type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
   character(len=*), optional, intent(in) :: longname  !< variable long name
   character(len=*), optional, intent(in) :: units     !< variable units
-  character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, '1' if absent
+  character(len=*), optional, intent(in) :: hor_grid  !< variable horizontal staggering, '1' if absent
   character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
 
@@ -503,7 +502,7 @@ function query_initialized_name(name, CS) result(query_initialized)
 !   This subroutine returns .true. if the field referred to by name has
 ! initialized from a restart file, and .false. otherwise.
 
-  integer :: m,n
+  integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
@@ -537,7 +536,7 @@ function query_initialized_0d(f_ptr, CS) result(query_initialized)
 !   This subroutine tests whether the field pointed to by f_ptr has
 ! been initialized from a restart file.
 
-  integer :: m,n
+  integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
@@ -564,7 +563,7 @@ function query_initialized_1d(f_ptr, CS) result(query_initialized)
 !   This subroutine tests whether the field pointed to by f_ptr has
 ! been initialized from a restart file.
 
-  integer :: m,n
+  integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
@@ -592,7 +591,7 @@ function query_initialized_2d(f_ptr, CS) result(query_initialized)
 !   This subroutine tests whether the field pointed to by f_ptr has
 ! been initialized from a restart file.
 
-  integer :: m,n
+  integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
@@ -620,7 +619,7 @@ function query_initialized_3d(f_ptr, CS) result(query_initialized)
 !   This subroutine tests whether the field pointed to by f_ptr has
 ! been initialized from a restart file.
 
-  integer :: m,n
+  integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
@@ -648,7 +647,7 @@ function query_initialized_4d(f_ptr, CS) result(query_initialized)
 !   This subroutine tests whether the field pointed to by f_ptr has
 ! been initialized from a restart file.
 
-  integer :: m,n
+  integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
@@ -677,7 +676,7 @@ function query_initialized_0d_name(f_ptr, name, CS) result(query_initialized)
 !   This subroutine tests whether the field pointed to by f_ptr or with the
 ! specified variable name has been initialized from a restart file.
 
-  integer :: m,n
+  integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
@@ -713,7 +712,7 @@ function query_initialized_1d_name(f_ptr, name, CS) result(query_initialized)
 !   This subroutine tests whether the field pointed to by f_ptr or with the
 ! specified variable name has been initialized from a restart file.
 
-  integer :: m,n
+  integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
@@ -749,7 +748,7 @@ function query_initialized_2d_name(f_ptr, name, CS) result(query_initialized)
 !   This subroutine tests whether the field pointed to by f_ptr or with the
 ! specified variable name has been initialized from a restart file.
 
-  integer :: m,n
+  integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
@@ -908,10 +907,10 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
   restartname = trim(CS%restartfile)
   if (present(filename)) restartname = trim(filename)
   if (PRESENT(time_stamped)) then ; if (time_stamped) then
-    call get_date(time,year,month,days,hour,minute,seconds)
+    call get_date(time, year, month, days, hour, minute, seconds)
     ! Compute the year-day, because I don't like months. - RWH
     do m=1,month-1
-      days = days + days_in_month(set_date(year,m,2,0,0,0))
+      days = days + days_in_month(set_date(year, m, 2, 0, 0, 0))
     enddo
     seconds = seconds + 60*minute + 3600*hour
     if (year <= 9999) then
@@ -1030,19 +1029,19 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
 
     do m=start_var,next_var-1
       if (associated(CS%var_ptr3d(m)%p)) then
-        call write_field(unit,fields(m-start_var+1), G%Domain%mpp_domain, &
+        call MOM_write_field(unit,fields(m-start_var+1), G%Domain, &
                          CS%var_ptr3d(m)%p, restart_time, turns=-turns)
       elseif (associated(CS%var_ptr2d(m)%p)) then
-        call write_field(unit,fields(m-start_var+1), G%Domain%mpp_domain, &
+        call MOM_write_field(unit,fields(m-start_var+1), G%Domain, &
                          CS%var_ptr2d(m)%p, restart_time, turns=-turns)
       elseif (associated(CS%var_ptr4d(m)%p)) then
-        call write_field(unit,fields(m-start_var+1), G%Domain%mpp_domain, &
+        call MOM_write_field(unit,fields(m-start_var+1), G%Domain, &
                          CS%var_ptr4d(m)%p, restart_time, turns=-turns)
       elseif (associated(CS%var_ptr1d(m)%p)) then
-        call write_field(unit, fields(m-start_var+1), CS%var_ptr1d(m)%p, &
+        call MOM_write_field(unit, fields(m-start_var+1), CS%var_ptr1d(m)%p, &
                          restart_time)
       elseif (associated(CS%var_ptr0d(m)%p)) then
-        call write_field(unit, fields(m-start_var+1), CS%var_ptr0d(m)%p, &
+        call MOM_write_field(unit, fields(m-start_var+1), CS%var_ptr0d(m)%p, &
                          restart_time)
       endif
     enddo

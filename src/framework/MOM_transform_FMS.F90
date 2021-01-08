@@ -5,19 +5,15 @@ module MOM_transform_FMS
 
 use horiz_interp_mod, only : horiz_interp_type
 use MOM_error_handler, only : MOM_error, FATAL
-use MOM_io, only : fieldtype, write_field
-use mpp_domains_mod, only : domain2D
 use mpp_mod, only : mpp_chksum
 use time_manager_mod, only : time_type
 use time_interp_external_mod, only : time_interp_external
 
 use MOM_array_transform, only : allocate_rotated_array, rotate_array
 
-implicit none
+implicit none ; private
 
-private
 public rotated_mpp_chksum
-public rotated_write_field
 public rotated_time_interp_external
 
 !> Rotate and compute the FMS (mpp) checksum of a field
@@ -28,15 +24,6 @@ interface rotated_mpp_chksum
   module procedure rotated_mpp_chksum_real_3d
   module procedure rotated_mpp_chksum_real_4d
 end interface rotated_mpp_chksum
-
-!> Rotate and write a registered field to an FMS output file
-interface rotated_write_field
-  module procedure rotated_write_field_real_0d
-  module procedure rotated_write_field_real_1d
-  module procedure rotated_write_field_real_2d
-  module procedure rotated_write_field_real_3d
-  module procedure rotated_write_field_real_4d
-end interface rotated_write_field
 
 !> Read a field based on model time, and rotate to the model domain
 interface rotated_time_interp_external
@@ -164,139 +151,6 @@ function rotated_mpp_chksum_real_4d(field, pelist, mask_val, turns) &
     deallocate(field_rot)
   endif
 end function rotated_mpp_chksum_real_4d
-
-
-! NOTE: In MOM_io, write_field points to mpp_write, which supports a very broad
-! range of interfaces.  Here, we only support the much more narrow family of
-! mpp_write_2ddecomp functions used to write tiled data.
-
-
-!> Write the rotation of a 1d field to an FMS output file
-!! This function is provided to support the full FMS write_field interface.
-subroutine rotated_write_field_real_0d(io_unit, field_md, field, tstamp, turns)
-  integer, intent(in) :: io_unit              !> File I/O unit handle
-  type(fieldtype), intent(in) :: field_md     !> FMS field metadata
-  real, intent(inout) :: field                !> Unrotated field array
-  real, optional, intent(in) :: tstamp        !> Model timestamp
-  integer, optional, intent(in) :: turns      !> Number of quarter-turns
-
-  if (present(turns)) &
-    call MOM_error(FATAL, "Rotation not supported for 0d fields.")
-
-  call write_field(io_unit, field_md, field, tstamp=tstamp)
-end subroutine rotated_write_field_real_0d
-
-
-!> Write the rotation of a 1d field to an FMS output file
-!! This function is provided to support the full FMS write_field interface.
-subroutine rotated_write_field_real_1d(io_unit, field_md, field, tstamp, turns)
-  integer, intent(in) :: io_unit              !> File I/O unit handle
-  type(fieldtype), intent(in) :: field_md     !> FMS field metadata
-  real, intent(inout) :: field(:)             !> Unrotated field array
-  real, optional, intent(in) :: tstamp        !> Model timestamp
-  integer, optional, intent(in) :: turns      !> Number of quarter-turns
-
-  if (present(turns)) &
-    call MOM_error(FATAL, "Rotation not supported for 0d fields.")
-
-  call write_field(io_unit, field_md, field, tstamp=tstamp)
-end subroutine rotated_write_field_real_1d
-
-
-!> Write the rotation of a 2d field to an FMS output file
-subroutine rotated_write_field_real_2d(io_unit, field_md, domain, field, &
-    tstamp, tile_count, default_data, turns)
-  integer, intent(in) :: io_unit              !> File I/O unit handle
-  type(fieldtype), intent(in) :: field_md     !> FMS field metadata
-  type(domain2D), intent(inout) :: domain     !> FMS MPP domain
-  real, intent(inout) :: field(:,:)           !> Unrotated field array
-  real, optional, intent(in) :: tstamp        !> Model timestamp
-  integer, optional, intent(in) :: tile_count !> PEs per tile (default: 1)
-  real, optional, intent(in) :: default_data  !> Default fill value
-  integer, optional, intent(in) :: turns      !> Number of quarter-turns
-
-  real, allocatable :: field_rot(:,:)
-  integer :: qturns
-
-  qturns = 0
-  if (present(turns)) &
-    qturns = modulo(turns, 4)
-
-  if (qturns == 0) then
-    call write_field(io_unit, field_md, domain, field, tstamp=tstamp, &
-        tile_count=tile_count, default_data=default_data)
-  else
-    call allocate_rotated_array(field, [1,1], qturns, field_rot)
-    call rotate_array(field, qturns, field_rot)
-    call write_field(io_unit, field_md, domain, field_rot, tstamp=tstamp, &
-        tile_count=tile_count, default_data=default_data)
-    deallocate(field_rot)
-  endif
-end subroutine rotated_write_field_real_2d
-
-
-!> Write the rotation of a 3d field to an FMS output file
-subroutine rotated_write_field_real_3d(io_unit, field_md, domain, field, &
-    tstamp, tile_count, default_data, turns)
-  integer, intent(in) :: io_unit              !> File I/O unit handle
-  type(fieldtype), intent(in) :: field_md     !> FMS field metadata
-  type(domain2D), intent(inout) :: domain     !> FMS MPP domain
-  real, intent(inout) :: field(:,:,:)         !> Unrotated field array
-  real, optional, intent(in) :: tstamp        !> Model timestamp
-  integer, optional, intent(in) :: tile_count !> PEs per tile (default: 1)
-  real, optional, intent(in) :: default_data  !> Default fill value
-  integer, optional, intent(in) :: turns      !> Number of quarter-turns
-
-  real, allocatable :: field_rot(:,:,:)
-  integer :: qturns
-
-  qturns = 0
-  if (present(turns)) &
-    qturns = modulo(turns, 4)
-
-  if (qturns == 0) then
-    call write_field(io_unit, field_md, domain, field, tstamp=tstamp, &
-        tile_count=tile_count, default_data=default_data)
-  else
-    call allocate_rotated_array(field, [1,1,1], qturns, field_rot)
-    call rotate_array(field, qturns, field_rot)
-    call write_field(io_unit, field_md, domain, field_rot, tstamp=tstamp, &
-        tile_count=tile_count, default_data=default_data)
-    deallocate(field_rot)
-  endif
-end subroutine rotated_write_field_real_3d
-
-
-!> Write the rotation of a 4d field to an FMS output file
-subroutine rotated_write_field_real_4d(io_unit, field_md, domain, field, &
-    tstamp, tile_count, default_data, turns)
-  integer, intent(in) :: io_unit              !> File I/O unit handle
-  type(fieldtype), intent(in) :: field_md     !> FMS field metadata
-  type(domain2D), intent(inout) :: domain     !> FMS MPP domain
-  real, intent(inout) :: field(:,:,:,:)       !> Unrotated field array
-  real, optional, intent(in) :: tstamp        !> Model timestamp
-  integer, optional, intent(in) :: tile_count !> PEs per tile (default: 1)
-  real, optional, intent(in) :: default_data  !> Default fill value
-  integer, optional, intent(in) :: turns      !> Number of quarter-turns
-
-  real, allocatable :: field_rot(:,:,:,:)
-  integer :: qturns
-
-  qturns = 0
-  if (present(turns)) &
-    qturns = modulo(turns, 4)
-
-  if (qturns == 0) then
-    call write_field(io_unit, field_md, domain, field, tstamp=tstamp, &
-        tile_count=tile_count, default_data=default_data)
-  else
-    call allocate_rotated_array(field, [1,1,1,1], qturns, field_rot)
-    call rotate_array(field, qturns, field_rot)
-    call write_field(io_unit, field_md, domain, field_rot, tstamp=tstamp, &
-        tile_count=tile_count, default_data=default_data)
-    deallocate(field_rot)
-  endif
-end subroutine rotated_write_field_real_4d
 
 
 !> Read a scalar field based on model time
