@@ -17,6 +17,7 @@ use mpp_domains_mod, only : MOM_define_io_domain => mpp_define_io_domain
 use mpp_domains_mod, only : MOM_define_domain => mpp_define_domains
 use mpp_domains_mod, only : domain2D, domain1D, mpp_get_data_domain
 use mpp_domains_mod, only : mpp_get_compute_domain, mpp_get_global_domain
+use mpp_domains_mod, only : mpp_get_domain_extents, mpp_deallocate_domain
 use mpp_domains_mod, only : global_field_sum => mpp_global_sum
 use mpp_domains_mod, only : mpp_update_domains, CYCLIC_GLOBAL_DOMAIN, FOLD_NORTH_EDGE
 use mpp_domains_mod, only : mpp_start_update_domains, mpp_complete_update_domains
@@ -37,6 +38,7 @@ implicit none ; private
 
 public :: MOM_domains_init, MOM_infra_init, MOM_infra_end, get_domain_extent, get_domain_extent_dsamp2
 public :: create_MOM_domain, clone_MOM_domain
+public :: deallocate_MOM_domain, deallocate_domain_contents
 public :: MOM_define_domain, MOM_define_layout, MOM_define_io_domain
 public :: pass_var, pass_vector, PE_here, root_PE, num_PEs
 public :: pass_var_start, pass_var_complete, fill_symmetric_edges, broadcast
@@ -47,7 +49,7 @@ public :: CORNER, CENTER, NORTH_FACE, EAST_FACE
 public :: To_East, To_West, To_North, To_South, To_All, Omit_Corners
 public :: create_group_pass, do_group_pass, group_pass_type
 public :: start_group_pass, complete_group_pass
-public :: compute_block_extent, get_global_shape
+public :: compute_block_extent, get_global_shape, get_layout_extents
 public :: MOM_thread_affinity_set, set_MOM_thread_affinity
 public :: get_simple_array_i_ind, get_simple_array_j_ind
 public :: domain2D
@@ -1639,6 +1641,42 @@ subroutine create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar, lay
 
 end subroutine create_MOM_domain
 
+!> dealloc_MOM_domain deallocates memory associated with a pointer to a MOM_domain_type
+!! and all of its contents
+subroutine deallocate_MOM_domain(MOM_domain, cursory)
+  type(MOM_domain_type), pointer :: MOM_domain !< A pointer to the MOM_domain_type being deallocated
+  logical,  optional, intent(in) :: cursory    !< If true do not deallocate fields associated
+                                               !! with the underlying infrastructure
+
+  if (associated(MOM_domain)) then
+    call deallocate_domain_contents(MOM_domain, cursory)
+    deallocate(MOM_domain)
+  endif
+
+end subroutine deallocate_MOM_domain
+
+!> deallocate_domain_contents deallocates memory associated with pointers
+!! inside of a MOM_domain_type.
+subroutine deallocate_domain_contents(MOM_domain, cursory)
+  type(MOM_domain_type), intent(inout) :: MOM_domain !< A MOM_domain_type whose contents will be deallocated
+  logical,     optional, intent(in)    :: cursory    !< If true do not deallocate fields associated
+                                                     !! with the underlying infrastructure
+
+  logical :: invasive  ! If true, deallocate fields associated with the underlying infrastructure
+
+  invasive = .true. ; if (present(cursory)) invasive = .not.cursory
+
+  if (associated(MOM_domain%mpp_domain)) then
+    if (invasive) call mpp_deallocate_domain(MOM_domain%mpp_domain)
+    deallocate(MOM_domain%mpp_domain)
+  endif
+  if (associated(MOM_domain%mpp_domain_d2)) then
+    if (invasive) call mpp_deallocate_domain(MOM_domain%mpp_domain_d2)
+    deallocate(MOM_domain%mpp_domain_d2)
+  endif
+  if (associated(MOM_domain%maskmap)) deallocate(MOM_domain%maskmap)
+
+end subroutine deallocate_domain_contents
 
 !> MOM_thread_affinity_set returns true if the number of openMP threads have been set to a value greater than 1.
 function MOM_thread_affinity_set()
@@ -2041,13 +2079,27 @@ end subroutine get_simple_array_j_ind
 
 !> Returns the global shape of h-point arrays
 subroutine get_global_shape(domain, niglobal, njglobal)
-  type(MOM_domain_type), intent(in)  :: domain   !< MOM domain
+  type(MOM_domain_type), intent(in)  :: domain   !< MOM domain from which to extract information
   integer,               intent(out) :: niglobal !< i-index global size of h-point arrays
   integer,               intent(out) :: njglobal !< j-index global size of h-point arrays
 
   niglobal = domain%niglobal
   njglobal = domain%njglobal
-
 end subroutine get_global_shape
+
+!> Returns arrays of the i- and j- sizes of the h-point computational domains for each
+!! element of the grid layout.  Any input values in the extent arrays are discarded, so
+!! they are effectively intent out despite their declared intent of inout.
+subroutine get_layout_extents(Domain, extent_i, extent_j)
+  type(MOM_domain_type), intent(in)  :: domain !< MOM domain from which to extract information
+  integer, dimension(:), allocatable, intent(inout) :: extent_i
+  integer, dimension(:), allocatable, intent(inout) :: extent_j
+
+  if (allocated(extent_i)) deallocate(extent_i)
+  if (allocated(extent_j)) deallocate(extent_j)
+  allocate(extent_i(domain%layout(1))) ; extent_i(:) = 0
+  allocate(extent_j(domain%layout(2))) ; extent_j(:) = 0
+  call mpp_get_domain_extents(domain%mpp_domain, extent_i, extent_j)
+end subroutine get_layout_extents
 
 end module MOM_domains
