@@ -3,27 +3,15 @@
 
 module MOM_transform_FMS
 
-use horiz_interp_mod, only : horiz_interp_type
+use MOM_array_transform, only : allocate_rotated_array, rotate_array
 use MOM_error_handler, only : MOM_error, FATAL
-use mpp_mod, only : mpp_chksum
+use horiz_interp_mod, only : horiz_interp_type
 use time_manager_mod, only : time_type
 use time_interp_external_mod, only : time_interp_external
 
-use MOM_array_transform, only : allocate_rotated_array, rotate_array
-
 implicit none ; private
 
-public rotated_mpp_chksum
 public rotated_time_interp_external
-
-!> Rotate and compute the FMS (mpp) checksum of a field
-interface rotated_mpp_chksum
-  module procedure rotated_mpp_chksum_real_0d
-  module procedure rotated_mpp_chksum_real_1d
-  module procedure rotated_mpp_chksum_real_2d
-  module procedure rotated_mpp_chksum_real_3d
-  module procedure rotated_mpp_chksum_real_4d
-end interface rotated_mpp_chksum
 
 !> Read a field based on model time, and rotate to the model domain
 interface rotated_time_interp_external
@@ -36,122 +24,6 @@ contains
 
 ! NOTE: No transformations are applied to the 0d and 1d field implementations,
 !   but are provided to maintain compatibility with the FMS interfaces.
-
-
-!> Compute the FMS (mpp) checksum of a scalar.
-!! This function is provided to support the full FMS mpp_chksum interface.
-function rotated_mpp_chksum_real_0d(field, pelist, mask_val, turns) &
-    result(chksum)
-  real, intent(in) :: field                   !> Input scalar
-  integer, optional, intent(in) :: pelist(:)  !> PE list of ranks to checksum
-  real, optional, intent(in) :: mask_val      !> FMS mask value
-  integer, optional, intent(in) :: turns      !> Number of quarter turns
-  integer :: chksum                           !> FMS checksum of scalar
-
-  if (present(turns)) &
-    call MOM_error(FATAL, "Rotation not supported for 0d fields.")
-
-  chksum = mpp_chksum(field, pelist=pelist, mask_val=mask_val)
-end function rotated_mpp_chksum_real_0d
-
-
-!> Compute the FMS (mpp) checksum of a 1d field.
-!! This function is provided to support the full FMS mpp_chksum interface.
-function rotated_mpp_chksum_real_1d(field, pelist, mask_val, turns) &
-    result(chksum)
-  real, intent(in) :: field(:)                !> Input field
-  integer, optional, intent(in) :: pelist(:)  !> PE list of ranks to checksum
-  real, optional, intent(in) :: mask_val      !> FMS mask value
-  integer, optional, intent(in) :: turns      !> Number of quarter-turns
-  integer :: chksum                           !> FMS checksum of field
-
-  if (present(turns)) &
-    call MOM_error(FATAL, "Rotation not supported for 1d fields.")
-
-  chksum = mpp_chksum(field, pelist=pelist, mask_val=mask_val)
-end function rotated_mpp_chksum_real_1d
-
-
-!> Compute the FMS (mpp) checksum of a rotated 2d field.
-function rotated_mpp_chksum_real_2d(field, pelist, mask_val, turns) &
-    result(chksum)
-  real, intent(in) :: field(:,:)              !> Unrotated input field
-  integer, optional, intent(in) :: pelist(:)  !> PE list of ranks to checksum
-  real, optional, intent(in) :: mask_val      !> FMS mask value
-  integer, optional, intent(in) :: turns      !> Number of quarter-turns
-  integer :: chksum                           !> FMS checksum of field
-
-  real, allocatable :: field_rot(:,:)
-  integer :: qturns
-
-  qturns = 0
-  if (present(turns)) &
-    qturns = modulo(turns, 4)
-
-  if (qturns == 0) then
-    chksum = mpp_chksum(field, pelist=pelist, mask_val=mask_val)
-  else
-    call allocate_rotated_array(field, [1,1], qturns, field_rot)
-    call rotate_array(field, qturns, field_rot)
-    chksum = mpp_chksum(field_rot, pelist=pelist, mask_val=mask_val)
-    deallocate(field_rot)
-  endif
-end function rotated_mpp_chksum_real_2d
-
-
-!> Compute the FMS (mpp) checksum of a rotated 3d field.
-function rotated_mpp_chksum_real_3d(field, pelist, mask_val, turns) &
-    result(chksum)
-  real, intent(in) :: field(:,:,:)            !> Unrotated input field
-  integer, optional, intent(in) :: pelist(:)  !> PE list of ranks to checksum
-  real, optional, intent(in) :: mask_val      !> FMS mask value
-  integer, optional, intent(in) :: turns      !> Number of quarter-turns
-  integer :: chksum                           !> FMS checksum of field
-
-  real, allocatable :: field_rot(:,:,:)
-  integer :: qturns
-
-  qturns = 0
-  if (present(turns)) &
-    qturns = modulo(turns, 4)
-
-  if (qturns == 0) then
-    chksum = mpp_chksum(field, pelist=pelist, mask_val=mask_val)
-  else
-    call allocate_rotated_array(field, [1,1,1], qturns, field_rot)
-    call rotate_array(field, qturns, field_rot)
-    chksum = mpp_chksum(field_rot, pelist=pelist, mask_val=mask_val)
-    deallocate(field_rot)
-  endif
-end function rotated_mpp_chksum_real_3d
-
-
-!> Compute the FMS (mpp) checksum of a rotated 4d field.
-function rotated_mpp_chksum_real_4d(field, pelist, mask_val, turns) &
-    result(chksum)
-  real, intent(in) :: field(:,:,:,:)          !> Unrotated input field
-  integer, optional, intent(in) :: pelist(:)  !> PE list of ranks to checksum
-  real, optional, intent(in) :: mask_val      !> FMS mask value
-  integer, optional, intent(in) :: turns      !> Number of quarter-turns
-  integer :: chksum                           !> FMS checksum of field
-
-  real, allocatable :: field_rot(:,:,:,:)
-  integer :: qturns
-
-  qturns = 0
-  if (present(turns)) &
-    qturns = modulo(turns, 4)
-
-  if (qturns == 0) then
-    chksum = mpp_chksum(field, pelist=pelist, mask_val=mask_val)
-  else
-    call allocate_rotated_array(field, [1,1,1,1], qturns, field_rot)
-    call rotate_array(field, qturns, field_rot)
-    chksum = mpp_chksum(field_rot, pelist=pelist, mask_val=mask_val)
-    deallocate(field_rot)
-  endif
-end function rotated_mpp_chksum_real_4d
-
 
 !> Read a scalar field based on model time
 !! This function is provided to support the full FMS time_interp_external

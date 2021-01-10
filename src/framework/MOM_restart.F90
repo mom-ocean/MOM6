@@ -3,10 +3,10 @@ module MOM_restart
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_checksums, only : chksum => rotated_field_chksum
 use MOM_domains, only : PE_here, num_PEs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_string_functions, only : lowercase
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : create_file, fieldtype, file_exists, open_file, close_file
 use MOM_io, only : MOM_read_data, read_data, MOM_write_field, read_field_chksum
@@ -14,9 +14,9 @@ use MOM_io, only : get_file_info, get_file_atts, get_file_fields, get_file_times
 use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc, get_filename_appendix
 use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
+use MOM_string_functions, only : lowercase
 use MOM_time_manager,  only : time_type, time_type_to_real, real_to_time
 use MOM_time_manager,  only : days_in_month, get_date, set_date
-use MOM_transform_FMS, only : chksum => rotated_mpp_chksum
 use MOM_verticalGrid,  only : verticalGrid_type
 
 implicit none ; private
@@ -874,7 +874,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
                                         ! this should be 2 Gb or less.
   integer :: start_var, next_var        ! The starting variables of the
                                         ! current and next files.
-  integer :: unit                       ! The mpp unit of the open file.
+  integer :: unit                       ! The I/O unit of the open file.
   integer :: m, nz, num_files, var_periods
   integer :: seconds, days, year, month, hour, minute
   character(len=8) :: hor_grid, z_grid, t_grid ! Variable grid info.
@@ -1086,7 +1086,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer :: sizes(7)
   integer :: ndim, nvar, natt, ntime, pos
 
-  integer :: unit(CS%max_fields) ! The mpp unit of all open files.
+  integer :: unit(CS%max_fields) ! The I/O units of all open files.
   character(len=200) :: unit_path(CS%max_fields) ! The file names.
   logical :: unit_is_global(CS%max_fields) ! True if the file is global.
 
@@ -1363,7 +1363,7 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
   type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
                                                   !! call to restart_init.
   integer, dimension(:), &
-               optional, intent(out) :: units     !< The mpp units of all opened files.
+               optional, intent(out) :: units     !< The I/O units of all opened files.
   character(len=*), dimension(:), &
                optional, intent(out) :: file_paths   !< The full paths to open files.
   logical, dimension(:), &
