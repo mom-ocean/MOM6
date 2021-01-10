@@ -1451,8 +1451,7 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
           ! Look for decomposed files using the I/O Layout.
           fexists = file_exists(filepath, G%Domain)
           if (fexists .and. (present(units))) &
-            call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
-                           domain=G%Domain%mpp_domain)
+            call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, MOM_domain=G%Domain)
           if (fexists .and. present(global_files)) global_files(n) = .false.
         endif
 

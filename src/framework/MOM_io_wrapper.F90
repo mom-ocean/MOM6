@@ -13,7 +13,7 @@ use fms_mod,              only : write_version_number, open_namelist_file, check
 use fms_io_mod,           only : file_exist, field_exist, field_size, read_data
 use fms_io_mod,           only : io_infra_end=>fms_io_exit, get_filename_appendix
 use mpp_domains_mod,      only : domain2d, CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
-use mpp_io_mod,           only : open_file=>mpp_open, close_file=>mpp_close
+use mpp_io_mod,           only : mpp_open, close_file=>mpp_close
 use mpp_io_mod,           only : write_metadata=>mpp_write_meta, write_field=>mpp_write
 use mpp_io_mod,           only : get_field_atts=>mpp_get_atts, mpp_attribute_exist
 use mpp_io_mod,           only : mpp_get_axes, axistype, get_axis_data=>mpp_get_axis_data
@@ -159,6 +159,34 @@ function FMS_file_exists(filename, domain, no_domain)
   FMS_file_exists = file_exist(filename, domain, no_domain)
 
 end function FMS_file_exists
+
+!> open_file opens a file for parallel or single-file I/O.
+subroutine open_file(unit, file, action, form, threading, fileset, nohdrs, domain, MOM_domain)
+  integer,                  intent(out) :: unit   !< The I/O unit for the opened file
+  character(len=*),         intent(in)  :: file   !< The name of the file being opened
+  integer,        optional, intent(in)  :: action !< A flag indicating whether the file can be read
+                                                  !! or written to and how to handle existing files.
+  integer,        optional, intent(in)  :: form   !< A flag indicating the format of a new file.  The
+                                                  !! default is ASCII_FILE, but NETCDF_FILE is also common.
+  integer,        optional, intent(in)  :: threading !< A flag indicating whether one (SINGLE_FILE)
+                                                  !! or multiple PEs (MULTIPLE) participate in I/O.
+                                                  !! With the default, the root PE does I/O.
+  integer,        optional, intent(in)  :: fileset !< A flag indicating whether multiple PEs doing I/O due
+                                                  !! to threading=MULTIPLE write to the same file (SINGLE_FILE)
+                                                  !! or to one file per PE (MULTIPLE, the default).
+  logical,        optional, intent(in)  :: nohdrs !< If nohdrs is .TRUE., headers are not written to
+                                                  !! ASCII files.  The default is .false.
+  type(domain2d), optional, intent(in)  :: domain !< A domain2d type that describes the decomposition
+  type(MOM_domain_type), optional, intent(in) :: MOM_Domain !< A MOM_Domain that describes the decomposition
+
+  if (present(MOM_Domain)) then
+    call mpp_open(unit, file, action=action, form=form, threading=threading, fileset=fileset, &
+                  nohdrs=nohdrs, domain=MOM_Domain%mpp_domain)
+  else
+    call mpp_open(unit, file, action=action, form=form, threading=threading, fileset=fileset, &
+                  nohdrs=nohdrs, domain=domain)
+  endif
+end subroutine open_file
 
 !> Field_exists returns true if the field indicated by field_name is present in the
 !! file file_name.  If file_name does not exist, it returns false.

@@ -138,7 +138,7 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
   if (one_file) then
     call open_file(unit, filename, OVERWRITE_FILE, NETCDF_FILE, threading=thread)
   else
-    call open_file(unit, filename, OVERWRITE_FILE, NETCDF_FILE, domain=Domain%mpp_domain)
+    call open_file(unit, filename, OVERWRITE_FILE, NETCDF_FILE, MOM_domain=Domain)
   endif
 
 ! Define the coordinates.
@@ -377,7 +377,7 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
     if (one_file) then
       call open_file(unit, filename, APPEND_FILE, NETCDF_FILE, threading=thread)
     else
-      call open_file(unit, filename, APPEND_FILE, NETCDF_FILE, domain=Domain%mpp_domain)
+      call open_file(unit, filename, APPEND_FILE, NETCDF_FILE, MOM_domain=Domain)
     endif
     if (unit < 0) return
 
