@@ -15,7 +15,7 @@ use MOM_string_functions, only : slasher
 use mpp_domains_mod, only : MOM_define_layout => mpp_define_layout, mpp_get_boundary
 use mpp_domains_mod, only : MOM_define_io_domain => mpp_define_io_domain
 use mpp_domains_mod, only : MOM_define_domain => mpp_define_domains
-use mpp_domains_mod, only : domain2D, domain1D, mpp_get_data_domain
+use mpp_domains_mod, only : domain2D, domain1D, mpp_get_data_domain, mpp_get_domain_components
 use mpp_domains_mod, only : mpp_get_compute_domain, mpp_get_global_domain
 use mpp_domains_mod, only : mpp_get_domain_extents, mpp_deallocate_domain
 use mpp_domains_mod, only : global_field_sum => mpp_global_sum
@@ -37,7 +37,7 @@ use fms_affinity_mod, only : fms_affinity_init, fms_affinity_set, fms_affinity_g
 implicit none ; private
 
 public :: MOM_domains_init, MOM_infra_init, MOM_infra_end, get_domain_extent, get_domain_extent_dsamp2
-public :: create_MOM_domain, clone_MOM_domain
+public :: create_MOM_domain, clone_MOM_domain, get_domain_components
 public :: deallocate_MOM_domain, deallocate_domain_contents
 public :: MOM_define_domain, MOM_define_layout, MOM_define_io_domain
 public :: pass_var, pass_vector, PE_here, root_PE, num_PEs
@@ -52,7 +52,7 @@ public :: start_group_pass, complete_group_pass
 public :: compute_block_extent, get_global_shape, get_layout_extents
 public :: MOM_thread_affinity_set, set_MOM_thread_affinity
 public :: get_simple_array_i_ind, get_simple_array_j_ind
-public :: domain2D
+public :: domain2D, domain1D
 
 !> Do a halo update on an array
 interface pass_var
@@ -104,7 +104,12 @@ interface clone_MOM_domain
   module procedure clone_MD_to_MD, clone_MD_to_d2D
 end interface clone_MOM_domain
 
-!> The MOM_domain_type contains information about the domain decompositoin.
+!> Extract the 1-d domain components from a MOM_domain or domain2d
+interface get_domain_components
+  module procedure get_domain_components_MD, get_domain_components_d2D
+end interface get_domain_components
+
+!> The MOM_domain_type contains information about the domain decomposition.
 type, public :: MOM_domain_type
   type(domain2D), pointer :: mpp_domain => NULL() !< The FMS domain with halos
                                 !! on this processor, centered at h points.
@@ -1708,6 +1713,24 @@ subroutine set_MOM_thread_affinity(ocean_nthreads, ocean_hyper_thread)
   !$ write(6,*) "MOM_domains_mod OMPthreading ", fms_affinity_get(), omp_get_thread_num(), omp_get_num_threads()
   !$ flush(6)
 end subroutine set_MOM_thread_affinity
+
+!> This subroutine retrieves the 1-d domains that make up the 2d-domain in a MOM_domain
+subroutine get_domain_components_MD(MOM_dom, x_domain, y_domain)
+  type(MOM_domain_type),    intent(in)    :: MOM_dom  !< The MOM_domain whose contents are being extracted
+  type(domain1D), optional, intent(inout) :: x_domain !< The 1-d logical x-domain
+  type(domain1D), optional, intent(inout) :: y_domain !< The 1-d logical y-domain
+
+  call mpp_get_domain_components(MOM_dom%mpp_domain, x_domain, y_domain)
+end subroutine get_domain_components_MD
+
+!> This subroutine retrieves the 1-d domains that make up a 2d-domain
+subroutine get_domain_components_d2D(domain, x_domain, y_domain)
+  type(domain2D),           intent(in)    :: domain  !< The 2D domain whose contents are being extracted
+  type(domain1D), optional, intent(inout) :: x_domain !< The 1-d logical x-domain
+  type(domain1D), optional, intent(inout) :: y_domain !< The 1-d logical y-domain
+
+  call mpp_get_domain_components(domain, x_domain, y_domain)
+end subroutine get_domain_components_d2D
 
 !> clone_MD_to_MD copies one MOM_domain_type into another, while allowing
 !! some properties of the new type to differ from the original one.
