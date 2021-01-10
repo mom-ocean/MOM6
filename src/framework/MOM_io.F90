@@ -15,9 +15,8 @@ use MOM_verticalGrid,     only : verticalGrid_type
 
 use ensemble_manager_mod, only : get_ensemble_id
 use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
-use fms_io_mod,           only : file_exist, field_size, read_data
-use fms_io_mod,           only : field_exists=>field_exist, io_infra_end=>fms_io_exit
-use fms_io_mod,           only : get_filename_appendix=>get_filename_appendix
+use fms_io_mod,           only : file_exist, field_exist, field_size, read_data
+use fms_io_mod,           only : io_infra_end=>fms_io_exit, get_filename_appendix
 use mpp_domains_mod,      only : domain1d, domain2d, mpp_get_domain_components
 use mpp_domains_mod,      only : CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
 use mpp_io_mod,           only : open_file => mpp_open, close_file => mpp_close
@@ -862,7 +861,7 @@ end function MOM_file_exists
 
 !> Returns true if the named file or its domain-decomposed variant exists.
 function FMS_file_exists(filename, domain, no_domain)
-  character(len=*), intent(in)         :: filename  !< The name of the file being inquired about
+  character(len=*),         intent(in) :: filename  !< The name of the file being inquired about
   type(domain2d), optional, intent(in) :: domain    !< The mpp domain2d that describes the decomposition
   logical,        optional, intent(in) :: no_domain !< This file does not use domain decomposition
 ! This function uses the fms_io function file_exist to determine whether
@@ -874,6 +873,23 @@ function FMS_file_exists(filename, domain, no_domain)
 
 end function FMS_file_exists
 
+!> Field_exists returns true if the field indicated by field_name is present in the
+!! file file_name.  If file_name does not exist, it returns false.
+function field_exists(filename, field_name, domain, no_domain, MOM_domain)
+  character(len=*),                 intent(in) :: filename   !< The name of the file being inquired about
+  character(len=*),                 intent(in) :: field_name !< The name of the field being sought
+  type(domain2d), target, optional, intent(in) :: domain     !< A domain2d type that describes the decomposition
+  logical,                optional, intent(in) :: no_domain  !< This file does not use domain decomposition
+  type(MOM_domain_type),  optional, intent(in) :: MOM_Domain !< A MOM_Domain that describes the decomposition
+  logical                                      :: field_exists !< True if filename exists and field_name is in filename
+
+  if (present(MOM_domain)) then
+    field_exists = field_exist(filename, field_name, domain=MOM_domain%mpp_domain, no_domain=no_domain)
+  else
+    field_exists = field_exist(filename, field_name, domain=domain, no_domain=no_domain)
+  endif
+
+end function field_exists
 
 !> This function uses the fms_io function read_data to read a scalar
 !! data field named "fieldname" from file "filename".
