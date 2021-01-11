@@ -2115,8 +2115,10 @@ end subroutine get_global_shape
 !! they are effectively intent out despite their declared intent of inout.
 subroutine get_layout_extents(Domain, extent_i, extent_j)
   type(MOM_domain_type), intent(in)  :: domain !< MOM domain from which to extract information
-  integer, dimension(:), allocatable, intent(inout) :: extent_i
-  integer, dimension(:), allocatable, intent(inout) :: extent_j
+  integer, dimension(:), allocatable, intent(inout) :: extent_i  !< The number of points in the
+                                               !! i-direction in each i-row of the layout
+  integer, dimension(:), allocatable, intent(inout) :: extent_j  !< The number of points in the
+                                               !! j-direction in each j-row of the layout
 
   if (allocated(extent_i)) deallocate(extent_i)
   if (allocated(extent_j)) deallocate(extent_j)
