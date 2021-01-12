@@ -3,32 +3,22 @@ module MOM_horizontal_regridding
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_debugging, only : hchksum
-use MOM_coms, only : max_across_PEs, min_across_PEs
-use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
-use MOM_cpu_clock, only :  CLOCK_ROUTINE, CLOCK_LOOP
-use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
-use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE, AGRID
+use MOM_debugging,     only : hchksum
+use MOM_coms,          only : max_across_PEs, min_across_PEs, sum_across_PEs, broadcast
+use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_LOOP
+use MOM_domains,       only : pass_var
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
-use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
-use MOM_file_parser, only : log_version
-use MOM_get_input, only : directories
-use MOM_grid, only : ocean_grid_type, isPointInCell
-use MOM_io, only : close_file, fieldtype, file_exists
-use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
-use MOM_io, only : slasher, vardesc, write_field
-use MOM_string_functions, only : uppercase
-use MOM_time_manager, only : time_type, get_external_field_size
-use MOM_time_manager, only : init_external_field
-use MOM_time_manager, only : get_external_field_axes, get_external_field_missing
+use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
+use MOM_grid,          only : ocean_grid_type
+use MOM_io_wrapper,    only : axistype, get_axis_data
+use MOM_time_manager,  only : time_type
+use MOM_time_manager,  only : init_external_field, get_external_field_size
+use MOM_time_manager,  only : get_external_field_axes, get_external_field_missing
 use MOM_transform_FMS, only : time_interp_external => rotated_time_interp_external
-use MOM_variables, only : thermo_var_ptrs
 
-use mpp_io_mod, only : axistype, mpp_get_axis_data
-use mpp_mod, only          : mpp_broadcast, mpp_sync, mpp_sync_self, mpp_max
-use horiz_interp_mod, only : horiz_interp_new, horiz_interp, horiz_interp_type
-use horiz_interp_mod, only : horiz_interp_init, horiz_interp_del
+use horiz_interp_mod,  only : horiz_interp_new, horiz_interp, horiz_interp_type
+use horiz_interp_mod,  only : horiz_interp_init, horiz_interp_del
 
 use netcdf
 
@@ -463,7 +453,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   endif
 
   max_depth = maxval(G%bathyT)
-  call mpp_max(max_depth)
+  call max_across_PEs(max_depth)
 
   if (z_edges_in(kd+1)<max_depth) z_edges_in(kd+1)=max_depth
   roundoff = 3.0*EPSILON(missing_value)
@@ -521,9 +511,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
           endif
        endif
 
-       call mpp_sync()
-       call mpp_broadcast(tr_inp, id*jdp, root_PE())
-       call mpp_sync_self()
+       call broadcast(tr_inp, id*jdp, blocking=.true.)
 
        do j=1,jdp
          do i=1,id
@@ -720,15 +708,15 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   if (PRESENT(spongeOngrid)) spongeDataOngrid=spongeOngrid
   if (.not. spongeDataOngrid) then
     allocate(lon_in(id),lat_in(jd))
-    call mpp_get_axis_data(axes_data(1), lon_in)
-    call mpp_get_axis_data(axes_data(2), lat_in)
+    call get_axis_data(axes_data(1), lon_in)
+    call get_axis_data(axes_data(2), lat_in)
   endif
 
   allocate(z_in(kd),z_edges_in(kd+1))
 
   allocate(tr_z(isd:ied,jsd:jed,kd), mask_z(isd:ied,jsd:jed,kd))
 
-  call mpp_get_axis_data(axes_data(3), z_in)
+  call get_axis_data(axes_data(3), z_in)
 
   if (present(m_to_Z)) then ; do k=1,kd ; z_in(k) = m_to_Z * z_in(k) ; enddo ; endif
 
@@ -776,7 +764,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
 
   max_depth = maxval(G%bathyT)
-  call mpp_max(max_depth)
+  call max_across_PEs(max_depth)
 
   if (z_edges_in(kd+1)<max_depth) z_edges_in(kd+1)=max_depth
 
@@ -813,9 +801,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
         endif
       endif
 
-      call mpp_sync()
-      call mpp_broadcast(tr_inp, id*jdp, root_PE())
-      call mpp_sync_self()
+      call broadcast(tr_inp, id*jdp, blocking=.true.)
 
       mask_in=0.0
 
