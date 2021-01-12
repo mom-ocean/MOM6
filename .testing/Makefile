@@ -328,6 +328,40 @@ $(DEPS)/Makefile: ../ac/deps/Makefile
 	mkdir -p $(@D)
 	cp $< $@
 
+#---
+# The following block does a non-library build of a coupled driver interface to MOM, along with everything below it.
+# This simply checks that we have not broken the ability to compile. This is not a means to build a complete coupled executable.
+# Todo: 
+# - avoid re-building FMS and MOM6 src by re-using existing object/mod files
+# - use autoconf rather than mkmf templates
+MK_TEMPLATE ?= ../../$(DEPS)/mkmf/templates/ncrc-gnu.mk
+# NUOPC driver
+build/nuopc/Makefile: ../config_src/nuopc_driver $(MOM_SOURCE)
+	mkdir -p $(@D)
+	cd $(@D) \
+	  && $(MOM_ENV) ../../$(DEPS)/mkmf/bin/list_paths -l ../../$(DEPS)/fms/src ../../../config_src/nuopc_driver ../../../config_src/dynamic_symmetric ../../../src/ ../../../config_src/external \
+	  && $(MOM_ENV) ../../$(DEPS)/mkmf/bin/mkmf -t $(MK_TEMPLATE) -p MOM6 path_names
+build/nuopc/mom_ocean_model_nuopc.o: build/nuopc/Makefile
+	cd $(@D) && make $(@F)
+check_mom6_api_nuopc: build/nuopc/mom_ocean_model_nuopc.o
+# GFDL coupled driver
+build/coupled/Makefile: ../config_src/coupled_driver $(MOM_SOURCE)
+	mkdir -p $(@D)
+	cd $(@D) \
+	  && $(MOM_ENV) ../../$(DEPS)/mkmf/bin/list_paths -l ../../$(DEPS)/fms/src ../../../config_src/coupled_driver ../../../config_src/dynamic_symmetric ../../../src/ ../../../config_src/external \
+	  && $(MOM_ENV) ../../$(DEPS)/mkmf/bin/mkmf -t $(MK_TEMPLATE) -p MOM6 path_names
+build/coupled/ocean_model_MOM.o: build/coupled/Makefile
+	cd $(@D) && make $(@F)
+check_mom6_api_coupled: build/coupled/ocean_model_MOM.o
+# MCT driver
+build/mct/Makefile: ../config_src/mct_driver $(MOM_SOURCE)
+	mkdir -p $(@D)
+	cd $(@D) \
+	  && $(MOM_ENV) ../../$(DEPS)/mkmf/bin/list_paths -l ../../$(DEPS)/fms/src ../../../config_src/mct_driver ../../../config_src/dynamic_symmetric ../../../src/ ../../../config_src/external \
+	  && $(MOM_ENV) ../../$(DEPS)/mkmf/bin/mkmf -t $(MK_TEMPLATE) -p MOM6 path_names
+build/mct/mom_ocean_model_mct.o: build/mct/Makefile
+	cd $(@D) && make $(@F)
+check_mom6_api_mct: build/mct/mom_ocean_model_mct.o
 
 #---
 # Python preprocessing
