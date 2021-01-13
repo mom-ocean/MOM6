@@ -4957,16 +4957,16 @@ subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart
   type(OBC_segment_type), pointer :: segment=>NULL()
 
   if (.not. associated(OBC)) &
-       call MOM_error(FATAL, "open_boundary_register_restarts: Called with "//&
+    call MOM_error(FATAL, "open_boundary_register_restarts: Called with "//&
                       "uninitialized OBC control structure")
 
   if (associated(OBC%rx_normal) .or. associated(OBC%ry_normal) .or. &
       associated(OBC%rx_oblique) .or. associated(OBC%ry_oblique) .or. associated(OBC%cff_normal)) &
-       call MOM_error(FATAL, "open_boundary_register_restarts: Restart "//&
+    call MOM_error(FATAL, "open_boundary_register_restarts: Restart "//&
                       "arrays were previously allocated")
 
   if (associated(OBC%tres_x) .or. associated(OBC%tres_y)) &
-       call MOM_error(FATAL, "open_boundary_register_restarts: Restart "//&
+    call MOM_error(FATAL, "open_boundary_register_restarts: Restart "//&
                       "arrays were previously allocated")
 
   ! *** This is a temporary work around for restarts with OBC segments.
@@ -5187,8 +5187,8 @@ subroutine adjustSegmentEtaToFitBathymetry(G, GV, US, segment,fld)
     ! previous call to open_boundary_impose_normal_slope
     do k=nz+1,1,-1
       if (-eta(i,j,k) > segment%Htot(i,j)*GV%H_to_Z + hTolerance) then
-         eta(i,j,k) = -segment%Htot(i,j)*GV%H_to_Z
-         contractions = contractions + 1
+        eta(i,j,k) = -segment%Htot(i,j)*GV%H_to_Z
+        contractions = contractions + 1
       endif
     enddo
 
@@ -5196,27 +5196,27 @@ subroutine adjustSegmentEtaToFitBathymetry(G, GV, US, segment,fld)
       ! Collapse layers to thinnest possible if the thickness less than
       ! the thinnest possible (or negative).
       if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_Z)) then
-         eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_Z
-         segment%field(fld)%dz_src(i,j,k) = GV%Angstrom_Z
+        eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_Z
+        segment%field(fld)%dz_src(i,j,k) = GV%Angstrom_Z
       else
-         segment%field(fld)%dz_src(i,j,k) = (eta(i,j,K) - eta(i,j,K+1))
+        segment%field(fld)%dz_src(i,j,k) = (eta(i,j,K) - eta(i,j,K+1))
       endif
     enddo
 
     !   The whole column is dilated to accommodate deeper topography than
     ! the bathymetry would indicate.
     if (-eta(i,j,nz+1) < (segment%Htot(i,j) * GV%H_to_Z) - hTolerance) then
-       dilations = dilations + 1
-       ! expand bottom-most cell only
-       eta(i,j,nz+1) = -(segment%Htot(i,j) * GV%H_to_Z)
-       segment%field(fld)%dz_src(i,j,nz)= eta(i,j,nz)-eta(i,j,nz+1)
-       ! if (eta(i,j,1) <= eta(i,j,nz+1)) then
-       !   do k=1,nz ; segment%field(fld)%dz_src(i,j,k) = (eta(i,j,1) + G%bathyT(i,j)) / real(nz) ; enddo
-       ! else
-       !   dilate = (eta(i,j,1) + G%bathyT(i,j)) / (eta(i,j,1) - eta(i,j,nz+1))
-       !   do k=1,nz ; segment%field(fld)%dz_src(i,j,k) = segment%field(fld)%dz_src(i,j,k) * dilate ; enddo
-       ! endif
-       !do k=nz,2,-1 ; eta(i,j,K) = eta(i,j,K+1) + segment%field(fld)%dz_src(i,j,k) ; enddo
+      dilations = dilations + 1
+      ! expand bottom-most cell only
+      eta(i,j,nz+1) = -(segment%Htot(i,j) * GV%H_to_Z)
+      segment%field(fld)%dz_src(i,j,nz)= eta(i,j,nz)-eta(i,j,nz+1)
+      ! if (eta(i,j,1) <= eta(i,j,nz+1)) then
+      !   do k=1,nz ; segment%field(fld)%dz_src(i,j,k) = (eta(i,j,1) + G%bathyT(i,j)) / real(nz) ; enddo
+      ! else
+      !   dilate = (eta(i,j,1) + G%bathyT(i,j)) / (eta(i,j,1) - eta(i,j,nz+1))
+      !   do k=1,nz ; segment%field(fld)%dz_src(i,j,k) = segment%field(fld)%dz_src(i,j,k) * dilate ; enddo
+      ! endif
+      !do k=nz,2,-1 ; eta(i,j,K) = eta(i,j,K+1) + segment%field(fld)%dz_src(i,j,k) ; enddo
     endif
     ! Now convert thicknesses to units of H.
     do k=1,nz
@@ -5239,8 +5239,6 @@ subroutine adjustSegmentEtaToFitBathymetry(G, GV, US, segment,fld)
   !    call MOM_error(WARNING, 'adjustEtaToFitBathymetry: '//mesg)
   ! endif
   deallocate(eta)
-
-
 
 end subroutine adjustSegmentEtaToFitBathymetry
 

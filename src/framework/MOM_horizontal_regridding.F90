@@ -461,86 +461,84 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     write(laynum,'(I8)') k ; laynum = adjustl(laynum)
     mask_in = 0.0
     if (is_ongrid) then
-       start(1) = is+G%HI%idg_offset ; start(2) = js+G%HI%jdg_offset ; start(3) = k
-       count(1) = ie-is+1 ; count(2) = je-js+1; count(3) = 1
-       rcode = NF90_GET_VAR(ncid,varid, tr_in, start, count)
-       if (rcode /= 0) call MOM_error(FATAL,"hinterp_and_extract_from_Fie: "//&
-            "error reading level "//trim(laynum)//" of variable "//&
-            trim(varnam)//" in file "// trim(filename))
+      start(1) = is+G%HI%idg_offset ; start(2) = js+G%HI%jdg_offset ; start(3) = k
+      count(1) = ie-is+1 ; count(2) = je-js+1; count(3) = 1
+      rcode = NF90_GET_VAR(ncid,varid, tr_in, start, count)
+      if (rcode /= 0) call MOM_error(FATAL,"hinterp_and_extract_from_Fie: "//&
+           "error reading level "//trim(laynum)//" of variable "//&
+           trim(varnam)//" in file "// trim(filename))
 
-       do j=js,je
-         do i=is,ie
-           if (abs(tr_in(i,j)-missing_value) > abs(roundoff*missing_value)) then
-              mask_in(i,j) = 1.0
-              tr_in(i,j) = (tr_in(i,j)*scale_factor+add_offset) * conversion
-           else
-              tr_in(i,j) = missing_value
-           endif
-         enddo
-       enddo
+      do j=js,je
+        do i=is,ie
+          if (abs(tr_in(i,j)-missing_value) > abs(roundoff*missing_value)) then
+            mask_in(i,j) = 1.0
+            tr_in(i,j) = (tr_in(i,j)*scale_factor+add_offset) * conversion
+          else
+            tr_in(i,j) = missing_value
+          endif
+        enddo
+      enddo
 
     else
-       if (is_root_pe()) then
-          start = 1 ; start(3) = k ; count(:) = 1 ; count(1) = id ; count(2) = jd
-          rcode = NF90_GET_VAR(ncid,varid, tr_in, start, count)
-          if (rcode /= 0) call MOM_error(FATAL,"hinterp_and_extract_from_Fie: "//&
-               "error reading level "//trim(laynum)//" of variable "//&
-               trim(varnam)//" in file "// trim(filename))
+      if (is_root_pe()) then
+        start = 1 ; start(3) = k ; count(:) = 1 ; count(1) = id ; count(2) = jd
+        rcode = NF90_GET_VAR(ncid,varid, tr_in, start, count)
+        if (rcode /= 0) call MOM_error(FATAL,"hinterp_and_extract_from_Fie: "//&
+             "error reading level "//trim(laynum)//" of variable "//&
+             trim(varnam)//" in file "// trim(filename))
 
-          if (add_np) then
-             last_row(:)=tr_in(:,jd); pole=0.0;npole=0.0
-             do i=1,id
-               if (abs(tr_in(i,jd)-missing_value) > abs(roundoff*missing_value)) then
-                  pole = pole+last_row(i)
-                  npole = npole+1.0
-               endif
-             enddo
-             if (npole > 0) then
-                pole=pole/npole
-             else
-                pole=missing_value
-             endif
-             tr_inp(:,1:jd) = tr_in(:,:)
-             tr_inp(:,jdp) = pole
+        if (add_np) then
+          last_row(:)=tr_in(:,jd); pole=0.0;npole=0.0
+          do i=1,id
+            if (abs(tr_in(i,jd)-missing_value) > abs(roundoff*missing_value)) then
+              pole = pole+last_row(i)
+              npole = npole+1.0
+            endif
+          enddo
+          if (npole > 0) then
+            pole=pole/npole
           else
-             tr_inp(:,:) = tr_in(:,:)
+            pole=missing_value
           endif
-       endif
+          tr_inp(:,1:jd) = tr_in(:,:)
+          tr_inp(:,jdp) = pole
+        else
+          tr_inp(:,:) = tr_in(:,:)
+        endif
+      endif
 
-       call broadcast(tr_inp, id*jdp, blocking=.true.)
+      call broadcast(tr_inp, id*jdp, blocking=.true.)
 
-       do j=1,jdp
-         do i=1,id
-           if (abs(tr_inp(i,j)-missing_value) > abs(roundoff*missing_value)) then
-              mask_in(i,j) = 1.0
-              tr_inp(i,j) = (tr_inp(i,j)*scale_factor+add_offset) * conversion
-           else
-              tr_inp(i,j) = missing_value
-           endif
-         enddo
-       enddo
+      do j=1,jdp
+        do i=1,id
+          if (abs(tr_inp(i,j)-missing_value) > abs(roundoff*missing_value)) then
+            mask_in(i,j) = 1.0
+            tr_inp(i,j) = (tr_inp(i,j)*scale_factor+add_offset) * conversion
+          else
+            tr_inp(i,j) = missing_value
+          endif
+        enddo
+      enddo
 
     endif
 
-
-
 !   call fms routine horiz_interp to interpolate input level data to model horizontal grid
     if (.not. is_ongrid) then
-       if (k == 1) then
-          call horiz_interp_new(Interp,x_in,y_in,lon_out(is:ie,js:je),lat_out(is:ie,js:je), &
-               interp_method='bilinear',src_modulo=.true.)
-       endif
+      if (k == 1) then
+        call horiz_interp_new(Interp,x_in,y_in,lon_out(is:ie,js:je),lat_out(is:ie,js:je), &
+              interp_method='bilinear',src_modulo=.true.)
+      endif
 
-       if (debug) then
-          call myStats(tr_inp,missing_value, is,ie,js,je,k,'Tracer from file')
-       endif
+      if (debug) then
+        call myStats(tr_inp,missing_value, is,ie,js,je,k,'Tracer from file')
+      endif
     endif
 
     tr_out(:,:) = 0.0
     if (is_ongrid) then
-       tr_out(is:ie,js:je)=tr_in(is:ie,js:je)
+      tr_out(is:ie,js:je)=tr_in(is:ie,js:je)
     else
-       call horiz_interp(Interp,tr_inp,tr_out(is:ie,js:je), missing_value=missing_value, new_missing_handle=.true.)
+      call horiz_interp(Interp,tr_inp,tr_out(is:ie,js:je), missing_value=missing_value, new_missing_handle=.true.)
     endif
 
     mask_out=1.0
@@ -575,14 +573,14 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 
     ! Horizontally homogenize data to produce perfectly "flat" initial conditions
     if (PRESENT(homogenize)) then
-       if (homogenize) then
-          call sum_across_PEs(nPoints)
-          call sum_across_PEs(varAvg)
-          if (nPoints>0) then
-             varAvg = varAvg/real(nPoints)
-          endif
-          tr_out(:,:) = varAvg
-       endif
+      if (homogenize) then
+        call sum_across_PEs(nPoints)
+        call sum_across_PEs(varAvg)
+        if (nPoints>0) then
+          varAvg = varAvg/real(nPoints)
+        endif
+        tr_out(:,:) = varAvg
+      endif
     endif
 
     ! tr_out contains input z-space data on the model grid with missing values
