@@ -1571,7 +1571,7 @@ subroutine create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar, lay
     if (io_layout(1) == 0) then
       MOM_dom%io_layout(1) = layout(1)
     elseif (io_layout(1) > 1) then
-      MOM_dom%layout(1) = io_layout(1)
+      MOM_dom%io_layout(1) = io_layout(1)
       if (modulo(layout(1), io_layout(1)) /= 0) then
         write(mesg,'("MOM_domains_init: The i-direction I/O-layout, IO_LAYOUT(1)=",i4, &
               &", does not evenly divide the i-direction layout, NIPROC=,",i4,".")') io_layout(1), layout(1)
@@ -1582,7 +1582,7 @@ subroutine create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar, lay
     if (io_layout(2) == 0) then
       MOM_dom%io_layout(2) = layout(2)
     elseif (io_layout(2) > 1) then
-      MOM_dom%layout(2) = io_layout(2)
+      MOM_dom%io_layout(2) = io_layout(2)
       if (modulo(layout(2), io_layout(2)) /= 0) then
         write(mesg,'("MOM_domains_init: The j-direction I/O-layout, IO_LAYOUT(2)=",i4, &
               &", does not evenly divide the j-direction layout, NJPROC=,",i4,".")') io_layout(2), layout(2)
