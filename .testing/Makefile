@@ -226,7 +226,9 @@ build/asymmetric/Makefile: MOM_ENV=$(PATH_FMS) $(ASYMMETRIC_FCFLAGS) $(MOM_LDFLA
 build/repro/Makefile: MOM_ENV=$(PATH_FMS) $(REPRO_FCFLAGS) $(MOM_LDFLAGS)
 build/openmp/Makefile: MOM_ENV=$(PATH_FMS) $(OPENMP_FCFLAGS) $(MOM_LDFLAGS)
 build/target/Makefile: MOM_ENV=$(PATH_FMS) $(TARGET_FCFLAGS) $(MOM_LDFLAGS)
-
+build/coupled/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(SYMMETRIC_LDFLAGS)
+build/nuopc/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(SYMMETRIC_LDFLAGS)
+build/mct/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(SYMMETRIC_LDFLAGS)
 
 # Configure script flags
 build/symmetric/Makefile: MOM_ACFLAGS=
@@ -234,7 +236,9 @@ build/asymmetric/Makefile: MOM_ACFLAGS=--enable-asymmetric
 build/repro/Makefile: MOM_ACFLAGS=
 build/openmp/Makefile: MOM_ACFLAGS=--enable-openmp
 build/target/Makefile: MOM_ACFLAGS=
-
+build/coupled/Makefile: MOM_ACFLAGS=--with-driver=coupled_driver
+build/nuopc/Makefile: MOM_ACFLAGS=--with-driver=nuopc_driver
+build/mct/Makefile: MOM_ACFLAGS=--with-driver=mct_driver
 
 # Fetch regression target source code
 build/target/Makefile: | $(TARGET_CODEBASE)
@@ -336,29 +340,14 @@ $(DEPS)/Makefile: ../ac/deps/Makefile
 # - use autoconf rather than mkmf templates
 MK_TEMPLATE ?= ../../$(DEPS)/mkmf/templates/ncrc-gnu.mk
 # NUOPC driver
-build/nuopc/Makefile: ../config_src/nuopc_driver $(MOM_SOURCE)
-	mkdir -p $(@D)
-	cd $(@D) \
-	  && $(MOM_ENV) ../../$(DEPS)/mkmf/bin/list_paths -l ../../$(DEPS)/fms/src ../../../config_src/nuopc_driver ../../../config_src/dynamic_symmetric ../../../src/ ../../../config_src/external \
-	  && $(MOM_ENV) ../../$(DEPS)/mkmf/bin/mkmf -t $(MK_TEMPLATE) -p MOM6 path_names
 build/nuopc/mom_ocean_model_nuopc.o: build/nuopc/Makefile
 	cd $(@D) && make $(@F)
 check_mom6_api_nuopc: build/nuopc/mom_ocean_model_nuopc.o
 # GFDL coupled driver
-build/coupled/Makefile: ../config_src/coupled_driver $(MOM_SOURCE)
-	mkdir -p $(@D)
-	cd $(@D) \
-	  && $(MOM_ENV) ../../$(DEPS)/mkmf/bin/list_paths -l ../../$(DEPS)/fms/src ../../../config_src/coupled_driver ../../../config_src/dynamic_symmetric ../../../src/ ../../../config_src/external \
-	  && $(MOM_ENV) ../../$(DEPS)/mkmf/bin/mkmf -t $(MK_TEMPLATE) -p MOM6 path_names
 build/coupled/ocean_model_MOM.o: build/coupled/Makefile
 	cd $(@D) && make $(@F)
 check_mom6_api_coupled: build/coupled/ocean_model_MOM.o
 # MCT driver
-build/mct/Makefile: ../config_src/mct_driver $(MOM_SOURCE)
-	mkdir -p $(@D)
-	cd $(@D) \
-	  && $(MOM_ENV) ../../$(DEPS)/mkmf/bin/list_paths -l ../../$(DEPS)/fms/src ../../../config_src/mct_driver ../../../config_src/dynamic_symmetric ../../../src/ ../../../config_src/external \
-	  && $(MOM_ENV) ../../$(DEPS)/mkmf/bin/mkmf -t $(MK_TEMPLATE) -p MOM6 path_names
 build/mct/mom_ocean_model_mct.o: build/mct/Makefile
 	cd $(@D) && make $(@F)
 check_mom6_api_mct: build/mct/mom_ocean_model_mct.o

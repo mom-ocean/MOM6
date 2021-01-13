@@ -48,6 +48,12 @@ AC_ARG_ENABLE([asymmetric],
 AS_IF([test "$enable_asymmetric" = yes],
   [MEM_LAYOUT=${srcdir}/config_src/dynamic])
 
+# Default to solo_driver
+DRIVER_DIR=${srcdir}/config_src/solo_driver
+AC_ARG_WITH([driver],
+  AS_HELP_STRING([--with-driver=coupled_driver|solo_driver], [Select directory for driver source code]))
+AS_IF([test "x$with_driver" != "x"],
+  [DRIVER_DIR=${srcdir}/config_src/${with_driver}])
 
 # TODO: Rather than point to a pre-configured header file, autoconf could be
 # used to configure a header based on a template.
@@ -210,10 +216,10 @@ AS_IF([test -z "$MKMF"], [
 AC_CONFIG_COMMANDS([path_names],
   [list_paths -l \
     ${srcdir}/src \
-    ${srcdir}/config_src/solo_driver \
     ${srcdir}/config_src/ext* \
+    ${DRIVER_DIR} \
     ${MEM_LAYOUT}
-], [MEM_LAYOUT=$MEM_LAYOUT])
+], [MEM_LAYOUT=$MEM_LAYOUT DRIVER_DIR=$DRIVER_DIR])
 
 
 AC_CONFIG_COMMANDS([Makefile.mkmf],
