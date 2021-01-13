@@ -32,6 +32,7 @@ program MOM_main
   use MOM,                 only : extract_surface_state, finish_MOM_initialization
   use MOM,                 only : get_MOM_state_elements, MOM_state_is_synchronized
   use MOM,                 only : step_offline
+  use MOM_coms,            only : Set_PElist
   use MOM_domains,         only : MOM_infra_init, MOM_infra_end
   use MOM_error_handler,   only : MOM_error, MOM_mesg, WARNING, FATAL, is_root_pe
   use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
@@ -41,6 +42,7 @@ program MOM_main
   use MOM_forcing_type,    only : mech_forcing_diags, MOM_forcing_chksum, MOM_mech_forcing_chksum
   use MOM_get_input,       only : directories
   use MOM_grid,            only : ocean_grid_type
+  use MOM_interpolate,     only : time_interp_external_init
   use MOM_io,              only : file_exists, open_file, close_file
   use MOM_io,              only : check_nml_error, io_infra_init, io_infra_end
   use MOM_io,              only : APPEND_FILE, ASCII_FILE, READONLY_FILE, SINGLE_FILE
@@ -64,8 +66,6 @@ program MOM_main
   use MOM_get_input,       only : get_MOM_input
   use ensemble_manager_mod, only : ensemble_manager_init, get_ensemble_size
   use ensemble_manager_mod, only : ensemble_pelist_setup
-  use mpp_mod, only : set_current_pelist => mpp_set_current_pelist
-  use time_interp_external_mod, only : time_interp_external_init
   use fms_affinity_mod,     only : fms_affinity_init, fms_affinity_set,fms_affinity_get
 
   use MOM_ice_shelf, only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
@@ -229,7 +229,7 @@ program MOM_main
     allocate(ocean_pelist(nPEs_per))
     call ensemble_pelist_setup(.true., 0, nPEs_per, 0, 0, atm_pelist, ocean_pelist, &
                                land_pelist, ice_pelist)
-    call set_current_pelist(ocean_pelist)
+    call Set_PElist(ocean_pelist)
     deallocate(ocean_pelist)
   endif
 
@@ -286,17 +286,17 @@ program MOM_main
 
 
   if (sum(date_init) > 0) then
-    Start_time = set_date(date_init(1),date_init(2), date_init(3), &
-         date_init(4),date_init(5),date_init(6))
+    Start_time = set_date(date_init(1), date_init(2), date_init(3), &
+                          date_init(4), date_init(5), date_init(6))
   else
     Start_time = real_to_time(0.0)
   endif
 
-  call time_interp_external_init
+  call time_interp_external_init()
 
   if (sum(date) >= 0) then
     ! In this case, the segment starts at a time fixed by ocean_solo.res
-    segment_start_time = set_date(date(1),date(2),date(3),date(4),date(5),date(6))
+    segment_start_time = set_date(date(1), date(2), date(3), date(4), date(5), date(6))
     Time = segment_start_time
   else
     ! In this case, the segment starts at a time read from the MOM restart file

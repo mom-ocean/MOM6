@@ -57,8 +57,8 @@ use user_shelf_init, only : user_ice_shelf_CS
 use MOM_coms, only : reproducing_sum
 use MOM_spatial_means, only : global_area_integral
 use MOM_checksums, only : hchksum, qchksum, chksum, uchksum, vchksum, uvchksum
-use time_interp_external_mod, only : init_external_field, time_interp_external
-use time_interp_external_mod, only : time_interp_external_init
+use MOM_interpolate, only : init_external_field, time_interp_extern, time_interp_external_init
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -1084,9 +1084,9 @@ subroutine add_shelf_flux(G, US, CS, sfc_state, fluxes)
         do j=js,je ; do i=is,ie
           last_hmask(i,j) = ISS%hmask(i,j) ; last_area_shelf_h(i,j) = ISS%area_shelf_h(i,j)
         enddo ; enddo
-        call time_interp_external(CS%id_read_mass, Time0, last_mass_shelf)
+        call time_interp_extern(CS%id_read_mass, Time0, last_mass_shelf)
         do j=js,je ; do i=is,ie
-        ! This should only be done if time_interp_external did an update.
+        ! This should only be done if time_interp_extern did an update.
           last_mass_shelf(i,j) = US%kg_m3_to_R*US%m_to_Z * last_mass_shelf(i,j) ! Rescale after time_interp
           last_h_shelf(i,j) = last_mass_shelf(i,j) / CS%density_ice
         enddo ; enddo
@@ -1512,7 +1512,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     if (CS%rotate_index) then
        allocate(tmp2d(CS%Grid_in%isd:CS%Grid_in%ied,CS%Grid_in%jsd:CS%Grid_in%jed));tmp2d(:,:)=0.0
        call MOM_read_data(TideAmp_file, 'tideamp', tmp2d, CS%Grid_in%domain, timelevel=1, scale=US%m_s_to_L_T)
-       call rotate_array(tmp2d,CS%turns, CS%utide)
+       call rotate_array(tmp2d, CS%turns, CS%utide)
        deallocate(tmp2d)
     else
        call MOM_read_data(TideAmp_file, 'tideamp', CS%utide, CS%Grid%domain, timelevel=1, scale=US%m_s_to_L_T)
@@ -1984,8 +1984,8 @@ subroutine update_shelf_mass(G, US, CS, ISS, Time)
     allocate(tmp2d(is:ie,js:je)) ; tmp2d(:,:) = 0.0
   endif
 
-  call time_interp_external(CS%id_read_mass, Time, tmp2d)
-  call rotate_array(tmp2d,CS%turns, ISS%mass_shelf)
+  call time_interp_extern(CS%id_read_mass, Time, tmp2d)
+  call rotate_array(tmp2d, CS%turns, ISS%mass_shelf)
   deallocate(tmp2d)
 
   ! This should only be done if time_interp_external did an update.

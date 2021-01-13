@@ -13,12 +13,8 @@ use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_io_wrapper,    only : axistype, get_axis_data
 use MOM_time_manager,  only : time_type
-use MOM_time_manager,  only : init_external_field, get_external_field_size
-use MOM_time_manager,  only : get_external_field_axes, get_external_field_missing
-use MOM_transform_FMS, only : time_interp_external => rotated_time_interp_external
-
-use horiz_interp_mod,  only : horiz_interp_new, horiz_interp, horiz_interp_type
-use horiz_interp_mod,  only : horiz_interp_init, horiz_interp_del
+use MOM_interpolate,   only : time_interp_extern, get_external_field_info, horiz_interp_init
+use MOM_interpolate,   only : horiz_interp_new, horiz_interp, horiz_interp_type
 
 use netcdf
 
@@ -31,10 +27,10 @@ public :: horiz_interp_and_extrap_tracer, myStats
 ! character(len=40)  :: mdl = "MOM_horizontal_regridding" ! This module's name.
 
 !> Fill grid edges
-interface fill_boundaries
-  module procedure fill_boundaries_real
-  module procedure fill_boundaries_int
-end interface
+! interface fill_boundaries
+!   module procedure fill_boundaries_real
+!   module procedure fill_boundaries_int
+! end interface
 
 !> Extrapolate and interpolate data
 interface horiz_interp_and_extrap_tracer
@@ -296,7 +292,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 
   real :: PI_180
   integer :: rcode, ncid, varid, ndims, id, jd, kd, jdp
-  integer :: i,j,k
+  integer :: i, j, k
   integer, dimension(4) :: start, count, dims, dim_id
   real, dimension(:,:), allocatable :: x_in, y_in
   real, dimension(:), allocatable  :: lon_in, lat_in
@@ -309,7 +305,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   character(len=8)  :: laynum
   type(horiz_interp_type) :: Interp
   integer :: is, ie, js, je     ! compute domain indices
-  integer :: isc,iec,jsc,jec    ! global compute domain indices
+  integer :: isc, iec, jsc, jec ! global compute domain indices
   integer :: isg, ieg, jsg, jeg ! global extent
   integer :: isd, ied, jsd, jed ! data domain indices
   integer :: id_clock_read
@@ -318,9 +314,9 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   real :: npoints,varAvg
   real, dimension(SZI_(G),SZJ_(G)) :: lon_out, lat_out, tr_out, mask_out
   real, dimension(SZI_(G),SZJ_(G)) :: good, fill
-  real, dimension(SZI_(G),SZJ_(G)) :: tr_outf,tr_prev
-  real, dimension(SZI_(G),SZJ_(G))  :: good2,fill2
-  real, dimension(SZI_(G),SZJ_(G))  :: nlevs
+  real, dimension(SZI_(G),SZJ_(G)) :: tr_outf, tr_prev
+  real, dimension(SZI_(G),SZJ_(G)) :: good2, fill2
+  real, dimension(SZI_(G),SZJ_(G)) :: nlevs
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -328,14 +324,14 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 
   id_clock_read = cpu_clock_id('(Initialize tracer from Z) read', grain=CLOCK_LOOP)
 
-  is_ongrid=.false.
-  if (present(ongrid)) is_ongrid=ongrid
+  is_ongrid = .false.
+  if (present(ongrid)) is_ongrid = ongrid
 
   if (allocated(tr_z)) deallocate(tr_z)
   if (allocated(mask_z)) deallocate(mask_z)
   if (allocated(z_edges_in)) deallocate(z_edges_in)
 
-  PI_180=atan(1.0)/45.
+  PI_180 = atan(1.0)/45.
 
   ! Open NetCDF file and if present, extract data and spatial coordinate information
   ! The convention adopted here requires that the data be written in (i,j,k) ordering.
@@ -391,7 +387,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   if (allocated(tr_z)) deallocate(tr_z)
   if (allocated(mask_z)) deallocate(mask_z)
 
-  allocate(lon_in(id),lat_in(jd),z_in(kd),z_edges_in(kd+1))
+  allocate(lon_in(id), lat_in(jd), z_in(kd), z_edges_in(kd+1))
   allocate(tr_z(isd:ied,jsd:jed,kd), mask_z(isd:ied,jsd:jed,kd))
 
   start = 1 ; count = 1 ; count(1) = id
@@ -692,15 +688,13 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
   call cpu_clock_begin(id_clock_read)
 
-  fld_sz = get_external_field_size(fms_id)
+  call get_external_field_info(fms_id, size=fld_sz, axes=axes_data, missing=missing_value)
   if (allocated(lon_in)) deallocate(lon_in)
   if (allocated(lat_in)) deallocate(lat_in)
   if (allocated(z_in)) deallocate(z_in)
   if (allocated(z_edges_in)) deallocate(z_edges_in)
   if (allocated(tr_z)) deallocate(tr_z)
   if (allocated(mask_z)) deallocate(mask_z)
-
-  axes_data =  get_external_field_axes(fms_id)
 
   id = fld_sz(1) ; jd  = fld_sz(2) ; kd = fld_sz(3)
 
@@ -721,8 +715,6 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   if (present(m_to_Z)) then ; do k=1,kd ; z_in(k) = m_to_Z * z_in(k) ; enddo ; endif
 
   call cpu_clock_end(id_clock_read)
-
-  missing_value = get_external_field_missing(fms_id)
 
   if (.not. spongeDataOngrid) then
     ! extrapolate the input data to the north pole using the northerm-most latitude
@@ -773,7 +765,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
   if (.not.spongeDataOngrid) then
     if (is_root_pe()) &
-      call time_interp_external(fms_id, Time, data_in, verbose=.true., turns=turns)
+      call time_interp_extern(fms_id, Time, data_in, verbose=.true., turns=turns)
     ! loop through each data level and interpolate to model grid.
     ! after interpolating, fill in points which will be needed
     ! to define the layers
@@ -891,7 +883,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
     enddo ! kd
   else
-      call time_interp_external(fms_id, Time, data_in, verbose=.true., turns=turns)
+      call time_interp_extern(fms_id, Time, data_in, verbose=.true., turns=turns)
       do k=1,kd
         do j=js,je
           do i=is,ie
@@ -927,55 +919,55 @@ end subroutine meshgrid
 
 ! None of the subsequent code appears to be used at all.
 
-!> Fill grid edges for integer data
-function fill_boundaries_int(m,cyclic_x,tripolar_n) result(mp)
-  integer, dimension(:,:), intent(in)             :: m !< input array (ND)
-  logical,                 intent(in)             :: cyclic_x !< True if domain is zonally re-entrant
-  logical,                 intent(in)             :: tripolar_n !< True if domain has an Arctic fold
-  integer, dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp
+! !> Fill grid edges for integer data
+! function fill_boundaries_int(m,cyclic_x,tripolar_n) result(mp)
+!   integer, dimension(:,:), intent(in)             :: m !< input array (ND)
+!   logical,                 intent(in)             :: cyclic_x !< True if domain is zonally re-entrant
+!   logical,                 intent(in)             :: tripolar_n !< True if domain has an Arctic fold
+!   integer, dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp
 
-  real,    dimension(size(m,1),size(m,2))         :: m_real
-  real,    dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp_real
+!   real,    dimension(size(m,1),size(m,2))         :: m_real
+!   real,    dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp_real
 
-  m_real = real(m)
+!   m_real = real(m)
 
-  mp_real = fill_boundaries_real(m_real,cyclic_x,tripolar_n)
+!   mp_real = fill_boundaries_real(m_real,cyclic_x,tripolar_n)
 
-  mp = int(mp_real)
+!   mp = int(mp_real)
 
-end function fill_boundaries_int
+! end function fill_boundaries_int
 
 !> Fill grid edges for real data
-function fill_boundaries_real(m,cyclic_x,tripolar_n) result(mp)
-  real, dimension(:,:), intent(in)             :: m !< input array (ND)
-  logical,              intent(in)             :: cyclic_x !< True if domain is zonally re-entrant
-  logical,              intent(in)             :: tripolar_n !< True if domain has an Arctic fold
-  real, dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp
+! function fill_boundaries_real(m,cyclic_x,tripolar_n) result(mp)
+!   real, dimension(:,:), intent(in)             :: m !< input array (ND)
+!   logical,              intent(in)             :: cyclic_x !< True if domain is zonally re-entrant
+!   logical,              intent(in)             :: tripolar_n !< True if domain has an Arctic fold
+!   real, dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp
 
-  integer :: ni,nj,i,j
+!   integer :: ni,nj,i,j
 
-  ni=size(m,1); nj=size(m,2)
+!   ni=size(m,1); nj=size(m,2)
 
-  mp(1:ni,1:nj)=m(:,:)
+!   mp(1:ni,1:nj)=m(:,:)
 
-  if (cyclic_x) then
-    mp(0,1:nj)=m(ni,1:nj)
-    mp(ni+1,1:nj)=m(1,1:nj)
-  else
-    mp(0,1:nj)=m(1,1:nj)
-    mp(ni+1,1:nj)=m(ni,1:nj)
-  endif
+!   if (cyclic_x) then
+!     mp(0,1:nj)=m(ni,1:nj)
+!     mp(ni+1,1:nj)=m(1,1:nj)
+!   else
+!     mp(0,1:nj)=m(1,1:nj)
+!     mp(ni+1,1:nj)=m(ni,1:nj)
+!   endif
 
-  mp(1:ni,0)=m(1:ni,1)
-  if (tripolar_n) then
-    do i=1,ni
-      mp(i,nj+1)=m(ni-i+1,nj)
-    enddo
-  else
-    mp(1:ni,nj+1)=m(1:ni,nj)
-  endif
+!   mp(1:ni,0)=m(1:ni,1)
+!   if (tripolar_n) then
+!     do i=1,ni
+!       mp(i,nj+1)=m(ni-i+1,nj)
+!     enddo
+!   else
+!     mp(1:ni,nj+1)=m(1:ni,nj)
+!   endif
 
-end function fill_boundaries_real
+! end function fill_boundaries_real
 
 !> Solve del2 (zi) = 0 using successive iterations
 !! with a 5 point stencil. Only points fill==1 are
@@ -983,64 +975,64 @@ end function fill_boundaries_real
 !! isotropically in index space.  The resulting solution
 !! in each region is an approximation to del2(zi)=0 subject to
 !! boundary conditions along the valid points curve bounding this region.
-subroutine smooth_heights(zi,fill,bad,sor,niter,cyclic_x, tripolar_n)
-  real,    dimension(:,:),                   intent(inout) :: zi !< input and output array (ND)
-  integer, dimension(size(zi,1),size(zi,2)), intent(in) :: fill !< same shape as zi, 1=fill
-  integer, dimension(size(zi,1),size(zi,2)), intent(in) :: bad  !< same shape as zi, 1=bad data
-  real,                                      intent(in)  :: sor !< relaxation coefficient (ND)
-  integer,                                   intent(in) :: niter !< maximum number of iterations
-  logical,                                   intent(in) :: cyclic_x !< true if domain is zonally reentrant
-  logical,                                   intent(in) :: tripolar_n !< true if domain has an Arctic fold
+! subroutine smooth_heights(zi,fill,bad,sor,niter,cyclic_x, tripolar_n)
+!   real,    dimension(:,:),                   intent(inout) :: zi !< input and output array (ND)
+!   integer, dimension(size(zi,1),size(zi,2)), intent(in) :: fill !< same shape as zi, 1=fill
+!   integer, dimension(size(zi,1),size(zi,2)), intent(in) :: bad  !< same shape as zi, 1=bad data
+!   real,                                      intent(in)  :: sor !< relaxation coefficient (ND)
+!   integer,                                   intent(in) :: niter !< maximum number of iterations
+!   logical,                                   intent(in) :: cyclic_x !< true if domain is zonally reentrant
+!   logical,                                   intent(in) :: tripolar_n !< true if domain has an Arctic fold
 
-  ! Local variables
-  real, dimension(size(zi,1),size(zi,2)) :: res, m
-  integer, dimension(size(zi,1),size(zi,2),4) :: B
-  real, dimension(0:size(zi,1)+1,0:size(zi,2)+1) :: mp
-  integer, dimension(0:size(zi,1)+1,0:size(zi,2)+1) :: nm
-  integer :: i,j,k,n
-  integer :: ni,nj
-  real :: Isum, bsum
+!   ! Local variables
+!   real, dimension(size(zi,1),size(zi,2)) :: res, m
+!   integer, dimension(size(zi,1),size(zi,2),4) :: B
+!   real, dimension(0:size(zi,1)+1,0:size(zi,2)+1) :: mp
+!   integer, dimension(0:size(zi,1)+1,0:size(zi,2)+1) :: nm
+!   integer :: i,j,k,n
+!   integer :: ni,nj
+!   real :: Isum, bsum
 
-  ni=size(zi,1) ; nj=size(zi,2)
+!   ni=size(zi,1) ; nj=size(zi,2)
 
 
-  mp(:,:) = fill_boundaries(zi,cyclic_x,tripolar_n)
+!   mp(:,:) = fill_boundaries(zi,cyclic_x,tripolar_n)
 
-  B(:,:,:) = 0.0
-  nm(:,:) = fill_boundaries(bad,cyclic_x,tripolar_n)
+!   B(:,:,:) = 0.0
+!   nm(:,:) = fill_boundaries(bad,cyclic_x,tripolar_n)
 
-  do j=1,nj
-    do i=1,ni
-      if (fill(i,j) == 1) then
-        B(i,j,1)=1-nm(i+1,j);B(i,j,2)=1-nm(i-1,j)
-        B(i,j,3)=1-nm(i,j+1);B(i,j,4)=1-nm(i,j-1)
-      endif
-    enddo
-  enddo
+!   do j=1,nj
+!     do i=1,ni
+!       if (fill(i,j) == 1) then
+!         B(i,j,1)=1-nm(i+1,j);B(i,j,2)=1-nm(i-1,j)
+!         B(i,j,3)=1-nm(i,j+1);B(i,j,4)=1-nm(i,j-1)
+!       endif
+!     enddo
+!   enddo
 
-  do n=1,niter
-    do j=1,nj
-      do i=1,ni
-        if (fill(i,j) == 1) then
-          bsum = real(B(i,j,1)+B(i,j,2)+B(i,j,3)+B(i,j,4))
-          Isum = 1.0/bsum
-          res(i,j)=Isum*(B(i,j,1)*mp(i+1,j)+B(i,j,2)*mp(i-1,j)+&
-                   B(i,j,3)*mp(i,j+1)+B(i,j,4)*mp(i,j-1)) - mp(i,j)
-        endif
-      enddo
-    enddo
-    res(:,:)=res(:,:)*sor
+!   do n=1,niter
+!     do j=1,nj
+!       do i=1,ni
+!         if (fill(i,j) == 1) then
+!           bsum = real(B(i,j,1)+B(i,j,2)+B(i,j,3)+B(i,j,4))
+!           Isum = 1.0/bsum
+!           res(i,j)=Isum*(B(i,j,1)*mp(i+1,j)+B(i,j,2)*mp(i-1,j)+&
+!                    B(i,j,3)*mp(i,j+1)+B(i,j,4)*mp(i,j-1)) - mp(i,j)
+!         endif
+!       enddo
+!     enddo
+!     res(:,:)=res(:,:)*sor
 
-    do j=1,nj
-      do i=1,ni
-        mp(i,j)=mp(i,j)+res(i,j)
-      enddo
-    enddo
+!     do j=1,nj
+!       do i=1,ni
+!         mp(i,j)=mp(i,j)+res(i,j)
+!       enddo
+!     enddo
 
-    zi(:,:)=mp(1:ni,1:nj)
-    mp = fill_boundaries(zi,cyclic_x,tripolar_n)
-  enddo
+!     zi(:,:)=mp(1:ni,1:nj)
+!     mp = fill_boundaries(zi,cyclic_x,tripolar_n)
+!   enddo
 
-end subroutine smooth_heights
+! end subroutine smooth_heights
 
 end module MOM_horizontal_regridding
