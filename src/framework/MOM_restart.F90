@@ -1419,15 +1419,15 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
       do while (err == 0)
         restartname = trim(CS%restartfile)
 
-       !query fms_io if there is a filename_appendix (for ensemble runs)
-       call get_filename_appendix(filename_appendix)
-       if (len_trim(filename_appendix) > 0) then
-         length = len_trim(restartname)
-         if (restartname(length-2:length) == '.nc') then
-           restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
-         else
-           restartname = restartname(1:length)  //'.'//trim(filename_appendix)
-         endif
+        ! query fms_io if there is a filename_appendix (for ensemble runs)
+        call get_filename_appendix(filename_appendix)
+        if (len_trim(filename_appendix) > 0) then
+          length = len_trim(restartname)
+          if (restartname(length-2:length) == '.nc') then
+            restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
+          else
+            restartname = restartname(1:length)  //'.'//trim(filename_appendix)
+          endif
         endif
         filepath = trim(directory) // trim(restartname)
 

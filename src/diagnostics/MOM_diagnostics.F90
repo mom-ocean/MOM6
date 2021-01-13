@@ -501,7 +501,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   ! area mean SST
   if (CS%id_tosga > 0) then
     do j=js,je ; do i=is,ie
-       surface_field(i,j) = tv%T(i,j,1)
+      surface_field(i,j) = tv%T(i,j,1)
     enddo ; enddo
     tosga = global_area_mean(surface_field, G)
     call post_data(CS%id_tosga, tosga, CS%diag)
@@ -1024,9 +1024,9 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
 
   if (.not.G%symmetric) then
     if (associated(CS%dKE_dt) .OR. associated(CS%PE_to_KE) .OR. associated(CS%KE_BT) .OR. &
-       associated(CS%KE_CorAdv) .OR. associated(CS%KE_adv) .OR. associated(CS%KE_visc) .OR. &
-       associated(CS%KE_horvisc) .OR. associated(CS%KE_dia) ) then
-        call create_group_pass(CS%pass_KE_uv, KE_u, KE_v, G%Domain, To_North+To_East)
+        associated(CS%KE_CorAdv) .OR. associated(CS%KE_adv) .OR. associated(CS%KE_visc) .OR. &
+        associated(CS%KE_horvisc) .OR. associated(CS%KE_dia) ) then
+      call create_group_pass(CS%pass_KE_uv, KE_u, KE_v, G%Domain, To_North+To_East)
     endif
   endif
 
