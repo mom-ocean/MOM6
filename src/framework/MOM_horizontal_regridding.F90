@@ -11,10 +11,10 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
-use MOM_io_wrapper,    only : axistype, get_axis_data
-use MOM_time_manager,  only : time_type
 use MOM_interpolate,   only : time_interp_extern, get_external_field_info, horiz_interp_init
 use MOM_interpolate,   only : horiz_interp_new, horiz_interp, horiz_interp_type
+use MOM_io_wrapper,    only : axistype, get_axis_data
+use MOM_time_manager,  only : time_type
 
 use netcdf
 
@@ -23,14 +23,6 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public :: horiz_interp_and_extrap_tracer, myStats
-
-! character(len=40)  :: mdl = "MOM_horizontal_regridding" ! This module's name.
-
-!> Fill grid edges
-! interface fill_boundaries
-!   module procedure fill_boundaries_real
-!   module procedure fill_boundaries_int
-! end interface
 
 !> Extrapolate and interpolate data
 interface horiz_interp_and_extrap_tracer
@@ -80,10 +72,9 @@ subroutine myStats(array, missing, is, ie, js, je, k, mesg)
 
 end subroutine myStats
 
-!> Use ICE-9 algorithm to populate points (fill=1) with
-!! valid data (good=1). If no information is available,
-!! Then use a previous guess (prev). Optionally (smooth)
-!! blend the filled points to achieve a more desirable result.
+!> Use ICE-9 algorithm to populate points (fill=1) with valid data (good=1).  If no information
+!! is available, use a previous guess (prev). Optionally (smooth) blend the filled points to
+!! achieve a more desirable result.
 subroutine fill_miss_2d(aout, good, fill, prev, G, smooth, num_pass, relc, crit, debug, answers_2018)
   use MOM_coms, only : sum_across_PEs
 
@@ -108,15 +99,20 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, smooth, num_pass, relc, crit,
                                                 !! answers as the code did in late 2018.  Otherwise
                                                 !! add parentheses for rotational symmetry.
 
-  real, dimension(SZI_(G),SZJ_(G)) :: b,r
-  real, dimension(SZI_(G),SZJ_(G)) :: fill_pts, good_, good_new
+  real, dimension(SZI_(G),SZJ_(G)) :: a_filled ! The aout with missing values filled in
+  real, dimension(SZI_(G),SZJ_(G)) :: a_chg    ! The change in aout due to an iteration of smoothing
+  real, dimension(SZI_(G),SZJ_(G)) :: fill_pts ! 1 for points that still need to be filled
+  real, dimension(SZI_(G),SZJ_(G)) :: good_    ! The values that are valid for the current iteration
+  real, dimension(SZI_(G),SZJ_(G)) :: good_new ! The values of good_ to use for the next iteration
 
+  real    :: east, west, north, south ! Valid neighboring values or 0 for invalid values
+  real    :: ge, gw, gn, gs  ! Flags indicating which neighbors have valid values
+  real    :: ngood     ! The number of valid values in neighboring points
+  logical :: do_smooth ! Indicates whether to do smoothing of the array
+  real    :: nfill     ! The remaining number of points to fill
+  real    :: nfill_prev ! The previous value of nfill
   character(len=256) :: mesg  ! The text of an error message
-  integer :: i,j,k
-  real    :: east,west,north,south,sor
-  real    :: ge,gw,gn,gs,ngood
-  logical :: do_smooth,siena_bug
-  real    :: nfill, nfill_prev
+  integer :: i, j, k
   integer, parameter :: num_pass_default = 10000
   real, parameter :: relc_default = 0.25, crit_default = 1.e-3
 
@@ -151,15 +147,15 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, smooth, num_pass, relc, crit,
 
   nfill_prev = nfill
   good_(:,:) = good(:,:)
-  r(:,:) = 0.0
+  a_chg(:,:) = 0.0
 
   do while (nfill > 0.0)
 
     call pass_var(good_,G%Domain)
     call pass_var(aout,G%Domain)
 
-    b(:,:)=aout(:,:)
-    good_new(:,:)=good_(:,:)
+    a_filled(:,:) = aout(:,:)
+    good_new(:,:) = good_(:,:)
 
     do j=js,je ; do i=is,ie
 
@@ -180,16 +176,16 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, smooth, num_pass, relc, crit,
       endif
       if (ngood > 0.) then
         if (ans_2018) then
-          b(i,j)=(east+west+north+south)/ngood
+          a_filled(i,j) = (east+west+north+south)/ngood
         else
-          b(i,j) = ((east+west) + (north+south))/ngood
+          a_filled(i,j) = ((east+west) + (north+south))/ngood
         endif
         fill_pts(i,j) = 0.0
         good_new(i,j) = 1.0
       endif
     enddo ; enddo
 
-    aout(is:ie,js:je) = b(is:ie,js:je)
+    aout(is:ie,js:je) = a_filled(is:ie,js:je)
     good_(is:ie,js:je) = good_new(is:ie,js:je)
     nfill_prev = nfill
     nfill = sum(fill_pts(is:ie,js:je))
@@ -209,11 +205,13 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, smooth, num_pass, relc, crit,
       call MOM_error(WARNING, mesg, .true.)
     endif
 
+    ! Determine the number of remaining points to fill globally.
     nfill = sum(fill_pts(is:ie,js:je))
     call sum_across_PEs(nfill)
 
-  enddo
+  enddo ! while block for remaining points to fill.
 
+  ! Do Laplacian smoothing for the points that have been filled in.
   if (do_smooth) then ; do k=1,npass
     call pass_var(aout,G%Domain)
     do j=js,je ; do i=is,ie
@@ -221,22 +219,22 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, smooth, num_pass, relc, crit,
         east = max(good(i+1,j),fill(i+1,j)) ; west = max(good(i-1,j),fill(i-1,j))
         north = max(good(i,j+1),fill(i,j+1)) ; south = max(good(i,j-1),fill(i,j-1))
         if (ans_2018) then
-          r(i,j) = relax_coeff*(south*aout(i,j-1)+north*aout(i,j+1) + &
-                                west*aout(i-1,j)+east*aout(i+1,j) - &
-                               (south+north+west+east)*aout(i,j))
+          a_chg(i,j) = relax_coeff*(south*aout(i,j-1)+north*aout(i,j+1) + &
+                                    west*aout(i-1,j)+east*aout(i+1,j) - &
+                                   (south+north+west+east)*aout(i,j))
         else
-          r(i,j) = relax_coeff*( ((south*aout(i,j-1) + north*aout(i,j+1)) + &
+          a_chg(i,j) = relax_coeff*( ((south*aout(i,j-1) + north*aout(i,j+1)) + &
                                   (west*aout(i-1,j)+east*aout(i+1,j))) - &
                                  ((south+north)+(west+east))*aout(i,j) )
         endif
       else
-        r(i,j) = 0.
+        a_chg(i,j) = 0.
       endif
     enddo ; enddo
     ares = 0.0
     do j=js,je ; do i=is,ie
-      aout(i,j) = r(i,j) + aout(i,j)
-      ares = max(ares, abs(r(i,j)))
+      aout(i,j) = a_chg(i,j) + aout(i,j)
+      ares = max(ares, abs(a_chg(i,j)))
     enddo ; enddo
     call max_across_PEs(ares)
     if (ares <= acrit) exit
@@ -285,9 +283,9 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
                                                      !! extrapolation is performed by this routine
 
   ! Local variables
-  real, dimension(:,:),  allocatable   :: tr_in, tr_inp ! A 2-d array for holding input data on
-                                                     ! native horizontal grid and extended grid
-                                                     ! with poles.
+  real, dimension(:,:),  allocatable   :: tr_in      !< A 2-d array for holding input data on its
+                                                     !! native horizontal grid.
+  real, dimension(:,:),  allocatable   :: tr_inp     !< Native horizontal grid data extended to the poles.
   real, dimension(:,:),  allocatable   :: mask_in    ! A 2-d mask for extended input grid.
 
   real :: PI_180
@@ -295,8 +293,8 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   integer :: i, j, k
   integer, dimension(4) :: start, count, dims, dim_id
   real, dimension(:,:), allocatable :: x_in, y_in
-  real, dimension(:), allocatable  :: lon_in, lat_in
-  real, dimension(:), allocatable  :: lat_inp, last_row
+  real, dimension(:), allocatable  :: lon_in, lat_in ! The longitude and latitude in the input file
+  real, dimension(:), allocatable  :: lat_inp ! The input file latitudes expanded to the pole
   real :: max_lat, min_lat, pole, max_depth, npole
   real :: roundoff  ! The magnitude of roundoff, usually ~2e-16.
   real :: add_offset, scale_factor
@@ -311,12 +309,15 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   integer :: id_clock_read
   character(len=12)  :: dim_name(4)
   logical :: debug=.false.
-  real :: npoints,varAvg
-  real, dimension(SZI_(G),SZJ_(G)) :: lon_out, lat_out, tr_out, mask_out
-  real, dimension(SZI_(G),SZJ_(G)) :: good, fill
-  real, dimension(SZI_(G),SZJ_(G)) :: tr_outf, tr_prev
-  real, dimension(SZI_(G),SZJ_(G)) :: good2, fill2
-  real, dimension(SZI_(G),SZJ_(G)) :: nlevs
+  real :: npoints, varAvg
+  real, dimension(SZI_(G),SZJ_(G)) :: lon_out, lat_out ! The longitude and latitude of points on the model grid
+  real, dimension(SZI_(G),SZJ_(G)) :: tr_out, mask_out ! The tracer and mask on the model grid
+  real, dimension(SZI_(G),SZJ_(G)) :: good    ! Where the data is valid, this is 1.
+  real, dimension(SZI_(G),SZJ_(G)) :: fill    ! 1 where the data needs to be filled in
+  real, dimension(SZI_(G),SZJ_(G)) :: tr_outf ! The tracer concentrations after Ice-9
+  real, dimension(SZI_(G),SZJ_(G)) :: tr_prev ! The tracer concentrations in the layer above
+  real, dimension(SZI_(G),SZJ_(G)) :: good2   ! 1 where the data is valid after Ice-9
+  real, dimension(SZI_(G),SZJ_(G)) :: fill2   ! 1 for points that still need to be filled after Ice-9
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -407,7 +408,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 
   if (present(m_to_Z)) then ; do k=1,kd ; z_in(k) = m_to_Z * z_in(k) ; enddo ; endif
 
-  ! extrapolate the input data to the north pole using the northerm-most latitude
+  ! extrapolate the input data to the north pole using the northern-most latitude
   add_np = .false.
   jdp = jd
   if (.not. is_ongrid) then
@@ -445,7 +446,6 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     allocate(tr_in(id,jd)) ; tr_in(:,:) = 0.0
     allocate(tr_inp(id,jdp)) ; tr_inp(:,:) = 0.0
     allocate(mask_in(id,jdp)) ; mask_in(:,:) = 0.0
-    allocate(last_row(id))    ; last_row(:) = 0.0
   endif
 
   max_depth = maxval(G%bathyT)
@@ -488,11 +488,11 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
              trim(varnam)//" in file "// trim(filename))
 
         if (add_np) then
-          last_row(:)=tr_in(:,jd); pole=0.0;npole=0.0
+          pole = 0.0 ; npole = 0.0
           do i=1,id
             if (abs(tr_in(i,jd)-missing_value) > abs(roundoff*missing_value)) then
-              pole = pole+last_row(i)
-              npole = npole+1.0
+              pole = pole + tr_in(i,jd)
+              npole = npole + 1.0
             endif
           enddo
           if (npole > 0) then
@@ -525,12 +525,12 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 !   call fms routine horiz_interp to interpolate input level data to model horizontal grid
     if (.not. is_ongrid) then
       if (k == 1) then
-        call horiz_interp_new(Interp,x_in,y_in,lon_out(is:ie,js:je),lat_out(is:ie,js:je), &
-              interp_method='bilinear',src_modulo=.true.)
+        call horiz_interp_new(Interp, x_in, y_in, lon_out(is:ie,js:je), lat_out(is:ie,js:je), &
+              interp_method='bilinear', src_modulo=.true.)
       endif
 
       if (debug) then
-        call myStats(tr_inp,missing_value, is,ie,js,je,k,'Tracer from file')
+        call myStats(tr_inp,missing_value, is, ie, js, je, k,'Tracer from file')
       endif
     endif
 
@@ -538,7 +538,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     if (is_ongrid) then
       tr_out(is:ie,js:je)=tr_in(is:ie,js:je)
     else
-      call horiz_interp(Interp,tr_inp,tr_out(is:ie,js:je), missing_value=missing_value, new_missing_handle=.true.)
+      call horiz_interp(Interp, tr_inp, tr_out(is:ie,js:je), missing_value=missing_value, new_missing_handle=.true.)
     endif
 
     mask_out=1.0
@@ -591,7 +591,9 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     fill2(:,:) = fill(:,:)
 
     call fill_miss_2d(tr_outf, good2, fill2, tr_prev, G, smooth=.true., answers_2018=answers_2018)
-    call myStats(tr_outf, missing_value, is, ie, js, je, k, 'field from fill_miss_2d()')
+    if (debug) then
+      call myStats(tr_outf, missing_value, is, ie, js, je, k, 'field from fill_miss_2d()')
+    endif
 
     tr_z(:,:,k) = tr_outf(:,:) * G%mask2dT(:,:)
     mask_z(:,:,k) = good2(:,:) + fill2(:,:)
@@ -634,9 +636,9 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
                                                      !! add parentheses for rotational symmetry.
 
   ! Local variables
-  real, dimension(:,:),  allocatable   :: tr_in,tr_inp !< A 2-d array for holding input data on
-                                                     !! native horizontal grid and extended grid
-                                                     !! with poles.
+  real, dimension(:,:),  allocatable   :: tr_in      !< A 2-d array for holding input data on its
+                                                     !! native horizontal grid.
+  real, dimension(:,:),  allocatable   :: tr_inp     !< Native horizontal grid data extended to the poles.
   real, dimension(:,:,:), allocatable  :: data_in    !< A buffer for storing the full 3-d time-interpolated array
                                                      !! on the original grid
   real, dimension(:,:),  allocatable   :: mask_in    !< A 2-d mask for extended input grid.
@@ -646,8 +648,8 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   integer :: i,j,k
   integer, dimension(4) :: start, count, dims, dim_id
   real, dimension(:,:), allocatable :: x_in, y_in
-  real, dimension(:), allocatable  :: lon_in, lat_in
-  real, dimension(:), allocatable  :: lat_inp, last_row
+  real, dimension(:), allocatable  :: lon_in, lat_in ! The longitude and latitude in the input file
+  real, dimension(:), allocatable  :: lat_inp ! The input file latitudes expanded to the pole
   real :: max_lat, min_lat, pole, max_depth, npole
   real :: roundoff  ! The magnitude of roundoff, usually ~2e-16.
   logical :: add_np
@@ -663,12 +665,15 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   character(len=12)  :: dim_name(4)
   logical :: debug=.false.
   logical :: spongeDataOngrid
-  real :: npoints,varAvg
-  real, dimension(SZI_(G),SZJ_(G)) :: lon_out, lat_out, tr_out, mask_out
-  real, dimension(SZI_(G),SZJ_(G)) :: good, fill
-  real, dimension(SZI_(G),SZJ_(G)) :: tr_outf,tr_prev
-  real, dimension(SZI_(G),SZJ_(G))  :: good2,fill2
-  real, dimension(SZI_(G),SZJ_(G))  :: nlevs
+  real :: npoints, varAvg
+  real, dimension(SZI_(G),SZJ_(G)) :: lon_out, lat_out ! The longitude and latitude of points on the model grid
+  real, dimension(SZI_(G),SZJ_(G)) :: tr_out, mask_out ! The tracer and mask on the model grid
+  real, dimension(SZI_(G),SZJ_(G)) :: good    ! Where the data is valid, this is 1.
+  real, dimension(SZI_(G),SZJ_(G)) :: fill    ! 1 where the data needs to be filled in
+  real, dimension(SZI_(G),SZJ_(G)) :: tr_outf ! The tracer concentrations after Ice-9
+  real, dimension(SZI_(G),SZJ_(G)) :: tr_prev ! The tracer concentrations in the layer above
+  real, dimension(SZI_(G),SZJ_(G)) :: good2   ! 1 where the data is valid after Ice-9
+  real, dimension(SZI_(G),SZJ_(G)) :: fill2   ! 1 for points that still need to be filled after Ice-9
   integer :: turns
 
   turns = G%HI%turns
@@ -679,7 +684,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
   id_clock_read = cpu_clock_id('(Initialize tracer from Z) read', grain=CLOCK_LOOP)
 
-  PI_180=atan(1.0)/45.
+  PI_180 = atan(1.0)/45.
 
   ! Open NetCDF file and if present, extract data and spatial coordinate information
   ! The convention adopted here requires that the data be written in (i,j,k) ordering.
@@ -696,15 +701,15 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
   id = fld_sz(1) ; jd  = fld_sz(2) ; kd = fld_sz(3)
 
-  spongeDataOngrid=.false.
-  if (PRESENT(spongeOngrid)) spongeDataOngrid=spongeOngrid
+  spongeDataOngrid = .false.
+  if (PRESENT(spongeOngrid)) spongeDataOngrid = spongeOngrid
   if (.not. spongeDataOngrid) then
-    allocate(lon_in(id),lat_in(jd))
+    allocate(lon_in(id), lat_in(jd))
     call get_axis_data(axes_data(1), lon_in)
     call get_axis_data(axes_data(2), lat_in)
   endif
 
-  allocate(z_in(kd),z_edges_in(kd+1))
+  allocate(z_in(kd), z_edges_in(kd+1))
 
   allocate(tr_z(isd:ied,jsd:jed,kd), mask_z(isd:ied,jsd:jed,kd))
 
@@ -715,9 +720,9 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   call cpu_clock_end(id_clock_read)
 
   if (.not. spongeDataOngrid) then
-    ! extrapolate the input data to the north pole using the northerm-most latitude
+    ! Extrapolate the input data to the north pole using the northerm-most latitude.
     max_lat = maxval(lat_in)
-    add_np=.false.
+    add_np = .false.
     if (max_lat < 90.0) then
       add_np = .true.
       jdp = jd+1
@@ -728,7 +733,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
       allocate(lat_in(1:jdp))
       lat_in(:) = lat_inp(:)
     else
-      jdp=jd
+      jdp = jd
     endif
     call horiz_interp_init()
     lon_in = lon_in*PI_180
@@ -741,7 +746,6 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
     allocate(tr_in(id,jd)) ; tr_in(:,:)=0.0
     allocate(tr_inp(id,jdp)) ; tr_inp(:,:)=0.0
     allocate(mask_in(id,jdp)) ; mask_in(:,:)=0.0
-    allocate(last_row(id))    ; last_row(:)=0.0
   else
     allocate(data_in(isd:ied,jsd:jed,kd))
   endif
@@ -764,40 +768,39 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   if (.not.spongeDataOngrid) then
     if (is_root_pe()) &
       call time_interp_extern(fms_id, Time, data_in, verbose=.true., turns=turns)
-    ! loop through each data level and interpolate to model grid.
-    ! after interpolating, fill in points which will be needed
-    ! to define the layers
+    ! Loop through each data level and interpolate to model grid.
+    ! After interpolating, fill in points which will be needed to define the layers.
     do k=1,kd
       write(laynum,'(I8)') k ; laynum = adjustl(laynum)
       if (is_root_pe()) then
         tr_in(1:id,1:jd) = data_in(1:id,1:jd,k)
         if (add_np) then
-         last_row(:)=tr_in(:,jd); pole=0.0;npole=0.0
-         do i=1,id
-           if (abs(tr_in(i,jd)-missing_value) > abs(roundoff*missing_value)) then
-             pole = pole+last_row(i)
-             npole = npole+1.0
-           endif
-         enddo
-         if (npole > 0) then
-           pole=pole/npole
-         else
-           pole=missing_value
-         endif
-         tr_inp(:,1:jd) = tr_in(:,:)
-         tr_inp(:,jdp) = pole
+          pole = 0.0 ; npole = 0.0
+          do i=1,id
+            if (abs(tr_in(i,jd)-missing_value) > abs(roundoff*missing_value)) then
+              pole = pole + tr_in(i,jd)
+              npole = npole+1.0
+            endif
+          enddo
+          if (npole > 0) then
+            pole = pole / npole
+          else
+            pole = missing_value
+          endif
+          tr_inp(:,1:jd) = tr_in(:,:)
+          tr_inp(:,jdp) = pole
         else
-         tr_inp(:,:) = tr_in(:,:)
+          tr_inp(:,:) = tr_in(:,:)
         endif
       endif
 
       call broadcast(tr_inp, id*jdp, blocking=.true.)
 
-      mask_in=0.0
+      mask_in(:,:) = 0.0
 
       do j=1,jdp ; do i=1,id
         if (abs(tr_inp(i,j)-missing_value) > abs(roundoff*missing_value)) then
-          mask_in(i,j)=1.0
+          mask_in(i,j) = 1.0
           tr_inp(i,j) = tr_inp(i,j) * conversion
         else
           tr_inp(i,j) = missing_value
@@ -837,7 +840,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
         endif
         if ((G%mask2dT(i,j) == 1.0) .and. (z_edges_in(k) <= G%bathyT(i,j)) .and. &
             (mask_out(i,j) < 1.0)) &
-          fill(i,j)=1.0
+          fill(i,j) = 1.0
       enddo ;  enddo
       call pass_var(fill, G%Domain)
       call pass_var(good, G%Domain)
@@ -881,15 +884,15 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
     enddo ! kd
   else
-      call time_interp_extern(fms_id, Time, data_in, verbose=.true., turns=turns)
-      do k=1,kd
-        do j=js,je
-          do i=is,ie
-            tr_z(i,j,k)=data_in(i,j,k)
-            if (abs(tr_z(i,j,k)-missing_value) < abs(roundoff*missing_value)) mask_z(i,j,k) = 0.
-          enddo
+    call time_interp_extern(fms_id, Time, data_in, verbose=.true., turns=turns)
+    do k=1,kd
+      do j=js,je
+        do i=is,ie
+          tr_z(i,j,k) = data_in(i,j,k)
+          if (abs(tr_z(i,j,k)-missing_value) < abs(roundoff*missing_value)) mask_z(i,j,k) = 0.
         enddo
       enddo
+    enddo
   endif
 
 end subroutine horiz_interp_and_extrap_tracer_fms_id
@@ -901,9 +904,9 @@ subroutine meshgrid(x, y, x_T, y_T)
   real, dimension(size(x,1),size(y,1)), intent(inout) :: x_T !< output 2-dimensional array
   real, dimension(size(x,1),size(y,1)), intent(inout) :: y_T !< output 2-dimensional array
 
-  integer :: ni,nj,i,j
+  integer :: ni, nj, i, j
 
-  ni=size(x,1) ; nj=size(y,1)
+  ni = size(x,1) ; nj = size(y,1)
 
   do j=1,nj ; do i=1,ni
     x_T(i,j) = x(i)
@@ -914,123 +917,5 @@ subroutine meshgrid(x, y, x_T, y_T)
   enddo ; enddo
 
 end subroutine meshgrid
-
-! None of the subsequent code appears to be used at all.
-
-! !> Fill grid edges for integer data
-! function fill_boundaries_int(m,cyclic_x,tripolar_n) result(mp)
-!   integer, dimension(:,:), intent(in)             :: m !< input array (ND)
-!   logical,                 intent(in)             :: cyclic_x !< True if domain is zonally re-entrant
-!   logical,                 intent(in)             :: tripolar_n !< True if domain has an Arctic fold
-!   integer, dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp
-
-!   real,    dimension(size(m,1),size(m,2))         :: m_real
-!   real,    dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp_real
-
-!   m_real = real(m)
-
-!   mp_real = fill_boundaries_real(m_real,cyclic_x,tripolar_n)
-
-!   mp = int(mp_real)
-
-! end function fill_boundaries_int
-
-!> Fill grid edges for real data
-! function fill_boundaries_real(m,cyclic_x,tripolar_n) result(mp)
-!   real, dimension(:,:), intent(in)             :: m !< input array (ND)
-!   logical,              intent(in)             :: cyclic_x !< True if domain is zonally re-entrant
-!   logical,              intent(in)             :: tripolar_n !< True if domain has an Arctic fold
-!   real, dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp
-
-!   integer :: ni,nj,i,j
-
-!   ni=size(m,1); nj=size(m,2)
-
-!   mp(1:ni,1:nj)=m(:,:)
-
-!   if (cyclic_x) then
-!     mp(0,1:nj)=m(ni,1:nj)
-!     mp(ni+1,1:nj)=m(1,1:nj)
-!   else
-!     mp(0,1:nj)=m(1,1:nj)
-!     mp(ni+1,1:nj)=m(ni,1:nj)
-!   endif
-
-!   mp(1:ni,0)=m(1:ni,1)
-!   if (tripolar_n) then
-!     do i=1,ni
-!       mp(i,nj+1)=m(ni-i+1,nj)
-!     enddo
-!   else
-!     mp(1:ni,nj+1)=m(1:ni,nj)
-!   endif
-
-! end function fill_boundaries_real
-
-!> Solve del2 (zi) = 0 using successive iterations
-!! with a 5 point stencil. Only points fill==1 are
-!! modified. Except where bad==1, information propagates
-!! isotropically in index space.  The resulting solution
-!! in each region is an approximation to del2(zi)=0 subject to
-!! boundary conditions along the valid points curve bounding this region.
-! subroutine smooth_heights(zi,fill,bad,sor,niter,cyclic_x, tripolar_n)
-!   real,    dimension(:,:),                   intent(inout) :: zi !< input and output array (ND)
-!   integer, dimension(size(zi,1),size(zi,2)), intent(in) :: fill !< same shape as zi, 1=fill
-!   integer, dimension(size(zi,1),size(zi,2)), intent(in) :: bad  !< same shape as zi, 1=bad data
-!   real,                                      intent(in)  :: sor !< relaxation coefficient (ND)
-!   integer,                                   intent(in) :: niter !< maximum number of iterations
-!   logical,                                   intent(in) :: cyclic_x !< true if domain is zonally reentrant
-!   logical,                                   intent(in) :: tripolar_n !< true if domain has an Arctic fold
-
-!   ! Local variables
-!   real, dimension(size(zi,1),size(zi,2)) :: res, m
-!   integer, dimension(size(zi,1),size(zi,2),4) :: B
-!   real, dimension(0:size(zi,1)+1,0:size(zi,2)+1) :: mp
-!   integer, dimension(0:size(zi,1)+1,0:size(zi,2)+1) :: nm
-!   integer :: i,j,k,n
-!   integer :: ni,nj
-!   real :: Isum, bsum
-
-!   ni=size(zi,1) ; nj=size(zi,2)
-
-
-!   mp(:,:) = fill_boundaries(zi,cyclic_x,tripolar_n)
-
-!   B(:,:,:) = 0.0
-!   nm(:,:) = fill_boundaries(bad,cyclic_x,tripolar_n)
-
-!   do j=1,nj
-!     do i=1,ni
-!       if (fill(i,j) == 1) then
-!         B(i,j,1)=1-nm(i+1,j);B(i,j,2)=1-nm(i-1,j)
-!         B(i,j,3)=1-nm(i,j+1);B(i,j,4)=1-nm(i,j-1)
-!       endif
-!     enddo
-!   enddo
-
-!   do n=1,niter
-!     do j=1,nj
-!       do i=1,ni
-!         if (fill(i,j) == 1) then
-!           bsum = real(B(i,j,1)+B(i,j,2)+B(i,j,3)+B(i,j,4))
-!           Isum = 1.0/bsum
-!           res(i,j)=Isum*(B(i,j,1)*mp(i+1,j)+B(i,j,2)*mp(i-1,j)+&
-!                    B(i,j,3)*mp(i,j+1)+B(i,j,4)*mp(i,j-1)) - mp(i,j)
-!         endif
-!       enddo
-!     enddo
-!     res(:,:)=res(:,:)*sor
-
-!     do j=1,nj
-!       do i=1,ni
-!         mp(i,j)=mp(i,j)+res(i,j)
-!       enddo
-!     enddo
-
-!     zi(:,:)=mp(1:ni,1:nj)
-!     mp = fill_boundaries(zi,cyclic_x,tripolar_n)
-!   enddo
-
-! end subroutine smooth_heights
 
 end module MOM_horizontal_regridding
