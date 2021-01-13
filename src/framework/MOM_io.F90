@@ -301,11 +301,11 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
 
     pack = 1
     if (present(checksums)) then
-       call write_metadata(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
-                           vars(k)%longname, pack=pack, checksum=checksums(k,:))
+      call write_metadata(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
+                          vars(k)%longname, pack=pack, checksum=checksums(k,:))
     else
-       call write_metadata(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
-                           vars(k)%longname, pack=pack)
+      call write_metadata(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
+                          vars(k)%longname, pack=pack)
     endif
   enddo
 

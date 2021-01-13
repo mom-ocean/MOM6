@@ -3280,13 +3280,13 @@ subroutine extract_surface_state(CS, sfc_state_in)
       enddo ; enddo
 
       do i=is,ie
-       ! set melt_potential to zero to avoid passing previous values
-       sfc_state%melt_potential(i,j) = 0.0
+        ! set melt_potential to zero to avoid passing previous values
+        sfc_state%melt_potential(i,j) = 0.0
 
-       if (G%mask2dT(i,j)>0.) then
-         ! instantaneous melt_potential [Q R Z ~> J m-2]
-         sfc_state%melt_potential(i,j) = CS%tv%C_p * GV%Rho0 * delT(i)
-       endif
+        if (G%mask2dT(i,j)>0.) then
+          ! instantaneous melt_potential [Q R Z ~> J m-2]
+          sfc_state%melt_potential(i,j) = CS%tv%C_p * GV%Rho0 * delT(i)
+        endif
       enddo
     enddo ! end of j loop
   endif   ! melt_potential

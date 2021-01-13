@@ -969,7 +969,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
             botfn = 1.0 / (1.0 + 0.09*z2*z2*z2*z2*z2*z2)
             hvel(i,k) = (1.0-botfn)*h_arith(i,k) + botfn*h_harm(i,k)
           endif
-       endif
+        endif
 
       endif ; enddo ; enddo ! i & k loops
     endif

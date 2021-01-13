@@ -193,7 +193,7 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
 
     if (G%geoLonT(i,j) > 1400.0) then ; damp_new = 10.0
     elseif (G%geoLonT(i,j) > 1300.0) then
-       damp_new = 10.0 * (G%geoLonT(i,j)-1300.0)/100.0
+      damp_new = 10.0 * (G%geoLonT(i,j)-1300.0)/100.0
     else ; damp_new = 0.0
     endif
 
