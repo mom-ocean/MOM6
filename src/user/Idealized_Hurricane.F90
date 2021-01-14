@@ -520,7 +520,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, C
     C = CS%max_windspeed / sqrt( US%R_to_kg_m3*dP )
     B = C**2 * US%R_to_kg_m3*CS%rho_a * exp(1.0)
     if (BR_Bench) then ! rho_a reset to value used in generated wind for benchmark test
-       B = C**2 * 1.2 * exp(1.0)
+      B = C**2 * 1.2 * exp(1.0)
     endif
   elseif (BR_Bench) then ! rho_a reset to value used in generated wind for benchmark test
     B = (CS%max_windspeed**2 / dP ) * 1.2*US%kg_m3_to_R * exp(1.0)

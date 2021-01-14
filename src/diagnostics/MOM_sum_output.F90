@@ -4,7 +4,7 @@ module MOM_sum_output
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use iso_fortran_env, only : int64
-use MOM_coms, only : sum_across_PEs, PE_here, root_PE, num_PEs, max_across_PEs
+use MOM_coms, only : sum_across_PEs, PE_here, root_PE, num_PEs, max_across_PEs, field_chksum
 use MOM_coms, only : reproducing_sum, reproducing_sum_EFP, EFP_to_real, real_to_EFP
 use MOM_coms, only : EFP_type, operator(+), operator(-), assignment(=), EFP_sum_across_PEs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe, MOM_mesg
@@ -25,7 +25,6 @@ use MOM_tracer_flow_control, only : tracer_flow_control_CS, call_tracer_stocks
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface, thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use mpp_mod, only : mpp_chksum
 
 use netcdf
 
@@ -1022,8 +1021,8 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
     enddo ; enddo ; endif
 
     if (associated(fluxes%seaice_melt_heat)) then ; do j=js,je ; do i=is,ie
-       heat_in(i,j) = heat_in(i,j) + dt * QRZL2_to_J * G%areaT(i,j) * &
-                                     fluxes%seaice_melt_heat(i,j)
+      heat_in(i,j) = heat_in(i,j) + dt * QRZL2_to_J * G%areaT(i,j) * &
+                                    fluxes%seaice_melt_heat(i,j)
     enddo ; enddo ; endif
 
     ! smg: new code
@@ -1511,13 +1510,13 @@ subroutine get_depth_list_checksums(G, depth_chksum, area_chksum)
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     field(i,j) = G%bathyT(i,j)
   enddo ; enddo
-  write(depth_chksum, '(Z16)') mpp_chksum(field(:,:))
+  write(depth_chksum, '(Z16)') field_chksum(field(:,:))
 
   ! Area checksum
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     field(i,j) = G%mask2dT(i,j) * G%US%L_to_m**2*G%areaT(i,j)
   enddo ; enddo
-  write(area_chksum, '(Z16)') mpp_chksum(field(:,:))
+  write(area_chksum, '(Z16)') field_chksum(field(:,:))
 
   deallocate(field)
 end subroutine get_depth_list_checksums

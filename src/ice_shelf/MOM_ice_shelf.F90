@@ -15,8 +15,8 @@ use MOM_IS_diag_mediator, only : set_axes_info, diag_ctrl, time_type
 use MOM_IS_diag_mediator, only : diag_mediator_init, diag_mediator_end, set_diag_mediator_grid
 use MOM_IS_diag_mediator, only : enable_averages, enable_averaging, disable_averaging
 use MOM_IS_diag_mediator, only : diag_mediator_infrastructure_init, diag_mediator_close_registration
-use MOM_domains, only : MOM_domains_init, clone_MOM_domain
-use MOM_domains, only : pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE, CORNER
+use MOM_domain_init, only : MOM_domains_init
+use MOM_domains, only : clone_MOM_domain, pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE, CORNER
 use MOM_dyn_horgrid, only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
 use MOM_dyn_horgrid, only : rescale_dyn_horgrid_bathymetry
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
@@ -1510,12 +1510,12 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     inputdir = slasher(inputdir)
     TideAmp_file = trim(inputdir) // trim(TideAmp_file)
     if (CS%rotate_index) then
-       allocate(tmp2d(CS%Grid_in%isd:CS%Grid_in%ied,CS%Grid_in%jsd:CS%Grid_in%jed));tmp2d(:,:)=0.0
-       call MOM_read_data(TideAmp_file, 'tideamp', tmp2d, CS%Grid_in%domain, timelevel=1, scale=US%m_s_to_L_T)
-       call rotate_array(tmp2d,CS%turns, CS%utide)
-       deallocate(tmp2d)
+      allocate(tmp2d(CS%Grid_in%isd:CS%Grid_in%ied,CS%Grid_in%jsd:CS%Grid_in%jed)) ; tmp2d(:,:)=0.0
+      call MOM_read_data(TideAmp_file, 'tideamp', tmp2d, CS%Grid_in%domain, timelevel=1, scale=US%m_s_to_L_T)
+      call rotate_array(tmp2d,CS%turns, CS%utide)
+      deallocate(tmp2d)
     else
-       call MOM_read_data(TideAmp_file, 'tideamp', CS%utide, CS%Grid%domain, timelevel=1, scale=US%m_s_to_L_T)
+      call MOM_read_data(TideAmp_file, 'tideamp', CS%utide, CS%Grid%domain, timelevel=1, scale=US%m_s_to_L_T)
     endif
   else
     call get_param(param_file, mdl, "UTIDE", utide, &
@@ -1592,7 +1592,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 
     if (new_sim) then
       ! new simulation, initialize ice thickness as in the static case
-       call initialize_ice_thickness(ISS%h_shelf, ISS%area_shelf_h, ISS%hmask, CS%Grid, CS%Grid_in, US, param_file,  &
+      call initialize_ice_thickness(ISS%h_shelf, ISS%area_shelf_h, ISS%hmask, CS%Grid, CS%Grid_in, US, param_file,  &
             CS%rotate_index, CS%turns)
 
     ! next make sure mass is consistent with thickness
@@ -1703,11 +1703,11 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
                               "ice sheet/shelf thickness", "m")
   if (PRESENT(sfc_state_in)) then
     if (allocated(sfc_state%taux_shelf) .and. allocated(sfc_state%tauy_shelf)) then
-       u_desc = var_desc("taux_shelf", "Pa", "the zonal stress on the ocean under ice shelves", &
+      u_desc = var_desc("taux_shelf", "Pa", "the zonal stress on the ocean under ice shelves", &
             hor_grid='Cu',z_grid='1')
-       v_desc = var_desc("tauy_shelf", "Pa", "the meridional stress on the ocean under ice shelves", &
+      v_desc = var_desc("tauy_shelf", "Pa", "the meridional stress on the ocean under ice shelves", &
             hor_grid='Cv',z_grid='1')
-       call register_restart_pair(sfc_state%taux_shelf, sfc_state%tauy_shelf, u_desc,v_desc, &
+      call register_restart_pair(sfc_state%taux_shelf, sfc_state%tauy_shelf, u_desc, v_desc, &
             .false., CS%restart_CSp)
     endif
   endif
@@ -1868,11 +1868,11 @@ subroutine initialize_ice_shelf_forces(CS, ocn_grid, US, forces_in)
   call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: allocating forces.")
   call allocate_mech_forcing(CS%Grid_in, forces_in, ustar=.true., shelf=.true., press=.true.)
   if (CS%rotate_index) then
-     allocate(forces)
-     call allocate_mech_forcing(forces_in, CS%Grid, forces)
-     call rotate_mech_forcing(forces_in, CS%turns, forces)
+    allocate(forces)
+    call allocate_mech_forcing(forces_in, CS%Grid, forces)
+    call rotate_mech_forcing(forces_in, CS%turns, forces)
   else
-     forces=>forces_in
+    forces=>forces_in
   endif
 
   call add_shelf_forces(ocn_grid, US, CS, forces, do_shelf_area=.not.CS%solo_ice_sheet)

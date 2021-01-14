@@ -483,9 +483,9 @@ function register_MOM_IS_diag_field(module_name, field_name, axes, init_time, &
 
   if (is_root_pe() .and. diag_CS%doc_unit > 0) then
     if (primary_id > 0) then
-       mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Used]'
+      mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Used]'
     else
-       mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Unused]'
+      mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Unused]'
     endif
     write(diag_CS%doc_unit, '(a)') trim(mesg)
     if (present(long_name)) call describe_option("long_name", long_name, diag_CS)

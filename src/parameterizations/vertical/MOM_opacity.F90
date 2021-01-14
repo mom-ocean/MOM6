@@ -402,7 +402,7 @@ function opacity_morel(chl_data)
   ! appropriate when using an interactive ecosystem model that predicts
   ! three-dimensional chl-a values.
   real, dimension(6), parameter :: &
-       Z2_coef=(/7.925, -6.644, 3.662, -1.815, -0.218,  0.502/)
+    Z2_coef = (/7.925, -6.644, 3.662, -1.815, -0.218,  0.502/)
   real :: Chl, Chl2 ! The log10 of chl_data (in mg m-3), and Chl^2.
 
   Chl = log10(min(max(chl_data,0.02),60.0)) ; Chl2 = Chl*Chl
@@ -423,7 +423,7 @@ function SW_pen_frac_morel(chl_data)
   ! three-dimensional chl-a values.
   real :: Chl, Chl2         ! The log10 of chl_data in mg m-3, and Chl^2.
   real, dimension(6), parameter :: &
-       V1_coef=(/0.321,  0.008, 0.132,  0.038, -0.017, -0.007/)
+    V1_coef = (/0.321,  0.008, 0.132,  0.038, -0.017, -0.007/)
 
   Chl = log10(min(max(chl_data,0.02),60.0)) ; Chl2 = Chl*Chl
   SW_pen_frac_morel = 1.0 - ( (V1_coef(1) + V1_coef(2)*Chl) + Chl2 * &
