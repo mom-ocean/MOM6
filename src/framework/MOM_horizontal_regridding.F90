@@ -16,7 +16,8 @@ use MOM_interpolate,   only : horiz_interp_new, horiz_interp, horiz_interp_type
 use MOM_io_wrapper,    only : axistype, get_axis_data
 use MOM_time_manager,  only : time_type
 
-use netcdf
+use netcdf, only : NF90_OPEN, NF90_NOWRITE, NF90_GET_ATT, NF90_GET_VAR
+use netcdf, only : NF90_INQ_VARID, NF90_INQUIRE_VARIABLE, NF90_INQUIRE_DIMENSION
 
 implicit none ; private
 
