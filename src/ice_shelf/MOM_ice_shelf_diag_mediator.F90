@@ -3,19 +3,15 @@ module MOM_IS_diag_mediator
 
 ! This file is a part of SIS2. See LICENSE.md for the license.
 
-use MOM_grid, only : ocean_grid_type
-
-use MOM_coms, only : PE_here
+use MOM_coms,          only : PE_here
+use MOM_diag_manager,  only : diag_manager_init, send_data, diag_axis_init, EAST, NORTH
+use MOM_diag_manager,  only : register_diag_field_fms, register_static_field_fms
 use MOM_error_handler, only : MOM_error, FATAL, is_root_pe, assert
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_safe_alloc, only : safe_alloc_ptr, safe_alloc_alloc
+use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
+use MOM_grid,          only : ocean_grid_type
+use MOM_safe_alloc,    only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_string_functions, only : lowercase, uppercase, slasher
-use MOM_time_manager, only : time_type
-
-use diag_manager_mod, only : diag_manager_init
-use diag_manager_mod, only : send_data, diag_axis_init,EAST,NORTH
-use diag_manager_mod, only : register_diag_field_fms=>register_diag_field
-use diag_manager_mod, only : register_static_field_fms=>register_static_field
+use MOM_time_manager,  only : time_type
 
 implicit none ; private
 
