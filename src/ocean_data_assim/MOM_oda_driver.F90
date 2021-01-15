@@ -14,7 +14,7 @@ use mpp_domains_mod, only : domain2d, mpp_global_field
 use mpp_domains_mod, only : mpp_get_compute_domain, mpp_get_data_domain
 use mpp_domains_mod, only : mpp_redistribute, mpp_broadcast_domain
 use mpp_domains_mod, only : set_domains_stack_size=>mpp_domains_set_stack_size
-use diag_manager_mod, only : register_diag_field, diag_axis_init, send_data
+use diag_manager_mod, only : register_diag_field, send_data
 use ensemble_manager_mod, only : get_ensemble_id, get_ensemble_size
 use ensemble_manager_mod, only : get_ensemble_pelist, get_ensemble_filter_pelist
 use time_manager_mod, only : time_type, decrement_time, increment_time
