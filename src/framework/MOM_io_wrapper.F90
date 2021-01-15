@@ -4,8 +4,8 @@ module MOM_io_wrapper
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_array_transform,  only : allocate_rotated_array, rotate_array
-use MOM_domains,          only : MOM_domain_type, AGRID, BGRID_NE, CGRID_NE
-use MOM_domains,          only : get_simple_array_i_ind, get_simple_array_j_ind
+use MOM_domain_infra,     only : MOM_domain_type, AGRID, BGRID_NE, CGRID_NE
+use MOM_domain_infra,     only : get_simple_array_i_ind, get_simple_array_j_ind
 use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING
 
 use ensemble_manager_mod, only : get_ensemble_id

@@ -3,8 +3,8 @@ module MOM_io
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_domains,          only : MOM_domain_type, AGRID, BGRID_NE, CGRID_NE, get_domain_components
-use MOM_domains,          only : domain1D, get_simple_array_i_ind, get_simple_array_j_ind
+use MOM_domains,          only : MOM_domain_type, domain1D, get_domain_components
+use MOM_domains,          only : AGRID, BGRID_NE, CGRID_NE
 use MOM_dyn_horgrid,      only : dyn_horgrid_type
 use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING
 use MOM_file_parser,      only : log_version, param_file_type
