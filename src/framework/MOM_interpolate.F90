@@ -4,14 +4,14 @@ module MOM_interpolate
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_array_transform, only : allocate_rotated_array, rotate_array
-use MOM_error_handler, only : MOM_error, FATAL
-use MOM_io_infra,   only : axistype
-use horiz_interp_mod,  only : horiz_interp_new, horiz_interp, horiz_interp_init, horiz_interp_type
+use MOM_error_handler,   only : MOM_error, FATAL
+use MOM_io_infra,        only : axistype
+use MOM_time_manager,    only : time_type
+use horiz_interp_mod,    only : horiz_interp_new, horiz_interp, horiz_interp_init, horiz_interp_type
 use time_interp_external_mod, only : time_interp_external_fms=>time_interp_external
 use time_interp_external_mod, only : init_external_field, time_interp_external_init
 use time_interp_external_mod, only : get_external_field_size
 use time_interp_external_mod, only : get_external_field_axes, get_external_field_missing
-use time_manager_mod, only : time_type
 
 implicit none ; private
 
