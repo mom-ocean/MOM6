@@ -12,12 +12,13 @@ use mpp_mod, only : Set_PElist => mpp_set_current_pelist, Get_PElist => mpp_get_
 use mpp_mod, only : broadcast => mpp_broadcast
 use mpp_domains_mod, only : broadcast_domain => mpp_broadcast_domain
 use mpp_mod, only : set_rootPE => mpp_set_root_pe
+use mpp_mod, only : field_chksum => mpp_chksum
 use mpp_mod, only : sum_across_PEs => mpp_sum, max_across_PEs => mpp_max, min_across_PEs => mpp_min
 
 implicit none ; private
 
 public :: PE_here, root_PE, num_PEs, MOM_infra_init, MOM_infra_end
-public :: broadcast, broadcast_domain, sum_across_PEs, min_across_PEs, max_across_PEs
+public :: broadcast, broadcast_domain, sum_across_PEs, min_across_PEs, max_across_PEs, field_chksum
 public :: reproducing_sum, reproducing_sum_EFP, EFP_sum_across_PEs, EFP_list_sum_across_PEs
 public :: EFP_plus, EFP_minus, EFP_to_real, real_to_EFP, EFP_real_diff
 public :: operator(+), operator(-), assignment(=)
