@@ -9,16 +9,16 @@ use MOM_dyn_horgrid,      only : dyn_horgrid_type
 use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING
 use MOM_file_parser,      only : log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
-use MOM_io_wrapper,       only : MOM_read_data, MOM_read_vector, MOM_write_field, read_axis_data
-use MOM_io_wrapper,       only : file_exists, field_exists, read_field_chksum
-use MOM_io_wrapper,       only : open_file, close_file, field_size, fieldtype, get_filename_appendix
-use MOM_io_wrapper,       only : flush_file, get_file_info, get_file_atts, get_file_fields
-use MOM_io_wrapper,       only : get_file_times, read_data, axistype, get_axis_data
-use MOM_io_wrapper,       only : write_field, write_metadata, write_version_number, get_ensemble_id
-use MOM_io_wrapper,       only : open_namelist_file, check_nml_error, io_infra_init, io_infra_end
-use MOM_io_wrapper,       only : APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
-use MOM_io_wrapper,       only : READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
-use MOM_io_wrapper,       only : CENTER, CORNER, NORTH_FACE, EAST_FACE
+use MOM_io_infra,         only : MOM_read_data, MOM_read_vector, MOM_write_field, read_axis_data
+use MOM_io_infra,         only : file_exists, field_exists, read_field_chksum
+use MOM_io_infra,         only : open_file, close_file, field_size, fieldtype, get_filename_appendix
+use MOM_io_infra,         only : flush_file, get_file_info, get_file_atts, get_file_fields
+use MOM_io_infra,         only : get_file_times, read_data, axistype, get_axis_data
+use MOM_io_infra,         only : write_field, write_metadata, write_version_number, get_ensemble_id
+use MOM_io_infra,         only : open_namelist_file, check_nml_error, io_infra_init, io_infra_end
+use MOM_io_infra,         only : APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
+use MOM_io_infra,         only : READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
+use MOM_io_infra,         only : CENTER, CORNER, NORTH_FACE, EAST_FACE
 use MOM_string_functions, only : lowercase, slasher
 use MOM_verticalGrid,     only : verticalGrid_type
 
@@ -32,7 +32,7 @@ implicit none ; private
 ! These interfaces are actually implemented in this file.
 public :: create_file, reopen_file, num_timelevels, cmor_long_std, ensembler, MOM_io_init
 public :: var_desc, modify_vardesc, query_vardesc
-! The following are simple pass throughs of routines from MOM_io_wrapper or other modules
+! The following are simple pass throughs of routines from MOM_io_infra or other modules
 public :: close_file, field_exists, field_size, fieldtype, get_filename_appendix
 public :: file_exists, flush_file, get_file_info, get_file_atts, get_file_fields
 public :: get_file_times, open_file, read_axis_data, read_data, read_field_chksum

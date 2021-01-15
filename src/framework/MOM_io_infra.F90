@@ -1,5 +1,5 @@
 !> This module contains a thin inteface to mpp and fms I/O code
-module MOM_io_wrapper
+module MOM_io_infra
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -529,4 +529,4 @@ subroutine MOM_write_field_0d(io_unit, field_md, field, tstamp, fill_value)
   call write_field(io_unit, field_md, field, tstamp=tstamp)
 end subroutine MOM_write_field_0d
 
-end module MOM_io_wrapper
+end module MOM_io_infra

@@ -13,7 +13,7 @@ use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_interpolate,   only : time_interp_extern, get_external_field_info, horiz_interp_init
 use MOM_interpolate,   only : horiz_interp_new, horiz_interp, horiz_interp_type
-use MOM_io_wrapper,    only : axistype, get_axis_data
+use MOM_io_infra,      only : axistype, get_axis_data
 use MOM_time_manager,  only : time_type
 
 use netcdf, only : NF90_OPEN, NF90_NOWRITE, NF90_GET_ATT, NF90_GET_VAR

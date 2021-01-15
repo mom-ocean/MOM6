@@ -3,9 +3,9 @@ module MOM_domains
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_coms_wrapper,     only : PE_here, root_PE, num_PEs, broadcast
-use MOM_coms_wrapper,     only : sum_across_PEs, min_across_PEs, max_across_PEs
-use MOM_coms_wrapper,     only : MOM_infra_init, MOM_infra_end
+use MOM_coms_infra,       only : PE_here, root_PE, num_PEs, broadcast
+use MOM_coms_infra,       only : sum_across_PEs, min_across_PEs, max_across_PEs
+use MOM_coms_infra,       only : MOM_infra_init, MOM_infra_end
 use MOM_domain_infra,     only : MOM_domain_type, domain2D, domain1D, create_MOM_domain
 use MOM_domain_infra,     only : get_domain_extent, get_domain_extent_dsamp2
 use MOM_domain_infra,     only : clone_MOM_domain, get_domain_components
@@ -24,7 +24,7 @@ use MOM_domain_infra,     only : To_East, To_West, To_North, To_South, To_All, O
 use MOM_domain_infra,     only : MOM_thread_affinity_set, set_MOM_thread_affinity
 use MOM_error_handler,    only : MOM_error, MOM_mesg, NOTE, WARNING, FATAL
 use MOM_file_parser,      only : get_param, log_param, log_version, param_file_type
-use MOM_io_wrapper,       only : file_exists
+use MOM_io_infra,         only : file_exists
 use MOM_string_functions, only : slasher
 
 implicit none ; private

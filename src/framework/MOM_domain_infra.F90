@@ -4,7 +4,7 @@ module MOM_domain_infra
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_array_transform, only : rotate_array
-use MOM_coms_wrapper,  only : PE_here, root_PE, num_PEs
+use MOM_coms_infra,    only : PE_here, root_PE, num_PEs
 use MOM_cpu_clock,     only : cpu_clock_begin, cpu_clock_end
 use MOM_error_handler, only : MOM_error, MOM_mesg, NOTE, WARNING, FATAL, is_root_pe
 
