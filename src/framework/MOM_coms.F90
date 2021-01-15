@@ -10,17 +10,19 @@ use memutils_mod, only : print_memuse_stats
 use mpp_mod, only : PE_here => mpp_pe, root_PE => mpp_root_pe, num_PEs => mpp_npes
 use mpp_mod, only : Set_PElist => mpp_set_current_pelist, Get_PElist => mpp_get_current_pelist
 use mpp_mod, only : broadcast => mpp_broadcast
+use mpp_domains_mod, only : broadcast_domain => mpp_broadcast_domain
+use mpp_mod, only : set_rootPE => mpp_set_root_pe
 use mpp_mod, only : sum_across_PEs => mpp_sum, max_across_PEs => mpp_max, min_across_PEs => mpp_min
 
 implicit none ; private
 
 public :: PE_here, root_PE, num_PEs, MOM_infra_init, MOM_infra_end
-public :: broadcast, sum_across_PEs, min_across_PEs, max_across_PEs
+public :: broadcast, broadcast_domain, sum_across_PEs, min_across_PEs, max_across_PEs
 public :: reproducing_sum, reproducing_sum_EFP, EFP_sum_across_PEs, EFP_list_sum_across_PEs
 public :: EFP_plus, EFP_minus, EFP_to_real, real_to_EFP, EFP_real_diff
 public :: operator(+), operator(-), assignment(=)
 public :: query_EFP_overflow_error, reset_EFP_overflow_error
-public :: Set_PElist, Get_PElist
+public :: Set_PElist, Get_PElist, Set_rootPE
 
 ! This module provides interfaces to the non-domain-oriented communication subroutines.
 
