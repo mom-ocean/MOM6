@@ -16,6 +16,9 @@ jobs:
         submodules: recursive
 
     - uses: ./.github/actions/testing-setup
+      with:
+        build_symmetric: 'false'
+        install_python: 'false'
 
     - name: Compile MOM6 for the GFDL coupled driver
       shell: bash
