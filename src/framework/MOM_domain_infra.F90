@@ -6,7 +6,7 @@ module MOM_domain_infra
 use MOM_array_transform, only : rotate_array
 use MOM_coms_infra,    only : PE_here, root_PE, num_PEs
 use MOM_cpu_clock,     only : cpu_clock_begin, cpu_clock_end
-use MOM_error_handler, only : MOM_error, MOM_mesg, NOTE, WARNING, FATAL, is_root_pe
+use MOM_error_infra,   only : MOM_error=>MOM_err, NOTE, WARNING, FATAL
 
 use mpp_domains_mod, only : MOM_define_layout => mpp_define_layout, mpp_get_boundary
 use mpp_domains_mod, only : MOM_define_io_domain => mpp_define_io_domain

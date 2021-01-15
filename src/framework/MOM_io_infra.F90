@@ -6,7 +6,7 @@ module MOM_io_infra
 use MOM_array_transform,  only : allocate_rotated_array, rotate_array
 use MOM_domain_infra,     only : MOM_domain_type, AGRID, BGRID_NE, CGRID_NE
 use MOM_domain_infra,     only : get_simple_array_i_ind, get_simple_array_j_ind
-use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING
+use MOM_error_infra,      only : MOM_error=>MOM_err, NOTE, FATAL, WARNING
 
 use ensemble_manager_mod, only : get_ensemble_id
 use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
