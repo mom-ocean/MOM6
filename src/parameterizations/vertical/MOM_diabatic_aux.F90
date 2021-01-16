@@ -15,8 +15,7 @@ use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,  only : forcing, extractFluxes1d, forcing_SinglePointPrint
 use MOM_grid,          only : ocean_grid_type
-use MOM_interpolate,   only : init_external_field, time_interp_extern
-use MOM_interpolate,   only : time_interp_external_init
+use MOM_interpolate,   only : init_external_field, time_interp_external, time_interp_external_init
 use MOM_io,            only : slasher
 use MOM_opacity,       only : set_opacity, opacity_CS, extract_optics_slice, extract_optics_fields
 use MOM_opacity,       only : optics_type, optics_nbands, absorbRemainingSW, sumSWoverBands
@@ -621,7 +620,7 @@ subroutine set_pen_shortwave(optics, fluxes, G, GV, US, CS, opacity_CSp, tracer_
     if (CS%chl_from_file) then
       ! Only the 2-d surface chlorophyll can be read in from a file.  The
       ! same value is assumed for all layers.
-      call time_interp_extern(CS%sbc_chl, CS%Time, chl_2d)
+      call time_interp_external(CS%sbc_chl, CS%Time, chl_2d)
       do j=js,je ; do i=is,ie
         if ((G%mask2dT(i,j) > 0.5) .and. (chl_2d(i,j) < 0.0)) then
           write(mesg,'(" Time_interp negative chl of ",(1pe12.4)," at i,j = ",&

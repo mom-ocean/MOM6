@@ -57,7 +57,7 @@ use user_shelf_init, only : user_ice_shelf_CS
 use MOM_coms, only : reproducing_sum
 use MOM_spatial_means, only : global_area_integral
 use MOM_checksums, only : hchksum, qchksum, chksum, uchksum, vchksum, uvchksum
-use MOM_interpolate, only : init_external_field, time_interp_extern, time_interp_external_init
+use MOM_interpolate, only : init_external_field, time_interp_external, time_interp_external_init
 
 implicit none ; private
 
@@ -1084,7 +1084,7 @@ subroutine add_shelf_flux(G, US, CS, sfc_state, fluxes)
         do j=js,je ; do i=is,ie
           last_hmask(i,j) = ISS%hmask(i,j) ; last_area_shelf_h(i,j) = ISS%area_shelf_h(i,j)
         enddo ; enddo
-        call time_interp_extern(CS%id_read_mass, Time0, last_mass_shelf)
+        call time_interp_external(CS%id_read_mass, Time0, last_mass_shelf)
         do j=js,je ; do i=is,ie
         ! This should only be done if time_interp_extern did an update.
           last_mass_shelf(i,j) = US%kg_m3_to_R*US%m_to_Z * last_mass_shelf(i,j) ! Rescale after time_interp
@@ -1984,7 +1984,7 @@ subroutine update_shelf_mass(G, US, CS, ISS, Time)
     allocate(tmp2d(is:ie,js:je)) ; tmp2d(:,:) = 0.0
   endif
 
-  call time_interp_extern(CS%id_read_mass, Time, tmp2d)
+  call time_interp_external(CS%id_read_mass, Time, tmp2d)
   call rotate_array(tmp2d, CS%turns, ISS%mass_shelf)
   deallocate(tmp2d)
 
