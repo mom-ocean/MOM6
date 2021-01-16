@@ -7,7 +7,7 @@ use MOM_coms_infra,       only : PE_here, root_PE, num_PEs, broadcast
 use MOM_coms_infra,       only : sum_across_PEs, min_across_PEs, max_across_PEs
 use MOM_coms_infra,       only : MOM_infra_init, MOM_infra_end
 use MOM_domain_infra,     only : MOM_domain_type, domain2D, domain1D, create_MOM_domain
-use MOM_domain_infra,     only : get_domain_extent, get_domain_extent_dsamp2
+use MOM_domain_infra,     only : get_domain_extent
 use MOM_domain_infra,     only : clone_MOM_domain, get_domain_components
 use MOM_domain_infra,     only : deallocate_MOM_domain, deallocate_domain_contents
 use MOM_domain_infra,     only : MOM_define_domain, MOM_define_layout, MOM_define_io_domain
@@ -31,7 +31,7 @@ implicit none ; private
 
 public :: MOM_domains_init, MOM_domain_type, MOM_infra_init, MOM_infra_end
 public :: domain2D, domain1D
-public :: get_domain_extent, get_domain_extent_dsamp2
+public :: get_domain_extent
 public :: create_MOM_domain, clone_MOM_domain, get_domain_components
 public :: deallocate_MOM_domain, deallocate_domain_contents
 public :: MOM_define_domain, MOM_define_layout, MOM_define_io_domain

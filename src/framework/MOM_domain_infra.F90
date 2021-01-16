@@ -3,10 +3,9 @@ module MOM_domain_infra
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_array_transform, only : rotate_array
-use MOM_coms_infra,    only : PE_here, root_PE, num_PEs
-use MOM_cpu_clock,     only : cpu_clock_begin, cpu_clock_end
-use MOM_error_infra,   only : MOM_error=>MOM_err, NOTE, WARNING, FATAL
+use MOM_coms_infra,  only : PE_here, root_PE, num_PEs
+use MOM_cpu_clock,   only : cpu_clock_begin, cpu_clock_end
+use MOM_error_infra, only : MOM_error=>MOM_err, NOTE, WARNING, FATAL
 
 use mpp_domains_mod, only : MOM_define_layout => mpp_define_layout, mpp_get_boundary
 use mpp_domains_mod, only : MOM_define_io_domain => mpp_define_io_domain
@@ -34,7 +33,7 @@ implicit none ; private
 public :: MOM_define_domain, MOM_define_layout, MOM_define_io_domain
 public :: create_MOM_domain, clone_MOM_domain, get_domain_components
 public :: deallocate_MOM_domain, deallocate_domain_contents
-public :: get_domain_extent, get_domain_extent_dsamp2
+public :: get_domain_extent
 public :: pass_var, pass_vector, fill_symmetric_edges, global_field_sum
 public :: pass_var_start, pass_var_complete
 public :: pass_vector_start, pass_vector_complete
@@ -105,6 +104,7 @@ end interface get_domain_components
 
 !> The MOM_domain_type contains information about the domain decomposition.
 type, public :: MOM_domain_type
+  character(len=64) :: name     !< The name of this domain
   type(domain2D), pointer :: mpp_domain => NULL() !< The FMS domain with halos
                                 !! on this processor, centered at h points.
   type(domain2D), pointer :: mpp_domain_d2 => NULL() !< A coarse FMS domain with halos
@@ -113,8 +113,7 @@ type, public :: MOM_domain_type
   integer :: njglobal           !< The total horizontal j-domain size.
   integer :: nihalo             !< The i-halo size in memory.
   integer :: njhalo             !< The j-halo size in memory.
-  logical :: symmetric          !< True if symmetric memory is used with
-                                !! this domain.
+  logical :: symmetric          !< True if symmetric memory is used with this domain.
   logical :: nonblocking_updates  !< If true, non-blocking halo updates are
                                 !! allowed.  The default is .false. (for now).
   logical :: thin_halo_updates  !< If true, optional arguments may be used to
@@ -1175,7 +1174,7 @@ end subroutine complete_group_pass
 !> create_MOM_domain creates and initializes a MOM_domain_type variables, based on the information
 !! provided in arguments.
 subroutine create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar_N, layout, io_layout, &
-                               domain_name, mask_table, symmetric, thin_halos, nonblocking)
+                             domain_name, mask_table, symmetric, thin_halos, nonblocking)
   type(MOM_domain_type),      pointer    :: MOM_dom   !< A pointer to the MOM_domain_type being defined here.
   integer, dimension(2),      intent(in) :: n_global  !< The number of points on the global grid in
                                                       !! the i- and j-directions
@@ -1199,7 +1198,6 @@ subroutine create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar_N, l
   integer :: Y_FLAGS  ! A combination of integers encoding the y-direction grid connectivity.
   integer :: xhalo_d2, yhalo_d2
   character(len=200) :: mesg    ! A string for use in error messages
-  character(len=64) :: dom_name ! The domain name
   logical :: mask_table_exists  ! Mask_table is present and the file it points to exists
 
   if (.not.associated(MOM_dom)) then
@@ -1208,7 +1206,7 @@ subroutine create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar_N, l
     allocate(MOM_dom%mpp_domain_d2)
   endif
 
-  dom_name = "MOM" ; if (present(domain_name)) dom_name = trim(domain_name)
+  MOM_dom%name = "MOM" ; if (present(domain_name)) MOM_dom%name = trim(domain_name)
 
   X_FLAGS = 0 ; Y_FLAGS = 0
   if (reentrant(1)) X_FLAGS = CYCLIC_GLOBAL_DOMAIN
@@ -1262,7 +1260,7 @@ subroutine create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar_N, l
     mask_table_exists = file_exist(mask_table)
     if (mask_table_exists) then
       allocate(MOM_dom%maskmap(layout(1), layout(2)))
-      call parse_mask_table(mask_table, MOM_dom%maskmap, dom_name)
+      call parse_mask_table(mask_table, MOM_dom%maskmap, MOM_dom%name)
     endif
   else
     mask_table_exists = .false.
@@ -1270,15 +1268,15 @@ subroutine create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar_N, l
 
   if (mask_table_exists) then
     call MOM_define_domain( global_indices, layout, MOM_dom%mpp_domain, &
-                xflags=X_FLAGS, yflags=Y_FLAGS, &
+                xflags=MOM_dom%X_FLAGS, yflags=MOM_dom%Y_FLAGS, &
                 xhalo=MOM_dom%nihalo, yhalo=MOM_dom%njhalo, &
-                symmetry = MOM_dom%symmetric, name=dom_name, &
+                symmetry=MOM_dom%symmetric, name=MOM_dom%name, &
                 maskmap=MOM_dom%maskmap )
   else
     call MOM_define_domain( global_indices, layout, MOM_dom%mpp_domain, &
-                xflags=X_FLAGS, yflags=Y_FLAGS, &
+                xflags=MOM_dom%X_FLAGS, yflags=MOM_dom%Y_FLAGS, &
                 xhalo=MOM_dom%nihalo, yhalo=MOM_dom%njhalo, &
-                symmetry = MOM_dom%symmetric, name=dom_name)
+                symmetry = MOM_dom%symmetric, name=MOM_dom%name)
   endif
 
   if ((MOM_dom%io_layout(1) > 0) .and. (MOM_dom%io_layout(2) > 0) .and. (layout(1)*layout(2) > 1)) then
@@ -1293,15 +1291,15 @@ subroutine create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar_N, l
   global_indices(1:4) = (/ 1, int(MOM_dom%niglobal/2), 1, int(MOM_dom%njglobal/2) /)
   if (mask_table_exists) then
     call MOM_define_domain( global_indices, layout, MOM_dom%mpp_domain_d2, &
-                xflags=X_FLAGS, yflags=Y_FLAGS, &
+                xflags=MOM_dom%X_FLAGS, yflags=MOM_dom%Y_FLAGS, &
                 xhalo=xhalo_d2, yhalo=yhalo_d2, &
-                symmetry = MOM_dom%symmetric, name=trim("MOMc"), &
+                symmetry=MOM_dom%symmetric, name=trim("MOMc"), &
                 maskmap=MOM_dom%maskmap )
   else
     call MOM_define_domain( global_indices, layout, MOM_dom%mpp_domain_d2, &
-                xflags=X_FLAGS, yflags=Y_FLAGS, &
+                xflags=MOM_dom%X_FLAGS, yflags=MOM_dom%Y_FLAGS, &
                 xhalo=xhalo_d2, yhalo=yhalo_d2, &
-                symmetry = MOM_dom%symmetric, name=trim("MOMc"))
+                symmetry=MOM_dom%symmetric, name=trim("MOMc"))
   endif
 
   if ((MOM_dom%io_layout(1) > 0) .and. (MOM_dom%io_layout(2) > 0) .and. &
@@ -1399,8 +1397,7 @@ end subroutine get_domain_components_d2D
 
 !> clone_MD_to_MD copies one MOM_domain_type into another, while allowing
 !! some properties of the new type to differ from the original one.
-subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
-                          domain_name, turns)
+subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, domain_name, turns)
   type(MOM_domain_type), intent(in)    :: MD_in  !< An existing MOM_domain
   type(MOM_domain_type), pointer       :: MOM_dom !< A pointer to a MOM_domain that will be
                                   !! allocated if it is unassociated, and will have data
@@ -1416,17 +1413,17 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
                                   !! whether the new domain is symmetric, regardless of
                                   !! whether the macro SYMMETRIC_MEMORY_ is defined.
   character(len=*), &
-               optional, intent(in)    :: domain_name !< A name for the new domain, "MOM"
-                                  !! if missing.
+               optional, intent(in)    :: domain_name !< A name for the new domain, copied
+                                  !! from MD_in if missing.
   integer, optional, intent(in) :: turns   !< Number of quarter turns
 
   integer :: global_indices(4)
   logical :: mask_table_exists
-  character(len=64) :: dom_name
-  integer :: qturns
+  integer :: qturns ! The number of quarter turns, restricted to the range of 0 to 3.
+  integer :: i, j, nl1, nl2
 
   qturns = 0
-  if (present(turns)) qturns = turns
+  if (present(turns)) qturns = modulo(turns, 4)
 
   if (.not.associated(MOM_dom)) then
     allocate(MOM_dom)
@@ -1461,11 +1458,26 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
   if (associated(MD_in%maskmap)) then
     mask_table_exists = .true.
     allocate(MOM_dom%maskmap(MOM_dom%layout(1), MOM_dom%layout(2)))
-    if (qturns /= 0) then
-      call rotate_array(MD_in%maskmap(:,:), qturns, MOM_dom%maskmap(:,:))
-    else
-      MOM_dom%maskmap(:,:) = MD_in%maskmap(:,:)
-    endif
+
+    nl1 = MOM_dom%layout(1) ; nl2 = MOM_dom%layout(2)
+    select case (modulo(qturns, 4))
+      case (0)
+        do j=1,nl2 ; do i=1,nl1
+          MOM_dom%maskmap(i,j) = MD_in%maskmap(i, j)
+        enddo ; enddo
+      case (1)
+        do j=1,nl2 ; do i=1,nl1
+          MOM_dom%maskmap(i,j) = MD_in%maskmap(j, nl1+1-i)
+        enddo ; enddo
+      case (2)
+        do j=1,nl2 ; do i=1,nl1
+          MOM_dom%maskmap(i,j) = MD_in%maskmap(nl1+1-i, nl2+1-j)
+        enddo ; enddo
+      case (3)
+        do j=1,nl2 ; do i=1,nl1
+          MOM_dom%maskmap(i,j) = MD_in%maskmap(nl2+1-j, i)
+        enddo ; enddo
+    end select
   else
     mask_table_exists = .false.
   endif
@@ -1486,14 +1498,17 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
 
   if (present(symmetric)) then ; MOM_dom%symmetric = symmetric ; endif
 
-  dom_name = "MOM"
-  if (present(domain_name)) dom_name = trim(domain_name)
+  if (present(domain_name)) then
+    MOM_dom%name = trim(domain_name)
+  else
+    MOM_dom%name = MD_in%name
+  endif
 
   if (mask_table_exists) then
     call MOM_define_domain(global_indices, MOM_dom%layout, MOM_dom%mpp_domain, &
                 xflags=MOM_dom%X_FLAGS, yflags=MOM_dom%Y_FLAGS, &
                 xhalo=MOM_dom%nihalo, yhalo=MOM_dom%njhalo, &
-                symmetry=MOM_dom%symmetric, name=dom_name, &
+                symmetry=MOM_dom%symmetric, name=MOM_dom%name, &
                 maskmap=MOM_dom%maskmap)
 
     global_indices(2) = global_indices(2) / 2
@@ -1502,13 +1517,13 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
                 MOM_dom%mpp_domain_d2, &
                 xflags=MOM_dom%X_FLAGS, yflags=MOM_dom%Y_FLAGS, &
                 xhalo=(MOM_dom%nihalo/2), yhalo=(MOM_dom%njhalo/2), &
-                symmetry=MOM_dom%symmetric, name=dom_name, &
+                symmetry=MOM_dom%symmetric, name=MOM_dom%name, &
                 maskmap=MOM_dom%maskmap)
   else
     call MOM_define_domain(global_indices, MOM_dom%layout, MOM_dom%mpp_domain, &
                 xflags=MOM_dom%X_FLAGS, yflags=MOM_dom%Y_FLAGS, &
                 xhalo=MOM_dom%nihalo, yhalo=MOM_dom%njhalo, &
-                symmetry=MOM_dom%symmetric, name=dom_name)
+                symmetry=MOM_dom%symmetric, name=MOM_dom%name)
 
     global_indices(2) = global_indices(2) / 2
     global_indices(4) = global_indices(4) / 2
@@ -1516,7 +1531,7 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
                 MOM_dom%mpp_domain_d2, &
                 xflags=MOM_dom%X_FLAGS, yflags=MOM_dom%Y_FLAGS, &
                 xhalo=(MOM_dom%nihalo/2), yhalo=(MOM_dom%njhalo/2), &
-                symmetry=MOM_dom%symmetric, name=dom_name)
+                symmetry=MOM_dom%symmetric, name=MOM_dom%name)
   endif
 
   if ((MOM_dom%io_layout(1) + MOM_dom%io_layout(2) > 0) .and. &
@@ -1580,7 +1595,7 @@ subroutine clone_MD_to_d2D(MD_in, mpp_domain, min_halo, halo_size, symmetric, &
 
   if (present(symmetric)) then ; symmetric_dom = symmetric ; endif
 
-  dom_name = "MOM"
+  dom_name = MD_in%name
   if (present(domain_name)) dom_name = trim(domain_name)
 
   global_indices(1) = 1 ; global_indices(2) = niglobal
@@ -1608,7 +1623,7 @@ end subroutine clone_MD_to_d2D
 !> Returns various data that has been stored in a MOM_domain_type
 subroutine get_domain_extent(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
                              isg, ieg, jsg, jeg, idg_offset, jdg_offset, &
-                             symmetric, local_indexing, index_offset)
+                             symmetric, local_indexing, index_offset, coarsen)
   type(MOM_domain_type), &
            intent(in)  :: Domain !< The MOM domain from which to extract information
   integer, intent(out) :: isc    !< The start i-index of the computational domain
@@ -1623,74 +1638,63 @@ subroutine get_domain_extent(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
   integer, intent(out) :: ieg    !< The end i-index of the global domain
   integer, intent(out) :: jsg    !< The start j-index of the global domain
   integer, intent(out) :: jeg    !< The end j-index of the global domain
-  integer, intent(out) :: idg_offset !< The offset between the corresponding global and
+  integer, optional, intent(out) :: idg_offset !< The offset between the corresponding global and
                                  !! data i-index spaces.
-  integer, intent(out) :: jdg_offset !< The offset between the corresponding global and
+  integer, optional, intent(out) :: jdg_offset !< The offset between the corresponding global and
                                  !! data j-index spaces.
-  logical, intent(out) :: symmetric  !< True if symmetric memory is used.
+  logical, optional, intent(out) :: symmetric  !< True if symmetric memory is used.
   logical, optional, intent(in)  :: local_indexing !< If true, local tracer array indices start at 1,
                                            !! as in most MOM6 code.
   integer, optional, intent(in)  :: index_offset   !< A fixed additional offset to all indices. This
                                            !! can be useful for some types of debugging with
                                            !! dynamic memory allocation.
+  integer, optional, intent(in)  :: coarsen !< A factor by which the grid is coarsened.
+                                           !!  The default is 1, for no coarsening.
+
   ! Local variables
-  integer :: ind_off
+  integer :: ind_off, idg_off, jdg_off, coarsen_lev
   logical :: local
 
   local = .true. ; if (present(local_indexing)) local = local_indexing
   ind_off = 0 ; if (present(index_offset)) ind_off = index_offset
 
-  call mpp_get_compute_domain(Domain%mpp_domain, isc, iec, jsc, jec)
-  call mpp_get_data_domain(Domain%mpp_domain, isd, ied, jsd, jed)
-  call mpp_get_global_domain(Domain%mpp_domain, isg, ieg, jsg, jeg)
+  coarsen_lev = 1 ; if (present(coarsen)) coarsen_lev = coarsen
 
-  ! This code institutes the MOM convention that local array indices start at 1.
+  if (coarsen_lev == 1) then
+    call mpp_get_compute_domain(Domain%mpp_domain, isc, iec, jsc, jec)
+    call mpp_get_data_domain(Domain%mpp_domain, isd, ied, jsd, jed)
+    call mpp_get_global_domain(Domain%mpp_domain, isg, ieg, jsg, jeg)
+  elseif (coarsen_lev == 2) then
+    if (.not.associated(Domain%mpp_domain_d2)) call MOM_error(FATAL, &
+            "get_domain_extent called with coarsen=2, but Domain%mpp_domain_d2 is not associated.")
+    call mpp_get_compute_domain(Domain%mpp_domain_d2, isc, iec, jsc, jec)
+    call mpp_get_data_domain(Domain%mpp_domain_d2, isd, ied, jsd, jed)
+    call mpp_get_global_domain(Domain%mpp_domain_d2, isg, ieg, jsg, jeg)
+  else
+    call MOM_error(FATAL, "get_domain_extent called with an unsupported level of coarsening.")
+  endif
+
   if (local) then
-    idg_offset = isd-1 ; jdg_offset = jsd-1
+    ! This code institutes the MOM convention that local array indices start at 1.
+    idg_off = isd-1 ; jdg_off = jsd-1
     isc = isc-isd+1 ; iec = iec-isd+1 ; jsc = jsc-jsd+1 ; jec = jec-jsd+1
     ied = ied-isd+1 ; jed = jed-jsd+1
     isd = 1 ; jsd = 1
   else
-    idg_offset = 0 ; jdg_offset = 0
+    idg_off = 0 ; jdg_off = 0
   endif
   if (ind_off /= 0) then
-    idg_offset = idg_offset + ind_off ; jdg_offset = jdg_offset + ind_off
+    idg_off = idg_off + ind_off ; jdg_off = jdg_off + ind_off
     isc = isc + ind_off ; iec = iec + ind_off
     jsc = jsc + ind_off ; jec = jec + ind_off
     isd = isd + ind_off ; ied = ied + ind_off
     jsd = jsd + ind_off ; jed = jed + ind_off
   endif
-  symmetric = Domain%symmetric
+  if (present(idg_offset)) idg_offset = idg_off
+  if (present(jdg_offset)) jdg_offset = jdg_off
+  if (present(symmetric)) symmetric = Domain%symmetric
 
 end subroutine get_domain_extent
-
-subroutine get_domain_extent_dsamp2(Domain, isc_d2, iec_d2, jsc_d2, jec_d2,&
-                                            isd_d2, ied_d2, jsd_d2, jed_d2,&
-                                            isg_d2, ieg_d2, jsg_d2, jeg_d2)
-  type(MOM_domain_type), &
-           intent(in)  :: Domain !< The MOM domain from which to extract information
-  integer, intent(out) :: isc_d2 !< The start i-index of the computational domain
-  integer, intent(out) :: iec_d2 !< The end i-index of the computational domain
-  integer, intent(out) :: jsc_d2 !< The start j-index of the computational domain
-  integer, intent(out) :: jec_d2 !< The end j-index of the computational domain
-  integer, intent(out) :: isd_d2 !< The start i-index of the data domain
-  integer, intent(out) :: ied_d2 !< The end i-index of the data domain
-  integer, intent(out) :: jsd_d2 !< The start j-index of the data domain
-  integer, intent(out) :: jed_d2 !< The end j-index of the data domain
-  integer, intent(out) :: isg_d2 !< The start i-index of the global domain
-  integer, intent(out) :: ieg_d2 !< The end i-index of the global domain
-  integer, intent(out) :: jsg_d2 !< The start j-index of the global domain
-  integer, intent(out) :: jeg_d2 !< The end j-index of the global domain
-
-  call mpp_get_compute_domain(Domain%mpp_domain_d2, isc_d2, iec_d2, jsc_d2, jec_d2)
-  call mpp_get_data_domain(Domain%mpp_domain_d2, isd_d2, ied_d2, jsd_d2, jed_d2)
-  call mpp_get_global_domain (Domain%mpp_domain_d2, isg_d2, ieg_d2, jsg_d2, jeg_d2)
-  ! This code institutes the MOM convention that local array indices start at 1.
-  isc_d2 = isc_d2-isd_d2+1 ; iec_d2 = iec_d2-isd_d2+1
-  jsc_d2 = jsc_d2-jsd_d2+1 ; jec_d2 = jec_d2-jsd_d2+1
-  ied_d2 = ied_d2-isd_d2+1 ; jed_d2 = jed_d2-jsd_d2+1
-  isd_d2 = 1 ; jsd_d2 = 1
-end subroutine get_domain_extent_dsamp2
 
 !> Return the (potentially symmetric) computational domain i-bounds for an array
 !! passed without index specifications (i.e. indices start at 1) based on an array size.
