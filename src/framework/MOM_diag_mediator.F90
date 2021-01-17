@@ -601,9 +601,9 @@ subroutine set_axes_info_dsamp(G, GV, param_file, diag_cs, id_zl_native, id_zi_n
       do i=diag_cs%dsamp(dl)%isgB,diag_cs%dsamp(dl)%iegB;  gridLonB_dsamp(i) = G%gridLonB(G%isgB+dl*i); enddo
       do j=diag_cs%dsamp(dl)%jsgB,diag_cs%dsamp(dl)%jegB;  gridLatB_dsamp(j) = G%gridLatB(G%jsgB+dl*j); enddo
       id_xq = diag_axis_init('xq', gridLonB_dsamp, G%x_axis_units, 'x', &
-            'q point nominal longitude', G%Domain, refine=2)
+            'q point nominal longitude', G%Domain, coarsen=2)
       id_yq = diag_axis_init('yq', gridLatB_dsamp, G%y_axis_units, 'y', &
-            'q point nominal latitude', G%Domain, refine=2)
+            'q point nominal latitude', G%Domain, coarsen=2)
       deallocate(gridLonB_dsamp,gridLatB_dsamp)
     else
       allocate(gridLonB_dsamp(diag_cs%dsamp(dl)%isg:diag_cs%dsamp(dl)%ieg))
@@ -611,9 +611,9 @@ subroutine set_axes_info_dsamp(G, GV, param_file, diag_cs, id_zl_native, id_zi_n
       do i=diag_cs%dsamp(dl)%isg,diag_cs%dsamp(dl)%ieg;  gridLonB_dsamp(i) = G%gridLonB(G%isg+dl*i-2); enddo
       do j=diag_cs%dsamp(dl)%jsg,diag_cs%dsamp(dl)%jeg;  gridLatB_dsamp(j) = G%gridLatB(G%jsg+dl*j-2); enddo
       id_xq = diag_axis_init('xq', gridLonB_dsamp, G%x_axis_units, 'x', &
-            'q point nominal longitude', G%Domain, refine=2)
+            'q point nominal longitude', G%Domain, coarsen=2)
       id_yq = diag_axis_init('yq', gridLatB_dsamp, G%y_axis_units, 'y', &
-            'q point nominal latitude', G%Domain, refine=2)
+            'q point nominal latitude', G%Domain, coarsen=2)
       deallocate(gridLonB_dsamp,gridLatB_dsamp)
     endif
 
@@ -622,9 +622,9 @@ subroutine set_axes_info_dsamp(G, GV, param_file, diag_cs, id_zl_native, id_zi_n
     do i=diag_cs%dsamp(dl)%isg,diag_cs%dsamp(dl)%ieg;  gridLonT_dsamp(i) = G%gridLonT(G%isg+dl*i-2); enddo
     do j=diag_cs%dsamp(dl)%jsg,diag_cs%dsamp(dl)%jeg;  gridLatT_dsamp(j) = G%gridLatT(G%jsg+dl*j-2); enddo
     id_xh = diag_axis_init('xh', gridLonT_dsamp, G%x_axis_units, 'x', &
-          'h point nominal longitude', G%Domain, refine=2)
+          'h point nominal longitude', G%Domain, coarsen=2)
     id_yh = diag_axis_init('yh', gridLatT_dsamp, G%y_axis_units, 'y', &
-          'h point nominal latitude', G%Domain, refine=2)
+          'h point nominal latitude', G%Domain, coarsen=2)
 
     deallocate(gridLonT_dsamp,gridLatT_dsamp)
 

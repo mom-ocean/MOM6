@@ -99,7 +99,7 @@ end function register_diag_field_scalar_fms
 !> diag_axis_init stores up the information for an axis that can be used for diagnostics and
 !! returns an integer hadle for this axis.
 integer function diag_axis_init(name, data, units, cart_name, long_name, MOM_domain, position, &
-         direction, edges, set_name, refine, null_axis)
+         direction, edges, set_name, coarsen, null_axis)
   character(len=*),   intent(in) :: name      !< The name of this axis
   real, dimension(:), intent(in) :: data      !< The array of coordinate values
   character(len=*),   intent(in) :: units     !< The units for the axis data
@@ -118,12 +118,12 @@ integer function diag_axis_init(name, data, units, cart_name, long_name, MOM_dom
                                               !! describes the edges of this axis
   character(len=*), &
             optional, intent(in) :: set_name  !< A name to use for this set of axes.
-  integer,  optional, intent(in) :: refine    !< An optional degree of refinement for the grid, 1
+  integer,  optional, intent(in) :: coarsen   !< An optional degree of coarsening for the grid, 1
                                               !! by default.
   logical,  optional, intent(in) :: null_axis !< If present and true, return the special null axis
                                               !! id for use with scalars.
 
-  integer :: refinement ! The degree of grid refinement
+  integer :: coarsening ! The degree of grid coarsening
 
   if (present(null_axis)) then ; if (null_axis) then
     ! Return the special null axis id for scalars
@@ -132,21 +132,21 @@ integer function diag_axis_init(name, data, units, cart_name, long_name, MOM_dom
   endif ; endif
 
   if (present(MOM_domain)) then
-    refinement = 1 ; if (present(refine)) refinement = refine
-    if (refinement == 1) then
+    coarsening = 1 ; if (present(coarsen)) coarsening = coarsen
+    if (coarsening == 1) then
       diag_axis_init = axis_init(name, data, units, cart_name, long_name=long_name, &
               direction=direction, set_name=set_name, edges=edges, &
               domain2=MOM_domain%mpp_domain, domain_position=position)
-    elseif (refinement == 2) then
+    elseif (coarsening == 2) then
       diag_axis_init = axis_init(name, data, units, cart_name, long_name=long_name, &
               direction=direction, set_name=set_name, edges=edges, &
               domain2=MOM_domain%mpp_domain_d2, domain_position=position)
     else
-      call MOM_error(FATAL, "diag_axis_init called with an invalid value of refine.")
+      call MOM_error(FATAL, "diag_axis_init called with an invalid value of coarsen.")
     endif
   else
-    if (present(refine)) then ; if (refine /= 1) then
-      call MOM_error(FATAL, "diag_axis_init does not support grid refinement without a MOM_domain.")
+    if (present(coarsen)) then ; if (coarsen /= 1) then
+      call MOM_error(FATAL, "diag_axis_init does not support grid coarsening without a MOM_domain.")
     endif ; endif
     diag_axis_init = axis_init(name, data, units, cart_name, long_name=long_name, &
             direction=direction, set_name=set_name, edges=edges)
