@@ -14,7 +14,7 @@ use MOM_io_infra,         only : MOM_read_data, read_data, MOM_read_vector, read
 use MOM_io_infra,         only : file_exists, get_file_info, get_file_atts, get_file_fields
 use MOM_io_infra,         only : open_file, close_file, field_size, fieldtype, field_exists
 use MOM_io_infra,         only : flush_file, get_filename_appendix, get_ensemble_id
-use MOM_io_infra,         only : get_file_times, axistype, get_axis_data, read_axis_data
+use MOM_io_infra,         only : get_file_times, axistype, get_axis_data
 use MOM_io_infra,         only : write_field, write_metadata, write_version_number
 use MOM_io_infra,         only : open_namelist_file, check_nml_error, io_infra_init, io_infra_end
 use MOM_io_infra,         only : APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
@@ -36,7 +36,7 @@ public :: MOM_write_field, var_desc, modify_vardesc, query_vardesc
 ! The following are simple pass throughs of routines from MOM_io_infra or other modules
 public :: close_file, field_exists, field_size, fieldtype, get_filename_appendix
 public :: file_exists, flush_file, get_file_info, get_file_atts, get_file_fields
-public :: get_file_times, open_file, read_axis_data, get_axis_data
+public :: get_file_times, open_file, get_axis_data
 public :: MOM_read_data, MOM_read_vector, read_data, read_field_chksum
 public :: slasher, write_field, write_version_number
 public :: open_namelist_file, check_nml_error, io_infra_init, io_infra_end

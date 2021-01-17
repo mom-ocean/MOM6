@@ -27,11 +27,12 @@ use mpp_io_mod,           only : io_infra_init=>mpp_io_init
 
 implicit none ; private
 
-! These interfaces are actually implemented in this file.
-public :: MOM_read_data, MOM_read_vector, write_field, read_axis_data
+! These interfaces are actually implemented or have explicit interfaces in this file.
+public :: MOM_read_data, MOM_read_vector, write_field, open_file
 public :: file_exists, field_exists, read_field_chksum
-! The following are simple pass throughs of routines from other modules.
-public :: open_file, close_file, field_size, fieldtype, get_filename_appendix
+! The following are simple pass throughs of routines from other modules.  They need
+! to have explicit interfaces added to this file.
+public :: close_file, field_size, fieldtype, get_filename_appendix
 public :: flush_file, get_file_info, get_file_atts, get_file_fields, get_field_atts
 public :: get_file_times, read_data, axistype, get_axis_data
 public :: write_metadata, write_version_number, get_ensemble_id
@@ -74,46 +75,8 @@ end interface
 
 contains
 
-!> Read the data associated with a named axis in a file
-subroutine read_axis_data(filename, axis_name, var)
-  character(len=*),   intent(in)  :: filename  !< Name of the file to read
-  character(len=*),   intent(in)  :: axis_name !< Name of the axis to read
-  real, dimension(:), intent(out) :: var       !< The axis location data
-
-  integer :: i, len, unit, ndim, nvar, natt, ntime
-  logical :: axis_found
-  type(axistype), allocatable :: axes(:)
-  type(axistype) :: time_axis
-  character(len=32) :: name, units
-
-  call open_file(unit, trim(filename), action=READONLY_FILE, form=NETCDF_FILE, &
-                 threading=MULTIPLE, fileset=SINGLE_FILE)
-
-!Find the number of variables (nvar) in this file
-  call get_file_info(unit, ndim, nvar, natt, ntime)
-! -------------------------------------------------------------------
-! Allocate space for the number of axes in the data file.
-! -------------------------------------------------------------------
-  allocate(axes(ndim))
-  call mpp_get_axes(unit, axes, time_axis)
-
-  axis_found = .false.
-  do i = 1, ndim
-    call get_file_atts(axes(i), name=name, len=len, units=units)
-    if (name == axis_name) then
-      axis_found = .true.
-      call get_axis_data(axes(i), var)
-      exit
-    endif
-  enddo
-
-  if (.not.axis_found) call MOM_error(FATAL, "MOM_io read_axis_data: "//&
-    "Unable to find axis "//trim(axis_name)//" in file "//trim(filename))
-
-  deallocate(axes)
-
-end subroutine read_axis_data
-
+!> Reads the checksum value for a field that was recorded in a file, along with a flag indicating
+!! whether the file contained a valid checksum for this field.
 subroutine read_field_chksum(field, chksum, valid_chksum)
   type(fieldtype), intent(in)  :: field !< The field whose checksum attribute is to be read.
   integer(kind=8), intent(out) :: chksum !< The checksum for the field.
@@ -130,7 +93,6 @@ subroutine read_field_chksum(field, chksum, valid_chksum)
     chksum = -1
   endif
 end subroutine read_field_chksum
-
 
 !> Returns true if the named file or its domain-decomposed variant exists.
 function MOM_file_exists(filename, MOM_Domain)
