@@ -528,21 +528,29 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     ! shearing strain advocated by Smagorinsky (1993) and discussed in
     ! Griffies and Hallberg (2000).
 
-    do j=Jsq-2,Jeq+2 ; do i=Isq-2,Ieq+2
-      ! Calculate horizontal tension
+    ! NOTE: There is a ~1% speedup when the tension and shearing loops below
+    !   are fused (presumably due to shared access of Id[xy]C[uv]).  However,
+    !   this breaks the center/vertex index case convention, and also evaluates
+    !   the dudx and dvdy terms beyond their valid bounds.
+    ! TODO: Explore methods for retaining both the syntax and speedup.
+
+    ! Calculate horizontal tension
+    do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
       dudx(i,j) = CS%DY_dxT(i,j)*(G%IdyCu(I,j) * u(I,j,k) - &
                                   G%IdyCu(I-1,j) * u(I-1,j,k))
       dvdy(i,j) = CS%DX_dyT(i,j)*(G%IdxCv(i,J) * v(i,J,k) - &
                                   G%IdxCv(i,J-1) * v(i,J-1,k))
       sh_xx(i,j) = dudx(i,j) - dvdy(i,j)
+    enddo ; enddo
 
-      ! Components for the shearing strain
+    ! Components for the shearing strain
+    do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
       dvdx(I,J) = CS%DY_dxBu(I,J)*(v(i+1,J,k)*G%IdyCv(i+1,J) - v(i,J,k)*G%IdyCv(i,J))
       dudy(I,J) = CS%DX_dyBu(I,J)*(u(I,j+1,k)*G%IdxCu(I,j+1) - u(I,j,k)*G%IdxCu(I,j))
     enddo ; enddo
 
     if (CS%id_normstress > 0) then
-      do j=Jsq-2,Jeq+2 ; do i=Isq-2,Ieq+2
+      do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
         NoSt(i,j,k) = sh_xx(i,j)
       enddo ; enddo
     endif
@@ -885,6 +893,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         Kh(i,j) = CS%Kh_bg_xx(i,j)
       enddo ; enddo
 
+      ! NOTE: The following do-block can be decomposed and vectorized after the
+      !   stack size has been reduced.
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         if (CS%add_LES_viscosity) then
           if (CS%Smagorinsky_Kh) &
@@ -1217,12 +1227,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
       ! All viscosity contributions above are subject to resolution scaling
 
+      ! NOTE: The following do-block can be decomposed and vectorized after the
+      !   stack size has been reduced.
       do J=js-1,Jeq ; do I=is-1,Ieq
-        ! NOTE: The following do-block can be decomposed and vectorized, but
-        !   appears to cause slowdown on some machines.  Evidence suggests that
-        !   this is caused by excessive spilling of stack variables.
-        ! TODO: Vectorize these loops after stack usage has been reduced..
-
         if (rescale_Kh) &
           Kh(i,j) = VarMix%Res_fn_q(i,j) * Kh(i,j)
 
