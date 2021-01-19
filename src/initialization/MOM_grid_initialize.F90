@@ -7,8 +7,7 @@ use MOM_checksums,     only : hchksum, Bchksum, uvchksum, hchksum_pair, Bchksum_
 use MOM_domains,       only : pass_var, pass_vector, pe_here, root_PE, broadcast
 use MOM_domains,       only : AGRID, BGRID_NE, CGRID_NE, To_All, Scalar_Pair
 use MOM_domains,       only : To_North, To_South, To_East, To_West
-use MOM_domains,       only : MOM_define_domain, MOM_define_IO_domain, get_layout_extents
-use MOM_domains,       only : MOM_domain_type, deallocate_domain_contents
+use MOM_domains,       only : MOM_domain_type, clone_MOM_domain, deallocate_MOM_domain
 use MOM_dyn_horgrid,   only : dyn_horgrid_type, set_derived_dyn_horgrid
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
@@ -185,13 +184,10 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
   character(len=200) :: filename, grid_file, inputdir
   character(len=64)  :: mdl = "MOM_grid_init set_grid_metrics_from_mosaic"
-  integer :: err=0, ni, nj, global_indices(4)
-  type(MOM_domain_type) :: SGdom ! Supergrid domain
+  type(MOM_domain_type), pointer :: SGdom => NULL() ! Supergrid domain
   logical :: lon_bug  ! If true use an older buggy answer in the tripolar longitude.
-  integer :: i, j, i2, j2
-  integer, dimension(:), allocatable :: exni ! The extents of the grid for each i-row of the layout
-  integer, dimension(:), allocatable :: exnj ! The extents of the grid for each j-row of the layout
-  integer        :: start(4), nread(4)
+  integer :: i, j, i2, j2, ni, nj
+  integer :: start(4), nread(4)
 
   call callTree_enter("set_grid_metrics_from_mosaic(), MOM_grid_initialize.F90")
 
@@ -217,39 +213,9 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   dxBu(:,:) = 0.0 ; dyBu(:,:) = 0.0 ; areaBu(:,:) = 0.0
 
   !<MISSING CODE TO READ REFINEMENT LEVEL>
-  ni = 2*(G%iec-G%isc+1) ! i size of supergrid
-  nj = 2*(G%jec-G%jsc+1) ! j size of supergrid
 
-  ! Define a domain for the supergrid (SGdom)
-  call get_layout_extents(G%domain, exni, exnj)
-  allocate(SGdom%mpp_domain)
-  SGdom%nihalo = 2*G%domain%nihalo+1
-  SGdom%njhalo = 2*G%domain%njhalo+1
-  SGdom%niglobal = 2*G%domain%niglobal
-  SGdom%njglobal = 2*G%domain%njglobal
-  SGdom%layout(:) = G%domain%layout(:)
-  SGdom%io_layout(:) = G%domain%io_layout(:)
-  global_indices(1) = 1+SGdom%nihalo
-  global_indices(2) = SGdom%niglobal+SGdom%nihalo
-  global_indices(3) = 1+SGdom%njhalo
-  global_indices(4) = SGdom%njglobal+SGdom%njhalo
-  exni(:) = 2*exni(:) ; exnj(:) = 2*exnj(:)
-  if (associated(G%domain%maskmap)) then
-    call MOM_define_domain(global_indices, SGdom%layout, SGdom%mpp_domain, &
-            xflags=G%domain%X_FLAGS, yflags=G%domain%Y_FLAGS, &
-            xhalo=SGdom%nihalo, yhalo=SGdom%njhalo, &
-            xextent=exni, yextent=exnj, &
-            symmetry=.true., name="MOM_MOSAIC", maskmap=G%domain%maskmap)
-  else
-    call MOM_define_domain(global_indices, SGdom%layout, SGdom%mpp_domain, &
-            xflags=G%domain%X_FLAGS, yflags=G%domain%Y_FLAGS, &
-            xhalo=SGdom%nihalo, yhalo=SGdom%njhalo, &
-            xextent=exni, yextent=exnj, &
-            symmetry=.true., name="MOM_MOSAIC")
-  endif
-
-  call MOM_define_IO_domain(SGdom%mpp_domain, SGdom%io_layout)
-  deallocate(exni, exnj)
+  call clone_MOM_domain(G%domain, SGdom, symmetric=.true., domain_name="MOM_MOSAIC", &
+                        refine=2, extra_halo=1)
 
   ! Read X from the supergrid
   tmpZ(:,:) = 999.
@@ -338,9 +304,9 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
                   (tmpT(i2,j2+1) + tmpT(i2+1,j2))
   enddo ; enddo
 
-  ni=SGdom%niglobal
-  nj=SGdom%njglobal
-  call deallocate_domain_contents(SGdom)
+  ni = SGdom%niglobal
+  nj = SGdom%njglobal
+  call deallocate_MOM_domain(SGdom)
 
   call pass_vector(dyCu, dxCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
   call pass_vector(dxCu, dyCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
