@@ -31,6 +31,9 @@ use mpp_domains_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXAC
 use mpp_domains_mod, only : To_East => WUPDATE, To_West => EUPDATE, Omit_Corners => EDGEUPDATE
 use mpp_domains_mod, only : To_North => SUPDATE, To_South => NUPDATE
 use mpp_domains_mod, only : CENTER, CORNER, NORTH_FACE => NORTH, EAST_FACE => EAST
+use mpp_domains_mod, only : global_field => mpp_global_field
+use mpp_domains_mod, only : mpp_redistribute
+use mpp_domains_mod, only : broadcast_domain => mpp_broadcast_domain
 use fms_io_mod,      only : file_exist, parse_mask_table
 use fms_affinity_mod, only : fms_affinity_init, fms_affinity_set, fms_affinity_get
 
@@ -52,7 +55,7 @@ public :: start_group_pass, complete_group_pass
 public :: compute_block_extent, get_global_shape, get_layout_extents
 public :: MOM_thread_affinity_set, set_MOM_thread_affinity
 public :: get_simple_array_i_ind, get_simple_array_j_ind
-public :: domain2D, domain1D
+public :: domain2D, domain1D, global_field, redistribute_array, broadcast_domain
 
 !> Do a halo update on an array
 interface pass_var
@@ -103,6 +106,11 @@ end interface fill_symmetric_edges
 interface clone_MOM_domain
   module procedure clone_MD_to_MD, clone_MD_to_d2D
 end interface clone_MOM_domain
+
+!> Pass an array from one MOM domain to another
+interface redistribute_array
+  module procedure redistribute_array_3d, redistribute_array_2d
+end interface redistribute_array
 
 !> Extract the 1-d domain components from a MOM_domain or domain2d
 interface get_domain_components
@@ -2109,6 +2117,44 @@ subroutine get_global_shape(domain, niglobal, njglobal)
   niglobal = domain%niglobal
   njglobal = domain%njglobal
 end subroutine get_global_shape
+
+!> Returns various data that has been stored in a MOM_domain_type
+subroutine redistribute_array_2d(Domain1, array1, Domain2, array2, complete)
+  type(domain2d), &
+           intent(in)  :: Domain1 !< The MOM domain from which to extract information.
+  real, dimension(:,:), intent(in) :: array1 !< The array from which to extract information.
+  type(domain2d), &
+           intent(in)  :: Domain2 !< The MOM domain receiving information.
+  real, dimension(:,:), intent(out) :: array2 !< The array receiving information.
+  logical, optional, intent(in) :: complete  !< If true, finish communication before proceeding.
+
+  ! Local variables
+  logical :: do_complete
+
+  do_complete=.true.;if (PRESENT(complete)) do_complete = complete
+
+  call mpp_redistribute(Domain1, array1, Domain2, array2, do_complete)
+
+end subroutine redistribute_array_2d
+
+!> Returns various data that has been stored in a MOM_domain_type
+subroutine redistribute_array_3d(Domain1, array1, Domain2, array2, complete)
+  type(domain2d), &
+           intent(in)  :: Domain1 !< The MOM domain from which to extract information.
+  real, dimension(:,:,:), intent(in) :: array1 !< The array from which to extract information.
+  type(domain2d), &
+           intent(in)  :: Domain2 !< The MOM domain receiving information.
+  real, dimension(:,:,:), intent(out) :: array2 !< The array receiving information.
+  logical, optional, intent(in) :: complete  !< If true, finish communication before proceeding.
+
+  ! Local variables
+  logical :: do_complete
+
+  do_complete=.true.;if (PRESENT(complete)) do_complete = complete
+
+  call mpp_redistribute(Domain1, array1, Domain2, array2, do_complete)
+
+end subroutine redistribute_array_3d
 
 !> Returns arrays of the i- and j- sizes of the h-point computational domains for each
 !! element of the grid layout.  Any input values in the extent arrays are discarded, so
