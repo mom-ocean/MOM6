@@ -59,9 +59,8 @@ use MOM_diag_mediator, only : diag_mediator_init, enable_averages
 use MOM_diag_mediator, only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator, only : register_diag_field, register_static_field
 use MOM_diag_mediator, only : set_diag_mediator_grid, diag_ctrl
-use MOM_domains, only : MOM_domains_init, pass_var, pass_vector
-use MOM_domains, only : pass_var_start, pass_var_complete
-use MOM_domains, only : pass_vector_start, pass_vector_complete
+use MOM_domains, only : pass_var, pass_var_start, pass_var_complete
+use MOM_domains, only : pass_vector, pass_vector_start, pass_vector_complete
 use MOM_domains, only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : MOM_set_verbosity
