@@ -3,21 +3,19 @@ module MOM_domains
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_coms_infra,       only : MOM_infra_init, MOM_infra_end
 use MOM_coms_infra,       only : PE_here, root_PE, num_PEs, broadcast
 use MOM_coms_infra,       only : sum_across_PEs, min_across_PEs, max_across_PEs
-use MOM_coms_infra,       only : MOM_infra_init, MOM_infra_end
-use MOM_domain_infra,     only : MOM_domain_type, domain2D, domain1D, create_MOM_domain
-use MOM_domain_infra,     only : get_domain_extent
-use MOM_domain_infra,     only : clone_MOM_domain, get_domain_components
-use MOM_domain_infra,     only : deallocate_MOM_domain, deallocate_domain_contents
-use MOM_domain_infra,     only : MOM_define_domain, MOM_define_layout, MOM_define_io_domain
-use MOM_domain_infra,     only : pass_var, pass_vector
-use MOM_domain_infra,     only : pass_var_start, pass_var_complete, fill_symmetric_edges
+use MOM_domain_infra,     only : MOM_domain_type, domain2D, domain1D
+use MOM_domain_infra,     only : create_MOM_domain, clone_MOM_domain, deallocate_MOM_domain
+use MOM_domain_infra,     only : MOM_define_domain, MOM_define_layout
+use MOM_domain_infra,     only : get_domain_extent, get_domain_components
+use MOM_domain_infra,     only : compute_block_extent, get_global_shape
+use MOM_domain_infra,     only : pass_var, pass_vector, fill_symmetric_edges, global_field_sum
+use MOM_domain_infra,     only : pass_var_start, pass_var_complete
 use MOM_domain_infra,     only : pass_vector_start, pass_vector_complete
 use MOM_domain_infra,     only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domain_infra,     only : start_group_pass, complete_group_pass
-use MOM_domain_infra,     only : global_field_sum
-use MOM_domain_infra,     only : compute_block_extent, get_global_shape, get_layout_extents
 use MOM_domain_infra,     only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM
 use MOM_domain_infra,     only : CORNER, CENTER, NORTH_FACE, EAST_FACE
 use MOM_domain_infra,     only : To_East, To_West, To_North, To_South, To_All, Omit_Corners
@@ -29,19 +27,22 @@ use MOM_string_functions, only : slasher
 
 implicit none ; private
 
-public :: MOM_domains_init, MOM_domain_type, MOM_infra_init, MOM_infra_end
-public :: domain2D, domain1D
-public :: get_domain_extent
-public :: create_MOM_domain, clone_MOM_domain, get_domain_components
-public :: deallocate_MOM_domain, deallocate_domain_contents
-public :: MOM_define_domain, MOM_define_layout, MOM_define_io_domain
-public :: pass_var, pass_vector, PE_here, root_PE, num_PEs
-public :: pass_var_start, pass_var_complete, fill_symmetric_edges, broadcast
-public :: pass_vector_start, pass_vector_complete
+public :: MOM_infra_init, MOM_infra_end
+!      Domain types and creation and destruction routines
+public :: MOM_domain_type, domain2D, domain1D
+public :: MOM_domains_init, create_MOM_domain, clone_MOM_domain, deallocate_MOM_domain
+!      Domain query routines
+public :: get_domain_extent, get_domain_components, compute_block_extent, get_global_shape
+public :: PE_here, root_PE, num_PEs
+!      Single call communication routines
+public :: pass_var, pass_vector, fill_symmetric_edges, broadcast
+!      Non-blocking communication routines
+public :: pass_var_start, pass_var_complete, pass_vector_start, pass_vector_complete
+!      Multi-variable group communication routines and type
+public :: create_group_pass, do_group_pass, group_pass_type, start_group_pass, complete_group_pass
+!      Global reduction routines
 public :: global_field_sum, sum_across_PEs, min_across_PEs, max_across_PEs
-public :: create_group_pass, do_group_pass, group_pass_type
-public :: start_group_pass, complete_group_pass
-public :: compute_block_extent, get_global_shape, get_layout_extents
+!      Coded integers for controlling communication or staggering
 public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM
 public :: CORNER, CENTER, NORTH_FACE, EAST_FACE
 public :: To_East, To_West, To_North, To_South, To_All, Omit_Corners

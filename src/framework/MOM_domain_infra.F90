@@ -30,9 +30,9 @@ use fms_affinity_mod, only : fms_affinity_init, fms_affinity_set, fms_affinity_g
 
 implicit none ; private
 
-public :: MOM_define_domain, MOM_define_layout, MOM_define_io_domain
+public :: MOM_define_domain, MOM_define_layout
 public :: create_MOM_domain, clone_MOM_domain, get_domain_components
-public :: deallocate_MOM_domain, deallocate_domain_contents
+public :: deallocate_MOM_domain
 public :: get_domain_extent
 public :: pass_var, pass_vector, fill_symmetric_edges, global_field_sum
 public :: pass_var_start, pass_var_complete
@@ -42,7 +42,7 @@ public :: CORNER, CENTER, NORTH_FACE, EAST_FACE
 public :: To_East, To_West, To_North, To_South, To_All, Omit_Corners
 public :: create_group_pass, do_group_pass, group_pass_type
 public :: start_group_pass, complete_group_pass
-public :: compute_block_extent, get_global_shape, get_layout_extents
+public :: compute_block_extent, get_global_shape
 public :: MOM_thread_affinity_set, set_MOM_thread_affinity
 public :: get_simple_array_i_ind, get_simple_array_j_ind
 public :: domain2D, domain1D
@@ -1280,36 +1280,24 @@ subroutine deallocate_MOM_domain(MOM_domain, cursory)
   type(MOM_domain_type), pointer :: MOM_domain !< A pointer to the MOM_domain_type being deallocated
   logical,  optional, intent(in) :: cursory    !< If true do not deallocate fields associated
                                                !! with the underlying infrastructure
-
-  if (associated(MOM_domain)) then
-    call deallocate_domain_contents(MOM_domain, cursory)
-    deallocate(MOM_domain)
-  endif
-
-end subroutine deallocate_MOM_domain
-
-!> deallocate_domain_contents deallocates memory associated with pointers
-!! inside of a MOM_domain_type.
-subroutine deallocate_domain_contents(MOM_domain, cursory)
-  type(MOM_domain_type), intent(inout) :: MOM_domain !< A MOM_domain_type whose contents will be deallocated
-  logical,     optional, intent(in)    :: cursory    !< If true do not deallocate fields associated
-                                                     !! with the underlying infrastructure
-
   logical :: invasive  ! If true, deallocate fields associated with the underlying infrastructure
 
   invasive = .true. ; if (present(cursory)) invasive = .not.cursory
 
-  if (associated(MOM_domain%mpp_domain)) then
-    if (invasive) call mpp_deallocate_domain(MOM_domain%mpp_domain)
-    deallocate(MOM_domain%mpp_domain)
+  if (associated(MOM_domain)) then
+    if (associated(MOM_domain%mpp_domain)) then
+      if (invasive) call mpp_deallocate_domain(MOM_domain%mpp_domain)
+      deallocate(MOM_domain%mpp_domain)
+    endif
+    if (associated(MOM_domain%mpp_domain_d2)) then
+      if (invasive) call mpp_deallocate_domain(MOM_domain%mpp_domain_d2)
+      deallocate(MOM_domain%mpp_domain_d2)
+    endif
+    if (associated(MOM_domain%maskmap)) deallocate(MOM_domain%maskmap)
+    deallocate(MOM_domain)
   endif
-  if (associated(MOM_domain%mpp_domain_d2)) then
-    if (invasive) call mpp_deallocate_domain(MOM_domain%mpp_domain_d2)
-    deallocate(MOM_domain%mpp_domain_d2)
-  endif
-  if (associated(MOM_domain%maskmap)) deallocate(MOM_domain%maskmap)
 
-end subroutine deallocate_domain_contents
+end subroutine deallocate_MOM_domain
 
 !> MOM_thread_affinity_set returns true if the number of openMP threads have been set to a value greater than 1.
 function MOM_thread_affinity_set()
