@@ -15,6 +15,7 @@ use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
 use MOM, only : extract_surface_state, allocate_surface_state, finish_MOM_initialization
 use MOM, only : get_MOM_state_elements, MOM_state_is_synchronized
 use MOM, only : get_ocean_stocks, step_offline
+use MOM_coms,      only : field_chksum
 use MOM_constants, only : CELSIUS_KELVIN_OFFSET, hlf
 use MOM_diag_mediator, only : diag_ctrl, enable_averaging, disable_averaging
 use MOM_diag_mediator, only : diag_mediator_close_registration, diag_mediator_end
@@ -22,6 +23,7 @@ use MOM_domains, only : pass_var, pass_vector, AGRID, BGRID_NE, CGRID_NE
 use MOM_domains, only : TO_ALL, Omit_Corners
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
+use MOM_EOS, only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_file_parser, only : get_param, log_version, close_param_file, param_file_type
 use MOM_forcing_type, only : forcing, mech_forcing, allocate_forcing_type
 use MOM_forcing_type, only : fluxes_accumulate, get_net_mass_forcing
@@ -48,6 +50,8 @@ use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_ice_shelf, only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
 use MOM_ice_shelf, only : add_shelf_forces, ice_shelf_end, ice_shelf_save_restart
+use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
+use MOM_wave_interface, only: MOM_wave_interface_init_lite, Update_Surface_Waves
 use coupler_types_mod, only : coupler_1d_bc_type, coupler_2d_bc_type
 use coupler_types_mod, only : coupler_type_spawn, coupler_type_write_chksums
 use coupler_types_mod, only : coupler_type_initialized, coupler_type_copy_data
@@ -56,10 +60,6 @@ use mpp_domains_mod, only : domain2d, mpp_get_layout, mpp_get_global_domain
 use mpp_domains_mod, only : mpp_define_domains, mpp_get_compute_domain, mpp_get_data_domain
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 use fms_mod, only : stdout
-use mpp_mod, only : mpp_chksum
-use MOM_EOS, only : gsw_sp_from_sr, gsw_pt_from_ct
-use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
-use MOM_wave_interface, only: MOM_wave_interface_init_lite, Update_Surface_Waves
 
 #include <MOM_memory.h>
 
@@ -1130,13 +1130,13 @@ subroutine ocean_public_type_chksum(id, timestep, ocn)
   outunit = stdout()
 
   write(outunit,*) "BEGIN CHECKSUM(ocean_type):: ", id, timestep
-  write(outunit,100) 'ocean%t_surf   ',mpp_chksum(ocn%t_surf )
-  write(outunit,100) 'ocean%s_surf   ',mpp_chksum(ocn%s_surf )
-  write(outunit,100) 'ocean%u_surf   ',mpp_chksum(ocn%u_surf )
-  write(outunit,100) 'ocean%v_surf   ',mpp_chksum(ocn%v_surf )
-  write(outunit,100) 'ocean%sea_lev  ',mpp_chksum(ocn%sea_lev)
-  write(outunit,100) 'ocean%frazil   ',mpp_chksum(ocn%frazil )
-  write(outunit,100) 'ocean%melt_potential  ',mpp_chksum(ocn%melt_potential)
+  write(outunit,100) 'ocean%t_surf   ', field_chksum(ocn%t_surf )
+  write(outunit,100) 'ocean%s_surf   ', field_chksum(ocn%s_surf )
+  write(outunit,100) 'ocean%u_surf   ', field_chksum(ocn%u_surf )
+  write(outunit,100) 'ocean%v_surf   ', field_chksum(ocn%v_surf )
+  write(outunit,100) 'ocean%sea_lev  ', field_chksum(ocn%sea_lev)
+  write(outunit,100) 'ocean%frazil   ', field_chksum(ocn%frazil )
+  write(outunit,100) 'ocean%melt_potential  ', field_chksum(ocn%melt_potential)
   call coupler_type_write_chksums(ocn%fields, outunit, 'ocean%')
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 

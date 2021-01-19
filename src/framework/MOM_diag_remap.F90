@@ -60,6 +60,8 @@ module MOM_diag_remap
 use MOM_coms,             only : reproducing_sum_EFP, EFP_to_real
 use MOM_coms,             only : EFP_type, assignment(=), EFP_sum_across_PEs
 use MOM_error_handler,    only : MOM_error, FATAL, assert, WARNING
+use MOM_debugging,        only : check_column_integrals
+use MOM_diag_manager,     only : diag_axis_init
 use MOM_diag_vkernels,    only : interpolate_column, reintegrate_column
 use MOM_file_parser,      only : get_param, log_param, param_file_type
 use MOM_io,               only : slasher, mom_read_data
@@ -80,9 +82,7 @@ use coord_zlike,          only : build_zstar_column
 use coord_sigma,          only : build_sigma_column
 use coord_rho,            only : build_rho_column
 
-use diag_manager_mod,  only : diag_axis_init
 
-use MOM_debugging,     only : check_column_integrals
 implicit none ; private
 
 public diag_remap_ctrl
