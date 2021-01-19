@@ -1933,15 +1933,15 @@ subroutine initialize_shelf_mass(G, param_file, CS, ISS, new_sim)
       call log_param(param_file, mdl, "INPUTDIR/SHELF_FILE", filename)
 
       CS%id_read_mass = init_external_field(filename, shelf_mass_var, &
-                          domain=CS%Grid_in%Domain%mpp_domain, verbose=CS%debug)
+                            MOM_domain=CS%Grid_in%Domain, verbose=CS%debug)
 
       if (read_shelf_area) then
          call get_param(param_file, mdl, "SHELF_AREA_VAR", shelf_area_var, &
                   "The variable in SHELF_FILE with the shelf area.", &
                   default="shelf_area")
 
-         CS%id_read_area = init_external_field(filename,shelf_area_var, &
-                             domain=CS%Grid_in%Domain%mpp_domain)
+         CS%id_read_area = init_external_field(filename, shelf_area_var, &
+                               MOM_domain=CS%Grid_in%Domain)
       endif
 
       if (.not.file_exists(filename, CS%Grid_in%Domain)) call MOM_error(FATAL, &

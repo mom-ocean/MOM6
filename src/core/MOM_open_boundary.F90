@@ -859,8 +859,8 @@ subroutine initialize_segment_data(G, OBC, PF)
             endif
           endif
           segment%field(m)%buffer_src(:,:,:)=0.0
-          segment%field(m)%fid = init_external_field(trim(filename),&
-               trim(fieldname),ignore_axis_atts=.true.,threading=SINGLE_FILE)
+          segment%field(m)%fid = init_external_field(trim(filename), trim(fieldname), &
+                    ignore_axis_atts=.true., threading=SINGLE_FILE)
           if (siz(3) > 1) then
             if ((index(segment%field(m)%name, 'phase') > 0) .or. (index(segment%field(m)%name, 'amp') > 0)) then
               ! siz(3) is constituent for tidal variables
@@ -890,8 +890,8 @@ subroutine initialize_segment_data(G, OBC, PF)
               endif
               segment%field(m)%dz_src(:,:,:)=0.0
               segment%field(m)%nk_src=siz(3)
-              segment%field(m)%fid_dz = init_external_field(trim(filename),trim(fieldname),&
-                        ignore_axis_atts=.true.,threading=SINGLE_FILE)
+              segment%field(m)%fid_dz = init_external_field(trim(filename), trim(fieldname), &
+                        ignore_axis_atts=.true., threading=SINGLE_FILE)
             endif
           else
             segment%field(m)%nk_src=1

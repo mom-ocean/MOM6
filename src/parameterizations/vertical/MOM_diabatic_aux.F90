@@ -1693,7 +1693,7 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
         call log_param(param_file, mdl, "INPUTDIR/CHL_FILE", chl_filename)
         call get_param(param_file, mdl, "CHL_VARNAME", chl_varname, &
                    "Name of CHL_A variable in CHL_FILE.", default='CHL_A')
-        CS%sbc_chl = init_external_field(chl_filename, trim(chl_varname), domain=G%Domain%mpp_domain)
+        CS%sbc_chl = init_external_field(chl_filename, trim(chl_varname), MOM_domain=G%Domain)
       endif
 
       CS%id_chl = register_diag_field('ocean_model', 'Chl_opac', diag%axesT1, Time, &
