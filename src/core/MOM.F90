@@ -880,12 +880,12 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   enddo ; enddo ; endif
 
   if (CS%ensemble_ocean) then
-    ! update the time for the next analysis step if needed
-    call set_analysis_time(CS%Time,CS%odaCS)
     ! store ensemble vector in odaCS
     call set_prior_tracer(CS%Time, G, GV, CS%h, CS%tv, CS%odaCS)
     ! call DA interface
     call oda(CS%Time,CS%odaCS)
+    ! update the time for the next analysis step if needed
+    call set_analysis_time(CS%Time,CS%odaCS)
   endif
 
   if (showCallTree) call callTree_waypoint("calling extract_surface_state (step_MOM)")

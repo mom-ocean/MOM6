@@ -16,6 +16,7 @@ use MOM_domain_infra,     only : pass_var_start, pass_var_complete
 use MOM_domain_infra,     only : pass_vector_start, pass_vector_complete
 use MOM_domain_infra,     only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domain_infra,     only : start_group_pass, complete_group_pass
+use MOM_domain_infra,     only : global_field, redistribute_array, broadcast_domain
 use MOM_domain_infra,     only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM
 use MOM_domain_infra,     only : CORNER, CENTER, NORTH_FACE, EAST_FACE
 use MOM_domain_infra,     only : To_East, To_West, To_North, To_South, To_All, Omit_Corners
@@ -42,6 +43,7 @@ public :: pass_var_start, pass_var_complete, pass_vector_start, pass_vector_comp
 public :: create_group_pass, do_group_pass, group_pass_type, start_group_pass, complete_group_pass
 !      Global reduction routines
 public :: global_field_sum, sum_across_PEs, min_across_PEs, max_across_PEs
+public :: global_field, redistribute_array, broadcast_domain
 !      Coded integers for controlling communication or staggering
 public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM
 public :: CORNER, CENTER, NORTH_FACE, EAST_FACE

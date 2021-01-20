@@ -20,6 +20,9 @@ use mpp_domains_mod, only : group_pass_type => mpp_group_update_type
 use mpp_domains_mod, only : mpp_reset_group_update_field, mpp_group_update_initialized
 use mpp_domains_mod, only : mpp_start_group_update, mpp_complete_group_update
 use mpp_domains_mod, only : compute_block_extent => mpp_compute_block_extent
+use mpp_domains_mod, only : mpp_redistribute
+use mpp_domains_mod, only : global_field => mpp_global_field
+use mpp_domains_mod, only : broadcast_domain => mpp_broadcast_domain
 use mpp_domains_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM
 use mpp_domains_mod, only : CYCLIC_GLOBAL_DOMAIN, FOLD_NORTH_EDGE
 use mpp_domains_mod, only : To_East => WUPDATE, To_West => EUPDATE, Omit_Corners => EDGEUPDATE
@@ -43,6 +46,7 @@ public :: To_East, To_West, To_North, To_South, To_All, Omit_Corners
 public :: create_group_pass, do_group_pass, group_pass_type
 public :: start_group_pass, complete_group_pass
 public :: compute_block_extent, get_global_shape
+public :: global_field, redistribute_array, broadcast_domain
 public :: MOM_thread_affinity_set, set_MOM_thread_affinity
 public :: get_simple_array_i_ind, get_simple_array_j_ind
 public :: domain2D, domain1D
@@ -91,6 +95,11 @@ interface fill_symmetric_edges
   module procedure fill_vector_symmetric_edges_2d !, fill_vector_symmetric_edges_3d
 !   module procedure fill_scalar_symmetric_edges_2d, fill_scalar_symmetric_edges_3d
 end interface fill_symmetric_edges
+
+!> Pass an array from one MOM domain to another
+interface redistribute_array
+  module procedure redistribute_array_3d, redistribute_array_2d
+end interface redistribute_array
 
 !> Copy one MOM_domain_type into another
 interface clone_MOM_domain
@@ -1170,6 +1179,46 @@ subroutine complete_group_pass(group, MOM_dom, clock)
   if (present(clock)) then ; if (clock>0) call cpu_clock_end(clock) ; endif
 
 end subroutine complete_group_pass
+
+
+!> Pass a 2-D array from one MOM domain to another
+subroutine redistribute_array_2d(Domain1, array1, Domain2, array2, complete)
+  type(domain2d), &
+           intent(in)  :: Domain1 !< The MOM domain from which to extract information.
+  real, dimension(:,:), intent(in) :: array1 !< The array from which to extract information.
+  type(domain2d), &
+           intent(in)  :: Domain2 !< The MOM domain receiving information.
+  real, dimension(:,:), intent(out) :: array2 !< The array receiving information.
+  logical, optional, intent(in) :: complete  !< If true, finish communication before proceeding.
+
+  ! Local variables
+  logical :: do_complete
+
+  do_complete=.true.;if (PRESENT(complete)) do_complete = complete
+
+  call mpp_redistribute(Domain1, array1, Domain2, array2, do_complete)
+
+end subroutine redistribute_array_2d
+
+!> Pass a 3-D array from one MOM domain to another
+subroutine redistribute_array_3d(Domain1, array1, Domain2, array2, complete)
+  type(domain2d), &
+           intent(in)  :: Domain1 !< The MOM domain from which to extract information.
+  real, dimension(:,:,:), intent(in) :: array1 !< The array from which to extract information.
+  type(domain2d), &
+           intent(in)  :: Domain2 !< The MOM domain receiving information.
+  real, dimension(:,:,:), intent(out) :: array2 !< The array receiving information.
+  logical, optional, intent(in) :: complete  !< If true, finish communication before proceeding.
+
+  ! Local variables
+  logical :: do_complete
+
+  do_complete=.true.;if (PRESENT(complete)) do_complete = complete
+
+  call mpp_redistribute(Domain1, array1, Domain2, array2, do_complete)
+
+end subroutine redistribute_array_3d
+
 
 !> create_MOM_domain creates and initializes a MOM_domain_type variables, based on the information
 !! provided in arguments.
