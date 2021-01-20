@@ -33,6 +33,7 @@ use mpp_domains_mod, only : To_North => SUPDATE, To_South => NUPDATE
 use mpp_domains_mod, only : CENTER, CORNER, NORTH_FACE => NORTH, EAST_FACE => EAST
 use mpp_domains_mod, only : global_field => mpp_global_field
 use mpp_domains_mod, only : mpp_redistribute
+use mpp_domains_mod, only : broadcast_domain => mpp_broadcast_domain
 use fms_io_mod,      only : file_exist, parse_mask_table
 use fms_affinity_mod, only : fms_affinity_init, fms_affinity_set, fms_affinity_get
 
@@ -54,7 +55,7 @@ public :: start_group_pass, complete_group_pass
 public :: compute_block_extent, get_global_shape, get_layout_extents
 public :: MOM_thread_affinity_set, set_MOM_thread_affinity
 public :: get_simple_array_i_ind, get_simple_array_j_ind
-public :: domain2D, domain1D, global_field, redistribute_array
+public :: domain2D, domain1D, global_field, redistribute_array, broadcast_domain
 
 !> Do a halo update on an array
 interface pass_var

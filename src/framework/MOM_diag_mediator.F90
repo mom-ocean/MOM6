@@ -9,37 +9,28 @@ use MOM_checksums,        only : hchksum, uchksum, vchksum, Bchksum
 use MOM_coms,             only : PE_here
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_MODULE, CLOCK_ROUTINE
+use MOM_diag_manager,     only : diag_manager_init, diag_manager_end
+use MOM_diag_manager,     only : diag_axis_init, get_diag_axis_name, null_axis_id
+use MOM_diag_manager,     only : send_data, diag_field_add_attribute, EAST, NORTH
+use MOM_diag_manager,     only : register_diag_field_fms, register_static_field_fms
+use MOM_diag_manager,     only : get_diag_field_id_fms, DIAG_FIELD_NOT_FOUND
+use MOM_diag_remap,       only : diag_remap_ctrl, diag_remap_update, diag_remap_calc_hmask
+use MOM_diag_remap,       only : diag_remap_init, diag_remap_end, diag_remap_do_remap
+use MOM_diag_remap,       only : vertically_reintegrate_diag_field, vertically_interpolate_diag_field
+use MOM_diag_remap,       only : horizontally_average_diag_field, diag_remap_get_axes_info
+use MOM_diag_remap,       only : diag_remap_configure_axes, diag_remap_axes_configured
+use MOM_diag_remap,       only : diag_remap_diag_registration_closed, diag_remap_set_active
+use MOM_EOS,              only : EOS_type
 use MOM_error_handler,    only : MOM_error, FATAL, WARNING, is_root_pe, assert
 use MOM_file_parser,      only : get_param, log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
-use MOM_io,               only : slasher, vardesc, query_vardesc, mom_read_data
+use MOM_io,               only : slasher, vardesc, query_vardesc, MOM_read_data
 use MOM_io,               only : get_filename_appendix
 use MOM_safe_alloc,       only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_string_functions, only : lowercase
 use MOM_time_manager,     only : time_type
 use MOM_unit_scaling,     only : unit_scale_type
 use MOM_verticalGrid,     only : verticalGrid_type
-use MOM_EOS,              only : EOS_type
-use MOM_diag_remap,       only : diag_remap_ctrl
-use MOM_diag_remap,       only : diag_remap_update
-use MOM_diag_remap,       only : diag_remap_calc_hmask
-use MOM_diag_remap,       only : diag_remap_init, diag_remap_end, diag_remap_do_remap
-use MOM_diag_remap,       only : vertically_reintegrate_diag_field, vertically_interpolate_diag_field
-use MOM_diag_remap,       only : diag_remap_configure_axes, diag_remap_axes_configured
-use MOM_diag_remap,       only : diag_remap_get_axes_info, diag_remap_set_active
-use MOM_diag_remap,       only : diag_remap_diag_registration_closed
-use MOM_diag_remap,       only : horizontally_average_diag_field
-
-use diag_axis_mod, only : get_diag_axis_name
-use diag_data_mod, only : null_axis_id
-use diag_manager_mod, only : diag_manager_init, diag_manager_end
-use diag_manager_mod, only : send_data, diag_axis_init, EAST, NORTH, diag_field_add_attribute
-! The following module is needed for PGI since the following line does not compile with PGI 6.5.0
-! was: use diag_manager_mod, only : register_diag_field_fms=>register_diag_field
-use MOM_diag_manager_wrapper, only : register_diag_field_fms
-use diag_manager_mod, only : register_static_field_fms=>register_static_field
-use diag_manager_mod, only : get_diag_field_id_fms=>get_diag_field_id
-use diag_manager_mod, only : DIAG_FIELD_NOT_FOUND
 
 implicit none ; private
 
@@ -482,9 +473,8 @@ subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
   call define_axes_group(diag_cs, (/ id_xh, id_yq /), diag_cs%axesCv1, &
        x_cell_method='mean', y_cell_method='point', is_v_point=.true.)
 
-  ! Axis group for special null axis from diag manager
+  ! Axis group for special null axis from diag manager.  (Could null_axis_id be made MOM specific?)
   call define_axes_group(diag_cs, (/ null_axis_id /), diag_cs%axesNull)
-
 
   !Non-native Non-downsampled
   if (diag_cs%num_diag_coords>0) then

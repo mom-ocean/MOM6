@@ -1,14 +1,23 @@
-!> A simple (very thin) wrapper for register_diag_field to avoid a compiler bug with PGI
-module MOM_diag_manager_wrapper
+!> A simple (very thin) wrapper for the FMS diag_manager routines, with some name changes
+module MOM_diag_manager
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_time_manager, only : time_type
+use diag_axis_mod, only : diag_axis_init, get_diag_axis_name, EAST, NORTH
+use diag_data_mod, only : null_axis_id
+use diag_manager_mod, only : diag_manager_init, diag_manager_end
+use diag_manager_mod, only : send_data, diag_field_add_attribute, DIAG_FIELD_NOT_FOUND
 use diag_manager_mod, only : register_diag_field
+use diag_manager_mod, only : register_static_field_fms=>register_static_field
+use diag_manager_mod, only : get_diag_field_id_fms=>get_diag_field_id
 
 implicit none ; private
 
-public register_diag_field_fms
+public diag_manager_init, diag_manager_end
+public diag_axis_init, get_diag_axis_name, EAST, NORTH, null_axis_id
+public send_data, diag_field_add_attribute, DIAG_FIELD_NOT_FOUND
+public register_diag_field_fms, register_static_field_fms,  get_diag_field_id_fms
 
 !> A wrapper for register_diag_field_array()
 interface register_diag_field_fms
@@ -85,11 +94,11 @@ integer function register_diag_field_scalar_fms(module_name, field_name, init_ti
 
 end function register_diag_field_scalar_fms
 
-!> \namespace mom_diag_manager_wrapper
+!> \namespace mom_diag_manager
 !!
 !! This module simply wraps register_diag_field() from FMS's diag_manager_mod.
 !! We used to be able to import register_diag_field and rename it to register_diag_field_fms
 !! with a simple "use, only : register_diag_field_fms => register_diag_field" but PGI 16.5
 !! has a bug that refuses to compile this - earlier versions did work.
 
-end module MOM_diag_manager_wrapper
+end module MOM_diag_manager
