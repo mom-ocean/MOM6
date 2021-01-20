@@ -249,6 +249,19 @@ type, public :: mech_forcing
                                 !! ice needs to be accumulated, and the rigidity explicitly
                                 !! reset to zero at the driver level when appropriate.
 
+  real, pointer, dimension(:,:) :: &
+       ustk0 => NULL(), &       !< Surface Stokes drift, zonal [m/s]
+       vstk0 => NULL()          !< Surface Stokes drift, meridional [m/s]
+  real, pointer, dimension(:) :: &
+       stk_wavenumbers => NULL() !< The central wave number of Stokes bands [rad/m]
+  real, pointer, dimension(:,:,:) :: &
+       ustkb => NULL(), &       !< Stokes Drift spectrum, zonal [m/s]
+                                !! Horizontal - u points
+                                !! 3rd dimension - wavenumber
+       vstkb => NULL()          !< Stokes Drift spectrum, meridional [m/s]
+                                !! Horizontal - v points
+                                !! 3rd dimension - wavenumber
+
   logical :: initialized = .false. !< This indicates whether the appropriate arrays have been initialized.
 end type mech_forcing
 
@@ -2983,7 +2996,7 @@ end subroutine allocate_forcing_by_ref
 !> Conditionally allocate fields within the mechanical forcing type using
 !! control flags.
 subroutine allocate_mech_forcing_by_group(G, forces, stress, ustar, shelf, &
-                                          press, iceberg)
+                                          press, iceberg, waves, num_stk_bands)
   type(ocean_grid_type), intent(in) :: G       !< Ocean grid structure
   type(mech_forcing), intent(inout) :: forces  !< Forcing fields structure
 
@@ -2992,6 +3005,8 @@ subroutine allocate_mech_forcing_by_group(G, forces, stress, ustar, shelf, &
   logical, optional,     intent(in) :: shelf   !< If present and true, allocate forces for ice-shelf
   logical, optional,     intent(in) :: press   !< If present and true, allocate p_surf and related fields
   logical, optional,     intent(in) :: iceberg !< If present and true, allocate forces for icebergs
+  logical, optional,     intent(in) :: waves   !< If present and true, allocate wave fields
+  integer, optional,     intent(in) :: num_stk_bands !< Number of Stokes bands to allocate
 
   ! Local variables
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -3017,6 +3032,24 @@ subroutine allocate_mech_forcing_by_group(G, forces, stress, ustar, shelf, &
   !These fields should only on allocated when iceberg area is being passed through the coupler.
   call myAlloc(forces%area_berg,isd,ied,jsd,jed, iceberg)
   call myAlloc(forces%mass_berg,isd,ied,jsd,jed, iceberg)
+
+  !These fields should only be allocated when waves
+  call myAlloc(forces%ustk0,isd,ied,jsd,jed, waves)
+  call myAlloc(forces%vstk0,isd,ied,jsd,jed, waves)
+  if (present(waves)) then; if (waves) then; if (.not.associated(forces%ustkb)) then
+    if (.not.(present(num_stk_bands))) call MOM_error(FATAL,"Requested to &
+      initialize with waves, but no waves are present.")
+    allocate(forces%stk_wavenumbers(num_stk_bands))
+    forces%stk_wavenumbers(:) = 0.0
+    allocate(forces%ustkb(isd:ied,jsd:jed,num_stk_bands))
+    forces%ustkb(isd:ied,jsd:jed,:) = 0.0
+  endif ; endif ; endif
+
+  if (present(waves)) then; if (waves) then; if (.not.associated(forces%vstkb)) then
+    allocate(forces%vstkb(isd:ied,jsd:jed,num_stk_bands))
+    forces%vstkb(isd:ied,jsd:jed,:) = 0.0
+  endif ; endif ; endif
+
 end subroutine allocate_mech_forcing_by_group
 
 
