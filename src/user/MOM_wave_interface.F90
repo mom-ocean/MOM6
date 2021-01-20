@@ -466,9 +466,9 @@ subroutine Update_Surface_Waves(G, GV, US, Day, dt, CS, forces)
     if (DataSource==DATAOVR) then
       call Surface_Bands_by_data_override(day_center, G, GV, US, CS)
     elseif (DataSource==Coupler) then
-      if (.not.present(FORCES)) then 
+      if (.not.present(FORCES)) then
         call MOM_error(FATAL,"The option SURFBAND = COUPLER can not be used with "//&
-             "this driver. If you are using a coupled driver with a wave model then "//& 
+             "this driver. If you are using a coupled driver with a wave model then "//&
              "check the arguments in the subroutine call to Update_Surface_Waves, "//&
              "otherwise select another option for SURFBAND_SOURCE.")
       endif

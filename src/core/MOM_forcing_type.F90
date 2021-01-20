@@ -3007,8 +3007,8 @@ subroutine allocate_mech_forcing_by_group(G, forces, stress, ustar, shelf, &
   logical, optional,     intent(in) :: shelf   !< If present and true, allocate forces for ice-shelf
   logical, optional,     intent(in) :: press   !< If present and true, allocate p_surf and related fields
   logical, optional,     intent(in) :: iceberg !< If present and true, allocate forces for icebergs
-  logical, optional,     intent(in) :: waves   !< If present and true, allocate wave fields              
-  integer, optional,     intent(in) :: num_stk_bands !< Number of Stokes bands to allocate 
+  logical, optional,     intent(in) :: waves   !< If present and true, allocate wave fields
+  integer, optional,     intent(in) :: num_stk_bands !< Number of Stokes bands to allocate
 
   ! Local variables
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -3038,16 +3038,16 @@ subroutine allocate_mech_forcing_by_group(G, forces, stress, ustar, shelf, &
   !These fields should only be allocated when waves
   call myAlloc(forces%ustk0,isd,ied,jsd,jed, waves)
   call myAlloc(forces%vstk0,isd,ied,jsd,jed, waves)
-  if (present(waves)) then; if (waves) then; if (.not.associated(forces%ustkb)) then       
+  if (present(waves)) then; if (waves) then; if (.not.associated(forces%ustkb)) then
     if (.not.(present(num_stk_bands))) call MOM_error(FATAL,"Requested to &
-      initialize with waves, but no waves are present.") 
-    allocate(forces%stk_wavenumbers(num_stk_bands)) 
-    forces%stk_wavenumbers(:) = 0.0    
-    allocate(forces%ustkb(isd:ied,jsd:jed,num_stk_bands)) 
+      initialize with waves, but no waves are present.")
+    allocate(forces%stk_wavenumbers(num_stk_bands))
+    forces%stk_wavenumbers(:) = 0.0
+    allocate(forces%ustkb(isd:ied,jsd:jed,num_stk_bands))
     forces%ustkb(isd:ied,jsd:jed,:) = 0.0
   endif ; endif ; endif
 
-  if (present(waves)) then; if (waves) then; if (.not.associated(forces%vstkb)) then    
+  if (present(waves)) then; if (waves) then; if (.not.associated(forces%vstkb)) then
     allocate(forces%vstkb(isd:ied,jsd:jed,num_stk_bands))
     forces%vstkb(isd:ied,jsd:jed,:) = 0.0
   endif ; endif ; endif

@@ -862,7 +862,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
       enddo; enddo
       call pass_vector(forces%ustkb(:,:,istk),forces%vstkb(:,:,istk), G%domain )
     enddo
-  endif 
+  endif
 
   ! sea ice related dynamic fields
   if (associated(IOB%ice_rigidity)) then
