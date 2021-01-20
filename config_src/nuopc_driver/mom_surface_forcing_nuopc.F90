@@ -183,6 +183,16 @@ type, public :: ice_ocean_boundary_type
                                                               !! ice-shelves, expressed as a coefficient
                                                               !! for divergence damping, as determined
                                                               !! outside of the ocean model in [m3/s]
+  real, pointer, dimension(:,:)   :: ustk0           => NULL() !< Surface Stokes drift, zonal [m/s]
+  real, pointer, dimension(:,:)   :: vstk0           => NULL() !< Surface Stokes drift, meridional [m/s]
+  real, pointer, dimension(:)     :: stk_wavenumbers => NULL() !< The central wave number of Stokes bands [rad/m]
+  real, pointer, dimension(:,:,:) :: ustkb           => NULL() !< Stokes Drift spectrum, zonal [m/s]
+                                                               !! Horizontal  - u points
+                                                               !! 3rd dimension - wavenumber
+  real, pointer, dimension(:,:,:) :: vstkb           => NULL() !< Stokes Drift spectrum, meridional [m/s]
+                                                               !! Horizontal  - v points
+                                                               !! 3rd dimension - wavenumber
+  integer :: num_stk_bands            !< Number of Stokes drift bands passed through the coupler
   integer :: xtype                                            !< The type of the exchange - REGRID, REDIST or DIRECT
   type(coupler_2d_bc_type)      :: fluxes                     !< A structure that may contain an array of
                                                               !! named fields used for passive tracer fluxes.
@@ -428,7 +438,10 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     call MOM_error(FATAL, "liquid runoff is being added via data_override but "// &
                           "there is no associated runoff in the IOB")
     return
-  end if
+  endif
+  if (associated(IOB%lrunoff)) then
+   if(CS%liquid_runoff_from_data)call data_override('OCN', 'runoff', IOB%lrunoff, Time)
+  endif
 
   ! obtain fluxes from IOB; note the staggering of indices
   i0 = is - isc_bnd ; j0 = js - jsc_bnd
@@ -445,7 +458,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
     ! liquid runoff flux
     if (associated(IOB%lrunoff)) then
-      if(CS%liquid_runoff_from_data)call data_override('OCN', 'runoff', IOB%lrunoff, Time)
       fluxes%lrunoff(i,j) = kg_m2_s_conversion * IOB%lrunoff(i-i0,j-j0) * G%mask2dT(i,j)
     endif
 
@@ -624,7 +636,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
   real :: mass_eff      !< effective mass of sea ice for rigidity [R Z ~> kg m-2]
 
   integer :: wind_stagger  !< AGRID, BGRID_NE, or CGRID_NE (integers from MOM_domains)
-  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
+  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0, istk
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, isr, ier, jsr, jer
   integer :: isc_bnd, iec_bnd, jsc_bnd, jec_bnd
 
@@ -663,6 +675,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
   if ( (associated(IOB%area_berg) .and. (.not. associated(forces%area_berg))) .or. &
        (associated(IOB%mass_berg) .and. (.not. associated(forces%mass_berg))) ) &
     call allocate_mech_forcing(G, forces, iceberg=.true.)
+
   if (associated(IOB%ice_rigidity)) then
     rigidity_at_h(:,:) = 0.0
     call safe_alloc_ptr(forces%rigidity_ice_u,IsdB,IedB,jsd,jed)
@@ -672,6 +685,9 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
   forces%accumulate_rigidity = .true. ! Multiple components may contribute to rigidity.
   if (associated(forces%rigidity_ice_u)) forces%rigidity_ice_u(:,:) = 0.0
   if (associated(forces%rigidity_ice_v)) forces%rigidity_ice_v(:,:) = 0.0
+
+  if ( associated(IOB%ustkb) ) &
+    call allocate_mech_forcing(G, forces, waves=.true., num_stk_bands=IOB%num_stk_bands)
 
   ! applied surface pressure from atmosphere and cryosphere
   if (CS%use_limited_P_SSH) then
@@ -829,6 +845,24 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
     enddo ; enddo
 
   endif   ! endif for wind related fields
+
+  ! wave to ocean coupling
+  if ( associated(IOB%ustkb) ) then
+
+    forces%stk_wavenumbers(:) = IOB%stk_wavenumbers
+    do j=js,je; do i=is,ie
+      forces%ustk0(i,j) = IOB%ustk0(i-I0,j-J0) ! How to be careful here that the domains are right?
+      forces%vstk0(i,j) = IOB%vstk0(i-I0,j-J0)
+    enddo ; enddo
+    call pass_vector(forces%ustk0,forces%vstk0, G%domain )
+    do istk = 1,IOB%num_stk_bands
+      do j=js,je; do i=is,ie
+        forces%ustkb(i,j,istk) = IOB%ustkb(i-I0,j-J0,istk)
+        forces%vstkb(i,j,istk) = IOB%vstkb(i-I0,j-J0,istk)
+      enddo; enddo
+      call pass_vector(forces%ustkb(:,:,istk),forces%vstkb(:,:,istk), G%domain )
+    enddo
+  endif
 
   ! sea ice related dynamic fields
   if (associated(IOB%ice_rigidity)) then
