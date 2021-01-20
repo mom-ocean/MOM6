@@ -940,9 +940,9 @@ subroutine field_getfldptr(field, fldptr1, fldptr2, rank, abort, rc)
 end subroutine field_getfldptr
 
 logical function ChkErr(rc, line, file)
-  integer, intent(in) :: rc
-  integer, intent(in) :: line
-  character(len=*), intent(in) :: file
+  integer, intent(in) :: rc            !< return code to check
+  integer, intent(in) :: line          !< Integer source line number
+  character(len=*), intent(in) :: file !< User-provided source file name
   integer :: lrc
   ChkErr = .false.
   lrc = rc
