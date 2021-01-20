@@ -939,6 +939,7 @@ subroutine field_getfldptr(field, fldptr1, fldptr2, rank, abort, rc)
 
 end subroutine field_getfldptr
 
+!> Returns true if ESMF_LogFoundError() determines that rc is an error code. Otherwise false.
 logical function ChkErr(rc, line, file)
   integer, intent(in) :: rc            !< return code to check
   integer, intent(in) :: line          !< Integer source line number
