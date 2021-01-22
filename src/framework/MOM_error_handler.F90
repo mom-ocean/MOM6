@@ -39,9 +39,6 @@ integer :: callTreeIndentLevel = 0
 
 contains
 
-! is_root_pe returns .true. if the current PE is the root PE.
-! function is_root_pe()
-
 !> This provides a convenient interface for writing an informative comment.
 subroutine MOM_mesg(message, verb, all_print)
   character(len=*), intent(in)  :: message !< A message to write out

@@ -9,7 +9,6 @@ use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_time_manager,  only : time_type, set_time, time_type_to_real
 use MOM_unit_scaling,  only : unit_scale_type
-! use MOM_io,            only : file_exists, read_data, slasher
 
 implicit none ; private
 
