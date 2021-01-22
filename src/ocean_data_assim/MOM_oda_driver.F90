@@ -4,18 +4,19 @@ module MOM_oda_driver_mod
 ! This file is part of MOM6. see LICENSE.md for the license.
 
 ! MOM infrastructure
-use MOM_error_handler, only : stdout, stdlog, MOM_error
 use MOM_coms, only : PE_here, num_PEs
 use MOM_coms, only : set_PElist, set_rootPE, Get_PElist, broadcast
-use MOM_io, only : SINGLE_FILE
 use MOM_domains, only : domain2d, global_field, get_domain_extent
 use MOM_domains, only : pass_var, redistribute_array, broadcast_domain
 use MOM_diag_mediator, only : register_diag_field, diag_axis_init, post_data
 use MOM_ensemble_manager, only : get_ensemble_id, get_ensemble_size
 use MOM_ensemble_manager, only : get_ensemble_pelist, get_ensemble_filter_pelist
+use MOM_error_handler, only : stdout, stdlog, MOM_error
+use MOM_io, only : SINGLE_FILE
 use MOM_time_manager, only : time_type, real_to_time, get_date
 use MOM_time_manager, only : operator(+), operator(>=), operator(/=)
 use MOM_time_manager, only : operator(==), operator(<)
+
 ! ODA Modules
 use ocean_da_types_mod, only : grid_type, ocean_profile_type, ocean_control_struct
 use ocean_da_core_mod, only : ocean_da_core_init, get_profiles

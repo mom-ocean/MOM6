@@ -13,18 +13,19 @@ module MOM_ALE_sponge
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 use MOM_array_transform, only: rotate_array
-use MOM_coms, only : sum_across_PEs
+use MOM_coms,          only : sum_across_PEs
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, register_diag_field
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, NOTE, WARNING, is_root_pe
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_grid, only : ocean_grid_type
+use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
+use MOM_grid,          only : ocean_grid_type
 use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
+use MOM_interpolate,   only : init_external_field, get_external_field_info, time_interp_external_init
+use MOM_remapping,     only : remapping_cs, remapping_core_h, initialize_remapping
 use MOM_spatial_means, only : global_i_mean
-use MOM_time_manager, only : time_type, init_external_field, get_external_field_size, time_interp_external_init
-use MOM_remapping, only : remapping_cs, remapping_core_h, initialize_remapping
-use MOM_unit_scaling, only : unit_scale_type
-use MOM_verticalGrid, only : verticalGrid_type
+use MOM_time_manager,  only : time_type
+use MOM_unit_scaling,  only : unit_scale_type
+use MOM_verticalGrid,  only : verticalGrid_type
 
 implicit none ; private
 
@@ -638,12 +639,12 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, US,
   ! get a unique time interp id for this field. If sponge data is ongrid, then setup
   ! to only read on the computational domain
   if (CS%spongeDataOngrid) then
-    CS%Ref_val(CS%fldno)%id = init_external_field(filename, fieldname,domain=G%Domain%mpp_domain)
+    CS%Ref_val(CS%fldno)%id = init_external_field(filename, fieldname, MOM_domain=G%Domain)
   else
     CS%Ref_val(CS%fldno)%id = init_external_field(filename, fieldname)
   endif
   fld_sz(1:4)=-1
-  fld_sz = get_external_field_size(CS%Ref_val(CS%fldno)%id)
+  call get_external_field_info(CS%Ref_val(CS%fldno)%id, size=fld_sz)
   nz_data = fld_sz(3)
   CS%Ref_val(CS%fldno)%nz_data = nz_data !< individual sponge fields may reside on a different vertical grid
   CS%Ref_val(CS%fldno)%num_tlevs = fld_sz(4)
@@ -735,12 +736,12 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u, fieldname_u, filename
   ! to the current model date.
   CS%Ref_val_u%id = init_external_field(filename_u, fieldname_u)
   fld_sz(1:4)=-1
-  fld_sz = get_external_field_size(CS%Ref_val_u%id)
+  call get_external_field_info(CS%Ref_val_u%id, size=fld_sz)
   CS%Ref_val_u%nz_data = fld_sz(3)
   CS%Ref_val_u%num_tlevs = fld_sz(4)
   CS%Ref_val_v%id = init_external_field(filename_v, fieldname_v)
   fld_sz(1:4)=-1
-  fld_sz = get_external_field_size(CS%Ref_val_v%id)
+  call get_external_field_info(CS%Ref_val_v%id, size=fld_sz)
   CS%Ref_val_v%nz_data = fld_sz(3)
   CS%Ref_val_v%num_tlevs = fld_sz(4)
   allocate( u_val(isdB:iedB,jsd:jed, fld_sz(3)) )

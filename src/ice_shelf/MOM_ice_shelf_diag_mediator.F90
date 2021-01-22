@@ -151,27 +151,21 @@ subroutine set_axes_info(G, param_file, diag_cs, axes_set_name)
 
   if (G%symmetric) then
     id_xq = diag_axis_init('xB', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
-          'Boundary point nominal longitude',set_name=set_name, &
-          Domain2=G%Domain%mpp_domain, domain_position=EAST)
+          'Boundary point nominal longitude', G%Domain, position=EAST, set_name=set_name)
     id_yq = diag_axis_init('yB', G%gridLatB(G%jsgB:G%jegB), G%y_axis_units, 'y', &
-          'Boundary point nominal latitude', set_name=set_name, &
-          Domain2=G%Domain%mpp_domain, domain_position=NORTH)
+          'Boundary point nominal latitude', G%Domain, position=NORTH, set_name=set_name)
 
   else
     id_xq = diag_axis_init('xB', G%gridLonB(G%isg:G%ieg), G%x_axis_units, 'x', &
-          'Boundary point nominal longitude',set_name=set_name, &
-          Domain2=G%Domain%mpp_domain, domain_position=EAST)
+          'Boundary point nominal longitude', G%Domain, position=EAST, set_name=set_name)
     id_yq = diag_axis_init('yB', G%gridLatB(G%jsg:G%jeg), G%y_axis_units, 'y', &
-          'Boundary point nominal latitude', set_name=set_name, &
-          Domain2=G%Domain%mpp_domain, domain_position=NORTH)
+          'Boundary point nominal latitude', G%Domain, position=NORTH, set_name=set_name)
 
   endif
   id_xh = diag_axis_init('xT', G%gridLonT(G%isg:G%ieg), G%x_axis_units, 'x', &
-          'T point nominal longitude', set_name=set_name, &
-          Domain2=G%Domain%mpp_domain)
+          'T point nominal longitude', G%Domain, set_name=set_name)
   id_yh = diag_axis_init('yT', G%gridLatT(G%jsg:G%jeg), G%y_axis_units, 'y', &
-          'T point nominal latitude', set_name=set_name, &
-          Domain2=G%Domain%mpp_domain)
+          'T point nominal latitude', G%Domain, set_name=set_name)
 
   ! Axis groupings for 2-D arrays.
   call defineAxes(diag_cs, [id_xh, id_yh], diag_cs%axesT1)

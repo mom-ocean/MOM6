@@ -1,5 +1,5 @@
 !> Thin interfaces to non-domain-oriented mpp communication subroutines
-module MOM_coms_wrapper
+module MOM_coms_infra
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -158,4 +158,4 @@ subroutine MOM_infra_end
   call fms_end()
 end subroutine MOM_infra_end
 
-end module MOM_coms_wrapper
+end module MOM_coms_infra

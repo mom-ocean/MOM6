@@ -3,8 +3,8 @@ module MOM_error_handler
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use mpp_mod, only : mpp_error, NOTE, WARNING, FATAL
-use mpp_mod, only : mpp_pe, mpp_root_pe, stdlog, stdout
+use MOM_error_infra, only : MOM_err, NOTE, WARNING, FATAL
+use MOM_error_infra, only : is_root_pe, stdlog, stdout
 
 implicit none ; private
 
@@ -39,15 +39,6 @@ integer :: callTreeIndentLevel = 0
 
 contains
 
-!> This returns .true. if the current PE is the root PE.
-function is_root_pe()
-  ! This returns .true. if the current PE is the root PE.
-  logical :: is_root_pe
-  is_root_pe = .false.
-  if (mpp_pe() == mpp_root_pe()) is_root_pe = .true.
-  return
-end function is_root_pe
-
 !> This provides a convenient interface for writing an informative comment.
 subroutine MOM_mesg(message, verb, all_print)
   character(len=*), intent(in)  :: message !< A message to write out
@@ -62,18 +53,18 @@ subroutine MOM_mesg(message, verb, all_print)
   if (present(all_print)) write_msg = write_msg .or. all_print
 
   verb_msg = 2 ; if (present(verb)) verb_msg = verb
-  if (write_msg .and. (verbosity >= verb_msg)) call mpp_error(NOTE, message)
+  if (write_msg .and. (verbosity >= verb_msg)) call MOM_err(NOTE, message)
 
 end subroutine MOM_mesg
 
-!> This provides a convenient interface for writing an mpp_error message
+!> This provides a convenient interface for writing an error message
 !! with run-time filter based on a verbosity.
 subroutine MOM_error(level, message, all_print)
   integer,           intent(in) :: level !< The verbosity level of this message
   character(len=*),  intent(in) :: message !< A message to write out
   logical, optional, intent(in) :: all_print !< If present and true, any PEs are
                                              !! able to write this message.
-  ! This provides a convenient interface for writing an mpp_error message
+  ! This provides a convenient interface for writing an error message
   ! with run-time filter based on a verbosity.
   logical :: write_msg
 
@@ -82,13 +73,13 @@ subroutine MOM_error(level, message, all_print)
 
   select case (level)
     case (NOTE)
-      if (write_msg.and.verbosity>=2) call mpp_error(NOTE, message)
+      if (write_msg.and.verbosity>=2) call MOM_err(NOTE, message)
     case (WARNING)
-      if (write_msg.and.verbosity>=1) call mpp_error(WARNING, message)
+      if (write_msg.and.verbosity>=1) call MOM_err(WARNING, message)
     case (FATAL)
-      if (verbosity>=0) call mpp_error(FATAL, message)
+      if (verbosity>=0) call MOM_err(FATAL, message)
     case default
-      call mpp_error(level, message)
+      call MOM_err(level, message)
   end select
 end subroutine MOM_error
 
@@ -137,10 +128,10 @@ subroutine callTree_enter(mesg,n)
     nAsString = ''
     if (present(n)) then
       write(nAsString(1:8),'(i8)') n
-      call mpp_error(NOTE, 'callTree: '// &
+      call MOM_err(NOTE, 'callTree: '// &
         repeat('   ',callTreeIndentLevel-1)//'loop '//trim(mesg)//trim(nAsString))
     else
-      call mpp_error(NOTE, 'callTree: '// &
+      call MOM_err(NOTE, 'callTree: '// &
         repeat('   ',callTreeIndentLevel-1)//'---> '//trim(mesg))
     endif
   endif
@@ -152,7 +143,7 @@ subroutine callTree_leave(mesg)
   if (callTreeIndentLevel<1) write(0,*) 'callTree_leave: error callTreeIndentLevel=',callTreeIndentLevel,trim(mesg)
   callTreeIndentLevel = callTreeIndentLevel - 1
   if (verbosity<6) return
-  if (is_root_pe()) call mpp_error(NOTE, 'callTree: '// &
+  if (is_root_pe()) call MOM_err(NOTE, 'callTree: '// &
         repeat('   ',callTreeIndentLevel)//'<--- '//trim(mesg))
 end subroutine callTree_leave
 
@@ -168,10 +159,10 @@ subroutine callTree_waypoint(mesg,n)
     nAsString = ''
     if (present(n)) then
       write(nAsString(1:8),'(i8)') n
-      call mpp_error(NOTE, 'callTree: '// &
+      call MOM_err(NOTE, 'callTree: '// &
         repeat('   ',callTreeIndentLevel)//'loop '//trim(mesg)//trim(nAsString))
     else
-      call mpp_error(NOTE, 'callTree: '// &
+      call MOM_err(NOTE, 'callTree: '// &
         repeat('   ',callTreeIndentLevel)//'o '//trim(mesg))
     endif
   endif

@@ -4,10 +4,10 @@ module MOM_coms
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_coms_infra,    only : PE_here, root_PE, num_PEs, set_rootPE, Set_PElist, Get_PElist
+use MOM_coms_infra,    only : broadcast, field_chksum, MOM_infra_init, MOM_infra_end
+use MOM_coms_infra,    only : sum_across_PEs, max_across_PEs, min_across_PEs
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
-use MOM_coms_wrapper, only : PE_here, root_PE, num_PEs, set_rootPE, Set_PElist, Get_PElist
-use MOM_coms_wrapper, only : broadcast, field_chksum, MOM_infra_init, MOM_infra_end
-use MOM_coms_wrapper, only : sum_across_PEs, max_across_PEs, min_across_PEs
 
 implicit none ; private
 
