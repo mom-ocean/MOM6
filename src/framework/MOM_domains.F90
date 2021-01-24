@@ -32,6 +32,7 @@ public :: MOM_infra_init, MOM_infra_end
 !      Domain types and creation and destruction routines
 public :: MOM_domain_type, domain2D, domain1D
 public :: MOM_domains_init, create_MOM_domain, clone_MOM_domain, deallocate_MOM_domain
+public :: MOM_thread_affinity_set, set_MOM_thread_affinity
 !      Domain query routines
 public :: get_domain_extent, get_domain_components, compute_block_extent, get_global_shape
 public :: PE_here, root_PE, num_PEs
@@ -52,7 +53,7 @@ public :: To_East, To_West, To_North, To_South, To_All, Omit_Corners
 contains
 
 !> MOM_domains_init initializes a MOM_domain_type variable, based on the information
-!! read in from a param_file_type, and optionally returns data describing various'
+!! read in from a param_file_type, and optionally returns data describing various
 !! properties of the domain type.
 subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                             NIHALO, NJHALO, NIGLOBAL, NJGLOBAL, NIPROC, NJPROC, &
@@ -260,7 +261,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
     min_halo(1) = n_halo(1)
     n_halo(2) = max(n_halo(2), min_halo(2))
     min_halo(2) = n_halo(2)
-    ! These are generally used only with static memory, so they are considerd layout params.
+    ! These are generally used only with static memory, so they are considered layout params.
     call log_param(param_file, mdl, "!NIHALO min_halo", n_halo(1), layoutParam=.true.)
     call log_param(param_file, mdl, "!NJHALO min_halo", n_halo(2), layoutParam=.true.)
   endif

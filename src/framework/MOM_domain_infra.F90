@@ -498,7 +498,7 @@ subroutine pass_var_complete_3d(id_update, array, MOM_dom, sideflag, position, h
 end subroutine pass_var_complete_3d
 
 !> pass_vector_2d does a halo update for a pair of two-dimensional arrays
-!! representing the compontents of a two-dimensional horizontal vector.
+!! representing the components of a two-dimensional horizontal vector.
 subroutine pass_vector_2d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete, halo, &
                           clock)
   real, dimension(:,:),  intent(inout) :: u_cmpt    !< The nominal zonal (u) component of the vector
@@ -557,7 +557,7 @@ end subroutine pass_vector_2d
 
 !> fill_vector_symmetric_edges_2d does an usual set of halo updates that only
 !! fill in the values at the edge of a pair of symmetric memory two-dimensional
-!! arrays representing the compontents of a two-dimensional horizontal vector.
+!! arrays representing the components of a two-dimensional horizontal vector.
 !! If symmetric memory is not being used, this subroutine does nothing except to
 !! possibly turn optional cpu clocks on or off.
 subroutine fill_vector_symmetric_edges_2d(u_cmpt, v_cmpt, MOM_dom, stagger, scalar, &
@@ -644,7 +644,7 @@ subroutine fill_vector_symmetric_edges_2d(u_cmpt, v_cmpt, MOM_dom, stagger, scal
 end subroutine fill_vector_symmetric_edges_2d
 
 !> pass_vector_3d does a halo update for a pair of three-dimensional arrays
-!! representing the compontents of a three-dimensional horizontal vector.
+!! representing the components of a three-dimensional horizontal vector.
 subroutine pass_vector_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete, halo, &
                           clock)
   real, dimension(:,:,:), intent(inout) :: u_cmpt   !< The nominal zonal (u) component of the vector
@@ -702,7 +702,7 @@ subroutine pass_vector_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete,
 end subroutine pass_vector_3d
 
 !> pass_vector_start_2d starts a halo update for a pair of two-dimensional arrays
-!! representing the compontents of a two-dimensional horizontal vector.
+!! representing the components of a two-dimensional horizontal vector.
 function pass_vector_start_2d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete, halo, &
                               clock)
   real, dimension(:,:),   intent(inout) :: u_cmpt   !< The nominal zonal (u) component of the vector
@@ -759,7 +759,7 @@ function pass_vector_start_2d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, compl
 end function pass_vector_start_2d
 
 !> pass_vector_start_3d starts a halo update for a pair of three-dimensional arrays
-!! representing the compontents of a three-dimensional horizontal vector.
+!! representing the components of a three-dimensional horizontal vector.
 function pass_vector_start_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete, halo, &
                               clock)
   real, dimension(:,:,:), intent(inout) :: u_cmpt   !< The nominal zonal (u) component of the vector
@@ -815,7 +815,7 @@ function pass_vector_start_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, compl
 end function pass_vector_start_3d
 
 !> pass_vector_complete_2d completes a halo update for a pair of two-dimensional arrays
-!! representing the compontents of a two-dimensional horizontal vector.
+!! representing the components of a two-dimensional horizontal vector.
 subroutine pass_vector_complete_2d(id_update, u_cmpt, v_cmpt, MOM_dom, direction, stagger, halo, &
                                    clock)
   integer,                intent(in)    :: id_update !< The integer id of this update which has been
@@ -869,7 +869,7 @@ subroutine pass_vector_complete_2d(id_update, u_cmpt, v_cmpt, MOM_dom, direction
 end subroutine pass_vector_complete_2d
 
 !> pass_vector_complete_3d completes a halo update for a pair of three-dimensional
-!! arrays representing the compontents of a three-dimensional horizontal vector.
+!! arrays representing the components of a three-dimensional horizontal vector.
 subroutine pass_vector_complete_3d(id_update, u_cmpt, v_cmpt, MOM_dom, direction, stagger, halo, &
                                    clock)
   integer,                intent(in)    :: id_update !< The integer id of this update which has been
@@ -1371,7 +1371,7 @@ function MOM_thread_affinity_set()
   !$ MOM_thread_affinity_set = (ocean_nthreads > 1 )
 end function MOM_thread_affinity_set
 
-!> set_MOM_thread_affinity sest the number of openMP threads to use with the ocean.
+!> set_MOM_thread_affinity sets the number of openMP threads to use with the ocean.
 subroutine set_MOM_thread_affinity(ocean_nthreads, ocean_hyper_thread)
   integer, intent(in) :: ocean_nthreads     !< Number of openMP threads to use for the ocean model
   logical, intent(in) :: ocean_hyper_thread !< If true, use hyper threading
@@ -1379,10 +1379,13 @@ subroutine set_MOM_thread_affinity(ocean_nthreads, ocean_hyper_thread)
   ! Local variables
   !$ integer :: omp_get_thread_num, omp_get_num_threads !< These are the results of openMP functions
 
+  !$ call fms_affinity_init()  ! fms_affinity_init can be safely called more than once.
   !$ call fms_affinity_set('OCEAN', ocean_hyper_thread, ocean_nthreads)
   !$ call omp_set_num_threads(ocean_nthreads)
+  !$OMP PARALLEL
   !$ write(6,*) "MOM_domains_mod OMPthreading ", fms_affinity_get(), omp_get_thread_num(), omp_get_num_threads()
   !$ flush(6)
+  !$OMP END PARALLEL
 end subroutine set_MOM_thread_affinity
 
 !> This subroutine retrieves the 1-d domains that make up the 2d-domain in a MOM_domain
