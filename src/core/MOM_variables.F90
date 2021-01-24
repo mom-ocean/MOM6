@@ -4,16 +4,14 @@ module MOM_variables
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_array_transform, only : rotate_array, rotate_vector
-use MOM_domains, only : MOM_domain_type, get_domain_extent, group_pass_type
-use MOM_debugging, only : hchksum
+use MOM_coupler_types, only : coupler_1d_bc_type, coupler_2d_bc_type
+use MOM_coupler_types, only : coupler_type_spawn, coupler_type_destructor, coupler_type_initialized
+use MOM_debugging,     only : hchksum
+use MOM_domains,       only : MOM_domain_type, get_domain_extent, group_pass_type
+use MOM_EOS,           only : EOS_type
 use MOM_error_handler, only : MOM_error, FATAL
-use MOM_grid, only : ocean_grid_type
-use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : EOS_type
-
-use coupler_types_mod, only : coupler_1d_bc_type, coupler_2d_bc_type
-use coupler_types_mod, only : coupler_type_spawn, coupler_type_destructor
-use coupler_types_mod, only : coupler_type_initialized
+use MOM_grid,          only : ocean_grid_type
+use MOM_verticalGrid,  only : verticalGrid_type
 
 implicit none ; private
 
@@ -471,8 +469,7 @@ subroutine rotate_surface_state(sfc_state_in, G_in, sfc_state, G, turns)
 
   ! TODO: tracer field rotation
   if (coupler_type_initialized(sfc_state_in%tr_fields)) &
-    call MOM_error(FATAL, "Rotation of surface state tracers is not yet " &
-        // "implemented.")
+    call MOM_error(FATAL, "Rotation of surface state tracers is not yet implemented.")
 end subroutine rotate_surface_state
 
 !> Allocates the arrays contained within a BT_cont_type and initializes them to 0.
