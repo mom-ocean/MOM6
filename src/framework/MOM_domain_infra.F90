@@ -111,6 +111,12 @@ interface get_domain_components
   module procedure get_domain_components_MD, get_domain_components_d2D
 end interface get_domain_components
 
+!> Returns the index ranges that have been stored in a MOM_domain_type
+interface get_domain_extent
+  module procedure get_domain_extent_MD, get_domain_extent_d2D
+end interface get_domain_extent
+
+
 !> The MOM_domain_type contains information about the domain decomposition.
 type, public :: MOM_domain_type
   character(len=64) :: name     !< The name of this domain
@@ -1626,38 +1632,39 @@ subroutine clone_MD_to_d2D(MD_in, mpp_domain, min_halo, halo_size, symmetric, &
 
 end subroutine clone_MD_to_d2D
 
-!> Returns various data that has been stored in a MOM_domain_type
-subroutine get_domain_extent(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
-                             isg, ieg, jsg, jeg, idg_offset, jdg_offset, &
-                             symmetric, local_indexing, index_offset, coarsen)
+!> Returns the index ranges that have been stored in a MOM_domain_type
+subroutine get_domain_extent_MD(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
+                                isg, ieg, jsg, jeg, idg_offset, jdg_offset, &
+                                symmetric, local_indexing, index_offset, coarsen)
   type(MOM_domain_type), &
-           intent(in)  :: Domain !< The MOM domain from which to extract information
-  integer, intent(out) :: isc    !< The start i-index of the computational domain
-  integer, intent(out) :: iec    !< The end i-index of the computational domain
-  integer, intent(out) :: jsc    !< The start j-index of the computational domain
-  integer, intent(out) :: jec    !< The end j-index of the computational domain
-  integer, intent(out) :: isd    !< The start i-index of the data domain
-  integer, intent(out) :: ied    !< The end i-index of the data domain
-  integer, intent(out) :: jsd    !< The start j-index of the data domain
-  integer, intent(out) :: jed    !< The end j-index of the data domain
-  integer, intent(out) :: isg    !< The start i-index of the global domain
-  integer, intent(out) :: ieg    !< The end i-index of the global domain
-  integer, intent(out) :: jsg    !< The start j-index of the global domain
-  integer, intent(out) :: jeg    !< The end j-index of the global domain
+                     intent(in)  :: Domain !< The MOM domain from which to extract information
+  integer,           intent(out) :: isc    !< The start i-index of the computational domain
+  integer,           intent(out) :: iec    !< The end i-index of the computational domain
+  integer,           intent(out) :: jsc    !< The start j-index of the computational domain
+  integer,           intent(out) :: jec    !< The end j-index of the computational domain
+  integer,           intent(out) :: isd    !< The start i-index of the data domain
+  integer,           intent(out) :: ied    !< The end i-index of the data domain
+  integer,           intent(out) :: jsd    !< The start j-index of the data domain
+  integer,           intent(out) :: jed    !< The end j-index of the data domain
+  integer, optional, intent(out) :: isg    !< The start i-index of the global domain
+  integer, optional, intent(out) :: ieg    !< The end i-index of the global domain
+  integer, optional, intent(out) :: jsg    !< The start j-index of the global domain
+  integer, optional, intent(out) :: jeg    !< The end j-index of the global domain
   integer, optional, intent(out) :: idg_offset !< The offset between the corresponding global and
-                                 !! data i-index spaces.
+                                           !! data i-index spaces.
   integer, optional, intent(out) :: jdg_offset !< The offset between the corresponding global and
-                                 !! data j-index spaces.
+                                           !! data j-index spaces.
   logical, optional, intent(out) :: symmetric  !< True if symmetric memory is used.
   logical, optional, intent(in)  :: local_indexing !< If true, local tracer array indices start at 1,
-                                           !! as in most MOM6 code.
+                                           !! as in most MOM6 code.  The default is true.
   integer, optional, intent(in)  :: index_offset   !< A fixed additional offset to all indices. This
                                            !! can be useful for some types of debugging with
-                                           !! dynamic memory allocation.
+                                           !! dynamic memory allocation.  The default is 0.
   integer, optional, intent(in)  :: coarsen !< A factor by which the grid is coarsened.
                                            !!  The default is 1, for no coarsening.
 
   ! Local variables
+  integer :: isg_, ieg_, jsg_, jeg_
   integer :: ind_off, idg_off, jdg_off, coarsen_lev
   logical :: local
 
@@ -1669,22 +1676,22 @@ subroutine get_domain_extent(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
   if (coarsen_lev == 1) then
     call mpp_get_compute_domain(Domain%mpp_domain, isc, iec, jsc, jec)
     call mpp_get_data_domain(Domain%mpp_domain, isd, ied, jsd, jed)
-    call mpp_get_global_domain(Domain%mpp_domain, isg, ieg, jsg, jeg)
+    call mpp_get_global_domain(Domain%mpp_domain, isg_, ieg_, jsg_, jeg_)
   elseif (coarsen_lev == 2) then
     if (.not.associated(Domain%mpp_domain_d2)) call MOM_error(FATAL, &
             "get_domain_extent called with coarsen=2, but Domain%mpp_domain_d2 is not associated.")
     call mpp_get_compute_domain(Domain%mpp_domain_d2, isc, iec, jsc, jec)
     call mpp_get_data_domain(Domain%mpp_domain_d2, isd, ied, jsd, jed)
-    call mpp_get_global_domain(Domain%mpp_domain_d2, isg, ieg, jsg, jeg)
+    call mpp_get_global_domain(Domain%mpp_domain_d2, isg_, ieg_, jsg_, jeg_)
   else
     call MOM_error(FATAL, "get_domain_extent called with an unsupported level of coarsening.")
   endif
 
   if (local) then
     ! This code institutes the MOM convention that local array indices start at 1.
-    idg_off = isd-1 ; jdg_off = jsd-1
-    isc = isc-isd+1 ; iec = iec-isd+1 ; jsc = jsc-jsd+1 ; jec = jec-jsd+1
-    ied = ied-isd+1 ; jed = jed-jsd+1
+    idg_off = isd - 1 ; jdg_off = jsd - 1
+    isc = isc - isd + 1 ; iec = iec - isd + 1 ; jsc = jsc - jsd + 1 ; jec = jec - jsd + 1
+    ied = ied - isd + 1 ; jed = jed - jsd + 1
     isd = 1 ; jsd = 1
   else
     idg_off = 0 ; jdg_off = 0
@@ -1696,11 +1703,41 @@ subroutine get_domain_extent(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
     isd = isd + ind_off ; ied = ied + ind_off
     jsd = jsd + ind_off ; jed = jed + ind_off
   endif
+  if (present(isg)) isg = isg_
+  if (present(ieg)) ieg = ieg_
+  if (present(jsg)) jsg = jsg_
+  if (present(jeg)) jeg = jeg_
   if (present(idg_offset)) idg_offset = idg_off
   if (present(jdg_offset)) jdg_offset = jdg_off
   if (present(symmetric)) symmetric = Domain%symmetric
 
-end subroutine get_domain_extent
+end subroutine get_domain_extent_MD
+
+!> Returns the index ranges that have been stored in a domain2D type
+subroutine get_domain_extent_d2D(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed)
+  type(domain2d),    intent(in)  :: Domain !< The MOM domain from which to extract information
+  integer,           intent(out) :: isc    !< The start i-index of the computational domain
+  integer,           intent(out) :: iec    !< The end i-index of the computational domain
+  integer,           intent(out) :: jsc    !< The start j-index of the computational domain
+  integer,           intent(out) :: jec    !< The end j-index of the computational domain
+  integer, optional, intent(out) :: isd    !< The start i-index of the data domain
+  integer, optional, intent(out) :: ied    !< The end i-index of the data domain
+  integer, optional, intent(out) :: jsd    !< The start j-index of the data domain
+  integer, optional, intent(out) :: jed    !< The end j-index of the data domain
+
+  ! Local variables
+  integer :: isd_, ied_, jsd_, jed_, jsg_, jeg_, isg_, ieg_
+
+  call mpp_get_compute_domain(Domain, isc, iec, jsc, jec)
+  call mpp_get_data_domain(Domain, isd_, ied_, jsd_, jed_)
+
+  if (present(isd)) isd = isd_
+  if (present(ied)) ied = ied_
+  if (present(jsd)) jsd = jsd_
+  if (present(jed)) jed = jed_
+
+end subroutine get_domain_extent_d2D
+
 
 !> Return the (potentially symmetric) computational domain i-bounds for an array
 !! passed without index specifications (i.e. indices start at 1) based on an array size.
