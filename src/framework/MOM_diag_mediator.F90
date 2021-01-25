@@ -10,7 +10,7 @@ use MOM_coms,             only : PE_here
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_manager,     only : diag_manager_init, diag_manager_end
-use MOM_diag_manager,     only : diag_axis_init, get_diag_axis_name, null_axis_id
+use MOM_diag_manager,     only : diag_axis_init, get_diag_axis_name
 use MOM_diag_manager,     only : send_data, diag_field_add_attribute, EAST, NORTH
 use MOM_diag_manager,     only : register_diag_field_fms, register_static_field_fms
 use MOM_diag_manager,     only : get_diag_field_id_fms, DIAG_FIELD_NOT_FOUND
@@ -345,7 +345,7 @@ subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
   logical,       optional, intent(in)    :: set_vertical !< If true or missing, set up
                                                        !! vertical axes
   ! Local variables
-  integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh
+  integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh, id_null
   integer :: id_zl_native, id_zi_native
   integer :: i, j, k, nz
   real :: zlev(GV%ke), zinter(GV%ke+1)
@@ -380,39 +380,39 @@ subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
   if (G%symmetric) then
     if (diag_cs%grid_space_axes) then
       id_xq = diag_axis_init('iq', IaxB(G%isgB:G%iegB), 'none', 'x', &
-          'q point grid-space longitude', Domain2=G%Domain%mpp_domain, domain_position=EAST)
+          'q point grid-space longitude', G%Domain, position=EAST)
       id_yq = diag_axis_init('jq', JaxB(G%jsgB:G%jegB), 'none', 'y', &
-          'q point grid space latitude', Domain2=G%Domain%mpp_domain, domain_position=NORTH)
+          'q point grid space latitude', G%Domain, position=NORTH)
     else
       id_xq = diag_axis_init('xq', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
-          'q point nominal longitude', Domain2=G%Domain%mpp_domain, domain_position=EAST)
+          'q point nominal longitude', G%Domain, position=EAST)
       id_yq = diag_axis_init('yq', G%gridLatB(G%jsgB:G%jegB), G%y_axis_units, 'y', &
-          'q point nominal latitude', Domain2=G%Domain%mpp_domain, domain_position=NORTH)
+          'q point nominal latitude', G%Domain, position=NORTH)
     endif
   else
     if (diag_cs%grid_space_axes) then
       id_xq = diag_axis_init('Iq', IaxB(G%isg:G%ieg), 'none', 'x', &
-          'q point grid-space longitude', Domain2=G%Domain%mpp_domain, domain_position=EAST)
+          'q point grid-space longitude', G%Domain, position=EAST)
       id_yq = diag_axis_init('Jq', JaxB(G%jsg:G%jeg), 'none', 'y', &
-          'q point grid space latitude', Domain2=G%Domain%mpp_domain, domain_position=NORTH)
+          'q point grid space latitude', G%Domain, position=NORTH)
     else
       id_xq = diag_axis_init('xq', G%gridLonB(G%isg:G%ieg), G%x_axis_units, 'x', &
-          'q point nominal longitude', Domain2=G%Domain%mpp_domain, domain_position=EAST)
+          'q point nominal longitude', G%Domain, position=EAST)
       id_yq = diag_axis_init('yq', G%gridLatB(G%jsg:G%jeg), G%y_axis_units, 'y', &
-          'q point nominal latitude', Domain2=G%Domain%mpp_domain, domain_position=NORTH)
+          'q point nominal latitude', G%Domain, position=NORTH)
     endif
   endif
 
   if (diag_cs%grid_space_axes) then
     id_xh = diag_axis_init('ih', iax(G%isg:G%ieg), 'none', 'x', &
-        'h point grid-space longitude', Domain2=G%Domain%mpp_domain, domain_position=EAST)
+        'h point grid-space longitude', G%Domain, position=EAST)
     id_yh = diag_axis_init('jh', jax(G%jsg:G%jeg), 'none', 'y', &
-        'h point grid space latitude', Domain2=G%Domain%mpp_domain, domain_position=NORTH)
+        'h point grid space latitude', G%Domain, position=NORTH)
   else
     id_xh = diag_axis_init('xh', G%gridLonT(G%isg:G%ieg), G%x_axis_units, 'x', &
-        'h point nominal longitude', Domain2=G%Domain%mpp_domain)
+        'h point nominal longitude', G%Domain)
     id_yh = diag_axis_init('yh', G%gridLatT(G%jsg:G%jeg), G%y_axis_units, 'y', &
-        'h point nominal latitude', Domain2=G%Domain%mpp_domain)
+        'h point nominal latitude', G%Domain)
   endif
 
   if (set_vert) then
@@ -420,11 +420,9 @@ subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
     zinter(1:nz+1) = GV%sInterface(1:nz+1)
     zlev(1:nz) = GV%sLayer(1:nz)
     id_zl = diag_axis_init('zl', zlev, trim(GV%zAxisUnits), 'z', &
-                           'Layer '//trim(GV%zAxisLongName),     &
-                           direction=GV%direction)
+                           'Layer '//trim(GV%zAxisLongName), direction=GV%direction)
     id_zi = diag_axis_init('zi', zinter, trim(GV%zAxisUnits), 'z', &
-                           'Interface '//trim(GV%zAxisLongName),   &
-                           direction=GV%direction)
+                           'Interface '//trim(GV%zAxisLongName), direction=GV%direction)
   else
     id_zl = -1 ; id_zi = -1
   endif
@@ -473,8 +471,9 @@ subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
   call define_axes_group(diag_cs, (/ id_xh, id_yq /), diag_cs%axesCv1, &
        x_cell_method='mean', y_cell_method='point', is_v_point=.true.)
 
-  ! Axis group for special null axis from diag manager.  (Could null_axis_id be made MOM specific?)
-  call define_axes_group(diag_cs, (/ null_axis_id /), diag_cs%axesNull)
+  ! Axis group for special null axis from diag manager.
+  id_null = diag_axis_init('scalar_axis', (/0./), 'none', 'N', 'none', null_axis=.true.)
+  call define_axes_group(diag_cs, (/ id_null /), diag_cs%axesNull)
 
   !Non-native Non-downsampled
   if (diag_cs%num_diag_coords>0) then
@@ -602,9 +601,9 @@ subroutine set_axes_info_dsamp(G, GV, param_file, diag_cs, id_zl_native, id_zi_n
       do i=diag_cs%dsamp(dl)%isgB,diag_cs%dsamp(dl)%iegB;  gridLonB_dsamp(i) = G%gridLonB(G%isgB+dl*i); enddo
       do j=diag_cs%dsamp(dl)%jsgB,diag_cs%dsamp(dl)%jegB;  gridLatB_dsamp(j) = G%gridLatB(G%jsgB+dl*j); enddo
       id_xq = diag_axis_init('xq', gridLonB_dsamp, G%x_axis_units, 'x', &
-            'q point nominal longitude', Domain2=G%Domain%mpp_domain_d2)
+            'q point nominal longitude', G%Domain, coarsen=2)
       id_yq = diag_axis_init('yq', gridLatB_dsamp, G%y_axis_units, 'y', &
-            'q point nominal latitude', Domain2=G%Domain%mpp_domain_d2)
+            'q point nominal latitude', G%Domain, coarsen=2)
       deallocate(gridLonB_dsamp,gridLatB_dsamp)
     else
       allocate(gridLonB_dsamp(diag_cs%dsamp(dl)%isg:diag_cs%dsamp(dl)%ieg))
@@ -612,9 +611,9 @@ subroutine set_axes_info_dsamp(G, GV, param_file, diag_cs, id_zl_native, id_zi_n
       do i=diag_cs%dsamp(dl)%isg,diag_cs%dsamp(dl)%ieg;  gridLonB_dsamp(i) = G%gridLonB(G%isg+dl*i-2); enddo
       do j=diag_cs%dsamp(dl)%jsg,diag_cs%dsamp(dl)%jeg;  gridLatB_dsamp(j) = G%gridLatB(G%jsg+dl*j-2); enddo
       id_xq = diag_axis_init('xq', gridLonB_dsamp, G%x_axis_units, 'x', &
-            'q point nominal longitude', Domain2=G%Domain%mpp_domain_d2)
+            'q point nominal longitude', G%Domain, coarsen=2)
       id_yq = diag_axis_init('yq', gridLatB_dsamp, G%y_axis_units, 'y', &
-            'q point nominal latitude', Domain2=G%Domain%mpp_domain_d2)
+            'q point nominal latitude', G%Domain, coarsen=2)
       deallocate(gridLonB_dsamp,gridLatB_dsamp)
     endif
 
@@ -623,9 +622,9 @@ subroutine set_axes_info_dsamp(G, GV, param_file, diag_cs, id_zl_native, id_zi_n
     do i=diag_cs%dsamp(dl)%isg,diag_cs%dsamp(dl)%ieg;  gridLonT_dsamp(i) = G%gridLonT(G%isg+dl*i-2); enddo
     do j=diag_cs%dsamp(dl)%jsg,diag_cs%dsamp(dl)%jeg;  gridLatT_dsamp(j) = G%gridLatT(G%jsg+dl*j-2); enddo
     id_xh = diag_axis_init('xh', gridLonT_dsamp, G%x_axis_units, 'x', &
-          'h point nominal longitude', Domain2=G%Domain%mpp_domain_d2)
+          'h point nominal longitude', G%Domain, coarsen=2)
     id_yh = diag_axis_init('yh', gridLatT_dsamp, G%y_axis_units, 'y', &
-          'h point nominal latitude', Domain2=G%Domain%mpp_domain_d2)
+          'h point nominal latitude', G%Domain, coarsen=2)
 
     deallocate(gridLonT_dsamp,gridLatT_dsamp)
 

@@ -3,21 +3,19 @@ module MOM_coord_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_debugging, only : chksum
-use MOM_EOS, only : calculate_density, EOS_type
-use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
-use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
-use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
-use MOM_file_parser, only : log_version
-use MOM_io, only : close_file, create_file, fieldtype, file_exists
-use MOM_io, only : open_file, MOM_read_data, read_axis_data, SINGLE_FILE, MULTIPLE
-use MOM_io, only : slasher, vardesc, write_field, var_desc
-use MOM_string_functions, only : uppercase
-use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : thermo_var_ptrs
-use MOM_verticalGrid, only : verticalGrid_type, setVerticalGridAxes
-use user_initialization, only : user_set_coord
-use BFB_initialization, only : BFB_set_coord
+use MOM_debugging,        only : chksum
+use MOM_EOS,              only : calculate_density, EOS_type
+use MOM_error_handler,    only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
+use MOM_error_handler,    only : callTree_enter, callTree_leave, callTree_waypoint
+use MOM_file_parser,      only : get_param, read_param, log_param, param_file_type, log_version
+use MOM_io,               only : MOM_read_data, close_file, create_file, fieldtype, file_exists
+use MOM_io,               only : write_field, vardesc, var_desc, SINGLE_FILE, MULTIPLE
+use MOM_string_functions, only : slasher, uppercase
+use MOM_unit_scaling,     only : unit_scale_type
+use MOM_variables,        only : thermo_var_ptrs
+use MOM_verticalGrid,     only : verticalGrid_type, setVerticalGridAxes
+use user_initialization,  only : user_set_coord
+use BFB_initialization,   only : BFB_set_coord
 
 use netcdf
 
@@ -286,8 +284,8 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, eqn_of_s
   filename = trim(slasher(inputdir))//trim(coord_file)
   call log_param(param_file, mdl, "INPUTDIR/COORD_FILE", filename)
 
-  call MOM_read_data(filename,"PTEMP",T0(:))
-  call MOM_read_data(filename,"SALT",S0(:))
+  call MOM_read_data(filename, "PTEMP", T0(:))
+  call MOM_read_data(filename, "SALT", S0(:))
 
   if (.not.file_exists(filename)) call MOM_error(FATAL, &
       " set_coord_from_TS_profile: Unable to open " //trim(filename))
@@ -420,7 +418,7 @@ subroutine set_coord_from_file(Rlay, g_prime, GV, US, param_file)
   if (.not.file_exists(filename)) call MOM_error(FATAL, &
       " set_coord_from_file: Unable to open "//trim(filename))
 
-  call read_axis_data(filename, coord_var, Rlay)
+  call MOM_read_data(filename, coord_var, Rlay)
   do k=1,nz ; Rlay(k) = US%kg_m3_to_R*Rlay(k) ; enddo
   g_prime(1) = g_fs
   do k=2,nz ; g_prime(k) = (GV%g_Earth/(GV%Rho0)) * (Rlay(k) - Rlay(k-1)) ; enddo

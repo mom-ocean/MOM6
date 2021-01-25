@@ -3,22 +3,23 @@ module MOM_io
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_domains,          only : MOM_domain_type, AGRID, BGRID_NE, CGRID_NE, get_domain_components
-use MOM_domains,          only : domain1D, get_simple_array_i_ind, get_simple_array_j_ind
+use MOM_array_transform,  only : allocate_rotated_array, rotate_array
+use MOM_domains,          only : MOM_domain_type, domain1D, get_domain_components
+use MOM_domains,          only : AGRID, BGRID_NE, CGRID_NE
 use MOM_dyn_horgrid,      only : dyn_horgrid_type
 use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING
 use MOM_file_parser,      only : log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
-use MOM_io_wrapper,       only : MOM_read_data, MOM_read_vector, MOM_write_field, read_axis_data
-use MOM_io_wrapper,       only : file_exists, field_exists, read_field_chksum
-use MOM_io_wrapper,       only : open_file, close_file, field_size, fieldtype, get_filename_appendix
-use MOM_io_wrapper,       only : flush_file, get_file_info, get_file_atts, get_file_fields
-use MOM_io_wrapper,       only : get_file_times, read_data, axistype, get_axis_data
-use MOM_io_wrapper,       only : write_field, write_metadata, write_version_number, get_ensemble_id
-use MOM_io_wrapper,       only : open_namelist_file, check_nml_error, io_infra_init, io_infra_end
-use MOM_io_wrapper,       only : APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
-use MOM_io_wrapper,       only : READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
-use MOM_io_wrapper,       only : CENTER, CORNER, NORTH_FACE, EAST_FACE
+use MOM_io_infra,         only : MOM_read_data, read_data, MOM_read_vector, read_field_chksum
+use MOM_io_infra,         only : file_exists, get_file_info, get_file_atts, get_file_fields
+use MOM_io_infra,         only : open_file, close_file, field_size, fieldtype, field_exists
+use MOM_io_infra,         only : flush_file, get_filename_appendix, get_ensemble_id
+use MOM_io_infra,         only : get_file_times, axistype, get_axis_data
+use MOM_io_infra,         only : write_field, write_metadata, write_version_number
+use MOM_io_infra,         only : open_namelist_file, check_nml_error, io_infra_init, io_infra_end
+use MOM_io_infra,         only : APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
+use MOM_io_infra,         only : READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
+use MOM_io_infra,         only : CENTER, CORNER, NORTH_FACE, EAST_FACE
 use MOM_string_functions, only : lowercase, slasher
 use MOM_verticalGrid,     only : verticalGrid_type
 
@@ -31,12 +32,12 @@ implicit none ; private
 
 ! These interfaces are actually implemented in this file.
 public :: create_file, reopen_file, num_timelevels, cmor_long_std, ensembler, MOM_io_init
-public :: var_desc, modify_vardesc, query_vardesc
-! The following are simple pass throughs of routines from MOM_io_wrapper or other modules
+public :: MOM_write_field, var_desc, modify_vardesc, query_vardesc
+! The following are simple pass throughs of routines from MOM_io_infra or other modules
 public :: close_file, field_exists, field_size, fieldtype, get_filename_appendix
 public :: file_exists, flush_file, get_file_info, get_file_atts, get_file_fields
-public :: get_file_times, open_file, read_axis_data, read_data, read_field_chksum
-public :: MOM_read_data, MOM_read_vector, MOM_write_field, get_axis_data
+public :: get_file_times, open_file, get_axis_data
+public :: MOM_read_data, MOM_read_vector, read_data, read_field_chksum
 public :: slasher, write_field, write_version_number
 public :: open_namelist_file, check_nml_error, io_infra_init, io_infra_end
 ! These are encoding constants.
@@ -44,7 +45,16 @@ public :: APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
 public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
 
-!> Type for describing a variable, typically a tracer
+!> Write a registered field to an output file, potentially with rotation
+interface MOM_write_field
+  module procedure MOM_write_field_4d
+  module procedure MOM_write_field_3d
+  module procedure MOM_write_field_2d
+  module procedure MOM_write_field_1d
+  module procedure MOM_write_field_0d
+end interface MOM_write_field
+
+!> Type for describing a 3-d variable for output
 type, public :: vardesc
   character(len=64)  :: name               !< Variable name in a NetCDF file
   character(len=48)  :: units              !< Physical dimensions of the variable
@@ -666,6 +676,118 @@ subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
                                      "vd%cmor_longname of "//trim(vd%name), cllr)
 
 end subroutine query_vardesc
+
+
+!> Write a 4d field to an output file, potentially with rotation
+subroutine MOM_write_field_4d(io_unit, field_md, MOM_domain, field, tstamp, tile_count, &
+                              fill_value, turns)
+  integer,                  intent(in)    :: io_unit    !< File I/O unit handle
+  type(fieldtype),          intent(in)    :: field_md   !< Field type with metadata
+  type(MOM_domain_type),    intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
+  real, dimension(:,:,:,:), intent(inout) :: field      !< Unrotated field to write
+  real,           optional, intent(in)    :: tstamp     !< Model timestamp
+  integer,        optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
+  real,           optional, intent(in)    :: fill_value !< Missing data fill value
+  integer,        optional, intent(in)    :: turns      !< Number of quarter-turns to rotate the data
+
+  real, allocatable :: field_rot(:,:,:,:)  ! A rotated version of field, with the same units
+  integer :: qturns ! The number of quarter turns through which to rotate field
+
+  qturns = 0 ; if (present(turns)) qturns = modulo(turns, 4)
+
+  if (qturns == 0) then
+    call write_field(io_unit, field_md, MOM_domain, field, tstamp=tstamp, &
+                         tile_count=tile_count, fill_value=fill_value)
+  else
+    call allocate_rotated_array(field, [1,1,1,1], qturns, field_rot)
+    call rotate_array(field, qturns, field_rot)
+    call write_field(io_unit, field_md, MOM_domain, field_rot, tstamp=tstamp, &
+                         tile_count=tile_count, fill_value=fill_value)
+    deallocate(field_rot)
+  endif
+end subroutine MOM_write_field_4d
+
+!> Write a 3d field to an output file, potentially with rotation
+subroutine MOM_write_field_3d(io_unit, field_md, MOM_domain, field, tstamp, tile_count, &
+                              fill_value, turns)
+  integer,                intent(in)    :: io_unit    !< File I/O unit handle
+  type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
+  type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
+  real, dimension(:,:,:), intent(inout) :: field      !< Unrotated field to write
+  real,         optional, intent(in)    :: tstamp     !< Model timestamp
+  integer,      optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
+  real,         optional, intent(in)    :: fill_value !< Missing data fill value
+  integer,      optional, intent(in)    :: turns      !< Number of quarter-turns to rotate the data
+
+  real, allocatable :: field_rot(:,:,:)  ! A rotated version of field, with the same units
+  integer :: qturns ! The number of quarter turns through which to rotate field
+
+  qturns = 0 ; if (present(turns)) qturns = modulo(turns, 4)
+
+  if (qturns == 0) then
+    call write_field(io_unit, field_md, MOM_domain, field, tstamp=tstamp, &
+                         tile_count=tile_count, fill_value=fill_value)
+  else
+    call allocate_rotated_array(field, [1,1,1], qturns, field_rot)
+    call rotate_array(field, qturns, field_rot)
+    call write_field(io_unit, field_md, MOM_domain, field_rot, tstamp=tstamp, &
+                         tile_count=tile_count, fill_value=fill_value)
+    deallocate(field_rot)
+  endif
+end subroutine MOM_write_field_3d
+
+!> Write a 2d field to an output file, potentially with rotation
+subroutine MOM_write_field_2d(io_unit, field_md, MOM_domain, field, tstamp, tile_count, &
+                              fill_value, turns)
+  integer,                intent(in)    :: io_unit    !< File I/O unit handle
+  type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
+  type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
+  real, dimension(:,:),   intent(inout) :: field      !< Unrotated field to write
+  real,         optional, intent(in)    :: tstamp     !< Model timestamp
+  integer,      optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
+  real,         optional, intent(in)    :: fill_value !< Missing data fill value
+  integer,      optional, intent(in)    :: turns      !< Number of quarter-turns to rotate the data
+
+  real, allocatable :: field_rot(:,:)  ! A rotated version of field, with the same units
+  integer :: qturns ! The number of quarter turns through which to rotate field
+
+  qturns = 0
+  if (present(turns)) qturns = modulo(turns, 4)
+
+  if (qturns == 0) then
+    call write_field(io_unit, field_md, MOM_domain, field, tstamp=tstamp, &
+                         tile_count=tile_count, fill_value=fill_value)
+  else
+    call allocate_rotated_array(field, [1,1], qturns, field_rot)
+    call rotate_array(field, qturns, field_rot)
+    call write_field(io_unit, field_md, MOM_domain, field_rot, tstamp=tstamp, &
+                         tile_count=tile_count, fill_value=fill_value)
+    deallocate(field_rot)
+  endif
+end subroutine MOM_write_field_2d
+
+!> Write a 1d field to an output file
+subroutine MOM_write_field_1d(io_unit, field_md, field, tstamp, fill_value)
+  integer,                intent(in)    :: io_unit    !< File I/O unit handle
+  type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
+  real, dimension(:),     intent(in)    :: field      !< Field to write
+  real,         optional, intent(in)    :: tstamp     !< Model timestamp
+  real,         optional, intent(in)    :: fill_value !< Missing data fill value
+
+  call write_field(io_unit, field_md, field, tstamp=tstamp)
+end subroutine MOM_write_field_1d
+
+!> Write a 0d field to an output file
+subroutine MOM_write_field_0d(io_unit, field_md, field, tstamp, fill_value)
+  integer,                intent(in)    :: io_unit    !< File I/O unit handle
+  type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
+  real,                   intent(in)    :: field      !< Field to write
+  real,         optional, intent(in)    :: tstamp     !< Model timestamp
+  real,         optional, intent(in)    :: fill_value !< Missing data fill value
+
+  call write_field(io_unit, field_md, field, tstamp=tstamp)
+end subroutine MOM_write_field_0d
+
 
 !> Copies a string
 subroutine safe_string_copy(str1, str2, fieldnm, caller)

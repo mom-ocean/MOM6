@@ -1,12 +1,11 @@
 !> This module contains a thin inteface to mpp and fms I/O code
-module MOM_io_wrapper
+module MOM_io_infra
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_array_transform,  only : allocate_rotated_array, rotate_array
-use MOM_domains,          only : MOM_domain_type, AGRID, BGRID_NE, CGRID_NE
-use MOM_domains,          only : get_simple_array_i_ind, get_simple_array_j_ind
-use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING
+use MOM_domain_infra,     only : MOM_domain_type, AGRID, BGRID_NE, CGRID_NE
+use MOM_domain_infra,     only : get_simple_array_i_ind, get_simple_array_j_ind
+use MOM_error_infra,      only : MOM_error=>MOM_err, NOTE, FATAL, WARNING
 
 use ensemble_manager_mod, only : get_ensemble_id
 use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
@@ -14,7 +13,7 @@ use fms_io_mod,           only : file_exist, field_exist, field_size, read_data
 use fms_io_mod,           only : io_infra_end=>fms_io_exit, get_filename_appendix
 use mpp_domains_mod,      only : domain2d, CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
 use mpp_io_mod,           only : mpp_open, close_file=>mpp_close
-use mpp_io_mod,           only : write_metadata=>mpp_write_meta, write_field=>mpp_write
+use mpp_io_mod,           only : write_metadata=>mpp_write_meta, mpp_write
 use mpp_io_mod,           only : get_field_atts=>mpp_get_atts, mpp_attribute_exist
 use mpp_io_mod,           only : mpp_get_axes, axistype, get_axis_data=>mpp_get_axis_data
 use mpp_io_mod,           only : mpp_get_fields, fieldtype, flush_file=>mpp_flush
@@ -28,14 +27,15 @@ use mpp_io_mod,           only : io_infra_init=>mpp_io_init
 
 implicit none ; private
 
-! These interfaces are actually implemented in this file.
-public :: MOM_read_data, MOM_read_vector, MOM_write_field, read_axis_data
+! These interfaces are actually implemented or have explicit interfaces in this file.
+public :: MOM_read_data, MOM_read_vector, write_field, open_file
 public :: file_exists, field_exists, read_field_chksum
-! The following are simple pass throughs of routines from other modules.
-public :: open_file, close_file, field_size, fieldtype, get_filename_appendix
+! The following are simple pass throughs of routines from other modules.  They need
+! to have explicit interfaces added to this file.
+public :: close_file, field_size, fieldtype, get_filename_appendix
 public :: flush_file, get_file_info, get_file_atts, get_file_fields, get_field_atts
 public :: get_file_times, read_data, axistype, get_axis_data
-public :: write_field, write_metadata, write_version_number, get_ensemble_id
+public :: write_metadata, write_version_number, get_ensemble_id
 public :: open_namelist_file, check_nml_error, io_infra_init, io_infra_end
 ! These are encoding constants.
 public :: APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
@@ -58,13 +58,14 @@ interface MOM_read_data
 end interface
 
 !> Write a registered field to an output file
-interface MOM_write_field
-  module procedure MOM_write_field_4d
-  module procedure MOM_write_field_3d
-  module procedure MOM_write_field_2d
-  module procedure MOM_write_field_1d
-  module procedure MOM_write_field_0d
-end interface MOM_write_field
+interface write_field
+  module procedure write_field_4d
+  module procedure write_field_3d
+  module procedure write_field_2d
+  module procedure write_field_1d
+  module procedure write_field_0d
+  module procedure MOM_write_axis
+end interface write_field
 
 !> Read a pair of data fields representing the two components of a vector from a file
 interface MOM_read_vector
@@ -74,46 +75,8 @@ end interface
 
 contains
 
-!> Read the data associated with a named axis in a file
-subroutine read_axis_data(filename, axis_name, var)
-  character(len=*),   intent(in)  :: filename  !< Name of the file to read
-  character(len=*),   intent(in)  :: axis_name !< Name of the axis to read
-  real, dimension(:), intent(out) :: var       !< The axis location data
-
-  integer :: i, len, unit, ndim, nvar, natt, ntime
-  logical :: axis_found
-  type(axistype), allocatable :: axes(:)
-  type(axistype) :: time_axis
-  character(len=32) :: name, units
-
-  call open_file(unit, trim(filename), action=READONLY_FILE, form=NETCDF_FILE, &
-                 threading=MULTIPLE, fileset=SINGLE_FILE)
-
-!Find the number of variables (nvar) in this file
-  call get_file_info(unit, ndim, nvar, natt, ntime)
-! -------------------------------------------------------------------
-! Allocate space for the number of axes in the data file.
-! -------------------------------------------------------------------
-  allocate(axes(ndim))
-  call mpp_get_axes(unit, axes, time_axis)
-
-  axis_found = .false.
-  do i = 1, ndim
-    call get_file_atts(axes(i), name=name, len=len, units=units)
-    if (name == axis_name) then
-      axis_found = .true.
-      call get_axis_data(axes(i), var)
-      exit
-    endif
-  enddo
-
-  if (.not.axis_found) call MOM_error(FATAL, "MOM_io read_axis_data: "//&
-    "Unable to find axis "//trim(axis_name)//" in file "//trim(filename))
-
-  deallocate(axes)
-
-end subroutine read_axis_data
-
+!> Reads the checksum value for a field that was recorded in a file, along with a flag indicating
+!! whether the file contained a valid checksum for this field.
 subroutine read_field_chksum(field, chksum, valid_chksum)
   type(fieldtype), intent(in)  :: field !< The field whose checksum attribute is to be read.
   integer(kind=8), intent(out) :: chksum !< The checksum for the field.
@@ -130,7 +93,6 @@ subroutine read_field_chksum(field, chksum, valid_chksum)
     chksum = -1
   endif
 end subroutine read_field_chksum
-
 
 !> Returns true if the named file or its domain-decomposed variant exists.
 function MOM_file_exists(filename, MOM_Domain)
@@ -417,116 +379,74 @@ subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data
 end subroutine MOM_read_vector_3d
 
 
-!> Write a 4d field to an output file, potentially with rotation
-subroutine MOM_write_field_4d(io_unit, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns)
+!> Write a 4d field to an output file.
+subroutine write_field_4d(io_unit, field_md, MOM_domain, field, tstamp, tile_count, fill_value)
   integer,                  intent(in)    :: io_unit    !< File I/O unit handle
   type(fieldtype),          intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),    intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
-  real, dimension(:,:,:,:), intent(inout) :: field      !< Unrotated field to write
+  real, dimension(:,:,:,:), intent(inout) :: field      !< Field to write
   real,           optional, intent(in)    :: tstamp     !< Model timestamp
   integer,        optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
   real,           optional, intent(in)    :: fill_value !< Missing data fill value
-  integer,        optional, intent(in)    :: turns      !< Number of quarter-turns to rotate the data
 
-  real, allocatable :: field_rot(:,:,:,:)  ! A rotated version of field, with the same units
-  integer :: qturns ! The number of quarter turns through which to rotate field
+  call mpp_write(io_unit, field_md, MOM_domain%mpp_domain, field, tstamp=tstamp, &
+                 tile_count=tile_count, default_data=fill_value)
+end subroutine write_field_4d
 
-  qturns = 0
-  if (present(turns)) qturns = modulo(turns, 4)
-
-  if (qturns == 0) then
-    call write_field(io_unit, field_md, MOM_domain%mpp_domain, field, tstamp=tstamp, &
-        tile_count=tile_count, default_data=fill_value)
-  else
-    call allocate_rotated_array(field, [1,1,1,1], qturns, field_rot)
-    call rotate_array(field, qturns, field_rot)
-    call write_field(io_unit, field_md, MOM_domain%mpp_domain, field_rot, tstamp=tstamp, &
-        tile_count=tile_count, default_data=fill_value)
-    deallocate(field_rot)
-  endif
-end subroutine MOM_write_field_4d
-
-!> Write a 3d field to an output file, potentially with rotation
-subroutine MOM_write_field_3d(io_unit, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns)
+!> Write a 3d field to an output file.
+subroutine write_field_3d(io_unit, field_md, MOM_domain, field, tstamp, tile_count, fill_value)
   integer,                intent(in)    :: io_unit    !< File I/O unit handle
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
-  real, dimension(:,:,:), intent(inout) :: field      !< Unrotated field to write
+  real, dimension(:,:,:), intent(inout) :: field      !< Field to write
   real,         optional, intent(in)    :: tstamp     !< Model timestamp
   integer,      optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
   real,         optional, intent(in)    :: fill_value !< Missing data fill value
-  integer,      optional, intent(in)    :: turns      !< Number of quarter-turns to rotate the data
 
-  real, allocatable :: field_rot(:,:,:)  ! A rotated version of field, with the same units
-  integer :: qturns ! The number of quarter turns through which to rotate field
+  call mpp_write(io_unit, field_md, MOM_domain%mpp_domain, field, tstamp=tstamp, &
+                   tile_count=tile_count, default_data=fill_value)
+end subroutine write_field_3d
 
-  qturns = 0
-  if (present(turns)) qturns = modulo(turns, 4)
-
-  if (qturns == 0) then
-    call write_field(io_unit, field_md, MOM_domain%mpp_domain, field, tstamp=tstamp, &
-                     tile_count=tile_count, default_data=fill_value)
-  else
-    call allocate_rotated_array(field, [1,1,1], qturns, field_rot)
-    call rotate_array(field, qturns, field_rot)
-    call write_field(io_unit, field_md, MOM_domain%mpp_domain, field_rot, tstamp=tstamp, &
-                     tile_count=tile_count, default_data=fill_value)
-    deallocate(field_rot)
-  endif
-end subroutine MOM_write_field_3d
-
-!> Write a 2d field to an output file, potentially with rotation
-subroutine MOM_write_field_2d(io_unit, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns)
+!> Write a 2d field to an output file.
+subroutine write_field_2d(io_unit, field_md, MOM_domain, field, tstamp, tile_count, fill_value)
   integer,                intent(in)    :: io_unit    !< File I/O unit handle
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
-  real, dimension(:,:),   intent(inout) :: field      !< Unrotated field to write
+  real, dimension(:,:),   intent(inout) :: field      !< Field to write
   real,         optional, intent(in)    :: tstamp     !< Model timestamp
   integer,      optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
   real,         optional, intent(in)    :: fill_value !< Missing data fill value
-  integer,      optional, intent(in)    :: turns      !< Number of quarter-turns to rotate the data
 
-  real, allocatable :: field_rot(:,:)  ! A rotated version of field, with the same units
-  integer :: qturns ! The number of quarter turns through which to rotate field
+  call mpp_write(io_unit, field_md, MOM_domain%mpp_domain, field, tstamp=tstamp, &
+                   tile_count=tile_count, default_data=fill_value)
+end subroutine write_field_2d
 
-  qturns = 0
-  if (present(turns)) qturns = modulo(turns, 4)
-
-  if (qturns == 0) then
-    call write_field(io_unit, field_md, MOM_domain%mpp_domain, field, tstamp=tstamp, &
-                     tile_count=tile_count, default_data=fill_value)
-  else
-    call allocate_rotated_array(field, [1,1], qturns, field_rot)
-    call rotate_array(field, qturns, field_rot)
-    call write_field(io_unit, field_md, MOM_domain%mpp_domain, field_rot, tstamp=tstamp, &
-                     tile_count=tile_count, default_data=fill_value)
-    deallocate(field_rot)
-  endif
-end subroutine MOM_write_field_2d
-
-!> Write a 1d field to an output file
-subroutine MOM_write_field_1d(io_unit, field_md, field, tstamp, fill_value)
+!> Write a 1d field to an output file.
+subroutine write_field_1d(io_unit, field_md, field, tstamp)
   integer,                intent(in)    :: io_unit    !< File I/O unit handle
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
-  real, dimension(:),     intent(inout) :: field      !< Field to write
+  real, dimension(:),     intent(in)    :: field      !< Field to write
   real,         optional, intent(in)    :: tstamp     !< Model timestamp
-  real,         optional, intent(in)    :: fill_value !< Missing data fill value
 
-  call write_field(io_unit, field_md, field, tstamp=tstamp)
-end subroutine MOM_write_field_1d
+  call mpp_write(io_unit, field_md, field, tstamp=tstamp)
+end subroutine write_field_1d
 
-!> Write a 0d field to an output file
-subroutine MOM_write_field_0d(io_unit, field_md, field, tstamp, fill_value)
+!> Write a 0d field to an output file.
+subroutine write_field_0d(io_unit, field_md, field, tstamp)
   integer,                intent(in)    :: io_unit    !< File I/O unit handle
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
-  real,                   intent(inout) :: field      !< Field to write
+  real,                   intent(in)    :: field      !< Field to write
   real,         optional, intent(in)    :: tstamp     !< Model timestamp
-  real,         optional, intent(in)    :: fill_value !< Missing data fill value
 
-  call write_field(io_unit, field_md, field, tstamp=tstamp)
-end subroutine MOM_write_field_0d
+  call mpp_write(io_unit, field_md, field, tstamp=tstamp)
+end subroutine write_field_0d
 
-end module MOM_io_wrapper
+subroutine MOM_write_axis(io_unit, axis)
+  integer,        intent(in)  :: io_unit    !< File I/O unit handle
+  type(axistype), intent(in)  :: axis       !< An axis type variable with information to write
+
+  call mpp_write(io_unit, axis)
+
+end subroutine MOM_write_axis
+
+end module MOM_io_infra
