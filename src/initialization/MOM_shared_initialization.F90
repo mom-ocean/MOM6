@@ -11,9 +11,9 @@ use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, log_param, param_file_type, log_version
-use MOM_io, only : close_file, create_file, fieldtype, file_exists
+use MOM_io, only : close_file, create_file, fieldtype, file_exists, stdout
 use MOM_io, only : MOM_read_data, MOM_read_vector, SINGLE_FILE, MULTIPLE
-use MOM_io, only : slasher, vardesc, write_field, var_desc
+use MOM_io, only : slasher, vardesc, MOM_write_field, var_desc
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
 
@@ -282,7 +282,7 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
     j = jg(n) - G%jsd_global + 2
     if (i>=G%isc .and. i<=G%iec .and. j>=G%jsc .and. j<=G%jec) then
       if (new_depth(n)/=0.) then
-        write(*,'(a,3i5,f8.2,a,f8.2,2i4)') &
+        write(stdout,'(a,3i5,f8.2,a,f8.2,2i4)') &
           'Ocean topography edit: ',n,ig(n),jg(n),D(i,j)/m_to_Z,'->',abs(new_depth(n)),i,j
         D(i,j) = abs(m_to_Z*new_depth(n)) ! Allows for height-file edits (i.e. converts negatives)
       else
@@ -1008,11 +1008,11 @@ subroutine reset_face_lengths_list(G, param_file, US)
         G%dy_Cu(I,j) = G%mask2dCu(I,j) * m_to_L*min(L_to_m*G%dyCu(I,j), max(u_width(npt), 0.0))
         if (j>=G%jsc .and. j<=G%jec .and. I>=G%isc .and. I<=G%iec) then ! Limit messages/checking to compute domain
           if ( G%mask2dCu(I,j) == 0.0 )  then
-            write(*,'(A,2F8.2,A,4F8.2,A)') "read_face_lengths_list : G%mask2dCu=0 at ",lat,lon," (",&
+            write(stdout,'(A,2F8.2,A,4F8.2,A)') "read_face_lengths_list : G%mask2dCu=0 at ",lat,lon," (",&
                 u_lat(1,npt), u_lat(2,npt), u_lon(1,npt), u_lon(2,npt),") so grid metric is unmodified."
           else
             u_line_used(npt) = u_line_used(npt) + 1
-            write(*,'(A,2F8.2,A,4F8.2,A5,F9.2,A1)') &
+            write(stdout,'(A,2F8.2,A,4F8.2,A5,F9.2,A1)') &
                   "read_face_lengths_list : Modifying dy_Cu gridpoint at ",lat,lon," (",&
                   u_lat(1,npt), u_lat(2,npt), u_lon(1,npt), u_lon(2,npt),") to ",L_to_m*G%dy_Cu(I,j),"m"
           endif
@@ -1038,11 +1038,11 @@ subroutine reset_face_lengths_list(G, param_file, US)
         G%dx_Cv(i,J) = G%mask2dCv(i,J) * m_to_L*min(L_to_m*G%dxCv(i,J), max(v_width(npt), 0.0))
         if (i>=G%isc .and. i<=G%iec .and. J>=G%jsc .and. J<=G%jec) then ! Limit messages/checking to compute domain
           if ( G%mask2dCv(i,J) == 0.0 )  then
-            write(*,'(A,2F8.2,A,4F8.2,A)') "read_face_lengths_list : G%mask2dCv=0 at ",lat,lon," (",&
+            write(stdout,'(A,2F8.2,A,4F8.2,A)') "read_face_lengths_list : G%mask2dCv=0 at ",lat,lon," (",&
                   v_lat(1,npt), v_lat(2,npt), v_lon(1,npt), v_lon(2,npt),") so grid metric is unmodified."
           else
             v_line_used(npt) = v_line_used(npt) + 1
-            write(*,'(A,2F8.2,A,4F8.2,A5,F9.2,A1)') &
+            write(stdout,'(A,2F8.2,A,4F8.2,A5,F9.2,A1)') &
                   "read_face_lengths_list : Modifying dx_Cv gridpoint at ",lat,lon," (",&
                   v_lat(1,npt), v_lat(2,npt), v_lon(1,npt), v_lon(2,npt),") to ",L_to_m*G%dx_Cv(I,j),"m"
           endif
@@ -1311,61 +1311,61 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   call create_file(unit, trim(filepath), vars, nFlds_used, fields, &
                    file_threading, dG=G)
 
-  do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLatBu(I,J); enddo ; enddo
-  call write_field(unit, fields(1), G%Domain%mpp_domain, out_q)
-  do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLonBu(I,J); enddo ; enddo
-  call write_field(unit, fields(2), G%Domain%mpp_domain, out_q)
-  call write_field(unit, fields(3), G%Domain%mpp_domain, G%geoLatT)
-  call write_field(unit, fields(4), G%Domain%mpp_domain, G%geoLonT)
+  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = G%geoLatBu(I,J) ; enddo ; enddo
+  call MOM_write_field(unit, fields(1), G%Domain, out_q)
+  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = G%geoLonBu(I,J) ; enddo ; enddo
+  call MOM_write_field(unit, fields(2), G%Domain, out_q)
+  call MOM_write_field(unit, fields(3), G%Domain, G%geoLatT)
+  call MOM_write_field(unit, fields(4), G%Domain, G%geoLonT)
 
   do j=js,je ; do i=is,ie ; out_h(i,j) = Z_to_m_scale*G%bathyT(i,j) ; enddo ; enddo
-  call write_field(unit, fields(5), G%Domain%mpp_domain, out_h)
+  call MOM_write_field(unit, fields(5), G%Domain, out_h)
   do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(i,J) = s_to_T_scale*G%CoriolisBu(I,J) ; enddo ; enddo
-  call write_field(unit, fields(6), G%Domain%mpp_domain, out_q)
+  call MOM_write_field(unit, fields(6), G%Domain, out_q)
 
   !   I think that all of these copies are holdovers from a much earlier
   ! ancestor code in which many of the metrics were macros that could have
   ! had reduced dimensions, and that they are no longer needed in MOM6. -RWH
   do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dxCv(i,J) ; enddo ; enddo
-  call write_field(unit, fields(7), G%Domain%mpp_domain, out_v)
+  call MOM_write_field(unit, fields(7), G%Domain, out_v)
   do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dyCu(I,j) ; enddo ; enddo
-  call write_field(unit, fields(8), G%Domain%mpp_domain, out_u)
+  call MOM_write_field(unit, fields(8), G%Domain, out_u)
 
   do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dxCu(I,j) ; enddo ; enddo
-  call write_field(unit, fields(9), G%Domain%mpp_domain, out_u)
+  call MOM_write_field(unit, fields(9), G%Domain, out_u)
   do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dyCv(i,J) ; enddo ; enddo
-  call write_field(unit, fields(10), G%Domain%mpp_domain, out_v)
+  call MOM_write_field(unit, fields(10), G%Domain, out_v)
 
   do j=js,je ; do i=is,ie ; out_h(i,j) = L_to_m_scale*G%dxT(i,j); enddo ; enddo
-  call write_field(unit, fields(11), G%Domain%mpp_domain, out_h)
+  call MOM_write_field(unit, fields(11), G%Domain, out_h)
   do j=js,je ; do i=is,ie ; out_h(i,j) = L_to_m_scale*G%dyT(i,j) ; enddo ; enddo
-  call write_field(unit, fields(12), G%Domain%mpp_domain, out_h)
+  call MOM_write_field(unit, fields(12), G%Domain, out_h)
 
   do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(i,J) = L_to_m_scale*G%dxBu(I,J) ; enddo ; enddo
-  call write_field(unit, fields(13), G%Domain%mpp_domain, out_q)
+  call MOM_write_field(unit, fields(13), G%Domain, out_q)
   do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = L_to_m_scale*G%dyBu(I,J) ; enddo ; enddo
-  call write_field(unit, fields(14), G%Domain%mpp_domain, out_q)
+  call MOM_write_field(unit, fields(14), G%Domain, out_q)
 
-  do j=js,je ; do i=is,ie ; out_h(i,j) = G%areaT(i,j) ; enddo ; enddo
-  call write_field(unit, fields(15), G%Domain%mpp_domain, out_h)
-  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = G%areaBu(I,J) ; enddo ; enddo
-  call write_field(unit, fields(16), G%Domain%mpp_domain, out_q)
+  do j=js,je ; do i=is,ie ; out_h(i,j) = L_to_m_scale**2*G%areaT(i,j) ; enddo ; enddo
+  call MOM_write_field(unit, fields(15), G%Domain, out_h)
+  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = L_to_m_scale**2*G%areaBu(I,J) ; enddo ; enddo
+  call MOM_write_field(unit, fields(16), G%Domain, out_q)
 
   do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dx_Cv(i,J) ; enddo ; enddo
-  call write_field(unit, fields(17), G%Domain%mpp_domain, out_v)
+  call MOM_write_field(unit, fields(17), G%Domain, out_v)
   do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dy_Cu(I,j) ; enddo ; enddo
-  call write_field(unit, fields(18), G%Domain%mpp_domain, out_u)
-  call write_field(unit, fields(19), G%Domain%mpp_domain, G%mask2dT)
+  call MOM_write_field(unit, fields(18), G%Domain, out_u)
+  call MOM_write_field(unit, fields(19), G%Domain, G%mask2dT)
 
   if (G%bathymetry_at_vel) then
     do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = Z_to_m_scale*G%Dblock_u(I,j) ; enddo ; enddo
-    call write_field(unit, fields(20), G%Domain%mpp_domain, out_u)
+    call MOM_write_field(unit, fields(20), G%Domain, out_u)
     do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = Z_to_m_scale*G%Dopen_u(I,j) ; enddo ; enddo
-    call write_field(unit, fields(21), G%Domain%mpp_domain, out_u)
+    call MOM_write_field(unit, fields(21), G%Domain, out_u)
     do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = Z_to_m_scale*G%Dblock_v(i,J) ; enddo ; enddo
-    call write_field(unit, fields(22), G%Domain%mpp_domain, out_v)
+    call MOM_write_field(unit, fields(22), G%Domain, out_v)
     do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = Z_to_m_scale*G%Dopen_v(i,J) ; enddo ; enddo
-    call write_field(unit, fields(23), G%Domain%mpp_domain, out_v)
+    call MOM_write_field(unit, fields(23), G%Domain, out_v)
   endif
 
   call close_file(unit)

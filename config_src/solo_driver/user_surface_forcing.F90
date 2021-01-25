@@ -89,7 +89,7 @@ subroutine USER_wind_forcing(sfc_state, forces, day, G, US, CS)
   !  is always positive.
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
-   forces%ustar(i,j) = G%mask2dT(i,j) * sqrt((CS%gust_const + &
+    forces%ustar(i,j) = G%mask2dT(i,j) * sqrt((CS%gust_const + &
             sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
                  0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))) * (US%L_to_Z/CS%Rho0))
   enddo ; enddo ; endif

@@ -34,10 +34,10 @@ use coupler_types_mod,    only : coupler_2d_bc_type, coupler_type_write_chksums
 use coupler_types_mod,    only : coupler_type_initialized, coupler_type_spawn
 use coupler_types_mod,    only : coupler_type_copy_data
 use data_override_mod,    only : data_override_init, data_override
-use fms_mod,              only : stdout
 use mpp_mod,              only : mpp_chksum
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
+use MOM_io,               only: stdout
 
 implicit none ; private
 
@@ -1361,37 +1361,35 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
                                          !! ocean in a coupled model whose checksums are reported
 
   ! local variables
-  integer ::   n,m, outunit
+  integer ::   n,m
 
-  outunit = stdout()
-
-  write(outunit,*) "BEGIN CHECKSUM(ice_ocean_boundary_type):: ", id, timestep
-  write(outunit,100) 'iobt%u_flux         '   , mpp_chksum( iobt%u_flux         )
-  write(outunit,100) 'iobt%v_flux         '   , mpp_chksum( iobt%v_flux         )
-  write(outunit,100) 'iobt%t_flux         '   , mpp_chksum( iobt%t_flux         )
-  write(outunit,100) 'iobt%q_flux         '   , mpp_chksum( iobt%q_flux         )
-  write(outunit,100) 'iobt%salt_flux      '   , mpp_chksum( iobt%salt_flux      )
-  write(outunit,100) 'iobt%seaice_melt_heat'  , mpp_chksum( iobt%seaice_melt_heat)
-  write(outunit,100) 'iobt%seaice_melt    '   , mpp_chksum( iobt%seaice_melt    )
-  write(outunit,100) 'iobt%lw_flux        '   , mpp_chksum( iobt%lw_flux        )
-  write(outunit,100) 'iobt%sw_flux_vis_dir'   , mpp_chksum( iobt%sw_flux_vis_dir)
-  write(outunit,100) 'iobt%sw_flux_vis_dif'   , mpp_chksum( iobt%sw_flux_vis_dif)
-  write(outunit,100) 'iobt%sw_flux_nir_dir'   , mpp_chksum( iobt%sw_flux_nir_dir)
-  write(outunit,100) 'iobt%sw_flux_nir_dif'   , mpp_chksum( iobt%sw_flux_nir_dif)
-  write(outunit,100) 'iobt%lprec          '   , mpp_chksum( iobt%lprec          )
-  write(outunit,100) 'iobt%fprec          '   , mpp_chksum( iobt%fprec          )
-  write(outunit,100) 'iobt%runoff         '   , mpp_chksum( iobt%runoff         )
-  write(outunit,100) 'iobt%calving        '   , mpp_chksum( iobt%calving        )
-  write(outunit,100) 'iobt%p              '   , mpp_chksum( iobt%p              )
+  write(stdout,*) "BEGIN CHECKSUM(ice_ocean_boundary_type):: ", id, timestep
+  write(stdout,100) 'iobt%u_flux         '   , mpp_chksum( iobt%u_flux         )
+  write(stdout,100) 'iobt%v_flux         '   , mpp_chksum( iobt%v_flux         )
+  write(stdout,100) 'iobt%t_flux         '   , mpp_chksum( iobt%t_flux         )
+  write(stdout,100) 'iobt%q_flux         '   , mpp_chksum( iobt%q_flux         )
+  write(stdout,100) 'iobt%salt_flux      '   , mpp_chksum( iobt%salt_flux      )
+  write(stdout,100) 'iobt%seaice_melt_heat'  , mpp_chksum( iobt%seaice_melt_heat)
+  write(stdout,100) 'iobt%seaice_melt    '   , mpp_chksum( iobt%seaice_melt    )
+  write(stdout,100) 'iobt%lw_flux        '   , mpp_chksum( iobt%lw_flux        )
+  write(stdout,100) 'iobt%sw_flux_vis_dir'   , mpp_chksum( iobt%sw_flux_vis_dir)
+  write(stdout,100) 'iobt%sw_flux_vis_dif'   , mpp_chksum( iobt%sw_flux_vis_dif)
+  write(stdout,100) 'iobt%sw_flux_nir_dir'   , mpp_chksum( iobt%sw_flux_nir_dir)
+  write(stdout,100) 'iobt%sw_flux_nir_dif'   , mpp_chksum( iobt%sw_flux_nir_dif)
+  write(stdout,100) 'iobt%lprec          '   , mpp_chksum( iobt%lprec          )
+  write(stdout,100) 'iobt%fprec          '   , mpp_chksum( iobt%fprec          )
+  write(stdout,100) 'iobt%runoff         '   , mpp_chksum( iobt%runoff         )
+  write(stdout,100) 'iobt%calving        '   , mpp_chksum( iobt%calving        )
+  write(stdout,100) 'iobt%p              '   , mpp_chksum( iobt%p              )
   if (associated(iobt%ustar_berg)) &
-    write(outunit,100) 'iobt%ustar_berg     ' , mpp_chksum( iobt%ustar_berg )
+    write(stdout,100) 'iobt%ustar_berg     ' , mpp_chksum( iobt%ustar_berg )
   if (associated(iobt%area_berg)) &
-    write(outunit,100) 'iobt%area_berg      ' , mpp_chksum( iobt%area_berg  )
+    write(stdout,100) 'iobt%area_berg      ' , mpp_chksum( iobt%area_berg  )
   if (associated(iobt%mass_berg)) &
-    write(outunit,100) 'iobt%mass_berg      ' , mpp_chksum( iobt%mass_berg  )
+    write(stdout,100) 'iobt%mass_berg      ' , mpp_chksum( iobt%mass_berg  )
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 
-  call coupler_type_write_chksums(iobt%fluxes, outunit, 'iobt%')
+  call coupler_type_write_chksums(iobt%fluxes, stdout, 'iobt%')
 
 end subroutine ice_ocn_bnd_type_chksum
 

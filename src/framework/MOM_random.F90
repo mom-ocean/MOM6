@@ -11,7 +11,7 @@ use MersenneTwister_mod, only : new_RandomNumberSequence ! Constructor/initializ
 use MersenneTwister_mod, only : getRandomReal ! Generates a random number
 use MersenneTwister_mod, only : getRandomPositiveInt ! Generates a random positive integer
 
-use iso_fortran_env, only : stdout=>output_unit, stderr=>error_unit
+use iso_fortran_env,     only : stdout=>output_unit, stderr=>error_unit
 
 implicit none ; private
 
@@ -22,8 +22,6 @@ public :: random_2d_constructor
 public :: random_2d_01
 public :: random_2d_norm
 public :: random_unit_tests
-
-#include <MOM_memory.h>
 
 !> Container for pseudo-random number generators
 type, public :: PRNG ; private
@@ -63,7 +61,7 @@ end function random_norm
 subroutine random_2d_01(CS, HI, rand)
   type(PRNG),           intent(inout) :: CS !< Container for pseudo-random number generators
   type(hor_index_type), intent(in)    :: HI !< Horizontal index structure
-  real, dimension(SZI_(HI),SZJ_(HI)), intent(out) :: rand !< Random numbers between 0 and 1
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), intent(out) :: rand !< Random numbers between 0 and 1
   ! Local variables
   integer :: i,j
 
@@ -80,7 +78,7 @@ end subroutine random_2d_01
 subroutine random_2d_norm(CS, HI, rand)
   type(PRNG),           intent(inout) :: CS !< Container for pseudo-random number generators
   type(hor_index_type), intent(in)    :: HI !< Horizontal index structure
-  real, dimension(SZI_(HI),SZJ_(HI)), intent(out) :: rand !< Random numbers between 0 and 1
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), intent(out) :: rand !< Random numbers between 0 and 1
   ! Local variables
   integer :: i,j,n
 

@@ -14,7 +14,7 @@ jobs:
 
     - name: Check white space (non-blocking)
       run: |
-        ./.testing/trailer.py -e TEOS10 -l 120 src config_src | tee style_errors
+        ./.testing/trailer.py -e TEOS10 -l 120 src config_src 2>&1 | tee style_errors
       continue-on-error: true
 
     - name: Install packages used when generating documentation
@@ -35,4 +35,5 @@ jobs:
       run: |
         grep "warning:" docs/_build/doxygen_warn_nortd_log.txt | grep -v "as part of a" | tee doxy_errors
         cat style_errors doxy_errors > all_errors
+        cat all_errors
         test ! -s  all_errors

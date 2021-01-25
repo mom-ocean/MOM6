@@ -8,6 +8,7 @@ use MOM_domains, only : MOM_domain_type, get_domain_extent, group_pass_type
 use MOM_debugging, only : hchksum
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_grid, only : ocean_grid_type
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : EOS_type
 
 use coupler_types_mod, only : coupler_1d_bc_type, coupler_2d_bc_type
@@ -171,7 +172,9 @@ type, public :: accel_diag_ptrs
     du_dt_visc => NULL(), &!< Zonal acceleration due to vertical viscosity [L T-2 ~> m s-2]
     dv_dt_visc => NULL(), &!< Meridional acceleration due to vertical viscosity [L T-2 ~> m s-2]
     du_dt_dia => NULL(), & !< Zonal acceleration due to diapycnal  mixing [L T-2 ~> m s-2]
-    dv_dt_dia => NULL()    !< Meridional acceleration due to diapycnal  mixing [L T-2 ~> m s-2]
+    dv_dt_dia => NULL(), & !< Meridional acceleration due to diapycnal  mixing [L T-2 ~> m s-2]
+    u_accel_bt => NULL(), &!< Pointer to the zonal barotropic-solver acceleration [L T-2 ~> m s-2]
+    v_accel_bt => NULL()   !< Pointer to the meridional barotropic-solver acceleration [L T-2 ~> m s-2]
   real, pointer, dimension(:,:,:) :: du_other => NULL()
                            !< Zonal velocity changes due to any other processes that are
                            !! not due to any explicit accelerations [L T-1 ~> m s-1].
@@ -448,7 +451,7 @@ subroutine rotate_surface_state(sfc_state_in, G_in, sfc_state, G, turns)
     if (use_temperature) then
       call rotate_array(sfc_state_in%ocean_heat, turns, sfc_state%ocean_heat)
       call rotate_array(sfc_state_in%ocean_salt, turns, sfc_state%ocean_salt)
-      call rotate_array(sfc_state_in%SSS, turns, sfc_state%TempxPmE)
+      call rotate_array(sfc_state_in%SSS, turns, sfc_state%SSS)
       call rotate_array(sfc_state_in%salt_deficit, turns, sfc_state%salt_deficit)
       call rotate_array(sfc_state_in%internal_heat, turns, sfc_state%internal_heat)
     endif
@@ -473,14 +476,15 @@ subroutine rotate_surface_state(sfc_state_in, G_in, sfc_state, G, turns)
 end subroutine rotate_surface_state
 
 !> Allocates the arrays contained within a BT_cont_type and initializes them to 0.
-subroutine alloc_BT_cont_type(BT_cont, G, alloc_faces)
-  type(BT_cont_type),    pointer    :: BT_cont !< The BT_cont_type whose elements will be allocated
-  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
-  logical,     optional, intent(in) :: alloc_faces !< If present and true, allocate
+subroutine alloc_BT_cont_type(BT_cont, G, GV, alloc_faces)
+  type(BT_cont_type),      pointer    :: BT_cont !< The BT_cont_type whose elements will be allocated
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
+  logical,       optional, intent(in) :: alloc_faces !< If present and true, allocate
                                             !! memory for effective face thicknesses.
 
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (associated(BT_cont)) call MOM_error(FATAL, &
@@ -502,8 +506,8 @@ subroutine alloc_BT_cont_type(BT_cont, G, alloc_faces)
   allocate(BT_cont%vBT_NN(isd:ied,JsdB:JedB))  ; BT_cont%vBT_NN(:,:) = 0.0
 
   if (present(alloc_faces)) then ; if (alloc_faces) then
-    allocate(BT_cont%h_u(IsdB:IedB,jsd:jed,1:G%ke)) ; BT_cont%h_u(:,:,:) = 0.0
-    allocate(BT_cont%h_v(isd:ied,JsdB:JedB,1:G%ke)) ; BT_cont%h_v(:,:,:) = 0.0
+    allocate(BT_cont%h_u(IsdB:IedB,jsd:jed,1:nz)) ; BT_cont%h_u(:,:,:) = 0.0
+    allocate(BT_cont%h_v(isd:ied,JsdB:JedB,1:nz)) ; BT_cont%h_v(:,:,:) = 0.0
   endif ; endif
 
 end subroutine alloc_BT_cont_type

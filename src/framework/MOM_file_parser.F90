@@ -837,8 +837,8 @@ subroutine read_param_time(CS, varname, value, timeunit, fail_if_missing, date_f
     elseif (INDEX(value_string(1),',') > 0) then
       ! Initialize vals with an invalid date.
       vals(:) = (/ -999, -999, -999, 0, 0, 0, 0 /)
-      read(value_string(1),*,end=995,err=1005) vals
-     995 continue
+      read(value_string(1), *, end=995, err=1005) vals
+      995 continue
       if ((vals(1) < 0) .or. (vals(2) < 0) .or. (vals(3) < 0)) &
         call MOM_error(FATAL,'read_param_time: integer list read error for time-type variable '//&
                        trim(varname)// ' parsing "'//trim(value_string(1))//'"')
@@ -865,8 +865,9 @@ subroutine read_param_time(CS, varname, value, timeunit, fail_if_missing, date_f
     endif ; endif
   endif
   return
- 1005 call MOM_error(FATAL,'read_param_time: read error for time-type variable '//&
-                           trim(varname)// ' parsing "'//trim(value_string(1))//'"')
+
+  1005 call MOM_error(FATAL, 'read_param_time: read error for time-type variable '//&
+                             trim(varname)// ' parsing "'//trim(value_string(1))//'"')
 end subroutine read_param_time
 
 !> This function removes single and double quotes from a character string
@@ -1406,14 +1407,13 @@ subroutine log_param_real_array(CS, modulename, varname, value, desc, &
   logical,          optional, intent(in) :: like_default !< If present and true, log this parameter as
                                          !! though it has the default value, even if there is no default.
 
-  character(len=1320) :: mesg
+  character(len=:), allocatable :: mesg
   character(len=240) :: myunits
 
  !write(mesg, '("  ",a," ",a,": ",ES19.12,99(",",ES19.12))') &
  !write(mesg, '("  ",a," ",a,": ",G,99(",",G))') &
  !  trim(modulename), trim(varname), value
-  write(mesg, '("  ",a," ",a,": ",a)') &
-    trim(modulename), trim(varname), trim(left_reals(value))
+  mesg = "  " // trim(modulename) // " " // trim(varname) // ": " // trim(left_reals(value))
   if (is_root_pe()) then
     if (CS%log_open) write(CS%stdlog,'(a)') trim(mesg)
     if (CS%log_to_stdout) write(CS%stdout,'(a)') trim(mesg)

@@ -5,7 +5,7 @@ module MOM_surface_forcing_gfdl
 !#CTRL# use MOM_controlled_forcing, only : apply_ctrl_forcing, register_ctrl_forcing_restarts
 !#CTRL# use MOM_controlled_forcing, only : controlled_forcing_init, controlled_forcing_end
 !#CTRL# use MOM_controlled_forcing, only : ctrl_forcing_CS
-use MOM_coms,             only : reproducing_sum
+use MOM_coms,             only : reproducing_sum, field_chksum
 use MOM_constants,        only : hlv, hlf
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_SUBCOMPONENT
@@ -21,6 +21,8 @@ use MOM_forcing_type,     only : allocate_forcing_type, deallocate_forcing_type
 use MOM_forcing_type,     only : allocate_mech_forcing, deallocate_mech_forcing
 use MOM_get_input,        only : Get_MOM_Input, directories
 use MOM_grid,             only : ocean_grid_type
+use MOM_interpolate,      only : init_external_field, time_interp_external
+use MOM_interpolate,      only : time_interp_external_init
 use MOM_io,               only : slasher, write_version_number, MOM_read_data
 use MOM_restart,          only : register_restart_field, restart_init, MOM_restart_CS
 use MOM_restart,          only : restart_init_end, save_restart, restore_state
@@ -36,9 +38,6 @@ use coupler_types_mod,    only : coupler_type_initialized, coupler_type_spawn
 use coupler_types_mod,    only : coupler_type_copy_data
 use data_override_mod,    only : data_override_init, data_override
 use fms_mod,              only : stdout
-use mpp_mod,              only : mpp_chksum
-use time_interp_external_mod, only : init_external_field, time_interp_external
-use time_interp_external_mod, only : time_interp_external_init
 
 implicit none ; private
 
@@ -350,7 +349,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
   ! Salinity restoring logic
   if (CS%restore_salt) then
-    call time_interp_external(CS%id_srestore,Time,data_restore)
+    call time_interp_external(CS%id_srestore, Time, data_restore)
     ! open_ocn_mask indicates where to restore salinity (1 means restore, 0 does not)
     open_ocn_mask(:,:) = 1.0
     if (CS%mask_srestore_under_ice) then ! Do not restore under sea-ice
@@ -407,7 +406,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
   ! SST restoring logic
   if (CS%restore_temp) then
-    call time_interp_external(CS%id_trestore,Time,data_restore)
+    call time_interp_external(CS%id_trestore, Time, data_restore)
     do j=js,je ; do i=is,ie
       delta_sst = data_restore(i,j)- sfc_state%SST(i,j)
       delta_sst = sign(1.0,delta_sst)*min(abs(delta_sst),CS%max_delta_trestore)
@@ -1486,7 +1485,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
     enddo ; enddo
   endif
 
-  call time_interp_external_init
+  call time_interp_external_init()
 
   ! Optionally read a x-y gustiness field in place of a global constant.
   call get_param(param_file, mdl, "READ_GUST_2D", CS%read_gust_2d, &
@@ -1558,7 +1557,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
 
   if (CS%restore_salt) then
     salt_file = trim(CS%inputdir) // trim(CS%salt_restore_file)
-    CS%id_srestore = init_external_field(salt_file, CS%salt_restore_var_name, domain=G%Domain%mpp_domain)
+    CS%id_srestore = init_external_field(salt_file, CS%salt_restore_var_name, MOM_domain=G%Domain)
     call safe_alloc_ptr(CS%srestore_mask,isd,ied,jsd,jed); CS%srestore_mask(:,:) = 1.0
     if (CS%mask_srestore) then ! read a 2-d file containing a mask for restoring fluxes
       flnam = trim(CS%inputdir) // 'salt_restore_mask.nc'
@@ -1568,7 +1567,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
 
   if (CS%restore_temp) then
     temp_file = trim(CS%inputdir) // trim(CS%temp_restore_file)
-    CS%id_trestore = init_external_field(temp_file, CS%temp_restore_var_name, domain=G%Domain%mpp_domain)
+    CS%id_trestore = init_external_field(temp_file, CS%temp_restore_var_name, MOM_domain=G%Domain)
     call safe_alloc_ptr(CS%trestore_mask,isd,ied,jsd,jed); CS%trestore_mask(:,:) = 1.0
     if (CS%mask_trestore) then  ! read a 2-d file containing a mask for restoring fluxes
       flnam = trim(CS%inputdir) // 'temp_restore_mask.nc'
@@ -1632,27 +1631,27 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
   outunit = stdout()
 
   write(outunit,*) "BEGIN CHECKSUM(ice_ocean_boundary_type):: ", id, timestep
-  write(outunit,100) 'iobt%u_flux         ', mpp_chksum( iobt%u_flux         )
-  write(outunit,100) 'iobt%v_flux         ', mpp_chksum( iobt%v_flux         )
-  write(outunit,100) 'iobt%t_flux         ', mpp_chksum( iobt%t_flux         )
-  write(outunit,100) 'iobt%q_flux         ', mpp_chksum( iobt%q_flux         )
-  write(outunit,100) 'iobt%salt_flux      ', mpp_chksum( iobt%salt_flux      )
-  write(outunit,100) 'iobt%lw_flux        ', mpp_chksum( iobt%lw_flux        )
-  write(outunit,100) 'iobt%sw_flux_vis_dir', mpp_chksum( iobt%sw_flux_vis_dir)
-  write(outunit,100) 'iobt%sw_flux_vis_dif', mpp_chksum( iobt%sw_flux_vis_dif)
-  write(outunit,100) 'iobt%sw_flux_nir_dir', mpp_chksum( iobt%sw_flux_nir_dir)
-  write(outunit,100) 'iobt%sw_flux_nir_dif', mpp_chksum( iobt%sw_flux_nir_dif)
-  write(outunit,100) 'iobt%lprec          ', mpp_chksum( iobt%lprec          )
-  write(outunit,100) 'iobt%fprec          ', mpp_chksum( iobt%fprec          )
-  write(outunit,100) 'iobt%runoff         ', mpp_chksum( iobt%runoff         )
-  write(outunit,100) 'iobt%calving        ', mpp_chksum( iobt%calving        )
-  write(outunit,100) 'iobt%p              ', mpp_chksum( iobt%p              )
+  write(outunit,100) 'iobt%u_flux         ', field_chksum( iobt%u_flux         )
+  write(outunit,100) 'iobt%v_flux         ', field_chksum( iobt%v_flux         )
+  write(outunit,100) 'iobt%t_flux         ', field_chksum( iobt%t_flux         )
+  write(outunit,100) 'iobt%q_flux         ', field_chksum( iobt%q_flux         )
+  write(outunit,100) 'iobt%salt_flux      ', field_chksum( iobt%salt_flux      )
+  write(outunit,100) 'iobt%lw_flux        ', field_chksum( iobt%lw_flux        )
+  write(outunit,100) 'iobt%sw_flux_vis_dir', field_chksum( iobt%sw_flux_vis_dir)
+  write(outunit,100) 'iobt%sw_flux_vis_dif', field_chksum( iobt%sw_flux_vis_dif)
+  write(outunit,100) 'iobt%sw_flux_nir_dir', field_chksum( iobt%sw_flux_nir_dir)
+  write(outunit,100) 'iobt%sw_flux_nir_dif', field_chksum( iobt%sw_flux_nir_dif)
+  write(outunit,100) 'iobt%lprec          ', field_chksum( iobt%lprec          )
+  write(outunit,100) 'iobt%fprec          ', field_chksum( iobt%fprec          )
+  write(outunit,100) 'iobt%runoff         ', field_chksum( iobt%runoff         )
+  write(outunit,100) 'iobt%calving        ', field_chksum( iobt%calving        )
+  write(outunit,100) 'iobt%p              ', field_chksum( iobt%p              )
   if (associated(iobt%ustar_berg)) &
-    write(outunit,100) 'iobt%ustar_berg     ', mpp_chksum( iobt%ustar_berg )
+    write(outunit,100) 'iobt%ustar_berg     ', field_chksum( iobt%ustar_berg )
   if (associated(iobt%area_berg)) &
-    write(outunit,100) 'iobt%area_berg      ', mpp_chksum( iobt%area_berg  )
+    write(outunit,100) 'iobt%area_berg      ', field_chksum( iobt%area_berg  )
   if (associated(iobt%mass_berg)) &
-    write(outunit,100) 'iobt%mass_berg      ', mpp_chksum( iobt%mass_berg  )
+    write(outunit,100) 'iobt%mass_berg      ', field_chksum( iobt%mass_berg  )
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 
   call coupler_type_write_chksums(iobt%fluxes, outunit, 'iobt%')
@@ -1664,7 +1663,8 @@ subroutine check_mask_val_consistency(val, mask, i, j, varname, G)
 
   real, intent(in) :: val  !< value of flux/variable passed by IOB
   real, intent(in) :: mask !< value of ocean mask
-  integer, intent(in) :: i, j !< model grid cell indices
+  integer, intent(in) :: i !< model grid cell indices
+  integer, intent(in) :: j !< model grid cell indices
   character(len=*), intent(in) :: varname !< variable name
   type(ocean_grid_type), intent(in) :: G !< The ocean's grid structure
   ! Local variables

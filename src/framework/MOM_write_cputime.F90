@@ -110,7 +110,7 @@ subroutine MOM_write_cputime_end(CS)
 
   ! Flush and close the output files.
   if (is_root_pe() .and. CS%fileCPU_ascii > 0) then
-    call flush(CS%fileCPU_ascii)
+    flush(CS%fileCPU_ascii)
     call close_file(CS%fileCPU_ascii)
   endif
 
@@ -200,7 +200,7 @@ subroutine write_cputime(day, n, CS, nmax, call_end)
            reday, n, (CS%cputime2 / real(CLOCKS_PER_SEC)), &
            d_cputime / real(CLOCKS_PER_SEC)
 
-    call flush(CS%fileCPU_ascii)
+    flush(CS%fileCPU_ascii)
   endif
   CS%previous_calls = CS%previous_calls + 1
 

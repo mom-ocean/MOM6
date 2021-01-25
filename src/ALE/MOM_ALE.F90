@@ -331,7 +331,7 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, OBC, dt, frac_shelf_h)
   type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
   type(ocean_OBC_type),                       pointer       :: OBC !< Open boundary structure
   real,                             optional, intent(in)    :: dt  !< Time step between calls to ALE_main [T ~> s]
-  real, dimension(:,:),             optional, pointer       :: frac_shelf_h !< Fractional ice shelf coverage
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)       :: frac_shelf_h !< Fractional ice shelf coverage [nondim]
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: eta_preale
@@ -341,10 +341,7 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, OBC, dt, frac_shelf_h)
 
   nk = GV%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
 
-  ice_shelf = .false.
-  if (present(frac_shelf_h)) then
-    if (associated(frac_shelf_h)) ice_shelf = .true.
-  endif
+  ice_shelf = present(frac_shelf_h)
 
   if (CS%show_call_tree) call callTree_enter("ALE_main(), MOM_ALE.F90")
 
@@ -367,9 +364,9 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, OBC, dt, frac_shelf_h)
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
   if (ice_shelf) then
-     call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid, frac_shelf_h)
+    call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid, frac_shelf_h)
   else
-     call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid)
+    call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid)
   endif
 
   call check_grid( G, GV, h, 0. )
@@ -483,7 +480,7 @@ subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug, OBC)
   dzRegrid(:,:,:) = 0.0
   h_new(:,:,:) = 0.0
 
-  if (debug) call MOM_tracer_chkinv("Before ALE_offline_inputs", G, h, Reg%Tr, Reg%ntr)
+  if (debug) call MOM_tracer_chkinv("Before ALE_offline_inputs", G, GV, h, Reg%Tr, Reg%ntr)
 
   ! Build new grid from the Zstar state onto the requested vertical coordinate. The new grid is stored
   ! in h_new. The old grid is h. Both are needed for the subsequent remapping of variables. Convective
@@ -526,7 +523,7 @@ subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug, OBC)
   call ALE_remap_scalar(CS%remapCS, G, GV, nk, h, tv%T, h_new, tv%T, answers_2018=CS%answers_2018)
   call ALE_remap_scalar(CS%remapCS, G, GV, nk, h, tv%S, h_new, tv%S, answers_2018=CS%answers_2018)
 
-  if (debug) call MOM_tracer_chkinv("After ALE_offline_inputs", G, h_new, Reg%Tr, Reg%ntr)
+  if (debug) call MOM_tracer_chkinv("After ALE_offline_inputs", G, GV, h_new, Reg%Tr, Reg%ntr)
 
   ! Copy over the new layer thicknesses
   do k = 1,nk  ; do j = jsc-1,jec+1 ; do i = isc-1,iec+1
@@ -621,7 +618,7 @@ subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug, frac_shelf_h 
   real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), intent(inout) :: h     !< Current 3D grid obtained after the
                                                                      !! last time step [H ~> m or kg-2]
   logical,                       optional, intent(in)    :: debug    !< If true, show the call tree
-  real, dimension(:,:),          optional, pointer       :: frac_shelf_h !< Fractional ice shelf coverage
+  real, dimension(SZI_(G),SZJ_(G)),  optional, intent(in):: frac_shelf_h !< Fractional ice shelf coverage [nondim]
   ! Local variables
   integer :: nk, i, j, k
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
@@ -631,17 +628,14 @@ subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug, frac_shelf_h 
   show_call_tree = .false.
   if (present(debug)) show_call_tree = debug
   if (show_call_tree) call callTree_enter("ALE_build_grid(), MOM_ALE.F90")
-  use_ice_shelf = .false.
-  if (present(frac_shelf_h)) then
-    if (associated(frac_shelf_h)) use_ice_shelf = .true.
-  endif
+  use_ice_shelf = present(frac_shelf_h)
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
   if (use_ice_shelf) then
-     call regridding_main( remapCS, regridCS, G, GV, h, tv, h_new, dzRegrid, frac_shelf_h )
+    call regridding_main( remapCS, regridCS, G, GV, h, tv, h_new, dzRegrid, frac_shelf_h )
   else
-     call regridding_main( remapCS, regridCS, G, GV, h, tv, h_new, dzRegrid )
+    call regridding_main( remapCS, regridCS, G, GV, h, tv, h_new, dzRegrid )
   endif
 
   ! Override old grid with new one. The new grid 'h_new' is built in

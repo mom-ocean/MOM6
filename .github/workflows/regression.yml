@@ -23,5 +23,5 @@ jobs:
     - name: Create validation data
       run: make run.symmetric -k -s
 
-    - name: Regression test 
+    - name: Regression test
       run: make test.regressions DO_REGRESSION_TESTS=true -k -s

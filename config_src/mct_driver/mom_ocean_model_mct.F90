@@ -56,7 +56,7 @@ use coupler_types_mod,        only : coupler_type_initialized, coupler_type_copy
 use coupler_types_mod,        only : coupler_type_set_diags, coupler_type_send_data
 use mpp_domains_mod,          only : domain2d, mpp_get_layout, mpp_get_global_domain
 use mpp_domains_mod,          only : mpp_define_domains, mpp_get_compute_domain, mpp_get_data_domain
-use fms_mod,                  only : stdout
+use MOM_io,                   only : stdout
 use mpp_mod,                  only : mpp_chksum
 use MOM_EOS,                  only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_wave_interface,       only : wave_parameters_CS, MOM_wave_interface_init
@@ -409,10 +409,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   call close_param_file(param_file)
   call diag_mediator_close_registration(OS%diag)
-
-  if (is_root_pe()) &
-    write(*,'(/12x,a/)') '======== COMPLETED MOM INITIALIZATION ========'
-
   call callTree_leave("ocean_model_init(")
 end subroutine ocean_model_init
 
@@ -1053,20 +1049,18 @@ subroutine ocean_public_type_chksum(id, timestep, ocn)
   integer,                 intent(in) :: timestep !< The number of elapsed timesteps
   type(ocean_public_type), intent(in) :: ocn !< A structure containing various publicly
                                              !! visible ocean surface fields.
-  integer :: n, m, outunit
+  integer :: n, m
 
-  outunit = stdout()
+  write(stdout,*) "BEGIN CHECKSUM(ocean_type):: ", id, timestep
+  write(stdout,100) 'ocean%t_surf   ',mpp_chksum(ocn%t_surf )
+  write(stdout,100) 'ocean%s_surf   ',mpp_chksum(ocn%s_surf )
+  write(stdout,100) 'ocean%u_surf   ',mpp_chksum(ocn%u_surf )
+  write(stdout,100) 'ocean%v_surf   ',mpp_chksum(ocn%v_surf )
+  write(stdout,100) 'ocean%sea_lev  ',mpp_chksum(ocn%sea_lev)
+  write(stdout,100) 'ocean%frazil   ',mpp_chksum(ocn%frazil )
+  write(stdout,100) 'ocean%melt_potential  ',mpp_chksum(ocn%melt_potential)
 
-  write(outunit,*) "BEGIN CHECKSUM(ocean_type):: ", id, timestep
-  write(outunit,100) 'ocean%t_surf   ',mpp_chksum(ocn%t_surf )
-  write(outunit,100) 'ocean%s_surf   ',mpp_chksum(ocn%s_surf )
-  write(outunit,100) 'ocean%u_surf   ',mpp_chksum(ocn%u_surf )
-  write(outunit,100) 'ocean%v_surf   ',mpp_chksum(ocn%v_surf )
-  write(outunit,100) 'ocean%sea_lev  ',mpp_chksum(ocn%sea_lev)
-  write(outunit,100) 'ocean%frazil   ',mpp_chksum(ocn%frazil )
-  write(outunit,100) 'ocean%melt_potential  ',mpp_chksum(ocn%melt_potential)
-
-  call coupler_type_write_chksums(ocn%fields, outunit, 'ocean%')
+  call coupler_type_write_chksums(ocn%fields, stdout, 'ocean%')
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 
 end subroutine ocean_public_type_chksum

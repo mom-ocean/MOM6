@@ -193,11 +193,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)    :: u    !< The zonal velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                             intent(in)    :: v    !< The meridional velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),    intent(in)    :: tv   !< A structure containing pointers to any
                                                   !! available thermodynamic fields. Absent fields
@@ -235,7 +235,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
     D_v, &      ! Bottom depth interpolated to v points [Z ~> m].
     mask_v      ! A mask that disables any contributions from v points that
                 ! are land or past open boundary conditions [nondim], 0 or 1.
-  real, dimension(SZIB_(G),SZK_(G)) :: &
+  real, dimension(SZIB_(G),SZK_(GV)) :: &
     h_at_vel, & ! Layer thickness at a velocity point, using an upwind-biased
                 ! second order accurate estimate based on the previous velocity
                 ! direction [H ~> m or kg m-2].
@@ -314,7 +314,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
                            ! L, or the error for the interface below [H ~> m or kg m-2].
   real :: Vol_quit         ! The volume error below which to quit iterating [H ~> m or kg m-2].
   real :: Vol_tol          ! A volume error tolerance [H ~> m or kg m-2].
-  real :: L(SZK_(G)+1)     ! The fraction of the full cell width that is open at
+  real :: L(SZK_(GV)+1)    ! The fraction of the full cell width that is open at
                            ! the depth of each interface [nondim].
   real :: L_direct         ! The value of L above volume Vol_direct [nondim].
   real :: L_max, L_min     ! Upper and lower bounds on the correct value for L  [nondim].
@@ -353,7 +353,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   integer :: itt, maxitt=20
   type(ocean_OBC_type), pointer :: OBC => NULL()
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkmb = GV%nk_rho_varies ; nkml = GV%nkml
   h_neglect = GV%H_subroundoff
@@ -603,7 +603,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
           hwtot = hwtot + hweight
 
           if ((.not.CS%linear_drag) .and. (hweight >= 0.0)) then ; if (m==1) then
-            v_at_u = set_v_at_u(v, h, G, i, j, k, mask_v, OBC)
+            v_at_u = set_v_at_u(v, h, G, GV, i, j, k, mask_v, OBC)
             if (CS%BBL_use_tidal_bg) then
               U_bg_sq = 0.5*( G%mask2dT(i,j)*(CS%tideamp(i,j)*CS%tideamp(i,j))+ &
                               G%mask2dT(i+1,j)*(CS%tideamp(i+1,j)*CS%tideamp(i+1,j)) )
@@ -611,7 +611,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
             hutot = hutot + hweight * sqrt(u(I,j,k)*u(I,j,k) + &
                                            v_at_u*v_at_u + U_bg_sq)
           else
-            u_at_v = set_u_at_v(u, h, G, i, j, k, mask_u, OBC)
+            u_at_v = set_u_at_v(u, h, G, GV, i, j, k, mask_u, OBC)
             if (CS%BBL_use_tidal_bg) then
               U_bg_sq = 0.5*( G%mask2dT(i,j)*(CS%tideamp(i,j)*CS%tideamp(i,j))+ &
                               G%mask2dT(i,j+1)*(CS%tideamp(i,j+1)*CS%tideamp(i,j+1)) )
@@ -1004,13 +1004,13 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
 
           if (m==1) then
             if (Rayleigh > 0.0) then
-              v_at_u = set_v_at_u(v, h, G, i, j, k, mask_v, OBC)
+              v_at_u = set_v_at_u(v, h, G, GV, i, j, k, mask_v, OBC)
               visc%Ray_u(I,j,k) = Rayleigh*sqrt(u(I,j,k)*u(I,j,k) + &
                                                 v_at_u*v_at_u + U_bg_sq)
             else ; visc%Ray_u(I,j,k) = 0.0 ; endif
           else
             if (Rayleigh > 0.0) then
-              u_at_v = set_u_at_v(u, h, G, i, j, k, mask_u, OBC)
+              u_at_v = set_u_at_v(u, h, G, GV, i, j, k, mask_u, OBC)
               visc%Ray_v(i,J,k) = Rayleigh*sqrt(v(i,J,k)*v(i,J,k) + &
                                                 u_at_v*u_at_v + U_bg_sq)
             else ; visc%Ray_v(i,J,k) = 0.0 ; endif
@@ -1112,20 +1112,21 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
 end subroutine set_viscous_BBL
 
 !> This subroutine finds a thickness-weighted value of v at the u-points.
-function set_v_at_u(v, h, G, i, j, k, mask2dCv, OBC)
-  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                         intent(in) :: v    !< The meridional velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                         intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
-  integer,               intent(in) :: i    !< The i-index of the u-location to work on.
-  integer,               intent(in) :: j    !< The j-index of the u-location to work on.
-  integer,               intent(in) :: k    !< The k-index of the u-location to work on.
+function set_v_at_u(v, h, G, GV, i, j, k, mask2dCv, OBC)
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in) :: GV !< Vertical grid structure
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                           intent(in) :: v    !< The meridional velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  integer,                 intent(in) :: i    !< The i-index of the u-location to work on.
+  integer,                 intent(in) :: j    !< The j-index of the u-location to work on.
+  integer,                 intent(in) :: k    !< The k-index of the u-location to work on.
   real, dimension(SZI_(G),SZJB_(G)),&
-                         intent(in) :: mask2dCv !< A multiplicative mask of the v-points
-  type(ocean_OBC_type),  pointer    :: OBC  !< A pointer to an open boundary condition structure
-  real                              :: set_v_at_u !< The return value of v at u points points in the
-                                            !! same units as u, i.e. [L T-1 ~> m s-1] or other units.
+                           intent(in) :: mask2dCv !< A multiplicative mask of the v-points
+  type(ocean_OBC_type),    pointer    :: OBC  !< A pointer to an open boundary condition structure
+  real                                :: set_v_at_u !< The return value of v at u points points in the
+                                              !! same units as u, i.e. [L T-1 ~> m s-1] or other units.
 
   ! This subroutine finds a thickness-weighted value of v at the u-points.
   real :: hwt(0:1,-1:0)    ! Masked weights used to average u onto v [H ~> m or kg m-2].
@@ -1156,20 +1157,21 @@ function set_v_at_u(v, h, G, i, j, k, mask2dCv, OBC)
 end function set_v_at_u
 
 !> This subroutine finds a thickness-weighted value of u at the v-points.
-function set_u_at_v(u, h, G, i, j, k, mask2dCu, OBC)
-  type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                         intent(in) :: u    !< The zonal velocity [L T-1 ~> m s-1] or other units.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                         intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
-  integer,               intent(in) :: i    !< The i-index of the u-location to work on.
-  integer,               intent(in) :: j    !< The j-index of the u-location to work on.
-  integer,               intent(in) :: k    !< The k-index of the u-location to work on.
+function set_u_at_v(u, h, G, GV, i, j, k, mask2dCu, OBC)
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in) :: GV !< Vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in) :: u    !< The zonal velocity [L T-1 ~> m s-1] or other units.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  integer,                 intent(in) :: i    !< The i-index of the u-location to work on.
+  integer,                 intent(in) :: j    !< The j-index of the u-location to work on.
+  integer,                 intent(in) :: k    !< The k-index of the u-location to work on.
   real, dimension(SZIB_(G),SZJ_(G)), &
-                         intent(in) :: mask2dCu !< A multiplicative mask of the u-points
-  type(ocean_OBC_type),  pointer    :: OBC  !< A pointer to an open boundary condition structure
-  real                              :: set_u_at_v !< The return value of u at v points in the
-                                            !! same units as u, i.e. [L T-1 ~> m s-1] or other units.
+                           intent(in) :: mask2dCu !< A multiplicative mask of the u-points
+  type(ocean_OBC_type),    pointer    :: OBC  !< A pointer to an open boundary condition structure
+  real                                :: set_u_at_v !< The return value of u at v points in the
+                                              !! same units as u, i.e. [L T-1 ~> m s-1] or other units.
 
   ! This subroutine finds a thickness-weighted value of u at the v-points.
   real :: hwt(-1:0,0:1)    ! Masked weights used to average u onto v [H ~> m or kg m-2].
@@ -1208,11 +1210,11 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: u    !< The zonal velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(in)    :: v    !< The meridional velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure containing pointers to any available
                                                  !! thermodynamic fields. Absent fields have
@@ -1255,7 +1257,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   real, dimension(SZI_(G),SZJB_(G)) :: &
     mask_v      ! A mask that disables any contributions from v points that
                 ! are land or past open boundary conditions [nondim], 0 or 1.
-  real :: h_at_vel(SZIB_(G),SZK_(G))! Layer thickness at velocity points,
+  real :: h_at_vel(SZIB_(G),SZK_(GV))! Layer thickness at velocity points,
                 ! using an upwind-biased second order accurate estimate based
                 ! on the previous velocity direction [H ~> m or kg m-2].
   integer :: k_massive(SZIB_(G)) ! The k-index of the deepest layer yet found
@@ -1323,7 +1325,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, K2, nkmb, nkml, n
   type(ocean_OBC_type), pointer :: OBC => NULL()
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkmb = GV%nk_rho_varies ; nkml = GV%nkml
 
@@ -1533,7 +1535,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
           hwtot = hwtot + hweight
 
           if (.not.CS%linear_drag) then
-            v_at_u = set_v_at_u(v, h, G, i, j, k, mask_v, OBC)
+            v_at_u = set_v_at_u(v, h, G, GV, i, j, k, mask_v, OBC)
             hutot = hutot + hweight * sqrt(u(I,j,k)**2 + &
                                            v_at_u**2 + U_bg_sq)
           endif
@@ -1771,7 +1773,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
           hwtot = hwtot + hweight
 
           if (.not.CS%linear_drag) then
-            u_at_v = set_u_at_v(u, h, G, i, J, k, mask_u, OBC)
+            u_at_v = set_u_at_v(u, h, G, GV, i, J, k, mask_u, OBC)
             hutot = hutot + hweight * sqrt(v(i,J,k)**2 + &
                                            u_at_v**2 + U_bg_sq)
           endif

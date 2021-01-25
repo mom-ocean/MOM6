@@ -28,8 +28,7 @@ use MOM_CVMix_KPP,             only : KPP_get_BLD, KPP_CS
 use MOM_energetic_PBL,         only : energetic_PBL_get_MLD, energetic_PBL_CS
 use MOM_diabatic_driver,       only : diabatic_CS, extract_diabatic_member
 use MOM_lateral_boundary_diffusion, only : boundary_k_range, SURFACE, BOTTOM
-
-use iso_fortran_env, only : stdout=>output_unit, stderr=>error_unit
+use MOM_io,                    only : stdout, stderr
 
 implicit none ; private
 
@@ -113,9 +112,10 @@ character(len=40)  :: mdl = "MOM_neutral_diffusion" !< module name
 contains
 
 !> Read parameters and allocate control structure for neutral_diffusion module.
-logical function neutral_diffusion_init(Time, G, US, param_file, diag, EOS, diabatic_CSp, CS)
+logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, diabatic_CSp, CS)
   type(time_type), target,    intent(in)    :: Time       !< Time structure
   type(ocean_grid_type),      intent(in)    :: G          !< Grid structure
+  type(verticalGrid_type),    intent(in)    :: GV         !< The ocean's vertical grid structure
   type(unit_scale_type),      intent(in)    :: US         !< A dimensional unit scaling type
   type(diag_ctrl), target,    intent(inout) :: diag       !< Diagnostics control structure
   type(param_file_type),      intent(in)    :: param_file !< Parameter file structure
@@ -228,9 +228,6 @@ logical function neutral_diffusion_init(Time, G, US, param_file, diag, EOS, diab
                    default = .true.)
   endif
 
-  ! Store a rescaling factor for use in diagnostic messages.
-  CS%R_to_kg_m3 = US%R_to_kg_m3
-
   if (CS%interior_only) then
     call extract_diabatic_member(diabatic_CSp, KPP_CSp=CS%KPP_CSp)
     call extract_diabatic_member(diabatic_CSp, energetic_PBL_CSp=CS%energetic_PBL_CSp)
@@ -238,31 +235,33 @@ logical function neutral_diffusion_init(Time, G, US, param_file, diag, EOS, diab
       call MOM_error(FATAL,"NDIFF_INTERIOR_ONLY is true, but no valid boundary layer scheme was found")
     endif
   endif
+  ! Store a rescaling factor for use in diagnostic messages.
+  CS%R_to_kg_m3 = US%R_to_kg_m3
 
 ! call get_param(param_file, mdl, "KHTR", CS%KhTr, &
 !                "The background along-isopycnal tracer diffusivity.", &
 !                units="m2 s-1", default=0.0)
 !  call closeParameterBlock(param_file)
   if (CS%continuous_reconstruction) then
-    CS%nsurf = 2*G%ke+2 ! Continuous reconstruction means that every interface has two connections
-    allocate(CS%dRdT(SZI_(G),SZJ_(G),SZK_(G)+1)) ; CS%dRdT(:,:,:) = 0.
-    allocate(CS%dRdS(SZI_(G),SZJ_(G),SZK_(G)+1)) ; CS%dRdS(:,:,:) = 0.
+    CS%nsurf = 2*GV%ke+2 ! Continuous reconstruction means that every interface has two connections
+    allocate(CS%dRdT(SZI_(G),SZJ_(G),SZK_(GV)+1)) ; CS%dRdT(:,:,:) = 0.
+    allocate(CS%dRdS(SZI_(G),SZJ_(G),SZK_(GV)+1)) ; CS%dRdS(:,:,:) = 0.
   else
-    CS%nsurf = 4*G%ke   ! Discontinuous means that every interface has four connections
-    allocate(CS%T_i(SZI_(G),SZJ_(G),SZK_(G),2))    ; CS%T_i(:,:,:,:) = 0.
-    allocate(CS%S_i(SZI_(G),SZJ_(G),SZK_(G),2))    ; CS%S_i(:,:,:,:) = 0.
-    allocate(CS%P_i(SZI_(G),SZJ_(G),SZK_(G),2))    ; CS%P_i(:,:,:,:) = 0.
-    allocate(CS%dRdT_i(SZI_(G),SZJ_(G),SZK_(G),2)) ; CS%dRdT_i(:,:,:,:) = 0.
-    allocate(CS%dRdS_i(SZI_(G),SZJ_(G),SZK_(G),2)) ; CS%dRdS_i(:,:,:,:) = 0.
-    allocate(CS%ppoly_coeffs_T(SZI_(G),SZJ_(G),SZK_(G),CS%deg+1)) ; CS%ppoly_coeffs_T(:,:,:,:) = 0.
-    allocate(CS%ppoly_coeffs_S(SZI_(G),SZJ_(G),SZK_(G),CS%deg+1)) ; CS%ppoly_coeffs_S(:,:,:,:) = 0.
+    CS%nsurf = 4*GV%ke   ! Discontinuous means that every interface has four connections
+    allocate(CS%T_i(SZI_(G),SZJ_(G),SZK_(GV),2))    ; CS%T_i(:,:,:,:) = 0.
+    allocate(CS%S_i(SZI_(G),SZJ_(G),SZK_(GV),2))    ; CS%S_i(:,:,:,:) = 0.
+    allocate(CS%P_i(SZI_(G),SZJ_(G),SZK_(GV),2))    ; CS%P_i(:,:,:,:) = 0.
+    allocate(CS%dRdT_i(SZI_(G),SZJ_(G),SZK_(GV),2)) ; CS%dRdT_i(:,:,:,:) = 0.
+    allocate(CS%dRdS_i(SZI_(G),SZJ_(G),SZK_(GV),2)) ; CS%dRdS_i(:,:,:,:) = 0.
+    allocate(CS%ppoly_coeffs_T(SZI_(G),SZJ_(G),SZK_(GV),CS%deg+1)) ; CS%ppoly_coeffs_T(:,:,:,:) = 0.
+    allocate(CS%ppoly_coeffs_S(SZI_(G),SZJ_(G),SZK_(GV),CS%deg+1)) ; CS%ppoly_coeffs_S(:,:,:,:) = 0.
     allocate(CS%ns(SZI_(G),SZJ_(G)))    ; CS%ns(:,:) = 0.
   endif
   ! T-points
-  allocate(CS%Tint(SZI_(G),SZJ_(G),SZK_(G)+1)) ; CS%Tint(:,:,:) = 0.
-  allocate(CS%Sint(SZI_(G),SZJ_(G),SZK_(G)+1)) ; CS%Sint(:,:,:) = 0.
-  allocate(CS%Pint(SZI_(G),SZJ_(G),SZK_(G)+1)) ; CS%Pint(:,:,:) = 0.
-  allocate(CS%stable_cell(SZI_(G),SZJ_(G),SZK_(G))) ; CS%stable_cell(:,:,:) = .true.
+  allocate(CS%Tint(SZI_(G),SZJ_(G),SZK_(GV)+1)) ; CS%Tint(:,:,:) = 0.
+  allocate(CS%Sint(SZI_(G),SZJ_(G),SZK_(GV)+1)) ; CS%Sint(:,:,:) = 0.
+  allocate(CS%Pint(SZI_(G),SZJ_(G),SZK_(GV)+1)) ; CS%Pint(:,:,:) = 0.
+  allocate(CS%stable_cell(SZI_(G),SZJ_(G),SZK_(GV))) ; CS%stable_cell(:,:,:) = .true.
   ! U-points
   allocate(CS%uPoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%uPoL(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0.
   allocate(CS%uPoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%uPoR(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0.
@@ -281,13 +280,13 @@ end function neutral_diffusion_init
 !> Calculate remapping factors for u/v columns used to map adjoining columns to
 !! a shared coordinate space.
 subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
-  type(ocean_grid_type),                    intent(in) :: G   !< Ocean grid structure
-  type(verticalGrid_type),                  intent(in) :: GV  !< ocean vertical grid structure
-  type(unit_scale_type),                    intent(in) :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h   !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: T   !< Potential temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: S   !< Salinity [ppt]
-  type(neutral_diffusion_CS),               pointer    :: CS  !< Neutral diffusion control structure
+  type(ocean_grid_type),                     intent(in) :: G   !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in) :: GV  !< ocean vertical grid structure
+  type(unit_scale_type),                     intent(in) :: US  !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h   !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: T   !< Potential temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: S   !< Salinity [ppt]
+  type(neutral_diffusion_CS),                pointer    :: CS  !< Neutral diffusion control structure
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: p_surf !< Surface pressure to include in pressures used
                                                               !! for equation of state calculations [R L2 T-2 ~> Pa]
 
@@ -295,7 +294,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k
   ! Variables used for reconstructions
-  real, dimension(SZK_(G),2) :: ppoly_r_S       ! Reconstruction slopes
+  real, dimension(SZK_(GV),2) :: ppoly_r_S      ! Reconstruction slopes
   real, dimension(SZI_(G), SZJ_(G)) :: hEff_sum ! Summed effective face thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G))  :: hbl      ! Boundary layer depth [H ~> m or kg m-2]
   integer :: iMethod
@@ -316,15 +315,14 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
 
   ! Check if hbl needs to be extracted
   if (CS%interior_only) then
-    hbl(:,:) = 0.
     if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G, US, m_to_BLD_units=GV%m_to_H)
-    if (ASSOCIATED(CS%energetic_PBL_CSp)) &
-      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US, m_to_MLD_units=GV%m_to_H)
-    call pass_var(hbl, G%Domain)
+    if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US, &
+                                                                     m_to_MLD_units=GV%m_to_H)
+    call pass_var(hbl,G%Domain)
     ! get k-indices and zeta
     do j=G%jsc-1, G%jec+1 ; do i=G%isc-1,G%iec+1
-      call boundary_k_range(SURFACE, G%ke, h(i,j,:), hbl(i,j), k_top(i,j), zeta_top(i,j), k_bot(i,j), zeta_bot(i,j))
-    enddo; enddo
+      call boundary_k_range(SURFACE, GV%ke, h(i,j,:), hbl(i,j), k_top(i,j), zeta_top(i,j), k_bot(i,j), zeta_bot(i,j))
+    enddo ; enddo
     ! TODO: add similar code for BOTTOM boundary layer
   endif
 
@@ -355,13 +353,13 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
 
   ! Calculate pressure at interfaces and layer averaged alpha/beta
   if (present(p_surf)) then
-     do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
-       CS%Pint(i,j,1) = p_surf(i,j)
-     enddo ; enddo
+    do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
+      CS%Pint(i,j,1) = p_surf(i,j)
+    enddo ; enddo
   else
     CS%Pint(:,:,1) = 0.
   endif
-  do k=1,G%ke ; do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
+  do k=1,GV%ke ; do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
     CS%Pint(i,j,k+1) = CS%Pint(i,j,k) + h(i,j,k)*(GV%g_Earth*GV%H_to_RZ)
   enddo ; enddo ; enddo
 
@@ -379,7 +377,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
         CS%P_i(i,j,1,2) = h(i,j,1)*(GV%H_to_RZ*GV%g_Earth)
       enddo ; enddo
     endif
-    do k=2,G%ke ; do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
+    do k=2,GV%ke ; do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
       CS%P_i(i,j,k,1) = CS%P_i(i,j,k-1,2)
       CS%P_i(i,j,k,2) = CS%P_i(i,j,k-1,2) + h(i,j,k)*(GV%H_to_RZ*GV%g_Earth)
     enddo ; enddo ; enddo
@@ -390,16 +388,16 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
     ! Interpolate state to interface
     do i = G%isc-1, G%iec+1
       if (CS%continuous_reconstruction) then
-        call interface_scalar(G%ke, h(i,j,:), T(i,j,:), CS%Tint(i,j,:), 2, h_neglect)
-        call interface_scalar(G%ke, h(i,j,:), S(i,j,:), CS%Sint(i,j,:), 2, h_neglect)
+        call interface_scalar(GV%ke, h(i,j,:), T(i,j,:), CS%Tint(i,j,:), 2, h_neglect)
+        call interface_scalar(GV%ke, h(i,j,:), S(i,j,:), CS%Sint(i,j,:), 2, h_neglect)
       else
-        call build_reconstructions_1d( CS%remap_CS, G%ke, h(i,j,:), T(i,j,:), CS%ppoly_coeffs_T(i,j,:,:), &
+        call build_reconstructions_1d( CS%remap_CS, GV%ke, h(i,j,:), T(i,j,:), CS%ppoly_coeffs_T(i,j,:,:), &
                                        CS%T_i(i,j,:,:), ppoly_r_S, iMethod, h_neglect, h_neglect_edge )
-        call build_reconstructions_1d( CS%remap_CS, G%ke, h(i,j,:), S(i,j,:), CS%ppoly_coeffs_S(i,j,:,:), &
+        call build_reconstructions_1d( CS%remap_CS, GV%ke, h(i,j,:), S(i,j,:), CS%ppoly_coeffs_S(i,j,:,:), &
                                        CS%S_i(i,j,:,:), ppoly_r_S, iMethod, h_neglect, h_neglect_edge )
         ! In the current ALE formulation, interface values are not exactly at the 0. or 1. of the
         ! polynomial reconstructions
-        do k=1,G%ke
+        do k=1,GV%ke
            CS%T_i(i,j,k,1) = evaluation_polynomial( CS%ppoly_coeffs_T(i,j,k,:), CS%deg+1, 0. )
            CS%T_i(i,j,k,2) = evaluation_polynomial( CS%ppoly_coeffs_T(i,j,k,:), CS%deg+1, 1. )
            CS%S_i(i,j,k,1) = evaluation_polynomial( CS%ppoly_coeffs_S(i,j,k,:), CS%deg+1, 0. )
@@ -410,13 +408,13 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
 
     ! Continuous reconstruction
     if (CS%continuous_reconstruction) then
-      do k = 1, G%ke+1
+      do k = 1, GV%ke+1
         if (CS%ref_pres<0) ref_pres(:) = CS%Pint(:,j,k)
         call calculate_density_derivs(CS%Tint(:,j,k), CS%Sint(:,j,k), ref_pres, CS%dRdT(:,j,k), &
                                       CS%dRdS(:,j,k), CS%EOS, EOSdom)
       enddo
     else ! Discontinuous reconstruction
-      do k = 1, G%ke
+      do k = 1, GV%ke
         if (CS%ref_pres<0) ref_pres(:) = CS%Pint(:,j,k)
         ! Calculate derivatives for the top interface
         call calculate_density_derivs(CS%T_i(:,j,k,1), CS%S_i(:,j,k,1), ref_pres, CS%dRdT_i(:,j,k,1), &
@@ -431,11 +429,11 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
 
   if (.not. CS%continuous_reconstruction) then
     do j = G%jsc-1, G%jec+1 ; do i = G%isc-1, G%iec+1
-      call mark_unstable_cells( CS, G%ke, CS%T_i(i,j,:,:), CS%S_i(i,j,:,:), CS%P_i(i,j,:,:), CS%stable_cell(i,j,:) )
+      call mark_unstable_cells( CS, GV%ke, CS%T_i(i,j,:,:), CS%S_i(i,j,:,:), CS%P_i(i,j,:,:), CS%stable_cell(i,j,:) )
       if (CS%interior_only) then
         if (.not. CS%stable_cell(i,j,k_bot(i,j))) zeta_bot(i,j) = -1.
         ! set values in the surface and bottom boundary layer to false.
-        do k = 1, k_bot(i,j)-1
+        do k = 1, k_bot(i,j)
           CS%stable_cell(i,j,k) = .false.
         enddo
       endif
@@ -457,13 +455,13 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
   do j = G%jsc, G%jec ; do I = G%isc-1, G%iec
     if (G%mask2dCu(I,j) > 0.) then
       if (CS%continuous_reconstruction) then
-        call find_neutral_surface_positions_continuous(G%ke,                                    &
+        call find_neutral_surface_positions_continuous(GV%ke,                                    &
                 CS%Pint(i,j,:), CS%Tint(i,j,:), CS%Sint(i,j,:), CS%dRdT(i,j,:), CS%dRdS(i,j,:),            &
                 CS%Pint(i+1,j,:), CS%Tint(i+1,j,:), CS%Sint(i+1,j,:), CS%dRdT(i+1,j,:), CS%dRdS(i+1,j,:),  &
                 CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:),           &
                 k_bot(I,j), k_bot(I+1,j), zeta_bot(I,j), zeta_bot(I+1,j))
       else
-        call find_neutral_surface_positions_discontinuous(CS, G%ke, &
+        call find_neutral_surface_positions_discontinuous(CS, GV%ke, &
             CS%P_i(i,j,:,:), h(i,j,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:), CS%ppoly_coeffs_T(i,j,:,:),           &
             CS%ppoly_coeffs_S(i,j,:,:),CS%stable_cell(i,j,:),                                                  &
             CS%P_i(i+1,j,:,:), h(i+1,j,:), CS%T_i(i+1,j,:,:), CS%S_i(i+1,j,:,:), CS%ppoly_coeffs_T(i+1,j,:,:), &
@@ -478,13 +476,13 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
   do J = G%jsc-1, G%jec ; do i = G%isc, G%iec
     if (G%mask2dCv(i,J) > 0.) then
       if (CS%continuous_reconstruction) then
-        call find_neutral_surface_positions_continuous(G%ke,                                              &
+        call find_neutral_surface_positions_continuous(GV%ke,                                              &
                 CS%Pint(i,j,:), CS%Tint(i,j,:), CS%Sint(i,j,:), CS%dRdT(i,j,:), CS%dRdS(i,j,:),           &
                 CS%Pint(i,j+1,:), CS%Tint(i,j+1,:), CS%Sint(i,j+1,:), CS%dRdT(i,j+1,:), CS%dRdS(i,j+1,:), &
-                CS%vPoL(i,J,:), CS%vPoR(i,J,:), CS%vKoL(i,J,:), CS%vKoR(i,J,:), CS%vhEff(i,J,:), &
+                CS%vPoL(i,J,:), CS%vPoR(i,J,:), CS%vKoL(i,J,:), CS%vKoR(i,J,:), CS%vhEff(i,J,:),          &
                 k_bot(i,J), k_bot(i,J+1), zeta_bot(i,J), zeta_bot(i,J+1))
       else
-        call find_neutral_surface_positions_discontinuous(CS, G%ke, &
+        call find_neutral_surface_positions_discontinuous(CS, GV%ke, &
             CS%P_i(i,j,:,:), h(i,j,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:), CS%ppoly_coeffs_T(i,j,:,:),           &
             CS%ppoly_coeffs_S(i,j,:,:),CS%stable_cell(i,j,:),                                                  &
             CS%P_i(i,j+1,:,:), h(i,j+1,:), CS%T_i(i,j+1,:,:), CS%S_i(i,j+1,:,:), CS%ppoly_coeffs_T(i,j+1,:,:), &
@@ -529,7 +527,7 @@ end subroutine neutral_diffusion_calc_coeffs
 subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
   type(ocean_grid_type),                     intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV     !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points [L2 ~> m2]
   real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: Coef_y !< dt * Kh * dx / dy at v-points [L2 ~> m2]
   real,                                      intent(in)    :: dt     !< Tracer time step * I_numitts [T ~> s]
@@ -542,11 +540,14 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
   real, dimension(SZIB_(G),SZJ_(G),CS%nsurf-1) :: uFlx        ! Zonal flux of tracer [H conc ~> m conc or conc kg m-2]
   real, dimension(SZI_(G),SZJB_(G),CS%nsurf-1) :: vFlx        ! Meridional flux of tracer
                                                               ! [H conc ~> m conc or conc kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),G%ke)        :: tendency    ! tendency array for diagn
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))    :: tendency    ! tendency array for diagnostics
+                                                              ! [H conc T-1 ~> m conc s-1 or kg m-2 conc s-1]
   real, dimension(SZI_(G),SZJ_(G))             :: tendency_2d ! depth integrated content tendency for diagn
+                                                              ! [H conc T-1 ~> m conc s-1 or kg m-2 conc s-1]
   real, dimension(SZIB_(G),SZJ_(G))            :: trans_x_2d  ! depth integrated diffusive tracer x-transport diagn
   real, dimension(SZI_(G),SZJB_(G))            :: trans_y_2d  ! depth integrated diffusive tracer y-transport diagn
-  real, dimension(G%ke)                        :: dTracer     ! change in tracer concentration due to ndiffusion
+  real, dimension(SZK_(GV))                    :: dTracer     ! change in tracer concentration due to ndiffusion
+                                                              ! [H L2 conc ~> m3 conc or kg conc]
 
   type(tracer_type), pointer                   :: Tracer => NULL() ! Pointer to the current tracer
 
@@ -659,7 +660,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
       call post_data(tracer%id_dfy_2d, trans_y_2d(:,:), CS%diag)
     endif
 
-    ! post tendency of tracer content
+    ! post tendency of layer-integrated tracer content
     if (tracer%id_dfxy_cont > 0) then
       call post_data(tracer%id_dfxy_cont, tendency(:,:,:), CS%diag)
     endif

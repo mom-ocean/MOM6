@@ -60,6 +60,8 @@ module MOM_diag_remap
 use MOM_coms,             only : reproducing_sum_EFP, EFP_to_real
 use MOM_coms,             only : EFP_type, assignment(=), EFP_sum_across_PEs
 use MOM_error_handler,    only : MOM_error, FATAL, assert, WARNING
+use MOM_debugging,        only : check_column_integrals
+use MOM_diag_manager,     only : diag_axis_init
 use MOM_diag_vkernels,    only : interpolate_column, reintegrate_column
 use MOM_file_parser,      only : get_param, log_param, param_file_type
 use MOM_io,               only : slasher, mom_read_data
@@ -80,10 +82,7 @@ use coord_zlike,          only : build_zstar_column
 use coord_sigma,          only : build_sigma_column
 use coord_rho,            only : build_rho_column
 
-use diag_axis_mod,     only : get_diag_axis_name
-use diag_manager_mod,  only : diag_axis_init
 
-use MOM_debugging,     only : check_column_integrals
 implicit none ; private
 
 public diag_remap_ctrl
@@ -327,7 +326,7 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
       call build_sigma_column(get_sigma_CS(remap_cs%regrid_cs), &
                               GV%Z_to_H*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
     elseif (remap_cs%vertical_coord == coordinateMode('RHO')) then
-      call build_rho_column(get_rho_CS(remap_cs%regrid_cs), G%ke, &
+      call build_rho_column(get_rho_CS(remap_cs%regrid_cs), GV%ke, &
                             GV%Z_to_H*G%bathyT(i,j), h(i,j,:), T(i,j,:), S(i,j,:), &
                             eqn_of_state, zInterfaces, h_neglect, h_neglect_edge)
     elseif (remap_cs%vertical_coord == coordinateMode('SLIGHT')) then
@@ -385,7 +384,7 @@ subroutine diag_remap_do_remap(remap_cs, G, GV, h, staggered_in_x, staggered_in_
   remapped_field(:,:,:) = 0.
 
   ! Symmetric grid offset under 1-based indexing; see header for details.
-  shift = 0; if (G%symmetric) shift = 1
+  shift = 0 ; if (G%symmetric) shift = 1
 
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points
@@ -516,7 +515,7 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, h_target, staggered
   reintegrated_field(:,:,:) = 0.
 
   ! Symmetric grid offset under 1-based indexing; see header for details.
-  shift = 0; if (G%symmetric) shift = 1
+  shift = 0 ; if (G%symmetric) shift = 1
 
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points
@@ -597,7 +596,7 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
   nz_dest = remap_cs%nz
 
   ! Symmetric grid offset under 1-based indexing; see header for details.
-  shift = 0; if (G%symmetric) shift = 1
+  shift = 0 ; if (G%symmetric) shift = 1
 
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points

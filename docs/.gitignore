@@ -4,8 +4,15 @@ doxygen.log
 APIs
 MOM6.tags
 details/tutorial
+
+
 # Ignore sphinx-build output
 _build
 api
 src
 xml
+
+
+# Citation output
+bib*.aux
+citelist.doc*

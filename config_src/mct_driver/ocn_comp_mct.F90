@@ -42,6 +42,7 @@ use MOM_EOS,              only: gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_constants,        only: CELSIUS_KELVIN_OFFSET
 use MOM_domains,          only: AGRID, BGRID_NE, CGRID_NE, pass_vector
 use mpp_domains_mod,      only: mpp_get_compute_domain
+use MOM_io,               only: stdout
 
 ! Previously inlined - now in separate modules
 use MOM_ocean_model_mct,     only: ocean_public_type, ocean_state_type
@@ -88,7 +89,6 @@ type MCT_MOM_Data
   type(cpl_indices_type)           :: ind                  !< Variable IDs
   logical                          :: sw_decomp            !< Controls whether shortwave is decomposed into 4 components
   real                             :: c1, c2, c3, c4       !< Coeffs. used in the shortwave decomposition  i/o
-  integer                          :: stdout               !< standard output unit. (by default, points to ocn.log.* )
   character(len=384)               :: pointer_filename     !< Name of the ascii file that contains the path
                                                            !! and filename of the latest restart file.
 end type MCT_MOM_Data
@@ -194,14 +194,14 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
     call shr_file_getLogUnit (shrlogunit)
     call shr_file_getLogLevel(shrloglev)
 
-    glb%stdout = shr_file_getUnit() ! get an unused unit number
+    stdout = shr_file_getUnit() ! get an unused unit number
 
     ! open the ocn_modelio.nml file and then open a log file associated with stdout
     ocn_modelio_name = 'ocn_modelio.nml' // trim(inst_suffix)
-    call shr_file_setIO(ocn_modelio_name,glb%stdout)
+    call shr_file_setIO(ocn_modelio_name,stdout)
 
     !  set the shr log io unit number
-    call shr_file_setLogUnit(glb%stdout)
+    call shr_file_setLogUnit(stdout)
   end if
 
   call set_calendar_type(NOLEAP)  !TODO: confirm this
@@ -218,23 +218,23 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
 
   ! Debugging clocks
   if (debug .and. is_root_pe()) then
-    write(glb%stdout,*) 'ocn_init_mct, current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    write(stdout,*) 'ocn_init_mct, current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
 
     call ESMF_ClockGet(EClock, StartTime=time_var, rc=rc)
     call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-    write(glb%stdout,*) 'ocn_init_mct, start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    write(stdout,*) 'ocn_init_mct, start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
 
     call ESMF_ClockGet(EClock, StopTime=time_var, rc=rc)
     call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-    write(glb%stdout,*) 'ocn_init_mct, stop time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    write(stdout,*) 'ocn_init_mct, stop time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
 
     call ESMF_ClockGet(EClock, PrevTime=time_var, rc=rc)
     call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-    write(glb%stdout,*) 'ocn_init_mct, previous time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    write(stdout,*) 'ocn_init_mct, previous time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
 
     call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
     call ESMF_TimeIntervalGet(ocn_cpl_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
-    write(glb%stdout,*) 'ocn_init_mct, time step: y,m,d-',year,month,day,'s,sn,sd=',seconds,seconds_n,seconds_d
+    write(stdout,*) 'ocn_init_mct, time step: y,m,d-',year,month,day,'s,sn,sd=',seconds,seconds_n,seconds_d
   endif
 
   npes = num_pes()
@@ -298,7 +298,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
     ! read name of restart file in the pointer file
     nu = shr_file_getUnit()
     restart_pointer_file = trim(glb%pointer_filename)
-    if (is_root_pe()) write(glb%stdout,*) 'Reading ocn pointer file: ',restart_pointer_file
+    if (is_root_pe()) write(stdout,*) 'Reading ocn pointer file: ',restart_pointer_file
     restartfile = ""; restartfiles = "";
     open(nu, file=restart_pointer_file, form='formatted', status='unknown')
     do
@@ -316,13 +316,13 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
     enddo
     close(nu)
     if (is_root_pe()) then
-      write(glb%stdout,*) 'Reading restart file(s): ',trim(restartfiles)
+      write(stdout,*) 'Reading restart file(s): ',trim(restartfiles)
     end if
     call shr_file_freeUnit(nu)
     call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time_start, input_restart_file=trim(restartfiles))
   endif
   if (is_root_pe()) then
-    write(glb%stdout,'(/12x,a/)') '======== COMPLETED MOM INITIALIZATION ========'
+    write(stdout,'(/12x,a/)') '======== COMPLETED MOM INITIALIZATION ========'
   end if
 
   ! Initialize ocn_state%sfc_state out of sight
@@ -383,7 +383,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   ncouple_per_day = seconds_in_day / ocn_cpl_dt
   mom_cpl_dt = seconds_in_day / ncouple_per_day
   if (mom_cpl_dt /= ocn_cpl_dt) then
-    write(glb%stdout,*) 'ERROR mom_cpl_dt and ocn_cpl_dt must be identical'
+    write(stdout,*) 'ERROR mom_cpl_dt and ocn_cpl_dt must be identical'
     call exit(0)
   end if
 
@@ -457,7 +457,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   if (is_root_pe()) then
     call shr_file_getLogUnit(shrlogunit)
     call shr_file_getLogLevel(shrloglev)
-    call shr_file_setLogUnit(glb%stdout)
+    call shr_file_setLogUnit(stdout)
   endif
 
   ! Query the beginning time of the current coupling interval
@@ -484,7 +484,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
     if (runtype /= "continue" .and. runtype /= "branch") then
 
       if (debug .and. is_root_pe()) then
-        write(glb%stdout,*) 'doubling first interval duration!'
+        write(stdout,*) 'doubling first interval duration!'
       endif
 
       ! shift back the start time by one coupling interval (to align the start time with other components)
@@ -500,19 +500,19 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   if (debug .and. is_root_pe()) then
     call ESMF_ClockGet(EClock, CurrTime=time_var, rc=rc)
     call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-    write(glb%stdout,*) 'ocn_run_mct, current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    write(stdout,*) 'ocn_run_mct, current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
     call ESMF_ClockGet(EClock, StartTime=time_var, rc=rc)
     call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-    write(glb%stdout,*) 'ocn_run_mct, start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    write(stdout,*) 'ocn_run_mct, start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
     call ESMF_ClockGet(EClock, StopTime=time_var, rc=rc)
     call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-    write(glb%stdout,*) 'ocn_run_mct, stop time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    write(stdout,*) 'ocn_run_mct, stop time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
     call ESMF_ClockGet(EClock, PrevTime=time_var, rc=rc)
     call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-    write(glb%stdout,*) 'ocn_run_mct, previous time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    write(stdout,*) 'ocn_run_mct, previous time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
     call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
     call ESMF_TimeIntervalGet(ocn_cpl_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
-    write(glb%stdout,*) 'ocn_init_mct, time step: y,m,d-',year,month,day,'s,sn,sd=',seconds,seconds_n,seconds_d
+    write(stdout,*) 'ocn_init_mct, time step: y,m,d-',year,month,day,'s,sn,sd=',seconds,seconds_n,seconds_d
   endif
 
   ! set the cdata pointers:
@@ -525,10 +525,10 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   !glb%sw_decomp = .false.
   !END TODO:
   if (glb%sw_decomp) then
-    call ocn_import(x2o_o%rattr, glb%ind,  glb%grid, Ice_ocean_boundary, glb%ocn_public, glb%stdout, Eclock, &
+    call ocn_import(x2o_o%rattr, glb%ind,  glb%grid, Ice_ocean_boundary, glb%ocn_public, stdout, Eclock, &
           c1=glb%c1, c2=glb%c2, c3=glb%c3, c4=glb%c4)
   else
-    call ocn_import(x2o_o%rattr, glb%ind,  glb%grid, Ice_ocean_boundary, glb%ocn_public, glb%stdout, Eclock )
+    call ocn_import(x2o_o%rattr, glb%ind,  glb%grid, Ice_ocean_boundary, glb%ocn_public, stdout, Eclock )
   end if
 
   ! Update internal ocean
@@ -540,7 +540,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   !--- write out intermediate restart file when needed.
   ! Check alarms for flag to write restart at end of day
   write_restart_at_eod = seq_timemgr_RestartAlarmIsOn(EClock)
-  if (debug .and. is_root_pe()) write(glb%stdout,*) 'ocn_run_mct, write_restart_at_eod=', write_restart_at_eod
+  if (debug .and. is_root_pe()) write(stdout,*) 'ocn_run_mct, write_restart_at_eod=', write_restart_at_eod
 
   if (write_restart_at_eod) then
     ! case name
@@ -575,7 +575,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
       endif
 
       close(nu)
-      write(glb%stdout,*) 'ocn restart pointer file written: ',trim(restartname)
+      write(stdout,*) 'ocn restart pointer file written: ',trim(restartname)
     endif
     call shr_file_freeUnit(nu)
 
@@ -761,7 +761,7 @@ character(32) function get_runtype()
   else if (trim(starttype) == trim(seq_infodata_start_type_brnch)) then
      get_runtype = "branch"
   else
-     write(glb%stdout,*) 'ocn_comp_mct ERROR: unknown starttype'
+     write(stdout,*) 'ocn_comp_mct ERROR: unknown starttype'
      call exit(0)
   end if
   return

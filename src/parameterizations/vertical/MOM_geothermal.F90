@@ -51,27 +51,25 @@ contains
 !! or very small, the layers are simply heated in place.  Any heat that can not
 !! be applied to the ocean is returned (WHERE)?
 subroutine geothermal_entraining(h, tv, dt, ea, eb, G, GV, US, CS, halo)
-  type(ocean_grid_type),                    intent(inout) :: G  !< The ocean's grid structure.
-  type(verticalGrid_type),                  intent(in)    :: GV !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thicknesses [H ~> m or kg m-2]
-  type(thermo_var_ptrs),                    intent(inout) :: tv !< A structure containing pointers
-                                                                !! to any available thermodynamic
-                                                                !! fields. Absent fields have NULL
-                                                                !! ptrs.
-  real,                                     intent(in)    :: dt !< Time increment [T ~> s].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea !< The amount of fluid moved
-                                                                !! downward into a layer; this
-                                                                !! should be increased due to mixed
-                                                                !! layer detrainment [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: eb !< The amount of fluid moved upward
-                                                                !! into a layer; this should be
-                                                                !! increased due to mixed layer
-                                                                !! entrainment [H ~> m or kg m-2].
-  type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
-  type(geothermal_CS),                      pointer       :: CS !< The control structure returned by
-                                                                !! a previous call to
-                                                                !! geothermal_init.
-  integer,                        optional, intent(in)    :: halo !< Halo width over which to work
+  type(ocean_grid_type),                     intent(inout) :: G  !< The ocean's grid structure.
+  type(verticalGrid_type),                   intent(in)    :: GV !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h  !< Layer thicknesses [H ~> m or kg m-2]
+  type(thermo_var_ptrs),                     intent(inout) :: tv !< A structure containing pointers
+                                                                 !! to any available thermodynamic fields.
+  real,                                      intent(in)    :: dt !< Time increment [T ~> s].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: ea !< The amount of fluid moved
+                                                                 !! downward into a layer; this
+                                                                 !! should be increased due to mixed
+                                                                 !! layer detrainment [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: eb !< The amount of fluid moved upward
+                                                                 !! into a layer; this should be
+                                                                 !! increased due to mixed layer
+                                                                 !! entrainment [H ~> m or kg m-2].
+  type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
+  type(geothermal_CS),                       pointer       :: CS !< The control structure returned by
+                                                                 !! a previous call to
+                                                                 !! geothermal_init.
+  integer,                         optional, intent(in)    :: halo !< Halo width over which to work
   ! Local variables
   real, dimension(SZI_(G)) :: &
     heat_rem,  & ! remaining heat [H degC ~> m degC or kg degC m-2]
@@ -106,15 +104,10 @@ subroutine geothermal_entraining(h, tv, dt, ea, eb, G, GV, US, CS, halo)
   real :: Irho_cp       ! inverse of heat capacity per unit layer volume
                         ! [degC H Q-1 R-1 Z-1 ~> degC m3 J-1 or degC kg J-1]
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: T_old   ! Temperature of each layer
-                                                      ! before any heat is added,
-                                                      ! for diagnostics [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_old   ! Thickness of each layer
-                                                      ! before any heat is added,
-                                                      ! for diagnostics [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: work_3d ! Scratch variable used to
-                                                      ! calculate change in heat
-                                                      ! due to geothermal
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
+    T_old, & ! Temperature of each layer before any heat is added, for diagnostics [degC]
+    h_old, & ! Thickness of each layer before any heat is added, for diagnostics [H ~> m or kg m-2]
+    work_3d ! Scratch variable used to calculate changes due to geothermal
   real :: Idt           ! inverse of the timestep [T-1 ~> s-1]
 
   logical :: do_i(SZI_(G))
@@ -122,7 +115,7 @@ subroutine geothermal_entraining(h, tv, dt, ea, eb, G, GV, US, CS, halo)
   integer :: i, j, k, is, ie, js, je, nz, k2, i2
   integer :: isj, iej, num_left, nkmb, k_tgt
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   if (present(halo)) then
     is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   endif
@@ -347,7 +340,7 @@ subroutine geothermal_entraining(h, tv, dt, ea, eb, G, GV, US, CS, halo)
   if (CS%id_internal_heat_temp_tendency > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       work_3d(i,j,k) = Idt * (tv%T(i,j,k) - T_old(i,j,k))
-    enddo; enddo; enddo
+    enddo ; enddo ; enddo
     call post_data(CS%id_internal_heat_temp_tendency, work_3d, CS%diag, alt_h=h_old)
   endif
   if (CS%id_internal_heat_h_tendency > 0) then
@@ -368,18 +361,16 @@ end subroutine geothermal_entraining
 !! the bottom, by simply heating the water in place.  Any heat that can not be applied to the ocean
 !! is returned (WHERE)?
 subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
-  type(ocean_grid_type),                    intent(inout) :: G  !< The ocean's grid structure.
-  type(verticalGrid_type),                  intent(in)    :: GV !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
-  type(thermo_var_ptrs),                    intent(inout) :: tv !< A structure containing pointers
-                                                                !! to any available thermodynamic
-                                                                !! fields. Absent fields have NULL
-                                                                !! ptrs.
-  real,                                     intent(in)    :: dt !< Time increment [T ~> s].
-  type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
-  type(geothermal_CS),                      pointer       :: CS !< The control structure returned by
-                                                                !! a previous call to geothermal_init.
-  integer,                        optional, intent(in)    :: halo !< Halo width over which to work
+  type(ocean_grid_type),                     intent(inout) :: G  !< The ocean's grid structure.
+  type(verticalGrid_type),                   intent(in)    :: GV !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
+  type(thermo_var_ptrs),                     intent(inout) :: tv !< A structure containing pointers
+                                                                 !! to any available thermodynamic fields.
+  real,                                      intent(in)    :: dt !< Time increment [T ~> s].
+  type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
+  type(geothermal_CS),                       pointer       :: CS !< The control structure returned by
+                                                                 !! a previous call to geothermal_init.
+  integer,                         optional, intent(in)    :: halo !< Halo width over which to work
 
   ! Local variables
   real, dimension(SZI_(G)) :: &
@@ -392,7 +383,7 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
   real :: Irho_cp       ! inverse of heat capacity per unit layer volume
                         ! [degC H Q-1 R-1 Z-1 ~> degC m3 J-1 or degC kg J-1]
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     dTdt_diag           ! Diagnostic of temperature tendency [degC T-1 ~> degC s-1] which might be
                         ! converted into a layer-integrated heat tendency [Q R Z T-1 ~> W m-2]
   real :: Idt           ! inverse of the timestep [T-1 ~> s-1]
@@ -400,7 +391,7 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
   logical :: calc_diags ! True if diagnostic tendencies are needed.
   integer :: i, j, k, is, ie, js, je, nz, i2, isj, iej
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   if (present(halo)) then
     is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   endif
@@ -581,7 +572,7 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS, useALEalgorith
   ! post the static geothermal heating field
   id = register_static_field('ocean_model', 'geo_heat', diag%axesT1,   &
         'Geothermal heat flux into ocean', 'W m-2', conversion=US%QRZ_T_to_W_m2, &
-        cmor_field_name='hfgeou', cmor_units='W m-2',                  &
+        cmor_field_name='hfgeou', &
         cmor_standard_name='upward_geothermal_heat_flux_at_sea_floor', &
         cmor_long_name='Upward geothermal heat flux at sea floor', &
         x_cell_method='mean', y_cell_method='mean', area_cell_method='mean')
