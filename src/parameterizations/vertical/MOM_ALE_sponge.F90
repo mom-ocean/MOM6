@@ -145,20 +145,15 @@ type, public :: ALE_sponge_CS ; private
   logical :: spongeDataOngrid !< True if the sponge data are on the model horizontal grid
 
   logical :: reentrant_x !< grid is reentrant in the x direction
-  logical :: tripolar_N !< grid is folded at its north edg
+  logical :: tripolar_N !< grid is folded at its north edge
 
   !>@{ Diagnostic IDs
-  integer :: id_sp_val_t = -1
-  integer :: id_sp_val_s = -1
-  integer :: id_sp_val_app_t = -1
-  integer :: id_sp_val_app_s = -1
-  integer :: id_sp_val_u = -1
-  integer :: id_sp_val_v = -1
-  integer :: id_sp_val_app_u = -1
-  integer :: id_sp_val_app_v = -1
-  integer :: id_sp_val_s_presponge = -1
-  integer :: id_sp_val_s_postsponge = -1
-
+  integer, dimension(2) :: id_sp_tendency      !< Diagnostic ids for temperature and salinity
+                                               !! tendency due to sponges
+  integer :: id_sp_u_tendency                  !< Diagnostic id for zonal momentum tendency due to
+                                               !! Rayleigh damping
+  integer :: id_sp_v_tendency                  !< Diagnostic id for meridional momentum tendency due to
+                                               !! Rayleigh damping
 end type ALE_sponge_CS
 
 contains
@@ -620,35 +615,17 @@ subroutine init_ALE_sponge_diags(Time, G, diag, CS)
 
   CS%diag => diag
 
-  CS%id_sp_val_t = register_diag_field('ocean_model', 'sp_val_t', diag%axesTL, Time, &
-        'Sponge target value for temperature at h points', 'degC')
-
-  CS%id_sp_val_s = register_diag_field('ocean_model', 'sp_val_s', diag%axesTL, Time, &
-        'Sponge target value for salinity at h points', 'psu')
-
-  CS%id_sp_val_app_t = register_diag_field('ocean_model', 'sp_val_app_t', diag%axesTL, Time, &
-        'Sponge target value for temperature at h points, only where sponge is applied', 'degC')
-
-  CS%id_sp_val_app_s = register_diag_field('ocean_model', 'sp_val_app_s', diag%axesTL, Time, &
-        'Sponge target value for salinity at h points, only where sponge is applied', 'psu')
-
-  CS%id_sp_val_u = register_diag_field('ocean_model', 'sp_val_u', diag%axesCuL, Time, &
-        'Sponge target value for zonal velocity at u points', 'm s-1')
-
-  CS%id_sp_val_v = register_diag_field('ocean_model', 'sp_val_v', diag%axesCvL, Time, &
-        'Sponge target value for meridional velocity at v points', 'm s-1')
-
-  CS%id_sp_val_app_u = register_diag_field('ocean_model', 'sp_val_app_u', diag%axesCuL, Time, &
-        'Sponge target value for zonal velocity at u points, only where sponge is applied', 'm s-1')
-
-  CS%id_sp_val_app_v = register_diag_field('ocean_model', 'sp_val_app_v', diag%axesCvL, Time, &
-        'Sponge target value for meridional velocity at v points, only where sponge is applied', 'm s-1')
-
-  CS%id_sp_val_s_presponge = register_diag_field('ocean_model', 'sp_val_s_presponge', diag%axesTL, Time, &
-        'Salinity at h points before sponge is applied', 'degC')
-
-  CS%id_sp_val_s_postsponge = register_diag_field('ocean_model', 'sp_val_s_postsponge', diag%axesTL, Time, &
-        'Salinity at h points after sponge is applied', 'degC')
+  CS%id_sp_tendency(:) = -1
+  CS%id_sp_tendency(1) = register_diag_field('ocean_model', 'sp_tendency_temp', diag%axesTL, Time, &
+        'Time tendency due to temperature restoring', 'degC s-1')
+  CS%id_sp_tendency(2) = register_diag_field('ocean_model', 'sp_tendency_salt', diag%axesTL, Time, &
+       'Time tendency due to salinity restoring', 'g kg-1 s-1')
+  CS%id_sp_u_tendency = -1
+  CS%id_sp_u_tendency = register_diag_field('ocean_model', 'sp_tendency_u', diag%axesCuL, Time, &
+       'Zonal acceleration due to sponges', 'm s-2')
+  CS%id_sp_v_tendency = -1
+  CS%id_sp_v_tendency = register_diag_field('ocean_model', 'sp_tendency_v', diag%axesCvL, Time, &
+       'Meridional acceleration due to sponges', 'm s-2')
 
 end subroutine init_ALE_sponge_diags
 
@@ -891,13 +868,15 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   integer :: c, m, nkmb, i, j, k, is, ie, js, je, nz, nz_data
   integer :: col, total_sponge_cols
   real, allocatable, dimension(:), target :: z_in, z_edges_in
-  real :: missing_value
+  real :: missing_value, Idt
   real :: h_neglect, h_neglect_edge
   real :: zTopOfCell, zBottomOfCell ! Heights [Z ~> m].
   integer :: nPoints
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   if (.not.associated(CS)) return
+
+  Idt = 1.0/dt
 
   if (.not.CS%remap_answers_2018) then
     h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
@@ -922,13 +901,6 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
                      spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z, &
                      answers_2018=CS%hor_regrid_answers_2018)
 
-      if (m .EQ. 1) then
-        if (CS%id_sp_val_t > 0)  call post_data(CS%id_sp_val_t, sp_val, CS%diag)
-      endif
-      if (m .EQ. 2) then
-        if (CS%id_sp_val_s > 0)  call post_data(CS%id_sp_val_s, sp_val, CS%diag)
-        if (CS%id_sp_val_s_presponge > 0)  call post_data(CS%id_sp_val_s_presponge, CS%var(m)%p, CS%diag)
-      endif
 
       allocate( hsrc(nz_data) )
       allocate( tmpT1d(nz_data) )
@@ -973,7 +945,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   allocate(tmp_val2(nz_data))
   do m=1,CS%fldno
 
-    tmp(:,:,:) = 0.0
+    if (CS%id_sp_tendency(m) > 0) tmp(:,:,:) = 0.0
 
     do c=1,CS%num_col
       ! c is an index for the next 3 lines but a multiplier for the rest of the loop
@@ -992,17 +964,15 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       endif
 
       !Backward Euler method
+      if (CS%id_sp_tendency(m) > 0) tmp(i,j,1:CS%nz) = CS%var(m)%p(i,j,1:CS%nz)
       CS%var(m)%p(i,j,1:CS%nz) = I1pdamp * (CS%var(m)%p(i,j,1:CS%nz) + tmp_val1 * damp)
+      if (CS%id_sp_tendency(m) > 0) &
+           tmp(i,j,1:CS%nz) = Idt*(CS%var(m)%p(i,j,1:CS%nz) - tmp(i,j,1:CS%nz))
+
 
     enddo
 
-    if (m .EQ. 1) then
-      if (CS%id_sp_val_app_t > 0)  call post_data(CS%id_sp_val_app_t, tmp, CS%diag)
-    endif
-    if (m .EQ. 2) then
-      if (CS%id_sp_val_app_s > 0)  call post_data(CS%id_sp_val_app_s, tmp, CS%diag)
-      if (CS%id_sp_val_s_postsponge > 0)  call post_data(CS%id_sp_val_s_postsponge, CS%var(m)%p, CS%diag)
-    endif
+    if (CS%id_sp_tendency(m) > 0)  call post_data(CS%id_sp_tendency(m), tmp, CS%diag)
 
   enddo
 
@@ -1032,10 +1002,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       do j=CS%jsc,CS%jec; do I=CS%iscB,CS%iecB
        sp_val_u(I,j,1:nz_data) = 0.5*(sp_val(i,j,1:nz_data)+sp_val(i+1,j,1:nz_data))
       enddo ; enddo
-      if (CS%id_sp_val_u > 0)  call post_data(CS%id_sp_val_u, sp_val, CS%diag)
 
-      !call pass_var(sp_val,G%Domain)
-      !call pass_var(mask_z,G%Domain)
       allocate( hsrc(nz_data) )
       allocate( tmpT1d(nz_data) )
       do c=1,CS%num_col_u
@@ -1133,7 +1100,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       nz_data = CS%nz_data
     endif
 
-    tmp_u(:,:,:) = 0.0
+    if (CS%id_sp_u_tendency > 0) tmp_u(:,:,:) = 0.0
 
     do c=1,CS%num_col_u
       i = CS%col_i_u(c) ; j = CS%col_j_u(c)
@@ -1148,17 +1115,20 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       else
         call remapping_core_h(CS%remap_cs, nz_data, CS%Ref_hu%p(1:nz_data,c), tmp_val2, &
                  CS%nz, hu(i,j,:), tmp_val1, h_neglect, h_neglect_edge)
-      endif
+     endif
+     if (CS%id_sp_u_tendency > 0) tmp_u(i,j,1:CS%nz) = CS%var_u%p(i,j,1:CS%nz)
       !Backward Euler method
-      CS%var_u%p(i,j,1:CS%nz) = I1pdamp * (CS%var_u%p(i,j,1:CS%nz) + tmp_val1 * damp)
+     CS%var_u%p(i,j,1:CS%nz) = I1pdamp * (CS%var_u%p(i,j,1:CS%nz) + tmp_val1 * damp)
+     if (CS%id_sp_u_tendency > 0) tmp_u(i,j,1:CS%nz) = Idt*(CS%var_u%p(i,j,1:CS%nz) - CS%var_u%p(i,j,1:CS%nz))
     enddo
 
+    if (CS%id_sp_u_tendency > 0) call post_data(CS%id_sp_u_tendency, tmp_u, CS%diag)
     ! v points
     do J=CS%jscB,CS%jecB; do i=CS%isc,CS%iec; do k=1,nz
       hv(i,J,k) = 0.5 * (h(i,j,k) + h(i,j+1,k))
     enddo ; enddo ; enddo
 
-    tmp_v(:,:,:) = 0.0
+    if (CS%id_sp_v_tendency > 0) tmp_v(:,:,:) = 0.0
 
     do c=1,CS%num_col_v
       i = CS%col_i_v(c) ; j = CS%col_j_v(c)
@@ -1174,12 +1144,13 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         call remapping_core_h(CS%remap_cs, nz_data, CS%Ref_hv%p(1:nz_data,c), tmp_val2, &
                  CS%nz, hv(i,j,:), tmp_val1, h_neglect, h_neglect_edge)
       endif
+      if (CS%id_sp_v_tendency > 0) tmp_v(i,j,1:CS%nz) = CS%var_v%p(i,j,1:CS%nz)
       !Backward Euler method
       CS%var_v%p(i,j,1:CS%nz) = I1pdamp * (CS%var_v%p(i,j,1:CS%nz) + tmp_val1 * damp)
+      if (CS%id_sp_v_tendency > 0) tmp_v(i,j,1:CS%nz) = Idt*(CS%var_v%p(i,j,1:CS%nz) - CS%var_v%p(i,j,1:CS%nz))
     enddo
 
-   if (CS%id_sp_val_app_u > 0)  call post_data(CS%id_sp_val_app_u, tmp_u, CS%diag)
-   if (CS%id_sp_val_app_v > 0)  call post_data(CS%id_sp_val_app_v, tmp_v, CS%diag)
+    if (CS%id_sp_v_tendency > 0) call post_data(CS%id_sp_v_tendency, tmp_v, CS%diag)
 
   endif
 
