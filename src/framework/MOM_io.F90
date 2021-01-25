@@ -11,7 +11,7 @@ use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING
 use MOM_file_parser,      only : log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
 use MOM_io_infra,         only : MOM_read_data, read_data, MOM_read_vector, read_field_chksum
-use MOM_io_infra,         only : file_exists, get_file_info, get_file_atts, get_file_fields
+use MOM_io_infra,         only : file_exists, get_file_info, get_file_fields, get_field_atts
 use MOM_io_infra,         only : open_file, close_file, field_size, fieldtype, field_exists
 use MOM_io_infra,         only : flush_file, get_filename_appendix, get_ensemble_id
 use MOM_io_infra,         only : get_file_times, axistype, get_axis_data
@@ -35,7 +35,7 @@ public :: create_file, reopen_file, num_timelevels, cmor_long_std, ensembler, MO
 public :: MOM_write_field, var_desc, modify_vardesc, query_vardesc
 ! The following are simple pass throughs of routines from MOM_io_infra or other modules
 public :: close_file, field_exists, field_size, fieldtype, get_filename_appendix
-public :: file_exists, flush_file, get_file_info, get_file_atts, get_file_fields
+public :: file_exists, flush_file, get_file_info, get_file_fields, get_field_atts
 public :: get_file_times, open_file, get_axis_data
 public :: MOM_read_data, MOM_read_vector, read_data, read_field_chksum
 public :: slasher, write_field, write_version_number

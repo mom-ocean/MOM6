@@ -5,38 +5,39 @@ module MOM_io_infra
 
 use MOM_domain_infra,     only : MOM_domain_type, AGRID, BGRID_NE, CGRID_NE
 use MOM_domain_infra,     only : get_simple_array_i_ind, get_simple_array_j_ind
+use MOM_domain_infra,     only : domain2d, CENTER, CORNER, NORTH_FACE, EAST_FACE
 use MOM_error_infra,      only : MOM_error=>MOM_err, NOTE, FATAL, WARNING
 
 use ensemble_manager_mod, only : get_ensemble_id
 use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
 use fms_io_mod,           only : file_exist, field_exist, field_size, read_data
-use fms_io_mod,           only : io_infra_end=>fms_io_exit, get_filename_appendix
-use mpp_domains_mod,      only : domain2d, CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
-use mpp_io_mod,           only : mpp_open, close_file=>mpp_close
+use fms_io_mod,           only : fms_io_exit, get_filename_appendix
+use mpp_io_mod,           only : mpp_open, mpp_close, mpp_flush
 use mpp_io_mod,           only : write_metadata=>mpp_write_meta, mpp_write
-use mpp_io_mod,           only : get_field_atts=>mpp_get_atts, mpp_attribute_exist
+use mpp_io_mod,           only : mpp_get_atts, mpp_attribute_exist
 use mpp_io_mod,           only : mpp_get_axes, axistype, get_axis_data=>mpp_get_axis_data
-use mpp_io_mod,           only : mpp_get_fields, fieldtype, flush_file=>mpp_flush
+use mpp_io_mod,           only : mpp_get_fields, fieldtype
+use mpp_io_mod,           only : mpp_get_info
+use mpp_io_mod,           only : get_file_times=>mpp_get_times
+use mpp_io_mod,           only : mpp_io_init
+! These are encoding constants.
 use mpp_io_mod,           only : APPEND_FILE=>MPP_APPEND, ASCII_FILE=>MPP_ASCII
 use mpp_io_mod,           only : MULTIPLE=>MPP_MULTI, NETCDF_FILE=>MPP_NETCDF
 use mpp_io_mod,           only : OVERWRITE_FILE=>MPP_OVERWR, READONLY_FILE=>MPP_RDONLY
 use mpp_io_mod,           only : SINGLE_FILE=>MPP_SINGLE, WRITEONLY_FILE=>MPP_WRONLY
-use mpp_io_mod,           only : get_file_info=>mpp_get_info, get_file_atts=>mpp_get_atts
-use mpp_io_mod,           only : get_file_fields=>mpp_get_fields, get_file_times=>mpp_get_times
-use mpp_io_mod,           only : io_infra_init=>mpp_io_init
 
 implicit none ; private
 
 ! These interfaces are actually implemented or have explicit interfaces in this file.
-public :: MOM_read_data, MOM_read_vector, write_field, open_file
+public :: MOM_read_data, MOM_read_vector, write_field, open_file, close_file, flush_file
 public :: file_exists, field_exists, read_field_chksum
+public :: get_file_info, get_file_fields, get_field_atts, io_infra_init, io_infra_end
 ! The following are simple pass throughs of routines from other modules.  They need
 ! to have explicit interfaces added to this file.
-public :: close_file, field_size, fieldtype, get_filename_appendix
-public :: flush_file, get_file_info, get_file_atts, get_file_fields, get_field_atts
-public :: get_file_times, read_data, axistype, get_axis_data
+public :: fieldtype, axistype, field_size, get_filename_appendix
+public :: get_file_times, read_data, get_axis_data
 public :: write_metadata, write_version_number, get_ensemble_id
-public :: open_namelist_file, check_nml_error, io_infra_init, io_infra_end
+public :: open_namelist_file, check_nml_error
 ! These are encoding constants.
 public :: APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
 public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
@@ -122,6 +123,34 @@ function FMS_file_exists(filename, domain, no_domain)
 
 end function FMS_file_exists
 
+!> close_file closes a file (or fileset).  If the file handle does not point to an open file,
+!! close_file simply returns without doing anything.
+subroutine close_file(unit)
+  integer,                  intent(out) :: unit   !< The I/O unit for the file to be closed
+
+  call mpp_close(unit)
+end subroutine close_file
+
+!> Ensure that the output stream associated with a unit is fully sent to dis.
+subroutine flush_file(unit)
+  integer,                  intent(out) :: unit   !< The I/O unit for the file to flush
+
+  call mpp_flush(unit)
+end subroutine flush_file
+
+!> Initialize the underlying I/O infrastructure
+subroutine io_infra_init(maxunits)
+  integer,   optional, intent(in) :: maxunits !< An optional maximum number of file
+                                              !! unit numbers that can be used.
+  call mpp_io_init(maxunit=maxunits)
+end subroutine io_infra_init
+
+!> Gracefully close out and terminate the underlying I/O infrastructure
+subroutine io_infra_end()
+  call fms_io_exit()
+end subroutine io_infra_end
+
+
 !> open_file opens a file for parallel or single-file I/O.
 subroutine open_file(unit, file, action, form, threading, fileset, nohdrs, domain, MOM_domain)
   integer,                  intent(out) :: unit   !< The I/O unit for the opened file
@@ -149,6 +178,47 @@ subroutine open_file(unit, file, action, form, threading, fileset, nohdrs, domai
                   nohdrs=nohdrs, domain=domain)
   endif
 end subroutine open_file
+
+!> Get information about the number of dimensions, variables, global attributes and time levels
+!! in the file associated with an open file unit
+subroutine get_file_info(unit, ndim, nvar, natt, ntime)
+  integer,            intent(in)  :: unit  !< The I/O unit for the open file
+  integer,  optional, intent(out) :: ndim  !< The number of dimensions in the file
+  integer,  optional, intent(out) :: nvar  !< The number of variables in the file
+  integer,  optional, intent(out) :: natt  !< The number of global attributes in the file
+  integer,  optional, intent(out) :: ntime !< The number of time levels in the file
+
+  ! Local variables
+  integer :: ndims, nvars, natts, ntimes
+
+  call mpp_get_info( unit, ndims, nvars, natts, ntimes )
+
+  if (present(ndim)) ndim = ndims
+  if (present(nvar)) nvar = nvars
+  if (present(natt)) natt = natts
+  if (present(ntime)) ntime = ntimes
+
+end subroutine get_file_info
+
+!> Set up the field information (e.g., names and metadata) for all of the variables in a file.  The
+!! argument fields must be allocated with a size that matches the number of variables in a file.
+subroutine get_file_fields(unit, fields)
+  integer,                       intent(in)    :: unit   !< The I/O unit for the open file
+  type(fieldtype), dimension(:), intent(inout) :: fields !< Field-type descriptions of all of
+                                                         !! the variables in a file.
+  call mpp_get_fields(unit, fields)
+end subroutine get_file_fields
+
+!> Extract information from a field type, as stored or as found in a file
+subroutine get_field_atts(field, name, units, longname, checksum)
+  type(fieldtype),            intent(in)  :: field !< The field to extract information from
+  character(len=*), optional, intent(out) :: name  !< The variable name
+  character(len=*), optional, intent(out) :: units !< The units of the variable
+  character(len=*), optional, intent(out) :: longname  !< The long name of the variable
+  integer(kind=8),  dimension(:), &
+                    optional, intent(out) :: checksum !< The checksums of the variable in a file
+  call mpp_get_atts(field, name=name, units=units, longname=longname, checksum=checksum)
+end subroutine get_field_atts
 
 !> Field_exists returns true if the field indicated by field_name is present in the
 !! file file_name.  If file_name does not exist, it returns false.
