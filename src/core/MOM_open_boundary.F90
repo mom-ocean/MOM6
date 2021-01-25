@@ -24,7 +24,7 @@ use MOM_string_functions,     only : extract_word, remove_spaces
 use MOM_tidal_forcing,        only : astro_longitudes, astro_longitudes_init, eq_phase, nodal_fu, tidal_frequency
 use MOM_time_manager,         only : set_date, time_type, time_type_to_real, operator(-)
 use MOM_tracer_registry,      only : tracer_type, tracer_registry_type, tracer_name_lookup
-use MOM_interpolate,          only : init_external_field, time_interp_extern, time_interp_external_init
+use MOM_interpolate,          only : init_external_field, time_interp_external, time_interp_external_init
 use MOM_remapping,            only : remappingSchemesDoc, remappingDefaultScheme, remapping_CS
 use MOM_remapping,            only : initialize_remapping, remapping_core_h, end_remapping
 use MOM_regridding,           only : regridding_CS
@@ -859,8 +859,8 @@ subroutine initialize_segment_data(G, OBC, PF)
             endif
           endif
           segment%field(m)%buffer_src(:,:,:)=0.0
-          segment%field(m)%fid = init_external_field(trim(filename),&
-               trim(fieldname),ignore_axis_atts=.true.,threading=SINGLE_FILE)
+          segment%field(m)%fid = init_external_field(trim(filename), trim(fieldname), &
+                    ignore_axis_atts=.true., threading=SINGLE_FILE)
           if (siz(3) > 1) then
             if ((index(segment%field(m)%name, 'phase') > 0) .or. (index(segment%field(m)%name, 'amp') > 0)) then
               ! siz(3) is constituent for tidal variables
@@ -890,8 +890,8 @@ subroutine initialize_segment_data(G, OBC, PF)
               endif
               segment%field(m)%dz_src(:,:,:)=0.0
               segment%field(m)%nk_src=siz(3)
-              segment%field(m)%fid_dz = init_external_field(trim(filename),trim(fieldname),&
-                        ignore_axis_atts=.true.,threading=SINGLE_FILE)
+              segment%field(m)%fid_dz = init_external_field(trim(filename), trim(fieldname), &
+                        ignore_axis_atts=.true., threading=SINGLE_FILE)
             endif
           else
             segment%field(m)%nk_src=1
@@ -3908,7 +3908,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
           tmp_buffer_in => tmp_buffer
         endif
 
-        call time_interp_extern(segment%field(m)%fid,Time, tmp_buffer_in)
+        call time_interp_external(segment%field(m)%fid,Time, tmp_buffer_in)
         ! NOTE: Rotation of face-points require that we skip the final value
         if (turns /= 0) then
           ! TODO: This is hardcoded for 90 degrees, and needs to be generalized.
@@ -3975,7 +3975,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
         ! no dz for tidal variables
         if (segment%field(m)%nk_src > 1 .and.&
             (index(segment%field(m)%name, 'phase') .le. 0 .and. index(segment%field(m)%name, 'amp') .le. 0)) then
-          call time_interp_extern(segment%field(m)%fid_dz,Time, tmp_buffer_in)
+          call time_interp_external(segment%field(m)%fid_dz,Time, tmp_buffer_in)
           if (turns /= 0) then
             ! TODO: This is hardcoded for 90 degrees, and needs to be generalized.
             if (segment%is_E_or_W &

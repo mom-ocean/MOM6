@@ -15,8 +15,8 @@ use MOM_IS_diag_mediator, only : set_axes_info, diag_ctrl, time_type
 use MOM_IS_diag_mediator, only : diag_mediator_init, diag_mediator_end, set_diag_mediator_grid
 use MOM_IS_diag_mediator, only : enable_averages, enable_averaging, disable_averaging
 use MOM_IS_diag_mediator, only : diag_mediator_infrastructure_init, diag_mediator_close_registration
-use MOM_domain_init, only : MOM_domains_init
-use MOM_domains, only : clone_MOM_domain, pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE, CORNER
+use MOM_domains, only : MOM_domains_init, pass_var, pass_vector, clone_MOM_domain
+use MOM_domains, only : TO_ALL, CGRID_NE, BGRID_NE, CORNER
 use MOM_dyn_horgrid, only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
 use MOM_dyn_horgrid, only : rescale_dyn_horgrid_bathymetry
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
@@ -57,7 +57,7 @@ use user_shelf_init, only : user_ice_shelf_CS
 use MOM_coms, only : reproducing_sum
 use MOM_spatial_means, only : global_area_integral
 use MOM_checksums, only : hchksum, qchksum, chksum, uchksum, vchksum, uvchksum
-use MOM_interpolate, only : init_external_field, time_interp_extern, time_interp_external_init
+use MOM_interpolate, only : init_external_field, time_interp_external, time_interp_external_init
 
 implicit none ; private
 
@@ -1084,7 +1084,7 @@ subroutine add_shelf_flux(G, US, CS, sfc_state, fluxes)
         do j=js,je ; do i=is,ie
           last_hmask(i,j) = ISS%hmask(i,j) ; last_area_shelf_h(i,j) = ISS%area_shelf_h(i,j)
         enddo ; enddo
-        call time_interp_extern(CS%id_read_mass, Time0, last_mass_shelf)
+        call time_interp_external(CS%id_read_mass, Time0, last_mass_shelf)
         do j=js,je ; do i=is,ie
         ! This should only be done if time_interp_extern did an update.
           last_mass_shelf(i,j) = US%kg_m3_to_R*US%m_to_Z * last_mass_shelf(i,j) ! Rescale after time_interp
@@ -1933,15 +1933,15 @@ subroutine initialize_shelf_mass(G, param_file, CS, ISS, new_sim)
       call log_param(param_file, mdl, "INPUTDIR/SHELF_FILE", filename)
 
       CS%id_read_mass = init_external_field(filename, shelf_mass_var, &
-                          domain=CS%Grid_in%Domain%mpp_domain, verbose=CS%debug)
+                            MOM_domain=CS%Grid_in%Domain, verbose=CS%debug)
 
       if (read_shelf_area) then
          call get_param(param_file, mdl, "SHELF_AREA_VAR", shelf_area_var, &
                   "The variable in SHELF_FILE with the shelf area.", &
                   default="shelf_area")
 
-         CS%id_read_area = init_external_field(filename,shelf_area_var, &
-                             domain=CS%Grid_in%Domain%mpp_domain)
+         CS%id_read_area = init_external_field(filename, shelf_area_var, &
+                               MOM_domain=CS%Grid_in%Domain)
       endif
 
       if (.not.file_exists(filename, CS%Grid_in%Domain)) call MOM_error(FATAL, &
@@ -1984,7 +1984,7 @@ subroutine update_shelf_mass(G, US, CS, ISS, Time)
     allocate(tmp2d(is:ie,js:je)) ; tmp2d(:,:) = 0.0
   endif
 
-  call time_interp_extern(CS%id_read_mass, Time, tmp2d)
+  call time_interp_external(CS%id_read_mass, Time, tmp2d)
   call rotate_array(tmp2d, CS%turns, ISS%mass_shelf)
   deallocate(tmp2d)
 

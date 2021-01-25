@@ -4,15 +4,12 @@ module user_shelf_init
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-! use MOM_domains, only : sum_across_PEs
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
-use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_grid, only : ocean_grid_type
-use MOM_time_manager, only : time_type, set_time, time_type_to_real
-use MOM_unit_scaling, only : unit_scale_type
-! use MOM_io, only : close_file, fieldtype, file_exists
-! use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
-! use MOM_io, only : write_field, slasher
+use MOM_file_parser,   only : get_param, log_version, param_file_type
+use MOM_grid,          only : ocean_grid_type
+use MOM_time_manager,  only : time_type, set_time, time_type_to_real
+use MOM_unit_scaling,  only : unit_scale_type
+
 implicit none ; private
 
 #include <MOM_memory.h>
