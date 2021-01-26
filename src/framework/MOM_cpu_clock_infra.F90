@@ -1,4 +1,6 @@
 !> Wraps the MPP cpu clock functions
+!!
+!! The functions and constants should be accessed via mom_cpu_clock
 module MOM_cpu_clock_infra
 
 ! This file is part of MOM6. See LICENSE.md for the license.

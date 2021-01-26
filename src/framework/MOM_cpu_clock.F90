@@ -17,9 +17,20 @@ use MOM_cpu_clock_infra, only : CLOCK_INFRA
 
 implicit none ; private
 
-! Public entities
+!> Public functions:
+!> mom_cpu_clock_infra::cpu_clock_id, mom_cpu_clock_infra::cpu_clock_begin, mom_cpu_clock_infra::cpu_clock_end
 public :: cpu_clock_id, cpu_clock_begin, cpu_clock_end
+
+!> Public constants:
+!> mom_cpu_clock_infra::clock_component, mom_cpu_clock_infra::clock_subcomponent
+!> mom_cpu_clock_infra::clock_module_driver, mom_cpu_clock_infra::clock_module_driver
 public :: CLOCK_COMPONENT, CLOCK_SUBCOMPONENT, CLOCK_MODULE_DRIVER, CLOCK_MODULE
+!> mom_cpu_clock_infra::clock_routine, mom_cpu_clock_infra::clock_loop
+!> mom_cpu_clock_infra::clock_infra
 public :: CLOCK_ROUTINE, CLOCK_LOOP, CLOCK_INFRA
 
 end module MOM_cpu_clock
+
+!> \namespace mom_cpu_clock
+!!
+!! APIs are defined and implemented in mom_cpu_clock_infra.
