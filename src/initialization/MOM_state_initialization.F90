@@ -1726,10 +1726,10 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
   logical,                 intent(in) :: use_temperature !< If true, T & S are state variables.
   type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic
                                               !! variables.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                               intent(out)   :: u    !< The zonal velocity that is being
                                                     !! initialized [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                               intent(out)   :: v    !< The meridional velocity that is being
                                                     !! initialized [L T-1 ~> m s-1]
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters.
@@ -1926,18 +1926,18 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
       h(i,j,k) = GV%Z_to_H*(eta(i,j,k)-eta(i,j,k+1))
     enddo ; enddo ; enddo
     if (separate_idamp_for_uv()) then
-      call initialize_ALE_sponge(Idamp, G, param_file, ALE_CSp, h, nz_data, Idamp_u, Idamp_v)
+      call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp, h, nz_data, Idamp_u, Idamp_v)
     else
-      call initialize_ALE_sponge(Idamp, G, param_file, ALE_CSp, h, nz_data)
+      call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp, h, nz_data)
     endif
     deallocate(eta)
     deallocate(h)
   else
     ! Initialize sponges without supplying sponge grid
     if (separate_idamp_for_uv()) then
-      call initialize_ALE_sponge(Idamp, G, param_file, ALE_CSp, Idamp_u, Idamp_v)
+      call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp, Idamp_u, Idamp_v)
     else
-      call initialize_ALE_sponge(Idamp, G, param_file, ALE_CSp)
+      call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp)
     endif
   endif
 
@@ -1989,14 +1989,14 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
   ! The remaining calls to set_up_sponge_field can be in any order.
   if ( use_temperature .and. .not. time_space_interp_sponge) then
     call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain)
-    call set_up_sponge_field(tmp, tv%T, G, nz, Layer_CSp)
+    call set_up_sponge_field(tmp, tv%T, G, GV, nz, Layer_CSp)
     call MOM_read_data(filename, salin_var, tmp(:,:,:), G%Domain)
-    call set_up_sponge_field(tmp, tv%S, G, nz, Layer_CSp)
+    call set_up_sponge_field(tmp, tv%S, G, GV, nz, Layer_CSp)
   elseif (use_temperature) then
     call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, US, tv%T, ALE_CSp)
     call set_up_ALE_sponge_field(filename, salin_var, Time, G, GV, US, tv%S, ALE_CSp)
     if (sponge_uv) &
-      call set_up_ALE_sponge_vel_field(filename, u_var, filename, v_var, Time, G, US, ALE_CSp, u, v)
+      call set_up_ALE_sponge_vel_field(filename, u_var, filename, v_var, Time, G, GV, US, ALE_CSp, u, v)
   endif
 
   contains
