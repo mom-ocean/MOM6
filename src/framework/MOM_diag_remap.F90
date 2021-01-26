@@ -64,8 +64,6 @@ use MOM_debugging,        only : check_column_integrals
 use MOM_diag_manager,     only : diag_axis_init
 use MOM_diag_vkernels,    only : interpolate_column, reintegrate_column
 use MOM_file_parser,      only : get_param, log_param, param_file_type
-use MOM_io,               only : slasher, mom_read_data
-use MOM_io,               only : file_exists, field_size
 use MOM_string_functions, only : lowercase, extractWord
 use MOM_grid,             only : ocean_grid_type
 use MOM_unit_scaling,     only : unit_scale_type
