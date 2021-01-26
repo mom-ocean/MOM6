@@ -27,6 +27,8 @@ interface broadcast
   module procedure broadcast_real0D, broadcast_real1D, broadcast_real2D
 end interface broadcast
 
+!> Compute a checksum for a field distributed over a PE list.  If no PE list is
+!! provided, then the current active PE list is used.
 interface field_chksum
   module procedure field_chksum_real_0d
   module procedure field_chksum_real_1d
@@ -35,6 +37,7 @@ interface field_chksum
   module procedure field_chksum_real_4d
 end interface field_chksum
 
+!> Find the sum of field across PEs, and update PEs with the sums.
 interface sum_across_PEs
   module procedure sum_across_PEs_int4_0d
   module procedure sum_across_PEs_int4_1d
@@ -46,12 +49,14 @@ interface sum_across_PEs
   module procedure sum_across_PEs_real_2d
 end interface sum_across_PEs
 
+!> Find the maximum value of field across PEs, and update PEs with the values.
 interface max_across_PEs
   module procedure max_across_PEs_int_0d
   module procedure max_across_PEs_real_0d
   module procedure max_across_PEs_real_1d
 end interface max_across_PEs
 
+!> Find the minimum value of field across PEs, and update PEs with the values.
 interface min_across_PEs
   module procedure min_across_PEs_int_0d
   module procedure min_across_PEs_real_0d
@@ -60,7 +65,7 @@ end interface min_across_PEs
 
 contains
 
-!> Retuen the ID of the PE for the current process.
+!> Return the ID of the PE for the current process.
 function PE_here() result(pe)
   integer :: pe   !< PE ID of the current process
   pe = mpp_pe()
