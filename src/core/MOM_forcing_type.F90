@@ -4,13 +4,15 @@ module MOM_forcing_type
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_array_transform, only : rotate_array, rotate_vector, rotate_array_pair
-use MOM_debugging,     only : hchksum, uvchksum
+use MOM_coupler_types, only : coupler_2d_bc_type, coupler_type_destructor
+use MOM_coupler_types, only : coupler_type_increment_data, coupler_type_initialized
 use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
+use MOM_debugging,     only : hchksum, uvchksum
 use MOM_diag_mediator, only : post_data, register_diag_field, register_scalar_field
 use MOM_diag_mediator, only : time_type, diag_ctrl, safe_alloc_alloc, query_averaging_enabled
 use MOM_diag_mediator, only : enable_averages, enable_averaging, disable_averaging
-use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_EOS,           only : calculate_density_derivs, EOS_domain
+use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_opacity,       only : sumSWoverBands, optics_type, extract_optics_slice, optics_nbands
@@ -18,10 +20,6 @@ use MOM_spatial_means, only : global_area_integral, global_area_mean
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : surface, thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
-
-use coupler_types_mod, only : coupler_2d_bc_type, coupler_type_spawn
-use coupler_types_mod, only : coupler_type_increment_data, coupler_type_initialized
-use coupler_types_mod, only : coupler_type_copy_data, coupler_type_destructor
 
 implicit none ; private
 

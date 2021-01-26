@@ -7,6 +7,9 @@ module MOM_surface_forcing_gfdl
 !#CTRL# use MOM_controlled_forcing, only : ctrl_forcing_CS
 use MOM_coms,             only : reproducing_sum, field_chksum
 use MOM_constants,        only : hlv, hlf
+use MOM_coupler_types,    only : coupler_2d_bc_type, coupler_type_write_chksums
+use MOM_coupler_types,    only : coupler_type_initialized, coupler_type_spawn
+use MOM_coupler_types,    only : coupler_type_copy_data
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_SUBCOMPONENT
 use MOM_diag_mediator,    only : diag_ctrl, safe_alloc_ptr, time_type
@@ -23,7 +26,7 @@ use MOM_get_input,        only : Get_MOM_Input, directories
 use MOM_grid,             only : ocean_grid_type
 use MOM_interpolate,      only : init_external_field, time_interp_external
 use MOM_interpolate,      only : time_interp_external_init
-use MOM_io,               only : slasher, write_version_number, MOM_read_data
+use MOM_io,               only : slasher, write_version_number, MOM_read_data, stdout
 use MOM_restart,          only : register_restart_field, restart_init, MOM_restart_CS
 use MOM_restart,          only : restart_init_end, save_restart, restore_state
 use MOM_string_functions, only : uppercase
@@ -33,11 +36,7 @@ use MOM_variables,        only : surface
 use user_revise_forcing,  only : user_alter_forcing, user_revise_forcing_init
 use user_revise_forcing,  only : user_revise_forcing_CS
 
-use coupler_types_mod,    only : coupler_2d_bc_type, coupler_type_write_chksums
-use coupler_types_mod,    only : coupler_type_initialized, coupler_type_spawn
-use coupler_types_mod,    only : coupler_type_copy_data
 use data_override_mod,    only : data_override_init, data_override
-use fms_mod,              only : stdout
 
 implicit none ; private
 
@@ -318,8 +317,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
   if ((.not.coupler_type_initialized(fluxes%tr_fluxes)) .and. &
       coupler_type_initialized(IOB%fluxes)) &
-    call coupler_type_spawn(IOB%fluxes, fluxes%tr_fluxes, &
-                            (/is,is,ie,ie/), (/js,js,je,je/))
+    call coupler_type_spawn(IOB%fluxes, fluxes%tr_fluxes, (/is,is,ie,ie/), (/js,js,je,je/))
   !   It might prove valuable to use the same array extents as the rest of the
   ! ocean model, rather than using haloless arrays, in which case the last line
   ! would be: (             (/isd,is,ie,ied/), (/jsd,js,je,jed/))
@@ -1628,7 +1626,7 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
                                          !! ocean in a coupled model whose checksums are reported
   integer ::   n,m, outunit
 
-  outunit = stdout()
+  outunit = stdout
 
   write(outunit,*) "BEGIN CHECKSUM(ice_ocean_boundary_type):: ", id, timestep
   write(outunit,100) 'iobt%u_flux         ', field_chksum( iobt%u_flux         )

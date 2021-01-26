@@ -6,6 +6,7 @@ module MOM_diagnostics
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_coms,              only : reproducing_sum
+use MOM_coupler_types,     only : coupler_type_send_data
 use MOM_density_integrals, only : int_density_dz
 use MOM_diag_mediator,     only : post_data, get_diag_time_end
 use MOM_diag_mediator,     only : register_diag_field, register_scalar_field
@@ -30,7 +31,6 @@ use MOM_variables,         only : thermo_var_ptrs, ocean_internal_state, p3d
 use MOM_variables,         only : accel_diag_ptrs, cont_diag_ptrs, surface
 use MOM_verticalGrid,      only : verticalGrid_type, get_thickness_units
 use MOM_wave_speed,        only : wave_speed, wave_speed_CS, wave_speed_init
-use coupler_types_mod,     only : coupler_type_send_data
 
 implicit none ; private
 

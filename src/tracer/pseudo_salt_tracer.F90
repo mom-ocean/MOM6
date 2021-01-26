@@ -23,9 +23,6 @@ use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface, thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 
-use coupler_types_mod, only : coupler_type_set_data, ind_csurf
-use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
-
 implicit none ; private
 
 #include <MOM_memory.h>

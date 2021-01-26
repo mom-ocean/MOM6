@@ -3,6 +3,8 @@ module MOM_OCMIP2_CFC
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_coupler_types, only : extract_coupler_type_data, set_coupler_type_data
+use MOM_coupler_types, only : atmos_ocn_coupler_flux
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
@@ -20,10 +22,6 @@ use MOM_tracer_Z_init, only : tracer_Z_init
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
-
-use coupler_types_mod, only : ind_flux, ind_alpha, ind_csurf
-use coupler_types_mod, only : coupler_type_extract_data, coupler_type_set_data
-use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 
 implicit none ; private
 
@@ -71,9 +69,9 @@ type, public :: OCMIP2_CFC_CS ; private
   character(len=16) :: CFC11_name !< CFC11 variable name
   character(len=16) :: CFC12_name !< CFC12 variable name
 
-  integer :: ind_cfc_11_flux  !< Index returned by aof_set_coupler_flux that is used to
+  integer :: ind_cfc_11_flux  !< Index returned by atmos_ocn_coupler_flux that is used to
                               !! pack and unpack surface boundary condition arrays.
-  integer :: ind_cfc_12_flux  !< Index returned by aof_set_coupler_flux that is used to
+  integer :: ind_cfc_12_flux  !< Index returned by atmos_ocn_coupler_flux that is used to
                               !! pack and unpack surface boundary condition arrays.
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate
@@ -127,7 +125,7 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   ! indicies for the CFC11 and CFC12 flux coupling.
   call flux_init_OCMIP2_CFC(CS, verbosity=3)
   if ((CS%ind_cfc_11_flux < 0) .or. (CS%ind_cfc_12_flux < 0)) then
-    ! This is most likely to happen with the dummy version of aof_set_coupler_flux
+    ! This is most likely to happen with the dummy version of atmos_ocn_coupler_flux
     ! used in ocean-only runs.
     call MOM_ERROR(WARNING, "CFCs are currently only set up to be run in " // &
                    " coupled model configurations, and will be disabled.")
@@ -291,18 +289,18 @@ subroutine flux_init_OCMIP2_CFC(CS, verbosity)
 
   ! These calls obtain the indices for the CFC11 and CFC12 flux coupling.  They
   ! can safely be called multiple times.
-  ind_flux(1) = aof_set_coupler_flux('cfc_11_flux', &
-       flux_type = 'air_sea_gas_flux', implementation = 'ocmip2', &
-       param = (/ 9.36e-07, 9.7561e-06 /), &
+  ind_flux(1) = atmos_ocn_coupler_flux('cfc_11_flux', &
+       flux_type = 'air_sea_gas_flux', implementation='ocmip2', &
+       param=(/ 9.36e-07, 9.7561e-06 /), &
        ice_restart_file = default_ice_restart_file, &
        ocean_restart_file = default_ocean_restart_file, &
        caller = "register_OCMIP2_CFC", verbosity=verbosity)
-  ind_flux(2) = aof_set_coupler_flux('cfc_12_flux', &
-       flux_type = 'air_sea_gas_flux', implementation = 'ocmip2', &
+  ind_flux(2) = atmos_ocn_coupler_flux('cfc_12_flux', &
+       flux_type='air_sea_gas_flux', implementation='ocmip2', &
        param = (/ 9.36e-07, 9.7561e-06 /), &
-       ice_restart_file = default_ice_restart_file, &
-       ocean_restart_file = default_ocean_restart_file, &
-       caller = "register_OCMIP2_CFC", verbosity=verbosity)
+       ice_restart_file=default_ice_restart_file, &
+       ocean_restart_file=default_ocean_restart_file, &
+       caller="register_OCMIP2_CFC", verbosity=verbosity)
 
   if (present(CS)) then ; if (associated(CS)) then
     CS%ind_cfc_11_flux = ind_flux(1)
@@ -459,9 +457,9 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
   ! These two calls unpack the fluxes from the input arrays.
   !   The -GV%Rho0 changes the sign convention of the flux and changes the units
   ! of the flux from [Conc. m s-1] to [Conc. kg m-2 T-1].
-  call coupler_type_extract_data(fluxes%tr_fluxes, CS%ind_cfc_11_flux, ind_flux, CFC11_flux, &
+  call extract_coupler_type_data(fluxes%tr_fluxes, CS%ind_cfc_11_flux, CFC11_flux, &
                                  scale_factor=-G%US%R_to_kg_m3*GV%Rho0*US%T_to_s, idim=idim, jdim=jdim)
-  call coupler_type_extract_data(fluxes%tr_fluxes, CS%ind_cfc_12_flux, ind_flux, CFC12_flux, &
+  call extract_coupler_type_data(fluxes%tr_fluxes, CS%ind_cfc_12_flux, CFC12_flux, &
                                  scale_factor=-G%US%R_to_kg_m3*GV%Rho0*US%T_to_s, idim=idim, jdim=jdim)
 
   ! Use a tridiagonal solver to determine the concentrations after the
@@ -602,14 +600,14 @@ subroutine OCMIP2_CFC_surface_state(sfc_state, h, G, GV, CS)
 
   !   These calls load these values into the appropriate arrays in the
   ! coupler-type structure.
-  call coupler_type_set_data(CFC11_alpha, CS%ind_cfc_11_flux, ind_alpha, &
-                             sfc_state%tr_fields, idim=idim, jdim=jdim)
-  call coupler_type_set_data(CFC11_Csurf, CS%ind_cfc_11_flux, ind_csurf, &
-                             sfc_state%tr_fields, idim=idim, jdim=jdim)
-  call coupler_type_set_data(CFC12_alpha, CS%ind_cfc_12_flux, ind_alpha, &
-                             sfc_state%tr_fields, idim=idim, jdim=jdim)
-  call coupler_type_set_data(CFC12_Csurf, CS%ind_cfc_12_flux, ind_csurf, &
-                             sfc_state%tr_fields, idim=idim, jdim=jdim)
+  call set_coupler_type_data(CFC11_alpha, CS%ind_cfc_11_flux, sfc_state%tr_fields, &
+                             solubility=.true., idim=idim, jdim=jdim)
+  call set_coupler_type_data(CFC11_Csurf, CS%ind_cfc_11_flux, sfc_state%tr_fields, &
+                             idim=idim, jdim=jdim)
+  call set_coupler_type_data(CFC12_alpha, CS%ind_cfc_12_flux, sfc_state%tr_fields, &
+                             solubility=.true., idim=idim, jdim=jdim)
+  call set_coupler_type_data(CFC12_Csurf, CS%ind_cfc_12_flux, sfc_state%tr_fields, &
+                             idim=idim, jdim=jdim)
 
 end subroutine OCMIP2_CFC_surface_state
 
