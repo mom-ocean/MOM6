@@ -254,6 +254,8 @@ type, public :: MOM_control_struct ; private
   logical :: useWaves                !< If true, update Stokes drift
   logical :: use_p_surf_in_EOS       !< If true, always include the surface pressure contributions
                                      !! in equation of state calculations.
+  logical :: use_diabatic_time_bug   !< If true, uses the wrong calendar time for diabatic processes,
+                                     !! as was done in MOM6 versions prior to February 2018.
   real :: dtbt_reset_period          !< The time interval between dynamic recalculation of the
                                      !! barotropic time step [s]. If this is negative dtbt is never
                                      !! calculated, and if it is 0, dtbt is calculated every step.
@@ -662,9 +664,15 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
   rel_time = 0.0
   do n=1,n_max
-    rel_time = rel_time + dt ! The relative time at the end of the step.
-    ! Set the universally visible time to the middle of the time step.
-    CS%Time = Time_start + real_to_time(US%T_to_s*(rel_time - 0.5*dt))
+    if (CS%use_diabatic_time_bug) then
+      ! This wrong form of update was used until Feb 2018, recovered with CS%use_diabatic_time_bug=T.
+      CS%Time = Time_start + real_to_time(US%T_to_s*int(floor(rel_time+0.5*dt+0.5)))
+      rel_time = rel_time + dt
+    else
+      rel_time = rel_time + dt ! The relative time at the end of the step.
+      ! Set the universally visible time to the middle of the time step.
+      CS%Time = Time_start + real_to_time(US%T_to_s*(rel_time - 0.5*dt))
+    endif
     ! Set the local time to the end of the time step.
     Time_local = Time_start + real_to_time(US%T_to_s*rel_time)
 
@@ -694,12 +702,16 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       endif
 
       end_time_thermo = Time_local
-      if (dtdia > dt) then
+      if (dtdia > dt .and. .not. CS%use_diabatic_time_bug) then
         ! If necessary, temporarily reset CS%Time to the center of the period covered
         ! by the call to step_MOM_thermo, noting that they begin at the same time.
+        ! This step was missing prior to Feb 2018, and is skipped with CS%use_diabatic_time_bug=T.
         CS%Time = CS%Time + real_to_time(0.5*US%T_to_s*(dtdia-dt))
+      endif
+      if (dtdia > dt .or. CS%use_diabatic_time_bug) then
         ! The end-time of the diagnostic interval needs to be set ahead if there
         ! are multiple dynamic time steps worth of thermodynamics applied here.
+        ! This line was not conditional prior to Feb 2018, recovered with CS%use_diabatic_time_bug=T.
         end_time_thermo = Time_local + real_to_time(US%T_to_s*(dtdia-dt))
       endif
 
@@ -712,7 +724,8 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       CS%t_dyn_rel_thermo = -dtdia
       if (showCallTree) call callTree_waypoint("finished diabatic_first (step_MOM)")
 
-      if (dtdia > dt) & ! Reset CS%Time to its previous value.
+      if (dtdia > dt .and. .not. CS%use_diabatic_time_bug) & ! Reset CS%Time to its previous value.
+        ! This step was missing prior to Feb 2018, recovered with CS%use_diabatic_time_bug=T.
         CS%Time = Time_start + real_to_time(US%T_to_s*(rel_time - 0.5*dt))
     endif ! end of block "(CS%diabatic_first .and. (CS%t_dyn_rel_adv==0.0))"
 
@@ -799,7 +812,9 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
       ! If necessary, temporarily reset CS%Time to the center of the period covered
       ! by the call to step_MOM_thermo, noting that they end at the same time.
-      if (dtdia > dt) CS%Time = CS%Time - real_to_time(0.5*US%T_to_s*(dtdia-dt))
+      ! This step was missing prior to Feb 2018, and is skipped with CS%use_diabatic_time_bug=T.
+      if (dtdia > dt .and. .not. CS%use_diabatic_time_bug) &
+        CS%Time = CS%Time - real_to_time(0.5*US%T_to_s*(dtdia-dt))
 
       ! Apply diabatic forcing, do mixing, and regrid.
       call step_MOM_thermo(CS, G, GV, US, u, v, h, CS%tv, fluxes, dtdia, &
@@ -813,7 +828,9 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
         CS%t_dyn_rel_thermo = 0.0
       endif
 
-      if (dtdia > dt) & ! Reset CS%Time to its previous value.
+      ! Reset CS%Time to its previous value.
+      ! This step was missing prior to Feb 2018, and is skipped with CS%use_diabatic_time_bug=T.
+      if (dtdia > dt .and. .not. CS%use_diabatic_time_bug) &
         CS%Time = Time_start + real_to_time(US%T_to_s*(rel_time - 0.5*dt))
     endif
 
@@ -1999,6 +2016,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "If true, use expressions for the surface properties that recover the answers "//&
                  "from the end of 2018. Otherwise, use more appropriate expressions that differ "//&
                  "at roundoff for non-Boussinesq cases.", default=default_2018_answers)
+  call get_param(param_file, "MOM", "USE_DIABATIC_TIME_BUG", CS%use_diabatic_time_bug, &
+                 "If true, uses the wrong calendar time for diabatic processes, as was "//&
+                 "done in MOM6 versions prior to February 2018. This is not recommended.", &
+                 default=.false.)
 
   call get_param(param_file, "MOM", "SAVE_INITIAL_CONDS", save_IC, &
                  "If true, write the initial conditions to a file given "//&
