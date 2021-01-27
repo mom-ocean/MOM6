@@ -35,7 +35,7 @@ use MOM_ocean_model_nuopc,    only: ocean_model_init_sfc
 use MOM_ocean_model_nuopc,    only: ocean_model_init, update_ocean_model, ocean_model_end
 use MOM_ocean_model_nuopc,    only: get_ocean_grid, get_eps_omesh
 use MOM_cap_time,             only: AlarmInit
-use MOM_cap_methods,          only: mom_import, mom_export, mom_set_geomtype
+use MOM_cap_methods,          only: mom_import, mom_export, mom_set_geomtype, mod2med_areacor, med2mod_areacor
 #ifdef CESMCOUPLED
 use shr_file_mod,             only: shr_file_setLogUnit, shr_file_getLogUnit
 #endif
@@ -68,6 +68,7 @@ use ESMF,  only: ESMF_FieldCreate, ESMF_LOGMSG_ERROR, ESMF_LOGMSG_WARNING
 use ESMF,  only: ESMF_COORDSYS_SPH_DEG, ESMF_GridCreate, ESMF_INDEX_DELOCAL
 use ESMF,  only: ESMF_MESHLOC_ELEMENT, ESMF_RC_VAL_OUTOFRANGE, ESMF_StateGet
 use ESMF,  only: ESMF_TimePrint, ESMF_AlarmSet, ESMF_FieldGet, ESMF_Array
+use ESMF,  only: ESMF_FieldRegridGetArea
 use ESMF,  only: ESMF_ArrayCreate
 use ESMF,  only: ESMF_RC_FILE_OPEN, ESMF_RC_FILE_READ, ESMF_RC_FILE_WRITE
 use ESMF,  only: ESMF_VMBroadcast
@@ -888,16 +889,21 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   character(len=256)                         :: cvalue
   character(len=256)                         :: frmt    ! format specifier for several error msgs
   character(len=512)                         :: err_msg ! error messages
+  integer                                    :: spatialDim
+  integer                                    :: numOwnedElements
+  type(ESMF_Array)                           :: elemMaskArray
+  real(ESMF_KIND_R8)    , pointer            :: ownedElemCoords(:)
+  real(ESMF_KIND_R8)    , pointer            :: lat(:), latMesh(:)
+  real(ESMF_KIND_R8)    , pointer            :: lon(:), lonMesh(:)
+  integer(ESMF_KIND_I4) , pointer            :: mask(:), maskMesh(:)
+  real(ESMF_KIND_R8)                         :: diff_lon, diff_lat
+  real                                       :: eps_omesh
+  real(ESMF_KIND_R8)                         :: L2_to_rad2
+  type(ESMF_Field)                           :: lfield
+  real(ESMF_KIND_R8), allocatable            :: mesh_areas(:)
+  real(ESMF_KIND_R8), allocatable            :: model_areas(:)
+  real(ESMF_KIND_R8), pointer                :: dataPtr_mesh_areas(:)
   character(len=*), parameter                :: subname='(MOM_cap:InitializeRealize)'
-  integer                         :: spatialDim
-  integer                         :: numOwnedElements
-  type(ESMF_Array)                :: elemMaskArray
-  real(ESMF_KIND_R8)    , pointer :: ownedElemCoords(:)
-  real(ESMF_KIND_R8)    , pointer :: lat(:), latMesh(:)
-  real(ESMF_KIND_R8)    , pointer :: lon(:), lonMesh(:)
-  integer(ESMF_KIND_I4) , pointer :: mask(:), maskMesh(:)
-  real(ESMF_KIND_R8)              :: diff_lon, diff_lat
-  real                            :: eps_omesh
   !--------------------------------
 
   rc = ESMF_SUCCESS
@@ -1426,7 +1432,6 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
          line=__LINE__, &
          file=__FILE__)) &
          return
-
   endif
 
   !---------------------------------
@@ -1449,6 +1454,58 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
          return
 
   endif
+
+  !---------------------------------
+  ! determine flux area correction factors - module variables in mom_cap_methods
+  !---------------------------------
+
+  ! Area correction factors are ONLY valid for meshes that are read in - so do not need them for
+  ! grids that are calculated internally
+
+  if (geomtype == ESMF_GEOMTYPE_MESH) then
+
+     ! Determine mesh areas for regridding
+     call ESMF_MeshGet(Emesh, numOwnedElements=numOwnedElements, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
+     call ESMF_StateGet(exportState, itemName=trim(fldsFrOcn(2)%stdname), field=lfield, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
+     call ESMF_FieldRegridGetArea(lfield, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
+     call ESMF_FieldGet(lfield, farrayPtr=dataPtr_mesh_areas, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
+     allocate(mesh_areas(numOwnedElements))
+     mesh_areas(:) = dataPtr_mesh_areas(:)
+
+     ! Determine model areas
+     allocate(model_areas(numOwnedElements))
+     k = 0
+     L2_to_rad2 = ocean_grid%US%L_to_m**2 / ocean_grid%Rad_Earth**2
+     do j = ocean_grid%jsc, ocean_grid%jec
+        do i = ocean_grid%isc, ocean_grid%iec
+           k = k + 1 ! Increment position within gindex
+           model_areas(k) = ocean_grid%AreaT(i,j) * L2_to_rad2
+        enddo
+     enddo
+
+     ! Determine flux correction factors (module variables in mom_)
+     allocate (mod2med_areacor(numOwnedElements))
+     allocate (med2mod_areacor(numOwnedElements))
+     do n = 1,numOwnedElements
+        if (model_areas(n) == mesh_areas(n)) then
+           mod2med_areacor(n) = 1._ESMF_KIND_R8
+           med2mod_areacor(n) = 1._ESMF_KIND_R8
+        else
+           mod2med_areacor(n) = model_areas(n) / mesh_areas(n)
+           med2mod_areacor(n) = mesh_areas(n) / model_areas(n)
+           if (abs(mod2med_areacor(n) - 1._ESMF_KIND_R8) > 1.e-13) then
+              write(6,'(a,i8,2x,d21.14,2x)')' AREACOR mom6: n, abs(mod2med_areacor(n)-1)', &
+                   n, abs(mod2med_areacor(n) - 1._ESMF_KIND_R8)
+           end if
+        end if
+     end do
+     deallocate(model_areas)
+     deallocate(mesh_areas)
+  end if
 
   !---------------------------------
   ! Set module variable geomtype in MOM_cap_methods
