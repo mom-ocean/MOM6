@@ -26,7 +26,10 @@ use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface, thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 
-use netcdf
+use netcdf, only : NF90_create, NF90_def_dim, NF90_def_var, NF90_put_att, NF90_enddef
+use netcdf, only : NF90_put_var, NF90_open, NF90_close, NF90_inquire_variable, NF90_strerror
+use netcdf, only : NF90_inq_varid, NF90_inquire_dimension, NF90_get_var, NF90_get_att
+use netcdf, only : NF90_DOUBLE, NF90_NOERR, NF90_NOWRITE, NF90_GLOBAL, NF90_ENOTATT
 
 implicit none ; private
 
@@ -1351,7 +1354,7 @@ subroutine read_depth_list(G, US, CS, filename)
   character(len=240) :: var_name, var_msg
   real, allocatable :: tmp(:)
   integer :: ncid, status, varid, list_size, k
-  integer :: ndim, len, var_dim_ids(NF90_MAX_VAR_DIMS)
+  integer :: ndim, len, var_dim_ids(8)
   character(len=16) :: depth_file_chksum, depth_grid_chksum
   character(len=16) :: area_file_chksum, area_grid_chksum
   integer :: depth_attr_status, area_attr_status

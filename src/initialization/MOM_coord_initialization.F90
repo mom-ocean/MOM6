@@ -17,8 +17,6 @@ use MOM_verticalGrid,     only : verticalGrid_type, setVerticalGridAxes
 use user_initialization,  only : user_set_coord
 use BFB_initialization,   only : BFB_set_coord
 
-use netcdf
-
 implicit none ; private
 
 public MOM_initialize_coord

@@ -35,7 +35,7 @@ use MOM_forcing_type, only : copy_back_forcing_fields
 use MOM_forcing_type, only : forcing_diagnostics, mech_forcing_diags
 use MOM_get_input, only : Get_MOM_Input, directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, file_exists, read_data, write_version_number, stdout
+use MOM_io, only : write_version_number, stdout
 use MOM_marine_ice, only : iceberg_forces, iceberg_fluxes, marine_ice_init, marine_ice_CS
 use MOM_restart, only : MOM_restart_CS, save_restart
 use MOM_string_functions, only : uppercase
