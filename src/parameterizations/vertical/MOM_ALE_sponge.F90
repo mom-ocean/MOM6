@@ -607,12 +607,13 @@ end subroutine initialize_ALE_sponge_varying
 
 !> Initialize diagnostics for the ALE_sponge module.
 ! GMM: this routine is not being used for now.
-subroutine init_ALE_sponge_diags(Time, G, diag, CS)
+subroutine init_ALE_sponge_diags(Time, G, diag, CS, US)
   type(time_type), target, intent(in)    :: Time !< The current model time
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic
                                                  !! output.
   type(ALE_sponge_CS),     pointer       :: CS   !< ALE sponge control structure
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
 
   if (.not.associated(CS)) return
 
@@ -620,16 +621,16 @@ subroutine init_ALE_sponge_diags(Time, G, diag, CS)
 
   CS%id_sp_tendency(1) = -1
   CS%id_sp_tendency(1) = register_diag_field('ocean_model', 'sp_tendency_temp', diag%axesTL, Time, &
-       'Time tendency due to temperature restoring', 'degC s-1')
+       'Time tendency due to temperature restoring', 'degC s-1',conversion=US%s_to_T)
   CS%id_sp_tendency(2) = -1
   CS%id_sp_tendency(2) = register_diag_field('ocean_model', 'sp_tendency_salt', diag%axesTL, Time, &
-       'Time tendency due to salinity restoring', 'g kg-1 s-1')
+       'Time tendency due to salinity restoring', 'g kg-1 s-1',conversion=US%s_to_T)
   CS%id_sp_u_tendency = -1
   CS%id_sp_u_tendency = register_diag_field('ocean_model', 'sp_tendency_u', diag%axesCuL, Time, &
-       'Zonal acceleration due to sponges', 'm s-2')
+       'Zonal acceleration due to sponges', 'm s-2',conversion=US%L_T2_to_m_s2)
   CS%id_sp_v_tendency = -1
   CS%id_sp_v_tendency = register_diag_field('ocean_model', 'sp_tendency_v', diag%axesCvL, Time, &
-       'Meridional acceleration due to sponges', 'm s-2')
+       'Meridional acceleration due to sponges', 'm s-2',conversion=US%L_T2_to_m_s2)
 
 end subroutine init_ALE_sponge_diags
 

@@ -2666,7 +2666,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     call init_sponge_diags(Time, G, GV, US, diag, CS%sponge_CSp)
 
   if (associated(CS%ALE_sponge_CSp)) &
-    call init_ALE_sponge_diags(Time, G, diag, CS%ALE_sponge_CSp)
+    call init_ALE_sponge_diags(Time, G, diag, CS%ALE_sponge_CSp, US)
 
   call tracer_advect_init(Time, G, US, param_file, diag, CS%tracer_adv_CSp)
   call tracer_hor_diff_init(Time, G, GV, US, param_file, diag, CS%tv%eqn_of_state, CS%diabatic_CSp, &
