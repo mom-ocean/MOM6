@@ -936,7 +936,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
     enddo
   endif
 
-  tmp_val1(:)=0.0
+  tmp_val1(:)=0.0;h_col(:)=0.0
   do m=1,CS%fldno
     nz_data = CS%Ref_val(m)%nz_data
     allocate(tmp_val2(CS%Ref_val(m)%nz_data))
