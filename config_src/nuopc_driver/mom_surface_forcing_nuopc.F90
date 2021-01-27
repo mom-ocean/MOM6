@@ -183,11 +183,15 @@ type, public :: ice_ocean_boundary_type
                                                               !! ice-shelves, expressed as a coefficient
                                                               !! for divergence damping, as determined
                                                               !! outside of the ocean model in [m3/s]
-  real, pointer, dimension(:,:)   :: ustk0           => NULL() !<
-  real, pointer, dimension(:,:)   :: vstk0           => NULL() !<
-  real, pointer, dimension(:)     :: stk_wavenumbers => NULL() !<
-  real, pointer, dimension(:,:,:) :: ustkb           => NULL() !<
-  real, pointer, dimension(:,:,:) :: vstkb           => NULL() !<
+  real, pointer, dimension(:,:)   :: ustk0           => NULL() !< Surface Stokes drift, zonal [m/s]
+  real, pointer, dimension(:,:)   :: vstk0           => NULL() !< Surface Stokes drift, meridional [m/s]
+  real, pointer, dimension(:)     :: stk_wavenumbers => NULL() !< The central wave number of Stokes bands [rad/m]
+  real, pointer, dimension(:,:,:) :: ustkb           => NULL() !< Stokes Drift spectrum, zonal [m/s]
+                                                               !! Horizontal  - u points
+                                                               !! 3rd dimension - wavenumber
+  real, pointer, dimension(:,:,:) :: vstkb           => NULL() !< Stokes Drift spectrum, meridional [m/s]
+                                                               !! Horizontal  - v points
+                                                               !! 3rd dimension - wavenumber
   integer :: num_stk_bands            !< Number of Stokes drift bands passed through the coupler
   integer :: xtype                                            !< The type of the exchange - REGRID, REDIST or DIRECT
   type(coupler_2d_bc_type)      :: fluxes                     !< A structure that may contain an array of
@@ -493,15 +497,17 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
          fluxes%seaice_melt(i,j) = kg_m2_s_conversion * G%mask2dT(i,j) * IOB%seaice_melt(i-i0,j-j0)
 
     fluxes%latent(i,j) = 0.0
+    ! notice minus sign since fprec is positive into the ocean
     if (associated(IOB%fprec)) then
-       fluxes%latent(i,j)            = fluxes%latent(i,j) + &
+       fluxes%latent(i,j)            = fluxes%latent(i,j) - &
            IOB%fprec(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
-       fluxes%latent_fprec_diag(i,j) = G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
+       fluxes%latent_fprec_diag(i,j) = - G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
     endif
+    ! notice minus sign since frunoff is positive into the ocean
     if (associated(IOB%frunoff)) then
-       fluxes%latent(i,j)              = fluxes%latent(i,j) + &
+       fluxes%latent(i,j)              = fluxes%latent(i,j) - &
            IOB%frunoff(i-i0,j-j0) * US%W_m2_to_QRZ_T * CS%latent_heat_fusion
-       fluxes%latent_frunoff_diag(i,j) = G%mask2dT(i,j) * &
+       fluxes%latent_frunoff_diag(i,j) = - G%mask2dT(i,j) * &
            IOB%frunoff(i-i0,j-j0) * US%W_m2_to_QRZ_T * CS%latent_heat_fusion
     endif
     if (associated(IOB%q_flux)) then
@@ -858,7 +864,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
       enddo; enddo
       call pass_vector(forces%ustkb(:,:,istk),forces%vstkb(:,:,istk), G%domain )
     enddo
-  endif 
+  endif
 
   ! sea ice related dynamic fields
   if (associated(IOB%ice_rigidity)) then

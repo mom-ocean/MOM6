@@ -14,6 +14,7 @@ use ESMF,               only: ESMF_CALKIND_360DAY, ESMF_CALKIND_NOCALENDAR
 use ESMF,               only: ESMF_Time, ESMF_TimeGet, ESMF_LogFoundError
 use ESMF,               only: ESMF_LOGERR_PASSTHRU,ESMF_TimeInterval
 use ESMF,               only: ESMF_TimeIntervalGet, ESMF_TimeSet, ESMF_SUCCESS
+use MOM_cap_methods,    only: ChkErr
 
 implicit none; private
 
@@ -159,17 +160,5 @@ function string_to_date(string, rc)
   string_to_date = set_date(yr, mon, day, hr, min, sec)
 
 end function string_to_date
-
-logical function chkerr(rc, line, file)
-  integer, intent(in) :: rc
-  integer, intent(in) :: line
-  character(len=*), intent(in) :: file
-  integer :: lrc
-  chkerr = .false.
-  lrc = rc
-  if (ESMF_LogFoundError(rcToCheck=lrc, msg=ESMF_LOGERR_PASSTHRU, line=line, file=file)) then
-     chkerr = .true.
-  endif
-end function chkerr
 
 end module time_utils_mod
