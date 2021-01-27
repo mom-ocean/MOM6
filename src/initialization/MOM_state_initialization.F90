@@ -2022,7 +2022,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
   ! returns true if a separate idamp is provided for u and/or v
   logical function separate_idamp_for_uv()
     separate_idamp_for_uv = (lowercase(damping_file)/=lowercase(uv_damping_file) .or. &
-                              lowercase(Idamp_var)/=lowercase(Idamp_u_var) .or. lowercase(Idamp_var)/=lowercase(Idamp_v_var))
+         lowercase(Idamp_var)/=lowercase(Idamp_u_var) .or. lowercase(Idamp_var)/=lowercase(Idamp_v_var))
   end function separate_idamp_for_uv
 
 end subroutine initialize_sponges_file

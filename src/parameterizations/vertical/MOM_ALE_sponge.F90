@@ -161,7 +161,8 @@ contains
 !> This subroutine determines the number of points which are within sponges in this computational
 !! domain.  Only points that have positive values of Iresttime and which mask2dT indicates are ocean
 !! points are included in the sponges.  It also stores the target interface heights.
-subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h, nz_data, Iresttime_u_in, Iresttime_v_in)
+  subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h, nz_data, &
+                                        Iresttime_u_in, Iresttime_v_in)
 
   type(ocean_grid_type),            intent(in) :: G !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV !< ocean vertical grid structure
@@ -438,8 +439,8 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
                                                              !! for model parameter values.
   type(ALE_sponge_CS),              pointer    :: CS !< A pointer that is set to point to the control
                                                      !! structure for this module (in/out).
-  real, dimension(SZIB_(G),SZJ_(G)), intent(in), optional :: Iresttime_u_in
-  real, dimension(SZI_(G),SZJB_(G)), intent(in), optional :: Iresttime_v_in
+  real, dimension(SZIB_(G),SZJ_(G)), intent(in), optional :: Iresttime_u_in !< The inverse of the restoring time for u [T-1 ~> s-1].
+  real, dimension(SZI_(G),SZJB_(G)), intent(in), optional :: Iresttime_v_in !< The inverse of the restoring time for v [T-1 ~> s-1].
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -935,6 +936,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
     enddo
   endif
 
+  tmp_val1(:)=0.0
   do m=1,CS%fldno
     nz_data = CS%Ref_val(m)%nz_data
     allocate(tmp_val2(CS%Ref_val(m)%nz_data))
