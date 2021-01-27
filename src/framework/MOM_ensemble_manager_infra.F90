@@ -1,5 +1,5 @@
 !> A simple (very thin) wrapper for managing ensemble member layout information
-module MOM_ensemble_manager
+module MOM_ensemble_manager_infra
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -93,4 +93,4 @@ subroutine get_ensemble_filter_pelist(pelist, name)
 
 end subroutine get_ensemble_filter_pelist
 
-end module MOM_ensemble_manager
+end module MOM_ensemble_manager_infra
