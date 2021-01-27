@@ -33,15 +33,20 @@ program MOM_main
   use MOM,                 only : get_MOM_state_elements, MOM_state_is_synchronized
   use MOM,                 only : step_offline
   use MOM_coms,            only : Set_PElist
-  use MOM_domains,         only : MOM_infra_init, MOM_infra_end
+  use MOM_domains,         only : MOM_infra_init, MOM_infra_end, set_MOM_thread_affinity
+  use MOM_ensemble_manager, only : ensemble_manager_init, get_ensemble_size
+  use MOM_ensemble_manager, only : ensemble_pelist_setup
   use MOM_error_handler,   only : MOM_error, MOM_mesg, WARNING, FATAL, is_root_pe
   use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
   use MOM_file_parser,     only : read_param, get_param, log_param, log_version, param_file_type
   use MOM_file_parser,     only : close_param_file
   use MOM_forcing_type,    only : forcing, mech_forcing, forcing_diagnostics
   use MOM_forcing_type,    only : mech_forcing_diags, MOM_forcing_chksum, MOM_mech_forcing_chksum
-  use MOM_get_input,       only : directories
+  use MOM_get_input,       only : get_MOM_input, directories
   use MOM_grid,            only : ocean_grid_type
+  use MOM_ice_shelf,       only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
+  use MOM_ice_shelf,       only : shelf_calc_flux, add_shelf_forces, ice_shelf_save_restart
+  use MOM_ice_shelf,       only : initialize_ice_shelf_fluxes, initialize_ice_shelf_forces
   use MOM_interpolate,     only : time_interp_external_init
   use MOM_io,              only : file_exists, open_file, close_file
   use MOM_io,              only : check_nml_error, io_infra_init, io_infra_end
@@ -50,30 +55,19 @@ program MOM_main
   use MOM_string_functions,only : uppercase
   use MOM_surface_forcing, only : set_forcing, forcing_save_restart
   use MOM_surface_forcing, only : surface_forcing_init, surface_forcing_CS
-  use MOM_time_manager,    only : time_type, set_date, get_date
-  use MOM_time_manager,    only : real_to_time, time_type_to_real
+  use MOM_time_manager,    only : time_type, set_date, get_date, real_to_time, time_type_to_real
   use MOM_time_manager,    only : operator(+), operator(-), operator(*), operator(/)
   use MOM_time_manager,    only : operator(>), operator(<), operator(>=)
   use MOM_time_manager,    only : increment_date, set_calendar_type, month_name
-  use MOM_time_manager,    only : JULIAN, GREGORIAN, NOLEAP, THIRTY_DAY_MONTHS
-  use MOM_time_manager,    only : NO_CALENDAR
+  use MOM_time_manager,    only : JULIAN, GREGORIAN, NOLEAP, THIRTY_DAY_MONTHS, NO_CALENDAR
   use MOM_tracer_flow_control, only : tracer_flow_control_CS
   use MOM_unit_scaling,    only : unit_scale_type
   use MOM_variables,       only : surface
   use MOM_verticalGrid,    only : verticalGrid_type
+  use MOM_wave_interface,  only : wave_parameters_CS, MOM_wave_interface_init
+  use MOM_wave_interface,  only : MOM_wave_interface_init_lite, Update_Surface_Waves
   use MOM_write_cputime,   only : write_cputime, MOM_write_cputime_init
   use MOM_write_cputime,   only : write_cputime_start_clock, write_cputime_CS
-  use MOM_get_input,       only : get_MOM_input
-  use ensemble_manager_mod, only : ensemble_manager_init, get_ensemble_size
-  use ensemble_manager_mod, only : ensemble_pelist_setup
-  use fms_affinity_mod,     only : fms_affinity_init, fms_affinity_set,fms_affinity_get
-
-  use MOM_ice_shelf, only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
-  use MOM_ice_shelf, only : shelf_calc_flux, add_shelf_forces, ice_shelf_save_restart
-  use MOM_ice_shelf, only : initialize_ice_shelf_fluxes, initialize_ice_shelf_forces
-
-  use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
-  use MOM_wave_interface, only: MOM_wave_interface_init_lite, Update_Surface_Waves
 
   implicit none
 
@@ -253,13 +247,8 @@ program MOM_main
     endif
   endif
 
-!$  call fms_affinity_init
-!$  call fms_affinity_set('OCEAN', use_hyper_thread, ocean_nthreads)
-!$  call omp_set_num_threads(ocean_nthreads)
-!$OMP PARALLEL
-!$  write(6,*) "ocean_solo OMPthreading ", fms_affinity_get(), omp_get_thread_num(), omp_get_num_threads()
-!$  flush(6)
-!$OMP END PARALLEL
+  ! This call sets the number and affinity of threads with openMP.
+  !$  call set_MOM_thread_affinity(ocean_nthreads, use_hyper_thread)
 
   ! Read ocean_solo restart, which can override settings from the namelist.
   if (file_exists(trim(dirs%restart_input_dir)//'ocean_solo.res')) then
@@ -337,7 +326,7 @@ program MOM_main
   call callTree_waypoint("done surface_forcing_init")
 
 
-  call get_param(param_file,mod_name,"USE_WAVES",Use_Waves,&
+  call get_param(param_file,mod_name, "USE_WAVES", Use_Waves, &
        "If true, enables surface wave modules.",default=.false.)
   if (use_waves) then
     call MOM_wave_interface_init(Time, grid, GV, US, param_file, Waves_CSp, diag)

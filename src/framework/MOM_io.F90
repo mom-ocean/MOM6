@@ -7,16 +7,18 @@ use MOM_array_transform,  only : allocate_rotated_array, rotate_array
 use MOM_domains,          only : MOM_domain_type, domain1D, get_domain_components
 use MOM_domains,          only : AGRID, BGRID_NE, CGRID_NE
 use MOM_dyn_horgrid,      only : dyn_horgrid_type
+use MOM_ensemble_manager, only : get_ensemble_id
 use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING
 use MOM_file_parser,      only : log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
-use MOM_io_infra,         only : MOM_read_data, read_data, MOM_read_vector, read_field_chksum
-use MOM_io_infra,         only : file_exists, get_file_info, get_file_atts, get_file_fields
-use MOM_io_infra,         only : open_file, close_file, field_size, fieldtype, field_exists
-use MOM_io_infra,         only : flush_file, get_filename_appendix, get_ensemble_id
+use MOM_io_infra,         only : MOM_read_data, MOM_read_vector, read_field_chksum
+use MOM_io_infra,         only : read_data=>MOM_read_data ! read_data will be removed soon.
+use MOM_io_infra,         only : file_exists, get_file_info, get_file_fields, get_field_atts
+use MOM_io_infra,         only : open_file, close_file, get_field_size, fieldtype, field_exists
+use MOM_io_infra,         only : flush_file, get_filename_suffix
 use MOM_io_infra,         only : get_file_times, axistype, get_axis_data
-use MOM_io_infra,         only : write_field, write_metadata, write_version_number
-use MOM_io_infra,         only : open_namelist_file, check_nml_error, io_infra_init, io_infra_end
+use MOM_io_infra,         only : write_field, write_metadata, write_version
+use MOM_io_infra,         only : MOM_namelist_file, check_namelist_error, io_infra_init, io_infra_end
 use MOM_io_infra,         only : APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
 use MOM_io_infra,         only : READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
 use MOM_io_infra,         only : CENTER, CORNER, NORTH_FACE, EAST_FACE
@@ -25,24 +27,31 @@ use MOM_verticalGrid,     only : verticalGrid_type
 
 use iso_fortran_env,      only : stdout_iso=>output_unit, stderr_iso=>error_unit
 use netcdf,               only : NF90_open, NF90_inquire, NF90_inq_varids, NF90_inquire_variable
-use netcdf,               only : NF90_Inquire_Dimension, NF90_max_name, NF90_max_var_dims
-use netcdf,               only : NF90_STRERROR, NF90_NOWRITE, NF90_NOERR
+use netcdf,               only : NF90_Inquire_Dimension, NF90_STRERROR, NF90_NOWRITE, NF90_NOERR
 
 implicit none ; private
 
 ! These interfaces are actually implemented in this file.
 public :: create_file, reopen_file, num_timelevels, cmor_long_std, ensembler, MOM_io_init
 public :: MOM_write_field, var_desc, modify_vardesc, query_vardesc
-! The following are simple pass throughs of routines from MOM_io_infra or other modules
-public :: close_file, field_exists, field_size, fieldtype, get_filename_appendix
-public :: file_exists, flush_file, get_file_info, get_file_atts, get_file_fields
-public :: get_file_times, open_file, get_axis_data
-public :: MOM_read_data, MOM_read_vector, read_data, read_field_chksum
+public :: open_namelist_file, check_namelist_error, check_nml_error
+! The following are simple pass throughs of routines from MOM_io_infra or other modules.
+public :: file_exists, open_file, close_file, flush_file, get_filename_appendix
+public :: get_file_info, field_exists, get_file_fields, get_file_times
+public :: fieldtype, field_size, get_field_atts
+public :: axistype, get_axis_data
+public :: MOM_read_data, MOM_read_vector, read_field_chksum
 public :: slasher, write_field, write_version_number
-public :: open_namelist_file, check_nml_error, io_infra_init, io_infra_end
-! These are encoding constants.
-public :: APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
-public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
+public :: io_infra_init, io_infra_end
+! This API is here just to support potential use by non-FMS drivers, and should not persist.
+public :: read_data
+!> These encoding constants are used to indicate the file format
+public :: ASCII_FILE, NETCDF_FILE
+!> These encoding constants are used to indicate whether the file is domain decomposed
+public :: MULTIPLE, SINGLE_FILE
+!> These encoding constants are used to indicate the access mode for a file
+public :: APPEND_FILE, OVERWRITE_FILE, READONLY_FILE, WRITEONLY_FILE
+!> These encoding constants are used to indicate the discretization position of a variable
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
 
 !> Write a registered field to an output file, potentially with rotation
@@ -431,14 +440,18 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
   integer :: n_time                           !< number of time levels varname has in filename
 
   logical :: found
-  character(len=200) :: msg
-  character(len=nf90_max_name) :: name
+  character(len=256) :: msg, name
   integer :: ncid, nvars, status, varid, ndims, n
-  integer, allocatable :: varids(:)
-  integer, dimension(nf90_max_var_dims) :: dimids
+  integer, allocatable :: varids(:), dimids(:)
 
   n_time = -1
   found = .false.
+
+  ! To do almost the same via MOM_io_infra calls, do the following:
+  !   found = field_exists(filename, varname)
+  !   call open_file(ncid, filename, action=READONLY_FILE, form=NETCDF_FILE, threading=MULTIPLE)
+  !   call get_file_info(ncid, ntime=n_time)
+  ! However, this does not handle the case where the time axis for the variable is not the record axis.
 
   status = NF90_OPEN(filename, NF90_NOWRITE, ncid)
   if (status /= NF90_NOERR) then
@@ -481,9 +494,8 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
 
     if (trim(lowercase(name)) == trim(lowercase(varname))) then
       if (found) then
-        call MOM_error(WARNING,"num_timelevels: "//&
-          " Two variables match the case-insensitive name "//trim(varname)//&
-          " in file "//trim(filename)//" - "//trim(NF90_STRERROR(status)))
+        call MOM_error(WARNING, "num_timelevels: Two variables match the case-insensitive name "//&
+                trim(varname)//" in file "//trim(filename))
       else
         varid = varids(n) ; found = .true.
       endif
@@ -508,19 +520,19 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
   if (present(min_dims)) then
     if (ndims < min_dims-1) then
       write(msg, '(I3)') min_dims
-      call MOM_error(WARNING, "num_timelevels: variable "//trim(varname)//&
-        " in file "//trim(filename)//" has fewer than min_dims = "//trim(msg)//&
-        " dimensions.")
+      call MOM_error(WARNING, "num_timelevels: variable "//trim(varname)//" in file "//&
+        trim(filename)//" has fewer than min_dims = "//trim(msg)//" dimensions.")
     elseif (ndims == min_dims - 1) then
       n_time = 0 ; return
     endif
   endif
 
-  status = nf90_inquire_variable(ncid, varid, dimids = dimids(1:ndims))
+  allocate(dimids(ndims))
+  status = nf90_inquire_variable(ncid, varid, dimids=dimids(1:ndims))
   if (status /= NF90_NOERR) then
     call MOM_error(WARNING,"num_timelevels: "//trim(NF90_STRERROR(status))//&
       " Getting last dimension ID for "//trim(varname)//" in "//trim(filename))
-    return
+    deallocate(dimids) ; return
   endif
 
   status = nf90_Inquire_Dimension(ncid, dimids(ndims), len=n_time)
@@ -528,8 +540,9 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
       trim(NF90_STRERROR(status))//" Getting number of time levels of "//&
       trim(varname)//" in "//trim(filename))
 
-end function num_timelevels
+  deallocate(dimids)
 
+end function num_timelevels
 
 !> Returns a vardesc type whose elements have been filled with the provided
 !! fields.  The argument name is required, while the others are optional and
@@ -788,6 +801,21 @@ subroutine MOM_write_field_0d(io_unit, field_md, field, tstamp, fill_value)
   call write_field(io_unit, field_md, field, tstamp=tstamp)
 end subroutine MOM_write_field_0d
 
+!> Given filename and fieldname, this subroutine returns the size of the field in the file
+subroutine field_size(filename, fieldname, sizes, field_found, no_domain)
+  character(len=*),      intent(in)    :: filename  !< The name of the file to read
+  character(len=*),      intent(in)    :: fieldname !< The name of the variable whose sizes are returned
+  integer, dimension(:), intent(inout) :: sizes     !< The sizes of the variable in each dimension
+  logical,     optional, intent(out)   :: field_found !< This indicates whether the field was found in
+                                                    !! the input file.  Without this argument, there
+                                                    !! is a fatal error if the field is not found.
+  logical,     optional, intent(in)    :: no_domain !< If present and true, do not check for file
+                                                    !! names with an appended tile number
+
+  call get_field_size(filename, fieldname, sizes, field_found=field_found, no_domain=no_domain)
+
+end subroutine field_size
+
 
 !> Copies a string
 subroutine safe_string_copy(str1, str2, fieldnm, caller)
@@ -864,6 +892,40 @@ function ensembler(name, ens_no_in) result(en_nm)
   enddo ; enddo
 
 end function ensembler
+
+!> Provide a string to append to filenames, to differentiate ensemble members, for example.
+subroutine get_filename_appendix(suffix)
+  character(len=*), intent(out) :: suffix !< A string to append to filenames
+
+  call get_filename_suffix(suffix)
+end subroutine get_filename_appendix
+
+!> Write a file version number to the log file or other output file
+subroutine write_version_number(version, tag, unit)
+  character(len=*),           intent(in) :: version !< A string that contains the routine name and version
+  character(len=*), optional, intent(in) :: tag  !< A tag name to add to the message
+  integer,          optional, intent(in) :: unit !< An alternate unit number for output
+
+  call write_version(version, tag, unit)
+end subroutine write_version_number
+
+
+!> Open a single namelist file that is potentially readable by all PEs.
+function open_namelist_file(file) result(unit)
+  character(len=*), optional, intent(in) :: file !< The file to open, by default "input.nml"
+  integer                                :: unit !< The opened unit number of the namelist file
+  unit = MOM_namelist_file(file)
+end function open_namelist_file
+
+!> Checks the iostat argument that is returned after reading a namelist variable and writes a
+!! message if there is an error.
+function check_nml_error(IOstat, nml_name) result(ierr)
+  integer,          intent(in) :: IOstat   !< An I/O status field from a namelist read call
+  character(len=*), intent(in) :: nml_name !< The name of the namelist
+  integer :: ierr    !< A copy of IOstat that is returned to preserve legacy function behavior
+  call check_namelist_error(IOstat, nml_name)
+  ierr = IOstat
+end function check_nml_error
 
 !> Initialize the MOM_io module
 subroutine MOM_io_init(param_file)

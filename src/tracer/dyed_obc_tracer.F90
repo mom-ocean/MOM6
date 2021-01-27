@@ -3,6 +3,7 @@ module dyed_obc_tracer
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_coupler_types,      only : atmos_ocn_coupler_flux
 use MOM_diag_mediator,      only : diag_ctrl
 use MOM_error_handler,      only : MOM_error, FATAL, WARNING
 use MOM_file_parser,        only : get_param, log_param, log_version, param_file_type
@@ -18,9 +19,6 @@ use MOM_tracer_diabatic,    only : tracer_vertdiff, applyTracerBoundaryFluxesInO
 use MOM_unit_scaling,       only : unit_scale_type
 use MOM_variables,          only : surface
 use MOM_verticalGrid,       only : verticalGrid_type
-
-use coupler_types_mod,      only : coupler_type_set_data, ind_csurf
-use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 
 implicit none ; private
 
@@ -38,7 +36,7 @@ type, public :: dyed_obc_tracer_CS ; private
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
   real, pointer :: tr(:,:,:,:) => NULL()   !< The array of tracers used in this subroutine, in g m-3?
 
-  integer, allocatable, dimension(:) :: ind_tr !< Indices returned by aof_set_coupler_flux if it is used and the
+  integer, allocatable, dimension(:) :: ind_tr !< Indices returned by atmos_ocn_coupler_flux if it is used and the
                                                !! surface tracer concentrations are to be provided to the coupler.
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
@@ -122,7 +120,7 @@ function register_dyed_obc_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     ! values to the coupler (if any).  This is meta-code and its arguments will
     ! currently (deliberately) give fatal errors if it is used.
     if (CS%coupled_tracers) &
-      CS%ind_tr(m) = aof_set_coupler_flux(trim(name)//'_flux', &
+      CS%ind_tr(m) = atmos_ocn_coupler_flux(trim(name)//'_flux', &
           flux_type=' ', implementation=' ', caller="register_dyed_obc_tracer")
   enddo
 

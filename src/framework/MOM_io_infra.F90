@@ -5,39 +5,37 @@ module MOM_io_infra
 
 use MOM_domain_infra,     only : MOM_domain_type, AGRID, BGRID_NE, CGRID_NE
 use MOM_domain_infra,     only : get_simple_array_i_ind, get_simple_array_j_ind
+use MOM_domain_infra,     only : domain2d, domain1d, CENTER, CORNER, NORTH_FACE, EAST_FACE
 use MOM_error_infra,      only : MOM_error=>MOM_err, NOTE, FATAL, WARNING
 
-use ensemble_manager_mod, only : get_ensemble_id
 use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
 use fms_io_mod,           only : file_exist, field_exist, field_size, read_data
-use fms_io_mod,           only : io_infra_end=>fms_io_exit, get_filename_appendix
-use mpp_domains_mod,      only : domain2d, CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
-use mpp_io_mod,           only : mpp_open, close_file=>mpp_close
-use mpp_io_mod,           only : write_metadata=>mpp_write_meta, mpp_write
-use mpp_io_mod,           only : get_field_atts=>mpp_get_atts, mpp_attribute_exist
-use mpp_io_mod,           only : mpp_get_axes, axistype, get_axis_data=>mpp_get_axis_data
-use mpp_io_mod,           only : mpp_get_fields, fieldtype, flush_file=>mpp_flush
+use fms_io_mod,           only : fms_io_exit, get_filename_appendix
+use mpp_io_mod,           only : mpp_open, mpp_close, mpp_flush
+use mpp_io_mod,           only : mpp_write_meta, mpp_write
+use mpp_io_mod,           only : mpp_get_atts, mpp_attribute_exist
+use mpp_io_mod,           only : mpp_get_axes, axistype, mpp_get_axis_data
+use mpp_io_mod,           only : mpp_get_fields, fieldtype
+use mpp_io_mod,           only : mpp_get_info, mpp_get_times
+use mpp_io_mod,           only : mpp_io_init
+! These are encoding constants.
 use mpp_io_mod,           only : APPEND_FILE=>MPP_APPEND, ASCII_FILE=>MPP_ASCII
 use mpp_io_mod,           only : MULTIPLE=>MPP_MULTI, NETCDF_FILE=>MPP_NETCDF
 use mpp_io_mod,           only : OVERWRITE_FILE=>MPP_OVERWR, READONLY_FILE=>MPP_RDONLY
 use mpp_io_mod,           only : SINGLE_FILE=>MPP_SINGLE, WRITEONLY_FILE=>MPP_WRONLY
-use mpp_io_mod,           only : get_file_info=>mpp_get_info, get_file_atts=>mpp_get_atts
-use mpp_io_mod,           only : get_file_fields=>mpp_get_fields, get_file_times=>mpp_get_times
-use mpp_io_mod,           only : io_infra_init=>mpp_io_init
 
 implicit none ; private
 
 ! These interfaces are actually implemented or have explicit interfaces in this file.
-public :: MOM_read_data, MOM_read_vector, write_field, open_file
-public :: file_exists, field_exists, read_field_chksum
-! The following are simple pass throughs of routines from other modules.  They need
-! to have explicit interfaces added to this file.
-public :: close_file, field_size, fieldtype, get_filename_appendix
-public :: flush_file, get_file_info, get_file_atts, get_file_fields, get_field_atts
-public :: get_file_times, read_data, axistype, get_axis_data
-public :: write_metadata, write_version_number, get_ensemble_id
-public :: open_namelist_file, check_nml_error, io_infra_init, io_infra_end
-! These are encoding constants.
+public :: open_file, close_file, flush_file, file_exists, get_filename_suffix
+public :: get_file_info, get_file_fields, get_file_times
+public :: MOM_read_data, MOM_read_vector, write_metadata, write_field
+public :: field_exists, get_field_atts, get_field_size, get_axis_data, read_field_chksum
+public :: io_infra_init, io_infra_end, MOM_namelist_file, check_namelist_error, write_version
+! These types are inherited from underlying infrastructure code, to act as containers for
+! information about fields and axes, respectively, and are opaque to this module.
+public :: fieldtype, axistype
+! These are encoding constant parmeters.
 public :: APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
 public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
@@ -52,7 +50,7 @@ end interface
 interface MOM_read_data
   module procedure MOM_read_data_4d
   module procedure MOM_read_data_3d
-  module procedure MOM_read_data_2d
+  module procedure MOM_read_data_2d, MOM_read_data_2d_region
   module procedure MOM_read_data_1d
   module procedure MOM_read_data_0d
 end interface
@@ -71,7 +69,12 @@ end interface write_field
 interface MOM_read_vector
   module procedure MOM_read_vector_3d
   module procedure MOM_read_vector_2d
-end interface
+end interface MOM_read_vector
+
+!> Write metadata about a variable or axis to a file and store it for later reuse
+interface write_metadata
+  module procedure write_metadata_axis, write_metadata_field
+end interface write_metadata
 
 contains
 
@@ -122,6 +125,58 @@ function FMS_file_exists(filename, domain, no_domain)
 
 end function FMS_file_exists
 
+!> close_file closes a file (or fileset).  If the file handle does not point to an open file,
+!! close_file simply returns without doing anything.
+subroutine close_file(unit)
+  integer,                  intent(out) :: unit   !< The I/O unit for the file to be closed
+
+  call mpp_close(unit)
+end subroutine close_file
+
+!> Ensure that the output stream associated with a unit is fully sent to dis.
+subroutine flush_file(unit)
+  integer,                  intent(out) :: unit   !< The I/O unit for the file to flush
+
+  call mpp_flush(unit)
+end subroutine flush_file
+
+!> Initialize the underlying I/O infrastructure
+subroutine io_infra_init(maxunits)
+  integer,   optional, intent(in) :: maxunits !< An optional maximum number of file
+                                              !! unit numbers that can be used.
+  call mpp_io_init(maxunit=maxunits)
+end subroutine io_infra_init
+
+!> Gracefully close out and terminate the underlying I/O infrastructure
+subroutine io_infra_end()
+  call fms_io_exit()
+end subroutine io_infra_end
+
+!> Open a single namelist file that is potentially readable by all PEs.
+function MOM_namelist_file(file) result(unit)
+  character(len=*), optional, intent(in) :: file !< The file to open, by default "input.nml".
+  integer                                :: unit !< The opened unit number of the namelist file
+  unit = open_namelist_file(file)
+end function MOM_namelist_file
+
+!> Checks the iostat argument that is returned after reading a namelist variable and writes a
+!! message if there is an error.
+subroutine check_namelist_error(IOstat, nml_name)
+  integer,          intent(in) :: IOstat   !< An I/O status field from a namelist read call
+  character(len=*), intent(in) :: nml_name !< The name of the namelist
+  integer :: ierr
+  ierr = check_nml_error(IOstat, nml_name)
+end subroutine check_namelist_error
+
+!> Write a file version number to the log file or other output file
+subroutine write_version(version, tag, unit)
+  character(len=*),           intent(in) :: version !< A string that contains the routine name and version
+  character(len=*), optional, intent(in) :: tag  !< A tag name to add to the message
+  integer,          optional, intent(in) :: unit !< An alternate unit number for output
+
+  call write_version_number(version, tag, unit)
+end subroutine write_version
+
 !> open_file opens a file for parallel or single-file I/O.
 subroutine open_file(unit, file, action, form, threading, fileset, nohdrs, domain, MOM_domain)
   integer,                  intent(out) :: unit   !< The I/O unit for the opened file
@@ -150,6 +205,74 @@ subroutine open_file(unit, file, action, form, threading, fileset, nohdrs, domai
   endif
 end subroutine open_file
 
+!> Provide a string to append to filenames, to differentiate ensemble members, for example.
+subroutine get_filename_suffix(suffix)
+  character(len=*), intent(out) :: suffix !< A string to append to filenames
+
+  call get_filename_appendix(suffix)
+end subroutine get_filename_suffix
+
+
+!> Get information about the number of dimensions, variables, global attributes and time levels
+!! in the file associated with an open file unit
+subroutine get_file_info(unit, ndim, nvar, natt, ntime)
+  integer,            intent(in)  :: unit  !< The I/O unit for the open file
+  integer,  optional, intent(out) :: ndim  !< The number of dimensions in the file
+  integer,  optional, intent(out) :: nvar  !< The number of variables in the file
+  integer,  optional, intent(out) :: natt  !< The number of global attributes in the file
+  integer,  optional, intent(out) :: ntime !< The number of time levels in the file
+
+  ! Local variables
+  integer :: ndims, nvars, natts, ntimes
+
+  call mpp_get_info( unit, ndims, nvars, natts, ntimes )
+
+  if (present(ndim)) ndim = ndims
+  if (present(nvar)) nvar = nvars
+  if (present(natt)) natt = natts
+  if (present(ntime)) ntime = ntimes
+
+end subroutine get_file_info
+
+
+!> Get the times of records from a file
+ !### Modify this to also convert to time_type, using information about the dimensions?
+subroutine get_file_times(unit, time_values, ntime)
+  integer,                         intent(in)    :: unit  !< The I/O unit for the open file
+  real, allocatable, dimension(:), intent(inout) :: time_values !< The real times for the records in file.
+  integer,               optional, intent(out)   :: ntime !< The number of time levels in the file
+
+  integer :: ntimes
+
+  if (allocated(time_values)) deallocate(time_values)
+  call get_file_info(unit, ntime=ntimes)
+  if (present(ntime)) ntime = ntimes
+  if (ntimes > 0) then
+    allocate(time_values(ntimes))
+    call mpp_get_times(unit, time_values)
+  endif
+end subroutine get_file_times
+
+!> Set up the field information (e.g., names and metadata) for all of the variables in a file.  The
+!! argument fields must be allocated with a size that matches the number of variables in a file.
+subroutine get_file_fields(unit, fields)
+  integer,                       intent(in)    :: unit   !< The I/O unit for the open file
+  type(fieldtype), dimension(:), intent(inout) :: fields !< Field-type descriptions of all of
+                                                         !! the variables in a file.
+  call mpp_get_fields(unit, fields)
+end subroutine get_file_fields
+
+!> Extract information from a field type, as stored or as found in a file
+subroutine get_field_atts(field, name, units, longname, checksum)
+  type(fieldtype),            intent(in)  :: field !< The field to extract information from
+  character(len=*), optional, intent(out) :: name  !< The variable name
+  character(len=*), optional, intent(out) :: units !< The units of the variable
+  character(len=*), optional, intent(out) :: longname  !< The long name of the variable
+  integer(kind=8),  dimension(:), &
+                    optional, intent(out) :: checksum !< The checksums of the variable in a file
+  call mpp_get_atts(field, name=name, units=units, longname=longname, checksum=checksum)
+end subroutine get_field_atts
+
 !> Field_exists returns true if the field indicated by field_name is present in the
 !! file file_name.  If file_name does not exist, it returns false.
 function field_exists(filename, field_name, domain, no_domain, MOM_domain)
@@ -168,7 +291,30 @@ function field_exists(filename, field_name, domain, no_domain, MOM_domain)
 
 end function field_exists
 
-!> This function uses the fms_io function read_data to read a scalar
+!> Given filename and fieldname, this subroutine returns the size of the field in the file
+subroutine get_field_size(filename, fieldname, sizes, field_found, no_domain)
+  character(len=*),      intent(in)    :: filename  !< The name of the file to read
+  character(len=*),      intent(in)    :: fieldname !< The name of the variable whose sizes are returned
+  integer, dimension(:), intent(inout) :: sizes     !< The sizes of the variable in each dimension
+  logical,     optional, intent(out)   :: field_found !< This indicates whether the field was found in
+                                                    !! the input file.  Without this argument, there
+                                                    !! is a fatal error if the field is not found.
+  logical,     optional, intent(in)    :: no_domain !< If present and true, do not check for file
+                                                    !! names with an appended tile number
+
+  call field_size(filename, fieldname, sizes, field_found=field_found, no_domain=no_domain)
+
+end subroutine get_field_size
+
+!> Extracts and returns the axis data stored in an axistype.
+subroutine get_axis_data( axis, dat )
+  type(axistype),     intent(in)  :: axis !< An axis type
+  real, dimension(:), intent(out) :: dat  !< The data in the axis variable
+
+  call mpp_get_axis_data( axis, dat )
+end subroutine get_axis_data
+
+!> This routine uses the fms_io subroutine read_data to read a scalar
 !! data field named "fieldname" from file "filename".
 subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
@@ -186,7 +332,7 @@ subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale)
 
 end subroutine MOM_read_data_0d
 
-!> This function uses the fms_io function read_data to read a 1-D
+!> This routine uses the fms_io subroutine read_data to read a 1-D
 !! data field named "fieldname" from file "filename".
 subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
@@ -204,7 +350,7 @@ subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale)
 
 end subroutine MOM_read_data_1d
 
-!> This function uses the fms_io function read_data to read a distributed
+!> This routine uses the fms_io subroutine read_data to read a distributed
 !! 2-D data field named "fieldname" from file "filename".  Valid values for
 !! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
 subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
@@ -232,7 +378,42 @@ subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
 
 end subroutine MOM_read_data_2d
 
-!> This function uses the fms_io function read_data to read a distributed
+!> This routine uses the fms_io subroutine read_data to read a region from a distributed or
+!! global 2-D data field named "fieldname" from file "filename".
+subroutine MOM_read_data_2d_region(filename, fieldname, data, start, nread, MOM_domain, &
+                                   no_domain, scale)
+  character(len=*),       intent(in)    :: filename  !< The name of the file to read
+  character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
+  real, dimension(:,:),   intent(inout) :: data      !< The 2-dimensional array into which the data
+                                                     !! should be read
+  integer, dimension(:),  intent(in)    :: start     !< The starting index to read in each of 4
+                                                     !! dimensions.  For this 2-d read, the 3rd
+                                                     !! and 4th values are always 1.
+  integer, dimension(:),  intent(in)    :: nread     !< The number of points to read in each of 4
+                                                     !! dimensions.  For this 2-d read, the 3rd
+                                                     !! and 4th values are always 1.
+  type(MOM_domain_type), &
+                optional, intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
+  logical,      optional, intent(in)    :: no_domain !< If present and true, this variable does not
+                                                     !! use domain decomposion.
+  real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
+                                                     !! by before it is returned.
+
+  if (present(MOM_Domain)) then
+    call read_data(filename, fieldname, data, start, nread, domain=MOM_Domain%mpp_domain, &
+                   no_domain=no_domain)
+  else
+    call read_data(filename, fieldname, data, start, nread, no_domain=no_domain)
+  endif
+
+  if (present(scale)) then ; if (scale /= 1.0) then
+    ! Dangerously rescale the whole array
+    data(:,:) = scale*data(:,:)
+  endif ; endif
+
+end subroutine MOM_read_data_2d_region
+
+!> This routine uses the fms_io subroutine read_data to read a distributed
 !! 3-D data field named "fieldname" from file "filename".  Valid values for
 !! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
 subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
@@ -260,7 +441,7 @@ subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
 
 end subroutine MOM_read_data_3d
 
-!> This function uses the fms_io function read_data to read a distributed
+!> This routine uses the fms_io subroutine read_data to read a distributed
 !! 4-D data field named "fieldname" from file "filename".  Valid values for
 !! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
 subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
@@ -289,7 +470,7 @@ subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
 end subroutine MOM_read_data_4d
 
 
-!> This function uses the fms_io function read_data to read a pair of distributed
+!> This routine uses the fms_io subroutine read_data to read a pair of distributed
 !! 2-D data fields with names given by "[uv]_fieldname" from file "filename".  Valid values for
 !! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
 subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
@@ -333,7 +514,7 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
 
 end subroutine MOM_read_vector_2d
 
-!> This function uses the fms_io function read_data to read a pair of distributed
+!> This routine uses the fms_io subroutine read_data to read a pair of distributed
 !! 3-D data fields with names given by "[uv]_fieldname" from file "filename".  Valid values for
 !! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
 subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
@@ -441,6 +622,7 @@ subroutine write_field_0d(io_unit, field_md, field, tstamp)
   call mpp_write(io_unit, field_md, field, tstamp=tstamp)
 end subroutine write_field_0d
 
+!> Write the data for an axis
 subroutine MOM_write_axis(io_unit, axis)
   integer,        intent(in)  :: io_unit    !< File I/O unit handle
   type(axistype), intent(in)  :: axis       !< An axis type variable with information to write
@@ -448,5 +630,55 @@ subroutine MOM_write_axis(io_unit, axis)
   call mpp_write(io_unit, axis)
 
 end subroutine MOM_write_axis
+
+!> Store information about an axis in a previously defined axistype and write this
+!! information to the file indicated by unit.
+subroutine write_metadata_axis( unit, axis, name, units, longname, cartesian, sense, domain, data, calendar)
+  integer,                    intent(in)    :: unit  !< The I/O unit for the file to write to
+  type(axistype),             intent(inout) :: axis  !< The axistype where this information is stored.
+  character(len=*),           intent(in)    :: name  !< The name in the file of this axis
+  character(len=*),           intent(in)    :: units !< The units of this axis
+  character(len=*),           intent(in)    :: longname !< The long description of this axis
+  character(len=*), optional, intent(in)    :: cartesian !< A variable indicating which direction
+                                                     !! this axis corresponds with. Valid values
+                                                     !! include 'X', 'Y', 'Z', 'T', and 'N' for none.
+  integer,          optional, intent(in)    :: sense !< This is 1 for axes whose values increase upward, or
+                                                     !! -1 if they increase downward.
+  type(domain1D),   optional, intent(in)    :: domain !< The domain decomposion for this axis
+  real, dimension(:), optional, intent(in)  :: data   !< The coordinate values of the points on this axis
+  character(len=*), optional, intent(in)    :: calendar !< The name of the calendar used with a time axis
+
+  call mpp_write_meta(unit, axis, name, units, longname, cartesian=cartesian, sense=sense, &
+                      domain=domain, data=data, calendar=calendar)
+end subroutine write_metadata_axis
+
+!> Store information about an output variable in a previously defined fieldtype and write this
+!! information to the file indicated by unit.
+subroutine write_metadata_field(unit, field, axes, name, units, longname, &
+                                min, max, fill, scale, add, pack, standard_name, checksum)
+  integer,                    intent(in)    :: unit  !< The I/O unit for the file to write to
+  type(fieldtype),            intent(inout) :: field !< The fieldtype where this information is stored
+  type(axistype), dimension(:), intent(in)  :: axes  !< Handles for the axis used for this variable
+  character(len=*),           intent(in)    :: name  !< The name in the file of this variable
+  character(len=*),           intent(in)    :: units !< The units of this variable
+  character(len=*),           intent(in)    :: longname !< The long description of this variable
+  real,             optional, intent(in)    :: min   !< The minimum valid value for this variable
+  real,             optional, intent(in)    :: max   !< The maximum valid value for this variable
+  real,             optional, intent(in)    :: fill  !< Missing data fill value
+  real,             optional, intent(in)    :: scale !< An multiplicative factor by which to scale
+                                                     !! the variable before output
+  real,             optional, intent(in)    :: add   !< An offset to add to the variable before output
+  integer,          optional, intent(in)    :: pack  !< A precision reduction factor with which the
+                                                     !! variable.  The default, 1, has no reduction,
+                                                     !! but 2 is not uncommon.
+  character(len=*), optional, intent(in)    :: standard_name !< The standard (e.g., CMOR) name for this variable
+  integer(kind=8), dimension(:), &
+                    optional, intent(in)    :: checksum !< Checksum values that can be used to verify reads.
+
+
+  call mpp_write_meta( unit, field, axes, name, units, longname, &
+         min=min, max=max, fill=fill, scale=scale, add=add, pack=pack, standard_name=standard_name, checksum=checksum)
+
+end subroutine write_metadata_field
 
 end module MOM_io_infra

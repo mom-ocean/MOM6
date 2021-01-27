@@ -3,6 +3,7 @@ module ideal_age_example
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_coupler_types, only : set_coupler_type_data, atmos_ocn_coupler_flux
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
@@ -20,9 +21,6 @@ use MOM_tracer_Z_init, only : tracer_Z_init
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
-
-use coupler_types_mod, only : coupler_type_set_data, ind_csurf
-use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 
 implicit none ; private
 
@@ -56,7 +54,7 @@ type, public :: ideal_age_tracer_CS ; private
                                  !! they are not found in the restart files.
   logical :: tracer_ages(NTR_MAX) !< Indicates whether each tracer ages.
 
-  integer, dimension(NTR_MAX) :: ind_tr !< Indices returned by aof_set_coupler_flux if it is used and the
+  integer, dimension(NTR_MAX) :: ind_tr !< Indices returned by atmos_ocn_coupler_flux if it is used and the
                                         !! surface tracer concentrations are to be provided to the coupler.
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
@@ -183,7 +181,7 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     ! values to the coupler (if any).  This is meta-code and its arguments will
     ! currently (deliberately) give fatal errors if it is used.
     if (CS%coupled_tracers) &
-      CS%ind_tr(m) = aof_set_coupler_flux(trim(var_name)//'_flux', &
+      CS%ind_tr(m) = atmos_ocn_coupler_flux(trim(var_name)//'_flux', &
           flux_type=' ', implementation=' ', caller="register_ideal_age_tracer")
   enddo
 
@@ -443,9 +441,8 @@ subroutine ideal_age_tracer_surface_state(sfc_state, h, G, GV, CS)
     do m=1,CS%ntr
       !   This call loads the surface values into the appropriate array in the
       ! coupler-type structure.
-      call coupler_type_set_data(CS%tr(:,:,1,m), CS%ind_tr(m), ind_csurf, &
-                   sfc_state%tr_fields, idim=(/isd, is, ie, ied/), &
-                   jdim=(/jsd, js, je, jed/) )
+      call set_coupler_type_data(CS%tr(:,:,1,m), CS%ind_tr(m), sfc_state%tr_fields, &
+                   idim=(/isd, is, ie, ied/), jdim=(/jsd, js, je, jed/) )
     enddo
   endif
 

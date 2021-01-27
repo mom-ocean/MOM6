@@ -18,6 +18,9 @@ use MOM_variables,     only : thermo_var_ptrs, surface
 use MOM_verticalgrid,  only : verticalGrid_type
 use data_override_mod, only : data_override_init, data_override
 
+use netcdf, only : NF90_open, NF90_inq_varid, NF90_inquire_variable, NF90_get_var
+use netcdf, only : NF90_inquire_dimension, NF90_close, NF90_NOWRITE, NF90_NOERR
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -773,12 +776,12 @@ end subroutine Update_Stokes_Drift
 !> A subroutine to fill the Stokes drift from a NetCDF file
 !! using the data_override procedures.
 subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
-  use NETCDF
   type(time_type),          intent(in) :: day_center !< Center of timestep
   type(wave_parameters_CS), pointer    :: CS         !< Wave structure
   type(ocean_grid_type), intent(inout) :: G          !< Grid structure
   type(verticalGrid_type),  intent(in) :: GV         !< Vertical grid structure
   type(unit_scale_type),    intent(in) :: US         !< A dimensional unit scaling type
+
   ! Local variables
   real    :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal Stokes drift of band at h-points [m s-1]
   real    :: temp_y(SZI_(G),SZJ_(G)) ! Psuedo-meridional Stokes drift of band at h-points [m s-1]
@@ -894,6 +897,10 @@ subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
         CS%WaveNum_Cen(b) = (2.*PI*CS%Freq_Cen(b)*US%T_to_s)**2 / (US%L_to_Z**2*GV%g_Earth)
       enddo
     endif
+
+    rcode_wn = NF90_close(ncid)
+    if (rcode_wn /= 0) call MOM_error(WARNING, &
+            "Error closing file "//trim(SurfBandFileName)//" in MOM_wave_interface.")
 
   endif
 

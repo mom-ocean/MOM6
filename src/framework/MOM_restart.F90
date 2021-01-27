@@ -10,7 +10,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : create_file, fieldtype, file_exists, open_file, close_file
 use MOM_io, only : MOM_read_data, read_data, MOM_write_field, read_field_chksum
-use MOM_io, only : get_file_info, get_file_atts, get_file_fields, get_file_times
+use MOM_io, only : get_file_info, get_file_fields, get_field_atts, get_file_times
 use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc, get_filename_appendix
 use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
@@ -1084,7 +1084,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer :: i, n, m, missing_fields
   integer :: isL, ieL, jsL, jeL, is0, js0
   integer :: sizes(7)
-  integer :: ndim, nvar, natt, ntime, pos
+  integer :: nvar, ntime, pos
 
   integer :: unit(CS%max_fields) ! The I/O units of all open files.
   character(len=200) :: unit_path(CS%max_fields) ! The file names.
@@ -1119,11 +1119,9 @@ subroutine restore_state(filename, directory, day, G, CS)
 
 ! Get the time from the first file in the list that has one.
   do n=1,num_file
-    call get_file_info(unit(n), ndim, nvar, natt, ntime)
+    call get_file_times(unit(n), time_vals, ntime)
     if (ntime < 1) cycle
 
-    allocate(time_vals(ntime))
-    call get_file_times(unit(n), time_vals)
     t1 = time_vals(1)
     deallocate(time_vals)
 
@@ -1138,11 +1136,9 @@ subroutine restore_state(filename, directory, day, G, CS)
 ! if they differ from the first time.
   if (is_root_pe()) then
     do m = n+1,num_file
-      call get_file_info(unit(n), ndim, nvar, natt, ntime)
+      call get_file_times(unit(n), time_vals, ntime)
       if (ntime < 1) cycle
 
-      allocate(time_vals(ntime))
-      call get_file_times(unit(n), time_vals)
       t2 = time_vals(1)
       deallocate(time_vals)
 
@@ -1157,13 +1153,13 @@ subroutine restore_state(filename, directory, day, G, CS)
 
 ! Read each variable from the first file in which it is found.
   do n=1,num_file
-    call get_file_info(unit(n), ndim, nvar, natt, ntime)
+    call get_file_info(unit(n), nvar=nvar)
 
     allocate(fields(nvar))
-    call get_file_fields(unit(n),fields(1:nvar))
+    call get_file_fields(unit(n), fields(1:nvar))
 
     do m=1, nvar
-      call get_file_atts(fields(m),name=varname)
+      call get_field_atts(fields(m), name=varname)
       do i=1,CS%num_obsolete_vars
         if (adjustl(lowercase(trim(varname))) == adjustl(lowercase(trim(CS%restart_obsolete(i)%field_name)))) then
             call MOM_error(FATAL, "MOM_restart restore_state: Attempting to use obsolete restart field "//&
@@ -1194,7 +1190,7 @@ subroutine restore_state(filename, directory, day, G, CS)
 
       call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
       do i=1, nvar
-        call get_file_atts(fields(i),name=varname)
+        call get_field_atts(fields(i), name=varname)
         if (lowercase(trim(varname)) == lowercase(trim(CS%restart_field(m)%var_name))) then
           checksum_data = -1
           if (CS%checksum_required) then
@@ -1216,8 +1212,9 @@ subroutine restore_state(filename, directory, day, G, CS)
               call MOM_read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
                                  G%Domain, timelevel=1, position=pos)
             else ! This array is not domain-decomposed.  This variant may be under-tested.
-              call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
-                             no_domain=.true., timelevel=1)
+              call MOM_error(FATAL, &
+                        "MOM_restart does not support 2-d arrays without domain decomposition.")
+              ! call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p,no_domain=.true., timelevel=1)
             endif
             if (is_there_a_checksum) checksum_data = chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
           elseif (associated(CS%var_ptr3d(m)%p)) then  ! Read a 3d array.
@@ -1225,8 +1222,9 @@ subroutine restore_state(filename, directory, day, G, CS)
               call MOM_read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
                                  G%Domain, timelevel=1, position=pos)
             else ! This array is not domain-decomposed.  This variant may be under-tested.
-              call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
-                             no_domain=.true., timelevel=1)
+              call MOM_error(FATAL, &
+                        "MOM_restart does not support 3-d arrays without domain decomposition.")
+              ! call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, no_domain=.true., timelevel=1)
             endif
             if (is_there_a_checksum) checksum_data = chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
           elseif (associated(CS%var_ptr4d(m)%p)) then  ! Read a 4d array.
@@ -1234,8 +1232,9 @@ subroutine restore_state(filename, directory, day, G, CS)
               call MOM_read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
                                  G%Domain, timelevel=1, position=pos)
             else ! This array is not domain-decomposed.  This variant may be under-tested.
-              call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
-                             no_domain=.true., timelevel=1)
+              call MOM_error(FATAL, &
+                        "MOM_restart does not support 4-d arrays without domain decomposition.")
+              ! call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, no_domain=.true., timelevel=1)
             endif
             if (is_there_a_checksum) checksum_data = chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
           else
