@@ -11,7 +11,6 @@ use MOM_file_parser, only : get_param, param_file_type, log_version
 use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_forcing_type, only : allocate_forcing_type, allocate_mech_forcing
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data
 use MOM_time_manager, only : time_type, operator(+), operator(/)
 use MOM_tracer_flow_control, only : call_tracer_set_forcing
 use MOM_tracer_flow_control, only : tracer_flow_control_CS

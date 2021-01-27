@@ -11,7 +11,9 @@ use MOM_EOS, only : EOS_type, calculate_density, calculate_density_derivs, EOS_d
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_verticalGrid, only : verticalGrid_type
 
-use netcdf
+use netcdf, only : NF90_open, NF90_inq_varid, NF90_inquire_variable, NF90_get_var
+use netcdf, only : NF90_get_att, NF90_inquire_dimension, NF90_close, NF90_strerror
+use netcdf, only : NF90_NOWRITE, NF90_NOERR
 
 implicit none ; private
 
@@ -402,7 +404,7 @@ subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
   character(len=120) :: dim_name, edge_name, tr_msg, dim_msg
   logical :: monotonic
   integer :: ncid, status, intid, tr_id, layid, k
-  integer :: nz_edge, ndim, tr_dim_ids(NF90_MAX_VAR_DIMS)
+  integer :: nz_edge, ndim, tr_dim_ids(8)
 
   mdl = "MOM_tracer_Z_init read_Z_edges: "
   tr_msg = trim(tr_name)//" in "//trim(filename)

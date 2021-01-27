@@ -30,7 +30,8 @@ use coord_hycom,  only : init_coord_hycom, hycom_CS, set_hycom_params, build_hyc
 use coord_slight, only : init_coord_slight, slight_CS, set_slight_params, build_slight_column, end_coord_slight
 use coord_adapt,  only : init_coord_adapt, adapt_CS, set_adapt_params, build_adapt_column, end_coord_adapt
 
-use netcdf ! Used by check_grid_def()
+! Direct netcdf calls are used by check_grid_def()
+use netcdf, only : NF90_open, NF90_inq_varid, NF90_get_att, NF90_NOERR, NF90_NOWRITE
 
 implicit none ; private
 
