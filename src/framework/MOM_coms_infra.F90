@@ -3,20 +3,23 @@ module MOM_coms_infra
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use fms_mod, only : fms_end, MOM_infra_init => fms_init
+use iso_fortran_env, only : int32, int64
+
+use mpp_mod, only : mpp_pe, mpp_root_pe, mpp_npes, mpp_set_root_pe
+use mpp_mod, only : mpp_set_current_pelist, mpp_get_current_pelist
+use mpp_mod, only : mpp_broadcast, mpp_sync, mpp_sync_self, mpp_chksum
+use mpp_mod, only : mpp_sum, mpp_max, mpp_min
 use memutils_mod, only : print_memuse_stats
-use mpp_mod, only : PE_here => mpp_pe, root_PE => mpp_root_pe, num_PEs => mpp_npes
-use mpp_mod, only : set_rootPE => mpp_set_root_pe
-use mpp_mod, only : Set_PElist => mpp_set_current_pelist, Get_PElist => mpp_get_current_pelist
-use mpp_mod, only : mpp_broadcast, mpp_sync, mpp_sync_self, field_chksum => mpp_chksum
-use mpp_mod, only : sum_across_PEs => mpp_sum, max_across_PEs => mpp_max, min_across_PEs => mpp_min
+use fms_mod, only : fms_end, fms_init
 
 implicit none ; private
 
-public :: PE_here, root_PE, num_PEs, MOM_infra_init, MOM_infra_end, Set_PElist, Get_PElist
-public :: set_rootPE, broadcast, sum_across_PEs, min_across_PEs, max_across_PEs, field_chksum
+public :: PE_here, root_PE, num_PEs, set_rootPE, Set_PElist, Get_PElist
+public :: broadcast, sum_across_PEs, min_across_PEs, max_across_PEs
+public :: field_chksum, MOM_infra_init, MOM_infra_end
 
-! This module provides interfaces to the non-domain-oriented communication subroutines.
+! This module provides interfaces to the non-domain-oriented communication
+! subroutines.
 
 !> Communicate an array, string or scalar from one PE to others
 interface broadcast
@@ -24,7 +27,85 @@ interface broadcast
   module procedure broadcast_real0D, broadcast_real1D, broadcast_real2D
 end interface broadcast
 
+!> Compute a checksum for a field distributed over a PE list.  If no PE list is
+!! provided, then the current active PE list is used.
+interface field_chksum
+  module procedure field_chksum_real_0d
+  module procedure field_chksum_real_1d
+  module procedure field_chksum_real_2d
+  module procedure field_chksum_real_3d
+  module procedure field_chksum_real_4d
+end interface field_chksum
+
+!> Find the sum of field across PEs, and update PEs with the sums.
+interface sum_across_PEs
+  module procedure sum_across_PEs_int4_0d
+  module procedure sum_across_PEs_int4_1d
+  module procedure sum_across_PEs_int8_0d
+  module procedure sum_across_PEs_int8_1d
+  module procedure sum_across_PEs_int8_2d
+  module procedure sum_across_PEs_real_0d
+  module procedure sum_across_PEs_real_1d
+  module procedure sum_across_PEs_real_2d
+end interface sum_across_PEs
+
+!> Find the maximum value of field across PEs, and update PEs with the values.
+interface max_across_PEs
+  module procedure max_across_PEs_int_0d
+  module procedure max_across_PEs_real_0d
+  module procedure max_across_PEs_real_1d
+end interface max_across_PEs
+
+!> Find the minimum value of field across PEs, and update PEs with the values.
+interface min_across_PEs
+  module procedure min_across_PEs_int_0d
+  module procedure min_across_PEs_real_0d
+  module procedure min_across_PEs_real_1d
+end interface min_across_PEs
+
 contains
+
+!> Return the ID of the PE for the current process.
+function PE_here() result(pe)
+  integer :: pe   !< PE ID of the current process
+  pe = mpp_pe()
+end function PE_here
+
+!> Return the ID of the root PE for the PE list of the current procss.
+function root_PE() result(pe)
+  integer :: pe   !< root PE ID
+  pe = mpp_root_pe()
+end function root_PE
+
+!> Return the number of PEs for the current PE list.
+function num_PEs() result(npes)
+  integer :: npes   !< Number of PEs
+  npes = mpp_npes()
+end function num_PEs
+
+!> Designate a PE as the root PE
+subroutine set_rootPE(pe)
+  integer, intent(in) :: pe   !< ID of the PE to be assigned as root
+  call mpp_set_root_pe(pe)
+end subroutine
+
+!> Set the current PE list.  If no list is provided, then the current PE list
+!! is set to the list of all available PEs on the communicator.  Setting the
+!! list will trigger a rank synchronization unless the `no_sync` flag is set.
+subroutine Set_PEList(pelist, no_sync)
+  integer, intent(in), optional :: pelist(:)  !< List of
+  logical, intent(in), optional :: no_sync    !< Do not sync after list update.
+  call mpp_set_current_pelist(pelist, no_sync)
+end subroutine Set_PEList
+
+!> Retrieve the current PE list and any metadata if requested.
+subroutine Get_PEList(pelist, name, commID)
+  integer, intent(out) :: pelist(:)   !< List of PE IDs of the current PE list
+  character(len=*), intent(out), optional :: name   !< Name of PE list
+  integer, intent(out), optional :: commID    !< Communicator ID of PE list
+
+  call mpp_get_current_pelist(pelist, name, commiD)
+end subroutine Get_PEList
 
 !> Communicate a 1-D array of character strings from one PE to others
 subroutine broadcast_char(dat, length, from_PE, PElist, blocking)
@@ -150,6 +231,195 @@ subroutine broadcast_real2D(dat, length, from_PE, PElist, blocking)
 
 end subroutine broadcast_real2D
 
+! field_chksum wrappers
+
+!> Compute a checksum for a field distributed over a PE list.  If no PE list is
+!! provided, then the current active PE list is used.
+function field_chksum_real_0d(field, pelist, mask_val) result(chksum)
+  real, intent(in) :: field                   !< Input scalar
+  integer, optional, intent(in) :: pelist(:)  !< PE list of ranks to checksum
+  real, optional, intent(in) :: mask_val      !< FMS mask value
+  integer :: chksum                           !< checksum of array
+
+  chksum = mpp_chksum(field, pelist, mask_val)
+end function field_chksum_real_0d
+
+!> Compute a checksum for a field distributed over a PE list.  If no PE list is
+!! provided, then the current active PE list is used.
+function field_chksum_real_1d(field, pelist, mask_val) result(chksum)
+  real, dimension(:), intent(in) :: field     !< Input array
+  integer, optional, intent(in) :: pelist(:)  !< PE list of ranks to checksum
+  real, optional, intent(in) :: mask_val      !< FMS mask value
+  integer :: chksum                           !< checksum of array
+
+  chksum = mpp_chksum(field, pelist, mask_val)
+end function field_chksum_real_1d
+
+!> Compute a checksum for a field distributed over a PE list.  If no PE list is
+!! provided, then the current active PE list is used.
+function field_chksum_real_2d(field, pelist, mask_val) result(chksum)
+  real, dimension(:,:), intent(in) :: field   !< Unrotated input field
+  integer, optional, intent(in) :: pelist(:)  !< PE list of ranks to checksum
+  real, optional, intent(in) :: mask_val      !< FMS mask value
+  integer :: chksum                           !< checksum of array
+
+  chksum = mpp_chksum(field, pelist, mask_val)
+end function field_chksum_real_2d
+
+!> Compute a checksum for a field distributed over a PE list.  If no PE list is
+!! provided, then the current active PE list is used.
+function field_chksum_real_3d(field, pelist, mask_val) result(chksum)
+  real, dimension(:,:,:), intent(in) :: field !< Unrotated input field
+  integer, optional, intent(in) :: pelist(:)  !< PE list of ranks to checksum
+  real, optional, intent(in) :: mask_val      !< FMS mask value
+  integer :: chksum                           !< checksum of array
+
+  chksum = mpp_chksum(field, pelist, mask_val)
+end function field_chksum_real_3d
+
+!> Compute a checksum for a field distributed over a PE list.  If no PE list is
+!! provided, then the current active PE list is used.
+function field_chksum_real_4d(field, pelist, mask_val) result(chksum)
+  real, dimension(:,:,:,:), intent(in) :: field !< Unrotated input field
+  integer, optional, intent(in) :: pelist(:)    !< PE list of ranks to checksum
+  real, optional, intent(in) :: mask_val        !< FMS mask value
+  integer :: chksum                             !< checksum of array
+
+  chksum = mpp_chksum(field, pelist, mask_val)
+end function field_chksum_real_4d
+
+! sum_across_PEs wrappers
+
+!> Find the sum of field across PEs, and update PEs with the sums.
+subroutine sum_across_PEs_int4_0d(field, pelist)
+  integer(kind=int32), intent(inout) :: field   !< Input field
+  integer, intent(in), optional :: pelist(:)    !< PE list
+
+  call mpp_sum(field, pelist)
+end subroutine sum_across_PEs_int4_0d
+
+!> Find the sum of field across PEs, and update PEs with the sums.
+subroutine sum_across_PEs_int4_1d(field, length, pelist)
+  integer(kind=int32), dimension(:), intent(inout) :: field !< Input field
+  integer, intent(in) :: length                             !< Length of field
+  integer, intent(in), optional :: pelist(:)                !< PE list
+
+  call mpp_sum(field, length, pelist)
+end subroutine sum_across_PEs_int4_1d
+
+!> Find the sum of field across PEs, and update PEs with the sums.
+subroutine sum_across_PEs_int8_0d(field, pelist)
+  integer(kind=int64), intent(inout) :: field   !< Input field
+  integer, intent(in), optional :: pelist(:)    !< PE list
+
+  call mpp_sum(field, pelist)
+end subroutine sum_across_PEs_int8_0d
+
+!> Find the sum of field across PEs, and update PEs with the sums.
+subroutine sum_across_PEs_int8_1d(field, length, pelist)
+  integer(kind=int64), dimension(:), intent(inout) :: field !< Input field
+  integer, intent(in) :: length                             !< Length of field
+  integer, intent(in), optional :: pelist(:)                !< PE list
+
+  call mpp_sum(field, length, pelist)
+end subroutine sum_across_PEs_int8_1d
+
+!> Find the sum of field across PEs, and update PEs with the sums.
+subroutine sum_across_PEs_int8_2d(field, length, pelist)
+  integer(kind=int64), dimension(:,:), intent(inout) :: field !< Input field
+  integer, intent(in) :: length                               !< Length of field
+  integer, intent(in), optional :: pelist(:)                  !< PE list
+
+  call mpp_sum(field, length, pelist)
+end subroutine sum_across_PEs_int8_2d
+
+!> Find the sum of field across PEs, and update PEs with the sums.
+subroutine sum_across_PEs_real_0d(field, pelist)
+  real, intent(inout) :: field                !< Input field
+  integer, intent(in), optional :: pelist(:)  !< PE list
+
+  call mpp_sum(field, pelist)
+end subroutine sum_across_PEs_real_0d
+
+!> Find the sum of field across PEs, and update PEs with the sums.
+subroutine sum_across_PEs_real_1d(field, length, pelist)
+  real, dimension(:), intent(inout) :: field  !< Input field
+  integer, intent(in) :: length               !< Length of field
+  integer, intent(in), optional :: pelist(:)  !< PE list
+
+  call mpp_sum(field, length, pelist)
+end subroutine sum_across_PEs_real_1d
+
+!> Find the sum of field across PEs, and update PEs with the sums.
+subroutine sum_across_PEs_real_2d(field, length, pelist)
+  real, dimension(:,:), intent(inout) :: field  !< Input field
+  integer, intent(in) :: length                 !< Length of field
+  integer, intent(in), optional :: pelist(:)    !< PE list
+
+  call mpp_sum(field, length, pelist)
+end subroutine sum_across_PEs_real_2d
+
+! max_across_PEs wrappers
+
+!> Find the maximum value of field across PEs, and update PEs with the values.
+subroutine max_across_PEs_int_0d(field, pelist)
+  integer, intent(inout) :: field             !< Input field
+  integer, intent(in), optional :: pelist(:)  !< PE list
+
+  call mpp_max(field, pelist)
+end subroutine max_across_PEs_int_0d
+
+!> Find the maximum value of field across PEs, and update PEs with the values.
+subroutine max_across_PEs_real_0d(field, pelist)
+  real, intent(inout) :: field                !< Input field
+  integer, intent(in), optional :: pelist(:)  !< PE list
+
+  call mpp_max(field, pelist)
+end subroutine max_across_PEs_real_0d
+
+!> Find the maximum value of field across PEs, and update PEs with the values.
+subroutine max_across_PEs_real_1d(field, length, pelist)
+  real, dimension(:), intent(inout) :: field  !< Input field
+  integer, intent(in) :: length               !< Length of field
+  integer, intent(in), optional :: pelist(:)  !< PE list
+
+  call mpp_max(field, length, pelist)
+end subroutine max_across_PEs_real_1d
+
+! min_across_PEs wrappers
+
+!> Find the minimum value of field across PEs, and update PEs with the values.
+subroutine min_across_PEs_int_0d(field, pelist)
+  integer, intent(inout) :: field             !< Input field
+  integer, intent(in), optional :: pelist(:)  !< PE list
+
+  call mpp_min(field, pelist)
+end subroutine min_across_PEs_int_0d
+
+!> Find the minimum value of field across PEs, and update PEs with the values.
+subroutine min_across_PEs_real_0d(field, pelist)
+  real, intent(inout) :: field                !< Input field
+  integer, intent(in), optional :: pelist(:)  !< PE list
+
+  call mpp_min(field, pelist)
+end subroutine min_across_PEs_real_0d
+
+!> Find the minimum value of field across PEs, and update PEs with the values.
+subroutine min_across_PEs_real_1d(field, length, pelist)
+  real, dimension(:), intent(inout) :: field  !< Input field
+  integer, intent(in) :: length               !< Length of field
+  integer, intent(in), optional :: pelist(:)  !< PE list
+
+  call mpp_min(field, length, pelist)
+end subroutine min_across_PEs_real_1d
+
+!> Initialize the model framework, including PE communication over a designated
+!! communicator.  If no communicator ID is provided, then the framework's
+!! default communicator is used.
+subroutine MOM_infra_init(localcomm)
+  integer, intent(in), optional :: localcomm  !< Communicator ID to initialize
+  call fms_init(localcomm)
+end subroutine
 
 !> This subroutine carries out all of the calls required to close out the infrastructure cleanly.
 !! This should only be called in ocean-only runs, as the coupler takes care of this in coupled runs.
