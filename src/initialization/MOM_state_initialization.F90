@@ -1726,11 +1726,11 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
   logical,                 intent(in) :: use_temperature !< If true, T & S are state variables.
   type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic
                                               !! variables.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-                              intent(out)   :: u    !< The zonal velocity that is being
+  real, target, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                              intent(in)   :: u    !< The zonal velocity that is being
                                                     !! initialized [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                              intent(out)   :: v    !< The meridional velocity that is being
+  real, target, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                              intent(in)    :: v    !< The meridional velocity that is being
                                                     !! initialized [L T-1 ~> m s-1]
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters.
   type(sponge_CS),         pointer    :: Layer_CSp  !< A pointer that is set to point to the control
@@ -1762,7 +1762,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
   logical :: sponge_uv ! Apply sponges in u and v, in addition to tracers.
   character(len=40) :: potemp_var, salin_var, u_var, v_var, Idamp_var, Idamp_u_var, Idamp_v_var, eta_var
   character(len=40) :: mdl = "initialize_sponges_file"
-  character(len=200) :: damping_file, uv_damping_file, state_file  ! Strings for filenames
+  character(len=200) :: damping_file, uv_damping_file, state_file, state_uv_file  ! Strings for filenames
   character(len=200) :: filename, inputdir ! Strings for file/path and path.
 
   logical :: use_ALE ! True if ALE is being used, False if in layered mode
@@ -1784,6 +1784,9 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
   call get_param(param_file, mdl, "SPONGE_STATE_FILE", state_file, &
                  "The name of the file with the state to damp toward.", &
                  default=damping_file)
+  call get_param(param_file, mdl, "SPONGE_UV_STATE_FILE", state_uv_file, &
+                 "The name of the file with the state to damp UV toward.", &
+                 default=damping_file)
   call get_param(param_file, mdl, "SPONGE_PTEMP_VAR", potemp_var, &
                  "The name of the potential temperature variable in "//&
                  "SPONGE_STATE_FILE.", default="PTEMP")
@@ -1796,10 +1799,10 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
   if (sponge_uv) then
     call get_param(param_file, mdl, "SPONGE_U_VAR", u_var, &
                  "The name of the zonal velocity variable in "//&
-                 "SPONGE_STATE_FILE.", default="UVEL")
+                 "SPONGE_UV_STATE_FILE.", default="UVEL")
     call get_param(param_file, mdl, "SPONGE_V_VAR", v_var, &
                  "The name of the vertical velocity variable in "//&
-                 "SPONGE_STATE_FILE.", default="VVEL")
+                 "SPONGE_UV_STATE_FILE.", default="VVEL")
   endif
   call get_param(param_file, mdl, "SPONGE_ETA_VAR", eta_var, &
                  "The name of the interface height variable in "//&
@@ -1813,10 +1816,10 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
                    default=damping_file)
     call get_param(param_file, mdl, "SPONGE_IDAMP_U_var", Idamp_u_var, &
                    "The name of the inverse damping rate variable in "//&
-                   "SPONGE_UV_DAMPING_FILE for the velocities.", default="IDAMP")
+                   "SPONGE_UV_DAMPING_FILE for the velocities.", default=Idamp_var)
     call get_param(param_file, mdl, "SPONGE_IDAMP_V_var", Idamp_v_var, &
                    "The name of the inverse damping rate variable in "//&
-                   "SPONGE_UV_DAMPING_FILE for the velocities.", default="IDAMP")
+                   "SPONGE_UV_DAMPING_FILE for the velocities.", default=Idamp_var)
   endif
   call get_param(param_file, mdl, "USE_REGRIDDING", use_ALE, do_not_log = .true.)
   time_space_interp_sponge = .false.
@@ -1855,9 +1858,20 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
       if (.not.file_exists(filename, G%Domain)) &
         call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
 
-      call MOM_read_vector(filename, "Idamp_u","Idamp_v",Idamp_u(:,:),Idamp_v(:,:), G%Domain, scale=US%T_to_s)
+      call MOM_read_vector(filename, Idamp_u_var,Idamp_v_var,Idamp_u(:,:),Idamp_v(:,:), G%Domain, scale=US%T_to_s)
     else
-      call MOM_error(FATAL, "Must provide SPONGE_IDAMP_U_var and SPONGE_IDAMP_V_var")
+       !      call MOM_error(FATAL, "Must provide SPONGE_IDAMP_U_var and SPONGE_IDAMP_V_var")
+       call pass_var(Idamp,G%Domain)
+       do j=G%jsc,G%jec
+         do i=G%iscB,G%iecB
+           Idamp_u(I,j) = 0.5*(Idamp(i,j)+Idamp(i+1,j))
+         enddo
+       enddo
+       do j=G%jscB,G%jecB
+         do i=G%isc,G%iec
+           Idamp_v(i,J) = 0.5*(Idamp(i,j)+Idamp(i,j+1))
+         enddo
+       enddo
     endif
   endif
 
@@ -1918,27 +1932,13 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
       call set_up_sponge_field(tmp, tv%S, G, GV, nz, Layer_CSp)
     endif
 
-    do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-      if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_Z)) &
-        eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_Z
-    enddo ; enddo ; enddo
-    do k=1,nz; do j=js,je ; do i=is,ie
-      h(i,j,k) = GV%Z_to_H*(eta(i,j,k)-eta(i,j,k+1))
-    enddo ; enddo ; enddo
-    if (separate_idamp_for_uv()) then
-      call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp, h, nz_data, Idamp_u, Idamp_v)
-    else
-      call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp, h, nz_data)
-    endif
-    deallocate(eta)
-    deallocate(h)
-  else
+!  else
     ! Initialize sponges without supplying sponge grid
-    if (separate_idamp_for_uv()) then
-      call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp, Idamp_u, Idamp_v)
-    else
-      call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp)
-    endif
+!    if (sponge_uv) then
+!      call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp, Idamp_u, Idamp_v)
+!    else
+!      call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp)
+!    endif
   endif
 
 
@@ -1960,8 +1960,12 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
       enddo ; enddo ; enddo
       do k=1,nz ; do j=js,je ; do i=is,ie
         h(i,j,k) = GV%Z_to_H*(eta(i,j,k)-eta(i,j,k+1))
-      enddo ; enddo ; enddo
-      call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp, h, nz_data)
+      enddo; enddo ; enddo
+      if (sponge_uv) then
+        call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp, h, nz_data, Idamp_u, Idamp_v)
+      else
+        call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp, h, nz_data)
+      endif
       deallocate(eta)
       deallocate(h)
       if (use_temperature) then
@@ -1974,7 +1978,11 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
       endif
     else
       ! Initialize sponges without supplying sponge grid
-      call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp)
+      if (sponge_uv) then
+        call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp, Idamp_u, Idamp_v)
+      else
+        call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp)
+      endif
       ! The remaining calls to set_up_sponge_field can be in any order.
       if ( use_temperature) then
         call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, US, tv%T, ALE_CSp)
@@ -1984,27 +1992,37 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
 
 
 
-  endif
+ endif
 
   ! The remaining calls to set_up_sponge_field can be in any order.
-  if ( use_temperature .and. .not. time_space_interp_sponge) then
-    call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain)
-    call set_up_sponge_field(tmp, tv%T, G, GV, nz, Layer_CSp)
-    call MOM_read_data(filename, salin_var, tmp(:,:,:), G%Domain)
-    call set_up_sponge_field(tmp, tv%S, G, GV, nz, Layer_CSp)
-  elseif (use_temperature) then
-    call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, US, tv%T, ALE_CSp)
-    call set_up_ALE_sponge_field(filename, salin_var, Time, G, GV, US, tv%S, ALE_CSp)
-    if (sponge_uv) &
-      call set_up_ALE_sponge_vel_field(filename, u_var, filename, v_var, Time, G, GV, US, ALE_CSp, u, v)
-  endif
+!  if ( use_temperature .and. .not. time_space_interp_sponge) then
+!    call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain)
+!    call set_up_sponge_field(tmp, tv%T, G, GV, nz, Layer_CSp)
+!    call MOM_read_data(filename, salin_var, tmp(:,:,:), G%Domain)
+!    call set_up_sponge_field(tmp, tv%S, G, GV, nz, Layer_CSp)
+!  elseif (use_temperature) then
+!    call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, US, tv%T, ALE_CSp)
+ !    call set_up_ALE_sponge_field(filename, salin_var, Time, G, GV, US, tv%S, ALE_CSp)
+
+ if (sponge_uv .and. .not. use_ALE) call MOM_error(FATAL,'initialize_sponges_file: '// &
+                       'UV damping to target values only available in ALE mode')
+
+ if (sponge_uv .and. use_ALE)  then
+
+   filename = trim(inputdir)//trim(state_uv_file)
+   call log_param(param_file, mdl, "INPUTDIR/SPONGE_STATE_UV_FILE", filename)
+   if (.not.file_exists(filename, G%Domain)) &
+     call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
+
+   call set_up_ALE_sponge_vel_field(filename, u_var, filename, v_var, Time, G, GV, US, ALE_CSp, u, v)
+ endif
 
   contains
 
   ! returns true if a separate idamp is provided for u and/or v
   logical function separate_idamp_for_uv()
-    separate_idamp_for_uv = (damping_file/=uv_damping_file .or. &
-                              Idamp_var/=Idamp_u_var .or. Idamp_var/=Idamp_v_var)
+    separate_idamp_for_uv = (lowercase(damping_file)/=lowercase(uv_damping_file) .or. &
+                              lowercase(Idamp_var)/=lowercase(Idamp_u_var) .or. lowercase(Idamp_var)/=lowercase(Idamp_v_var))
   end function separate_idamp_for_uv
 
 end subroutine initialize_sponges_file

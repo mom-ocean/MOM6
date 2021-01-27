@@ -287,7 +287,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
     allocate(Iresttime_v(G%isd:G%ied,G%jsdB:G%jedB)) ; Iresttime_v(:,:) = 0.0
 
     ! u points
-    CS%num_col_u = 0 ; !CS%fldno_u = 0
+    CS%num_col_u = 0 ;
     if (present(Iresttime_u_in)) then
        Iresttime_u(:,:) = Iresttime_u_in(:,:)
     else
@@ -331,7 +331,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
                 "The total number of columns where sponges are applied at u points.", like_default=.true.)
 
     ! v points
-    CS%num_col_v = 0 ; !CS%fldno_v = 0
+    CS%num_col_v = 0 ;
     if (present(Iresttime_v_in)) then
       Iresttime_v(:,:) = Iresttime_v_in(:,:)
     else
@@ -543,7 +543,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
         Iresttime_u(I,j) = 0.5 * (Iresttime(i,j) + Iresttime(i+1,j))
       enddo ; enddo
     endif
-    CS%num_col_u = 0 ; !CS%fldno_u = 0
+    CS%num_col_u = 0 ;
     do j=CS%jsc,CS%jec; do I=CS%iscB,CS%iecB
       if ((Iresttime_u(I,j)>0.0) .and. (G%mask2dCu(I,j)>0)) &
         CS%num_col_u = CS%num_col_u + 1
@@ -575,7 +575,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
         Iresttime_v(i,J) = 0.5 * (Iresttime(i,j) + Iresttime(i,j+1))
       enddo ; enddo
     endif
-    CS%num_col_v = 0 ; !CS%fldno_v = 0
+    CS%num_col_v = 0 ;
     do J=CS%jscB,CS%jecB; do i=CS%isc,CS%iec
       if ((Iresttime_v(i,J)>0.0) .and. (G%mask2dCv(i,J)>0)) &
         CS%num_col_v = CS%num_col_v + 1
@@ -621,12 +621,12 @@ subroutine init_ALE_sponge_diags(Time, G, diag, CS)
   CS%id_sp_tendency(2) = -1
   CS%id_sp_tendency(2) = register_diag_field('ocean_model', 'sp_tendency_salt', diag%axesTL, Time, &
        'Time tendency due to salinity restoring', 'g kg-1 s-1')
-!  CS%id_sp_u_tendency = -1
-!  CS%id_sp_u_tendency = register_diag_field('ocean_model', 'sp_tendency_u', diag%axesCuL, Time, &
-!       'Zonal acceleration due to sponges', 'm s-2')
-!  CS%id_sp_v_tendency = -1
-!  CS%id_sp_v_tendency = register_diag_field('ocean_model', 'sp_tendency_v', diag%axesCvL, Time, &
-!       'Meridional acceleration due to sponges', 'm s-2')
+  CS%id_sp_u_tendency = -1
+  CS%id_sp_u_tendency = register_diag_field('ocean_model', 'sp_tendency_u', diag%axesCuL, Time, &
+       'Zonal acceleration due to sponges', 'm s-2')
+  CS%id_sp_v_tendency = -1
+  CS%id_sp_v_tendency = register_diag_field('ocean_model', 'sp_tendency_v', diag%axesCvL, Time, &
+       'Meridional acceleration due to sponges', 'm s-2')
 
 end subroutine init_ALE_sponge_diags
 
@@ -648,7 +648,6 @@ subroutine set_up_ALE_sponge_field_fixed(sp_val, G, GV, f_ptr, CS)
   if (.not.associated(CS)) return
 
   CS%fldno = CS%fldno + 1
-
   if (CS%fldno > MAX_FIELDS_) then
     write(mesg,'("Increase MAX_FIELDS_ to at least ",I3," in MOM_memory.h or decrease &
            &the number of fields to be damped in the call to &
@@ -786,8 +785,8 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u, fieldname_u, filename
   type(verticalGrid_type), intent(in) :: GV    !< ocean vertical grid structure
   type(unit_scale_type), intent(in)    :: US     !< A dimensional unit scaling type
   type(ALE_sponge_CS), pointer    :: CS          !< Sponge structure (in/out).
-  real, target, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u_ptr !< u pointer to the field to be damped (in).
-  real, target, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: v_ptr !< v pointer to the field to be damped (in).
+  real, target, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in) :: u_ptr !< u pointer to the field to be damped (in).
+  real, target, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in) :: v_ptr !< v pointer to the field to be damped (in).
   ! Local variables
   real, allocatable, dimension(:,:,:) :: u_val !< U field to be used in the sponge.
   real, allocatable, dimension(:,:,:) :: v_val !< V field to be used in the sponge.
@@ -1071,9 +1070,9 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
 
     nz_data = CS%Ref_val_u%nz_data
     allocate(tmp_val2(nz_data))
-!    if (CS%id_sp_u_tendency > 0) then
-!      allocate(tmp_u(G%isdB:G%iedB,G%jsd:G%jed,nz));tmp_u(:,:,:)=0.0
-!    endif
+    if (CS%id_sp_u_tendency > 0) then
+      allocate(tmp_u(G%isdB:G%iedB,G%jsd:G%jed,nz));tmp_u(:,:,:)=0.0
+    endif
     ! u points
     do c=1,CS%num_col_u
       I = CS%col_i_u(c) ; j = CS%col_j_u(c)
@@ -1090,20 +1089,20 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         call remapping_core_h(CS%remap_cs, nz_data, CS%Ref_hu%p(1:nz_data,c), tmp_val2, &
                  CS%nz, h_col, tmp_val1, h_neglect, h_neglect_edge)
      endif
-!     if (CS%id_sp_u_tendency > 0) tmp_u(i,j,1:nz) = CS%var_u%p(i,j,1:nz)
+     if (CS%id_sp_u_tendency > 0) tmp_u(i,j,1:nz) = CS%var_u%p(i,j,1:nz)
       !Backward Euler method
      CS%var_u%p(i,j,1:nz) = I1pdamp * (CS%var_u%p(i,j,1:nz) + tmp_val1 * damp)
-!     if (CS%id_sp_u_tendency > 0) tmp_u(i,j,1:nz) = Idt*(CS%var_u%p(i,j,1:nz) - CS%var_u%p(i,j,1:nz))
+     if (CS%id_sp_u_tendency > 0) tmp_u(i,j,1:nz) = Idt*(CS%var_u%p(i,j,1:nz) - tmp_u(i,j,1:nz))
     enddo
     deallocate(tmp_val2)
-!    if (CS%id_sp_u_tendency > 0) then
-!      call post_data(CS%id_sp_u_tendency, tmp_u, CS%diag)
-!      deallocate(tmp_u)
-!    endif
+    if (CS%id_sp_u_tendency > 0) then
+      call post_data(CS%id_sp_u_tendency, tmp_u, CS%diag)
+      deallocate(tmp_u)
+    endif
     ! v points
-!    if (CS%id_sp_v_tendency > 0) then
-!      allocate(tmp_v(G%isd:G%ied,G%jsdB:G%jedB,nz));tmp_v(:,:,:)=0.0
-!    endif
+    if (CS%id_sp_v_tendency > 0) then
+      allocate(tmp_v(G%isd:G%ied,G%jsdB:G%jedB,nz));tmp_v(:,:,:)=0.0
+    endif
     nz_data = CS%Ref_val_v%nz_data
     allocate(tmp_val2(nz_data))
 
@@ -1123,15 +1122,15 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         call remapping_core_h(CS%remap_cs, nz_data, CS%Ref_hv%p(1:nz_data,c), tmp_val2, &
                  CS%nz, h_col, tmp_val1, h_neglect, h_neglect_edge)
       endif
-!      if (CS%id_sp_v_tendency > 0) tmp_v(i,j,1:nz) = CS%var_v%p(i,j,1:nz)
+      if (CS%id_sp_v_tendency > 0) tmp_v(i,j,1:nz) = CS%var_v%p(i,j,1:nz)
       !Backward Euler method
       CS%var_v%p(i,j,1:nz) = I1pdamp * (CS%var_v%p(i,j,1:nz) + tmp_val1 * damp)
-!      if (CS%id_sp_v_tendency > 0) tmp_v(i,j,1:nz) = Idt*(CS%var_v%p(i,j,1:nz) - CS%var_v%p(i,j,1:nz))
+      if (CS%id_sp_v_tendency > 0) tmp_v(i,j,1:nz) = Idt*(CS%var_v%p(i,j,1:nz) - tmp_v(i,j,1:nz))
     enddo
-!    if (CS%id_sp_v_tendency > 0) then
-!      call post_data(CS%id_sp_v_tendency, tmp_v, CS%diag)
-!      deallocate(tmp_v)
-!    endif
+    if (CS%id_sp_v_tendency > 0) then
+      call post_data(CS%id_sp_v_tendency, tmp_v, CS%diag)
+      deallocate(tmp_v)
+    endif
     deallocate(tmp_val2)
   endif
 
