@@ -190,7 +190,7 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
   type(param_file_type),            intent(in)    :: param_file !< Parameter file structure
   type(unit_scale_type),  optional, intent(in)    :: US !< A dimensional unit scaling type
 
-  ! Local variablesNF
+  ! Local variables
   real :: m_to_Z  ! A dimensional rescaling factor.
   character(len=200) :: topo_edits_file, inputdir ! Strings for file/path
   character(len=40)  :: mdl = "apply_topography_edits_from_file" ! This subroutine's name.
