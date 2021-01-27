@@ -9,13 +9,12 @@ use MOM_coms,                 only : sum_across_PEs, Set_PElist, Get_PElist, PE_
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator,        only : diag_ctrl, time_type
 use MOM_domains,              only : pass_var, pass_vector
-use MOM_domains,              only : To_All, SCALAR_PAIR, CGRID_NE, CORNER
+use MOM_domains,              only : To_All, EAST_FACE, NORTH_FACE, SCALAR_PAIR, CGRID_NE, CORNER
 use MOM_error_handler,        only : MOM_mesg, MOM_error, FATAL, WARNING, NOTE, is_root_pe
 use MOM_file_parser,          only : get_param, log_version, param_file_type, log_param
 use MOM_grid,                 only : ocean_grid_type, hor_index_type
 use MOM_dyn_horgrid,          only : dyn_horgrid_type
-use MOM_io,                   only : EAST_FACE, NORTH_FACE
-use MOM_io,                   only : slasher, read_data, field_size, SINGLE_FILE
+use MOM_io,                   only : slasher, field_size, SINGLE_FILE
 use MOM_io,                   only : vardesc, query_vardesc, var_desc
 use MOM_restart,              only : register_restart_field, register_restart_pair
 use MOM_restart,              only : query_initialized, MOM_restart_CS

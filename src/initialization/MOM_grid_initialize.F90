@@ -12,7 +12,7 @@ use MOM_dyn_horgrid,   only : dyn_horgrid_type, set_derived_dyn_horgrid
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
-use MOM_io,            only : MOM_read_data, read_data, slasher, file_exists, stdout
+use MOM_io,            only : MOM_read_data, slasher, file_exists, stdout
 use MOM_io,            only : CORNER, NORTH_FACE, EAST_FACE
 use MOM_unit_scaling,  only : unit_scale_type
 
@@ -333,7 +333,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   start(2) = 2 ; nread(1) = ni+1 ; nread(2) = 2
   allocate( tmpGlbl(ni+1,2) )
   if (is_root_PE()) &
-    call read_data(filename, "x", tmpGlbl, start, nread, no_domain=.TRUE.)
+    call MOM_read_data(filename, "x", tmpGlbl, start, nread, no_domain=.TRUE.)
   call broadcast(tmpGlbl, 2*(ni+1), root_PE())
 
   ! I don't know why the second axis is 1 or 2 here. -RWH
@@ -351,7 +351,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   start(:) = 1 ; nread(:) = 1
   start(1) = int(ni/4)+1 ; nread(2) = nj+1
   if (is_root_PE()) &
-    call read_data(filename, "y", tmpGlbl, start, nread, no_domain=.TRUE.)
+    call MOM_read_data(filename, "y", tmpGlbl, start, nread, no_domain=.TRUE.)
   call broadcast(tmpGlbl, nj+1, root_PE())
 
   do j=G%jsg,G%jeg
