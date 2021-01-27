@@ -11,7 +11,8 @@ use MOM_ensemble_manager, only : get_ensemble_id
 use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING
 use MOM_file_parser,      only : log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
-use MOM_io_infra,         only : MOM_read_data, read_data=>MOM_read_data, MOM_read_vector, read_field_chksum
+use MOM_io_infra,         only : MOM_read_data, MOM_read_vector, read_field_chksum
+use MOM_io_infra,         only : read_data=>MOM_read_data ! read_data will be removed soon.
 use MOM_io_infra,         only : file_exists, get_file_info, get_file_fields, get_field_atts
 use MOM_io_infra,         only : open_file, close_file, get_field_size, fieldtype, field_exists
 use MOM_io_infra,         only : flush_file, get_filename_suffix
@@ -26,8 +27,7 @@ use MOM_verticalGrid,     only : verticalGrid_type
 
 use iso_fortran_env,      only : stdout_iso=>output_unit, stderr_iso=>error_unit
 use netcdf,               only : NF90_open, NF90_inquire, NF90_inq_varids, NF90_inquire_variable
-use netcdf,               only : NF90_Inquire_Dimension, NF90_max_name, NF90_max_var_dims
-use netcdf,               only : NF90_STRERROR, NF90_NOWRITE, NF90_NOERR
+use netcdf,               only : NF90_Inquire_Dimension, NF90_STRERROR, NF90_NOWRITE, NF90_NOERR
 
 implicit none ; private
 
@@ -35,18 +35,23 @@ implicit none ; private
 public :: create_file, reopen_file, num_timelevels, cmor_long_std, ensembler, MOM_io_init
 public :: MOM_write_field, var_desc, modify_vardesc, query_vardesc
 public :: open_namelist_file, check_namelist_error, check_nml_error
-! The following are simple pass throughs of routines from MOM_io_infra or other modules
-public :: close_file, field_exists, field_size, fieldtype, get_filename_appendix
-public :: file_exists, flush_file, get_file_info, get_file_fields, get_field_atts
-public :: get_file_times, open_file, get_axis_data
+! The following are simple pass throughs of routines from MOM_io_infra or other modules.
+public :: file_exists, open_file, close_file, flush_file, get_filename_appendix
+public :: get_file_info, field_exists, get_file_fields, get_file_times
+public :: fieldtype, field_size, get_field_atts
+public :: axistype, get_axis_data
 public :: MOM_read_data, MOM_read_vector, read_field_chksum
 public :: slasher, write_field, write_version_number
 public :: io_infra_init, io_infra_end
-! This API is here just to support non-FMS couplers, and should not persist.
+! This API is here just to support potential use by non-FMS drivers, and should not persist.
 public :: read_data
-! These are encoding constants.
-public :: APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
-public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
+!> These encoding constants are used to indicate the file format
+public :: ASCII_FILE, NETCDF_FILE
+!> These encoding constants are used to indicate whether the file is domain decomposed
+public :: MULTIPLE, SINGLE_FILE
+!> These encoding constants are used to indicate the access mode for a file
+public :: APPEND_FILE, OVERWRITE_FILE, READONLY_FILE, WRITEONLY_FILE
+!> These encoding constants are used to indicate the discretization position of a variable
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
 
 !> Write a registered field to an output file, potentially with rotation
@@ -435,16 +440,14 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
   integer :: n_time                           !< number of time levels varname has in filename
 
   logical :: found
-  character(len=200) :: msg
-  character(len=nf90_max_name) :: name
+  character(len=256) :: msg, name
   integer :: ncid, nvars, status, varid, ndims, n
-  integer, allocatable :: varids(:)
-  integer, dimension(nf90_max_var_dims) :: dimids
+  integer, allocatable :: varids(:), dimids(:)
 
   n_time = -1
   found = .false.
 
-  ! To do the same via MOM_io_infra calls, do the following:
+  ! To do almost the same via MOM_io_infra calls, do the following:
   !   found = field_exists(filename, varname)
   !   call open_file(ncid, filename, action=READONLY_FILE, form=NETCDF_FILE, threading=MULTIPLE)
   !   call get_file_info(ncid, ntime=n_time)
@@ -491,9 +494,8 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
 
     if (trim(lowercase(name)) == trim(lowercase(varname))) then
       if (found) then
-        call MOM_error(WARNING,"num_timelevels: "//&
-          " Two variables match the case-insensitive name "//trim(varname)//&
-          " in file "//trim(filename)//" - "//trim(NF90_STRERROR(status)))
+        call MOM_error(WARNING, "num_timelevels: Two variables match the case-insensitive name "//&
+                trim(varname)//" in file "//trim(filename))
       else
         varid = varids(n) ; found = .true.
       endif
@@ -518,19 +520,19 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
   if (present(min_dims)) then
     if (ndims < min_dims-1) then
       write(msg, '(I3)') min_dims
-      call MOM_error(WARNING, "num_timelevels: variable "//trim(varname)//&
-        " in file "//trim(filename)//" has fewer than min_dims = "//trim(msg)//&
-        " dimensions.")
+      call MOM_error(WARNING, "num_timelevels: variable "//trim(varname)//" in file "//&
+        trim(filename)//" has fewer than min_dims = "//trim(msg)//" dimensions.")
     elseif (ndims == min_dims - 1) then
       n_time = 0 ; return
     endif
   endif
 
-  status = nf90_inquire_variable(ncid, varid, dimids = dimids(1:ndims))
+  allocate(dimids(ndims))
+  status = nf90_inquire_variable(ncid, varid, dimids=dimids(1:ndims))
   if (status /= NF90_NOERR) then
     call MOM_error(WARNING,"num_timelevels: "//trim(NF90_STRERROR(status))//&
       " Getting last dimension ID for "//trim(varname)//" in "//trim(filename))
-    return
+    deallocate(dimids) ; return
   endif
 
   status = nf90_Inquire_Dimension(ncid, dimids(ndims), len=n_time)
@@ -538,8 +540,9 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
       trim(NF90_STRERROR(status))//" Getting number of time levels of "//&
       trim(varname)//" in "//trim(filename))
 
-end function num_timelevels
+  deallocate(dimids)
 
+end function num_timelevels
 
 !> Returns a vardesc type whose elements have been filled with the provided
 !! fields.  The argument name is required, while the others are optional and

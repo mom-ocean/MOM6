@@ -17,7 +17,8 @@ use MOM_io, only : slasher, vardesc, MOM_write_field, var_desc
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
 
-use netcdf
+use netcdf, only : NF90_open, NF90_inq_varid, NF90_get_var, NF90_close
+use netcdf, only : NF90_inq_dimid, NF90_inquire_dimension, NF90_NOWRITE, NF90_NOERR
 
 implicit none ; private
 
@@ -189,7 +190,7 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
   type(param_file_type),            intent(in)    :: param_file !< Parameter file structure
   type(unit_scale_type),  optional, intent(in)    :: US !< A dimensional unit scaling type
 
-  ! Local variables
+  ! Local variablesNF
   real :: m_to_Z  ! A dimensional rescaling factor.
   character(len=200) :: topo_edits_file, inputdir ! Strings for file/path
   character(len=40)  :: mdl = "apply_topography_edits_from_file" ! This subroutine's name.
