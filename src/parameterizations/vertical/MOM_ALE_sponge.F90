@@ -491,8 +491,10 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
                  "forms of the same expressions.", default=default_2018_answers)
   call get_param(param_file, mdl, "HOR_REGRID_2018_ANSWERS", CS%hor_regrid_answers_2018, &
                  "If true, use the order of arithmetic for horizonal regridding that recovers "//&
-                 "the answers from the end of 2018.  Otherwise, use rotationally symmetric "//&
-                 "forms of the same expressions.", default=default_2018_answers)
+                 "the answers from the end of 2018 and retain a bug in the 3-dimensional mask "//&
+                 "returned in certain cases.  Otherwise, use rotationally symmetric "//&
+                 "forms of the same expressions and initialize the mask properly.", &
+                 default=default_2018_answers)
   call get_param(param_file, mdl, "SPONGE_DATA_ONGRID", CS%spongeDataOngrid, &
                  "When defined, the incoming sponge data are "//&
                  "assumed to be on the model grid " , &
