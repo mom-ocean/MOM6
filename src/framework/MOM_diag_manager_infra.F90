@@ -20,6 +20,7 @@ use MOM_domain_infra, only : MOM_domain_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 implicit none ; private
 
+!> transmit data for diagnostic output
 interface send_data
   module procedure send_data_0d
   module procedure send_data_1d
@@ -31,6 +32,7 @@ interface send_data
 #endif
 end interface send_data
 
+!> Add an attribute to a diagnostic field
 interface diag_field_add_attribute
   module procedure diag_field_add_attribute_scalar_r
   module procedure diag_field_add_attribute_scalar_i
