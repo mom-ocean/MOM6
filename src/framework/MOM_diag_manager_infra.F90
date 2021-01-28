@@ -164,7 +164,8 @@ logical function send_data_1d(diag_field_id, field, time, is_in, mask, rmask, ie
     type (time_type), intent(in), optional :: time  !< The time for the current record.
     logical, intent(in), dimension(:), optional :: mask !< An optional rank 1 logical mask.
     real, intent(in), dimension(:), optional :: rmask !< An optional rank 1 mask array
-    integer, intent(in), optional :: is_in, ie_in !< An optional range for subsetting the data being recorded.
+    integer, intent(in), optional :: is_in !< An optional starting index for subsetting the data being recorded.
+    integer, intent(in), optional :: ie_in !< An optional end index for subsetting the data being recorded.
     real, intent(in), optional :: weight !< An optional scalar weight factor to apply to the current record
                                          !! in the case where data a data reduction in time is being performed.
     character(len=*), intent(out), optional :: err_msg !< A log indicating the status of the post upon
@@ -183,8 +184,10 @@ logical function send_data_2d(diag_field_id, field, time, is_in, js_in, mask, rm
     type (time_type), intent(in), optional :: time  !< The time for the current record.
     logical, intent(in), dimension(:,:), optional :: mask !< An optional rank 1 logical mask.
     real, intent(in), dimension(:,:), optional :: rmask !< An optional rank 1 mask array
-    integer, intent(in), optional :: is_in, ie_in !< An optional range for subsetting the data being recorded.
-    integer, intent(in), optional :: js_in, je_in !< An optional range for subsetting the data being recorded.
+    integer, intent(in), optional :: is_in !< An optional i starting index for subsetting the data being recorded.
+    integer, intent(in), optional :: ie_in !< An optional i end index for subsetting the data being recorded.
+    integer, intent(in), optional :: js_in !< An optional j starting index for subsetting the data being recorded.
+    integer, intent(in), optional :: je_in !< An optional j end index for subsetting the data being recorded.
     real, intent(in), optional :: weight !< An optional scalar weight factor to apply to the current record
                                          !! in the case where data a data reduction in time is being performed.
     character(len=*), intent(out), optional :: err_msg !< A log indicating the status of the post upon
@@ -205,8 +208,10 @@ logical function send_data_2d_r8(diag_field_id, field, time, is_in, js_in, mask,
     type (time_type), intent(in), optional :: time  !< The time for the current record.
     logical, intent(in), dimension(:,:), optional :: mask !< An optional rank 1 logical mask.
     real, intent(in), dimension(:,:), optional :: rmask !< An optional rank 1 mask array
-    integer, intent(in), optional :: is_in, ie_in !< An optional range for subsetting the data being recorded.
-    integer, intent(in), optional :: js_in, je_in !< An optional range for subsetting the data being recorded.
+    integer, intent(in), optional :: is_in !< An optional i starting index for subsetting the data being recorded.
+    integer, intent(in), optional :: ie_in !< An optional i end index for subsetting the data being recorded.
+    integer, intent(in), optional :: js_in !< An optional j starting index for subsetting the data being recorded.
+    integer, intent(in), optional :: je_in !< An optional j end index for subsetting the data being recorded.
     real, intent(in), optional :: weight !< An optional scalar weight factor to apply to the current record
                                          !! in the case where data a data reduction in time is being performed.
     character(len=*), intent(out), optional :: err_msg !< A log indicating the status of the post upon
@@ -227,9 +232,12 @@ logical function send_data_3d(diag_field_id, field, time, is_in, js_in, ks_in, m
     type (time_type), intent(in), optional :: time  !< The time for the current record.
     logical, intent(in), dimension(:,:,:), optional :: mask !< An optional rank 1 logical mask.
     real, intent(in), dimension(:,:,:), optional :: rmask !< An optional rank 1 mask array
-    integer, intent(in), optional :: is_in, ie_in !< An optional range for subsetting the data being recorded.
-    integer, intent(in), optional :: js_in, je_in !< An optional range for subsetting the data being recorded.
-    integer, intent(in), optional :: ks_in, ke_in !< An optional range for subsetting the data being recorded.
+    integer, intent(in), optional :: is_in !< An optional i starting index for subsetting the data being recorded.
+    integer, intent(in), optional :: ie_in !< An optional i end index for subsetting the data being recorded.
+    integer, intent(in), optional :: js_in !< An optional j starting index for subsetting the data being recorded.
+    integer, intent(in), optional :: je_in !< An optional j end index for subsetting the data being recorded.
+    integer, intent(in), optional :: ks_in !< An optional k starting index for subsetting the data being recorded.
+    integer, intent(in), optional :: ke_in !< An optional k end index for subsetting the data being recorded.
     real, intent(in), optional :: weight !< An optional scalar weight factor to apply to the current record
                                          !! in the case where data a data reduction in time is being performed.
     character(len=*), intent(out), optional :: err_msg !< A log indicating the status of the post upon
@@ -251,9 +259,12 @@ logical function send_data_3d_r8(diag_field_id, field, time, is_in, js_in, ks_in
     type (time_type), intent(in), optional :: time  !< The time for the current record.
     logical, intent(in), dimension(:,:,:), optional :: mask !< An optional rank 1 logical mask.
     real, intent(in), dimension(:,:,:), optional :: rmask !< An optional rank 1 mask array
-    integer, intent(in), optional :: is_in, ie_in !< An optional range for subsetting the data being recorded.
-    integer, intent(in), optional :: js_in, je_in !< An optional range for subsetting the data being recorded.
-    integer, intent(in), optional :: ks_in, ke_in !< An optional range for subsetting the data being recorded.
+    integer, intent(in), optional :: is_in !< An optional i starting index for subsetting the data being recorded.
+    integer, intent(in), optional :: ie_in !< An optional i end index for subsetting the data being recorded.
+    integer, intent(in), optional :: js_in !< An optional j starting index for subsetting the data being recorded.
+    integer, intent(in), optional :: je_in !< An optional j end index for subsetting the data being recorded.
+    integer, intent(in), optional :: ks_in !< An optional k starting index for subsetting the data being recorded.
+    integer, intent(in), optional :: ke_in !< An optional k end index for subsetting the data being recorded.
     real, intent(in), optional :: weight !< An optional scalar weight factor to apply to the current record
                                          !! in the case where data a data reduction in time is being performed.
     character(len=*), intent(out), optional :: err_msg !< A log indicating the status of the post upon
