@@ -6,7 +6,7 @@ module MOM_regridding
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : param_file_type, get_param, log_param
 use MOM_io,            only : file_exists, field_exists, field_size, MOM_read_data
-use MOM_io,            only : slasher
+use MOM_io,            only : verify_variable_units, slasher
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
@@ -29,9 +29,6 @@ use coord_rho,    only : old_inflate_layers_1d
 use coord_hycom,  only : init_coord_hycom, hycom_CS, set_hycom_params, build_hycom1_column, end_coord_hycom
 use coord_slight, only : init_coord_slight, slight_CS, set_slight_params, build_slight_column, end_coord_slight
 use coord_adapt,  only : init_coord_adapt, adapt_CS, set_adapt_params, build_adapt_column, end_coord_adapt
-
-! Direct netcdf calls are used by check_grid_def()
-use netcdf, only : NF90_open, NF90_inq_varid, NF90_get_att, NF90_NOERR, NF90_NOWRITE
 
 implicit none ; private
 
@@ -371,7 +368,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     endif
     if (index(trim(varName),'interfaces=')==1) then
       varName=trim(varName(12:))
-      call check_grid_def(filename, varName, expected_units, message, ierr)
+      call verify_variable_units(filename, varName, expected_units, message, ierr)
       if (ierr) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "//&
                   "Unsupported format in grid definition '"//trim(filename)//"'. Error message "//trim(message))
       call field_size(trim(fileName), trim(varName), nzf)
@@ -734,61 +731,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   if (allocated(dz)) deallocate(dz)
 end subroutine initialize_regridding
 
-!> Do some basic checks on the vertical grid definition file, variable
-subroutine check_grid_def(filename, varname, expected_units, msg, ierr)
-  character(len=*), intent(in)    :: filename !< File name
-  character(len=*), intent(in)    :: varname !< Variable name
-  character(len=*), intent(in)    :: expected_units !< Expected units of variable
-  character(len=*), intent(inout) :: msg !< Message to use for errors
-  logical,          intent(out)   :: ierr !< True if an error occurs
-  ! Local variables
-  character (len=200) :: units, long_name
-  integer :: ncid, status, intid, vid
-  integer :: i
 
-  ierr = .false.
-  status = NF90_OPEN(trim(filename), NF90_NOWRITE, ncid)
-  if (status /= NF90_NOERR) then
-    ierr = .true.
-    msg = 'File not found: '//trim(filename)
-    return
-  endif
-
-  status = NF90_INQ_VARID(ncid, trim(varname), vid)
-  if (status /= NF90_NOERR) then
-    ierr = .true.
-    msg = 'Var not found: '//trim(varname)
-    return
-  endif
-
-  status = NF90_GET_ATT(ncid, vid, "units", units)
-  if (status /= NF90_NOERR) then
-    ierr = .true.
-    msg = 'Attribute not found: units'
-    return
-  endif
-  ! NF90_GET_ATT can return attributes with null characters, which TRIM will not truncate.
-  ! This loop replaces any null characters with a space so that the following check between
-  ! the read units and the expected units will pass
-  do i=1,LEN_TRIM(units)
-    if (units(i:i) == CHAR(0)) units(i:i) = " "
-  enddo
-
-  if (trim(units) /= trim(expected_units)) then
-    if (trim(expected_units) == "meters") then
-      if (trim(units) /= "m") then
-        ierr = .true.
-      endif
-    else
-      ierr = .true.
-    endif
-  endif
-
-  if (ierr) then
-    msg = 'Units incorrect: '//trim(units)//' /= '//trim(expected_units)
-  endif
-
-end subroutine check_grid_def
 
 !> Deallocation of regridding memory
 subroutine end_regridding(CS)

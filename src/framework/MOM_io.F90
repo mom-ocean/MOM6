@@ -26,15 +26,17 @@ use MOM_string_functions, only : lowercase, slasher
 use MOM_verticalGrid,     only : verticalGrid_type
 
 use iso_fortran_env,      only : stdout_iso=>output_unit, stderr_iso=>error_unit
-use netcdf,               only : NF90_open, NF90_inquire, NF90_inq_varids, NF90_inquire_variable
-use netcdf,               only : NF90_Inquire_Dimension, NF90_STRERROR, NF90_NOWRITE, NF90_NOERR
+use netcdf,               only : NF90_open, NF90_inq_varid, NF90_inq_varids, NF90_inquire, NF90_close
+use netcdf,               only : NF90_inquire_variable, NF90_get_att
+use netcdf,               only : NF90_Inquire_dimension, NF90_STRERROR, NF90_NOWRITE, NF90_NOERR
 
 implicit none ; private
 
 ! These interfaces are actually implemented in this file.
-public :: create_file, reopen_file, num_timelevels, cmor_long_std, ensembler, MOM_io_init
+public :: create_file, reopen_file, cmor_long_std, ensembler, MOM_io_init
 public :: MOM_write_field, var_desc, modify_vardesc, query_vardesc
 public :: open_namelist_file, check_namelist_error, check_nml_error
+public :: get_var_sizes, verify_variable_units, num_timelevels, get_varid
 ! The following are simple pass throughs of routines from MOM_io_infra or other modules.
 public :: file_exists, open_file, close_file, flush_file, get_filename_appendix
 public :: get_file_info, field_exists, get_file_fields, get_file_times
@@ -429,7 +431,7 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
 end subroutine reopen_file
 
 
-!> This function determines how many time levels a variable has.
+!> This function determines how many time levels a variable has in a file.
 function num_timelevels(filename, varname, min_dims) result(n_time)
   character(len=*),  intent(in) :: filename   !< name of the file to read
   character(len=*),  intent(in) :: varname    !< variable whose number of time levels
@@ -439,110 +441,218 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
                                               !! dimension than this, then 0 is returned.
   integer :: n_time                           !< number of time levels varname has in filename
 
-  logical :: found
-  character(len=256) :: msg, name
-  integer :: ncid, nvars, status, varid, ndims, n
-  integer, allocatable :: varids(:), dimids(:)
+  character(len=256) :: msg
+  integer :: ncid, status, varid, ndims
+  integer :: sizes(8)
 
   n_time = -1
-  found = .false.
 
-  ! To do almost the same via MOM_io_infra calls, do the following:
+  ! To do almost the same via MOM_io_infra calls, we could do the following:
   !   found = field_exists(filename, varname)
-  !   call open_file(ncid, filename, action=READONLY_FILE, form=NETCDF_FILE, threading=MULTIPLE)
-  !   call get_file_info(ncid, ntime=n_time)
-  ! However, this does not handle the case where the time axis for the variable is not the record axis.
+  !   if (found) then
+  !     call open_file(ncid, filename, action=READONLY_FILE, form=NETCDF_FILE, threading=MULTIPLE)
+  !     call get_file_info(ncid, ntime=n_time)
+  !   endif
+  ! However, this does not handle the case where the time axis for the variable is not the record
+  ! axis, it does not do a case-insensitive search for the variable, and min_dims is not used.
 
-  status = NF90_OPEN(filename, NF90_NOWRITE, ncid)
-  if (status /= NF90_NOERR) then
-    call MOM_error(WARNING,"num_timelevels: "//&
-        " Difficulties opening "//trim(filename)//" - "//trim(NF90_STRERROR(status)))
-    return
-  endif
+  call get_var_sizes(filename, varname, ndims, sizes, match_case=.false.)
 
-  status = NF90_INQUIRE(ncid, nVariables=nvars)
-  if (status /= NF90_NOERR) then
-    call MOM_error(WARNING,"num_timelevels: "//&
-        " Difficulties getting the number of variables in file "//&
-        trim(filename)//" - "//trim(NF90_STRERROR(status)))
-    return
-  endif
-
-  if (nvars < 1) then
-    call MOM_error(WARNING,"num_timelevels: "//&
-        " There appear not to be any variables in "//trim(filename))
-    return
-  endif
-
-  allocate(varids(nvars))
-
-  status = nf90_inq_varids(ncid, nvars, varids)
-  if (status /= NF90_NOERR) then
-    call MOM_error(WARNING,"num_timelevels: "//&
-        " Difficulties getting the variable IDs in file "//&
-        trim(filename)//" - "//trim(NF90_STRERROR(status)))
-    deallocate(varids) ; return
-  endif
-
-  do n = 1,nvars
-    status = nf90_inquire_variable(ncid, varids(n), name=name)
-    if (status /= NF90_NOERR) then
-      call MOM_error(WARNING,"num_timelevels: "//&
-          " Difficulties getting a variable name in file "//&
-          trim(filename)//" - "//trim(NF90_STRERROR(status)))
-    endif
-
-    if (trim(lowercase(name)) == trim(lowercase(varname))) then
-      if (found) then
-        call MOM_error(WARNING, "num_timelevels: Two variables match the case-insensitive name "//&
-                trim(varname)//" in file "//trim(filename))
-      else
-        varid = varids(n) ; found = .true.
-      endif
-    endif
-  enddo
-
-  deallocate(varids)
-
-  if (.not.found) then
-    call MOM_error(WARNING,"num_timelevels: "//&
-        " variable "//trim(varname)//" was not found in file "//trim(filename))
-    return
-  endif
-
-  status = nf90_inquire_variable(ncid, varid, ndims = ndims)
-  if (status /= NF90_NOERR) then
-    call MOM_error(WARNING,"num_timelevels: "//trim(NF90_STRERROR(status))//&
-      " Getting number of dimensions of "//trim(varname)//" in "//trim(filename))
-    return
-  endif
+  n_time = sizes(ndims)
 
   if (present(min_dims)) then
     if (ndims < min_dims-1) then
       write(msg, '(I3)') min_dims
       call MOM_error(WARNING, "num_timelevels: variable "//trim(varname)//" in file "//&
         trim(filename)//" has fewer than min_dims = "//trim(msg)//" dimensions.")
+      n_time = -1
     elseif (ndims == min_dims - 1) then
-      n_time = 0 ; return
+      n_time = 0
     endif
   endif
 
-  allocate(dimids(ndims))
-  status = nf90_inquire_variable(ncid, varid, dimids=dimids(1:ndims))
+end function num_timelevels
+
+
+!> get_var_sizes returns the number and size of dimensions associate with a variable in a file.
+subroutine get_var_sizes(filename, varname, ndims, sizes, match_case, caller)
+  character(len=*),      intent(in)  :: filename   !< Name of the file to read, used here in messages
+  character(len=*),      intent(in)  :: varname    !< The variable name, used here for messages
+  integer,               intent(out) :: ndims      !< The number of dimensions to the variable
+  integer, dimension(:), intent(out) :: sizes      !< The dimension sizes, or 0 for extra values
+  logical,     optional, intent(in)  :: match_case !< If false, allow for variables name matches to be
+                                                   !! case insensitive, but take a perfect match if
+                                                   !! found.  The default is true.
+  character(len=*), optional, intent(in) :: caller !< The name of a calling routine for use in error messages
+
+  character(len=256) :: hdr
+  integer, allocatable :: dimids(:)
+  integer :: varid, ncid, n, status
+
+  hdr = "get_var_size: " ; if (present(caller)) hdr = trim(hdr)//": "
+  sizes(:) = 0 ; ndims = -1
+
+  status = NF90_open(filename, NF90_NOWRITE, ncid)
   if (status /= NF90_NOERR) then
-    call MOM_error(WARNING,"num_timelevels: "//trim(NF90_STRERROR(status))//&
-      " Getting last dimension ID for "//trim(varname)//" in "//trim(filename))
+    call MOM_error(WARNING, trim(hdr) // trim(NF90_STRERROR(status)) //&
+        " Difficulties opening "//trim(filename))
+    return
+  endif
+
+  ! Get the dimension sizes of the variable varname.
+  call get_varid(varname, ncid, filename, varid, match_case=match_case)
+  if (varid < 0) return
+
+  status = NF90_inquire_variable(ncid, varid, ndims=ndims)
+  if (status /= NF90_NOERR) then
+    call MOM_error(WARNING, trim(hdr) // trim(NF90_STRERROR(status)) //&
+      " Getting number of dimensions of "//trim(varname)//" in "//trim(filename))
+    return
+  endif
+  if (ndims < 1) return
+
+  allocate(dimids(ndims))
+  status = NF90_inquire_variable(ncid, varid, dimids=dimids(1:ndims))
+  if (status /= NF90_NOERR) then
+    call MOM_error(WARNING, trim(hdr) // trim(NF90_STRERROR(status)) //&
+      " Getting dimension IDs for "//trim(varname)//" in "//trim(filename))
     deallocate(dimids) ; return
   endif
 
-  status = nf90_Inquire_Dimension(ncid, dimids(ndims), len=n_time)
-  if (status /= NF90_NOERR) call MOM_error(WARNING,"num_timelevels: "//&
-      trim(NF90_STRERROR(status))//" Getting number of time levels of "//&
-      trim(varname)//" in "//trim(filename))
-
+  do n = 1, min(ndims,size(sizes))
+    status = NF90_Inquire_Dimension(ncid, dimids(n), len=sizes(n))
+    if (status /= NF90_NOERR) call MOM_error(WARNING, trim(hdr) // trim(NF90_STRERROR(status)) //&
+        " Getting dimension length for "//trim(varname)//" in "//trim(filename))
+  enddo
   deallocate(dimids)
 
-end function num_timelevels
+  status = NF90_close(ncid)
+  if (status /= NF90_NOERR) call MOM_error(WARNING, trim(hdr) // trim(NF90_STRERROR(status)) //&
+        " Difficulties closing "//trim(filename))
+
+end subroutine get_var_sizes
+
+
+!> get_varid finds the netcdf handle for the potentially case-insensitive variable name in a file
+subroutine get_varid(varname, ncid, filename, varid, match_case)
+  character(len=*),  intent(in)  :: varname    !< The name of the variable that is being sought
+  integer,           intent(in)  :: ncid       !< The open netcdf handle for the file
+  character(len=*),  intent(in)  :: filename   !< name of the file to read, used here in messages
+  integer,           intent(out) :: varid      !< The netcdf handle for the variable
+  logical, optional, intent(in)  :: match_case !< If false, allow for variables name matches to be
+                                               !! case insensitive, but take a perfect match if
+                                               !! found.  The default is true.
+
+  logical :: found, insensitive
+  character(len=256) :: name
+  integer, allocatable :: varids(:)
+  integer :: nvars, status, n
+
+  varid = -1
+  found = .false.
+  insensitive = .false. ; if (present(match_case)) insensitive = .not.match_case
+
+  if (insensitive) then
+    ! This code does a case-insensitive search for a variable in the file.
+    status = NF90_inquire(ncid, nVariables=nvars)
+    if (status /= NF90_NOERR) then
+      call MOM_error(WARNING,"get_varid:  Difficulties getting the number of variables in file "//&
+          trim(filename)//" - "//trim(NF90_STRERROR(status)))
+      return
+    endif
+
+    if (nvars < 1) then
+      call MOM_error(WARNING,"get_varid: There appear not to be any variables in "//trim(filename))
+      return
+    endif
+    allocate(varids(nvars))
+
+    status = nf90_inq_varids(ncid, nvars, varids)
+    if (status /= NF90_NOERR) then
+      call MOM_error(WARNING, "get_varid: Difficulties getting the variable IDs in file "//&
+          trim(filename)//" - "//trim(NF90_STRERROR(status)))
+      deallocate(varids) ; return
+    endif
+
+    do n = 1,nvars
+      status = nf90_inquire_variable(ncid, varids(n), name=name)
+      if (status /= NF90_NOERR) then
+        call MOM_error(WARNING, "get_varid:  Difficulties getting a variable name in file "//&
+            trim(filename)//" - "//trim(NF90_STRERROR(status)))
+      endif
+
+      if (trim(lowercase(name)) == trim(lowercase(varname))) then
+        if (found) then
+          call MOM_error(WARNING, "get_varid: Two variables match the case-insensitive name "//&
+                  trim(varname)//" in file "//trim(filename))
+          ! Replace the first variable if the second one is a case-sensitive match
+          if (trim(name) == trim(varname)) varid = varids(n)
+        else
+          varid = varids(n) ; found = .true.
+        endif
+      endif
+    enddo
+    if (.not.found) call MOM_error(WARNING, "get_varid: variable "//trim(varname)//&
+                                            " was not found in file "//trim(filename))
+
+    deallocate(varids)
+  else
+    status = NF90_INQ_VARID(ncid, trim(varname), varid)
+    if (status /= NF90_NOERR) then
+      call MOM_error(WARNING, "get_varid: Difficulties getting a variable id for "//&
+          trim(varname)//" in file "//trim(filename)//" - "//trim(NF90_STRERROR(status)))
+    endif
+  endif
+
+end subroutine get_varid
+
+!> Verify that a file contains a named variable with the expected units.
+subroutine verify_variable_units(filename, varname, expected_units, msg, ierr)
+  character(len=*), intent(in)    :: filename !< File name
+  character(len=*), intent(in)    :: varname !< Variable name
+  character(len=*), intent(in)    :: expected_units !< Expected units of variable
+  character(len=*), intent(inout) :: msg !< Message to use for errors
+  logical,          intent(out)   :: ierr !< True if an error occurs
+
+  ! Local variables
+  character (len=200) :: units
+  integer :: i, ncid, status, vid
+
+  ierr = .true.
+  status = NF90_OPEN(trim(filename), NF90_NOWRITE, ncid)
+  if (status /= NF90_NOERR) then
+    msg = 'File not found: '//trim(filename)
+    return
+  endif
+
+  status = NF90_INQ_VARID(ncid, trim(varname), vid)
+  if (status /= NF90_NOERR) then
+    msg = 'Var not found: '//trim(varname)
+  else
+    status = NF90_GET_ATT(ncid, vid, "units", units)
+    if (status /= NF90_NOERR) then
+      msg = 'Attribute not found: units'
+    else
+      ! NF90_GET_ATT can return attributes with null characters, which TRIM will not truncate.
+      ! This loop replaces any null characters with a space so that the subsequent check
+      ! between the read units and the expected units will pass
+      do i=1,LEN_TRIM(units)
+        if (units(i:i) == CHAR(0)) units(i:i) = " "
+      enddo
+
+      if ((trim(units) == trim(expected_units)) .or. &
+         ((trim(expected_units) == "meters") .and. (trim(units) == "m"))) then
+        ierr = .false.
+        msg = ''
+      else
+        msg = 'Units incorrect: '//trim(units)//' /= '//trim(expected_units)
+      endif
+    endif
+  endif
+
+  status = NF90_close(ncid)
+
+end subroutine verify_variable_units
 
 !> Returns a vardesc type whose elements have been filled with the provided
 !! fields.  The argument name is required, while the others are optional and
