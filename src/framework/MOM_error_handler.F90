@@ -3,15 +3,18 @@ module MOM_error_handler
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_error_infra, only : MOM_err, NOTE, WARNING, FATAL
-use MOM_error_infra, only : is_root_pe, stdlog, stdout
+use MOM_error_infra, only : MOM_err, is_root_pe, stdlog, stdout, NOTE, WARNING, FATAL
 
 implicit none ; private
 
-public MOM_error, MOM_mesg, NOTE, WARNING, FATAL, is_root_pe, stdlog, stdout
-public MOM_set_verbosity, MOM_get_verbosity, MOM_verbose_enough
-public callTree_showQuery, callTree_enter, callTree_leave, callTree_waypoint
-public assert
+! These routines are found in this module.
+public :: MOM_error, MOM_mesg, assert
+public :: MOM_set_verbosity, MOM_get_verbosity, MOM_verbose_enough
+public :: callTree_showQuery, callTree_enter, callTree_leave, callTree_waypoint
+! These routines are simply passed-through from MOM_error_infra
+public :: is_root_pe, stdlog, stdout
+!> Integer parameters encoding the severity of an error message
+public :: NOTE, WARNING, FATAL
 
 integer :: verbosity = 6
 !< Verbosity level:
@@ -39,7 +42,8 @@ integer :: callTreeIndentLevel = 0
 
 contains
 
-!> This provides a convenient interface for writing an informative comment.
+!> This provides a convenient interface for writing an informative comment, depending
+!! on the model's current verbosity setting and the verbosity level for this message.
 subroutine MOM_mesg(message, verb, all_print)
   character(len=*), intent(in)  :: message !< A message to write out
   integer, optional, intent(in) :: verb !< A level of verbosity for this message
@@ -58,9 +62,9 @@ subroutine MOM_mesg(message, verb, all_print)
 end subroutine MOM_mesg
 
 !> This provides a convenient interface for writing an error message
-!! with run-time filter based on a verbosity.
+!! with run-time filter based on a verbosity and the severity of the error.
 subroutine MOM_error(level, message, all_print)
-  integer,           intent(in) :: level !< The verbosity level of this message
+  integer,           intent(in) :: level !< The severity level of this message
   character(len=*),  intent(in) :: message !< A message to write out
   logical, optional, intent(in) :: all_print !< If present and true, any PEs are
                                              !! able to write this message.
