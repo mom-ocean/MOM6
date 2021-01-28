@@ -26,6 +26,7 @@ interface time_interp_extern
   module procedure time_interp_extern_3d
 end interface time_interp_extern
 
+!> perform horizontal interpolation of field (new)
 interface run_new_horiz_interp
   module procedure run_new_horiz_interp_1d_to_1d
   module procedure run_new_horiz_interp_1d_to_2d
@@ -35,6 +36,8 @@ end interface run_new_horiz_interp
 
 contains
 
+!> horizontal interpolation from source grid defined by 1d lon/lat to destination grid
+!! defined by 1d lon/lat
 subroutine run_new_horiz_interp_1d_to_1d(Interp, lon_in, lat_in, lon_out, lat_out, &
                                          verbose, interp_method, num_nbrs, max_dist, &
                                          src_modulo, grid_at_center, mask_in, mask_out)
@@ -59,6 +62,8 @@ subroutine run_new_horiz_interp_1d_to_1d(Interp, lon_in, lat_in, lon_out, lat_ou
 
 end subroutine run_new_horiz_interp_1d_to_1d
 
+!> horizontal interpolation from source grid defined by 1d lon/lat to destination grid
+!! defined by 2d lon/lat
 subroutine run_new_horiz_interp_1d_to_2d(Interp, lon_in, lat_in, lon_out, lat_out, &
                                          verbose, interp_method, num_nbrs, max_dist, &
                                          src_modulo, grid_at_center, mask_in, mask_out)
@@ -83,6 +88,8 @@ subroutine run_new_horiz_interp_1d_to_2d(Interp, lon_in, lat_in, lon_out, lat_ou
 
 end subroutine run_new_horiz_interp_1d_to_2d
 
+!> horizontal interpolation from source grid defined by 2d lon/lat to destination grid
+!! defined by 2d lon/lat
 subroutine run_new_horiz_interp_2d_to_2d(Interp, lon_in, lat_in, lon_out, lat_out, &
                                          verbose, interp_method, num_nbrs, max_dist, &
                                          src_modulo, mask_in, mask_out, &
@@ -110,6 +117,8 @@ subroutine run_new_horiz_interp_2d_to_2d(Interp, lon_in, lat_in, lon_out, lat_ou
 
 end subroutine run_new_horiz_interp_2d_to_2d
 
+!> horizontal interpolation from source grid defined by 2d lon/lat to destination grid
+!! defined by 1d lon/lat
 subroutine run_new_horiz_interp_2d_to_1d(Interp, lon_in, lat_in, lon_out, lat_out, &
                                          verbose, interp_method, num_nbrs, max_dist, &
                                          src_modulo, mask_in, mask_out, &
@@ -136,7 +145,7 @@ subroutine run_new_horiz_interp_2d_to_1d(Interp, lon_in, lat_in, lon_out, lat_ou
 
 end subroutine run_new_horiz_interp_2d_to_1d
 
-
+!> get size of an external field from field index
 function get_extern_field_size(index)
 
   integer :: index                     !< field index
@@ -146,7 +155,7 @@ function get_extern_field_size(index)
 
 end function get_extern_field_size
 
-
+!> get axes of an external field from field index
 function get_extern_field_axes(index)
 
   integer :: index                                      !< field index
@@ -156,7 +165,7 @@ function get_extern_field_axes(index)
 
 end function get_extern_field_axes
 
-
+!> get missing value of an external field from field index
 function get_extern_field_missing(index)
 
   integer :: index                 !< field index
@@ -239,7 +248,7 @@ subroutine time_interp_extern_3d(field_id, time, data_in, interp, verbose, horz_
                             horz_interp=horz_interp, mask_out=mask_out)
 end subroutine time_interp_extern_3d
 
-
+!> initialize an external field
 integer function init_extern_field(file, fieldname, MOM_domain, domain, verbose, &
                                    threading, ierr, ignore_axis_atts )
 
