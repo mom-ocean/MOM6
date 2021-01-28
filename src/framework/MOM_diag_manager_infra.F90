@@ -146,7 +146,7 @@ subroutine diag_manager_end(time)
 end subroutine diag_manager_end
 
 !> Returns true if the argument data are successfully passed to a diagnostic manager
-!!  with the indicated unique reference id, false otherwise.
+!! with the indicated unique reference id, false otherwise.
 logical function send_data_0d(diag_field_id, field, time, err_msg)
   integer, intent(in) :: diag_field_id !< A unique identifier for this data to the diagnostic manager
   real, intent(in) :: field !< Floating point value being recorded
@@ -170,7 +170,7 @@ logical function send_data_1d(diag_field_id, field, time, is_in, mask, rmask, ie
     character(len=*), intent(out), optional :: err_msg !< A log indicating the status of the post upon
                                                        !! returning to the calling routine.
 
-    send_data_1d = send_data_fms(diag_field_id, field, time, is_in, mask, rmask, ie_in, weight, err_msg)
+    send_data_1d= send_data_fms(diag_field_id, field, time, is_in, mask, rmask, ie_in, weight, err_msg)
 
 end function send_data_1d
 
@@ -190,7 +190,8 @@ logical function send_data_2d(diag_field_id, field, time, is_in, js_in, mask, rm
     character(len=*), intent(out), optional :: err_msg !< A log indicating the status of the post upon
                                                        !! returning to the calling routine.
 
-    send_data_2d = send_data_fms(diag_field_id, field, time, is_in, js_in, mask, rmask, ie_in, je_in, weight, err_msg)
+    send_data_2d= send_data_fms(diag_field_id, field, time, is_in, js_in, mask, &
+                                rmask, ie_in, je_in, weight, err_msg)
 
 end function send_data_2d
 
@@ -211,7 +212,8 @@ logical function send_data_2d_r8(diag_field_id, field, time, is_in, js_in, mask,
     character(len=*), intent(out), optional :: err_msg !< A log indicating the status of the post upon
                                                        !! returning to the calling routine.
 
-    send_data_2d_r8 = send_data_fms(diag_field_id, field, time, is_in, js_in, mask, rmask, ie_in, je_in, weight, err_msg)
+    send_data_2d_r8 = send_data_fms(diag_field_id, field, time, is_in, js_in, mask, &
+                                   rmask, ie_in, je_in, weight, err_msg)
 
 end function send_data_2d_r8
 #endif
@@ -233,7 +235,8 @@ logical function send_data_3d(diag_field_id, field, time, is_in, js_in, ks_in, m
     character(len=*), intent(out), optional :: err_msg !< A log indicating the status of the post upon
                                                        !! returning to the calling routine.
 
-    send_data_3d = send_data_fms(diag_field_id, field, time, is_in, js_in, ks_in, mask, rmask, ie_in, je_in, ke_in, weight, err_msg)
+    send_data_3d = send_data_fms(diag_field_id, field, time, is_in, js_in, ks_in, mask, &
+                               rmask, ie_in, je_in, ke_in, weight, err_msg)
 
 end function send_data_3d
 
@@ -256,7 +259,8 @@ logical function send_data_3d_r8(diag_field_id, field, time, is_in, js_in, ks_in
     character(len=*), intent(out), optional :: err_msg !< A log indicating the status of the post upon
                                                        !! returning to the calling routine.
 
-    send_data_3d_r8 = send_data_fms(diag_field_id, field, time, is_in, js_in, ks_in, mask, rmask, ie_in, je_in, ke_in, weight, err_msg)
+    send_data_3d_r8 = send_data_fms(diag_field_id, field, time, is_in, js_in, ks_in, mask, rmask, &
+                                ie_in, je_in, ke_in, weight, err_msg)
 
 end function send_data_3d_r8
 #endif
