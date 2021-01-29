@@ -91,9 +91,7 @@ use NUOPC_Model, only: model_label_DataInitialize => label_DataInitialize
 use NUOPC_Model, only: model_label_SetRunClock    => label_SetRunClock
 use NUOPC_Model, only: model_label_Finalize       => label_Finalize
 use NUOPC_Model, only: SetVM
-#ifdef UFS
 use get_stochy_pattern_mod, only: write_stoch_restart_ocn
-#endif
 
 implicit none; private
 
@@ -1589,7 +1587,6 @@ subroutine ModelAdvance(gcomp, rc)
         call ocean_model_restart(ocean_state, restartname=restartname)
 
         ! write stochastic physics restart file if active
-#ifdef UFS
         if (ESMF_AlarmIsRinging(stop_alarm, rc=rc)) then
            write(restartname,'(A)')"ocn_stoch.res.nc"
         else
@@ -1598,7 +1595,6 @@ subroutine ModelAdvance(gcomp, rc)
         endif
         call ESMF_LogWrite("MOM_cap: Writing restart :  "//trim(restartname), ESMF_LOGMSG_INFO)
         call write_stoch_restart_ocn('RESTART/'//trim(restartname))
-#endif
      endif
 
      if (is_root_pe()) then

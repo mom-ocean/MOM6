@@ -269,6 +269,13 @@ end type vertvisc_type
 
 !> Container for information about the summed layer transports
 !! and how they will vary as the barotropic velocity is changed.
+type, public :: stochastic_pattern
+  logical           :: do_sppt = .false.
+  logical           :: pert_epbl = .false.
+  real, allocatable :: sppt_wts(:,:) !< Random pattern for ocean SPPT
+  real, allocatable :: t_rp1(:,:) !< Random pattern for K.E. generation
+  real, allocatable :: t_rp2(:,:) !< Random pattern for K.E. dissipation
+end type stochastic_pattern
 type, public :: BT_cont_type
   real, allocatable :: FA_u_EE(:,:) !< The effective open face area for zonal barotropic transport
                                     !! drawing from locations far to the east [H L ~> m2 or kg m-1].

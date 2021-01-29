@@ -43,7 +43,7 @@ use time_interp_external_mod,only : time_interp_external_init
 use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_init
 use MOM_tracer_flow_control, only : call_tracer_flux_init
 use MOM_unit_scaling,        only : unit_scale_type
-use MOM_variables,           only : surface
+use MOM_variables,           only : surface, stochastic_pattern
 use MOM_verticalGrid,        only : verticalGrid_type
 use MOM_ice_shelf,           only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
 use MOM_ice_shelf,           only : add_shelf_forces, ice_shelf_end, ice_shelf_save_restart
@@ -62,6 +62,8 @@ use MOM_surface_forcing_nuopc, only : surface_forcing_init, convert_IOB_to_fluxe
 use MOM_surface_forcing_nuopc, only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
 use MOM_surface_forcing_nuopc, only : ice_ocean_boundary_type, surface_forcing_CS
 use MOM_surface_forcing_nuopc, only : forcing_save_restart
+use MOM_domains,               only : root_PE,PE_here,Get_PElist,num_PEs
+use stochastic_physics,        only : init_stochastic_physics_ocn, run_stochastic_physics_ocn
 
 #include <MOM_memory.h>
 
@@ -187,6 +189,7 @@ type, public :: ocean_state_type ; private
                               !! timesteps are taken per thermodynamic step.
   type(surface)   :: sfc_state !< A structure containing pointers to
                               !! the ocean surface state fields.
+  type(stochastic_pattern) :: stochastics !< A structure containing pointers to
   type(ocean_grid_type), pointer :: &
     grid => NULL()            !< A pointer to a grid structure containing metrics
                               !! and related information.
@@ -248,6 +251,13 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
                       !! min(HFrz, OBLD), where OBLD is the boundary layer depth.
                       !! If HFrz <= 0 (default), melt potential will not be computed.
   logical :: use_melt_pot!< If true, allocate melt_potential array
+! stochastic physics
+  integer,allocatable :: pelist(:) ! list of pes for this instance of the ocean
+  integer :: mom_comm          ! list of pes for this instance of the ocean
+  integer :: num_procs         ! number of processors to pass to stochastic physics
+  integer :: iret              ! return code from stochastic physics
+  integer :: me                !  my pe
+  integer :: master            !  root pe
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -416,6 +426,21 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   endif
 
+  num_procs=num_PEs()
+  allocate(pelist(num_procs))
+  call Get_PElist(pelist,commID = mom_comm)
+  me=PE_here()
+  master=root_PE()
+
+  call init_stochastic_physics_ocn(OS%dt_therm,OS%grid%geoLonT,OS%grid%geoLatT,OS%grid%ied-OS%grid%isd+1,OS%grid%jed-OS%grid%jsd+1,OS%grid%ke,&
+                                   OS%stochastics%pert_epbl,OS%stochastics%do_sppt,master,mom_comm,iret)
+  print*,'after init_stochastic_physics_ocn',OS%stochastics%pert_epbl,OS%stochastics%do_sppt
+
+  if (OS%stochastics%do_sppt) allocate(OS%stochastics%sppt_wts(OS%grid%isd:OS%grid%ied,OS%grid%jsd:OS%grid%jed))
+  if (OS%stochastics%pert_epbl) then
+    allocate(OS%stochastics%t_rp1(OS%grid%isd:OS%grid%ied,OS%grid%jsd:OS%grid%jed))
+    allocate(OS%stochastics%t_rp2(OS%grid%isd:OS%grid%ied,OS%grid%jsd:OS%grid%jed))
+  endif
   call close_param_file(param_file)
   call diag_mediator_close_registration(OS%diag)
 
@@ -585,17 +610,23 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call disable_averaging(OS%diag)
   Master_time = OS%Time ; Time1 = OS%Time
 
+! update stochastic physics patterns before running next time-step
+  print*,'before call to stoch',OS%stochastics%do_sppt .OR.  OS%stochastics%pert_epbl
+  if (OS%stochastics%do_sppt .OR. OS%stochastics%pert_epbl ) then
+   call run_stochastic_physics_ocn(OS%stochastics%sppt_wts,OS%stochastics%t_rp1,OS%stochastics%t_rp2)
+  endif
+
   if (OS%offline_tracer_mode) then
     call step_offline(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp)
   elseif ((.not.do_thermo) .or. (.not.do_dyn)) then
     ! The call sequence is being orchestrated from outside of update_ocean_model.
-    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp, &
+    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, OS%stochastics, Time1, dt_coupling, OS%MOM_CSp, &
                   Waves=OS%Waves, do_dynamics=do_thermo, do_thermodynamics=do_dyn, &
                   reset_therm=Ocn_fluxes_used)
  !### What to do with these?   , start_cycle=(n==1), end_cycle=.false., cycle_length=dt_coupling)
 
   elseif (OS%single_step_call) then
-    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp, Waves=OS%Waves)
+    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, OS%stochastics, Time1, dt_coupling, OS%MOM_CSp, Waves=OS%Waves)
   else
     n_max = 1 ; if (dt_coupling > OS%dt) n_max = ceiling(dt_coupling/OS%dt - 0.001)
     dt_dyn = dt_coupling / real(n_max)
@@ -618,16 +649,16 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
             "THERMO_SPANS_COUPLING and DIABATIC_FIRST.")
         if (modulo(n-1,nts)==0) then
           dtdia = dt_dyn*min(nts,n_max-(n-1))
-          call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dtdia, OS%MOM_CSp, &
+          call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, OS%stochastics, Time2, dtdia, OS%MOM_CSp, &
                         Waves=OS%Waves, do_dynamics=.false., do_thermodynamics=.true., &
                         start_cycle=(n==1), end_cycle=.false., cycle_length=dt_coupling)
         endif
 
-        call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dt_dyn, OS%MOM_CSp, &
+        call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, OS%stochastics, Time2, dt_dyn, OS%MOM_CSp, &
                       Waves=OS%Waves, do_dynamics=.true., do_thermodynamics=.false., &
                       start_cycle=.false., end_cycle=(n==n_max), cycle_length=dt_coupling)
       else
-        call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dt_dyn, OS%MOM_CSp, &
+        call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, OS%stochastics, Time2, dt_dyn, OS%MOM_CSp, &
                       Waves=OS%Waves, do_dynamics=.true., do_thermodynamics=.false., &
                       start_cycle=(n==1), end_cycle=.false., cycle_length=dt_coupling)
 
@@ -644,7 +675,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
         if (step_thermo) then
           ! Back up Time2 to the start of the thermodynamic segment.
           Time2 = Time2 - set_time(int(floor((dtdia - dt_dyn) + 0.5)))
-          call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dtdia, OS%MOM_CSp, &
+          call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, OS%stochastics, Time2, dtdia, OS%MOM_CSp, &
                         Waves=OS%Waves, do_dynamics=.false., do_thermodynamics=.true., &
                         start_cycle=.false., end_cycle=(n==n_max), cycle_length=dt_coupling)
         endif
