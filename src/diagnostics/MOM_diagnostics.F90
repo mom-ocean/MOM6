@@ -1980,7 +1980,6 @@ subroutine register_surface_diags(Time, G, US, IDs, diag, tv)
          'Heat flux into ocean from geothermal or other internal sources', &
          'W m-2', conversion=US%QRZ_T_to_W_m2)
 
-
 end subroutine register_surface_diags
 
 !> Register certain diagnostics related to transports
