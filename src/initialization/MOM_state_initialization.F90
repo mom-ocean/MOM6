@@ -1748,6 +1748,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
   real, dimension (SZI_(G),SZJ_(G)) :: &
     tmp_2d ! A temporary array for tracers.
   real, allocatable, dimension(:,:,:) :: tmp_tr ! A temporary array for reading sponge fields
+  real, allocatable, dimension(:,:,:) :: tmp_u,tmp_v ! A temporary array for reading sponge fields
 
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
   real :: Idamp_u(SZIB_(G),SZJ_(G)) ! The inverse damping rate for velocity fields [T-1 ~> s-1].
@@ -1942,8 +1943,8 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
   endif
 
 
-  if  (use_ALE) then
-    if (.not. time_space_interp_sponge) then ! ALE mode
+  if  (use_ALE) then ! ALE mode
+    if (.not. time_space_interp_sponge) then
       call field_size(filename,eta_var,siz,no_domain=.true.)
       if (siz(1) /= G%ieg-G%isg+1 .or. siz(2) /= G%jeg-G%jsg+1) &
         call MOM_error(FATAL,"initialize_sponge_file: Array size mismatch for sponge data.")
@@ -1976,6 +1977,17 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
         call set_up_ALE_sponge_field(tmp_tr, G, GV, tv%S, ALE_CSp)
         deallocate(tmp_tr)
       endif
+      if (sponge_uv) then
+        filename = trim(inputdir)//trim(state_uv_file)
+        call log_param(param_file, mdl, "INPUTDIR/SPONGE_STATE_UV_FILE", filename)
+        if (.not.file_exists(filename, G%Domain)) &
+             call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
+        allocate(tmp_u(G%IsdB:G%IedB,jsd:jed,nz_data))
+        allocate(tmp_v(isd:ied,G%JsdB:G%JedB,nz_data))
+        call MOM_read_vector(filename, u_var, v_var, tmp_u(:,:,:), tmp_v(:,:,:), G%Domain,scale=US%m_s_to_L_T)
+        call set_up_ALE_sponge_vel_field(tmp_u, tmp_v, G, GV, u, v, ALE_CSp)
+        deallocate(tmp_u,tmp_v)
+      endif
     else
       ! Initialize sponges without supplying sponge grid
       if (sponge_uv) then
@@ -1988,34 +2000,19 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
         call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, US, tv%T, ALE_CSp)
         call set_up_ALE_sponge_field(filename, salin_var, Time, G, GV, US, tv%S, ALE_CSp)
       endif
+      if (sponge_uv) then
+        filename = trim(inputdir)//trim(state_uv_file)
+        call log_param(param_file, mdl, "INPUTDIR/SPONGE_STATE_UV_FILE", filename)
+        if (.not.file_exists(filename, G%Domain)) &
+             call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
+        call set_up_ALE_sponge_vel_field(filename, u_var, filename, v_var, Time, G, GV, US, ALE_CSp, u, v)
+      endif
     endif
+  endif
 
-
-
- endif
-
-  ! The remaining calls to set_up_sponge_field can be in any order.
-!  if ( use_temperature .and. .not. time_space_interp_sponge) then
-!    call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain)
-!    call set_up_sponge_field(tmp, tv%T, G, GV, nz, Layer_CSp)
-!    call MOM_read_data(filename, salin_var, tmp(:,:,:), G%Domain)
-!    call set_up_sponge_field(tmp, tv%S, G, GV, nz, Layer_CSp)
-!  elseif (use_temperature) then
-!    call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, US, tv%T, ALE_CSp)
- !    call set_up_ALE_sponge_field(filename, salin_var, Time, G, GV, US, tv%S, ALE_CSp)
-
- if (sponge_uv .and. .not. use_ALE) call MOM_error(FATAL,'initialize_sponges_file: '// &
+  if (sponge_uv .and. .not. use_ALE) call MOM_error(FATAL,'initialize_sponges_file: '// &
                        'UV damping to target values only available in ALE mode')
 
- if (sponge_uv .and. use_ALE)  then
-
-   filename = trim(inputdir)//trim(state_uv_file)
-   call log_param(param_file, mdl, "INPUTDIR/SPONGE_STATE_UV_FILE", filename)
-   if (.not.file_exists(filename, G%Domain)) &
-     call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
-
-   call set_up_ALE_sponge_vel_field(filename, u_var, filename, v_var, Time, G, GV, US, ALE_CSp, u, v)
- endif
 
   contains
 
