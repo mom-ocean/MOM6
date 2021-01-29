@@ -6,8 +6,6 @@ module MOM_domains
 
 use MOM_array_transform, only : rotate_array
 use MOM_coms, only : PE_here, root_PE, num_PEs, MOM_infra_init, MOM_infra_end, Get_PElist
-
-use MOM_coms, only : PE_here, root_PE, num_PEs, MOM_infra_init, MOM_infra_end, Get_PElist
 use MOM_coms, only : broadcast, sum_across_PEs, min_across_PEs, max_across_PEs
 use MOM_cpu_clock, only : cpu_clock_begin, cpu_clock_end
 use MOM_error_handler, only : MOM_error, MOM_mesg, NOTE, WARNING, FATAL, is_root_pe
