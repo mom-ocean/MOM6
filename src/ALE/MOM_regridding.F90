@@ -193,7 +193,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   character(len=40)  :: coord_units, param_name, coord_res_param ! Temporary strings
   character(len=200) :: inputdir, fileName
   character(len=320) :: message ! Temporary strings
-  character(len=12) :: expected_units ! Temporary strings
+  character(len=12) :: expected_units, alt_units ! Temporary strings
   logical :: tmpLogical, fix_haloclines, set_max, do_sum, main_parameters
   logical :: coord_is_state_dependent, ierr
   logical :: default_2018_answers, remap_answers_2018
@@ -360,16 +360,16 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
    !if (.not. field_exists(fileName,trim(varName))) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
    !             "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
     if (CS%regridding_scheme == REGRIDDING_SIGMA) then
-      expected_units = 'nondim'
+      expected_units = 'nondim' ; alt_units = expected_units
     elseif (CS%regridding_scheme == REGRIDDING_RHO) then
-      expected_units = 'kg m-3'
+      expected_units = 'kg m-3' ; alt_units = expected_units
     else
-      expected_units = 'meters'
+      expected_units = 'meters' ; alt_units = 'm'
     endif
     if (index(trim(varName),'interfaces=')==1) then
       varName=trim(varName(12:))
-      call verify_variable_units(filename, varName, expected_units, message, ierr)
-      if (ierr) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "//&
+      call verify_variable_units(filename, varName, expected_units, message, ierr, alt_units)
+      if (ierr) call MOM_error(FATAL, trim(mdl)//", initialize_regridding: "//&
                   "Unsupported format in grid definition '"//trim(filename)//"'. Error message "//trim(message))
       call field_size(trim(fileName), trim(varName), nzf)
       ke = nzf(1)-1

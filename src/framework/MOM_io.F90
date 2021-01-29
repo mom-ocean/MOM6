@@ -4,11 +4,11 @@ module MOM_io
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_array_transform,  only : allocate_rotated_array, rotate_array
-use MOM_domains,          only : MOM_domain_type, domain1D, get_domain_components
+use MOM_domains,          only : MOM_domain_type, domain1D, broadcast, get_domain_components
 use MOM_domains,          only : AGRID, BGRID_NE, CGRID_NE
 use MOM_dyn_horgrid,      only : dyn_horgrid_type
 use MOM_ensemble_manager, only : get_ensemble_id
-use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING
+use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING, is_root_PE
 use MOM_file_parser,      only : log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
 use MOM_io_infra,         only : MOM_read_data, MOM_read_vector, read_field_chksum
@@ -456,7 +456,7 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
   ! However, this does not handle the case where the time axis for the variable is not the record
   ! axis, it does not do a case-insensitive search for the variable, and min_dims is not used.
 
-  call get_var_sizes(filename, varname, ndims, sizes, match_case=.false.)
+  call get_var_sizes(filename, varname, ndims, sizes, match_case=.false., caller="num_timelevels")
 
   n_time = sizes(ndims)
 
@@ -475,7 +475,50 @@ end function num_timelevels
 
 
 !> get_var_sizes returns the number and size of dimensions associate with a variable in a file.
-subroutine get_var_sizes(filename, varname, ndims, sizes, match_case, caller)
+!! Usually only the root PE does the read, and then the information is broadcast
+subroutine get_var_sizes(filename, varname, ndims, sizes, match_case, caller, all_read)
+  character(len=*),      intent(in)  :: filename   !< Name of the file to read, used here in messages
+  character(len=*),      intent(in)  :: varname    !< The variable name, used here for messages
+  integer,               intent(out) :: ndims      !< The number of dimensions to the variable
+  integer, dimension(:), intent(out) :: sizes      !< The dimension sizes, or 0 for extra values
+  logical,     optional, intent(in)  :: match_case !< If false, allow for variables name matches to be
+                                                   !! case insensitive, but take a perfect match if
+                                                   !! found.  The default is true.
+  character(len=*), optional, intent(in) :: caller !< The name of a calling routine for use in error messages
+  logical,     optional, intent(in)  :: all_read   !< If present and true, all PEs that call this
+                                                   !! routine actually do the read, otherwise only
+                                                   !! root PE reads and then it broadcasts the results.
+
+  logical :: do_read, do_broadcast
+  integer, allocatable :: size_msg(:)  ! An array combining the number of dimensions and the sizes.
+  integer :: n, nval
+
+  do_read = is_root_pe()
+  if (present(all_read)) do_read = all_read .or. do_read
+  do_broadcast = .true. ; if (present(all_read)) do_broadcast = .not.all_read
+
+  if (do_read) call read_var_sizes(filename, varname, ndims, sizes, match_case, caller)
+
+  if (do_broadcast) then
+    ! Distribute the sizes from the root PE.
+    nval = size(sizes) + 1
+
+    allocate(size_msg(nval))
+    size_msg(1) = ndims
+    do n=2,nval ; size_msg(n) = sizes(n-1) ; enddo
+
+    call broadcast(size_msg, nval, blocking=.true.)
+
+    ndims = size_msg(1)
+    do n=2,nval ;  sizes(n-1) = size_msg(n) ; enddo
+    deallocate(size_msg)
+  endif
+
+end subroutine get_var_sizes
+
+!> read_var_sizes returns the number and size of dimensions associate with a variable in a file.
+!! Every processor for which this is called does the reading.
+subroutine read_var_sizes(filename, varname, ndims, sizes, match_case, caller)
   character(len=*),      intent(in)  :: filename   !< Name of the file to read, used here in messages
   character(len=*),      intent(in)  :: varname    !< The variable name, used here for messages
   integer,               intent(out) :: ndims      !< The number of dimensions to the variable
@@ -488,7 +531,6 @@ subroutine get_var_sizes(filename, varname, ndims, sizes, match_case, caller)
   character(len=256) :: hdr
   integer, allocatable :: dimids(:)
   integer :: varid, ncid, n, status
-
   hdr = "get_var_size: " ; if (present(caller)) hdr = trim(hdr)//": "
   sizes(:) = 0 ; ndims = -1
 
@@ -530,7 +572,7 @@ subroutine get_var_sizes(filename, varname, ndims, sizes, match_case, caller)
   if (status /= NF90_NOERR) call MOM_error(WARNING, trim(hdr) // trim(NF90_STRERROR(status)) //&
         " Difficulties closing "//trim(filename))
 
-end subroutine get_var_sizes
+end subroutine read_var_sizes
 
 
 !> get_varid finds the netcdf handle for the potentially case-insensitive variable name in a file
@@ -607,16 +649,22 @@ subroutine get_varid(varname, ncid, filename, varid, match_case)
 end subroutine get_varid
 
 !> Verify that a file contains a named variable with the expected units.
-subroutine verify_variable_units(filename, varname, expected_units, msg, ierr)
-  character(len=*), intent(in)    :: filename !< File name
-  character(len=*), intent(in)    :: varname !< Variable name
-  character(len=*), intent(in)    :: expected_units !< Expected units of variable
-  character(len=*), intent(inout) :: msg !< Message to use for errors
-  logical,          intent(out)   :: ierr !< True if an error occurs
+subroutine verify_variable_units(filename, varname, expected_units, msg, ierr, alt_units)
+  character(len=*),           intent(in)    :: filename  !< File name
+  character(len=*),           intent(in)    :: varname   !< Variable name
+  character(len=*),           intent(in)    :: expected_units !< Expected units of variable
+  character(len=*),           intent(inout) :: msg       !< Message to use for errors
+  logical,                    intent(out)   :: ierr      !< True if an error occurs
+  character(len=*), optional, intent(in)    :: alt_units !< Alterate acceptable units of variable
 
   ! Local variables
   character (len=200) :: units
+  logical :: units_correct
   integer :: i, ncid, status, vid
+
+  if (.not.is_root_pe()) then ! Only the root PE should do the verification.
+    ierr = .false. ; msg = '' ; return
+  endif
 
   ierr = .true.
   status = NF90_OPEN(trim(filename), NF90_NOWRITE, ncid)
@@ -640,8 +688,11 @@ subroutine verify_variable_units(filename, varname, expected_units, msg, ierr)
         if (units(i:i) == CHAR(0)) units(i:i) = " "
       enddo
 
-      if ((trim(units) == trim(expected_units)) .or. &
-         ((trim(expected_units) == "meters") .and. (trim(units) == "m"))) then
+      units_correct = (trim(units) == trim(expected_units))
+      if (present(alt_units)) then
+        units_correct = units_correct .or. (trim(units) == trim(alt_units))
+      endif
+      if (units_correct) then
         ierr = .false.
         msg = ''
       else
@@ -690,7 +741,7 @@ function var_desc(name, units, longname, hor_grid, z_grid, t_grid, &
 
   call modify_vardesc(vd, units=units, longname=longname, hor_grid=hor_grid, &
                       z_grid=z_grid, t_grid=t_grid,                          &
-                      cmor_field_name=cmor_field_name,cmor_units=cmor_units, &
+                      cmor_field_name=cmor_field_name, cmor_units=cmor_units, &
                       cmor_longname=cmor_longname, conversion=conversion, caller=cllr)
 
 end function var_desc
@@ -912,7 +963,7 @@ subroutine MOM_write_field_0d(io_unit, field_md, field, tstamp, fill_value)
 end subroutine MOM_write_field_0d
 
 !> Given filename and fieldname, this subroutine returns the size of the field in the file
-subroutine field_size(filename, fieldname, sizes, field_found, no_domain)
+subroutine field_size(filename, fieldname, sizes, field_found, no_domain, ndims)
   character(len=*),      intent(in)    :: filename  !< The name of the file to read
   character(len=*),      intent(in)    :: fieldname !< The name of the variable whose sizes are returned
   integer, dimension(:), intent(inout) :: sizes     !< The sizes of the variable in each dimension
@@ -920,9 +971,22 @@ subroutine field_size(filename, fieldname, sizes, field_found, no_domain)
                                                     !! the input file.  Without this argument, there
                                                     !! is a fatal error if the field is not found.
   logical,     optional, intent(in)    :: no_domain !< If present and true, do not check for file
-                                                    !! names with an appended tile number
+                                                    !! names with an appended tile number.  If
+                                                    !! ndims is present, the default changes to true.
+  integer,     optional, intent(out)   :: ndims     !< The number of dimensions to the variable
 
-  call get_field_size(filename, fieldname, sizes, field_found=field_found, no_domain=no_domain)
+  if (present(ndims)) then
+    if (present(no_domain)) then ; if (.not.no_domain) call MOM_error(FATAL, &
+          "field_size does not support the ndims argument when no_domain is present and false.")
+    endif
+    call get_var_sizes(filename, fieldname, ndims, sizes, match_case=.false.)
+    if (present(field_found)) field_found = (ndims >= 0)
+    if ((ndims < 0) .and. .not.present(field_found)) then
+      call MOM_error(FATAL, "Variable "//trim(fieldname)//" not found in "//trim(filename) )
+    endif
+  else
+    call get_field_size(filename, fieldname, sizes, field_found=field_found, no_domain=no_domain)
+  endif
 
 end subroutine field_size
 
