@@ -74,7 +74,7 @@ use ESMF,  only: ESMF_RC_FILE_OPEN, ESMF_RC_FILE_READ, ESMF_RC_FILE_WRITE
 use ESMF,  only: ESMF_VMBroadcast
 use ESMF,  only: ESMF_AlarmCreate, ESMF_ClockGetAlarmList, ESMF_AlarmList_Flag
 use ESMF,  only: ESMF_AlarmGet, ESMF_AlarmIsCreated, ESMF_ALARMLIST_ALL, ESMF_AlarmIsEnabled
-use ESMF,  only: ESMF_STATEITEM_NOTFOUND, ESMF_FieldWrite 
+use ESMF,  only: ESMF_STATEITEM_NOTFOUND, ESMF_FieldWrite
 use ESMF,  only: ESMF_END_ABORT, ESMF_Finalize
 use ESMF,  only: operator(==), operator(/=), operator(+), operator(-)
 
@@ -149,11 +149,9 @@ logical :: cesm_coupled = .true.
 type(ESMF_GeomType_Flag) :: geomtype = ESMF_GEOMTYPE_MESH
 #else
 logical :: cesm_coupled = .false.
-!type(ESMF_GeomType_Flag) :: geomtype = ESMF_GEOMTYPE_GRID
-!type(ESMF_GeomType_Flag) :: geomtype = ESMF_GEOMTYPE_MESH
+type(ESMF_GeomType_Flag) :: geomtype
 #endif
 character(len=8) :: restart_mode = 'alarms'
-type(ESMF_GeomType_Flag) :: geomtype
 
 contains
 
@@ -976,7 +974,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
                 "greater than parameter EPS_OMESH. n, lonMesh(n), lon(n), diff_lon, "//&
                 "EPS_OMESH= ',i8,2(f21.13,3x),2(d21.5))"
          write(err_msg, frmt)n,lonMesh(n),lon(n), diff_lon, eps_omesh
-         !call MOM_error(FATAL, err_msg)
+         call MOM_error(FATAL, err_msg)
        end if
        diff_lat = abs(latMesh(n) - lat(n))
        if (diff_lat > eps_omesh) then
@@ -984,13 +982,13 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
                 "greater than parameter EPS_OMESH. n, latMesh(n), lat(n), diff_lat, "//&
                 "EPS_OMESH= ',i8,2(f21.13,3x),2(d21.5))"
          write(err_msg, frmt)n,latMesh(n),lat(n), diff_lat, eps_omesh
-         !call MOM_error(FATAL, err_msg)
+         call MOM_error(FATAL, err_msg)
         end if
         if (abs(maskMesh(n) - mask(n)) > 0) then
           frmt = "('ERROR: ESMF mesh and MOM6 domain masks are inconsistent! - "//&
                  "MOM n, maskMesh(n), mask(n) = ',3(i8,2x))"
           write(err_msg, frmt)n,maskMesh(n),mask(n)
-          !call MOM_error(FATAL, err_msg)
+          call MOM_error(FATAL, err_msg)
         end if
      end do
 
