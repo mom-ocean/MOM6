@@ -26,6 +26,7 @@ interface time_interp_extern
   module procedure time_interp_extern_3d
 end interface time_interp_extern
 
+!> perform horizontal interpolation of field
 interface run_horiz_interp
   module procedure horiz_interp_from_weights_field2d
   module procedure horiz_interp_from_weights_field3d
