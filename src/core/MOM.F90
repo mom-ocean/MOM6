@@ -30,7 +30,6 @@ use MOM_domains,              only : To_North, To_East, To_South, To_West
 use MOM_domains,              only : To_All, Omit_corners, CGRID_NE, SCALAR_PAIR
 use MOM_domains,              only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,              only : start_group_pass, complete_group_pass, Omit_Corners
-use MOM_domains,              only : root_PE,PE_here,Get_PElist,num_PEs
 use MOM_error_handler,        only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler,        only : MOM_set_verbosity, callTree_showQuery
 use MOM_error_handler,        only : callTree_enter, callTree_leave, callTree_waypoint
@@ -134,7 +133,7 @@ use MOM_unit_scaling,          only : unit_scaling_end, fix_restart_unit_scaling
 use MOM_variables,             only : surface, allocate_surface_state, deallocate_surface_state
 use MOM_variables,             only : thermo_var_ptrs, vertvisc_type, porous_barrier_ptrs
 use MOM_variables,             only : accel_diag_ptrs, cont_diag_ptrs, ocean_internal_state
-use MOM_variables,             only : rotate_surface_state
+use MOM_variables,             only : rotate_surface_state,stochastic_pattern
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
 use MOM_verticalGrid,          only : fix_restart_scaling
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
@@ -156,9 +155,6 @@ use MOM_offline_main,          only : offline_redistribute_residual, offline_dia
 use MOM_offline_main,          only : offline_fw_fluxes_into_ocean, offline_fw_fluxes_out_ocean
 use MOM_offline_main,          only : offline_advection_layer, offline_transport_end
 use MOM_ALE,                   only : ale_offline_tracer_final, ALE_main_offline
-#ifdef UFS
-use stochastic_physics,        only : init_stochastic_physics_ocn
-#endif
 
 implicit none ; private
 
@@ -456,13 +452,14 @@ contains
 !! The action of lateral processes on tracers occur in calls to
 !! advect_tracer and tracer_hordiff.  Vertical mixing and possibly remapping
 !! occur inside of diabatic.
-subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS, &
+subroutine step_MOM(forces_in, fluxes_in, sfc_state, stochastics, Time_start, time_int_in, CS, &
                     Waves, do_dynamics, do_thermodynamics, start_cycle, &
                     end_cycle, cycle_length, reset_therm)
   type(mech_forcing), target, intent(inout) :: forces_in !< A structure with the driving mechanical forces
   type(forcing), target, intent(inout) :: fluxes_in  !< A structure with pointers to themodynamic,
                                                      !! tracer and mass exchange forcing fields
   type(surface), target, intent(inout) :: sfc_state  !< surface ocean state
+  type(stochastic_pattern), intent(in) :: stochastics  !< surface ocean state
   type(time_type),    intent(in)    :: Time_start    !< starting time of a segment, as a time type
   real,               intent(in)    :: time_int_in   !< time interval covered by this run segment [s].
   type(MOM_control_struct), intent(inout), target :: CS   !< control structure from initialize_MOM
@@ -771,8 +768,8 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       endif
 
       ! Apply diabatic forcing, do mixing, and regrid.
-      call step_MOM_thermo(CS, G, GV, US, u, v, h, CS%tv, fluxes, dtdia, &
-                           end_time_thermo, .true., Waves=Waves)
+      call step_MOM_thermo(CS, G, GV, US, u, v, h, CS%tv, fluxes, stochastics, &
+                           dtdia, end_time_thermo, .true., Waves=Waves)
       CS%time_in_thermo_cycle = CS%time_in_thermo_cycle + dtdia
 
       ! The diabatic processes are now ahead of the dynamics by dtdia.
@@ -872,8 +869,8 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
         CS%Time = CS%Time - real_to_time(0.5*US%T_to_s*(dtdia-dt))
 
       ! Apply diabatic forcing, do mixing, and regrid.
-      call step_MOM_thermo(CS, G, GV, US, u, v, h, CS%tv, fluxes, dtdia, &
-                           Time_local, .false., Waves=Waves)
+      call step_MOM_thermo(CS, G, GV, US, u, v, h, CS%tv, fluxes, stochastics, &
+                           dtdia, Time_local, .false., Waves=Waves)
       CS%time_in_thermo_cycle = CS%time_in_thermo_cycle + dtdia
 
       if ((CS%t_dyn_rel_thermo==0.0) .and. .not.do_dyn) then
@@ -1305,8 +1302,8 @@ end subroutine step_MOM_tracer_dyn
 
 !> MOM_step_thermo orchestrates the thermodynamic time stepping and vertical
 !! remapping, via calls to diabatic (or adiabatic) and ALE_main.
-subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
-                           Time_end_thermo, update_BBL, Waves)
+subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, stochastics, &
+                           dtdia, Time_end_thermo, update_BBL, Waves)
   type(MOM_control_struct), intent(inout) :: CS     !< Master MOM control structure
   type(ocean_grid_type),    intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),  intent(inout) :: GV     !< ocean vertical grid structure
@@ -1319,6 +1316,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
                             intent(inout) :: h      !< layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),    intent(inout) :: tv     !< A structure pointing to various thermodynamic variables
   type(forcing),            intent(inout) :: fluxes !< pointers to forcing fields
+  type(stochastic_pattern), intent(in) :: stochastics  !< surface ocean state
   real,                     intent(in)    :: dtdia  !< The time interval over which to advance [T ~> s]
   type(time_type),          intent(in)    :: Time_end_thermo !< End of averaging interval for thermo diags
   logical,                  intent(in)    :: update_BBL !< If true, calculate the bottom boundary layer properties.
@@ -1394,8 +1392,8 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
 
     call cpu_clock_begin(id_clock_diabatic)
 
-    call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, dtdia, &
-                  Time_end_thermo, G, GV, US, CS%diabatic_CSp, CS%stoch_CS, CS%OBC, Waves)
+    call diabatic(u, v, h, tv, CS%Hml, fluxes, stochastics, CS%visc, CS%ADp, CS%CDp, dtdia, &
+                  Time_end_thermo, G, GV, US, CS%diabatic_CSp, OBC=CS%OBC, Waves=Waves)
     fluxes%fluxes_used = .true.
 
     if (showCallTree) call callTree_waypoint("finished diabatic (step_MOM_thermo)")
@@ -1807,19 +1805,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   logical :: calc_dtbt         ! Indicates whether the dynamically adjusted barotropic
                                ! time step needs to be updated before it is used.
   logical :: debug_truncations ! If true, turn on diagnostics useful for debugging truncations.
-  logical :: do_epbl,do_sppt
   integer :: first_direction   ! An integer that indicates which direction is to be
                                ! updated first in directionally split parts of the
                                ! calculation.
   integer :: nkml, nkbl, verbosity, write_geom
   integer :: dynamics_stencil  ! The computational stencil for the calculations
                                ! in the dynamic core.
-  integer,allocatable :: pelist(:) ! list of pes for this instance of the ocean
-  integer :: mom_comm          ! list of pes for this instance of the ocean
-  integer :: num_procs         ! number of processors to pass to stochastic physics
-  integer :: iret              ! return code from stochastic physics
-  integer :: me                !  my pe
-  integer :: master            !  root pe
   real :: conv2watt, conv2salt
   character(len=48) :: flux_units, S_flux_units
 
@@ -2505,18 +2496,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call copy_dyngrid_to_MOM_grid(dG, G, US)
   call destroy_dyn_horgrid(dG)
 
-  do_epbl=.false.
-  do_sppt=.false.
-#ifdef UFS
-  num_procs=num_PEs()
-  allocate(pelist(num_procs))
-  call Get_PElist(pelist,commID = mom_comm)
-  me=PE_here()
-  master=root_PE()
-
-  call init_stochastic_physics_ocn(CS%dt_therm,G%geoLonT,G%geoLatT,G%ied-G%isd+1,G%jed-G%jsd+1,nz,do_epbl,do_sppt,master,mom_comm,iret)
-#endif
-
   ! Set a few remaining fields that are specific to the ocean grid type.
   if (CS%rotate_index) then
     call set_first_direction(G, modulo(first_direction + turns, 2))
@@ -2967,9 +2946,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   !### This could perhaps go here instead of in finish_MOM_initialization?
   ! call fix_restart_scaling(GV)
   ! call fix_restart_unit_scaling(US)
-
-  CS%diabatic_CSp%do_epbl=do_epbl
-  CS%diabatic_CSp%do_sppt=do_sppt
 
   call callTree_leave("initialize_MOM()")
   call cpu_clock_end(id_clock_init)
