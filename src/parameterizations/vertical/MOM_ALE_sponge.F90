@@ -160,7 +160,7 @@ contains
 
 !> This subroutine determines the number of points which are within sponges in this computational
 !! domain.  Only points that have positive values of Iresttime and which mask2dT indicates are ocean
-!! points are included in the sponges.  It also stores the target interface heights.
+!! points are included in the sponges.  It also stores the target interface heights. This
 subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h, nz_data, &
                                         Iresttime_u_in, Iresttime_v_in)
 
@@ -757,24 +757,24 @@ subroutine set_up_ALE_sponge_vel_field_fixed(u_val, v_val, G, GV, u_ptr, v_ptr, 
   real, target, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in) :: u_ptr !< u pointer to the field to be damped
   real, target, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in) :: v_ptr !< v pointer to the field to be damped
 
-  integer :: j, k, col
+  integer :: j, k, col, fld_sz(4)
   character(len=256) :: mesg ! String for error messages
 
   if (.not.associated(CS)) return
 
   ! stores the reference profile
-  allocate(CS%Ref_val_u%p(CS%Ref_val_u%nz_data,CS%num_col_u))
+  allocate(CS%Ref_val_u%p(CS%nz_data,CS%num_col_u))
   CS%Ref_val_u%p(:,:) = 0.0
   do col=1,CS%num_col_u
-    do k=1,CS%Ref_val_u%nz_data
+    do k=1,CS%nz_data
       CS%Ref_val_u%p(k,col) = u_val(CS%col_i_u(col),CS%col_j_u(col),k)
     enddo
   enddo
   CS%var_u%p => u_ptr
-  allocate(CS%Ref_val_v%p(CS%Ref_val_v%nz_data,CS%num_col_v))
+  allocate(CS%Ref_val_v%p(CS%nz_data,CS%num_col_v))
   CS%Ref_val_v%p(:,:) = 0.0
   do col=1,CS%num_col_v
-    do k=1,CS%Ref_val_v%nz_data
+    do k=1,CS%nz_data
       CS%Ref_val_v%p(k,col) = v_val(CS%col_i_v(col),CS%col_j_v(col),k)
     enddo
   enddo
@@ -1099,11 +1099,11 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       else
         call remapping_core_h(CS%remap_cs, nz_data, CS%Ref_hu%p(1:nz_data,c), tmp_val2, &
                  CS%nz, h_col, tmp_val1, h_neglect, h_neglect_edge)
-     endif
-     if (CS%id_sp_u_tendency > 0) tmp_u(i,j,1:nz) = CS%var_u%p(i,j,1:nz)
+      endif
+      if (CS%id_sp_u_tendency > 0) tmp_u(i,j,1:nz) = CS%var_u%p(i,j,1:nz)
       !Backward Euler method
-     CS%var_u%p(i,j,1:nz) = I1pdamp * (CS%var_u%p(i,j,1:nz) + tmp_val1 * damp)
-     if (CS%id_sp_u_tendency > 0) tmp_u(i,j,1:nz) = Idt*(CS%var_u%p(i,j,1:nz) - tmp_u(i,j,1:nz))
+      CS%var_u%p(i,j,1:nz) = I1pdamp * (CS%var_u%p(i,j,1:nz) + tmp_val1 * damp)
+      if (CS%id_sp_u_tendency > 0) tmp_u(i,j,1:nz) = Idt*(CS%var_u%p(i,j,1:nz) - tmp_u(i,j,1:nz))
     enddo
     deallocate(tmp_val2)
     if (CS%id_sp_u_tendency > 0) then
