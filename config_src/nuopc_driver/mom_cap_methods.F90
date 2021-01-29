@@ -30,6 +30,7 @@ public :: mom_set_geomtype
 public :: mom_import
 public :: mom_export
 public :: state_diagnose
+public :: ChkErr
 
 private :: State_getImport
 private :: State_setExport
@@ -251,9 +252,9 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
 
 
   !----
-  ! Partitioned Stokes Drift Components 
+  ! Partitioned Stokes Drift Components
   !----
-  if ( associated(ice_ocean_boundary%ustkb) ) then    
+  if ( associated(ice_ocean_boundary%ustkb) ) then
     allocate(stkx1(isc:iec,jsc:jec))
     allocate(stky1(isc:iec,jsc:jec))
     allocate(stkx2(isc:iec,jsc:jec))
@@ -765,15 +766,18 @@ subroutine State_SetExport(state, fldname, isc, iec, jsc, jec, input, ocean_grid
 
 end subroutine State_SetExport
 
+!> This subroutine writes the minimum, maximum and sum of each field
+!! contained within an ESMF state.
 subroutine state_diagnose(State, string, rc)
 
   ! ----------------------------------------------
   ! Diagnose status of State
   ! ----------------------------------------------
 
-  type(ESMF_State), intent(in)  :: state
-  character(len=*), intent(in)  :: string
-  integer         , intent(out) :: rc
+  type(ESMF_State), intent(in)    :: state  !< An ESMF State
+  character(len=*), intent(in)    :: string !< A string indicating whether the State is an
+                                            !! import or export State
+  integer         , intent(out)   :: rc     !< Return code
 
   ! local variables
   integer                         :: i,j,n
@@ -787,19 +791,19 @@ subroutine state_diagnose(State, string, rc)
   ! ----------------------------------------------
 
   call ESMF_StateGet(state, itemCount=fieldCount, rc=rc)
-  if (chkerr(rc,__LINE__,u_FILE_u)) return
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
   allocate(lfieldnamelist(fieldCount))
 
   call ESMF_StateGet(state, itemNameList=lfieldnamelist, rc=rc)
-  if (chkerr(rc,__LINE__,u_FILE_u)) return
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   do n = 1, fieldCount
 
      call ESMF_StateGet(state, itemName=lfieldnamelist(n), field=lfield, rc=rc)
-     if (chkerr(rc,__LINE__,u_FILE_u)) return
+     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
      call field_getfldptr(lfield, fldptr1=dataPtr1d, fldptr2=dataPtr2d, rank=lrank, rc=rc)
-     if (chkerr(rc,__LINE__,u_FILE_u)) return
+     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
      if (lrank == 0) then
         ! no local data
@@ -829,23 +833,16 @@ subroutine state_diagnose(State, string, rc)
 
 end subroutine state_diagnose
 
-!===============================================================================
-
+!> Obtain a pointer to a rank 1 or rank 2 ESMF field
 subroutine field_getfldptr(field, fldptr1, fldptr2, rank, abort, rc)
 
-  ! ----------------------------------------------
-  ! for a field, determine rank and return fldptr1 or fldptr2
-  ! abort is true by default and will abort if fldptr is not yet allocated in field
-  ! rank returns 0, 1, or 2.  0 means fldptr not allocated and abort=false
-  ! ----------------------------------------------
-
   ! input/output variables
-  type(ESMF_Field)  , intent(in)              :: field
-  real(ESMF_KIND_R8), pointer , intent(inout), optional :: fldptr1(:)
-  real(ESMF_KIND_R8), pointer , intent(inout), optional :: fldptr2(:,:)
-  integer           , intent(out)  , optional :: rank
-  logical           , intent(in)   , optional :: abort
-  integer           , intent(out)  , optional :: rc
+  type(ESMF_Field)  , intent(in)                        :: field        !< An ESMF field
+  real(ESMF_KIND_R8), pointer , intent(inout), optional :: fldptr1(:)   !< A pointer to a rank 1 ESMF field
+  real(ESMF_KIND_R8), pointer , intent(inout), optional :: fldptr2(:,:) !< A pointer to a rank 2 ESMF field
+  integer           , intent(out)            , optional :: rank         !< Field rank
+  logical           , intent(in)             , optional :: abort        !< Abort code
+  integer           , intent(out)            , optional :: rc           !< Return code
 
   ! local variables
   type(ESMF_GeomType_Flag)    :: geomtype
@@ -872,7 +869,7 @@ subroutine field_getfldptr(field, fldptr1, fldptr2, rank, abort, rc)
   lrank = -99
 
   call ESMF_FieldGet(field, status=status, rc=rc)
-  if (chkerr(rc,__LINE__,u_FILE_u)) return
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   if (status /= ESMF_FIELDSTATUS_COMPLETE) then
      lrank = 0
@@ -886,20 +883,20 @@ subroutine field_getfldptr(field, fldptr1, fldptr2, rank, abort, rc)
   else
 
      call ESMF_FieldGet(field, geomtype=geomtype, rc=rc)
-     if (chkerr(rc,__LINE__,u_FILE_u)) return
+     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
      if (geomtype == ESMF_GEOMTYPE_GRID) then
         call ESMF_FieldGet(field, rank=lrank, rc=rc)
-        if (chkerr(rc,__LINE__,u_FILE_u)) return
+        if (ChkErr(rc,__LINE__,u_FILE_u)) return
      elseif (geomtype == ESMF_GEOMTYPE_MESH) then
         call ESMF_FieldGet(field, rank=lrank, rc=rc)
-        if (chkerr(rc,__LINE__,u_FILE_u)) return
+        if (ChkErr(rc,__LINE__,u_FILE_u)) return
         call ESMF_FieldGet(field, mesh=lmesh, rc=rc)
-        if (chkerr(rc,__LINE__,u_FILE_u)) return
+        if (ChkErr(rc,__LINE__,u_FILE_u)) return
         call ESMF_MeshGet(lmesh, numOwnedNodes=nnodes, numOwnedElements=nelements, rc=rc)
-        if (chkerr(rc,__LINE__,u_FILE_u)) return
+        if (ChkErr(rc,__LINE__,u_FILE_u)) return
         if (nnodes == 0 .and. nelements == 0) lrank = 0
-     else  
+     else
         call ESMF_LogWrite(trim(subname)//": ERROR geomtype not supported ", &
              ESMF_LOGMSG_INFO)
         rc = ESMF_FAILURE
@@ -917,7 +914,7 @@ subroutine field_getfldptr(field, fldptr1, fldptr2, rank, abort, rc)
            return
         endif
         call ESMF_FieldGet(field, farrayPtr=fldptr1, rc=rc)
-        if (chkerr(rc,__LINE__,u_FILE_u)) return
+        if (ChkErr(rc,__LINE__,u_FILE_u)) return
      elseif (lrank == 2) then
         if (.not.present(fldptr2)) then
            call ESMF_LogWrite(trim(subname)//": ERROR missing rank=2 array ", &
@@ -926,7 +923,7 @@ subroutine field_getfldptr(field, fldptr1, fldptr2, rank, abort, rc)
            return
         endif
         call ESMF_FieldGet(field, farrayPtr=fldptr2, rc=rc)
-        if (chkerr(rc,__LINE__,u_FILE_u)) return
+        if (ChkErr(rc,__LINE__,u_FILE_u)) return
      else
         call ESMF_LogWrite(trim(subname)//": ERROR in rank ", &
              ESMF_LOGMSG_ERROR, line=__LINE__, file=u_FILE_u)
@@ -942,16 +939,17 @@ subroutine field_getfldptr(field, fldptr1, fldptr2, rank, abort, rc)
 
 end subroutine field_getfldptr
 
-logical function chkerr(rc, line, file)
-  integer, intent(in) :: rc
-  integer, intent(in) :: line
-  character(len=*), intent(in) :: file
+!> Returns true if ESMF_LogFoundError() determines that rc is an error code. Otherwise false.
+logical function ChkErr(rc, line, file)
+  integer, intent(in) :: rc            !< return code to check
+  integer, intent(in) :: line          !< Integer source line number
+  character(len=*), intent(in) :: file !< User-provided source file name
   integer :: lrc
-  chkerr = .false.
+  ChkErr = .false.
   lrc = rc
   if (ESMF_LogFoundError(rcToCheck=lrc, msg=ESMF_LOGERR_PASSTHRU, line=line, file=file)) then
-     chkerr = .true.
+     ChkErr = .true.
   endif
-end function chkerr
+end function ChkErr
 
 end module MOM_cap_methods

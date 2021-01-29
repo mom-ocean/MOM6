@@ -36,6 +36,7 @@ use MOM_ocean_model_nuopc,    only: ocean_model_init, update_ocean_model, ocean_
 use MOM_ocean_model_nuopc,    only: get_ocean_grid, get_eps_omesh
 use MOM_cap_time,             only: AlarmInit
 use MOM_cap_methods,          only: mom_import, mom_export, mom_set_geomtype, state_diagnose
+use MOM_cap_methods,          only: ChkErr
 #ifdef CESMCOUPLED
 use shr_file_mod,             only: shr_file_setLogUnit, shr_file_getLogUnit
 #endif
@@ -2071,18 +2072,6 @@ subroutine shr_file_getLogUnit(nunit)
   ! having cppdefs in the main program
 end subroutine shr_file_getLogUnit
 #endif
-
-logical function chkerr(rc, line, file)
-  integer, intent(in) :: rc
-  integer, intent(in) :: line
-  character(len=*), intent(in) :: file
-  integer :: lrc
-  chkerr = .false.
-  lrc = rc
-  if (ESMF_LogFoundError(rcToCheck=lrc, msg=ESMF_LOGERR_PASSTHRU, line=line, file=file)) then
-     chkerr = .true.
-  endif
-end function chkerr
 
 !>
 !! @page nuopc_cap NUOPC Cap
