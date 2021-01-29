@@ -78,7 +78,7 @@ end subroutine horiz_interp_from_weights_field2d
 subroutine horiz_interp_from_weights_field3d(Interp, data_in, data_out, verbose, mask_in, mask_out, &
                                              missing_value, missing_permit, err_msg)
 
-  type(horiz_interp_type), intent(in) :: Interp             !< type containing interpolation 
+  type(horiz_interp_type), intent(in) :: Interp             !< type containing interpolation
                                                             !! options/weights
   real, intent(in), dimension(:,:,:) :: data_in             !< input data
   real, intent(out), dimension(:,:,:) :: data_out           !< output data
