@@ -7,11 +7,11 @@ use MOM_coms_infra,  only : PE_here, root_PE, num_PEs
 use MOM_cpu_clock,   only : cpu_clock_begin, cpu_clock_end
 use MOM_error_infra, only : MOM_error=>MOM_err, NOTE, WARNING, FATAL
 
-use mpp_domains_mod, only : domain2D, domain1D, group_pass_type => mpp_group_update_type
+use mpp_domains_mod, only : domain2D, domain1D
 use mpp_domains_mod, only : mpp_define_io_domain, mpp_define_domains, mpp_deallocate_domain
 use mpp_domains_mod, only : mpp_get_domain_components, mpp_get_domain_extents
 use mpp_domains_mod, only : mpp_get_compute_domain, mpp_get_data_domain, mpp_get_global_domain
-use mpp_domains_mod, only : mpp_get_boundary, mpp_update_domains, global_field_sum => mpp_global_sum
+use mpp_domains_mod, only : mpp_get_boundary, mpp_update_domains
 use mpp_domains_mod, only : mpp_start_update_domains, mpp_complete_update_domains
 use mpp_domains_mod, only : mpp_create_group_update, mpp_do_group_update
 use mpp_domains_mod, only : mpp_reset_group_update_field, mpp_group_update_initialized
@@ -25,6 +25,12 @@ use mpp_domains_mod, only : To_North => SUPDATE, To_South => NUPDATE
 use mpp_domains_mod, only : CENTER, CORNER, NORTH_FACE => NORTH, EAST_FACE => EAST
 use fms_io_mod,      only : file_exist, parse_mask_table
 use fms_affinity_mod, only : fms_affinity_init, fms_affinity_set, fms_affinity_get
+
+! This subroutine is not in MOM6/src but may be required by legacy drivers
+use mpp_domains_mod, only : global_field_sum => mpp_global_sum
+
+! The `group_pass_type` fields are never accessed, so we keep it as an FMS type
+use mpp_domains_mod, only : group_pass_type => mpp_group_update_type
 
 implicit none ; private
 
