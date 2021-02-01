@@ -38,6 +38,7 @@ public :: create_file, reopen_file, cmor_long_std, ensembler, MOM_io_init
 public :: MOM_write_field, var_desc, modify_vardesc, query_vardesc
 public :: open_namelist_file, check_namelist_error, check_nml_error
 public :: get_var_sizes, verify_variable_units, num_timelevels, read_variable, read_attribute
+public :: open_file_to_read, close_file_to_read
 ! The following are simple pass throughs of routines from MOM_io_infra or other modules.
 public :: file_exists, open_file, close_file, flush_file, get_filename_appendix
 public :: get_file_info, field_exists, get_file_fields, get_file_times
@@ -491,7 +492,7 @@ end function num_timelevels
 
 !> get_var_sizes returns the number and size of dimensions associate with a variable in a file.
 !! Usually only the root PE does the read, and then the information is broadcast
-subroutine get_var_sizes(filename, varname, ndims, sizes, match_case, caller, all_read, dim_names)
+subroutine get_var_sizes(filename, varname, ndims, sizes, match_case, caller, all_read, dim_names, ncid_in)
   character(len=*),      intent(in)  :: filename   !< Name of the file to read, used here in messages
   character(len=*),      intent(in)  :: varname    !< The variable name, used here for messages
   integer,               intent(out) :: ndims      !< The number of dimensions to the variable
@@ -505,6 +506,8 @@ subroutine get_var_sizes(filename, varname, ndims, sizes, match_case, caller, al
                                                    !! root PE reads and then it broadcasts the results.
   character(len=*), dimension(:), &
                optional, intent(out) :: dim_names  !< The names of the dimensions for this variable
+  integer,     optional, intent(in)  :: ncid_in    !< The netCDF ID of an open file.  If absent, the
+                                                   !! file is opened and closed within this routine.
 
   logical :: do_read, do_broadcast
   integer, allocatable :: size_msg(:)  ! An array combining the number of dimensions and the sizes.
@@ -514,7 +517,7 @@ subroutine get_var_sizes(filename, varname, ndims, sizes, match_case, caller, al
   if (present(all_read)) do_read = all_read .or. do_read
   do_broadcast = .true. ; if (present(all_read)) do_broadcast = .not.all_read
 
-  if (do_read) call read_var_sizes(filename, varname, ndims, sizes, match_case, caller, dim_names)
+  if (do_read) call read_var_sizes(filename, varname, ndims, sizes, match_case, caller, dim_names, ncid_in)
 
   if (do_broadcast) then
     ! Distribute the sizes from the root PE.
@@ -540,7 +543,7 @@ end subroutine get_var_sizes
 
 !> read_var_sizes returns the number and size of dimensions associate with a variable in a file.
 !! Every processor for which this is called does the reading.
-subroutine read_var_sizes(filename, varname, ndims, sizes, match_case, caller, dim_names)
+subroutine read_var_sizes(filename, varname, ndims, sizes, match_case, caller, dim_names, ncid_in)
   character(len=*),      intent(in)  :: filename   !< Name of the file to read, used here in messages
   character(len=*),      intent(in)  :: varname    !< The variable name, used here for messages
   integer,               intent(out) :: ndims      !< The number of dimensions to the variable
@@ -552,6 +555,8 @@ subroutine read_var_sizes(filename, varname, ndims, sizes, match_case, caller, d
                optional, intent(in)  :: caller     !< The name of a calling routine for use in error messages
   character(len=*), dimension(:), &
                optional, intent(out) :: dim_names  !< The names of the dimensions for this variable
+  integer,     optional, intent(in)  :: ncid_in    !< The netCDF ID of an open file.  If absent, the
+                                                   !! file is opened and closed within this routine.
 
   character(len=256) :: hdr, dimname
   integer, allocatable :: dimids(:)
@@ -560,8 +565,12 @@ subroutine read_var_sizes(filename, varname, ndims, sizes, match_case, caller, d
   hdr = "get_var_size: " ; if (present(caller)) hdr = trim(hdr)//": "
   sizes(:) = 0 ; ndims = -1
 
-  call open_file_to_read(filename, ncid, success=success)
-  if (.not.success) return
+  if (present(ncid_in)) then
+    ncid = ncid_in
+  else
+    call open_file_to_read(filename, ncid, success=success)
+    if (.not.success) return
+  endif
 
   ! Get the dimension sizes of the variable varname.
   call get_varid(varname, ncid, filename, varid, match_case=match_case)
@@ -593,25 +602,29 @@ subroutine read_var_sizes(filename, varname, ndims, sizes, match_case, caller, d
   enddo
   deallocate(dimids)
 
-  status = NF90_close(ncid)
-  if (status /= NF90_NOERR) call MOM_error(WARNING, trim(hdr) // trim(NF90_STRERROR(status)) //&
-        " Difficulties closing "//trim(filename))
+  if (.not.present(ncid_in)) call close_file_to_read(ncid, filename)
 
 end subroutine read_var_sizes
 
 !> Read a real scalar variable from a netCDF file with the root PE, and broadcast the
 !! results to all the other PEs.
-subroutine read_variable_0d(filename, varname, var)
-  character(len=*), intent(in)    :: filename !< The name of the file to read
-  character(len=*), intent(in)    :: varname  !< The variable name of the data in the file
-  real,             intent(inout) :: var      !< The scalar into which to read the data
+subroutine read_variable_0d(filename, varname, var, ncid_in)
+  character(len=*),  intent(in)    :: filename !< The name of the file to read
+  character(len=*),  intent(in)    :: varname  !< The variable name of the data in the file
+  real,              intent(inout) :: var      !< The scalar into which to read the data
+  integer, optional, intent(in)    :: ncid_in  !< The netCDF ID of an open file.  If absent, the
+                                               !! file is opened and closed within this routine.
 
   integer :: varid, ncid, rc
   character(len=256) :: hdr
   hdr = "read_variable_0d"
 
   if (is_root_pe()) then
-    call open_file_to_read(filename, ncid)
+    if (present(ncid_in)) then
+      ncid = ncid_in
+    else
+      call open_file_to_read(filename, ncid)
+    endif
 
     call get_varid(varname, ncid, filename, varid, match_case=.false.)
     if (varid < 0) call MOM_error(FATAL, "Unable to get netCDF varid for "//trim(varname)//&
@@ -620,7 +633,7 @@ subroutine read_variable_0d(filename, varname, var)
     if (rc /= NF90_NOERR) call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //&
           " Difficulties reading "//trim(varname)//" from "//trim(filename))
 
-    rc = NF90_close(ncid)
+    if (.not.present(ncid_in)) call close_file_to_read(ncid, filename)
   endif
 
   call broadcast(var, blocking=.true.)
@@ -628,17 +641,23 @@ end subroutine read_variable_0d
 
 !> Read a 1-d real variable from a netCDF file with the root PE, and broadcast the
 !! results to all the other PEs.
-subroutine read_variable_1d(filename, varname, var)
-  character(len=*),  intent(in)    :: filename !< The name of the file to read
-  character(len=*),  intent(in)    :: varname  !< The variable name of the data in the file
- real, dimension(:), intent(inout) :: var      !< The 1-d array into which to read the data
+subroutine read_variable_1d(filename, varname, var, ncid_in)
+  character(len=*),   intent(in)    :: filename !< The name of the file to read
+  character(len=*),   intent(in)    :: varname  !< The variable name of the data in the file
+  real, dimension(:), intent(inout) :: var      !< The 1-d array into which to read the data
+  integer,  optional, intent(in)    :: ncid_in  !< The netCDF ID of an open file.  If absent, the
+                                                !! file is opened and closed within this routine.
 
   integer :: varid, ncid, rc
   character(len=256) :: hdr
   hdr = "read_variable_1d"
 
   if (is_root_pe()) then
-    call open_file_to_read(filename, ncid)
+    if (present(ncid_in)) then
+      ncid = ncid_in
+    else
+      call open_file_to_read(filename, ncid)
+    endif
 
     call get_varid(varname, ncid, filename, varid, match_case=.false.)
     if (varid < 0) call MOM_error(FATAL, "Unable to get netCDF varid for "//trim(varname)//&
@@ -647,7 +666,7 @@ subroutine read_variable_1d(filename, varname, var)
     if (rc /= NF90_NOERR) call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //&
           " Difficulties reading "//trim(varname)//" from "//trim(filename))
 
-    rc = NF90_close(ncid)
+    if (.not.present(ncid_in)) call close_file_to_read(ncid, filename)
   endif
 
   call broadcast(var, size(var), blocking=.true.)
@@ -655,17 +674,23 @@ end subroutine read_variable_1d
 
 !> Read a integer scalar variable from a netCDF file with the root PE, and broadcast the
 !! results to all the other PEs.
-subroutine read_variable_0d_int(filename, varname, var)
-  character(len=*), intent(in)    :: filename !< The name of the file to read
-  character(len=*), intent(in)    :: varname  !< The variable name of the data in the file
-  integer,          intent(inout) :: var      !< The scalar into which to read the data
+subroutine read_variable_0d_int(filename, varname, var, ncid_in)
+  character(len=*),  intent(in)    :: filename !< The name of the file to read
+  character(len=*),  intent(in)    :: varname  !< The variable name of the data in the file
+  integer,           intent(inout) :: var      !< The scalar into which to read the data
+  integer, optional, intent(in)    :: ncid_in  !< The netCDF ID of an open file.  If absent, the
+                                               !! file is opened and closed within this routine.
 
   integer :: varid, ncid, rc
   character(len=256) :: hdr
   hdr = "read_variable_0d_int"
 
   if (is_root_pe()) then
-    call open_file_to_read(filename, ncid)
+    if (present(ncid_in)) then
+      ncid = ncid_in
+    else
+      call open_file_to_read(filename, ncid)
+    endif
 
     call get_varid(varname, ncid, filename, varid, match_case=.false.)
     if (varid < 0) call MOM_error(FATAL, "Unable to get netCDF varid for "//trim(varname)//&
@@ -674,7 +699,7 @@ subroutine read_variable_0d_int(filename, varname, var)
     if (rc /= NF90_NOERR) call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //&
           " Difficulties reading "//trim(varname)//" from "//trim(filename))
 
-    rc = NF90_close(ncid)
+    if (.not.present(ncid_in)) call close_file_to_read(ncid, filename)
   endif
 
   call broadcast(var, blocking=.true.)
@@ -682,17 +707,23 @@ end subroutine read_variable_0d_int
 
 !> Read a 1-d integer variable from a netCDF file with the root PE, and broadcast the
 !! results to all the other PEs.
-subroutine read_variable_1d_int(filename, varname, var)
+subroutine read_variable_1d_int(filename, varname, var, ncid_in)
   character(len=*),      intent(in)    :: filename !< The name of the file to read
   character(len=*),      intent(in)    :: varname  !< The variable name of the data in the file
   integer, dimension(:), intent(inout) :: var      !< The 1-d array into which to read the data
+  integer, optional,     intent(in)    :: ncid_in  !< The netCDF ID of an open file.  If absent, the
+                                                   !! file is opened and closed within this routine.
 
   integer :: varid, ncid, rc
   character(len=256) :: hdr
   hdr = "read_variable_1d_int"
 
   if (is_root_pe()) then
-    call open_file_to_read(filename, ncid)
+    if (present(ncid_in)) then
+      ncid = ncid_in
+    else
+      call open_file_to_read(filename, ncid)
+    endif
 
     call get_varid(varname, ncid, filename, varid, match_case=.false.)
     if (varid < 0) call MOM_error(FATAL, "Unable to get netCDF varid for "//trim(varname)//&
@@ -701,14 +732,14 @@ subroutine read_variable_1d_int(filename, varname, var)
     if (rc /= NF90_NOERR) call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //&
           " Difficulties reading "//trim(varname)//" from "//trim(filename))
 
-    rc = NF90_close(ncid)
+    if (.not.present(ncid_in)) call close_file_to_read(ncid, filename)
   endif
 
   call broadcast(var, size(var), blocking=.true.)
 end subroutine read_variable_1d_int
 
 !> Read a character-string global or variable attribute
-subroutine read_attribute_str(filename, attname, att_val, varname, found, all_read)
+subroutine read_attribute_str(filename, attname, att_val, varname, found, all_read, ncid_in)
   character(len=*),           intent(in)  :: filename !< Name of the file to read
   character(len=*),           intent(in)  :: attname  !< Name of the attribute to read
   character(:), allocatable,  intent(out) :: att_val  !< The value of the attribute
@@ -718,6 +749,8 @@ subroutine read_attribute_str(filename, attname, att_val, varname, found, all_re
   logical,          optional, intent(in)  :: all_read !< If present and true, all PEs that call this
                                                       !! routine actually do the read, otherwise only
                                                       !! root PE reads and then broadcasts the results.
+  integer,          optional, intent(in)  :: ncid_in  !< The netCDF ID of an open file.  If absent, the
+                                                      !! file is opened and closed within this routine.
 
   logical :: do_read, do_broadcast
   integer :: rc, ncid, varid, att_type, att_len, info(2)
@@ -729,8 +762,14 @@ subroutine read_attribute_str(filename, attname, att_val, varname, found, all_re
   do_read = is_root_pe() ; if (present(all_read)) do_read = all_read .or. do_read
   do_broadcast = .true. ; if (present(all_read)) do_broadcast = .not.all_read
 
-  call open_file_to_read(filename, ncid, success=found)
-  if (present(found)) then ; if (.not.found) do_read = .false. ; endif
+  if (do_read) then
+    if (present(ncid_in)) then
+      ncid = ncid_in
+    else
+      call open_file_to_read(filename, ncid, success=found)
+      if (present(found)) then ; if (.not.found) do_read = .false. ; endif
+    endif
+  endif
 
   if (do_read) then
     rc = NF90_ENOTATT ; att_len = 0
@@ -759,7 +798,7 @@ subroutine read_attribute_str(filename, attname, att_val, varname, found, all_re
     endif
     if (present(found)) found = (rc == NF90_NOERR)
 
-    rc = NF90_close(ncid)
+    if (.not.present(ncid_in)) call close_file_to_read(ncid, filename)
   endif
 
   if (do_broadcast) then
@@ -786,7 +825,7 @@ end subroutine read_attribute_str
 
 
 !> Read a 32-bit integer global or variable attribute
-subroutine read_attribute_int32(filename, attname, att_val, varname, found, all_read)
+subroutine read_attribute_int32(filename, attname, att_val, varname, found, all_read, ncid_in)
   character(len=*),           intent(in)  :: filename !< Name of the file to read
   character(len=*),           intent(in)  :: attname  !< Name of the attribute to read
   integer(kind=int32),        intent(out) :: att_val  !< The value of the attribute
@@ -796,6 +835,8 @@ subroutine read_attribute_int32(filename, attname, att_val, varname, found, all_
   logical,          optional, intent(in)  :: all_read !< If present and true, all PEs that call this
                                                       !! routine actually do the read, otherwise only
                                                       !! root PE reads and then broadcasts the results.
+  integer,        optional, intent(in)    :: ncid_in  !< The netCDF ID of an open file.  If absent, the
+                                                      !! file is opened and closed within this routine.
 
   logical :: do_read, do_broadcast
   integer :: rc, ncid, varid, is_found
@@ -806,8 +847,14 @@ subroutine read_attribute_int32(filename, attname, att_val, varname, found, all_
   do_read = is_root_pe() ; if (present(all_read)) do_read = all_read .or. do_read
   do_broadcast = .true. ; if (present(all_read)) do_broadcast = .not.all_read
 
-  call open_file_to_read(filename, ncid, success=found)
-  if (present(found)) then ; if (.not.found) do_read = .false. ; endif
+  if (do_read) then
+    if (present(ncid_in)) then
+      ncid = ncid_in
+    else
+      call open_file_to_read(filename, ncid, success=found)
+      if (present(found)) then ; if (.not.found) do_read = .false. ; endif
+    endif
+  endif
 
   if (do_read) then
     rc = NF90_ENOTATT
@@ -827,7 +874,7 @@ subroutine read_attribute_int32(filename, attname, att_val, varname, found, all_
     endif
     if (present(found)) found = (rc == NF90_NOERR)
 
-    rc = NF90_close(ncid)
+    if (.not.present(ncid_in)) call close_file_to_read(ncid, filename)
   endif
 
   if (do_broadcast) then
@@ -843,7 +890,7 @@ end subroutine read_attribute_int32
 
 
 !> Read a 64-bit integer global or variable attribute
-subroutine read_attribute_int64(filename, attname, att_val, varname, found, all_read)
+subroutine read_attribute_int64(filename, attname, att_val, varname, found, all_read, ncid_in)
   character(len=*),           intent(in)  :: filename !< Name of the file to read
   character(len=*),           intent(in)  :: attname  !< Name of the attribute to read
   integer(kind=int64),        intent(out) :: att_val  !< The value of the attribute
@@ -853,6 +900,8 @@ subroutine read_attribute_int64(filename, attname, att_val, varname, found, all_
   logical,          optional, intent(in)  :: all_read !< If present and true, all PEs that call this
                                                       !! routine actually do the read, otherwise only
                                                       !! root PE reads and then broadcasts the results.
+  integer,        optional, intent(in)    :: ncid_in  !< The netCDF ID of an open file.  If absent, the
+                                                      !! file is opened and closed within this routine.
 
   logical :: do_read, do_broadcast
   integer :: rc, ncid, varid, is_found
@@ -863,8 +912,14 @@ subroutine read_attribute_int64(filename, attname, att_val, varname, found, all_
   do_read = is_root_pe() ; if (present(all_read)) do_read = all_read .or. do_read
   do_broadcast = .true. ; if (present(all_read)) do_broadcast = .not.all_read
 
-  call open_file_to_read(filename, ncid, success=found)
-  if (present(found)) then ; if (.not.found) do_read = .false. ; endif
+  if (do_read) then
+    if (present(ncid_in)) then
+      ncid = ncid_in
+    else
+      call open_file_to_read(filename, ncid, success=found)
+      if (present(found)) then ; if (.not.found) do_read = .false. ; endif
+    endif
+  endif
 
   if (do_read) then
     rc = NF90_ENOTATT
@@ -899,7 +954,7 @@ subroutine read_attribute_int64(filename, attname, att_val, varname, found, all_
 end subroutine read_attribute_int64
 
 !> Read a real global or variable attribute
-subroutine read_attribute_real(filename, attname, att_val, varname, found, all_read)
+subroutine read_attribute_real(filename, attname, att_val, varname, found, all_read, ncid_in)
   character(len=*),           intent(in)  :: filename !< Name of the file to read
   character(len=*),           intent(in)  :: attname  !< Name of the attribute to read
   real,                       intent(out) :: att_val  !< The value of the attribute
@@ -909,6 +964,8 @@ subroutine read_attribute_real(filename, attname, att_val, varname, found, all_r
   logical,          optional, intent(in)  :: all_read !< If present and true, all PEs that call this
                                                       !! routine actually do the read, otherwise only
                                                       !! root PE reads and then broadcasts the results.
+  integer,          optional, intent(in)  :: ncid_in  !< The netCDF ID of an open file.  If absent, the
+                                                      !! file is opened and closed within this routine.
 
   logical :: do_read, do_broadcast
   integer :: rc, ncid, varid, is_found
@@ -919,8 +976,14 @@ subroutine read_attribute_real(filename, attname, att_val, varname, found, all_r
   do_read = is_root_pe() ; if (present(all_read)) do_read = all_read .or. do_read
   do_broadcast = .true. ; if (present(all_read)) do_broadcast = .not.all_read
 
-  call open_file_to_read(filename, ncid, success=found)
-  if (present(found)) then ; if (.not.found) do_read = .false. ; endif
+  if (do_read) then
+    if (present(ncid_in)) then
+      ncid = ncid_in
+    else
+      call open_file_to_read(filename, ncid, success=found)
+      if (present(found)) then ; if (.not.found) do_read = .false. ; endif
+    endif
+  endif
 
   if (do_read) then
     rc = NF90_ENOTATT
@@ -940,7 +1003,7 @@ subroutine read_attribute_real(filename, attname, att_val, varname, found, all_r
     endif
     if (present(found)) found = (rc == NF90_NOERR)
 
-    rc = NF90_close(ncid)
+    if (.not.present(ncid_in)) call close_file_to_read(ncid, filename)
   endif
 
   if (do_broadcast) then
@@ -971,6 +1034,22 @@ subroutine open_file_to_read(filename, ncid, success)
   endif
 
 end subroutine open_file_to_read
+
+!> Close a netcdf file that had been opened for reading, with error handling
+subroutine close_file_to_read(ncid, filename)
+  integer,                    intent(inout) :: ncid       !< The netcdf handle for the file to close
+  character(len=*), optional, intent(in)    :: filename   !< path and name of the file to close
+  integer :: rc
+  if (ncid >= 0) then
+    rc = NF90_close(ncid)
+    if (present(filename) .and. (rc /= NF90_NOERR)) then
+      call MOM_error(WARNING, "Difficulties closing "//trim(filename)//": "//trim(NF90_STRERROR(rc)))
+    elseif (rc /= NF90_NOERR) then
+      call MOM_error(WARNING, "Difficulties closing file: "//trim(NF90_STRERROR(rc)))
+    endif
+  endif
+  ncid = -1
+end subroutine close_file_to_read
 
 !> get_varid finds the netcdf handle for the potentially case-insensitive variable name in a file
 subroutine get_varid(varname, ncid, filename, varid, match_case, found)
@@ -1362,7 +1441,7 @@ subroutine MOM_write_field_0d(io_unit, field_md, field, tstamp, fill_value)
 end subroutine MOM_write_field_0d
 
 !> Given filename and fieldname, this subroutine returns the size of the field in the file
-subroutine field_size(filename, fieldname, sizes, field_found, no_domain, ndims)
+subroutine field_size(filename, fieldname, sizes, field_found, no_domain, ndims, ncid_in)
   character(len=*),      intent(in)    :: filename  !< The name of the file to read
   character(len=*),      intent(in)    :: fieldname !< The name of the variable whose sizes are returned
   integer, dimension(:), intent(inout) :: sizes     !< The sizes of the variable in each dimension
@@ -1373,12 +1452,14 @@ subroutine field_size(filename, fieldname, sizes, field_found, no_domain, ndims)
                                                     !! names with an appended tile number.  If
                                                     !! ndims is present, the default changes to true.
   integer,     optional, intent(out)   :: ndims     !< The number of dimensions to the variable
+  integer,     optional, intent(in)    :: ncid_in   !< The netCDF ID of an open file.  If absent, the
+                                                    !! file is opened and closed within this routine.
 
   if (present(ndims)) then
     if (present(no_domain)) then ; if (.not.no_domain) call MOM_error(FATAL, &
           "field_size does not support the ndims argument when no_domain is present and false.")
     endif
-    call get_var_sizes(filename, fieldname, ndims, sizes, match_case=.false.)
+    call get_var_sizes(filename, fieldname, ndims, sizes, match_case=.false., ncid_in=ncid_in)
     if (present(field_found)) field_found = (ndims >= 0)
     if ((ndims < 0) .and. .not.present(field_found)) then
       call MOM_error(FATAL, "Variable "//trim(fieldname)//" not found in "//trim(filename) )

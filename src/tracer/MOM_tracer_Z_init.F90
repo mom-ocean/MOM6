@@ -7,6 +7,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 ! use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : MOM_read_data, get_var_sizes, read_attribute, read_variable
+use MOM_io, only : open_file_to_read, close_file_to_read
 use MOM_EOS, only : EOS_type, calculate_density, calculate_density_derivs, EOS_domain
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_verticalGrid, only : verticalGrid_type
@@ -407,16 +408,22 @@ subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
   mdl = "MOM_tracer_Z_init read_Z_edges: "
   tr_msg = trim(tr_name)//" in "//trim(filename)
 
-  call get_var_sizes(filename, tr_name, ndim, sizes, dim_names=dim_names)
+  if (is_root_PE()) then
+    call open_file_to_read(filename, ncid)
+  else
+    ncid = -1
+  endif
+
+  call get_var_sizes(filename, tr_name, ndim, sizes, dim_names=dim_names, ncid_in=ncid)
   if ((ndim < 3) .or. (ndim > 4)) &
     call MOM_ERROR(FATAL, mdl//" "//trim(tr_msg)//" has too many or too few dimensions.")
   nz_out = sizes(3)
 
   if (.not.use_missing) then  ! Try to find the missing value from the dataset.
-    call read_attribute(filename, "missing_value", missing, varname=tr_name, found=use_missing)
+    call read_attribute(filename, "missing_value", missing, varname=tr_name, found=use_missing, ncid_in=ncid)
   endif
   ! Find out if the Z-axis has an edges attribute
-  call read_attribute(filename, "edges", edge_name, varname=dim_names(3), found=has_edges)
+  call read_attribute(filename, "edges", edge_name, varname=dim_names(3), found=has_edges, ncid_in=ncid)
 
   nz_edge = sizes(3) ; if (has_edges) nz_edge = sizes(3)+1
   allocate(z_edges(nz_edge)) ; z_edges(:) = 0.0
@@ -425,10 +432,11 @@ subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
 
   ! Read the right variable.
   if (has_edges) then
-    call read_variable(filename, edge_name, z_edges)
+    call read_variable(filename, edge_name, z_edges, ncid)
   else
-    call read_variable(filename, dim_names(3), z_edges)
+    call read_variable(filename, dim_names(3), z_edges, ncid)
   endif
+  call close_file_to_read(ncid, filename)
   if (allocated(edge_name)) deallocate(edge_name)
 
   ! z_edges should be montonically decreasing with our sign convention.

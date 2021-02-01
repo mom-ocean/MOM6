@@ -13,6 +13,7 @@ use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, log_param, param_file_type, log_version
 use MOM_io, only : close_file, create_file, fieldtype, file_exists, field_size, stdout
 use MOM_io, only : MOM_read_data, MOM_read_vector, read_variable, SINGLE_FILE, MULTIPLE
+use MOM_io, only : open_file_to_read, close_file_to_read
 use MOM_io, only : slasher, vardesc, MOM_write_field, var_desc
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
@@ -193,7 +194,7 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
   integer, dimension(:), allocatable :: ig, jg ! The global indicies of the points to modify
   character(len=200) :: topo_edits_file, inputdir ! Strings for file/path
   character(len=40)  :: mdl = "apply_topography_edits_from_file" ! This subroutine's name.
-  integer :: i, j, n, n_edits, i_file, j_file, ndims, sizes(8)
+  integer :: i, j, n, ncid, n_edits, i_file, j_file, ndims, sizes(8)
   logical :: found
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
@@ -209,19 +210,24 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
   if (len_trim(topo_edits_file)==0) return
 
   topo_edits_file = trim(inputdir)//trim(topo_edits_file)
-  if (.not.file_exists(topo_edits_file, G%Domain)) &
-     call MOM_error(FATAL, trim(mdl)//': Unable to find file '//trim(topo_edits_file))
+  if (is_root_PE()) then
+    if (.not.file_exists(topo_edits_file, G%Domain)) &
+      call MOM_error(FATAL, trim(mdl)//': Unable to find file '//trim(topo_edits_file))
+    call open_file_to_read(topo_edits_file, ncid)
+  else
+    ncid = -1
+  endif
 
   ! Read and check the values of ni and nj in the file for consistency with this configuration.
-  call read_variable(topo_edits_file, 'ni', i_file)
-  call read_variable(topo_edits_file, 'nj', j_file)
+  call read_variable(topo_edits_file, 'ni', i_file, ncid_in=ncid)
+  call read_variable(topo_edits_file, 'nj', j_file, ncid_in=ncid)
   if (i_file /= G%ieg) call MOM_error(FATAL, trim(mdl)//': Incompatible i-dimension of grid in '//&
                                       trim(topo_edits_file))
   if (j_file /= G%jeg) call MOM_error(FATAL, trim(mdl)//': Incompatible j-dimension of grid in '//&
                                       trim(topo_edits_file))
 
   ! Get nEdits
-  call field_size(topo_edits_file, 'zEdit', sizes, ndims=ndims)
+  call field_size(topo_edits_file, 'zEdit', sizes, ndims=ndims, ncid_in=ncid)
   if (ndims /= 1) call MOM_error(FATAL, "The variable zEdit has an "//&
             "unexpected number of dimensions in "//trim(topo_edits_file) )
   n_edits = sizes(1)
@@ -230,9 +236,10 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
   allocate(new_depth(n_edits))
 
   ! Read iEdit, jEdit and zEdit
-  call read_variable(topo_edits_file, 'iEdit', ig)
-  call read_variable(topo_edits_file, 'jEdit', jg)
-  call read_variable(topo_edits_file, 'zEdit', new_depth)
+  call read_variable(topo_edits_file, 'iEdit', ig, ncid_in=ncid)
+  call read_variable(topo_edits_file, 'jEdit', jg, ncid_in=ncid)
+  call read_variable(topo_edits_file, 'zEdit', new_depth, ncid_in=ncid)
+  call close_file_to_read(ncid, topo_edits_file)
 
   do n = 1, n_edits
     i = ig(n) - G%isd_global + 2 ! +1 for python indexing and +1 for ig-isd_global+1
