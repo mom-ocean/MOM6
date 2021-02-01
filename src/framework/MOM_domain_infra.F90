@@ -7,22 +7,17 @@ use MOM_coms_infra,  only : PE_here, root_PE, num_PEs
 use MOM_cpu_clock,   only : cpu_clock_begin, cpu_clock_end
 use MOM_error_infra, only : MOM_error=>MOM_err, NOTE, WARNING, FATAL
 
-use mpp_domains_mod, only : MOM_define_layout => mpp_define_layout, mpp_get_boundary
-use mpp_domains_mod, only : MOM_define_io_domain => mpp_define_io_domain
-use mpp_domains_mod, only : MOM_define_domain => mpp_define_domains
-use mpp_domains_mod, only : domain2D, domain1D, mpp_get_data_domain, mpp_get_domain_components
-use mpp_domains_mod, only : mpp_get_compute_domain, mpp_get_global_domain
-use mpp_domains_mod, only : mpp_get_domain_extents, mpp_deallocate_domain
-use mpp_domains_mod, only : mpp_update_domains, global_field_sum => mpp_global_sum
+use mpp_domains_mod, only : domain2D, domain1D
+use mpp_domains_mod, only : mpp_define_io_domain, mpp_define_domains, mpp_deallocate_domain
+use mpp_domains_mod, only : mpp_get_domain_components, mpp_get_domain_extents
+use mpp_domains_mod, only : mpp_get_compute_domain, mpp_get_data_domain, mpp_get_global_domain
+use mpp_domains_mod, only : mpp_get_boundary, mpp_update_domains
 use mpp_domains_mod, only : mpp_start_update_domains, mpp_complete_update_domains
 use mpp_domains_mod, only : mpp_create_group_update, mpp_do_group_update
-use mpp_domains_mod, only : group_pass_type => mpp_group_update_type
 use mpp_domains_mod, only : mpp_reset_group_update_field, mpp_group_update_initialized
 use mpp_domains_mod, only : mpp_start_group_update, mpp_complete_group_update
-use mpp_domains_mod, only : compute_block_extent => mpp_compute_block_extent
-use mpp_domains_mod, only : mpp_redistribute
-use mpp_domains_mod, only : global_field => mpp_global_field
-use mpp_domains_mod, only : broadcast_domain => mpp_broadcast_domain
+use mpp_domains_mod, only : mpp_compute_block_extent
+use mpp_domains_mod, only : mpp_broadcast_domain, mpp_redistribute, mpp_global_field
 use mpp_domains_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM
 use mpp_domains_mod, only : CYCLIC_GLOBAL_DOMAIN, FOLD_NORTH_EDGE
 use mpp_domains_mod, only : To_East => WUPDATE, To_West => EUPDATE, Omit_Corners => EDGEUPDATE
@@ -31,25 +26,32 @@ use mpp_domains_mod, only : CENTER, CORNER, NORTH_FACE => NORTH, EAST_FACE => EA
 use fms_io_mod,      only : file_exist, parse_mask_table
 use fms_affinity_mod, only : fms_affinity_init, fms_affinity_set, fms_affinity_get
 
+! This subroutine is not in MOM6/src but may be required by legacy drivers
+use mpp_domains_mod, only : global_field_sum => mpp_global_sum
+
+! The `group_pass_type` fields are never accessed, so we keep it as an FMS type
+use mpp_domains_mod, only : group_pass_type => mpp_group_update_type
+
 implicit none ; private
 
-public :: MOM_define_domain, MOM_define_layout
-public :: create_MOM_domain, clone_MOM_domain, get_domain_components
-public :: deallocate_MOM_domain
-public :: get_domain_extent
-public :: pass_var, pass_vector, fill_symmetric_edges, global_field_sum
-public :: pass_var_start, pass_var_complete
-public :: pass_vector_start, pass_vector_complete
-public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM
-public :: CORNER, CENTER, NORTH_FACE, EAST_FACE
-public :: To_East, To_West, To_North, To_South, To_All, Omit_Corners
-public :: create_group_pass, do_group_pass, group_pass_type
-public :: start_group_pass, complete_group_pass
-public :: compute_block_extent, get_global_shape
-public :: global_field, redistribute_array, broadcast_domain
-public :: MOM_thread_affinity_set, set_MOM_thread_affinity
+! These types are inherited from mpp, but are treated as opaque here.
+public :: domain2D, domain1D, group_pass_type
+! These interfaces are actually implemented or have explicit interfaces in this file.
+public :: create_MOM_domain, clone_MOM_domain, get_domain_components, get_domain_extent
+public :: deallocate_MOM_domain, get_global_shape, compute_block_extent
+public :: pass_var, pass_vector, fill_symmetric_edges
+public :: pass_var_start, pass_var_complete, pass_vector_start, pass_vector_complete
+public :: create_group_pass, do_group_pass, start_group_pass, complete_group_pass
+public :: redistribute_array, broadcast_domain, global_field
 public :: get_simple_array_i_ind, get_simple_array_j_ind
-public :: domain2D, domain1D
+public :: MOM_thread_affinity_set, set_MOM_thread_affinity
+! These are encoding constant parmeters.
+public :: To_East, To_West, To_North, To_South, To_All, Omit_Corners
+public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR
+public :: CORNER, CENTER, NORTH_FACE, EAST_FACE
+! These are no longer used by MOM6 because the reproducing sum works so well, but they are
+! still referenced by some of the non-GFDL couplers.
+public :: global_field_sum, BITWISE_EXACT_SUM
 
 !> Do a halo update on an array
 interface pass_var
@@ -1133,7 +1135,7 @@ subroutine do_group_pass(group, MOM_dom, clock)
   type(MOM_domain_type), intent(inout) :: MOM_dom   !< The MOM_domain_type containing the mpp_domain
                                                     !! needed to determine where data should be
                                                     !! sent.
-  integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
+  integer,     optional, intent(in)    :: clock     !< The handle for a cpu time clock that should be
                                                     !! started then stopped to time this routine.
   real :: d_type
 
@@ -1618,19 +1620,19 @@ subroutine clone_MD_to_d2D(MD_in, mpp_domain, min_halo, halo_size, symmetric, &
   endif
 
   if (associated(MD_in%maskmap)) then
-    call MOM_define_domain( global_indices, MD_in%layout, mpp_domain, &
+    call mpp_define_domains( global_indices, MD_in%layout, mpp_domain, &
                 xflags=MD_in%X_FLAGS, yflags=MD_in%Y_FLAGS, xhalo=nihalo, yhalo=njhalo, &
                 xextent=xextent, yextent=yextent, symmetry=symmetric_dom, name=dom_name, &
                 maskmap=MD_in%maskmap )
   else
-    call MOM_define_domain( global_indices, MD_in%layout, mpp_domain, &
+    call mpp_define_domains( global_indices, MD_in%layout, mpp_domain, &
                 xflags=MD_in%X_FLAGS, yflags=MD_in%Y_FLAGS, xhalo=nihalo, yhalo=njhalo, &
                 symmetry=symmetric_dom, xextent=xextent, yextent=yextent, name=dom_name)
   endif
 
   if ((MD_in%io_layout(1) + MD_in%io_layout(2) > 0) .and. &
       (MD_in%layout(1)*MD_in%layout(2) > 1)) then
-    call MOM_define_io_domain(mpp_domain, MD_in%io_layout)
+    call mpp_define_io_domain(mpp_domain, MD_in%io_layout)
   endif
 
 end subroutine clone_MD_to_d2D
@@ -1836,6 +1838,33 @@ subroutine get_global_shape(domain, niglobal, njglobal)
   niglobal = domain%niglobal
   njglobal = domain%njglobal
 end subroutine get_global_shape
+
+!> Get the array ranges in one dimension for the divisions of a global index space
+subroutine compute_block_extent(isg, ieg, ndivs, ibegin, iend)
+  integer,               intent(in)  :: isg    !< The starting index of the global index space
+  integer,               intent(in)  :: ieg    !< The ending index of the global index space
+  integer,               intent(in)  :: ndivs  !< The number of divisions
+  integer, dimension(:), intent(out) :: ibegin !< The starting index of each division
+  integer, dimension(:), intent(out) :: iend   !< The ending index of each division
+
+  call mpp_compute_block_extent(isg, ieg, ndivs, ibegin, iend)
+end subroutine compute_block_extent
+
+!> Broadcast a 2-d domain from the root PE to the other PEs
+subroutine broadcast_domain(domain)
+  type(domain2d),  intent(inout) :: domain !< The domain2d type that will be shared across PEs.
+
+  call mpp_broadcast_domain(domain)
+end subroutine broadcast_domain
+
+!> Broadcast an entire 2-d array from the root processor to all others.
+subroutine global_field(domain, local, global)
+  type(domain2d),       intent(inout) :: domain !< The domain2d type that describes the decomposition
+  real, dimension(:,:), intent(in)    :: local  !< The portion of the array on the local PE
+  real, dimension(:,:), intent(out)   :: global !< The whole global array
+
+  call mpp_global_field(domain, local, global)
+end subroutine global_field
 
 !> Returns arrays of the i- and j- sizes of the h-point computational domains for each
 !! element of the grid layout.  Any input values in the extent arrays are discarded, so
