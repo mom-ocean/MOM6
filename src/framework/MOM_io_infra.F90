@@ -23,6 +23,7 @@ use mpp_io_mod,           only : APPEND_FILE=>MPP_APPEND, ASCII_FILE=>MPP_ASCII
 use mpp_io_mod,           only : MULTIPLE=>MPP_MULTI, NETCDF_FILE=>MPP_NETCDF
 use mpp_io_mod,           only : OVERWRITE_FILE=>MPP_OVERWR, READONLY_FILE=>MPP_RDONLY
 use mpp_io_mod,           only : SINGLE_FILE=>MPP_SINGLE, WRITEONLY_FILE=>MPP_WRONLY
+use iso_fortran_env,      only : int64
 
 implicit none ; private
 
@@ -51,8 +52,8 @@ interface MOM_read_data
   module procedure MOM_read_data_4d
   module procedure MOM_read_data_3d
   module procedure MOM_read_data_2d, MOM_read_data_2d_region
-  module procedure MOM_read_data_1d
-  module procedure MOM_read_data_0d
+  module procedure MOM_read_data_1d, MOM_read_data_1d_int
+  module procedure MOM_read_data_0d, MOM_read_data_0d_int
 end interface
 
 !> Write a registered field to an output file
@@ -81,11 +82,11 @@ contains
 !> Reads the checksum value for a field that was recorded in a file, along with a flag indicating
 !! whether the file contained a valid checksum for this field.
 subroutine read_field_chksum(field, chksum, valid_chksum)
-  type(fieldtype), intent(in)  :: field !< The field whose checksum attribute is to be read.
-  integer(kind=8), intent(out) :: chksum !< The checksum for the field.
-  logical,         intent(out) :: valid_chksum  !< If true, chksum has been successfully read.
+  type(fieldtype),     intent(in)  :: field !< The field whose checksum attribute is to be read.
+  integer(kind=int64), intent(out) :: chksum !< The checksum for the field.
+  logical,             intent(out) :: valid_chksum  !< If true, chksum has been successfully read.
   ! Local variables
-  integer(kind=8), dimension(3) :: checksum_file
+  integer(kind=int64), dimension(3) :: checksum_file
 
   checksum_file(:) = -1
   valid_chksum = mpp_attribute_exist(field, "checksum")
@@ -268,7 +269,7 @@ subroutine get_field_atts(field, name, units, longname, checksum)
   character(len=*), optional, intent(out) :: name  !< The variable name
   character(len=*), optional, intent(out) :: units !< The units of the variable
   character(len=*), optional, intent(out) :: longname  !< The long name of the variable
-  integer(kind=8),  dimension(:), &
+  integer(kind=int64),  dimension(:), &
                     optional, intent(out) :: checksum !< The checksums of the variable in a file
   call mpp_get_atts(field, name=name, units=units, longname=longname, checksum=checksum)
 end subroutine get_field_atts
@@ -468,6 +469,30 @@ subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
   endif ; endif
 
 end subroutine MOM_read_data_4d
+
+!> This routine uses the fms_io subroutine read_data to read a scalar integer
+!! data field named "fieldname" from file "filename".
+subroutine MOM_read_data_0d_int(filename, fieldname, data, timelevel)
+  character(len=*),       intent(in)    :: filename  !< The name of the file to read
+  character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
+  integer,                intent(inout) :: data      !< The 1-dimensional array into which the data
+  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
+
+  call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
+
+end subroutine MOM_read_data_0d_int
+
+!> This routine uses the fms_io subroutine read_data to read a 1-D integer
+!! data field named "fieldname" from file "filename".
+subroutine MOM_read_data_1d_int(filename, fieldname, data, timelevel)
+  character(len=*),       intent(in)    :: filename  !< The name of the file to read
+  character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
+  integer, dimension(:),  intent(inout) :: data      !< The 1-dimensional array into which the data
+  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
+
+  call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
+
+end subroutine MOM_read_data_1d_int
 
 
 !> This routine uses the fms_io subroutine read_data to read a pair of distributed
@@ -672,7 +697,7 @@ subroutine write_metadata_field(unit, field, axes, name, units, longname, &
                                                      !! variable.  The default, 1, has no reduction,
                                                      !! but 2 is not uncommon.
   character(len=*), optional, intent(in)    :: standard_name !< The standard (e.g., CMOR) name for this variable
-  integer(kind=8), dimension(:), &
+  integer(kind=int64), dimension(:), &
                     optional, intent(in)    :: checksum !< Checksum values that can be used to verify reads.
 
 
