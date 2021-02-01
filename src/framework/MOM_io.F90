@@ -27,9 +27,9 @@ use MOM_verticalGrid,     only : verticalGrid_type
 
 use iso_fortran_env,      only : int32, int64, stdout_iso=>output_unit, stderr_iso=>error_unit
 use netcdf,               only : NF90_open, NF90_inq_varid, NF90_inq_varids, NF90_inquire, NF90_close
-use netcdf,               only : NF90_inquire_variable, NF90_get_var, NF90_get_att
-use netcdf,               only : NF90_strerror,  NF90_Inquire_dimension, NF90_get_att
-use netcdf,               only : NF90_NOWRITE, NF90_NOERR, NF90_GLOBAL, NF90_ENOTATT
+use netcdf,               only : NF90_inquire_variable, NF90_get_var, NF90_get_att, NF90_inquire_attribute
+use netcdf,               only : NF90_strerror, NF90_inquire_dimension
+use netcdf,               only : NF90_NOWRITE, NF90_NOERR, NF90_GLOBAL, NF90_ENOTATT, NF90_CHAR
 
 implicit none ; private
 
@@ -711,7 +711,7 @@ end subroutine read_variable_1d_int
 subroutine read_attribute_str(filename, attname, att_val, varname, found, all_read)
   character(len=*),           intent(in)  :: filename !< Name of the file to read
   character(len=*),           intent(in)  :: attname  !< Name of the attribute to read
-  character(len=*),           intent(out) :: att_val  !< The value of the attribute
+  character(:), allocatable,  intent(out) :: att_val  !< The value of the attribute
   character(len=*), optional, intent(in)  :: varname  !< The name of the variable whose attribute will
                                                       !! be read. If missing, read a global attribute.
   logical,          optional, intent(out) :: found    !< Returns true if the attribute is found
@@ -720,11 +720,11 @@ subroutine read_attribute_str(filename, attname, att_val, varname, found, all_re
                                                       !! root PE reads and then broadcasts the results.
 
   logical :: do_read, do_broadcast
-  integer :: rc, ncid, varid, is_found
-  character(len=256) :: hdr
-  character(len=len(att_val)) :: tmp_str(1)
+  integer :: rc, ncid, varid, att_type, att_len, info(2)
+  character(len=256) :: hdr, att_str
+  character(len=:), dimension(:), allocatable :: tmp_str
   hdr = "read_attribute_str"
-  att_val = ""
+  att_len = 0
 
   do_read = is_root_pe() ; if (present(all_read)) do_read = all_read .or. do_read
   do_broadcast = .true. ; if (present(all_read)) do_broadcast = .not.all_read
@@ -733,20 +733,29 @@ subroutine read_attribute_str(filename, attname, att_val, varname, found, all_re
   if (present(found)) then ; if (.not.found) do_read = .false. ; endif
 
   if (do_read) then
-    rc = NF90_ENOTATT
+    rc = NF90_ENOTATT ; att_len = 0
     if (present(varname)) then  ! Read a variable attribute
       call get_varid(varname, ncid, filename, varid, match_case=.false., found=found)
-      if (varid >= 0) then ! The named variable does exist, and found would be true.
+      att_str = "att "//trim(attname)//" for "//trim(varname)//" from "//trim(filename)
+    else   ! Read a global attribute
+      varid = NF90_GLOBAL
+      att_str = "global att "//trim(attname)//" from "//trim(filename)
+    endif
+    if ((varid > 0) .or. (varid == NF90_GLOBAL)) then ! The named variable does exist, and found would be true.
+      rc = NF90_inquire_attribute(ncid, varid, attname, xtype=att_type, len=att_len)
+      if ((rc /= NF90_NOERR) .and. (rc /= NF90_ENOTATT)) &
+        call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //" Error getting info for "//trim(att_str))
+      if (att_type /= NF90_CHAR) &
+        call MOM_error(FATAL, trim(hdr)//": Attribute data type is not a char for "//trim(att_str))
+!      if (att_len > len(att_val)) &
+!        call MOM_error(FATAL, trim(hdr)//": Insufficiently long string passed in to read "//trim(att_str))
+      allocate(character(att_len) :: att_val)
+
+      if (rc == NF90_NOERR) then
         rc = NF90_get_att(ncid, varid, attname, att_val)
         if ((rc /= NF90_NOERR) .and. (rc /= NF90_ENOTATT)) &
-          call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //" Difficulties reading att "//&
-                trim(attname)//" for "//trim(varname)//" from "//trim(filename))
+          call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //" Difficulties reading "//trim(att_str))
       endif
-    else  ! Read a global attribute
-      rc = NF90_get_att(ncid, NF90_GLOBAL, attname, att_val)
-      if ((rc /= NF90_NOERR) .and. (rc /= NF90_ENOTATT)) &
-        call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //&
-                " Difficulties reading global att "//trim(attname)//" from "//trim(filename))
     endif
     if (present(found)) found = (rc == NF90_NOERR)
 
@@ -754,15 +763,24 @@ subroutine read_attribute_str(filename, attname, att_val, varname, found, all_re
   endif
 
   if (do_broadcast) then
-    if (present(found)) then
-      is_found = 0 ; if (is_root_pe() .and. found) is_found = 1
-      call broadcast(is_found, blocking=.false.)
+    ! Communicate the string length
+    info(1) = att_len ; info(2) = 0 ; if (do_read .and. found) info(2) = 1
+    call broadcast(info, 2, blocking=.true.)
+    att_len = info(1)
+
+    if (att_len > 0) then
+      ! These extra copies are here because broadcast only supports arrays of strings.
+      allocate(character(att_len) :: tmp_str(1))
+      if (.not.do_read) allocate(character(att_len) :: att_val)
+      if (do_read) tmp_str(1) = att_val
+      call broadcast(tmp_str, att_len, blocking=.true.)
+      att_val = tmp_str(1)
+      if (present(found)) found = (info(2) /= 0)
+    elseif (.not.allocated(att_val)) then
+      allocate(character(4) :: att_val) ; att_val = ''
     endif
-    ! These copies are here because broadcast only supports arrays of strings.
-    tmp_str(1) = att_val
-    call broadcast(tmp_str, len(att_val), blocking=.true.)
-    att_val = tmp_str(1)
-    if (present(found)) found = (is_found /= 0)
+  elseif (.not.allocated(att_val)) then
+    allocate(character(4) :: att_val) ; att_val = ''
   endif
 end subroutine read_attribute_str
 

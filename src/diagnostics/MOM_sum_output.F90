@@ -1352,8 +1352,8 @@ subroutine read_depth_list(G, US, CS, filename)
   character(len=240) :: var_msg
   real, allocatable :: tmp(:)
   integer :: ncid, list_size, k, ndim, sizes(4)
-  character(len=16) :: depth_file_chksum, depth_grid_chksum
-  character(len=16) :: area_file_chksum, area_grid_chksum
+  character(len=:), allocatable :: depth_file_chksum, area_file_chksum
+  character(len=16) :: depth_grid_chksum, area_grid_chksum
   logical :: depth_att_found, area_att_found
 
   ! Check bathymetric consistency between this configuration and the depth list file.
@@ -1376,7 +1376,8 @@ subroutine read_depth_list(G, US, CS, filename)
   else
     call get_depth_list_checksums(G, depth_grid_chksum, area_grid_chksum)
 
-    if ((depth_grid_chksum /= depth_file_chksum) .or. (area_grid_chksum /= area_file_chksum)) then
+    if ((trim(depth_grid_chksum) /= trim(depth_file_chksum)) .or. &
+        (trim(area_grid_chksum) /= trim(area_file_chksum)) ) then
       var_msg = trim(CS%depth_list_file) // " checksums do not match;"
       if (CS%require_depth_list_chksum) then
         call MOM_error(FATAL, trim(var_msg) // " aborting.")
@@ -1390,6 +1391,8 @@ subroutine read_depth_list(G, US, CS, filename)
       endif
     endif
   endif
+  if (allocated(area_file_chksum)) deallocate(area_file_chksum)
+  if (allocated(depth_file_chksum)) deallocate(depth_file_chksum)
 
   ! Get the length of the list.
   call field_size(filename, "depth", sizes, ndims=ndim)

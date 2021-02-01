@@ -397,7 +397,8 @@ subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
   !   This subroutine reads the vertical coordinate data for a field from a
   ! NetCDF file.  It also might read the missing value attribute for that same field.
   character(len=32) :: mdl
-  character(len=120) :: dim_name, edge_name, tr_msg, dim_msg
+  character(len=120) :: dim_name, tr_msg, dim_msg
+  character(:), allocatable :: edge_name
   character(len=256) :: dim_names(4)
   logical :: monotonic
   integer :: ncid, status, intid, tr_id, layid, k
@@ -428,6 +429,7 @@ subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
   else
     call read_variable(filename, dim_names(3), z_edges)
   endif
+  if (allocated(edge_name)) deallocate(edge_name)
 
   ! z_edges should be montonically decreasing with our sign convention.
   ! Change the sign sign convention if it looks like z_edges is increasing.
