@@ -14,6 +14,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
 use MOM_io, only : create_file, fieldtype, flush_file, open_file, reopen_file, stdout
 use MOM_io, only : file_exists, slasher, vardesc, var_desc, write_field, get_filename_appendix
+use MOM_io, only : field_size, read_variable, read_attribute
 use MOM_io, only : APPEND_FILE, ASCII_FILE, SINGLE_FILE, WRITEONLY_FILE
 use MOM_open_boundary, only : ocean_OBC_type, OBC_segment_type
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
@@ -26,10 +27,8 @@ use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface, thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 
-use netcdf, only : NF90_create, NF90_def_dim, NF90_def_var, NF90_put_att, NF90_enddef
-use netcdf, only : NF90_put_var, NF90_open, NF90_close, NF90_inquire_variable, NF90_strerror
-use netcdf, only : NF90_inq_varid, NF90_inquire_dimension, NF90_get_var, NF90_get_att
-use netcdf, only : NF90_DOUBLE, NF90_NOERR, NF90_NOWRITE, NF90_GLOBAL, NF90_ENOTATT
+use netcdf, only : NF90_create, NF90_def_dim, NF90_def_var, NF90_enddef, NF90_put_att, NF90_put_var
+use netcdf, only : NF90_close, NF90_strerror, NF90_DOUBLE, NF90_NOERR, NF90_GLOBAL
 
 implicit none ; private
 
@@ -1269,75 +1268,75 @@ subroutine write_depth_list(G, US, CS, filename, list_size)
 
   status = NF90_CREATE(filename, 0, ncid)
   if (status /= NF90_NOERR) then
-    call MOM_error(WARNING, filename//trim(NF90_STRERROR(status)))
+    call MOM_error(WARNING, trim(filename)//trim(NF90_STRERROR(status)))
     return
   endif
 
   status = NF90_DEF_DIM(ncid, "list", list_size, dimid(1))
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      filename//trim(NF90_STRERROR(status)))
+      trim(filename)//trim(NF90_STRERROR(status)))
 
   status = NF90_DEF_VAR(ncid, "depth", NF90_DOUBLE, dimid, Did)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      filename//" depth "//trim(NF90_STRERROR(status)))
+      trim(filename)//" depth "//trim(NF90_STRERROR(status)))
   status = NF90_PUT_ATT(ncid, Did, "long_name", "Sorted depth")
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      filename//" depth "//trim(NF90_STRERROR(status)))
+      trim(filename)//" depth "//trim(NF90_STRERROR(status)))
   status = NF90_PUT_ATT(ncid, Did, "units", "m")
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      filename//" depth "//trim(NF90_STRERROR(status)))
+      trim(filename)//" depth "//trim(NF90_STRERROR(status)))
 
   status = NF90_DEF_VAR(ncid, "area", NF90_DOUBLE, dimid, Aid)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      filename//" area "//trim(NF90_STRERROR(status)))
+      trim(filename)//" area "//trim(NF90_STRERROR(status)))
   status = NF90_PUT_ATT(ncid, Aid, "long_name", "Open area at depth")
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      filename//" area "//trim(NF90_STRERROR(status)))
+      trim(filename)//" area "//trim(NF90_STRERROR(status)))
   status = NF90_PUT_ATT(ncid, Aid, "units", "m2")
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      filename//" area "//trim(NF90_STRERROR(status)))
+      trim(filename)//" area "//trim(NF90_STRERROR(status)))
 
   status = NF90_DEF_VAR(ncid, "vol_below", NF90_DOUBLE, dimid, Vid)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      filename//" vol_below "//trim(NF90_STRERROR(status)))
+      trim(filename)//" vol_below "//trim(NF90_STRERROR(status)))
   status = NF90_PUT_ATT(ncid, Vid, "long_name", "Open volume below depth")
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      filename//" vol_below "//trim(NF90_STRERROR(status)))
+      trim(filename)//" vol_below "//trim(NF90_STRERROR(status)))
   status = NF90_PUT_ATT(ncid, Vid, "units", "m3")
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      filename//" vol_below "//trim(NF90_STRERROR(status)))
+      trim(filename)//" vol_below "//trim(NF90_STRERROR(status)))
 
   ! Dependency checksums
   status = NF90_PUT_ATT(ncid, NF90_GLOBAL, depth_chksum_attr, depth_chksum)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      filename//" "//depth_chksum_attr//" "//trim(NF90_STRERROR(status)))
+      trim(filename)//" "//depth_chksum_attr//" "//trim(NF90_STRERROR(status)))
 
   status = NF90_PUT_ATT(ncid, NF90_GLOBAL, area_chksum_attr, area_chksum)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      filename//" "//area_chksum_attr//" "//trim(NF90_STRERROR(status)))
+      trim(filename)//" "//area_chksum_attr//" "//trim(NF90_STRERROR(status)))
 
   status = NF90_ENDDEF(ncid)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      filename//trim(NF90_STRERROR(status)))
+      trim(filename)//trim(NF90_STRERROR(status)))
 
   do k=1,list_size ; tmp(k) = US%Z_to_m*CS%DL(k)%depth ; enddo
   status = NF90_PUT_VAR(ncid, Did, tmp)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      filename//" depth "//trim(NF90_STRERROR(status)))
+      trim(filename)//" depth "//trim(NF90_STRERROR(status)))
 
   do k=1,list_size ; tmp(k) = US%L_to_m**2*CS%DL(k)%area ; enddo
   status = NF90_PUT_VAR(ncid, Aid, tmp)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      filename//" area "//trim(NF90_STRERROR(status)))
+      trim(filename)//" area "//trim(NF90_STRERROR(status)))
 
   do k=1,list_size ; tmp(k) = US%Z_to_m*US%L_to_m**2*CS%DL(k)%vol_below ; enddo
   status = NF90_PUT_VAR(ncid, Vid, tmp)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      filename//" vol_below "//trim(NF90_STRERROR(status)))
+      trim(filename)//" vol_below "//trim(NF90_STRERROR(status)))
 
   status = NF90_CLOSE(ncid)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      filename//trim(NF90_STRERROR(status)))
+      trim(filename)//trim(NF90_STRERROR(status)))
 
 end subroutine write_depth_list
 
@@ -1350,30 +1349,18 @@ subroutine read_depth_list(G, US, CS, filename)
                                            !! previous call to MOM_sum_output_init.
   character(len=*),      intent(in) :: filename !< The path to the depth list file to read.
   ! Local variables
-  character(len=32) :: mdl
-  character(len=240) :: var_name, var_msg
+  character(len=240) :: var_msg
   real, allocatable :: tmp(:)
-  integer :: ncid, status, varid, list_size, k
-  integer :: ndim, len, var_dim_ids(8)
+  integer :: ncid, list_size, k, ndim, sizes(4)
   character(len=16) :: depth_file_chksum, depth_grid_chksum
   character(len=16) :: area_file_chksum, area_grid_chksum
-  integer :: depth_attr_status, area_attr_status
+  logical :: depth_att_found, area_att_found
 
-  mdl = "MOM_sum_output read_depth_list:"
+  ! Check bathymetric consistency between this configuration and the depth list file.
+  call read_attribute(filename, depth_chksum_attr, depth_file_chksum, found=depth_att_found)
+  call read_attribute(filename, area_chksum_attr, area_file_chksum, found=area_att_found)
 
-  status = NF90_OPEN(filename, NF90_NOWRITE, ncid)
-  if (status /= NF90_NOERR) then
-    call MOM_error(FATAL,mdl//" Difficulties opening "//trim(filename)// &
-        " - "//trim(NF90_STRERROR(status)))
-  endif
-
-  ! Check bathymetric consistency
-  depth_attr_status = NF90_GET_ATT(ncid, NF90_GLOBAL, depth_chksum_attr, &
-                                   depth_file_chksum)
-  area_attr_status = NF90_GET_ATT(ncid, NF90_GLOBAL, area_chksum_attr, &
-                                  area_file_chksum)
-
-  if (any([depth_attr_status, area_attr_status] == NF90_ENOTATT)) then
+  if ((.not.depth_att_found) .or. (.not.area_att_found)) then
     var_msg = trim(CS%depth_list_file) // " checksums are missing;"
     if (CS%require_depth_list_chksum) then
       call MOM_error(FATAL, trim(var_msg) // " aborting.")
@@ -1387,25 +1374,9 @@ subroutine read_depth_list(G, US, CS, filename)
         trim(var_msg) // " some diagnostics may not be reproducible.")
     endif
   else
-    ! Validate netCDF call
-    if (depth_attr_status /= NF90_NOERR) then
-      var_msg = mdl // "Failed to read " // trim(filename) // ":" &
-                // depth_chksum_attr
-      call MOM_error(FATAL, &
-        trim(var_msg) // " - " // NF90_STRERROR(depth_attr_status))
-    endif
-
-    if (area_attr_status /= NF90_NOERR) then
-      var_msg = mdl // "Failed to read " // trim(filename) // ":" &
-                // area_chksum_attr
-      call MOM_error(FATAL, &
-        trim(var_msg) // " - " // NF90_STRERROR(area_attr_status))
-    endif
-
     call get_depth_list_checksums(G, depth_grid_chksum, area_grid_chksum)
 
-    if (depth_grid_chksum /= depth_file_chksum &
-            .or. area_grid_chksum /= area_file_chksum) then
+    if ((depth_grid_chksum /= depth_file_chksum) .or. (area_grid_chksum /= area_file_chksum)) then
       var_msg = trim(CS%depth_list_file) // " checksums do not match;"
       if (CS%require_depth_list_chksum) then
         call MOM_error(FATAL, trim(var_msg) // " aborting.")
@@ -1415,74 +1386,29 @@ subroutine read_depth_list(G, US, CS, filename)
         call write_depth_list(G, US, CS, CS%depth_list_file, CS%list_size+1)
         return
       else
-        call MOM_error(WARNING, &
-          trim(var_msg) // " some diagnostics may not be reproducible.")
+        call MOM_error(WARNING, trim(var_msg) // " some diagnostics may not be reproducible.")
       endif
     endif
   endif
 
-  var_name = "depth"
-  var_msg = trim(var_name)//" in "//trim(filename)//" - "
-  status = NF90_INQ_VARID(ncid, var_name, varid)
-  if (status /= NF90_NOERR) call MOM_error(FATAL,mdl// &
-        " Difficulties finding variable "//trim(var_msg)//&
-        trim(NF90_STRERROR(status)))
-
-  status = NF90_INQUIRE_VARIABLE(ncid, varid, ndims=ndim, dimids=var_dim_ids)
-  if (status /= NF90_NOERR) then
-    call MOM_ERROR(FATAL,mdl//" cannot inquire about "//trim(var_msg)//&
-        trim(NF90_STRERROR(status)))
-  elseif (ndim > 1) then
-    call MOM_ERROR(FATAL,mdl//" "//trim(var_msg)//&
-         " has too many or too few dimensions.")
-  endif
-
   ! Get the length of the list.
-  status = NF90_INQUIRE_DIMENSION(ncid, var_dim_ids(1), len=list_size)
-  if (status /= NF90_NOERR) call MOM_ERROR(FATAL,mdl// &
-        " cannot inquire about dimension(1) of "//trim(var_msg)//&
-        trim(NF90_STRERROR(status)))
+  call field_size(filename, "depth", sizes, ndims=ndim)
+  if (ndim /= 1) call MOM_ERROR(FATAL, "MOM_sum_output read_depth_list: depth in "//&
+                                trim(filename)//" has too many or too few dimensions.")
+  list_size = sizes(1)
 
   CS%list_size = list_size-1
   allocate(CS%DL(list_size))
   allocate(tmp(list_size))
 
-  status = NF90_GET_VAR(ncid, varid, tmp)
-  if (status /= NF90_NOERR) call MOM_error(FATAL,mdl// &
-        " Difficulties reading variable "//trim(var_msg)//&
-        trim(NF90_STRERROR(status)))
-
+  call read_variable(filename, "depth", tmp)
   do k=1,list_size ; CS%DL(k)%depth = US%m_to_Z*tmp(k) ; enddo
 
-  var_name = "area"
-  var_msg = trim(var_name)//" in "//trim(filename)//" - "
-  status = NF90_INQ_VARID(ncid, var_name, varid)
-  if (status /= NF90_NOERR) call MOM_error(FATAL,mdl// &
-        " Difficulties finding variable "//trim(var_msg)//&
-        trim(NF90_STRERROR(status)))
-  status = NF90_GET_VAR(ncid, varid, tmp)
-  if (status /= NF90_NOERR) call MOM_error(FATAL,mdl// &
-        " Difficulties reading variable "//trim(var_msg)//&
-        trim(NF90_STRERROR(status)))
-
+  call read_variable(filename, "area", tmp)
   do k=1,list_size ; CS%DL(k)%area = US%m_to_L**2*tmp(k) ; enddo
 
-  var_name = "vol_below"
-  var_msg = trim(var_name)//" in "//trim(filename)
-  status = NF90_INQ_VARID(ncid, var_name, varid)
-  if (status /= NF90_NOERR) call MOM_error(FATAL,mdl// &
-        " Difficulties finding variable "//trim(var_msg)//&
-        trim(NF90_STRERROR(status)))
-  status = NF90_GET_VAR(ncid, varid, tmp)
-  if (status /= NF90_NOERR) call MOM_error(FATAL,mdl// &
-        " Difficulties reading variable "//trim(var_msg)//&
-        trim(NF90_STRERROR(status)))
-
+  call read_variable(filename, "vol_below", tmp)
   do k=1,list_size ; CS%DL(k)%vol_below = US%m_to_Z*US%m_to_L**2*tmp(k) ; enddo
-
-  status = NF90_CLOSE(ncid)
-  if (status /= NF90_NOERR) call MOM_error(WARNING, mdl// &
-    " Difficulties closing "//trim(filename)//" - "//trim(NF90_STRERROR(status)))
 
   deallocate(tmp)
 
