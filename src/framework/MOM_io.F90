@@ -73,6 +73,8 @@ interface read_variable
   module procedure read_variable_1d, read_variable_1d_int
 end interface read_variable
 
+!> Read a global or variable attribute from a named netCDF file using netCDF calls
+!! directly, in some cases reading from the root PE before broadcasting to the other PEs.
 interface read_attribute
   module procedure read_attribute_str, read_attribute_real
   module procedure read_attribute_int32, read_attribute_int64
