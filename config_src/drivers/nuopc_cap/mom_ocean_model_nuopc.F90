@@ -460,10 +460,10 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
          return
      endif
 
-     if (OS%do_sppt) allocate(OS%stochastics%sppt_wts(OS%grid%isd:OS%grid%ied,OS%grid%jsd:OS%grid%jed))
+     if (OS%do_sppt) allocate(OS%stochastics%sppt_wts(OS%grid%isd:OS%grid%ied, OS%grid%jsd:OS%grid%jed))
      if (OS%pert_epbl) then
-       allocate(OS%stochastics%t_rp1(OS%grid%isd:OS%grid%ied,OS%grid%jsd:OS%grid%jed))
-       allocate(OS%stochastics%t_rp2(OS%grid%isd:OS%grid%ied,OS%grid%jsd:OS%grid%jed))
+       allocate(OS%stochastics%t_rp1(OS%grid%isd:OS%grid%ied, OS%grid%jsd:OS%grid%jed))
+       allocate(OS%stochastics%t_rp2(OS%grid%isd:OS%grid%ied, OS%grid%jsd:OS%grid%jed))
      endif
   endif
   call close_param_file(param_file)
@@ -639,7 +639,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
 ! update stochastic physics patterns before running next time-step
   if (OS%do_sppt .OR. OS%pert_epbl ) then
-   call run_stochastic_physics_ocn(OS%stochastics%sppt_wts,OS%stochastics%t_rp1,OS%stochastics%t_rp2)
+   call run_stochastic_physics_ocn(OS%stochastics%sppt_wts, OS%stochastics%t_rp1, OS%stochastics%t_rp2)
   endif
 
   if (OS%offline_tracer_mode) then
