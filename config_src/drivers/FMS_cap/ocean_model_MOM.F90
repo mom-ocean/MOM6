@@ -561,7 +561,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
     ! For now, the waves are only updated on the thermodynamics steps, because that is where
     ! the wave intensities are actually used to drive mixing.  At some point, the wave updates
     ! might also need to become a part of the ocean dynamics, according to B. Reichl.
-    call Update_Surface_Waves(OS%grid, OS%GV, OS%US, OS%time, ocean_coupling_time_step, OS%waves, OS%forces)
+    call Update_Surface_Waves(OS%grid, OS%GV, OS%US, OS%time, ocean_coupling_time_step, OS%waves)
   endif
 
   if ((OS%nstep==0) .and. (OS%nstep_thermo==0)) then ! This is the first call to update_ocean_model.
