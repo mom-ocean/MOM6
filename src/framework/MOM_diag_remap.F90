@@ -61,7 +61,7 @@ use MOM_coms,             only : reproducing_sum_EFP, EFP_to_real
 use MOM_coms,             only : EFP_type, assignment(=), EFP_sum_across_PEs
 use MOM_error_handler,    only : MOM_error, FATAL, assert, WARNING
 use MOM_debugging,        only : check_column_integrals
-use MOM_diag_manager,     only : diag_axis_init
+use MOM_diag_manager,     only : MOM_diag_axis_init
 use MOM_diag_vkernels,    only : interpolate_column, reintegrate_column
 use MOM_file_parser,      only : get_param, log_param, param_file_type
 use MOM_string_functions, only : lowercase, extractWord
@@ -222,10 +222,10 @@ subroutine diag_remap_configure_axes(remap_cs, GV, US, param_file)
   interfaces(:) = getCoordinateInterfaces(remap_cs%regrid_cs)
   layers(:) = 0.5 * ( interfaces(1:remap_cs%nz) + interfaces(2:remap_cs%nz+1) )
 
-  remap_cs%interface_axes_id = diag_axis_init(lowercase(trim(remap_cs%diag_coord_name))//'_i', &
+  remap_cs%interface_axes_id = MOM_diag_axis_init(lowercase(trim(remap_cs%diag_coord_name))//'_i', &
                                               interfaces, trim(units), 'z', &
                                               trim(longname)//' at interface', direction=-1)
-  remap_cs%layer_axes_id = diag_axis_init(lowercase(trim(remap_cs%diag_coord_name))//'_l', &
+  remap_cs%layer_axes_id = MOM_diag_axis_init(lowercase(trim(remap_cs%diag_coord_name))//'_l', &
                                           layers, trim(units), 'z', &
                                           trim(longname)//' at cell center', direction=-1, &
                                           edges=remap_cs%interface_axes_id)

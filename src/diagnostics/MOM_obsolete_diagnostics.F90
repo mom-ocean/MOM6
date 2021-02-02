@@ -4,7 +4,7 @@ module MOM_obsolete_diagnostics
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_diag_manager,  only : register_static_field_fms
+use MOM_diag_manager,  only : register_static_field_fms_wrapper
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser,   only : param_file_type, log_version, get_param
@@ -72,7 +72,7 @@ logical function found_in_diagtable(diag, varName, newVarName)
 
   ! We use register_static_field_fms() instead of register_static_field() so
   ! that the diagnostic does not appear in the available diagnostics list.
-  handle = register_static_field_fms('ocean_model', varName, &
+  handle = register_static_field_fms_wrapper('ocean_model', varName, &
             diag%axesT1%handles, 'Obsolete parameter', 'N/A')
 
   found_in_diagtable = (handle>0)

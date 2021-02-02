@@ -10,11 +10,14 @@ use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_COMPONENT, CLOCK_ROUTINE
 use MOM_coms,                 only : num_PEs
 use MOM_diag_mediator, only    : MOM_diag_ctrl=>diag_ctrl
-use MOM_IS_diag_mediator, only : post_data, register_diag_field=>register_MOM_IS_diag_field, safe_alloc_ptr
-use MOM_IS_diag_mediator, only : set_axes_info, diag_ctrl, time_type
-use MOM_IS_diag_mediator, only : diag_mediator_init, diag_mediator_end, set_diag_mediator_grid
+use MOM_IS_diag_mediator, only : post_data=>post_IS_data
+use MOM_IS_diag_mediator, only : register_diag_field=>register_MOM_IS_diag_field, safe_alloc_ptr
+use MOM_IS_diag_mediator, only : set_IS_axes_info, diag_ctrl, time_type
+use MOM_IS_diag_mediator, only : MOM_IS_diag_mediator_init, MOM_IS_diag_mediator_end
+use MOM_IS_diag_mediator, only : set_IS_diag_mediator_grid
 use MOM_IS_diag_mediator, only : enable_averages, enable_averaging, disable_averaging
-use MOM_IS_diag_mediator, only : diag_mediator_infrastructure_init, diag_mediator_close_registration
+use MOM_IS_diag_mediator, only : MOM_IS_diag_mediator_infrastructure_init
+use MOM_IS_diag_mediator, only : MOM_IS_diag_mediator_close_registration
 use MOM_domains, only : MOM_domains_init, pass_var, pass_vector, clone_MOM_domain
 use MOM_domains, only : TO_ALL, CGRID_NE, BGRID_NE, CORNER
 use MOM_dyn_horgrid, only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
@@ -1232,7 +1235,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   ! MOM's grid and infrastructure.
   call Get_MOM_Input(dirs=dirs)
 
-  call diag_mediator_infrastructure_init()
+  call MOM_IS_diag_mediator_infrastructure_init()
 
   ! Determining the internal unit scaling factors for this run.
   call unit_scaling_init(param_file, CS%US)
@@ -1301,10 +1304,10 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   G => CS%Grid ; CS%Grid_in => CS%Grid
 
   allocate(CS%diag)
-  call diag_mediator_init(G, param_file, CS%diag, component='MOM_IceShelf')
+  call MOM_IS_diag_mediator_init(G, param_file, CS%diag, component='MOM_IceShelf')
   ! This call sets up the diagnostic axes. These are needed,
   ! e.g. to generate the target grids below.
-  call set_axes_info(G, param_file, CS%diag)
+  call set_IS_axes_info(G, param_file, CS%diag)
 
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -1803,7 +1806,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     CS%id_h_mask = register_diag_field('ice_shelf_model', 'h_mask', CS%diag%axesT1, CS%Time, &
        'ice shelf thickness mask', 'none')
   endif
-  call diag_mediator_close_registration(CS%diag)
+  call MOM_IS_diag_mediator_close_registration(CS%diag)
 
   if (present(fluxes_in)) call initialize_ice_shelf_fluxes(CS, ocn_grid, US, fluxes_in)
   if (present(forces_in)) call initialize_ice_shelf_forces(CS, ocn_grid, US, forces_in)
@@ -2069,7 +2072,7 @@ subroutine ice_shelf_end(CS)
 
   if (CS%active_shelf_dynamics) call ice_shelf_dyn_end(CS%dCS)
 
-  call diag_mediator_end(CS%diag)
+  call MOM_IS_diag_mediator_end(CS%diag)
   deallocate(CS)
 
 end subroutine ice_shelf_end

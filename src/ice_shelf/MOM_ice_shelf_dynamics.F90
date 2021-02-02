@@ -6,8 +6,9 @@ module MOM_ice_shelf_dynamics
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_COMPONENT, CLOCK_ROUTINE
-use MOM_IS_diag_mediator, only : post_data, register_diag_field=>register_MOM_IS_diag_field, safe_alloc_ptr
-use MOM_IS_diag_mediator, only : diag_mediator_init, set_diag_mediator_grid
+use MOM_IS_diag_mediator, only : post_data=>post_IS_data
+use MOM_IS_diag_mediator, only : register_diag_field=>register_MOM_IS_diag_field, safe_alloc_ptr
+!use MOM_IS_diag_mediator, only : MOM_IS_diag_mediator_init, set_IS_diag_mediator_grid
 use MOM_IS_diag_mediator, only : diag_ctrl, time_type, enable_averages, disable_averaging
 use MOM_domains, only : MOM_domains_init, clone_MOM_domain
 use MOM_domains, only : pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE, CORNER
