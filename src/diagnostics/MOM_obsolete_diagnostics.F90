@@ -4,7 +4,7 @@ module MOM_obsolete_diagnostics
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_diag_manager,  only : register_static_field_fms_wrapper
+use MOM_diag_manager_infra,  only : register_static_field_fms_wrapper
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser,   only : param_file_type, log_version, get_param
