@@ -198,7 +198,7 @@ type, public :: energetic_PBL_CS ; private
   integer :: id_TKE_mech_decay = -1, id_TKE_conv_decay = -1
   integer :: id_Mixing_Length = -1, id_Velocity_Scale = -1
   integer :: id_MSTAR_mix = -1, id_LA_mod = -1, id_LA = -1, id_MSTAR_LT = -1
-  integer :: id_t_rp1=-1,id_t_rp2=-1
+  integer :: id_t_rp1=-1, id_t_rp2=-1
   !>@}
 end type energetic_PBL_CS
 
@@ -508,8 +508,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
     ! only write random patterns if running with stochastic physics, otherwise the
     ! array is unallocated and will give an error
     if  (CS%pert_epbl) then
-      if (CS%id_t_rp1 > 0)    call post_data(CS%id_t_rp1, stochastics%t_rp1, CS%diag)
-      if (CS%id_t_rp2 > 0)    call post_data(CS%id_t_rp2, stochastics%t_rp2, CS%diag)
+      if (CS%id_t_rp1 > 0) call post_data(CS%id_t_rp1, stochastics%t_rp1, CS%diag)
+      if (CS%id_t_rp2 > 0) call post_data(CS%id_t_rp2, stochastics%t_rp2, CS%diag)
     endif
   endif
 end subroutine energetic_PBL
@@ -856,7 +856,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
         mech_TKE = MSTAR_total * (dt*GV%Rho0* u_star**3)
       endif
       ! stochastically pertrub mech_TKE in the UFS
-      if (CS%pert_epbl) mech_TKE=mech_TKE*stochastics%t_rp1(i,j)
+      if (CS%pert_epbl) mech_TKE = mech_TKE * stochastics%t_rp1(i,j)
 
       if (CS%TKE_diagnostics) then
         eCD%dTKE_conv = 0.0 ; eCD%dTKE_mixing = 0.0
@@ -939,7 +939,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
         if (Idecay_len_TKE > 0.0) exp_kh = exp(-h(k-1)*Idecay_len_TKE)
         if (CS%TKE_diagnostics) &
           eCD%dTKE_mech_decay = eCD%dTKE_mech_decay + (exp_kh-1.0) * mech_TKE * I_dtdiag
-        if (CS%pert_epbl) then ! perturb the TKE destruction
+        if (CS%pert_epbl) then ! perturb the TKE dissipation
            mech_TKE = mech_TKE * (1+(exp_kh-1) * stochastics%t_rp2(i,j))
         else
            mech_TKE = mech_TKE * exp_kh
