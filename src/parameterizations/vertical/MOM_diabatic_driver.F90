@@ -290,7 +290,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   integer :: i, j, k, m, is, ie, js, je, nz
   logical :: showCallTree ! If true, show the call tree
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G))   :: h_in  ! thickenss before thermodynamics
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G))   :: h_in  ! thickness before thermodynamics
   real, dimension(SZI_(G),SZJ_(G),SZK_(G))   :: t_in  ! temperature before thermodynamics
   real, dimension(SZI_(G),SZJ_(G),SZK_(G))   :: s_in  ! salinity before thermodynamics
   real :: t_tend,s_tend,h_tend                  ! holder for tendencey needed for SPPT
@@ -390,7 +390,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   if (CS%useALEalgorithm .and. CS%use_legacy_diabatic) then
     call diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
-                      G, GV, US, CS, Waves,stochastics=stochastics)
+                      G, GV, US, CS, Waves, stochastics=stochastics)
   elseif (CS%useALEalgorithm) then
     call diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
                       G, GV, US, CS, Waves, stochastics=stochastics)
