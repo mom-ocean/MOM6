@@ -61,7 +61,7 @@ use MOM_coms,             only : reproducing_sum_EFP, EFP_to_real
 use MOM_coms,             only : EFP_type, assignment(=), EFP_sum_across_PEs
 use MOM_error_handler,    only : MOM_error, FATAL, assert, WARNING
 use MOM_debugging,        only : check_column_integrals
-use MOM_diag_manager,     only : MOM_diag_axis_init
+use MOM_diag_manager_infra,only : MOM_diag_axis_init
 use MOM_diag_vkernels,    only : interpolate_column, reintegrate_column
 use MOM_file_parser,      only : get_param, log_param, param_file_type
 use MOM_string_functions, only : lowercase, extractWord

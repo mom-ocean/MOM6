@@ -4,10 +4,10 @@ module MOM_IS_diag_mediator
 ! This file is a part of SIS2. See LICENSE.md for the license.
 
 use MOM_coms,          only : PE_here
-use MOM_diag_manager,  only : MOM_diag_manager_init, send_data_fms_wrapper, MOM_diag_axis_init
-use MOM_diag_manager,  only : EAST, NORTH
-use MOM_diag_manager,  only : register_static_field_fms_wrapper
-use MOM_diag_manager,  only : register_diag_field_fms_wrapper
+use MOM_diag_manager_infra,  only : MOM_diag_manager_init, send_data_fms_wrapper, MOM_diag_axis_init
+use MOM_diag_manager_infra,  only : EAST, NORTH
+use MOM_diag_manager_infra,  only : register_static_field_fms_wrapper
+use MOM_diag_manager_infra,  only : register_diag_field_fms_wrapper
 use MOM_error_handler, only : MOM_error, FATAL, is_root_pe, assert
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type

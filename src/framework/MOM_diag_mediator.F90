@@ -9,11 +9,11 @@ use MOM_checksums,        only : hchksum, uchksum, vchksum, Bchksum
 use MOM_coms,             only : PE_here
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_manager,     only : MOM_diag_manager_init, MOM_diag_manager_end
-use MOM_diag_manager,     only : diag_axis_init=>MOM_diag_axis_init, get_MOM_diag_axis_name
-use MOM_diag_manager,     only : send_data_fms_wrapper, MOM_diag_field_add_attribute, EAST, NORTH
-use MOM_diag_manager,     only : register_diag_field_fms_wrapper, register_static_field_fms_wrapper
-use MOM_diag_manager,     only : get_MOM_diag_field_id, DIAG_FIELD_NOT_FOUND
+use MOM_diag_manager_infra,     only : MOM_diag_manager_init, MOM_diag_manager_end
+use MOM_diag_manager_infra,     only : diag_axis_init=>MOM_diag_axis_init, get_MOM_diag_axis_name
+use MOM_diag_manager_infra,     only : send_data_fms_wrapper, MOM_diag_field_add_attribute, EAST, NORTH
+use MOM_diag_manager_infra,     only : register_diag_field_fms_wrapper, register_static_field_fms_wrapper
+use MOM_diag_manager_infra,     only : get_MOM_diag_field_id, DIAG_FIELD_NOT_FOUND
 use MOM_diag_remap,       only : diag_remap_ctrl, diag_remap_update, diag_remap_calc_hmask
 use MOM_diag_remap,       only : diag_remap_init, diag_remap_end, diag_remap_do_remap
 use MOM_diag_remap,       only : vertically_reintegrate_diag_field, vertically_interpolate_diag_field
