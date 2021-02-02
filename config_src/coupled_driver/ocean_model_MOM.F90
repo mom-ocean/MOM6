@@ -44,7 +44,7 @@ use MOM_time_manager, only : real_to_time, time_type_to_real
 use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_init
 use MOM_tracer_flow_control, only : call_tracer_flux_init
 use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables,           only : surface, stochastic_pattern
+use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_ice_shelf, only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
 use MOM_ice_shelf, only : add_shelf_forces, ice_shelf_end, ice_shelf_save_restart
@@ -187,7 +187,6 @@ type, public :: ocean_state_type ; private
                               !! timesteps are taken per thermodynamic step.
   type(surface)   :: sfc_state !< A structure containing pointers to
                               !! the ocean surface state fields.
-  type(stochastic_pattern) :: stochastics !< A structure containing pointers to
   type(ocean_grid_type), pointer :: &
     grid => NULL()            !< A pointer to a grid structure containing metrics
                               !! and related information.
@@ -566,7 +565,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
     ! For now, the waves are only updated on the thermodynamics steps, because that is where
     ! the wave intensities are actually used to drive mixing.  At some point, the wave updates
     ! might also need to become a part of the ocean dynamics, according to B. Reichl.
-    call Update_Surface_Waves(OS%grid, OS%GV, OS%US, OS%time, ocean_coupling_time_step, OS%waves)
+    call Update_Surface_Waves(OS%grid, OS%GV, OS%US, OS%time, ocean_coupling_time_step, OS%waves, OS%forces)
   endif
 
   if ((OS%nstep==0) .and. (OS%nstep_thermo==0)) then ! This is the first call to update_ocean_model.
@@ -581,12 +580,12 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
     call step_offline(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp)
   elseif ((.not.do_thermo) .or. (.not.do_dyn)) then
     ! The call sequence is being orchestrated from outside of update_ocean_model.
-    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, OS%stochastics, Time1, dt_coupling, OS%MOM_CSp, &
+    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp, &
                   Waves=OS%Waves, do_dynamics=do_dyn, do_thermodynamics=do_thermo, &
                   start_cycle=start_cycle, end_cycle=end_cycle, cycle_length=cycle_length, &
                   reset_therm=Ocn_fluxes_used)
   elseif (OS%single_step_call) then
-    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, OS%stochastics, Time1, dt_coupling, OS%MOM_CSp, Waves=OS%Waves)
+    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp, Waves=OS%Waves)
   else  ! Step both the dynamics and thermodynamics with separate calls.
     n_max = 1 ; if (dt_coupling > OS%dt) n_max = ceiling(dt_coupling/OS%dt - 0.001)
     dt_dyn = dt_coupling / real(n_max)
@@ -608,16 +607,16 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
             "THERMO_SPANS_COUPLING and DIABATIC_FIRST.")
         if (modulo(n-1,nts)==0) then
           dtdia = dt_dyn*min(nts,n_max-(n-1))
-          call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, OS%stochastics, Time1, dtdia, OS%MOM_CSp, &
+          call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dtdia, OS%MOM_CSp, &
                         Waves=OS%Waves, do_dynamics=.false., do_thermodynamics=.true., &
                         start_cycle=(n==1), end_cycle=.false., cycle_length=dt_coupling)
         endif
 
-        call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, OS%stochastics, Time1, dt_dyn, OS%MOM_CSp, &
+        call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_dyn, OS%MOM_CSp, &
                       Waves=OS%Waves, do_dynamics=.true., do_thermodynamics=.false., &
                       start_cycle=.false., end_cycle=(n==n_max), cycle_length=dt_coupling)
       else
-        call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, OS%stochastics, Time1, dt_dyn, OS%MOM_CSp, &
+        call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_dyn, OS%MOM_CSp, &
                       Waves=OS%Waves, do_dynamics=.true., do_thermodynamics=.false., &
                       start_cycle=(n==1), end_cycle=.false., cycle_length=dt_coupling)
 
@@ -634,7 +633,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
         if (step_thermo) then
           ! Back up Time1 to the start of the thermodynamic segment.
           Time1 = Time1 - real_to_time(dtdia - dt_dyn)
-          call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, OS%stochastics, Time1, dtdia, OS%MOM_CSp, &
+          call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dtdia, OS%MOM_CSp, &
                         Waves=OS%Waves, do_dynamics=.false., do_thermodynamics=.true., &
                         start_cycle=.false., end_cycle=(n==n_max), cycle_length=dt_coupling)
         endif

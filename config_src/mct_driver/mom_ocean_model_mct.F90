@@ -46,7 +46,7 @@ use MOM_time_manager,         only : operator(<), real_to_time_type, time_type_t
 use MOM_tracer_flow_control,  only : call_tracer_register, tracer_flow_control_init
 use MOM_tracer_flow_control,  only : call_tracer_flux_init
 use MOM_unit_scaling,         only : unit_scale_type
-use MOM_variables,           only : surface, stochastic_pattern
+use MOM_variables,            only : surface
 use MOM_verticalGrid,         only : verticalGrid_type
 use MOM_ice_shelf,            only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
 use MOM_ice_shelf,            only : add_shelf_forces, ice_shelf_end, ice_shelf_save_restart
@@ -185,7 +185,6 @@ type, public :: ocean_state_type ;
                               !! timesteps are taken per thermodynamic step.
   type(surface)   :: sfc_state !< A structure containing pointers to
                               !! the ocean surface state fields.
-  type(stochastic_pattern) :: stochastics !< A structure containing pointers to
   type(ocean_grid_type), pointer :: &
     grid => NULL()            !< A pointer to a grid structure containing metrics
                               !! and related information.
@@ -587,12 +586,12 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
   elseif ((.not.do_thermo) .or. (.not.do_dyn)) then
     ! The call sequence is being orchestrated from outside of update_ocean_model.
-    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, OS%stochastics, Time1, dt_coupling, OS%MOM_CSp, &
+    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp, &
                   Waves=OS%Waves, do_dynamics=do_thermo, do_thermodynamics=do_dyn, &
                   reset_therm=Ocn_fluxes_used)
 
   elseif (OS%single_step_call) then
-    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, OS%stochastics, Time1, dt_coupling, OS%MOM_CSp, Waves=OS%Waves)
+    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp, Waves=OS%Waves)
 
   else
     n_max = 1 ; if (dt_coupling > OS%dt) n_max = ceiling(dt_coupling/OS%dt - 0.001)
@@ -616,16 +615,16 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
             "THERMO_SPANS_COUPLING and DIABATIC_FIRST.")
         if (modulo(n-1,nts)==0) then
           dtdia = dt_dyn*min(nts,n_max-(n-1))
-          call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, OS%stochastics, Time2, dtdia, OS%MOM_CSp, &
+          call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dtdia, OS%MOM_CSp, &
                         Waves=OS%Waves, do_dynamics=.false., do_thermodynamics=.true., &
                         start_cycle=(n==1), end_cycle=.false., cycle_length=dt_coupling)
         endif
 
-        call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, OS%stochastics, Time2, dt_dyn, OS%MOM_CSp, &
+        call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dt_dyn, OS%MOM_CSp, &
                       Waves=OS%Waves, do_dynamics=.true., do_thermodynamics=.false., &
                       start_cycle=.false., end_cycle=(n==n_max), cycle_length=dt_coupling)
       else
-        call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, OS%stochastics, Time2, dt_dyn, OS%MOM_CSp, &
+        call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dt_dyn, OS%MOM_CSp, &
                       Waves=OS%Waves, do_dynamics=.true., do_thermodynamics=.false., &
                       start_cycle=(n==1), end_cycle=.false., cycle_length=dt_coupling)
 
@@ -642,7 +641,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
         if (step_thermo) then
           ! Back up Time2 to the start of the thermodynamic segment.
           Time2 = Time2 - set_time(int(floor((dtdia - dt_dyn) + 0.5)))
-          call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, OS%stochastics, Time2, dtdia, OS%MOM_CSp, &
+          call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dtdia, OS%MOM_CSp, &
                         Waves=OS%Waves, do_dynamics=.false., do_thermodynamics=.true., &
                         start_cycle=.false., end_cycle=(n==n_max), cycle_length=dt_coupling)
         endif
