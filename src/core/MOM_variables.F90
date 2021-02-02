@@ -277,8 +277,6 @@ end type vertvisc_type
 !> Container for information about the summed layer transports
 !! and how they will vary as the barotropic velocity is changed.
 type, public :: stochastic_pattern
-  logical           :: do_sppt = .false.
-  logical           :: pert_epbl = .false.
   real, allocatable :: sppt_wts(:,:) !< Random pattern for ocean SPPT
   real, allocatable :: t_rp1(:,:) !< Random pattern for K.E. generation
   real, allocatable :: t_rp2(:,:) !< Random pattern for K.E. dissipation

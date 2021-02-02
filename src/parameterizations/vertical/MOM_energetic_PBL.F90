@@ -58,6 +58,7 @@ type, public :: energetic_PBL_CS ; private
                              !! self-consistent mixed layer depth.  Otherwise use the false position
                              !! after a maximum and minimum bound have been evaluated and the
                              !! returned value from the previous guess or bisection before this.
+  logical :: pert_epbl       !! If true, then randomly perturb the KE dissipation and genration terms
   integer :: max_MLD_its     !< The maximum number of iterations that can be used to find a
                              !! self-consistent mixed layer depth with Use_MLD_iteration.
   real    :: MixLenExponent  !< Exponent in the mixing length shape-function.
@@ -245,9 +246,9 @@ contains
 !!  mixed layer model.  It assumes that heating, cooling and freshwater fluxes
 !!  have already been applied.  All calculations are done implicitly, and there
 !!  is no stability limit on the time step.
-subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, stochastics, dt, Kd_int, G, GV, US, CS, &
+subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS, &
                          dSV_dT, dSV_dS, TKE_forced, buoy_flux, dt_diag, last_call, &
-                         dT_expected, dS_expected, Waves )
+                         dT_expected, dS_expected, Waves, stochastics )
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
@@ -276,8 +277,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, stochastics, dt, Kd_int, 
   type(forcing),           intent(inout) :: fluxes !< A structure containing pointers to any
                                                    !! possible forcing fields. Unused fields have
                                                    !! NULL ptrs.
-  type(stochastic_pattern), intent(in) :: stochastics  !< A structure containing array to any unsued fields
-                                                   !! are not allocated
   real,                    intent(in)    :: dt     !< Time increment [T ~> s].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(out)   :: Kd_int !< The diagnosed diffusivities at interfaces
@@ -286,8 +285,26 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, stochastics, dt, Kd_int, 
                                                    !! call to mixedlayer_init.
   real, dimension(SZI_(G),SZJ_(G)), &
                            intent(in)    :: buoy_flux !< The surface buoyancy flux [Z2 T-3 ~> m2 s-3].
-  type(wave_parameters_CS), pointer      :: Waves  !< Waves control structure for Langmuir turbulence
-  type(stochastic_CS),  pointer       :: stoch_CS  !< The control structure returned by a previous
+  real,          optional, intent(in)    :: dt_diag   !< The diagnostic time step, which may be less
+                                                   !! than dt if there are two calls to mixedlayer [T ~> s].
+  logical,       optional, intent(in)    :: last_call !< If true, this is the last call to
+                                                   !! mixedlayer in the current time step, so
+                                                   !! diagnostics will be written. The default
+                                                   !! is .true.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                 optional, intent(out)   :: dT_expected !< The values of temperature change that
+                                                   !! should be expected when the returned
+                                                   !! diffusivities are applied [degC].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                 optional, intent(out)   :: dS_expected !< The values of salinity change that
+                                                   !! should be expected when the returned
+                                                   !! diffusivities are applied [ppt].
+  type(wave_parameters_CS), &
+                 optional, pointer       :: Waves  !< Wave CS
+  type(stochastic_pattern), optional, &
+                 intent(in) :: stochastics  !< A structure containing array to stochastic
+                                                   !! patterns. Any unsued fields
+                                                   !! are not allocated
 
 !    This subroutine determines the diffusivities from the integrated energetics
 !  mixed layer model.  It assumes that heating, cooling and freshwater fluxes
@@ -428,9 +445,10 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, stochastics, dt, Kd_int, 
       MLD_io = -1.0
       if (CS%MLD_iteration_guess .and. (CS%ML_Depth(i,j) > 0.0))  MLD_io = CS%ML_Depth(i,j)
 
-      call ePBL_column(h, u, v, T0, S0, dSV_dT_1d, dSV_dS_1d, TKE_forcing, stochastics,   &
+      call ePBL_column(h, u, v, T0, S0, dSV_dT_1d, dSV_dS_1d, TKE_forcing, &
                        B_flux, absf, u_star, u_star_mean, dt, MLD_io, Kd, mixvel, mixlen, &
-                       GV, US, CS, eCD, dt_diag=dt_diag, Waves=Waves, G=G, i=i, j=j)
+                       GV, US, CS, eCD, dt_diag=dt_diag, Waves=Waves, G=G, &
+                       stochastics=stochastics,i=i, j=j)
 
       ! Copy the diffusivities to a 2-d array.
       do K=1,nz+1
@@ -489,7 +507,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, stochastics, dt, Kd_int, 
     if (CS%id_MSTAR_LT > 0) call post_data(CS%id_MSTAR_LT, CS%MSTAR_LT, CS%diag)
     ! only write random patterns if running with stochastic physics, otherwise the
     ! array is unallocated and will give an error
-    if  (stochastics%pert_epbl) then
+    if  (CS%pert_epbl) then
       if (CS%id_t_rp1 > 0)    call post_data(CS%id_t_rp1, stochastics%t_rp1, CS%diag)
       if (CS%id_t_rp2 > 0)    call post_data(CS%id_t_rp2, stochastics%t_rp2, CS%diag)
     endif
@@ -500,9 +518,9 @@ end subroutine energetic_PBL
 
 !> This subroutine determines the diffusivities from the integrated energetics
 !!  mixed layer model for a single column of water.
-subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, stochastics, B_flux, absf, &
+subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, absf, &
                        u_star, u_star_mean, dt, MLD_io, Kd, mixvel, mixlen, GV, US, CS, eCD, &
-                       dt_diag, Waves, G, i, j)
+                       dt_diag, Waves, G, stochastics, i, j)
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZK_(GV)), intent(in)  :: h      !< Layer thicknesses [H ~> m or kg m-2].
@@ -521,7 +539,6 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, stochastics
   real, dimension(SZK_(GV)), intent(in)  :: TKE_forcing !< The forcing requirements to homogenize the
                                                    !! forcing that has been applied to each layer
                                                    !! [R Z3 T-2 ~> J m-2].
-  type(stochastic_pattern), intent(in)   :: stochastics !< stochastic patterns and logic controls
   real,                    intent(in)    :: B_flux !< The surface buoyancy flux [Z2 T-3 ~> m2 s-3]
   real,                    intent(in)    :: absf   !< The absolute value of the Coriolis parameter [T-1 ~> s-1].
   real,                    intent(in)    :: u_star !< The surface friction velocity [Z T-1 ~> m s-1].
@@ -546,6 +563,8 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, stochastics
                  optional, pointer       :: Waves  !< Wave CS for Langmuir turbulence
   type(ocean_grid_type), &
                  optional, intent(inout) :: G      !< The ocean's grid structure.
+  type(stochastic_pattern), &
+                 optional, intent(in)   :: stochastics !< stochastic patterns and logic controls
   integer,       optional, intent(in)    :: i      !< The i-index to work on (used for Waves)
   integer,       optional, intent(in)    :: j      !< The i-index to work on (used for Waves)
 
@@ -837,7 +856,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, stochastics
         mech_TKE = MSTAR_total * (dt*GV%Rho0* u_star**3)
       endif
       ! stochastically pertrub mech_TKE in the UFS
-      if (stochastics%pert_epbl) mech_TKE=mech_TKE*stochastics%t_rp1(i,j)
+      if (CS%pert_epbl) mech_TKE=mech_TKE*stochastics%t_rp1(i,j)
 
       if (CS%TKE_diagnostics) then
         eCD%dTKE_conv = 0.0 ; eCD%dTKE_mixing = 0.0
@@ -920,7 +939,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, stochastics
         if (Idecay_len_TKE > 0.0) exp_kh = exp(-h(k-1)*Idecay_len_TKE)
         if (CS%TKE_diagnostics) &
           eCD%dTKE_mech_decay = eCD%dTKE_mech_decay + (exp_kh-1.0) * mech_TKE * I_dtdiag
-        if (stochastics%pert_epbl) then ! perturb the TKE destruction
+        if (CS%pert_epbl) then ! perturb the TKE destruction
            mech_TKE = mech_TKE * (1+(exp_kh-1) * stochastics%t_rp2(i,j))
         else
            mech_TKE = mech_TKE * exp_kh
@@ -2153,6 +2172,11 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  "This is only used if USE_MLD_ITERATION is True.", &
                  units="nondim", default=2.0)
 
+  call get_param(param_file, mdl, "PERT_EPBL", CS%pert_epbl, &
+                 "If true, then stochastically perturb the kinetic energy "//&
+                 "production and dissipation terms.  Amplitude and correlations are "//&
+                 "controlled by the nam_stoch namelist in the UFS model only.", &
+                 default=.false.)
 !/ Turbulent velocity scale in mixing coefficient
   call get_param(param_file, mdl, "EPBL_VEL_SCALE_SCHEME", tmpstr, &
                  "Selects the method for translating TKE into turbulent velocities. "//&
@@ -2328,9 +2352,9 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   CS%id_MSTAR_mix = register_diag_field('ocean_model', 'MSTAR', diag%axesT1, &
       Time, 'Total mstar that is used.', 'nondim')
   CS%id_t_rp1 = register_diag_field('ocean_model', 'random_pattern1', diag%axesT1, Time, &
-      'random pattern1 for stochastics', 'None')
+      'random pattern for KE generation', 'None')
   CS%id_t_rp2 = register_diag_field('ocean_model', 'random_pattern2', diag%axesT1, Time, &
-      'random pattern2 for stochastics', 'None')
+      'random pattern for KE dissipation', 'None')
   if (CS%use_LT) then
     CS%id_LA = register_diag_field('ocean_model', 'LA', diag%axesT1, &
         Time, 'Langmuir number.', 'nondim')
