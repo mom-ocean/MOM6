@@ -3,6 +3,7 @@ module MOM_wave_interface
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_data_override, only : data_override_init, data_override
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_alloc
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_domains,       only : pass_var, pass_vector, AGRID
@@ -16,7 +17,6 @@ use MOM_time_manager,  only : time_type, operator(+), operator(/)
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, surface
 use MOM_verticalgrid,  only : verticalGrid_type
-use data_override_mod, only : data_override_init, data_override
 
 use netcdf, only : NF90_open, NF90_inq_varid, NF90_inquire_variable, NF90_get_var
 use netcdf, only : NF90_inquire_dimension, NF90_close, NF90_NOWRITE, NF90_NOERR
@@ -794,7 +794,7 @@ subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
   integer :: rcode_fr, rcode_wn, ncid, varid_fr, varid_wn, id, ndims
 
   if (.not.dataOverrideIsInitialized) then
-    call data_override_init(Ocean_domain_in=G%Domain%mpp_domain)
+    call data_override_init(G%Domain)
     dataOverrideIsInitialized = .true.
 
     ! Read in number of wavenumber bands in file to set number to be read in
