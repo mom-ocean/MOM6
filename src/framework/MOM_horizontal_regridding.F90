@@ -12,7 +12,7 @@ use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_interpolate,   only : time_interp_external, get_external_field_info, horiz_interp_init
-use MOM_interpolate,   only : run_new_horiz_interp, run_horiz_interp, horiz_interp_type
+use MOM_interpolate,   only : build_horiz_interp_weights, run_horiz_interp, horiz_interp_type
 use MOM_io_infra,      only : axistype, get_axis_data
 use MOM_time_manager,  only : time_type
 
@@ -526,8 +526,8 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 !   call fms routine horiz_interp to interpolate input level data to model horizontal grid
     if (.not. is_ongrid) then
       if (k == 1) then
-        call run_new_horiz_interp(Interp, x_in, y_in, lon_out(is:ie,js:je), lat_out(is:ie,js:je), &
-                                  interp_method='bilinear', src_modulo=.true.)
+        call build_horiz_interp_weights(Interp, x_in, y_in, lon_out(is:ie,js:je), lat_out(is:ie,js:je), &
+                                        interp_method='bilinear', src_modulo=.true.)
       endif
 
       if (debug) then
@@ -811,8 +811,8 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
       ! call fms routine horiz_interp to interpolate input level data to model horizontal grid
       if (k == 1) then
-        call run_new_horiz_interp(Interp, x_in, y_in, lon_out(is:ie,js:je), lat_out(is:ie,js:je), &
-                                  interp_method='bilinear', src_modulo=.true.)
+        call build_horiz_interp_weights(Interp, x_in, y_in, lon_out(is:ie,js:je), lat_out(is:ie,js:je), &
+                                        interp_method='bilinear', src_modulo=.true.)
       endif
 
       if (debug) then

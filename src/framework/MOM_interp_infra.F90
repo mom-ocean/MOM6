@@ -6,7 +6,7 @@ module MOM_interp_infra
 use MOM_domain_infra,    only : MOM_domain_type, domain2d
 use MOM_io_infra,        only : axistype
 use MOM_time_manager,    only : time_type
-use horiz_interp_mod,    only : horiz_interp, horiz_interp_new, horiz_interp_type, horiz_interp_init
+use horiz_interp_mod,    only : horiz_interp_new, horiz_interp, horiz_interp_init, horiz_interp_type
 use time_interp_external_mod, only : time_interp_external
 use time_interp_external_mod, only : init_external_field, time_interp_external_init
 use time_interp_external_mod, only : get_external_field_size
@@ -17,7 +17,7 @@ implicit none ; private
 public :: horiz_interp_type, horiz_interp_init
 public :: time_interp_extern, init_extern_field, time_interp_external_init
 public :: get_external_field_info
-public :: run_horiz_interp, run_new_horiz_interp
+public :: run_horiz_interp, build_horiz_interp_weights
 
 !> Read a field based on model time, and rotate to the model domain.
 interface time_interp_extern
@@ -30,20 +30,12 @@ end interface time_interp_extern
 interface run_horiz_interp
   module procedure horiz_interp_from_weights_field2d
   module procedure horiz_interp_from_weights_field3d
-  module procedure horiz_interp_noweights_1d_to_1d
-  module procedure horiz_interp_noweights_1d_to_2d
-  module procedure horiz_interp_noweights_2d_to_2d
-  module procedure horiz_interp_noweights_2d_to_1d
-  module procedure horiz_interp_noweight_old
 end interface
 
-!> perform horizontal interpolation of field (new)
-interface run_new_horiz_interp
-  module procedure run_new_horiz_interp_1d_to_1d
-  module procedure run_new_horiz_interp_1d_to_2d
-  module procedure run_new_horiz_interp_2d_to_2d
-  module procedure run_new_horiz_interp_2d_to_1d
-end interface run_new_horiz_interp
+!> build weights for horizontal interpolation of field
+interface build_horiz_interp_weights
+  module procedure build_horiz_interp_weights_2d_to_2d
+end interface build_horiz_interp_weights
 
 contains
 
@@ -96,221 +88,12 @@ subroutine horiz_interp_from_weights_field3d(Interp, data_in, data_out, verbose,
 end subroutine horiz_interp_from_weights_field3d
 
 
-!> perform horizontal interpolation and computed weights
-!! source coordinates are 1d and destination coordinates are 1d
-subroutine horiz_interp_noweights_1d_to_1d(data_in, lon_in, lat_in, lon_out, lat_out, &
-                                           data_out, verbose, mask_in, mask_out, &
-                                           interp_method, missing_value, missing_permit, &
-                                           num_nbrs, max_dist,src_modulo, grid_at_center)
-
-  real, intent(in), dimension(:,:) :: data_in             !< input data
-  real, intent(in), dimension(:) :: lon_in                !< input longitude 1d
-  real, intent(in), dimension(:) :: lat_in                !< input latitude 1d
-  real, intent(in), dimension(:) :: lon_out               !< output longitude 1d
-  real, intent(in), dimension(:) :: lat_out               !< output latitude 1d
-  real, intent(out), dimension(:,:) :: data_out           !< output data
-  integer, intent(in), optional :: verbose                !< verbosity level
-  real, intent(in), dimension(:,:), optional :: mask_in   !< mask for input data
-  real, intent(out), dimension(:,:), optional :: mask_out !< mask for output data
-  character(len=*), intent(in), optional :: interp_method !< interpolation method
-  real, intent(in), optional :: missing_value             !< missing value
-  integer, intent(in), optional :: missing_permit         !< number of allowed points with missing value
-                                                          !! for interpolation (0-3)
-  integer, intent(in), optional :: num_nbrs               !< number of nearest neighbors
-  real, intent(in), optional :: max_dist                  !< maximum region of influence
-  logical, intent(in), optional :: src_modulo             !< periodicity of E-W boundary
-  logical, intent(in), optional :: grid_at_center         !< true for cell center, false for cell edge
-
-  call horiz_interp(data_in, lon_in, lat_in, lon_out, lat_out, &
-                    data_out, verbose, mask_in, mask_out, &
-                    interp_method, missing_value, missing_permit, &
-                    num_nbrs, max_dist,src_modulo, grid_at_center)
-
-end subroutine horiz_interp_noweights_1d_to_1d
-
-
-!> perform horizontal interpolation and computed weights
-!! source coordinates are 1d and destination coordinates are 2d
-subroutine horiz_interp_noweights_1d_to_2d(data_in, lon_in, lat_in, lon_out, lat_out, &
-                                           data_out, verbose, mask_in, mask_out, &
-                                           interp_method, missing_value, missing_permit, &
-                                           num_nbrs, max_dist, src_modulo, grid_at_center)
-
-  real, intent(in), dimension(:,:) :: data_in             !< input data
-  real, intent(in), dimension(:) :: lon_in                !< input longitude 1d
-  real, intent(in), dimension(:) :: lat_in                !< input latitude 1d
-  real, intent(in), dimension(:,:) :: lon_out             !< output longitude 2d
-  real, intent(in), dimension(:,:) :: lat_out             !< output latitude 2d
-  real, intent(out), dimension(:,:) :: data_out           !< output data
-  integer, intent(in), optional :: verbose                !< verbosity level
-  real, intent(in), dimension(:,:), optional :: mask_in   !< mask for input data
-  real, intent(out), dimension(:,:), optional :: mask_out !< mask for output data
-  character(len=*), intent(in), optional :: interp_method !< interpolation method
-  real, intent(in), optional :: missing_value             !< missing value
-  integer, intent(in), optional :: missing_permit         !< number of allowed points with missing value
-                                                          !! for interpolation (0-3)
-  integer, intent(in), optional :: num_nbrs               !< number of nearest neighbors
-  real, intent(in), optional :: max_dist                  !< maximum region of influence
-  logical, intent(in), optional :: src_modulo             !< periodicity of E-W boundary
-  logical, intent(in), optional :: grid_at_center         !< true for cell center, false for cell edge
-
-  call horiz_interp(data_in, lon_in, lat_in, lon_out, lat_out, &
-                    data_out, verbose, mask_in, mask_out, &
-                    interp_method, missing_value, missing_permit, &
-                    num_nbrs, max_dist, src_modulo, grid_at_center)
-
-end subroutine horiz_interp_noweights_1d_to_2d
-
-
-!> perform horizontal interpolation and computed weights
-!! source coordinates are 2d and destination coordinates are 2d
-subroutine horiz_interp_noweights_2d_to_2d(data_in, lon_in, lat_in, lon_out, lat_out, data_out, &
-                                           verbose, mask_in, mask_out, interp_method, missing_value, &
-                                           missing_permit, num_nbrs, max_dist, src_modulo)
-
-  real, intent(in), dimension(:,:) :: data_in             !< input data
-  real, intent(in), dimension(:,:) :: lon_in              !< input longitude 2d
-  real, intent(in), dimension(:,:) :: lat_in              !< input latitude 2d
-  real, intent(in), dimension(:,:) :: lon_out             !< output longitude 2d
-  real, intent(in), dimension(:,:) :: lat_out             !< output latitude 2d
-  real, intent(out), dimension(:,:) :: data_out           !< output data
-  integer, intent(in), optional :: verbose                !< verbosity level
-  real, intent(in), dimension(:,:), optional :: mask_in   !< mask for input data
-  real, intent(out), dimension(:,:), optional :: mask_out !< mask for output data
-  character(len=*), intent(in), optional :: interp_method !< interpolation method
-  real, intent(in), optional :: missing_value             !< missing value
-  integer, intent(in), optional :: missing_permit         !< number of allowed points with missing value
-                                                          !! for interpolation (0-3)
-  integer, intent(in), optional :: num_nbrs               !< number of nearest neighbors
-  real, intent(in), optional :: max_dist                  !< maximum region of influence
-  logical, intent(in), optional :: src_modulo             !< periodicity of E-W boundary
-
-  call horiz_interp(data_in, lon_in, lat_in, lon_out, lat_out, data_out, &
-                    verbose, mask_in, mask_out, interp_method, missing_value, &
-                    missing_permit, num_nbrs, max_dist, src_modulo)
-
-end subroutine horiz_interp_noweights_2d_to_2d
-
-
-!> perform horizontal interpolation and computed weights
-!! source coordinates are 2d and destination coordinates are 1d
-subroutine horiz_interp_noweights_2d_to_1d(data_in, lon_in, lat_in, lon_out, lat_out, data_out, &
-                                           verbose, mask_in, mask_out,interp_method,missing_value, &
-                                           missing_permit, num_nbrs, max_dist, src_modulo)
-
-  real, intent(in), dimension(:,:) :: data_in             !< input data
-  real, intent(in), dimension(:,:) :: lon_in              !< input longitude 2d
-  real, intent(in), dimension(:,:) :: lat_in              !< input latitude 2d
-  real, intent(in), dimension(:) :: lon_out               !< output longitude 1d
-  real, intent(in), dimension(:) :: lat_out               !< output latitude 1d
-  real, intent(out), dimension(:,:) :: data_out           !< output data
-  integer, intent(in), optional :: verbose                !< verbosity level
-  real, intent(in), dimension(:,:), optional :: mask_in   !< mask for input data
-  real, intent(out), dimension(:,:), optional :: mask_out !< mask for output data
-  character(len=*), intent(in), optional :: interp_method !< interpolation method
-  real, intent(in), optional :: missing_value             !< missing value
-  integer, intent(in), optional :: missing_permit         !< number of allowed points with missing value
-                                                          !! for interpolation (0-3)
-  integer, intent(in), optional :: num_nbrs               !< number of nearest neighbors
-  real, intent(in), optional :: max_dist                  !< maximum region of influence
-  logical, intent(in), optional :: src_modulo             !< periodicity of E-W boundary
-
-  call horiz_interp(data_in, lon_in, lat_in, lon_out, lat_out, data_out, &
-                    verbose, mask_in, mask_out,interp_method,missing_value, &
-                    missing_permit, num_nbrs, max_dist, src_modulo)
-
-end subroutine horiz_interp_noweights_2d_to_1d
-
-
-!> perform horizontal interpolation and computed weights
-!! source coordinates are 1d, defined as SW corner + dx/dy and destination coordinates are 1d
-subroutine horiz_interp_noweight_old(data_in, wb, sb, dx, dy, &
-                                     lon_out, lat_out, data_out, &
-                                     verbose, mask_in, mask_out)
-
-  real, intent(in), dimension(:,:) :: data_in             !< input data
-  real, intent(in) :: wb                                  !< longitude of grid southwest corner [rad]
-  real, intent(in) :: sb                                  !< latitude of grid southwest corner [rad]
-  real, intent(in) :: dx                                  !< grid spacing in longitude [rad]
-  real, intent(in) :: dy                                  !< grid spacing in latitude [rad]
-  real, intent(in), dimension(:) :: lon_out               !< output longitude 1d
-  real, intent(in), dimension(:) :: lat_out               !< output latitude 1d
-  real, intent(out), dimension(:,:) :: data_out           !< output data
-  integer, intent(in), optional :: verbose                !< verbosity level
-  real, intent(in), dimension(:,:), optional :: mask_in   !< mask for input data
-  real, intent(out), dimension(:,:), optional :: mask_out !< mask for output data
-
-  call horiz_interp(data_in, wb, sb, dx, dy, &
-                    lon_out, lat_out, data_out, &
-                    verbose, mask_in, mask_out)
-
-end subroutine horiz_interp_noweight_old
-
-
-!> horizontal interpolation from source grid defined by 1d lon/lat to destination grid
-!! defined by 1d lon/lat
-subroutine run_new_horiz_interp_1d_to_1d(Interp, lon_in, lat_in, lon_out, lat_out, &
-                                         verbose, interp_method, num_nbrs, max_dist, &
-                                         src_modulo, grid_at_center, mask_in, mask_out)
-
-  type(horiz_interp_type), intent(inout) :: Interp         !< type containing interpolation
-                                                           !! options/weights
-  real, intent(in), dimension(:) :: lon_in                 !< input longitude 1d
-  real, intent(in), dimension(:) :: lat_in                 !< input latitude 1d
-  real, intent(in), dimension(:) :: lon_out                !< output longitude 1d
-  real, intent(in), dimension(:) :: lat_out                !< output latitude 1d
-  integer, intent(in), optional :: verbose                 !< verbosity level
-  character(len=*), intent(in), optional :: interp_method  !< interpolation method
-  integer, intent(in), optional :: num_nbrs                !< number of nearest neighbors
-  real, intent(in), optional :: max_dist                   !< maximum region of influence
-  logical, intent(in), optional :: src_modulo              !< periodicity of E-W boundary
-  logical, intent(in), optional :: grid_at_center          !< true for cell center, false for cell edge
-  real, intent(in), dimension(:,:), optional :: mask_in    !< mask for input data
-  real, intent(inout),dimension(:,:), optional :: mask_out !< mask for output data
-
-  call horiz_interp_new(Interp, lon_in, lat_in, lon_out, lat_out, &
-                        verbose, interp_method, num_nbrs, max_dist, &
-                        src_modulo, grid_at_center, mask_in, mask_out)
-
-end subroutine run_new_horiz_interp_1d_to_1d
-
-
-!> horizontal interpolation from source grid defined by 1d lon/lat to destination grid
+!> build horizontal interpolation weights from source grid defined by 2d lon/lat to destination grid
 !! defined by 2d lon/lat
-subroutine run_new_horiz_interp_1d_to_2d(Interp, lon_in, lat_in, lon_out, lat_out, &
-                                         verbose, interp_method, num_nbrs, max_dist, &
-                                         src_modulo, grid_at_center, mask_in, mask_out, &
-                                         is_latlon_out)
-
-  type(horiz_interp_type), intent(inout) :: Interp         !< type containing interpolation options/weights
-  real, intent(in), dimension(:) :: lon_in                 !< input longitude 1d
-  real, intent(in), dimension(:) :: lat_in                 !< input latitude 1d
-  real, intent(in), dimension(:,:) :: lon_out              !< output longitude 2d
-  real, intent(in), dimension(:,:) :: lat_out              !< output latitude 2d
-  integer, intent(in), optional :: verbose                 !< verbosity level
-  character(len=*), intent(in), optional :: interp_method  !< interpolation method
-  integer, intent(in), optional :: num_nbrs                !< number of nearest neighbors
-  real, intent(in), optional :: max_dist                   !< maximum region of influence
-  logical, intent(in), optional :: src_modulo              !< periodicity of E-W boundary
-  logical, intent(in), optional :: grid_at_center          !< true for cell center, false for cell edge
-  real, intent(in), dimension(:,:), optional :: mask_in    !< mask for input data
-  real, intent(inout),dimension(:,:), optional :: mask_out !< mask for output data
-  logical, intent(in), optional :: is_latlon_out           !< output grid is regular lat/lon grid
-
-  call horiz_interp_new(Interp, lon_in, lat_in, lon_out, lat_out, &
-                        verbose, interp_method, num_nbrs, max_dist, &
-                        src_modulo, grid_at_center, mask_in, mask_out, &
-                        is_latlon_out)
-
-end subroutine run_new_horiz_interp_1d_to_2d
-
-
-!> horizontal interpolation from source grid defined by 2d lon/lat to destination grid
-!! defined by 2d lon/lat
-subroutine run_new_horiz_interp_2d_to_2d(Interp, lon_in, lat_in, lon_out, lat_out, &
-                                         verbose, interp_method, num_nbrs, max_dist, &
-                                         src_modulo, mask_in, mask_out, &
-                                         is_latlon_in, is_latlon_out)
+subroutine build_horiz_interp_weights_2d_to_2d(Interp, lon_in, lat_in, lon_out, lat_out, &
+                                               verbose, interp_method, num_nbrs, max_dist, &
+                                               src_modulo, mask_in, mask_out, &
+                                               is_latlon_in, is_latlon_out)
 
   type(horiz_interp_type), intent(inout) :: Interp         !< type containing interpolation options/weights
   real, intent(in), dimension(:,:) :: lon_in               !< input longitude 2d
@@ -332,36 +115,7 @@ subroutine run_new_horiz_interp_2d_to_2d(Interp, lon_in, lat_in, lon_out, lat_ou
                         src_modulo, mask_in, mask_out, &
                         is_latlon_in, is_latlon_out)
 
-end subroutine run_new_horiz_interp_2d_to_2d
-
-
-!> horizontal interpolation from source grid defined by 2d lon/lat to destination grid
-!! defined by 1d lon/lat
-subroutine run_new_horiz_interp_2d_to_1d(Interp, lon_in, lat_in, lon_out, lat_out, &
-                                         verbose, interp_method, num_nbrs, max_dist, &
-                                         src_modulo, mask_in, mask_out, &
-                                         is_latlon_in)
-
-  type(horiz_interp_type), intent(inout) :: Interp         !< type containing interpolation options/weights
-  real, intent(in), dimension(:,:) :: lon_in               !< input longitude 2d
-  real, intent(in), dimension(:,:) :: lat_in               !< input latitude 2d
-  real, intent(in), dimension(:) :: lon_out                !< output longitude 1d
-  real, intent(in), dimension(:) :: lat_out                !< output latitude 1d
-  integer, intent(in), optional :: verbose                 !< verbosity level
-  character(len=*), intent(in), optional :: interp_method  !< interpolation method
-  integer, intent(in), optional :: num_nbrs                !< number of nearest neighbors
-  real, intent(in), optional :: max_dist                   !< maximum region of influence
-  logical, intent(in), optional :: src_modulo              !< periodicity of E-W boundary
-  real, intent(in), dimension(:,:), optional :: mask_in    !< mask for input data
-  real, intent(inout),dimension(:,:), optional :: mask_out !< mask for output data
-  logical, intent(in), optional :: is_latlon_in            !< input grid is regular lat/lon grid
-
-  call horiz_interp_new(Interp, lon_in, lat_in, lon_out, lat_out, &
-                        verbose, interp_method, num_nbrs, max_dist, &
-                        src_modulo, mask_in, mask_out, &
-                        is_latlon_in)
-
-end subroutine run_new_horiz_interp_2d_to_1d
+end subroutine build_horiz_interp_weights_2d_to_2d
 
 
 !> get size of an external field from field index
