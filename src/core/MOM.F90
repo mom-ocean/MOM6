@@ -418,7 +418,7 @@ contains
 !! occur inside of diabatic.
 subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS, &
                     Waves, do_dynamics, do_thermodynamics, start_cycle, &
-                    end_cycle, cycle_length, reset_therm, stochastics)
+                    end_cycle, cycle_length, reset_therm)
   type(mech_forcing), target, intent(inout) :: forces_in !< A structure with the driving mechanical forces
   type(forcing), target, intent(inout) :: fluxes_in  !< A structure with pointers to themodynamic,
                                                      !! tracer and mass exchange forcing fields
@@ -443,7 +443,6 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   logical,  optional, intent(in)    :: reset_therm   !< This indicates whether the running sums of
                                                      !! thermodynamic quantities should be reset.
                                                      !! If missing, this is like start_cycle.
-  type(stochastic_pattern), optional, intent(in) :: stochastics  !< random patternss for stochastics
 
   ! local variables
   type(ocean_grid_type),   pointer :: G => NULL()  ! pointer to a structure containing
@@ -704,8 +703,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
       ! Apply diabatic forcing, do mixing, and regrid.
       call step_MOM_thermo(CS, G, GV, US, u, v, h, CS%tv, fluxes, dtdia, &
-                           end_time_thermo, .true., Waves=Waves,         &
-                           stochastics=stochastics)
+                           end_time_thermo, .true., Waves=Waves)
       CS%time_in_thermo_cycle = CS%time_in_thermo_cycle + dtdia
 
       ! The diabatic processes are now ahead of the dynamics by dtdia.
@@ -803,8 +801,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
       ! Apply diabatic forcing, do mixing, and regrid.
       call step_MOM_thermo(CS, G, GV, US, u, v, h, CS%tv, fluxes, dtdia, &
-                           Time_local, .false., Waves=Waves,             &
-                           stochastics=stochastics)
+                           Time_local, .false., Waves=Waves)
       CS%time_in_thermo_cycle = CS%time_in_thermo_cycle + dtdia
 
       if ((CS%t_dyn_rel_thermo==0.0) .and. .not.do_dyn) then
@@ -1212,7 +1209,7 @@ end subroutine step_MOM_tracer_dyn
 !> MOM_step_thermo orchestrates the thermodynamic time stepping and vertical
 !! remapping, via calls to diabatic (or adiabatic) and ALE_main.
 subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
-                           Time_end_thermo, update_BBL, Waves, stochastics)
+                           Time_end_thermo, update_BBL, Waves)
   type(MOM_control_struct), intent(inout) :: CS     !< Master MOM control structure
   type(ocean_grid_type),    intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),  intent(inout) :: GV     !< ocean vertical grid structure
@@ -1225,7 +1222,6 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
                             intent(inout) :: h      !< layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),    intent(inout) :: tv     !< A structure pointing to various thermodynamic variables
   type(forcing),            intent(inout) :: fluxes !< pointers to forcing fields
-  type(stochastic_pattern), intent(in) :: stochastics  !< surface ocean state
   real,                     intent(in)    :: dtdia  !< The time interval over which to advance [T ~> s]
   type(time_type),          intent(in)    :: Time_end_thermo !< End of averaging interval for thermo diags
   logical,                  intent(in)    :: update_BBL !< If true, calculate the bottom boundary layer properties.
@@ -1288,8 +1284,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     call cpu_clock_begin(id_clock_diabatic)
 
     call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, dtdia, &
-                  Time_end_thermo, G, GV, US, CS%diabatic_CSp, OBC=CS%OBC, Waves=Waves, &
-                  stochastics=stochastics)
+                  Time_end_thermo, G, GV, US, CS%diabatic_CSp, OBC=CS%OBC, Waves=Waves)
     fluxes%fluxes_used = .true.
 
     if (showCallTree) call callTree_waypoint("finished diabatic (step_MOM_thermo)")
