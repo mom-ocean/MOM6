@@ -7,14 +7,15 @@ use MOM_array_transform, only : allocate_rotated_array, rotate_array
 use MOM_error_handler,   only : MOM_error, FATAL
 use MOM_interp_infra,    only : time_interp_extern, init_external_field=>init_extern_field
 use MOM_interp_infra,    only : time_interp_external_init, get_external_field_info
-use MOM_interp_infra,    only : horiz_interp_type, horiz_interp_init, horiz_interp, horiz_interp_new
+use MOM_interp_infra,    only : horiz_interp_type, horiz_interp_init
+use MOM_interp_infra,    only : run_horiz_interp, build_horiz_interp_weights
 use MOM_io_infra,        only : axistype
 use MOM_time_manager,    only : time_type
 
 implicit none ; private
 
 public :: time_interp_external, init_external_field, time_interp_external_init, get_external_field_info
-public :: horiz_interp_type, horiz_interp_init, horiz_interp, horiz_interp_new
+public :: horiz_interp_type, horiz_interp_init, run_horiz_interp, build_horiz_interp_weights
 
 !> Read a field based on model time, and rotate to the model domain.
 interface time_interp_external

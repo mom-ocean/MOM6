@@ -12,7 +12,7 @@ use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_interpolate,   only : time_interp_external, get_external_field_info, horiz_interp_init
-use MOM_interpolate,   only : horiz_interp_new, horiz_interp, horiz_interp_type
+use MOM_interpolate,   only : build_horiz_interp_weights, run_horiz_interp, horiz_interp_type
 use MOM_io_infra,      only : axistype, get_axis_data
 use MOM_time_manager,  only : time_type
 
@@ -526,8 +526,8 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 !   call fms routine horiz_interp to interpolate input level data to model horizontal grid
     if (.not. is_ongrid) then
       if (k == 1) then
-        call horiz_interp_new(Interp, x_in, y_in, lon_out(is:ie,js:je), lat_out(is:ie,js:je), &
-              interp_method='bilinear', src_modulo=.true.)
+        call build_horiz_interp_weights(Interp, x_in, y_in, lon_out(is:ie,js:je), lat_out(is:ie,js:je), &
+                                        interp_method='bilinear', src_modulo=.true.)
       endif
 
       if (debug) then
@@ -539,7 +539,8 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     if (is_ongrid) then
       tr_out(is:ie,js:je)=tr_in(is:ie,js:je)
     else
-      call horiz_interp(Interp, tr_inp, tr_out(is:ie,js:je), missing_value=missing_value, new_missing_handle=.true.)
+      call run_horiz_interp(Interp, tr_inp, tr_out(is:ie,js:je), &
+                            missing_value=missing_value, new_missing_handle=.true.)
     endif
 
     mask_out=1.0
@@ -810,8 +811,8 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
       ! call fms routine horiz_interp to interpolate input level data to model horizontal grid
       if (k == 1) then
-        call horiz_interp_new(Interp, x_in, y_in, lon_out(is:ie,js:je), lat_out(is:ie,js:je), &
-                              interp_method='bilinear', src_modulo=.true.)
+        call build_horiz_interp_weights(Interp, x_in, y_in, lon_out(is:ie,js:je), lat_out(is:ie,js:je), &
+                                        interp_method='bilinear', src_modulo=.true.)
       endif
 
       if (debug) then
@@ -820,8 +821,8 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
       tr_out(:,:) = 0.0
 
-      call horiz_interp(Interp, tr_inp, tr_out(is:ie,js:je), missing_value=missing_value, &
-                        new_missing_handle=.true.)
+      call run_horiz_interp(Interp, tr_inp, tr_out(is:ie,js:je), missing_value=missing_value, &
+                            new_missing_handle=.true.)
 
       mask_out(:,:) = 1.0
       do j=js,je ; do i=is,ie
