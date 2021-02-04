@@ -461,7 +461,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
         call ePBL_column(h, u, v, T0, S0, dSV_dT_1d, dSV_dS_1d, TKE_forcing, B_flux, absf, &
                          u_star, u_star_mean, dt, MLD_io, Kd, mixvel, mixlen, GV, &
                          US, CS, eCD, dt_diag=dt_diag, Waves=Waves, G=G, &
-                         epbl1_wt=epbl1_wts(i,j),epbl2_wt=epbl2_wts(i,j),i=i, j=j)
+                         epbl1_wt=fluxes%epbl1_wts(i,j),epbl2_wt=fluxes%epbl2_wts(i,j), &
+                         i=i, j=j)
       else
         call ePBL_column(h, u, v, T0, S0, dSV_dT_1d, dSV_dS_1d, TKE_forcing, B_flux, absf, &
                          u_star, u_star_mean, dt, MLD_io, Kd, mixvel, mixlen, GV, &
@@ -540,8 +541,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
     ! only write random patterns if running with stochastic physics, otherwise the
     ! array is unallocated and will give an error
     if  (CS%pert_epbl) then
-      if (CS%id_epbl1_wts > 0)    call post_data(CS%id_epbl1_wts, stochastics%epbl1_wts, CS%diag)
-      if (CS%id_epbl2_wts > 0)    call post_data(CS%id_epbl2_wts, stochastics%epbl2_wts, CS%diag)
+      if (CS%id_epbl1_wts > 0)    call post_data(CS%id_epbl1_wts, fluxes%epbl1_wts, CS%diag)
+      if (CS%id_epbl2_wts > 0)    call post_data(CS%id_epbl2_wts, fluxes%epbl2_wts, CS%diag)
     endif
   endif
 

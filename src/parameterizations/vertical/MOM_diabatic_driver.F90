@@ -289,9 +289,9 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   integer :: i, j, k, m, is, ie, js, je, nz
   logical :: showCallTree ! If true, show the call tree
 
-  real, allocatable(:,:,:)    :: h_in  ! thickness before thermodynamics
-  real, allocatable(:,:,:)    :: t_in  ! temperature before thermodynamics
-  real, allocatable(:,:,:)    :: s_in  ! salinity before thermodynamics
+  real, allocatable, dimension(:,:,:)    :: h_in  ! thickness before thermodynamics
+  real, allocatable, dimension(:,:,:)    :: t_in  ! temperature before thermodynamics
+  real, allocatable, dimension(:,:,:)    :: s_in  ! salinity before thermodynamics
   real :: t_tend,s_tend,h_tend                  ! holder for tendencey needed for SPPT
   real :: t_pert,s_pert,h_pert                  ! holder for perturbations needed for SPPT
 
@@ -302,9 +302,9 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     allocate(h_in(G%isd:G%ied, G%jsd:G%jed,G%ke))
     allocate(t_in(G%isd:G%ied, G%jsd:G%jed,G%ke))
     allocate(s_in(G%isd:G%ied, G%jsd:G%jed,G%ke))
-    h_in(:,:) = h(:,:)
-    t_in(:,:) = tv%T(:,:)
-    s_in(:,:) = tv%S(:,:)
+    h_in(:,:,:)=h(:,:,:)
+    t_in(:,:,:)=tv%T(:,:,:)
+    s_in(:,:,:)=tv%S(:,:,:)
    
     if (CS%id_sppt_wts > 0) then
       call post_data(CS%id_sppt_wts, fluxes%sppt_wts, CS%diag)
@@ -458,6 +458,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   if (CS%debugConservation) call MOM_state_stats('leaving diabatic', u, v, h, tv%T, tv%S, G, GV, US)
 
   if (CS%do_sppt) then
+  ! perturb diabatic tendecies
     do k=1,nz
       do j=js,je
         do i=is,ie
@@ -468,17 +469,20 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
           t_pert=t_tend+t_in(i,j,k)
           s_pert=s_tend+s_in(i,j,k)
           if (h_pert > GV%Angstrom_H) then
-             h(i,j,k)=h_pert
+            h(i,j,k) = h_pert
           else
-             h(i,j,k)=GV%Angstrom_H
+            h(i,j,k) = GV%Angstrom_H
           endif
-          tv%T(i,j,k)=t_pert
+          tv%T(i,j,k) = t_pert
           if (s_pert > 0.0) then
-             tv%S(i,j,k)=s_pert
+            tv%S(i,j,k) = s_pert
           endif
         enddo
       enddo
     enddo
+    deallocate(h_in)
+    deallocate(t_in)
+    deallocate(s_in)
   endif
 
 end subroutine diabatic

@@ -63,6 +63,7 @@ use MOM_surface_forcing_nuopc, only : convert_IOB_to_forces, ice_ocn_bnd_type_ch
 use MOM_surface_forcing_nuopc, only : ice_ocean_boundary_type, surface_forcing_CS
 use MOM_surface_forcing_nuopc, only : forcing_save_restart
 use MOM_domains,               only : root_PE,PE_here,num_PEs
+use MOM_coms,                  only : Get_PElist
 use stochastic_physics,        only : init_stochastic_physics_ocn, run_stochastic_physics_ocn
 
 #include <MOM_memory.h>
@@ -176,8 +177,8 @@ type, public :: ocean_state_type ; private
                               !! steps can span multiple coupled time steps.
   logical :: diabatic_first   !< If true, apply diabatic and thermodynamic
                               !! processes before time stepping the dynamics.
-  logical :: do_sppt          !< If true, allocate array for SPPT
-  logical :: pert_epbl        !< If true, allocate arrays for energetic PBL perturbations
+  logical,public :: do_sppt   !< If true, allocate array for SPPT
+  logical,public :: pert_epbl !< If true, allocate arrays for energetic PBL perturbations
 
   real :: eps_omesh           !< Max allowable difference between ESMF mesh and MOM6
                               !! domain coordinates
@@ -253,6 +254,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
                       !! If HFrz <= 0 (default), melt potential will not be computed.
   logical :: use_melt_pot!< If true, allocate melt_potential array
 ! stochastic physics
+  integer,allocatable :: pelist(:) ! list of pes for this instance of the ocean
   integer :: mom_comm          ! list of pes for this instance of the ocean
   integer :: num_procs         ! number of processors to pass to stochastic physics
   integer :: iret              ! return code from stochastic physics
@@ -439,7 +441,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
                  default=.false.)
   if (OS%do_sppt .OR. OS%pert_epbl) then
      num_procs=num_PEs()
-     call mpp_get_pelist(Ocean_sfc%domain, mom_comm)
+     allocate(pelist(num_procs))
+     !call mpp_get_pelist(pelist, commID=mom_comm)
+     call Get_PElist(pelist,commID = mom_comm)
      me=PE_here()
      master=root_PE()
    

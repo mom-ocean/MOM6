@@ -1379,6 +1379,8 @@ subroutine ModelAdvance(gcomp, rc)
   character(len=*),parameter             :: subname='(MOM_cap:ModelAdvance)'
   character(len=8)                       :: suffix
   integer                                :: num_rest_files
+  logical                                :: do_sppt = .false.
+  logical                                :: pert_epbl = .false.
 
   rc = ESMF_SUCCESS
   if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM Model_ADVANCE: ")
@@ -1587,15 +1589,17 @@ subroutine ModelAdvance(gcomp, rc)
         ! write restart file(s)
         call ocean_model_restart(ocean_state, restartname=restartname)
 
-        ! write stochastic physics restart file if active
-        if (ESMF_AlarmIsRinging(stop_alarm, rc=rc)) then
-           write(restartname,'(A)')"ocn_stoch.res.nc"
-        else
-           write(restartname,'(A,I4.4,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,A)') &
-                "ocn_stoch.res.", year, month, day, hour, minute, seconds,".nc"
+        if (ocean_state%do_sppt .OR. ocean_state%pert_epbl) then
+          if (ESMF_AlarmIsRinging(stop_alarm, rc=rc)) then
+             write(restartname,'(A)')"ocn_stoch.res.nc"
+          else
+             write(restartname,'(A,I4.4,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,A)') &
+                  "ocn_stoch.res.", year, month, day, hour, minute, seconds,".nc"
+          endif
+          call ESMF_LogWrite("MOM_cap: Writing stoch restart :  "//trim(restartname), &
+                             ESMF_LOGMSG_INFO)
+          call write_stoch_restart_ocn('RESTART/'//trim(restartname))
         endif
-        call ESMF_LogWrite("MOM_cap: Writing restart :  "//trim(restartname), ESMF_LOGMSG_INFO)
-        call write_stoch_restart_ocn('RESTART/'//trim(restartname))
      endif
 
      if (is_root_pe()) then
