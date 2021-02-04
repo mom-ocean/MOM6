@@ -65,7 +65,7 @@ use MOM_tracer_flow_control, only : call_tracer_column_fns, tracer_flow_control_
 use MOM_tracer_diabatic,     only : tracer_vertdiff, tracer_vertdiff_Eulerian
 use MOM_unit_scaling,        only : unit_scale_type
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, accel_diag_ptrs
-use MOM_variables,           only : cont_diag_ptrs, MOM_thermovar_chksum, p3d, stochastic_pattern
+use MOM_variables,           only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
 use MOM_verticalGrid,        only : verticalGrid_type, get_thickness_units
 use MOM_wave_speed,          only : wave_speeds
 use MOM_wave_interface,      only : wave_parameters_CS
@@ -183,7 +183,7 @@ type, public :: diabatic_CS ; private
   integer :: id_Kd_heat  = -1, id_Kd_salt  = -1, id_Kd_interface = -1, id_Kd_ePBL  = -1
   integer :: id_Tdif     = -1, id_Tadv     = -1, id_Sdif         = -1, id_Sadv     = -1
   integer :: id_MLD_003  = -1, id_MLD_0125  = -1, id_MLD_user     = -1, id_mlotstsq = -1
-  integer :: id_subMLN2  = -1, id_sppt_wts  = -1, id_t_rp1 = -1, id_t_rp2 = -1
+  integer :: id_subMLN2  = -1, id_sppt_wts  = -1
 
   ! diagnostic for fields prior to applying diapycnal physics
   integer :: id_u_predia = -1, id_v_predia = -1, id_h_predia = -1
@@ -266,7 +266,7 @@ contains
 !>  This subroutine imposes the diapycnal mass fluxes and the
 !!  accompanying diapycnal advection of momentum and tracers.
 subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
-                    G, GV, US, CS, OBC, WAVES, stochastics)
+                    G, GV, US, CS, OBC, WAVES)
   type(ocean_grid_type),                     intent(inout) :: G         !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV        !< ocean vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u         !< zonal velocity [L T-1 ~> m s-1]
@@ -288,7 +288,6 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   type(diabatic_CS),                         pointer       :: CS        !< module control structure
   type(ocean_OBC_type),            optional, pointer       :: OBC       !< Open boundaries control structure.
   type(Wave_parameters_CS),        optional, pointer       :: Waves     !< Surface gravity waves
-  type(stochastic_pattern),        optional, intent(in)    :: stochastics  !< random patterns
 
   ! local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: &
@@ -299,9 +298,9 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   integer :: i, j, k, m, is, ie, js, je, nz
   logical :: showCallTree ! If true, show the call tree
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G))   :: h_in  ! thickness before thermodynamics
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G))   :: t_in  ! temperature before thermodynamics
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G))   :: s_in  ! salinity before thermodynamics
+  real, allocatable(:,:,:)    :: h_in  ! thickness before thermodynamics
+  real, allocatable(:,:,:)    :: t_in  ! temperature before thermodynamics
+  real, allocatable(:,:,:)    :: s_in  ! salinity before thermodynamics
   real :: t_tend,s_tend,h_tend                  ! holder for tendencey needed for SPPT
   real :: t_pert,s_pert,h_pert                  ! holder for perturbations needed for SPPT
 
@@ -309,12 +308,15 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
    ! save  copy of the date for SPPT
   if (CS%do_sppt) then
-    h_in(:,:,:)=h(:,:,:)
-    t_in(:,:,:)=tv%T(:,:,:)
-    s_in(:,:,:)=tv%S(:,:,:)
+    allocate(h_in(G%isd:G%ied, G%jsd:G%jed,G%ke))
+    allocate(t_in(G%isd:G%ied, G%jsd:G%jed,G%ke))
+    allocate(s_in(G%isd:G%ied, G%jsd:G%jed,G%ke))
+    h_in(:,:) = h(:,:)
+    t_in(:,:) = tv%T(:,:)
+    s_in(:,:) = tv%S(:,:)
 
     if (CS%id_sppt_wts > 0) then
-      call post_data(CS%id_sppt_wts, stochastics%sppt_wts, CS%diag)
+      call post_data(CS%id_sppt_wts, fluxes%sppt_wts, CS%diag)
     endif
   endif
 
@@ -403,10 +405,10 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   if (CS%useALEalgorithm .and. CS%use_legacy_diabatic) then
     call diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
-                      G, GV, US, CS, Waves, stochastics=stochastics)
+                      G, GV, US, CS, Waves)
   elseif (CS%useALEalgorithm) then
     call diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
-                      G, GV, US, CS, Waves, stochastics=stochastics)
+                      G, GV, US, CS, Waves)
   else
     call layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
                           G, GV, US, CS, Waves)
@@ -477,12 +479,12 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     do k=1,nz
       do j=js,je
         do i=is,ie
-          h_tend = (h(i,j,k) - h_in(i,j,k)) * stochastics%sppt_wts(i,j)
-          t_tend = (tv%T(i,j,k) - t_in(i,j,k)) * stochastics%sppt_wts(i,j)
-          s_tend = (tv%S(i,j,k) - s_in(i,j,k)) * stochastics%sppt_wts(i,j)
-          h_pert = h_tend + h_in(i,j,k)
-          t_pert = t_tend + t_in(i,j,k)
-          s_pert = s_tend + s_in(i,j,k)
+          h_tend = (h(i,j,k)-h_in(i,j,k))*fluxes%sppt_wts(i,j)
+          t_tend = (tv%T(i,j,k)-t_in(i,j,k))*fluxes%sppt_wts(i,j)
+          s_tend = (tv%S(i,j,k)-s_in(i,j,k))*fluxes%sppt_wts(i,j)
+          h_pert=h_tend+h_in(i,j,k)
+          t_pert=t_tend+t_in(i,j,k)
+          s_pert=s_tend+s_in(i,j,k)
           if (h_pert > GV%Angstrom_H) then
             h(i,j,k) = h_pert
           else
@@ -505,7 +507,7 @@ end subroutine diabatic
 !> Applies diabatic forcing and diapycnal mixing of temperature, salinity and other tracers for use
 !! with an ALE algorithm.  This version uses an older set of algorithms compared with diabatic_ALE.
 subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
-                           G, GV, US, CS, WAVES, stochastics)
+                           G, GV, US, CS, WAVES)
   type(ocean_grid_type),                     intent(inout) :: G         !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV        !< ocean vertical grid structure
   type(unit_scale_type),                     intent(in)    :: US        !< A dimensional unit scaling type
@@ -525,8 +527,6 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   type(time_type),                           intent(in)    :: Time_end  !< Time at the end of the interval
   type(diabatic_CS),                         pointer       :: CS        !< module control structure
   type(Wave_parameters_CS),        optional, pointer       :: Waves     !< Surface gravity waves
-  type(stochastic_pattern),        optional, intent(in)    :: stochastics !< random patterns for SPPT and
-                                                                        !! energetic PBL perturbations
 
   ! local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
@@ -828,7 +828,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
     call energetic_PBL(h, u_h, v_h, tv, fluxes, dt, Kd_ePBL, G, GV, US, &
                       CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, &
-                      waves=waves, stochastics=stochastics)
+                      waves=waves)
 
     if (associated(Hml)) then
       call energetic_PBL_get_MLD(CS%ePBL, Hml(:,:), G, US)
@@ -1091,7 +1091,7 @@ end subroutine diabatic_ALE_legacy
 !>  This subroutine imposes the diapycnal mass fluxes and the
 !!  accompanying diapycnal advection of momentum and tracers.
 subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
-                    G, GV, US, CS, Waves, stochastics)
+                    G, GV, US, CS, Waves)
   type(ocean_grid_type),                     intent(inout) :: G         !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV        !< ocean vertical grid structure
   type(unit_scale_type),                     intent(in)    :: US        !< A dimensional unit scaling type
@@ -1112,8 +1112,6 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   type(time_type),                           intent(in)    :: Time_end  !< Time at the end of the interval
   type(diabatic_CS),                         pointer       :: CS        !< module control structure
   type(Wave_parameters_CS),        optional, pointer       :: Waves     !< Surface gravity waves
-  type(stochastic_pattern),        optional, intent(in)    :: stochastics !< random patterns for SPPT and
-                                                                        !! energetic PBL perturbations
 
   ! local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
@@ -1366,7 +1364,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
     call energetic_PBL(h, u_h, v_h, tv, fluxes, dt, Kd_ePBL, G, GV, US, &
                        CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, &
-                       waves=waves, stochastics=stochastics)
+                       waves=waves)
 
     if (associated(Hml)) then
       call energetic_PBL_get_MLD(CS%ePBL, Hml(:,:), G, US)
