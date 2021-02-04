@@ -9,11 +9,11 @@ use MOM_checksums,        only : hchksum, uchksum, vchksum, Bchksum
 use MOM_coms,             only : PE_here
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_manager,     only : diag_manager_init, diag_manager_end
-use MOM_diag_manager,     only : diag_axis_init, get_diag_axis_name
-use MOM_diag_manager,     only : send_data, diag_field_add_attribute, EAST, NORTH
-use MOM_diag_manager,     only : register_diag_field_fms, register_static_field_fms
-use MOM_diag_manager,     only : get_diag_field_id_fms, DIAG_FIELD_NOT_FOUND
+use MOM_diag_manager_infra,     only : MOM_diag_manager_init, MOM_diag_manager_end
+use MOM_diag_manager_infra,     only : diag_axis_init=>MOM_diag_axis_init, get_MOM_diag_axis_name
+use MOM_diag_manager_infra,     only : send_data_fms_wrapper, MOM_diag_field_add_attribute, EAST, NORTH
+use MOM_diag_manager_infra,     only : register_diag_field_fms_wrapper, register_static_field_fms_wrapper
+use MOM_diag_manager_infra,     only : get_MOM_diag_field_id, DIAG_FIELD_NOT_FOUND
 use MOM_diag_remap,       only : diag_remap_ctrl, diag_remap_update, diag_remap_calc_hmask
 use MOM_diag_remap,       only : diag_remap_init, diag_remap_end, diag_remap_do_remap
 use MOM_diag_remap,       only : vertically_reintegrate_diag_field, vertically_interpolate_diag_field
@@ -56,6 +56,7 @@ public diag_set_state_ptrs, diag_update_remap_grids
 public diag_grid_storage_init, diag_grid_storage_end
 public diag_copy_diag_to_storage, diag_copy_storage_to_diag
 public diag_save_grids, diag_restore_grids
+public found_in_diagtable
 
 !> Make a diagnostic available for averaging or output.
 interface post_data
@@ -1270,9 +1271,9 @@ subroutine post_data_0d(diag_field_id, field, diag_cs, is_static)
     if (diag_cs%diag_as_chksum) then
       call chksum0(locfield, diag%debug_str, logunit=diag_cs%chksum_iounit)
     elseif (is_stat) then
-      used = send_data(diag%fms_diag_id, locfield)
+      used = send_data_fms_wrapper(diag%fms_diag_id, locfield)
     elseif (diag_cs%ave_enabled) then
-      used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end)
+      used = send_data_fms_wrapper(diag%fms_diag_id, locfield, diag_cs%time_end)
     endif
     diag => diag%next
   enddo
@@ -1322,9 +1323,9 @@ subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
     if (diag_cs%diag_as_chksum) then
       call zchksum(locfield, diag%debug_str, logunit=diag_cs%chksum_iounit)
     elseif (is_stat) then
-      used = send_data(diag%fms_diag_id, locfield)
+      used = send_data_fms_wrapper(diag%fms_diag_id, locfield)
     elseif (diag_cs%ave_enabled) then
-      used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, weight=diag_cs%time_int)
+      used = send_data_fms_wrapper(diag%fms_diag_id, locfield, diag_cs%time_end, weight=diag_cs%time_int)
     endif
     if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) deallocate( locfield )
 
@@ -1478,24 +1479,24 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
       if (present(mask)) then
         call assert(size(locfield) == size(locmask), &
             'post_data_2d_low is_stat: mask size mismatch: '//diag%debug_str)
-        used = send_data(diag%fms_diag_id, locfield, &
+        used = send_data_fms_wrapper(diag%fms_diag_id, locfield, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=locmask)
      !elseif (associated(diag%axes%mask2d)) then
      !  used = send_data(diag%fms_diag_id, locfield, &
      !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%axes%mask2d)
       else
-        used = send_data(diag%fms_diag_id, locfield, &
+        used = send_data_fms_wrapper(diag%fms_diag_id, locfield, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
       endif
     elseif (diag_cs%ave_enabled) then
       if (associated(locmask)) then
         call assert(size(locfield) == size(locmask), &
             'post_data_2d_low: mask size mismatch: '//diag%debug_str)
-        used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
+        used = send_data_fms_wrapper(diag%fms_diag_id, locfield, diag_cs%time_end, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                          weight=diag_cs%time_int, rmask=locmask)
       else
-        used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
+        used = send_data_fms_wrapper(diag%fms_diag_id, locfield, diag_cs%time_end, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                          weight=diag_cs%time_int)
       endif
@@ -1766,24 +1767,24 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
         if (present(mask)) then
           call assert(size(locfield) == size(locmask), &
               'post_data_3d_low is_stat: mask size mismatch: '//diag%debug_str)
-          used = send_data(diag%fms_diag_id, locfield, &
+          used = send_data_fms_wrapper(diag%fms_diag_id, locfield, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=locmask)
        !elseif (associated(diag%axes%mask2d)) then
        !  used = send_data(diag%fms_diag_id, locfield, &
        !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%axes%mask2d)
         else
-          used = send_data(diag%fms_diag_id, locfield, &
+          used = send_data_fms_wrapper(diag%fms_diag_id, locfield, &
                            is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
         endif
       elseif (diag_cs%ave_enabled) then
         if (associated(locmask)) then
           call assert(size(locfield) == size(locmask), &
               'post_data_3d_low: mask size mismatch: '//diag%debug_str)
-          used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
+          used = send_data_fms_wrapper(diag%fms_diag_id, locfield, diag_cs%time_end, &
                            is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                            weight=diag_cs%time_int, rmask=locmask)
         else
-          used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
+          used = send_data_fms_wrapper(diag%fms_diag_id, locfield, diag_cs%time_end, &
                            is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                            weight=diag_cs%time_int)
         endif
@@ -1849,7 +1850,7 @@ subroutine post_xy_average(diag_cs, diag, field)
     call zchksum(averaged_field, trim(diag%debug_str)//'_xyave', &
                  logunit=diag_CS%chksum_iounit)
   else
-    used = send_data(diag%fms_xyave_diag_id, averaged_field, diag_cs%time_end, &
+    used = send_data_fms_wrapper(diag%fms_xyave_diag_id, averaged_field, diag_cs%time_end, &
                      weight=diag_cs%time_int, mask=averaged_mask)
   endif
 end subroutine post_xy_average
@@ -2390,13 +2391,13 @@ integer function register_diag_field_expand_axes(module_name, field_name, axes, 
     ! If interp_method is provided we must use it
     if (area_id>0) then
       if (volume_id>0) then
-        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_fms_wrapper(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
                  interp_method=interp_method, tile_count=tile_count, area=area_id, volume=volume_id)
       else
-        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_fms_wrapper(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -2404,13 +2405,13 @@ integer function register_diag_field_expand_axes(module_name, field_name, axes, 
       endif
     else
       if (volume_id>0) then
-        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_fms_wrapper(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
                  interp_method=interp_method, tile_count=tile_count, volume=volume_id)
       else
-        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_fms_wrapper(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -2421,13 +2422,13 @@ integer function register_diag_field_expand_axes(module_name, field_name, axes, 
     ! If interp_method is not provided and the field is not at an h-point then interp_method='none'
     if (area_id>0) then
       if (volume_id>0) then
-        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_fms_wrapper(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
                  interp_method='none', tile_count=tile_count, area=area_id, volume=volume_id)
       else
-        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_fms_wrapper(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -2435,13 +2436,13 @@ integer function register_diag_field_expand_axes(module_name, field_name, axes, 
       endif
     else
       if (volume_id>0) then
-        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_fms_Wrapper(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
                  interp_method='none', tile_count=tile_count, volume=volume_id)
       else
-        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_fms_wrapper(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -2578,22 +2579,22 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
            'Individual direction cell method was specified along with a "cell_methods" string.')
     endif
     if (len(trim(cell_methods))>0) then
-      call diag_field_add_attribute(id, 'cell_methods', trim(cell_methods))
+      call MOM_diag_field_add_attribute(id, 'cell_methods', trim(cell_methods))
       ostring = trim(cell_methods)
     endif
   else
     if (present(x_cell_method)) then
       if (len(trim(x_cell_method))>0) then
-        call get_diag_axis_name(axes%handles(1), axis_name)
-        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
+        call get_MOM_diag_axis_name(axes%handles(1), axis_name)
+        call MOM_diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(x_cell_method)
         if (trim(x_cell_method)=='mean') x_mean=.true.
         if (trim(x_cell_method)=='sum') x_sum=.true.
       endif
     else
       if (len(trim(axes%x_cell_method))>0) then
-        call get_diag_axis_name(axes%handles(1), axis_name)
-        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(axes%x_cell_method))
+        call get_MOM_diag_axis_name(axes%handles(1), axis_name)
+        call MOM_diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(axes%x_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(axes%x_cell_method)
         if (trim(axes%x_cell_method)=='mean') x_mean=.true.
         if (trim(axes%x_cell_method)=='sum') x_sum=.true.
@@ -2601,16 +2602,16 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
     endif
     if (present(y_cell_method)) then
       if (len(trim(y_cell_method))>0) then
-        call get_diag_axis_name(axes%handles(2), axis_name)
-        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(y_cell_method))
+        call get_MOM_diag_axis_name(axes%handles(2), axis_name)
+        call MOM_diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(y_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(y_cell_method)
         if (trim(y_cell_method)=='mean') y_mean=.true.
         if (trim(y_cell_method)=='sum') y_sum=.true.
       endif
     else
       if (len(trim(axes%y_cell_method))>0) then
-        call get_diag_axis_name(axes%handles(2), axis_name)
-        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(axes%y_cell_method))
+        call get_MOM_diag_axis_name(axes%handles(2), axis_name)
+        call MOM_diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(axes%y_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(axes%y_cell_method)
         if (trim(axes%y_cell_method)=='mean') y_mean=.true.
         if (trim(axes%y_cell_method)=='sum') y_sum=.true.
@@ -2621,39 +2622,39 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
            'Vertical cell method was specified along with the vertically extensive flag.')
       if (len(trim(v_cell_method))>0) then
         if (axes%rank==1) then
-          call get_diag_axis_name(axes%handles(1), axis_name)
+          call get_MOM_diag_axis_name(axes%handles(1), axis_name)
         elseif (axes%rank==3) then
-          call get_diag_axis_name(axes%handles(3), axis_name)
+          call get_MOM_diag_axis_name(axes%handles(3), axis_name)
         endif
-        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(v_cell_method))
+        call MOM_diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(v_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(v_cell_method)
       endif
     elseif (present(v_extensive)) then
       if (v_extensive) then
         if (axes%rank==1) then
-          call get_diag_axis_name(axes%handles(1), axis_name)
+          call get_MOM_diag_axis_name(axes%handles(1), axis_name)
         elseif (axes%rank==3) then
-          call get_diag_axis_name(axes%handles(3), axis_name)
+          call get_MOM_diag_axis_name(axes%handles(3), axis_name)
         endif
-        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':sum')
+        call MOM_diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':sum')
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':sum'
       endif
     else
       if (len(trim(axes%v_cell_method))>0) then
         if (axes%rank==1) then
-          call get_diag_axis_name(axes%handles(1), axis_name)
+          call get_MOM_diag_axis_name(axes%handles(1), axis_name)
         elseif (axes%rank==3) then
-          call get_diag_axis_name(axes%handles(3), axis_name)
+          call get_MOM_diag_axis_name(axes%handles(3), axis_name)
         endif
-        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(axes%v_cell_method))
+        call MOM_diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(axes%v_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(axes%v_cell_method)
       endif
     endif
     if (x_mean .and. y_mean) then
-      call diag_field_add_attribute(id, 'cell_methods', 'area:mean')
+      call MOM_diag_field_add_attribute(id, 'cell_methods', 'area:mean')
       ostring = trim(adjustl(ostring))//' area:mean'
     elseif (x_sum .and. y_sum) then
-      call diag_field_add_attribute(id, 'cell_methods', 'area:sum')
+      call MOM_diag_field_add_attribute(id, 'cell_methods', 'area:sum')
       ostring = trim(adjustl(ostring))//' area:sum'
     endif
   endif
@@ -2702,7 +2703,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
     fms_id = diag_cs%num_chksum_diags + 1
     diag_cs%num_chksum_diags = fms_id
   else
-    fms_id = register_diag_field_fms(module_name, field_name, init_time, &
+    fms_id = register_diag_field_fms_wrapper(module_name, field_name, init_time, &
         long_name=long_name, units=units, missing_value=MOM_missing_value, &
         range=range, standard_name=standard_name, do_not_log=do_not_log, &
         err_msg=err_msg)
@@ -2733,7 +2734,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
     if (present(cmor_standard_name)) posted_cmor_standard_name = cmor_standard_name
     if (present(cmor_long_name)) posted_cmor_long_name = cmor_long_name
 
-    fms_id = register_diag_field_fms(module_name, cmor_field_name, init_time, &
+    fms_id = register_diag_field_fms_wrapper(module_name, cmor_field_name, init_time, &
        long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units), &
        missing_value=MOM_missing_value, range=range, &
        standard_name=trim(posted_cmor_standard_name), do_not_log=do_not_log, err_msg=err_msg)
@@ -2816,7 +2817,7 @@ function register_static_field(module_name, field_name, axes, &
     fms_id = diag_cs%num_chksum_diags + 1
     diag_cs%num_chksum_diags = fms_id
   else
-    fms_id = register_static_field_fms(module_name, field_name, axes%handles, &
+    fms_id = register_static_field_fms_wrapper(module_name, field_name, axes%handles, &
            long_name=long_name, units=units, missing_value=MOM_missing_value, &
            range=range, mask_variant=mask_variant, standard_name=standard_name, &
            do_not_log=do_not_log, &
@@ -2835,17 +2836,17 @@ function register_static_field(module_name, field_name, axes, &
       diag%axes => axes
     else
       if (present(x_cell_method)) then
-        call get_diag_axis_name(axes%handles(1), axis_name)
-        call diag_field_add_attribute(fms_id, 'cell_methods', &
+        call get_MOM_diag_axis_name(axes%handles(1), axis_name)
+        call MOM_diag_field_add_attribute(fms_id, 'cell_methods', &
             trim(axis_name)//':'//trim(x_cell_method))
       endif
       if (present(y_cell_method)) then
-        call get_diag_axis_name(axes%handles(2), axis_name)
-        call diag_field_add_attribute(fms_id, 'cell_methods', &
+        call get_MOM_diag_axis_name(axes%handles(2), axis_name)
+        call MOM_diag_field_add_attribute(fms_id, 'cell_methods', &
             trim(axis_name)//':'//trim(y_cell_method))
       endif
       if (present(area_cell_method)) then
-        call diag_field_add_attribute(fms_id, 'cell_methods', &
+        call MOM_diag_field_add_attribute(fms_id, 'cell_methods', &
             'area:'//trim(area_cell_method))
       endif
     endif
@@ -2868,7 +2869,7 @@ function register_static_field(module_name, field_name, axes, &
     if (present(cmor_standard_name)) posted_cmor_standard_name = cmor_standard_name
     if (present(cmor_long_name)) posted_cmor_long_name = cmor_long_name
 
-    fms_id = register_static_field_fms(module_name, cmor_field_name, &
+    fms_id = register_static_field_fms_wrapper(module_name, cmor_field_name, &
       axes%handles, long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units), &
       missing_value=MOM_missing_value, range=range, mask_variant=mask_variant,            &
       standard_name=trim(posted_cmor_standard_name), do_not_log=do_not_log,               &
@@ -2882,15 +2883,15 @@ function register_static_field(module_name, field_name, axes, &
       cmor_diag%debug_str = trim(module_name)//"-"//trim(cmor_field_name)
       if (present(conversion)) cmor_diag%conversion_factor = conversion
       if (present(x_cell_method)) then
-        call get_diag_axis_name(axes%handles(1), axis_name)
-        call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
+        call get_MOM_diag_axis_name(axes%handles(1), axis_name)
+        call MOM_diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
       endif
       if (present(y_cell_method)) then
-        call get_diag_axis_name(axes%handles(2), axis_name)
-        call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(y_cell_method))
+        call get_MOM_diag_axis_name(axes%handles(2), axis_name)
+        call MOM_diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(y_cell_method))
       endif
       if (present(area_cell_method)) then
-        call diag_field_add_attribute(fms_id, 'cell_methods', 'area:'//trim(area_cell_method))
+        call MOM_diag_field_add_attribute(fms_id, 'cell_methods', 'area:'//trim(area_cell_method))
       endif
     endif
   endif
@@ -3007,7 +3008,7 @@ subroutine diag_mediator_infrastructure_init(err_msg)
   ! This subroutine initializes the FMS diag_manager.
   character(len=*), optional, intent(out)   :: err_msg !< An error message
 
-  call diag_manager_init(err_msg=err_msg)
+  call MOM_diag_manager_init(err_msg=err_msg)
 end subroutine diag_mediator_infrastructure_init
 
 !> diag_mediator_init initializes the MOM diag_mediator and opens the available
@@ -3425,7 +3426,7 @@ subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
 #endif
 
   if (present(end_diag_manager)) then
-    if (end_diag_manager) call diag_manager_end(time)
+    if (end_diag_manager) call MOM_diag_manager_end(time)
   endif
 
 end subroutine diag_mediator_end
@@ -4299,5 +4300,34 @@ subroutine downsample_mask_3d(field_in, field_out, dl, isc_o, jsc_o, isc_d, iec_
     if (tot_non_zero > 0.0) field_out(i,j,k)=1.0
   enddo ; enddo ; enddo
 end subroutine downsample_mask_3d
+
+!> Fakes a register of a diagnostic to find out if an obsolete
+!! parameter appears in the diag_table.
+logical function found_in_diagtable(diag, varName, newVarName)
+  type(diag_ctrl),            intent(in) :: diag       !< A structure used to control diagnostics.
+  character(len=*),           intent(in) :: varName    !< The obsolete diagnostic name
+  character(len=*), optional, intent(in) :: newVarName !< The valid name of this diagnostic
+  ! Local
+  integer :: handle ! Integer handle returned from diag_manager
+
+  ! We use register_static_field_fms() instead of register_static_field() so
+  ! that the diagnostic does not appear in the available diagnostics list.
+  handle = register_static_field_fms_wrapper('ocean_model', varName, &
+            diag%axesT1%handles, 'Obsolete parameter', 'N/A')
+
+  found_in_diagtable = (handle>0)
+
+  if (handle>0 .and. is_root_pe()) then
+    if (present(newVarName)) then
+      call MOM_error(WARNING, 'MOM_obsolete_params: '//                        &
+          'diag_table entry "'//trim(varName)//'" found. Use '// &
+          '"'//trim(newVarName)//'" instead.' )
+    else
+      call MOM_error(WARNING, 'MOM_obsolete_params: '//                        &
+          'diag_table entry "'//trim(varName)//'" is obsolete.' )
+    endif
+  endif
+
+end function found_in_diagtable
 
 end module MOM_diag_mediator
