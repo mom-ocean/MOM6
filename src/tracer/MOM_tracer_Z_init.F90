@@ -6,14 +6,11 @@ module MOM_tracer_Z_init
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 ! use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : MOM_read_data
+use MOM_io, only : MOM_read_data, get_var_sizes, read_attribute, read_variable
+use MOM_io, only : open_file_to_read, close_file_to_read
 use MOM_EOS, only : EOS_type, calculate_density, calculate_density_derivs, EOS_domain
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_verticalGrid, only : verticalGrid_type
-
-use netcdf, only : NF90_open, NF90_inq_varid, NF90_inquire_variable, NF90_get_var
-use netcdf, only : NF90_get_att, NF90_inquire_dimension, NF90_close, NF90_strerror
-use netcdf, only : NF90_NOWRITE, NF90_NOERR
 
 implicit none ; private
 
@@ -401,98 +398,46 @@ subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
   !   This subroutine reads the vertical coordinate data for a field from a
   ! NetCDF file.  It also might read the missing value attribute for that same field.
   character(len=32) :: mdl
-  character(len=120) :: dim_name, edge_name, tr_msg, dim_msg
+  character(len=120) :: dim_name, tr_msg, dim_msg
+  character(:), allocatable :: edge_name
+  character(len=256) :: dim_names(4)
   logical :: monotonic
   integer :: ncid, status, intid, tr_id, layid, k
-  integer :: nz_edge, ndim, tr_dim_ids(8)
+  integer :: nz_edge, ndim, tr_dim_ids(8), sizes(4)
 
   mdl = "MOM_tracer_Z_init read_Z_edges: "
   tr_msg = trim(tr_name)//" in "//trim(filename)
 
-  status = NF90_OPEN(filename, NF90_NOWRITE, ncid)
-  if (status /= NF90_NOERR) then
-    call MOM_error(WARNING,mdl//" Difficulties opening "//trim(filename)//&
-        " - "//trim(NF90_STRERROR(status)))
-    nz_out = -1 ; return
+  if (is_root_PE()) then
+    call open_file_to_read(filename, ncid)
+  else
+    ncid = -1
   endif
 
-  status = NF90_INQ_VARID(ncid, tr_name, tr_id)
-  if (status /= NF90_NOERR) then
-    call MOM_error(WARNING,mdl//" Difficulties finding variable "//&
-        trim(tr_msg)//" - "//trim(NF90_STRERROR(status)))
-    nz_out = -1 ; status = NF90_CLOSE(ncid) ; return
-  endif
-  status = NF90_INQUIRE_VARIABLE(ncid, tr_id, ndims=ndim, dimids=tr_dim_ids)
-  if (status /= NF90_NOERR) then
-    call MOM_ERROR(WARNING,mdl//" cannot inquire about "//trim(tr_msg))
-  elseif ((ndim < 3) .or. (ndim > 4)) then
-    call MOM_ERROR(WARNING,mdl//" "//trim(tr_msg)//&
-         " has too many or too few dimensions.")
-    nz_out = -1 ; status = NF90_CLOSE(ncid) ; return
-  endif
+  call get_var_sizes(filename, tr_name, ndim, sizes, dim_names=dim_names, ncid_in=ncid)
+  if ((ndim < 3) .or. (ndim > 4)) &
+    call MOM_ERROR(FATAL, mdl//" "//trim(tr_msg)//" has too many or too few dimensions.")
+  nz_out = sizes(3)
 
-  if (.not.use_missing) then
-    ! Try to find the missing value from the dataset.
-    status = NF90_GET_ATT(ncid, tr_id, "missing_value", missing)
-    if (status /= NF90_NOERR) use_missing = .true.
-  endif
-
-  ! Get the axis name and length.
-  status = NF90_INQUIRE_DIMENSION(ncid, tr_dim_ids(3), dim_name, len=nz_out)
-  if (status /= NF90_NOERR) then
-    call MOM_ERROR(WARNING,mdl//" cannot inquire about dimension(3) of "//&
-                    trim(tr_msg))
-  endif
-
-  dim_msg = trim(dim_name)//" in "//trim(filename)
-  status = NF90_INQ_VARID(ncid, dim_name, layid)
-  if (status /= NF90_NOERR) then
-    call MOM_error(WARNING,mdl//" Difficulties finding variable "//&
-        trim(dim_msg)//" - "//trim(NF90_STRERROR(status)))
-    nz_out = -1 ; status = NF90_CLOSE(ncid) ; return
+  if (.not.use_missing) then  ! Try to find the missing value from the dataset.
+    call read_attribute(filename, "missing_value", missing, varname=tr_name, found=use_missing, ncid_in=ncid)
   endif
   ! Find out if the Z-axis has an edges attribute
-  status = NF90_GET_ATT(ncid, layid, "edges", edge_name)
-  if (status /= NF90_NOERR) then
-    call MOM_mesg(mdl//" "//trim(dim_msg)//&
-         " has no readable edges attribute - "//trim(NF90_STRERROR(status)))
-    has_edges = .false.
-  else
-    has_edges = .true.
-    status = NF90_INQ_VARID(ncid, edge_name, intid)
-    if (status /= NF90_NOERR) then
-      call MOM_error(WARNING,mdl//" Difficulties finding edge variable "//&
-          trim(edge_name)//" in "//trim(filename)//" - "//trim(NF90_STRERROR(status)))
-      has_edges = .false.
-    endif
-  endif
+  call read_attribute(filename, "edges", edge_name, varname=dim_names(3), found=has_edges, ncid_in=ncid)
 
-  nz_edge = nz_out ; if (has_edges) nz_edge = nz_out+1
+  nz_edge = sizes(3) ; if (has_edges) nz_edge = sizes(3)+1
   allocate(z_edges(nz_edge)) ; z_edges(:) = 0.0
 
   if (nz_out < 1) return
 
   ! Read the right variable.
   if (has_edges) then
-    dim_msg = trim(edge_name)//" in "//trim(filename)
-    status = NF90_GET_VAR(ncid, intid, z_edges)
-    if (status /= NF90_NOERR) then
-      call MOM_error(WARNING,mdl//" Difficulties reading variable "//&
-          trim(dim_msg)//" - "//trim(NF90_STRERROR(status)))
-      nz_out = -1 ; status = NF90_CLOSE(ncid) ; return
-    endif
+    call read_variable(filename, edge_name, z_edges, ncid)
   else
-    status = NF90_GET_VAR(ncid, layid, z_edges)
-    if (status /= NF90_NOERR) then
-      call MOM_error(WARNING,mdl//" Difficulties reading variable "//&
-          trim(dim_msg)//" - "//trim(NF90_STRERROR(status)))
-      nz_out = -1 ; status = NF90_CLOSE(ncid) ; return
-    endif
+    call read_variable(filename, dim_names(3), z_edges, ncid)
   endif
-
-  status = NF90_CLOSE(ncid)
-  if (status /= NF90_NOERR) call MOM_error(WARNING, mdl// &
-    " Difficulties closing "//trim(filename)//" - "//trim(NF90_STRERROR(status)))
+  call close_file_to_read(ncid, filename)
+  if (allocated(edge_name)) deallocate(edge_name)
 
   ! z_edges should be montonically decreasing with our sign convention.
   ! Change the sign sign convention if it looks like z_edges is increasing.
@@ -502,8 +447,7 @@ subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
   ! Check that z_edges is now monotonically decreasing.
   monotonic = .true.
   do k=2,nz_edge ; if (z_edges(k) >= z_edges(k-1)) monotonic = .false. ; enddo
-  if (.not.monotonic) &
-    call MOM_error(WARNING,mdl//" "//trim(dim_msg)//" is not monotonic.")
+  if (.not.monotonic) call MOM_error(WARNING,mdl//" "//trim(dim_msg)//" is not monotonic.")
 
   if (scale /= 1.0) then ; do k=1,nz_edge ; z_edges(k) = scale*z_edges(k) ; enddo ; endif
 

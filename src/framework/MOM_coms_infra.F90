@@ -23,7 +23,7 @@ public :: field_chksum, MOM_infra_init, MOM_infra_end
 
 !> Communicate an array, string or scalar from one PE to others
 interface broadcast
-  module procedure broadcast_char, broadcast_int0D, broadcast_int1D
+  module procedure broadcast_char, broadcast_int32_0D, broadcast_int64_0D, broadcast_int1D
   module procedure broadcast_real0D, broadcast_real1D, broadcast_real2D
 end interface broadcast
 
@@ -129,8 +129,8 @@ subroutine broadcast_char(dat, length, from_PE, PElist, blocking)
 end subroutine broadcast_char
 
 !> Communicate an integer from one PE to others
-subroutine broadcast_int0D(dat, from_PE, PElist, blocking)
-  integer,               intent(inout) :: dat       !< The data to communicate and destination
+subroutine broadcast_int64_0D(dat, from_PE, PElist, blocking)
+  integer(kind=int64),   intent(inout) :: dat       !< The data to communicate and destination
   integer,     optional, intent(in)    :: from_PE   !< The source PE, by default the root PE
   integer,     optional, intent(in)    :: PElist(:) !< The list of participating PEs, by default the
                                                     !! active PE set as previously set via Set_PElist.
@@ -146,7 +146,28 @@ subroutine broadcast_int0D(dat, from_PE, PElist, blocking)
   call mpp_broadcast(dat, src_PE, PElist)
   if (do_block) call mpp_sync_self(PElist)
 
-end subroutine broadcast_int0D
+end subroutine broadcast_int64_0D
+
+
+!> Communicate an integer from one PE to others
+subroutine broadcast_int32_0D(dat, from_PE, PElist, blocking)
+  integer(kind=int32),   intent(inout) :: dat       !< The data to communicate and destination
+  integer,     optional, intent(in)    :: from_PE   !< The source PE, by default the root PE
+  integer,     optional, intent(in)    :: PElist(:) !< The list of participating PEs, by default the
+                                                    !! active PE set as previously set via Set_PElist.
+  logical,     optional, intent(in)    :: blocking  !< If true, barriers are added around the call
+
+  integer :: src_PE   ! The processor that is sending the data
+  logical :: do_block ! If true add synchronizing barriers
+
+  do_block = .false. ; if (present(blocking)) do_block = blocking
+  if (present(from_PE)) then ; src_PE = from_PE ; else ; src_PE = root_PE() ; endif
+
+  if (do_block) call mpp_sync(PElist)
+  call mpp_broadcast(dat, src_PE, PElist)
+  if (do_block) call mpp_sync_self(PElist)
+
+end subroutine broadcast_int32_0D
 
 !> Communicate a 1-D array of integers from one PE to others
 subroutine broadcast_int1D(dat, length, from_PE, PElist, blocking)
@@ -236,10 +257,10 @@ end subroutine broadcast_real2D
 !> Compute a checksum for a field distributed over a PE list.  If no PE list is
 !! provided, then the current active PE list is used.
 function field_chksum_real_0d(field, pelist, mask_val) result(chksum)
-  real, intent(in) :: field                   !< Input scalar
+  real,              intent(in) :: field      !< Input scalar
   integer, optional, intent(in) :: pelist(:)  !< PE list of ranks to checksum
-  real, optional, intent(in) :: mask_val      !< FMS mask value
-  integer :: chksum                           !< checksum of array
+  real,    optional, intent(in) :: mask_val   !< FMS mask value
+  integer(kind=int64) :: chksum               !< checksum of array
 
   chksum = mpp_chksum(field, pelist, mask_val)
 end function field_chksum_real_0d
@@ -248,9 +269,9 @@ end function field_chksum_real_0d
 !! provided, then the current active PE list is used.
 function field_chksum_real_1d(field, pelist, mask_val) result(chksum)
   real, dimension(:), intent(in) :: field     !< Input array
-  integer, optional, intent(in) :: pelist(:)  !< PE list of ranks to checksum
-  real, optional, intent(in) :: mask_val      !< FMS mask value
-  integer :: chksum                           !< checksum of array
+  integer,  optional, intent(in) :: pelist(:) !< PE list of ranks to checksum
+  real,     optional, intent(in) :: mask_val  !< FMS mask value
+  integer(kind=int64) :: chksum               !< checksum of array
 
   chksum = mpp_chksum(field, pelist, mask_val)
 end function field_chksum_real_1d
@@ -258,10 +279,10 @@ end function field_chksum_real_1d
 !> Compute a checksum for a field distributed over a PE list.  If no PE list is
 !! provided, then the current active PE list is used.
 function field_chksum_real_2d(field, pelist, mask_val) result(chksum)
-  real, dimension(:,:), intent(in) :: field   !< Unrotated input field
-  integer, optional, intent(in) :: pelist(:)  !< PE list of ranks to checksum
-  real, optional, intent(in) :: mask_val      !< FMS mask value
-  integer :: chksum                           !< checksum of array
+  real, dimension(:,:), intent(in) :: field     !< Unrotated input field
+  integer,    optional, intent(in) :: pelist(:) !< PE list of ranks to checksum
+  real,       optional, intent(in) :: mask_val  !< FMS mask value
+  integer(kind=int64) :: chksum                 !< checksum of array
 
   chksum = mpp_chksum(field, pelist, mask_val)
 end function field_chksum_real_2d
@@ -269,10 +290,10 @@ end function field_chksum_real_2d
 !> Compute a checksum for a field distributed over a PE list.  If no PE list is
 !! provided, then the current active PE list is used.
 function field_chksum_real_3d(field, pelist, mask_val) result(chksum)
-  real, dimension(:,:,:), intent(in) :: field !< Unrotated input field
-  integer, optional, intent(in) :: pelist(:)  !< PE list of ranks to checksum
-  real, optional, intent(in) :: mask_val      !< FMS mask value
-  integer :: chksum                           !< checksum of array
+  real, dimension(:,:,:), intent(in) :: field     !< Unrotated input field
+  integer,      optional, intent(in) :: pelist(:) !< PE list of ranks to checksum
+  real,         optional, intent(in) :: mask_val  !< FMS mask value
+  integer(kind=int64) :: chksum               !< checksum of array
 
   chksum = mpp_chksum(field, pelist, mask_val)
 end function field_chksum_real_3d
@@ -280,10 +301,10 @@ end function field_chksum_real_3d
 !> Compute a checksum for a field distributed over a PE list.  If no PE list is
 !! provided, then the current active PE list is used.
 function field_chksum_real_4d(field, pelist, mask_val) result(chksum)
-  real, dimension(:,:,:,:), intent(in) :: field !< Unrotated input field
-  integer, optional, intent(in) :: pelist(:)    !< PE list of ranks to checksum
-  real, optional, intent(in) :: mask_val        !< FMS mask value
-  integer :: chksum                             !< checksum of array
+  real, dimension(:,:,:,:), intent(in) :: field     !< Unrotated input field
+  integer,        optional, intent(in) :: pelist(:) !< PE list of ranks to checksum
+  real,           optional, intent(in) :: mask_val  !< FMS mask value
+  integer(kind=int64) :: chksum               !< checksum of array
 
   chksum = mpp_chksum(field, pelist, mask_val)
 end function field_chksum_real_4d
