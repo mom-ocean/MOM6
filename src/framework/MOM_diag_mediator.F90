@@ -56,6 +56,7 @@ public diag_set_state_ptrs, diag_update_remap_grids
 public diag_grid_storage_init, diag_grid_storage_end
 public diag_copy_diag_to_storage, diag_copy_storage_to_diag
 public diag_save_grids, diag_restore_grids
+public found_in_diagtable
 
 !> Make a diagnostic available for averaging or output.
 interface post_data
@@ -4299,5 +4300,34 @@ subroutine downsample_mask_3d(field_in, field_out, dl, isc_o, jsc_o, isc_d, iec_
     if (tot_non_zero > 0.0) field_out(i,j,k)=1.0
   enddo ; enddo ; enddo
 end subroutine downsample_mask_3d
+
+!> Fakes a register of a diagnostic to find out if an obsolete
+!! parameter appears in the diag_table.
+logical function found_in_diagtable(diag, varName, newVarName)
+  type(diag_ctrl),            intent(in) :: diag       !< A structure used to control diagnostics.
+  character(len=*),           intent(in) :: varName    !< The obsolete diagnostic name
+  character(len=*), optional, intent(in) :: newVarName !< The valid name of this diagnostic
+  ! Local
+  integer :: handle ! Integer handle returned from diag_manager
+
+  ! We use register_static_field_fms() instead of register_static_field() so
+  ! that the diagnostic does not appear in the available diagnostics list.
+  handle = register_static_field_fms_wrapper('ocean_model', varName, &
+            diag%axesT1%handles, 'Obsolete parameter', 'N/A')
+
+  found_in_diagtable = (handle>0)
+
+  if (handle>0 .and. is_root_pe()) then
+    if (present(newVarName)) then
+      call MOM_error(WARNING, 'MOM_obsolete_params: '//                        &
+          'diag_table entry "'//trim(varName)//'" found. Use '// &
+          '"'//trim(newVarName)//'" instead.' )
+    else
+      call MOM_error(WARNING, 'MOM_obsolete_params: '//                        &
+          'diag_table entry "'//trim(varName)//'" is obsolete.' )
+    endif
+  endif
+
+end function found_in_diagtable
 
 end module MOM_diag_mediator

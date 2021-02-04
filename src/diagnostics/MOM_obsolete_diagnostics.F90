@@ -4,8 +4,7 @@ module MOM_obsolete_diagnostics
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_diag_manager_infra,  only : register_static_field_fms_wrapper
-use MOM_diag_mediator, only : diag_ctrl
+use MOM_diag_mediator, only : diag_ctrl, found_in_diagtable
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser,   only : param_file_type, log_version, get_param
 
@@ -61,33 +60,5 @@ subroutine register_obsolete_diagnostics(param_file, diag)
 
 end subroutine register_obsolete_diagnostics
 
-!> Fakes a register of a diagnostic to find out if an obsolete
-!! parameter appears in the diag_table.
-logical function found_in_diagtable(diag, varName, newVarName)
-  type(diag_ctrl),            intent(in) :: diag       !< A structure used to control diagnostics.
-  character(len=*),           intent(in) :: varName    !< The obsolete diagnostic name
-  character(len=*), optional, intent(in) :: newVarName !< The valid name of this diagnostic
-  ! Local
-  integer :: handle ! Integer handle returned from diag_manager
-
-  ! We use register_static_field_fms() instead of register_static_field() so
-  ! that the diagnostic does not appear in the available diagnostics list.
-  handle = register_static_field_fms_wrapper('ocean_model', varName, &
-            diag%axesT1%handles, 'Obsolete parameter', 'N/A')
-
-  found_in_diagtable = (handle>0)
-
-  if (handle>0 .and. is_root_pe()) then
-    if (present(newVarName)) then
-      call MOM_error(WARNING, 'MOM_obsolete_params: '//                        &
-          'diag_table entry "'//trim(varName)//'" found. Use '// &
-          '"'//trim(newVarName)//'" instead.' )
-    else
-      call MOM_error(WARNING, 'MOM_obsolete_params: '//                        &
-          'diag_table entry "'//trim(varName)//'" is obsolete.' )
-    endif
-  endif
-
-end function found_in_diagtable
 
 end module MOM_obsolete_diagnostics
