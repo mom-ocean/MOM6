@@ -140,6 +140,7 @@ extensions = [
         'sphinxcontrib.autodoc_doxygen',
         'sphinxfortran.fortran_domain',
 ]
+bibtex_bibfiles = ['ocean.bib', 'references.bib', 'zotero.bib']
 
 autosummary_generate = ['api/modules.rst', 'api/pages.rst']
 doxygen_xml = 'xml'
