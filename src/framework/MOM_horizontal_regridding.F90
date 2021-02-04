@@ -667,6 +667,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   character(len=12)  :: dim_name(4)
   logical :: debug=.false.
   logical :: spongeDataOngrid
+  logical :: ans_2018
   real :: npoints, varAvg
   real, dimension(SZI_(G),SZJ_(G)) :: lon_out, lat_out ! The longitude and latitude of points on the model grid
   real, dimension(SZI_(G),SZJ_(G)) :: tr_out, mask_out ! The tracer and mask on the model grid
@@ -687,6 +688,8 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   id_clock_read = cpu_clock_id('(Initialize tracer from Z) read', grain=CLOCK_LOOP)
 
   PI_180 = atan(1.0)/45.
+
+  ans_2018 = .true.;if (present(answers_2018)) ans_2018 = answers_2018
 
   ! Open NetCDF file and if present, extract data and spatial coordinate information
   ! The convention adopted here requires that the data be written in (i,j,k) ordering.
@@ -886,15 +889,16 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
     enddo ! kd
   else
-    call time_interp_external(fms_id, Time, data_in, verbose=.true., turns=turns)
-    do k=1,kd
-      do j=js,je
-        do i=is,ie
-          tr_z(i,j,k) = data_in(i,j,k)
-          if (abs(tr_z(i,j,k)-missing_value) < abs(roundoff*missing_value)) mask_z(i,j,k) = 0.
+      call time_interp_external(fms_id, Time, data_in, verbose=.true., turns=turns)
+      do k=1,kd
+        do j=js,je
+          do i=is,ie
+            tr_z(i,j,k)=data_in(i,j,k)
+            if (.not. ans_2018) mask_z(i,j,k) = 1.
+            if (abs(tr_z(i,j,k)-missing_value) < abs(roundoff*missing_value)) mask_z(i,j,k) = 0.
+          enddo
         enddo
       enddo
-    enddo
   endif
 
 end subroutine horiz_interp_and_extrap_tracer_fms_id
