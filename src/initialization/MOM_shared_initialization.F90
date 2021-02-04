@@ -11,14 +11,12 @@ use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, log_param, param_file_type, log_version
-use MOM_io, only : close_file, create_file, fieldtype, file_exists, stdout
-use MOM_io, only : MOM_read_data, MOM_read_vector, SINGLE_FILE, MULTIPLE
+use MOM_io, only : close_file, create_file, fieldtype, file_exists, field_size, stdout
+use MOM_io, only : MOM_read_data, MOM_read_vector, read_variable, SINGLE_FILE, MULTIPLE
+use MOM_io, only : open_file_to_read, close_file_to_read
 use MOM_io, only : slasher, vardesc, MOM_write_field, var_desc
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
-
-use netcdf, only : NF90_open, NF90_inq_varid, NF90_get_var, NF90_close
-use netcdf, only : NF90_inq_dimid, NF90_inquire_dimension, NF90_NOWRITE, NF90_NOERR
 
 implicit none ; private
 
@@ -192,11 +190,12 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
 
   ! Local variables
   real :: m_to_Z  ! A dimensional rescaling factor.
+  real, dimension(:), allocatable :: new_depth ! The new values of the depths [m]
+  integer, dimension(:), allocatable :: ig, jg ! The global indicies of the points to modify
   character(len=200) :: topo_edits_file, inputdir ! Strings for file/path
   character(len=40)  :: mdl = "apply_topography_edits_from_file" ! This subroutine's name.
-  integer :: n_edits, n, ashape(5), i, j, ncid, id, ncstatus, iid, jid, zid
-  integer, dimension(:), allocatable :: ig, jg
-  real, dimension(:), allocatable :: new_depth
+  integer :: i, j, n, ncid, n_edits, i_file, j_file, ndims, sizes(8)
+  logical :: found
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
 
@@ -211,72 +210,36 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
   if (len_trim(topo_edits_file)==0) return
 
   topo_edits_file = trim(inputdir)//trim(topo_edits_file)
-  if (.not.file_exists(topo_edits_file, G%Domain)) call MOM_error(FATAL, &
-     'initialize_topography_from_file: Unable to open '//trim(topo_edits_file))
+  if (is_root_PE()) then
+    if (.not.file_exists(topo_edits_file, G%Domain)) &
+      call MOM_error(FATAL, trim(mdl)//': Unable to find file '//trim(topo_edits_file))
+    call open_file_to_read(topo_edits_file, ncid)
+  else
+    ncid = -1
+  endif
 
-  ncstatus = nf90_open(trim(topo_edits_file), NF90_NOWRITE, ncid)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                                'Failed to open '//trim(topo_edits_file))
+  ! Read and check the values of ni and nj in the file for consistency with this configuration.
+  call read_variable(topo_edits_file, 'ni', i_file, ncid_in=ncid)
+  call read_variable(topo_edits_file, 'nj', j_file, ncid_in=ncid)
+  if (i_file /= G%ieg) call MOM_error(FATAL, trim(mdl)//': Incompatible i-dimension of grid in '//&
+                                      trim(topo_edits_file))
+  if (j_file /= G%jeg) call MOM_error(FATAL, trim(mdl)//': Incompatible j-dimension of grid in '//&
+                                      trim(topo_edits_file))
 
   ! Get nEdits
-  ncstatus = nf90_inq_dimid(ncid, 'nEdits', id)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                                'Failed to inq_dimid nEdits for '//trim(topo_edits_file))
-  ncstatus = nf90_inquire_dimension(ncid, id, len=n_edits)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                                'Failed to inquire_dimension nEdits for '//trim(topo_edits_file))
-
-  ! Read ni
-  ncstatus = nf90_inq_varid(ncid, 'ni', id)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                                'Failed to inq_varid ni for '//trim(topo_edits_file))
-  ncstatus = nf90_get_var(ncid, id, i)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                              'Failed to get_var ni for '//trim(topo_edits_file))
-  if (i /= G%ieg) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                              'Incompatible i-dimension of grid in '//trim(topo_edits_file))
-
-  ! Read nj
-  ncstatus = nf90_inq_varid(ncid, 'nj', id)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                                'Failed to inq_varid nj for '//trim(topo_edits_file))
-  ncstatus = nf90_get_var(ncid, id, j)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                              'Failed to get_var nj for '//trim(topo_edits_file))
-  if (j /= G%jeg) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                              'Incompatible j-dimension of grid in '//trim(topo_edits_file))
-
-  ! Read iEdit
-  ncstatus = nf90_inq_varid(ncid, 'iEdit', id)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                                'Failed to inq_varid iEdit for '//trim(topo_edits_file))
+  call field_size(topo_edits_file, 'zEdit', sizes, ndims=ndims, ncid_in=ncid)
+  if (ndims /= 1) call MOM_error(FATAL, "The variable zEdit has an "//&
+            "unexpected number of dimensions in "//trim(topo_edits_file) )
+  n_edits = sizes(1)
   allocate(ig(n_edits))
-  ncstatus = nf90_get_var(ncid, id, ig)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                              'Failed to get_var iEdit for '//trim(topo_edits_file))
-
-  ! Read jEdit
-  ncstatus = nf90_inq_varid(ncid, 'jEdit', id)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                                'Failed to inq_varid jEdit for '//trim(topo_edits_file))
   allocate(jg(n_edits))
-  ncstatus = nf90_get_var(ncid, id, jg)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                              'Failed to get_var jEdit for '//trim(topo_edits_file))
-
-  ! Read zEdit
-  ncstatus = nf90_inq_varid(ncid, 'zEdit', id)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                                'Failed to inq_varid zEdit for '//trim(topo_edits_file))
   allocate(new_depth(n_edits))
-  ncstatus = nf90_get_var(ncid, id, new_depth)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                              'Failed to get_var zEdit for '//trim(topo_edits_file))
 
-  ! Close file
-  ncstatus = nf90_close(ncid)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                                'Failed to close '//trim(topo_edits_file))
+  ! Read iEdit, jEdit and zEdit
+  call read_variable(topo_edits_file, 'iEdit', ig, ncid_in=ncid)
+  call read_variable(topo_edits_file, 'jEdit', jg, ncid_in=ncid)
+  call read_variable(topo_edits_file, 'zEdit', new_depth, ncid_in=ncid)
+  call close_file_to_read(ncid, topo_edits_file)
 
   do n = 1, n_edits
     i = ig(n) - G%isd_global + 2 ! +1 for python indexing and +1 for ig-isd_global+1
@@ -284,11 +247,11 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
     if (i>=G%isc .and. i<=G%iec .and. j>=G%jsc .and. j<=G%jec) then
       if (new_depth(n)/=0.) then
         write(stdout,'(a,3i5,f8.2,a,f8.2,2i4)') &
-          'Ocean topography edit: ',n,ig(n),jg(n),D(i,j)/m_to_Z,'->',abs(new_depth(n)),i,j
+          'Ocean topography edit: ', n, ig(n), jg(n), D(i,j)/m_to_Z, '->', abs(new_depth(n)), i, j
         D(i,j) = abs(m_to_Z*new_depth(n)) ! Allows for height-file edits (i.e. converts negatives)
       else
-        call MOM_error(FATAL, ' apply_topography_edits_from_file: '//&
-          "A zero depth edit would change the land mask and is not allowed in"//trim(topo_edits_file))
+        call MOM_error(FATAL, trim(mdl)//': A zero depth edit would change the land mask and '//&
+          "is not allowed in"//trim(topo_edits_file))
       endif
     endif
   enddo
