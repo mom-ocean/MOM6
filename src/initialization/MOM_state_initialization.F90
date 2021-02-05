@@ -1785,9 +1785,6 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
   call get_param(param_file, mdl, "SPONGE_STATE_FILE", state_file, &
                  "The name of the file with the state to damp toward.", &
                  default=damping_file)
-  call get_param(param_file, mdl, "SPONGE_UV_STATE_FILE", state_uv_file, &
-                 "The name of the file with the state to damp UV toward.", &
-                 default=damping_file)
   call get_param(param_file, mdl, "SPONGE_PTEMP_VAR", potemp_var, &
                  "The name of the potential temperature variable in "//&
                  "SPONGE_STATE_FILE.", default="PTEMP")
@@ -1798,6 +1795,9 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
                  "Apply sponges in u and v, in addition to tracers.", &
                  default=.false.)
   if (sponge_uv) then
+    call get_param(param_file, mdl, "SPONGE_UV_STATE_FILE", state_uv_file, &
+                 "The name of the file with the state to damp UV toward.", &
+                 default=damping_file)
     call get_param(param_file, mdl, "SPONGE_U_VAR", u_var, &
                  "The name of the zonal velocity variable in "//&
                  "SPONGE_UV_STATE_FILE.", default="UVEL")
@@ -1810,7 +1810,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
                  "SPONGE_STATE_FILE.", default="ETA")
   call get_param(param_file, mdl, "SPONGE_IDAMP_VAR", Idamp_var, &
                  "The name of the inverse damping rate variable in "//&
-                 "SPONGE_DAMPING_FILE.", default="IDAMP")
+                 "SPONGE_DAMPING_FILE.", default="Idamp")
   if (sponge_uv) then
     call get_param(param_file, mdl, "SPONGE_UV_DAMPING_FILE", uv_damping_file, &
                    "The name of the file with sponge damping rates for the velocity variables.", &
