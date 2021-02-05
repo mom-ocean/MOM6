@@ -51,7 +51,7 @@ use coupler_types_mod,       only : coupler_1d_bc_type, coupler_2d_bc_type
 use coupler_types_mod,       only : coupler_type_spawn, coupler_type_write_chksums
 use coupler_types_mod,       only : coupler_type_initialized, coupler_type_copy_data
 use coupler_types_mod,       only : coupler_type_set_diags, coupler_type_send_data
-use mpp_domains_mod,         only : domain2d, mpp_get_layout, mpp_get_global_domain,mpp_get_pelist
+use mpp_domains_mod,         only : domain2d, mpp_get_layout, mpp_get_global_domain
 use mpp_domains_mod,         only : mpp_define_domains, mpp_get_compute_domain, mpp_get_data_domain
 use fms_mod,                 only : stdout
 use mpp_mod,                 only : mpp_chksum
@@ -444,7 +444,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
                  default=.false.)
   if (OS%do_sppt .OR. OS%pert_epbl) then
      num_procs=num_PEs()
-     call mpp_get_pelist(Ocean_sfc%domain, mom_comm)
+     allocate(pelist(num_procs))
+     call Get_PElist(pelist,commID = mom_comm)
      me=PE_here()
      master=root_PE()
 
@@ -701,7 +702,6 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
           call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dtdia, OS%MOM_CSp, &
                         Waves=OS%Waves, do_dynamics=.false., do_thermodynamics=.true., &
                         start_cycle=.false., end_cycle=(n==n_max), cycle_length=dt_coupling)
-
         endif
       endif
 
