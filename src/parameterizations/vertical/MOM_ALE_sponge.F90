@@ -666,6 +666,7 @@ subroutine set_up_ALE_sponge_field_fixed(sp_val, G, GV, f_ptr, CS)
   endif
 
   ! stores the reference profile
+  CS%Ref_val(CS%fldno)%nz_data = CS%nz_data
   allocate(CS%Ref_val(CS%fldno)%p(CS%nz_data,CS%num_col))
   CS%Ref_val(CS%fldno)%p(:,:) = 0.0
   do col=1,CS%num_col
