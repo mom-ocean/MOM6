@@ -62,7 +62,8 @@ use MOM_surface_forcing_nuopc, only : surface_forcing_init, convert_IOB_to_fluxe
 use MOM_surface_forcing_nuopc, only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
 use MOM_surface_forcing_nuopc, only : ice_ocean_boundary_type, surface_forcing_CS
 use MOM_surface_forcing_nuopc, only : forcing_save_restart
-use MOM_domains,               only : root_PE,PE_here,num_PEs
+use MOM_domains,               only : root_PE,num_PEs
+use MOM_coms,                  only : Get_PElist
 use stochastic_physics,        only : init_stochastic_physics_ocn, run_stochastic_physics_ocn
 
 #include <MOM_memory.h>
@@ -446,7 +447,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
      num_procs=num_PEs()
      allocate(pelist(num_procs))
      call Get_PElist(pelist,commID = mom_comm)
-     me=PE_here()
      master=root_PE()
 
      call init_stochastic_physics_ocn(OS%dt_therm,OS%grid%geoLonT,OS%grid%geoLatT,OS%grid%ied-OS%grid%isd+1,OS%grid%jed-OS%grid%jsd+1,OS%grid%ke,&
