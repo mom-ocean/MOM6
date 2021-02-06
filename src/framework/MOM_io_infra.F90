@@ -315,17 +315,23 @@ subroutine get_axis_data( axis, dat )
   call mpp_get_axis_data( axis, dat )
 end subroutine get_axis_data
 
-!> This routine uses the fms_io subroutine read_data to read a scalar
-!! data field named "fieldname" from file "filename".
-subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale)
+!> This routine uses the fms_io subroutine read_data to read a scalar named
+!! "fieldname" from a single or domain-decomposed file "filename".
+subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale, MOM_Domain)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real,                   intent(inout) :: data      !< The 1-dimensional array into which the data
   integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
   real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
                                                      !! by before it is returned.
+  type(MOM_domain_type), &
+                optional, intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
 
-  call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
+  if (present(MOM_Domain)) then
+    call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, timelevel=timelevel)
+  else
+    call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
+  endif
 
   if (present(scale)) then ; if (scale /= 1.0) then
     data = scale*data
@@ -333,17 +339,23 @@ subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale)
 
 end subroutine MOM_read_data_0d
 
-!> This routine uses the fms_io subroutine read_data to read a 1-D
-!! data field named "fieldname" from file "filename".
-subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale)
+!> This routine uses the fms_io subroutine read_data to read a 1-D data field named
+!! "fieldname" from a single or domain-decomposed file "filename".
+subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale, MOM_Domain)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:),     intent(inout) :: data      !< The 1-dimensional array into which the data
   integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
   real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
                                                      !! by before they are returned.
+  type(MOM_domain_type), &
+                optional, intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
 
-  call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
+  if (present(MOM_Domain)) then
+    call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, timelevel=timelevel)
+  else
+    call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
+  endif
 
   if (present(scale)) then ; if (scale /= 1.0) then
     data(:) = scale*data(:)

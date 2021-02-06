@@ -1202,10 +1202,12 @@ subroutine restore_state(filename, directory, day, G, CS)
 
           if (associated(CS%var_ptr1d(m)%p))  then
             ! Read a 1d array, which should be invariant to domain decomposition.
-            call MOM_read_data(unit_path(n), varname, CS%var_ptr1d(m)%p, timelevel=1)
+            call MOM_read_data(unit_path(n), varname, CS%var_ptr1d(m)%p, &
+                               timelevel=1, MOM_Domain=G%Domain)
             if (is_there_a_checksum) checksum_data = chksum(CS%var_ptr1d(m)%p)
           elseif (associated(CS%var_ptr0d(m)%p)) then ! Read a scalar...
-            call MOM_read_data(unit_path(n), varname, CS%var_ptr0d(m)%p, timelevel=1)
+            call MOM_read_data(unit_path(n), varname, CS%var_ptr0d(m)%p, &
+                               timelevel=1, MOM_Domain=G%Domain)
             if (is_there_a_checksum) checksum_data = chksum(CS%var_ptr0d(m)%p, pelist=(/PE_here()/))
           elseif (associated(CS%var_ptr2d(m)%p)) then  ! Read a 2d array.
             if (pos /= 0) then
