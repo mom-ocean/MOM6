@@ -12,6 +12,7 @@ use MOM_coupler_types,    only : coupler_type_initialized, coupler_type_spawn
 use MOM_coupler_types,    only : coupler_type_copy_data
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_SUBCOMPONENT
+use MOM_data_override,    only : data_override_init, data_override
 use MOM_diag_mediator,    only : diag_ctrl, safe_alloc_ptr, time_type
 use MOM_domains,          only : pass_vector, pass_var, fill_symmetric_edges
 use MOM_domains,          only : AGRID, BGRID_NE, CGRID_NE, To_All
@@ -35,8 +36,6 @@ use MOM_unit_scaling,     only : unit_scale_type
 use MOM_variables,        only : surface
 use user_revise_forcing,  only : user_alter_forcing, user_revise_forcing_init
 use user_revise_forcing,  only : user_revise_forcing_CS
-
-use data_override_mod,    only : data_override_init, data_override
 
 implicit none ; private
 
@@ -1118,28 +1117,27 @@ subroutine apply_flux_adjustments(G, US, CS, Time, fluxes)
 
   isc = G%isc; iec = G%iec ; jsc = G%jsc; jec = G%jec
 
-  overrode_h = .false.
-  call data_override('OCN', 'hflx_adj', temp_at_h(isc:iec,jsc:jec), Time, override=overrode_h)
+  call data_override(G%Domain, 'hflx_adj', temp_at_h, Time, override=overrode_h, &
+                     scale=US%W_m2_to_QRZ_T)
 
   if (overrode_h) then ; do j=jsc,jec ; do i=isc,iec
-    fluxes%heat_added(i,j) = fluxes%heat_added(i,j) + US%W_m2_to_QRZ_T*temp_at_h(i,j)* G%mask2dT(i,j)
+    fluxes%heat_added(i,j) = fluxes%heat_added(i,j) + temp_at_h(i,j)* G%mask2dT(i,j)
   enddo ; enddo ; endif
   ! Not needed? ! if (overrode_h) call pass_var(fluxes%heat_added, G%Domain)
 
-  overrode_h = .false.
-  call data_override('OCN', 'sflx_adj', temp_at_h(isc:iec,jsc:jec), Time, override=overrode_h)
+  call data_override(G%Domain, 'sflx_adj', temp_at_h, Time, override=overrode_h, &
+                     scale=US%kg_m2s_to_RZ_T)
 
   if (overrode_h) then ; do j=jsc,jec ; do i=isc,iec
-    fluxes%salt_flux_added(i,j) = fluxes%salt_flux_added(i,j) + &
-        US%kg_m2s_to_RZ_T * temp_at_h(i,j)* G%mask2dT(i,j)
+    fluxes%salt_flux_added(i,j) = fluxes%salt_flux_added(i,j) + temp_at_h(i,j) * G%mask2dT(i,j)
   enddo ; enddo ; endif
   ! Not needed? ! if (overrode_h) call pass_var(fluxes%salt_flux_added, G%Domain)
 
-  overrode_h = .false.
-  call data_override('OCN', 'prcme_adj', temp_at_h(isc:iec,jsc:jec), Time, override=overrode_h)
+  call data_override(G%Domain, 'prcme_adj', temp_at_h, Time, override=overrode_h, &
+                     scale=US%kg_m2s_to_RZ_T)
 
   if (overrode_h) then ; do j=jsc,jec ; do i=isc,iec
-    fluxes%vprec(i,j) = fluxes%vprec(i,j) + US%kg_m2s_to_RZ_T * temp_at_h(i,j)* G%mask2dT(i,j)
+    fluxes%vprec(i,j) = fluxes%vprec(i,j) + temp_at_h(i,j)* G%mask2dT(i,j)
   enddo ; enddo ; endif
   ! Not needed? ! if (overrode_h) call pass_var(fluxes%vprec, G%Domain)
 end subroutine apply_flux_adjustments
@@ -1171,8 +1169,8 @@ subroutine apply_force_adjustments(G, US, CS, Time, forces)
   tempx_at_h(:,:) = 0.0 ; tempy_at_h(:,:) = 0.0
   ! Either reads data or leaves contents unchanged
   overrode_x = .false. ; overrode_y = .false.
-  call data_override('OCN', 'taux_adj', tempx_at_h(isc:iec,jsc:jec), Time, override=overrode_x)
-  call data_override('OCN', 'tauy_adj', tempy_at_h(isc:iec,jsc:jec), Time, override=overrode_y)
+  call data_override(G%Domain, 'taux_adj', tempx_at_h, Time, override=overrode_x, scale=Pa_conversion)
+  call data_override(G%Domain, 'tauy_adj', tempy_at_h, Time, override=overrode_y, scale=Pa_conversion)
 
   if (overrode_x .or. overrode_y) then
     if (.not. (overrode_x .and. overrode_y)) call MOM_error(FATAL,"apply_flux_adjustments: "//&
@@ -1187,8 +1185,8 @@ subroutine apply_force_adjustments(G, US, CS, Time, forces)
       if (rDlon > 0.) rDlon = 1. / rDlon
       cosA = dLonDx * rDlon
       sinA = dLonDy * rDlon
-      zonal_tau = Pa_conversion * tempx_at_h(i,j)
-      merid_tau = Pa_conversion * tempy_at_h(i,j)
+      zonal_tau = tempx_at_h(i,j)
+      merid_tau = tempy_at_h(i,j)
       tempx_at_h(i,j) = cosA * zonal_tau - sinA * merid_tau
       tempy_at_h(i,j) = sinA * zonal_tau + cosA * merid_tau
     enddo ; enddo
@@ -1551,7 +1549,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
                  "above land points (i.e. G%mask2dT = 0).", default=.false., &
                  debuggingParam=.true.)
 
-  call data_override_init(Ocean_domain_in=G%Domain%mpp_domain)
+  call data_override_init(G%Domain)
 
   if (CS%restore_salt) then
     salt_file = trim(CS%inputdir) // trim(CS%salt_restore_file)
