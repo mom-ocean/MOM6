@@ -30,13 +30,13 @@ end subroutine ensemble_manager_init
 !! associated with the current ensemble member.
 subroutine ensemble_pelist_setup(concurrent, atmos_npes, ocean_npes, land_npes, ice_npes, &
                                    Atm_pelist, Ocean_pelist, Land_pelist, Ice_pelist)
-  logical, intent(in)                  :: concurrent !< A logical flag, if True, then
-                                       !! ocean fast PEs are run concurrently with
-                                       !! slow PEs within the coupler.
-  integer, intent(in)                  :: atmos_npes !< The number of atmospheric (fast) PEs
-  integer, intent(in)                  :: ocean_npes !< The number of ocean (slow) PEs
-  integer, intent(in)                  :: land_npes  !< The number of land PEs (fast)
-  integer, intent(in)                  :: ice_npes   !< The number of ice (fast) PEs
+  logical,               intent(in)    :: concurrent !< A logical flag, if True, then ocean fast
+                                                     !! PEs are run concurrently with
+                                                     !! slow PEs within the coupler.
+  integer,               intent(in)    :: atmos_npes !< The number of atmospheric (fast) PEs
+  integer,               intent(in)    :: ocean_npes !< The number of ocean (slow) PEs
+  integer,               intent(in)    :: land_npes  !< The number of land PEs (fast)
+  integer,               intent(in)    :: ice_npes   !< The number of ice (fast) PEs
   integer, dimension(:), intent(inout) :: Atm_pelist !< A list of Atm PEs
   integer, dimension(:), intent(inout) :: Ocean_pelist !< A list of Ocean PEs
   integer, dimension(:), intent(inout) :: Land_pelist !< A list of Land PEs
@@ -71,25 +71,24 @@ function get_ensemble_size()
 end function get_ensemble_size
 
 !> Returns the list of PEs associated with all ensemble members
-!! Results are stored in the argument array which ust be large
+!! Results are stored in the argument array which must be large
 !! enough to contain the list.  If the optional name argument is present,
 !! the returned processor list are for a particular component (atmos, ocean ,land, ice)
 subroutine get_ensemble_pelist(pelist, name)
-  integer, intent(inout) :: pelist(:,:) !< A processor list for all ensemble members
-  character(len=*), intent(in), optional  :: name !< An optional component name (atmos, ocean, land, ice)
+  integer,                    intent(inout) :: pelist(:,:) !< A processor list for all ensemble members
+  character(len=*), optional, intent(in)    :: name !< An optional component name (atmos, ocean, land, ice)
 
-  call FMS_get_ensemble_pelist(pelist,name)
+  call FMS_get_ensemble_pelist(pelist, name)
 
 end subroutine get_ensemble_pelist
 
-!> Returns the list of PEs associated with an ensemble filter application.
-!! If the optional name argument is present, the returned list is for a
-!! particular component (atmos, ocean ,land, ice)
+!> Returns the list of PEs associated with the named ensemble filter application.
+!! Valid component names include ('atmos', 'ocean', 'land', and 'ice')
 subroutine get_ensemble_filter_pelist(pelist, name)
-  integer, intent(inout) :: pelist(:) !< A processor list for the ensemble filter
-  character(len=*), intent(in)  :: name !< An optional component name (atmos, ocean, land, ice)
+  integer,          intent(inout) :: pelist(:) !< A processor list for the ensemble filter
+  character(len=*), intent(in)    :: name      !< The component name (atmos, ocean, land, ice)
 
-  call FMS_get_Ensemble_filter_pelist(pelist,name)
+  call FMS_get_Ensemble_filter_pelist(pelist, name)
 
 end subroutine get_ensemble_filter_pelist
 
