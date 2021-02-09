@@ -266,7 +266,7 @@ subroutine initialize_ice_thickness_channel(h_shelf, area_shelf_h, hmask, G, US,
 end subroutine initialize_ice_thickness_channel
 subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_bdry, &
                 u_flux_bdry_val, v_flux_bdry_val, u_bdry_val, v_bdry_val, h_bdry_val, &
-                thickness_bdry_val, hmask,  h_shelf, G,&   ! OVS h_shelf 11/10/20
+                thickness_bdry_val, hmask,  h_shelf, u_shelf, v_shelf, G,&   ! OVS h_shelf 11/10/20
 !                flux_bdry, &
                 US, PF )
 
@@ -286,6 +286,10 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
                                                        !! boundary vertices [L T-1 ~> m s-1].
    real, dimension(SZIB_(G),SZJB_(G)), &
                           intent(inout) :: v_bdry_val !< The meridional ice shelf velocity at open
+   real, dimension(SZIB_(G),SZJB_(G)), &
+                          intent(inout) :: u_shelf !< The zonal ice shelf velocity  [L T-1 ~> m s-1].                  
+   real, dimension(SZIB_(G),SZJB_(G)), &
+                          intent(inout) :: v_shelf !< The meridional ice shelf velocity  [L T-1 ~> m s-1]. 
    real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout) :: thickness_bdry_val !< The ice shelf thickness at open boundaries [Z ~> m]
                                                           !! boundary vertices [L T-1 ~> m s-1].
@@ -362,9 +366,11 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
            v_face_mask_bdry(i,j+1) = 0.
            u_face_mask_bdry(i,j-1) = 3.          !OVS 11/25/20 
          else
-           v_face_mask_bdry(i,j+1) = 1.
+!           v_face_mask_bdry(i,j+1) = 1.
+           v_face_mask_bdry(i,j-1) = 3.         !OVS 01/20/21
            u_face_mask_bdry(i,j-1) = 3.         !OVS 11/25/20
-           u_bdry_val(i,j) = 0.
+!           u_bdry_val(i,j) = 0.
+!           v_bdry_val(i,j) = 0.                !OVS 01/20/21
            !hmask(i,j) = 0.0                   !OVS 11/25/20
          endif
        elseif (G%geoLatBu(i,j-1) == southlat+lenlat) then !top boundary
@@ -372,7 +378,8 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
            v_face_mask_bdry(i,j-1) = 0.
            u_face_mask_bdry(i,j-1) = 3.         !OVS 11/25/20
          else
-           v_face_mask_bdry(i,j-1) = 1.
+!           v_face_mask_bdry(i,j-1) = 1.
+           v_face_mask_bdry(i,j-1) = 3.         !OVS 01/20/21
            u_face_mask_bdry(i,j-1) = 3.         !OVS 11/25/20
            !u_bdry_val(i,j) = 0.               !OVS 11/25/20
            !hmask(i,j) = 0.0                   !OVS 11/25/20
@@ -387,6 +394,29 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
      enddo
    enddo
 
+
+!       if (.not. G%symmetric) then
+!!      do j=G%jsd,G%jed 
+!!       do i=G%isd,G%ied
+!       do j=jsc-1,jec+1
+!        do i=isc-1,iec+1
+!!        if (((i+G%idg_offset) == (G%domain%nihalo+1)).and.(u_face_mask_bdry(I-1,j) == 3)) then
+!        if (u_face_mask_bdry(I-1,j) == 3) then
+!          u_shelf(I-1,J-1) = u_bdry_val(I-1,J-1)
+!          u_shelf(I-1,J) = u_bdry_val(I-1,J)
+!          v_shelf(I-1,J-1) = v_bdry_val(I-1,J-1)
+!          v_shelf(I-1,J) = v_bdry_val(I-1,J)
+!        endif
+!!        if (((j+G%jdg_offset) == (G%domain%njhalo+1)).and.(v_face_mask_bdry(i,J-1) == 3)) then
+!        if (v_face_mask_bdry(I,j-1) == 3) then
+!          u_shelf(I-1,J-1) = u_bdry_val(I-1,J-1)
+!          u_shelf(I,J-1) = u_bdry_val(I,J-1)
+!          v_shelf(I-1,J-1) = v_bdry_val(I-1,J-1)
+!          v_shelf(I,J-1) = v_bdry_val(I,J-1)
+!        endif
+!      enddo  
+!     enddo
+!    endif
 end subroutine initialize_ice_shelf_boundary_channel
 
 !BEGIN MJH
