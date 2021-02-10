@@ -73,13 +73,13 @@ end subroutine cpu_clock_end
 !> Returns the integer handle for a named CPU clock.
 integer function cpu_clock_id( name, synchro_flag, grain )
   character(len=*),  intent(in) :: name  !< The unique name of the CPU clock
-  integer, intent(in), optional :: synchro_flag !< An integer flag that controls whether the PEs
+  integer, optional, intent(in) :: synchro_flag !< An integer flag that controls whether the PEs
                                        !! are synchronized before the cpu clocks start counting.
                                        !! Synchronization occurs before the start of a clock if this
                                        !! is odd, while additional (expensive) statistics can set
                                        !! for other values. If absent, the default is taken from the
                                        !! settings for FMS.
-  integer, intent(in), optional :: grain !< The timing granularity for this clock, usually set to
+  integer, optional, intent(in) :: grain !< The timing granularity for this clock, usually set to
                                        !! the values of CLOCK_COMPONENT, CLOCK_ROUTINE, CLOCK_LOOP, etc.
 
   if (present(synchro_flag)) then

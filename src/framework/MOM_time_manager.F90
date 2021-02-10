@@ -29,15 +29,15 @@ public :: set_calendar_type, get_calendar_type
 
 contains
 
-!> This is an alternate implementation of the FMS function real_to_time_type that is accurate over
-!! a larger range of input values.  With 32 bit signed integers, this version should work over the
-!! entire valid range (2^31 days or ~5.8835 million years) of time_types, whereas the standard
-!! version in the FMS time_manager stops working for conversions of times greater than 2^31 seconds,
-!! or ~68.1 years.
-function real_to_time(x, err_msg)
-  type(time_type)  :: real_to_time !< The output time as a time_type
-  real, intent(in) :: x            !< The input time in real seconds.
-  character(len=*), intent(out), optional :: err_msg !< An optional returned error message.
+!> Returns a time_type version of a real time in seconds, using an alternate implementation to the
+!! FMS function real_to_time_type that is accurate over a larger range of input values.  With 32 bit
+!! signed integers, this version should work over the entire valid range (2^31 days or ~5.8835
+!! million years) of time_types, whereas the standard version in the FMS time_manager stops working
+!! for conversions of times greater than 2^31 seconds, or ~68.1 years.
+type(time_type) function real_to_time(x, err_msg)
+!  type(time_type)  :: real_to_time !< The output time as a time_type
+  real,                       intent(in)  :: x       !< The input time in real seconds.
+  character(len=*), optional, intent(out) :: err_msg !< An optional returned error message.
 
   ! Local variables
   integer          :: seconds, days, ticks

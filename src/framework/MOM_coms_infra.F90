@@ -93,16 +93,16 @@ end subroutine
 !! is set to the list of all available PEs on the communicator.  Setting the
 !! list will trigger a rank synchronization unless the `no_sync` flag is set.
 subroutine Set_PEList(pelist, no_sync)
-  integer, intent(in), optional :: pelist(:)  !< List of
-  logical, intent(in), optional :: no_sync    !< Do not sync after list update.
+  integer, optional, intent(in) :: pelist(:)  !< List of PEs to set for communication
+  logical, optional, intent(in) :: no_sync    !< Do not sync after list update.
   call mpp_set_current_pelist(pelist, no_sync)
 end subroutine Set_PEList
 
 !> Retrieve the current PE list and any metadata if requested.
 subroutine Get_PEList(pelist, name, commID)
-  integer, intent(out) :: pelist(:)   !< List of PE IDs of the current PE list
-  character(len=*), intent(out), optional :: name   !< Name of PE list
-  integer, intent(out), optional :: commID    !< Communicator ID of PE list
+  integer,                    intent(out) :: pelist(:) !< List of PE IDs of the current PE list
+  character(len=*), optional, intent(out) :: name   !< Name of PE list
+  integer,          optional, intent(out) :: commID !< Communicator ID of PE list
 
   call mpp_get_current_pelist(pelist, name, commiD)
 end subroutine Get_PEList
@@ -311,134 +311,137 @@ end function field_chksum_real_4d
 
 ! sum_across_PEs wrappers
 
-!> Find the sum of field across PEs, and update PEs with the sums.
+!> Find the sum of field across PEs, and return this sum in field.
 subroutine sum_across_PEs_int4_0d(field, pelist)
-  integer(kind=int32), intent(inout) :: field   !< Input field
-  integer, intent(in), optional :: pelist(:)    !< PE list
+  integer(kind=int32), intent(inout) :: field     !< Value on this PE, and the sum across PEs upon return
+  integer,   optional, intent(in)    :: pelist(:) !< List of PEs to work with
 
   call mpp_sum(field, pelist)
 end subroutine sum_across_PEs_int4_0d
 
-!> Find the sum of field across PEs, and update PEs with the sums.
+!> Find the sum of the values in corresponding positions of field across PEs, and return these sums in field.
 subroutine sum_across_PEs_int4_1d(field, length, pelist)
-  integer(kind=int32), dimension(:), intent(inout) :: field !< Input field
-  integer, intent(in) :: length                             !< Length of field
-  integer, intent(in), optional :: pelist(:)                !< PE list
+  integer(kind=int32), dimension(:), intent(inout) :: field     !< The values to add, the sums upon return
+  integer,                           intent(in)    :: length    !< Number of elements in field to add
+  integer,                 optional, intent(in)    :: pelist(:) !< List of PEs to work with
 
   call mpp_sum(field, length, pelist)
 end subroutine sum_across_PEs_int4_1d
 
-!> Find the sum of field across PEs, and update PEs with the sums.
+!> Find the sum of field across PEs, and return this sum in field.
 subroutine sum_across_PEs_int8_0d(field, pelist)
-  integer(kind=int64), intent(inout) :: field   !< Input field
-  integer, intent(in), optional :: pelist(:)    !< PE list
+  integer(kind=int64), intent(inout) :: field     !< Value on this PE, and the sum across PEs upon return
+  integer,   optional, intent(in)    :: pelist(:) !< List of PEs to work with
 
   call mpp_sum(field, pelist)
 end subroutine sum_across_PEs_int8_0d
 
-!> Find the sum of field across PEs, and update PEs with the sums.
+!> Find the sum of the values in corresponding positions of field across PEs, and return these sums in field.
 subroutine sum_across_PEs_int8_1d(field, length, pelist)
-  integer(kind=int64), dimension(:), intent(inout) :: field !< Input field
-  integer, intent(in) :: length                             !< Length of field
-  integer, intent(in), optional :: pelist(:)                !< PE list
+  integer(kind=int64), dimension(:), intent(inout) :: field     !< The values to add, the sums upon return
+  integer,                           intent(in)    :: length    !< Number of elements in field to add
+  integer,                 optional, intent(in)    :: pelist(:) !< List of PEs to work with
 
   call mpp_sum(field, length, pelist)
 end subroutine sum_across_PEs_int8_1d
 
-!> Find the sum of field across PEs, and update PEs with the sums.
+!> Find the sum of the values in corresponding positions of field across PEs, and return these sums in field.
 subroutine sum_across_PEs_int8_2d(field, length, pelist)
-  integer(kind=int64), dimension(:,:), intent(inout) :: field !< Input field
-  integer, intent(in) :: length                               !< Length of field
-  integer, intent(in), optional :: pelist(:)                  !< PE list
+  integer(kind=int64), &
+           dimension(:,:), intent(inout) :: field     !< The values to add, the sums upon return
+  integer,                 intent(in)    :: length    !< The total number of positions to sum, usually
+                                                      !! the product of the array sizes.
+  integer,       optional, intent(in)    :: pelist(:) !< List of PEs to work with
 
   call mpp_sum(field, length, pelist)
 end subroutine sum_across_PEs_int8_2d
 
-!> Find the sum of field across PEs, and update PEs with the sums.
+!> Find the sum of field across PEs, and return this sum in field.
 subroutine sum_across_PEs_real_0d(field, pelist)
-  real, intent(inout) :: field                !< Input field
-  integer, intent(in), optional :: pelist(:)  !< PE list
+  real,              intent(inout) :: field     !< Value on this PE, and the sum across PEs upon return
+  integer, optional, intent(in)    :: pelist(:) !< List of PEs to work with
 
   call mpp_sum(field, pelist)
 end subroutine sum_across_PEs_real_0d
 
-!> Find the sum of field across PEs, and update PEs with the sums.
+!> Find the sum of the values in corresponding positions of field across PEs, and return these sums in field.
 subroutine sum_across_PEs_real_1d(field, length, pelist)
-  real, dimension(:), intent(inout) :: field  !< Input field
-  integer, intent(in) :: length               !< Length of field
-  integer, intent(in), optional :: pelist(:)  !< PE list
+  real, dimension(:), intent(inout) :: field     !< The values to add, the sums upon return
+  integer,            intent(in)    :: length    !< Number of elements in field to add
+  integer,  optional, intent(in)    :: pelist(:) !< List of PEs to work with
 
   call mpp_sum(field, length, pelist)
 end subroutine sum_across_PEs_real_1d
 
-!> Find the sum of field across PEs, and update PEs with the sums.
+!> Find the sum of the values in corresponding positions of field across PEs, and return these sums in field.
 subroutine sum_across_PEs_real_2d(field, length, pelist)
-  real, dimension(:,:), intent(inout) :: field  !< Input field
-  integer, intent(in) :: length                 !< Length of field
-  integer, intent(in), optional :: pelist(:)    !< PE list
+  real, dimension(:,:), intent(inout) :: field     !< The values to add, the sums upon return
+  integer,              intent(in)    :: length    !< The total number of positions to sum, usually
+                                                   !! the product of the array sizes.
+  integer,    optional, intent(in)    :: pelist(:) !< List of PEs to work with
 
   call mpp_sum(field, length, pelist)
 end subroutine sum_across_PEs_real_2d
 
 ! max_across_PEs wrappers
 
-!> Find the maximum value of field across PEs, and update PEs with the values.
+!> Find the maximum value of field across PEs, and store this maximum in field.
 subroutine max_across_PEs_int_0d(field, pelist)
-  integer, intent(inout) :: field             !< Input field
-  integer, intent(in), optional :: pelist(:)  !< PE list
+  integer,           intent(inout) :: field     !< The values to compare, the maximum upon return
+  integer, optional, intent(in)    :: pelist(:) !< List of PEs to work with
 
   call mpp_max(field, pelist)
 end subroutine max_across_PEs_int_0d
 
-!> Find the maximum value of field across PEs, and update PEs with the values.
+!> Find the maximum value of field across PEs, and store this maximum in field.
 subroutine max_across_PEs_real_0d(field, pelist)
-  real, intent(inout) :: field                !< Input field
-  integer, intent(in), optional :: pelist(:)  !< PE list
+  real,              intent(inout) :: field     !< The values to compare, the maximum upon return
+  integer, optional, intent(in)    :: pelist(:) !< List of PEs to work with
 
   call mpp_max(field, pelist)
 end subroutine max_across_PEs_real_0d
 
-!> Find the maximum value of field across PEs, and update PEs with the values.
+!> Find the maximum values in each position of field across PEs, and store these minima in field.
 subroutine max_across_PEs_real_1d(field, length, pelist)
-  real, dimension(:), intent(inout) :: field  !< Input field
-  integer, intent(in) :: length               !< Length of field
-  integer, intent(in), optional :: pelist(:)  !< PE list
+  real, dimension(:), intent(inout) :: field     !< The list of values being compared, with the
+                                                 !! maxima in each position upon return
+  integer,            intent(in)    :: length    !< Number of elements in field to compare
+  integer,  optional, intent(in)    :: pelist(:) !< List of PEs to work with
 
   call mpp_max(field, length, pelist)
 end subroutine max_across_PEs_real_1d
 
 ! min_across_PEs wrappers
 
-!> Find the minimum value of field across PEs, and update PEs with the values.
+!> Find the minimum value of field across PEs, and store this minimum in field.
 subroutine min_across_PEs_int_0d(field, pelist)
-  integer, intent(inout) :: field             !< Input field
-  integer, intent(in), optional :: pelist(:)  !< PE list
+  integer,           intent(inout) :: field     !< The values to compare, the minimum upon return
+  integer, optional, intent(in)    :: pelist(:) !< List of PEs to work with
 
   call mpp_min(field, pelist)
 end subroutine min_across_PEs_int_0d
 
-!> Find the minimum value of field across PEs, and update PEs with the values.
+!> Find the minimum value of field across PEs, and store this minimum in field.
 subroutine min_across_PEs_real_0d(field, pelist)
-  real, intent(inout) :: field                !< Input field
-  integer, intent(in), optional :: pelist(:)  !< PE list
-
+  real,              intent(inout) :: field     !< The values to compare, the minimum upon return
+  integer, optional, intent(in)    :: pelist(:) !< List of PEs to work with
   call mpp_min(field, pelist)
 end subroutine min_across_PEs_real_0d
 
-!> Find the minimum value of field across PEs, and update PEs with the values.
+!> Find the minimum values in each position of field across PEs, and store these minima in field.
 subroutine min_across_PEs_real_1d(field, length, pelist)
-  real, dimension(:), intent(inout) :: field  !< Input field
-  integer, intent(in) :: length               !< Length of field
-  integer, intent(in), optional :: pelist(:)  !< PE list
+  real, dimension(:), intent(inout) :: field     !< The list of values being compared, with the
+                                                 !! minima in each position upon return
+  integer,            intent(in)    :: length    !< Number of elements in field to compare
+  integer,  optional, intent(in)    :: pelist(:) !< List of PEs to work with
 
   call mpp_min(field, length, pelist)
 end subroutine min_across_PEs_real_1d
 
-!> Initialize the model framework, including PE communication over a designated
-!! communicator.  If no communicator ID is provided, then the framework's
-!! default communicator is used.
+!> Initialize the model framework, including PE communication over a designated communicator.
+!! If no communicator ID is provided, the framework's default communicator is used.
 subroutine MOM_infra_init(localcomm)
-  integer, intent(in), optional :: localcomm  !< Communicator ID to initialize
+  integer, optional, intent(in) :: localcomm  !< Communicator ID to initialize
   call fms_init(localcomm)
 end subroutine
 
