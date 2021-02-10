@@ -196,11 +196,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   call get_param(param_file, mdl, "NONBLOCKING_UPDATES", nonblocking, &
                  "If true, non-blocking halo updates may be used.", &
                  default=.false., layoutParam=.true.)
-  !### Note the duplicated "the the" in the following description, which should be fixed as a part
-  !    of a larger commit that also changes other MOM_parameter_doc file messages, but for now
-  !    reproduces the existing output files.
   call get_param(param_file, mdl, "THIN_HALO_UPDATES", thin_halos, &
-                 "If true, optional arguments may be used to specify the the width of the "//&
+                 "If true, optional arguments may be used to specify the width of the "//&
                  "halos that are updated with each call.", &
                  default=.true., layoutParam=.true.)
 
