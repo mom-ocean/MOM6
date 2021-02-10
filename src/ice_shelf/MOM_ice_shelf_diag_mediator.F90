@@ -4,10 +4,10 @@ module MOM_IS_diag_mediator
 ! This file is a part of SIS2. See LICENSE.md for the license.
 
 use MOM_coms,          only : PE_here
-use MOM_diag_manager_infra,  only : MOM_diag_manager_init, send_data_fms_wrapper, MOM_diag_axis_init
+use MOM_diag_manager_infra,  only : MOM_diag_manager_init, send_data_infra, MOM_diag_axis_init
 use MOM_diag_manager_infra,  only : EAST, NORTH
-use MOM_diag_manager_infra,  only : register_static_field_fms_wrapper
-use MOM_diag_manager_infra,  only : register_diag_field_fms_wrapper
+use MOM_diag_manager_infra,  only : register_static_field_infra
+use MOM_diag_manager_infra,  only : register_diag_field_infra
 use MOM_error_handler, only : MOM_error, FATAL, is_root_pe, assert
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
@@ -25,7 +25,7 @@ public enable_averaging, disable_averaging, query_averaging_enabled
 public enable_averages
 public MOM_IS_diag_mediator_init, MOM_IS_diag_mediator_end, set_IS_diag_mediator_grid
 public MOM_IS_diag_mediator_close_registration, get_diag_time_end
-public MOM_diag_axis_init, register_static_field_fms_wrapper
+public MOM_diag_axis_init, register_static_field_infra
 
 !> 2D/3D axes type to contain 1D axes handles and pointers to masks
 type, public :: axesType
@@ -289,48 +289,48 @@ subroutine post_IS_data(diag_field_id, field, diag_cs, is_static, mask)
 
   if (is_stat) then
     if (present(mask)) then
-      used = send_data_fms_wrapper(fms_diag_id, locfield, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, mask=mask)
+      used = send_data_infra(fms_diag_id, locfield, &
+                       is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, mask=mask)
     elseif(i_data .and. associated(diag%mask2d)) then
 !      used = send_data(fms_diag_id, locfield, &
-!           is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%mask2d)
-      used = send_data_fms_wrapper(fms_diag_id, locfield, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
+!           is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, rmask=diag%mask2d)
+      used = send_data_infra(fms_diag_id, locfield, &
+                       is_in=isv, ie_in=iev, js_in=jsv, je_in=jev)
     elseif((.not.i_data) .and. associated(diag%mask2d_comp)) then
 !      used = send_data(fms_diag_id, locfield, &
-!           is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%mask2d_comp)
-      used = send_data_fms_wrapper(fms_diag_id, locfield, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
+!           is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, rmask=diag%mask2d_comp)
+      used = send_data_infra(fms_diag_id, locfield, &
+                       is_in=isv, ie_in=iev, js_in=jsv, je_in=jev)
     else
-      used = send_data_fms_wrapper(fms_diag_id, locfield, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
+      used = send_data_infra(fms_diag_id, locfield, &
+                       is_in=isv, ie_in=iev, js_in=jsv, je_in=jev)
     endif
   elseif (diag_cs%ave_enabled) then
     if (present(mask)) then
-      used = send_data_fms_wrapper(fms_diag_id, locfield, diag_cs%time_end, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag_cs%time_int, mask=mask)
-!      used = send_data(fms_diag_id, locfield, diag_cs%time_end, &
-!                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-!                       weight=diag_cs%time_int)
+      used = send_data_infra(fms_diag_id, locfield, &
+                       is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, &
+                       time=diag_cs%time_end, weight=diag_cs%time_int, mask=mask)
+!      used = send_data(fms_diag_id, locfield, &
+!                       is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, &
+!                       time=diag_cs%time_end, weight=diag_cs%time_int)
     elseif(i_data .and. associated(diag%mask2d)) then
-!      used = send_data(fms_diag_id, locfield, diag_cs%time_end, &
-!                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-!                       weight=diag_cs%time_int, rmask=diag%mask2d)
-      used = send_data_fms_wrapper(fms_diag_id, locfield, diag_cs%time_end, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag_cs%time_int)
+!      used = send_data(fms_diag_id, locfield, &
+!                       is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, &
+!                       time=diag_cs%time_end, weight=diag_cs%time_int, rmask=diag%mask2d)
+      used = send_data_infra(fms_diag_id, locfield, &
+                       is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, &
+                       time=diag_cs%time_end, weight=diag_cs%time_int)
     elseif((.not.i_data) .and. associated(diag%mask2d_comp)) then
-!      used = send_data(fms_diag_id, locfield, diag_cs%time_end, &
-!                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-!                       weight=diag_cs%time_int, rmask=diag%mask2d_comp)
-      used = send_data_fms_wrapper(fms_diag_id, locfield, diag_cs%time_end, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag_cs%time_int)
+!      used = send_data(fms_diag_id, locfield, &
+!                       is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, &
+!                       time=diag_cs%time_end, weight=diag_cs%time_int, rmask=diag%mask2d_comp)
+      used = send_data_infra(fms_diag_id, locfield, &
+                       is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, &
+                       time=diag_cs%time_end, weight=diag_cs%time_int)
     else
-      used = send_data_fms_wrapper(fms_diag_id, locfield, diag_cs%time_end, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag_cs%time_int)
+      used = send_data_infra(fms_diag_id, locfield, &
+                       is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, &
+                       time=diag_cs%time_end, weight=diag_cs%time_int)
     endif
   endif
 
@@ -453,7 +453,7 @@ function register_MOM_IS_diag_field(module_name, field_name, axes, init_time, &
   diag_cs => axes%diag_cs
   primary_id = -1
 
-  fms_id = register_diag_field_fms_wrapper(module_name, field_name, axes%handles, &
+  fms_id = register_diag_field_infra(module_name, field_name, axes%handles, &
          init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
          range=range, mask_variant=mask_variant, standard_name=standard_name, &
          verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -542,7 +542,7 @@ integer function register_MOM_IS_static_field(module_name, field_name, axes, &
   diag_cs => axes%diag_cs
   primary_id = -1
 
-  fms_id = register_static_field_fms_wrapper(module_name, field_name, axes%handles, &
+  fms_id = register_static_field_infra(module_name, field_name, axes%handles, &
        long_name=long_name, units=units, missing_value=MOM_missing_value, &
        range=range, mask_variant=mask_variant, standard_name=standard_name, &
        do_not_log=do_not_log, &
