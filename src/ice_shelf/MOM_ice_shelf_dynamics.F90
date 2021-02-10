@@ -558,9 +558,9 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
     CS%id_v_shelf = register_diag_field('ice_shelf_model','v_shelf',CS%diag%axesCv1, Time, &
        'y-velocity of ice', 'm yr-1', conversion=365.0*86400.0*US%L_T_to_m_s)
     CS%id_taudx_shelf = register_diag_field('ice_shelf_model','taudx_shelf',CS%diag%axesT1, Time, &
-       'x-driving stress of ice', 'kPa', conversion=1.e-3*US%L_T_to_m_s)
+       'x-driving stress of ice', 'kPa', conversion=1.e-9*US%L_T_to_m_s)
     CS%id_taudy_shelf = register_diag_field('ice_shelf_model','taudy_shelf',CS%diag%axesT1, Time, &
-       'x-driving stress of ice', 'kPa', conversion=1.e-3*US%L_T_to_m_s)
+       'x-driving stress of ice', 'kPa', conversion=1.e-9*US%L_T_to_m_s)
 !    CS%id_u_mask = register_diag_field('ocean_model','u_mask',CS%diag%axesCu1, Time, &
 !       'mask for u-nodes', 'none')
     CS%id_u_mask = register_diag_field('ice_shelf_model','u_mask',CS%diag%axesCu1, Time, &
@@ -693,7 +693,7 @@ subroutine update_ice_shelf(CS, ISS, G, US, time_step, Time, ocean_mass, coupled
   coupled_GL = .false.
   if (present(ocean_mass) .and. present(coupled_grounding)) coupled_GL = coupled_grounding
 
-!  call ice_shelf_advect(CS, ISS, G, time_step, Time) !OVS 02/08/21
+  call ice_shelf_advect(CS, ISS, G, time_step, Time) !OVS 02/08/21
   CS%elapsed_velocity_time = CS%elapsed_velocity_time + time_step
   if (CS%elapsed_velocity_time >= CS%velocity_update_time_step) update_ice_vel = .true.
 
@@ -782,7 +782,7 @@ subroutine ice_shelf_advect(CS, ISS, G, time_step, Time)
   call ice_shelf_advect_thickness_x(CS, G, LB, time_step, ISS%hmask, ISS%h_shelf, h_after_uflux, uh_ice)
 
 !  call enable_averages(time_step, Time, CS%diag)
-!  call pass_var(h_after_uflux, G%domain)
+  call pass_var(h_after_uflux, G%domain)
 !  if (CS%id_h_after_uflux > 0) call post_data(CS%id_h_after_uflux, h_after_uflux, CS%diag)
 !  call disable_averaging(CS%diag)
 
@@ -790,7 +790,7 @@ subroutine ice_shelf_advect(CS, ISS, G, time_step, Time)
   call ice_shelf_advect_thickness_y(CS, G, LB, time_step, ISS%hmask, h_after_uflux, h_after_vflux, vh_ice)
 
 !  call enable_averages(time_step, Time, CS%diag)
-!  call pass_var(h_after_vflux, G%domain)
+  call pass_var(h_after_vflux, G%domain)
 !  if (CS%id_h_after_vflux > 0) call post_data(CS%id_h_after_vflux, h_after_vflux, CS%diag)
 !  call disable_averaging(CS%diag)
 
@@ -882,7 +882,7 @@ end subroutine ice_shelf_advect
   enddo
 
   call calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, CS%OD_av)
-  call pass_vector(taudx, taudy, G%domain, TO_ALL, BGRID_NE)  !OVS 02/01/21
+!  call pass_vector(taudx, taudy, G%domain, TO_ALL, BGRID_NE)  !OVS 02/01/21
 !  call pass_var(taudx, G%Domain)              !OVS 01/21/21
 !  call pass_var(taudy, G%Domain)              !OVS 01/21/21     
   ! This is to determine which cells contain the grounding line, the criterion being that the cell
@@ -1842,6 +1842,8 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
   enddo  
   do j=jsc-1,jec+1
     do i=isc-1,iec+1
+!  do j=G%jsd+1,G%jed-1      !OVS 02/08/21
+!    do i=G%isd+1,G%ied-1    !OVS 02/08/21
 !  do j=jsc-G%domain%njhalo+1,jec+G%domain%njhalo-1     !OVS 02/02/21 
 !   do i=isc-G%domain%nihalo+1,iec+G%domain%nihalo-1    !OVS 02/02/21
       cnt = 0
@@ -2594,7 +2596,7 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
         vy = ((v_shlf(I,J) + v_shlf(I-1,J)) - (v_shlf(I,J-1) + v_shlf(I-1,J-1))) / (2*G%dyT(i,j))
         CS%ice_visc(i,j) = 0.5 * Visc_coef * (G%areaT(i,j) * ISS%h_shelf(i,j)) * &
              (US%s_to_T**2 * (ux**2 + vy**2 + ux*vy + 0.25*(uy+vx)**2 + eps_min**2))**((1.-n_g)/(2.*n_g))
-
+!        CS%ice_visc(i,j) =1e15*(G%areaT(i,j) * ISS%h_shelf(i,j)) !OVS 02/09/21 constvisc
 !        umid = ((u_shlf(I,J) + u_shlf(I-1,J-1)) + (u_shlf(I,J-1) + u_shlf(I-1,J))) * 0.25
 !        vmid = ((v_shlf(I,J) + v_shlf(I-1,J-1)) + (v_shlf(I,J-1) + v_shlf(I-1,J))) * 0.25
 !        unorm = sqrt(umid**2 + vmid**2 + eps_min**2*(G%dxT(i,j)**2 + G%dyT(i,j)**2))
