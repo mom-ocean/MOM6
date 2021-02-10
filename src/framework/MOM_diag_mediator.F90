@@ -9,11 +9,11 @@ use MOM_checksums,        only : hchksum, uchksum, vchksum, Bchksum
 use MOM_coms,             only : PE_here
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_manager_infra,     only : MOM_diag_manager_init, MOM_diag_manager_end
-use MOM_diag_manager_infra,     only : diag_axis_init=>MOM_diag_axis_init, get_MOM_diag_axis_name
-use MOM_diag_manager_infra,     only : send_data_fms_wrapper, MOM_diag_field_add_attribute, EAST, NORTH
-use MOM_diag_manager_infra,     only : register_diag_field_fms_wrapper, register_static_field_fms_wrapper
-use MOM_diag_manager_infra,     only : get_MOM_diag_field_id, DIAG_FIELD_NOT_FOUND
+use MOM_diag_manager_infra, only : MOM_diag_manager_init, MOM_diag_manager_end
+use MOM_diag_manager_infra, only : diag_axis_init=>MOM_diag_axis_init, get_MOM_diag_axis_name
+use MOM_diag_manager_infra, only : send_data_infra, MOM_diag_field_add_attribute, EAST, NORTH
+use MOM_diag_manager_infra, only : register_diag_field_infra, register_static_field_infra
+use MOM_diag_manager_infra, only : get_MOM_diag_field_id, DIAG_FIELD_NOT_FOUND
 use MOM_diag_remap,       only : diag_remap_ctrl, diag_remap_update, diag_remap_calc_hmask
 use MOM_diag_remap,       only : diag_remap_init, diag_remap_end, diag_remap_do_remap
 use MOM_diag_remap,       only : vertically_reintegrate_diag_field, vertically_interpolate_diag_field
@@ -1271,9 +1271,9 @@ subroutine post_data_0d(diag_field_id, field, diag_cs, is_static)
     if (diag_cs%diag_as_chksum) then
       call chksum0(locfield, diag%debug_str, logunit=diag_cs%chksum_iounit)
     elseif (is_stat) then
-      used = send_data_fms_wrapper(diag%fms_diag_id, locfield)
+      used = send_data_infra(diag%fms_diag_id, locfield)
     elseif (diag_cs%ave_enabled) then
-      used = send_data_fms_wrapper(diag%fms_diag_id, locfield, diag_cs%time_end)
+      used = send_data_infra(diag%fms_diag_id, locfield, diag_cs%time_end)
     endif
     diag => diag%next
   enddo
@@ -1323,9 +1323,9 @@ subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
     if (diag_cs%diag_as_chksum) then
       call zchksum(locfield, diag%debug_str, logunit=diag_cs%chksum_iounit)
     elseif (is_stat) then
-      used = send_data_fms_wrapper(diag%fms_diag_id, locfield)
+      used = send_data_infra(diag%fms_diag_id, locfield)
     elseif (diag_cs%ave_enabled) then
-      used = send_data_fms_wrapper(diag%fms_diag_id, locfield, diag_cs%time_end, weight=diag_cs%time_int)
+      used = send_data_infra(diag%fms_diag_id, locfield, time=diag_cs%time_end, weight=diag_cs%time_int)
     endif
     if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) deallocate( locfield )
 
@@ -1479,26 +1479,26 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
       if (present(mask)) then
         call assert(size(locfield) == size(locmask), &
             'post_data_2d_low is_stat: mask size mismatch: '//diag%debug_str)
-        used = send_data_fms_wrapper(diag%fms_diag_id, locfield, &
-                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=locmask)
+        used = send_data_infra(diag%fms_diag_id, locfield, &
+                         is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, rmask=locmask)
      !elseif (associated(diag%axes%mask2d)) then
      !  used = send_data(diag%fms_diag_id, locfield, &
-     !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%axes%mask2d)
+     !                   is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, rmask=diag%axes%mask2d)
       else
-        used = send_data_fms_wrapper(diag%fms_diag_id, locfield, &
-                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
+        used = send_data_infra(diag%fms_diag_id, locfield, &
+                         is_in=isv, ie_in=iev, js_in=jsv, je_in=jev)
       endif
     elseif (diag_cs%ave_enabled) then
       if (associated(locmask)) then
         call assert(size(locfield) == size(locmask), &
             'post_data_2d_low: mask size mismatch: '//diag%debug_str)
-        used = send_data_fms_wrapper(diag%fms_diag_id, locfield, diag_cs%time_end, &
-                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                         weight=diag_cs%time_int, rmask=locmask)
+        used = send_data_infra(diag%fms_diag_id, locfield, &
+                         is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, &
+                         time=diag_cs%time_end, weight=diag_cs%time_int, rmask=locmask)
       else
-        used = send_data_fms_wrapper(diag%fms_diag_id, locfield, diag_cs%time_end, &
-                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                         weight=diag_cs%time_int)
+        used = send_data_infra(diag%fms_diag_id, locfield, &
+                         is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, &
+                         time=diag_cs%time_end, weight=diag_cs%time_int)
       endif
     endif
   endif
@@ -1767,26 +1767,26 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
         if (present(mask)) then
           call assert(size(locfield) == size(locmask), &
               'post_data_3d_low is_stat: mask size mismatch: '//diag%debug_str)
-          used = send_data_fms_wrapper(diag%fms_diag_id, locfield, &
-                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=locmask)
+          used = send_data_infra(diag%fms_diag_id, locfield, &
+                         is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, rmask=locmask)
        !elseif (associated(diag%axes%mask2d)) then
        !  used = send_data(diag%fms_diag_id, locfield, &
-       !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%axes%mask2d)
+       !                   is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, rmask=diag%axes%mask2d)
         else
-          used = send_data_fms_wrapper(diag%fms_diag_id, locfield, &
-                           is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
+          used = send_data_infra(diag%fms_diag_id, locfield, &
+                           is_in=isv, ie_in=iev, js_in=jsv, je_in=jev)
         endif
       elseif (diag_cs%ave_enabled) then
         if (associated(locmask)) then
           call assert(size(locfield) == size(locmask), &
               'post_data_3d_low: mask size mismatch: '//diag%debug_str)
-          used = send_data_fms_wrapper(diag%fms_diag_id, locfield, diag_cs%time_end, &
-                           is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                           weight=diag_cs%time_int, rmask=locmask)
+          used = send_data_infra(diag%fms_diag_id, locfield, &
+                           is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, &
+                           time=diag_cs%time_end, weight=diag_cs%time_int, rmask=locmask)
         else
-          used = send_data_fms_wrapper(diag%fms_diag_id, locfield, diag_cs%time_end, &
-                           is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                           weight=diag_cs%time_int)
+          used = send_data_infra(diag%fms_diag_id, locfield, &
+                           is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, &
+                           time=diag_cs%time_end, weight=diag_cs%time_int)
         endif
       endif
     endif
@@ -1842,16 +1842,15 @@ subroutine post_xy_average(diag_cs, diag, field)
                                          diag_cs%diag_remap_cs(coord)%h, &
                                          staggered_in_x, staggered_in_y, &
                                          diag%axes%is_layer, diag%v_extensive, &
-                                         field, &
-                                         averaged_field, averaged_mask)
+                                         field, averaged_field, averaged_mask)
   endif
 
   if (diag_cs%diag_as_chksum) then
     call zchksum(averaged_field, trim(diag%debug_str)//'_xyave', &
                  logunit=diag_CS%chksum_iounit)
   else
-    used = send_data_fms_wrapper(diag%fms_xyave_diag_id, averaged_field, diag_cs%time_end, &
-                     weight=diag_cs%time_int, mask=averaged_mask)
+    used = send_data_infra(diag%fms_xyave_diag_id, averaged_field, &
+                           time=diag_cs%time_end, weight=diag_cs%time_int, mask=averaged_mask)
   endif
 end subroutine post_xy_average
 
@@ -2391,13 +2390,13 @@ integer function register_diag_field_expand_axes(module_name, field_name, axes, 
     ! If interp_method is provided we must use it
     if (area_id>0) then
       if (volume_id>0) then
-        fms_id = register_diag_field_fms_wrapper(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_infra(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
                  interp_method=interp_method, tile_count=tile_count, area=area_id, volume=volume_id)
       else
-        fms_id = register_diag_field_fms_wrapper(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_infra(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -2405,13 +2404,13 @@ integer function register_diag_field_expand_axes(module_name, field_name, axes, 
       endif
     else
       if (volume_id>0) then
-        fms_id = register_diag_field_fms_wrapper(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_infra(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
                  interp_method=interp_method, tile_count=tile_count, volume=volume_id)
       else
-        fms_id = register_diag_field_fms_wrapper(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_infra(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -2422,13 +2421,13 @@ integer function register_diag_field_expand_axes(module_name, field_name, axes, 
     ! If interp_method is not provided and the field is not at an h-point then interp_method='none'
     if (area_id>0) then
       if (volume_id>0) then
-        fms_id = register_diag_field_fms_wrapper(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_infra(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
                  interp_method='none', tile_count=tile_count, area=area_id, volume=volume_id)
       else
-        fms_id = register_diag_field_fms_wrapper(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_infra(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -2436,13 +2435,13 @@ integer function register_diag_field_expand_axes(module_name, field_name, axes, 
       endif
     else
       if (volume_id>0) then
-        fms_id = register_diag_field_fms_Wrapper(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_infra(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
                  interp_method='none', tile_count=tile_count, volume=volume_id)
       else
-        fms_id = register_diag_field_fms_wrapper(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_infra(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -2703,10 +2702,10 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
     fms_id = diag_cs%num_chksum_diags + 1
     diag_cs%num_chksum_diags = fms_id
   else
-    fms_id = register_diag_field_fms_wrapper(module_name, field_name, init_time, &
-        long_name=long_name, units=units, missing_value=MOM_missing_value, &
-        range=range, standard_name=standard_name, do_not_log=do_not_log, &
-        err_msg=err_msg)
+    fms_id = register_diag_field_infra(module_name, field_name, init_time, &
+                long_name=long_name, units=units, missing_value=MOM_missing_value, &
+                range=range, standard_name=standard_name, do_not_log=do_not_log, &
+                err_msg=err_msg)
   endif
 
   if (fms_id /= DIAG_FIELD_NOT_FOUND) then
@@ -2734,10 +2733,10 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
     if (present(cmor_standard_name)) posted_cmor_standard_name = cmor_standard_name
     if (present(cmor_long_name)) posted_cmor_long_name = cmor_long_name
 
-    fms_id = register_diag_field_fms_wrapper(module_name, cmor_field_name, init_time, &
-       long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units), &
-       missing_value=MOM_missing_value, range=range, &
-       standard_name=trim(posted_cmor_standard_name), do_not_log=do_not_log, err_msg=err_msg)
+    fms_id = register_diag_field_infra(module_name, cmor_field_name, init_time, &
+           long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units), &
+           missing_value=MOM_missing_value, range=range, &
+           standard_name=trim(posted_cmor_standard_name), do_not_log=do_not_log, err_msg=err_msg)
     if (fms_id /= DIAG_FIELD_NOT_FOUND) then
       if (dm_id == -1) then
         dm_id = get_new_diag_id(diag_cs)
@@ -2817,7 +2816,7 @@ function register_static_field(module_name, field_name, axes, &
     fms_id = diag_cs%num_chksum_diags + 1
     diag_cs%num_chksum_diags = fms_id
   else
-    fms_id = register_static_field_fms_wrapper(module_name, field_name, axes%handles, &
+    fms_id = register_static_field_infra(module_name, field_name, axes%handles, &
            long_name=long_name, units=units, missing_value=MOM_missing_value, &
            range=range, mask_variant=mask_variant, standard_name=standard_name, &
            do_not_log=do_not_log, &
@@ -2869,11 +2868,11 @@ function register_static_field(module_name, field_name, axes, &
     if (present(cmor_standard_name)) posted_cmor_standard_name = cmor_standard_name
     if (present(cmor_long_name)) posted_cmor_long_name = cmor_long_name
 
-    fms_id = register_static_field_fms_wrapper(module_name, cmor_field_name, &
-      axes%handles, long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units), &
-      missing_value=MOM_missing_value, range=range, mask_variant=mask_variant,            &
-      standard_name=trim(posted_cmor_standard_name), do_not_log=do_not_log,               &
-      interp_method=interp_method, tile_count=tile_count, area=area)
+    fms_id = register_static_field_infra(module_name, cmor_field_name, axes%handles, &
+                long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units), &
+                missing_value=MOM_missing_value, range=range, mask_variant=mask_variant, &
+                standard_name=trim(posted_cmor_standard_name), do_not_log=do_not_log, &
+                interp_method=interp_method, tile_count=tile_count, area=area)
     if (fms_id /= DIAG_FIELD_NOT_FOUND) then
       if (dm_id == -1) then
         dm_id = get_new_diag_id(diag_cs)
@@ -4303,30 +4302,17 @@ end subroutine downsample_mask_3d
 
 !> Fakes a register of a diagnostic to find out if an obsolete
 !! parameter appears in the diag_table.
-logical function found_in_diagtable(diag, varName, newVarName)
+logical function found_in_diagtable(diag, varName)
   type(diag_ctrl),            intent(in) :: diag       !< A structure used to control diagnostics.
   character(len=*),           intent(in) :: varName    !< The obsolete diagnostic name
-  character(len=*), optional, intent(in) :: newVarName !< The valid name of this diagnostic
   ! Local
   integer :: handle ! Integer handle returned from diag_manager
 
   ! We use register_static_field_fms() instead of register_static_field() so
   ! that the diagnostic does not appear in the available diagnostics list.
-  handle = register_static_field_fms_wrapper('ocean_model', varName, &
-            diag%axesT1%handles, 'Obsolete parameter', 'N/A')
+  handle = register_static_field_infra('ocean_model', varName, diag%axesT1%handles)
 
   found_in_diagtable = (handle>0)
-
-  if (handle>0 .and. is_root_pe()) then
-    if (present(newVarName)) then
-      call MOM_error(WARNING, 'MOM_obsolete_params: '//                        &
-          'diag_table entry "'//trim(varName)//'" found. Use '// &
-          '"'//trim(newVarName)//'" instead.' )
-    else
-      call MOM_error(WARNING, 'MOM_obsolete_params: '//                        &
-          'diag_table entry "'//trim(varName)//'" is obsolete.' )
-    endif
-  endif
 
 end function found_in_diagtable
 

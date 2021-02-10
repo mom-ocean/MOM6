@@ -23,26 +23,23 @@ use diag_manager_mod, only : get_diag_field_id_fms => get_diag_field_id
 use time_manager_mod, only : time_type
 use MOM_domain_infra, only : MOM_domain_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
+
 implicit none ; private
 
+!> transmit data for diagnostic output
+interface register_diag_field_infra
+  module procedure register_diag_field_infra_scalar
+  module procedure register_diag_field_infra_array
+end interface register_diag_field_infra
 
 !> transmit data for diagnostic output
-interface register_diag_field_fms_wrapper
-  module procedure register_diag_field_fms_wrapper_scalar
-  module procedure register_diag_field_fms_wrapper_array
-end interface register_diag_field_fms_wrapper
-
-!> transmit data for diagnostic output
-interface send_data_fms_wrapper
-  module procedure send_data_fms_wrapper_0d
-  module procedure send_data_fms_wrapper_1d
-  module procedure send_data_fms_wrapper_2d
-  module procedure send_data_fms_wrapper_3d
+interface send_data_infra
+  module procedure send_data_infra_0d, send_data_infra_1d
+  module procedure send_data_infra_2d, send_data_infra_3d
 #ifdef OVERLOAD_R8
-  module procedure send_data_fms_wrapper_2d_r8
-  module procedure send_data_fms_wrapper_3d_r8
+  module procedure send_data_infra_2d_r8, send_data_infra_3d_r8
 #endif
-end interface send_data_fms_wrapper
+end interface send_data_infra
 
 !> Add an attribute to a diagnostic field
 interface MOM_diag_field_add_attribute
@@ -59,10 +56,10 @@ public MOM_diag_axis_init
 public get_MOM_diag_axis_name
 public MOM_diag_manager_init
 public MOM_diag_manager_end
-public send_data_fms_wrapper
+public send_data_infra
 public MOM_diag_field_add_attribute
-public register_diag_field_fms_wrapper
-public register_static_field_fms_wrapper
+public register_diag_field_infra
+public register_static_field_infra
 public get_MOM_diag_field_id
 ! Public data
 public null_axis_id
@@ -131,7 +128,7 @@ end function MOM_diag_axis_init
 
 !> Returns the short name of the axis
 subroutine get_MOM_diag_axis_name(id, name)
-  integer,  intent(in)          :: id   !< The axis numeric id
+  integer,          intent(in)  :: id   !< The axis numeric id
   character(len=*), intent(out) :: name !< The short name of the axis
 
   call fms_get_diag_axis_name(id, name)
@@ -144,18 +141,18 @@ integer function get_MOM_diag_field_id(module_name, field_name)
   character(len=*), intent(in) :: field_name  !< A field name string to query.
 
 
-  get_MOM_diag_field_id=-1
+  get_MOM_diag_field_id = -1
   get_MOM_diag_field_id = get_diag_field_id_fms(module_name, field_name)
 
 end function get_MOM_diag_field_id
 
 !> Initializes the diagnostic manager
 subroutine MOM_diag_manager_init(diag_model_subset, time_init, err_msg)
-  integer, optional, intent(in) :: diag_model_subset       !< An optional diagnostic subset
+  integer,               optional, intent(in) :: diag_model_subset !< An optional diagnostic subset
   integer, dimension(6), optional, intent(in) :: time_init !< An optional reference time for diagnostics
                                                            !! The default uses the value contained in the
                                                            !! diag_table. Format is Y-M-D-H-M-S
-  character(len=*), intent(out), optional :: err_msg        !< Error message.
+  character(len=*),     optional, intent(out) :: err_msg   !< Error message.
   call FMS_diag_manager_init(diag_model_subset, time_init, err_msg)
 
 end subroutine MOM_diag_manager_init
@@ -169,224 +166,215 @@ subroutine MOM_diag_manager_end(time)
 end subroutine MOM_diag_manager_end
 
 !> Register a MOM diagnostic field for scalars
-integer function register_diag_field_fms_wrapper_scalar(module_name, field_name, init_time, &
-     & long_name, units, missing_value, range, standard_name, do_not_log, err_msg, &
-     & area, volume, realm)
-  character(len=*), intent(in) :: module_name !< The name of the associated module
-  character(len=*), intent(in) :: field_name !< The name of the field
-  type(time_type), optional, intent(in) :: init_time !< The registration time.
-  character(len=*), optional, intent(in) :: long_name !< A long name for the field
-  character(len=*), optional, intent(in) :: units !< Field metric.
-  character(len=*), optional, intent(in) :: standard_name !< A standard name for the field
-  real, optional, intent(in) :: missing_value !< Missing value attribute.
-  real,  dimension(2), optional, intent(in) :: range !< A valid range of the field
-  logical, optional, intent(in) :: do_not_log !< if TRUE, field information is not logged
-  character(len=*), optional, intent(out):: err_msg !< Log message.
-  integer, optional, intent(in) :: area  !< Diagnostic ID of the field containing the area attribute
-  integer, optional, intent(in) :: volume  !< Diagnostic ID of the field containing the volume attribute
-  character(len=*), optional, intent(in):: realm !< String to set as the value to the modeling_realm attribute
+integer function register_diag_field_infra_scalar(module_name, field_name, init_time, &
+                        long_name, units, missing_value, range, standard_name, do_not_log, &
+                        err_msg, area, volume)
+  character(len=*),              intent(in) :: module_name !< The name of the associated module
+  character(len=*),              intent(in) :: field_name !< The name of the field
+  type(time_type),     optional, intent(in) :: init_time !< The registration time
+  character(len=*),    optional, intent(in) :: long_name !< A long name for the field
+  character(len=*),    optional, intent(in) :: units     !< Field units
+  character(len=*),    optional, intent(in) :: standard_name !< A standard name for the field
+  real,                optional, intent(in) :: missing_value !< Missing value attribute
+  real,  dimension(2), optional, intent(in) :: range     !< A valid range of the field
+  logical,             optional, intent(in) :: do_not_log !< if TRUE, field information is not logged
+  character(len=*),    optional, intent(out):: err_msg   !< An error message to return
+  integer,             optional, intent(in) :: area      !< Diagnostic ID of the field containing the area attribute
+  integer,             optional, intent(in) :: volume    !< Diagnostic ID of the field containing the volume attribute
 
+  register_diag_field_infra_scalar = register_diag_field_fms(module_name, field_name, init_time, &
+        long_name, units, missing_value, range, standard_name, do_not_log, err_msg, area, volume)
 
-  register_diag_field_fms_wrapper_scalar = register_diag_field_fms(module_name, field_name, init_time, &
-       long_name, units, missing_value, range, standard_name, do_not_log, err_msg, &
-       area, volume, realm)
-
-end function register_diag_field_fms_wrapper_scalar
+end function register_diag_field_infra_scalar
 
 !> Register a MOM diagnostic field for scalars
-integer function register_diag_field_fms_wrapper_array(module_name, field_name, axes, init_time, &
-     & long_name, units, missing_value, range, mask_variant, standard_name, verbose, do_not_log, &
-     & err_msg, interp_method, tile_count, &
-     & area, volume, realm)
-  character(len=*), intent(in) :: module_name !< The name of the associated module
-  character(len=*), intent(in) :: field_name !< The name of the field
-  integer, INTENT(in) :: axes(:)  !< Diagnostic ID of 1 dimensional axis attributes for the field.
-  type(time_type), optional, intent(in) :: init_time !< The registration time.
-  character(len=*), optional, intent(in) :: long_name !< A long name for the field
-  character(len=*), optional, intent(in) :: units !< Field metric.
-  real, optional, intent(in) :: missing_value !< Missing value attribute.
-  real,  dimension(2), optional, intent(in) :: range !< A valid range of the field
-  logical, optional, intent(in) :: mask_variant !< If true, the field mask is varying in time.
-  character(len=*), optional, intent(in) :: standard_name !< A standard name for the field
-  logical, optional, intent(in) :: verbose !< If true, provide additional log information
-  logical, optional, intent(in) :: do_not_log !< if TRUE, field information is not logged
-  character(len=*), optional, intent(in) :: interp_method !< Not documented
-  integer, optional, intent(in) :: tile_count   !< The tile number for the current PE
-  character(len=*), optional, intent(out):: err_msg !< Log message.
-  integer, optional, intent(in) :: area  !< Diagnostic ID of the field containing the area attribute
-  integer, optional, intent(in) :: volume  !< Diagnostic ID of the field containing the volume attribute
-  character(len=*), optional, intent(in):: realm !< String to set as the value to the modeling_realm attribute
+integer function register_diag_field_infra_array(module_name, field_name, axes, init_time, &
+                        long_name, units, missing_value, range, mask_variant, standard_name, verbose, &
+                        do_not_log, err_msg, interp_method, tile_count, area, volume)
+  character(len=*),             intent(in) :: module_name !< The name of the associated module
+  character(len=*),             intent(in) :: field_name !< The name of the field
+  integer, dimension(:),        intent(in) :: axes      !< Diagnostic IDs of axis attributes for the field
+  type(time_type),    optional, intent(in) :: init_time !< The registration time
+  character(len=*),   optional, intent(in) :: long_name !< A long name for the field
+  character(len=*),   optional, intent(in) :: units     !< Units of the field
+  real,               optional, intent(in) :: missing_value !< Missing value attribute
+  real, dimension(2), optional, intent(in) :: range     !< A valid range of the field
+  logical,            optional, intent(in) :: mask_variant !< If true, the field mask is varying in time
+  character(len=*),   optional, intent(in) :: standard_name !< A standard name for the field
+  logical,            optional, intent(in) :: verbose    !< If true, provide additional log information
+  logical,            optional, intent(in) :: do_not_log !< if TRUE, field information is not logged
+  character(len=*),   optional, intent(in) :: interp_method !< If 'none' indicates the field should
+                                                         !! not be interpolated as a scalar
+  integer,            optional, intent(in) :: tile_count !< The tile number for the current PE
+  character(len=*),   optional, intent(out):: err_msg   !< An error message to return
+  integer,            optional, intent(in) :: area      !< Diagnostic ID of the field containing the area attribute
+  integer,            optional, intent(in) :: volume    !< Diagnostic ID of the field containing the volume attribute
+
+  register_diag_field_infra_array = register_diag_field_fms(module_name, field_name, axes, init_time, &
+        long_name, units, missing_value, range, mask_variant, standard_name, verbose, do_not_log, &
+        err_msg, interp_method, tile_count, area, volume)
+
+end function register_diag_field_infra_array
 
 
-  register_diag_field_fms_wrapper_array = register_diag_field_fms(module_name, field_name, axes, init_time, &
-     & long_name, units, missing_value, range, mask_variant, standard_name, verbose, do_not_log, &
-     & err_msg, interp_method, tile_count, &
-     & area, volume, realm)
+integer function register_static_field_infra(module_name, field_name, axes, long_name, units, &
+                        missing_value, range, mask_variant, standard_name, do_not_log, interp_method, &
+                        tile_count, area, volume)
+  character(len=*),             intent(in) :: module_name !< The name of the associated module
+  character(len=*),             intent(in) :: field_name !< The name of the field
+  integer, dimension(:),        intent(in) :: axes      !< Diagnostic IDs of axis attributes for the field
+  character(len=*),   optional, intent(in) :: long_name !< A long name for the field
+  character(len=*),   optional, intent(in) :: units     !< Units of the field
+  real,               optional, intent(in) :: missing_value !< Missing value attribute
+  real, dimension(2), optional, intent(in) :: range     !< A valid range of the field
+  logical,            optional, intent(in) :: mask_variant !< If true, the field mask is varying in time
+  character(len=*),   optional, intent(in) :: standard_name !< A standard name for the field
+  logical,            optional, intent(in) :: do_not_log !< if TRUE, field information is not logged
+  character(len=*),   optional, intent(in) :: interp_method !< If 'none' indicates the field should
+                                                         !! not be interpolated as a scalar
+  integer,            optional, intent(in) :: tile_count !< The tile number for the current PE
+  integer,            optional, intent(in) :: area      !< Diagnostic ID of the field containing the area attribute
+  integer,            optional, intent(in) :: volume    !< Diagnostic ID of the field containing the volume attribute
 
-end function register_diag_field_fms_wrapper_array
-
-
-integer function register_static_field_fms_wrapper(module_name, field_name, axes, long_name, units,&
-       & missing_value, range, mask_variant, standard_name, do_not_log, interp_method,&
-       & tile_count, area, volume, realm)
-  character(len=*), intent(in) :: module_name !< The name of the associated module
-  character(len=*), intent(in) :: field_name !< The name of the field
-  integer, INTENT(in) :: axes(:)  !< Diagnostic ID of 1 dimensional axis attributes for the field.
-  character(len=*), optional, intent(in) :: long_name !< A long name for the field
-  character(len=*), optional, intent(in) :: units !< Field metric.
-  real, optional, intent(in) :: missing_value !< Missing value attribute.
-  real,  dimension(2), optional, intent(in) :: range !< A valid range of the field
-  logical, optional, intent(in) :: mask_variant !< If true, the field mask is varying in time.
-  character(len=*), optional, intent(in) :: standard_name !< A standard name for the field
-  logical, optional, intent(in) :: do_not_log !< if TRUE, field information is not logged
-  character(len=*), optional, intent(in) :: interp_method !< Not documented
-  integer, optional, intent(in) :: tile_count   !< The tile number for the current PE
-  integer, optional, intent(in) :: area  !< Diagnostic ID of the field containing the area attribute
-  integer, optional, intent(in) :: volume  !< Diagnostic ID of the field containing the volume attribute
-  character(len=*), optional, intent(in):: realm !< String to set as the value to the modeling_realm attribute
-
-
-  register_static_field_fms_wrapper = register_static_field_fms(module_name, field_name, axes, long_name, units,&
+  register_static_field_infra = register_static_field_fms(module_name, field_name, axes, long_name, units,&
        & missing_value, range, mask_variant, standard_name, dynamic=.false.,do_not_log=do_not_log, &
-       interp_method=interp_method,tile_count=tile_count, area=area, volume=volume, realm=realm)
-end function register_static_field_fms_wrapper
+       interp_method=interp_method,tile_count=tile_count, area=area, volume=volume)
+end function register_static_field_infra
 
 !> Returns true if the argument data are successfully passed to a diagnostic manager
 !! with the indicated unique reference id, false otherwise.
-logical function send_data_fms_wrapper_0d(diag_field_id, field, time, err_msg)
-  integer, intent(in) :: diag_field_id !< A unique identifier for this data to the diagnostic manager
-  real, intent(in) :: field !< Floating point value being recorded
-  TYPE(time_type), intent(in), optional :: time !< Time slice for this record
-  CHARACTER(len=*), intent(out), optional :: err_msg !< An optional error message
+logical function send_data_infra_0d(diag_field_id, field, time, err_msg)
+  integer,                    intent(in)  :: diag_field_id !< The diagnostic manager identifier for this field
+  real,                       intent(in)  :: field   !< The value being recorded
+  TYPE(time_type),  optional, intent(in)  :: time    !< The time for the current record
+  CHARACTER(len=*), optional, intent(out) :: err_msg !< An optional error message
 
-  send_data_fms_wrapper_0d= send_data_fms(diag_field_id, field, time, err_msg)
-end function send_data_fms_wrapper_0d
-
-!> Returns true if the argument data are successfully passed to a diagnostic manager
-!!  with the indicated unique reference id, false otherwise.
-logical function send_data_fms_wrapper_1d(diag_field_id, field, time, is_in, mask, rmask, ie_in, weight, err_msg)
-  integer, intent(in) :: diag_field_id !< A unique identifier for this data to the diagnostic manager
-  real, dimension(:), intent(in) :: field !< A rank 1 array of floating point values being recorded
-  type (time_type), intent(in), optional :: time  !< The time for the current record.
-  logical, intent(in), dimension(:), optional :: mask !< An optional rank 1 logical mask.
-  real, intent(in), dimension(:), optional :: rmask !< An optional rank 1 mask array
-  integer, intent(in), optional :: is_in !< An optional starting index for subsetting the data being recorded.
-  integer, intent(in), optional :: ie_in !< An optional end index for subsetting the data being recorded.
-  real, intent(in), optional :: weight !< An optional scalar weight factor to apply to the current record
-                                       !! in the case where data a data reduction in time is being performed.
-  character(len=*), intent(out), optional :: err_msg !< A log indicating the status of the post upon
-                                                       !! returning to the calling routine.
-
-  send_data_fms_wrapper_1d= send_data_fms(diag_field_id, field, time, is_in, mask, rmask, ie_in, weight, err_msg)
-
-end function send_data_fms_wrapper_1d
+  send_data_infra_0d = send_data_fms(diag_field_id, field, time, err_msg)
+end function send_data_infra_0d
 
 !> Returns true if the argument data are successfully passed to a diagnostic manager
 !!  with the indicated unique reference id, false otherwise.
-logical function send_data_fms_wrapper_2d(diag_field_id, field, time, is_in, js_in, mask, rmask, &
-                            &  ie_in, je_in, weight, err_msg)
-  integer, intent(in) :: diag_field_id !< A unique identifier for this data to the diagnostic manager
-  real, dimension(:,:), intent(in) :: field !< A rank 1 array of floating point values being recorded
-  type (time_type), intent(in), optional :: time  !< The time for the current record.
-  logical, intent(in), dimension(:,:), optional :: mask !< An optional rank 1 logical mask.
-  real, intent(in), dimension(:,:), optional :: rmask !< An optional rank 1 mask array
-  integer, intent(in), optional :: is_in !< An optional i starting index for subsetting the data being recorded.
-  integer, intent(in), optional :: ie_in !< An optional i end index for subsetting the data being recorded.
-  integer, intent(in), optional :: js_in !< An optional j starting index for subsetting the data being recorded.
-  integer, intent(in), optional :: je_in !< An optional j end index for subsetting the data being recorded.
-  real, intent(in), optional :: weight !< An optional scalar weight factor to apply to the current record
-                                       !! in the case where data a data reduction in time is being performed.
-  character(len=*), intent(out), optional :: err_msg !< A log indicating the status of the post upon
-                                                       !! returning to the calling routine.
+logical function send_data_infra_1d(diag_field_id, field, is_in, ie_in, time, mask, rmask, weight, err_msg)
+  integer,                         intent(in) :: diag_field_id !< The diagnostic manager identifier for this field
+  real, dimension(:),              intent(in) :: field !< A 1-d array of values being recorded
+  integer,               optional, intent(in) :: is_in !< The starting index for the data being recorded
+  integer,               optional, intent(in) :: ie_in !< The end index for the data being recorded
+  type(time_type),       optional, intent(in) :: time  !< The time for the current record
+  logical, dimension(:), optional, intent(in) :: mask  !< An optional rank 1 logical mask
+  real, dimension(:),    optional, intent(in) :: rmask !< An optional rank 1 mask array
+  real,                  optional, intent(in) :: weight !< A scalar weight factor to apply to the current
+                                                       !! record if there is averaging in time
+  character(len=*),      optional, intent(out) :: err_msg !< A log indicating the status of the post upon
+                                                       !! returning to the calling routine
 
-  send_data_fms_wrapper_2d= send_data_fms(diag_field_id, field, time, is_in, js_in, mask, &
+  send_data_infra_1d = send_data_fms(diag_field_id, field, time, is_in, mask, rmask, ie_in, weight, err_msg)
+
+end function send_data_infra_1d
+
+!> Returns true if the argument data are successfully passed to a diagnostic manager
+!!  with the indicated unique reference id, false otherwise.
+logical function send_data_infra_2d(diag_field_id, field, is_in, ie_in, js_in, je_in, &
+                                    time, mask, rmask, weight, err_msg)
+  integer,                           intent(in) :: diag_field_id !< The diagnostic manager identifier for this field
+  real, dimension(:,:),              intent(in) :: field !< A 2-d array of values being recorded
+  integer,                 optional, intent(in) :: is_in !< The starting i-index for the data being recorded
+  integer,                 optional, intent(in) :: ie_in !< The end i-index for the data being recorded
+  integer,                 optional, intent(in) :: js_in !< The starting j-index for the data being recorded
+  integer,                 optional, intent(in) :: je_in !< The end j-index for the data being recorded
+  type(time_type),         optional, intent(in) :: time  !< The time for the current record
+  logical, dimension(:,:), optional, intent(in) :: mask  !< An optional 2-d logical mask
+  real, dimension(:,:),    optional, intent(in) :: rmask !< An optional 2-d mask array
+  real,                    optional, intent(in) :: weight !< A scalar weight factor to apply to the current
+                                                         !! record if there is averaging in time
+  character(len=*),        optional, intent(out) :: err_msg !< A log indicating the status of the post upon
+                                                         !! returning to the calling routine
+
+  send_data_infra_2d = send_data_fms(diag_field_id, field, time, is_in, js_in, mask, &
                                 rmask, ie_in, je_in, weight, err_msg)
 
-end function send_data_fms_wrapper_2d
-
-#ifdef OVERLOAD_R8
-!> Returns true if the argument data are successfully passed to a diagnostic manager
-!!  with the indicated unique reference id, false otherwise.
-logical function send_data_fms_wrapper_2d_r8(diag_field_id, field, time, is_in, js_in, mask, rmask, &
-                            &  ie_in, je_in, weight, err_msg)
-  integer, intent(in) :: diag_field_id !< A unique identifier for this data to the diagnostic manager
-  real(kind=8), dimension(:,:), intent(in) :: field !< A rank 1 array of floating point values being recorded
-  type (time_type), intent(in), optional :: time  !< The time for the current record.
-  logical, intent(in), dimension(:,:), optional :: mask !< An optional rank 1 logical mask.
-  real, intent(in), dimension(:,:), optional :: rmask !< An optional rank 1 mask array
-  integer, intent(in), optional :: is_in !< An optional i starting index for subsetting the data being recorded.
-  integer, intent(in), optional :: ie_in !< An optional i end index for subsetting the data being recorded.
-  integer, intent(in), optional :: js_in !< An optional j starting index for subsetting the data being recorded.
-  integer, intent(in), optional :: je_in !< An optional j end index for subsetting the data being recorded.
-  real, intent(in), optional :: weight !< An optional scalar weight factor to apply to the current record
-                                         !! in the case where data a data reduction in time is being performed.
-  character(len=*), intent(out), optional :: err_msg !< A log indicating the status of the post upon
-                                                     !! returning to the calling routine.
-
-  send_data_fms_wrapper_2d_r8 = send_data_fms(diag_field_id, field, time, is_in, js_in, mask, &
-                                   rmask, ie_in, je_in, weight, err_msg)
-
-end function send_data_fms_wrapper_2d_r8
-#endif
+end function send_data_infra_2d
 
 !> Returns true if the argument data are successfully passed to a diagnostic manager
 !!  with the indicated unique reference id, false otherwise.
-logical function send_data_fms_wrapper_3d(diag_field_id, field, time, is_in, js_in, ks_in, mask, rmask, &
-                            &  ie_in, je_in, ke_in, weight, err_msg)
-  integer, intent(in) :: diag_field_id !< A unique identifier for this data to the diagnostic manager
-  real, dimension(:,:,:), intent(in) :: field !< A rank 1 array of floating point values being recorded
-  type (time_type), intent(in), optional :: time  !< The time for the current record.
-  logical, intent(in), dimension(:,:,:), optional :: mask !< An optional rank 1 logical mask.
-  real, intent(in), dimension(:,:,:), optional :: rmask !< An optional rank 1 mask array
-  integer, intent(in), optional :: is_in !< An optional i starting index for subsetting the data being recorded.
-  integer, intent(in), optional :: ie_in !< An optional i end index for subsetting the data being recorded.
-  integer, intent(in), optional :: js_in !< An optional j starting index for subsetting the data being recorded.
-  integer, intent(in), optional :: je_in !< An optional j end index for subsetting the data being recorded.
-  integer, intent(in), optional :: ks_in !< An optional k starting index for subsetting the data being recorded.
-  integer, intent(in), optional :: ke_in !< An optional k end index for subsetting the data being recorded.
-  real, intent(in), optional :: weight !< An optional scalar weight factor to apply to the current record
-                                       !! in the case where data a data reduction in time is being performed.
-  character(len=*), intent(out), optional :: err_msg !< A log indicating the status of the post upon
-                                                     !! returning to the calling routine.
+logical function send_data_infra_3d(diag_field_id, field, is_in, ie_in, js_in, je_in, ks_in, ke_in, &
+                                    time, mask, rmask, weight, err_msg)
+  integer,                             intent(in) :: diag_field_id !< The diagnostic manager identifier for this field
+  real, dimension(:,:,:),              intent(in) :: field !< A rank 1 array of floating point values being recorded
+  integer,                   optional, intent(in) :: is_in !< The starting i-index for the data being recorded
+  integer,                   optional, intent(in) :: ie_in !< The end i-index for the data being recorded
+  integer,                   optional, intent(in) :: js_in !< The starting j-index for the data being recorded
+  integer,                   optional, intent(in) :: je_in !< The end j-index for the data being recorded
+  integer,                   optional, intent(in) :: ks_in !< The starting k-index for the data being recorded
+  integer,                   optional, intent(in) :: ke_in !< The end k-index for the data being recorded
+  type(time_type),           optional, intent(in) :: time  !< The time for the current record
+  logical, dimension(:,:,:), optional, intent(in) :: mask  !< An optional 3-d logical mask
+  real, dimension(:,:,:),    optional, intent(in) :: rmask !< An optional 3-d mask array
+  real,                      optional, intent(in) :: weight !< A scalar weight factor to apply to the current
+                                                           !! record if there is averaging in time
+  character(len=*),          optional, intent(out) :: err_msg !< A log indicating the status of the post upon
+                                                           !! returning to the calling routine
 
-  send_data_fms_wrapper_3d = send_data_fms(diag_field_id, field, time, is_in, js_in, ks_in, mask, &
+  send_data_infra_3d = send_data_fms(diag_field_id, field, time, is_in, js_in, ks_in, mask, &
                                rmask, ie_in, je_in, ke_in, weight, err_msg)
 
-end function send_data_fms_wrapper_3d
+end function send_data_infra_3d
 
 
 #ifdef OVERLOAD_R8
 !> Returns true if the argument data are successfully passed to a diagnostic manager
 !!  with the indicated unique reference id, false otherwise.
-logical function send_data_fms_wrapper_3d_r8(diag_field_id, field, time, is_in, js_in, ks_in, mask, rmask, &
-                            &  ie_in, je_in, ke_in, weight, err_msg)
-  integer, intent(in) :: diag_field_id !< A unique identifier for this data to the diagnostic manager
-  real(kind=8), dimension(:,:,:), intent(in) :: field !< A rank 1 array of floating point values being recorded
-  type (time_type), intent(in), optional :: time  !< The time for the current record.
-  logical, intent(in), dimension(:,:,:), optional :: mask !< An optional rank 1 logical mask.
-  real, intent(in), dimension(:,:,:), optional :: rmask !< An optional rank 1 mask array
-  integer, intent(in), optional :: is_in !< An optional i starting index for subsetting the data being recorded.
-  integer, intent(in), optional :: ie_in !< An optional i end index for subsetting the data being recorded.
-  integer, intent(in), optional :: js_in !< An optional j starting index for subsetting the data being recorded.
-  integer, intent(in), optional :: je_in !< An optional j end index for subsetting the data being recorded.
-  integer, intent(in), optional :: ks_in !< An optional k starting index for subsetting the data being recorded.
-  integer, intent(in), optional :: ke_in !< An optional k end index for subsetting the data being recorded.
-  real, intent(in), optional :: weight !< An optional scalar weight factor to apply to the current record
-                                       !! in the case where data a data reduction in time is being performed.
-  character(len=*), intent(out), optional :: err_msg !< A log indicating the status of the post upon
-                                                     !! returning to the calling routine.
+logical function send_data_infra_2d_r8(diag_field_id, field, is_in, ie_in, js_in, je_in, &
+                                       time, mask, rmask, weight, err_msg)
+  integer,                           intent(in) :: diag_field_id !< The diagnostic manager identifier for this field
+  real(kind=8), dimension(:,:),      intent(in) :: field !< A 2-d array of values being recorded
+  integer,                 optional, intent(in) :: is_in !< The starting i-index for the data being recorded
+  integer,                 optional, intent(in) :: ie_in !< The end i-index for the data being recorded
+  integer,                 optional, intent(in) :: js_in !< The starting j-index for the data being recorded
+  integer,                 optional, intent(in) :: je_in !< The end j-index for the data being recorded
+  type(time_type),         optional, intent(in) :: time  !< The time for the current record
+  logical, dimension(:,:), optional, intent(in) :: mask  !< An optional 2-d logical mask
+  real, dimension(:,:),    optional, intent(in) :: rmask !< An optional 2-d mask array
+  real,                    optional, intent(in) :: weight !< A scalar weight factor to apply to the current
+                                                         !! record if there is averaging in time
+  character(len=*),        optional, intent(out) :: err_msg !< A log indicating the status of the post upon
+                                                         !! returning to the calling routine
 
-  send_data_fms_wrapper_3d_r8 = send_data_fms(diag_field_id, field, time, is_in, js_in, ks_in, mask, rmask, &
+  send_data_infra_2d_r8 = send_data_fms(diag_field_id, field, time, is_in, js_in, mask, &
+                                   rmask, ie_in, je_in, weight, err_msg)
+
+end function send_data_infra_2d_r8
+
+!> Returns true if the argument data are successfully passed to a diagnostic manager
+!!  with the indicated unique reference id, false otherwise.
+logical function send_data_infra_3d_r8(diag_field_id, field, is_in, ie_in, js_in, je_in, ks_in, ke_in, &
+                                    time, mask, rmask, weight, err_msg)
+  integer,                             intent(in) :: diag_field_id !< The diagnostic manager identifier for this field
+  real(kind=8), dimension(:,:,:),      intent(in) :: field !< A rank 1 array of floating point values being recorded
+  integer,                   optional, intent(in) :: is_in !< The starting i-index for the data being recorded
+  integer,                   optional, intent(in) :: ie_in !< The end i-index for the data being recorded
+  integer,                   optional, intent(in) :: js_in !< The starting j-index for the data being recorded
+  integer,                   optional, intent(in) :: je_in !< The end j-index for the data being recorded
+  integer,                   optional, intent(in) :: ks_in !< The starting k-index for the data being recorded
+  integer,                   optional, intent(in) :: ke_in !< The end k-index for the data being recorded
+  type(time_type),           optional, intent(in) :: time  !< The time for the current record
+  logical, dimension(:,:,:), optional, intent(in) :: mask  !< An optional 3-d logical mask
+  real, dimension(:,:,:),    optional, intent(in) :: rmask !< An optional 3-d mask array
+  real,                      optional, intent(in) :: weight !< A scalar weight factor to apply to the current
+                                                           !! record if there is averaging in time
+  character(len=*),          optional, intent(out) :: err_msg !< A log indicating the status of the post upon
+                                                           !! returning to the calling routine
+
+  send_data_infra_3d_r8 = send_data_fms(diag_field_id, field, time, is_in, js_in, ks_in, mask, rmask, &
                                 ie_in, je_in, ke_in, weight, err_msg)
 
-end function send_data_fms_wrapper_3d_r8
+end function send_data_infra_3d_r8
 #endif
 
 !> Add a real scalar attribute to a diagnostic field
 subroutine MOM_diag_field_add_attribute_scalar_r(diag_field_id, att_name, att_value)
-  integer, intent(in) :: diag_field_id !< A unique numeric field id
-  character(len=*), intent(in) :: att_name !< The name of the attribute
-  real, intent(in) :: att_value !< A real scalar value
+  integer,          intent(in) :: diag_field_id !< The diagnostic manager identifier for this field
+  character(len=*), intent(in) :: att_name  !< The name of the attribute
+  real,             intent(in) :: att_value !< A real scalar value
 
   call FMS_diag_field_add_attribute(diag_field_id, att_name, att_value)
 
@@ -394,9 +382,9 @@ end subroutine MOM_diag_field_add_attribute_scalar_r
 
 !> Add an integer attribute to a diagnostic field
 subroutine MOM_diag_field_add_attribute_scalar_i(diag_field_id, att_name, att_value)
-  integer, intent(in) :: diag_field_id !< A unique numeric field id
-  character(len=*), intent(in) :: att_name !< The name of the attribute
-  integer, intent(in) :: att_value !< A real scalar value
+  integer,          intent(in) :: diag_field_id !< The diagnostic manager identifier for this field
+  character(len=*), intent(in) :: att_name  !< The name of the attribute
+  integer,          intent(in) :: att_value !< An integer scalar value
 
   call FMS_diag_field_add_attribute(diag_field_id, att_name, att_value)
 
@@ -404,9 +392,9 @@ end subroutine MOM_diag_field_add_attribute_scalar_i
 
 !> Add a character string attribute to a diagnostic field
 subroutine MOM_diag_field_add_attribute_scalar_c(diag_field_id, att_name, att_value)
-  integer, intent(in) :: diag_field_id !< A unique numeric field id
-  character(len=*), intent(in) :: att_name !< The name of the attribute
-  character(len=*), intent(in) :: att_value !< A real scalar value
+  integer,          intent(in) :: diag_field_id !< The diagnostic manager identifier for this field
+  character(len=*), intent(in) :: att_name  !< The name of the attribute
+  character(len=*), intent(in) :: att_value !< A character string value
 
   call FMS_diag_field_add_attribute(diag_field_id, att_name, att_value)
 
@@ -414,9 +402,9 @@ end subroutine MOM_diag_field_add_attribute_scalar_c
 
 !> Add a real list of attributes attribute to a diagnostic field
 subroutine MOM_diag_field_add_attribute_r1d(diag_field_id, att_name, att_value)
-  integer, intent(in) :: diag_field_id !< A unique numeric field id
-  character(len=*), intent(in) :: att_name !< The name of the attribute
-  real, dimension(:), intent(in) :: att_value !< A real scalar value
+  integer,            intent(in) :: diag_field_id !< The diagnostic manager identifier for this field
+  character(len=*),   intent(in) :: att_name  !< The name of the attribute
+  real, dimension(:), intent(in) :: att_value !< An array of real values
 
   call FMS_diag_field_add_attribute(diag_field_id, att_name, att_value)
 
@@ -424,14 +412,12 @@ end subroutine MOM_diag_field_add_attribute_r1d
 
 !> Add a integer list of attributes attribute to a diagnostic field
 subroutine MOM_diag_field_add_attribute_i1d(diag_field_id, att_name, att_value)
-  integer, intent(in) :: diag_field_id !< A unique numeric field id
-  character(len=*), intent(in) :: att_name !< The name of the attribute
-  integer, dimension(:), intent(in) :: att_value !< A integer list of values
+  integer,               intent(in) :: diag_field_id !< The diagnostic manager identifier for this field
+  character(len=*),      intent(in) :: att_name  !< The name of the attribute
+  integer, dimension(:), intent(in) :: att_value !< An array of integer values
 
   call FMS_diag_field_add_attribute(diag_field_id, att_name, att_value)
 
 end subroutine MOM_diag_field_add_attribute_i1d
-
-
 
 end module MOM_diag_manager_infra
