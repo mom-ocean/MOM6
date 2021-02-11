@@ -41,26 +41,23 @@ contains
 
 !> perform horizontal interpolation of a 2d field using pre-computed weights
 !! source and destination coordinates are 2d
-subroutine horiz_interp_from_weights_field2d(Interp, data_in, data_out, verbose, &
-                                             mask_in, mask_out, missing_value, missing_permit, &
-                                             err_msg, new_missing_handle)
+subroutine horiz_interp_from_weights_field2d(Interp, data_in, data_out, verbose, mask_in, mask_out, &
+                                             missing_value, missing_permit, err_msg)
 
-  type(horiz_interp_type), intent(in) :: Interp           !< type containing interpolation
-                                                          !! options/weights
-  real, intent(in), dimension(:,:) :: data_in             !< input data
-  real, intent(out), dimension(:,:) :: data_out           !< output data
-  integer, intent(in), optional :: verbose                !< verbosity level
-  real, intent(in), dimension(:,:), optional :: mask_in   !< mask for input data
-  real, intent(out), dimension(:,:), optional :: mask_out !< mask for output data
-  real, intent(in), optional :: missing_value             !< missing value
-  integer, intent(in), optional :: missing_permit         !< number of allowed points with missing value
-                                                          !! for interpolation (0-3)
-  character(len=*), intent(out), optional :: err_msg      !< error message
-  logical, intent(in), optional :: new_missing_handle     !< unknown
+  type(horiz_interp_type),        intent(in)  :: Interp   !< type containing interpolation options and weights
+  real, dimension(:,:),           intent(in)  :: data_in  !< input data
+  real, dimension(:,:),           intent(out) :: data_out !< output data
+  integer,              optional, intent(in)  :: verbose  !< verbosity level
+  real, dimension(:,:), optional, intent(in)  :: mask_in  !< mask for input data
+  real, dimension(:,:), optional, intent(out) :: mask_out !< mask for output data
+  real,                 optional, intent(in)  :: missing_value  !< A value indicating missing data
+  integer,              optional, intent(in)  :: missing_permit !< number of allowed points with
+                                                          !! missing value for interpolation (0-3)
+  character(len=*),     optional, intent(out) :: err_msg  !< error message
 
   call horiz_interp(Interp, data_in, data_out, verbose, &
                     mask_in, mask_out, missing_value, missing_permit, &
-                    err_msg, new_missing_handle )
+                    err_msg, new_missing_handle=.true. )
 
 end subroutine horiz_interp_from_weights_field2d
 
@@ -70,17 +67,16 @@ end subroutine horiz_interp_from_weights_field2d
 subroutine horiz_interp_from_weights_field3d(Interp, data_in, data_out, verbose, mask_in, mask_out, &
                                              missing_value, missing_permit, err_msg)
 
-  type(horiz_interp_type), intent(in) :: Interp             !< type containing interpolation
-                                                            !! options/weights
-  real, intent(in), dimension(:,:,:) :: data_in             !< input data
-  real, intent(out), dimension(:,:,:) :: data_out           !< output data
-  integer, intent(in), optional :: verbose                  !< verbosity level
-  real, intent(in), dimension(:,:,:), optional :: mask_in   !< mask for input data
-  real, intent(out), dimension(:,:,:), optional :: mask_out !< mask for output data
-  real, intent(in), optional :: missing_value               !< missing value
-  integer, intent(in), optional :: missing_permit           !< number of allowed points with missing value
-                                                            !! for interpolation (0-3)
-  character(len=*), intent(out), optional :: err_msg        !< error message
+  type(horiz_interp_type),          intent(in)  :: Interp   !< type containing interpolation options and weights
+  real, dimension(:,:,:),           intent(in)  :: data_in  !< input data
+  real, dimension(:,:,:),           intent(out) :: data_out !< output data
+  integer,                optional, intent(in)  :: verbose  !< verbosity level
+  real, dimension(:,:,:), optional, intent(in)  :: mask_in  !< mask for input data
+  real, dimension(:,:,:), optional, intent(out) :: mask_out !< mask for output data
+  real,                   optional, intent(in)  :: missing_value !< A value indicating missing data
+  integer,                optional, intent(in)  :: missing_permit !< number of allowed points with
+                                                            !! missing value for interpolation (0-3)
+  character(len=*),       optional, intent(out) :: err_msg  !< error message
 
   call horiz_interp(Interp, data_in, data_out, verbose, mask_in, mask_out, &
                     missing_value, missing_permit, err_msg)
@@ -95,20 +91,20 @@ subroutine build_horiz_interp_weights_2d_to_2d(Interp, lon_in, lat_in, lon_out, 
                                                src_modulo, mask_in, mask_out, &
                                                is_latlon_in, is_latlon_out)
 
-  type(horiz_interp_type), intent(inout) :: Interp         !< type containing interpolation options/weights
-  real, intent(in), dimension(:,:) :: lon_in               !< input longitude 2d
-  real, intent(in), dimension(:,:) :: lat_in               !< input latitude 2d
-  real, intent(in), dimension(:,:) :: lon_out              !< output longitude 2d
-  real, intent(in), dimension(:,:) :: lat_out              !< output latitude 2d
-  integer, intent(in), optional :: verbose                 !< verbosity level
-  character(len=*), intent(in), optional :: interp_method  !< interpolation method
-  integer, intent(in), optional :: num_nbrs                !< number of nearest neighbors
-  real, intent(in), optional :: max_dist                   !< maximum region of influence
-  logical, intent(in), optional :: src_modulo              !< periodicity of E-W boundary
-  real, intent(in), dimension(:,:), optional :: mask_in    !< mask for input data
-  real, intent(inout),dimension(:,:), optional :: mask_out !< mask for output data
-  logical, intent(in), optional :: is_latlon_in            !< input grid is regular lat/lon grid
-  logical, intent(in), optional :: is_latlon_out           !< output grid is regular lat/lon grid
+  type(horiz_interp_type), intent(inout) :: Interp         !< type containing interpolation options and weights
+  real, dimension(:,:),       intent(in) :: lon_in         !< input longitude 2d
+  real, dimension(:,:),       intent(in) :: lat_in         !< input latitude 2d
+  real, dimension(:,:),       intent(in) :: lon_out        !< output longitude 2d
+  real, dimension(:,:),       intent(in) :: lat_out        !< output latitude 2d
+  integer,          optional, intent(in) :: verbose        !< verbosity level
+  character(len=*), optional, intent(in) :: interp_method  !< interpolation method
+  integer,          optional, intent(in) :: num_nbrs       !< number of nearest neighbors
+  real,             optional, intent(in) :: max_dist       !< maximum region of influence
+  logical,          optional, intent(in) :: src_modulo     !< periodicity of E-W boundary
+  real, dimension(:,:), optional, intent(in) :: mask_in    !< mask for input data
+  real, dimension(:,:), optional, intent(inout) :: mask_out !< mask for output data
+  logical,          optional, intent(in) :: is_latlon_in   !< input grid is regular lat/lon grid
+  logical,          optional, intent(in) :: is_latlon_out  !< output grid is regular lat/lon grid
 
   call horiz_interp_new(Interp, lon_in, lat_in, lon_out, lat_out, &
                         verbose, interp_method, num_nbrs, max_dist, &
@@ -121,7 +117,7 @@ end subroutine build_horiz_interp_weights_2d_to_2d
 !> get size of an external field from field index
 function get_extern_field_size(index)
 
-  integer :: index                     !< field index
+  integer, intent(in) :: index         !< field index
   integer :: get_extern_field_size(4)  !< field size
 
   get_extern_field_size = get_external_field_size(index)
@@ -132,7 +128,7 @@ end function get_extern_field_size
 !> get axes of an external field from field index
 function get_extern_field_axes(index)
 
-  integer :: index                                      !< field index
+  integer, intent(in) :: index          !< field index
   type(axistype), dimension(4) :: get_extern_field_axes !< field axes
 
   get_extern_field_axes = get_external_field_axes(index)
@@ -143,7 +139,7 @@ end function get_extern_field_axes
 !> get missing value of an external field from field index
 function get_extern_field_missing(index)
 
-  integer :: index                 !< field index
+  integer, intent(in) :: index     !< field index
   real :: get_extern_field_missing !< field missing value
 
   get_extern_field_missing = get_external_field_missing(index)

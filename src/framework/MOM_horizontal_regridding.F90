@@ -539,8 +539,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     if (is_ongrid) then
       tr_out(is:ie,js:je)=tr_in(is:ie,js:je)
     else
-      call run_horiz_interp(Interp, tr_inp, tr_out(is:ie,js:je), &
-                            missing_value=missing_value, new_missing_handle=.true.)
+      call run_horiz_interp(Interp, tr_inp, tr_out(is:ie,js:je), missing_value=missing_value)
     endif
 
     mask_out=1.0
@@ -824,8 +823,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
       tr_out(:,:) = 0.0
 
-      call run_horiz_interp(Interp, tr_inp, tr_out(is:ie,js:je), missing_value=missing_value, &
-                            new_missing_handle=.true.)
+      call run_horiz_interp(Interp, tr_inp, tr_out(is:ie,js:je), missing_value=missing_value)
 
       mask_out(:,:) = 1.0
       do j=js,je ; do i=is,ie
