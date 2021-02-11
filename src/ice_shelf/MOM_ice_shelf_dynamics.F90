@@ -925,10 +925,11 @@ end subroutine ice_shelf_advect
   enddo ; enddo
 
   call calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
-  call pass_var(CS%ice_visc, G%domain)
-
+!  call pass_var(CS%ice_visc, G%domain)
+!  call pass_vector(CS%ice_visc, G%domain, TO_ALL, BGRID_NE)  !OVS 02/11/21
   call calc_shelf_taub(CS, ISS, G, US, u_shlf, v_shlf)
   call pass_var(CS%basal_traction, G%domain)
+!  call pass_vector(CS%ice_visc,CS%basal_traction, G%domain, TO_ALL, BGRID_NE) !OVS 02/11/21
 
   ! This makes sure basal stress is only applied when it is supposed to be
   do j=G%jsd,G%jed ; do i=G%isd,G%ied
@@ -1842,10 +1843,6 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
   enddo  
   do j=jsc-1,jec+1
     do i=isc-1,iec+1
-!  do j=G%jsd+1,G%jed-1      !OVS 02/08/21
-!    do i=G%isd+1,G%ied-1    !OVS 02/08/21
-!  do j=jsc-G%domain%njhalo+1,jec+G%domain%njhalo-1     !OVS 02/02/21 
-!   do i=isc-G%domain%nihalo+1,iec+G%domain%nihalo-1    !OVS 02/02/21
       cnt = 0
       sx = 0
       sy = 0
@@ -1856,14 +1853,12 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
 
         ! calculate sx
         if ((i+i_off) == gisc) then ! at left computational bdry
-!        if ((i-i_off) == gisc) then ! at left computational bdry  !OVS 02/02/21
          if (ISS%hmask(i+1,j) == 1) then
             sx = (S(i+1,j)-S(i,j))/dxh
           else
             sx = 0
           endif
         elseif ((i+i_off) == giec) then ! at east computational bdry
-!        elseif ((i-i_off) == giec) then ! at east computational bdry   !OVS 02/02/21
           if (ISS%hmask(i-1,j) == 1) then
             sx = (S(i,j)-S(i-1,j))/dxh
           else
@@ -1893,14 +1888,12 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
 
         ! calculate sy, similarly
         if ((j+j_off) == gjsc) then ! at south computational bdry
-!        if ((j-j_off) == gjsc) then ! at south computational bdry   !OVS 02/02/21
           if (ISS%hmask(i,j+1) == 1) then
             sy = (S(i,j+1)-S(i,j))/dyh
           else
             sy = 0
           endif
         elseif ((j+j_off) == gjec) then ! at nprth computational bdry
-!        elseif ((j-j_off) == gjec) then ! at nprth computational bdry   !OVS 02/02/21
           if (ISS%hmask(i,j-1) == 1) then
             sy = (S(i,j)-S(i,j-1))/dyh
           else
@@ -1928,31 +1921,23 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
 
         ! SW vertex
           if (ISS%hmask(I-1,J-1) == 1)  then
-!             if (CS%u_face_mask(I-1,J-1) /= 3)  then        
                 taudx(I-1,J-1) = taudx(I-1,J-1) - .25 * rho * grav * ISS%h_shelf(i,j) * sx * G%areaT(i,j)
                 taudy(I-1,J-1) = taudy(I-1,J-1) - .25 * rho * grav * ISS%h_shelf(i,j) * sy * G%areaT(i,j)
-!             endif
           endif
         ! SE vertex
           if (ISS%hmask(I,J-1) == 1)  then
-!             if (CS%u_face_mask(I,J-1) /= 3) then        
                 taudx(I,J-1) = taudx(I,J-1) - .25 * rho * grav * ISS%h_shelf(i,j) * sx * G%areaT(i,j)
                 taudy(I,J-1) = taudy(I,J-1) - .25 * rho * grav * ISS%h_shelf(i,j) * sy * G%areaT(i,j)
-!             endif
           endif
         ! NW vertex
         if  (ISS%hmask(I-1,J) == 1)  then        
-!          if (CS%u_face_mask(I-1,J) /= 3) then        
                 taudx(I-1,J) = taudx(I-1,J) - .25 * rho * grav * ISS%h_shelf(i,j) * sx * G%areaT(i,j)
                 taudy(I-1,J) = taudy(I-1,J) - .25 * rho * grav * ISS%h_shelf(i,j) * sy * G%areaT(i,j)
-!          endif
         endif  
         ! NE vertex
         if  (ISS%hmask(I,J) == 1)  then
-!         if (CS%u_face_mask(I,J) /= 3) then        
                 taudx(I,J) = taudx(I,J) - .25 * rho * grav * ISS%h_shelf(i,j) * sx * G%areaT(i,j)
                 taudy(I,J) = taudy(I,J) - .25 * rho * grav * ISS%h_shelf(i,j) * sy * G%areaT(i,j)
-!          endif
         endif
         if (CS%ground_frac(i,j) == 1) then                
 !          neumann_val = .5 * grav * (rho * ISS%h_shelf(i,j)**2 - rhow * G%bathyT(i,j)**2)
@@ -2567,11 +2552,11 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
 ! also this subroutine updates the nonlinear part of the basal traction
 
 ! this may be subject to change later... to make it "hybrid"
-
+  real, dimension(SZDIB_(G),SZDJB_(G)) ::  eII
   integer :: i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq
-  integer :: giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
+  integer :: giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js, i_off, j_off
   real :: Visc_coef, n_g
-  real :: ux, uy, vx, vy, eps_min ! Velocity shears [T-1 ~> s-1]
+  real :: ux, uy, vx, vy, eps_min, dxh, dyh ! Velocity shears [T-1 ~> s-1]
 !  real :: umid, vmid, unorm ! Velocities [L T-1 ~> m s-1]
 
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
@@ -2581,30 +2566,177 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
   gisc = G%domain%nihalo+1 ; gjsc = G%domain%njhalo+1
   giec = G%domain%niglobal+gisc ; gjec = G%domain%njglobal+gjsc
   is = iscq - 1; js = jscq - 1
+    i_off = G%idg_offset ; j_off = G%jdg_offset
 
   n_g = CS%n_glen; eps_min = CS%eps_glen_min
 
+  CS%ice_visc(:,:) = 0.0
+  eII(:,:) = (US%s_to_T**2 * (eps_min**2))
   Visc_coef = US%kg_m2s_to_RZ_T*US%m_to_L*US%Z_to_L*(CS%A_glen_isothermal)**(-1./CS%n_glen) !OVS '-' in the exponent
+    call pass_vector(u_shlf, v_shlf, G%domain, TO_ALL, BGRID_NE)
+!    do j=jsc-1,jec+1
+!    do i=isc-1,iec+1
+!!  do j=jsd+1,jed!-1     OVS 02/01/21
+!!    do i=isd+1,ied!-1   OVS 02/01/21
 
-  do j=jsd+1,jed!-1     OVS 02/01/21
-    do i=isd+1,ied!-1   OVS 02/01/21
-
-      if (ISS%hmask(i,j) == 1) then
-        ux = ((u_shlf(I,J) + u_shlf(I,J-1)) - (u_shlf(I-1,J) + u_shlf(I-1,J-1))) / (2*G%dxT(i,j))
-        vx = ((v_shlf(I,J) + v_shlf(I,J-1)) - (v_shlf(I-1,J) + v_shlf(I-1,J-1))) / (2*G%dxT(i,j))
-        uy = ((u_shlf(I,J) + u_shlf(I-1,J)) - (u_shlf(I,J-1) + u_shlf(I-1,J-1))) / (2*G%dyT(i,j))
-        vy = ((v_shlf(I,J) + v_shlf(I-1,J)) - (v_shlf(I,J-1) + v_shlf(I-1,J-1))) / (2*G%dyT(i,j))
-        CS%ice_visc(i,j) = 0.5 * Visc_coef * (G%areaT(i,j) * ISS%h_shelf(i,j)) * &
-             (US%s_to_T**2 * (ux**2 + vy**2 + ux*vy + 0.25*(uy+vx)**2 + eps_min**2))**((1.-n_g)/(2.*n_g))
-!        CS%ice_visc(i,j) =1e15*(G%areaT(i,j) * ISS%h_shelf(i,j)) !OVS 02/09/21 constvisc
+!      if (ISS%hmask(i,j) == 1) then
+!        ux = ((u_shlf(I,J) + 0*u_shlf(I,J-1)) - (u_shlf(I-1,J) + 0*u_shlf(I-1,J-1))) / (G%dxT(i,j))
+!        vx = ((v_shlf(I,J) + v_shlf(I,J-1)) - (v_shlf(I-1,J) + v_shlf(I-1,J-1))) / (2*G%dxT(i,j))
+!        uy = ((u_shlf(I,J) + u_shlf(I-1,J)) - (u_shlf(I,J-1) + u_shlf(I-1,J-1))) / (2*G%dyT(i,j))
+!        vy = ((v_shlf(I,J) + v_shlf(I-1,J)) - (v_shlf(I,J-1) + v_shlf(I-1,J-1))) / (2*G%dyT(i,j))              
+!!        ux = ((u_shlf(I,J) + u_shlf(I,J-1)) - (u_shlf(I-1,J) + u_shlf(I-1,J-1))) / (2*G%dxT(i,j))
+!!        vx = ((v_shlf(I,J) + v_shlf(I,J-1)) - (v_shlf(I-1,J) + v_shlf(I-1,J-1))) / (2*G%dxT(i,j))
+!!        uy = ((u_shlf(I,J) + u_shlf(I-1,J)) - (u_shlf(I,J-1) + u_shlf(I-1,J-1))) / (2*G%dyT(i,j))
+!!        vy = ((v_shlf(I,J) + v_shlf(I-1,J)) - (v_shlf(I,J-1) + v_shlf(I-1,J-1))) / (2*G%dyT(i,j))
+!        CS%ice_visc(i,j) = 0.5 * Visc_coef * (G%areaT(i,j) * ISS%h_shelf(i,j)) * &
+!             (US%s_to_T**2 * (ux**2 + vy**2 + ux*vy + 0.25*(uy+vx)**2 + eps_min**2))**((1.-n_g)/(2.*n_g))
+!        CS%ice_visc(i,j) =1e15*(G%areaT(i,j) * ISS%h_shelf(i,j)) ! constant viscocity for debugging
 !        umid = ((u_shlf(I,J) + u_shlf(I-1,J-1)) + (u_shlf(I,J-1) + u_shlf(I-1,J))) * 0.25
 !        vmid = ((v_shlf(I,J) + v_shlf(I-1,J-1)) + (v_shlf(I,J-1) + v_shlf(I-1,J))) * 0.25
 !        unorm = sqrt(umid**2 + vmid**2 + eps_min**2*(G%dxT(i,j)**2 + G%dyT(i,j)**2))
 !        CS%basal_traction(i,j) = G%areaT(i,j) * CS%C_basal_friction * (US%L_T_to_m_s*unorm)**(CS%n_basal_fric-1)
-      endif
-    enddo
-  enddo
+!      endif
+!    enddo
+!  enddo
 
+  
+  do j=jsc-1,jec+1
+    do i=isc-1,iec+1
+      cnt = 0
+      ux = 0
+      uy = 0
+      vx = 0 
+      vy = 0
+      dxh = G%dxT(i,j)
+      dyh = G%dyT(i,j)
+
+      if (ISS%hmask(i,j) == 1) then ! we are inside the global computational bdry, at an ice-filled cell
+
+        ! calculate sx
+!        if ((i+i_off) == gisc) then ! at left computational bdry
+!         if (ISS%hmask(i+1,j) == 1) then
+!            ux = (u_shlf(i+1,j)-u_shlf(i,j))/dxh
+!            vx = (v_shlf(i+1,j)-v_shlf(i,j))/dxh
+!          else
+!            ux = 0
+!            vx = 0
+!          endif
+!        elseif ((i+i_off) == giec) then ! at east computational bdry
+!          if (ISS%hmask(i-1,j) == 1) then
+!           ux = (u_shlf(i,j)-u_shlf(i-1,j))/dxh
+!           vx = (v_shlf(i,j)-v_shlf(i-1,j))/dxh
+!          else
+!            ux = 0
+!            vx = 0
+!          endif
+!        else ! interior
+          if (ISS%hmask(i+1,j) == 1) then
+            cnt = cnt+1
+            ux = u_shlf(i+1,j)
+            vx = v_shlf(i+1,j)
+          else
+            ux = u_shlf(i,j)
+            vx = v_shlf(i,j)
+          endif
+          if (ISS%hmask(i-1,j) == 1) then
+            cnt = cnt+1
+            ux = ux - u_shlf(i-1,j)
+            vx = vx - v_shlf(i-1,j)
+          else
+            ux = ux - u_shlf(i,j)
+            vx = vx - v_shlf(i,j)
+          endif
+          if (cnt == 0) then
+            ux = 0
+            vx = 0
+          else
+            ux = ux / (cnt * dxh)
+            vx = vx / (cnt * dxh)
+          endif
+!        endif
+        cnt = 0
+
+        ! calculate sy, similarly
+!        if ((j+j_off) == gjsc) then ! at south computational bdry
+!          if (ISS%hmask(i,j+1) == 1) then
+!            uy = (u_shlf(i,j+1)-u_shlf(i,j))/dyh
+!            vy = (v_shlf(i,j+1)-v_shlf(i,j))/dyh
+!          else
+!            vy = 0
+!          endif
+!        elseif ((j+j_off) == gjec) then ! at nprth computational bdry
+!          if (ISS%hmask(i,j-1) == 1) then
+!            uy = (u_shlf(i,j)-u_shlf(i,j-1))/dyh
+!            vy = (v_shlf(i,j)-v_shlf(i,j-1))/dyh
+!          else
+!            uy = 0
+!            vy = 0
+!          endif
+!        else ! interior
+          if (ISS%hmask(i,j+1) == 1) then
+            cnt = cnt+1
+            uy = u_shlf(i,j+1)
+            vy = v_shlf(i,j+1)
+          else
+            uy = u_shlf(i,j)
+            vy = v_shlf(i,j)
+          endif
+          if (ISS%hmask(i,j-1) == 1) then
+            cnt = cnt+1
+            uy = uy - u_shlf(i,j-1)
+            vy = vy - v_shlf(i,j-1)
+          else
+            uy = uy - u_shlf(i,j)
+            vy = vy - v_shlf(i,j)
+          endif
+          if (cnt == 0) then
+            uy = 0
+            vy = 0
+          else
+            uy = uy / (cnt * dyh)
+            vy = vy / (cnt * dyh)
+          endif
+!        endif
+
+        ! SW vertex
+          if (ISS%hmask(I-1,J-1) == 1)  then
+             eII(i-1,j-1) = eII(i-1,j-1)+.125*(US%s_to_T**2 * (ux**2 + vy**2 + ux*vy + 0.25*(uy+vx)**2 + eps_min**2))
+          endif
+        ! SE vertex
+          if (ISS%hmask(I,J-1) == 1)  then
+             eII(i,j-1) = eII(i,j-1)+.125*(US%s_to_T**2 * (ux**2 + vy**2 + ux*vy + 0.25*(uy+vx)**2 + eps_min**2))
+                  
+!             CS%ice_visc(i,j-1) = CS%ice_visc(i,j-1)+.25*0.5 * Visc_coef * (G%areaT(i,j) * ISS%h_shelf(i,j)) * &
+!                     (US%s_to_T**2 * (ux**2 + vy**2 + ux*vy + 0.25*(uy+vx)**2 + eps_min**2))**((1.-n_g)/(2.*n_g))                  
+          endif
+        ! NW vertex
+        if  (ISS%hmask(I-1,J) == 1)  then       
+             eII(i-1,j) = eII(i-1,j)+.125*(US%s_to_T**2 * (ux**2 + vy**2 + ux*vy + 0.25*(uy+vx)**2 + eps_min**2))
+                
+!             CS%ice_visc(i-1,j) = CS%ice_visc(i-1,j)+.25*0.5 * Visc_coef * (G%areaT(i,j) * ISS%h_shelf(i,j)) * &
+!                     (US%s_to_T**2 * (ux**2 + vy**2 + ux*vy + 0.25*(uy+vx)**2 + eps_min**2))**((1.-n_g)/(2.*n_g))                
+        endif  
+        ! NE vertex
+        if  (ISS%hmask(I,J) == 1)  then
+             eII(i,j) = eII(i,j)+.25*(US%s_to_T**2 * (ux**2 + vy**2 + ux*vy + 0.25*(uy+vx)**2 + eps_min**2))
+                
+!             CS%ice_visc(i,j) = CS%ice_visc(i,j)+.25*0.5 * Visc_coef * (G%areaT(i,j) * ISS%h_shelf(i,j)) * &
+!                     (US%s_to_T**2 * (ux**2 + vy**2 + ux*vy + 0.25*(uy+vx)**2 + eps_min**2))**((1.-n_g)/(2.*n_g))                
+        endif
+          if (ISS%hmask(I+1,J+1) == 1)  then
+             eII(i+1,j+1) = eII(i+1,j+1)+.125*(US%s_to_T**2 * (ux**2 + vy**2 + ux*vy + 0.25*(uy+vx)**2 + eps_min**2))
+          endif        
+          if (ISS%hmask(I,J+1) == 1)  then
+             eII(i,j+1) = eII(i,j+1)+.125*(US%s_to_T**2 * (ux**2 + vy**2 + ux*vy + 0.25*(uy+vx)**2 + eps_min**2))
+          endif          
+          if (ISS%hmask(I+1,J) == 1)  then
+             eII(i+1,j) = eII(i+1,j)+.125*(US%s_to_T**2 * (ux**2 + vy**2 + ux*vy + 0.25*(uy+vx)**2 + eps_min**2))
+          endif          
+     endif  
+        CS%ice_visc(i,j) =0.5 * Visc_coef*(G%areaT(i,j) * ISS%h_shelf(i,j))*eII(i,j)**((1.-n_g)/(2.*n_g))
+!    CS%ice_visc(i,j) =1e15*(G%areaT(i,j) * ISS%h_shelf(i,j)) !constant viscosity for debugging
+    enddo
+   enddo
 end subroutine calc_shelf_visc
 
 subroutine calc_shelf_taub(CS, ISS, G, US, u_shlf, v_shlf)
