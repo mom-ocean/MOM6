@@ -22,7 +22,7 @@ use MOM_error_handler,    only : callTree_showQuery
 use MOM_error_handler,    only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,      only : get_param, param_file_type, log_param
 use MOM_io,               only : vardesc, var_desc, fieldtype, SINGLE_FILE
-use MOM_io,               only : create_file, write_field, close_file
+use MOM_io,               only : create_file, write_field, close_file, file_type
 use MOM_interface_heights,only : find_eta
 use MOM_open_boundary,    only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_open_boundary,    only : OBC_DIRECTION_N, OBC_DIRECTION_S
@@ -1273,7 +1273,7 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
   character(len=240) :: filepath
   type(vardesc)      :: vars(2)
   type(fieldtype)    :: fields(2)
-  integer            :: unit
+  type(file_type)    :: IO_handle ! The I/O handle of the fileset
   real               :: ds(GV%ke), dsi(GV%ke+1)
 
   filepath    = trim(directory) // trim("Vertical_coordinate")
@@ -1287,13 +1287,12 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
   vars(2) = var_desc('ds_interface', getCoordinateUnits( CS%regridCS ), &
                     'Layer Center Coordinate Separation','1','i','1')
 
-  call create_file(unit, trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
-  call write_field(unit, fields(1), ds)
-  call write_field(unit, fields(2), dsi)
-  call close_file(unit)
+  call create_file(IO_handle, trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
+  call write_field(IO_handle, fields(1), ds)
+  call write_field(IO_handle, fields(2), dsi)
+  call close_file(IO_handle)
 
 end subroutine ALE_writeCoordinateFile
-
 
 !> Set h to coordinate values for fixed coordinate systems
 subroutine ALE_initThicknessToCoord( CS, G, GV, h )

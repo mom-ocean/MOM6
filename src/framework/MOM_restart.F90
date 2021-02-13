@@ -8,11 +8,11 @@ use MOM_domains, only : PE_here, num_PEs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : create_file, fieldtype, file_exists, open_file, close_file
+use MOM_io, only : create_file, file_type, fieldtype, file_exists, open_file, close_file
 use MOM_io, only : MOM_read_data, read_data, MOM_write_field, read_field_chksum
 use MOM_io, only : get_file_info, get_file_fields, get_field_atts, get_file_times
 use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc, get_filename_appendix
-use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
+use MOM_io, only : MULTIPLE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
 use MOM_string_functions, only : lowercase
 use MOM_time_manager,  only : time_type, time_type_to_real, real_to_time
@@ -874,7 +874,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
                                         ! this should be 2 Gb or less.
   integer :: start_var, next_var        ! The starting variables of the
                                         ! current and next files.
-  integer :: unit                       ! The I/O unit of the open file.
+  type(file_type) :: IO_handle          ! The I/O handle of the open fileset
   integer :: m, nz, num_files, var_periods
   integer :: seconds, days, year, month, hour, minute
   character(len=8) :: hor_grid, z_grid, t_grid ! Variable grid info.
@@ -1020,33 +1020,31 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
     enddo
 
     if (CS%parallel_restartfiles) then
-      call create_file(unit, trim(restartpath), vars, (next_var-start_var), &
+      call create_file(IO_handle, trim(restartpath), vars, (next_var-start_var), &
                        fields, MULTIPLE, G=G, GV=GV, checksums=check_val)
     else
-      call create_file(unit, trim(restartpath), vars, (next_var-start_var), &
+      call create_file(IO_handle, trim(restartpath), vars, (next_var-start_var), &
                        fields, SINGLE_FILE, G=G, GV=GV, checksums=check_val)
     endif
 
     do m=start_var,next_var-1
       if (associated(CS%var_ptr3d(m)%p)) then
-        call MOM_write_field(unit,fields(m-start_var+1), G%Domain, &
+        call MOM_write_field(IO_handle, fields(m-start_var+1), G%Domain, &
                          CS%var_ptr3d(m)%p, restart_time, turns=-turns)
       elseif (associated(CS%var_ptr2d(m)%p)) then
-        call MOM_write_field(unit,fields(m-start_var+1), G%Domain, &
+        call MOM_write_field(IO_handle, fields(m-start_var+1), G%Domain, &
                          CS%var_ptr2d(m)%p, restart_time, turns=-turns)
       elseif (associated(CS%var_ptr4d(m)%p)) then
-        call MOM_write_field(unit,fields(m-start_var+1), G%Domain, &
+        call MOM_write_field(IO_handle, fields(m-start_var+1), G%Domain, &
                          CS%var_ptr4d(m)%p, restart_time, turns=-turns)
       elseif (associated(CS%var_ptr1d(m)%p)) then
-        call MOM_write_field(unit, fields(m-start_var+1), CS%var_ptr1d(m)%p, &
-                         restart_time)
+        call MOM_write_field(IO_handle, fields(m-start_var+1), CS%var_ptr1d(m)%p, restart_time)
       elseif (associated(CS%var_ptr0d(m)%p)) then
-        call MOM_write_field(unit, fields(m-start_var+1), CS%var_ptr0d(m)%p, &
-                         restart_time)
+        call MOM_write_field(IO_handle, fields(m-start_var+1), CS%var_ptr0d(m)%p, restart_time)
       endif
     enddo
 
-    call close_file(unit)
+    call close_file(IO_handle)
 
     num_files = num_files+1
 
@@ -1086,7 +1084,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer :: sizes(7)
   integer :: nvar, ntime, pos
 
-  integer :: unit(CS%max_fields) ! The I/O units of all open files.
+  type(file_type) :: IO_handles(CS%max_fields) ! The I/O units of all open files.
   character(len=200) :: unit_path(CS%max_fields) ! The file names.
   logical :: unit_is_global(CS%max_fields) ! True if the file is global.
 
@@ -1104,10 +1102,10 @@ subroutine restore_state(filename, directory, day, G, CS)
 
 ! Get NetCDF ids for all of the restart files.
   if ((LEN_TRIM(filename) == 1) .and. (filename(1:1) == 'F')) then
-    num_file = open_restart_units('r', directory, G, CS, units=unit, &
+    num_file = open_restart_units('r', directory, G, CS, IO_handles=IO_handles, &
                      file_paths=unit_path, global_files=unit_is_global)
   else
-    num_file = open_restart_units(filename, directory, G, CS, units=unit, &
+    num_file = open_restart_units(filename, directory, G, CS, IO_handles=IO_handles, &
                      file_paths=unit_path, global_files=unit_is_global)
   endif
 
@@ -1119,7 +1117,7 @@ subroutine restore_state(filename, directory, day, G, CS)
 
 ! Get the time from the first file in the list that has one.
   do n=1,num_file
-    call get_file_times(unit(n), time_vals, ntime)
+    call get_file_times(IO_handles(n), time_vals, ntime)
     if (ntime < 1) cycle
 
     t1 = time_vals(1)
@@ -1136,7 +1134,7 @@ subroutine restore_state(filename, directory, day, G, CS)
 ! if they differ from the first time.
   if (is_root_pe()) then
     do m = n+1,num_file
-      call get_file_times(unit(n), time_vals, ntime)
+      call get_file_times(IO_handles(n), time_vals, ntime)
       if (ntime < 1) cycle
 
       t2 = time_vals(1)
@@ -1153,10 +1151,10 @@ subroutine restore_state(filename, directory, day, G, CS)
 
 ! Read each variable from the first file in which it is found.
   do n=1,num_file
-    call get_file_info(unit(n), nvar=nvar)
+    call get_file_info(IO_handles(n), nvar=nvar)
 
     allocate(fields(nvar))
-    call get_file_fields(unit(n), fields(1:nvar))
+    call get_file_fields(IO_handles(n), fields(1:nvar))
 
     do m=1, nvar
       call get_field_atts(fields(m), name=varname)
@@ -1262,7 +1260,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   enddo
 
   do n=1,num_file
-    call close_file(unit(n))
+    call close_file(IO_handles(n))
   enddo
 
 ! Check whether any mandatory fields have not been found.
@@ -1355,7 +1353,7 @@ end function is_new_run
 
 !> open_restart_units determines the number of existing restart files and optionally opens
 !! them and returns unit ids, paths and whether the files are global or spatially decomposed.
-function open_restart_units(filename, directory, G, CS, units, file_paths, &
+function open_restart_units(filename, directory, G, CS, IO_handles, file_paths, &
                             global_files) result(num_files)
   character(len=*),      intent(in)  :: filename  !< The list of restart file names or a single
                                                   !! character 'r' to read automatically named files.
@@ -1363,8 +1361,8 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
   type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
   type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
                                                   !! call to restart_init.
-  integer, dimension(:), &
-               optional, intent(out) :: units     !< The I/O units of all opened files.
+  type(file_type), dimension(:), &
+               optional, intent(out) :: IO_handles !< The I/O handles of all opened files.
   character(len=*), dimension(:), &
                optional, intent(out) :: file_paths   !< The full paths to open files.
   logical, dimension(:), &
@@ -1444,22 +1442,22 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
         num_restart = num_restart + 1
         inquire(file=filepath, exist=fexists)
         if (fexists) then
-          if (present(units)) &
-            call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
+          if (present(IO_handles)) &
+            call open_file(IO_handles(n), trim(filepath), READONLY_FILE, &
                            threading=MULTIPLE, fileset=SINGLE_FILE)
           if (present(global_files)) global_files(n) = .true.
         elseif (CS%parallel_restartfiles) then
           ! Look for decomposed files using the I/O Layout.
           fexists = file_exists(filepath, G%Domain)
-          if (fexists .and. (present(units))) &
-            call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, MOM_domain=G%Domain)
+          if (fexists .and. (present(IO_handles))) &
+            call open_file(IO_handles(n), trim(filepath), READONLY_FILE, MOM_domain=G%Domain)
           if (fexists .and. present(global_files)) global_files(n) = .false.
         endif
 
         if (fexists) then
           if (present(file_paths)) file_paths(n) = filepath
           n = n + 1
-          if (is_root_pe() .and. (present(units))) &
+          if (is_root_pe() .and. (present(IO_handles))) &
             call MOM_error(NOTE, "MOM_restart: MOM run restarted using : "//trim(filepath))
         else
           err = 1 ; exit
@@ -1472,16 +1470,16 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
 
       inquire(file=filepath, exist=fexists)
       if (fexists) then
-        if (present(units)) &
-          call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
+        if (present(IO_handles)) &
+          call open_file(IO_handles(n), trim(filepath), READONLY_FILE, &
                        threading=MULTIPLE, fileset=SINGLE_FILE)
         if (present(global_files)) global_files(n) = .true.
         if (present(file_paths)) file_paths(n) = filepath
         n = n + 1
-        if (is_root_pe() .and. (present(units))) &
+        if (is_root_pe() .and. (present(IO_handles))) &
           call MOM_error(NOTE,"MOM_restart: MOM run restarted using : "//trim(filepath))
       else
-        if (present(units)) &
+        if (present(IO_handles)) &
           call MOM_error(WARNING,"MOM_restart: Unable to find restart file : "//trim(filepath))
       endif
 

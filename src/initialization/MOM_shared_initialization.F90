@@ -11,9 +11,9 @@ use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, log_param, param_file_type, log_version
-use MOM_io, only : close_file, create_file, fieldtype, file_exists, field_size, stdout
-use MOM_io, only : MOM_read_data, MOM_read_vector, read_variable, SINGLE_FILE, MULTIPLE
-use MOM_io, only : open_file_to_read, close_file_to_read
+use MOM_io, only : close_file, create_file, file_type, fieldtype, file_exists, field_size
+use MOM_io, only : MOM_read_data, MOM_read_vector, read_variable, stdout
+use MOM_io, only : open_file_to_read, close_file_to_read, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, MOM_write_field, var_desc
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
@@ -1189,10 +1189,10 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   integer, parameter :: nFlds=23
   type(vardesc) :: vars(nFlds)
   type(fieldtype) :: fields(nFlds)
-  real :: Z_to_m_scale ! A unit conversion factor from Z to m.
-  real :: s_to_T_scale ! A unit conversion factor from T-1 to s-1.
-  real :: L_to_m_scale ! A unit conversion factor from L to m.
-  integer :: unit
+  real :: Z_to_m_scale ! A unit conversion factor from Z to m
+  real :: s_to_T_scale ! A unit conversion factor from T-1 to s-1
+  real :: L_to_m_scale ! A unit conversion factor from L to m
+  type(file_type) :: IO_handle ! The I/O handle of the fileset
   integer :: file_threading
   integer :: nFlds_used
   logical :: multiple_files
@@ -1255,40 +1255,40 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   file_threading = SINGLE_FILE
   if (multiple_files) file_threading = MULTIPLE
 
-  call create_file(unit, trim(filepath), vars, nFlds_used, fields, file_threading, dG=G)
+  call create_file(IO_handle, trim(filepath), vars, nFlds_used, fields, file_threading, dG=G)
 
-  call MOM_write_field(unit, fields(1), G%Domain, G%geoLatBu)
-  call MOM_write_field(unit, fields(2), G%Domain, G%geoLonBu)
-  call MOM_write_field(unit, fields(3), G%Domain, G%geoLatT)
-  call MOM_write_field(unit, fields(4), G%Domain, G%geoLonT)
+  call MOM_write_field(IO_handle, fields(1), G%Domain, G%geoLatBu)
+  call MOM_write_field(IO_handle, fields(2), G%Domain, G%geoLonBu)
+  call MOM_write_field(IO_handle, fields(3), G%Domain, G%geoLatT)
+  call MOM_write_field(IO_handle, fields(4), G%Domain, G%geoLonT)
 
-  call MOM_write_field(unit, fields(5), G%Domain, G%bathyT, scale=Z_to_m_scale)
-  call MOM_write_field(unit, fields(6), G%Domain, G%CoriolisBu, scale=s_to_T_scale)
+  call MOM_write_field(IO_handle, fields(5), G%Domain, G%bathyT, scale=Z_to_m_scale)
+  call MOM_write_field(IO_handle, fields(6), G%Domain, G%CoriolisBu, scale=s_to_T_scale)
 
-  call MOM_write_field(unit, fields(7),  G%Domain, G%dxCv, scale=L_to_m_scale)
-  call MOM_write_field(unit, fields(8),  G%Domain, G%dyCu, scale=L_to_m_scale)
-  call MOM_write_field(unit, fields(9),  G%Domain, G%dxCu, scale=L_to_m_scale)
-  call MOM_write_field(unit, fields(10), G%Domain, G%dyCv, scale=L_to_m_scale)
-  call MOM_write_field(unit, fields(11), G%Domain, G%dxT, scale=L_to_m_scale)
-  call MOM_write_field(unit, fields(12), G%Domain, G%dyT, scale=L_to_m_scale)
-  call MOM_write_field(unit, fields(13), G%Domain, G%dxBu, scale=L_to_m_scale)
-  call MOM_write_field(unit, fields(14), G%Domain, G%dyBu, scale=L_to_m_scale)
+  call MOM_write_field(IO_handle, fields(7),  G%Domain, G%dxCv, scale=L_to_m_scale)
+  call MOM_write_field(IO_handle, fields(8),  G%Domain, G%dyCu, scale=L_to_m_scale)
+  call MOM_write_field(IO_handle, fields(9),  G%Domain, G%dxCu, scale=L_to_m_scale)
+  call MOM_write_field(IO_handle, fields(10), G%Domain, G%dyCv, scale=L_to_m_scale)
+  call MOM_write_field(IO_handle, fields(11), G%Domain, G%dxT, scale=L_to_m_scale)
+  call MOM_write_field(IO_handle, fields(12), G%Domain, G%dyT, scale=L_to_m_scale)
+  call MOM_write_field(IO_handle, fields(13), G%Domain, G%dxBu, scale=L_to_m_scale)
+  call MOM_write_field(IO_handle, fields(14), G%Domain, G%dyBu, scale=L_to_m_scale)
 
-  call MOM_write_field(unit, fields(15), G%Domain, G%areaT, scale=L_to_m_scale**2)
-  call MOM_write_field(unit, fields(16), G%Domain, G%areaBu, scale=L_to_m_scale**2)
+  call MOM_write_field(IO_handle, fields(15), G%Domain, G%areaT, scale=L_to_m_scale**2)
+  call MOM_write_field(IO_handle, fields(16), G%Domain, G%areaBu, scale=L_to_m_scale**2)
 
-  call MOM_write_field(unit, fields(17), G%Domain, G%dx_Cv, scale=L_to_m_scale)
-  call MOM_write_field(unit, fields(18), G%Domain, G%dy_Cu, scale=L_to_m_scale)
-  call MOM_write_field(unit, fields(19), G%Domain, G%mask2dT)
+  call MOM_write_field(IO_handle, fields(17), G%Domain, G%dx_Cv, scale=L_to_m_scale)
+  call MOM_write_field(IO_handle, fields(18), G%Domain, G%dy_Cu, scale=L_to_m_scale)
+  call MOM_write_field(IO_handle, fields(19), G%Domain, G%mask2dT)
 
   if (G%bathymetry_at_vel) then
-    call MOM_write_field(unit, fields(20), G%Domain, G%Dblock_u, scale=Z_to_m_scale)
-    call MOM_write_field(unit, fields(21), G%Domain, G%Dopen_u, scale=Z_to_m_scale)
-    call MOM_write_field(unit, fields(22), G%Domain, G%Dblock_v, scale=Z_to_m_scale)
-    call MOM_write_field(unit, fields(23), G%Domain, G%Dopen_v, scale=Z_to_m_scale)
+    call MOM_write_field(IO_handle, fields(20), G%Domain, G%Dblock_u, scale=Z_to_m_scale)
+    call MOM_write_field(IO_handle, fields(21), G%Domain, G%Dopen_u, scale=Z_to_m_scale)
+    call MOM_write_field(IO_handle, fields(22), G%Domain, G%Dblock_v, scale=Z_to_m_scale)
+    call MOM_write_field(IO_handle, fields(23), G%Domain, G%Dopen_v, scale=Z_to_m_scale)
   endif
 
-  call close_file(unit)
+  call close_file(IO_handle)
 
   call callTree_leave('write_ocean_geometry_file()')
 end subroutine write_ocean_geometry_file

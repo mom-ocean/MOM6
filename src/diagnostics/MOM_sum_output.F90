@@ -12,9 +12,9 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
-use MOM_io, only : create_file, fieldtype, flush_file, open_ASCII_file, reopen_file, stdout
+use MOM_io, only : create_file, file_type, fieldtype, flush_file, reopen_file
 use MOM_io, only : file_exists, slasher, vardesc, var_desc, write_field, get_filename_appendix
-use MOM_io, only : field_size, read_variable, read_attribute
+use MOM_io, only : field_size, read_variable, read_attribute, open_ASCII_file, stdout
 use MOM_io, only : APPEND_FILE, SINGLE_FILE, WRITEONLY_FILE
 use MOM_open_boundary, only : ocean_OBC_type, OBC_segment_type
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
@@ -122,7 +122,7 @@ type, public :: sum_output_CS ; private
                                 !! to stdout when the energy files are written.
   integer :: previous_calls = 0 !< The number of times write_energy has been called.
   integer :: prev_n = 0         !< The value of n from the last call.
-  integer :: fileenergy_nc      !< NetCDF id of the energy file.
+  type(file_type) :: fileenergy_nc !< The file handle for the netCDF version of the energy file.
   integer :: fileenergy_ascii   !< The unit number of the ascii version of the energy file.
   type(fieldtype), dimension(NUM_FIELDS+MAX_FIELDS_) :: &
              fields             !< fieldtype variables for the output fields.

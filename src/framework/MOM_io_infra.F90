@@ -18,16 +18,16 @@ use mpp_io_mod,           only : mpp_get_fields, fieldtype
 use mpp_io_mod,           only : mpp_get_info, mpp_get_times
 use mpp_io_mod,           only : mpp_io_init
 ! These are encoding constants.
-use mpp_io_mod,           only : APPEND_FILE=>MPP_APPEND, ASCII_FILE=>MPP_ASCII
-use mpp_io_mod,           only : MULTIPLE=>MPP_MULTI, NETCDF_FILE=>MPP_NETCDF
+use mpp_io_mod,           only : APPEND_FILE=>MPP_APPEND, WRITEONLY_FILE=>MPP_WRONLY
 use mpp_io_mod,           only : OVERWRITE_FILE=>MPP_OVERWR, READONLY_FILE=>MPP_RDONLY
-use mpp_io_mod,           only : SINGLE_FILE=>MPP_SINGLE, WRITEONLY_FILE=>MPP_WRONLY
+use mpp_io_mod,           only : NETCDF_FILE=>MPP_NETCDF, ASCII_FILE=>MPP_ASCII
+use mpp_io_mod,           only : MULTIPLE=>MPP_MULTI, SINGLE_FILE=>MPP_SINGLE
 use iso_fortran_env,      only : int64
 
 implicit none ; private
 
 ! These interfaces are actually implemented or have explicit interfaces in this file.
-public :: open_file, open_ASCII_file, close_file, flush_file, file_exists
+public :: open_file, open_ASCII_file, file_is_open, close_file, flush_file, file_exists
 public :: get_file_info, get_file_fields, get_file_times, get_filename_suffix
 public :: MOM_read_data, MOM_read_vector, write_metadata, write_field
 public :: field_exists, get_field_atts, get_field_size, get_axis_data, read_field_chksum
@@ -36,8 +36,8 @@ public :: io_infra_init, io_infra_end, MOM_namelist_file, check_namelist_error, 
 ! information about fields and axes, respectively, and are opaque to this module.
 public :: fieldtype, axistype
 ! These are encoding constant parmeters.
-public :: APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
-public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
+public :: ASCII_FILE, NETCDF_FILE, SINGLE_FILE, MULTIPLE
+public :: APPEND_FILE, READONLY_FILE, OVERWRITE_FILE, WRITEONLY_FILE
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
 
 !> Indicate whether a file exists, perhaps with domain decomposition
@@ -45,6 +45,11 @@ interface file_exists
   module procedure FMS_file_exists
   module procedure MOM_file_exists
 end interface
+
+!> Open a file (or fileset) for parallel or single-file I/).
+interface open_file
+  module procedure open_file_type, open_file_unit
+end interface open_file
 
 !> Read a data field from a file
 interface MOM_read_data
@@ -76,6 +81,25 @@ interface write_metadata
   module procedure write_metadata_axis, write_metadata_field
 end interface write_metadata
 
+!> Close a file (or fileset).  If the file handle does not point to an open file,
+!! close_file simply returns without doing anything.
+interface close_file
+  module procedure close_file_type, close_file_unit
+end interface close_file
+
+!> Ensure that the output stream associated with a file handle is fully sent to disk
+interface flush_file
+  module procedure flush_file_type, flush_file_unit
+end interface flush_file
+
+!> Type for holding a handle to an open file and related information
+type, public :: file_type ; private
+  integer :: unit = -1 !< The framework identfier or netCDF unit number of an output file
+  character(len=:), allocatable :: filename !< The path to this file, if it is open
+  logical :: open_to_read  = .false. !< If true, this file or fileset can be read
+  logical :: open_to_write = .false. !< If true, this file or fileset can be written to
+end type file_type
+
 contains
 
 !> Reads the checksum value for a field that was recorded in a file, along with a flag indicating
@@ -98,47 +122,67 @@ subroutine read_field_chksum(field, chksum, valid_chksum)
 end subroutine read_field_chksum
 
 !> Returns true if the named file or its domain-decomposed variant exists.
-function MOM_file_exists(filename, MOM_Domain)
+logical function MOM_file_exists(filename, MOM_Domain)
   character(len=*),       intent(in) :: filename   !< The name of the file being inquired about
   type(MOM_domain_type),  intent(in) :: MOM_Domain !< The MOM_Domain that describes the decomposition
 
 ! This function uses the fms_io function file_exist to determine whether
 ! a named file (or its decomposed variant) exists.
 
-  logical :: MOM_file_exists
-
   MOM_file_exists = file_exist(filename, MOM_Domain%mpp_domain)
 
 end function MOM_file_exists
 
 !> Returns true if the named file or its domain-decomposed variant exists.
-function FMS_file_exists(filename, domain, no_domain)
+logical function FMS_file_exists(filename, domain, no_domain)
   character(len=*),         intent(in) :: filename  !< The name of the file being inquired about
   type(domain2d), optional, intent(in) :: domain    !< The mpp domain2d that describes the decomposition
   logical,        optional, intent(in) :: no_domain !< This file does not use domain decomposition
 ! This function uses the fms_io function file_exist to determine whether
 ! a named file (or its decomposed variant) exists.
 
-  logical :: FMS_file_exists
-
   FMS_file_exists = file_exist(filename, domain, no_domain)
 
 end function FMS_file_exists
 
-!> close_file closes a file (or fileset).  If the file handle does not point to an open file,
-!! close_file simply returns without doing anything.
-subroutine close_file(unit)
+!> indicates whether an I/O handle is attached to an open file
+logical function file_is_open(IO_handle)
+  type(file_type), intent(in) :: IO_handle !< Handle to a file to inquire about
+
+  file_is_open = (IO_handle%unit >= 0)
+end function file_is_open
+
+!> closes a file (or fileset).  If the file handle does not point to an open file,
+!! close_file_type simply returns without doing anything.
+subroutine close_file_type(IO_handle)
+  type(file_type), intent(inout) :: IO_handle   !< The I/O handle for the file to be closed
+
+  call mpp_close(IO_handle%unit)
+  if (allocated(IO_handle%filename)) deallocate(IO_handle%filename)
+  IO_handle%open_to_read = .false. ; IO_handle%open_to_write = .false.
+end subroutine close_file_type
+
+!> closes a file.  If the unit does not point to an open file,
+!! close_file_unit simply returns without doing anything.
+subroutine close_file_unit(unit)
   integer, intent(inout) :: unit   !< The I/O unit for the file to be closed
 
   call mpp_close(unit)
-end subroutine close_file
+end subroutine close_file_unit
 
-!> Ensure that the output stream associated with a unit is fully sent to dis.
-subroutine flush_file(unit)
-  integer,                  intent(in) :: unit    !< The I/O unit for the file to flush
+!> Ensure that the output stream associated with a file handle is fully sent to disk.
+subroutine flush_file_type(file)
+  type(file_type), intent(in) :: file    !< The I/O handle for the file to flush
+
+  call mpp_flush(file%unit)
+end subroutine flush_file_type
+
+!> Ensure that the output stream associated with a unit is fully sent to disk.
+subroutine flush_file_unit(unit)
+  integer, intent(in) :: unit    !< The I/O unit for the file to flush
 
   call mpp_flush(unit)
-end subroutine flush_file
+end subroutine flush_file_unit
 
 !> Initialize the underlying I/O infrastructure
 subroutine io_infra_init(maxunits)
@@ -178,9 +222,9 @@ subroutine write_version(version, tag, unit)
 end subroutine write_version
 
 !> open_file opens a file for parallel or single-file I/O.
-subroutine open_file(unit, file, action, form, threading, fileset, nohdrs, domain, MOM_domain)
+subroutine open_file_unit(unit, filename, action, form, threading, fileset, nohdrs, domain, MOM_domain)
   integer,                  intent(out) :: unit   !< The I/O unit for the opened file
-  character(len=*),         intent(in)  :: file   !< The name of the file being opened
+  character(len=*),         intent(in)  :: filename !< The name of the file being opened
   integer,        optional, intent(in)  :: action !< A flag indicating whether the file can be read
                                                   !! or written to and how to handle existing files.
   integer,        optional, intent(in)  :: form   !< A flag indicating the format of a new file.  The
@@ -197,15 +241,51 @@ subroutine open_file(unit, file, action, form, threading, fileset, nohdrs, domai
   type(MOM_domain_type), optional, intent(in) :: MOM_Domain !< A MOM_Domain that describes the decomposition
 
   if (present(MOM_Domain)) then
-    call mpp_open(unit, file, action=action, form=form, threading=threading, fileset=fileset, &
+    call mpp_open(unit, filename, action=action, form=form, threading=threading, fileset=fileset, &
                   nohdrs=nohdrs, domain=MOM_Domain%mpp_domain)
   else
-    call mpp_open(unit, file, action=action, form=form, threading=threading, fileset=fileset, &
+    call mpp_open(unit, filename, action=action, form=form, threading=threading, fileset=fileset, &
                   nohdrs=nohdrs, domain=domain)
   endif
-end subroutine open_file
+end subroutine open_file_unit
 
-!> open_file opens an ascii file for parallel or single-file I/O.
+!> open_file opens a file for parallel or single-file I/O.
+subroutine open_file_type(IO_handle, filename, action, MOM_domain, threading, fileset)
+  type(file_type),          intent(inout) :: IO_handle !< The handle for the opened file
+  character(len=*),         intent(in)    :: filename !< The path name of the file being opened
+  integer,        optional, intent(in)    :: action !< A flag indicating whether the file can be read
+                                                    !! or written to and how to handle existing files.
+                                                    !! The default is WRITE_ONLY.
+  type(MOM_domain_type), &
+                  optional, intent(in)    :: MOM_Domain !< A MOM_Domain that describes the decomposition
+  integer,        optional, intent(in)    :: threading !< A flag indicating whether one (SINGLE_FILE)
+                                                    !! or multiple PEs (MULTIPLE) participate in I/O.
+                                                    !! With the default, the root PE does I/O.
+  integer,        optional, intent(in)    :: fileset !< A flag indicating whether multiple PEs doing I/O due
+                                                    !! to threading=MULTIPLE write to the same file (SINGLE_FILE)
+                                                    !! or to one file per PE (MULTIPLE, the default).
+
+  if (present(MOM_Domain)) then
+    call mpp_open(IO_handle%unit, filename, action=action, form=NETCDF_FILE, threading=threading, &
+                  fileset=fileset, domain=MOM_Domain%mpp_domain)
+  else
+    call mpp_open(IO_handle%unit, filename, action=action, form=NETCDF_FILE, threading=threading, &
+                  fileset=fileset)
+  endif
+  IO_handle%filename = trim(filename)
+  if (present(action)) then
+    if (action == READONLY_FILE) then
+      IO_handle%open_to_read = .true. ; IO_handle%open_to_write = .false.
+    else
+      IO_handle%open_to_read = .false. ; IO_handle%open_to_write = .true.
+    endif
+  else
+    IO_handle%open_to_read = .false. ; IO_handle%open_to_write = .true.
+  endif
+
+end subroutine open_file_type
+
+!> open_file opens an ascii file for parallel or single-file I/O using Fortran read and write calls.
 subroutine open_ASCII_file(unit, file, action, threading, fileset)
   integer,                  intent(out) :: unit   !< The I/O unit for the opened file
   character(len=*),         intent(in)  :: file   !< The name of the file being opened
@@ -234,8 +314,8 @@ end subroutine get_filename_suffix
 
 !> Get information about the number of dimensions, variables, global attributes and time levels
 !! in the file associated with an open file unit
-subroutine get_file_info(unit, ndim, nvar, natt, ntime)
-  integer,            intent(in)  :: unit  !< The I/O unit for the open file
+subroutine get_file_info(IO_handle, ndim, nvar, natt, ntime)
+  type(file_type),    intent(in)  :: IO_handle !< Handle for a file that is open for I/O
   integer,  optional, intent(out) :: ndim  !< The number of dimensions in the file
   integer,  optional, intent(out) :: nvar  !< The number of variables in the file
   integer,  optional, intent(out) :: natt  !< The number of global attributes in the file
@@ -244,7 +324,7 @@ subroutine get_file_info(unit, ndim, nvar, natt, ntime)
   ! Local variables
   integer :: ndims, nvars, natts, ntimes
 
-  call mpp_get_info( unit, ndims, nvars, natts, ntimes )
+  call mpp_get_info(IO_handle%unit, ndims, nvars, natts, ntimes )
 
   if (present(ndim)) ndim = ndims
   if (present(nvar)) nvar = nvars
@@ -256,29 +336,29 @@ end subroutine get_file_info
 
 !> Get the times of records from a file
  !### Modify this to also convert to time_type, using information about the dimensions?
-subroutine get_file_times(unit, time_values, ntime)
-  integer,                         intent(in)    :: unit  !< The I/O unit for the open file
+subroutine get_file_times(IO_handle, time_values, ntime)
+  type(file_type),                 intent(in)    :: IO_handle !< Handle for a file that is open for I/O
   real, allocatable, dimension(:), intent(inout) :: time_values !< The real times for the records in file.
   integer,               optional, intent(out)   :: ntime !< The number of time levels in the file
 
   integer :: ntimes
 
   if (allocated(time_values)) deallocate(time_values)
-  call get_file_info(unit, ntime=ntimes)
+  call get_file_info(IO_handle, ntime=ntimes)
   if (present(ntime)) ntime = ntimes
   if (ntimes > 0) then
     allocate(time_values(ntimes))
-    call mpp_get_times(unit, time_values)
+    call mpp_get_times(IO_handle%unit, time_values)
   endif
 end subroutine get_file_times
 
 !> Set up the field information (e.g., names and metadata) for all of the variables in a file.  The
 !! argument fields must be allocated with a size that matches the number of variables in a file.
-subroutine get_file_fields(unit, fields)
-  integer,                       intent(in)    :: unit   !< The I/O unit for the open file
+subroutine get_file_fields(IO_handle, fields)
+  type(file_type),               intent(in)    :: IO_handle !< Handle for a file that is open for I/O
   type(fieldtype), dimension(:), intent(inout) :: fields !< Field-type descriptions of all of
                                                          !! the variables in a file.
-  call mpp_get_fields(unit, fields)
+  call mpp_get_fields(IO_handle%unit, fields)
 end subroutine get_file_fields
 
 !> Extract information from a field type, as stored or as found in a file
@@ -598,8 +678,8 @@ end subroutine MOM_read_vector_3d
 
 
 !> Write a 4d field to an output file.
-subroutine write_field_4d(io_unit, field_md, MOM_domain, field, tstamp, tile_count, fill_value)
-  integer,                  intent(in)    :: io_unit    !< File I/O unit handle
+subroutine write_field_4d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, fill_value)
+  type(file_type),          intent(in)    :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),          intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),    intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
   real, dimension(:,:,:,:), intent(inout) :: field      !< Field to write
@@ -607,13 +687,13 @@ subroutine write_field_4d(io_unit, field_md, MOM_domain, field, tstamp, tile_cou
   integer,        optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
   real,           optional, intent(in)    :: fill_value !< Missing data fill value
 
-  call mpp_write(io_unit, field_md, MOM_domain%mpp_domain, field, tstamp=tstamp, &
+  call mpp_write(IO_handle%unit, field_md, MOM_domain%mpp_domain, field, tstamp=tstamp, &
                  tile_count=tile_count, default_data=fill_value)
 end subroutine write_field_4d
 
 !> Write a 3d field to an output file.
-subroutine write_field_3d(io_unit, field_md, MOM_domain, field, tstamp, tile_count, fill_value)
-  integer,                intent(in)    :: io_unit    !< File I/O unit handle
+subroutine write_field_3d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, fill_value)
+  type(file_type),        intent(in)    :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
   real, dimension(:,:,:), intent(inout) :: field      !< Field to write
@@ -621,13 +701,13 @@ subroutine write_field_3d(io_unit, field_md, MOM_domain, field, tstamp, tile_cou
   integer,      optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
   real,         optional, intent(in)    :: fill_value !< Missing data fill value
 
-  call mpp_write(io_unit, field_md, MOM_domain%mpp_domain, field, tstamp=tstamp, &
+  call mpp_write(IO_handle%unit, field_md, MOM_domain%mpp_domain, field, tstamp=tstamp, &
                    tile_count=tile_count, default_data=fill_value)
 end subroutine write_field_3d
 
 !> Write a 2d field to an output file.
-subroutine write_field_2d(io_unit, field_md, MOM_domain, field, tstamp, tile_count, fill_value)
-  integer,                intent(in)    :: io_unit    !< File I/O unit handle
+subroutine write_field_2d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, fill_value)
+  type(file_type),        intent(in)    :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
   real, dimension(:,:),   intent(inout) :: field      !< Field to write
@@ -635,43 +715,43 @@ subroutine write_field_2d(io_unit, field_md, MOM_domain, field, tstamp, tile_cou
   integer,      optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
   real,         optional, intent(in)    :: fill_value !< Missing data fill value
 
-  call mpp_write(io_unit, field_md, MOM_domain%mpp_domain, field, tstamp=tstamp, &
+  call mpp_write(IO_handle%unit, field_md, MOM_domain%mpp_domain, field, tstamp=tstamp, &
                    tile_count=tile_count, default_data=fill_value)
 end subroutine write_field_2d
 
 !> Write a 1d field to an output file.
-subroutine write_field_1d(io_unit, field_md, field, tstamp)
-  integer,                intent(in)    :: io_unit    !< File I/O unit handle
+subroutine write_field_1d(IO_handle, field_md, field, tstamp)
+  type(file_type),        intent(in)    :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   real, dimension(:),     intent(in)    :: field      !< Field to write
   real,         optional, intent(in)    :: tstamp     !< Model timestamp
 
-  call mpp_write(io_unit, field_md, field, tstamp=tstamp)
+  call mpp_write(IO_handle%unit, field_md, field, tstamp=tstamp)
 end subroutine write_field_1d
 
 !> Write a 0d field to an output file.
-subroutine write_field_0d(io_unit, field_md, field, tstamp)
-  integer,                intent(in)    :: io_unit    !< File I/O unit handle
+subroutine write_field_0d(IO_handle, field_md, field, tstamp)
+  type(file_type),        intent(in)    :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   real,                   intent(in)    :: field      !< Field to write
   real,         optional, intent(in)    :: tstamp     !< Model timestamp
 
-  call mpp_write(io_unit, field_md, field, tstamp=tstamp)
+  call mpp_write(IO_handle%unit, field_md, field, tstamp=tstamp)
 end subroutine write_field_0d
 
 !> Write the data for an axis
-subroutine MOM_write_axis(io_unit, axis)
-  integer,        intent(in)  :: io_unit    !< File I/O unit handle
-  type(axistype), intent(in)  :: axis       !< An axis type variable with information to write
+subroutine MOM_write_axis(IO_handle, axis)
+  type(file_type), intent(in) :: IO_handle  !< Handle for a file that is open for writing
+  type(axistype),  intent(in) :: axis       !< An axis type variable with information to write
 
-  call mpp_write(io_unit, axis)
+  call mpp_write(IO_handle%unit, axis)
 
 end subroutine MOM_write_axis
 
 !> Store information about an axis in a previously defined axistype and write this
 !! information to the file indicated by unit.
-subroutine write_metadata_axis( unit, axis, name, units, longname, cartesian, sense, domain, data, calendar)
-  integer,                    intent(in)    :: unit  !< The I/O unit for the file to write to
+subroutine write_metadata_axis(IO_handle, axis, name, units, longname, cartesian, sense, domain, data, calendar)
+  type(file_type),            intent(in)    :: IO_handle  !< Handle for a file that is open for writing
   type(axistype),             intent(inout) :: axis  !< The axistype where this information is stored.
   character(len=*),           intent(in)    :: name  !< The name in the file of this axis
   character(len=*),           intent(in)    :: units !< The units of this axis
@@ -685,15 +765,15 @@ subroutine write_metadata_axis( unit, axis, name, units, longname, cartesian, se
   real, dimension(:), optional, intent(in)  :: data   !< The coordinate values of the points on this axis
   character(len=*), optional, intent(in)    :: calendar !< The name of the calendar used with a time axis
 
-  call mpp_write_meta(unit, axis, name, units, longname, cartesian=cartesian, sense=sense, &
+  call mpp_write_meta(IO_handle%unit, axis, name, units, longname, cartesian=cartesian, sense=sense, &
                       domain=domain, data=data, calendar=calendar)
 end subroutine write_metadata_axis
 
 !> Store information about an output variable in a previously defined fieldtype and write this
 !! information to the file indicated by unit.
-subroutine write_metadata_field(unit, field, axes, name, units, longname, &
+subroutine write_metadata_field(IO_handle, field, axes, name, units, longname, &
                                 min, max, fill, scale, add, pack, standard_name, checksum)
-  integer,                    intent(in)    :: unit  !< The I/O unit for the file to write to
+  type(file_type),            intent(in)    :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),            intent(inout) :: field !< The fieldtype where this information is stored
   type(axistype), dimension(:), intent(in)  :: axes  !< Handles for the axis used for this variable
   character(len=*),           intent(in)    :: name  !< The name in the file of this variable
@@ -713,8 +793,8 @@ subroutine write_metadata_field(unit, field, axes, name, units, longname, &
                     optional, intent(in)    :: checksum !< Checksum values that can be used to verify reads.
 
 
-  call mpp_write_meta( unit, field, axes, name, units, longname, &
-         min=min, max=max, fill=fill, scale=scale, add=add, pack=pack, standard_name=standard_name, checksum=checksum)
+  call mpp_write_meta(IO_handle%unit, field, axes, name, units, longname, min=min, max=max, &
+            fill=fill, scale=scale, add=add, pack=pack, standard_name=standard_name, checksum=checksum)
 
 end subroutine write_metadata_field
 

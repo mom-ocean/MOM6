@@ -13,9 +13,9 @@ use MOM_file_parser,      only : log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
 use MOM_io_infra,         only : MOM_read_data, MOM_read_vector, read_field_chksum
 use MOM_io_infra,         only : read_data=>MOM_read_data ! read_data will be removed soon.
-use MOM_io_infra,         only : file_exists, get_file_info, get_file_fields, get_field_atts
-use MOM_io_infra,         only : open_file, open_ASCII_file, close_file, flush_file
-use MOM_io_infra,         only : get_field_size, fieldtype, field_exists
+use MOM_io_infra,         only : file_type, file_exists, get_file_info, get_file_fields
+use MOM_io_infra,         only : open_file, open_ASCII_file, close_file, flush_file, file_is_open
+use MOM_io_infra,         only : get_field_size, fieldtype, field_exists, get_field_atts
 use MOM_io_infra,         only : get_file_times, axistype, get_axis_data, get_filename_suffix
 use MOM_io_infra,         only : write_field, write_metadata, write_version
 use MOM_io_infra,         only : MOM_namelist_file, check_namelist_error, io_infra_init, io_infra_end
@@ -40,7 +40,7 @@ public :: open_namelist_file, check_namelist_error, check_nml_error
 public :: get_var_sizes, verify_variable_units, num_timelevels, read_variable, read_attribute
 public :: open_file_to_read, close_file_to_read
 ! The following are simple pass throughs of routines from MOM_io_infra or other modules.
-public :: file_exists, open_file, open_ASCII_file, close_file, flush_file
+public :: file_exists, open_file, open_ASCII_file, close_file, flush_file, file_type
 public :: get_file_info, field_exists, get_file_fields, get_file_times, get_filename_appendix
 public :: fieldtype, field_size, get_field_atts
 public :: axistype, get_axis_data
@@ -101,12 +101,12 @@ integer, public :: stderr = stderr_iso  !< standard output unit
 
 contains
 
-!> Routine creates a new NetCDF file.  It also sets up
+!> Routine creates a new NetCDF file.  It also sets up fieldtype
 !! structures that describe this file and variables that will
-!! later be written to this file. Type for describing a variable, typically a tracer
-subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit, G, dG, GV, checksums)
-  integer,               intent(out)   :: unit       !< unit id of an open file or -1 on a
-                                                     !! nonwriting PE with single file output
+!! later be written to this file.
+subroutine create_file(IO_handle, filename, vars, novars, fields, threading, timeunit, G, dG, GV, checksums)
+  type(file_type),       intent(inout) :: IO_handle  !< Handle for a file or fileset that is to be
+                                                     !! opened or reopened for writing
   character(len=*),      intent(in)    :: filename   !< full path to the file to create
   type(vardesc),         intent(in)    :: vars(:)    !< structures describing fields written to filename
   integer,               intent(in)    :: novars     !< number of fields written to filename
@@ -173,9 +173,9 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
   if (domain_set) one_file = (thread == SINGLE_FILE)
 
   if (one_file) then
-    call open_file(unit, filename, OVERWRITE_FILE, NETCDF_FILE, threading=thread)
+    call open_file(IO_handle, filename, OVERWRITE_FILE, threading=thread)
   else
-    call open_file(unit, filename, OVERWRITE_FILE, NETCDF_FILE, MOM_domain=Domain)
+    call open_file(IO_handle, filename, OVERWRITE_FILE, MOM_domain=Domain)
   endif
 
 ! Define the coordinates.
@@ -245,28 +245,28 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
     "create_file: A vertical grid type is required to create a file with a vertical coordinate.")
 
   if (use_lath) &
-    call write_metadata(unit, axis_lath, name="lath", units=y_axis_units, longname="Latitude", &
+    call write_metadata(IO_handle, axis_lath, name="lath", units=y_axis_units, longname="Latitude", &
                         cartesian='Y', domain=y_domain, data=gridLatT(jsg:jeg))
 
   if (use_lonh) &
-    call write_metadata(unit, axis_lonh, name="lonh", units=x_axis_units, longname="Longitude", &
+    call write_metadata(IO_handle, axis_lonh, name="lonh", units=x_axis_units, longname="Longitude", &
                         cartesian='X', domain=x_domain, data=gridLonT(isg:ieg))
 
   if (use_latq) &
-    call write_metadata(unit, axis_latq, name="latq", units=y_axis_units, longname="Latitude", &
+    call write_metadata(IO_handle, axis_latq, name="latq", units=y_axis_units, longname="Latitude", &
                         cartesian='Y', domain=y_domain, data=gridLatB(JsgB:JegB))
 
   if (use_lonq) &
-    call write_metadata(unit, axis_lonq, name="lonq", units=x_axis_units, longname="Longitude", &
+    call write_metadata(IO_handle, axis_lonq, name="lonq", units=x_axis_units, longname="Longitude", &
                         cartesian='X', domain=x_domain, data=gridLonB(IsgB:IegB))
 
   if (use_layer) &
-    call write_metadata(unit, axis_layer, name="Layer", units=trim(GV%zAxisUnits), &
+    call write_metadata(IO_handle, axis_layer, name="Layer", units=trim(GV%zAxisUnits), &
                         longname="Layer "//trim(GV%zAxisLongName), cartesian='Z', &
                         sense=1, data=GV%sLayer(1:GV%ke))
 
   if (use_int) &
-    call write_metadata(unit, axis_int, name="Interface", units=trim(GV%zAxisUnits), &
+    call write_metadata(IO_handle, axis_int, name="Interface", units=trim(GV%zAxisUnits), &
                         longname="Interface "//trim(GV%zAxisLongName), cartesian='Z', &
                         sense=1, data=GV%sInterface(1:GV%ke+1))
 
@@ -286,9 +286,9 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
       write(time_units,'(es8.2," s")') timeunit
     endif
 
-    call write_metadata(unit, axis_time, name="Time", units=time_units, longname="Time", cartesian='T')
+    call write_metadata(IO_handle, axis_time, name="Time", units=time_units, longname="Time", cartesian='T')
   else
-    call write_metadata(unit, axis_time, name="Time", units="days", longname="Time", cartesian= 'T')
+    call write_metadata(IO_handle, axis_time, name="Time", units="days", longname="Time", cartesian= 'T')
   endif ; endif
 
   if (use_periodic) then
@@ -297,7 +297,7 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
     ! Define a periodic axis with unit labels.
     allocate(period_val(num_periods))
     do k=1,num_periods ; period_val(k) = real(k) ; enddo
-    call write_metadata(unit, axis_periodic, name="Period", units="nondimensional", &
+    call write_metadata(IO_handle, axis_periodic, name="Period", units="nondimensional", &
                         longname="Periods for cyclical varaiables", cartesian='T', data=period_val)
     deallocate(period_val)
   endif
@@ -338,21 +338,21 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
 
     pack = 1
     if (present(checksums)) then
-      call write_metadata(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
+      call write_metadata(IO_handle, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
                           vars(k)%longname, pack=pack, checksum=checksums(k,:))
     else
-      call write_metadata(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
+      call write_metadata(IO_handle, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
                           vars(k)%longname, pack=pack)
     endif
   enddo
 
-  if (use_lath) call write_field(unit, axis_lath)
-  if (use_latq) call write_field(unit, axis_latq)
-  if (use_lonh) call write_field(unit, axis_lonh)
-  if (use_lonq) call write_field(unit, axis_lonq)
-  if (use_layer) call write_field(unit, axis_layer)
-  if (use_int) call write_field(unit, axis_int)
-  if (use_periodic) call write_field(unit, axis_periodic)
+  if (use_lath) call write_field(IO_handle, axis_lath)
+  if (use_latq) call write_field(IO_handle, axis_latq)
+  if (use_lonh) call write_field(IO_handle, axis_lonh)
+  if (use_lonq) call write_field(IO_handle, axis_lonq)
+  if (use_layer) call write_field(IO_handle, axis_layer)
+  if (use_int) call write_field(IO_handle, axis_int)
+  if (use_periodic) call write_field(IO_handle, axis_periodic)
 
 end subroutine create_file
 
@@ -361,9 +361,9 @@ end subroutine create_file
 !! does not find the file, a new file is created.  It also sets up
 !! structures that describe this file and the variables that will
 !! later be written to this file.
-subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit, G, dG, GV)
-  integer,               intent(out)   :: unit       !< unit id of an open file or -1 on a
-                                                     !! nonwriting PE with single file output
+subroutine reopen_file(IO_handle, filename, vars, novars, fields, threading, timeunit, G, dG, GV)
+  type(file_type),       intent(inout) :: IO_handle  !< Handle for a file or fileset that is to be
+                                                     !! opened or reopened for writing
   character(len=*),      intent(in)    :: filename   !< full path to the file to create
   type(vardesc),         intent(in)    :: vars(:)    !< structures describing fields written to filename
   integer,               intent(in)    :: novars     !< number of fields written to filename
@@ -397,7 +397,7 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
   inquire(file=check_name,EXIST=exists)
 
   if (.not.exists) then
-    call create_file(unit, filename, vars, novars, fields, threading, timeunit, &
+    call create_file(IO_handle, filename, vars, novars, fields, threading, timeunit, &
                      G=G, dG=dG, GV=GV)
   else
 
@@ -412,26 +412,26 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
     if (domain_set) one_file = (thread == SINGLE_FILE)
 
     if (one_file) then
-      call open_file(unit, filename, APPEND_FILE, NETCDF_FILE, threading=thread)
+      call open_file(IO_handle, filename, APPEND_FILE, threading=thread)
     else
-      call open_file(unit, filename, APPEND_FILE, NETCDF_FILE, MOM_domain=Domain)
+      call open_file(IO_handle, filename, APPEND_FILE, MOM_domain=Domain)
     endif
-    if (unit < 0) return
+    if (.not.file_is_open(IO_handle)) return
 
-    call get_file_info(unit, ndim, nvar, natt, ntime)
+    call get_file_info(IO_handle, ndim, nvar, natt, ntime)
 
     if (nvar == -1) then
       write (mesg,*) "Reopening file ",trim(filename)," apparently had ",nvar,&
                      " variables. Clobbering and creating file with ",novars," instead."
       call MOM_error(WARNING,"MOM_io: "//mesg)
-      call create_file(unit, filename, vars, novars, fields, threading, timeunit, G=G, GV=GV)
+      call create_file(IO_handle, filename, vars, novars, fields, threading, timeunit, G=G, GV=GV)
     elseif (nvar /= novars) then
       write (mesg,*) "Reopening file ",trim(filename)," with ",novars,&
                      " variables instead of ",nvar,"."
       call MOM_error(FATAL,"MOM_io: "//mesg)
     endif
 
-    if (nvar > 0) call get_file_fields(unit, fields(1:nvar))
+    if (nvar > 0) call get_file_fields(IO_handle, fields(1:nvar))
 
     ! Check for inconsistent field names...
 !    do i=1,nvar
@@ -1331,9 +1331,9 @@ end subroutine query_vardesc
 
 
 !> Write a 4d field to an output file, potentially with rotation
-subroutine MOM_write_field_4d(io_unit, field_md, MOM_domain, field, tstamp, tile_count, &
+subroutine MOM_write_field_4d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
                               fill_value, turns, scale)
-  integer,                  intent(in)    :: io_unit    !< File I/O unit handle
+  type(file_type),          intent(in)    :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),          intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),    intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
   real, dimension(:,:,:,:), intent(inout) :: field      !< Unrotated field to write
@@ -1353,22 +1353,22 @@ subroutine MOM_write_field_4d(io_unit, field_md, MOM_domain, field, tstamp, tile
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
 
   if ((qturns == 0) .and. (scale_fac == 1.0)) then
-    call write_field(io_unit, field_md, MOM_domain, field, tstamp=tstamp, &
+    call write_field(IO_handle, field_md, MOM_domain, field, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
   else
     call allocate_rotated_array(field, [1,1,1,1], qturns, field_rot)
     call rotate_array(field, qturns, field_rot)
     if (scale_fac /= 1.0) call rescale_comp_data(MOM_Domain, field_rot, scale_fac)
-    call write_field(io_unit, field_md, MOM_domain, field_rot, tstamp=tstamp, &
+    call write_field(IO_handle, field_md, MOM_domain, field_rot, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
     deallocate(field_rot)
   endif
 end subroutine MOM_write_field_4d
 
 !> Write a 3d field to an output file, potentially with rotation
-subroutine MOM_write_field_3d(io_unit, field_md, MOM_domain, field, tstamp, tile_count, &
+subroutine MOM_write_field_3d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
                               fill_value, turns, scale)
-  integer,                intent(in)    :: io_unit    !< File I/O unit handle
+  type(file_type),        intent(in)    :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
   real, dimension(:,:,:), intent(inout) :: field      !< Unrotated field to write
@@ -1388,22 +1388,22 @@ subroutine MOM_write_field_3d(io_unit, field_md, MOM_domain, field, tstamp, tile
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
 
   if ((qturns == 0) .and. (scale_fac == 1.0)) then
-    call write_field(io_unit, field_md, MOM_domain, field, tstamp=tstamp, &
+    call write_field(IO_handle, field_md, MOM_domain, field, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
   else
     call allocate_rotated_array(field, [1,1,1], qturns, field_rot)
     call rotate_array(field, qturns, field_rot)
     if (scale_fac /= 1.0) call rescale_comp_data(MOM_Domain, field_rot, scale_fac)
-    call write_field(io_unit, field_md, MOM_domain, field_rot, tstamp=tstamp, &
+    call write_field(IO_handle, field_md, MOM_domain, field_rot, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
     deallocate(field_rot)
   endif
 end subroutine MOM_write_field_3d
 
 !> Write a 2d field to an output file, potentially with rotation
-subroutine MOM_write_field_2d(io_unit, field_md, MOM_domain, field, tstamp, tile_count, &
+subroutine MOM_write_field_2d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
                               fill_value, turns, scale)
-  integer,                intent(in)    :: io_unit    !< File I/O unit handle
+  type(file_type),        intent(in)    :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
   real, dimension(:,:),   intent(inout) :: field      !< Unrotated field to write
@@ -1423,21 +1423,21 @@ subroutine MOM_write_field_2d(io_unit, field_md, MOM_domain, field, tstamp, tile
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
 
   if ((qturns == 0) .and. (scale_fac == 1.0)) then
-    call write_field(io_unit, field_md, MOM_domain, field, tstamp=tstamp, &
+    call write_field(IO_handle, field_md, MOM_domain, field, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
   else
     call allocate_rotated_array(field, [1,1], qturns, field_rot)
     call rotate_array(field, qturns, field_rot)
     if (scale_fac /= 1.0) call rescale_comp_data(MOM_Domain, field_rot, scale_fac)
-    call write_field(io_unit, field_md, MOM_domain, field_rot, tstamp=tstamp, &
+    call write_field(IO_handle, field_md, MOM_domain, field_rot, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
     deallocate(field_rot)
   endif
 end subroutine MOM_write_field_2d
 
 !> Write a 1d field to an output file
-subroutine MOM_write_field_1d(io_unit, field_md, field, tstamp, fill_value, scale)
-  integer,                intent(in)    :: io_unit    !< File I/O unit handle
+subroutine MOM_write_field_1d(IO_handle, field_md, field, tstamp, fill_value, scale)
+  type(file_type),        intent(in)    :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   real, dimension(:),     intent(in)    :: field      !< Field to write
   real,         optional, intent(in)    :: tstamp     !< Model timestamp
@@ -1452,21 +1452,21 @@ subroutine MOM_write_field_1d(io_unit, field_md, field, tstamp, fill_value, scal
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
 
   if (scale_fac == 1.0) then
-    call write_field(io_unit, field_md, field, tstamp=tstamp)
+    call write_field(IO_handle, field_md, field, tstamp=tstamp)
   else
     allocate(array(size(field)))
     array(:) = scale_fac * field(:)
     if (present(fill_value)) then
       do i=1,size(field) ; if (field(i) == fill_value) array(i) = fill_value ; enddo
     endif
-    call write_field(io_unit, field_md, array, tstamp=tstamp)
+    call write_field(IO_handle, field_md, array, tstamp=tstamp)
     deallocate(array)
   endif
 end subroutine MOM_write_field_1d
 
 !> Write a 0d field to an output file
-subroutine MOM_write_field_0d(io_unit, field_md, field, tstamp, fill_value, scale)
-  integer,                intent(in)    :: io_unit    !< File I/O unit handle
+subroutine MOM_write_field_0d(IO_handle, field_md, field, tstamp, fill_value, scale)
+  type(file_type),        intent(in)    :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   real,                   intent(in)    :: field      !< Field to write
   real,         optional, intent(in)    :: tstamp     !< Model timestamp
@@ -1479,7 +1479,7 @@ subroutine MOM_write_field_0d(io_unit, field_md, field, tstamp, fill_value, scal
   if (present(scale)) scaled_val = scale*field
   if (present(fill_value)) then ; if (field == fill_value) scaled_val = fill_value ; endif
 
-  call write_field(io_unit, field_md, scaled_val, tstamp=tstamp)
+  call write_field(IO_handle, field_md, scaled_val, tstamp=tstamp)
 end subroutine MOM_write_field_0d
 
 !> Given filename and fieldname, this subroutine returns the size of the field in the file
