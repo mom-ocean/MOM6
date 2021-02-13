@@ -9,7 +9,7 @@ use MOM_error_handler,    only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler,    only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,      only : get_param, read_param, log_param, param_file_type, log_version
 use MOM_io,               only : MOM_read_data, close_file, create_file, fieldtype, file_exists
-use MOM_io,               only : write_field, vardesc, var_desc, SINGLE_FILE, MULTIPLE
+use MOM_io,               only : MOM_write_field, vardesc, var_desc, SINGLE_FILE, MULTIPLE
 use MOM_string_functions, only : slasher, uppercase
 use MOM_unit_scaling,     only : unit_scale_type
 use MOM_variables,        only : thermo_var_ptrs
@@ -526,8 +526,8 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
 
   call create_file(unit, trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
 
-  call write_field(unit, fields(1), US%R_to_kg_m3*GV%Rlay(:))
-  call write_field(unit, fields(2), US%L_T_to_m_s**2*US%m_to_Z*GV%g_prime(:))
+  call MOM_write_field(unit, fields(1), GV%Rlay, scale=US%R_to_kg_m3)
+  call MOM_write_field(unit, fields(2), GV%g_prime, scale=US%L_T_to_m_s**2*US%m_to_Z)
 
   call close_file(unit)
 

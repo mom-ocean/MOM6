@@ -1195,36 +1195,24 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   integer :: unit
   integer :: file_threading
   integer :: nFlds_used
-  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   logical :: multiple_files
-  real, dimension(G%isd :G%ied ,G%jsd :G%jed ) :: out_h
-  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: out_q
-  real, dimension(G%IsdB:G%IedB,G%jsd :G%jed ) :: out_u
-  real, dimension(G%isd :G%ied ,G%JsdB:G%JedB) :: out_v
 
   call callTree_enter('write_ocean_geometry_file()')
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   Z_to_m_scale = 1.0 ; if (present(US)) Z_to_m_scale = US%Z_to_m
   s_to_T_scale = 1.0 ; if (present(US)) s_to_T_scale = US%s_to_T
   L_to_m_scale = 1.0 ; if (present(US)) L_to_m_scale = US%L_to_m
 
-!   vardesc is a structure defined in MOM_io.F90.  The elements of
-! this structure, in order, are:
-! (1) the variable name for the NetCDF file
-! (2) the variable's long name
-! (3) a character indicating the  horizontal grid, which may be '1' (column),
-!     'h', 'q', 'u', or 'v', for the corresponding C-grid variable
-! (4) a character indicating the vertical grid, which may be 'L' (layer),
-!     'i' (interface), or '1' (no vertical location)
-! (5) a character indicating the time levels of the field, which may be
-!    's' (snap-shot), 'p' (periodic), or '1' (no time variation)
-! (6) the variable's units
+  !   var_desc populates a type defined in MOM_io.F90.  The arguments, in order, are:
+  ! (1) the variable name for the NetCDF file
+  ! (2) the units of the variable when output
+  ! (3) the variable's long name
+  ! (4) a character indicating the  horizontal grid, which may be '1' (column),
+  !     'h', 'q', 'u', or 'v', for the corresponding C-grid variable
+  ! (5) a character indicating the vertical grid, which may be 'L' (layer),
+  !     'i' (interface), or '1' (no vertical location)
+  ! (6) a character indicating the time levels of the field, which may be
+  !    's' (snap-shot), 'p' (periodic), or '1' (no time variation)
   vars(1) = var_desc("geolatb","degree","latitude at corner (Bu) points",'q','1','1')
   vars(2) = var_desc("geolonb","degree","longitude at corner (Bu) points",'q','1','1')
   vars(3) = var_desc("geolat","degree", "latitude at tracer (T) points", 'h','1','1')
@@ -1260,11 +1248,6 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
     filepath = trim(directory) // "ocean_geometry"
   endif
 
-  out_h(:,:) = 0.0
-  out_u(:,:) = 0.0
-  out_v(:,:) = 0.0
-  out_q(:,:) = 0.0
-
   call get_param(param_file, mdl, "PARALLEL_RESTARTFILES", multiple_files, &
                  "If true, each processor writes its own restart file, "//&
                  "otherwise a single restart file is generated", &
@@ -1272,64 +1255,37 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   file_threading = SINGLE_FILE
   if (multiple_files) file_threading = MULTIPLE
 
-  call create_file(unit, trim(filepath), vars, nFlds_used, fields, &
-                   file_threading, dG=G)
+  call create_file(unit, trim(filepath), vars, nFlds_used, fields, file_threading, dG=G)
 
-  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = G%geoLatBu(I,J) ; enddo ; enddo
-  call MOM_write_field(unit, fields(1), G%Domain, out_q)
-  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = G%geoLonBu(I,J) ; enddo ; enddo
-  call MOM_write_field(unit, fields(2), G%Domain, out_q)
+  call MOM_write_field(unit, fields(1), G%Domain, G%geoLatBu)
+  call MOM_write_field(unit, fields(2), G%Domain, G%geoLonBu)
   call MOM_write_field(unit, fields(3), G%Domain, G%geoLatT)
   call MOM_write_field(unit, fields(4), G%Domain, G%geoLonT)
 
-  do j=js,je ; do i=is,ie ; out_h(i,j) = Z_to_m_scale*G%bathyT(i,j) ; enddo ; enddo
-  call MOM_write_field(unit, fields(5), G%Domain, out_h)
-  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(i,J) = s_to_T_scale*G%CoriolisBu(I,J) ; enddo ; enddo
-  call MOM_write_field(unit, fields(6), G%Domain, out_q)
+  call MOM_write_field(unit, fields(5), G%Domain, G%bathyT, scale=Z_to_m_scale)
+  call MOM_write_field(unit, fields(6), G%Domain, G%CoriolisBu, scale=s_to_T_scale)
 
-  !   I think that all of these copies are holdovers from a much earlier
-  ! ancestor code in which many of the metrics were macros that could have
-  ! had reduced dimensions, and that they are no longer needed in MOM6. -RWH
-  do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dxCv(i,J) ; enddo ; enddo
-  call MOM_write_field(unit, fields(7), G%Domain, out_v)
-  do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dyCu(I,j) ; enddo ; enddo
-  call MOM_write_field(unit, fields(8), G%Domain, out_u)
+  call MOM_write_field(unit, fields(7),  G%Domain, G%dxCv, scale=L_to_m_scale)
+  call MOM_write_field(unit, fields(8),  G%Domain, G%dyCu, scale=L_to_m_scale)
+  call MOM_write_field(unit, fields(9),  G%Domain, G%dxCu, scale=L_to_m_scale)
+  call MOM_write_field(unit, fields(10), G%Domain, G%dyCv, scale=L_to_m_scale)
+  call MOM_write_field(unit, fields(11), G%Domain, G%dxT, scale=L_to_m_scale)
+  call MOM_write_field(unit, fields(12), G%Domain, G%dyT, scale=L_to_m_scale)
+  call MOM_write_field(unit, fields(13), G%Domain, G%dxBu, scale=L_to_m_scale)
+  call MOM_write_field(unit, fields(14), G%Domain, G%dyBu, scale=L_to_m_scale)
 
-  do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dxCu(I,j) ; enddo ; enddo
-  call MOM_write_field(unit, fields(9), G%Domain, out_u)
-  do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dyCv(i,J) ; enddo ; enddo
-  call MOM_write_field(unit, fields(10), G%Domain, out_v)
+  call MOM_write_field(unit, fields(15), G%Domain, G%areaT, scale=L_to_m_scale**2)
+  call MOM_write_field(unit, fields(16), G%Domain, G%areaBu, scale=L_to_m_scale**2)
 
-  do j=js,je ; do i=is,ie ; out_h(i,j) = L_to_m_scale*G%dxT(i,j); enddo ; enddo
-  call MOM_write_field(unit, fields(11), G%Domain, out_h)
-  do j=js,je ; do i=is,ie ; out_h(i,j) = L_to_m_scale*G%dyT(i,j) ; enddo ; enddo
-  call MOM_write_field(unit, fields(12), G%Domain, out_h)
-
-  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(i,J) = L_to_m_scale*G%dxBu(I,J) ; enddo ; enddo
-  call MOM_write_field(unit, fields(13), G%Domain, out_q)
-  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = L_to_m_scale*G%dyBu(I,J) ; enddo ; enddo
-  call MOM_write_field(unit, fields(14), G%Domain, out_q)
-
-  do j=js,je ; do i=is,ie ; out_h(i,j) = L_to_m_scale**2*G%areaT(i,j) ; enddo ; enddo
-  call MOM_write_field(unit, fields(15), G%Domain, out_h)
-  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = L_to_m_scale**2*G%areaBu(I,J) ; enddo ; enddo
-  call MOM_write_field(unit, fields(16), G%Domain, out_q)
-
-  do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dx_Cv(i,J) ; enddo ; enddo
-  call MOM_write_field(unit, fields(17), G%Domain, out_v)
-  do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dy_Cu(I,j) ; enddo ; enddo
-  call MOM_write_field(unit, fields(18), G%Domain, out_u)
+  call MOM_write_field(unit, fields(17), G%Domain, G%dx_Cv, scale=L_to_m_scale)
+  call MOM_write_field(unit, fields(18), G%Domain, G%dy_Cu, scale=L_to_m_scale)
   call MOM_write_field(unit, fields(19), G%Domain, G%mask2dT)
 
   if (G%bathymetry_at_vel) then
-    do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = Z_to_m_scale*G%Dblock_u(I,j) ; enddo ; enddo
-    call MOM_write_field(unit, fields(20), G%Domain, out_u)
-    do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = Z_to_m_scale*G%Dopen_u(I,j) ; enddo ; enddo
-    call MOM_write_field(unit, fields(21), G%Domain, out_u)
-    do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = Z_to_m_scale*G%Dblock_v(i,J) ; enddo ; enddo
-    call MOM_write_field(unit, fields(22), G%Domain, out_v)
-    do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = Z_to_m_scale*G%Dopen_v(i,J) ; enddo ; enddo
-    call MOM_write_field(unit, fields(23), G%Domain, out_v)
+    call MOM_write_field(unit, fields(20), G%Domain, G%Dblock_u, scale=Z_to_m_scale)
+    call MOM_write_field(unit, fields(21), G%Domain, G%Dopen_u, scale=Z_to_m_scale)
+    call MOM_write_field(unit, fields(22), G%Domain, G%Dblock_v, scale=Z_to_m_scale)
+    call MOM_write_field(unit, fields(23), G%Domain, G%Dopen_v, scale=Z_to_m_scale)
   endif
 
   call close_file(unit)
