@@ -5,7 +5,7 @@ module MOM_io
 
 use MOM_array_transform,  only : allocate_rotated_array, rotate_array
 use MOM_domains,          only : MOM_domain_type, domain1D, broadcast, get_domain_components
-use MOM_domains,          only : AGRID, BGRID_NE, CGRID_NE
+use MOM_domains,          only : rescale_comp_data, AGRID, BGRID_NE, CGRID_NE
 use MOM_dyn_horgrid,      only : dyn_horgrid_type
 use MOM_ensemble_manager, only : get_ensemble_id
 use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING, is_root_PE
@@ -1332,7 +1332,7 @@ end subroutine query_vardesc
 
 !> Write a 4d field to an output file, potentially with rotation
 subroutine MOM_write_field_4d(io_unit, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns)
+                              fill_value, turns, scale)
   integer,                  intent(in)    :: io_unit    !< File I/O unit handle
   type(fieldtype),          intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),    intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
@@ -1341,18 +1341,24 @@ subroutine MOM_write_field_4d(io_unit, field_md, MOM_domain, field, tstamp, tile
   integer,        optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
   real,           optional, intent(in)    :: fill_value !< Missing data fill value
   integer,        optional, intent(in)    :: turns      !< Number of quarter-turns to rotate the data
+  real,           optional, intent(in)    :: scale      !< A scaling factor that the field is
+                                                        !! multiplied by before it is written
 
-  real, allocatable :: field_rot(:,:,:,:)  ! A rotated version of field, with the same units
+  real, allocatable :: field_rot(:,:,:,:)  ! A rotated version of field, with the same units or rescaled
+  real :: scale_fac ! A scaling factor to use before writing the array
   integer :: qturns ! The number of quarter turns through which to rotate field
+  integer :: is, ie, js, je ! The extent of the computational domain
 
   qturns = 0 ; if (present(turns)) qturns = modulo(turns, 4)
+  scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
 
-  if (qturns == 0) then
+  if ((qturns == 0) .and. (scale_fac == 1.0)) then
     call write_field(io_unit, field_md, MOM_domain, field, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
   else
     call allocate_rotated_array(field, [1,1,1,1], qturns, field_rot)
     call rotate_array(field, qturns, field_rot)
+    if (scale_fac /= 1.0) call rescale_comp_data(MOM_Domain, field_rot, scale_fac)
     call write_field(io_unit, field_md, MOM_domain, field_rot, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
     deallocate(field_rot)
@@ -1361,7 +1367,7 @@ end subroutine MOM_write_field_4d
 
 !> Write a 3d field to an output file, potentially with rotation
 subroutine MOM_write_field_3d(io_unit, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns)
+                              fill_value, turns, scale)
   integer,                intent(in)    :: io_unit    !< File I/O unit handle
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
@@ -1370,18 +1376,24 @@ subroutine MOM_write_field_3d(io_unit, field_md, MOM_domain, field, tstamp, tile
   integer,      optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
   real,         optional, intent(in)    :: fill_value !< Missing data fill value
   integer,      optional, intent(in)    :: turns      !< Number of quarter-turns to rotate the data
+  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is
+                                                      !! multiplied by before it is written
 
-  real, allocatable :: field_rot(:,:,:)  ! A rotated version of field, with the same units
+  real, allocatable :: field_rot(:,:,:)  ! A rotated version of field, with the same units or rescaled
+  real :: scale_fac ! A scaling factor to use before writing the array
   integer :: qturns ! The number of quarter turns through which to rotate field
+  integer :: is, ie, js, je ! The extent of the computational domain
 
   qturns = 0 ; if (present(turns)) qturns = modulo(turns, 4)
+  scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
 
-  if (qturns == 0) then
+  if ((qturns == 0) .and. (scale_fac == 1.0)) then
     call write_field(io_unit, field_md, MOM_domain, field, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
   else
     call allocate_rotated_array(field, [1,1,1], qturns, field_rot)
     call rotate_array(field, qturns, field_rot)
+    if (scale_fac /= 1.0) call rescale_comp_data(MOM_Domain, field_rot, scale_fac)
     call write_field(io_unit, field_md, MOM_domain, field_rot, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
     deallocate(field_rot)
@@ -1390,7 +1402,7 @@ end subroutine MOM_write_field_3d
 
 !> Write a 2d field to an output file, potentially with rotation
 subroutine MOM_write_field_2d(io_unit, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns)
+                              fill_value, turns, scale)
   integer,                intent(in)    :: io_unit    !< File I/O unit handle
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
@@ -1399,19 +1411,24 @@ subroutine MOM_write_field_2d(io_unit, field_md, MOM_domain, field, tstamp, tile
   integer,      optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
   real,         optional, intent(in)    :: fill_value !< Missing data fill value
   integer,      optional, intent(in)    :: turns      !< Number of quarter-turns to rotate the data
+  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is
+                                                      !! multiplied by before it is written
 
   real, allocatable :: field_rot(:,:)  ! A rotated version of field, with the same units
+  real :: scale_fac ! A scaling factor to use before writing the array
   integer :: qturns ! The number of quarter turns through which to rotate field
+  integer :: is, ie, js, je ! The extent of the computational domain
 
-  qturns = 0
-  if (present(turns)) qturns = modulo(turns, 4)
+  qturns = 0 ; if (present(turns)) qturns = modulo(turns, 4)
+  scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
 
-  if (qturns == 0) then
+  if ((qturns == 0) .and. (scale_fac == 1.0)) then
     call write_field(io_unit, field_md, MOM_domain, field, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
   else
     call allocate_rotated_array(field, [1,1], qturns, field_rot)
     call rotate_array(field, qturns, field_rot)
+    if (scale_fac /= 1.0) call rescale_comp_data(MOM_Domain, field_rot, scale_fac)
     call write_field(io_unit, field_md, MOM_domain, field_rot, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
     deallocate(field_rot)
@@ -1419,25 +1436,50 @@ subroutine MOM_write_field_2d(io_unit, field_md, MOM_domain, field, tstamp, tile
 end subroutine MOM_write_field_2d
 
 !> Write a 1d field to an output file
-subroutine MOM_write_field_1d(io_unit, field_md, field, tstamp, fill_value)
+subroutine MOM_write_field_1d(io_unit, field_md, field, tstamp, fill_value, scale)
   integer,                intent(in)    :: io_unit    !< File I/O unit handle
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   real, dimension(:),     intent(in)    :: field      !< Field to write
   real,         optional, intent(in)    :: tstamp     !< Model timestamp
   real,         optional, intent(in)    :: fill_value !< Missing data fill value
+  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is
+                                                      !! multiplied by before it is written
 
-  call write_field(io_unit, field_md, field, tstamp=tstamp)
+  real, dimension(:), allocatable :: array ! A rescaled copy of field
+  real :: scale_fac ! A scaling factor to use before writing the array
+  integer :: i
+
+  scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
+
+  if (scale_fac == 1.0) then
+    call write_field(io_unit, field_md, field, tstamp=tstamp)
+  else
+    allocate(array(size(field)))
+    array(:) = scale_fac * field(:)
+    if (present(fill_value)) then
+      do i=1,size(field) ; if (field(i) == fill_value) array(i) = fill_value ; enddo
+    endif
+    call write_field(io_unit, field_md, array, tstamp=tstamp)
+    deallocate(array)
+  endif
 end subroutine MOM_write_field_1d
 
 !> Write a 0d field to an output file
-subroutine MOM_write_field_0d(io_unit, field_md, field, tstamp, fill_value)
+subroutine MOM_write_field_0d(io_unit, field_md, field, tstamp, fill_value, scale)
   integer,                intent(in)    :: io_unit    !< File I/O unit handle
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   real,                   intent(in)    :: field      !< Field to write
   real,         optional, intent(in)    :: tstamp     !< Model timestamp
   real,         optional, intent(in)    :: fill_value !< Missing data fill value
+  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is
+                                                      !! multiplied by before it is written
+  real :: scaled_val ! A rescaled copy of field
 
-  call write_field(io_unit, field_md, field, tstamp=tstamp)
+  scaled_val = field
+  if (present(scale)) scaled_val = scale*field
+  if (present(fill_value)) then ; if (field == fill_value) scaled_val = fill_value ; endif
+
+  call write_field(io_unit, field_md, scaled_val, tstamp=tstamp)
 end subroutine MOM_write_field_0d
 
 !> Given filename and fieldname, this subroutine returns the size of the field in the file

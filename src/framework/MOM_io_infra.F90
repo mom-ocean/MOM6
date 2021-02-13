@@ -3,8 +3,7 @@ module MOM_io_infra
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_domain_infra,     only : MOM_domain_type, AGRID, BGRID_NE, CGRID_NE
-use MOM_domain_infra,     only : get_simple_array_i_ind, get_simple_array_j_ind
+use MOM_domain_infra,     only : MOM_domain_type, rescale_comp_data, AGRID, BGRID_NE, CGRID_NE
 use MOM_domain_infra,     only : domain2d, domain1d, CENTER, CORNER, NORTH_FACE, EAST_FACE
 use MOM_error_infra,      only : MOM_error=>MOM_err, NOTE, FATAL, WARNING
 
@@ -397,15 +396,11 @@ subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
   real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
                                                      !! by before it is returned.
 
-  integer :: is, ie, js, je
-
   call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=position)
 
   if (present(scale)) then ; if (scale /= 1.0) then
-    call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
-    data(is:ie,js:je) = scale*data(is:ie,js:je)
+    call rescale_comp_data(MOM_Domain, data, scale)
   endif ; endif
 
 end subroutine MOM_read_data_2d
@@ -439,8 +434,12 @@ subroutine MOM_read_data_2d_region(filename, fieldname, data, start, nread, MOM_
   endif
 
   if (present(scale)) then ; if (scale /= 1.0) then
-    ! Dangerously rescale the whole array
-    data(:,:) = scale*data(:,:)
+    if (present(MOM_Domain)) then
+      call rescale_comp_data(MOM_Domain, data, scale)
+    else
+      ! Dangerously rescale the whole array
+      data(:,:) = scale*data(:,:)
+    endif
   endif ; endif
 
 end subroutine MOM_read_data_2d_region
@@ -460,15 +459,11 @@ subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
   real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
                                                      !! by before it is returned.
 
-  integer :: is, ie, js, je
-
   call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=position)
 
   if (present(scale)) then ; if (scale /= 1.0) then
-    call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
-    data(is:ie,js:je,:) = scale*data(is:ie,js:je,:)
+    call rescale_comp_data(MOM_Domain, data, scale)
   endif ; endif
 
 end subroutine MOM_read_data_3d
@@ -488,15 +483,11 @@ subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
   real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
                                                      !! by before it is returned.
 
-  integer :: is, ie, js, je
-
   call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=position)
 
   if (present(scale)) then ; if (scale /= 1.0) then
-    call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
-    data(is:ie,js:je,:,:) = scale*data(is:ie,js:je,:,:)
+    call rescale_comp_data(MOM_Domain, data, scale)
   endif ; endif
 
 end subroutine MOM_read_data_4d
@@ -544,7 +535,6 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
   logical,      optional, intent(in)    :: scalar_pair !< If true, a pair of scalars are to be read
   real,         optional, intent(in)    :: scale     !< A scaling factor that the fields are multiplied
                                                      !! by before they are returned.
-  integer :: is, ie, js, je
   integer :: u_pos, v_pos
 
   u_pos = EAST_FACE ; v_pos = NORTH_FACE
@@ -560,12 +550,8 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
                  timelevel=timelevel, position=v_pos)
 
   if (present(scale)) then ; if (scale /= 1.0) then
-    call get_simple_array_i_ind(MOM_Domain, size(u_data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(u_data,2), js, je)
-    u_data(is:ie,js:je) = scale*u_data(is:ie,js:je)
-    call get_simple_array_i_ind(MOM_Domain, size(v_data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(v_data,2), js, je)
-    v_data(is:ie,js:je) = scale*v_data(is:ie,js:je)
+    call rescale_comp_data(MOM_Domain, u_data, scale)
+    call rescale_comp_data(MOM_Domain, v_data, scale)
   endif ; endif
 
 end subroutine MOM_read_vector_2d
@@ -589,7 +575,6 @@ subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data
   real,         optional, intent(in)    :: scale     !< A scaling factor that the fields are multiplied
                                                      !! by before they are returned.
 
-  integer :: is, ie, js, je
   integer :: u_pos, v_pos
 
   u_pos = EAST_FACE ; v_pos = NORTH_FACE
@@ -605,12 +590,8 @@ subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data
                  timelevel=timelevel, position=v_pos)
 
   if (present(scale)) then ; if (scale /= 1.0) then
-    call get_simple_array_i_ind(MOM_Domain, size(u_data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(u_data,2), js, je)
-    u_data(is:ie,js:je,:) = scale*u_data(is:ie,js:je,:)
-    call get_simple_array_i_ind(MOM_Domain, size(v_data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(v_data,2), js, je)
-    v_data(is:ie,js:je,:) = scale*v_data(is:ie,js:je,:)
+    call rescale_comp_data(MOM_Domain, u_data, scale)
+    call rescale_comp_data(MOM_Domain, v_data, scale)
   endif ; endif
 
 end subroutine MOM_read_vector_3d
