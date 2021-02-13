@@ -14,9 +14,9 @@ use MOM_grid,             only : ocean_grid_type
 use MOM_io_infra,         only : MOM_read_data, MOM_read_vector, read_field_chksum
 use MOM_io_infra,         only : read_data=>MOM_read_data ! read_data will be removed soon.
 use MOM_io_infra,         only : file_exists, get_file_info, get_file_fields, get_field_atts
-use MOM_io_infra,         only : open_file, close_file, get_field_size, fieldtype, field_exists
-use MOM_io_infra,         only : flush_file, get_filename_suffix
-use MOM_io_infra,         only : get_file_times, axistype, get_axis_data
+use MOM_io_infra,         only : open_file, open_ASCII_file, close_file, flush_file
+use MOM_io_infra,         only : get_field_size, fieldtype, field_exists
+use MOM_io_infra,         only : get_file_times, axistype, get_axis_data, get_filename_suffix
 use MOM_io_infra,         only : write_field, write_metadata, write_version
 use MOM_io_infra,         only : MOM_namelist_file, check_namelist_error, io_infra_init, io_infra_end
 use MOM_io_infra,         only : APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
@@ -40,8 +40,8 @@ public :: open_namelist_file, check_namelist_error, check_nml_error
 public :: get_var_sizes, verify_variable_units, num_timelevels, read_variable, read_attribute
 public :: open_file_to_read, close_file_to_read
 ! The following are simple pass throughs of routines from MOM_io_infra or other modules.
-public :: file_exists, open_file, close_file, flush_file, get_filename_appendix
-public :: get_file_info, field_exists, get_file_fields, get_file_times
+public :: file_exists, open_file, open_ASCII_file, close_file, flush_file
+public :: get_file_info, field_exists, get_file_fields, get_file_times, get_filename_appendix
 public :: fieldtype, field_size, get_field_atts
 public :: axistype, get_axis_data
 public :: MOM_read_data, MOM_read_vector, read_field_chksum

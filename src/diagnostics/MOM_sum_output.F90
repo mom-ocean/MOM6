@@ -12,10 +12,10 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
-use MOM_io, only : create_file, fieldtype, flush_file, open_file, reopen_file, stdout
+use MOM_io, only : create_file, fieldtype, flush_file, open_ASCII_file, reopen_file, stdout
 use MOM_io, only : file_exists, slasher, vardesc, var_desc, write_field, get_filename_appendix
 use MOM_io, only : field_size, read_variable, read_attribute
-use MOM_io, only : APPEND_FILE, ASCII_FILE, SINGLE_FILE, WRITEONLY_FILE
+use MOM_io, only : APPEND_FILE, SINGLE_FILE, WRITEONLY_FILE
 use MOM_open_boundary, only : ocean_OBC_type, OBC_segment_type
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_time_manager, only : time_type, get_time, get_date, set_time, operator(>)
@@ -583,11 +583,9 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     !  Reopen or create a text output file, with an explanatory header line.
     if (is_root_pe()) then
       if (day > CS%Start_time) then
-        call open_file(CS%fileenergy_ascii, trim(CS%energyfile), &
-                       action=APPEND_FILE, form=ASCII_FILE, nohdrs=.true.)
+        call open_ASCII_file(CS%fileenergy_ascii, trim(CS%energyfile), action=APPEND_FILE)
       else
-        call open_file(CS%fileenergy_ascii, trim(CS%energyfile), &
-                       action=WRITEONLY_FILE, form=ASCII_FILE, nohdrs=.true.)
+        call open_ASCII_file(CS%fileenergy_ascii, trim(CS%energyfile), action=WRITEONLY_FILE)
         if (abs(CS%timeunit - 86400.0) < 1.0) then
           if (CS%use_temperature) then
             write(CS%fileenergy_ascii,'("  Step,",7x,"Day,  Truncs,      &

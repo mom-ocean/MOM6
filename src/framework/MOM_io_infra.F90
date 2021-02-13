@@ -28,8 +28,8 @@ use iso_fortran_env,      only : int64
 implicit none ; private
 
 ! These interfaces are actually implemented or have explicit interfaces in this file.
-public :: open_file, close_file, flush_file, file_exists, get_filename_suffix
-public :: get_file_info, get_file_fields, get_file_times
+public :: open_file, open_ASCII_file, close_file, flush_file, file_exists
+public :: get_file_info, get_file_fields, get_file_times, get_filename_suffix
 public :: MOM_read_data, MOM_read_vector, write_metadata, write_field
 public :: field_exists, get_field_atts, get_field_size, get_axis_data, read_field_chksum
 public :: io_infra_init, io_infra_end, MOM_namelist_file, check_namelist_error, write_version
@@ -129,14 +129,14 @@ end function FMS_file_exists
 !> close_file closes a file (or fileset).  If the file handle does not point to an open file,
 !! close_file simply returns without doing anything.
 subroutine close_file(unit)
-  integer,                  intent(out) :: unit   !< The I/O unit for the file to be closed
+  integer, intent(inout) :: unit   !< The I/O unit for the file to be closed
 
   call mpp_close(unit)
 end subroutine close_file
 
 !> Ensure that the output stream associated with a unit is fully sent to dis.
 subroutine flush_file(unit)
-  integer,                  intent(out) :: unit   !< The I/O unit for the file to flush
+  integer,                  intent(in) :: unit    !< The I/O unit for the file to flush
 
   call mpp_flush(unit)
 end subroutine flush_file
@@ -205,6 +205,25 @@ subroutine open_file(unit, file, action, form, threading, fileset, nohdrs, domai
                   nohdrs=nohdrs, domain=domain)
   endif
 end subroutine open_file
+
+!> open_file opens an ascii file for parallel or single-file I/O.
+subroutine open_ASCII_file(unit, file, action, threading, fileset)
+  integer,                  intent(out) :: unit   !< The I/O unit for the opened file
+  character(len=*),         intent(in)  :: file   !< The name of the file being opened
+  integer,        optional, intent(in)  :: action !< A flag indicating whether the file can be read
+                                                  !! or written to and how to handle existing files.
+  integer,        optional, intent(in)  :: threading !< A flag indicating whether one (SINGLE_FILE)
+                                                  !! or multiple PEs (MULTIPLE) participate in I/O.
+                                                  !! With the default, the root PE does I/O.
+  integer,        optional, intent(in)  :: fileset !< A flag indicating whether multiple PEs doing I/O due
+                                                  !! to threading=MULTIPLE write to the same file (SINGLE_FILE)
+                                                  !! or to one file per PE (MULTIPLE, the default).
+
+  call mpp_open(unit, file, action=action, form=ASCII_FILE, threading=threading, fileset=fileset, &
+                  nohdrs=.true.)
+
+end subroutine open_ASCII_file
+
 
 !> Provide a string to append to filenames, to differentiate ensemble members, for example.
 subroutine get_filename_suffix(suffix)
