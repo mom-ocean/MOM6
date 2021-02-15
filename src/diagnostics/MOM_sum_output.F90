@@ -53,15 +53,15 @@ character (*), parameter :: area_chksum_attr = "mask2dT_areaT_checksum"
 !> A list of depths and corresponding globally integrated ocean area at each
 !! depth and the ocean volume below each depth.
 type :: Depth_List
-  real :: depth       !< A depth [Z ~> m].
-  real :: area        !< The cross-sectional area of the ocean at that depth [L2 ~> m2].
-  real :: vol_below   !< The ocean volume below that depth [Z m2 ~> m3].
+  integer                         :: listsize  !< length of the list <= niglobal*njglobal + 1
+  real, allocatable, dimension(:) :: depth     !< A list of depths [Z ~> m]
+  real, allocatable, dimension(:) :: area      !< The cross-sectional area of the ocean at that depth [L2 ~> m2]
+  real, allocatable, dimension(:) :: vol_below !< The ocean volume below that depth [Z m2 ~> m3]
 end type Depth_List
 
 !> The control structure for the MOM_sum_output module
 type, public :: sum_output_CS ; private
-  type(Depth_List), pointer, dimension(:) :: DL => NULL() !< The sorted depth list.
-  integer :: list_size          !< length of sorting vector <= niglobal*njglobal
+  type(Depth_List)              :: DL !< The sorted depth list.
 
   integer, allocatable, dimension(:) :: lH
                                 !< This saves the entry in DL with a volume just
@@ -251,9 +251,9 @@ subroutine MOM_sum_output_init(G, GV, US, param_file, directory, ntrnc, &
     endif
 
     allocate(CS%lH(GV%ke))
-    call depth_list_setup(G, GV, US, CS)
+    call depth_list_setup(G, GV, US, CS%DL, CS)
   else
-    CS%list_size = 0
+    CS%DL%listsize = 1
   endif
 
   call get_param(param_file, mdl, "TIMEUNIT", Time_unit, &
@@ -287,7 +287,8 @@ subroutine MOM_sum_output_end(CS)
                                       !! previous call to MOM_sum_output_init.
   if (associated(CS)) then
     if (CS%do_APE_calc) then
-      deallocate(CS%lH, CS%DL)
+      deallocate(CS%DL%depth, CS%DL%area, CS%DL%vol_below)
+      deallocate(CS%lH)
     endif
 
     deallocate(CS)
@@ -398,8 +399,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   integer :: num_nc_fields  ! The number of fields that will actually go into
                             ! the NetCDF file.
   integer :: i, j, k, is, ie, js, je, ns, nz, m, Isq, Ieq, Jsq, Jeq, isr, ier, jsr, jer
-  integer :: l, lbelow, labove   ! indices of deep_area_vol, used to find Z_0APE.
-                                 ! lbelow & labove are lower & upper limits for l
+  integer :: li, lbelow, labove  ! indices of deep_area_vol, used to find Z_0APE.
+                                 ! lbelow & labove are lower & upper limits for li
                                  ! in the search for the entry in lH to use.
   integer :: start_of_day, num_days
   real    :: reday, var
@@ -645,23 +646,23 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     lbelow = 1 ; volbelow = 0.0
     do k=nz,1,-1
       volbelow = volbelow + vol_lay(k)
-      if ((volbelow >= CS%DL(CS%lH(k))%vol_below) .and. &
-          (volbelow < CS%DL(CS%lH(k)+1)%vol_below)) then
-        l = CS%lH(k)
+      if ((volbelow >= CS%DL%vol_below(CS%lH(k))) .and. &
+          (volbelow < CS%DL%vol_below(CS%lH(k)+1))) then
+        li = CS%lH(k)
       else
-        labove=CS%list_size+1
-        l = (labove + lbelow) / 2
-        do while (l > lbelow)
-          if (volbelow < CS%DL(l)%vol_below) then ; labove = l
-          else ; lbelow = l ; endif
-          l = (labove + lbelow) / 2
+        labove=CS%DL%listsize
+        li = (labove + lbelow) / 2
+        do while (li > lbelow)
+          if (volbelow < CS%DL%vol_below(li)) then ; labove = li
+          else ; lbelow = li ; endif
+          li = (labove + lbelow) / 2
         enddo
-        CS%lH(k) = l
+        CS%lH(k) = li
       endif
-      lbelow = l
-      Z_0APE(K) = CS%DL(l)%depth - (volbelow - CS%DL(l)%vol_below) / CS%DL(l)%area
+      lbelow = li
+      Z_0APE(K) = CS%DL%depth(li) - (volbelow - CS%DL%vol_below(li)) / CS%DL%area(li)
     enddo
-    Z_0APE(nz+1) = CS%DL(2)%depth
+    Z_0APE(nz+1) = CS%DL%depth(2)
 
     !   Calculate the Available Potential Energy integrated over each interface.  With a nonlinear
     ! equation of state or with a bulk mixed layer this calculation is only approximate.
@@ -1089,41 +1090,53 @@ end subroutine accumulate_net_input
 !! cross sectional areas at each depth and the volume of fluid deeper
 !! than each depth.  This might be read from a previously created file
 !! or it might be created anew.  (For now only new creation occurs.
-subroutine depth_list_setup(G, GV, US, CS)
-  type(ocean_grid_type),   intent(in) :: G   !< The ocean's grid structure
-  type(verticalGrid_type), intent(in) :: GV  !< The ocean's vertical grid structure.
-  type(unit_scale_type),   intent(in) :: US  !< A dimensional unit scaling type
-  type(Sum_output_CS),     pointer    :: CS  !< The control structure returned by a
-                                             !! previous call to MOM_sum_output_init.
+subroutine depth_list_setup(G, GV, US, DL, CS)
+  type(ocean_grid_type),   intent(in)    :: G   !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)    :: GV  !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
+  type(Depth_List),        intent(inout) :: DL  !< The list of depths, areas and volumes to set up
+  type(Sum_output_CS),     pointer       :: CS  !< The control structure returned by a
+                                                !! previous call to MOM_sum_output_init.
   ! Local variables
+  logical :: valid_DL_read
   integer :: k
 
   if (CS%read_depth_list) then
     if (file_exists(CS%depth_list_file)) then
-      call read_depth_list(G, US, CS, CS%depth_list_file)
+      if (CS%update_depth_list_chksum) then
+        call read_depth_list(G, US, DL, CS%depth_list_file, &
+          require_chksum=CS%require_depth_list_chksum, file_matches=valid_DL_read)
+      else
+        call read_depth_list(G, US, DL, CS%depth_list_file, require_chksum=CS%require_depth_list_chksum)
+        valid_DL_read = .true. ! Otherwise there would have been a fatal error.
+      endif
     else
       if (is_root_pe()) call MOM_error(WARNING, "depth_list_setup: "// &
         trim(CS%depth_list_file)//" does not exist.  Creating a new file.")
-      call create_depth_list(G, CS)
+      valid_DL_read = .false.
+    endif
 
-      call write_depth_list(G, US, CS, CS%depth_list_file, CS%list_size+1)
+    if (.not.valid_DL_read) then
+      call create_depth_list(G, DL, CS%D_list_min_inc)
+      call write_depth_list(G, US, DL, CS%depth_list_file)
     endif
   else
-    call create_depth_list(G, CS)
+    call create_depth_list(G, DL, CS%D_list_min_inc)
   endif
 
   do k=1,GV%ke
-    CS%lH(k) = CS%list_size
+    CS%lH(k) = DL%listsize-1
   enddo
 
 end subroutine depth_list_setup
 
 !>  create_depth_list makes an ordered list of depths, along with the cross
 !! sectional areas at each depth and the volume of fluid deeper than each depth.
-subroutine create_depth_list(G, CS)
-  type(ocean_grid_type), intent(in) :: G  !< The ocean's grid structure.
-  type(Sum_output_CS),   pointer    :: CS !< The control structure set up in MOM_sum_output_init,
-                                          !! in which the ordered depth list is stored.
+subroutine create_depth_list(G, DL, min_depth_inc)
+  type(ocean_grid_type), intent(in)    :: G  !< The ocean's grid structure.
+  type(Depth_List),      intent(inout) :: DL !< The list of depths, areas and volumes to create
+  real,                  intent(in)    :: min_depth_inc !< The minimum increment bewteen depths in the list [Z ~> m]
+
   ! Local variables
   real, dimension(G%Domain%niglobal*G%Domain%njglobal + 1) :: &
     Dlist, &  !< The global list of bottom depths [Z ~> m].
@@ -1194,14 +1207,14 @@ subroutine create_depth_list(G, CS)
   D_list_prev = Dlist(indx2(mls))
   list_size = 2
   do k=mls-1,1,-1
-    if (Dlist(indx2(k)) < D_list_prev-CS%D_list_min_inc) then
+    if (Dlist(indx2(k)) < D_list_prev-min_depth_inc) then
       list_size = list_size + 1
       D_list_prev = Dlist(indx2(k))
     endif
   enddo
 
-  CS%list_size = list_size
-  allocate(CS%DL(CS%list_size+1))
+  DL%listsize = list_size+1
+  allocate(DL%depth(DL%listsize), DL%area(DL%listsize), DL%vol_below(DL%listsize))
 
   vol = 0.0 ; area = 0.0
   Dprev = Dlist(indx2(mls))
@@ -1216,42 +1229,41 @@ subroutine create_depth_list(G, CS)
     add_to_list = .false.
     if ((kl == 0) .or. (k==1)) then
       add_to_list = .true.
-    elseif (Dlist(indx2(k-1)) < D_list_prev-CS%D_list_min_inc) then
+    elseif (Dlist(indx2(k-1)) < D_list_prev-min_depth_inc) then
       add_to_list = .true.
       D_list_prev = Dlist(indx2(k-1))
     endif
 
     if (add_to_list) then
       kl = kl+1
-      CS%DL(kl)%depth = Dlist(i)
-      CS%DL(kl)%area = area
-      CS%DL(kl)%vol_below = vol
+      DL%depth(kl) = Dlist(i)
+      DL%area(kl) = area
+      DL%vol_below(kl) = vol
     endif
     Dprev = Dlist(i)
   enddo
 
-  do while (kl < list_size)
+  do while (kl+1 < DL%listsize)
     ! I don't understand why this is needed... RWH
     kl = kl+1
-    CS%DL(kl)%vol_below = CS%DL(kl-1)%vol_below * 1.000001
-    CS%DL(kl)%area = CS%DL(kl-1)%area
-    CS%DL(kl)%depth = CS%DL(kl-1)%depth
+    DL%vol_below(kl) = DL%vol_below(kl-1) * 1.000001
+    DL%area(kl) = DL%area(kl-1)
+    DL%depth(kl) = DL%depth(kl-1)
   enddo
 
-  CS%DL(CS%list_size+1)%vol_below = CS%DL(CS%list_size)%vol_below * 1000.0
-  CS%DL(CS%list_size+1)%area = CS%DL(CS%list_size)%area
-  CS%DL(CS%list_size+1)%depth = CS%DL(CS%list_size)%depth
+  DL%vol_below(DL%listsize) = DL%vol_below(DL%listsize-1) * 1000.0
+  DL%area(DL%listsize) = DL%area(DL%listsize-1)
+  DL%depth(DL%listsize) = DL%depth(DL%listsize-1)
 
 end subroutine create_depth_list
 
 !> This subroutine writes out the depth list to the specified file.
-subroutine write_depth_list(G, US, CS, filename, list_size)
+subroutine write_depth_list(G, US, DL, filename)
   type(ocean_grid_type), intent(in) :: G   !< The ocean's grid structure.
   type(unit_scale_type), intent(in) :: US  !< A dimensional unit scaling type
-  type(Sum_output_CS),   pointer    :: CS  !< The control structure returned by a
-                                           !! previous call to MOM_sum_output_init.
+  type(Depth_List),      intent(in) :: DL  !< The list of depths, areas and volumes to write
   character(len=*),      intent(in) :: filename !< The path to the depth list file to write.
-  integer,               intent(in) :: list_size !< The size of the depth list.
+
   ! Local variables
   real, allocatable :: tmp(:)
   integer :: ncid, dimid(1), Did, Aid, Vid, status, k
@@ -1262,7 +1274,7 @@ subroutine write_depth_list(G, US, CS, filename, list_size)
 
   if (.not.is_root_pe()) return
 
-  allocate(tmp(list_size)) ; tmp(:) = 0.0
+  allocate(tmp(DL%listsize)) ; tmp(:) = 0.0
 
   status = NF90_CREATE(filename, 0, ncid)
   if (status /= NF90_NOERR) then
@@ -1270,7 +1282,7 @@ subroutine write_depth_list(G, US, CS, filename, list_size)
     return
   endif
 
-  status = NF90_DEF_DIM(ncid, "list", list_size, dimid(1))
+  status = NF90_DEF_DIM(ncid, "list", DL%listsize, dimid(1))
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
       trim(filename)//trim(NF90_STRERROR(status)))
 
@@ -1317,17 +1329,17 @@ subroutine write_depth_list(G, US, CS, filename, list_size)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
       trim(filename)//trim(NF90_STRERROR(status)))
 
-  do k=1,list_size ; tmp(k) = US%Z_to_m*CS%DL(k)%depth ; enddo
+  do k=1,DL%listsize ; tmp(k) = US%Z_to_m*DL%depth(k) ; enddo
   status = NF90_PUT_VAR(ncid, Did, tmp)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
       trim(filename)//" depth "//trim(NF90_STRERROR(status)))
 
-  do k=1,list_size ; tmp(k) = US%L_to_m**2*CS%DL(k)%area ; enddo
+  do k=1,DL%listsize ; tmp(k) = US%L_to_m**2*DL%area(k) ; enddo
   status = NF90_PUT_VAR(ncid, Aid, tmp)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
       trim(filename)//" area "//trim(NF90_STRERROR(status)))
 
-  do k=1,list_size ; tmp(k) = US%Z_to_m*US%L_to_m**2*CS%DL(k)%vol_below ; enddo
+  do k=1,DL%listsize ; tmp(k) = US%Z_to_m*US%L_to_m**2*DL%vol_below(k) ; enddo
   status = NF90_PUT_VAR(ncid, Vid, tmp)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
       trim(filename)//" vol_below "//trim(NF90_STRERROR(status)))
@@ -1338,14 +1350,18 @@ subroutine write_depth_list(G, US, CS, filename, list_size)
 
 end subroutine write_depth_list
 
-!> This subroutine reads in the depth list to the specified file
-!! and allocates and sets up CS%DL and CS%list_size .
-subroutine read_depth_list(G, US, CS, filename)
-  type(ocean_grid_type), intent(in) :: G   !< The ocean's grid structure
-  type(unit_scale_type), intent(in) :: US  !< A dimensional unit scaling type
-  type(Sum_output_CS),   pointer    :: CS  !< The control structure returned by a
-                                           !! previous call to MOM_sum_output_init.
-  character(len=*),      intent(in) :: filename !< The path to the depth list file to read.
+!> This subroutine reads in the depth list from the specified file
+!! and allocates the memory within and sets up DL.
+subroutine read_depth_list(G, US, DL, filename, require_chksum, file_matches)
+  type(ocean_grid_type), intent(in)    :: G   !< The ocean's grid structure
+  type(unit_scale_type), intent(in)    :: US  !< A dimensional unit scaling type
+  type(Depth_List),      intent(inout) :: DL  !< The list of depths, areas and volumes
+  character(len=*),      intent(in)    :: filename !< The path to the depth list file to read.
+  logical,               intent(in)    :: require_chksum !< If true, missing or mismatched depth
+                                              !! and area checksums result in a fatal error.
+  logical, optional,     intent(out)   :: file_matches !< If present, this indicates whether the file
+                                              !! has been read with matching depth and area checksums
+
   ! Local variables
   character(len=240) :: var_msg
   real, allocatable :: tmp(:)
@@ -1359,30 +1375,27 @@ subroutine read_depth_list(G, US, CS, filename)
   call read_attribute(filename, area_chksum_attr, area_file_chksum, found=area_att_found)
 
   if ((.not.depth_att_found) .or. (.not.area_att_found)) then
-    var_msg = trim(CS%depth_list_file) // " checksums are missing;"
-    if (CS%require_depth_list_chksum) then
+    var_msg = trim(filename) // " checksums are missing;"
+    if (require_chksum) then
       call MOM_error(FATAL, trim(var_msg) // " aborting.")
-    elseif (CS%update_depth_list_chksum) then
+    elseif (present(file_matches)) then
       call MOM_error(WARNING, trim(var_msg) // " updating file.")
-      call create_depth_list(G, CS)
-      call write_depth_list(G, US, CS, CS%depth_list_file, CS%list_size+1)
+      file_matches = .false.
       return
     else
-      call MOM_error(WARNING, &
-        trim(var_msg) // " some diagnostics may not be reproducible.")
+      call MOM_error(WARNING, trim(var_msg) // " some diagnostics may not be reproducible.")
     endif
   else
     call get_depth_list_checksums(G, depth_grid_chksum, area_grid_chksum)
 
     if ((trim(depth_grid_chksum) /= trim(depth_file_chksum)) .or. &
         (trim(area_grid_chksum) /= trim(area_file_chksum)) ) then
-      var_msg = trim(CS%depth_list_file) // " checksums do not match;"
-      if (CS%require_depth_list_chksum) then
+      var_msg = trim(filename) // " checksums do not match;"
+      if (require_chksum) then
         call MOM_error(FATAL, trim(var_msg) // " aborting.")
-      elseif (CS%update_depth_list_chksum) then
+      elseif (present(file_matches)) then
         call MOM_error(WARNING, trim(var_msg) // " updating file.")
-        call create_depth_list(G, CS)
-        call write_depth_list(G, US, CS, CS%depth_list_file, CS%list_size+1)
+        file_matches = .false.
         return
       else
         call MOM_error(WARNING, trim(var_msg) // " some diagnostics may not be reproducible.")
@@ -1398,20 +1411,14 @@ subroutine read_depth_list(G, US, CS, filename)
                                 trim(filename)//" has too many or too few dimensions.")
   list_size = sizes(1)
 
-  CS%list_size = list_size-1
-  allocate(CS%DL(list_size))
-  allocate(tmp(list_size))
+  DL%listsize = list_size
+  allocate(DL%depth(list_size), DL%area(list_size), DL%vol_below(list_size))
 
-  call read_variable(filename, "depth", tmp)
-  do k=1,list_size ; CS%DL(k)%depth = US%m_to_Z*tmp(k) ; enddo
+  call read_variable(filename, "depth", DL%depth, scale=US%m_to_Z)
+  call read_variable(filename, "area", DL%area, scale=US%m_to_L**2)
+  call read_variable(filename, "vol_below", DL%vol_below, scale=US%m_to_Z*US%m_to_L**2)
 
-  call read_variable(filename, "area", tmp)
-  do k=1,list_size ; CS%DL(k)%area = US%m_to_L**2*tmp(k) ; enddo
-
-  call read_variable(filename, "vol_below", tmp)
-  do k=1,list_size ; CS%DL(k)%vol_below = US%m_to_Z*US%m_to_L**2*tmp(k) ; enddo
-
-  deallocate(tmp)
+  if (present(file_matches)) file_matches = .true.
 
 end subroutine read_depth_list
 
