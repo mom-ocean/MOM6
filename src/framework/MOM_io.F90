@@ -608,12 +608,14 @@ end subroutine read_var_sizes
 
 !> Read a real scalar variable from a netCDF file with the root PE, and broadcast the
 !! results to all the other PEs.
-subroutine read_variable_0d(filename, varname, var, ncid_in)
+subroutine read_variable_0d(filename, varname, var, ncid_in, scale)
   character(len=*),  intent(in)    :: filename !< The name of the file to read
   character(len=*),  intent(in)    :: varname  !< The variable name of the data in the file
   real,              intent(inout) :: var      !< The scalar into which to read the data
   integer, optional, intent(in)    :: ncid_in  !< The netCDF ID of an open file.  If absent, the
-                                               !! file is opened and closed within this routine.
+                                               !! file is opened and closed within this routine
+  real,    optional, intent(in)    :: scale    !< A scaling factor that the variable is
+                                               !! multiplied by before it is returned
 
   integer :: varid, ncid, rc
   character(len=256) :: hdr
@@ -634,6 +636,8 @@ subroutine read_variable_0d(filename, varname, var, ncid_in)
           " Difficulties reading "//trim(varname)//" from "//trim(filename))
 
     if (.not.present(ncid_in)) call close_file_to_read(ncid, filename)
+
+    if (present(scale)) var = scale * var
   endif
 
   call broadcast(var, blocking=.true.)
@@ -641,12 +645,14 @@ end subroutine read_variable_0d
 
 !> Read a 1-d real variable from a netCDF file with the root PE, and broadcast the
 !! results to all the other PEs.
-subroutine read_variable_1d(filename, varname, var, ncid_in)
+subroutine read_variable_1d(filename, varname, var, ncid_in, scale)
   character(len=*),   intent(in)    :: filename !< The name of the file to read
   character(len=*),   intent(in)    :: varname  !< The variable name of the data in the file
   real, dimension(:), intent(inout) :: var      !< The 1-d array into which to read the data
   integer,  optional, intent(in)    :: ncid_in  !< The netCDF ID of an open file.  If absent, the
-                                                !! file is opened and closed within this routine.
+                                                !! file is opened and closed within this routine
+  real,     optional, intent(in)    :: scale    !< A scaling factor that the variable is
+                                                !! multiplied by before it is returned
 
   integer :: varid, ncid, rc
   character(len=256) :: hdr
@@ -667,6 +673,10 @@ subroutine read_variable_1d(filename, varname, var, ncid_in)
           " Difficulties reading "//trim(varname)//" from "//trim(filename))
 
     if (.not.present(ncid_in)) call close_file_to_read(ncid, filename)
+
+    if (present(scale)) then ; if (scale /= 1.0) then
+      var(:) = scale * var(:)
+    endif ; endif
   endif
 
   call broadcast(var, size(var), blocking=.true.)
