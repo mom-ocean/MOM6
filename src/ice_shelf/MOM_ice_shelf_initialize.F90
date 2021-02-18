@@ -265,9 +265,8 @@ subroutine initialize_ice_thickness_channel(h_shelf, area_shelf_h, hmask, G, US,
 
 end subroutine initialize_ice_thickness_channel
 subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_bdry, &
-                u_flux_bdry_val, v_flux_bdry_val, u_bdry_val, v_bdry_val, h_bdry_val, &
-                thickness_bdry_val, hmask,  h_shelf, u_shelf, v_shelf, G,&   ! OVS h_shelf 11/10/20
-!                flux_bdry, &
+                u_flux_bdry_val, v_flux_bdry_val, u_bdry_val, v_bdry_val, u_shelf, v_shelf, h_bdry_val, &
+                thickness_bdry_val, hmask,  h_shelf, G,&  
                 US, PF )
 
    type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
@@ -340,7 +339,8 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
    giec = G%Domain%niglobal+gisc ; gjec = G%Domain%njglobal+gjsc
 
 !-----------b.c.s based on geopositions -----------------
-   do j=jsc-1,jec+1
+!   do j=jsc-1,jec+1
+   do j=jsc-0*1,jec+1
      do i=isc-1,iec+1
   ! upstream boundary - set either dirichlet or flux condition
 
@@ -349,13 +349,13 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
  !          u_face_mask_bdry(i-1,j) = 4.0
  !          u_flux_bdry_val(i-1,j) = input_flux
  !        else
-!           hmask(i+1,j) = 3.0
-           hmask(i,j) = 3.0
-!           h_bdry_val(i+1,j) = h_shelf(i+1,j) !OVS 11/10/20 !input_thick
-           h_bdry_val(i,j) = h_shelf(i,j)
-           thickness_bdry_val(i+0*1,j) = h_bdry_val(i+0*1,j)
-           u_face_mask_bdry(i+0*1,j) = 3.0
-           u_bdry_val(i+0*1,j) = input_vel*(1-16.0*((G%geoLatBu(i-1,j)/lenlat-0.5))**4) !OVS 11/09/20 U b.c.
+           hmask(i+1,j) = 3.0
+!           hmask(i,j) = 3.0
+           h_bdry_val(i+1,j) = h_shelf(i+1,j) !OVS 11/10/20 !input_thick
+!           h_bdry_val(i,j) = h_shelf(i,j)
+           thickness_bdry_val(i+1,j) = h_bdry_val(i+0*1,j)
+           u_face_mask_bdry(i+1,j) = 3.0
+           u_bdry_val(i+1,j) = input_vel*(1-16.0*((G%geoLatBu(i-1,j)/lenlat-0.5))**4) !OVS 11/09/20 U b.c.
  !          u_bdry_val(i+1,j) = (1 - ((G%geoLatBu(i,j) - 0.5*lenlat)*2./lenlat)**2) * &
  !                  1.5 * input_flux / input_thick
  !        endif
@@ -396,7 +396,11 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
      enddo
    enddo
 
-
+!  call pass_var(hmask, G%domain)
+!  call pass_var(h_bdry_val, G%domain) 
+!  call pass_var(thickness_bdry_val, G%domain)  
+  
+  
 !       if (.not. G%symmetric) then
 !!      do j=G%jsd,G%jed 
 !!       do i=G%isd,G%ied
