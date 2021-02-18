@@ -15,7 +15,7 @@ use MOM_domain_infra,     only : pass_var_start, pass_var_complete
 use MOM_domain_infra,     only : pass_vector_start, pass_vector_complete
 use MOM_domain_infra,     only : create_group_pass, do_group_pass
 use MOM_domain_infra,     only : start_group_pass, complete_group_pass
-use MOM_domain_infra,     only : global_field, redistribute_array, broadcast_domain
+use MOM_domain_infra,     only : rescale_comp_data, global_field, redistribute_array, broadcast_domain
 use MOM_domain_infra,     only : MOM_thread_affinity_set, set_MOM_thread_affinity
 use MOM_domain_infra,     only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM
 use MOM_domain_infra,     only : CORNER, CENTER, NORTH_FACE, EAST_FACE
@@ -28,22 +28,24 @@ use MOM_string_functions, only : slasher
 implicit none ; private
 
 public :: MOM_infra_init, MOM_infra_end
-!      Domain types and creation and destruction routines
+!  Domain types and creation and destruction routines
 public :: MOM_domain_type, domain2D, domain1D
 public :: MOM_domains_init, create_MOM_domain, clone_MOM_domain, deallocate_MOM_domain
 public :: MOM_thread_affinity_set, set_MOM_thread_affinity
-!      Domain query routines
+!  Domain query routines
 public :: get_domain_extent, get_domain_components, compute_block_extent, get_global_shape
 public :: PE_here, root_PE, num_PEs
-!      Single call communication routines
+!  Single call communication routines
 public :: pass_var, pass_vector, fill_symmetric_edges, broadcast
-!      Non-blocking communication routines
+!  Non-blocking communication routines
 public :: pass_var_start, pass_var_complete, pass_vector_start, pass_vector_complete
-!      Multi-variable group communication routines and type
+!  Multi-variable group communication routines and type
 public :: create_group_pass, do_group_pass, group_pass_type, start_group_pass, complete_group_pass
-!      Global reduction routines
+!  Global reduction routines
 public :: sum_across_PEs, min_across_PEs, max_across_PEs
 public :: global_field, redistribute_array, broadcast_domain
+!  Simple index-convention-invariant array manipulation routine
+public :: rescale_comp_data
 !> These encoding constants are used to indicate the staggering of scalars and vectors
 public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR
 !> These encoding constants are used to indicate the discretization position of a variable

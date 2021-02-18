@@ -8,8 +8,9 @@ use MOM_EOS,              only : calculate_density, EOS_type
 use MOM_error_handler,    only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler,    only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,      only : get_param, read_param, log_param, param_file_type, log_version
-use MOM_io,               only : MOM_read_data, close_file, create_file, fieldtype, file_exists
-use MOM_io,               only : write_field, vardesc, var_desc, SINGLE_FILE, MULTIPLE
+use MOM_io,               only : close_file, create_file, file_type, fieldtype, file_exists
+use MOM_io,               only : MOM_read_data, MOM_write_field, vardesc, var_desc
+use MOM_io,               only : SINGLE_FILE, MULTIPLE
 use MOM_string_functions, only : slasher, uppercase
 use MOM_unit_scaling,     only : unit_scale_type
 use MOM_variables,        only : thermo_var_ptrs
@@ -517,19 +518,19 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
   character(len=240) :: filepath
   type(vardesc) :: vars(2)
   type(fieldtype) :: fields(2)
-  integer :: unit
+  type(file_type) :: IO_handle ! The I/O handle of the fileset
 
   filepath = trim(directory) // trim("Vertical_coordinate")
 
   vars(1) = var_desc("R","kilogram meter-3","Target Potential Density",'1','L','1')
   vars(2) = var_desc("g","meter second-2","Reduced gravity",'1','L','1')
 
-  call create_file(unit, trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
+  call create_file(IO_handle, trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
 
-  call write_field(unit, fields(1), US%R_to_kg_m3*GV%Rlay(:))
-  call write_field(unit, fields(2), US%L_T_to_m_s**2*US%m_to_Z*GV%g_prime(:))
+  call MOM_write_field(IO_handle, fields(1), GV%Rlay, scale=US%R_to_kg_m3)
+  call MOM_write_field(IO_handle, fields(2), GV%g_prime, scale=US%L_T_to_m_s**2*US%m_to_Z)
 
-  call close_file(unit)
+  call close_file(IO_handle)
 
 end subroutine write_vertgrid_file
 

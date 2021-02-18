@@ -190,8 +190,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   call get_param(PF, mdl, "DEBUG", debug, default=.false.)
   call get_param(PF, mdl, "DEBUG_OBC", debug_obc, default=.false.)
 
-  new_sim = determine_is_new_run(dirs%input_filename, dirs%restart_input_dir, &
-                                 G, restart_CS)
+  new_sim = determine_is_new_run(dirs%input_filename, dirs%restart_input_dir, G, restart_CS)
   just_read = .not.new_sim
 
   call get_param(PF, mdl, "INPUTDIR", inputdir, &
@@ -485,8 +484,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   if (.not.new_sim) then ! This block restores the state from a restart file.
     !    This line calls a subroutine that reads the initial conditions
     !  from a previously generated file.
-    call restore_state(dirs%input_filename, dirs%restart_input_dir, Time, &
-                       G, restart_CS)
+    call restore_state(dirs%input_filename, dirs%restart_input_dir, Time, G, restart_CS)
     if (present(Time_in)) Time = Time_in
     if ((GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= GV%m_to_H)) then
       H_rescale = GV%m_to_H / GV%m_to_H_restart
