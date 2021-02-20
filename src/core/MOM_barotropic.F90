@@ -948,11 +948,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   do j=CS%jsdw,CS%jedw ; do I=CS%isdw-1,CS%iedw
     Cor_ref_u(I,j) = 0.0 ; BT_force_u(I,j) = 0.0 ; ubt(I,j) = 0.0
     Datu(I,j) = 0.0 ; bt_rem_u(I,j) = 0.0 ; uhbt0(I,j) = 0.0
+    Rayleigh_u(I,j) = 0.0
   enddo ; enddo
   !$OMP parallel do default(shared)
   do J=CS%jsdw-1,CS%jedw ; do i=CS%isdw,CS%iedw
     Cor_ref_v(i,J) = 0.0 ; BT_force_v(i,J) = 0.0 ; vbt(i,J) = 0.0
     Datv(i,J) = 0.0 ; bt_rem_v(i,J) = 0.0 ; vhbt0(i,J) = 0.0
+    Rayleigh_v(i,J) = 0.0
   enddo ; enddo
 
   ! Copy input arrays into their wide-halo counterparts.
