@@ -76,7 +76,7 @@ contains
 !! a third-order PPM ih4 scheme). In these cases, we resort to the simplest
 !! continuous linear scheme (P1M h2).
 subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
-     ppoly0_coefs, degree, h_neglect, h_neglect_edge)
+               ppoly0_coefs, degree, h_neglect, h_neglect_edge)
   type(interp_CS_type),  intent(in)    :: CS !< Interpolation control structure
   integer,               intent(in)    :: n0 !< Number of cells on source grid
   real, dimension(n0),   intent(in)    :: densities !< Actual cell densities [A]

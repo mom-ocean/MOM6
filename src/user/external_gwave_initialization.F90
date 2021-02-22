@@ -36,10 +36,10 @@ subroutine external_gwave_initialize_thickness(h, G, GV, US, param_file, just_re
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
   ! Local variables
-  real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface
-                          ! positive upward [Z ~> m].
-  real :: ssh_anomaly_height ! Vertical height of ssh anomaly
-  real :: ssh_anomaly_width ! Lateral width of anomaly
+  real :: eta1D(SZK_(GV)+1)  ! Interface height relative to the sea surface
+                             ! positive upward [Z ~> m].
+  real :: ssh_anomaly_height ! Vertical height of ssh anomaly [Z ~> m]
+  real :: ssh_anomaly_width ! Lateral width of anomaly [degrees]
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40)  :: mdl = "external_gwave_initialize_thickness" ! This subroutine's name.
 ! This include declares and sets the variable "version".
@@ -47,7 +47,7 @@ subroutine external_gwave_initialize_thickness(h, G, GV, US, param_file, just_re
   integer :: i, j, k, is, ie, js, je, nz
   real :: PI, Xnondim
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
