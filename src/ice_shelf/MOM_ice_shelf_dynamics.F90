@@ -714,7 +714,7 @@ subroutine update_ice_shelf(CS, ISS, G, US, time_step, Time, ocean_mass, coupled
   coupled_GL = .false.
   if (present(ocean_mass) .and. present(coupled_grounding)) coupled_GL = coupled_grounding
 
-!  call ice_shelf_advect(CS, ISS, G, time_step, Time) !OVS 02/08/21
+  call ice_shelf_advect(CS, ISS, G, time_step, Time) !OVS 02/08/21
   CS%elapsed_velocity_time = CS%elapsed_velocity_time + time_step
   if (CS%elapsed_velocity_time >= CS%velocity_update_time_step) update_ice_vel = .true.
 
