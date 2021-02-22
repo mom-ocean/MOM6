@@ -366,13 +366,16 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
         if (G%geoLatBu(i,j-1) == southlat) then !bot boundary
          if (len_stress == 0. .OR. G%geoLonCv(i,j) <= len_stress) then
            v_face_mask_bdry(i,j+1) = 0.
-           u_face_mask_bdry(i,j-1) = 3.          !OVS 11/25/20 
+!           u_face_mask_bdry(i,j-1) = 3.          !OVS 11/25/20
+           u_face_mask_bdry(i,j) = 3.         !OVS 11/25/20
+           u_bdry_val(i,j) = 0.
+           v_bdry_val(i,j) = 0.            
          else
-!           v_face_mask_bdry(i,j+1) = 1.
-           v_face_mask_bdry(i,j-1) = 3.         !OVS 01/20/21
-           u_face_mask_bdry(i,j-1) = 3.         !OVS 11/25/20
-!           u_bdry_val(i,j) = 0.
-!           v_bdry_val(i,j) = 0.                !OVS 01/20/21
+           v_face_mask_bdry(i,j+1) = 1.
+!           v_face_mask_bdry(i,j) = 3.         !OVS 01/20/21
+           u_face_mask_bdry(i,j) = 3.         !OVS 11/25/20
+           u_bdry_val(i,j) = 0.
+           v_bdry_val(i,j) = 0.                !OVS 01/20/21
            !hmask(i,j) = 0.0                   !OVS 11/25/20
          endif
        elseif (G%geoLatBu(i,j-1) == southlat+lenlat) then !top boundary
