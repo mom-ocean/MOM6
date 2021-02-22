@@ -2641,12 +2641,12 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
                            dT_dS_gauge*dRcv_dT(i)*(S(i,k1)-S(i,kb2))
               if (dSpice_det*dSpice_lim <= 0.0) dSpice_lim = 0.0
             endif
-            if (k1<nz) then; if (h(i,k1+1) > 10.0*Angstrom) then
+            if (k1<nz) then ; if (h(i,k1+1) > 10.0*Angstrom) then
               dSpice_lim2 = dS_dT_gauge*dRcv_dS(i)*(T(i,k1+1)-T(i,kb2)) - &
                             dT_dS_gauge*dRcv_dT(i)*(S(i,k1+1)-S(i,kb2))
               if ((dSpice_det*dSpice_lim2 > 0.0) .and. &
                   (abs(dSpice_lim2) > abs(dSpice_lim))) dSpice_lim = dSpice_lim2
-            endif; endif
+            endif ; endif
             if (abs(dSpice_det) > abs(dSpice_lim)) dSpice_det = dSpice_lim
 
             I_denom = 1.0 / (dRcv_dS(i)**2 + (dT_dS_gauge*dRcv_dT(i))**2)

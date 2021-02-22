@@ -3,22 +3,18 @@ module MOM_grid_initialize
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_checksums, only : hchksum, Bchksum
-use MOM_checksums, only : uvchksum, hchksum_pair, Bchksum_pair
-use MOM_domains, only : pass_var, pass_vector, pe_here, root_PE, broadcast
-use MOM_domains, only : AGRID, BGRID_NE, CGRID_NE, To_All, Scalar_Pair
-use MOM_domains, only : To_North, To_South, To_East, To_West
-use MOM_domains, only : MOM_define_domain, MOM_define_IO_domain
-use MOM_domains, only : MOM_domain_type
-use MOM_dyn_horgrid, only : dyn_horgrid_type, set_derived_dyn_horgrid
+use MOM_checksums,     only : hchksum, Bchksum, uvchksum, hchksum_pair, Bchksum_pair
+use MOM_domains,       only : pass_var, pass_vector, pe_here, root_PE, broadcast
+use MOM_domains,       only : AGRID, BGRID_NE, CGRID_NE, To_All, Scalar_Pair
+use MOM_domains,       only : To_North, To_South, To_East, To_West
+use MOM_domains,       only : MOM_domain_type, clone_MOM_domain, deallocate_MOM_domain
+use MOM_dyn_horgrid,   only : dyn_horgrid_type, set_derived_dyn_horgrid
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_io, only : MOM_read_data, read_data, slasher, file_exists
-use MOM_io, only : CORNER, NORTH_FACE, EAST_FACE
-use MOM_unit_scaling, only : unit_scale_type
-
-use mpp_domains_mod, only : mpp_get_domain_extents, mpp_deallocate_domain
+use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
+use MOM_io,            only : MOM_read_data, slasher, file_exists, stdout
+use MOM_io,            only : CORNER, NORTH_FACE, EAST_FACE
+use MOM_unit_scaling,  only : unit_scale_type
 
 implicit none ; private
 
@@ -188,13 +184,10 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
   character(len=200) :: filename, grid_file, inputdir
   character(len=64)  :: mdl = "MOM_grid_init set_grid_metrics_from_mosaic"
-  integer :: err=0, ni, nj, global_indices(4)
-  type(MOM_domain_type) :: SGdom ! Supergrid domain
+  type(MOM_domain_type), pointer :: SGdom => NULL() ! Supergrid domain
   logical :: lon_bug  ! If true use an older buggy answer in the tripolar longitude.
-  integer :: i, j, i2, j2
-  integer :: npei,npej
-  integer, dimension(:), allocatable :: exni,exnj
-  integer        :: start(4), nread(4)
+  integer :: i, j, i2, j2, ni, nj
+  integer :: start(4), nread(4)
 
   call callTree_enter("set_grid_metrics_from_mosaic(), MOM_grid_initialize.F90")
 
@@ -220,42 +213,9 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   dxBu(:,:) = 0.0 ; dyBu(:,:) = 0.0 ; areaBu(:,:) = 0.0
 
   !<MISSING CODE TO READ REFINEMENT LEVEL>
-  ni = 2*(G%iec-G%isc+1) ! i size of supergrid
-  nj = 2*(G%jec-G%jsc+1) ! j size of supergrid
 
-  ! Define a domain for the supergrid (SGdom)
-  npei = G%domain%layout(1) ; npej = G%domain%layout(2)
-  allocate(exni(npei)) ; allocate(exnj(npej))
-  call mpp_get_domain_extents(G%domain%mpp_domain, exni, exnj)
-  allocate(SGdom%mpp_domain)
-  SGdom%nihalo = 2*G%domain%nihalo+1
-  SGdom%njhalo = 2*G%domain%njhalo+1
-  SGdom%niglobal = 2*G%domain%niglobal
-  SGdom%njglobal = 2*G%domain%njglobal
-  SGdom%layout(:) = G%domain%layout(:)
-  SGdom%io_layout(:) = G%domain%io_layout(:)
-  global_indices(1) = 1+SGdom%nihalo
-  global_indices(2) = SGdom%niglobal+SGdom%nihalo
-  global_indices(3) = 1+SGdom%njhalo
-  global_indices(4) = SGdom%njglobal+SGdom%njhalo
-  exni(:) = 2*exni(:) ; exnj(:) = 2*exnj(:)
-  if (associated(G%domain%maskmap)) then
-     call MOM_define_domain(global_indices, SGdom%layout, SGdom%mpp_domain, &
-            xflags=G%domain%X_FLAGS, yflags=G%domain%Y_FLAGS, &
-            xhalo=SGdom%nihalo, yhalo=SGdom%njhalo, &
-            xextent=exni,yextent=exnj, &
-            symmetry=.true., name="MOM_MOSAIC", maskmap=G%domain%maskmap)
-  else
-     call MOM_define_domain(global_indices, SGdom%layout, SGdom%mpp_domain, &
-            xflags=G%domain%X_FLAGS, yflags=G%domain%Y_FLAGS, &
-            xhalo=SGdom%nihalo, yhalo=SGdom%njhalo, &
-            xextent=exni,yextent=exnj, &
-            symmetry=.true., name="MOM_MOSAIC")
-  endif
-
-  call MOM_define_IO_domain(SGdom%mpp_domain, SGdom%io_layout)
-  deallocate(exni)
-  deallocate(exnj)
+  call clone_MOM_domain(G%domain, SGdom, symmetric=.true., domain_name="MOM_MOSAIC", &
+                        refine=2, extra_halo=1)
 
   ! Read X from the supergrid
   tmpZ(:,:) = 999.
@@ -344,10 +304,9 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
                   (tmpT(i2,j2+1) + tmpT(i2+1,j2))
   enddo ; enddo
 
-  ni=SGdom%niglobal
-  nj=SGdom%njglobal
-  call mpp_deallocate_domain(SGdom%mpp_domain)
-  deallocate(SGdom%mpp_domain)
+  ni = SGdom%niglobal
+  nj = SGdom%njglobal
+  call deallocate_MOM_domain(SGdom)
 
   call pass_vector(dyCu, dxCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
   call pass_vector(dxCu, dyCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
@@ -374,7 +333,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   start(2) = 2 ; nread(1) = ni+1 ; nread(2) = 2
   allocate( tmpGlbl(ni+1,2) )
   if (is_root_PE()) &
-    call read_data(filename, "x", tmpGlbl, start, nread, no_domain=.TRUE.)
+    call MOM_read_data(filename, "x", tmpGlbl, start, nread, no_domain=.TRUE.)
   call broadcast(tmpGlbl, 2*(ni+1), root_PE())
 
   ! I don't know why the second axis is 1 or 2 here. -RWH
@@ -392,7 +351,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   start(:) = 1 ; nread(:) = 1
   start(1) = int(ni/4)+1 ; nread(2) = nj+1
   if (is_root_PE()) &
-    call read_data(filename, "y", tmpGlbl, start, nread, no_domain=.TRUE.)
+    call MOM_read_data(filename, "y", tmpGlbl, start, nread, no_domain=.TRUE.)
   call broadcast(tmpGlbl, nj+1, root_PE())
 
   do j=G%jsg,G%jeg
@@ -806,14 +765,14 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
     y_q = find_root(Int_dj_dy, dy_dj, GP, jd, 0.0, -1.0*PI_2, PI_2, itt2)
     G%gridLatB(J) = y_q*180.0/PI
     ! if (is_root_pe()) &
-    !   write(*, '("J, y_q = ",I4,ES14.4," itts = ",I4)')  j, y_q, itt2
+    !   write(stdout, '("J, y_q = ",I4,ES14.4," itts = ",I4)')  j, y_q, itt2
   enddo
   do j=G%jsg,G%jeg
     jd = fnRef + (j - jRef) - 0.5
     y_h = find_root(Int_dj_dy, dy_dj, GP, jd, 0.0, -1.0*PI_2, PI_2, itt1)
     G%gridLatT(j) = y_h*180.0/PI
     ! if (is_root_pe()) &
-    !   write(*, '("j, y_h = ",I4,ES14.4," itts = ",I4)')  j, y_h, itt1
+    !   write(stdout, '("j, y_h = ",I4,ES14.4," itts = ",I4)')  j, y_h, itt1
   enddo
   do J=JsdB+J_off,JedB+J_off
     jd = fnRef + (J - jRef)

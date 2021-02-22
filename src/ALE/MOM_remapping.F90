@@ -13,8 +13,7 @@ use PCM_functions, only : PCM_reconstruction
 use PLM_functions, only : PLM_reconstruction, PLM_boundary_extrapolation
 use PPM_functions, only : PPM_reconstruction, PPM_boundary_extrapolation
 use PQM_functions, only : PQM_reconstruction, PQM_boundary_extrapolation_v1
-
-use iso_fortran_env, only : stdout=>output_unit, stderr=>error_unit
+use MOM_io, only : stdout, stderr
 
 implicit none ; private
 
@@ -1636,7 +1635,7 @@ logical function remapping_unit_tests(verbose)
   h_neglect = hNeglect_dflt
   h_neglect_edge = hNeglect_dflt ; if (answers_2018) h_neglect_edge = 1.0e-10
 
-  write(*,*) '==== MOM_remapping: remapping_unit_tests ================='
+  write(stdout,*) '==== MOM_remapping: remapping_unit_tests ================='
   remapping_unit_tests = .false. ! Normally return false
 
   thisTest = .false.
@@ -1645,19 +1644,19 @@ logical function remapping_unit_tests(verbose)
     err=x0(i)-0.75*real(i-1)
     if (abs(err)>real(i-1)*epsilon(err)) thisTest = .true.
   enddo
-  if (thisTest) write(*,*) 'remapping_unit_tests: Failed buildGridFromH() 1'
+  if (thisTest) write(stdout,*) 'remapping_unit_tests: Failed buildGridFromH() 1'
   remapping_unit_tests = remapping_unit_tests .or. thisTest
   call buildGridFromH(n1, h1, x1)
   do i=1,n1+1
     err=x1(i)-real(i-1)
     if (abs(err)>real(i-1)*epsilon(err)) thisTest = .true.
   enddo
-  if (thisTest) write(*,*) 'remapping_unit_tests: Failed buildGridFromH() 2'
+  if (thisTest) write(stdout,*) 'remapping_unit_tests: Failed buildGridFromH() 2'
   remapping_unit_tests = remapping_unit_tests .or. thisTest
 
   thisTest = .false.
   call initialize_remapping(CS, 'PPM_H4', answers_2018=answers_2018)
-  if (verbose) write(*,*) 'h0 (test data)'
+  if (verbose) write(stdout,*) 'h0 (test data)'
   if (verbose) call dumpGrid(n0,h0,x0,u0)
 
   call dzFromH1H2( n0, h0, n1, h1, dx1 )
@@ -1666,9 +1665,9 @@ logical function remapping_unit_tests(verbose)
     err=u1(i)-8.*(0.5*real(1+n1)-real(i))
     if (abs(err)>real(n1-1)*epsilon(err)) thisTest = .true.
   enddo
-  if (verbose) write(*,*) 'h1 (by projection)'
+  if (verbose) write(stdout,*) 'h1 (by projection)'
   if (verbose) call dumpGrid(n1,h1,x1,u1)
-  if (thisTest) write(*,*) 'remapping_unit_tests: Failed remapping_core_w()'
+  if (thisTest) write(stdout,*) 'remapping_unit_tests: Failed remapping_core_w()'
   remapping_unit_tests = remapping_unit_tests .or. thisTest
 
   thisTest = .false.
@@ -1690,7 +1689,7 @@ logical function remapping_unit_tests(verbose)
     err=u1(i)-8.*(0.5*real(1+n1)-real(i))
     if (abs(err)>2.*epsilon(err)) thisTest = .true.
   enddo
-  if (thisTest) write(*,*) 'remapping_unit_tests: Failed remapByProjection()'
+  if (thisTest) write(stdout,*) 'remapping_unit_tests: Failed remapByProjection()'
   remapping_unit_tests = remapping_unit_tests .or. thisTest
 
   thisTest = .false.
@@ -1698,14 +1697,14 @@ logical function remapping_unit_tests(verbose)
   call remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefs, &
                       n1, x1-x0(1:n1+1), &
                       INTEGRATION_PPM, u1, hn1, h_neglect )
-  if (verbose) write(*,*) 'h1 (by delta)'
+  if (verbose) write(stdout,*) 'h1 (by delta)'
   if (verbose) call dumpGrid(n1,h1,x1,u1)
   hn1=hn1-h1
   do i=1,n1
     err=u1(i)-8.*(0.5*real(1+n1)-real(i))
     if (abs(err)>2.*epsilon(err)) thisTest = .true.
   enddo
-  if (thisTest) write(*,*) 'remapping_unit_tests: Failed remapByDeltaZ() 1'
+  if (thisTest) write(stdout,*) 'remapping_unit_tests: Failed remapByDeltaZ() 1'
   remapping_unit_tests = remapping_unit_tests .or. thisTest
 
   thisTest = .false.
@@ -1715,19 +1714,19 @@ logical function remapping_unit_tests(verbose)
   call remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefs, &
                       n2, dx2, &
                       INTEGRATION_PPM, u2, hn2, h_neglect )
-  if (verbose) write(*,*) 'h2'
+  if (verbose) write(stdout,*) 'h2'
   if (verbose) call dumpGrid(n2,h2,x2,u2)
-  if (verbose) write(*,*) 'hn2'
+  if (verbose) write(stdout,*) 'hn2'
   if (verbose) call dumpGrid(n2,hn2,x2,u2)
 
   do i=1,n2
     err=u2(i)-8./2.*(0.5*real(1+n2)-real(i))
     if (abs(err)>2.*epsilon(err)) thisTest = .true.
   enddo
-  if (thisTest) write(*,*) 'remapping_unit_tests: Failed remapByDeltaZ() 2'
+  if (thisTest) write(stdout,*) 'remapping_unit_tests: Failed remapByDeltaZ() 2'
   remapping_unit_tests = remapping_unit_tests .or. thisTest
 
-  if (verbose) write(*,*) 'Via sub-cells'
+  if (verbose) write(stdout,*) 'Via sub-cells'
   thisTest = .false.
   call remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefs, &
                             n2, h2, INTEGRATION_PPM, .false., u2, err )
@@ -1737,7 +1736,7 @@ logical function remapping_unit_tests(verbose)
     err=u2(i)-8./2.*(0.5*real(1+n2)-real(i))
     if (abs(err)>2.*epsilon(err)) thisTest = .true.
   enddo
-  if (thisTest) write(*,*) 'remapping_unit_tests: Failed remap_via_sub_cells() 2'
+  if (thisTest) write(stdout,*) 'remapping_unit_tests: Failed remap_via_sub_cells() 2'
   remapping_unit_tests = remapping_unit_tests .or. thisTest
 
   call remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefs, &
@@ -1748,9 +1747,9 @@ logical function remapping_unit_tests(verbose)
                             3, (/2.25,1.5,1./), INTEGRATION_PPM, .false., u2, err )
   if (verbose) call dumpGrid(3,h2,x2,u2)
 
-  if (.not. remapping_unit_tests) write(*,*) 'Pass'
+  if (.not. remapping_unit_tests) write(stdout,*) 'Pass'
 
-  write(*,*) '===== MOM_remapping: new remapping_unit_tests =================='
+  write(stdout,*) '===== MOM_remapping: new remapping_unit_tests =================='
 
   deallocate(ppoly0_E, ppoly0_S, ppoly0_coefs)
   allocate(ppoly0_coefs(5,6))
@@ -1879,7 +1878,7 @@ logical function remapping_unit_tests(verbose)
 
   deallocate(ppoly0_E, ppoly0_S, ppoly0_coefs)
 
-  if (.not. remapping_unit_tests) write(*,*) 'Pass'
+  if (.not. remapping_unit_tests) write(stdout,*) 'Pass'
 
 end function remapping_unit_tests
 

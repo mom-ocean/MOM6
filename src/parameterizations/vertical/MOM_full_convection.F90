@@ -23,13 +23,13 @@ subroutine full_convection(G, GV, US, h, tv, T_adj, S_adj, p_surf, Kddt_smooth, 
   type(ocean_grid_type),   intent(in)    :: G     !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV    !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(in)    :: tv    !< A structure pointing to various
                                                   !! thermodynamic variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out)   :: T_adj !< Adjusted potential temperature [degC].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out)   :: S_adj !< Adjusted salinity [ppt].
   real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface [R L2 T-2 ~> Pa] (or NULL).
   real,                    intent(in)    :: Kddt_smooth  !< A smoothing vertical
@@ -39,7 +39,7 @@ subroutine full_convection(G, GV, US, h, tv, T_adj, S_adj, p_surf, Kddt_smooth, 
   integer,       optional, intent(in)    :: halo  !< Halo width over which to compute
 
   ! Local variables
-  real, dimension(SZI_(G),SZK_(G)+1) :: &
+  real, dimension(SZI_(G),SZK_(GV)+1) :: &
     dRho_dT, &  ! The derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
     dRho_dS     ! The derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
   real :: h_neglect, h0 ! A thickness that is so small it is usually lost
@@ -54,7 +54,7 @@ subroutine full_convection(G, GV, US, h, tv, T_adj, S_adj, p_surf, Kddt_smooth, 
             ! mixing with layers above rescaled by a factor of d_a [ppt].
             ! This array is discreted on tracer cells, but contains an extra
             ! layer at the top for algorithmic convenience.
-  real, dimension(SZI_(G),SZK_(G)+1) :: &
+  real, dimension(SZI_(G),SZK_(GV)+1) :: &
     Te_b, & ! A partially updated temperature estimate including the influnce from
             ! mixing with layers below rescaled by a factor of d_b [degC].
             ! This array is discreted on tracer cells, but contains an extra
@@ -63,7 +63,7 @@ subroutine full_convection(G, GV, US, h, tv, T_adj, S_adj, p_surf, Kddt_smooth, 
             ! mixing with layers below rescaled by a factor of d_b [ppt].
             ! This array is discreted on tracer cells, but contains an extra
             ! layer at the bottom for algorithmic convenience.
-  real, dimension(SZI_(G),SZK_(G)+1) :: &
+  real, dimension(SZI_(G),SZK_(GV)+1) :: &
     c_a, &  ! The fractional influence of the properties of the layer below
             ! in the final properies with a downward-first solver, nondim.
     d_a, &  ! The fractional influence of the properties of the layer in question
@@ -74,7 +74,7 @@ subroutine full_convection(G, GV, US, h, tv, T_adj, S_adj, p_surf, Kddt_smooth, 
     d_b     ! The fractional influence of the properties of the layer in question
             ! and layers below in the final properies with a upward-first solver, nondim.
             ! d_b = 1.0 - c_b
-  real, dimension(SZI_(G),SZK_(G)+1) :: &
+  real, dimension(SZI_(G),SZK_(GV)+1) :: &
     mix     !< The amount of mixing across the interface between layers [H ~> m or kg m-2].
   real :: mix_len  ! The length-scale of mixing, when it is active [H ~> m or kg m-2]
   real :: h_b, h_a ! The thicknessses of the layers above and below an interface [H ~> m or kg m-2]
@@ -94,7 +94,7 @@ subroutine full_convection(G, GV, US, h, tv, T_adj, S_adj, p_surf, Kddt_smooth, 
   else
     is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   endif
-  nz = G%ke
+  nz = GV%ke
 
   if (.not.associated(tv%eqn_of_state)) return
 
@@ -322,15 +322,15 @@ end function is_unstable
 subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, halo)
   type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(in)  :: tv   !< A structure pointing to various
                                                !! thermodynamic variables
   real,                    intent(in)  :: Kddt !< A diffusivity times a time increment [H2 ~> m2 or kg2 m-4].
-  real, dimension(SZI_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZK_(GV)+1), &
                            intent(out) :: dR_dT !< Derivative of locally referenced
                                                !! potential density with temperature [R degC-1 ~> kg m-3 degC-1]
-  real, dimension(SZI_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZK_(GV)+1), &
                            intent(out) :: dR_dS !< Derivative of locally referenced
                                                !! potential density with salinity [R degC-1 ~> kg m-3 ppt-1]
   type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
@@ -339,12 +339,12 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
   integer,       optional, intent(in)  :: halo !< Halo width over which to compute
 
   ! Local variables
-  real :: mix(SZI_(G),SZK_(G)+1)   ! The diffusive mixing length (kappa*dt)/dz
+  real :: mix(SZI_(G),SZK_(GV)+1)  ! The diffusive mixing length (kappa*dt)/dz
                                    ! between layers within in a timestep [H ~> m or kg m-2].
   real :: b1(SZI_(G)), d1(SZI_(G)) ! b1, c1, and d1 are variables used by the
-  real :: c1(SZI_(G),SZK_(G))      ! tridiagonal solver.
-  real :: T_f(SZI_(G),SZK_(G))     ! Filtered temperatures [degC]
-  real :: S_f(SZI_(G),SZK_(G))     ! Filtered salinities [ppt]
+  real :: c1(SZI_(G),SZK_(GV))     ! tridiagonal solver.
+  real :: T_f(SZI_(G),SZK_(GV))    ! Filtered temperatures [degC]
+  real :: S_f(SZI_(G),SZK_(GV))    ! Filtered salinities [ppt]
   real :: pres(SZI_(G))            ! Interface pressures [R L2 T-2 ~> Pa].
   real :: T_EOS(SZI_(G))           ! Filtered and vertically averaged temperatures [degC]
   real :: S_EOS(SZI_(G))           ! Filtered and vertically averaged salinities [ppt]
@@ -360,7 +360,7 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
   else
     is = G%isc ; ie = G%iec
   endif
-  nz = G%ke
+  nz = GV%ke
 
   h_neglect = GV%H_subroundoff
   kap_dt_x2 = 2.0*Kddt

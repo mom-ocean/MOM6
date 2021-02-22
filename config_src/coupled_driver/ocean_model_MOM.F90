@@ -15,13 +15,19 @@ use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
 use MOM, only : extract_surface_state, allocate_surface_state, finish_MOM_initialization
 use MOM, only : get_MOM_state_elements, MOM_state_is_synchronized
 use MOM, only : get_ocean_stocks, step_offline
+use MOM_coms,      only : field_chksum
 use MOM_constants, only : CELSIUS_KELVIN_OFFSET, hlf
+use MOM_coupler_types, only : coupler_1d_bc_type, coupler_2d_bc_type
+use MOM_coupler_types, only : coupler_type_spawn, coupler_type_write_chksums
+use MOM_coupler_types, only : coupler_type_initialized, coupler_type_copy_data
+use MOM_coupler_types, only : coupler_type_set_diags, coupler_type_send_data
 use MOM_diag_mediator, only : diag_ctrl, enable_averaging, disable_averaging
 use MOM_diag_mediator, only : diag_mediator_close_registration, diag_mediator_end
-use MOM_domains, only : pass_var, pass_vector, AGRID, BGRID_NE, CGRID_NE
-use MOM_domains, only : TO_ALL, Omit_Corners
+use MOM_domains, only : MOM_domain_type, domain2d, clone_MOM_domain, get_domain_extent
+use MOM_domains, only : pass_var, pass_vector, AGRID, BGRID_NE, CGRID_NE, TO_ALL, Omit_Corners
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
+use MOM_EOS, only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_file_parser, only : get_param, log_version, close_param_file, param_file_type
 use MOM_forcing_type, only : forcing, mech_forcing, allocate_forcing_type
 use MOM_forcing_type, only : fluxes_accumulate, get_net_mass_forcing
@@ -29,7 +35,7 @@ use MOM_forcing_type, only : copy_back_forcing_fields
 use MOM_forcing_type, only : forcing_diagnostics, mech_forcing_diags
 use MOM_get_input, only : Get_MOM_Input, directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, file_exists, read_data, write_version_number
+use MOM_io, only : write_version_number, stdout
 use MOM_marine_ice, only : iceberg_forces, iceberg_fluxes, marine_ice_init, marine_ice_CS
 use MOM_restart, only : MOM_restart_CS, save_restart
 use MOM_string_functions, only : uppercase
@@ -48,17 +54,6 @@ use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_ice_shelf, only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
 use MOM_ice_shelf, only : add_shelf_forces, ice_shelf_end, ice_shelf_save_restart
-use MOM_IS_diag_mediator, only : diag_IS_ctrl => diag_ctrl, diag_mediator_IS_end=>diag_mediator_end
-use coupler_types_mod, only : coupler_1d_bc_type, coupler_2d_bc_type
-use coupler_types_mod, only : coupler_type_spawn, coupler_type_write_chksums
-use coupler_types_mod, only : coupler_type_initialized, coupler_type_copy_data
-use coupler_types_mod, only : coupler_type_set_diags, coupler_type_send_data
-use mpp_domains_mod, only : domain2d, mpp_get_layout, mpp_get_global_domain
-use mpp_domains_mod, only : mpp_define_domains, mpp_get_compute_domain, mpp_get_data_domain
-use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
-use fms_mod, only : stdout
-use mpp_mod, only : mpp_chksum
-use MOM_EOS, only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
 use MOM_wave_interface, only: MOM_wave_interface_init_lite, Update_Surface_Waves
 
@@ -108,7 +103,7 @@ type, public ::  ocean_public_type
                     !! points of the two velocity components. Valid entries
                     !! include AGRID, BGRID_NE, CGRID_NE, BGRID_SW, and CGRID_SW,
                     !! corresponding to the community-standard Arakawa notation.
-                    !! (These are named integers taken from mpp_parameter_mod.)
+                    !! (These are named integers taken from the MOM_domains module.)
                     !! Following MOM5, stagger is BGRID_NE by default when the
                     !! ocean is initialized, but here it is set to -999 so that
                     !! a global max across ocean and non-ocean processors can be
@@ -182,13 +177,13 @@ type, public :: ocean_state_type ; private
                               !! processes before time stepping the dynamics.
 
   type(directories) :: dirs   !< A structure containing several relevant directory paths.
-  type(mech_forcing), pointer :: forces => NULL() !< A structure with the driving mechanical surface forces
-  type(forcing), pointer      :: fluxes => NULL()   !< A structure containing pointers to
+  type(mech_forcing)          :: forces  !< A structure with the driving mechanical surface forces
+  type(forcing)               :: fluxes  !< A structure containing pointers to
                                                     !! the thermodynamic ocean forcing fields.
-  type(forcing), pointer      :: flux_tmp => NULL() !< A secondary structure containing pointers to the
+  type(forcing)               :: flux_tmp !< A secondary structure containing pointers to the
                               !! ocean forcing fields for when multiple coupled
                               !! timesteps are taken per thermodynamic step.
-  type(surface), pointer      :: sfc_state => NULL() !< A structure containing pointers to
+  type(surface)               :: sfc_state   !< A structure containing pointers to
                               !! the ocean surface state fields.
   type(ocean_grid_type), pointer :: &
     grid => NULL()            !< A pointer to a grid structure containing metrics
@@ -217,9 +212,6 @@ type, public :: ocean_state_type ; private
                               !! that will be used for MOM restart files.
   type(diag_ctrl), pointer :: &
     diag => NULL()            !< A pointer to the diagnostic regulatory structure
-  type(diag_IS_ctrl), pointer :: &
-    diag_IS => NULL()         !< A pointer to the diagnostic regulatory structure
-                              !! for the ice shelf module.
 end type ocean_state_type
 
 contains
@@ -273,9 +265,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
   endif
   allocate(OS)
 
-  allocate(OS%fluxes)
-  allocate(OS%forces)
-  allocate(OS%flux_tmp)
+!  allocate(OS%fluxes)
+!  allocate(OS%forces)
+!  allocate(OS%flux_tmp)
 
   OS%is_ocean_pe = Ocean_sfc%is_ocean_pe
   if (.not.OS%is_ocean_pe) return
@@ -365,7 +357,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
     use_melt_pot=.false.
   endif
 
-  allocate(OS%sfc_state)
+  !allocate(OS%sfc_state)
   call allocate_surface_state(OS%sfc_state, OS%grid, use_temperature, do_integrals=.true., &
                               gas_fields_ocn=gas_fields_ocn, use_meltpot=use_melt_pot)
 
@@ -379,7 +371,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
 
   if (OS%use_ice_shelf)  then
     call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
-                              OS%diag_IS, OS%forces, OS%fluxes)
+                              OS%diag, OS%forces, OS%fluxes)
   endif
   if (OS%icebergs_alter_ocean)  then
     call marine_ice_init(OS%Time, OS%grid, param_file, OS%diag, OS%marine_ice_CSp)
@@ -395,14 +387,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
     call MOM_wave_interface_init_lite(param_file)
   endif
 
-  if (associated(OS%grid%Domain%maskmap)) then
-    call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
-                                      OS%diag, maskmap=OS%grid%Domain%maskmap, &
-                                      gas_fields_ocn=gas_fields_ocn)
-  else
-    call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
-                                      OS%diag, gas_fields_ocn=gas_fields_ocn)
-  endif
+  call initialize_ocean_public_type(OS%grid%Domain, Ocean_sfc, OS%diag, &
+                                    gas_fields_ocn=gas_fields_ocn)
 
   ! This call can only occur here if the coupler_bc_type variables have been
   ! initialized already using the information from gas_fields_ocn.
@@ -517,8 +503,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
                           (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
   ! Translate Ice_ocean_boundary into fluxes and forces.
-  call mpp_get_compute_domain(Ocean_sfc%Domain, index_bnds(1), index_bnds(2), &
-                              index_bnds(3), index_bnds(4))
+  call get_domain_extent(Ocean_sfc%Domain, index_bnds(1), index_bnds(2), index_bnds(3), index_bnds(4))
 
   if (do_dyn) then
     call convert_IOB_to_forces(Ice_ocean_boundary, OS%forces, index_bnds, OS%Time_dyn, OS%grid, OS%US, &
@@ -728,8 +713,6 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
 
   call ocean_model_save_restart(Ocean_state, Time)
   call diag_mediator_end(Time, Ocean_state%diag)
-  if (Ocean_state%use_ice_shelf) &
-    call diag_mediator_IS_end(Time, Ocean_state%diag_IS)
   call MOM_end(Ocean_state%MOM_CSp)
   if (Ocean_state%use_ice_shelf) call ice_shelf_end(Ocean_state%Ice_shelf_CSp)
 end subroutine ocean_model_end
@@ -739,7 +722,7 @@ end subroutine ocean_model_end
 subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
   type(ocean_state_type),     pointer    :: OS  !< A pointer to the structure containing the
                                                 !! internal ocean state (in).
-  type(time_type),            intent(in) :: Time !< The model time at this call, needed for mpp_write calls.
+  type(time_type),            intent(in) :: Time !< The model time at this call, needed for writing files.
   character(len=*), optional, intent(in) :: directory  !<  An optional directory into which to
                                                 !! write these restart files.
   character(len=*), optional, intent(in) :: filename_suffix !< An optional suffix (e.g., a time-stamp)
@@ -771,16 +754,12 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
 end subroutine ocean_model_save_restart
 
 !> Initialize the public ocean type
-subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, &
-                                        gas_fields_ocn)
-  type(domain2D),          intent(in)    :: input_domain !< The ocean model domain description
+subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, gas_fields_ocn)
+  type(MOM_domain_type),   intent(in)    :: input_domain !< The ocean model domain description
   type(ocean_public_type), intent(inout) :: Ocean_sfc !< A structure containing various publicly
-                                !! visible ocean surface properties after initialization, whose
-                                !! elements are allocated here.
-  type(diag_ctrl),         intent(in)    :: diag  !< A structure that regulates diagnsotic output
-  logical, dimension(:,:), &
-                 optional, intent(in)    :: maskmap !< A mask indicating which virtual processors
-                                              !! are actually in use.  If missing, all are used.
+                                              !! visible ocean surface properties after
+                                              !! initialization, whose elements are allocated here.
+  type(diag_ctrl),         intent(in)    :: diag  !< A structure that regulates diagnostic output
   type(coupler_1d_bc_type), &
                  optional, intent(in)    :: gas_fields_ocn !< If present, this type describes the
                                               !! ocean and surface-ice fields that will participate
@@ -792,14 +771,9 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
   ! and have no halos.
   integer :: isc, iec, jsc, jec
 
-  call mpp_get_layout(input_domain,layout)
-  call mpp_get_global_domain(input_domain, xsize=xsz, ysize=ysz)
-  if (PRESENT(maskmap)) then
-     call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain, maskmap=maskmap)
-  else
-     call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain)
-  endif
-  call mpp_get_compute_domain(Ocean_sfc%Domain, isc, iec, jsc, jec)
+  call clone_MOM_domain(input_domain, Ocean_sfc%Domain, halo_size=0, symmetric=.false.)
+
+  call get_domain_extent(Ocean_sfc%Domain, isc, iec, jsc, jec)
 
   allocate ( Ocean_sfc%t_surf (isc:iec,jsc:jec), &
              Ocean_sfc%s_surf (isc:iec,jsc:jec), &
@@ -855,8 +829,7 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, US, patm, press_
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   call pass_vector(sfc_state%u, sfc_state%v, G%Domain)
 
-  call mpp_get_compute_domain(Ocean_sfc%Domain, isc_bnd, iec_bnd, &
-                              jsc_bnd, jec_bnd)
+  call get_domain_extent(Ocean_sfc%Domain, isc_bnd, iec_bnd, jsc_bnd, jec_bnd)
   if (present(patm)) then
     ! Check that the inidicies in patm are (isc_bnd:iec_bnd,jsc_bnd:jec_bnd).
     if (.not.present(press_to_z)) call MOM_error(FATAL, &
@@ -1050,55 +1023,52 @@ subroutine ocean_model_data2D_get(OS, Ocean, name, array2D, isc, jsc)
   integer                   , intent(in) :: isc   !< The starting i-index of array2D
   integer                   , intent(in) :: jsc   !< The starting j-index of array2D
 
-  integer :: g_isc, g_iec, g_jsc, g_jec,g_isd, g_ied, g_jsd, g_jed, i, j
+  integer :: g_isc, g_iec, g_jsc, g_jec, g_isd, g_ied, g_jsd, g_jed, i, j
 
   if (.not.associated(OS)) return
   if (.not.OS%is_ocean_pe) return
 
-! The problem is %areaT is on MOM domain but Ice_Ocean_Boundary%... is on mpp domain.
-! We want to return the MOM data on the mpp (compute) domain
-! Get MOM domain extents
-  call mpp_get_compute_domain(OS%grid%Domain%mpp_domain, g_isc, g_iec, g_jsc, g_jec)
-  call mpp_get_data_domain   (OS%grid%Domain%mpp_domain, g_isd, g_ied, g_jsd, g_jed)
+  ! The problem is that %areaT is on MOM domain but Ice_Ocean_Boundary%... is on a haloless domain.
+  ! We want to return the MOM data on the haloless (compute) domain
+  call get_domain_extent(OS%grid%Domain, g_isc, g_iec, g_jsc, g_jec, g_isd, g_ied, g_jsd, g_jed)
 
   g_isc = g_isc-g_isd+1 ; g_iec = g_iec-g_isd+1 ; g_jsc = g_jsc-g_jsd+1 ; g_jec = g_jec-g_jsd+1
 
-
   select case(name)
-  case('area')
-     array2D(isc:,jsc:) = OS%US%L_to_m**2*OS%grid%areaT(g_isc:g_iec,g_jsc:g_jec)
-  case('mask')
-     array2D(isc:,jsc:) = OS%grid%mask2dT(g_isc:g_iec,g_jsc:g_jec)
+    case('area')
+      array2D(isc:,jsc:) = OS%US%L_to_m**2*OS%grid%areaT(g_isc:g_iec,g_jsc:g_jec)
+    case('mask')
+      array2D(isc:,jsc:) = OS%grid%mask2dT(g_isc:g_iec,g_jsc:g_jec)
 !OR same result
 !     do j=g_jsc,g_jec ; do i=g_isc,g_iec
 !        array2D(isc+i-g_isc,jsc+j-g_jsc) = OS%grid%mask2dT(i,j)
 !     enddo ; enddo
-  case('t_surf')
-     array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
-  case('t_pme')
-     array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
-  case('t_runoff')
-     array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
-  case('t_calving')
-     array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
-  case('btfHeat')
-     array2D(isc:,jsc:) = 0
-  case('cos_rot')
-     array2D(isc:,jsc:) = OS%grid%cos_rot(g_isc:g_iec,g_jsc:g_jec) ! =1
-  case('sin_rot')
-     array2D(isc:,jsc:) = OS%grid%sin_rot(g_isc:g_iec,g_jsc:g_jec) ! =0
-  case('s_surf')
-     array2D(isc:,jsc:) = Ocean%s_surf(isc:,jsc:)
-  case('sea_lev')
-     array2D(isc:,jsc:) = Ocean%sea_lev(isc:,jsc:)
-  case('frazil')
-     array2D(isc:,jsc:) = Ocean%frazil(isc:,jsc:)
-  case('melt_pot')
-     array2D(isc:,jsc:) = Ocean%melt_potential(isc:,jsc:)
-  case('obld')
-     array2D(isc:,jsc:) = Ocean%OBLD(isc:,jsc:)
-  case default
-     call MOM_error(FATAL,'get_ocean_grid_data2D: unknown argument name='//name)
+    case('t_surf')
+      array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
+    case('t_pme')
+      array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
+    case('t_runoff')
+      array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
+    case('t_calving')
+      array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
+    case('btfHeat')
+      array2D(isc:,jsc:) = 0
+    case('cos_rot')
+      array2D(isc:,jsc:) = OS%grid%cos_rot(g_isc:g_iec,g_jsc:g_jec) ! =1
+    case('sin_rot')
+      array2D(isc:,jsc:) = OS%grid%sin_rot(g_isc:g_iec,g_jsc:g_jec) ! =0
+    case('s_surf')
+      array2D(isc:,jsc:) = Ocean%s_surf(isc:,jsc:)
+    case('sea_lev')
+      array2D(isc:,jsc:) = Ocean%sea_lev(isc:,jsc:)
+    case('frazil')
+      array2D(isc:,jsc:) = Ocean%frazil(isc:,jsc:)
+    case('melt_pot')
+      array2D(isc:,jsc:) = Ocean%melt_potential(isc:,jsc:)
+    case('obld')
+      array2D(isc:,jsc:) = Ocean%OBLD(isc:,jsc:)
+    case default
+      call MOM_error(FATAL,'get_ocean_grid_data2D: unknown argument name='//name)
   end select
 
 end subroutine ocean_model_data2D_get
@@ -1133,16 +1103,16 @@ subroutine ocean_public_type_chksum(id, timestep, ocn)
                                              !! visible ocean surface fields.
   integer :: n, m, outunit
 
-  outunit = stdout()
+  outunit = stdout
 
   write(outunit,*) "BEGIN CHECKSUM(ocean_type):: ", id, timestep
-  write(outunit,100) 'ocean%t_surf   ',mpp_chksum(ocn%t_surf )
-  write(outunit,100) 'ocean%s_surf   ',mpp_chksum(ocn%s_surf )
-  write(outunit,100) 'ocean%u_surf   ',mpp_chksum(ocn%u_surf )
-  write(outunit,100) 'ocean%v_surf   ',mpp_chksum(ocn%v_surf )
-  write(outunit,100) 'ocean%sea_lev  ',mpp_chksum(ocn%sea_lev)
-  write(outunit,100) 'ocean%frazil   ',mpp_chksum(ocn%frazil )
-  write(outunit,100) 'ocean%melt_potential  ',mpp_chksum(ocn%melt_potential)
+  write(outunit,100) 'ocean%t_surf   ', field_chksum(ocn%t_surf )
+  write(outunit,100) 'ocean%s_surf   ', field_chksum(ocn%s_surf )
+  write(outunit,100) 'ocean%u_surf   ', field_chksum(ocn%u_surf )
+  write(outunit,100) 'ocean%v_surf   ', field_chksum(ocn%v_surf )
+  write(outunit,100) 'ocean%sea_lev  ', field_chksum(ocn%sea_lev)
+  write(outunit,100) 'ocean%frazil   ', field_chksum(ocn%frazil )
+  write(outunit,100) 'ocean%melt_potential  ', field_chksum(ocn%melt_potential)
   call coupler_type_write_chksums(ocn%fields, outunit, 'ocean%')
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 
@@ -1186,8 +1156,7 @@ subroutine ocean_model_get_UV_surf(OS, Ocean, name, array2D, isc, jsc)
   G => OS%grid
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-  call mpp_get_compute_domain(Ocean%Domain, isc_bnd, iec_bnd, &
-                              jsc_bnd, jec_bnd)
+  call get_domain_extent(Ocean%Domain, isc_bnd, iec_bnd, jsc_bnd, jec_bnd)
 
   i0 = is - isc_bnd ; j0 = js - jsc_bnd
 
@@ -1215,7 +1184,7 @@ subroutine ocean_model_get_UV_surf(OS, Ocean, name, array2D, isc, jsc)
                 0.5*(sfc_state%v(i+i0,J+j0)+sfc_state%v(i+i0+1,J+j0))
     enddo ; enddo
   case default
-     call MOM_error(FATAL,'ocean_model_get_UV_surf: unknown argument name='//name)
+    call MOM_error(FATAL,'ocean_model_get_UV_surf: unknown argument name='//name)
   end select
 
 end subroutine ocean_model_get_UV_surf

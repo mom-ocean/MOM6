@@ -3,53 +3,85 @@ module MOM_io
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-
-use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING
-use MOM_domains,          only : MOM_domain_type, AGRID, BGRID_NE, CGRID_NE
-use MOM_domains,          only : get_simple_array_i_ind, get_simple_array_j_ind
+use MOM_array_transform,  only : allocate_rotated_array, rotate_array
+use MOM_domains,          only : MOM_domain_type, domain1D, broadcast, get_domain_components
+use MOM_domains,          only : rescale_comp_data, AGRID, BGRID_NE, CGRID_NE
+use MOM_dyn_horgrid,      only : dyn_horgrid_type
+use MOM_ensemble_manager, only : get_ensemble_id
+use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING, is_root_PE
 use MOM_file_parser,      only : log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
-use MOM_dyn_horgrid,      only : dyn_horgrid_type
+use MOM_io_infra,         only : MOM_read_data, MOM_read_vector, read_field_chksum
+use MOM_io_infra,         only : read_data=>MOM_read_data ! read_data will be removed soon.
+use MOM_io_infra,         only : file_type, file_exists, get_file_info, get_file_fields
+use MOM_io_infra,         only : open_file, open_ASCII_file, close_file, flush_file, file_is_open
+use MOM_io_infra,         only : get_field_size, fieldtype, field_exists, get_field_atts
+use MOM_io_infra,         only : get_file_times, axistype, get_axis_data, get_filename_suffix
+use MOM_io_infra,         only : write_field, write_metadata, write_version
+use MOM_io_infra,         only : MOM_namelist_file, check_namelist_error, io_infra_init, io_infra_end
+use MOM_io_infra,         only : APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
+use MOM_io_infra,         only : READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
+use MOM_io_infra,         only : CENTER, CORNER, NORTH_FACE, EAST_FACE
 use MOM_string_functions, only : lowercase, slasher
 use MOM_verticalGrid,     only : verticalGrid_type
 
-use ensemble_manager_mod, only : get_ensemble_id
-use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
-use fms_io_mod,           only : file_exist, field_size, read_data
-use fms_io_mod,           only : field_exists => field_exist, io_infra_end=>fms_io_exit
-use fms_io_mod,           only : get_filename_appendix => get_filename_appendix
-use mpp_domains_mod,      only : domain1d, domain2d, mpp_get_domain_components
-use mpp_domains_mod,      only : CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
-use mpp_io_mod,           only : open_file => mpp_open, close_file => mpp_close
-use mpp_io_mod,           only : mpp_write_meta, write_field => mpp_write, mpp_get_info
-use mpp_io_mod,           only : mpp_get_atts, mpp_get_axes, get_axis_data=>mpp_get_axis_data, axistype
-use mpp_io_mod,           only : mpp_get_fields, fieldtype, axistype, flush_file => mpp_flush
-use mpp_io_mod,           only : APPEND_FILE=>MPP_APPEND, ASCII_FILE=>MPP_ASCII
-use mpp_io_mod,           only : MULTIPLE=>MPP_MULTI, NETCDF_FILE=>MPP_NETCDF
-use mpp_io_mod,           only : OVERWRITE_FILE=>MPP_OVERWR, READONLY_FILE=>MPP_RDONLY
-use mpp_io_mod,           only : SINGLE_FILE=>MPP_SINGLE, WRITEONLY_FILE=>MPP_WRONLY
-use mpp_io_mod,           only : MPP_APPEND, MPP_MULTI, MPP_OVERWR, MPP_NETCDF, MPP_RDONLY
-use mpp_io_mod,           only : get_file_info=>mpp_get_info, get_file_atts=>mpp_get_atts
-use mpp_io_mod,           only : get_file_fields=>mpp_get_fields, get_file_times=>mpp_get_times
-use mpp_io_mod,           only : io_infra_init=>mpp_io_init
-
-use netcdf
+use iso_fortran_env,      only : int32, int64, stdout_iso=>output_unit, stderr_iso=>error_unit
+use netcdf,               only : NF90_open, NF90_inq_varid, NF90_inq_varids, NF90_inquire, NF90_close
+use netcdf,               only : NF90_inquire_variable, NF90_get_var, NF90_get_att, NF90_inquire_attribute
+use netcdf,               only : NF90_strerror, NF90_inquire_dimension
+use netcdf,               only : NF90_NOWRITE, NF90_NOERR, NF90_GLOBAL, NF90_ENOTATT, NF90_CHAR
 
 implicit none ; private
 
-public :: close_file, create_file, field_exists, field_size, fieldtype, get_filename_appendix
-public :: file_exists, flush_file, get_file_info, get_file_atts, get_file_fields
-public :: get_file_times, open_file, read_axis_data, read_data
-public :: num_timelevels, MOM_read_data, MOM_read_vector, ensembler
-public :: reopen_file, slasher, write_field, write_version_number, MOM_io_init
-public :: open_namelist_file, check_nml_error, io_infra_init, io_infra_end
-public :: APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
-public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
+! These interfaces are actually implemented in this file.
+public :: create_file, reopen_file, cmor_long_std, ensembler, MOM_io_init
+public :: MOM_write_field, var_desc, modify_vardesc, query_vardesc
+public :: open_namelist_file, check_namelist_error, check_nml_error
+public :: get_var_sizes, verify_variable_units, num_timelevels, read_variable, read_attribute
+public :: open_file_to_read, close_file_to_read
+! The following are simple pass throughs of routines from MOM_io_infra or other modules.
+public :: file_exists, open_file, open_ASCII_file, close_file, flush_file, file_type
+public :: get_file_info, field_exists, get_file_fields, get_file_times, get_filename_appendix
+public :: fieldtype, field_size, get_field_atts
+public :: axistype, get_axis_data
+public :: MOM_read_data, MOM_read_vector, read_field_chksum
+public :: slasher, write_field, write_version_number
+public :: io_infra_init, io_infra_end
+! This API is here just to support potential use by non-FMS drivers, and should not persist.
+public :: read_data
+!> These encoding constants are used to indicate the file format
+public :: ASCII_FILE, NETCDF_FILE
+!> These encoding constants are used to indicate whether the file is domain decomposed
+public :: MULTIPLE, SINGLE_FILE
+!> These encoding constants are used to indicate the access mode for a file
+public :: APPEND_FILE, OVERWRITE_FILE, READONLY_FILE, WRITEONLY_FILE
+!> These encoding constants are used to indicate the discretization position of a variable
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
-public :: var_desc, modify_vardesc, query_vardesc, cmor_long_std
-public :: get_axis_data
 
-!> Type for describing a variable, typically a tracer
+!> Write a registered field to an output file, potentially with rotation
+interface MOM_write_field
+  module procedure MOM_write_field_4d
+  module procedure MOM_write_field_3d
+  module procedure MOM_write_field_2d
+  module procedure MOM_write_field_1d
+  module procedure MOM_write_field_0d
+end interface MOM_write_field
+
+!> Read an entire named variable from a named netCDF file using netCDF calls directly, rather
+!! than any infrastructure routines and broadcast it from the root PE to the other PEs.
+interface read_variable
+  module procedure read_variable_0d, read_variable_0d_int
+  module procedure read_variable_1d, read_variable_1d_int
+end interface read_variable
+
+!> Read a global or variable attribute from a named netCDF file using netCDF calls
+!! directly, in some cases reading from the root PE before broadcasting to the other PEs.
+interface read_attribute
+  module procedure read_attribute_str, read_attribute_real
+  module procedure read_attribute_int32, read_attribute_int64
+end interface read_attribute
+
+!> Type for describing a 3-d variable for output
 type, public :: vardesc
   character(len=64)  :: name               !< Variable name in a NetCDF file
   character(len=48)  :: units              !< Physical dimensions of the variable
@@ -64,34 +96,17 @@ type, public :: vardesc
                                            !! convert from intensive to extensive
 end type vardesc
 
-!> Indicate whether a file exists, perhaps with domain decomposition
-interface file_exists
-  module procedure FMS_file_exists
-  module procedure MOM_file_exists
-end interface
-
-!> Read a data field from a file
-interface MOM_read_data
-  module procedure MOM_read_data_4d
-  module procedure MOM_read_data_3d
-  module procedure MOM_read_data_2d
-  module procedure MOM_read_data_1d
-end interface
-
-!> Read a pair of data fields representing the two components of a vector from a file
-interface MOM_read_vector
-  module procedure MOM_read_vector_3d
-  module procedure MOM_read_vector_2d
-end interface
+integer, public :: stdout = stdout_iso  !< standard output unit
+integer, public :: stderr = stderr_iso  !< standard output unit
 
 contains
 
-!> Routine creates a new NetCDF file.  It also sets up
+!> Routine creates a new NetCDF file.  It also sets up fieldtype
 !! structures that describe this file and variables that will
-!! later be written to this file. Type for describing a variable, typically a tracer
-subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit, G, dG, GV, checksums)
-  integer,               intent(out)   :: unit       !< unit id of an open file or -1 on a
-                                                     !! nonwriting PE with single file output
+!! later be written to this file.
+subroutine create_file(IO_handle, filename, vars, novars, fields, threading, timeunit, G, dG, GV, checksums)
+  type(file_type),       intent(inout) :: IO_handle  !< Handle for a file or fileset that is to be
+                                                     !! opened or reopened for writing
   character(len=*),      intent(in)    :: filename   !< full path to the file to create
   type(vardesc),         intent(in)    :: vars(:)    !< structures describing fields written to filename
   integer,               intent(in)    :: novars     !< number of fields written to filename
@@ -108,7 +123,7 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
   type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
                                                      !! required if the new file uses any
                                                      !! vertical grid axes.
-  integer(kind=8), optional,      intent(in)    :: checksums(:,:)  !< checksums of vars
+  integer(kind=int64),     optional, intent(in) :: checksums(:,:)  !< checksums of vars
 
   logical        :: use_lath, use_lonh, use_latq, use_lonq, use_time
   logical        :: use_layer, use_int, use_periodic
@@ -158,9 +173,9 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
   if (domain_set) one_file = (thread == SINGLE_FILE)
 
   if (one_file) then
-    call open_file(unit, filename, MPP_OVERWR, MPP_NETCDF, threading=thread)
+    call open_file(IO_handle, filename, OVERWRITE_FILE, threading=thread)
   else
-    call open_file(unit, filename, MPP_OVERWR, MPP_NETCDF, domain=Domain%mpp_domain)
+    call open_file(IO_handle, filename, OVERWRITE_FILE, MOM_domain=Domain)
   endif
 
 ! Define the coordinates.
@@ -224,39 +239,36 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
     if (.not.domain_set) call MOM_error(FATAL, "create_file: "//&
       "An ocean_grid_type or dyn_horgrid_type is required to create a file with a horizontal coordinate.")
 
-    call mpp_get_domain_components(Domain%mpp_domain, x_domain, y_domain)
+    call get_domain_components(Domain, x_domain, y_domain)
   endif
   if ((use_layer .or. use_int) .and. .not.present(GV)) call MOM_error(FATAL, &
     "create_file: A vertical grid type is required to create a file with a vertical coordinate.")
 
-! Specify all optional arguments to mpp_write_meta: name, units, longname, cartesian, calendar, sense,
-! domain, data, min). Otherwise if optional arguments are added to mpp_write_meta the compiler may
-! (and in case of GNU does) get confused and crash.
   if (use_lath) &
-    call mpp_write_meta(unit, axis_lath, name="lath", units=y_axis_units, longname="Latitude", &
-                   cartesian='Y', domain = y_domain, data=gridLatT(jsg:jeg))
+    call write_metadata(IO_handle, axis_lath, name="lath", units=y_axis_units, longname="Latitude", &
+                        cartesian='Y', domain=y_domain, data=gridLatT(jsg:jeg))
 
   if (use_lonh) &
-    call mpp_write_meta(unit, axis_lonh, name="lonh", units=x_axis_units, longname="Longitude", &
-                   cartesian='X', domain = x_domain, data=gridLonT(isg:ieg))
+    call write_metadata(IO_handle, axis_lonh, name="lonh", units=x_axis_units, longname="Longitude", &
+                        cartesian='X', domain=x_domain, data=gridLonT(isg:ieg))
 
   if (use_latq) &
-    call mpp_write_meta(unit, axis_latq, name="latq", units=y_axis_units, longname="Latitude", &
-                   cartesian='Y', domain = y_domain, data=gridLatB(JsgB:JegB))
+    call write_metadata(IO_handle, axis_latq, name="latq", units=y_axis_units, longname="Latitude", &
+                        cartesian='Y', domain=y_domain, data=gridLatB(JsgB:JegB))
 
   if (use_lonq) &
-    call mpp_write_meta(unit, axis_lonq, name="lonq", units=x_axis_units, longname="Longitude", &
-                   cartesian='X', domain = x_domain, data=gridLonB(IsgB:IegB))
+    call write_metadata(IO_handle, axis_lonq, name="lonq", units=x_axis_units, longname="Longitude", &
+                        cartesian='X', domain=x_domain, data=gridLonB(IsgB:IegB))
 
   if (use_layer) &
-    call mpp_write_meta(unit, axis_layer, name="Layer", units=trim(GV%zAxisUnits), &
-          longname="Layer "//trim(GV%zAxisLongName), cartesian='Z', &
-          sense=1, data=GV%sLayer(1:GV%ke))
+    call write_metadata(IO_handle, axis_layer, name="Layer", units=trim(GV%zAxisUnits), &
+                        longname="Layer "//trim(GV%zAxisLongName), cartesian='Z', &
+                        sense=1, data=GV%sLayer(1:GV%ke))
 
   if (use_int) &
-    call mpp_write_meta(unit, axis_int, name="Interface", units=trim(GV%zAxisUnits), &
-          longname="Interface "//trim(GV%zAxisLongName), cartesian='Z', &
-          sense=1, data=GV%sInterface(1:GV%ke+1))
+    call write_metadata(IO_handle, axis_int, name="Interface", units=trim(GV%zAxisUnits), &
+                        longname="Interface "//trim(GV%zAxisLongName), cartesian='Z', &
+                        sense=1, data=GV%sInterface(1:GV%ke+1))
 
   if (use_time) then ; if (present(timeunit)) then
     ! Set appropriate units, depending on the value.
@@ -274,9 +286,9 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
       write(time_units,'(es8.2," s")') timeunit
     endif
 
-    call mpp_write_meta(unit, axis_time, name="Time", units=time_units, longname="Time", cartesian='T')
+    call write_metadata(IO_handle, axis_time, name="Time", units=time_units, longname="Time", cartesian='T')
   else
-    call mpp_write_meta(unit, axis_time, name="Time", units="days", longname="Time",cartesian= 'T')
+    call write_metadata(IO_handle, axis_time, name="Time", units="days", longname="Time", cartesian= 'T')
   endif ; endif
 
   if (use_periodic) then
@@ -285,8 +297,8 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
     ! Define a periodic axis with unit labels.
     allocate(period_val(num_periods))
     do k=1,num_periods ; period_val(k) = real(k) ; enddo
-    call mpp_write_meta(unit, axis_periodic, name="Period", units="nondimensional", &
-          longname="Periods for cyclical varaiables", cartesian= 't', data=period_val)
+    call write_metadata(IO_handle, axis_periodic, name="Period", units="nondimensional", &
+                        longname="Periods for cyclical varaiables", cartesian='T', data=period_val)
     deallocate(period_val)
   endif
 
@@ -323,24 +335,24 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
         call MOM_error(WARNING, "MOM_io create_file: "//trim(vars(k)%name)//&
                         " has unrecognized t_grid "//trim(vars(k)%t_grid))
     end select
-    pack = 1
 
+    pack = 1
     if (present(checksums)) then
-       call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
-           vars(k)%longname, pack = pack, checksum=checksums(k,:))
+      call write_metadata(IO_handle, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
+                          vars(k)%longname, pack=pack, checksum=checksums(k,:))
     else
-       call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
-           vars(k)%longname, pack = pack)
+      call write_metadata(IO_handle, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
+                          vars(k)%longname, pack=pack)
     endif
   enddo
 
-  if (use_lath) call write_field(unit, axis_lath)
-  if (use_latq) call write_field(unit, axis_latq)
-  if (use_lonh) call write_field(unit, axis_lonh)
-  if (use_lonq) call write_field(unit, axis_lonq)
-  if (use_layer) call write_field(unit, axis_layer)
-  if (use_int) call write_field(unit, axis_int)
-  if (use_periodic) call write_field(unit, axis_periodic)
+  if (use_lath) call write_field(IO_handle, axis_lath)
+  if (use_latq) call write_field(IO_handle, axis_latq)
+  if (use_lonh) call write_field(IO_handle, axis_lonh)
+  if (use_lonq) call write_field(IO_handle, axis_lonq)
+  if (use_layer) call write_field(IO_handle, axis_layer)
+  if (use_int) call write_field(IO_handle, axis_int)
+  if (use_periodic) call write_field(IO_handle, axis_periodic)
 
 end subroutine create_file
 
@@ -349,9 +361,9 @@ end subroutine create_file
 !! does not find the file, a new file is created.  It also sets up
 !! structures that describe this file and the variables that will
 !! later be written to this file.
-subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit, G, dG, GV)
-  integer,               intent(out)   :: unit       !< unit id of an open file or -1 on a
-                                                     !! nonwriting PE with single file output
+subroutine reopen_file(IO_handle, filename, vars, novars, fields, threading, timeunit, G, dG, GV)
+  type(file_type),       intent(inout) :: IO_handle  !< Handle for a file or fileset that is to be
+                                                     !! opened or reopened for writing
   character(len=*),      intent(in)    :: filename   !< full path to the file to create
   type(vardesc),         intent(in)    :: vars(:)    !< structures describing fields written to filename
   integer,               intent(in)    :: novars     !< number of fields written to filename
@@ -385,7 +397,7 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
   inquire(file=check_name,EXIST=exists)
 
   if (.not.exists) then
-    call create_file(unit, filename, vars, novars, fields, threading, timeunit, &
+    call create_file(IO_handle, filename, vars, novars, fields, threading, timeunit, &
                      G=G, dG=dG, GV=GV)
   else
 
@@ -400,80 +412,42 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
     if (domain_set) one_file = (thread == SINGLE_FILE)
 
     if (one_file) then
-      call open_file(unit, filename, MPP_APPEND, MPP_NETCDF, threading=thread)
+      call open_file(IO_handle, filename, APPEND_FILE, threading=thread)
     else
-      call open_file(unit, filename, MPP_APPEND, MPP_NETCDF, domain=Domain%mpp_domain)
+      call open_file(IO_handle, filename, APPEND_FILE, MOM_domain=Domain)
     endif
-    if (unit < 0) return
+    if (.not.file_is_open(IO_handle)) return
 
-    call mpp_get_info(unit, ndim, nvar, natt, ntime)
+    call get_file_info(IO_handle, ndim, nvar, natt, ntime)
 
     if (nvar == -1) then
       write (mesg,*) "Reopening file ",trim(filename)," apparently had ",nvar,&
                      " variables. Clobbering and creating file with ",novars," instead."
       call MOM_error(WARNING,"MOM_io: "//mesg)
-      call create_file(unit, filename, vars, novars, fields, threading, timeunit, G=G, GV=GV)
+      call create_file(IO_handle, filename, vars, novars, fields, threading, timeunit, G=G, GV=GV)
     elseif (nvar /= novars) then
       write (mesg,*) "Reopening file ",trim(filename)," with ",novars,&
                      " variables instead of ",nvar,"."
       call MOM_error(FATAL,"MOM_io: "//mesg)
     endif
 
-    if (nvar>0) call mpp_get_fields(unit,fields(1:nvar))
+    if (nvar > 0) call get_file_fields(IO_handle, fields(1:nvar))
 
-    ! Check the field names...
+    ! Check for inconsistent field names...
 !    do i=1,nvar
-!      call mpp_get_field_atts(fields(i),name)
-!      !if (trim(name) /= trim(vars%name) then
-!      !write (mesg,'("Reopening file ",a," variable ",a," is called ",a,".")',&
-!      !    filename,vars%name,name)
-!      !call MOM_error(NOTE,"MOM_io: "//mesg)
+!      call get_field_atts(fields(i), name)
+!      !if (trim(name) /= trim(vars%name)) then
+!      !  write (mesg, '("Reopening file ",a," variable ",a," is called ",a,".")',&
+!      !         trim(filename), trim(vars%name), trim(name))
+!      !  call MOM_error(NOTE, "MOM_io: "//trim(mesg))
+!      !endif
 !    enddo
   endif
 
 end subroutine reopen_file
 
-!> Read the data associated with a named axis in a file
-subroutine read_axis_data(filename, axis_name, var)
-  character(len=*),   intent(in)  :: filename  !< Name of the file to read
-  character(len=*),   intent(in)  :: axis_name !< Name of the axis to read
-  real, dimension(:), intent(out) :: var       !< The axis location data
 
-  integer :: i,len,unit, ndim, nvar, natt, ntime
-  logical :: axis_found
-  type(axistype), allocatable :: axes(:)
-  type(axistype) :: time_axis
-  character(len=32) :: name, units
-
-  call open_file(unit, trim(filename), action=MPP_RDONLY, form=MPP_NETCDF, &
-                 threading=MPP_MULTI, fileset=SINGLE_FILE)
-
-!Find the number of variables (nvar) in this file
-  call mpp_get_info(unit, ndim, nvar, natt, ntime)
-! -------------------------------------------------------------------
-! Allocate space for the number of axes in the data file.
-! -------------------------------------------------------------------
-  allocate(axes(ndim))
-  call mpp_get_axes(unit, axes, time_axis)
-
-  axis_found = .false.
-  do i = 1, ndim
-    call mpp_get_atts(axes(i), name=name,len=len,units=units)
-    if (name == axis_name) then
-      axis_found = .true.
-      call get_axis_data(axes(i),var)
-      exit
-    endif
-  enddo
-
-  if (.not.axis_found) call MOM_error(FATAL, "MOM_io read_axis_data: "//&
-    "Unable to find axis "//trim(axis_name)//" in file "//trim(filename))
-
-  deallocate(axes)
-
-end subroutine read_axis_data
-
-!> This function determines how many time levels a variable has.
+!> This function determines how many time levels a variable has in a file.
 function num_timelevels(filename, varname, min_dims) result(n_time)
   character(len=*),  intent(in) :: filename   !< name of the file to read
   character(len=*),  intent(in) :: varname    !< variable whose number of time levels
@@ -483,113 +457,741 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
                                               !! dimension than this, then 0 is returned.
   integer :: n_time                           !< number of time levels varname has in filename
 
-  logical :: found
-  character(len=200) :: msg
-  character(len=nf90_max_name) :: name
-  integer :: ncid, nvars, status, varid, ndims, n
-  integer, allocatable :: varids(:)
-  integer, dimension(nf90_max_var_dims) :: dimids
+  character(len=256) :: msg
+  integer :: ncid, status, varid, ndims
+  integer :: sizes(8)
 
   n_time = -1
-  found = .false.
 
-  status = NF90_OPEN(filename, NF90_NOWRITE, ncid)
-  if (status /= NF90_NOERR) then
-    call MOM_error(WARNING,"num_timelevels: "//&
-        " Difficulties opening "//trim(filename)//" - "//&
-        trim(NF90_STRERROR(status)))
-    return
-  endif
+  ! To do almost the same via MOM_io_infra calls, we could do the following:
+  !   found = field_exists(filename, varname)
+  !   if (found) then
+  !     call open_file(ncid, filename, action=READONLY_FILE, form=NETCDF_FILE, threading=MULTIPLE)
+  !     call get_file_info(ncid, ntime=n_time)
+  !   endif
+  ! However, this does not handle the case where the time axis for the variable is not the record
+  ! axis and min_dims is not used.
 
-  status = NF90_INQUIRE(ncid, nVariables=nvars)
-  if (status /= NF90_NOERR) then
-    call MOM_error(WARNING,"num_timelevels: "//&
-        " Difficulties getting the number of variables in file "//&
-        trim(filename)//" - "//trim(NF90_STRERROR(status)))
-    return
-  endif
+  call get_var_sizes(filename, varname, ndims, sizes, match_case=.false., caller="num_timelevels")
 
-  if (nvars < 1) then
-    call MOM_error(WARNING,"num_timelevels: "//&
-        " There appear not to be any variables in "//trim(filename))
-    return
-  endif
-
-
-  allocate(varids(nvars))
-
-  status = nf90_inq_varids(ncid, nvars, varids)
-  if (status /= NF90_NOERR) then
-    call MOM_error(WARNING,"num_timelevels: "//&
-        " Difficulties getting the variable IDs in file "//&
-        trim(filename)//" - "//trim(NF90_STRERROR(status)))
-    deallocate(varids) ; return
-  endif
-
-  do n = 1,nvars
-    status = nf90_inquire_variable(ncid, varids(n), name=name)
-    if (status /= NF90_NOERR) then
-      call MOM_error(WARNING,"num_timelevels: "//&
-          " Difficulties getting a variable name in file "//&
-          trim(filename)//" - "//trim(NF90_STRERROR(status)))
-    endif
-
-    if (trim(lowercase(name)) == trim(lowercase(varname))) then
-      if (found) then
-        call MOM_error(WARNING,"num_timelevels: "//&
-          " Two variables match the case-insensitive name "//trim(varname)//&
-          " in file "//trim(filename)//" - "//trim(NF90_STRERROR(status)))
-      else
-        varid = varids(n) ; found = .true.
-      endif
-    endif
-  enddo
-
-  deallocate(varids)
-
-  if (.not.found) then
-    call MOM_error(WARNING,"num_timelevels: "//&
-        " variable "//trim(varname)//" was not found in file "//&
-        trim(filename))
-    return
-  endif
-
-  status = nf90_inquire_variable(ncid, varid, ndims = ndims)
-  if (status /= NF90_NOERR) then
-    call MOM_error(WARNING,"num_timelevels: "//&
-      trim(NF90_STRERROR(status))//" Getting number of dimensions of "//&
-      trim(varname)//" in "//trim(filename))
-    return
-  endif
+  n_time = sizes(ndims)
 
   if (present(min_dims)) then
     if (ndims < min_dims-1) then
       write(msg, '(I3)') min_dims
-      call MOM_error(WARNING, "num_timelevels: variable "//trim(varname)//&
-        " in file "//trim(filename)//" has fewer than min_dims = "//trim(msg)//&
-        " dimensions.")
+      call MOM_error(WARNING, "num_timelevels: variable "//trim(varname)//" in file "//&
+        trim(filename)//" has fewer than min_dims = "//trim(msg)//" dimensions.")
+      n_time = -1
     elseif (ndims == min_dims - 1) then
-      n_time = 0 ; return
+      n_time = 0
     endif
   endif
 
-  status = nf90_inquire_variable(ncid, varid, dimids = dimids(1:ndims))
+end function num_timelevels
+
+
+!> get_var_sizes returns the number and size of dimensions associate with a variable in a file.
+!! Usually only the root PE does the read, and then the information is broadcast
+subroutine get_var_sizes(filename, varname, ndims, sizes, match_case, caller, all_read, dim_names, ncid_in)
+  character(len=*),      intent(in)  :: filename   !< Name of the file to read, used here in messages
+  character(len=*),      intent(in)  :: varname    !< The variable name, used here for messages
+  integer,               intent(out) :: ndims      !< The number of dimensions to the variable
+  integer, dimension(:), intent(out) :: sizes      !< The dimension sizes, or 0 for extra values
+  logical,     optional, intent(in)  :: match_case !< If false, allow for variables name matches to be
+                                                   !! case insensitive, but take a perfect match if
+                                                   !! found.  The default is true.
+  character(len=*), optional, intent(in) :: caller !< The name of a calling routine for use in error messages
+  logical,     optional, intent(in)  :: all_read   !< If present and true, all PEs that call this
+                                                   !! routine actually do the read, otherwise only
+                                                   !! root PE reads and then it broadcasts the results.
+  character(len=*), dimension(:), &
+               optional, intent(out) :: dim_names  !< The names of the dimensions for this variable
+  integer,     optional, intent(in)  :: ncid_in    !< The netCDF ID of an open file.  If absent, the
+                                                   !! file is opened and closed within this routine.
+
+  logical :: do_read, do_broadcast
+  integer, allocatable :: size_msg(:)  ! An array combining the number of dimensions and the sizes.
+  integer :: n, nval
+
+  do_read = is_root_pe()
+  if (present(all_read)) do_read = all_read .or. do_read
+  do_broadcast = .true. ; if (present(all_read)) do_broadcast = .not.all_read
+
+  if (do_read) call read_var_sizes(filename, varname, ndims, sizes, match_case, caller, dim_names, ncid_in)
+
+  if (do_broadcast) then
+    ! Distribute the sizes from the root PE.
+    nval = size(sizes) + 1
+
+    allocate(size_msg(nval))
+    size_msg(1) = ndims
+    do n=2,nval ; size_msg(n) = sizes(n-1) ; enddo
+
+    call broadcast(size_msg, nval, blocking=.true.)
+
+    ndims = size_msg(1)
+    do n=2,nval ;  sizes(n-1) = size_msg(n) ; enddo
+    deallocate(size_msg)
+
+    if (present(dim_names)) then
+      nval = min(ndims, size(dim_names))
+      call broadcast(dim_names(1:nval), len(dim_names(1)), blocking=.true.)
+    endif
+  endif
+
+end subroutine get_var_sizes
+
+!> read_var_sizes returns the number and size of dimensions associate with a variable in a file.
+!! Every processor for which this is called does the reading.
+subroutine read_var_sizes(filename, varname, ndims, sizes, match_case, caller, dim_names, ncid_in)
+  character(len=*),      intent(in)  :: filename   !< Name of the file to read, used here in messages
+  character(len=*),      intent(in)  :: varname    !< The variable name, used here for messages
+  integer,               intent(out) :: ndims      !< The number of dimensions to the variable
+  integer, dimension(:), intent(out) :: sizes      !< The dimension sizes, or 0 for extra values
+  logical,     optional, intent(in)  :: match_case !< If false, allow for variables name matches to be
+                                                   !! case insensitive, but take a perfect match if
+                                                   !! found.  The default is true.
+  character(len=*), &
+               optional, intent(in)  :: caller     !< The name of a calling routine for use in error messages
+  character(len=*), dimension(:), &
+               optional, intent(out) :: dim_names  !< The names of the dimensions for this variable
+  integer,     optional, intent(in)  :: ncid_in    !< The netCDF ID of an open file.  If absent, the
+                                                   !! file is opened and closed within this routine.
+
+  character(len=256) :: hdr, dimname
+  integer, allocatable :: dimids(:)
+  integer :: varid, ncid, n, status
+  logical :: success
+  hdr = "get_var_size: " ; if (present(caller)) hdr = trim(hdr)//": "
+  sizes(:) = 0 ; ndims = -1
+
+  if (present(ncid_in)) then
+    ncid = ncid_in
+  else
+    call open_file_to_read(filename, ncid, success=success)
+    if (.not.success) return
+  endif
+
+  ! Get the dimension sizes of the variable varname.
+  call get_varid(varname, ncid, filename, varid, match_case=match_case)
+  if (varid < 0) return
+
+  status = NF90_inquire_variable(ncid, varid, ndims=ndims)
   if (status /= NF90_NOERR) then
-    call MOM_error(WARNING,"num_timelevels: "//&
-      trim(NF90_STRERROR(status))//" Getting last dimension ID for "//&
-      trim(varname)//" in "//trim(filename))
+    call MOM_error(WARNING, trim(hdr) // trim(NF90_STRERROR(status)) //&
+      " Getting number of dimensions of "//trim(varname)//" in "//trim(filename))
+    return
+  endif
+  if (ndims < 1) return
+
+  allocate(dimids(ndims))
+  status = NF90_inquire_variable(ncid, varid, dimids=dimids(1:ndims))
+  if (status /= NF90_NOERR) then
+    call MOM_error(WARNING, trim(hdr) // trim(NF90_STRERROR(status)) //&
+      " Getting dimension IDs for "//trim(varname)//" in "//trim(filename))
+    deallocate(dimids) ; return
+  endif
+
+  do n = 1, min(ndims,size(sizes))
+    status = NF90_Inquire_Dimension(ncid, dimids(n), name=dimname, len=sizes(n))
+    if (status /= NF90_NOERR) call MOM_error(WARNING, trim(hdr) // trim(NF90_STRERROR(status)) //&
+        " Getting dimension length for "//trim(varname)//" in "//trim(filename))
+    if (present(dim_names)) then
+      if (n <= size(dim_names)) dim_names = trim(dimname)
+    endif
+  enddo
+  deallocate(dimids)
+
+  if (.not.present(ncid_in)) call close_file_to_read(ncid, filename)
+
+end subroutine read_var_sizes
+
+!> Read a real scalar variable from a netCDF file with the root PE, and broadcast the
+!! results to all the other PEs.
+subroutine read_variable_0d(filename, varname, var, ncid_in, scale)
+  character(len=*),  intent(in)    :: filename !< The name of the file to read
+  character(len=*),  intent(in)    :: varname  !< The variable name of the data in the file
+  real,              intent(inout) :: var      !< The scalar into which to read the data
+  integer, optional, intent(in)    :: ncid_in  !< The netCDF ID of an open file.  If absent, the
+                                               !! file is opened and closed within this routine
+  real,    optional, intent(in)    :: scale    !< A scaling factor that the variable is
+                                               !! multiplied by before it is returned
+
+  integer :: varid, ncid, rc
+  character(len=256) :: hdr
+  hdr = "read_variable_0d"
+
+  if (is_root_pe()) then
+    if (present(ncid_in)) then
+      ncid = ncid_in
+    else
+      call open_file_to_read(filename, ncid)
+    endif
+
+    call get_varid(varname, ncid, filename, varid, match_case=.false.)
+    if (varid < 0) call MOM_error(FATAL, "Unable to get netCDF varid for "//trim(varname)//&
+                                         " in "//trim(filename))
+    rc = NF90_get_var(ncid, varid, var)
+    if (rc /= NF90_NOERR) call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //&
+          " Difficulties reading "//trim(varname)//" from "//trim(filename))
+
+    if (.not.present(ncid_in)) call close_file_to_read(ncid, filename)
+
+    if (present(scale)) var = scale * var
+  endif
+
+  call broadcast(var, blocking=.true.)
+end subroutine read_variable_0d
+
+!> Read a 1-d real variable from a netCDF file with the root PE, and broadcast the
+!! results to all the other PEs.
+subroutine read_variable_1d(filename, varname, var, ncid_in, scale)
+  character(len=*),   intent(in)    :: filename !< The name of the file to read
+  character(len=*),   intent(in)    :: varname  !< The variable name of the data in the file
+  real, dimension(:), intent(inout) :: var      !< The 1-d array into which to read the data
+  integer,  optional, intent(in)    :: ncid_in  !< The netCDF ID of an open file.  If absent, the
+                                                !! file is opened and closed within this routine
+  real,     optional, intent(in)    :: scale    !< A scaling factor that the variable is
+                                                !! multiplied by before it is returned
+
+  integer :: varid, ncid, rc
+  character(len=256) :: hdr
+  hdr = "read_variable_1d"
+
+  if (is_root_pe()) then
+    if (present(ncid_in)) then
+      ncid = ncid_in
+    else
+      call open_file_to_read(filename, ncid)
+    endif
+
+    call get_varid(varname, ncid, filename, varid, match_case=.false.)
+    if (varid < 0) call MOM_error(FATAL, "Unable to get netCDF varid for "//trim(varname)//&
+                                         " in "//trim(filename))
+    rc = NF90_get_var(ncid, varid, var)
+    if (rc /= NF90_NOERR) call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //&
+          " Difficulties reading "//trim(varname)//" from "//trim(filename))
+
+    if (.not.present(ncid_in)) call close_file_to_read(ncid, filename)
+
+    if (present(scale)) then ; if (scale /= 1.0) then
+      var(:) = scale * var(:)
+    endif ; endif
+  endif
+
+  call broadcast(var, size(var), blocking=.true.)
+end subroutine read_variable_1d
+
+!> Read a integer scalar variable from a netCDF file with the root PE, and broadcast the
+!! results to all the other PEs.
+subroutine read_variable_0d_int(filename, varname, var, ncid_in)
+  character(len=*),  intent(in)    :: filename !< The name of the file to read
+  character(len=*),  intent(in)    :: varname  !< The variable name of the data in the file
+  integer,           intent(inout) :: var      !< The scalar into which to read the data
+  integer, optional, intent(in)    :: ncid_in  !< The netCDF ID of an open file.  If absent, the
+                                               !! file is opened and closed within this routine.
+
+  integer :: varid, ncid, rc
+  character(len=256) :: hdr
+  hdr = "read_variable_0d_int"
+
+  if (is_root_pe()) then
+    if (present(ncid_in)) then
+      ncid = ncid_in
+    else
+      call open_file_to_read(filename, ncid)
+    endif
+
+    call get_varid(varname, ncid, filename, varid, match_case=.false.)
+    if (varid < 0) call MOM_error(FATAL, "Unable to get netCDF varid for "//trim(varname)//&
+                                         " in "//trim(filename))
+    rc = NF90_get_var(ncid, varid, var)
+    if (rc /= NF90_NOERR) call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //&
+          " Difficulties reading "//trim(varname)//" from "//trim(filename))
+
+    if (.not.present(ncid_in)) call close_file_to_read(ncid, filename)
+  endif
+
+  call broadcast(var, blocking=.true.)
+end subroutine read_variable_0d_int
+
+!> Read a 1-d integer variable from a netCDF file with the root PE, and broadcast the
+!! results to all the other PEs.
+subroutine read_variable_1d_int(filename, varname, var, ncid_in)
+  character(len=*),      intent(in)    :: filename !< The name of the file to read
+  character(len=*),      intent(in)    :: varname  !< The variable name of the data in the file
+  integer, dimension(:), intent(inout) :: var      !< The 1-d array into which to read the data
+  integer, optional,     intent(in)    :: ncid_in  !< The netCDF ID of an open file.  If absent, the
+                                                   !! file is opened and closed within this routine.
+
+  integer :: varid, ncid, rc
+  character(len=256) :: hdr
+  hdr = "read_variable_1d_int"
+
+  if (is_root_pe()) then
+    if (present(ncid_in)) then
+      ncid = ncid_in
+    else
+      call open_file_to_read(filename, ncid)
+    endif
+
+    call get_varid(varname, ncid, filename, varid, match_case=.false.)
+    if (varid < 0) call MOM_error(FATAL, "Unable to get netCDF varid for "//trim(varname)//&
+                                         " in "//trim(filename))
+    rc = NF90_get_var(ncid, varid, var)
+    if (rc /= NF90_NOERR) call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //&
+          " Difficulties reading "//trim(varname)//" from "//trim(filename))
+
+    if (.not.present(ncid_in)) call close_file_to_read(ncid, filename)
+  endif
+
+  call broadcast(var, size(var), blocking=.true.)
+end subroutine read_variable_1d_int
+
+!> Read a character-string global or variable attribute
+subroutine read_attribute_str(filename, attname, att_val, varname, found, all_read, ncid_in)
+  character(len=*),           intent(in)  :: filename !< Name of the file to read
+  character(len=*),           intent(in)  :: attname  !< Name of the attribute to read
+  character(:), allocatable,  intent(out) :: att_val  !< The value of the attribute
+  character(len=*), optional, intent(in)  :: varname  !< The name of the variable whose attribute will
+                                                      !! be read. If missing, read a global attribute.
+  logical,          optional, intent(out) :: found    !< Returns true if the attribute is found
+  logical,          optional, intent(in)  :: all_read !< If present and true, all PEs that call this
+                                                      !! routine actually do the read, otherwise only
+                                                      !! root PE reads and then broadcasts the results.
+  integer,          optional, intent(in)  :: ncid_in  !< The netCDF ID of an open file.  If absent, the
+                                                      !! file is opened and closed within this routine.
+
+  logical :: do_read, do_broadcast
+  integer :: rc, ncid, varid, att_type, att_len, info(2)
+  character(len=256) :: hdr, att_str
+  character(len=:), dimension(:), allocatable :: tmp_str
+  hdr = "read_attribute_str"
+  att_len = 0
+
+  do_read = is_root_pe() ; if (present(all_read)) do_read = all_read .or. do_read
+  do_broadcast = .true. ; if (present(all_read)) do_broadcast = .not.all_read
+
+  if (do_read) then
+    if (present(ncid_in)) then
+      ncid = ncid_in
+    else
+      call open_file_to_read(filename, ncid, success=found)
+      if (present(found)) then ; if (.not.found) do_read = .false. ; endif
+    endif
+  endif
+
+  if (do_read) then
+    rc = NF90_ENOTATT ; att_len = 0
+    if (present(varname)) then  ! Read a variable attribute
+      call get_varid(varname, ncid, filename, varid, match_case=.false., found=found)
+      att_str = "att "//trim(attname)//" for "//trim(varname)//" from "//trim(filename)
+    else   ! Read a global attribute
+      varid = NF90_GLOBAL
+      att_str = "global att "//trim(attname)//" from "//trim(filename)
+    endif
+    if ((varid > 0) .or. (varid == NF90_GLOBAL)) then ! The named variable does exist, and found would be true.
+      rc = NF90_inquire_attribute(ncid, varid, attname, xtype=att_type, len=att_len)
+      if ((rc /= NF90_NOERR) .and. (rc /= NF90_ENOTATT)) &
+        call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //" Error getting info for "//trim(att_str))
+      if (att_type /= NF90_CHAR) &
+        call MOM_error(FATAL, trim(hdr)//": Attribute data type is not a char for "//trim(att_str))
+!      if (att_len > len(att_val)) &
+!        call MOM_error(FATAL, trim(hdr)//": Insufficiently long string passed in to read "//trim(att_str))
+      allocate(character(att_len) :: att_val)
+
+      if (rc == NF90_NOERR) then
+        rc = NF90_get_att(ncid, varid, attname, att_val)
+        if ((rc /= NF90_NOERR) .and. (rc /= NF90_ENOTATT)) &
+          call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //" Difficulties reading "//trim(att_str))
+      endif
+    endif
+    if (present(found)) found = (rc == NF90_NOERR)
+
+    if (.not.present(ncid_in)) call close_file_to_read(ncid, filename)
+  endif
+
+  if (do_broadcast) then
+    ! Communicate the string length
+    info(1) = att_len ; info(2) = 0 ; if (do_read .and. found) info(2) = 1
+    call broadcast(info, 2, blocking=.true.)
+    att_len = info(1)
+
+    if (att_len > 0) then
+      ! These extra copies are here because broadcast only supports arrays of strings.
+      allocate(character(att_len) :: tmp_str(1))
+      if (.not.do_read) allocate(character(att_len) :: att_val)
+      if (do_read) tmp_str(1) = att_val
+      call broadcast(tmp_str, att_len, blocking=.true.)
+      att_val = tmp_str(1)
+      if (present(found)) found = (info(2) /= 0)
+    elseif (.not.allocated(att_val)) then
+      allocate(character(4) :: att_val) ; att_val = ''
+    endif
+  elseif (.not.allocated(att_val)) then
+    allocate(character(4) :: att_val) ; att_val = ''
+  endif
+end subroutine read_attribute_str
+
+
+!> Read a 32-bit integer global or variable attribute
+subroutine read_attribute_int32(filename, attname, att_val, varname, found, all_read, ncid_in)
+  character(len=*),           intent(in)  :: filename !< Name of the file to read
+  character(len=*),           intent(in)  :: attname  !< Name of the attribute to read
+  integer(kind=int32),        intent(out) :: att_val  !< The value of the attribute
+  character(len=*), optional, intent(in)  :: varname  !< The name of the variable whose attribute will
+                                                      !! be read. If missing, read a global attribute.
+  logical,          optional, intent(out) :: found    !< Returns true if the attribute is found
+  logical,          optional, intent(in)  :: all_read !< If present and true, all PEs that call this
+                                                      !! routine actually do the read, otherwise only
+                                                      !! root PE reads and then broadcasts the results.
+  integer,        optional, intent(in)    :: ncid_in  !< The netCDF ID of an open file.  If absent, the
+                                                      !! file is opened and closed within this routine.
+
+  logical :: do_read, do_broadcast
+  integer :: rc, ncid, varid, is_found
+  character(len=256) :: hdr
+  hdr = "read_attribute_int32"
+  att_val = 0
+
+  do_read = is_root_pe() ; if (present(all_read)) do_read = all_read .or. do_read
+  do_broadcast = .true. ; if (present(all_read)) do_broadcast = .not.all_read
+
+  if (do_read) then
+    if (present(ncid_in)) then
+      ncid = ncid_in
+    else
+      call open_file_to_read(filename, ncid, success=found)
+      if (present(found)) then ; if (.not.found) do_read = .false. ; endif
+    endif
+  endif
+
+  if (do_read) then
+    rc = NF90_ENOTATT
+    if (present(varname)) then  ! Read a variable attribute
+      call get_varid(varname, ncid, filename, varid, match_case=.false., found=found)
+      if (varid >= 0) then ! The named variable does exist, and found would be true.
+        rc = NF90_get_att(ncid, varid, attname, att_val)
+        if ((rc /= NF90_NOERR) .and. (rc /= NF90_ENOTATT)) &
+          call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //" Difficulties reading att "//&
+                trim(attname)//" for "//trim(varname)//" from "//trim(filename))
+      endif
+    else  ! Read a global attribute
+      rc = NF90_get_att(ncid, NF90_GLOBAL, attname, att_val)
+      if ((rc /= NF90_NOERR) .and. (rc /= NF90_ENOTATT)) &
+        call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //&
+                " Difficulties reading global att "//trim(attname)//" from "//trim(filename))
+    endif
+    if (present(found)) found = (rc == NF90_NOERR)
+
+    if (.not.present(ncid_in)) call close_file_to_read(ncid, filename)
+  endif
+
+  if (do_broadcast) then
+    if (present(found)) then
+      is_found = 0 ; if (is_root_pe() .and. found) is_found = 1
+      call broadcast(is_found, blocking=.false.)
+    endif
+    call broadcast(att_val, blocking=.true.)
+    if (present(found)) found = (is_found /= 0)
+  endif
+
+end subroutine read_attribute_int32
+
+
+!> Read a 64-bit integer global or variable attribute
+subroutine read_attribute_int64(filename, attname, att_val, varname, found, all_read, ncid_in)
+  character(len=*),           intent(in)  :: filename !< Name of the file to read
+  character(len=*),           intent(in)  :: attname  !< Name of the attribute to read
+  integer(kind=int64),        intent(out) :: att_val  !< The value of the attribute
+  character(len=*), optional, intent(in)  :: varname  !< The name of the variable whose attribute will
+                                                      !! be read. If missing, read a global attribute.
+  logical,          optional, intent(out) :: found    !< Returns true if the attribute is found
+  logical,          optional, intent(in)  :: all_read !< If present and true, all PEs that call this
+                                                      !! routine actually do the read, otherwise only
+                                                      !! root PE reads and then broadcasts the results.
+  integer,        optional, intent(in)    :: ncid_in  !< The netCDF ID of an open file.  If absent, the
+                                                      !! file is opened and closed within this routine.
+
+  logical :: do_read, do_broadcast
+  integer :: rc, ncid, varid, is_found
+  character(len=256) :: hdr
+  hdr = "read_attribute_int64"
+  att_val = 0
+
+  do_read = is_root_pe() ; if (present(all_read)) do_read = all_read .or. do_read
+  do_broadcast = .true. ; if (present(all_read)) do_broadcast = .not.all_read
+
+  if (do_read) then
+    if (present(ncid_in)) then
+      ncid = ncid_in
+    else
+      call open_file_to_read(filename, ncid, success=found)
+      if (present(found)) then ; if (.not.found) do_read = .false. ; endif
+    endif
+  endif
+
+  if (do_read) then
+    rc = NF90_ENOTATT
+    if (present(varname)) then  ! Read a variable attribute
+      call get_varid(varname, ncid, filename, varid, match_case=.false., found=found)
+      if (varid >= 0) then ! The named variable does exist, and found would be true.
+        rc = NF90_get_att(ncid, varid, attname, att_val)
+        if ((rc /= NF90_NOERR) .and. (rc /= NF90_ENOTATT)) &
+          call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //" Difficulties reading att "//&
+                trim(attname)//" for "//trim(varname)//" from "//trim(filename))
+      endif
+    else  ! Read a global attribute
+      rc = NF90_get_att(ncid, NF90_GLOBAL, attname, att_val)
+      if ((rc /= NF90_NOERR) .and. (rc /= NF90_ENOTATT)) &
+        call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //&
+                " Difficulties reading global att "//trim(attname)//" from "//trim(filename))
+    endif
+    if (present(found)) found = (rc == NF90_NOERR)
+
+    rc = NF90_close(ncid)
+  endif
+
+  if (do_broadcast) then
+    if (present(found)) then
+      is_found = 0 ; if (is_root_pe() .and. found) is_found = 1
+      call broadcast(is_found, blocking=.false.)
+    endif
+    call broadcast(att_val, blocking=.true.)
+    if (present(found)) found = (is_found /= 0)
+  endif
+
+end subroutine read_attribute_int64
+
+!> Read a real global or variable attribute
+subroutine read_attribute_real(filename, attname, att_val, varname, found, all_read, ncid_in)
+  character(len=*),           intent(in)  :: filename !< Name of the file to read
+  character(len=*),           intent(in)  :: attname  !< Name of the attribute to read
+  real,                       intent(out) :: att_val  !< The value of the attribute
+  character(len=*), optional, intent(in)  :: varname  !< The name of the variable whose attribute will
+                                                      !! be read. If missing, read a global attribute.
+  logical,          optional, intent(out) :: found    !< Returns true if the attribute is found
+  logical,          optional, intent(in)  :: all_read !< If present and true, all PEs that call this
+                                                      !! routine actually do the read, otherwise only
+                                                      !! root PE reads and then broadcasts the results.
+  integer,          optional, intent(in)  :: ncid_in  !< The netCDF ID of an open file.  If absent, the
+                                                      !! file is opened and closed within this routine.
+
+  logical :: do_read, do_broadcast
+  integer :: rc, ncid, varid, is_found
+  character(len=256) :: hdr
+  hdr = "read_attribute_real"
+  att_val = 0.0
+
+  do_read = is_root_pe() ; if (present(all_read)) do_read = all_read .or. do_read
+  do_broadcast = .true. ; if (present(all_read)) do_broadcast = .not.all_read
+
+  if (do_read) then
+    if (present(ncid_in)) then
+      ncid = ncid_in
+    else
+      call open_file_to_read(filename, ncid, success=found)
+      if (present(found)) then ; if (.not.found) do_read = .false. ; endif
+    endif
+  endif
+
+  if (do_read) then
+    rc = NF90_ENOTATT
+    if (present(varname)) then  ! Read a variable attribute
+      call get_varid(varname, ncid, filename, varid, match_case=.false., found=found)
+      if (varid >= 0) then ! The named variable does exist, and found would be true.
+        rc = NF90_get_att(ncid, varid, attname, att_val)
+        if ((rc /= NF90_NOERR) .and. (rc /= NF90_ENOTATT)) &
+          call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //" Difficulties reading att "//&
+                trim(attname)//" for "//trim(varname)//" from "//trim(filename))
+      endif
+    else  ! Read a global attribute
+      rc = NF90_get_att(ncid, NF90_GLOBAL, attname, att_val)
+      if ((rc /= NF90_NOERR) .and. (rc /= NF90_ENOTATT)) &
+        call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //&
+                " Difficulties reading global att "//trim(attname)//" from "//trim(filename))
+    endif
+    if (present(found)) found = (rc == NF90_NOERR)
+
+    if (.not.present(ncid_in)) call close_file_to_read(ncid, filename)
+  endif
+
+  if (do_broadcast) then
+    if (present(found)) then
+      is_found = 0 ; if (is_root_pe() .and. found) is_found = 1
+      call broadcast(is_found, blocking=.false.)
+    endif
+    call broadcast(att_val, blocking=.true.)
+    if (present(found)) found = (is_found /= 0)
+  endif
+
+end subroutine read_attribute_real
+
+!> Open a netcdf file for reading, with error handling
+subroutine open_file_to_read(filename, ncid, success)
+  character(len=*),  intent(in)  :: filename   !< path and name of the file to open for reading
+  integer,           intent(out) :: ncid       !< The netcdf handle for the file
+  logical, optional, intent(out) :: success    !< Returns true if the file was opened, or if this
+                                               !! argument is not present, failure is fatal error.
+  ! Local variables
+  integer rc
+
+  rc = NF90_open(trim(filename), NF90_NOWRITE, ncid)
+  if (present(success)) then
+    success = (rc == NF90_NOERR)
+  elseif (rc /= NF90_NOERR) then
+    call MOM_error(FATAL, "Difficulties opening "//trim(filename)//" - "//trim(NF90_STRERROR(rc)) )
+  endif
+
+end subroutine open_file_to_read
+
+!> Close a netcdf file that had been opened for reading, with error handling
+subroutine close_file_to_read(ncid, filename)
+  integer,                    intent(inout) :: ncid       !< The netcdf handle for the file to close
+  character(len=*), optional, intent(in)    :: filename   !< path and name of the file to close
+  integer :: rc
+  if (ncid >= 0) then
+    rc = NF90_close(ncid)
+    if (present(filename) .and. (rc /= NF90_NOERR)) then
+      call MOM_error(WARNING, "Difficulties closing "//trim(filename)//": "//trim(NF90_STRERROR(rc)))
+    elseif (rc /= NF90_NOERR) then
+      call MOM_error(WARNING, "Difficulties closing file: "//trim(NF90_STRERROR(rc)))
+    endif
+  endif
+  ncid = -1
+end subroutine close_file_to_read
+
+!> get_varid finds the netcdf handle for the potentially case-insensitive variable name in a file
+subroutine get_varid(varname, ncid, filename, varid, match_case, found)
+  character(len=*),  intent(in)  :: varname    !< The name of the variable that is being sought
+  integer,           intent(in)  :: ncid       !< The open netcdf handle for the file
+  character(len=*),  intent(in)  :: filename   !< name of the file to read, used here in messages
+  integer,           intent(out) :: varid      !< The netcdf handle for the variable
+  logical, optional, intent(in)  :: match_case !< If false, allow for variables name matches to be
+                                               !! case insensitive, but take a perfect match if
+                                               !! found.  The default is true.
+  logical, optional, intent(out) :: found      !< Returns true if the attribute is found
+
+  logical :: var_found, insensitive
+  character(len=256) :: name
+  integer, allocatable :: varids(:)
+  integer :: nvars, status, n
+
+  varid = -1
+  var_found = .false.
+  insensitive = .false. ; if (present(match_case)) insensitive = .not.match_case
+
+  if (insensitive) then
+    ! This code ounddoes a case-insensitive search for a variable in the file.
+    status = NF90_inquire(ncid, nVariables=nvars)
+    if (present(found) .and. ((status /= NF90_NOERR) .or. (nvars < 1))) then
+      found = .false. ; return
+    elseif (status /= NF90_NOERR) then
+      call MOM_error(FATAL, "get_varid:  Difficulties getting the number of variables in file "//&
+          trim(filename)//" - "//trim(NF90_STRERROR(status)))
+    elseif (nvars < 1) then
+      call MOM_error(FATAL, "get_varid: There appear not to be any variables in "//trim(filename))
+    endif
+
+    allocate(varids(nvars))
+
+    status = nf90_inq_varids(ncid, nvars, varids)
+    if (status /= NF90_NOERR) then
+      call MOM_error(WARNING, "get_varid: Difficulties getting the variable IDs in file "//&
+          trim(filename)//" - "//trim(NF90_STRERROR(status)))
+      nvars = -1  ! Full error handling will occur after the do-loop.
+    endif
+
+    do n = 1,nvars
+      status = nf90_inquire_variable(ncid, varids(n), name=name)
+      if (status /= NF90_NOERR) then
+        call MOM_error(WARNING, "get_varid:  Difficulties getting a variable name in file "//&
+            trim(filename)//" - "//trim(NF90_STRERROR(status)))
+      endif
+
+      if (trim(lowercase(name)) == trim(lowercase(varname))) then
+        if (var_found) then
+          call MOM_error(WARNING, "get_varid: Two variables match the case-insensitive name "//&
+                  trim(varname)//" in file "//trim(filename))
+          ! Replace the first variable if the second one is a case-sensitive match
+          if (trim(name) == trim(varname)) varid = varids(n)
+        else
+          varid = varids(n) ; var_found = .true.
+        endif
+      endif
+    enddo
+    if (present(found)) found = var_found
+    if ((.not.var_found) .and. .not.present(found)) call MOM_error(FATAL, &
+        "get_varid: variable "//trim(varname)//" was not found in file "//trim(filename))
+
+    deallocate(varids)
+  else
+    status = NF90_INQ_VARID(ncid, trim(varname), varid)
+    if (present(found)) found = (status == NF90_NOERR)
+    if ((status /= NF90_NOERR) .and. .not.present(found)) then
+      call MOM_error(FATAL, "get_varid: Difficulties getting a variable id for "//&
+          trim(varname)//" in file "//trim(filename)//" - "//trim(NF90_STRERROR(status)))
+    endif
+  endif
+
+end subroutine get_varid
+
+!> Verify that a file contains a named variable with the expected units.
+subroutine verify_variable_units(filename, varname, expected_units, msg, ierr, alt_units)
+  character(len=*),           intent(in)    :: filename  !< File name
+  character(len=*),           intent(in)    :: varname   !< Variable name
+  character(len=*),           intent(in)    :: expected_units !< Expected units of variable
+  character(len=*),           intent(inout) :: msg       !< Message to use for errors
+  logical,                    intent(out)   :: ierr      !< True if an error occurs
+  character(len=*), optional, intent(in)    :: alt_units !< Alterate acceptable units of variable
+
+  ! Local variables
+  character (len=200) :: units
+  logical :: units_correct, success
+  integer :: i, ncid, status, vid
+
+  if (.not.is_root_pe()) then ! Only the root PE should do the verification.
+    ierr = .false. ; msg = '' ; return
+  endif
+
+  ierr = .true.
+  call open_file_to_read(filename, ncid, success)
+  if (.not.success) then
+    msg = 'File not found: '//trim(filename)
     return
   endif
 
-  status = nf90_Inquire_Dimension(ncid, dimids(ndims), len=n_time)
-  if (status /= NF90_NOERR) call MOM_error(WARNING,"num_timelevels: "//&
-      trim(NF90_STRERROR(status))//" Getting number of time levels of "//&
-      trim(varname)//" in "//trim(filename))
+  status = NF90_INQ_VARID(ncid, trim(varname), vid)
+  if (status /= NF90_NOERR) then
+    msg = 'Var not found: '//trim(varname)
+  else
+    status = NF90_GET_ATT(ncid, vid, "units", units)
+    if (status /= NF90_NOERR) then
+      msg = 'Attribute not found: units'
+    else
+      ! NF90_GET_ATT can return attributes with null characters, which TRIM will not truncate.
+      ! This loop replaces any null characters with a space so that the subsequent check
+      ! between the read units and the expected units will pass
+      do i=1,LEN_TRIM(units)
+        if (units(i:i) == CHAR(0)) units(i:i) = " "
+      enddo
 
-  return
+      units_correct = (trim(units) == trim(expected_units))
+      if (present(alt_units)) then
+        units_correct = units_correct .or. (trim(units) == trim(alt_units))
+      endif
+      if (units_correct) then
+        ierr = .false.
+        msg = ''
+      else
+        msg = 'Units incorrect: '//trim(units)//' /= '//trim(expected_units)
+      endif
+    endif
+  endif
 
-end function num_timelevels
+  status = NF90_close(ncid)
 
+end subroutine verify_variable_units
 
 !> Returns a vardesc type whose elements have been filled with the provided
 !! fields.  The argument name is required, while the others are optional and
@@ -600,7 +1202,7 @@ function var_desc(name, units, longname, hor_grid, z_grid, t_grid, &
   character(len=*),           intent(in) :: name               !< variable name
   character(len=*), optional, intent(in) :: units              !< variable units
   character(len=*), optional, intent(in) :: longname           !< variable long name
-  character(len=*), optional, intent(in) :: hor_grid           !< variable horizonal staggering
+  character(len=*), optional, intent(in) :: hor_grid           !< variable horizontal staggering
   character(len=*), optional, intent(in) :: z_grid             !< variable vertical staggering
   character(len=*), optional, intent(in) :: t_grid             !< time description: s, p, or 1
   character(len=*), optional, intent(in) :: cmor_field_name    !< CMOR name
@@ -627,7 +1229,7 @@ function var_desc(name, units, longname, hor_grid, z_grid, t_grid, &
 
   call modify_vardesc(vd, units=units, longname=longname, hor_grid=hor_grid, &
                       z_grid=z_grid, t_grid=t_grid,                          &
-                      cmor_field_name=cmor_field_name,cmor_units=cmor_units, &
+                      cmor_field_name=cmor_field_name, cmor_units=cmor_units, &
                       cmor_longname=cmor_longname, conversion=conversion, caller=cllr)
 
 end function var_desc
@@ -641,7 +1243,7 @@ subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
   character(len=*), optional, intent(in)    :: name            !< name of variable
   character(len=*), optional, intent(in)    :: units           !< units of variable
   character(len=*), optional, intent(in)    :: longname        !< long name of variable
-  character(len=*), optional, intent(in)    :: hor_grid        !< horizonal staggering of variable
+  character(len=*), optional, intent(in)    :: hor_grid        !< horizontal staggering of variable
   character(len=*), optional, intent(in)    :: z_grid          !< vertical staggering of variable
   character(len=*), optional, intent(in)    :: t_grid          !< time description: s, p, or 1
   character(len=*), optional, intent(in)    :: cmor_field_name !< CMOR name
@@ -700,8 +1302,8 @@ subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
   character(len=*), optional, intent(out) :: name               !< name of variable
   character(len=*), optional, intent(out) :: units              !< units of variable
   character(len=*), optional, intent(out) :: longname           !< long name of variable
-  character(len=*), optional, intent(out) :: hor_grid           !< horiz staggering of variable
-  character(len=*), optional, intent(out) :: z_grid             !< vert staggering of variable
+  character(len=*), optional, intent(out) :: hor_grid           !< horizontal staggering of variable
+  character(len=*), optional, intent(out) :: z_grid             !< verticle staggering of variable
   character(len=*), optional, intent(out) :: t_grid             !< time description: s, p, or 1
   character(len=*), optional, intent(out) :: cmor_field_name    !< CMOR name
   character(len=*), optional, intent(out) :: cmor_units         !< CMOR physical dimensions of variable
@@ -738,6 +1340,189 @@ subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
 end subroutine query_vardesc
 
 
+!> Write a 4d field to an output file, potentially with rotation
+subroutine MOM_write_field_4d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
+                              fill_value, turns, scale)
+  type(file_type),          intent(in)    :: IO_handle  !< Handle for a file that is open for writing
+  type(fieldtype),          intent(in)    :: field_md   !< Field type with metadata
+  type(MOM_domain_type),    intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
+  real, dimension(:,:,:,:), intent(inout) :: field      !< Unrotated field to write
+  real,           optional, intent(in)    :: tstamp     !< Model timestamp
+  integer,        optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
+  real,           optional, intent(in)    :: fill_value !< Missing data fill value
+  integer,        optional, intent(in)    :: turns      !< Number of quarter-turns to rotate the data
+  real,           optional, intent(in)    :: scale      !< A scaling factor that the field is
+                                                        !! multiplied by before it is written
+
+  real, allocatable :: field_rot(:,:,:,:)  ! A rotated version of field, with the same units or rescaled
+  real :: scale_fac ! A scaling factor to use before writing the array
+  integer :: qturns ! The number of quarter turns through which to rotate field
+  integer :: is, ie, js, je ! The extent of the computational domain
+
+  qturns = 0 ; if (present(turns)) qturns = modulo(turns, 4)
+  scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
+
+  if ((qturns == 0) .and. (scale_fac == 1.0)) then
+    call write_field(IO_handle, field_md, MOM_domain, field, tstamp=tstamp, &
+                         tile_count=tile_count, fill_value=fill_value)
+  else
+    call allocate_rotated_array(field, [1,1,1,1], qturns, field_rot)
+    call rotate_array(field, qturns, field_rot)
+    if (scale_fac /= 1.0) call rescale_comp_data(MOM_Domain, field_rot, scale_fac)
+    call write_field(IO_handle, field_md, MOM_domain, field_rot, tstamp=tstamp, &
+                         tile_count=tile_count, fill_value=fill_value)
+    deallocate(field_rot)
+  endif
+end subroutine MOM_write_field_4d
+
+!> Write a 3d field to an output file, potentially with rotation
+subroutine MOM_write_field_3d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
+                              fill_value, turns, scale)
+  type(file_type),        intent(in)    :: IO_handle  !< Handle for a file that is open for writing
+  type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
+  type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
+  real, dimension(:,:,:), intent(inout) :: field      !< Unrotated field to write
+  real,         optional, intent(in)    :: tstamp     !< Model timestamp
+  integer,      optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
+  real,         optional, intent(in)    :: fill_value !< Missing data fill value
+  integer,      optional, intent(in)    :: turns      !< Number of quarter-turns to rotate the data
+  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is
+                                                      !! multiplied by before it is written
+
+  real, allocatable :: field_rot(:,:,:)  ! A rotated version of field, with the same units or rescaled
+  real :: scale_fac ! A scaling factor to use before writing the array
+  integer :: qturns ! The number of quarter turns through which to rotate field
+  integer :: is, ie, js, je ! The extent of the computational domain
+
+  qturns = 0 ; if (present(turns)) qturns = modulo(turns, 4)
+  scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
+
+  if ((qturns == 0) .and. (scale_fac == 1.0)) then
+    call write_field(IO_handle, field_md, MOM_domain, field, tstamp=tstamp, &
+                         tile_count=tile_count, fill_value=fill_value)
+  else
+    call allocate_rotated_array(field, [1,1,1], qturns, field_rot)
+    call rotate_array(field, qturns, field_rot)
+    if (scale_fac /= 1.0) call rescale_comp_data(MOM_Domain, field_rot, scale_fac)
+    call write_field(IO_handle, field_md, MOM_domain, field_rot, tstamp=tstamp, &
+                         tile_count=tile_count, fill_value=fill_value)
+    deallocate(field_rot)
+  endif
+end subroutine MOM_write_field_3d
+
+!> Write a 2d field to an output file, potentially with rotation
+subroutine MOM_write_field_2d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
+                              fill_value, turns, scale)
+  type(file_type),        intent(in)    :: IO_handle  !< Handle for a file that is open for writing
+  type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
+  type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
+  real, dimension(:,:),   intent(inout) :: field      !< Unrotated field to write
+  real,         optional, intent(in)    :: tstamp     !< Model timestamp
+  integer,      optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
+  real,         optional, intent(in)    :: fill_value !< Missing data fill value
+  integer,      optional, intent(in)    :: turns      !< Number of quarter-turns to rotate the data
+  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is
+                                                      !! multiplied by before it is written
+
+  real, allocatable :: field_rot(:,:)  ! A rotated version of field, with the same units
+  real :: scale_fac ! A scaling factor to use before writing the array
+  integer :: qturns ! The number of quarter turns through which to rotate field
+  integer :: is, ie, js, je ! The extent of the computational domain
+
+  qturns = 0 ; if (present(turns)) qturns = modulo(turns, 4)
+  scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
+
+  if ((qturns == 0) .and. (scale_fac == 1.0)) then
+    call write_field(IO_handle, field_md, MOM_domain, field, tstamp=tstamp, &
+                         tile_count=tile_count, fill_value=fill_value)
+  else
+    call allocate_rotated_array(field, [1,1], qturns, field_rot)
+    call rotate_array(field, qturns, field_rot)
+    if (scale_fac /= 1.0) call rescale_comp_data(MOM_Domain, field_rot, scale_fac)
+    call write_field(IO_handle, field_md, MOM_domain, field_rot, tstamp=tstamp, &
+                         tile_count=tile_count, fill_value=fill_value)
+    deallocate(field_rot)
+  endif
+end subroutine MOM_write_field_2d
+
+!> Write a 1d field to an output file
+subroutine MOM_write_field_1d(IO_handle, field_md, field, tstamp, fill_value, scale)
+  type(file_type),        intent(in)    :: IO_handle  !< Handle for a file that is open for writing
+  type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
+  real, dimension(:),     intent(in)    :: field      !< Field to write
+  real,         optional, intent(in)    :: tstamp     !< Model timestamp
+  real,         optional, intent(in)    :: fill_value !< Missing data fill value
+  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is
+                                                      !! multiplied by before it is written
+
+  real, dimension(:), allocatable :: array ! A rescaled copy of field
+  real :: scale_fac ! A scaling factor to use before writing the array
+  integer :: i
+
+  scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
+
+  if (scale_fac == 1.0) then
+    call write_field(IO_handle, field_md, field, tstamp=tstamp)
+  else
+    allocate(array(size(field)))
+    array(:) = scale_fac * field(:)
+    if (present(fill_value)) then
+      do i=1,size(field) ; if (field(i) == fill_value) array(i) = fill_value ; enddo
+    endif
+    call write_field(IO_handle, field_md, array, tstamp=tstamp)
+    deallocate(array)
+  endif
+end subroutine MOM_write_field_1d
+
+!> Write a 0d field to an output file
+subroutine MOM_write_field_0d(IO_handle, field_md, field, tstamp, fill_value, scale)
+  type(file_type),        intent(in)    :: IO_handle  !< Handle for a file that is open for writing
+  type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
+  real,                   intent(in)    :: field      !< Field to write
+  real,         optional, intent(in)    :: tstamp     !< Model timestamp
+  real,         optional, intent(in)    :: fill_value !< Missing data fill value
+  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is
+                                                      !! multiplied by before it is written
+  real :: scaled_val ! A rescaled copy of field
+
+  scaled_val = field
+  if (present(scale)) scaled_val = scale*field
+  if (present(fill_value)) then ; if (field == fill_value) scaled_val = fill_value ; endif
+
+  call write_field(IO_handle, field_md, scaled_val, tstamp=tstamp)
+end subroutine MOM_write_field_0d
+
+!> Given filename and fieldname, this subroutine returns the size of the field in the file
+subroutine field_size(filename, fieldname, sizes, field_found, no_domain, ndims, ncid_in)
+  character(len=*),      intent(in)    :: filename  !< The name of the file to read
+  character(len=*),      intent(in)    :: fieldname !< The name of the variable whose sizes are returned
+  integer, dimension(:), intent(inout) :: sizes     !< The sizes of the variable in each dimension
+  logical,     optional, intent(out)   :: field_found !< This indicates whether the field was found in
+                                                    !! the input file.  Without this argument, there
+                                                    !! is a fatal error if the field is not found.
+  logical,     optional, intent(in)    :: no_domain !< If present and true, do not check for file
+                                                    !! names with an appended tile number.  If
+                                                    !! ndims is present, the default changes to true.
+  integer,     optional, intent(out)   :: ndims     !< The number of dimensions to the variable
+  integer,     optional, intent(in)    :: ncid_in   !< The netCDF ID of an open file.  If absent, the
+                                                    !! file is opened and closed within this routine.
+
+  if (present(ndims)) then
+    if (present(no_domain)) then ; if (.not.no_domain) call MOM_error(FATAL, &
+          "field_size does not support the ndims argument when no_domain is present and false.")
+    endif
+    call get_var_sizes(filename, fieldname, ndims, sizes, match_case=.false., ncid_in=ncid_in)
+    if (present(field_found)) field_found = (ndims >= 0)
+    if ((ndims < 0) .and. .not.present(field_found)) then
+      call MOM_error(FATAL, "Variable "//trim(fieldname)//" not found in "//trim(filename) )
+    endif
+  else
+    call get_field_size(filename, fieldname, sizes, field_found=field_found, no_domain=no_domain)
+  endif
+
+end subroutine field_size
+
+
 !> Copies a string
 subroutine safe_string_copy(str1, str2, fieldnm, caller)
   character(len=*),           intent(in)  :: str1    !< The string being copied
@@ -756,7 +1541,6 @@ subroutine safe_string_copy(str1, str2, fieldnm, caller)
   endif
   str2 = trim(str1)
 end subroutine safe_string_copy
-
 
 !> Returns a name with "%#E" or "%E" replaced with the ensemble member number.
 function ensembler(name, ens_no_in) result(en_nm)
@@ -815,242 +1599,52 @@ function ensembler(name, ens_no_in) result(en_nm)
 
 end function ensembler
 
+!> Provide a string to append to filenames, to differentiate ensemble members, for example.
+subroutine get_filename_appendix(suffix)
+  character(len=*), intent(out) :: suffix !< A string to append to filenames
 
-!> Returns true if the named file or its domain-decomposed variant exists.
-function MOM_file_exists(filename, MOM_Domain)
-  character(len=*),       intent(in) :: filename   !< The name of the file being inquired about
-  type(MOM_domain_type),  intent(in) :: MOM_Domain !< The MOM_Domain that describes the decomposition
+  call get_filename_suffix(suffix)
+end subroutine get_filename_appendix
 
-! This function uses the fms_io function file_exist to determine whether
-! a named file (or its decomposed variant) exists.
+!> Write a file version number to the log file or other output file
+subroutine write_version_number(version, tag, unit)
+  character(len=*),           intent(in) :: version !< A string that contains the routine name and version
+  character(len=*), optional, intent(in) :: tag  !< A tag name to add to the message
+  integer,          optional, intent(in) :: unit !< An alternate unit number for output
 
-  logical :: MOM_file_exists
-
-  MOM_file_exists = file_exist(filename, MOM_Domain%mpp_domain)
-
-end function MOM_file_exists
-
-!> Returns true if the named file or its domain-decomposed variant exists.
-function FMS_file_exists(filename, domain, no_domain)
-  character(len=*), intent(in)         :: filename  !< The name of the file being inquired about
-  type(domain2d), optional, intent(in) :: domain    !< The mpp domain2d that describes the decomposition
-  logical,        optional, intent(in) :: no_domain !< This file does not use domain decomposition
-! This function uses the fms_io function file_exist to determine whether
-! a named file (or its decomposed variant) exists.
-
-  logical :: FMS_file_exists
-
-  FMS_file_exists = file_exist(filename, domain, no_domain)
-
-end function FMS_file_exists
-
-!> This function uses the fms_io function read_data to read 1-D
-!! data field named "fieldname" from file "filename".
-subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale)
-  character(len=*),       intent(in)    :: filename  !< The name of the file to read
-  character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
-  real, dimension(:),     intent(inout) :: data      !< The 1-dimensional array into which the data
-  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
-  real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
-                                                     !! by before they are returned.
-
-  call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
-
-  if (present(scale)) then ; if (scale /= 1.0) then
-    data(:) = scale*data(:)
-  endif ; endif
-
-end subroutine MOM_read_data_1d
-
-!> This function uses the fms_io function read_data to read a distributed
-!! 2-D data field named "fieldname" from file "filename".  Valid values for
-!! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
-subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position, scale)
-  character(len=*),       intent(in)    :: filename  !< The name of the file to read
-  character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
-  real, dimension(:,:),   intent(inout) :: data      !< The 2-dimensional array into which the data
-                                                     !! should be read
-  type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
-  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
-  integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
-  real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
-                                                     !! by before they are returned.
-
-  integer :: is, ie, js, je
-
-  call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=position)
-
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
-    data(is:ie,js:je) = scale*data(is:ie,js:je)
-  endif ; endif
-
-end subroutine MOM_read_data_2d
-
-!> This function uses the fms_io function read_data to read a distributed
-!! 3-D data field named "fieldname" from file "filename".  Valid values for
-!! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
-subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position, scale)
-  character(len=*),       intent(in)    :: filename  !< The name of the file to read
-  character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
-  real, dimension(:,:,:), intent(inout) :: data      !< The 3-dimensional array into which the data
-                                                     !! should be read
-  type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
-  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
-  integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
-  real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
-                                                     !! by before they are returned.
-
-  integer :: is, ie, js, je
-
-  call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=position)
-
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
-    data(is:ie,js:je,:) = scale*data(is:ie,js:je,:)
-  endif ; endif
-
-end subroutine MOM_read_data_3d
-
-!> This function uses the fms_io function read_data to read a distributed
-!! 4-D data field named "fieldname" from file "filename".  Valid values for
-!! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
-subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position, scale)
-  character(len=*),       intent(in)    :: filename  !< The name of the file to read
-  character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
-  real, dimension(:,:,:,:), intent(inout) :: data    !< The 4-dimensional array into which the data
-                                                     !! should be read
-  type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
-  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
-  integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
-  real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
-                                                     !! by before they are returned.
-
-  integer :: is, ie, js, je
-
-  call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=position)
-
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
-    data(is:ie,js:je,:,:) = scale*data(is:ie,js:je,:,:)
-  endif ; endif
-
-end subroutine MOM_read_data_4d
+  call write_version(version, tag, unit)
+end subroutine write_version_number
 
 
-!> This function uses the fms_io function read_data to read a pair of distributed
-!! 2-D data fields with names given by "[uv]_fieldname" from file "filename".  Valid values for
-!! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
-subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
-                              timelevel, stagger, scalar_pair, scale)
-  character(len=*),       intent(in)    :: filename  !< The name of the file to read
-  character(len=*),       intent(in)    :: u_fieldname !< The variable name of the u data in the file
-  character(len=*),       intent(in)    :: v_fieldname !< The variable name of the v data in the file
-  real, dimension(:,:),   intent(inout) :: u_data    !< The 2 dimensional array into which the
-                                                     !! u-component of the data should be read
-  real, dimension(:,:),   intent(inout) :: v_data    !< The 2 dimensional array into which the
-                                                     !! v-component of the data should be read
-  type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
-  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
-  integer,      optional, intent(in)    :: stagger   !< A flag indicating where this vector is discretized
-  logical,      optional, intent(in)    :: scalar_pair !< If true, a pair of scalars are to be read.cretized
-  real,         optional, intent(in)    :: scale     !< A scaling factor that the fields are multiplied
-                                                     !! by before they are returned.
-  integer :: is, ie, js, je
-  integer :: u_pos, v_pos
+!> Open a single namelist file that is potentially readable by all PEs.
+function open_namelist_file(file) result(unit)
+  character(len=*), optional, intent(in) :: file !< The file to open, by default "input.nml"
+  integer                                :: unit !< The opened unit number of the namelist file
+  unit = MOM_namelist_file(file)
+end function open_namelist_file
 
-  u_pos = EAST_FACE ; v_pos = NORTH_FACE
-  if (present(stagger)) then
-    if (stagger == CGRID_NE) then ; u_pos = EAST_FACE ; v_pos = NORTH_FACE
-    elseif (stagger == BGRID_NE) then ; u_pos = CORNER ; v_pos = CORNER
-    elseif (stagger == AGRID) then ; u_pos = CENTER ; v_pos = CENTER ; endif
-  endif
-
-  call read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=u_pos)
-  call read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=v_pos)
-
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call get_simple_array_i_ind(MOM_Domain, size(u_data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(u_data,2), js, je)
-    u_data(is:ie,js:je) = scale*u_data(is:ie,js:je)
-    call get_simple_array_i_ind(MOM_Domain, size(v_data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(v_data,2), js, je)
-    v_data(is:ie,js:je) = scale*v_data(is:ie,js:je)
-  endif ; endif
-
-end subroutine MOM_read_vector_2d
-
-
-!> This function uses the fms_io function read_data to read a pair of distributed
-!! 3-D data fields with names given by "[uv]_fieldname" from file "filename".  Valid values for
-!! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
-subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
-                              timelevel, stagger, scalar_pair, scale)
-  character(len=*),       intent(in)    :: filename  !< The name of the file to read
-  character(len=*),       intent(in)    :: u_fieldname !< The variable name of the u data in the file
-  character(len=*),       intent(in)    :: v_fieldname !< The variable name of the v data in the file
-  real, dimension(:,:,:), intent(inout) :: u_data    !< The 3 dimensional array into which the
-                                                     !! u-component of the data should be read
-  real, dimension(:,:,:), intent(inout) :: v_data    !< The 3 dimensional array into which the
-                                                     !! v-component of the data should be read
-  type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
-  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
-  integer,      optional, intent(in)    :: stagger   !< A flag indicating where this vector is discretized
-  logical,      optional, intent(in)    :: scalar_pair !< If true, a pair of scalars are to be read.cretized
-  real,         optional, intent(in)    :: scale     !< A scaling factor that the fields are multiplied
-                                                     !! by before they are returned.
-
-  integer :: is, ie, js, je
-  integer :: u_pos, v_pos
-
-  u_pos = EAST_FACE ; v_pos = NORTH_FACE
-  if (present(stagger)) then
-    if (stagger == CGRID_NE) then ; u_pos = EAST_FACE ; v_pos = NORTH_FACE
-    elseif (stagger == BGRID_NE) then ; u_pos = CORNER ; v_pos = CORNER
-    elseif (stagger == AGRID) then ; u_pos = CENTER ; v_pos = CENTER ; endif
-  endif
-
-  call read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=u_pos)
-  call read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=v_pos)
-
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call get_simple_array_i_ind(MOM_Domain, size(u_data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(u_data,2), js, je)
-    u_data(is:ie,js:je,:) = scale*u_data(is:ie,js:je,:)
-    call get_simple_array_i_ind(MOM_Domain, size(v_data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(v_data,2), js, je)
-    v_data(is:ie,js:je,:) = scale*v_data(is:ie,js:je,:)
-  endif ; endif
-
-end subroutine MOM_read_vector_3d
-
+!> Checks the iostat argument that is returned after reading a namelist variable and writes a
+!! message if there is an error.
+function check_nml_error(IOstat, nml_name) result(ierr)
+  integer,          intent(in) :: IOstat   !< An I/O status field from a namelist read call
+  character(len=*), intent(in) :: nml_name !< The name of the namelist
+  integer :: ierr    !< A copy of IOstat that is returned to preserve legacy function behavior
+  call check_namelist_error(IOstat, nml_name)
+  ierr = IOstat
+end function check_nml_error
 
 !> Initialize the MOM_io module
 subroutine MOM_io_init(param_file)
   type(param_file_type), intent(in) :: param_file  !< structure indicating the open file to
                                                    !! parse for model parameter values.
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_io" ! This module's name.
 
   call log_version(param_file, mdl, version)
 
 end subroutine MOM_io_init
-
 
 !> \namespace mom_io
 !!

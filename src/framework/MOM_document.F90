@@ -661,7 +661,7 @@ end function real_string
 !> Returns a character string of a comma-separated, compact formatted, reals
 !> e.g. "1., 2., 5*3., 5.E2", that give the list of values.
 function real_array_string(vals, sep)
-  character(len=1320)    :: real_array_string !< The output string listing vals
+  character(len=:) ,allocatable :: real_array_string !< The output string listing vals
   real,      intent(in)  :: vals(:) !< The array of values to record
   character(len=*), &
     optional, intent(in) :: sep     !< The separator between successive values,
@@ -669,10 +669,10 @@ function real_array_string(vals, sep)
 ! Returns a character string of a comma-separated, compact formatted, reals
 ! e.g. "1., 2., 5*3., 5.E2"
   ! Local variables
-  integer :: j, n, b, ns
+  integer :: j, n, ns
   logical :: doWrite
   character(len=10) :: separator
-  n=1 ; doWrite=.true. ; real_array_string='' ; b=1
+  n=1 ; doWrite=.true. ; real_array_string=''
   if (present(sep)) then
     separator=sep ; ns=len(sep)
   else
@@ -687,16 +687,15 @@ function real_array_string(vals, sep)
       endif
     endif
     if (doWrite) then
-      if (b>1) then ! Write separator if a number has already been written
-        write(real_array_string(b:),'(A)') separator
-        b=b+ns
+      if(len(real_array_string)>0) then ! Write separator if a number has already been written
+        real_array_string = real_array_string // separator(1:ns)
       endif
       if (n>1) then
-        write(real_array_string(b:),'(A,"*",A)') trim(int_string(n)),trim(real_string(vals(j)))
+        real_array_string = real_array_string // trim(int_string(n)) // "*" // trim(real_string(vals(j)))
       else
-        write(real_array_string(b:),'(A)') trim(real_string(vals(j)))
+        real_array_string = real_array_string // trim(real_string(vals(j)))
       endif
-      n=1 ; b=len_trim(real_array_string)+1
+      n=1
     endif
   enddo
 end function real_array_string

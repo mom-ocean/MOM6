@@ -226,7 +226,9 @@ build/asymmetric/Makefile: MOM_ENV=$(PATH_FMS) $(ASYMMETRIC_FCFLAGS) $(MOM_LDFLA
 build/repro/Makefile: MOM_ENV=$(PATH_FMS) $(REPRO_FCFLAGS) $(MOM_LDFLAGS)
 build/openmp/Makefile: MOM_ENV=$(PATH_FMS) $(OPENMP_FCFLAGS) $(MOM_LDFLAGS)
 build/target/Makefile: MOM_ENV=$(PATH_FMS) $(TARGET_FCFLAGS) $(MOM_LDFLAGS)
-
+build/coupled/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(SYMMETRIC_LDFLAGS)
+build/nuopc/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(SYMMETRIC_LDFLAGS)
+build/mct/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(SYMMETRIC_LDFLAGS)
 
 # Configure script flags
 build/symmetric/Makefile: MOM_ACFLAGS=
@@ -234,7 +236,9 @@ build/asymmetric/Makefile: MOM_ACFLAGS=--enable-asymmetric
 build/repro/Makefile: MOM_ACFLAGS=
 build/openmp/Makefile: MOM_ACFLAGS=--enable-openmp
 build/target/Makefile: MOM_ACFLAGS=
-
+build/coupled/Makefile: MOM_ACFLAGS=--with-driver=coupled_driver
+build/nuopc/Makefile: MOM_ACFLAGS=--with-driver=nuopc_driver
+build/mct/Makefile: MOM_ACFLAGS=--with-driver=mct_driver
 
 # Fetch regression target source code
 build/target/Makefile: | $(TARGET_CODEBASE)
@@ -328,6 +332,25 @@ $(DEPS)/Makefile: ../ac/deps/Makefile
 	mkdir -p $(@D)
 	cp $< $@
 
+#---
+# The following block does a non-library build of a coupled driver interface to MOM, along with everything below it.
+# This simply checks that we have not broken the ability to compile. This is not a means to build a complete coupled executable.
+# Todo: 
+# - avoid re-building FMS and MOM6 src by re-using existing object/mod files
+# - use autoconf rather than mkmf templates
+MK_TEMPLATE ?= ../../$(DEPS)/mkmf/templates/ncrc-gnu.mk
+# NUOPC driver
+build/nuopc/mom_ocean_model_nuopc.o: build/nuopc/Makefile
+	cd $(@D) && make $(@F)
+check_mom6_api_nuopc: build/nuopc/mom_ocean_model_nuopc.o
+# GFDL coupled driver
+build/coupled/ocean_model_MOM.o: build/coupled/Makefile
+	cd $(@D) && make $(@F)
+check_mom6_api_coupled: build/coupled/ocean_model_MOM.o
+# MCT driver
+build/mct/mom_ocean_model_mct.o: build/mct/Makefile
+	cd $(@D) && make $(@F)
+check_mom6_api_mct: build/mct/mom_ocean_model_mct.o
 
 #---
 # Python preprocessing

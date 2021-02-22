@@ -4,7 +4,7 @@ module MOM_diag_vkernels
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use iso_fortran_env, only : stdout=>output_unit, stderr=>error_unit
+use MOM_io, only : stdout, stderr
 
 implicit none ; private
 

@@ -117,8 +117,9 @@ run:
     - time tar zxf $CACHE_DIR/build-pgi-repro-$CI_PIPELINE_ID.tgz
     # time tar zxf $CACHE_DIR/build-gnu-debug-$CI_PIPELINE_ID.tgz
     - (echo '#!/bin/tcsh';echo 'make -f MRS/Makefile.tests all') > job.sh
-    - sbatch --clusters=c3,c4 --nodes=29 --time=0:34:00 --account=gfdl_o --qos=debug --job-name=mom6_regressions --output=log.$CI_PIPELINE_ID --wait job.sh
+    - sbatch --clusters=c3,c4 --nodes=29 --time=0:34:00 --account=gfdl_o --qos=debug --job-name=mom6_regressions --output=log.$CI_PIPELINE_ID --wait job.sh || MJOB_RETURN_STATE=Fail
     - cat log.$CI_PIPELINE_ID
+    - test -z "$MJOB_RETURN_STATE"
     - test -f restart_results_gnu.tar.gz
     - time tar zvcf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz *.tar.gz
 

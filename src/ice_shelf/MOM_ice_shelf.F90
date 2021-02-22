@@ -9,13 +9,17 @@ use MOM_constants, only : hlf
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_COMPONENT, CLOCK_ROUTINE
 use MOM_coms,                 only : num_PEs
-use MOM_IS_diag_mediator, only : post_data, register_diag_field=>register_MOM_IS_diag_field, safe_alloc_ptr
-use MOM_IS_diag_mediator, only : set_axes_info
-use MOM_IS_diag_mediator, only : diag_mediator_init, set_diag_mediator_grid, diag_ctrl, time_type
+use MOM_diag_mediator, only    : MOM_diag_ctrl=>diag_ctrl
+use MOM_IS_diag_mediator, only : post_data=>post_IS_data
+use MOM_IS_diag_mediator, only : register_diag_field=>register_MOM_IS_diag_field, safe_alloc_ptr
+use MOM_IS_diag_mediator, only : set_IS_axes_info, diag_ctrl, time_type
+use MOM_IS_diag_mediator, only : MOM_IS_diag_mediator_init, MOM_IS_diag_mediator_end
+use MOM_IS_diag_mediator, only : set_IS_diag_mediator_grid
 use MOM_IS_diag_mediator, only : enable_averages, enable_averaging, disable_averaging
-use MOM_IS_diag_mediator, only : diag_mediator_infrastructure_init, diag_mediator_close_registration
-use MOM_domains, only : MOM_domains_init, clone_MOM_domain
-use MOM_domains, only : pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE, CORNER
+use MOM_IS_diag_mediator, only : MOM_IS_diag_mediator_infrastructure_init
+use MOM_IS_diag_mediator, only : MOM_IS_diag_mediator_close_registration
+use MOM_domains, only : MOM_domains_init, pass_var, pass_vector, clone_MOM_domain
+use MOM_domains, only : TO_ALL, CGRID_NE, BGRID_NE, CORNER
 use MOM_dyn_horgrid, only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
 use MOM_dyn_horgrid, only : rescale_dyn_horgrid_bathymetry
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
@@ -56,8 +60,8 @@ use user_shelf_init, only : user_ice_shelf_CS
 use MOM_coms, only : reproducing_sum
 use MOM_spatial_means, only : global_area_integral
 use MOM_checksums, only : hchksum, qchksum, chksum, uchksum, vchksum, uvchksum
-use time_interp_external_mod, only : init_external_field, time_interp_external
-use time_interp_external_mod, only : time_interp_external_init
+use MOM_interpolate, only : init_external_field, time_interp_external, time_interp_external_init
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -69,6 +73,7 @@ implicit none ; private
 
 public shelf_calc_flux, initialize_ice_shelf, ice_shelf_end, ice_shelf_query
 public ice_shelf_save_restart, solo_step_ice_shelf, add_shelf_forces
+public initialize_ice_shelf_fluxes, initialize_ice_shelf_forces
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -80,7 +85,7 @@ type, public :: ice_shelf_CS ; private
   ! Parameters
   type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< A pointer to the restart control
                                                   !! structure for the ice shelves
-  type(ocean_grid_type)         :: Grid_in        !< un-rotated input grid metric
+  type(ocean_grid_type), pointer :: Grid_in => NULL() !< un-rotated input grid metric
   type(hor_index_type), pointer :: HI_in => NULL()  !< Pointer to a horizontal indexing structure for
                                                     !! incoming data which has not been rotated.
   type(hor_index_type), pointer :: HI => NULL()  !< Pointer to a horizontal indexing structure for
@@ -103,6 +108,8 @@ type, public :: ice_shelf_CS ; private
     utide   => NULL()  !< An unresolved tidal velocity [L T-1 ~> m s-1]
 
   real :: ustar_bg     !< A minimum value for ustar under ice shelves [Z T-1 ~> m s-1].
+  real :: ustar_max    !< A maximum value for ustar under ice shelves, or a negative value to
+                       !! have no limit [Z T-1 ~> m s-1].
   real :: cdrag        !< drag coefficient under ice shelves [nondim].
   real :: g_Earth      !< The gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
   real :: Cp           !< The heat capacity of sea water [Q degC-1 ~> J kg-1 degC-1].
@@ -124,6 +131,8 @@ type, public :: ice_shelf_CS ; private
   real :: col_mass_melt_threshold !< An ocean column mass below the iceshelf below which melting
                        !! does not occur [R Z ~> kg m-2]
   logical :: mass_from_file !< Read the ice shelf mass from a file every dt
+  logical :: ustar_shelf_from_vel !< If true, use the surface velocities, and not the previous
+                       !! values of the stresses to set ustar.
 
   !!!! PHYSICAL AND NUMERICAL PARAMETERS FOR ICE DYNAMICS !!!!!!
 
@@ -314,14 +323,14 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
   ISS => CS%ISS
 
   if (CS%rotate_index) then
-     allocate(sfc_state)
-     call rotate_surface_state(sfc_state_in,CS%Grid_in, sfc_state,CS%Grid,CS%turns)
-     allocate(fluxes)
-     call allocate_forcing_type(fluxes_in,G,fluxes)
-     call rotate_forcing(fluxes_in,fluxes,CS%turns)
+    allocate(sfc_state)
+    call rotate_surface_state(sfc_state_in, CS%Grid_in, sfc_state, CS%Grid, CS%turns)
+    allocate(fluxes)
+    call allocate_forcing_type(fluxes_in, G, fluxes)
+    call rotate_forcing(fluxes_in, fluxes, CS%turns)
   else
-     sfc_state=>sfc_state_in
-     fluxes=>fluxes_in
+    sfc_state => sfc_state_in
+    fluxes => fluxes_in
   endif
   ! useful parameters
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; ied = G%ied ; jed = G%jed
@@ -386,9 +395,14 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
     u2_av = (asu1 * sfc_state%u(I-1,j)**2 + asu2 * sfc_state%u(I,j)**2) * I_au
     v2_av = (asv1 * sfc_state%v(i,J-1)**2 + asu2 * sfc_state%v(i,J)**2) * I_av
 
-    if (taux2 + tauy2 > 0.0) then
-      fluxes%ustar_shelf(i,j) = MAX(CS%ustar_bg, US%L_to_Z * &
-          sqrt(Irho0 * sqrt(taux2 + tauy2) + CS%cdrag*CS%utide(i,j)**2))
+    if ((taux2 + tauy2 > 0.0) .and. .not.CS%ustar_shelf_from_vel) then
+      if (CS%ustar_max >= 0.0) then
+        fluxes%ustar_shelf(i,j) = MIN(CS%ustar_max, MAX(CS%ustar_bg, US%L_to_Z * &
+            sqrt(Irho0 * sqrt(taux2 + tauy2) + CS%cdrag*CS%utide(i,j)**2)))
+      else
+        fluxes%ustar_shelf(i,j) = MAX(CS%ustar_bg, US%L_to_Z * &
+            sqrt(Irho0 * sqrt(taux2 + tauy2) + CS%cdrag*CS%utide(i,j)**2))
+      endif
     else   ! Take care of the cases when taux_shelf is not set or not allocated.
       fluxes%ustar_shelf(i,j) = MAX(CS%ustar_bg, US%L_TO_Z * &
           sqrt(CS%cdrag*((u2_av + v2_av) + CS%utide(i,j)**2)))
@@ -748,8 +762,8 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
   call cpu_clock_end(id_clock_shelf)
 
   if (CS%rotate_index) then
-!     call rotate_surface_state(sfc_state,CS%Grid, sfc_state_in,CS%Grid_in,-CS%turns)
-     call rotate_forcing(fluxes,fluxes_in,-CS%turns)
+!   call rotate_surface_state(sfc_state,CS%Grid, sfc_state_in,CS%Grid_in,-CS%turns)
+    call rotate_forcing(fluxes,fluxes_in,-CS%turns)
   endif
 
 
@@ -806,18 +820,18 @@ end subroutine change_thickness_using_melt
 
 !> This subroutine adds the mechanical forcing fields and perhaps shelf areas, based on
 !! the ice state in ice_shelf_CS.
-subroutine add_shelf_forces(Ocn_grid, US, CS, forces_in, do_shelf_area, external_call)
+subroutine add_shelf_forces(Ocn_grid, US, CS, forces, do_shelf_area, external_call)
   type(ocean_grid_type), intent(in)    :: Ocn_grid !< The ocean's grid structure.
   type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   type(ice_shelf_CS),    pointer       :: CS   !< This module's control structure.
-  type(mech_forcing),target, intent(inout) :: forces_in !< A structure with the
+  type(mech_forcing),    intent(inout) :: forces !< A structure with the
                                                !! driving mechanical forces
   logical, optional,     intent(in)    :: do_shelf_area !< If true find the shelf-covered areas.
   logical, optional,     intent(in)    :: external_call !< If true the incoming forcing type
                                                !! is using the input grid metric and needs
                                                !! to be rotated.
   type(ocean_grid_type), pointer :: G => NULL()   !< A pointer to the ocean grid metric.
-  type(mech_forcing),    pointer :: forces => NULL() !< A structure with the driving mechanical forces
+!  type(mech_forcing),    target :: forces     !< A structure with the driving mechanical forces
   real :: kv_rho_ice ! The viscosity of ice divided by its density [L4 T-1 R-1 Z-2 ~> m5 kg-1 s-1].
   real :: press_ice  ! The pressure of the ice shelf per unit area of ocean (not ice) [R L2 T-2 ~> Pa].
   logical :: find_area ! If true find the shelf areas at u & v points.
@@ -829,20 +843,21 @@ subroutine add_shelf_forces(Ocn_grid, US, CS, forces_in, do_shelf_area, external
 
   if (present(external_call)) rotate=external_call
 
+  if ((Ocn_grid%isc /= CS%Grid_in%isc) .or. (Ocn_grid%iec /= CS%Grid_in%iec) .or. &
+      (Ocn_grid%jsc /= CS%Grid_in%jsc) .or. (Ocn_grid%jec /= CS%Grid_in%jec)) &
+    call MOM_error(FATAL,"add_shelf_forces: Incompatible Ocean and Ice shelf grids.")
+
   if (CS%rotate_index .and. rotate) then
-    if ((Ocn_grid%isc /= CS%Grid_in%isc) .or. (Ocn_grid%iec /= CS%Grid_in%iec) .or. &
-        (Ocn_grid%jsc /= CS%Grid_in%jsc) .or. (Ocn_grid%jec /= CS%Grid_in%jec)) &
-      call MOM_error(FATAL,"add_shelf_forces: Incompatible Ocean and Ice shelf grids.")
+    call MOM_error(FATAL,"add_shelf_forces: Rotation not implemented for ice shelves.")
+    ! allocate(forces)
+    ! call allocate_mech_forcing(forces_in, CS%Grid, forces)
+    ! call rotate_mech_forcing(forces_in, CS%turns, forces)
+  ! else
+  !   if ((Ocn_grid%isc /= CS%Grid%isc) .or. (Ocn_grid%iec /= CS%Grid%iec) .or. &
+  !       (Ocn_grid%jsc /= CS%Grid%jsc) .or. (Ocn_grid%jec /= CS%Grid%jec)) &
+  !     call MOM_error(FATAL,"add_shelf_forces: Incompatible Ocean and Ice shelf grids.")
 
-    allocate(forces)
-    call allocate_mech_forcing(forces_in, CS%Grid, forces)
-    call rotate_mech_forcing(forces_in, CS%turns, forces)
-  else
-    if ((Ocn_grid%isc /= CS%Grid%isc) .or. (Ocn_grid%iec /= CS%Grid%iec) .or. &
-        (Ocn_grid%jsc /= CS%Grid%jsc) .or. (Ocn_grid%jec /= CS%Grid%jec)) &
-      call MOM_error(FATAL,"add_shelf_forces: Incompatible Ocean and Ice shelf grids.")
-
-    forces=>forces_in
+  !   forces=>forces_in
   endif
 
   G=>CS%Grid
@@ -910,10 +925,10 @@ subroutine add_shelf_forces(Ocn_grid, US, CS, forces_in, do_shelf_area, external
         scalar_pair=.true.)
   endif
 
-  if (CS%rotate_index .and. rotate) then
-     call rotate_mech_forcing(forces, -CS%turns, forces_in)
-     ! TODO: deallocate mech forcing?
-  endif
+  ! if (CS%rotate_index .and. rotate) then
+  !    call rotate_mech_forcing(forces, -CS%turns, forces_in)
+  !    ! TODO: deallocate mech forcing?
+  ! endif
 
 end subroutine add_shelf_forces
 
@@ -922,7 +937,7 @@ subroutine add_shelf_pressure(Ocn_grid, US, CS, fluxes)
   type(ocean_grid_type), intent(in) :: Ocn_grid  !< The ocean's grid structure.
   type(unit_scale_type), intent(in)    :: US     !< A dimensional unit scaling type
   type(ice_shelf_CS),    intent(in)    :: CS     !< This module's control structure.
-  type(forcing), pointer              :: fluxes  !< A structure of surface fluxes that may be updated.
+  type(forcing),         intent(inout) :: fluxes  !< A structure of surface fluxes that may be updated.
 
   type(ocean_grid_type), pointer :: G => NULL()  ! A pointer to  ocean's grid structure.
   real :: press_ice       !< The pressure of the ice shelf per unit area of ocean (not ice) [R L2 T-2 ~> Pa].
@@ -956,7 +971,7 @@ subroutine add_shelf_flux(G, US, CS, sfc_state, fluxes)
   type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   type(ice_shelf_CS),    pointer       :: CS   !< This module's control structure.
   type(surface),         intent(inout) :: sfc_state !< Surface ocean state
-  type(forcing),         pointer :: fluxes  !< A structure of surface fluxes that may be used/updated.
+  type(forcing),         intent(inout) :: fluxes  !< A structure of surface fluxes that may be used/updated.
 
   ! local variables
   real :: frac_shelf       !< The fractional area covered by the ice shelf [nondim].
@@ -1074,7 +1089,7 @@ subroutine add_shelf_flux(G, US, CS, sfc_state, fluxes)
         enddo ; enddo
         call time_interp_external(CS%id_read_mass, Time0, last_mass_shelf)
         do j=js,je ; do i=is,ie
-        ! This should only be done if time_interp_external did an update.
+        ! This should only be done if time_interp_extern did an update.
           last_mass_shelf(i,j) = US%kg_m3_to_R*US%m_to_Z * last_mass_shelf(i,j) ! Rescale after time_interp
           last_h_shelf(i,j) = last_mass_shelf(i,j) / CS%density_ice
         enddo ; enddo
@@ -1156,7 +1171,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   type(ocean_grid_type),        pointer       :: ocn_grid   !< The calling ocean model's horizontal grid structure
   type(time_type),              intent(inout) :: Time !< The clock that that will indicate the model time
   type(ice_shelf_CS),           pointer       :: CS   !< A pointer to the ice shelf control structure
-  type(diag_ctrl),              pointer       :: diag !< A structure that is used to regulate the diagnostic output.
+  type(MOM_diag_ctrl),          pointer       :: diag !< This is a pointer to the MOM diag CS
+                                                      !! which will be discarded
+
   type(mech_forcing), optional, target, intent(inout) :: forces_in !< A structure with the driving mechanical forces
   type(forcing),      optional, target, intent(inout) :: fluxes_in !< A structure containing pointers to any
                                                            !!  possible thermodynamic or mass-flux forcing fields.
@@ -1218,7 +1235,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   ! MOM's grid and infrastructure.
   call Get_MOM_Input(dirs=dirs)
 
-  call diag_mediator_infrastructure_init()
+  call MOM_IS_diag_mediator_infrastructure_init()
 
   ! Determining the internal unit scaling factors for this run.
   call unit_scaling_init(param_file, CS%US)
@@ -1235,60 +1252,62 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 
   ! Set up the ice-shelf domain and grid
   wd_halos(:)=0
-  !allocate(CS%Grid_in)
-  call MOM_domains_init(CS%Grid_in%domain, param_file, min_halo=wd_halos, symmetric=GRID_SYM_,&
+  allocate(CS%Grid)
+  call MOM_domains_init(CS%Grid%domain, param_file, min_halo=wd_halos, symmetric=GRID_SYM_,&
        domain_name='MOM_Ice_Shelf_in')
 !  allocate(CS%Grid_in%HI)
-  call hor_index_init(CS%Grid_in%Domain, CS%Grid_in%HI, param_file, &
-       local_indexing=.not.global_indexing)
-  call MOM_grid_init(CS%Grid_in, param_file, CS%US, CS%Grid_in%HI)
+  !call hor_index_init(CS%Grid%Domain, CS%Grid%HI, param_file, &
+  !     local_indexing=.not.global_indexing)
+  call MOM_grid_init(CS%Grid, param_file, CS%US)
 
-  if (CS%rotate_index) then
-    ! TODO: Index rotation currently only works when index rotation does not
-    !   change the MPI rank of each domain.  Resolving this will require a
-    !   modification to FMS PE assignment.
-    !   For now, we only permit single-core runs.
+  ! if (CS%rotate_index) then
+  !   ! TODO: Index rotation currently only works when index rotation does not
+  !   !   change the MPI rank of each domain.  Resolving this will require a
+  !   !   modification to FMS PE assignment.
+  !   !   For now, we only permit single-core runs.
 
-    if (num_PEs() /= 1) &
-         call MOM_error(FATAL, "Index rotation is only supported on one PE.")
+  !   if (num_PEs() /= 1) &
+  !        call MOM_error(FATAL, "Index rotation is only supported on one PE.")
 
-    call get_param(param_file, mdl, "INDEX_TURNS", CS%turns, &
-         "Number of counterclockwise quarter-turn index rotations.", &
-         default=1, debuggingParam=.true.)
-    ! NOTE: If indices are rotated, then CS%Grid and CS%Grid_in must both be initialized.
-    !   If not rotated, then CS%Grid_in and CS%Ggrid are the same grid.
-    allocate(CS%Grid)
-    !allocate(CS%HI)
-    call clone_MOM_domain(CS%Grid_in%Domain, CS%Grid%Domain,turns=CS%turns)
-    call rotate_hor_index(CS%Grid_in%HI, CS%turns, CS%Grid%HI)
-    call MOM_grid_init(CS%Grid, param_file, CS%US, CS%HI)
-    call create_dyn_horgrid(dG, CS%Grid%HI)
-    call create_dyn_horgrid(dG_in, CS%Grid_in%HI)
-    call clone_MOM_domain(CS%Grid_in%Domain, dG_in%Domain)
-    ! Set up the bottom depth, G%D either analytically or from file
-    call set_grid_metrics(dG_in,param_file,CS%US)
-    call MOM_initialize_topography(dG_in%bathyT, CS%Grid_in%max_depth, dG_in, param_file)
-    call rescale_dyn_horgrid_bathymetry(dG_in, CS%US%Z_to_m)
-    call rotate_dyngrid(dG_in, dG, CS%US, CS%turns)
-    call copy_dyngrid_to_MOM_grid(dG,CS%Grid,CS%US)
-  else
-    CS%Grid=>CS%Grid_in
-    !CS%Grid%HI=>CS%Grid_in%HI
-    call create_dyn_horgrid(dG, CS%Grid%HI)
-    call clone_MOM_domain(CS%Grid%Domain,dG%Domain)
-    call set_grid_metrics(dG,param_file,CS%US)
-    ! Set up the bottom depth, G%D either analytically or from file
-    call MOM_initialize_topography(dG%bathyT, CS%Grid%max_depth, dG, param_file)
-    call rescale_dyn_horgrid_bathymetry(dG, CS%US%Z_to_m)
-    call copy_dyngrid_to_MOM_grid(dG,CS%Grid,CS%US)
-  endif
-  G=>CS%Grid
+  !   call get_param(param_file, mdl, "INDEX_TURNS", CS%turns, &
+  !        "Number of counterclockwise quarter-turn index rotations.", &
+  !        default=1, debuggingParam=.true.)
+  !   ! NOTE: If indices are rotated, then CS%Grid and CS%Grid_in must both be initialized.
+  !   !   If not rotated, then CS%Grid_in and CS%Ggrid are the same grid.
+  !   allocate(CS%Grid)
+  !   !allocate(CS%HI)
+  !   call clone_MOM_domain(CS%Grid_in%Domain, CS%Grid%Domain,turns=CS%turns)
+  !   call rotate_hor_index(CS%Grid_in%HI, CS%turns, CS%Grid%HI)
+  !   call MOM_grid_init(CS%Grid, param_file, CS%US, CS%HI)
+  !   call create_dyn_horgrid(dG, CS%Grid%HI)
+  !   call create_dyn_horgrid(dG_in, CS%Grid_in%HI)
+  !   call clone_MOM_domain(CS%Grid_in%Domain, dG_in%Domain)
+  !   ! Set up the bottom depth, G%D either analytically or from file
+  !   call set_grid_metrics(dG_in,param_file,CS%US)
+  !   call MOM_initialize_topography(dG_in%bathyT, CS%Grid_in%max_depth, dG_in, param_file)
+  !   call rescale_dyn_horgrid_bathymetry(dG_in, CS%US%Z_to_m)
+  !   call rotate_dyngrid(dG_in, dG, CS%US, CS%turns)
+  !   call copy_dyngrid_to_MOM_grid(dG,CS%Grid,CS%US)
+  ! else
+  !CS%Grid=>CS%Grid_in
+  dG => NULL()
+  !CS%Grid%HI=>CS%Grid_in%HI
+  call create_dyn_horgrid(dG, CS%Grid%HI)
+  call clone_MOM_domain(CS%Grid%Domain,dG%Domain)
+  call set_grid_metrics(dG,param_file,CS%US)
+  ! Set up the bottom depth, G%D either analytically or from file
+  call MOM_initialize_topography(dG%bathyT, CS%Grid%max_depth, dG, param_file)
+  call rescale_dyn_horgrid_bathymetry(dG, CS%US%Z_to_m)
+  call copy_dyngrid_to_MOM_grid(dG,CS%Grid,CS%US)
+  call destroy_dyn_horgrid(dG)
+!  endif
+  G => CS%Grid ; CS%Grid_in => CS%Grid
 
-  allocate(diag)
-  call diag_mediator_init(G, param_file,diag,component='MOM_IceShelf')
+  allocate(CS%diag)
+  call MOM_IS_diag_mediator_init(G, param_file, CS%diag, component='MOM_IceShelf')
   ! This call sets up the diagnostic axes. These are needed,
   ! e.g. to generate the target grids below.
-  call set_axes_info(G, param_file, diag)
+  call set_IS_axes_info(G, param_file, CS%diag)
 
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -1302,7 +1321,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   ! Convenience pointers
   OG => CS%ocn_grid
   US => CS%US
-  CS%diag=>diag
 
   ! Are we being called from the solo ice-sheet driver? When called by the ocean
   ! model solo_ice_sheet_in is not preset.
@@ -1405,7 +1423,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
                  "ice shelf (every time step) from a file.", default=.false.)
 
   if (CS%find_salt_root) then ! read liquidus coeffs.
-     call get_param(param_file, mdl, "TFREEZE_S0_P0", CS%TFr_0_0, &
+    call get_param(param_file, mdl, "TFREEZE_S0_P0", CS%TFr_0_0, &
                  "this is the freezing potential temperature at "//&
                  "S=0, P=0.", units="degC", default=0.0, do_not_log=.true.)
     call get_param(param_file, mdl, "DTFREEZE_DS", CS%dTFr_dS, &
@@ -1472,19 +1490,19 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 
 
   if (PRESENT(sfc_state_in)) then
-     allocate(sfc_state)
-     ! assuming frazil is enabled in ocean. This could break some configurations?
-     call allocate_surface_state(sfc_state_in, CS%Grid_in, use_temperature=.true.,&
-          do_integrals=.true.,omit_frazil=.false.,use_iceshelves=.true.)
-     if (CS%rotate_index) then
-        call rotate_surface_state(sfc_state_in,CS%Grid_in, sfc_state,CS%Grid,CS%turns)
-     else
-        sfc_state=>sfc_state_in
-     endif
+    allocate(sfc_state)
+    ! assuming frazil is enabled in ocean. This could break some configurations?
+    call allocate_surface_state(sfc_state_in, CS%Grid_in, use_temperature=.true., &
+          do_integrals=.true., omit_frazil=.false., use_iceshelves=.true.)
+    if (CS%rotate_index) then
+      call rotate_surface_state(sfc_state_in, CS%Grid_in, sfc_state,CS%Grid,CS%turns)
+    else
+      sfc_state=>sfc_state_in
+    endif
   endif
 
 
-  call safe_alloc_ptr(CS%utide,isd,ied,jsd,jed)   ; CS%utide(:,:) = 0.0
+  call safe_alloc_ptr(CS%utide,isd,ied,jsd,jed) ; CS%utide(:,:) = 0.0
 
   if (read_TIDEAMP) then
     call get_param(param_file, mdl, "TIDEAMP_FILE", TideAmp_file, &
@@ -1495,12 +1513,12 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     inputdir = slasher(inputdir)
     TideAmp_file = trim(inputdir) // trim(TideAmp_file)
     if (CS%rotate_index) then
-       allocate(tmp2d(CS%Grid_in%isd:CS%Grid_in%ied,CS%Grid_in%jsd:CS%Grid_in%jed));tmp2d(:,:)=0.0
-       call MOM_read_data(TideAmp_file, 'tideamp', tmp2d, CS%Grid_in%domain, timelevel=1, scale=US%m_s_to_L_T)
-       call rotate_array(tmp2d,CS%turns, CS%utide)
-       deallocate(tmp2d)
+      allocate(tmp2d(CS%Grid_in%isd:CS%Grid_in%ied,CS%Grid_in%jsd:CS%Grid_in%jed)) ; tmp2d(:,:) = 0.0
+      call MOM_read_data(TideAmp_file, 'tideamp', tmp2d, CS%Grid_in%domain, timelevel=1, scale=US%m_s_to_L_T)
+      call rotate_array(tmp2d, CS%turns, CS%utide)
+      deallocate(tmp2d)
     else
-       call MOM_read_data(TideAmp_file, 'tideamp', CS%utide, CS%Grid%domain, timelevel=1, scale=US%m_s_to_L_T)
+      call MOM_read_data(TideAmp_file, 'tideamp', CS%utide, CS%Grid%domain, timelevel=1, scale=US%m_s_to_L_T)
     endif
   else
     call get_param(param_file, mdl, "UTIDE", utide, &
@@ -1548,102 +1566,18 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
                  "velocity magnitude.", units="m s-1", default=0.0, scale=US%m_to_Z*US%T_to_s)
     if (CS%cdrag*drag_bg_vel > 0.0) CS%ustar_bg = sqrt(CS%cdrag)*drag_bg_vel
   endif
+  call get_param(param_file, mdl, "USTAR_SHELF_FROM_VEL", CS%ustar_shelf_from_vel, &
+                 "If true, use the surface velocities to set the friction velocity under ice "//&
+                 "shelves instead of using the previous values of the stresses.", &
+                 default=.true.)
+  call get_param(param_file, mdl, "USTAR_SHELF_MAX", CS%ustar_max, &
+                 "The maximum value of ustar under ice shelves, or a negative value for no limit.", &
+                 units="m s-1", default=-1.0, scale=US%m_to_Z*US%T_to_s, &
+                 do_not_log=CS%ustar_shelf_from_vel)
 
   ! Allocate and initialize state variables to default values
   call ice_shelf_state_init(CS%ISS, CS%grid)
   ISS => CS%ISS
-
-  ! Allocate the arrays for passing ice-shelf data through the forcing type.
-  if (.not. CS%solo_ice_sheet) then
-    call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: allocating fluxes.")
-     ! GMM: the following assures that water/heat fluxes are just allocated
-     ! when SHELF_THERMO = True. These fluxes are necessary if one wants to
-     ! use either ENERGETICS_SFC_PBL (ALE mode) or BULKMIXEDLAYER (layer mode).
-    if (present(fluxes_in)) then
-      call allocate_forcing_type(CS%Grid_in, fluxes_in, ustar=.true., shelf=.true., &
-           press=.true., water=CS%isthermo, heat=CS%isthermo)
-      if (CS%rotate_index) then
-         allocate(fluxes)
-         call allocate_forcing_type(fluxes_in, CS%Grid, fluxes)
-         call rotate_forcing(fluxes_in, fluxes, CS%turns)
-      else
-         fluxes=>fluxes_in
-      endif
-    endif
-    if (present(forces_in)) then
-       call allocate_mech_forcing(CS%Grid_in, forces_in, ustar=.true., shelf=.true., press=.true.)
-       if (CS%rotate_index) then
-          allocate(forces)
-          call allocate_mech_forcing(forces_in, CS%Grid, forces)
-          call rotate_mech_forcing(forces_in, CS%turns, forces)
-       else
-          forces=>forces_in
-       endif
-    endif
-  else
-    call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: allocating fluxes in solo mode.")
-    if (present(fluxes_in)) then
-       call allocate_forcing_type(CS%Grid_in, fluxes_in, ustar=.true., shelf=.true., press=.true.)
-       if (CS%rotate_index) then
-          allocate(fluxes)
-          call allocate_forcing_type(fluxes_in, CS%Grid, fluxes)
-          call rotate_forcing(fluxes_in, fluxes, CS%turns)
-       endif
-    endif
-    if (present(forces_in)) then
-       call allocate_mech_forcing(CS%Grid_in, forces_in, ustar=.true., shelf=.true., press=.true.)
-       if (CS%rotate_index) then
-          allocate(forces)
-          call allocate_mech_forcing(forces_in, CS%Grid, forces)
-          call rotate_mech_forcing(forces_in, CS%turns, forces)
-       endif
-    endif
-  endif
-
-  ! Set up the restarts.
-  call restart_init(param_file, CS%restart_CSp, "Shelf.res")
-  call register_restart_field(ISS%mass_shelf, "shelf_mass", .true., CS%restart_CSp, &
-                              "Ice shelf mass", "kg m-2")
-  call register_restart_field(ISS%area_shelf_h, "shelf_area", .true., CS%restart_CSp, &
-                              "Ice shelf area in cell", "m2")
-  call register_restart_field(ISS%h_shelf, "h_shelf", .true., CS%restart_CSp, &
-                              "ice sheet/shelf thickness", "m")
-  if (PRESENT(sfc_state_in)) then
-    if (allocated(sfc_state%taux_shelf) .and. allocated(sfc_state%tauy_shelf)) then
-       u_desc = var_desc("taux_shelf", "Pa", "the zonal stress on the ocean under ice shelves", &
-            hor_grid='Cu',z_grid='1')
-       v_desc = var_desc("tauy_shelf", "Pa", "the meridional stress on the ocean under ice shelves", &
-            hor_grid='Cv',z_grid='1')
-       call register_restart_pair(sfc_state%taux_shelf, sfc_state%tauy_shelf, u_desc,v_desc, &
-            .false., CS%restart_CSp)
-    endif
-  endif
-
-  call register_restart_field(ISS%h_shelf, "_shelf", .true., CS%restart_CSp, &
-                              "ice sheet/shelf thickness", "m")
-  call register_restart_field(US%m_to_Z_restart, "m_to_Z", .false., CS%restart_CSp, &
-                              "Height unit conversion factor", "Z meter-1")
-  call register_restart_field(US%m_to_L_restart, "m_to_L", .false., CS%restart_CSp, &
-                              "Length unit conversion factor", "L meter-1")
-  call register_restart_field(US%kg_m3_to_R_restart, "kg_m3_to_R", .false., CS%restart_CSp, &
-                              "Density unit conversion factor", "R m3 kg-1")
-  if (CS%active_shelf_dynamics) then
-    call register_restart_field(ISS%hmask, "h_mask", .true., CS%restart_CSp, &
-                                "ice sheet/shelf thickness mask" ,"none")
-  endif
-
-  if (CS%active_shelf_dynamics) then
-    ! Allocate CS%dCS and specify additional restarts for ice shelf dynamics
-    call register_ice_shelf_dyn_restarts(CS%Grid_in, param_file, CS%dCS, CS%restart_CSp)
-  endif
-
-  !GMM - I think we do not need to save ustar_shelf and iceshelf_melt in the restart file
-  !if (.not. CS%solo_ice_sheet) then
-  !  call register_restart_field(fluxes%ustar_shelf, "ustar_shelf", .false., CS%restart_CSp, &
-  !                              "Friction velocity under ice shelves", "m s-1")
-  !endif
-
-  CS%restart_output_dir = dirs%restart_output_dir
 
   new_sim = .false.
   if ((dirs%input_filename(1:1) == 'n') .and. &
@@ -1661,7 +1595,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 
     if (new_sim) then
       ! new simulation, initialize ice thickness as in the static case
-       call initialize_ice_thickness(ISS%h_shelf, ISS%area_shelf_h, ISS%hmask, CS%Grid, CS%Grid_in, US, param_file,  &
+      call initialize_ice_thickness(ISS%h_shelf, ISS%area_shelf_h, ISS%hmask, CS%Grid, CS%Grid_in, US, param_file,  &
             CS%rotate_index, CS%turns)
 
     ! next make sure mass is consistent with thickness
@@ -1688,8 +1622,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   endif
 
   if (new_sim .and. (.not. (CS%override_shelf_movement .and. CS%mass_from_file))) then
-     ! This model is initialized internally or from a file.
-     call initialize_ice_thickness(ISS%h_shelf, ISS%area_shelf_h, ISS%hmask, CS%Grid, CS%Grid_in, US, param_file,&
+    ! This model is initialized internally or from a file.
+    call initialize_ice_thickness(ISS%h_shelf, ISS%area_shelf_h, ISS%hmask, CS%Grid, CS%Grid_in, US, param_file,&
           CS%rotate_index, CS%turns)
     ! next make sure mass is consistent with thickness
     do j=G%jsd,G%jed ; do i=G%isd,G%ied
@@ -1698,9 +1632,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
       endif
     enddo ; enddo
     if (CS%debug) then
-       call hchksum(ISS%mass_shelf, "IS init: mass_shelf", G%HI, haloshift=0, scale=US%RZ_to_kg_m2)
-       call hchksum(ISS%area_shelf_h, "IS init: area_shelf", G%HI, haloshift=0, scale=US%L_to_m*US%L_to_m)
-       call hchksum(ISS%hmask, "IS init: hmask", G%HI, haloshift=0)
+      call hchksum(ISS%mass_shelf, "IS init: mass_shelf", G%HI, haloshift=0, scale=US%RZ_to_kg_m2)
+      call hchksum(ISS%area_shelf_h, "IS init: area_shelf", G%HI, haloshift=0, scale=US%L_to_m*US%L_to_m)
+      call hchksum(ISS%hmask, "IS init: hmask", G%HI, haloshift=0)
     endif
 
   ! else ! Previous block for new_sim=.T., this block restores the state.
@@ -1736,9 +1670,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 
 !  do j=G%jsc,G%jec ; do i=G%isc,G%iec
 !    ISS%area_shelf_h(i,j) = ISS%area_shelf_h(i,j)*G%mask2dT(i,j)
-!  enddo; enddo
-
-  CS%Time = Time
+!  enddo ; enddo
 
   id_clock_shelf = cpu_clock_id('Ice shelf', grain=CLOCK_COMPONENT)
   id_clock_pass = cpu_clock_id(' Ice shelf halo updates', grain=CLOCK_ROUTINE)
@@ -1751,33 +1683,71 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   call pass_var(G%bathyT, G%domain)
   call cpu_clock_end(id_clock_pass)
 
-
   do j=jsd,jed ; do i=isd,ied
     if (ISS%area_shelf_h(i,j) > G%areaT(i,j)) then
       call MOM_error(WARNING,"Initialize_ice_shelf: area_shelf_h exceeds G%areaT.")
       ISS%area_shelf_h(i,j) = G%areaT(i,j)
     endif
   enddo ; enddo
-  if (present(fluxes_in)) then ; do j=jsd,jed ; do i=isd,ied
-    if (G%areaT(i,j)>0.) fluxes%frac_shelf_h(i,j) = ISS%area_shelf_h(i,j) / G%areaT(i,j)
-  enddo ; enddo ; endif
 
   if (CS%debug) then
-    call hchksum(fluxes%frac_shelf_h, "IS init: frac_shelf_h", G%HI, haloshift=0)
     call hchksum(ISS%area_shelf_h, "IS init: area_shelf_h", G%HI, haloshift=0, scale=US%L_to_m*US%L_to_m)
   endif
 
-  if (present(forces_in)) &
-    call add_shelf_forces(G, US, CS, forces, do_shelf_area=.not.CS%solo_ice_sheet)
 
-  if (present(fluxes_in)) call add_shelf_pressure(ocn_grid, US, CS, fluxes)
+  ! Set up the restarts.
+
+  call restart_init(param_file, CS%restart_CSp, "Shelf.res")
+  call register_restart_field(ISS%mass_shelf, "shelf_mass", .true., CS%restart_CSp, &
+                              "Ice shelf mass", "kg m-2")
+  call register_restart_field(ISS%area_shelf_h, "shelf_area", .true., CS%restart_CSp, &
+                              "Ice shelf area in cell", "m2")
+  call register_restart_field(ISS%h_shelf, "h_shelf", .true., CS%restart_CSp, &
+                              "ice sheet/shelf thickness", "m")
+  if (PRESENT(sfc_state_in)) then
+    if (allocated(sfc_state%taux_shelf) .and. allocated(sfc_state%tauy_shelf)) then
+      u_desc = var_desc("taux_shelf", "Pa", "the zonal stress on the ocean under ice shelves", &
+            hor_grid='Cu',z_grid='1')
+      v_desc = var_desc("tauy_shelf", "Pa", "the meridional stress on the ocean under ice shelves", &
+            hor_grid='Cv',z_grid='1')
+      call register_restart_pair(sfc_state%taux_shelf, sfc_state%tauy_shelf, u_desc, v_desc, &
+            .false., CS%restart_CSp)
+    endif
+  endif
+
+  call register_restart_field(US%m_to_Z_restart, "m_to_Z", .false., CS%restart_CSp, &
+                              "Height unit conversion factor", "Z meter-1")
+  call register_restart_field(US%m_to_L_restart, "m_to_L", .false., CS%restart_CSp, &
+                              "Length unit conversion factor", "L meter-1")
+  call register_restart_field(US%kg_m3_to_R_restart, "kg_m3_to_R", .false., CS%restart_CSp, &
+                              "Density unit conversion factor", "R m3 kg-1")
+  if (CS%active_shelf_dynamics) then
+    call register_restart_field(ISS%hmask, "h_mask", .true., CS%restart_CSp, &
+                                "ice sheet/shelf thickness mask" ,"none")
+  endif
+
+  if (CS%active_shelf_dynamics) then
+    ! Allocate CS%dCS and specify additional restarts for ice shelf dynamics
+    call register_ice_shelf_dyn_restarts(CS%Grid_in, param_file, CS%dCS, CS%restart_CSp)
+  endif
+
+  !GMM - I think we do not need to save ustar_shelf and iceshelf_melt in the restart file
+  !if (.not. CS%solo_ice_sheet) then
+  !  call register_restart_field(fluxes%ustar_shelf, "ustar_shelf", .false., CS%restart_CSp, &
+  !                              "Friction velocity under ice shelves", "m s-1")
+  !endif
+
+  CS%restart_output_dir = dirs%restart_output_dir
+
+  CS%Time = Time
+
 
   if (CS%active_shelf_dynamics .and. .not.CS%isthermo) then
     ISS%water_flux(:,:) = 0.0
   endif
 
   if (shelf_mass_is_dynamic) &
-    call initialize_ice_shelf_dyn(param_file, Time, ISS, CS%dCS, G, US, diag, new_sim, solo_ice_sheet_in)
+    call initialize_ice_shelf_dyn(param_file, Time, ISS, CS%dCS, G, US, CS%diag, new_sim, solo_ice_sheet_in)
 
   call fix_restart_unit_scaling(US)
 
@@ -1796,14 +1766,14 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 
 
   CS%id_area_shelf_h = register_diag_field('ice_shelf_model', 'area_shelf_h', CS%diag%axesT1, CS%Time, &
-     'Ice Shelf Area in cell', 'meter-2', conversion=US%L_to_m**2)
+      'Ice Shelf Area in cell', 'meter-2', conversion=US%L_to_m**2)
   CS%id_shelf_mass = register_diag_field('ice_shelf_model', 'shelf_mass', CS%diag%axesT1, CS%Time, &
-     'mass of shelf', 'kg/m^2', conversion=US%RZ_to_kg_m2)
+      'mass of shelf', 'kg/m^2', conversion=US%RZ_to_kg_m2)
   CS%id_h_shelf = register_diag_field('ice_shelf_model', 'h_shelf', CS%diag%axesT1, CS%Time, &
-       'ice shelf thickness', 'm', conversion=US%Z_to_m)
+      'ice shelf thickness', 'm', conversion=US%Z_to_m)
   CS%id_mass_flux = register_diag_field('ice_shelf_model', 'mass_flux', CS%diag%axesT1,&
-     CS%Time, 'Total mass flux of freshwater across the ice-ocean interface.', &
-     'kg/s', conversion=US%RZ_T_to_kg_m2s*US%L_to_m**2)
+      CS%Time, 'Total mass flux of freshwater across the ice-ocean interface.', &
+      'kg/s', conversion=US%RZ_T_to_kg_m2s*US%L_to_m**2)
 
   if (CS%const_gamma) then ! use ISOMIP+ eq. with rho_fw = 1000. kg m-3
     meltrate_conversion = 86400.0*365.0*US%Z_to_m*US%s_to_T / (1000.0*US%kg_m3_to_R)
@@ -1811,40 +1781,109 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     meltrate_conversion = 86400.0*365.0*US%Z_to_m*US%s_to_T / CS%density_ice
   endif
   CS%id_melt = register_diag_field('ice_shelf_model', 'melt', CS%diag%axesT1, CS%Time, &
-     'Ice Shelf Melt Rate', 'm yr-1', conversion= meltrate_conversion)
+      'Ice Shelf Melt Rate', 'm yr-1', conversion= meltrate_conversion)
   CS%id_thermal_driving = register_diag_field('ice_shelf_model', 'thermal_driving', CS%diag%axesT1, CS%Time, &
-     'pot. temp. in the boundary layer minus freezing pot. temp. at the ice-ocean interface.', 'Celsius')
+      'pot. temp. in the boundary layer minus freezing pot. temp. at the ice-ocean interface.', 'Celsius')
   CS%id_haline_driving = register_diag_field('ice_shelf_model', 'haline_driving', CS%diag%axesT1, CS%Time, &
-     'salinity in the boundary layer minus salinity at the ice-ocean interface.', 'psu')
+      'salinity in the boundary layer minus salinity at the ice-ocean interface.', 'psu')
   CS%id_Sbdry = register_diag_field('ice_shelf_model', 'sbdry', CS%diag%axesT1, CS%Time, &
-     'salinity at the ice-ocean interface.', 'psu')
+      'salinity at the ice-ocean interface.', 'psu')
   CS%id_u_ml = register_diag_field('ice_shelf_model', 'u_ml', CS%diag%axesCu1, CS%Time, &
-     'Eastward vel. in the boundary layer (used to compute ustar)', 'm s-1', conversion=US%L_T_to_m_s)
+      'Eastward vel. in the boundary layer (used to compute ustar)', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_v_ml = register_diag_field('ice_shelf_model', 'v_ml', CS%diag%axesCv1, CS%Time, &
-     'Northward vel. in the boundary layer (used to compute ustar)', 'm s-1', conversion=US%L_T_to_m_s)
+      'Northward vel. in the boundary layer (used to compute ustar)', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_exch_vel_s = register_diag_field('ice_shelf_model', 'exch_vel_s', CS%diag%axesT1, CS%Time, &
-     'Sub-shelf salinity exchange velocity', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
+      'Sub-shelf salinity exchange velocity', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
   CS%id_exch_vel_t = register_diag_field('ice_shelf_model', 'exch_vel_t', CS%diag%axesT1, CS%Time, &
-     'Sub-shelf thermal exchange velocity', 'm s-1' , conversion=US%Z_to_m*US%s_to_T)
+      'Sub-shelf thermal exchange velocity', 'm s-1' , conversion=US%Z_to_m*US%s_to_T)
   CS%id_tfreeze = register_diag_field('ice_shelf_model', 'tfreeze', CS%diag%axesT1, CS%Time, &
-     'In Situ Freezing point at ice shelf interface', 'degC')
+      'In Situ Freezing point at ice shelf interface', 'degC')
   CS%id_tfl_shelf = register_diag_field('ice_shelf_model', 'tflux_shelf', CS%diag%axesT1, CS%Time, &
-     'Heat conduction into ice shelf', 'W m-2', conversion=-US%QRZ_T_to_W_m2)
+      'Heat conduction into ice shelf', 'W m-2', conversion=-US%QRZ_T_to_W_m2)
   CS%id_ustar_shelf = register_diag_field('ice_shelf_model', 'ustar_shelf', CS%diag%axesT1, CS%Time, &
-     'Fric vel under shelf', 'm/s', conversion=US%Z_to_m*US%s_to_T)
+      'Fric vel under shelf', 'm/s', conversion=US%Z_to_m*US%s_to_T)
   if (CS%active_shelf_dynamics) then
     CS%id_h_mask = register_diag_field('ice_shelf_model', 'h_mask', CS%diag%axesT1, CS%Time, &
        'ice shelf thickness mask', 'none')
   endif
-  call diag_mediator_close_registration(CS%diag)
+  call MOM_IS_diag_mediator_close_registration(CS%diag)
 
-
-  if (present(fluxes_in) .and. CS%rotate_index) &
-     call rotate_forcing(fluxes, fluxes_in, -CS%turns)
-  if (present(forces_in) .and. CS%rotate_index) &
-     call rotate_mech_forcing(forces, -CS%turns, forces_in)
+  if (present(fluxes_in)) call initialize_ice_shelf_fluxes(CS, ocn_grid, US, fluxes_in)
+  if (present(forces_in)) call initialize_ice_shelf_forces(CS, ocn_grid, US, forces_in)
 
 end subroutine initialize_ice_shelf
+
+subroutine initialize_ice_shelf_fluxes(CS, ocn_grid, US, fluxes_in)
+  type(ice_shelf_CS),           pointer       :: CS   !< A pointer to the ice shelf control structure
+  type(ocean_grid_type),        pointer       :: ocn_grid   !< The calling ocean model's horizontal grid structure
+  type(unit_scale_type),        intent(in)    :: US  !< A dimensional unit scaling type
+  type(forcing),        target, intent(inout) :: fluxes_in !< A structure containing pointers to any
+                                                           !!  possible thermodynamic or mass-flux forcing fields.
+
+  ! Local variables
+  type(ocean_grid_type), pointer :: G  => NULL() ! Pointers to grids for convenience.
+  type(forcing), pointer :: fluxes =>  NULL()
+  integer :: i, j, isd, ied, jsd, jed
+
+  G => CS%Grid
+  isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
+
+  ! Allocate the arrays for passing ice-shelf data through the forcing type.
+  if (.not. CS%solo_ice_sheet) then
+      call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: allocating fluxes.")
+   ! GMM: the following assures that water/heat fluxes are just allocated
+   ! when SHELF_THERMO = True. These fluxes are necessary if one wants to
+   ! use either ENERGETICS_SFC_PBL (ALE mode) or BULKMIXEDLAYER (layer mode).
+    call allocate_forcing_type(CS%Grid_in, fluxes_in, ustar=.true., shelf=.true., &
+         press=.true., water=CS%isthermo, heat=CS%isthermo)
+  else
+    call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: allocating fluxes in solo mode.")
+    call allocate_forcing_type(CS%Grid_in, fluxes_in, ustar=.true., shelf=.true., press=.true.)
+  endif
+  if (CS%rotate_index) then
+    allocate(fluxes)
+    call allocate_forcing_type(fluxes_in, CS%Grid, fluxes)
+    call rotate_forcing(fluxes_in, fluxes, CS%turns)
+  else
+    fluxes=>fluxes_in
+  endif
+
+  do j=jsd,jed ; do i=isd,ied
+    if (G%areaT(i,j)>0.) fluxes%frac_shelf_h(i,j) = CS%ISS%area_shelf_h(i,j) / G%areaT(i,j)
+  enddo ; enddo
+  if (CS%debug) call hchksum(fluxes%frac_shelf_h, "IS init: frac_shelf_h", G%HI, haloshift=0)
+  call add_shelf_pressure(ocn_grid, US, CS, fluxes)
+
+  if (CS%rotate_index) &
+    call rotate_forcing(fluxes, fluxes_in, -CS%turns)
+
+end subroutine initialize_ice_shelf_fluxes
+
+subroutine initialize_ice_shelf_forces(CS, ocn_grid, US, forces_in)
+  type(ice_shelf_CS),           pointer       :: CS   !< A pointer to the ice shelf control structure
+  type(ocean_grid_type),        pointer       :: ocn_grid   !< The calling ocean model's horizontal grid structure
+  type(unit_scale_type),        intent(in)    :: US  !< A dimensional unit scaling type
+  type(mech_forcing),   target, intent(inout) :: forces_in !< A structure with the driving mechanical forces
+
+  ! Local variables
+  type(mech_forcing), pointer :: forces => NULL()
+
+  call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: allocating forces.")
+  call allocate_mech_forcing(CS%Grid_in, forces_in, ustar=.true., shelf=.true., press=.true.)
+  if (CS%rotate_index) then
+    allocate(forces)
+    call allocate_mech_forcing(forces_in, CS%Grid, forces)
+    call rotate_mech_forcing(forces_in, CS%turns, forces)
+  else
+    forces=>forces_in
+  endif
+
+  call add_shelf_forces(ocn_grid, US, CS, forces, do_shelf_area=.not.CS%solo_ice_sheet)
+
+  if (CS%rotate_index) &
+    call rotate_mech_forcing(forces, -CS%turns, forces_in)
+
+end subroutine initialize_ice_shelf_forces
 
 !> Initializes shelf mass based on three options (file, zero and user)
 subroutine initialize_shelf_mass(G, param_file, CS, ISS, new_sim)
@@ -1897,15 +1936,15 @@ subroutine initialize_shelf_mass(G, param_file, CS, ISS, new_sim)
       call log_param(param_file, mdl, "INPUTDIR/SHELF_FILE", filename)
 
       CS%id_read_mass = init_external_field(filename, shelf_mass_var, &
-                          domain=CS%Grid_in%Domain%mpp_domain, verbose=CS%debug)
+                            MOM_domain=CS%Grid_in%Domain, verbose=CS%debug)
 
       if (read_shelf_area) then
          call get_param(param_file, mdl, "SHELF_AREA_VAR", shelf_area_var, &
                   "The variable in SHELF_FILE with the shelf area.", &
                   default="shelf_area")
 
-         CS%id_read_area = init_external_field(filename,shelf_area_var, &
-                             domain=CS%Grid_in%Domain%mpp_domain)
+         CS%id_read_area = init_external_field(filename, shelf_area_var, &
+                               MOM_domain=CS%Grid_in%Domain)
       endif
 
       if (.not.file_exists(filename, CS%Grid_in%Domain)) call MOM_error(FATAL, &
@@ -1930,7 +1969,7 @@ end subroutine initialize_shelf_mass
 !> Updates the ice shelf mass using data from a file.
 subroutine update_shelf_mass(G, US, CS, ISS, Time)
   type(ocean_grid_type), intent(inout) :: G   !< The ocean's grid structure.
-  type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
+  type(unit_scale_type), intent(in)    :: US  !< A dimensional unit scaling type
   type(ice_shelf_CS),    intent(in)    :: CS  !< A pointer to the ice shelf control structure
   type(ice_shelf_state), intent(inout) :: ISS !< The ice shelf state type that is being updated
   type(time_type),       intent(in)    :: Time !< The current model time
@@ -1943,15 +1982,13 @@ subroutine update_shelf_mass(G, US, CS, ISS, Time)
 
 
   if (CS%rotate_index) then
-     allocate(tmp2d(CS%Grid_in%isc:CS%Grid_in%iec,CS%Grid_in%jsc:CS%Grid_in%jec)); tmp2d(:,:) = 0.0
+    allocate(tmp2d(CS%Grid_in%isc:CS%Grid_in%iec,CS%Grid_in%jsc:CS%Grid_in%jec)) ; tmp2d(:,:) = 0.0
   else
-     allocate(tmp2d(is:ie,js:je)) ; tmp2d(:,:) = 0.0
+    allocate(tmp2d(is:ie,js:je)) ; tmp2d(:,:) = 0.0
   endif
 
-
-
   call time_interp_external(CS%id_read_mass, Time, tmp2d)
-  call rotate_array(tmp2d,CS%turns, ISS%mass_shelf)
+  call rotate_array(tmp2d, CS%turns, ISS%mass_shelf)
   deallocate(tmp2d)
 
   ! This should only be done if time_interp_external did an update.
@@ -1991,21 +2028,17 @@ subroutine ice_shelf_query(CS, G, frac_shelf_h)
   real, optional, dimension(SZI_(G),SZJ_(G))  :: frac_shelf_h !<
                                       !< Ice shelf area fraction [nodim].
 
-  logical :: do_frac=.false.
-  integer :: i,j
+  integer :: i, j
 
-  if (present(frac_shelf_h)) do_frac=.true.
-
-  if (do_frac) then
-     do j=G%jsd,G%jed
-       do i=G%isd,G%ied
-         frac_shelf_h(i,j)=0.0
-         if (G%areaT(i,j)>0.) frac_shelf_h(i,j) = CS%ISS%area_shelf_h(i,j) / G%areaT(i,j)
-       enddo
-     enddo
-   endif
+  if (present(frac_shelf_h)) then
+    do j=G%jsd,G%jed ; do i=G%isd,G%ied
+      frac_shelf_h(i,j) = 0.0
+      if (G%areaT(i,j)>0.) frac_shelf_h(i,j) = CS%ISS%area_shelf_h(i,j) / G%areaT(i,j)
+    enddo ; enddo
+  endif
 
 end subroutine ice_shelf_query
+
 !> Save the ice shelf restart file
 subroutine ice_shelf_save_restart(CS, Time, directory, time_stamped, filename_suffix)
   type(ice_shelf_CS),         pointer    :: CS !< ice shelf control structure
@@ -2039,6 +2072,7 @@ subroutine ice_shelf_end(CS)
 
   if (CS%active_shelf_dynamics) call ice_shelf_dyn_end(CS%dCS)
 
+  call MOM_IS_diag_mediator_end(CS%diag)
   deallocate(CS)
 
 end subroutine ice_shelf_end

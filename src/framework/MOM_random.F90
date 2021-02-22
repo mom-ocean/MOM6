@@ -3,15 +3,10 @@ module MOM_random
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_hor_index,       only : hor_index_type
-use MOM_time_manager,    only : time_type, set_date, get_date
+use MOM_hor_index,    only : hor_index_type
+use MOM_time_manager, only : time_type, set_date, get_date
 
-use MersenneTwister_mod, only : randomNumberSequence ! Random number class from FMS
-use MersenneTwister_mod, only : new_RandomNumberSequence ! Constructor/initializer
-use MersenneTwister_mod, only : getRandomReal ! Generates a random number
-use MersenneTwister_mod, only : getRandomPositiveInt ! Generates a random positive integer
-
-use iso_fortran_env, only : stdout=>output_unit, stderr=>error_unit
+use iso_fortran_env,  only : stdout=>output_unit, stderr=>error_unit
 
 implicit none ; private
 
@@ -23,7 +18,21 @@ public :: random_2d_01
 public :: random_2d_norm
 public :: random_unit_tests
 
-#include <MOM_memory.h>
+! Private period parameters for the Mersenne Twister
+integer, parameter :: blockSize = 624,           & !< Size of the state vector
+                      M         = 397,           & !< Pivot element in state vector
+                      MATRIX_A  = -1727483681,   & !< constant vector a         (0x9908b0dfUL)
+                      UMASK     = -2147483648_8, & !< most significant w-r bits (0x80000000UL)
+                      LMASK     =  2147483647      !< least significant r bits  (0x7fffffffUL)
+! Private tempering parameters for the Mersenne Twister
+integer, parameter :: TMASKB= -1658038656, & !< (0x9d2c5680UL)
+                      TMASKC= -272236544     !< (0xefc60000UL)
+
+!> A private type used by the Mersenne Twistor
+type randomNumberSequence
+  integer                            :: currentElement !< Index into state vector
+  integer, dimension(0:blockSize -1) :: state          !< State vector
+end type randomNumberSequence
 
 !> Container for pseudo-random number generators
 type, public :: PRNG ; private
@@ -63,7 +72,7 @@ end function random_norm
 subroutine random_2d_01(CS, HI, rand)
   type(PRNG),           intent(inout) :: CS !< Container for pseudo-random number generators
   type(hor_index_type), intent(in)    :: HI !< Horizontal index structure
-  real, dimension(SZI_(HI),SZJ_(HI)), intent(out) :: rand !< Random numbers between 0 and 1
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), intent(out) :: rand !< Random numbers between 0 and 1
   ! Local variables
   integer :: i,j
 
@@ -80,7 +89,7 @@ end subroutine random_2d_01
 subroutine random_2d_norm(CS, HI, rand)
   type(PRNG),           intent(inout) :: CS !< Container for pseudo-random number generators
   type(hor_index_type), intent(in)    :: HI !< Horizontal index structure
-  real, dimension(SZI_(HI),SZJ_(HI)), intent(out) :: rand !< Random numbers between 0 and 1
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), intent(out) :: rand !< Random numbers between 0 and 1
   ! Local variables
   integer :: i,j,n
 
@@ -178,6 +187,102 @@ subroutine random_destruct(CS)
   if (allocated(CS%stream2d)) deallocate(CS%stream2d)
   !deallocate(CS)
 end subroutine random_destruct
+
+!> Return an initialized twister using seed
+!!
+!! Code was based on initialize_scaler() from the FMS implementation of the Mersenne Twistor
+function new_RandomNumberSequence(seed) result(twister)
+  integer, intent(in) :: seed !< Seed to initialize twister
+  type(randomNumberSequence) :: twister !< The Mersenne Twister container
+  ! Local variables
+  integer :: i
+
+  twister%state(0) = iand(seed, -1)
+  do i = 1,  blockSize - 1 ! ubound(twister%state)
+     twister%state(i) = 1812433253 * ieor(twister%state(i-1), &
+                                          ishft(twister%state(i-1), -30)) + i
+     twister%state(i) = iand(twister%state(i), -1) ! for >32 bit machines
+  end do
+  twister%currentElement = blockSize
+end function new_RandomNumberSequence
+
+!> Return a random integer on interval [0,0xffffffff]
+!!
+!! Code was based on getRandomInt() from the FMS implementation of the Mersenne Twistor
+integer function getRandomInt(twister)
+  type(randomNumberSequence), intent(inout) :: twister !< The Mersenne Twister container
+
+  if(twister%currentElement >= blockSize) call nextState(twister)
+  getRandomInt = temper(twister%state(twister%currentElement))
+  twister%currentElement = twister%currentElement + 1
+
+end function getRandomInt
+
+!> Return a random real number on interval [0,1]
+!!
+!! Code was based on getRandomReal() from the FMS implementation of the Mersenne Twistor
+double precision function getRandomReal(twister)
+  type(randomNumberSequence), intent(inout) :: twister
+  ! Local variables
+  integer :: localInt
+
+  localInt = getRandomInt(twister)
+  if(localInt < 0) then
+    getRandomReal = dble(localInt + 2.0d0**32)/(2.0d0**32 - 1.0d0)
+  else
+    getRandomReal = dble(localInt            )/(2.0d0**32 - 1.0d0)
+  end if
+end function getRandomReal
+
+!> Merge bits of u and v
+integer function mixbits(u, v)
+  integer, intent(in) :: u !< An integer
+  integer, intent(in) :: v !< An integer
+
+  mixbits = ior(iand(u, UMASK), iand(v, LMASK))
+end function mixbits
+
+!> Twist bits of u and v
+integer function twist(u, v)
+  integer, intent(in) :: u !< An integer
+  integer, intent(in) :: v !< An integer
+  ! Local variable
+  integer, parameter, dimension(0:1) :: t_matrix = (/ 0, MATRIX_A /)
+
+  twist = ieor(ishft(mixbits(u, v), -1), t_matrix(iand(v, 1)))
+  twist = ieor(ishft(mixbits(u, v), -1), t_matrix(iand(v, 1)))
+end function twist
+
+!> Update internal state of twister to the next state in the sequence
+subroutine nextState(twister)
+  type(randomNumberSequence), intent(inout) :: twister !< Container for the Mersenne Twister
+  ! Local variables
+  integer :: k
+
+  do k = 0, blockSize - M - 1
+    twister%state(k) = ieor(twister%state(k + M), &
+                            twist(twister%state(k), twister%state(k + 1)))
+  end do
+  do k = blockSize - M, blockSize - 2
+    twister%state(k) = ieor(twister%state(k + M - blockSize), &
+                            twist(twister%state(k), twister%state(k + 1)))
+  end do
+  twister%state(blockSize - 1) = ieor(twister%state(M - 1), &
+                                      twist(twister%state(blockSize - 1), twister%state(0)))
+  twister%currentElement = 0
+end subroutine nextState
+
+!> Tempering of bits in y
+elemental integer function temper(y)
+  integer, intent(in) :: y !< An integer
+  ! Local variables
+  integer :: x
+
+  x      = ieor(y, ishft(y, -11))
+  x      = ieor(x, iand(ishft(x,  7), TMASKB))
+  x      = ieor(x, iand(ishft(x, 15), TMASKC))
+  temper = ieor(x, ishft(x, -18))
+end function temper
 
 !> Runs some statistical tests on the PRNG
 logical function random_unit_tests(verbose)
@@ -441,7 +546,11 @@ end module MOM_random
 
 !> \namespace mom_random
 !!
-!! Provides MOM6 wrappers to the FMS implementation of the Mersenne twister.
+!! Provides MOM6 implementation of the Mersenne Twistor, copied from the FMS implementation
+!! which was originally written by Robert Pincus (Robert.Pincus@colorado.edu).
+!! We once used the FMS implementation directly but since random numers do not need to be
+!! infrastructure specific, and because MOM6 should be infrastructure agnostic, we have copied
+!! the parts of MT that we used here.
 !!
 !! Example usage:
 !! \code

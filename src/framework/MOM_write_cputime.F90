@@ -3,11 +3,11 @@ module MOM_write_cputime
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_coms, only : sum_across_PEs, num_pes
+use MOM_coms,          only : sum_across_PEs, num_pes
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
-use MOM_io, only : open_file, close_file, APPEND_FILE, ASCII_FILE, WRITEONLY_FILE
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_time_manager, only : time_type, get_time, operator(>)
+use MOM_io,            only : open_ASCII_file, close_file, APPEND_FILE, WRITEONLY_FILE
+use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
+use MOM_time_manager,  only : time_type, get_time, operator(>)
 
 implicit none ; private
 
@@ -181,11 +181,9 @@ subroutine write_cputime(day, n, CS, nmax, call_end)
   !  Reopen or create a text output file.
   if ((CS%previous_calls == 0) .and. (is_root_pe())) then
     if (day > CS%Start_time) then
-      call open_file(CS%fileCPU_ascii, trim(CS%CPUfile), &
-                     action=APPEND_FILE, form=ASCII_FILE, nohdrs=.true.)
+      call open_ASCII_file(CS%fileCPU_ascii, trim(CS%CPUfile), action=APPEND_FILE)
     else
-      call open_file(CS%fileCPU_ascii, trim(CS%CPUfile), &
-                     action=WRITEONLY_FILE, form=ASCII_FILE, nohdrs=.true.)
+      call open_ASCII_file(CS%fileCPU_ascii, trim(CS%CPUfile), action=WRITEONLY_FILE)
     endif
   endif
 
