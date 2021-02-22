@@ -27,15 +27,13 @@ public initialize_nw2_tracers
 public nw2_tracer_column_physics
 public nw2_tracers_end
 
-integer, parameter :: NTR_MAX = 20 !< the maximum number of tracers in this module.
-
 !> The control structure for the nw2_tracers package
 type, public :: nw2_tracers_CS ; private
-  integer :: ntr = NTR_MAX  !< The number of tracers that are actually used.
+  integer :: ntr = 0  !< The number of tracers that are actually used.
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
   real, pointer :: tr(:,:,:,:) => NULL()   !< The array of tracers used in this package, in g m-3?
-  real, dimension(NTR_MAX) :: restore_rate !< The exponential growth rate for restoration value [year-1].
+  real, allocatable , dimension(:) :: restore_rate !< The exponential growth rate for restoration value [year-1].
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                              !! regulate the timing of diagnostic output.
   type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< A pointer to the restart controls structure
@@ -57,7 +55,7 @@ logical function register_nw2_tracers(HI, GV, param_file, CS, tr_Reg, restart_CS
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mdl = "nw2_example" ! This module's name.
+  character(len=40)  :: mdl = "nw2_tracers" ! This module's name.
   character(len=200) :: inputdir ! The directory where the input files are.
   character(len=8)  :: var_name ! The variable's name.
   real, pointer :: tr_ptr(:,:,:) => NULL()
@@ -76,7 +74,9 @@ logical function register_nw2_tracers(HI, GV, param_file, CS, tr_Reg, restart_CS
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
 
+  CS%ntr=20
   allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
+  allocate(CS%restore_rate(CS%ntr))
 
   do m=1,CS%ntr
     write(var_name(1:8),'(a6,i2.2)') 'tracer',m
