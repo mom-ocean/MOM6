@@ -60,7 +60,9 @@ logical function register_nw2_tracers(HI, GV, param_file, CS, tr_Reg, restart_CS
   character(len=8)  :: var_name ! The variable's name.
   real, pointer :: tr_ptr(:,:,:) => NULL()
   logical :: do_nw2
-  integer :: isd, ied, jsd, jed, nz, m
+  integer :: isd, ied, jsd, jed, nz, m, ig
+  integer :: n_groups ! Number of groups of three tracers (i.e. # tracers/3)
+  real, allocatable, dimension(:) :: timescale_in_days
   type(vardesc) :: tr_desc ! Descriptions and metadata for the tracers
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
@@ -73,8 +75,18 @@ logical function register_nw2_tracers(HI, GV, param_file, CS, tr_Reg, restart_CS
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "NW2_TRACER_GROUPS", n_groups, &
+                 "The number of tracer groups where a group is of three tracers "//&
+                 "initialized and restored to sin(x), y and z, respectively. Each "//&
+                 "group is restored with an independent restoration rate.", &
+                 default=3)
+  allocate(timescale_in_days(n_groups))
+  timescale_in_days = (/365., 730., 1460./)
+  call get_param(param_file, mdl, "NW2_TRACER_RESTORE_TIMESCALE", timescale_in_days, &
+                 "A list of timescales, one for each tracer group.", &
+                 units="days")
 
-  CS%ntr=20
+  CS%ntr = 3 * n_groups
   allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
   allocate(CS%restore_rate(CS%ntr))
 
@@ -87,11 +99,8 @@ logical function register_nw2_tracers(HI, GV, param_file, CS, tr_Reg, restart_CS
     ! Register the tracer for horizontal advection, diffusion, and restarts.
     call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, tr_desc=tr_desc, &
                          registry_diags=.true., restart_CS=restart_CS, mandatory=.false.)
-    if (m<=10) then
-      CS%restore_rate(m) = 1.0 / 6.0 ! 6 years
-    else
-      CS%restore_rate(m) = 1.0 ! 1 year
-    endif
+    ig = int( (m+2)/3 ) ! maps (1,2,3)->1, (4,5,6)->2, ...
+    CS%restore_rate(m) = 1.0 / ( timescale_in_days(ig) * 86400.0 )
   enddo
 
   CS%tr_Reg => tr_Reg
@@ -244,7 +253,7 @@ subroutine nw2_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
   endif
 
   do m=1,CS%ntr
-    dt_x_rate = dt / ( CS%restore_rate(m)*((365.0*86400.0)*US%s_to_T) )
+    dt_x_rate = ( dt * CS%restore_rate(m) ) * US%T_to_s
 !$OMP parallel do default(private) shared(CS,G,dt,dt_x_rate)
     do k=1,GV%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
       target_value = nw2_tracer_dist(m, G, GV, eta, i, j, k)
@@ -272,27 +281,13 @@ real function nw2_tracer_dist(m, G, GV, eta, i, j, k)
   x = ( G%geolonT(i,j) - G%west_lon ) / G%len_lon ! 0 ... 1
   y = -G%geolatT(i,j) / G%south_lat ! -1 ... 1
   z = - 0.5 * ( eta(i,j,K-1) + eta(i,j,K) ) / GV%max_depth ! 0 ... 1
-  select case ( mod(m-1,10) )
-  case (0) ! y/L
-    nw2_tracer_dist = y
-  case (1) ! -z/L
-    nw2_tracer_dist = -z
-  case (2) ! cos(2 pi x/L)
-    nw2_tracer_dist = cos( 2.0 * pi * x )
-  case (3) ! sin(2 pi x/L)
+  select case ( mod(m-1,3) )
+  case (0) ! sin(2 pi x/L)
     nw2_tracer_dist = sin( 2.0 * pi * x )
-  case (4) ! sin(4 pi x/L)
-    nw2_tracer_dist = sin( 2.0 * pi * mod( 2.0*x, 1.0 ) )
-  case (5) ! sin(pi y/L)
-    nw2_tracer_dist = sin( pi * y )
-  case (6) ! cos(2 pi y/L)
-    nw2_tracer_dist = cos( 2.0 * pi * y )
-  case (7) ! sin(2 pi y/L)
-    nw2_tracer_dist = sin( 2.0 * pi * y )
-  case (8) ! cos(pi z/H)
-    nw2_tracer_dist = cos( pi * z )
-  case (9) ! sin(pi z/H)
-    nw2_tracer_dist = sin( pi * z )
+  case (1) ! y/L
+    nw2_tracer_dist = y
+  case (2) ! -z/L
+    nw2_tracer_dist = -z
   case default
     stop 'This should not happen. Died in nw2_tracer_dist()!'
   end select
