@@ -964,11 +964,9 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
 
         call remapping_core_h(CS%remap_cs, nz_data, CS%Ref_val(m)%h(1:nz_data,c), tmp_val2, &
              CS%nz, h(i,j,:), tmp_val1, h_neglect, h_neglect_edge)
-         print *,'calling remapping_core_h',h(i,j,:),tmp_val2(:),tmp_val1(:)
       else
         call remapping_core_h(CS%remap_cs, nz_data, CS%Ref_h%p(1:nz_data,c), tmp_val2, &
              CS%nz, h(i,j,:), tmp_val1, h_neglect, h_neglect_edge)
-         print *,'Calling remapping_core_h',h(i,j,1),tmp_val1(1)
       endif
       !Backward Euler method
       if (CS%id_sp_tendency(m) > 0) tmp(i,j,1:nz) = CS%var(m)%p(i,j,1:nz)
