@@ -1932,7 +1932,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
           v_accel_bt(i,J) = v_accel_bt(i,J) + wt_accel(n) * (Cor_v(i,J) + PFv(i,J))
         enddo ; enddo
       endif
-      
+
       if (integral_BT_cont) then
         !$OMP do schedule(static)
         do J=jsv-1,jev ; do i=isv-1,iev+1
