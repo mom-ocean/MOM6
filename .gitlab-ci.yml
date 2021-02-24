@@ -117,10 +117,35 @@ run:
     - time tar zxf $CACHE_DIR/build-pgi-repro-$CI_PIPELINE_ID.tgz
     # time tar zxf $CACHE_DIR/build-gnu-debug-$CI_PIPELINE_ID.tgz
     - (echo '#!/bin/tcsh';echo 'make -f MRS/Makefile.tests all') > job.sh
-    - sbatch --clusters=c3,c4 --nodes=29 --time=0:34:00 --account=gfdl_o --qos=debug --job-name=mom6_regressions --output=log.$CI_PIPELINE_ID --wait job.sh
+    - sbatch --clusters=c3,c4 --nodes=29 --time=0:34:00 --account=gfdl_o --qos=debug --job-name=mom6_regressions --output=log.$CI_PIPELINE_ID --wait job.sh || MJOB_RETURN_STATE=Fail
     - cat log.$CI_PIPELINE_ID
+    - test -z "$MJOB_RETURN_STATE"
     - test -f restart_results_gnu.tar.gz
     - time tar zvcf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz *.tar.gz
+
+gnu.testing:
+  stage: run
+  tags:
+    - ncrc4
+  script:
+    - cd .testing
+    - module unload PrgEnv-pgi PrgEnv-intel PrgEnv-gnu darshan ; module load PrgEnv-gnu ; module unload netcdf gcc ; module load gcc/7.3.0 cray-hdf5 cray-netcdf
+    - make work/local-env
+    - make -s -j
+    - (echo '#!/bin/bash';echo '. ./work/local-env/bin/activate';echo 'make MPIRUN="srun -mblock --exclusive" test -s -j') > job.sh
+    - sbatch --clusters=c3,c4 --nodes=5 --time=0:05:00 --account=gfdl_o --qos=debug --job-name=MOM6.gnu.testing --output=log.$CI_PIPELINE_ID --wait job.sh || cat log.$CI_PIPELINE_ID && make test
+
+intel.testing:
+  stage: run
+  tags:
+    - ncrc4
+  script:
+    - cd .testing
+    - module unload PrgEnv-pgi PrgEnv-intel PrgEnv-gnu darshan; module load PrgEnv-intel; module unload netcdf intel; module load intel/18.0.6.288 cray-hdf5 cray-netcdf
+    - make work/local-env
+    - make -s -j
+    - (echo '#!/bin/bash';echo '. ./work/local-env/bin/activate';echo 'make MPIRUN="srun -mblock --exclusive" test -s -j') > job.sh
+    - sbatch --clusters=c3,c4 --nodes=5 --time=0:05:00 --account=gfdl_o --qos=debug --job-name=MOM6.gnu.testing --output=log.$CI_PIPELINE_ID --wait job.sh || cat log.$CI_PIPELINE_ID && make test
 
 # Tests
 gnu:non-symmetric:

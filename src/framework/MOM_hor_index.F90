@@ -178,7 +178,7 @@ end subroutine rotate_hor_index
 !! - declaration of u-point data is of the form `u(HI%%IsdB:HI%%IedB,HI%%jsd:HI%%jed)`
 !! - declaration of v-point data is of the form `v(HI%%isd:HI%%ied,HI%%JsdB:HI%%JedB)`.
 !!
-!! For more detail explanation of horizontal indexing see \ref Horizontal_indexing.
+!! For more detail explanation of horizontal indexing see \ref Horizontal_Indexing.
 
 
 end module MOM_hor_index

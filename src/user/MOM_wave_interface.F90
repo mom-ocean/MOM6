@@ -3,6 +3,7 @@ module MOM_wave_interface
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_data_override, only : data_override_init, data_override
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_alloc
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_domains,       only : pass_var, pass_vector, AGRID
@@ -16,7 +17,9 @@ use MOM_time_manager,  only : time_type, operator(+), operator(/)
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, surface
 use MOM_verticalgrid,  only : verticalGrid_type
-use data_override_mod, only : data_override_init, data_override
+
+use netcdf, only : NF90_open, NF90_inq_varid, NF90_inquire_variable, NF90_get_var
+use netcdf, only : NF90_inquire_dimension, NF90_close, NF90_NOWRITE, NF90_NOERR
 
 implicit none ; private
 
@@ -73,42 +76,42 @@ type, public :: wave_parameters_CS ; private
                                !! This needs to match the number of bands provided
                                !! via either coupling or file.
   real, allocatable, dimension(:), public :: &
-       WaveNum_Cen        !< Wavenumber bands for read/coupled [m-1]
+    WaveNum_Cen        !< Wavenumber bands for read/coupled [m-1]
   real, allocatable, dimension(:), public :: &
-       Freq_Cen           !< Frequency bands for read/coupled [s-1]
+    Freq_Cen           !< Frequency bands for read/coupled [s-1]
   real, allocatable, dimension(:), public :: &
-       PrescribedSurfStkX !< Surface Stokes drift if prescribed [m s-1]
+    PrescribedSurfStkX !< Surface Stokes drift if prescribed [m s-1]
   real, allocatable, dimension(:), public :: &
-       PrescribedSurfStkY !< Surface Stokes drift if prescribed [m s-1]
+    PrescribedSurfStkY !< Surface Stokes drift if prescribed [m s-1]
   real, allocatable, dimension(:,:,:), public :: &
-       Us_x               !< 3d zonal Stokes drift profile [m s-1]
-                          !! Horizontal -> U points
-                          !! Vertical -> Mid-points
+    Us_x               !< 3d zonal Stokes drift profile [m s-1]
+                       !! Horizontal -> U points
+                       !! Vertical -> Mid-points
   real, allocatable, dimension(:,:,:), public :: &
-       Us_y               !< 3d meridional Stokes drift profile [m s-1]
-                          !! Horizontal -> V points
-                          !! Vertical -> Mid-points
+    Us_y               !< 3d meridional Stokes drift profile [m s-1]
+                       !! Horizontal -> V points
+                       !! Vertical -> Mid-points
   real, allocatable, dimension(:,:), public :: &
-       La_SL,&            !< SL Langmuir number (directionality factored later)
-                          !! Horizontal -> H points
-       La_Turb            !< Aligned Turbulent Langmuir number
-                          !! Horizontal -> H points
+    La_SL,&            !< SL Langmuir number (directionality factored later)
+                       !! Horizontal -> H points
+    La_Turb            !< Aligned Turbulent Langmuir number
+                       !! Horizontal -> H points
   real, allocatable, dimension(:,:), public :: &
-       US0_x              !< Surface Stokes Drift (zonal, m/s)
-                          !! Horizontal -> U points
+    US0_x              !< Surface Stokes Drift (zonal, m/s)
+                       !! Horizontal -> U points
   real, allocatable, dimension(:,:), public :: &
-       US0_y              !< Surface Stokes Drift (meridional, m/s)
-                          !! Horizontal -> V points
+    US0_y              !< Surface Stokes Drift (meridional, m/s)
+                       !! Horizontal -> V points
   real, allocatable, dimension(:,:,:), public :: &
-       STKx0              !< Stokes Drift spectrum (zonal, m/s)
-                          !! Horizontal -> U points
-                          !! 3rd dimension -> Freq/Wavenumber
+    STKx0              !< Stokes Drift spectrum (zonal, m/s)
+                       !! Horizontal -> U points
+                       !! 3rd dimension -> Freq/Wavenumber
   real, allocatable, dimension(:,:,:), public :: &
-       STKy0              !< Stokes Drift spectrum (meridional, m/s)
-                          !! Horizontal -> V points
-                          !! 3rd dimension -> Freq/Wavenumber
+    STKy0              !< Stokes Drift spectrum (meridional, m/s)
+                       !! Horizontal -> V points
+                       !! 3rd dimension -> Freq/Wavenumber
   real, allocatable, dimension(:,:,:), public :: &
-       KvS                !< Viscosity for Stokes Drift shear [Z2 T-1 ~> m2 s-1]
+    KvS                !< Viscosity for Stokes Drift shear [Z2 T-1 ~> m2 s-1]
 
   ! Pointers to auxiliary fields
   type(time_type), pointer, public :: Time !< A pointer to the ocean model's clock.
@@ -211,9 +214,8 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
 
   ! Dummy Check
   if (associated(CS)) then
-     call MOM_error(FATAL, "wave_interface_init called with an associated"//&
-                             "control structure.")
-     return
+    call MOM_error(FATAL, "wave_interface_init called with an associated control structure.")
+    return
   endif
 
   PI=4.0*atan(1.0)
@@ -339,9 +341,9 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
       call get_param(param_file,mdl,"SURFBAND_STOKES_Y",CS%PrescribedSurfStkY,      &
            "Y-direction surface Stokes drift for bands.",units='m/s', &
            default=0.0)
-   case default! No method provided
-     call MOM_error(FATAL,'Check WAVE_METHOD.')
-   end select
+    case default! No method provided
+      call MOM_error(FATAL,'Check WAVE_METHOD.')
+    end select
 
   case (DHH85_STRING)!Donelan et al., 1985 spectrum
     WaveMethod = DHH85
@@ -361,8 +363,8 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
           default=.false.)
   case (LF17_STRING)!Li and Fox-Kemper 17 wind-sea Langmuir number
     WaveMethod = LF17
-   case default
-     call MOM_error(FATAL,'Check WAVE_METHOD.')
+  case default
+    call MOM_error(FATAL,'Check WAVE_METHOD.')
   end select
 
   ! Langmuir number Options
@@ -381,9 +383,9 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
 
   ! Allocate and initialize
   ! a. Stokes driftProfiles
-  allocate(CS%Us_x(G%isdB:G%IedB,G%jsd:G%jed,G%ke))
+  allocate(CS%Us_x(G%isdB:G%IedB,G%jsd:G%jed,GV%ke))
   CS%Us_x(:,:,:) = 0.0
-  allocate(CS%Us_y(G%isd:G%Ied,G%jsdB:G%jedB,G%ke))
+  allocate(CS%Us_y(G%isd:G%Ied,G%jsdB:G%jedB,GV%ke))
   CS%Us_y(:,:,:) = 0.0
   ! b. Surface Values
   allocate(CS%US0_x(G%isdB:G%iedB,G%jsd:G%jed))
@@ -397,7 +399,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
   CS%La_turb (:,:) = 0.0
   ! d. Viscosity for Stokes drift
   if (CS%StokesMixing) then
-    allocate(CS%KvS(G%isd:G%Ied,G%jsd:G%jed,G%ke))
+    allocate(CS%KvS(G%isd:G%Ied,G%jsd:G%jed,GV%ke))
     CS%KvS(:,:,:) = 0.0
   endif
 
@@ -515,14 +517,14 @@ end subroutine Update_Surface_Waves
 !> Constructs the Stokes Drift profile on the model grid based on
 !! desired coupling options
 subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
-  type(wave_parameters_CS),  pointer     :: CS    !< Wave parameter Control structure
-  type(ocean_grid_type),   intent(inout) :: G     !< Grid structure
-  type(verticalGrid_type), intent(in)    :: GV    !< Vertical grid structure
-  type(unit_scale_type),   intent(in)    :: US    !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-       intent(in)    :: h     !< Thickness [H ~> m or kg m-2]
+  type(wave_parameters_CS), pointer       :: CS    !< Wave parameter Control structure
+  type(ocean_grid_type),    intent(inout) :: G     !< Grid structure
+  type(verticalGrid_type),  intent(in)    :: GV    !< Vertical grid structure
+  type(unit_scale_type),    intent(in)    :: US    !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                            intent(in)    :: h     !< Thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), &
-       intent(in)    :: ustar !< Wind friction velocity [Z T-1 ~> m s-1].
+                            intent(in)    :: ustar !< Wind friction velocity [Z T-1 ~> m s-1].
   ! Local Variables
   real    :: Top, MidPoint, Bottom, one_cm, level_thick, min_level_thick_avg
   real    :: DecayScale
@@ -542,7 +544,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
         IIm1 = max(1,II-1)
         Bottom = 0.0
         MidPoint = 0.0
-        do kk = 1,G%ke
+        do kk = 1,GV%ke
           Top = Bottom
           MidPoint = Bottom - GV%H_to_Z*0.25*(h(II,jj,kk)+h(IIm1,jj,kk))
           Bottom = Bottom - GV%H_to_Z*0.5*(h(II,jj,kk)+h(IIm1,jj,kk))
@@ -555,7 +557,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
         JJm1 = max(1,JJ-1)
         Bottom = 0.0
         MidPoint = 0.0
-        do kk = 1,G%ke
+        do kk = 1,GV%ke
           Top = Bottom
           MidPoint = Bottom - GV%H_to_Z*0.25*(h(ii,JJ,kk)+h(ii,JJm1,kk))
           Bottom = Bottom - GV%H_to_Z*0.5*(h(ii,JJ,kk)+h(ii,JJm1,kk))
@@ -589,7 +591,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
         enddo
         ! 2. Second compute the level averaged Stokes drift
         bottom = 0.0
-        do kk = 1,G%ke
+        do kk = 1,GV%ke
           Top = Bottom
           IIm1 = max(II-1,1)
           level_thick = 0.5*GV%H_to_Z*(h(II,jj,kk)+h(IIm1,jj,kk))
@@ -646,7 +648,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
         enddo
         ! Compute the level averages.
         bottom = 0.0
-        do kk = 1,G%ke
+        do kk = 1,GV%ke
           Top = Bottom
           JJm1 = max(JJ-1,1)
           level_thick = 0.5*GV%H_to_Z*(h(ii,JJ,kk)+h(ii,JJm1,kk))
@@ -691,7 +693,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
       do jj = G%jsd,G%jed
         do II = G%isdB,G%iedB
           bottom = 0.0
-          do kk = 1,G%ke
+          do kk = 1,GV%ke
             Top = Bottom
             IIm1 = max(II-1,1)
             MidPoint = Bottom - GV%H_to_Z*0.25*(h(II,jj,kk)+h(IIm1,jj,kk))
@@ -709,7 +711,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
       do JJ = G%jsdB,G%jedB
         do ii = G%isd,G%ied
           Bottom = 0.0
-          do kk=1, G%ke
+          do kk=1, GV%ke
             Top = Bottom
             JJm1 = max(JJ-1,1)
             MidPoint = Bottom - GV%H_to_Z*0.25*(h(ii,JJ,kk)+h(ii,JJm1,kk))
@@ -731,7 +733,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
       DHH85_is_set = .true.
     endif
   else! Keep this else, fallback to 0 Stokes drift
-    do kk= 1,G%ke
+    do kk= 1,GV%ke
       do jj = G%jsd,G%jed
         do II = G%isdB,G%iedB
           CS%Us_x(II,jj,kk) = 0.
@@ -774,12 +776,12 @@ end subroutine Update_Stokes_Drift
 !> A subroutine to fill the Stokes drift from a NetCDF file
 !! using the data_override procedures.
 subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
-  use NETCDF
   type(time_type),          intent(in) :: day_center !< Center of timestep
   type(wave_parameters_CS), pointer    :: CS         !< Wave structure
   type(ocean_grid_type), intent(inout) :: G          !< Grid structure
   type(verticalGrid_type),  intent(in) :: GV         !< Vertical grid structure
   type(unit_scale_type),    intent(in) :: US         !< A dimensional unit scaling type
+
   ! Local variables
   real    :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal Stokes drift of band at h-points [m s-1]
   real    :: temp_y(SZI_(G),SZJ_(G)) ! Psuedo-meridional Stokes drift of band at h-points [m s-1]
@@ -792,7 +794,7 @@ subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
   integer :: rcode_fr, rcode_wn, ncid, varid_fr, varid_wn, id, ndims
 
   if (.not.dataOverrideIsInitialized) then
-    call data_override_init(Ocean_domain_in=G%Domain%mpp_domain)
+    call data_override_init(G%Domain)
     dataOverrideIsInitialized = .true.
 
     ! Read in number of wavenumber bands in file to set number to be read in
@@ -896,6 +898,10 @@ subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
       enddo
     endif
 
+    rcode_wn = NF90_close(ncid)
+    if (rcode_wn /= 0) call MOM_error(WARNING, &
+            "Error closing file "//trim(SurfBandFileName)//" in MOM_wave_interface.")
+
   endif
 
   do b = 1,CS%NumBands
@@ -971,7 +977,7 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
   real :: Dpt_LASL, ShearDirection, WaveDirection
   real :: LA_STKx, LA_STKy, LA_STK ! Stokes velocities in [m s-1]
   logical :: ContinueLoop, USE_MA
-  real, dimension(SZK_(G)) :: US_H, VS_H
+  real, dimension(SZK_(GV)) :: US_H, VS_H
   real, allocatable :: StkBand_X(:), StkBand_Y(:)
   integer :: KK, BB
 
@@ -989,7 +995,7 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
     endif
     ContinueLoop = .true.
     bottom = 0.0
-    do kk = 1,G%ke
+    do kk = 1,GV%ke
       Top = Bottom
       MidPoint = Bottom + GV%H_to_Z*0.5*h(kk)
       Bottom = Bottom + GV%H_to_Z*h(kk)
@@ -1001,7 +1007,7 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
   endif
 
   if (WaveMethod==TESTPROF) then
-    do kk = 1,G%ke
+    do kk = 1,GV%ke
       US_H(kk) = 0.5*(WAVES%US_X(I,j,kk)+WAVES%US_X(I-1,j,kk))
       VS_H(kk) = 0.5*(WAVES%US_Y(i,J,kk)+WAVES%US_Y(i,J-1,kk))
     enddo
@@ -1291,11 +1297,11 @@ subroutine StokesMixing(G, GV, dt, h, u, v, Waves )
   type(verticalGrid_type), &
        intent(in)    :: GV    !< Ocean vertical grid
   real, intent(in)   :: dt    !< Time step of MOM6 [T ~> s] for explicit solver
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),&
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
        intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
        intent(inout) :: u     !< Velocity i-component [m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
        intent(inout) :: v     !< Velocity j-component [m s-1]
   type(Wave_parameters_CS), &
        pointer       :: Waves !< Surface wave related control structure.
@@ -1307,7 +1313,7 @@ subroutine StokesMixing(G, GV, dt, h, u, v, Waves )
 ! This is a template to think about down-Stokes mixing.
 ! This is not ready for use...
 
-  do k = 1, G%ke
+  do k = 1, GV%ke
     do j = G%jsc, G%jec
       do I = G%iscB, G%iecB
         h_lay = GV%H_to_Z*0.5*(h(i,j,k)+h(i+1,j,k))
@@ -1317,7 +1323,7 @@ subroutine StokesMixing(G, GV, dt, h, u, v, Waves )
                (waves%us_x(i,j,k-1)-waves%us_x(i,j,k)) / &
                (0.5*(h_lay + GV%H_to_Z*0.5*(h(i,j,k-1)+h(i+1,j,k-1)) ))
         dTauDn = 0.0
-        if (k < G%ke-1) &
+        if (k < GV%ke-1) &
           dTauDn = 0.5*(waves%Kvs(i,j,k+1)+waves%Kvs(i+1,j,k+1)) * &
                (waves%us_x(i,j,k)-waves%us_x(i,j,k+1)) / &
                (0.5*(h_lay + GV%H_to_Z*0.5*(h(i,j,k+1)+h(i+1,j,k+1)) ))
@@ -1326,7 +1332,7 @@ subroutine StokesMixing(G, GV, dt, h, u, v, Waves )
     enddo
   enddo
 
-  do k = 1, G%ke
+  do k = 1, GV%ke
     do J = G%jscB, G%jecB
       do i = G%isc, G%iec
         h_Lay = GV%H_to_Z*0.5*(h(i,j,k)+h(i,j+1,k))
@@ -1336,7 +1342,7 @@ subroutine StokesMixing(G, GV, dt, h, u, v, Waves )
                (waves%us_y(i,j,k-1)-waves%us_y(i,j,k)) / &
                (0.5*(h_lay + GV%H_to_Z*0.5*(h(i,j,k-1)+h(i,j+1,k-1)) ))
         dTauDn = 0.0
-        if (k < G%ke-1) &
+        if (k < GV%ke-1) &
           dTauDn =0.5*(waves%Kvs(i,j,k+1)+waves%Kvs(i,j+1,k+1)) * &
                (waves%us_y(i,j,k)-waves%us_y(i,j,k+1)) / &
                (0.5*(h_lay + GV%H_to_Z*0.5*(h(i,j,k+1)+h(i,j+1,k+1)) ))
@@ -1359,11 +1365,11 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES, US)
   type(verticalGrid_type), &
        intent(in)   :: GV     !< Ocean vertical grid
   real, intent(in)  :: Dt     !< Time step of MOM6 [s] CHECK IF PASSING RIGHT TIMESTEP
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
        intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
        intent(inout) :: u     !< Velocity i-component [m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
        intent(inout) :: v     !< Velocity j-component [m s-1]
   type(Wave_parameters_CS), &
        pointer       :: Waves !< Surface wave related control structure.
@@ -1372,7 +1378,7 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES, US)
   real :: DVel ! A rescaled velocity change [m s-1 T-1 ~> m s-2]
   integer :: i,j,k
 
-  do k = 1, G%ke
+  do k = 1, GV%ke
     do j = G%jsc, G%jec
       do I = G%iscB, G%iecB
         DVel = 0.25*(WAVES%us_y(i,j+1,k)+WAVES%us_y(i-1,j+1,k))*G%CoriolisBu(i,j+1) + &
@@ -1382,7 +1388,7 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES, US)
     enddo
   enddo
 
-  do k = 1, G%ke
+  do k = 1, GV%ke
     do J = G%jscB, G%jecB
       do i = G%isc, G%iec
         DVel = 0.25*(WAVES%us_x(i+1,j,k)+WAVES%us_x(i+1,j-1,k))*G%CoriolisBu(i+1,j) + &

@@ -18,7 +18,7 @@ dnl    library with different -L flags, or perhaps other ld configurations.
 dnl
 dnl Results are cached in the ax_fc_cv_lib_LIBRARY_FUNCTION variable.
 dnl
-AC_DEFUN([AX_FC_CHECK_LIB],[dnl
+AC_DEFUN([AX_FC_CHECK_LIB],[
   AS_VAR_PUSHDEF([ax_fc_Lib], [ax_fc_cv_lib_$1_$2])
   m4_ifval([$6],
     [ax_fc_lib_msg_LDFLAGS=" with $6"],
@@ -29,14 +29,15 @@ AC_DEFUN([AX_FC_CHECK_LIB],[dnl
     LDFLAGS="$6 $LDFLAGS"
     ax_fc_check_lib_save_LIBS=$LIBS
     LIBS="-l$1 $7 $LIBS"
-    AS_IF([test -n $3],
+    AS_IF([test -n "$3"],
       [ax_fc_use_mod="use $3"],
       [ax_fc_use_mod=""])
-    AC_LINK_IFELSE([
-        AC_LANG_PROGRAM([], [dnl
+    AC_LINK_IFELSE([dnl
+dnl Begin 7-column code block
+AC_LANG_PROGRAM([], [dnl
         $ax_fc_use_mod
-        call $2]dnl
-        )
+        call $2])dnl
+dnl End code block
       ],
       [AS_VAR_SET([ax_fc_Lib], [yes])],
       [AS_VAR_SET([ax_fc_Lib], [no])]

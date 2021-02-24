@@ -11,13 +11,12 @@ use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, log_param, param_file_type, log_version
-use MOM_io, only : close_file, create_file, fieldtype, file_exists, stdout
-use MOM_io, only : MOM_read_data, MOM_read_vector, SINGLE_FILE, MULTIPLE
-use MOM_io, only : slasher, vardesc, write_field, var_desc
+use MOM_io, only : close_file, create_file, file_type, fieldtype, file_exists, field_size
+use MOM_io, only : MOM_read_data, MOM_read_vector, read_variable, stdout
+use MOM_io, only : open_file_to_read, close_file_to_read, SINGLE_FILE, MULTIPLE
+use MOM_io, only : slasher, vardesc, MOM_write_field, var_desc
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
-
-use netcdf
 
 implicit none ; private
 
@@ -191,11 +190,12 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
 
   ! Local variables
   real :: m_to_Z  ! A dimensional rescaling factor.
+  real, dimension(:), allocatable :: new_depth ! The new values of the depths [m]
+  integer, dimension(:), allocatable :: ig, jg ! The global indicies of the points to modify
   character(len=200) :: topo_edits_file, inputdir ! Strings for file/path
   character(len=40)  :: mdl = "apply_topography_edits_from_file" ! This subroutine's name.
-  integer :: n_edits, n, ashape(5), i, j, ncid, id, ncstatus, iid, jid, zid
-  integer, dimension(:), allocatable :: ig, jg
-  real, dimension(:), allocatable :: new_depth
+  integer :: i, j, n, ncid, n_edits, i_file, j_file, ndims, sizes(8)
+  logical :: found
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
 
@@ -210,72 +210,36 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
   if (len_trim(topo_edits_file)==0) return
 
   topo_edits_file = trim(inputdir)//trim(topo_edits_file)
-  if (.not.file_exists(topo_edits_file, G%Domain)) call MOM_error(FATAL, &
-     'initialize_topography_from_file: Unable to open '//trim(topo_edits_file))
+  if (is_root_PE()) then
+    if (.not.file_exists(topo_edits_file, G%Domain)) &
+      call MOM_error(FATAL, trim(mdl)//': Unable to find file '//trim(topo_edits_file))
+    call open_file_to_read(topo_edits_file, ncid)
+  else
+    ncid = -1
+  endif
 
-  ncstatus = nf90_open(trim(topo_edits_file), NF90_NOWRITE, ncid)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                                'Failed to open '//trim(topo_edits_file))
+  ! Read and check the values of ni and nj in the file for consistency with this configuration.
+  call read_variable(topo_edits_file, 'ni', i_file, ncid_in=ncid)
+  call read_variable(topo_edits_file, 'nj', j_file, ncid_in=ncid)
+  if (i_file /= G%ieg) call MOM_error(FATAL, trim(mdl)//': Incompatible i-dimension of grid in '//&
+                                      trim(topo_edits_file))
+  if (j_file /= G%jeg) call MOM_error(FATAL, trim(mdl)//': Incompatible j-dimension of grid in '//&
+                                      trim(topo_edits_file))
 
   ! Get nEdits
-  ncstatus = nf90_inq_dimid(ncid, 'nEdits', id)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                                'Failed to inq_dimid nEdits for '//trim(topo_edits_file))
-  ncstatus = nf90_inquire_dimension(ncid, id, len=n_edits)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                                'Failed to inquire_dimension nEdits for '//trim(topo_edits_file))
-
-  ! Read ni
-  ncstatus = nf90_inq_varid(ncid, 'ni', id)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                                'Failed to inq_varid ni for '//trim(topo_edits_file))
-  ncstatus = nf90_get_var(ncid, id, i)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                              'Failed to get_var ni for '//trim(topo_edits_file))
-  if (i /= G%ieg) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                              'Incompatible i-dimension of grid in '//trim(topo_edits_file))
-
-  ! Read nj
-  ncstatus = nf90_inq_varid(ncid, 'nj', id)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                                'Failed to inq_varid nj for '//trim(topo_edits_file))
-  ncstatus = nf90_get_var(ncid, id, j)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                              'Failed to get_var nj for '//trim(topo_edits_file))
-  if (j /= G%jeg) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                              'Incompatible j-dimension of grid in '//trim(topo_edits_file))
-
-  ! Read iEdit
-  ncstatus = nf90_inq_varid(ncid, 'iEdit', id)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                                'Failed to inq_varid iEdit for '//trim(topo_edits_file))
+  call field_size(topo_edits_file, 'zEdit', sizes, ndims=ndims, ncid_in=ncid)
+  if (ndims /= 1) call MOM_error(FATAL, "The variable zEdit has an "//&
+            "unexpected number of dimensions in "//trim(topo_edits_file) )
+  n_edits = sizes(1)
   allocate(ig(n_edits))
-  ncstatus = nf90_get_var(ncid, id, ig)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                              'Failed to get_var iEdit for '//trim(topo_edits_file))
-
-  ! Read jEdit
-  ncstatus = nf90_inq_varid(ncid, 'jEdit', id)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                                'Failed to inq_varid jEdit for '//trim(topo_edits_file))
   allocate(jg(n_edits))
-  ncstatus = nf90_get_var(ncid, id, jg)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                              'Failed to get_var jEdit for '//trim(topo_edits_file))
-
-  ! Read zEdit
-  ncstatus = nf90_inq_varid(ncid, 'zEdit', id)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                                'Failed to inq_varid zEdit for '//trim(topo_edits_file))
   allocate(new_depth(n_edits))
-  ncstatus = nf90_get_var(ncid, id, new_depth)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                              'Failed to get_var zEdit for '//trim(topo_edits_file))
 
-  ! Close file
-  ncstatus = nf90_close(ncid)
-  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
-                                'Failed to close '//trim(topo_edits_file))
+  ! Read iEdit, jEdit and zEdit
+  call read_variable(topo_edits_file, 'iEdit', ig, ncid_in=ncid)
+  call read_variable(topo_edits_file, 'jEdit', jg, ncid_in=ncid)
+  call read_variable(topo_edits_file, 'zEdit', new_depth, ncid_in=ncid)
+  call close_file_to_read(ncid, topo_edits_file)
 
   do n = 1, n_edits
     i = ig(n) - G%isd_global + 2 ! +1 for python indexing and +1 for ig-isd_global+1
@@ -283,11 +247,11 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
     if (i>=G%isc .and. i<=G%iec .and. j>=G%jsc .and. j<=G%jec) then
       if (new_depth(n)/=0.) then
         write(stdout,'(a,3i5,f8.2,a,f8.2,2i4)') &
-          'Ocean topography edit: ',n,ig(n),jg(n),D(i,j)/m_to_Z,'->',abs(new_depth(n)),i,j
+          'Ocean topography edit: ', n, ig(n), jg(n), D(i,j)/m_to_Z, '->', abs(new_depth(n)), i, j
         D(i,j) = abs(m_to_Z*new_depth(n)) ! Allows for height-file edits (i.e. converts negatives)
       else
-        call MOM_error(FATAL, ' apply_topography_edits_from_file: '//&
-          "A zero depth edit would change the land mask and is not allowed in"//trim(topo_edits_file))
+        call MOM_error(FATAL, trim(mdl)//': A zero depth edit would change the land mask and '//&
+          "is not allowed in"//trim(topo_edits_file))
       endif
     endif
   enddo
@@ -826,12 +790,15 @@ subroutine reset_face_lengths_list(G, param_file, US)
   character(len=120) :: line
   character(len=200) :: filename, chan_file, inputdir, mesg ! Strings for file/path
   character(len=40)  :: mdl = "reset_face_lengths_list" ! This subroutine's name.
-  real, pointer, dimension(:,:) :: &
-    u_lat => NULL(), u_lon => NULL(), v_lat => NULL(), v_lon => NULL()
-  real, pointer, dimension(:) :: &
-    u_width => NULL(), v_width => NULL()
-  real    :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
-  real    :: L_to_m  ! A unit conversion factor [m L-1 ~> nondim]
+  real, allocatable, dimension(:,:) :: &
+    u_lat, u_lon, v_lat, v_lon ! The latitude and longitude ranges of faces [degrees]
+  real, allocatable, dimension(:) :: &
+    u_width, v_width      ! The open width of faces [m]
+  integer, allocatable, dimension(:) :: &
+    u_line_no, v_line_no, &  ! The line numbers in lines of u- and v-face lines
+    u_line_used, v_line_used ! The number of times each u- and v-line is used.
+  real    :: m_to_L       ! A unit conversion factor [L m-1 ~> nondim]
+  real    :: L_to_m       ! A unit conversion factor [m L-1 ~> nondim]
   real    :: lat, lon     ! The latitude and longitude of a point.
   real    :: len_lon      ! The periodic range of longitudes, usually 360 degrees.
   real    :: len_lat      ! The range of latitudes, usually 180 degrees.
@@ -840,6 +807,8 @@ subroutine reset_face_lengths_list(G, param_file, US)
                           ! +/- 360 degrees from the specified range of values.
   logical :: found_u, found_v
   logical :: unit_in_use
+  logical :: fatal_unused_lengths
+  integer :: unused
   integer :: ios, iounit, isu, isv
   integer :: last, num_lines, nl_read, ln, npt, u_pt, v_pt
   integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -860,6 +829,10 @@ subroutine reset_face_lengths_list(G, param_file, US)
   call get_param(param_file, mdl, "CHANNEL_LIST_360_LON_CHECK", check_360, &
                  "If true, the channel configuration list works for any "//&
                  "longitudes in the range of -360 to 360.", default=.true.)
+  call get_param(param_file, mdl, "FATAL_UNUSED_CHANNEL_WIDTHS", fatal_unused_lengths, &
+                 "If true, trigger a fatal error if there are any channel widths in "//&
+                 "CHANNEL_LIST_FILE that do not cause any open face widths to change.", &
+                 default=.false.)
 
   if (is_root_pe()) then
     ! Open the input file.
@@ -889,16 +862,19 @@ subroutine reset_face_lengths_list(G, param_file, US)
   call broadcast(num_lines, root_PE())
   u_pt = 0 ; v_pt = 0
   if (num_lines > 0) then
-    allocate (lines(num_lines))
-    if (num_lines > 0) then
-      allocate(u_lat(2,num_lines)) ; u_lat(:,:) = -1e34
-      allocate(u_lon(2,num_lines)) ; u_lon(:,:) = -1e34
-      allocate(u_width(num_lines)) ; u_width(:) = -1e34
+    allocate(lines(num_lines))
 
-      allocate(v_lat(2,num_lines)) ; v_lat(:,:) = -1e34
-      allocate(v_lon(2,num_lines)) ; v_lon(:,:) = -1e34
-      allocate(v_width(num_lines)) ; v_width(:) = -1e34
-    endif
+    allocate(u_lat(2,num_lines)) ; u_lat(:,:) = -1e34
+    allocate(u_lon(2,num_lines)) ; u_lon(:,:) = -1e34
+    allocate(u_width(num_lines)) ; u_width(:) = -1e34
+    allocate(u_line_used(num_lines)) ; u_line_used(:) = 0
+    allocate(u_line_no(num_lines)) ; u_line_no(:) = 0
+
+    allocate(v_lat(2,num_lines)) ; v_lat(:,:) = -1e34
+    allocate(v_lon(2,num_lines)) ; v_lon(:,:) = -1e34
+    allocate(v_width(num_lines)) ; v_width(:) = -1e34
+    allocate(v_line_used(num_lines)) ; v_line_used(:) = 0
+    allocate(v_line_no(num_lines)) ; v_line_no(:) = 0
 
     ! Actually read the lines.
     if (is_root_pe()) then
@@ -924,6 +900,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
       if (found_u) then
         u_pt = u_pt + 1
         read(line(isu+8:),*) u_lon(1:2,u_pt), u_lat(1:2,u_pt), u_width(u_pt)
+        u_line_no(u_pt) = ln
         if (is_root_PE()) then
           if (check_360) then
             if ((abs(u_lon(1,u_pt)) > len_lon) .or. (abs(u_lon(2,u_pt)) > len_lon)) &
@@ -951,6 +928,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
       elseif (found_v) then
         v_pt = v_pt + 1
         read(line(isv+8:),*) v_lon(1:2,v_pt), v_lat(1:2,v_pt), v_width(v_pt)
+        v_line_no(v_pt) = ln
         if (is_root_PE()) then
           if (check_360) then
             if ((abs(v_lon(1,v_pt)) > len_lon) .or. (abs(v_lon(2,v_pt)) > len_lon)) &
@@ -978,7 +956,6 @@ subroutine reset_face_lengths_list(G, param_file, US)
       endif
     enddo
 
-    deallocate(lines)
   endif
 
   do j=jsd,jed ; do I=IsdB,IedB
@@ -998,6 +975,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
             write(stdout,'(A,2F8.2,A,4F8.2,A)') "read_face_lengths_list : G%mask2dCu=0 at ",lat,lon," (",&
                 u_lat(1,npt), u_lat(2,npt), u_lon(1,npt), u_lon(2,npt),") so grid metric is unmodified."
           else
+            u_line_used(npt) = u_line_used(npt) + 1
             write(stdout,'(A,2F8.2,A,4F8.2,A5,F9.2,A1)') &
                   "read_face_lengths_list : Modifying dy_Cu gridpoint at ",lat,lon," (",&
                   u_lat(1,npt), u_lat(2,npt), u_lon(1,npt), u_lon(2,npt),") to ",L_to_m*G%dy_Cu(I,j),"m"
@@ -1027,6 +1005,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
             write(stdout,'(A,2F8.2,A,4F8.2,A)') "read_face_lengths_list : G%mask2dCv=0 at ",lat,lon," (",&
                   v_lat(1,npt), v_lat(2,npt), v_lon(1,npt), v_lon(2,npt),") so grid metric is unmodified."
           else
+            v_line_used(npt) = v_line_used(npt) + 1
             write(stdout,'(A,2F8.2,A,4F8.2,A5,F9.2,A1)') &
                   "read_face_lengths_list : Modifying dx_Cv gridpoint at ",lat,lon," (",&
                   v_lat(1,npt), v_lat(2,npt), v_lon(1,npt), v_lon(2,npt),") to ",L_to_m*G%dx_Cv(I,j),"m"
@@ -1040,7 +1019,29 @@ subroutine reset_face_lengths_list(G, param_file, US)
     if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / (G%areaCv(i,J))
   enddo ; enddo
 
+  ! Verify that all channel widths have been used
+  unused = 0
+  if (u_pt > 0) call sum_across_PEs(u_line_used, u_pt)
+  if (v_pt > 0) call sum_across_PEs(v_line_used, v_pt)
+  if (is_root_PE()) then
+    unused = 0
+    do npt=1,u_pt ; if (u_line_used(npt) == 0) then
+      call MOM_error(WARNING, "reset_face_lengths_list unused u-face line: "//&
+                     trim(lines(u_line_no(npt))) )
+      unused = unused + 1
+    endif ; enddo
+    do npt=1,v_pt ; if (v_line_used(npt) == 0) then
+      call MOM_error(WARNING, "reset_face_lengths_list unused v-face line: "//&
+                     trim(lines(v_line_no(npt))) )
+      unused = unused + 1
+    endif ; enddo
+    if (fatal_unused_lengths .and. (unused > 0)) call MOM_error(FATAL, &
+      "reset_face_lengths_list causing MOM6 abort due to unused face length lines.")
+  endif
+
   if (num_lines > 0) then
+    deallocate(lines)
+    deallocate(u_line_used, v_line_used, u_line_no, v_line_no)
     deallocate(u_lat) ; deallocate(u_lon) ; deallocate(u_width)
     deallocate(v_lat) ; deallocate(v_lon) ; deallocate(v_width)
   endif
@@ -1188,42 +1189,30 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   integer, parameter :: nFlds=23
   type(vardesc) :: vars(nFlds)
   type(fieldtype) :: fields(nFlds)
-  real :: Z_to_m_scale ! A unit conversion factor from Z to m.
-  real :: s_to_T_scale ! A unit conversion factor from T-1 to s-1.
-  real :: L_to_m_scale ! A unit conversion factor from L to m.
-  integer :: unit
+  real :: Z_to_m_scale ! A unit conversion factor from Z to m
+  real :: s_to_T_scale ! A unit conversion factor from T-1 to s-1
+  real :: L_to_m_scale ! A unit conversion factor from L to m
+  type(file_type) :: IO_handle ! The I/O handle of the fileset
   integer :: file_threading
   integer :: nFlds_used
-  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   logical :: multiple_files
-  real, dimension(G%isd :G%ied ,G%jsd :G%jed ) :: out_h
-  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: out_q
-  real, dimension(G%IsdB:G%IedB,G%jsd :G%jed ) :: out_u
-  real, dimension(G%isd :G%ied ,G%JsdB:G%JedB) :: out_v
 
   call callTree_enter('write_ocean_geometry_file()')
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   Z_to_m_scale = 1.0 ; if (present(US)) Z_to_m_scale = US%Z_to_m
   s_to_T_scale = 1.0 ; if (present(US)) s_to_T_scale = US%s_to_T
   L_to_m_scale = 1.0 ; if (present(US)) L_to_m_scale = US%L_to_m
 
-!   vardesc is a structure defined in MOM_io.F90.  The elements of
-! this structure, in order, are:
-! (1) the variable name for the NetCDF file
-! (2) the variable's long name
-! (3) a character indicating the  horizontal grid, which may be '1' (column),
-!     'h', 'q', 'u', or 'v', for the corresponding C-grid variable
-! (4) a character indicating the vertical grid, which may be 'L' (layer),
-!     'i' (interface), or '1' (no vertical location)
-! (5) a character indicating the time levels of the field, which may be
-!    's' (snap-shot), 'p' (periodic), or '1' (no time variation)
-! (6) the variable's units
+  !   var_desc populates a type defined in MOM_io.F90.  The arguments, in order, are:
+  ! (1) the variable name for the NetCDF file
+  ! (2) the units of the variable when output
+  ! (3) the variable's long name
+  ! (4) a character indicating the  horizontal grid, which may be '1' (column),
+  !     'h', 'q', 'u', or 'v', for the corresponding C-grid variable
+  ! (5) a character indicating the vertical grid, which may be 'L' (layer),
+  !     'i' (interface), or '1' (no vertical location)
+  ! (6) a character indicating the time levels of the field, which may be
+  !    's' (snap-shot), 'p' (periodic), or '1' (no time variation)
   vars(1) = var_desc("geolatb","degree","latitude at corner (Bu) points",'q','1','1')
   vars(2) = var_desc("geolonb","degree","longitude at corner (Bu) points",'q','1','1')
   vars(3) = var_desc("geolat","degree", "latitude at tracer (T) points", 'h','1','1')
@@ -1259,11 +1248,6 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
     filepath = trim(directory) // "ocean_geometry"
   endif
 
-  out_h(:,:) = 0.0
-  out_u(:,:) = 0.0
-  out_v(:,:) = 0.0
-  out_q(:,:) = 0.0
-
   call get_param(param_file, mdl, "PARALLEL_RESTARTFILES", multiple_files, &
                  "If true, each processor writes its own restart file, "//&
                  "otherwise a single restart file is generated", &
@@ -1271,67 +1255,40 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   file_threading = SINGLE_FILE
   if (multiple_files) file_threading = MULTIPLE
 
-  call create_file(unit, trim(filepath), vars, nFlds_used, fields, &
-                   file_threading, dG=G)
+  call create_file(IO_handle, trim(filepath), vars, nFlds_used, fields, file_threading, dG=G)
 
-  do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLatBu(I,J); enddo ; enddo
-  call write_field(unit, fields(1), G%Domain%mpp_domain, out_q)
-  do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLonBu(I,J); enddo ; enddo
-  call write_field(unit, fields(2), G%Domain%mpp_domain, out_q)
-  call write_field(unit, fields(3), G%Domain%mpp_domain, G%geoLatT)
-  call write_field(unit, fields(4), G%Domain%mpp_domain, G%geoLonT)
+  call MOM_write_field(IO_handle, fields(1), G%Domain, G%geoLatBu)
+  call MOM_write_field(IO_handle, fields(2), G%Domain, G%geoLonBu)
+  call MOM_write_field(IO_handle, fields(3), G%Domain, G%geoLatT)
+  call MOM_write_field(IO_handle, fields(4), G%Domain, G%geoLonT)
 
-  do j=js,je ; do i=is,ie ; out_h(i,j) = Z_to_m_scale*G%bathyT(i,j) ; enddo ; enddo
-  call write_field(unit, fields(5), G%Domain%mpp_domain, out_h)
-  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(i,J) = s_to_T_scale*G%CoriolisBu(I,J) ; enddo ; enddo
-  call write_field(unit, fields(6), G%Domain%mpp_domain, out_q)
+  call MOM_write_field(IO_handle, fields(5), G%Domain, G%bathyT, scale=Z_to_m_scale)
+  call MOM_write_field(IO_handle, fields(6), G%Domain, G%CoriolisBu, scale=s_to_T_scale)
 
-  !   I think that all of these copies are holdovers from a much earlier
-  ! ancestor code in which many of the metrics were macros that could have
-  ! had reduced dimensions, and that they are no longer needed in MOM6. -RWH
-  do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dxCv(i,J) ; enddo ; enddo
-  call write_field(unit, fields(7), G%Domain%mpp_domain, out_v)
-  do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dyCu(I,j) ; enddo ; enddo
-  call write_field(unit, fields(8), G%Domain%mpp_domain, out_u)
+  call MOM_write_field(IO_handle, fields(7),  G%Domain, G%dxCv, scale=L_to_m_scale)
+  call MOM_write_field(IO_handle, fields(8),  G%Domain, G%dyCu, scale=L_to_m_scale)
+  call MOM_write_field(IO_handle, fields(9),  G%Domain, G%dxCu, scale=L_to_m_scale)
+  call MOM_write_field(IO_handle, fields(10), G%Domain, G%dyCv, scale=L_to_m_scale)
+  call MOM_write_field(IO_handle, fields(11), G%Domain, G%dxT, scale=L_to_m_scale)
+  call MOM_write_field(IO_handle, fields(12), G%Domain, G%dyT, scale=L_to_m_scale)
+  call MOM_write_field(IO_handle, fields(13), G%Domain, G%dxBu, scale=L_to_m_scale)
+  call MOM_write_field(IO_handle, fields(14), G%Domain, G%dyBu, scale=L_to_m_scale)
 
-  do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dxCu(I,j) ; enddo ; enddo
-  call write_field(unit, fields(9), G%Domain%mpp_domain, out_u)
-  do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dyCv(i,J) ; enddo ; enddo
-  call write_field(unit, fields(10), G%Domain%mpp_domain, out_v)
+  call MOM_write_field(IO_handle, fields(15), G%Domain, G%areaT, scale=L_to_m_scale**2)
+  call MOM_write_field(IO_handle, fields(16), G%Domain, G%areaBu, scale=L_to_m_scale**2)
 
-  do j=js,je ; do i=is,ie ; out_h(i,j) = L_to_m_scale*G%dxT(i,j); enddo ; enddo
-  call write_field(unit, fields(11), G%Domain%mpp_domain, out_h)
-  do j=js,je ; do i=is,ie ; out_h(i,j) = L_to_m_scale*G%dyT(i,j) ; enddo ; enddo
-  call write_field(unit, fields(12), G%Domain%mpp_domain, out_h)
-
-  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(i,J) = L_to_m_scale*G%dxBu(I,J) ; enddo ; enddo
-  call write_field(unit, fields(13), G%Domain%mpp_domain, out_q)
-  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = L_to_m_scale*G%dyBu(I,J) ; enddo ; enddo
-  call write_field(unit, fields(14), G%Domain%mpp_domain, out_q)
-
-  do j=js,je ; do i=is,ie ; out_h(i,j) = G%areaT(i,j) ; enddo ; enddo
-  call write_field(unit, fields(15), G%Domain%mpp_domain, out_h)
-  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = G%areaBu(I,J) ; enddo ; enddo
-  call write_field(unit, fields(16), G%Domain%mpp_domain, out_q)
-
-  do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dx_Cv(i,J) ; enddo ; enddo
-  call write_field(unit, fields(17), G%Domain%mpp_domain, out_v)
-  do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dy_Cu(I,j) ; enddo ; enddo
-  call write_field(unit, fields(18), G%Domain%mpp_domain, out_u)
-  call write_field(unit, fields(19), G%Domain%mpp_domain, G%mask2dT)
+  call MOM_write_field(IO_handle, fields(17), G%Domain, G%dx_Cv, scale=L_to_m_scale)
+  call MOM_write_field(IO_handle, fields(18), G%Domain, G%dy_Cu, scale=L_to_m_scale)
+  call MOM_write_field(IO_handle, fields(19), G%Domain, G%mask2dT)
 
   if (G%bathymetry_at_vel) then
-    do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = Z_to_m_scale*G%Dblock_u(I,j) ; enddo ; enddo
-    call write_field(unit, fields(20), G%Domain%mpp_domain, out_u)
-    do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = Z_to_m_scale*G%Dopen_u(I,j) ; enddo ; enddo
-    call write_field(unit, fields(21), G%Domain%mpp_domain, out_u)
-    do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = Z_to_m_scale*G%Dblock_v(i,J) ; enddo ; enddo
-    call write_field(unit, fields(22), G%Domain%mpp_domain, out_v)
-    do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = Z_to_m_scale*G%Dopen_v(i,J) ; enddo ; enddo
-    call write_field(unit, fields(23), G%Domain%mpp_domain, out_v)
+    call MOM_write_field(IO_handle, fields(20), G%Domain, G%Dblock_u, scale=Z_to_m_scale)
+    call MOM_write_field(IO_handle, fields(21), G%Domain, G%Dopen_u, scale=Z_to_m_scale)
+    call MOM_write_field(IO_handle, fields(22), G%Domain, G%Dblock_v, scale=Z_to_m_scale)
+    call MOM_write_field(IO_handle, fields(23), G%Domain, G%Dopen_v, scale=Z_to_m_scale)
   endif
 
-  call close_file(unit)
+  call close_file(IO_handle)
 
   call callTree_leave('write_ocean_geometry_file()')
 end subroutine write_ocean_geometry_file

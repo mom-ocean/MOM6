@@ -1,0 +1,121 @@
+/*! \page Discrete_Coriolis Discrete Coriolis Term
+
+\section Coriolis Coriolis Term
+In general, the discrete equations are written as simple difference equations
+based on the Arakawa C-grid as described in section \ref horizontal_grids.
+One of the more interesting exceptions is the Coriolis term. It is computed in the
+form shown in \eqref{eq:h-horz-momentum,h-equations,momentum}, or:
+
+\f[
+    \frac{( f + \zeta )}{h} \, \hat{\mathbf{z}} \times h \, \mathbf{u}
+\f]
+
+This term needs to be evaluated at \f$u\f$ points for the \f$v\f$ equation and
+vice versa, plus we need to keep the thickness, \f$h\f$, positive definite.
+MOM6 contains a number of options for how to compute this term.
+
+\li SADOURNY75_ENERGY Sadourny \cite sadourny1975 figured out how to
+conserve energy or enstrophy but not both. This option is energy conserving.
+The term in the \f$u\f$ equation becomes:
+\f[
+    \frac{1}{4 dx} \left( q_{i,j} (vh_{i+1,j} + vh_{i,j}) +
+    q_{i,j-1} (vh_{i+1,j-1} + vh_{i,j-1}) \right)
+\f]
+where \f$q = \frac{f + \zeta}{h}\f$ and \f$h\f$ is an area-weighted
+average of the four thicknesses surrounding the \f$q\f$ point, such that
+it is guaranteed to be positive definite.
+
+There is a variant on this scheme with the CORIOLIS_EN_DIS option. If true,
+two estimates of the thickness fluxes \f$vh\f$ are used to estimate the Coriolis
+term, and the one that dissipates energy relative to the other one
+is used.
+
+\li SADOURNY75_ENSTRO Also from \cite sadourny1975, this option is enstrophy
+conserving.
+\f[
+    \frac{1}{8 dx} ( q_{i,j} + q_{i,j-1} ) ((vh_{i+1,j} + vh_{i,j}) +
+    (vh_{i+1,j-1} + vh_{i,j-1}) )
+\f]
+
+\li ARAKAWA_LAMB81 From \cite arakawa1981 is a scheme which is both
+energy and enstrophy conserving. Its weaknesses are a large stencil and differing
+thickness stencils in the numerator and denominator.
+This scheme and several others (with differing values of \f$a,
+b, c, d\f$ and \f$ep\f$) are implemented as:
+\f{eqnarray}{
+    \frac{1}{dx} (a_{i,j} vh_{i+1,j} &+ b_{i,j} vh_{i,j} +
+    d_{i,j} vh_{i+1,j-1} + c_{i,j} vh_{i,j-1} \\
+    &+ ep_{i,j}*uh_{i-1,j} -
+    ep_{i+1,j}*uh_{i+1,j}) \label{eq:Coriolis_abcd}
+\f}
+with
+\f{eqnarray}{
+   a_{i,j} &= \frac{1}{24} (2.0*(q_{i+1,j} + q_{i,j-1}) + (q_{i,j} + q_{i+1,j-1})) \\
+   b_{i,j} &= \frac{1}{24} ((q_{i,j} + q_{i-1,j-1}) + 2.0*(q_{i-1,j} + q_{i,j-1})) \\
+   c_{i,j} &= \frac{1}{24} (2.0*(q_{i,j} + q_{i-1,j-1}) + (q_{i-1,j} + q_{i,j-1})) \\
+   d_{i,j} &= \frac{1}{24} ((q_{i+1,j} + q_{i,j-1}) + 2.0*(q_{i,j} + q_{i+1,j-1})) \\
+   ep_{i,j} &= \frac{1}{24}((q_{i,j} - q_{i-1,j-1}) + (q_{i-1,j} - q_{i,j-1}))
+\f}
+
+\li ARAKAWA_HSU90 From \cite arakawa1990 is a scheme which always conserves
+energy and conserves enstrophy in the limit of non-divergent flow. This one
+has a larger stencil than Sadourny's energy scheme, but it's much better behaved
+in terms of handling vanishing layers than Arakawa and Lamb.
+This scheme is implemented with:
+\f[
+    \frac{1}{dx} (a_{i,j} vh_{i+1,j} + b_{i,j} vh_{i,j} +
+    d_{i,j} vh_{i+1,j-1} + c_{i,j} vh_{i,j-1})
+\f]
+and
+\f{eqnarray}{
+   a_{i,j} &= \frac{1}{12} (q_{i,j} + (q_{i+1,j} + q_{i,j-1})) \\
+   b_{i,j} &= \frac{1}{12} (q_{i,j} + (q_{i-1,j} + q_{i,j-1})) \\
+   c_{i,j} &= \frac{1}{12} (q_{i,j} + (q_{i-1,j-1} + q_{i,j-1})) \\
+   d_{i,j} &= \frac{1}{12} (q_{i,j} + (q_{i+1,j-1} + q_{i,j-1}))
+\f}
+
+\li ARAKAWA_LAMB_BLEND This is a blending of Arakawa and Lamb, Arakawa and Hsu,
+and the Sadourny Energy scheme. There are weights CORIOLIS_BLEND_WT_LIN and
+CORIOLIS_BLEND_F_EFF_MAX to control this scheme. The equation is the same as for
+Arakawa and Lamb \eqref{eq:Coriolis_abcd}, but the values of \f$a, b, c, d\f$ and
+\f$ep\f$ differ when the pure Arakawa and Lamb scheme breaks down due to thickness
+variations.
+
+\li ROBUST_ENSTRO An enstrophy-conserving scheme which is robust to vanishing
+layers.
+
+Some of these options also support the BOUND_CORIOLIS flag. If true,
+the Coriolis terms in the \f$u\f$ equation are bounded by the four estimates of
+\f$\frac{(f+\zeta)}{h}vh\f$ from the four neighboring \f$v\f$ points, and
+similarly in the \f$v\f$ equation.  This option would have no effect
+on the SADOURNY75_ENERGY scheme if it were possible to use centered
+difference thickness fluxes.
+
+Note, if BOUND_CORIOLIS is on, it will also turn on the
+BOUND_CORIOLIS_BIHARM option by default. This option uses a viscosity
+that increases with the square of the velocity shears, so that the
+resulting viscous drag is of comparable magnitude to the Coriolis
+terms when the velocity differences between adjacent grid points is
+0.5*BOUND_CORIOLIS_VEL.
+
+\subsection Coriolis_BC Wall boundary conditions
+
+Two sets of boundary conditions have been coded in the
+definition of relative vorticity.  These are written as:
+
+NOSLIP defined (in spherical coordinates):
+\f{eqnarray}{
+  \mbox{relvort} &= dv/dx \mbox{ (east $\&$ west)}, \mbox{ with } v = 0. \\
+  \mbox{relvort} &= -\sec(\phi) * d(u \cos(\phi))/dy \mbox{ (north $\&$
+  south)}, \mbox{ with } u = 0.
+\f}
+
+Free slip (NOSLIP not defined):
+\f[
+  \mbox{relvort} = 0 \mbox{ (all boundaries)}
+\f]
+
+with \f$\phi\f$ defined as latitude.  The free slip boundary
+condition is much more natural on a C-grid.
+
+*/

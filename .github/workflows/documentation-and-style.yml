@@ -1,0 +1,39 @@
+name: Doxygen and style
+
+on: [push, pull_request]
+
+jobs:
+  doxygen:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - name: Check white space (non-blocking)
+      run: |
+        ./.testing/trailer.py -e TEOS10 -l 120 src config_src 2>&1 | tee style_errors
+      continue-on-error: true
+
+    - name: Install packages used when generating documentation
+      run: |
+        sudo apt-get update
+        sudo apt-get install python3-sphinx python3-lxml perl
+        sudo apt-get install texlive-binaries texlive-base bibtool tex-common texlive-bibtex-extra
+        sudo apt-get install graphviz
+
+    - name: Build doxygen HTML
+      run: |
+        cd docs
+        perl -e 'print "perl version $^V" . "\n"'
+        mkdir _build && make nortd DOXYGEN_RELEASE=Release_1_8_13 UPDATEHTMLEQS=Y
+        cat _build/doxygen_warn_nortd_log.txt
+
+    - name: Report doxygen or style errors
+      run: |
+        grep "warning:" docs/_build/doxygen_warn_nortd_log.txt | grep -v "as part of a" | tee doxy_errors
+        cat style_errors doxy_errors > all_errors
+        cat all_errors
+        test ! -s  all_errors

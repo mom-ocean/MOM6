@@ -7,10 +7,9 @@ module ocean_da_types_mod
 
   private
 
-
   !> Example type for ocean ensemble DA state
   type, public :: OCEAN_CONTROL_STRUCT
-     integer :: ensemble_size
+     integer :: ensemble_size        !< ensemble size
      real, pointer, dimension(:,:,:)   :: SSH=>NULL() !<sea surface height (m) across ensembles
      real, pointer, dimension(:,:,:,:) :: h=>NULL() !<layer thicknesses (m or kg) across ensembles
      real, pointer, dimension(:,:,:,:) :: T=>NULL() !<layer potential temperature (degC) across ensembles
@@ -35,17 +34,19 @@ module ocean_da_types_mod
                            !! 4:Arctic Ocean, 5:Indian Ocean, 6:Mediterranean Sea, 7:Black Sea,
                            !! 8:Hudson Bay, 9:Baltic Sea, 10:Red Sea, 11:Persian Gulf
      integer :: profile_flag !< an overall flag for the profile
-     real :: lat, lon !< latitude and longitude (degrees E and N)
+     real :: lat      !< latitude [degrees_N]
+     real :: lon      !< longitude [degrees_E]
      logical :: accepted !< logical flag to disable a profile
      type(time_type) :: time_window !< The time window associated with this profile [s]
      real, pointer, dimension(:) :: obs_error  !< The observation error by variable
      real  :: loc_dist   !< The impact radius of this observation (m)
      type(ocean_profile_type), pointer :: next=>NULL() !< all profiles are stored as linked list.
-     type(ocean_profile_type), pointer :: prev=>NULL()
-     type(ocean_profile_type), pointer :: cnext=>NULL() ! current profiles are stored as linked list.
-     type(ocean_profile_type), pointer :: cprev=>NULL()
-     integer :: nbr_xi, nbr_yi ! nearest neighbor model gridpoint for the profile
-     real :: nbr_dist ! distance to nearest neighbor model gridpoint
+     type(ocean_profile_type), pointer :: prev=>NULL() !< previous
+     type(ocean_profile_type), pointer :: cnext=>NULL() !< current profiles are stored as linked list.
+     type(ocean_profile_type), pointer :: cprev=>NULL() !< previous
+     integer :: nbr_xi !< x nearest neighbor model gridpoint for the profile
+     integer :: nbr_yi !< y nearest neighbor model gridpoint for the profile
+     real :: nbr_dist !< distance to nearest neighbor model gridpoint
      logical :: compute !< profile is within current compute domain
      real, dimension(:,:), pointer :: depth => NULL() !< depth of measurement [m]
      real, dimension(:,:), pointer :: data => NULL() !< data by variable type
@@ -54,32 +55,36 @@ module ocean_da_types_mod
      real, dimension(:,:,:), pointer :: analysis => NULL() !< ensemble member analysis
      type(forward_operator_type), pointer :: obs_def => NULL() !< observation forward operator
      type(time_type) :: time !< profile time type
-     real :: i_index, j_index !< model longitude and latitude indices respectively
+     real :: i_index !< model longitude indices respectively
+     real :: j_index !< model latitude indices respectively
      real, dimension(:,:), pointer :: k_index !< model depth indices
      type(time_type) :: tdiff !< difference between model time and observation time
-     character(len=128) :: filename
+     character(len=128) :: filename !< a filename
   end type ocean_profile_type
 
   !>  Example forward operator type.
   type, public :: forward_operator_type
-     integer :: num
+     integer :: num                      !< how many?
      integer, dimension(2) :: state_size !< for
      integer, dimension(:), pointer :: state_var_index !< for flattened data
      integer, dimension(:), pointer :: i_index !< i-dimension index
      integer, dimension(:), pointer :: j_index !< j-dimension index
-     real, dimension(:), pointer :: coef
+     real, dimension(:), pointer :: coef !< coefficient
   end type forward_operator_type
 
   !> Grid type for DA
   type, public :: grid_type
-     real, pointer, dimension(:,:) :: x=>NULL(), y=>NULL()
-     real, pointer, dimension(:,:,:) :: z=>NULL()
-     real, pointer, dimension(:,:,:) :: h=>NULL()
-     real, pointer, dimension(:,:) :: basin_mask => NULL()
-     real, pointer, dimension(:,:,:) :: mask => NULL()
-     real, pointer, dimension(:,:) :: bathyT => NULL()
-     logical :: tripolar_N
-     integer :: ni, nj, nk
+     real, pointer, dimension(:,:) :: x=>NULL()    !< x
+     real, pointer, dimension(:,:) :: y=>NULL()    !< y
+     real, pointer, dimension(:,:,:) :: z=>NULL()  !< z
+     real, pointer, dimension(:,:,:) :: h=>NULL()  !< h
+     real, pointer, dimension(:,:) :: basin_mask => NULL() !< basin mask
+     real, pointer, dimension(:,:,:) :: mask => NULL()     !< land mask?
+     real, pointer, dimension(:,:) :: bathyT => NULL()     !< bathymetry at T points
+     logical :: tripolar_N    !< True for tripolar grids
+     integer :: ni !< ni
+     integer :: nj !< nj
+     integer :: nk !< nk
   end type grid_type
 
 end module ocean_da_types_mod

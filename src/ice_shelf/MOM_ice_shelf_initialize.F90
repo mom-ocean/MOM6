@@ -4,6 +4,8 @@ module MOM_ice_shelf_initialize
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_grid, only : ocean_grid_type
+use MOM_array_transform,      only : rotate_array
+use MOM_hor_index,  only : hor_index_type
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_io, only: MOM_read_data, file_exists, slasher
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
@@ -25,8 +27,9 @@ public initialize_ice_thickness
 contains
 
 !> Initialize ice shelf thickness
-subroutine initialize_ice_thickness(h_shelf, area_shelf_h, hmask, G, US, PF)
+subroutine initialize_ice_thickness(h_shelf, area_shelf_h, hmask, G, G_in, US, PF, rotate_index, turns)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
+  type(ocean_grid_type), intent(in)    :: G_in    !< The ocean's unrotated grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: h_shelf !< The ice shelf thickness [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
@@ -36,23 +39,46 @@ subroutine initialize_ice_thickness(h_shelf, area_shelf_h, hmask, G, US, PF)
                                              !! partly or fully covered by an ice-shelf
   type(unit_scale_type), intent(in)    :: US !< A structure containing unit conversion factors
   type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
+  logical, intent(in), optional        :: rotate_index !< If true, this is a rotation test
+  integer, intent(in), optional        :: turns !< Number of turns for rotation test
 
   integer :: i, j
   character(len=40)  :: mdl = "initialize_ice_thickness" ! This subroutine's name.
   character(len=200) :: config
+  logical :: rotate = .false.
+  real, allocatable, dimension(:,:) :: tmp1_2d ! Temporary array for storing ice shelf input data
+  real, allocatable, dimension(:,:) :: tmp2_2d ! Temporary array for storing ice shelf input data
+  real, allocatable, dimension(:,:) :: tmp3_2d ! Temporary array for storing ice shelf input data
 
   call get_param(PF, mdl, "ICE_PROFILE_CONFIG", config, &
                  "This specifies how the initial ice profile is specified. "//&
                  "Valid values are: CHANNEL, FILE, and USER.", &
                  fail_if_missing=.true.)
 
-  select case ( trim(config) )
-  case ("CHANNEL"); call initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, US, PF)
-  case ("FILE");  call initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, G, US, PF)
-  case ("USER");  call USER_init_ice_thickness (h_shelf, area_shelf_h, hmask, G, US, PF)
-  case default ;  call MOM_error(FATAL,"MOM_initialize: "// &
-    "Unrecognized ice profile setup "//trim(config))
-  end select
+  if (PRESENT(rotate_index)) rotate=rotate_index
+
+  if (rotate) then
+    allocate(tmp1_2d(G_in%isd:G_in%ied,G_in%jsd:G_in%jed)) ; tmp1_2d(:,:)=0.0
+    allocate(tmp2_2d(G_in%isd:G_in%ied,G_in%jsd:G_in%jed)) ; tmp2_2d(:,:)=0.0
+    allocate(tmp3_2d(G_in%isd:G_in%ied,G_in%jsd:G_in%jed)) ; tmp3_2d(:,:)=0.0
+    select case ( trim(config) )
+      case ("CHANNEL") ; call initialize_ice_thickness_channel (tmp1_2d, tmp2_2d, tmp3_2d, G_in, US, PF)
+      case ("FILE") ; call initialize_ice_thickness_from_file (tmp1_2d, tmp2_2d, tmp3_2d, G_in, US, PF)
+      case ("USER") ; call USER_init_ice_thickness (tmp1_2d, tmp2_2d, tmp3_2d, G_in, US, PF)
+      case default  ; call MOM_error(FATAL,"MOM_initialize: Unrecognized ice profile setup "//trim(config))
+    end select
+    call rotate_array(tmp1_2d,turns, h_shelf)
+    call rotate_array(tmp2_2d,turns, area_shelf_h)
+    call rotate_array(tmp3_2d,turns, hmask)
+    deallocate(tmp1_2d,tmp2_2d,tmp3_2d)
+  else
+    select case ( trim(config) )
+      case ("CHANNEL") ; call initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, US, PF)
+      case ("FILE") ; call initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, G, US, PF)
+      case ("USER") ; call USER_init_ice_thickness (h_shelf, area_shelf_h, hmask, G, US, PF)
+      case default  ; call MOM_error(FATAL,"MOM_initialize: Unrecognized ice profile setup "//trim(config))
+    end select
+  endif
 
 end subroutine initialize_ice_thickness
 
@@ -77,7 +103,7 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
   integer :: i, j, isc, jsc, iec, jec
   real :: len_sidestress, mask, udh
 
-  call MOM_mesg("  MOM_ice_shelf_init_profile.F90, initialize_thickness_from_file: reading thickness")
+  call MOM_mesg("Initialize_ice_thickness_from_file: reading thickness")
 
   call get_param(PF, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
@@ -99,7 +125,6 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
 
   if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
        " initialize_topography_from_file: Unable to open "//trim(filename))
-
   call MOM_read_data(filename, trim(thickness_varname), h_shelf, G%Domain, scale=US%m_to_Z)
   call MOM_read_data(filename,trim(area_varname), area_shelf_h, G%Domain, scale=US%m_to_L**2)
 

@@ -38,9 +38,9 @@ program Shelf_main
   use MOM_get_input,       only : Get_MOM_Input, directories
   use MOM_grid,            only : ocean_grid_type, MOM_grid_init, MOM_grid_end
   use MOM_hor_index,       only : hor_index_type, hor_index_init
-  use MOM_io,              only : MOM_io_init, file_exists, open_file, close_file
+  use MOM_io,              only : MOM_io_init, file_exists, open_ASCII_file, close_file
   use MOM_io,              only : check_nml_error, io_infra_init, io_infra_end
-  use MOM_io,              only : APPEND_FILE, ASCII_FILE, READONLY_FILE, SINGLE_FILE
+  use MOM_io,              only : APPEND_FILE, READONLY_FILE, SINGLE_FILE
   use MOM_open_boundary,   only : ocean_OBC_type
   use MOM_restart,         only : save_restart
   use MOM_string_functions,only : uppercase
@@ -176,7 +176,7 @@ program Shelf_main
 
   if (file_exists('input.nml')) then
     ! Provide for namelist specification of the run length and calendar data.
-    call open_file(unit, 'input.nml', form=ASCII_FILE, action=READONLY_FILE)
+    call open_ASCII_file(unit, 'input.nml', action=READONLY_FILE)
     read(unit, ice_solo_nml, iostat=io_status)
     call close_file(unit)
     ierr = check_nml_error(io_status,'ice_solo_nml')
@@ -187,15 +187,14 @@ program Shelf_main
 
   ! Read ocean_solo restart, which can override settings from the namelist.
   if (file_exists(trim(dirs%restart_input_dir)//'ice_solo.res')) then
-    call open_file(unit,trim(dirs%restart_input_dir)//'ice_solo.res', &
-                   form=ASCII_FILE,action=READONLY_FILE)
+    call open_ASCII_file(unit, trim(dirs%restart_input_dir)//'ice_solo.res', action=READONLY_FILE)
     read(unit,*) calendar_type
     read(unit,*) date_init
     read(unit,*) date
     call close_file(unit)
   else
     calendar = uppercase(calendar)
-    if (calendar(1:6) == 'JULIAN') then ;         calendar_type = JULIAN
+    if (calendar(1:6) == 'JULIAN') then ;        calendar_type = JULIAN
     elseif (calendar(1:9) == 'GREGORIAN') then ; calendar_type = GREGORIAN
     elseif (calendar(1:6) == 'NOLEAP') then ;    calendar_type = NOLEAP
     elseif (calendar(1:10)=='THIRTY_DAY') then ; calendar_type = THIRTY_DAY_MONTHS
@@ -341,15 +340,14 @@ program Shelf_main
   call diag_mediator_close_registration(diag)
 
   ! Write out a time stamp file.
-  if (calendar_type /= NO_CALENDAR) then
-    call open_file(unit, 'time_stamp.out', form=ASCII_FILE, action=APPEND_FILE, &
-                   threading=SINGLE_FILE)
+  if (is_root_pe() .and. (calendar_type /= NO_CALENDAR)) then
+    call open_ASCII_file(unit, 'time_stamp.out', action=APPEND_FILE)
     call get_date(Time, date(1), date(2), date(3), date(4), date(5), date(6))
     month = month_name(date(2))
-    if (is_root_pe()) write(unit,'(6i4,2x,a3)') date, month(1:3)
+    write(unit,'(6i4,2x,a3)') date, month(1:3)
     call get_date(Time_end, date(1), date(2), date(3), date(4), date(5), date(6))
     month = month_name(date(2))
-    if (is_root_pe()) write(unit,'(6i4,2x,a3)') date, month(1:3)
+    write(unit,'(6i4,2x,a3)') date, month(1:3)
     call close_file(unit)
   endif
 
@@ -428,19 +426,19 @@ program Shelf_main
                                 dirs%restart_output_dir)
 
     ! Write ice shelf solo restart file.
-    call open_file(unit, trim(dirs%restart_output_dir)//'shelf.res', nohdrs=.true.)
     if (is_root_pe())then
-        write(unit, '(i6,8x,a)') calendar_type, &
-             '(Calendar: no_calendar=0, thirty_day_months=1, julian=2, gregorian=3, noleap=4)'
+      call open_ASCII_file(unit, trim(dirs%restart_output_dir)//'shelf.res')
+      write(unit, '(i6,8x,a)') calendar_type, &
+            '(Calendar: no_calendar=0, thirty_day_months=1, julian=2, gregorian=3, noleap=4)'
 
-        call get_date(Start_time, yr, mon, day, hr, mins, sec)
-        write(unit, '(6i6,8x,a)') yr, mon, day, hr, mins, sec, &
-             'Model start time:   year, month, day, hour, minute, second'
-        call get_date(Time, yr, mon, day, hr, mins, sec)
-        write(unit, '(6i6,8x,a)') yr, mon, day, hr, mins, sec, &
-             'Current model time: year, month, day, hour, minute, second'
+      call get_date(Start_time, yr, mon, day, hr, mins, sec)
+      write(unit, '(6i6,8x,a)') yr, mon, day, hr, mins, sec, &
+            'Model start time:   year, month, day, hour, minute, second'
+      call get_date(Time, yr, mon, day, hr, mins, sec)
+      write(unit, '(6i6,8x,a)') yr, mon, day, hr, mins, sec, &
+            'Current model time: year, month, day, hour, minute, second'
+      call close_file(unit)
     endif
-    call close_file(unit)
   endif
 
   if (is_root_pe()) then
