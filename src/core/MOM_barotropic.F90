@@ -1994,7 +1994,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
         ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
              dtbt * ((BT_force_u(I,j) + Cor_u(I,j)) + PFu(I,j)))
         if (abs(ubt(I,j)) < CS%vel_underflow) ubt(I,j) = 0.0
-        ubt_trans(I,j) = trans_wt1*ubt(I,j) + trans_wt2*vel_prev   
+        ubt_trans(I,j) = trans_wt1*ubt(I,j) + trans_wt2*vel_prev
       enddo ; enddo
       !$OMP end do nowait
 
