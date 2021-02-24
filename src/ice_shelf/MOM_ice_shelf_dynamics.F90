@@ -23,7 +23,7 @@ use MOM_unit_scaling, only : unit_scale_type, unit_scaling_init
 use MOM_ice_shelf_state, only : ice_shelf_state
 use MOM_coms, only : reproducing_sum, sum_across_PEs, max_across_PEs, min_across_PEs
 use MOM_checksums, only : hchksum, qchksum
-use MOM_ice_shelf_initialize, only : initialize_ice_shelf_boundary_channel !OVS intializing b.c.s
+use MOM_ice_shelf_initialize, only : initialize_ice_shelf_boundary_channel,initialize_ice_flow_from_file !OVS intializing b.c.s
 
 implicit none ; private
 
@@ -535,7 +535,6 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
                 CS%thickness_bdry_val, ISS%hmask, ISS%h_shelf, G, &
 !               CS%flux_bdry, &
                 US, param_file )  !OVS initialize b.c.s
-
     call pass_var(ISS%hmask, G%domain)
     call pass_var(CS%h_bdry_val, G%domain)
     call pass_var(CS%thickness_bdry_val, G%domain)               
@@ -545,6 +544,9 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
     call pass_var(CS%v_face_mask_bdry, G%domain)    
 !    call init_boundary_values(CS, G, time, ISS%hmask, CS%input_flux, CS%input_thickness, new_sim)
     call update_velocity_masks(CS, G, ISS%hmask, CS%umask, CS%vmask, CS%u_face_mask, CS%v_face_mask)
+!    call initialize_ice_flow_from_file(CS%u_shelf, CS%v_shelf,CS%ice_visc,CS%ground_frac, ISS%hmask,ISS%h_shelf, &
+!            G, US, param_file)   !spacially variable viscosity from a file for debugging
+!    call pass_var(CS%ice_visc, G%domain)
 !    if (new_sim) then
 !      call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: initialize ice velocity.")
 !      call update_OD_ffrac_uncoupled(CS, G, ISS%h_shelf(:,:))
@@ -713,7 +715,7 @@ subroutine update_ice_shelf(CS, ISS, G, US, time_step, Time, ocean_mass, coupled
 
   coupled_GL = .false.
   if (present(ocean_mass) .and. present(coupled_grounding)) coupled_GL = coupled_grounding
-
+!
   call ice_shelf_advect(CS, ISS, G, time_step, Time) !OVS 02/08/21
   CS%elapsed_velocity_time = CS%elapsed_velocity_time + time_step
   if (CS%elapsed_velocity_time >= CS%velocity_update_time_step) update_ice_vel = .true.
@@ -946,7 +948,7 @@ end subroutine ice_shelf_advect
     call bilinear_shape_fn_grid(G, i, j, Phi(:,:,i,j))
   enddo ; enddo
 
-  call calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
+  call calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)   !OVS 02/24/21
   call pass_var(CS%ice_visc, G%domain)
 !  call pass_vector(CS%ice_visc, G%domain, TO_ALL, BGRID_NE)  !OVS 02/11/21
   call calc_shelf_taub(CS, ISS, G, US, u_shlf, v_shlf)
@@ -1000,7 +1002,7 @@ end subroutine ice_shelf_advect
     write(mesg,*) "ice_shelf_solve_outer: linear solve done in ",iters," iterations"
     call MOM_mesg(mesg, 5)
 
-    call calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
+    call calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)   !OVS 02/24/21
     call pass_var(CS%ice_visc, G%domain)
     call calc_shelf_taub(CS, ISS, G, US, u_shlf, v_shlf)
     call pass_var(CS%basal_traction, G%domain)
@@ -1351,7 +1353,7 @@ subroutine ice_shelf_solve_inner(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, H
     if (cg_halo == 0) then
      ! pass vectors
       call pass_vector(Du, Dv, G%domain, TO_ALL, BGRID_NE)
-!      call pass_vector(u_shlf, v_shlf, G%domain, TO_ALL, BGRID_NE)
+      call pass_vector(u_shlf, v_shlf, G%domain, TO_ALL, BGRID_NE)
       call pass_var(u_shlf, G%domain)      
       call pass_var(v_shlf, G%domain)      
       call pass_vector(Ru, Rv, G%domain, TO_ALL, BGRID_NE)
@@ -2604,10 +2606,10 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
 !  eII(:,:) = (US%s_to_T**2 * (eps_min**2))
   Visc_coef = US%kg_m2s_to_RZ_T*US%m_to_L*US%Z_to_L*(CS%A_glen_isothermal)**(-1./CS%n_glen) !OVS '-' in the exponent
 !    call pass_vector(u_shlf, v_shlf, G%domain, TO_ALL, BGRID_NE)
-!    do j=jsc-1,jec+1
-!    do i=isc-1,iec+1
-  do j=jsd+1,jed-1     !OVS 02/01/21
-    do i=isd+1,ied-1   !OVS 02/01/21
+    do j=jsc-0*1,jec+0*1
+    do i=isc-0*1,iec+0*1
+!  do j=jsd+1,jed-1     !OVS 02/01/21
+!    do i=isd+1,ied-1   !OVS 02/01/21
 
       if ((ISS%hmask(i,j) == 1) .OR. (ISS%hmask(i,j) == 3)) then
 !        ux(i,j) = ((u_shlf(I,J) + u_shlf(I,J-1)) - (u_shlf(I-1,J) + u_shlf(I-1,J-1))) / (2*G%dxT(i,j))
@@ -2619,14 +2621,18 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
 !      enddo 
 !    call pass_vector(ux, uy, G%domain, TO_ALL, BGRID_NE)
 !    call pass_vector(vx, vy, G%domain, TO_ALL, BGRID_NE)    
-!        ux = ((u_shlf(I,J) + 0*u_shlf(I,J-1)) - (u_shlf(I-1,J) + 0*u_shlf(I-1,J-1))) / (G%dxT(i,j))
+        ux = ((u_shlf(I,J) + u_shlf(I,J-1) + u_shlf(I,J+1)) - &
+                (u_shlf(I-1,J) + u_shlf(I-1,J-1) + u_shlf(I-1,J+1))) / (3*G%dxT(i,j))
+        vx = ((v_shlf(I,J) + v_shlf(I,J-1) + v_shlf(I,J+1)) - &
+                (v_shlf(I-1,J) + v_shlf(I-1,J-1) + v_shlf(I-1,J+1))) / (3*G%dxT(i,j))
+        uy = ((u_shlf(I,J) + u_shlf(I-1,J) + u_shlf(I+1,J)) - &
+                (u_shlf(I,J-1) + u_shlf(I-1,J-1) + u_shlf(I+1,J-1))) / (3*G%dyT(i,j))
+        vy = ((v_shlf(I,J) + v_shlf(I-1,J)+ v_shlf(I+1,J)) - &
+                (v_shlf(I,J-1) + v_shlf(I-1,J-1)+ v_shlf(I+1,J-1))) / (3*G%dyT(i,j))              
+!        ux = ((u_shlf(I,J) + u_shlf(I,J-1)) - (u_shlf(I-1,J) + u_shlf(I-1,J-1))) / (2*G%dxT(i,j))
 !        vx = ((v_shlf(I,J) + v_shlf(I,J-1)) - (v_shlf(I-1,J) + v_shlf(I-1,J-1))) / (2*G%dxT(i,j))
 !        uy = ((u_shlf(I,J) + u_shlf(I-1,J)) - (u_shlf(I,J-1) + u_shlf(I-1,J-1))) / (2*G%dyT(i,j))
-!        vy = ((v_shlf(I,J) + v_shlf(I-1,J)) - (v_shlf(I,J-1) + v_shlf(I-1,J-1))) / (2*G%dyT(i,j))              
-        ux = ((u_shlf(I,J) + u_shlf(I,J-1)) - (u_shlf(I-1,J) + u_shlf(I-1,J-1))) / (2*G%dxT(i,j))
-        vx = ((v_shlf(I,J) + v_shlf(I,J-1)) - (v_shlf(I-1,J) + v_shlf(I-1,J-1))) / (2*G%dxT(i,j))
-        uy = ((u_shlf(I,J) + u_shlf(I-1,J)) - (u_shlf(I,J-1) + u_shlf(I-1,J-1))) / (2*G%dyT(i,j))
-        vy = ((v_shlf(I,J) + v_shlf(I-1,J)) - (v_shlf(I,J-1) + v_shlf(I-1,J-1))) / (2*G%dyT(i,j))
+!        vy = ((v_shlf(I,J) + v_shlf(I-1,J)) - (v_shlf(I,J-1) + v_shlf(I-1,J-1))) / (2*G%dyT(i,j))
         CS%ice_visc(i,j) = 0.5 * Visc_coef * (G%areaT(i,j) * ISS%h_shelf(i,j)) * &
              (US%s_to_T**2 * (ux**2 + vy**2 + ux*vy + 0.25*(uy+vx)**2 + eps_min**2))**((1.-n_g)/(2.*n_g))
 !        CS%ice_visc(i,j) =1e15*(G%areaT(i,j) * ISS%h_shelf(i,j)) ! constant viscocity for debugging

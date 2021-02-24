@@ -19,6 +19,7 @@ implicit none ; private
 !MJHpublic initialize_ice_shelf_boundary, initialize_ice_thickness
 public initialize_ice_thickness
 public initialize_ice_shelf_boundary_channel
+public initialize_ice_flow_from_file
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -589,4 +590,80 @@ end subroutine initialize_ice_shelf_boundary_channel
 
 !END MJH end subroutine initialize_ice_shelf_boundary_channel
 
+subroutine initialize_ice_flow_from_file(u_shelf, v_shelf,ice_visc,float_cond, hmask,h_shelf, G, US, PF)
+  type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                         intent(inout) :: u_shelf !< The ice shelf u velocity  [Z ~> m T ~>s].
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                         intent(inout) :: v_shelf !< The ice shelf v velocity [Z ~> m T ~> s].
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                         intent(inout) :: ice_visc !< The ice shelf viscosity [Pa ~> m T ~> s].
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                         intent(inout)    :: float_cond !< An array indicating where the ice
+                                                !! shelf is floating: 0 if floating, 1 if not.               
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                         intent(in) :: hmask !< A mask indicating which tracer points are
+                                             !! partly or fully covered by an ice-shelf
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                         intent(in) :: h_shelf !< A mask indicating which tracer points are
+                                             !! partly or fully covered by an ice-shelf                                             
+  type(unit_scale_type), intent(in)    :: US !< A structure containing unit conversion factors
+  type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
+
+  !  This subroutine reads ice thickness and area from a file and puts it into
+  !  h_shelf [Z ~> m] and area_shelf_h [L2 ~> m2] (and dimensionless) and updates hmask
+  character(len=200) :: filename,vel_file,inputdir ! Strings for file/path
+  character(len=200) :: ushelf_varname, vshelf_varname, ice_visc_varname, floatfr_varname  ! Variable name in file
+  character(len=40)  :: mdl = "initialize_ice_velocity_from_file" ! This subroutine's name.
+  integer :: i, j, isc, jsc, iec, jec
+  real :: len_sidestress, mask, udh
+
+  call MOM_mesg("  MOM_ice_shelf_init_profile.F90, initialize_velocity_from_file: reading velocity")
+
+  call get_param(PF, mdl, "INPUTDIR", inputdir, default=".")
+  inputdir = slasher(inputdir)
+  call get_param(PF, mdl, "ICE_VELOCITY_FILE", vel_file, &
+                 "The file from which the velocity is read.", &
+                 default="ice_shelf_vel.nc")
+ call get_param(PF, mdl, "LEN_SIDE_STRESS", len_sidestress, &
+                 "position past which shelf sides are stress free.", &
+                 default=0.0, units="axis_units")
+
+  filename = trim(inputdir)//trim(vel_file)
+  call log_param(PF, mdl, "INPUTDIR/THICKNESS_FILE", filename)
+  call get_param(PF, mdl, "ICE_U_VEL_VARNAME", ushelf_varname, &
+                 "The name of the thickness variable in ICE_VELOCITY_FILE.", &
+                 default="u_shelf")
+  call get_param(PF, mdl, "ICE_V_VEL_VARNAME", vshelf_varname, &
+                 "The name of the thickness variable in ICE_VELOCITY_FILE.", &
+                 default="v_shelf")
+  call get_param(PF, mdl, "ICE_VISC_VARNAME", ice_visc_varname, &
+                 "The name of the thickness variable in ICE_VELOCITY_FILE.", &
+                 default="viscosity")
+
+  if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
+       " initialize_ice_shelf_velocity_from_file: Unable to open "//trim(filename))
+
+ !hmask_varname = "hmask" 
+ floatfr_varname = "float_frac"
+
+! call MOM_read_data(filename, trim(ushelf_varname), u_shelf, G%Domain, scale=1.0) !/(365.0*86400.0))
+! call MOM_read_data(filename,trim(vshelf_varname), v_shelf, G%Domain, scale=1.0)  !/(365.0*86400.0))
+ call MOM_read_data(filename,trim(ice_visc_varname), ice_visc, G%Domain, scale=1.0) !*(365.0*86400.0))
+ call MOM_read_data(filename,trim(floatfr_varname), float_cond, G%Domain, scale=1.)
+!  call get_param(PF, mdl, "ICE_BOUNDARY_CONFIG", config, &
+!                 "This specifies how the ice domain boundary is specified", &
+!                 fail_if_missing=.true.)
+
+  isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
+
+  do j=jsc,jec
+    do i=isc,iec
+       if  (hmask(i,j) == 1.) then
+               ice_visc(i,j) = ice_visc(i,j) * (G%areaT(i,j) * h_shelf(i,j))
+       endif
+    enddo
+  enddo
+
+end subroutine initialize_ice_flow_from_file
 end module MOM_ice_shelf_initialize
