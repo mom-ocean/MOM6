@@ -2679,7 +2679,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       ADp%diag_hu(I,j,k) = BT_cont%h_u(I,j,k)
     enddo ; enddo ; enddo
   endif
-  if ((present(ADp)) .and. (present(BT_cont)) .and. (associated(ADp%diag_h_v))) then
+  if ((present(ADp)) .and. (present(BT_cont)) .and. (associated(ADp%diag_hv))) then
     do k=1,nz ; do J=js-1,je ; do i=is,ie
       ADp%diag_hv(i,J,k) = BT_cont%h_v(i,J,k)
     enddo ; enddo ; enddo
