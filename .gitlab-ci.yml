@@ -31,7 +31,7 @@ setup:
     # Clone regressions directory
     - git clone --recursive http://gitlab.gfdl.noaa.gov/ogrp/Gaea-stats-MOM6-examples.git tests && cd tests
     # Install / update testing scripts
-    - git clone https://github.com/adcroft/MRS.git MRS
+    - git clone -b new-code-struct https://github.com/adcroft/MRS.git MRS
     # Update MOM6-examples and submodules
     - (cd MOM6-examples && git checkout . && git checkout dev/gfdl && git pull && git submodule init && git submodule update)
     - (cd MOM6-examples/src/MOM6 && git submodule update)
