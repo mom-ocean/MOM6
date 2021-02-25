@@ -19,6 +19,7 @@ use MOM_ocean_model_nuopc,     only: ocean_public_type, ocean_state_type
 use MOM_surface_forcing_nuopc, only: ice_ocean_boundary_type
 use MOM_grid,                  only: ocean_grid_type
 use MOM_domains,               only: pass_var
+use MOM_error_handler,         only: MOM_error, FATAL, is_root_pe
 use mpp_domains_mod,           only: mpp_get_compute_domain
 
 ! By default make data private
@@ -101,6 +102,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   !----
   ! near-IR, direct shortwave  (W/m2)
   !----
+
   call state_getimport(importState, 'mean_net_sw_ir_dir_flx', &
        isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_nir_dir, areacor=med2mod_areacor, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -112,7 +114,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   ! near-IR, diffuse shortwave  (W/m2)
   !----
   call state_getimport(importState, 'mean_net_sw_ir_dif_flx', &
-       isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_nir_dif, rc=rc)
+       isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_nir_dif, areacor=med2mod_areacor, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
        line=__LINE__, &
        file=__FILE__)) &
@@ -122,7 +124,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   ! visible, direct shortwave  (W/m2)
   !----
   call state_getimport(importState, 'mean_net_sw_vis_dir_flx', &
-       isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_vis_dir, rc=rc)
+       isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_vis_dir, areacor=med2mod_areacor, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
        line=__LINE__, &
        file=__FILE__)) &
@@ -132,7 +134,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   ! visible, diffuse shortwave (W/m2)
   !----
   call state_getimport(importState, 'mean_net_sw_vis_dif_flx', &
-       isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_vis_dif, rc=rc)
+       isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_vis_dif, areacor=med2mod_areacor, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
        line=__LINE__, &
        file=__FILE__)) &
@@ -142,7 +144,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   ! Net longwave radiation (W/m2)
   ! -------
   call state_getimport(importState, 'mean_net_lw_flx',  &
-       isc, iec, jsc, jec, ice_ocean_boundary%lw_flux, rc=rc)
+       isc, iec, jsc, jec, ice_ocean_boundary%lw_flux, areacor=med2mod_areacor, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
        line=__LINE__, &
        file=__FILE__)) &
@@ -715,6 +717,13 @@ subroutine State_GetImport(state, fldname, isc, iec, jsc, jec, output, do_sum, a
         call state_getfldptr(state, trim(fldname), dataptr1d, rc)
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return  ! bail out
 
+        ! option to apply area correction
+        if (present(areacor)) then
+           do n = 1,size(dataPtr1d)
+              dataPtr1d(n) = dataPtr1d(n) * areacor(n)
+           end do
+        end if
+
         ! determine output array
         n = 0
         do j = jsc,jec
@@ -727,11 +736,6 @@ subroutine State_GetImport(state, fldname, isc, iec, jsc, jec, output, do_sum, a
               endif
            enddo
         enddo
-        if (present(areacor)) then
-           do n = 1,size(dataPtr1d)
-              dataPtr1d(n) = dataPtr1d(n) * areacor(n)
-           end do
-        end if
 
      else if (geomtype == ESMF_GEOMTYPE_GRID) then
 
