@@ -76,8 +76,10 @@ type, public :: CoriolisAdv_CS ; private
   integer :: id_rvxu = -1, id_rvxv = -1
   ! integer :: id_hf_gKEu    = -1, id_hf_gKEv    = -1
   integer :: id_hf_gKEu_2d = -1, id_hf_gKEv_2d = -1
+  integer :: id_intz_gKEu_2d = -1, id_intz_gKEv_2d = -1
   ! integer :: id_hf_rvxu    = -1, id_hf_rvxv    = -1
   integer :: id_hf_rvxu_2d = -1, id_hf_rvxv_2d = -1
+  integer :: id_intz_rvxu_2d = -1, id_intz_rvxv_2d = -1
   !>@}
 end type CoriolisAdv_CS
 
@@ -218,7 +220,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
 ! Diagnostics for fractional thickness-weighted terms
   real, allocatable, dimension(:,:) :: &
     hf_gKEu_2d, hf_gKEv_2d, & ! Depth sum of hf_gKEu, hf_gKEv [L T-2 ~> m s-2].
-    hf_rvxu_2d, hf_rvxv_2d    ! Depth sum of hf_rvxu, hf_rvxv [L T-2 ~> m s-2].
+    hf_rvxu_2d, hf_rvxv_2d, & ! Depth sum of hf_rvxu, hf_rvxv [L T-2 ~> m s-2].
+    intz_gKEu_2d, intz_gKEv_2d, & ! Depth integral of gKEu, gKEv [L T-2 ~> m s-2].
+    intz_rvxu_2d, intz_rvxv_2d    ! Depth integral of rvxu, rvxv [L T-2 ~> m s-2].
   !real, allocatable, dimension(:,:,:) :: &
   !  hf_gKEu, hf_gKEv, & ! accel. due to KE gradient x fract. thickness  [L T-2 ~> m s-2].
   !  hf_rvxu, hf_rvxv    ! accel. due to RV x fract. thickness [L T-2 ~> m s-2].
@@ -883,6 +887,26 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
       deallocate(hf_gKEv_2d)
     endif
 
+    if (CS%id_intz_gKEu_2d > 0) then
+      allocate(intz_gKEu_2d(G%IsdB:G%IedB,G%jsd:G%jed))
+      intz_gKEu_2d(:,:) = 0.0
+      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+        intz_gKEu_2d(I,j) = intz_gKEu_2d(I,j) + AD%gradKEu(I,j,k) * AD%diag_hu(I,j,k)
+      enddo ; enddo ; enddo
+      call post_data(CS%id_intz_gKEu_2d, intz_gKEu_2d, CS%diag)
+      deallocate(intz_gKEu_2d)
+    endif
+
+    if (CS%id_intz_gKEv_2d > 0) then
+      allocate(intz_gKEv_2d(G%isd:G%ied,G%JsdB:G%JedB))
+      intz_gKEv_2d(:,:) = 0.0
+      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+        intz_gKEv_2d(i,J) = intz_gKEv_2d(i,J) + AD%gradKEv(i,J,k) * AD%diag_hv(i,J,k)
+      enddo ; enddo ; enddo
+      call post_data(CS%id_intz_gKEv_2d, intz_gKEv_2d, CS%diag)
+      deallocate(intz_gKEv_2d)
+    endif
+
     !if (CS%id_hf_rvxv > 0) then
     !  allocate(hf_rvxv(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
     !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
@@ -917,6 +941,26 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
       enddo ; enddo ; enddo
       call post_data(CS%id_hf_rvxu_2d, hf_rvxu_2d, CS%diag)
       deallocate(hf_rvxu_2d)
+    endif
+
+        if (CS%id_intz_rvxv_2d > 0) then
+      allocate(intz_rvxv_2d(G%IsdB:G%IedB,G%jsd:G%jed))
+      intz_rvxv_2d(:,:) = 0.0
+      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+        intz_rvxv_2d(I,j) = intz_rvxv_2d(I,j) + AD%rv_x_v(I,j,k) * AD%diag_hu(I,j,k)
+      enddo ; enddo ; enddo
+      call post_data(CS%id_intz_rvxv_2d, intz_rvxv_2d, CS%diag)
+      deallocate(intz_rvxv_2d)
+    endif
+
+    if (CS%id_intz_rvxu_2d > 0) then
+      allocate(intz_rvxu_2d(G%isd:G%ied,G%JsdB:G%JedB))
+      intz_rvxu_2d(:,:) = 0.0
+      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+        intz_rvxu_2d(i,J) = intz_rvxu_2d(i,J) + AD%rv_x_u(i,J,k) * AD%diag_hv(i,J,k)
+      enddo ; enddo ; enddo
+      call post_data(CS%id_intz_rvxu_2d, intz_rvxu_2d, CS%diag)
+      deallocate(intz_rvxu_2d)
     endif
   endif
 
@@ -1163,24 +1207,24 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
      'Potential Vorticity', 'm-1 s-1', conversion=GV%m_to_H*US%s_to_T)
 
   CS%id_gKEu = register_diag_field('ocean_model', 'gKEu', diag%axesCuL, Time, &
-     'Zonal Acceleration from Grad. Kinetic Energy', 'm-1 s-2', conversion=US%L_T2_to_m_s2)
+     'Zonal Acceleration from Grad. Kinetic Energy', 'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_gKEu > 0) call safe_alloc_ptr(AD%gradKEu,IsdB,IedB,jsd,jed,nz)
 
   CS%id_gKEv = register_diag_field('ocean_model', 'gKEv', diag%axesCvL, Time, &
-     'Meridional Acceleration from Grad. Kinetic Energy', 'm-1 s-2', conversion=US%L_T2_to_m_s2)
+     'Meridional Acceleration from Grad. Kinetic Energy', 'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_gKEv > 0) call safe_alloc_ptr(AD%gradKEv,isd,ied,JsdB,JedB,nz)
 
   CS%id_rvxu = register_diag_field('ocean_model', 'rvxu', diag%axesCvL, Time, &
-     'Meridional Acceleration from Relative Vorticity', 'm-1 s-2', conversion=US%L_T2_to_m_s2)
+     'Meridional Acceleration from Relative Vorticity', 'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_rvxu > 0) call safe_alloc_ptr(AD%rv_x_u,isd,ied,JsdB,JedB,nz)
 
   CS%id_rvxv = register_diag_field('ocean_model', 'rvxv', diag%axesCuL, Time, &
-     'Zonal Acceleration from Relative Vorticity', 'm-1 s-2', conversion=US%L_T2_to_m_s2)
+     'Zonal Acceleration from Relative Vorticity', 'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_rvxv > 0) call safe_alloc_ptr(AD%rv_x_v,IsdB,IedB,jsd,jed,nz)
 
   !CS%id_hf_gKEu = register_diag_field('ocean_model', 'hf_gKEu', diag%axesCuL, Time, &
   !   'Fractional Thickness-weighted Zonal Acceleration from Grad. Kinetic Energy', &
-  !   'm-1 s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !   'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   !if (CS%id_hf_gKEu > 0) then
   !  call safe_alloc_ptr(AD%gradKEu,IsdB,IedB,jsd,jed,nz)
   !  call safe_alloc_ptr(AD%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
@@ -1188,7 +1232,7 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
 
   !CS%id_hf_gKEv = register_diag_field('ocean_model', 'hf_gKEv', diag%axesCvL, Time, &
   !   'Fractional Thickness-weighted Meridional Acceleration from Grad. Kinetic Energy', &
-  !   'm-1 s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !   'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   !if (CS%id_hf_gKEv > 0) then
   !  call safe_alloc_ptr(AD%gradKEv,isd,ied,JsdB,JedB,nz)
   !  call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
@@ -1196,7 +1240,7 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
 
   CS%id_hf_gKEu_2d = register_diag_field('ocean_model', 'hf_gKEu_2d', diag%axesCu1, Time, &
      'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Grad. Kinetic Energy', &
-     'm-1 s-2', conversion=US%L_T2_to_m_s2)
+     'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_gKEu_2d > 0) then
     call safe_alloc_ptr(AD%gradKEu,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(AD%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
@@ -1204,10 +1248,26 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
 
   CS%id_hf_gKEv_2d = register_diag_field('ocean_model', 'hf_gKEv_2d', diag%axesCv1, Time, &
      'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Grad. Kinetic Energy', &
-     'm-1 s-2', conversion=US%L_T2_to_m_s2)
+     'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_gKEv_2d > 0) then
     call safe_alloc_ptr(AD%gradKEv,isd,ied,JsdB,JedB,nz)
     call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+  endif
+
+  CS%id_intz_gKEu_2d = register_diag_field('ocean_model', 'intz_gKEu_2d', diag%axesCu1, Time, &
+     'Depth-integral of Zonal Acceleration from Grad. Kinetic Energy', &
+     'm2 s-2', conversion=US%L_T_to_m_s**2)
+  if (CS%id_intz_gKEu_2d > 0) then
+    call safe_alloc_ptr(AD%gradKEu,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(AD%diag_hu,IsdB,IedB,jsd,jed,nz)
+  endif
+
+  CS%id_intz_gKEv_2d = register_diag_field('ocean_model', 'intz_gKEv_2d', diag%axesCv1, Time, &
+     'Depth-integral of Meridional Acceleration from Grad. Kinetic Energy', &
+     'm2 s-2', conversion=US%L_T_to_m_s**2)
+  if (CS%id_intz_gKEv_2d > 0) then
+    call safe_alloc_ptr(AD%gradKEv,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(AD%diag_hv,isd,ied,Jsd,JedB,nz)
   endif
 
   !CS%id_hf_rvxu = register_diag_field('ocean_model', 'hf_rvxu', diag%axesCvL, Time, &
@@ -1227,7 +1287,7 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
   !endif
 
   CS%id_hf_rvxu_2d = register_diag_field('ocean_model', 'hf_rvxu_2d', diag%axesCv1, Time, &
-     'Fractional Thickness-weighted Meridional Acceleration from Relative Vorticity', &
+     'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Relative Vorticity', &
      'm-1 s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_rvxu_2d > 0) then
     call safe_alloc_ptr(AD%rv_x_u,isd,ied,JsdB,JedB,nz)
@@ -1240,6 +1300,22 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
   if (CS%id_hf_rvxv_2d > 0) then
     call safe_alloc_ptr(AD%rv_x_v,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(AD%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+  endif
+
+  CS%id_intz_rvxu_2d = register_diag_field('ocean_model', 'intz_rvxu_2d', diag%axesCv1, Time, &
+     'Depth-integral of Meridional Acceleration from Relative Vorticity', &
+     'm-2 s-2', conversion=US%L_T_to_m_s**2)
+  if (CS%id_intz_rvxu_2d > 0) then
+    call safe_alloc_ptr(AD%rv_x_u,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(AD%diag_hv,isd,ied,Jsd,JedB,nz)
+  endif
+
+  CS%id_intz_rvxv_2d = register_diag_field('ocean_model', 'intz_rvxv_2d', diag%axesCu1, Time, &
+     'Depth-integral of Fractional Thickness-weighted Zonal Acceleration from Relative Vorticity', &
+     'm-2 s-2', conversion=US%L_T_to_m_s**2)
+  if (CS%id_intz_rvxv_2d > 0) then
+    call safe_alloc_ptr(AD%rv_x_v,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(AD%diag_hu,IsdB,IedB,jsd,jed,nz)
   endif
 
 end subroutine CoriolisAdv_init
