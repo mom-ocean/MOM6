@@ -274,7 +274,6 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     endif
 
     ! post tendency of tracer content
-    !### This seems to be dimensionally inconsistent with the calculation of tendency above.
     if (tracer%id_lbdxy_cont > 0) then
       call post_data(tracer%id_lbdxy_cont, tendency, CS%diag)
     endif
@@ -293,7 +292,6 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     ! post tendency of tracer concentration; this step must be
     ! done after posting tracer content tendency, since we alter
     ! the tendency array and its units.
-    !### This seems to be dimensionally inconsistent with the calculation of tendency above.
     if (tracer%id_lbdxy_conc > 0) then
       do k=1,GV%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
         tendency(i,j,k) =  tendency(i,j,k) / ( h(i,j,k) + CS%H_subroundoff )
