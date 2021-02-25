@@ -411,19 +411,19 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   type(ocean_grid_type),                   intent(inout) :: G       !< The ocean's grid structure.
   type(verticalGrid_type),                   intent(in)  :: GV      !< The ocean's vertical grid structure.
   type(unit_scale_type),                     intent(in)  :: US      !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: U_in    !< The initial (3-D) zonal
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)  :: U_in    !< The initial (3-D) zonal
                                                                     !! velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: V_in    !< The initial (3-D) meridional
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: V_in    !< The initial (3-D) meridional
                                                                     !! velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: eta_in  !< The initial barotropic free surface height
                                                          !! anomaly or column mass anomaly [H ~> m or kg m-2].
   real,                                      intent(in)  :: dt      !< The time increment to integrate over [T ~> s].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: bc_accel_u !< The zonal baroclinic accelerations,
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)  :: bc_accel_u !< The zonal baroclinic accelerations,
                                                                        !! [L T-2 ~> m s-2].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: bc_accel_v !< The meridional baroclinic accelerations,
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: bc_accel_v !< The meridional baroclinic accelerations,
                                                                        !! [L T-2 ~> m s-2].
   type(mech_forcing),                        intent(in)  :: forces     !< A structure with the driving mechanical forces
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: pbce       !< The baroclinic pressure anomaly in each layer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: pbce       !< The baroclinic pressure anomaly in each layer
                                                          !! due to free surface height anomalies
                                                          !! [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: eta_PF_in  !< The 2-D eta field (either SSH anomaly or
@@ -432,13 +432,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                                                          !! eta_PF_start is provided [H ~> m or kg m-2].
                                                          !! Note: eta_in, pbce, and eta_PF_in must have up-to-date
                                                          !! values in the first point of their halos.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: U_Cor      !< The (3-D) zonal velocities used to
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)  :: U_Cor      !< The (3-D) zonal velocities used to
                                                          !! calculate the Coriolis terms in bc_accel_u [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: V_Cor      !< The (3-D) meridional velocities used to
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: V_Cor      !< The (3-D) meridional velocities used to
                                                          !! calculate the Coriolis terms in bc_accel_u [L T-1 ~> m s-1].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: accel_layer_u !< The zonal acceleration of each layer due
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(out) :: accel_layer_u !< The zonal acceleration of each layer due
                                                          !! to the barotropic calculation [L T-2 ~> m s-2].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: accel_layer_v !< The meridional acceleration of each layer
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(out) :: accel_layer_v !< The meridional acceleration of each layer
                                                          !! due to the barotropic calculation [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: eta_out       !< The final barotropic free surface
                                                          !! height anomaly or column mass anomaly [H ~> m or kg m-2].
@@ -450,13 +450,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                                                          !! [H L2 T-1 ~> m3 or kg s-1].
   type(barotropic_CS),                       pointer     :: CS            !< The control structure returned by a
                                                          !! previous call to barotropic_init.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: visc_rem_u    !< Both the fraction of the momentum
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)  :: visc_rem_u    !< Both the fraction of the momentum
                                                          !! originally in a layer that remains after a time-step of
                                                          !! viscosity, and the fraction of a time-step's worth of a
                                                          !! barotropic acceleration that a layer experiences after
                                                          !! viscosity is applied, in the zonal direction. Nondimensional
                                                          !! between 0 (at the bottom) and 1 (far above the bottom).
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: visc_rem_v    !< Ditto for meridional direction [nondim].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: visc_rem_v    !< Ditto for meridional direction [nondim].
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(out) :: etaav        !< The free surface height or column mass
                                                          !! averaged over the barotropic integration [H ~> m or kg m-2].
   type(accel_diag_ptrs),               optional, pointer :: ADp          !< Acceleration diagnostic pointers
@@ -484,8 +484,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real :: ubt_Cor(SZIB_(G),SZJ_(G)) ! The barotropic velocities that had been
   real :: vbt_Cor(SZI_(G),SZJB_(G)) ! used to calculate the input Coriolis
                                     ! terms [L T-1 ~> m s-1].
-  real :: wt_u(SZIB_(G),SZJ_(G),SZK_(G)) ! wt_u and wt_v are the
-  real :: wt_v(SZI_(G),SZJB_(G),SZK_(G)) ! normalized weights to
+  real :: wt_u(SZIB_(G),SZJ_(G),SZK_(GV)) ! wt_u and wt_v are the
+  real :: wt_v(SZI_(G),SZJB_(G),SZK_(GV)) ! normalized weights to
                 ! be used in calculating barotropic velocities, possibly with
                 ! sums less than one due to viscous losses.  Nondimensional.
   real, dimension(SZIB_(G),SZJ_(G)) :: &
@@ -694,7 +694,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   if (.not.associated(CS)) call MOM_error(FATAL, &
       "btstep: Module MOM_barotropic must be initialized before it is used.")
   if (.not.CS%split) return
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -1027,7 +1027,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   enddo
   !$OMP parallel do default(shared)
   do J=js-1,je
-     do k=1,nz ; do i=is,ie
+    do k=1,nz ; do i=is,ie
       gtot_N(i,j)   = gtot_N(i,j)   + pbce(i,j,k)   * wt_v(i,J,k)
       gtot_S(i,j+1) = gtot_S(i,j+1) + pbce(i,j+1,k) * wt_v(i,J,k)
     enddo ; enddo
@@ -1462,7 +1462,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     do J=js-1,je ; do i=is,ie ; if (CS%lin_drag_v(i,J) > 0.0) then
       Htot = 0.5 * (eta(i,j) + eta(i,j+1))
       if (GV%Boussinesq) &
-        Htot = Htot + 0.5*GV%Z_to_H * (CS%bathyT(i,j) + CS%bathyT(i+1,j+1))
+        Htot = Htot + 0.5*GV%Z_to_H * (CS%bathyT(i,j) + CS%bathyT(i,j+1))
       bt_rem_v(i,J) = bt_rem_v(i,J) * (Htot / (Htot + CS%lin_drag_v(i,J) * dtbt))
 
       Rayleigh_v(i,J) = CS%lin_drag_v(i,J) / Htot
@@ -1496,7 +1496,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   ! Set the mass source, after first initializing the halos to 0.
   !$OMP do
-  do j=jsvf-1,jevf+1; do i=isvf-1,ievf+1 ; eta_src(i,j) = 0.0 ; enddo ; enddo
+  do j=jsvf-1,jevf+1 ; do i=isvf-1,ievf+1 ; eta_src(i,j) = 0.0 ; enddo ; enddo
   if (CS%bound_BT_corr) then ; if ((use_BT_Cont.or.integral_BT_cont) .and. CS%BT_cont_bounds) then
     do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
       if (CS%eta_cor(i,j) > 0.0) then
@@ -2173,7 +2173,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                     scale=US%L_T_to_m_s*US%s_to_T)
       call uvchksum(trim(mesg)//" BT_force_[uv]", BT_force_u, BT_force_v, CS%debug_BT_HI, haloshift=iev-ie, &
                     scale=US%L_T_to_m_s*US%s_to_T)
-      call uvchksum(trim(mesg)//" BT_rem_[uv]", BT_rem_u, BT_rem_v, CS%debug_BT_HI, haloshift=iev-ie)
+      call uvchksum(trim(mesg)//" BT_rem_[uv]", BT_rem_u, BT_rem_v, CS%debug_BT_HI, &
+                    haloshift=iev-ie, scalar_pair=.true.)
       call uvchksum(trim(mesg)//" [uv]bt", ubt, vbt, CS%debug_BT_HI, haloshift=iev-ie, &
                     scale=US%L_T_to_m_s)
       call uvchksum(trim(mesg)//" [uv]bt_trans", ubt_trans, vbt_trans, CS%debug_BT_HI, haloshift=iev-ie, &
@@ -2647,7 +2648,7 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
   type(barotropic_CS),          pointer       :: CS   !< Barotropic control structure.
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: eta  !< The barotropic free surface
                                                       !! height anomaly or column mass anomaly [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(in) :: pbce  !< The baroclinic pressure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), optional, intent(in) :: pbce  !< The baroclinic pressure
                                                       !! anomaly in each layer due to free surface
                                                       !! height anomalies [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
   type(BT_cont_type), optional, pointer       :: BT_cont  !< A structure with elements that describe
@@ -2696,7 +2697,7 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
   if (.not.associated(CS)) call MOM_error(FATAL, &
       "set_dtbt: Module MOM_barotropic must be initialized before it is used.")
   if (.not.CS%split) return
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   MS%isdw = G%isd ; MS%iedw = G%ied ; MS%jsdw = G%jsd ; MS%jedw = G%jed
 
   if (.not.(present(pbce) .or. present(gtot_est))) call MOM_error(FATAL, &
@@ -3006,7 +3007,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
   type(OBC_segment_type), pointer  :: segment !< Open boundary segment
 
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   isdw = MS%isdw ; iedw = MS%iedw ; jsdw = MS%jsdw ; jedw = MS%jedw
 
@@ -3079,7 +3080,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
       endif
     endif ; enddo ; enddo
     if (OBC%Flather_u_BCs_exist_globally) then
-     do n = 1, OBC%number_of_segments
+      do n = 1, OBC%number_of_segments
         segment => OBC%segment(n)
         if (segment%is_E_or_W .and. segment%Flather) then
           do j=segment%HI%jsd,segment%HI%jed ; do I=segment%HI%IsdB,segment%HI%IedB
@@ -3133,7 +3134,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
       endif
     endif ; enddo ; enddo
     if (OBC%Flather_v_BCs_exist_globally) then
-     do n = 1, OBC%number_of_segments
+      do n = 1, OBC%number_of_segments
         segment => OBC%segment(n)
         if (segment%is_N_or_S .and. segment%Flather) then
           do J=segment%HI%JsdB,segment%HI%JedB ; do i=segment%HI%isd,segment%HI%ied
@@ -3183,13 +3184,13 @@ end subroutine destroy_BT_OBC
 subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   type(barotropic_CS),     pointer       :: CS   !< The control structure returned by a previous
                                                  !! call to barotropic_init.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(in)    :: h_u  !< The specified thicknesses at u-points [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                  optional, intent(in)    :: h_v  !< The specified thicknesses at v-points [H ~> m or kg m-2].
   logical,       optional, intent(in)    :: may_use_default !< An optional logical argument
                                                  !! to indicate that the default velocity point
@@ -3211,8 +3212,8 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   real :: wt_arith             ! The nondimensional weight for the arithmetic mean thickness.
                                ! The harmonic mean uses a weight of (1 - wt_arith).
   real :: Rh                   ! A ratio of summed thicknesses, nondim.
-  real :: e_u(SZIB_(G),SZK_(G)+1) !   The interface heights at u-velocity and
-  real :: e_v(SZI_(G),SZK_(G)+1)  ! v-velocity points [H ~> m or kg m-2].
+  real :: e_u(SZIB_(G),SZK_(GV)+1) !   The interface heights at u-velocity and
+  real :: e_v(SZI_(G),SZK_(GV)+1)  ! v-velocity points [H ~> m or kg m-2].
   real :: D_shallow_u(SZI_(G)) ! The shallower of the adjacent depths [H ~> m or kg m-2].
   real :: D_shallow_v(SZIB_(G))! The shallower of the adjacent depths [H ~> m or kg m-2].
   real :: htot                 ! The sum of the layer thicknesses [H ~> m or kg m-2].
@@ -3249,7 +3250,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
     apply_OBCs = (OBC%number_of_segments > 0)
   endif ; endif ; endif
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   h_neglect = GV%H_subroundoff
 
@@ -3806,13 +3807,13 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, US, MS, BT_Domain
     FA_v_NN(i,j) = 0.0 ; FA_v_N0(i,j) = 0.0 ; FA_v_S0(i,j) = 0.0 ; FA_v_SS(i,j) = 0.0
   enddo ; enddo
 !$OMP do
-  do j=js,je; do I=is-1,ie
+  do j=js,je ; do I=is-1,ie
     uBT_EE(I,j) = BT_cont%uBT_EE(I,j) ; uBT_WW(I,j) = BT_cont%uBT_WW(I,j)
     FA_u_EE(I,j) = BT_cont%FA_u_EE(I,j) ; FA_u_E0(I,j) = BT_cont%FA_u_E0(I,j)
     FA_u_W0(I,j) = BT_cont%FA_u_W0(I,j) ; FA_u_WW(I,j) = BT_cont%FA_u_WW(I,j)
   enddo ; enddo
 !$OMP do
-  do J=js-1,je; do i=is,ie
+  do J=js-1,je ; do i=is,ie
     vBT_NN(i,J) = BT_cont%vBT_NN(i,J) ; vBT_SS(i,J) = BT_cont%vBT_SS(i,J)
     FA_v_NN(i,J) = BT_cont%FA_v_NN(i,J) ; FA_v_N0(i,J) = BT_cont%FA_v_N0(i,J)
     FA_v_S0(i,J) = BT_cont%FA_v_S0(i,J) ; FA_v_SS(i,J) = BT_cont%FA_v_SS(i,J)
@@ -4146,7 +4147,7 @@ end subroutine find_face_areas
 subroutine bt_mass_source(h, eta, set_cor, G, GV, CS)
   type(ocean_grid_type),              intent(in) :: G        !< The ocean's grid structure.
   type(verticalGrid_type),            intent(in) :: GV       !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h  !< Layer thicknesses [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h  !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G)),   intent(in) :: eta      !< The free surface height that is to be
                                                              !! corrected [H ~> m or kg m-2].
   logical,                            intent(in) :: set_cor  !< A flag to indicate whether to set the corrective
@@ -4168,7 +4169,7 @@ subroutine bt_mass_source(h, eta, set_cor, G, GV, CS)
         "Module MOM_barotropic must be initialized before it is used.")
   if (.not.CS%split) return
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   !$OMP parallel do default(shared) private(eta_h,h_tot,d_eta)
   do j=js,je
@@ -4206,11 +4207,11 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: u    !< The zonal velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(in)    :: v    !< The meridional velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G)), &
                            intent(in)    :: eta  !< Free surface height or column mass anomaly
@@ -4271,7 +4272,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   integer :: wd_halos(2), bt_halo_sz
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   MS%isdw = G%isd ; MS%iedw = G%ied ; MS%jsdw = G%jsd ; MS%jedw = G%jed
 
@@ -4580,7 +4581,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   call do_group_pass(pass_a_polarity, CS%BT_domain)
 
   if (use_BT_cont_type) &
-    call alloc_BT_cont_type(BT_cont, G, (CS%hvel_scheme == FROM_BT_CONT))
+    call alloc_BT_cont_type(BT_cont, G, GV, (CS%hvel_scheme == FROM_BT_CONT))
 
   if (CS%debug) then ! Make a local copy of loop ranges for chksum calls
     allocate(CS%debug_BT_HI)
@@ -4698,7 +4699,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
 
   ! Estimate the maximum stable barotropic time step.
   gtot_estimate = 0.0
-  do k=1,G%ke ; gtot_estimate = gtot_estimate + GV%g_prime(K) ; enddo
+  do k=1,GV%ke ; gtot_estimate = gtot_estimate + GV%g_prime(K) ; enddo
   call set_dtbt(G, GV, US, CS, gtot_est=gtot_estimate, SSH_add=SSH_extra)
 
   if (dtbt_input > 0.0) then

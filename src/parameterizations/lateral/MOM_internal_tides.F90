@@ -7,6 +7,7 @@ module MOM_internal_tides
 
 use MOM_debugging,     only : is_NaN
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_axis_init
+use MOM_diag_mediator, only : disable_averaging, enable_averages
 use MOM_diag_mediator, only : register_diag_field, diag_ctrl, safe_alloc_ptr
 use MOM_diag_mediator, only : axes_grp, define_axes_group
 use MOM_domains, only       : AGRID, To_South, To_West, To_All
@@ -154,7 +155,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   type(ocean_grid_type),            intent(inout) :: G  !< The ocean's grid structure.
   type(verticalGrid_type),          intent(in)    :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),            intent(in)    :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),            intent(in)    :: tv !< Pointer to thermodynamic variables
                                                         !! (needed for wave structure).
@@ -202,6 +203,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   integer :: a, m, fr, i, j, is, ie, js, je, isd, ied, jsd, jed, nAngle, nzm
   integer :: id_g, jd_g         ! global (decomp-invar) indices (for debugging)
   type(group_pass_type), save :: pass_test, pass_En
+  type(time_type) :: time_end
+  logical:: avg_enabled
 
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -497,6 +500,9 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   enddo ; enddo
 
   ! Output diagnostics.************************************************************
+  avg_enabled = query_averaging_enabled(CS%diag, time_end=time_end)
+  call enable_averages(dt, time_end, CS%diag)
+
   if (query_averaging_enabled(CS%diag)) then
     ! Output two-dimensional diagnostistics
     if (CS%id_tot_En > 0)     call post_data(CS%id_tot_En, tot_En, CS%diag)
@@ -586,6 +592,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     endif ; enddo ; enddo
 
   endif
+
+  call disable_averaging(CS%diag)
 
 end subroutine propagate_int_tide
 
@@ -2384,7 +2392,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   endif
   call pass_var(ridge_temp,G%domain)
   allocate(CS%refl_dbl(isd:ied,jsd:jed)) ; CS%refl_dbl(:,:) = .false.
-  do i=isd,ied; do j=jsd,jed
+  do i=isd,ied ; do j=jsd,jed
     if (ridge_temp(i,j) == 1) then; CS%refl_dbl(i,j) = .true.
     else ; CS%refl_dbl(i,j) = .false. ; endif
   enddo ; enddo
@@ -2540,7 +2548,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   enddo ; enddo
 
   ! Initialize wave_structure (not sure if this should be here - BDM)
-  call wave_structure_init(Time, G, param_file, diag, CS%wave_structure_CSp)
+  call wave_structure_init(Time, G, GV, param_file, diag, CS%wave_structure_CSp)
 
 end subroutine internal_tides_init
 

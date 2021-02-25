@@ -32,48 +32,42 @@ program MOM_main
   use MOM,                 only : extract_surface_state, finish_MOM_initialization
   use MOM,                 only : get_MOM_state_elements, MOM_state_is_synchronized
   use MOM,                 only : step_offline
-  use MOM_domains,         only : MOM_infra_init, MOM_infra_end
+  use MOM_coms,            only : Set_PElist
+  use MOM_domains,         only : MOM_infra_init, MOM_infra_end, set_MOM_thread_affinity
+  use MOM_ensemble_manager, only : ensemble_manager_init, get_ensemble_size
+  use MOM_ensemble_manager, only : ensemble_pelist_setup
   use MOM_error_handler,   only : MOM_error, MOM_mesg, WARNING, FATAL, is_root_pe
   use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
   use MOM_file_parser,     only : read_param, get_param, log_param, log_version, param_file_type
   use MOM_file_parser,     only : close_param_file
   use MOM_forcing_type,    only : forcing, mech_forcing, forcing_diagnostics
   use MOM_forcing_type,    only : mech_forcing_diags, MOM_forcing_chksum, MOM_mech_forcing_chksum
-  use MOM_get_input,       only : directories
+  use MOM_get_input,       only : get_MOM_input, directories
   use MOM_grid,            only : ocean_grid_type
-  use MOM_io,              only : file_exists, open_file, close_file
+  use MOM_ice_shelf,       only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
+  use MOM_ice_shelf,       only : shelf_calc_flux, add_shelf_forces, ice_shelf_save_restart
+  use MOM_ice_shelf,       only : initialize_ice_shelf_fluxes, initialize_ice_shelf_forces
+  use MOM_interpolate,     only : time_interp_external_init
+  use MOM_io,              only : file_exists, open_ASCII_file, close_file
   use MOM_io,              only : check_nml_error, io_infra_init, io_infra_end
-  use MOM_io,              only : APPEND_FILE, ASCII_FILE, READONLY_FILE, SINGLE_FILE
+  use MOM_io,              only : APPEND_FILE, READONLY_FILE
   use MOM_restart,         only : MOM_restart_CS, save_restart
   use MOM_string_functions,only : uppercase
   use MOM_surface_forcing, only : set_forcing, forcing_save_restart
   use MOM_surface_forcing, only : surface_forcing_init, surface_forcing_CS
-  use MOM_time_manager,    only : time_type, set_date, get_date
-  use MOM_time_manager,    only : real_to_time, time_type_to_real
+  use MOM_time_manager,    only : time_type, set_date, get_date, real_to_time, time_type_to_real
   use MOM_time_manager,    only : operator(+), operator(-), operator(*), operator(/)
   use MOM_time_manager,    only : operator(>), operator(<), operator(>=)
   use MOM_time_manager,    only : increment_date, set_calendar_type, month_name
-  use MOM_time_manager,    only : JULIAN, GREGORIAN, NOLEAP, THIRTY_DAY_MONTHS
-  use MOM_time_manager,    only : NO_CALENDAR
+  use MOM_time_manager,    only : JULIAN, GREGORIAN, NOLEAP, THIRTY_DAY_MONTHS, NO_CALENDAR
   use MOM_tracer_flow_control, only : tracer_flow_control_CS
   use MOM_unit_scaling,    only : unit_scale_type
   use MOM_variables,       only : surface
   use MOM_verticalGrid,    only : verticalGrid_type
+  use MOM_wave_interface,  only : wave_parameters_CS, MOM_wave_interface_init
+  use MOM_wave_interface,  only : MOM_wave_interface_init_lite, Update_Surface_Waves
   use MOM_write_cputime,   only : write_cputime, MOM_write_cputime_init
   use MOM_write_cputime,   only : write_cputime_start_clock, write_cputime_CS
-
-  use ensemble_manager_mod, only : ensemble_manager_init, get_ensemble_size
-  use ensemble_manager_mod, only : ensemble_pelist_setup
-  use mpp_mod, only : set_current_pelist => mpp_set_current_pelist
-  use time_interp_external_mod, only : time_interp_external_init
-  use fms_affinity_mod,     only : fms_affinity_init, fms_affinity_set,fms_affinity_get
-
-  use MOM_ice_shelf, only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
-  use MOM_ice_shelf, only : shelf_calc_flux, add_shelf_forces, ice_shelf_save_restart
-! , add_shelf_flux_forcing, add_shelf_flux_IOB
-
-  use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
-  use MOM_wave_interface, only: MOM_wave_interface_init_lite, Update_Surface_Waves
 
   implicit none
 
@@ -84,18 +78,17 @@ program MOM_main
   ! A structure containing pointers to the thermodynamic forcing fields
   ! at the ocean surface.
   type(forcing) :: fluxes
-
   ! A structure containing pointers to the ocean surface state fields.
   type(surface) :: sfc_state
 
   ! A pointer to a structure containing metrics and related information.
-  type(ocean_grid_type), pointer :: grid
-  type(verticalGrid_type), pointer :: GV
+  type(ocean_grid_type), pointer :: grid => NULL()
+  type(verticalGrid_type), pointer :: GV => NULL()
   ! A pointer to a structure containing dimensional unit scaling factors.
-  type(unit_scale_type), pointer :: US
+  type(unit_scale_type), pointer :: US => NULL()
 
   ! If .true., use the ice shelf model for part of the domain.
-  logical :: use_ice_shelf
+  logical :: use_ice_shelf = .false.
 
   ! If .true., use surface wave coupling
   logical :: use_waves = .false.
@@ -198,8 +191,8 @@ program MOM_main
   type(MOM_restart_CS),      pointer :: &
     restart_CSp => NULL()     !< A pointer to the restart control structure
                               !! that will be used for MOM restart files.
-  type(diag_ctrl), pointer :: &
-    diag => NULL()            !< A pointer to the diagnostic regulatory structure
+  type(diag_ctrl),           pointer :: &
+       diag => NULL()         !< A pointer to the diagnostic regulatory structure
   !-----------------------------------------------------------------------
 
   character(len=4), parameter :: vers_num = 'v2.0'
@@ -219,6 +212,8 @@ program MOM_main
 
   call MOM_infra_init() ; call io_infra_init()
 
+  !allocate(forces,fluxes,sfc_state)
+
   ! Initialize the ensemble manager.  If there are no settings for ensemble_size
   ! in input.nml(ensemble.nml), these should not do anything.  In coupled
   ! configurations, this all occurs in the external driver.
@@ -228,7 +223,7 @@ program MOM_main
     allocate(ocean_pelist(nPEs_per))
     call ensemble_pelist_setup(.true., 0, nPEs_per, 0, 0, atm_pelist, ocean_pelist, &
                                land_pelist, ice_pelist)
-    call set_current_pelist(ocean_pelist)
+    call Set_PElist(ocean_pelist)
     deallocate(ocean_pelist)
   endif
 
@@ -243,7 +238,7 @@ program MOM_main
 
   if (file_exists('input.nml')) then
     ! Provide for namelist specification of the run length and calendar data.
-    call open_file(unit, 'input.nml', form=ASCII_FILE, action=READONLY_FILE)
+    call open_ASCII_file(unit, 'input.nml', action=READONLY_FILE)
     read(unit, ocean_solo_nml, iostat=io_status)
     call close_file(unit)
     ierr = check_nml_error(io_status,'ocean_solo_nml')
@@ -252,25 +247,19 @@ program MOM_main
     endif
   endif
 
-!$  call fms_affinity_init
-!$  call fms_affinity_set('OCEAN', use_hyper_thread, ocean_nthreads)
-!$  call omp_set_num_threads(ocean_nthreads)
-!$OMP PARALLEL
-!$  write(6,*) "ocean_solo OMPthreading ", fms_affinity_get(), omp_get_thread_num(), omp_get_num_threads()
-!$  call flush(6)
-!$OMP END PARALLEL
+  ! This call sets the number and affinity of threads with openMP.
+  !$  call set_MOM_thread_affinity(ocean_nthreads, use_hyper_thread)
 
   ! Read ocean_solo restart, which can override settings from the namelist.
   if (file_exists(trim(dirs%restart_input_dir)//'ocean_solo.res')) then
-    call open_file(unit,trim(dirs%restart_input_dir)//'ocean_solo.res', &
-                   form=ASCII_FILE,action=READONLY_FILE)
+    call open_ASCII_file(unit, trim(dirs%restart_input_dir)//'ocean_solo.res', action=READONLY_FILE)
     read(unit,*) calendar_type
     read(unit,*) date_init
     read(unit,*) date
     call close_file(unit)
   else
     calendar = uppercase(calendar)
-    if (calendar(1:6) == 'JULIAN') then ;         calendar_type = JULIAN
+    if (calendar(1:6) == 'JULIAN') then ;        calendar_type = JULIAN
     elseif (calendar(1:9) == 'GREGORIAN') then ; calendar_type = GREGORIAN
     elseif (calendar(1:6) == 'NOLEAP') then ;    calendar_type = NOLEAP
     elseif (calendar(1:10)=='THIRTY_DAY') then ; calendar_type = THIRTY_DAY_MONTHS
@@ -285,32 +274,47 @@ program MOM_main
 
 
   if (sum(date_init) > 0) then
-    Start_time = set_date(date_init(1),date_init(2), date_init(3), &
-         date_init(4),date_init(5),date_init(6))
+    Start_time = set_date(date_init(1), date_init(2), date_init(3), &
+                          date_init(4), date_init(5), date_init(6))
   else
     Start_time = real_to_time(0.0)
   endif
 
-  call time_interp_external_init
+  call time_interp_external_init()
 
   if (sum(date) >= 0) then
     ! In this case, the segment starts at a time fixed by ocean_solo.res
-    segment_start_time = set_date(date(1),date(2),date(3),date(4),date(5),date(6))
+    segment_start_time = set_date(date(1), date(2), date(3), date(4), date(5), date(6))
     Time = segment_start_time
-    call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, restart_CSp, &
-                        segment_start_time, offline_tracer_mode=offline_tracer_mode, &
-                        diag_ptr=diag, tracer_flow_CSp=tracer_flow_CSp)
   else
     ! In this case, the segment starts at a time read from the MOM restart file
     ! or left as Start_time by MOM_initialize.
     Time = Start_time
+  endif
+
+  ! Call initialize MOM with an optional Ice Shelf CS which, if present triggers
+  ! initialization of ice shelf parameters and arrays.
+  if (sum(date) >= 0) then
+    call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, restart_CSp, &
+                        segment_start_time, offline_tracer_mode=offline_tracer_mode, &
+                        diag_ptr=diag, tracer_flow_CSp=tracer_flow_CSp, ice_shelf_CSp=ice_shelf_CSp)
+  else
     call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, restart_CSp, &
                         offline_tracer_mode=offline_tracer_mode, diag_ptr=diag, &
-                        tracer_flow_CSp=tracer_flow_CSp)
+                        tracer_flow_CSp=tracer_flow_CSp, ice_shelf_CSp=ice_shelf_CSp)
   endif
 
   call get_MOM_state_elements(MOM_CSp, G=grid, GV=GV, US=US, C_p_scaled=fluxes%C_p)
   Master_Time = Time
+  use_ice_shelf = associated(ice_shelf_CSp)
+
+  if (use_ice_shelf) then
+    ! These arrays are not initialized in most solo cases, but are needed
+    ! when using an ice shelf
+    call initialize_ice_shelf_fluxes(ice_shelf_CSp, grid, US, fluxes)
+    call initialize_ice_shelf_forces(ice_shelf_CSp, grid, US, forces)
+  endif
+
 
   call callTree_waypoint("done initialize_MOM")
 
@@ -320,16 +324,8 @@ program MOM_main
                             surface_forcing_CSp, tracer_flow_CSp)
   call callTree_waypoint("done surface_forcing_init")
 
-  call get_param(param_file, mod_name, "ICE_SHELF", use_ice_shelf, &
-                 "If true, enables the ice shelf model.", default=.false.)
-  if (use_ice_shelf) then
-    ! These arrays are not initialized in most solo cases, but are needed
-    ! when using an ice shelf
-    call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, &
-                              diag, forces, fluxes)
-  endif
 
-  call get_param(param_file,mod_name,"USE_WAVES",Use_Waves,&
+  call get_param(param_file,mod_name, "USE_WAVES", Use_Waves, &
        "If true, enables surface wave modules.",default=.false.)
   if (use_waves) then
     call MOM_wave_interface_init(Time, grid, GV, US, param_file, Waves_CSp, diag)
@@ -435,15 +431,14 @@ program MOM_main
   call diag_mediator_close_registration(diag)
 
   ! Write out a time stamp file.
-  if (calendar_type /= NO_CALENDAR) then
-    call open_file(unit, 'time_stamp.out', form=ASCII_FILE, action=APPEND_FILE, &
-                   threading=SINGLE_FILE)
+  if (is_root_pe() .and. (calendar_type /= NO_CALENDAR)) then
+    call open_ASCII_file(unit, 'time_stamp.out', action=APPEND_FILE)
     call get_date(Time, date(1), date(2), date(3), date(4), date(5), date(6))
     month = month_name(date(2))
-    if (is_root_pe()) write(unit,'(6i4,2x,a3)') date, month(1:3)
+    write(unit,'(6i4,2x,a3)') date, month(1:3)
     call get_date(Time_end, date(1), date(2), date(3), date(4), date(5), date(6))
     month = month_name(date(2))
-    if (is_root_pe()) write(unit,'(6i4,2x,a3)') date, month(1:3)
+    write(unit,'(6i4,2x,a3)') date, month(1:3)
     call close_file(unit)
   endif
 
@@ -482,7 +477,7 @@ program MOM_main
 
     if (use_ice_shelf) then
       call shelf_calc_flux(sfc_state, fluxes, Time, dt_forcing, ice_shelf_CSp)
-      call add_shelf_forces(grid, US, Ice_shelf_CSp, forces)
+      call add_shelf_forces(grid, US, Ice_shelf_CSp, forces, external_call=.true.)
     endif
     fluxes%fluxes_used = .false.
     fluxes%dt_buoy_accum = US%s_to_T*dt_forcing
@@ -621,19 +616,19 @@ program MOM_main
     if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
                                 dirs%restart_output_dir)
     ! Write ocean solo restart file.
-    call open_file(unit, trim(dirs%restart_output_dir)//'ocean_solo.res', nohdrs=.true.)
-    if (is_root_pe())then
-        write(unit, '(i6,8x,a)') calendar_type, &
-             '(Calendar: no_calendar=0, thirty_day_months=1, julian=2, gregorian=3, noleap=4)'
+    if (is_root_pe()) then
+      call open_ASCII_file(unit, trim(dirs%restart_output_dir)//'ocean_solo.res')
+      write(unit, '(i6,8x,a)') calendar_type, &
+            '(Calendar: no_calendar=0, thirty_day_months=1, julian=2, gregorian=3, noleap=4)'
 
-        call get_date(Start_time, yr, mon, day, hr, mins, sec)
-        write(unit, '(6i6,8x,a)') yr, mon, day, hr, mins, sec, &
-             'Model start time:   year, month, day, hour, minute, second'
-        call get_date(Time, yr, mon, day, hr, mins, sec)
-        write(unit, '(6i6,8x,a)') yr, mon, day, hr, mins, sec, &
-             'Current model time: year, month, day, hour, minute, second'
+      call get_date(Start_time, yr, mon, day, hr, mins, sec)
+      write(unit, '(6i6,8x,a)') yr, mon, day, hr, mins, sec, &
+            'Model start time:   year, month, day, hour, minute, second'
+      call get_date(Time, yr, mon, day, hr, mins, sec)
+      write(unit, '(6i6,8x,a)') yr, mon, day, hr, mins, sec, &
+            'Current model time: year, month, day, hour, minute, second'
+      call close_file(unit)
     endif
-    call close_file(unit)
   endif
 
   if (is_root_pe()) then
@@ -651,6 +646,7 @@ program MOM_main
   endif
 
   call callTree_waypoint("End MOM_main")
+  if (use_ice_shelf) call ice_shelf_end(ice_shelf_CSp)
   call diag_mediator_end(Time, diag, end_diag_manager=.true.)
   if (cpu_steps > 0) call write_cputime(Time, ns-1, write_CPU_CSp, call_end=.true.)
   call cpu_clock_end(termClock)
@@ -658,6 +654,5 @@ program MOM_main
   call io_infra_end ; call MOM_infra_end
 
   call MOM_end(MOM_CSp)
-  if (use_ice_shelf) call ice_shelf_end(ice_shelf_CSp)
 
 end program MOM_main

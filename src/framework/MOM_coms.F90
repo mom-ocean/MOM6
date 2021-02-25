@@ -4,23 +4,20 @@ module MOM_coms
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_coms_infra,    only : PE_here, root_PE, num_PEs, set_rootPE, Set_PElist, Get_PElist
+use MOM_coms_infra,    only : broadcast, field_chksum, MOM_infra_init, MOM_infra_end
+use MOM_coms_infra,    only : sum_across_PEs, max_across_PEs, min_across_PEs
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
-use fms_mod, only : fms_end, MOM_infra_init => fms_init
-use memutils_mod, only : print_memuse_stats
-use mpp_mod, only : PE_here => mpp_pe, root_PE => mpp_root_pe, num_PEs => mpp_npes
-use mpp_mod, only : Set_PElist => mpp_set_current_pelist, Get_PElist => mpp_get_current_pelist
-use mpp_mod, only : broadcast => mpp_broadcast
-use mpp_mod, only : sum_across_PEs => mpp_sum, max_across_PEs => mpp_max, min_across_PEs => mpp_min
 
 implicit none ; private
 
 public :: PE_here, root_PE, num_PEs, MOM_infra_init, MOM_infra_end
-public :: broadcast, sum_across_PEs, min_across_PEs, max_across_PEs
+public :: broadcast, sum_across_PEs, min_across_PEs, max_across_PEs, field_chksum
+public :: set_PElist, Get_PElist, Set_rootPE
 public :: reproducing_sum, reproducing_sum_EFP, EFP_sum_across_PEs, EFP_list_sum_across_PEs
 public :: EFP_plus, EFP_minus, EFP_to_real, real_to_EFP, EFP_real_diff
 public :: operator(+), operator(-), assignment(=)
 public :: query_EFP_overflow_error, reset_EFP_overflow_error
-public :: Set_PElist, Get_PElist
 
 ! This module provides interfaces to the non-domain-oriented communication subroutines.
 
@@ -879,13 +876,5 @@ subroutine EFP_val_sum_across_PEs(EFP, error)
   endif
 
 end subroutine EFP_val_sum_across_PEs
-
-
-!> This subroutine carries out all of the calls required to close out the infrastructure cleanly.
-!! This should only be called in ocean-only runs, as the coupler takes care of this in coupled runs.
-subroutine MOM_infra_end
-  call print_memuse_stats( 'Memory HiWaterMark', always=.TRUE. )
-  call fms_end
-end subroutine MOM_infra_end
 
 end module MOM_coms

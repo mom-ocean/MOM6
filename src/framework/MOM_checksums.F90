@@ -3,10 +3,11 @@ module MOM_checksums
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_array_transform, only: rotate_array, rotate_array_pair, rotate_vector
+use MOM_array_transform, only : rotate_array, rotate_array_pair, rotate_vector
+use MOM_array_transform, only : allocate_rotated_array
 use MOM_coms, only : PE_here, root_PE, num_PEs, sum_across_PEs
 use MOM_coms, only : min_across_PEs, max_across_PEs
-use MOM_coms, only : reproducing_sum
+use MOM_coms, only : reproducing_sum, field_chksum
 use MOM_error_handler, only : MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : log_version, param_file_type
 use MOM_hor_index, only : hor_index_type, rotate_hor_index
@@ -15,7 +16,7 @@ use iso_fortran_env, only: error_unit
 
 implicit none ; private
 
-public :: chksum0, zchksum
+public :: chksum0, zchksum, rotated_field_chksum
 public :: hchksum, Bchksum, uchksum, vchksum, qchksum, is_NaN, chksum
 public :: hchksum_pair, uvchksum, Bchksum_pair
 public :: MOM_checksums_init
@@ -74,6 +75,15 @@ end interface
 interface is_NaN
   module procedure is_NaN_0d, is_NaN_1d, is_NaN_2d, is_NaN_3d
 end interface
+
+!> Rotate and compute the checksum of a field
+interface rotated_field_chksum
+  module procedure rotated_field_chksum_real_0d
+  module procedure rotated_field_chksum_real_1d
+  module procedure rotated_field_chksum_real_2d
+  module procedure rotated_field_chksum_real_3d
+  module procedure rotated_field_chksum_real_4d
+end interface rotated_field_chksum
 
 integer, parameter :: bc_modulus = 1000000000 !< Modulus of checksum bitcount
 integer, parameter :: default_shift=0 !< The default array shift
@@ -178,7 +188,9 @@ subroutine zchksum(array, mesg, scale, logunit)
 
   subroutine subStats(array, aMean, aMin, aMax)
     real, dimension(:), intent(in) :: array !< The array to be checksummed
-    real, intent(out) :: aMean, aMin, aMax
+    real, intent(out) :: aMean !< Array mean
+    real, intent(out) :: aMin !< Array minimum
+    real, intent(out) :: aMax !< Array maximum
 
     integer :: k, n
 
@@ -411,7 +423,7 @@ subroutine chksum_h_2d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logu
     real, intent(in)    :: scale !< A scaling factor for this array.
     integer :: i, j, bc
     subchk = 0
-    do j=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
+    do j=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
       bc = bitcount(abs(scale*array(i,j)))
       subchk = subchk + bc
     enddo ; enddo
@@ -422,7 +434,9 @@ subroutine chksum_h_2d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logu
   subroutine subStats(HI, array, aMean, aMin, aMax)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
     real, dimension(HI%isd:,HI%jsd:), intent(in) :: array !< The array to be checksummed
-    real, intent(out) :: aMean, aMin, aMax
+    real, intent(out) :: aMean !< Array mean
+    real, intent(out) :: aMin !< Array minimum
+    real, intent(out) :: aMax !< Array maximum
 
     integer :: i, j, n
 
@@ -689,7 +703,7 @@ subroutine chksum_B_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     integer :: i, j, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
-    do J=HI%jsc+dj,HI%jec+dj; do I=HI%isc+di,HI%iec+di
+    do J=HI%jsc+dj,HI%jec+dj ; do I=HI%isc+di,HI%iec+di
       bc = bitcount(abs(scale*array(I,J)))
       subchk = subchk + bc
     enddo ; enddo
@@ -702,7 +716,9 @@ subroutine chksum_B_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     real, dimension(HI%IsdB:,HI%JsdB:), intent(in) :: array !< The array to be checksummed
     logical,          intent(in) :: sym_stats !< If true, evaluate the statistics on the
                                               !! full symmetric computational domain.
-    real, intent(out) :: aMean, aMin, aMax
+    real, intent(out) :: aMean !< Array mean
+    real, intent(out) :: aMin !< Array minimum
+    real, intent(out) :: aMax !< Array maximum
 
     integer :: i, j, n, IsB, JsB
 
@@ -977,7 +993,7 @@ subroutine chksum_u_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     integer :: i, j, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
-    do j=HI%jsc+dj,HI%jec+dj; do I=HI%isc+di,HI%iec+di
+    do j=HI%jsc+dj,HI%jec+dj ; do I=HI%isc+di,HI%iec+di
       bc = bitcount(abs(scale*array(I,j)))
       subchk = subchk + bc
     enddo ; enddo
@@ -990,7 +1006,9 @@ subroutine chksum_u_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     real, dimension(HI%IsdB:,HI%jsd:), intent(in) :: array !< The array to be checksummed
     logical,          intent(in) :: sym_stats !< If true, evaluate the statistics on the
                                               !! full symmetric computational domain.
-    real, intent(out) :: aMean, aMin, aMax
+    real, intent(out) :: aMean !< Array mean
+    real, intent(out) :: aMin !< Array minimum
+    real, intent(out) :: aMax !< Array maximum
 
     integer :: i, j, n, IsB
 
@@ -1154,7 +1172,7 @@ subroutine chksum_v_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     integer :: i, j, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
-    do J=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
+    do J=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
       bc = bitcount(abs(scale*array(i,J)))
       subchk = subchk + bc
     enddo ; enddo
@@ -1167,7 +1185,9 @@ subroutine chksum_v_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     real, dimension(HI%isd:,HI%JsdB:), intent(in) :: array !< The array to be checksummed
     logical,          intent(in) :: sym_stats !< If true, evaluate the statistics on the
                                               !! full symmetric computational domain.
-    real, intent(out) :: aMean, aMin, aMax
+    real, intent(out) :: aMean !< Array mean
+    real, intent(out) :: aMin !< Array minimum
+    real, intent(out) :: aMax !< Array maximum
 
     integer :: i, j, n, JsB
 
@@ -1315,7 +1335,9 @@ subroutine chksum_h_3d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logu
   subroutine subStats(HI, array, aMean, aMin, aMax)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
     real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: array !< The array to be checksummed
-    real, intent(out) :: aMean, aMin, aMax
+    real, intent(out) :: aMean !<  Array mean
+    real, intent(out) :: aMin !< Array minimum
+    real, intent(out) :: aMax !< Array maximum
 
     integer :: i, j, k, n
 
@@ -1484,7 +1506,9 @@ subroutine chksum_B_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     real, dimension(HI%IsdB:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed
     logical,          intent(in) :: sym_stats !< If true, evaluate the statistics on the
                                               !! full symmetric computational domain.
-    real, intent(out) :: aMean, aMin, aMax
+    real, intent(out) :: aMean !< Array mean
+    real, intent(out) :: aMin !< Array minimum
+    real, intent(out) :: aMax !< Array maximum
 
     integer :: i, j, k, n, IsB, JsB
 
@@ -1661,7 +1685,9 @@ subroutine chksum_u_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     real, dimension(HI%IsdB:,HI%jsd:,:), intent(in) :: array !< The array to be checksummed
     logical,          intent(in) :: sym_stats !< If true, evaluate the statistics on the
                                               !! full symmetric computational domain.
-    real, intent(out) :: aMean, aMin, aMax
+    real, intent(out) :: aMean !< Array mean
+    real, intent(out) :: aMin !< Array minimum
+    real, intent(out) :: aMax !< Array maximum
 
     integer :: i, j, k, n, IsB
 
@@ -1839,7 +1865,9 @@ subroutine chksum_v_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     real, dimension(HI%isd:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed
     logical,          intent(in) :: sym_stats !< If true, evaluate the statistics on the
                                               !! full symmetric computational domain.
-    real, intent(out) :: aMean, aMin, aMax    !< Mean/min/max of array over domain
+    real, intent(out) :: aMean   !< Mean of array over domain
+    real, intent(out) :: aMin    !< Minimum of array over domain
+    real, intent(out) :: aMax    !< Maximum of array over domain
 
     integer :: i, j, k, n, JsB
 
@@ -2003,16 +2031,16 @@ function is_NaN_1d(x, skip_mpp)
   logical :: is_NaN_1d
 
   integer :: i, n
-  logical :: call_mpp
+  logical :: global_check
 
   n = 0
   do i = LBOUND(x,1), UBOUND(x,1)
     if (is_NaN_0d(x(i))) n = n + 1
   enddo
-  call_mpp = .true.
-  if (present(skip_mpp)) call_mpp = .not.skip_mpp
+  global_check = .true.
+  if (present(skip_mpp)) global_check = .not.skip_mpp
 
-  if (call_mpp) call sum_across_PEs(n)
+  if (global_check) call sum_across_PEs(n)
   is_NaN_1d = .false.
   if (n>0) is_NaN_1d = .true.
 
@@ -2053,6 +2081,121 @@ function is_NaN_3d(x)
   if (n>0) is_NaN_3d = .true.
 
 end function is_NaN_3d
+
+! The following set of routines do a checksum across the computational domain of
+! a field, with the potential for rotation of this field and masking.
+
+!> Compute the field checksum of a scalar.
+function rotated_field_chksum_real_0d(field, pelist, mask_val, turns) &
+    result(chksum)
+  real,              intent(in) :: field      !< Input scalar
+  integer, optional, intent(in) :: pelist(:)  !< PE list of ranks to checksum
+  real,    optional, intent(in) :: mask_val   !< FMS mask value
+  integer, optional, intent(in) :: turns      !< Number of quarter turns
+  integer :: chksum                           !< checksum of scalar
+
+  if (present(turns)) call MOM_error(FATAL, "Rotation not supported for 0d fields.")
+
+  chksum = field_chksum(field, pelist=pelist, mask_val=mask_val)
+end function rotated_field_chksum_real_0d
+
+
+!> Compute the field checksum of a 1d field.
+function rotated_field_chksum_real_1d(field, pelist, mask_val, turns) &
+    result(chksum)
+  real, dimension(:), intent(in) :: field     !< Input array
+  integer,  optional, intent(in) :: pelist(:) !< PE list of ranks to checksum
+  real,     optional, intent(in) :: mask_val  !< FMS mask value
+  integer,  optional, intent(in) :: turns     !< Number of quarter turns
+  integer :: chksum                           !< checksum of array
+
+  if (present(turns)) call MOM_error(FATAL, "Rotation not supported for 1d fields.")
+
+  chksum = field_chksum(field, pelist=pelist, mask_val=mask_val)
+end function rotated_field_chksum_real_1d
+
+
+!> Compute the field checksum of a rotated 2d field.
+function rotated_field_chksum_real_2d(field, pelist, mask_val, turns) &
+    result(chksum)
+  real, dimension(:,:),     intent(in) :: field     !< Unrotated input field
+  integer,        optional, intent(in) :: pelist(:) !< PE list of ranks to checksum
+  real,           optional, intent(in) :: mask_val  !< FMS mask value
+  integer,        optional, intent(in) :: turns     !< Number of quarter turns
+  integer :: chksum                                 !< checksum of array
+
+  ! Local variables
+  real, allocatable :: field_rot(:,:)  ! A rotated version of field, with the same units
+  integer :: qturns ! The number of quarter turns through which to rotate field
+
+  qturns = 0
+  if (present(turns)) &
+    qturns = modulo(turns, 4)
+
+  if (qturns == 0) then
+    chksum = field_chksum(field, pelist=pelist, mask_val=mask_val)
+  else
+    call allocate_rotated_array(field, [1,1], qturns, field_rot)
+    call rotate_array(field, qturns, field_rot)
+    chksum = field_chksum(field_rot, pelist=pelist, mask_val=mask_val)
+    deallocate(field_rot)
+  endif
+end function rotated_field_chksum_real_2d
+
+!> Compute the field checksum of a rotated 3d field.
+function rotated_field_chksum_real_3d(field, pelist, mask_val, turns) &
+    result(chksum)
+  real, dimension(:,:,:),   intent(in) :: field     !< Unrotated input field
+  integer,        optional, intent(in) :: pelist(:) !< PE list of ranks to checksum
+  real,           optional, intent(in) :: mask_val  !< FMS mask value
+  integer,        optional, intent(in) :: turns     !< Number of quarter turns
+  integer :: chksum                                 !< checksum of array
+
+  ! Local variables
+  real, allocatable :: field_rot(:,:,:)  ! A rotated version of field, with the same units
+  integer :: qturns ! The number of quarter turns through which to rotate field
+
+  qturns = 0
+  if (present(turns)) &
+    qturns = modulo(turns, 4)
+
+  if (qturns == 0) then
+    chksum = field_chksum(field, pelist=pelist, mask_val=mask_val)
+  else
+    call allocate_rotated_array(field, [1,1,1], qturns, field_rot)
+    call rotate_array(field, qturns, field_rot)
+    chksum = field_chksum(field_rot, pelist=pelist, mask_val=mask_val)
+    deallocate(field_rot)
+  endif
+end function rotated_field_chksum_real_3d
+
+!> Compute the field checksum of a rotated 4d field.
+function rotated_field_chksum_real_4d(field, pelist, mask_val, turns) &
+    result(chksum)
+  real, dimension(:,:,:,:), intent(in) :: field     !< Unrotated input field
+  integer,        optional, intent(in) :: pelist(:) !< PE list of ranks to checksum
+  real,           optional, intent(in) :: mask_val  !< FMS mask value
+  integer,        optional, intent(in) :: turns     !< Number of quarter turns
+  integer :: chksum                                 !< checksum of array
+
+  ! Local variables
+  real, allocatable :: field_rot(:,:,:,:)  ! A rotated version of field, with the same units
+  integer :: qturns ! The number of quarter turns through which to rotate field
+
+  qturns = 0
+  if (present(turns)) &
+    qturns = modulo(turns, 4)
+
+  if (qturns == 0) then
+    chksum = field_chksum(field, pelist=pelist, mask_val=mask_val)
+  else
+    call allocate_rotated_array(field, [1,1,1,1], qturns, field_rot)
+    call rotate_array(field, qturns, field_rot)
+    chksum = field_chksum(field_rot, pelist=pelist, mask_val=mask_val)
+    deallocate(field_rot)
+  endif
+end function rotated_field_chksum_real_4d
+
 
 !> Write a message including the checksum of the non-shifted array
 subroutine chk_sum_msg1(fmsg, bc0, mesg, iounit)

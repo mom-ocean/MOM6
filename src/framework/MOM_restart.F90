@@ -3,24 +3,21 @@ module MOM_restart
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_domains, only : pe_here, num_PEs
+use MOM_checksums, only : chksum => rotated_field_chksum
+use MOM_domains, only : PE_here, num_PEs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_string_functions, only : lowercase
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : create_file, fieldtype, file_exists, open_file, close_file
-use MOM_io, only : MOM_read_data, read_data, get_filename_appendix
-use MOM_io, only : get_file_info, get_file_atts, get_file_fields, get_file_times
-use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc
-use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
+use MOM_io, only : create_file, file_type, fieldtype, file_exists, open_file, close_file
+use MOM_io, only : MOM_read_data, read_data, MOM_write_field, read_field_chksum
+use MOM_io, only : get_file_info, get_file_fields, get_field_atts, get_file_times
+use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc, get_filename_appendix
+use MOM_io, only : MULTIPLE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
-use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
-use MOM_time_manager, only : days_in_month, get_date, set_date
-use MOM_transform_FMS, only : mpp_chksum => rotated_mpp_chksum
-use MOM_transform_FMS, only : write_field => rotated_write_field
-use MOM_verticalGrid, only : verticalGrid_type
-use mpp_io_mod,      only :  mpp_attribute_exist, mpp_get_atts
-use mpp_mod,         only :  mpp_pe
+use MOM_string_functions, only : lowercase
+use MOM_time_manager,  only : time_type, time_type_to_real, real_to_time
+use MOM_time_manager,  only : days_in_month, get_date, set_date
+use MOM_verticalGrid,  only : verticalGrid_type
 
 implicit none ; private
 
@@ -67,8 +64,8 @@ end type field_restart
 
 !> A structure to store information about restart fields that are no longer used
 type obsolete_restart
-   character(len=32) :: field_name       !< Name of restart field that is no longer in use
-   character(len=32) :: replacement_name !< Name of replacement restart field, if applicable
+  character(len=32) :: field_name       !< Name of restart field that is no longer in use
+  character(len=32) :: replacement_name !< Name of replacement restart field, if applicable
 end type obsolete_restart
 
 !> A restart registry and the control structure for restarts
@@ -116,7 +113,7 @@ interface register_restart_field
   module procedure register_restart_field_ptr0d, register_restart_field_0d
 end interface
 
-!> Register a pair of restart fieilds whose rotations map onto each other
+!> Register a pair of restart fields whose rotations map onto each other
 interface register_restart_pair
   module procedure register_restart_pair_ptr2d
   module procedure register_restart_pair_ptr3d
@@ -372,7 +369,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, longname, units
   type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
   character(len=*), optional, intent(in) :: longname  !< variable long name
   character(len=*), optional, intent(in) :: units     !< variable units
-  character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
+  character(len=*), optional, intent(in) :: hor_grid  !< variable horizontal staggering, 'h' if absent
   character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
 
@@ -399,7 +396,7 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, longname, units
   type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
   character(len=*), optional, intent(in) :: longname  !< variable long name
   character(len=*), optional, intent(in) :: units     !< variable units
-  character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
+  character(len=*), optional, intent(in) :: hor_grid  !< variable horizontal staggering, 'h' if absent
   character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
 
@@ -426,7 +423,7 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, longname, units
   type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
   character(len=*), optional, intent(in) :: longname  !< variable long name
   character(len=*), optional, intent(in) :: units     !< variable units
-  character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
+  character(len=*), optional, intent(in) :: hor_grid  !< variable horizontal staggering, 'h' if absent
   character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, '1' if absent
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
 
@@ -454,7 +451,7 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, longname, units
   type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
   character(len=*), optional, intent(in) :: longname  !< variable long name
   character(len=*), optional, intent(in) :: units     !< variable units
-  character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, '1' if absent
+  character(len=*), optional, intent(in) :: hor_grid  !< variable horizontal staggering, '1' if absent
   character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
 
@@ -505,7 +502,7 @@ function query_initialized_name(name, CS) result(query_initialized)
 !   This subroutine returns .true. if the field referred to by name has
 ! initialized from a restart file, and .false. otherwise.
 
-  integer :: m,n
+  integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
@@ -539,7 +536,7 @@ function query_initialized_0d(f_ptr, CS) result(query_initialized)
 !   This subroutine tests whether the field pointed to by f_ptr has
 ! been initialized from a restart file.
 
-  integer :: m,n
+  integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
@@ -566,7 +563,7 @@ function query_initialized_1d(f_ptr, CS) result(query_initialized)
 !   This subroutine tests whether the field pointed to by f_ptr has
 ! been initialized from a restart file.
 
-  integer :: m,n
+  integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
@@ -594,7 +591,7 @@ function query_initialized_2d(f_ptr, CS) result(query_initialized)
 !   This subroutine tests whether the field pointed to by f_ptr has
 ! been initialized from a restart file.
 
-  integer :: m,n
+  integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
@@ -622,7 +619,7 @@ function query_initialized_3d(f_ptr, CS) result(query_initialized)
 !   This subroutine tests whether the field pointed to by f_ptr has
 ! been initialized from a restart file.
 
-  integer :: m,n
+  integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
@@ -650,7 +647,7 @@ function query_initialized_4d(f_ptr, CS) result(query_initialized)
 !   This subroutine tests whether the field pointed to by f_ptr has
 ! been initialized from a restart file.
 
-  integer :: m,n
+  integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
@@ -679,7 +676,7 @@ function query_initialized_0d_name(f_ptr, name, CS) result(query_initialized)
 !   This subroutine tests whether the field pointed to by f_ptr or with the
 ! specified variable name has been initialized from a restart file.
 
-  integer :: m,n
+  integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
@@ -715,7 +712,7 @@ function query_initialized_1d_name(f_ptr, name, CS) result(query_initialized)
 !   This subroutine tests whether the field pointed to by f_ptr or with the
 ! specified variable name has been initialized from a restart file.
 
-  integer :: m,n
+  integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
@@ -751,7 +748,7 @@ function query_initialized_2d_name(f_ptr, name, CS) result(query_initialized)
 !   This subroutine tests whether the field pointed to by f_ptr or with the
 ! specified variable name has been initialized from a restart file.
 
-  integer :: m,n
+  integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
@@ -877,7 +874,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
                                         ! this should be 2 Gb or less.
   integer :: start_var, next_var        ! The starting variables of the
                                         ! current and next files.
-  integer :: unit                       ! The mpp unit of the open file.
+  type(file_type) :: IO_handle          ! The I/O handle of the open fileset
   integer :: m, nz, num_files, var_periods
   integer :: seconds, days, year, month, hour, minute
   character(len=8) :: hor_grid, z_grid, t_grid ! Variable grid info.
@@ -910,10 +907,10 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
   restartname = trim(CS%restartfile)
   if (present(filename)) restartname = trim(filename)
   if (PRESENT(time_stamped)) then ; if (time_stamped) then
-    call get_date(time,year,month,days,hour,minute,seconds)
+    call get_date(time, year, month, days, hour, minute, seconds)
     ! Compute the year-day, because I don't like months. - RWH
     do m=1,month-1
-      days = days + days_in_month(set_date(year,m,2,0,0,0))
+      days = days + days_in_month(set_date(year, m, 2, 0, 0, 0))
     enddo
     seconds = seconds + 60*minute + 3600*hour
     if (year <= 9999) then
@@ -1010,49 +1007,44 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
     endif
     do m=start_var,next_var-1
       if (associated(CS%var_ptr3d(m)%p)) then
-        check_val(m-start_var+1,1) = &
-            mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:), turns=-turns)
+        check_val(m-start_var+1,1) = chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:), turns=-turns)
       elseif (associated(CS%var_ptr2d(m)%p)) then
-        check_val(m-start_var+1,1) = &
-            mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL), turns=-turns)
+        check_val(m-start_var+1,1) = chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL), turns=-turns)
       elseif (associated(CS%var_ptr4d(m)%p)) then
-        check_val(m-start_var+1,1) = &
-            mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:), turns=-turns)
+        check_val(m-start_var+1,1) = chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:), turns=-turns)
       elseif (associated(CS%var_ptr1d(m)%p)) then
-        check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr1d(m)%p)
+        check_val(m-start_var+1,1) = chksum(CS%var_ptr1d(m)%p)
       elseif (associated(CS%var_ptr0d(m)%p)) then
-        check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
+        check_val(m-start_var+1,1) = chksum(CS%var_ptr0d(m)%p, pelist=(/PE_here()/))
       endif
     enddo
 
     if (CS%parallel_restartfiles) then
-      call create_file(unit, trim(restartpath), vars, (next_var-start_var), &
+      call create_file(IO_handle, trim(restartpath), vars, (next_var-start_var), &
                        fields, MULTIPLE, G=G, GV=GV, checksums=check_val)
     else
-      call create_file(unit, trim(restartpath), vars, (next_var-start_var), &
+      call create_file(IO_handle, trim(restartpath), vars, (next_var-start_var), &
                        fields, SINGLE_FILE, G=G, GV=GV, checksums=check_val)
     endif
 
     do m=start_var,next_var-1
       if (associated(CS%var_ptr3d(m)%p)) then
-        call write_field(unit,fields(m-start_var+1), G%Domain%mpp_domain, &
+        call MOM_write_field(IO_handle, fields(m-start_var+1), G%Domain, &
                          CS%var_ptr3d(m)%p, restart_time, turns=-turns)
       elseif (associated(CS%var_ptr2d(m)%p)) then
-        call write_field(unit,fields(m-start_var+1), G%Domain%mpp_domain, &
+        call MOM_write_field(IO_handle, fields(m-start_var+1), G%Domain, &
                          CS%var_ptr2d(m)%p, restart_time, turns=-turns)
       elseif (associated(CS%var_ptr4d(m)%p)) then
-        call write_field(unit,fields(m-start_var+1), G%Domain%mpp_domain, &
+        call MOM_write_field(IO_handle, fields(m-start_var+1), G%Domain, &
                          CS%var_ptr4d(m)%p, restart_time, turns=-turns)
       elseif (associated(CS%var_ptr1d(m)%p)) then
-        call write_field(unit, fields(m-start_var+1), CS%var_ptr1d(m)%p, &
-                         restart_time)
+        call MOM_write_field(IO_handle, fields(m-start_var+1), CS%var_ptr1d(m)%p, restart_time)
       elseif (associated(CS%var_ptr0d(m)%p)) then
-        call write_field(unit, fields(m-start_var+1), CS%var_ptr0d(m)%p, &
-                         restart_time)
+        call MOM_write_field(IO_handle, fields(m-start_var+1), CS%var_ptr0d(m)%p, restart_time)
       endif
     enddo
 
-    call close_file(unit)
+    call close_file(IO_handle)
 
     num_files = num_files+1
 
@@ -1090,9 +1082,9 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer :: i, n, m, missing_fields
   integer :: isL, ieL, jsL, jeL, is0, js0
   integer :: sizes(7)
-  integer :: ndim, nvar, natt, ntime, pos
+  integer :: nvar, ntime, pos
 
-  integer :: unit(CS%max_fields) ! The mpp unit of all open files.
+  type(file_type) :: IO_handles(CS%max_fields) ! The I/O units of all open files.
   character(len=200) :: unit_path(CS%max_fields) ! The file names.
   logical :: unit_is_global(CS%max_fields) ! True if the file is global.
 
@@ -1100,9 +1092,9 @@ subroutine restore_state(filename, directory, day, G, CS)
   real    :: t1, t2 ! Two times.
   real, allocatable :: time_vals(:)
   type(fieldtype), allocatable :: fields(:)
-  logical                          :: check_exist, is_there_a_checksum
-  integer(kind=8),dimension(3)     :: checksum_file
-  integer(kind=8)                  :: checksum_data
+  logical            :: is_there_a_checksum ! Is there a valid checksum that should be checked.
+  integer(kind=8)    :: checksum_file  ! The checksum value recorded in the input file.
+  integer(kind=8)    :: checksum_data  ! The checksum value for the data that was read in.
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "restore_state: Module must be initialized before it is used.")
@@ -1110,10 +1102,10 @@ subroutine restore_state(filename, directory, day, G, CS)
 
 ! Get NetCDF ids for all of the restart files.
   if ((LEN_TRIM(filename) == 1) .and. (filename(1:1) == 'F')) then
-    num_file = open_restart_units('r', directory, G, CS, units=unit, &
+    num_file = open_restart_units('r', directory, G, CS, IO_handles=IO_handles, &
                      file_paths=unit_path, global_files=unit_is_global)
   else
-    num_file = open_restart_units(filename, directory, G, CS, units=unit, &
+    num_file = open_restart_units(filename, directory, G, CS, IO_handles=IO_handles, &
                      file_paths=unit_path, global_files=unit_is_global)
   endif
 
@@ -1125,11 +1117,9 @@ subroutine restore_state(filename, directory, day, G, CS)
 
 ! Get the time from the first file in the list that has one.
   do n=1,num_file
-    call get_file_info(unit(n), ndim, nvar, natt, ntime)
+    call get_file_times(IO_handles(n), time_vals, ntime)
     if (ntime < 1) cycle
 
-    allocate(time_vals(ntime))
-    call get_file_times(unit(n), time_vals)
     t1 = time_vals(1)
     deallocate(time_vals)
 
@@ -1144,11 +1134,9 @@ subroutine restore_state(filename, directory, day, G, CS)
 ! if they differ from the first time.
   if (is_root_pe()) then
     do m = n+1,num_file
-      call get_file_info(unit(n), ndim, nvar, natt, ntime)
+      call get_file_times(IO_handles(n), time_vals, ntime)
       if (ntime < 1) cycle
 
-      allocate(time_vals(ntime))
-      call get_file_times(unit(n), time_vals)
       t2 = time_vals(1)
       deallocate(time_vals)
 
@@ -1163,13 +1151,13 @@ subroutine restore_state(filename, directory, day, G, CS)
 
 ! Read each variable from the first file in which it is found.
   do n=1,num_file
-    call get_file_info(unit(n), ndim, nvar, natt, ntime)
+    call get_file_info(IO_handles(n), nvar=nvar)
 
     allocate(fields(nvar))
-    call get_file_fields(unit(n),fields(1:nvar))
+    call get_file_fields(IO_handles(n), fields(1:nvar))
 
     do m=1, nvar
-      call get_file_atts(fields(m),name=varname)
+      call get_field_atts(fields(m), name=varname)
       do i=1,CS%num_obsolete_vars
         if (adjustl(lowercase(trim(varname))) == adjustl(lowercase(trim(CS%restart_obsolete(i)%field_name)))) then
             call MOM_error(FATAL, "MOM_restart restore_state: Attempting to use obsolete restart field "//&
@@ -1200,61 +1188,62 @@ subroutine restore_state(filename, directory, day, G, CS)
 
       call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
       do i=1, nvar
-        call get_file_atts(fields(i),name=varname)
+        call get_field_atts(fields(i), name=varname)
         if (lowercase(trim(varname)) == lowercase(trim(CS%restart_field(m)%var_name))) then
-          check_exist = mpp_attribute_exist(fields(i),"checksum")
-          checksum_file(:) = -1
           checksum_data = -1
-          is_there_a_checksum = .false.
-          if ( check_exist ) then
-            call mpp_get_atts(fields(i),checksum=checksum_file)
-            is_there_a_checksum = .true.
+          if (CS%checksum_required) then
+            call read_field_chksum(fields(i), checksum_file, is_there_a_checksum)
+          else
+            checksum_file = -1
+            is_there_a_checksum = .false. ! Do not need to do data checksumming.
           endif
-          if (.NOT. CS%checksum_required) is_there_a_checksum = .false. ! Do not need to do data checksumming.
 
           if (associated(CS%var_ptr1d(m)%p))  then
             ! Read a 1d array, which should be invariant to domain decomposition.
-            call read_data(unit_path(n), varname, CS%var_ptr1d(m)%p, &
-                           G%Domain%mpp_domain, timelevel=1)
-            if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr1d(m)%p)
+            call MOM_read_data(unit_path(n), varname, CS%var_ptr1d(m)%p, &
+                               timelevel=1, MOM_Domain=G%Domain)
+            if (is_there_a_checksum) checksum_data = chksum(CS%var_ptr1d(m)%p)
           elseif (associated(CS%var_ptr0d(m)%p)) then ! Read a scalar...
-            call read_data(unit_path(n), varname, CS%var_ptr0d(m)%p, &
-                           G%Domain%mpp_domain, timelevel=1)
-            if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
+            call MOM_read_data(unit_path(n), varname, CS%var_ptr0d(m)%p, &
+                               timelevel=1, MOM_Domain=G%Domain)
+            if (is_there_a_checksum) checksum_data = chksum(CS%var_ptr0d(m)%p, pelist=(/PE_here()/))
           elseif (associated(CS%var_ptr2d(m)%p)) then  ! Read a 2d array.
             if (pos /= 0) then
               call MOM_read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
                                  G%Domain, timelevel=1, position=pos)
             else ! This array is not domain-decomposed.  This variant may be under-tested.
-              call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
-                             no_domain=.true., timelevel=1)
+              call MOM_error(FATAL, &
+                        "MOM_restart does not support 2-d arrays without domain decomposition.")
+              ! call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p,no_domain=.true., timelevel=1)
             endif
-            if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
+            if (is_there_a_checksum) checksum_data = chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
           elseif (associated(CS%var_ptr3d(m)%p)) then  ! Read a 3d array.
             if (pos /= 0) then
               call MOM_read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
                                  G%Domain, timelevel=1, position=pos)
             else ! This array is not domain-decomposed.  This variant may be under-tested.
-              call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
-                             no_domain=.true., timelevel=1)
+              call MOM_error(FATAL, &
+                        "MOM_restart does not support 3-d arrays without domain decomposition.")
+              ! call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, no_domain=.true., timelevel=1)
             endif
-            if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
+            if (is_there_a_checksum) checksum_data = chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
           elseif (associated(CS%var_ptr4d(m)%p)) then  ! Read a 4d array.
             if (pos /= 0) then
               call MOM_read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
                                  G%Domain, timelevel=1, position=pos)
             else ! This array is not domain-decomposed.  This variant may be under-tested.
-              call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
-                             no_domain=.true., timelevel=1)
+              call MOM_error(FATAL, &
+                        "MOM_restart does not support 4-d arrays without domain decomposition.")
+              ! call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, no_domain=.true., timelevel=1)
             endif
-            if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
+            if (is_there_a_checksum) checksum_data = chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
           else
             call MOM_error(FATAL, "MOM_restart restore_state: No pointers set for "//trim(varname))
           endif
 
-          if (is_root_pe() .and. is_there_a_checksum .and. (checksum_file(1) /= checksum_data)) then
+          if (is_root_pe() .and. is_there_a_checksum .and. (checksum_file /= checksum_data)) then
              write (mesg,'(a,Z16,a,Z16,a)') "Checksum of input field "// trim(varname)//" ",checksum_data,&
-                                          " does not match value ", checksum_file(1), &
+                                          " does not match value ", checksum_file, &
                                           " stored in "//trim(unit_path(n)//"." )
              call MOM_error(FATAL, "MOM_restart(restore_state): "//trim(mesg) )
           endif
@@ -1271,7 +1260,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   enddo
 
   do n=1,num_file
-    call close_file(unit(n))
+    call close_file(IO_handles(n))
   enddo
 
 ! Check whether any mandatory fields have not been found.
@@ -1364,7 +1353,7 @@ end function is_new_run
 
 !> open_restart_units determines the number of existing restart files and optionally opens
 !! them and returns unit ids, paths and whether the files are global or spatially decomposed.
-function open_restart_units(filename, directory, G, CS, units, file_paths, &
+function open_restart_units(filename, directory, G, CS, IO_handles, file_paths, &
                             global_files) result(num_files)
   character(len=*),      intent(in)  :: filename  !< The list of restart file names or a single
                                                   !! character 'r' to read automatically named files.
@@ -1372,8 +1361,8 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
   type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
   type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
                                                   !! call to restart_init.
-  integer, dimension(:), &
-               optional, intent(out) :: units     !< The mpp units of all opened files.
+  type(file_type), dimension(:), &
+               optional, intent(out) :: IO_handles !< The I/O handles of all opened files.
   character(len=*), dimension(:), &
                optional, intent(out) :: file_paths   !< The full paths to open files.
   logical, dimension(:), &
@@ -1428,15 +1417,15 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
       do while (err == 0)
         restartname = trim(CS%restartfile)
 
-       !query fms_io if there is a filename_appendix (for ensemble runs)
-       call get_filename_appendix(filename_appendix)
-       if (len_trim(filename_appendix) > 0) then
-         length = len_trim(restartname)
-         if (restartname(length-2:length) == '.nc') then
-           restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
-         else
-           restartname = restartname(1:length)  //'.'//trim(filename_appendix)
-         endif
+        ! query fms_io if there is a filename_appendix (for ensemble runs)
+        call get_filename_appendix(filename_appendix)
+        if (len_trim(filename_appendix) > 0) then
+          length = len_trim(restartname)
+          if (restartname(length-2:length) == '.nc') then
+            restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
+          else
+            restartname = restartname(1:length)  //'.'//trim(filename_appendix)
+          endif
         endif
         filepath = trim(directory) // trim(restartname)
 
@@ -1453,23 +1442,22 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
         num_restart = num_restart + 1
         inquire(file=filepath, exist=fexists)
         if (fexists) then
-          if (present(units)) &
-            call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
-                           threading = MULTIPLE, fileset = SINGLE_FILE)
+          if (present(IO_handles)) &
+            call open_file(IO_handles(n), trim(filepath), READONLY_FILE, &
+                           threading=MULTIPLE, fileset=SINGLE_FILE)
           if (present(global_files)) global_files(n) = .true.
         elseif (CS%parallel_restartfiles) then
           ! Look for decomposed files using the I/O Layout.
           fexists = file_exists(filepath, G%Domain)
-          if (fexists .and. (present(units))) &
-            call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
-                           domain=G%Domain%mpp_domain)
+          if (fexists .and. (present(IO_handles))) &
+            call open_file(IO_handles(n), trim(filepath), READONLY_FILE, MOM_domain=G%Domain)
           if (fexists .and. present(global_files)) global_files(n) = .false.
         endif
 
         if (fexists) then
           if (present(file_paths)) file_paths(n) = filepath
           n = n + 1
-          if (is_root_pe() .and. (present(units))) &
+          if (is_root_pe() .and. (present(IO_handles))) &
             call MOM_error(NOTE, "MOM_restart: MOM run restarted using : "//trim(filepath))
         else
           err = 1 ; exit
@@ -1482,16 +1470,16 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
 
       inquire(file=filepath, exist=fexists)
       if (fexists) then
-        if (present(units)) &
-          call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
-                       threading = MULTIPLE, fileset = SINGLE_FILE)
+        if (present(IO_handles)) &
+          call open_file(IO_handles(n), trim(filepath), READONLY_FILE, &
+                       threading=MULTIPLE, fileset=SINGLE_FILE)
         if (present(global_files)) global_files(n) = .true.
         if (present(file_paths)) file_paths(n) = filepath
         n = n + 1
-        if (is_root_pe() .and. (present(units))) &
+        if (is_root_pe() .and. (present(IO_handles))) &
           call MOM_error(NOTE,"MOM_restart: MOM run restarted using : "//trim(filepath))
       else
-        if (present(units)) &
+        if (present(IO_handles)) &
           call MOM_error(WARNING,"MOM_restart: Unable to find restart file : "//trim(filepath))
       endif
 
