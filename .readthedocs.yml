@@ -1,11 +1,16 @@
-# don't build extra formats (like HTML zip)
-formats:
-  - none
+version: 2
 
-# path to pip requirements file to bring in
-# doxygen extensions
-requirements_file: docs/requirements.txt
+# Extra formats
+# PDF generation is failing for now; disabled on 2020-12-02
+#formats:
+#  - pdf
+
+# Build documentation
+sphinx:
+  configuration: docs/conf.py
 
 python:
   # make sure we're using Python 3
-  version: 3.5
+  version: 3
+  install:
+    - requirements: docs/requirements.txt

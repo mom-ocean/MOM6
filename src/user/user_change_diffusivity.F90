@@ -47,25 +47,25 @@ contains
 subroutine user_change_diff(h, tv, G, GV, US, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_add)
   type(ocean_grid_type),                    intent(in)    :: G   !< The ocean's grid structure.
   type(verticalGrid_type),                  intent(in)    :: GV  !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h   !< Layer thickness [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)   :: h   !< Layer thickness [H ~> m or kg m-2].
   type(thermo_var_ptrs),                    intent(in)    :: tv  !< A structure containing pointers
                                                                  !! to any available thermodynamic
                                                                  !! fields. Absent fields have NULL ptrs.
   type(unit_scale_type),                    intent(in)    :: US  !< A dimensional unit scaling type
   type(user_change_diff_CS),                pointer       :: CS  !< This module's control structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity of
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity of
                                                                   !! each layer [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), optional, intent(inout) :: Kd_int !< The diapycnal diffusivity
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), optional, intent(inout) :: Kd_int !< The diapycnal diffusivity
                                                                   !! at each interface [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(in)    :: T_f !< Temperature with massless
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   optional, intent(in)    :: T_f !< Temperature with massless
                                                                   !! layers filled in vertically [degC].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(in)    :: S_f !< Salinity with massless
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   optional, intent(in)    :: S_f !< Salinity with massless
                                                                   !! layers filled in vertically [ppt].
-  real, dimension(:,:,:),                     optional, pointer       :: Kd_int_add !< The diapycnal
+  real, dimension(:,:,:),                      optional, pointer       :: Kd_int_add !< The diapycnal
                                                                   !! diffusivity that is being added at
                                                                   !! each interface [Z2 T-1 ~> m2 s-1].
   ! Local variables
-  real :: Rcv(SZI_(G),SZK_(G)) ! The coordinate density in layers [R ~> kg m-3].
+  real :: Rcv(SZI_(G),SZK_(GV)) ! The coordinate density in layers [R ~> kg m-3].
   real :: p_ref(SZI_(G))       ! An array of tv%P_Ref pressures [R L2 T-2 ~> Pa].
   real :: rho_fn      ! The density dependence of the input function, 0-1 [nondim].
   real :: lat_fn      ! The latitude dependence of the input function, 0-1 [nondim].
@@ -80,7 +80,7 @@ subroutine user_change_diff(h, tv, G, GV, US, CS, Kd_lay, Kd_int, T_f, S_f, Kd_i
   real :: dt_fill     ! timestep used to fill massless layers
   character(len=200) :: mesg
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   if (.not.associated(CS)) call MOM_error(FATAL,"user_set_diffusivity: "//&

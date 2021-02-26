@@ -71,17 +71,17 @@ contains
 subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, US, CS)
   type(ocean_grid_type),      intent(inout) :: G  !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)    :: GV !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(inout) :: h  !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),      intent(inout) :: tv !< A structure containing pointers to any
                                                   !! available thermodynamic fields. Absent fields
                                                   !! have NULL ptrs.
   real,                       intent(in)    :: dt !< Time increment [T ~> s].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(inout) :: ea !< The amount of fluid moved downward into a
                                                   !! layer; this should be increased due to mixed
                                                   !! layer detrainment [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(inout) :: eb !< The amount of fluid moved upward into a layer
                                                   !! this should be increased due to mixed layer
                                                   !! entrainment [H ~> m or kg m-2].
@@ -91,7 +91,7 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, US, CS)
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_regularize_layers: "//&
          "Module must be initialized before it is used.")
@@ -108,17 +108,17 @@ end subroutine regularize_layers
 subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   type(ocean_grid_type),      intent(inout) :: G  !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)    :: GV !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(inout) :: h  !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),      intent(inout) :: tv !< A structure containing pointers to any
                                                   !! available thermodynamic fields. Absent fields
                                                   !! have NULL ptrs.
   real,                       intent(in)    :: dt !< Time increment [T ~> s].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(inout) :: ea !< The amount of fluid moved downward into a
                                                   !! layer; this should be increased due to mixed
                                                   !! layer detrainment [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(inout) :: eb !< The amount of fluid moved upward into a layer
                                                   !! this should be increased due to mixed layer
                                                   !! entrainment [H ~> m or kg m-2].
@@ -132,12 +132,12 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
     def_rat_v   ! The ratio of the thickness deficit to the minimum depth [nondim].
   real, dimension(SZI_(G),SZJ_(G)) :: &
     def_rat_h   ! The ratio of the thickness deficit to the minimum depth [nondim].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: &
     e           ! The interface depths [H ~> m or kg m-2], positive upward.
 
-  real, dimension(SZI_(G),SZK_(G)+1) :: &
+  real, dimension(SZI_(G),SZK_(GV)+1) :: &
     e_filt, e_2d  ! The interface depths [H ~> m or kg m-2], positive upward.
-  real, dimension(SZI_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZK_(GV)) :: &
     h_2d, &     !   A 2-d version of h [H ~> m or kg m-2].
     T_2d, &     !   A 2-d version of tv%T [degC].
     S_2d, &     !   A 2-d version of tv%S [ppt].
@@ -160,7 +160,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
     h_tot1, Th_tot1, Sh_tot1, &
     h_tot3, Th_tot3, Sh_tot3, &
     h_tot2, Th_tot2, Sh_tot2
-  real, dimension(SZK_(G)) :: &
+  real, dimension(SZK_(GV)) :: &
     h_prev_1d     ! The previous thicknesses [H ~> m or kg m-2].
   real :: I_dtol  ! The inverse of the tolerance changes [nondim].
   real :: I_dtol34 ! The inverse of the tolerance changes [nondim].
@@ -170,7 +170,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   real :: scale ! A scaling factor [nondim].
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
-  real, dimension(SZK_(G)+1) :: &
+  real, dimension(SZK_(GV)+1) :: &
     int_flux, int_Tflux, int_Sflux, int_Rflux
   real :: h_add
   real :: h_det_tot
@@ -192,7 +192,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz, nkmb, nkml, k1, k2, k3, ks, nz_filt, kmax_d_ea
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_regularize_layers: "//&
          "Module must be initialized before it is used.")
@@ -616,7 +616,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
                                def_rat_u_2lay, def_rat_v_2lay, halo, h)
   type(ocean_grid_type),      intent(in)  :: G         !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)  :: GV        !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                               intent(in)  :: e         !< Interface depths [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G)),          &
                               intent(out) :: def_rat_u !< The thickness deficit ratio at u points,
@@ -635,7 +635,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
                                                        !! pointswhen the mixed and buffer layers
                                                        !! are aggregated into 1 layer [nondim].
   integer,          optional, intent(in)  :: halo      !< An extra-wide halo size, 0 by default.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
                     optional, intent(in)  :: h         !< Layer thicknesses [H ~> m or kg m-2].
                                                        !! If h is not present, vertical differences
                                                        !! in interface heights are used instead.
@@ -656,7 +656,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
   real :: h1, h2  ! Temporary thicknesses [H ~> m or kg m-2].
   integer :: i, j, k, is, ie, js, je, nz, nkmb
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   if (present(halo)) then
     is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   endif

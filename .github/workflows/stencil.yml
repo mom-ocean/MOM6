@@ -1,0 +1,27 @@
+name: Stencil related verification
+
+on: [push, pull_request]
+
+jobs:
+  test-symmetric-layout-rotation:
+
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .testing
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - uses: ./.github/actions/testing-setup
+
+    - name: Compile MOM6 in asymmetric memory mode
+      run: make build/asymmetric/MOM6 -j
+
+    - name: Create validation data
+      run: make run.symmetric -k -s
+
+    - name: Run tests
+      run: make test.grids test.layouts test.rotations -k -s

@@ -238,9 +238,9 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
   call allocate_mech_forcing(G, forces, stress=.true., ustar=.true.)
 
   if (CS%relative_tau) then
-     REL_TAU_FAC = 1.
+    REL_TAU_FAC = 1.
   else
-     REL_TAU_FAC = 0. !Multiplied to 0 surface current
+    REL_TAU_FAC = 0. !Multiplied to 0 surface current
   endif
 
   !> Compute storm center location
@@ -432,9 +432,9 @@ subroutine idealized_hurricane_wind_profile(CS, US, absf, YY, XX, UOCN, VOCN, Tx
   ALPH = A0 - A1*cos(CS%hurr_translation_dir-Adir-P1)
   if ( (radius > 10.*CS%rad_max_wind) .and.&
        (radius < 15.*CS%rad_max_wind) ) then
-     ALPH = ALPH*(15.0 - radius/CS%rad_max_wind)/5.
+    ALPH = ALPH*(15.0 - radius/CS%rad_max_wind)/5.
   elseif (radius > 15.*CS%rad_max_wind) then
-     ALPH = 0.0
+    ALPH = 0.0
   endif
   ALPH = ALPH * CS%Deg2Rad
 
@@ -520,7 +520,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, C
     C = CS%max_windspeed / sqrt( US%R_to_kg_m3*dP )
     B = C**2 * US%R_to_kg_m3*CS%rho_a * exp(1.0)
     if (BR_Bench) then ! rho_a reset to value used in generated wind for benchmark test
-       B = C**2 * 1.2 * exp(1.0)
+      B = C**2 * 1.2 * exp(1.0)
     endif
   elseif (BR_Bench) then ! rho_a reset to value used in generated wind for benchmark test
     B = (CS%max_windspeed**2 / dP ) * 1.2*US%kg_m3_to_R * exp(1.0)
@@ -545,12 +545,12 @@ subroutine SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, C
   !       be maintained.  Causes winds far from storm center to be a
   !       couple of m/s higher than the correct Holland prof.
   if (BR_Bench) then
-     rkm = rad/1000.
-     rB = (US%L_to_m*rkm)**B
+    rkm = rad/1000.
+    rB = (US%L_to_m*rkm)**B
   else
-     ! if not comparing to benchmark, then use correct Holland prof.
-     rkm = rad
-     rB = (US%L_to_m*rad)**B
+    ! if not comparing to benchmark, then use correct Holland prof.
+    rkm = rad
+    rB = (US%L_to_m*rad)**B
   endif
   !/ BR
   ! Calculate U10 in the interior (inside of 10x radius of maximum wind),
@@ -561,11 +561,11 @@ subroutine SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, C
   elseif (rad > 10.*CS%rad_max_wind .AND. rad < 12.*CS%rad_max_wind) then
     rad=(CS%rad_max_wind)*10.
     if (BR_Bench) then
-       rkm = rad/1000.
-       rB = (US%L_to_m*rkm)**B
+      rkm = rad/1000.
+      rB = (US%L_to_m*rkm)**B
     else
-       rkm = rad
-       rB = (US%L_to_m*rad)**B
+      rkm = rad
+      rB = (US%L_to_m*rad)**B
     endif
     U10 = ( sqrt( A*B*dP*exp(-A/rB)/(1.2*US%kg_m3_to_R*rB) + 0.25*(rkm*f_local)**2 ) - 0.5*rkm*f_local) &
           * (12. - rad/CS%rad_max_wind)/2.
@@ -588,7 +588,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, C
     ALPH = 0.0
   endif
   ALPH = ALPH * Deg2Rad
- !/BR
+  !/BR
   ! Prepare for wind calculation
   ! X_TS is component of translation speed added to wind vector
   ! due to background steering wind.

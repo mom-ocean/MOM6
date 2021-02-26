@@ -1,4 +1,4 @@
-/*! \page Horizontal_indexing Horizontal indexing and memory
+/*! \page Horizontal_Indexing Horizontal indexing and memory
 
 \brief Conventions for staggering of variables and loops over 2d/3d arrays
 
@@ -7,7 +7,7 @@ MOM6 is written in Fortran90 and uses the `i,j,k` order of indexing.
 We often refer to the i-direction as the x- or zonal direction, and similarly to the j-direction as y- or meridional direction.
 The model can use curvilinear grids/coordinates in the horizontal and so these labels have loose meanings but convenient.
 
-\section Staggering Loops and staggered variables
+\section section_Staggering Loops and staggered variables
 
 Many variables are staggered horizontally with respect to each other.
 The dynamics and tracer equations are discretized on an Arakawa C grid.
@@ -15,6 +15,7 @@ Staggered variables must still have integer indices and we use a north-east conv
 These means a variable with indices `i,j` will be either collocated, to the east, to the north, or to the north-east of the h-point with the same indices.
 
 \image html Arakawa_C_grid.png MOM6 uses an Arakawa C grid staggering of variables with a North-East indexing convention. "Cells" refer to the control volumes around tracer- or h-point located variables unless labelled otherwise.
+\image latex Arakawa_C_grid.png MOM6 uses an Arakawa C grid staggering of variables with a North-East indexing convention. "Cells" refer to the control volumes around tracer- or h-point located variables unless labelled otherwise.
 
 \subsection Soft_convention Soft convention for loop variables
 
@@ -32,11 +33,13 @@ In contrast, when a loop is over u-points collocated variables
 - the expression \f$ u_{i+\frac{1}{2},j} ( h_{i,j} + h_{i+1,j} ) \f$ is `u(I,j) * ( h(i,j) + h(i+1,j)`.
 
 
-\section Memory Declaration of variables
+\section section_Memory Declaration of variables
 
 \image html Horizontal_NE_indexing_nonsym.png Non-symmetric mode: All arrays are declared with the same shape `(isd:ied,jsd:jed)`.
+\image latex Horizontal_NE_indexing_nonsym.png Non-symmetric mode: All arrays are declared with the same shape `(isd:ied,jsd:jed)`.
 
 \image html Horizontal_NE_indexing_sym.png Symmetric mode: Arrays have different shapes depending on their staggering location on the Arakawa C grid.
+\image latex Horizontal_NE_indexing_sym.png Symmetric mode: Arrays have different shapes depending on their staggering location on the Arakawa C grid.
 
 A field is described by 2D or 3D arrays which are distributed across parallel processors.
 Each processor only sees a small window of the global field.

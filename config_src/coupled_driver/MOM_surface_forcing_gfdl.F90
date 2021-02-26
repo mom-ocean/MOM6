@@ -5,10 +5,14 @@ module MOM_surface_forcing_gfdl
 !#CTRL# use MOM_controlled_forcing, only : apply_ctrl_forcing, register_ctrl_forcing_restarts
 !#CTRL# use MOM_controlled_forcing, only : controlled_forcing_init, controlled_forcing_end
 !#CTRL# use MOM_controlled_forcing, only : ctrl_forcing_CS
-use MOM_coms,             only : reproducing_sum
+use MOM_coms,             only : reproducing_sum, field_chksum
 use MOM_constants,        only : hlv, hlf
+use MOM_coupler_types,    only : coupler_2d_bc_type, coupler_type_write_chksums
+use MOM_coupler_types,    only : coupler_type_initialized, coupler_type_spawn
+use MOM_coupler_types,    only : coupler_type_copy_data
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_SUBCOMPONENT
+use MOM_data_override,    only : data_override_init, data_override
 use MOM_diag_mediator,    only : diag_ctrl, safe_alloc_ptr, time_type
 use MOM_domains,          only : pass_vector, pass_var, fill_symmetric_edges
 use MOM_domains,          only : AGRID, BGRID_NE, CGRID_NE, To_All
@@ -21,7 +25,9 @@ use MOM_forcing_type,     only : allocate_forcing_type, deallocate_forcing_type
 use MOM_forcing_type,     only : allocate_mech_forcing, deallocate_mech_forcing
 use MOM_get_input,        only : Get_MOM_Input, directories
 use MOM_grid,             only : ocean_grid_type
-use MOM_io,               only : slasher, write_version_number, MOM_read_data
+use MOM_interpolate,      only : init_external_field, time_interp_external
+use MOM_interpolate,      only : time_interp_external_init
+use MOM_io,               only : slasher, write_version_number, MOM_read_data, stdout
 use MOM_restart,          only : register_restart_field, restart_init, MOM_restart_CS
 use MOM_restart,          only : restart_init_end, save_restart, restore_state
 use MOM_string_functions, only : uppercase
@@ -30,15 +36,6 @@ use MOM_unit_scaling,     only : unit_scale_type
 use MOM_variables,        only : surface
 use user_revise_forcing,  only : user_alter_forcing, user_revise_forcing_init
 use user_revise_forcing,  only : user_revise_forcing_CS
-
-use coupler_types_mod,    only : coupler_2d_bc_type, coupler_type_write_chksums
-use coupler_types_mod,    only : coupler_type_initialized, coupler_type_spawn
-use coupler_types_mod,    only : coupler_type_copy_data
-use data_override_mod,    only : data_override_init, data_override
-use fms_mod,              only : stdout
-use mpp_mod,              only : mpp_chksum
-use time_interp_external_mod, only : init_external_field, time_interp_external
-use time_interp_external_mod, only : time_interp_external_init
 
 implicit none ; private
 
@@ -319,8 +316,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
   if ((.not.coupler_type_initialized(fluxes%tr_fluxes)) .and. &
       coupler_type_initialized(IOB%fluxes)) &
-    call coupler_type_spawn(IOB%fluxes, fluxes%tr_fluxes, &
-                            (/is,is,ie,ie/), (/js,js,je,je/))
+    call coupler_type_spawn(IOB%fluxes, fluxes%tr_fluxes, (/is,is,ie,ie/), (/js,js,je,je/))
   !   It might prove valuable to use the same array extents as the rest of the
   ! ocean model, rather than using haloless arrays, in which case the last line
   ! would be: (             (/isd,is,ie,ied/), (/jsd,js,je,jed/))
@@ -350,7 +346,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
   ! Salinity restoring logic
   if (CS%restore_salt) then
-    call time_interp_external(CS%id_srestore,Time,data_restore)
+    call time_interp_external(CS%id_srestore, Time, data_restore)
     ! open_ocn_mask indicates where to restore salinity (1 means restore, 0 does not)
     open_ocn_mask(:,:) = 1.0
     if (CS%mask_srestore_under_ice) then ! Do not restore under sea-ice
@@ -407,7 +403,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
   ! SST restoring logic
   if (CS%restore_temp) then
-    call time_interp_external(CS%id_trestore,Time,data_restore)
+    call time_interp_external(CS%id_trestore, Time, data_restore)
     do j=js,je ; do i=is,ie
       delta_sst = data_restore(i,j)- sfc_state%SST(i,j)
       delta_sst = sign(1.0,delta_sst)*min(abs(delta_sst),CS%max_delta_trestore)
@@ -1121,28 +1117,27 @@ subroutine apply_flux_adjustments(G, US, CS, Time, fluxes)
 
   isc = G%isc; iec = G%iec ; jsc = G%jsc; jec = G%jec
 
-  overrode_h = .false.
-  call data_override('OCN', 'hflx_adj', temp_at_h(isc:iec,jsc:jec), Time, override=overrode_h)
+  call data_override(G%Domain, 'hflx_adj', temp_at_h, Time, override=overrode_h, &
+                     scale=US%W_m2_to_QRZ_T)
 
   if (overrode_h) then ; do j=jsc,jec ; do i=isc,iec
-    fluxes%heat_added(i,j) = fluxes%heat_added(i,j) + US%W_m2_to_QRZ_T*temp_at_h(i,j)* G%mask2dT(i,j)
+    fluxes%heat_added(i,j) = fluxes%heat_added(i,j) + temp_at_h(i,j)* G%mask2dT(i,j)
   enddo ; enddo ; endif
   ! Not needed? ! if (overrode_h) call pass_var(fluxes%heat_added, G%Domain)
 
-  overrode_h = .false.
-  call data_override('OCN', 'sflx_adj', temp_at_h(isc:iec,jsc:jec), Time, override=overrode_h)
+  call data_override(G%Domain, 'sflx_adj', temp_at_h, Time, override=overrode_h, &
+                     scale=US%kg_m2s_to_RZ_T)
 
   if (overrode_h) then ; do j=jsc,jec ; do i=isc,iec
-    fluxes%salt_flux_added(i,j) = fluxes%salt_flux_added(i,j) + &
-        US%kg_m2s_to_RZ_T * temp_at_h(i,j)* G%mask2dT(i,j)
+    fluxes%salt_flux_added(i,j) = fluxes%salt_flux_added(i,j) + temp_at_h(i,j) * G%mask2dT(i,j)
   enddo ; enddo ; endif
   ! Not needed? ! if (overrode_h) call pass_var(fluxes%salt_flux_added, G%Domain)
 
-  overrode_h = .false.
-  call data_override('OCN', 'prcme_adj', temp_at_h(isc:iec,jsc:jec), Time, override=overrode_h)
+  call data_override(G%Domain, 'prcme_adj', temp_at_h, Time, override=overrode_h, &
+                     scale=US%kg_m2s_to_RZ_T)
 
   if (overrode_h) then ; do j=jsc,jec ; do i=isc,iec
-    fluxes%vprec(i,j) = fluxes%vprec(i,j) + US%kg_m2s_to_RZ_T * temp_at_h(i,j)* G%mask2dT(i,j)
+    fluxes%vprec(i,j) = fluxes%vprec(i,j) + temp_at_h(i,j)* G%mask2dT(i,j)
   enddo ; enddo ; endif
   ! Not needed? ! if (overrode_h) call pass_var(fluxes%vprec, G%Domain)
 end subroutine apply_flux_adjustments
@@ -1174,8 +1169,8 @@ subroutine apply_force_adjustments(G, US, CS, Time, forces)
   tempx_at_h(:,:) = 0.0 ; tempy_at_h(:,:) = 0.0
   ! Either reads data or leaves contents unchanged
   overrode_x = .false. ; overrode_y = .false.
-  call data_override('OCN', 'taux_adj', tempx_at_h(isc:iec,jsc:jec), Time, override=overrode_x)
-  call data_override('OCN', 'tauy_adj', tempy_at_h(isc:iec,jsc:jec), Time, override=overrode_y)
+  call data_override(G%Domain, 'taux_adj', tempx_at_h, Time, override=overrode_x, scale=Pa_conversion)
+  call data_override(G%Domain, 'tauy_adj', tempy_at_h, Time, override=overrode_y, scale=Pa_conversion)
 
   if (overrode_x .or. overrode_y) then
     if (.not. (overrode_x .and. overrode_y)) call MOM_error(FATAL,"apply_flux_adjustments: "//&
@@ -1190,8 +1185,8 @@ subroutine apply_force_adjustments(G, US, CS, Time, forces)
       if (rDlon > 0.) rDlon = 1. / rDlon
       cosA = dLonDx * rDlon
       sinA = dLonDy * rDlon
-      zonal_tau = Pa_conversion * tempx_at_h(i,j)
-      merid_tau = Pa_conversion * tempy_at_h(i,j)
+      zonal_tau = tempx_at_h(i,j)
+      merid_tau = tempy_at_h(i,j)
       tempx_at_h(i,j) = cosA * zonal_tau - sinA * merid_tau
       tempy_at_h(i,j) = sinA * zonal_tau + cosA * merid_tau
     enddo ; enddo
@@ -1486,7 +1481,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
     enddo ; enddo
   endif
 
-  call time_interp_external_init
+  call time_interp_external_init()
 
   ! Optionally read a x-y gustiness field in place of a global constant.
   call get_param(param_file, mdl, "READ_GUST_2D", CS%read_gust_2d, &
@@ -1554,11 +1549,11 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
                  "above land points (i.e. G%mask2dT = 0).", default=.false., &
                  debuggingParam=.true.)
 
-  call data_override_init(Ocean_domain_in=G%Domain%mpp_domain)
+  call data_override_init(G%Domain)
 
   if (CS%restore_salt) then
     salt_file = trim(CS%inputdir) // trim(CS%salt_restore_file)
-    CS%id_srestore = init_external_field(salt_file, CS%salt_restore_var_name, domain=G%Domain%mpp_domain)
+    CS%id_srestore = init_external_field(salt_file, CS%salt_restore_var_name, MOM_domain=G%Domain)
     call safe_alloc_ptr(CS%srestore_mask,isd,ied,jsd,jed); CS%srestore_mask(:,:) = 1.0
     if (CS%mask_srestore) then ! read a 2-d file containing a mask for restoring fluxes
       flnam = trim(CS%inputdir) // 'salt_restore_mask.nc'
@@ -1568,7 +1563,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
 
   if (CS%restore_temp) then
     temp_file = trim(CS%inputdir) // trim(CS%temp_restore_file)
-    CS%id_trestore = init_external_field(temp_file, CS%temp_restore_var_name, domain=G%Domain%mpp_domain)
+    CS%id_trestore = init_external_field(temp_file, CS%temp_restore_var_name, MOM_domain=G%Domain)
     call safe_alloc_ptr(CS%trestore_mask,isd,ied,jsd,jed); CS%trestore_mask(:,:) = 1.0
     if (CS%mask_trestore) then  ! read a 2-d file containing a mask for restoring fluxes
       flnam = trim(CS%inputdir) // 'temp_restore_mask.nc'
@@ -1629,30 +1624,30 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
                                          !! ocean in a coupled model whose checksums are reported
   integer ::   n,m, outunit
 
-  outunit = stdout()
+  outunit = stdout
 
   write(outunit,*) "BEGIN CHECKSUM(ice_ocean_boundary_type):: ", id, timestep
-  write(outunit,100) 'iobt%u_flux         ', mpp_chksum( iobt%u_flux         )
-  write(outunit,100) 'iobt%v_flux         ', mpp_chksum( iobt%v_flux         )
-  write(outunit,100) 'iobt%t_flux         ', mpp_chksum( iobt%t_flux         )
-  write(outunit,100) 'iobt%q_flux         ', mpp_chksum( iobt%q_flux         )
-  write(outunit,100) 'iobt%salt_flux      ', mpp_chksum( iobt%salt_flux      )
-  write(outunit,100) 'iobt%lw_flux        ', mpp_chksum( iobt%lw_flux        )
-  write(outunit,100) 'iobt%sw_flux_vis_dir', mpp_chksum( iobt%sw_flux_vis_dir)
-  write(outunit,100) 'iobt%sw_flux_vis_dif', mpp_chksum( iobt%sw_flux_vis_dif)
-  write(outunit,100) 'iobt%sw_flux_nir_dir', mpp_chksum( iobt%sw_flux_nir_dir)
-  write(outunit,100) 'iobt%sw_flux_nir_dif', mpp_chksum( iobt%sw_flux_nir_dif)
-  write(outunit,100) 'iobt%lprec          ', mpp_chksum( iobt%lprec          )
-  write(outunit,100) 'iobt%fprec          ', mpp_chksum( iobt%fprec          )
-  write(outunit,100) 'iobt%runoff         ', mpp_chksum( iobt%runoff         )
-  write(outunit,100) 'iobt%calving        ', mpp_chksum( iobt%calving        )
-  write(outunit,100) 'iobt%p              ', mpp_chksum( iobt%p              )
+  write(outunit,100) 'iobt%u_flux         ', field_chksum( iobt%u_flux         )
+  write(outunit,100) 'iobt%v_flux         ', field_chksum( iobt%v_flux         )
+  write(outunit,100) 'iobt%t_flux         ', field_chksum( iobt%t_flux         )
+  write(outunit,100) 'iobt%q_flux         ', field_chksum( iobt%q_flux         )
+  write(outunit,100) 'iobt%salt_flux      ', field_chksum( iobt%salt_flux      )
+  write(outunit,100) 'iobt%lw_flux        ', field_chksum( iobt%lw_flux        )
+  write(outunit,100) 'iobt%sw_flux_vis_dir', field_chksum( iobt%sw_flux_vis_dir)
+  write(outunit,100) 'iobt%sw_flux_vis_dif', field_chksum( iobt%sw_flux_vis_dif)
+  write(outunit,100) 'iobt%sw_flux_nir_dir', field_chksum( iobt%sw_flux_nir_dir)
+  write(outunit,100) 'iobt%sw_flux_nir_dif', field_chksum( iobt%sw_flux_nir_dif)
+  write(outunit,100) 'iobt%lprec          ', field_chksum( iobt%lprec          )
+  write(outunit,100) 'iobt%fprec          ', field_chksum( iobt%fprec          )
+  write(outunit,100) 'iobt%runoff         ', field_chksum( iobt%runoff         )
+  write(outunit,100) 'iobt%calving        ', field_chksum( iobt%calving        )
+  write(outunit,100) 'iobt%p              ', field_chksum( iobt%p              )
   if (associated(iobt%ustar_berg)) &
-    write(outunit,100) 'iobt%ustar_berg     ', mpp_chksum( iobt%ustar_berg )
+    write(outunit,100) 'iobt%ustar_berg     ', field_chksum( iobt%ustar_berg )
   if (associated(iobt%area_berg)) &
-    write(outunit,100) 'iobt%area_berg      ', mpp_chksum( iobt%area_berg  )
+    write(outunit,100) 'iobt%area_berg      ', field_chksum( iobt%area_berg  )
   if (associated(iobt%mass_berg)) &
-    write(outunit,100) 'iobt%mass_berg      ', mpp_chksum( iobt%mass_berg  )
+    write(outunit,100) 'iobt%mass_berg      ', field_chksum( iobt%mass_berg  )
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 
   call coupler_type_write_chksums(iobt%fluxes, outunit, 'iobt%')
@@ -1664,7 +1659,8 @@ subroutine check_mask_val_consistency(val, mask, i, j, varname, G)
 
   real, intent(in) :: val  !< value of flux/variable passed by IOB
   real, intent(in) :: mask !< value of ocean mask
-  integer, intent(in) :: i, j !< model grid cell indices
+  integer, intent(in) :: i !< model grid cell indices
+  integer, intent(in) :: j !< model grid cell indices
   character(len=*), intent(in) :: varname !< variable name
   type(ocean_grid_type), intent(in) :: G !< The ocean's grid structure
   ! Local variables

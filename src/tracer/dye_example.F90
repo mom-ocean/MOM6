@@ -3,13 +3,14 @@ module regional_dyes
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_coupler_types,      only : set_coupler_type_data, atmos_ocn_coupler_flux
 use MOM_diag_mediator,      only : diag_ctrl
 use MOM_error_handler,      only : MOM_error, FATAL, WARNING
 use MOM_file_parser,        only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,       only : forcing
 use MOM_grid,               only : ocean_grid_type
 use MOM_hor_index,          only : hor_index_type
-use MOM_io,                 only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_io,                 only : vardesc, var_desc, query_vardesc
 use MOM_open_boundary,      only : ocean_OBC_type
 use MOM_restart,            only : query_initialized, MOM_restart_CS
 use MOM_sponge,             only : set_up_sponge_field, sponge_CS
@@ -20,9 +21,6 @@ use MOM_tracer_Z_init,      only : tracer_Z_init
 use MOM_unit_scaling,       only : unit_scale_type
 use MOM_variables,          only : surface
 use MOM_verticalGrid,       only : verticalGrid_type
-
-use coupler_types_mod,      only : coupler_type_set_data, ind_csurf
-use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 
 implicit none ; private
 
@@ -50,7 +48,7 @@ type, public :: dye_tracer_CS ; private
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
   real, pointer :: tr(:,:,:,:) => NULL() !< The array of tracers used in this subroutine, in g m-3?
 
-  integer, allocatable, dimension(:) :: ind_tr !< Indices returned by aof_set_coupler_flux if it is used and the
+  integer, allocatable, dimension(:) :: ind_tr !< Indices returned by atmos_ocn_coupler_flux if it is used and the
                                                !! surface tracer concentrations are to be provided to the coupler.
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
@@ -172,7 +170,7 @@ function register_dye_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
     ! values to the coupler (if any).  This is meta-code and its arguments will
     ! currently (deliberately) give fatal errors if it is used.
     if (CS%coupled_tracers) &
-      CS%ind_tr(m) = aof_set_coupler_flux(trim(var_name)//'_flux', &
+      CS%ind_tr(m) = atmos_ocn_coupler_flux(trim(var_name)//'_flux', &
           flux_type=' ', implementation=' ', caller="register_dye_tracer")
   enddo
 
@@ -247,15 +245,15 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: h_old !< Layer thickness before entrainment [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: h_new !< Layer thickness after entrainment [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: ea   !< an array to which the amount of fluid entrained
                                               !! from the layer above during this call will be
                                               !! added [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: eb   !< an array to which the amount of fluid entrained
                                               !! from the layer below during this call will be
                                               !! added [H ~> m or kg m-2].
@@ -271,7 +269,7 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
                                               !! fluxes can be applied [H ~> m or kg m-2]
 
 ! Local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified
   real :: sfc_val  ! The surface value for the tracers.
   real :: Isecs_per_year  ! The number of seconds in a year.
   real :: year            ! The time in years.
@@ -372,14 +370,15 @@ end function dye_stock
 !> This subroutine extracts the surface fields from this tracer package that
 !! are to be shared with the atmosphere in coupled configurations.
 !! This particular tracer package does not report anything back to the coupler.
-subroutine dye_tracer_surface_state(sfc_state, h, G, CS)
-  type(ocean_grid_type),  intent(in)    :: G  !< The ocean's grid structure.
-  type(surface),          intent(inout) :: sfc_state !< A structure containing fields that
-                                              !! describe the surface state of the ocean.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                          intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2].
-  type(dye_tracer_CS),    pointer       :: CS !< The control structure returned by a previous
-                                              !! call to register_dye_tracer.
+subroutine dye_tracer_surface_state(sfc_state, h, G, GV, CS)
+  type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure
+  type(surface),           intent(inout) :: sfc_state !< A structure containing fields that
+                                               !! describe the surface state of the ocean.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2].
+  type(dye_tracer_CS),     pointer       :: CS !< The control structure returned by a previous
+                                               !! call to register_dye_tracer.
 
   ! This particular tracer package does not report anything back to the coupler.
   ! The code that is here is just a rough guide for packages that would.
@@ -394,9 +393,8 @@ subroutine dye_tracer_surface_state(sfc_state, h, G, CS)
     do m=1,CS%ntr
       !   This call loads the surface values into the appropriate array in the
       ! coupler-type structure.
-      call coupler_type_set_data(CS%tr(:,:,1,m), CS%ind_tr(m), ind_csurf, &
-                   sfc_state%tr_fields, idim=(/isd, is, ie, ied/), &
-                   jdim=(/jsd, js, je, jed/) )
+      call set_coupler_type_data(CS%tr(:,:,1,m), CS%ind_tr(m), sfc_state%tr_fields, &
+                   idim=(/isd, is, ie, ied/), jdim=(/jsd, js, je, jed/) )
     enddo
   endif
 
