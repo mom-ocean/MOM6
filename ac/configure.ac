@@ -43,7 +43,6 @@ srcdir=$srcdir/..
 # NOTE: --enable is more properly used to add a feature, rather than to select
 #   a compile-time mode, so this is not exactly being used as intended.
 MEM_LAYOUT=${srcdir}/config_src/memory/dynamic_symmetric
-AC_CHECK_FILE($MEM_LAYOUT, [MEM_LAYOUT=$MEM_LAYOUT], [MEM_LAYOUT=${srcdir}/config_src/dynamic_symmetric])
 AC_ARG_ENABLE([asymmetric],
   AS_HELP_STRING([--enable-asymmetric], [Use the asymmetric grid]))
 AS_IF([test "$enable_asymmetric" = yes],
