@@ -985,6 +985,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
         else
            mech_TKE = mech_TKE * exp_kh
         endif
+        !if ( i .eq. 10 .and. j .eq. 10 .and. k .eq. nz) print*,'mech TKE', mech_TKE
 
         !   Accumulate any convectively released potential energy to contribute
         ! to wstar and to drive penetrating convection.
