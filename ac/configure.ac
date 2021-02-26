@@ -50,7 +50,6 @@ AS_IF([test "$enable_asymmetric" = yes],
 
 # Default to solo_driver
 DRIVER_DIR=${srcdir}/config_src/drivers/solo_driver
-AC_CHECK_FILE($DRIVER_DIR, [DRIVER_DIR=$DRIVER_DIR], [DRIVER_DIR=${srcdir}/config_src/solo_driver])
 AC_ARG_WITH([driver],
   AS_HELP_STRING([--with-driver=coupled_driver|solo_driver], [Select directory for driver source code]))
 AS_IF([test "x$with_driver" != "x"],
