@@ -2400,14 +2400,14 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
 
   CS%id_intz_diffu_2d = register_diag_field('ocean_model', 'intz_diffu_2d', diag%axesCu1, Time, &
       'Depth-integral of Zonal Acceleration from Horizontal Viscosity', 'm2 s-2', &
-      conversion=US%Z_to_m*US%L_T2_to_m_s2)
+      conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if ((CS%id_intz_diffu_2d > 0) .and. (present(ADp))) then
     call safe_alloc_ptr(ADp%diag_hu,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
   endif
 
   CS%id_intz_diffv_2d = register_diag_field('ocean_model', 'intz_diffv_2d', diag%axesCv1, Time, &
       'Depth-integral of Meridional Acceleration from Horizontal Viscosity', 'm2 s-2', &
-      conversion=US%Z_to_m*US%L_T2_to_m_s2)
+      conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if ((CS%id_intz_diffv_2d > 0) .and. (present(ADp))) then
     call safe_alloc_ptr(ADp%diag_hv,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
   endif
