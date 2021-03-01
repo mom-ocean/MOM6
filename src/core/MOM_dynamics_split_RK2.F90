@@ -1453,12 +1453,12 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
 
   CS%id_intz_PFu_2d = register_diag_field('ocean_model', 'intz_PFu_2d', diag%axesCu1, Time, &
       'Depth-integral of Zonal Pressure Force Acceleration', 'm2 s-2', &
-      conversion=US%L_T_to_m_s**2)
+      conversion=US%Z_to_m*US%L_T2_to_m_s2)
   if(CS%id_intz_PFu_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
 
   CS%id_intz_PFv_2d = register_diag_field('ocean_model', 'intz_PFv_2d', diag%axesCv1, Time, &
       'Depth-integral of Meridional Pressure Force Acceleration', 'm2 s-2', &
-      conversion=US%L_T_to_m_s**2)
+      conversion=US%Z_to_m*US%L_T2_to_m_s2)
   if(CS%id_intz_PFv_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hv,isd,ied,Jsd,JedB,nz)
 
   CS%id_hf_CAu_2d = register_diag_field('ocean_model', 'hf_CAu_2d', diag%axesCu1, Time, &
@@ -1473,12 +1473,12 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
 
   CS%id_intz_CAu_2d = register_diag_field('ocean_model', 'intz_CAu_2d', diag%axesCu1, Time, &
       'Depth-integral of Zonal Coriolis and Advective Acceleration', 'm2 s-2', &
-      conversion=US%L_T_to_m_s**2)
+      conversion=US%Z_to_m*US%L_T2_to_m_s2)
   if(CS%id_intz_CAu_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
 
   CS%id_intz_CAv_2d = register_diag_field('ocean_model', 'intz_CAv_2d', diag%axesCv1, Time, &
       'Depth-integral of Meridional Coriolis and Advective Acceleration', 'm2 s-2', &
-      conversion=US%L_T_to_m_s**2)
+      conversion=US%Z_to_m*US%L_T2_to_m_s2)
   if(CS%id_intz_CAv_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hv,isd,ied,Jsd,JedB,nz)
 
   CS%id_uav = register_diag_field('ocean_model', 'uav', diag%axesCuL, Time, &
@@ -1513,12 +1513,12 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
 
   CS%id_intz_u_BT_accel_2d = register_diag_field('ocean_model', 'intz_u_BT_accel_2d', diag%axesCu1, Time, &
       'Depth-integral of Barotropic Anomaly Zonal Acceleration', 'm2 s-2', &
-      conversion=US%L_T_to_m_s**2)
+      conversion=US%Z_to_m*US%L_T2_to_m_s2)
   if(CS%id_intz_u_BT_accel_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
 
   CS%id_intz_v_BT_accel_2d = register_diag_field('ocean_model', 'intz_v_BT_accel_2d', diag%axesCv1, Time, &
       'Depth-integral of Barotropic Anomaly Meridional Acceleration', 'm2 s-2', &
-      conversion=US%L_T_to_m_s**2)
+      conversion=US%Z_to_m*US%L_T2_to_m_s2)
   if(CS%id_intz_v_BT_accel_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hv,isd,ied,Jsd,JedB,nz)
 
   id_clock_Cor        = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)
