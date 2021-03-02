@@ -220,14 +220,17 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
 ! Diagnostics for fractional thickness-weighted terms
   real, allocatable, dimension(:,:) :: &
     hf_gKEu_2d, hf_gKEv_2d, & ! Depth sum of hf_gKEu, hf_gKEv [L T-2 ~> m s-2].
-    hf_rvxu_2d, hf_rvxv_2d, & ! Depth sum of hf_rvxu, hf_rvxv [L T-2 ~> m s-2].
-    intz_gKEu_2d, intz_gKEv_2d, & ! Depth integral of gKEu, gKEv [L2 T-2 ~> m2 s-2].
-    intz_rvxu_2d, intz_rvxv_2d    ! Depth integral of rvxu, rvxv [L2 T-2 ~> m2 s-2].
+    hf_rvxu_2d, hf_rvxv_2d    ! Depth sum of hf_rvxu, hf_rvxv [L T-2 ~> m s-2].
+
   !real, allocatable, dimension(:,:,:) :: &
   !  hf_gKEu, hf_gKEv, & ! accel. due to KE gradient x fract. thickness  [L T-2 ~> m s-2].
   !  hf_rvxu, hf_rvxv    ! accel. due to RV x fract. thickness [L T-2 ~> m s-2].
   ! 3D diagnostics hf_gKEu etc. are commented because there is no clarity on proper remapping grid option.
   ! The code is retained for degugging purposes in the future.
+
+! Diagnostics for depth-integrated momentum budget terms     
+  real, dimension(SZIB_(G),SZJ_(G)) :: intz_gKEu_2d, intz_rvxv_2d ! [L2 T-2 ~> m2 s-2]
+  real, dimension(SZI_(G),SZJB_(G)) :: intz_gKEv_2d, intz_rvxu_2d ! [L2 T-2 ~> m2 s-2].
 
 ! To work, the following fields must be set outside of the usual
 ! is to ie range before this subroutine is called:
@@ -888,23 +891,19 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
     endif
 
     if (CS%id_intz_gKEu_2d > 0) then
-      allocate(intz_gKEu_2d(G%IsdB:G%IedB,G%jsd:G%jed))
       intz_gKEu_2d(:,:) = 0.0
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq
         intz_gKEu_2d(I,j) = intz_gKEu_2d(I,j) + AD%gradKEu(I,j,k) * AD%diag_hu(I,j,k)
       enddo ; enddo ; enddo
       call post_data(CS%id_intz_gKEu_2d, intz_gKEu_2d, CS%diag)
-      deallocate(intz_gKEu_2d)
     endif
 
     if (CS%id_intz_gKEv_2d > 0) then
-      allocate(intz_gKEv_2d(G%isd:G%ied,G%JsdB:G%JedB))
       intz_gKEv_2d(:,:) = 0.0
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
         intz_gKEv_2d(i,J) = intz_gKEv_2d(i,J) + AD%gradKEv(i,J,k) * AD%diag_hv(i,J,k)
       enddo ; enddo ; enddo
       call post_data(CS%id_intz_gKEv_2d, intz_gKEv_2d, CS%diag)
-      deallocate(intz_gKEv_2d)
     endif
 
     !if (CS%id_hf_rvxv > 0) then
@@ -943,24 +942,20 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
       deallocate(hf_rvxu_2d)
     endif
 
-        if (CS%id_intz_rvxv_2d > 0) then
-      allocate(intz_rvxv_2d(G%IsdB:G%IedB,G%jsd:G%jed))
+    if (CS%id_intz_rvxv_2d > 0) then
       intz_rvxv_2d(:,:) = 0.0
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq
         intz_rvxv_2d(I,j) = intz_rvxv_2d(I,j) + AD%rv_x_v(I,j,k) * AD%diag_hu(I,j,k)
       enddo ; enddo ; enddo
       call post_data(CS%id_intz_rvxv_2d, intz_rvxv_2d, CS%diag)
-      deallocate(intz_rvxv_2d)
     endif
 
     if (CS%id_intz_rvxu_2d > 0) then
-      allocate(intz_rvxu_2d(G%isd:G%ied,G%JsdB:G%JedB))
       intz_rvxu_2d(:,:) = 0.0
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
         intz_rvxu_2d(i,J) = intz_rvxu_2d(i,J) + AD%rv_x_u(i,J,k) * AD%diag_hv(i,J,k)
       enddo ; enddo ; enddo
       call post_data(CS%id_intz_rvxu_2d, intz_rvxu_2d, CS%diag)
-      deallocate(intz_rvxu_2d)
     endif
   endif
 
