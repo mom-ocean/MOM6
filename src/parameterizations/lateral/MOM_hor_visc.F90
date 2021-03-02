@@ -278,7 +278,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     boundary_mask_h ! A mask that zeroes out cells with at least one land edge [nondim]
 
   real, allocatable, dimension(:,:) :: hf_diffu_2d, hf_diffv_2d ! Depth sum of hf_diffu, hf_diffv [L T-2 ~> m s-2]
-  real, allocatable, dimension(:,:) :: intz_diffu_2d, intz_diffv_2d ! Integral of diffu, diffv [L2 T-2 ~> m2 s-2]
+  real, dimension(SZIB_(G),SZJ_(G)) :: intz_diffu_2d ! Depth-integral of diffu [L2 T-2 ~> m2 s-2]
+  real, dimension(SZI_(G),SZJB_(G)) :: intz_diffv_2d ! Depth-integral of diffv [L2 T-2 ~> m2 s-2]
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     dvdx, dudy, & ! components in the shearing strain [T-1 ~> s-1]
@@ -1664,22 +1665,18 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   endif
 
   if (present(ADp) .and. (CS%id_intz_diffu_2d > 0)) then
-    allocate(intz_diffu_2d(G%IsdB:G%IedB,G%jsd:G%jed))
     intz_diffu_2d(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       intz_diffu_2d(I,j) = intz_diffu_2d(I,j) + diffu(I,j,k) * ADp%diag_hu(I,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_intz_diffu_2d, intz_diffu_2d, CS%diag)
-    deallocate(intz_diffu_2d)
   endif
   if (present(ADp) .and. (CS%id_intz_diffv_2d > 0)) then
-    allocate(intz_diffv_2d(G%isd:G%ied,G%JsdB:G%JedB))
     intz_diffv_2d(:,:) = 0.0
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       intz_diffv_2d(i,J) = intz_diffv_2d(i,J) + diffv(i,J,k) * ADp%diag_hv(i,J,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_intz_diffv_2d, intz_diffv_2d, CS%diag)
-    deallocate(intz_diffv_2d)
   endif
 
 end subroutine horizontal_viscosity
