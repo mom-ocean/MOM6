@@ -265,6 +265,8 @@ subroutine initialize_ice_thickness_channel(h_shelf, area_shelf_h, hmask, G, US,
   endif ; enddo
 
 end subroutine initialize_ice_thickness_channel
+
+!> Initialize ice shelf boundary conditions for a channel configuration
 subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_bdry, &
                 u_flux_bdry_val, v_flux_bdry_val, u_bdry_val, v_bdry_val, u_shelf, v_shelf, h_bdry_val, &
                 thickness_bdry_val, hmask,  h_shelf, G,&  
@@ -309,7 +311,7 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
  real    :: input_thick ! The input ice shelf thickness [Z ~> m]
 !   real    :: input_flux  ! The input ice flux per unit length [L Z T-1 ~> m2 s-1]
    real    :: input_vel  ! The input ice velocity per  [L Z T-1 ~> m s-1]
-   real    :: lenlat, len_stress, westlon, lenlon, southlat
+   real    :: lenlat, len_stress, westlon, lenlon, southlat ! The input positions of the channel boundarises
 
 
    call get_param(PF, mdl, "LENLAT", lenlat, fail_if_missing=.true.)
@@ -352,11 +354,11 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
  !        else
            hmask(i+1,j) = 3.0
 !           hmask(i,j) = 3.0
-           h_bdry_val(i+1,j) = h_shelf(i+1,j) !OVS 11/10/20 !input_thick
+           h_bdry_val(i+1,j) = h_shelf(i+1,j)
 !           h_bdry_val(i,j) = h_shelf(i,j)
            thickness_bdry_val(i+1,j) = h_bdry_val(i+0*1,j)
            u_face_mask_bdry(i+1,j) = 3.0
-           u_bdry_val(i+1,j) = input_vel*(1-16.0*((G%geoLatBu(i-1,j)/lenlat-0.5))**4) !OVS 11/09/20 U b.c.
+           u_bdry_val(i+1,j) = input_vel*(1-16.0*((G%geoLatBu(i-1,j)/lenlat-0.5))**4) !velocity distribution
  !          u_bdry_val(i+1,j) = (1 - ((G%geoLatBu(i,j) - 0.5*lenlat)*2./lenlat)**2) * &
  !                  1.5 * input_flux / input_thick
  !        endif
@@ -367,28 +369,26 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
         if (G%geoLatBu(i,j-1) == southlat) then !bot boundary
          if (len_stress == 0. .OR. G%geoLonCv(i,j) <= len_stress) then
            v_face_mask_bdry(i,j+1) = 0.
-!           u_face_mask_bdry(i,j-1) = 3.          !OVS 11/25/20
-           u_face_mask_bdry(i,j) = 3.         !OVS 11/25/20
+!           u_face_mask_bdry(i,j-1) = 3.         
+           u_face_mask_bdry(i,j) = 3.         
            u_bdry_val(i,j) = 0.
            v_bdry_val(i,j) = 0.            
          else
            v_face_mask_bdry(i,j+1) = 1.
-!           v_face_mask_bdry(i,j) = 3.         !OVS 01/20/21
-           u_face_mask_bdry(i,j) = 3.         !OVS 11/25/20
+           u_face_mask_bdry(i,j) = 3.         
            u_bdry_val(i,j) = 0.
-           v_bdry_val(i,j) = 0.                !OVS 01/20/21
-           !hmask(i,j) = 0.0                   !OVS 11/25/20
+           v_bdry_val(i,j) = 0.                
          endif
        elseif (G%geoLatBu(i,j-1) == southlat+lenlat) then !top boundary
          if (len_stress == 0. .OR. G%geoLonCv(i,j) <= len_stress) then
            v_face_mask_bdry(i,j-1) = 0.
-           u_face_mask_bdry(i,j-1) = 3.         !OVS 11/25/20
+           u_face_mask_bdry(i,j-1) = 3.         
          else
 !           v_face_mask_bdry(i,j-1) = 1.
-           v_face_mask_bdry(i,j-1) = 3.         !OVS 01/20/21
-           u_face_mask_bdry(i,j-1) = 3.         !OVS 11/25/20
-           !u_bdry_val(i,j) = 0.               !OVS 11/25/20
-           !hmask(i,j) = 0.0                   !OVS 11/25/20
+           v_face_mask_bdry(i,j-1) = 3.         
+           u_face_mask_bdry(i,j-1) = 3.       
+           !u_bdry_val(i,j) = 0.               
+           !hmask(i,j) = 0.0                   
          endif
        endif
 
@@ -400,9 +400,6 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
      enddo
    enddo
 
-!  call pass_var(hmask, G%domain)
-!  call pass_var(h_bdry_val, G%domain) 
-!  call pass_var(thickness_bdry_val, G%domain)  
   
   
 !       if (.not. G%symmetric) then
@@ -590,6 +587,7 @@ end subroutine initialize_ice_shelf_boundary_channel
 
 !END MJH end subroutine initialize_ice_shelf_boundary_channel
 
+!> Initialize ice shelf flow from file
 subroutine initialize_ice_flow_from_file(u_shelf, v_shelf,ice_visc,float_cond, hmask,h_shelf, G, US, PF)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
@@ -644,7 +642,6 @@ subroutine initialize_ice_flow_from_file(u_shelf, v_shelf,ice_visc,float_cond, h
   if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
        " initialize_ice_shelf_velocity_from_file: Unable to open "//trim(filename))
 
- !hmask_varname = "hmask" 
  floatfr_varname = "float_frac"
 
 ! call MOM_read_data(filename, trim(ushelf_varname), u_shelf, G%Domain, scale=1.0) !/(365.0*86400.0))
