@@ -302,14 +302,12 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
                                               !! partly or fully covered by an ice-shelf
    real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout) :: h_shelf !< Ice-shelf thickness  OVS 11/10/20                                              
-!   logical,               intent(in)    :: flux_bdry !< If true, use mass fluxes as the boundary value.
    type(unit_scale_type), intent(in)    :: US !< A structure containing unit conversion factors
    type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
 
    character(len=40)  :: mdl = "initialize_ice_shelf_boundary_channel" ! This subroutine's name.
    integer :: i, j, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc,gisd,gjsd, isc, jsc, iec, jec, ied, jed
- real    :: input_thick ! The input ice shelf thickness [Z ~> m]
-!   real    :: input_flux  ! The input ice flux per unit length [L Z T-1 ~> m2 s-1]
+   real    :: input_thick ! The input ice shelf thickness [Z ~> m]
    real    :: input_vel  ! The input ice velocity per  [L Z T-1 ~> m s-1]
    real    :: lenlat, len_stress, westlon, lenlon, southlat ! The input positions of the channel boundarises
 
@@ -341,27 +339,27 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
    gisc = G%Domain%nihalo ; gjsc = G%Domain%njhalo
    giec = G%Domain%niglobal+gisc ; gjec = G%Domain%njglobal+gjsc
 
-!-----------b.c.s based on geopositions -----------------
-!   do j=jsc-1,jec+1
+  !---------b.c.s based on geopositions -----------------
+  !  do j=jsc-1,jec+1
    do j=jsc-0*1,jec+1
      do i=isc-1,iec+1
   ! upstream boundary - set either dirichlet or flux condition
 
         if (G%geoLonBu(i,j) == westlon) then
- !        if (flux_bdry) then
- !          u_face_mask_bdry(i-1,j) = 4.0
- !          u_flux_bdry_val(i-1,j) = input_flux
- !        else
+  !        if (flux_bdry) then
+  !          u_face_mask_bdry(i-1,j) = 4.0
+  !          u_flux_bdry_val(i-1,j) = input_flux
+  !        else
            hmask(i+1,j) = 3.0
-!           hmask(i,j) = 3.0
+  !           hmask(i,j) = 3.0
            h_bdry_val(i+1,j) = h_shelf(i+1,j)
-!           h_bdry_val(i,j) = h_shelf(i,j)
+  !           h_bdry_val(i,j) = h_shelf(i,j)
            thickness_bdry_val(i+1,j) = h_bdry_val(i+0*1,j)
            u_face_mask_bdry(i+1,j) = 3.0
            u_bdry_val(i+1,j) = input_vel*(1-16.0*((G%geoLatBu(i-1,j)/lenlat-0.5))**4) !velocity distribution
- !          u_bdry_val(i+1,j) = (1 - ((G%geoLatBu(i,j) - 0.5*lenlat)*2./lenlat)**2) * &
- !                  1.5 * input_flux / input_thick
- !        endif
+  !          u_bdry_val(i+1,j) = (1 - ((G%geoLatBu(i,j) - 0.5*lenlat)*2./lenlat)**2) * &
+  !                  1.5 * input_flux / input_thick
+  !        endif
        endif
 
 
@@ -369,7 +367,7 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
         if (G%geoLatBu(i,j-1) == southlat) then !bot boundary
          if (len_stress == 0. .OR. G%geoLonCv(i,j) <= len_stress) then
            v_face_mask_bdry(i,j+1) = 0.
-!           u_face_mask_bdry(i,j-1) = 3.         
+  !           u_face_mask_bdry(i,j-1) = 3.         
            u_face_mask_bdry(i,j) = 3.         
            u_bdry_val(i,j) = 0.
            v_bdry_val(i,j) = 0.            
@@ -384,7 +382,7 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
            v_face_mask_bdry(i,j-1) = 0.
            u_face_mask_bdry(i,j-1) = 3.         
          else
-!           v_face_mask_bdry(i,j-1) = 1.
+           !v_face_mask_bdry(i,j-1) = 1.
            v_face_mask_bdry(i,j-1) = 3.         
            u_face_mask_bdry(i,j-1) = 3.       
            !u_bdry_val(i,j) = 0.               
@@ -398,10 +396,7 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
        endif
 
      enddo
-   enddo
-
-  
-  
+   enddo  
 !       if (.not. G%symmetric) then
 !!      do j=G%jsd,G%jed 
 !!       do i=G%isd,G%ied
@@ -623,7 +618,7 @@ subroutine initialize_ice_flow_from_file(u_shelf, v_shelf,ice_visc,float_cond, h
   call get_param(PF, mdl, "ICE_VELOCITY_FILE", vel_file, &
                  "The file from which the velocity is read.", &
                  default="ice_shelf_vel.nc")
- call get_param(PF, mdl, "LEN_SIDE_STRESS", len_sidestress, &
+  call get_param(PF, mdl, "LEN_SIDE_STRESS", len_sidestress, &
                  "position past which shelf sides are stress free.", &
                  default=0.0, units="axis_units")
 
@@ -642,12 +637,12 @@ subroutine initialize_ice_flow_from_file(u_shelf, v_shelf,ice_visc,float_cond, h
   if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
        " initialize_ice_shelf_velocity_from_file: Unable to open "//trim(filename))
 
- floatfr_varname = "float_frac"
+  floatfr_varname = "float_frac"
 
 ! call MOM_read_data(filename, trim(ushelf_varname), u_shelf, G%Domain, scale=1.0) !/(365.0*86400.0))
 ! call MOM_read_data(filename,trim(vshelf_varname), v_shelf, G%Domain, scale=1.0)  !/(365.0*86400.0))
- call MOM_read_data(filename,trim(ice_visc_varname), ice_visc, G%Domain, scale=1.0) !*(365.0*86400.0))
- call MOM_read_data(filename,trim(floatfr_varname), float_cond, G%Domain, scale=1.)
+  call MOM_read_data(filename,trim(ice_visc_varname), ice_visc, G%Domain, scale=1.0) !*(365.0*86400.0))
+  call MOM_read_data(filename,trim(floatfr_varname), float_cond, G%Domain, scale=1.)
 !  call get_param(PF, mdl, "ICE_BOUNDARY_CONFIG", config, &
 !                 "This specifies how the ice domain boundary is specified", &
 !                 fail_if_missing=.true.)
