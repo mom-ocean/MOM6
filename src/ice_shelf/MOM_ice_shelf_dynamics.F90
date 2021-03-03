@@ -160,8 +160,9 @@ type, public :: ice_shelf_dyn_CS ; private
              id_u_mask = -1, id_v_mask = -1, id_t_mask = -1
   !>@}
   ! ids for outputting intermediate thickness in advection subroutine (debugging)
+  !>@{ Diagnostic handles for debugging
   integer :: id_h_after_uflux = -1, id_h_after_vflux = -1, id_h_after_adv = -1, id_visc_shelf = -1
-
+  !>@}
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to control diagnostic output.
 
 end type ice_shelf_dyn_CS
@@ -809,8 +810,9 @@ subroutine ice_shelf_advect(CS, ISS, G, time_step, Time)
 
 end subroutine ice_shelf_advect
 
+!>This subroutine computes u- and v-velocities of the ice shelf iterating on non-linear ice viscosity
 !subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, iters, time)
- subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf,taudx,taudy, iters, Time) !OVS 02/08/21
+ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf,taudx,taudy, iters, Time)
   type(ice_shelf_dyn_CS), intent(inout) :: CS !< The ice shelf dynamics control structure
   type(ice_shelf_state),  intent(in)    :: ISS !< A structure with elements that describe
                                                !! the ice-shelf state
@@ -823,7 +825,7 @@ end subroutine ice_shelf_advect
   integer,                intent(out)   :: iters !< The number of iterations used in the solver.
   type(time_type),        intent(in)    :: Time !< The current model time
 
-  real, dimension(SZDIB_(G),SZDJB_(G)) :: taudx, taudy ! Driving stresses at q-points [R L3 Z T-2 ~> kg m s-2]
+  real, dimension(SZDIB_(G),SZDJB_(G)) :: taudx, taudy !< Driving stresses at q-points [R L3 Z T-2 ~> kg m s-2]
   real, dimension(SZDIB_(G),SZDJB_(G)) :: u_bdry_cont ! Boundary u-stress contribution [R L3 Z T-2 ~> kg m s-2]
   real, dimension(SZDIB_(G),SZDJB_(G)) :: v_bdry_cont ! Boundary v-stress contribution [R L3 Z T-2 ~> kg m s-2]
   real, dimension(SZDIB_(G),SZDJB_(G)) :: Au, Av ! The retarding lateral stress contributions [R L3 Z T-2 ~> kg m s-2]
