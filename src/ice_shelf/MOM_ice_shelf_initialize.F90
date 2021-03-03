@@ -269,7 +269,7 @@ end subroutine initialize_ice_thickness_channel
 !> Initialize ice shelf boundary conditions for a channel configuration
 subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_bdry, &
                 u_flux_bdry_val, v_flux_bdry_val, u_bdry_val, v_bdry_val, u_shelf, v_shelf, h_bdry_val, &
-                thickness_bdry_val, hmask,  h_shelf, G,&  
+                thickness_bdry_val, hmask,  h_shelf, G,&
                 US, PF )
 
    type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
@@ -289,9 +289,9 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
    real, dimension(SZIB_(G),SZJB_(G)), &
                           intent(inout) :: v_bdry_val !< The meridional ice shelf velocity at open
    real, dimension(SZIB_(G),SZJB_(G)), &
-                          intent(inout) :: u_shelf !< The zonal ice shelf velocity  [L T-1 ~> m s-1].                  
+                          intent(inout) :: u_shelf !< The zonal ice shelf velocity  [L T-1 ~> m s-1].
    real, dimension(SZIB_(G),SZJB_(G)), &
-                          intent(inout) :: v_shelf !< The meridional ice shelf velocity  [L T-1 ~> m s-1]. 
+                          intent(inout) :: v_shelf !< The meridional ice shelf velocity  [L T-1 ~> m s-1].
    real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout) :: thickness_bdry_val !< The ice shelf thickness at open boundaries [Z ~> m]
                                                           !! boundary vertices [L T-1 ~> m s-1].
@@ -301,7 +301,7 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
                           intent(inout) :: hmask !< A mask indicating which tracer points are
                                               !! partly or fully covered by an ice-shelf
    real, dimension(SZDI_(G),SZDJ_(G)), &
-                          intent(inout) :: h_shelf !< Ice-shelf thickness  OVS 11/10/20                                              
+                          intent(inout) :: h_shelf !< Ice-shelf thickness  OVS 11/10/20
    type(unit_scale_type), intent(in)    :: US !< A structure containing unit conversion factors
    type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
 
@@ -367,26 +367,26 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
         if (G%geoLatBu(i,j-1) == southlat) then !bot boundary
          if (len_stress == 0. .OR. G%geoLonCv(i,j) <= len_stress) then
            v_face_mask_bdry(i,j+1) = 0.
-  !           u_face_mask_bdry(i,j-1) = 3.         
-           u_face_mask_bdry(i,j) = 3.         
+  !           u_face_mask_bdry(i,j-1) = 3.
+           u_face_mask_bdry(i,j) = 3.
            u_bdry_val(i,j) = 0.
-           v_bdry_val(i,j) = 0.            
+           v_bdry_val(i,j) = 0.
          else
            v_face_mask_bdry(i,j+1) = 1.
-           u_face_mask_bdry(i,j) = 3.         
+           u_face_mask_bdry(i,j) = 3.
            u_bdry_val(i,j) = 0.
-           v_bdry_val(i,j) = 0.                
+           v_bdry_val(i,j) = 0.
          endif
        elseif (G%geoLatBu(i,j-1) == southlat+lenlat) then !top boundary
          if (len_stress == 0. .OR. G%geoLonCv(i,j) <= len_stress) then
            v_face_mask_bdry(i,j-1) = 0.
-           u_face_mask_bdry(i,j-1) = 3.         
+           u_face_mask_bdry(i,j-1) = 3.
          else
            !v_face_mask_bdry(i,j-1) = 1.
-           v_face_mask_bdry(i,j-1) = 3.         
-           u_face_mask_bdry(i,j-1) = 3.       
-           !u_bdry_val(i,j) = 0.               
-           !hmask(i,j) = 0.0                   
+           v_face_mask_bdry(i,j-1) = 3.
+           u_face_mask_bdry(i,j-1) = 3.
+           !u_bdry_val(i,j) = 0.
+           !hmask(i,j) = 0.0
          endif
        endif
 
@@ -396,9 +396,9 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
        endif
 
      enddo
-   enddo  
+   enddo
 !       if (.not. G%symmetric) then
-!!      do j=G%jsd,G%jed 
+!!      do j=G%jsd,G%jed
 !!       do i=G%isd,G%ied
 !       do j=jsc-1,jec+1
 !        do i=isc-1,iec+1
@@ -416,7 +416,7 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
 !          v_shelf(I-1,J-1) = v_bdry_val(I-1,J-1)
 !          v_shelf(I,J-1) = v_bdry_val(I,J-1)
 !        endif
-!      enddo  
+!      enddo
 !     enddo
 !    endif
 end subroutine initialize_ice_shelf_boundary_channel
@@ -583,7 +583,8 @@ end subroutine initialize_ice_shelf_boundary_channel
 !END MJH end subroutine initialize_ice_shelf_boundary_channel
 
 !> Initialize ice shelf flow from file
-subroutine initialize_ice_flow_from_file(u_shelf, v_shelf,ice_visc,float_cond, hmask,h_shelf, G, US, PF)
+subroutine initialize_ice_flow_from_file(u_shelf, v_shelf,ice_visc,float_cond,&
+                                         hmask,h_shelf, G, US, PF)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: u_shelf !< The ice shelf u velocity  [Z ~> m T ~>s].
@@ -593,13 +594,13 @@ subroutine initialize_ice_flow_from_file(u_shelf, v_shelf,ice_visc,float_cond, h
                          intent(inout) :: ice_visc !< The ice shelf viscosity [Pa ~> m T ~> s].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout)    :: float_cond !< An array indicating where the ice
-                                                !! shelf is floating: 0 if floating, 1 if not.               
+                                                !! shelf is floating: 0 if floating, 1 if not.
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(in) :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(in) :: h_shelf !< A mask indicating which tracer points are
-                                             !! partly or fully covered by an ice-shelf                                             
+                                             !! partly or fully covered by an ice-shelf
   type(unit_scale_type), intent(in)    :: US !< A structure containing unit conversion factors
   type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
 

@@ -719,7 +719,7 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
       call hchksum(ISS%mass_shelf, "mass_shelf after change thickness using melt", G%HI, haloshift=0, &
                    scale=US%RZ_to_kg_m2)
     endif
-  endif !OVS 12/10/20  
+  endif !OVS 12/10/20
 
   if (CS%debug) call MOM_forcing_chksum("Before add shelf flux", fluxes, G, CS%US, haloshift=0)
 
