@@ -2675,6 +2675,17 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     enddo ; enddo ; enddo
   endif
 
+  if ((present(ADp)) .and. (present(BT_cont)) .and. (associated(ADp%diag_hu))) then
+    do k=1,nz ; do j=js,je ; do I=is-1,ie
+      ADp%diag_hu(I,j,k) = BT_cont%h_u(I,j,k)
+    enddo ; enddo ; enddo
+  endif
+  if ((present(ADp)) .and. (present(BT_cont)) .and. (associated(ADp%diag_hv))) then
+    do k=1,nz ; do J=js-1,je ; do i=is,ie
+      ADp%diag_hv(i,J,k) = BT_cont%h_v(i,J,k)
+    enddo ; enddo ; enddo
+  endif
+
   if (G%nonblocking_updates) then
     if (find_etaav) call complete_group_pass(CS%pass_etaav, G%Domain)
     call complete_group_pass(CS%pass_ubta_uhbta, G%Domain)
