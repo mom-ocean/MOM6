@@ -13,6 +13,7 @@ use MOM_open_boundary,  only : OBC_segment_type, register_OBC
 use MOM_open_boundary,  only : OBC_registry_type
 use MOM_time_manager,   only : time_type, time_type_to_real
 use MOM_unit_scaling,   only : unit_scale_type
+use MOM_verticalGrid,   only : verticalGrid_type
 
 implicit none ; private
 
@@ -125,14 +126,15 @@ subroutine shelfwave_initialize_topography( D, G, param_file, max_depth, US )
 end subroutine shelfwave_initialize_topography
 
 !> This subroutine sets the properties of flow at open boundary conditions.
-subroutine shelfwave_set_OBC_data(OBC, CS, G, h, Time)
-  type(ocean_OBC_type),   pointer    :: OBC  !< This open boundary condition type specifies
+subroutine shelfwave_set_OBC_data(OBC, CS, G, GV, h, Time)
+  type(ocean_OBC_type),    pointer    :: OBC !< This open boundary condition type specifies
                                              !! whether, where, and what open boundary
                                              !! conditions are used.
-  type(shelfwave_OBC_CS), pointer    :: CS   !< tidal bay control structure.
-  type(ocean_grid_type),  intent(in) :: G    !< The ocean's grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h !< layer thickness.
-  type(time_type),        intent(in) :: Time !< model time.
+  type(shelfwave_OBC_CS),  pointer    :: CS  !< tidal bay control structure.
+  type(ocean_grid_type),   intent(in) :: G   !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV  !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h !< layer thickness.
+  type(time_type),         intent(in) :: Time !< model time.
 
   ! The following variables are used to set up the transport in the shelfwave example.
   real :: my_amp, time_sec

@@ -17,7 +17,6 @@ use MOM_open_boundary, only : ocean_OBC_type
 use MOM_open_boundary, only : open_boundary_config, open_boundary_query
 use MOM_open_boundary, only : open_boundary_impose_normal_slope
 use MOM_open_boundary, only : open_boundary_impose_land_mask
-! use MOM_shared_initialization, only : MOM_shared_init_init
 use MOM_shared_initialization, only : MOM_initialize_rotation, MOM_calculate_grad_Coriolis
 use MOM_shared_initialization, only : initialize_topography_from_file, apply_topography_edits_from_file
 use MOM_shared_initialization, only : initialize_topography_named, limit_topography, diagnoseMaximumDepth
@@ -41,8 +40,6 @@ use dumbbell_initialization, only : dumbbell_initialize_topography
 use shelfwave_initialization, only : shelfwave_initialize_topography
 use Phillips_initialization, only : Phillips_initialize_topography
 use dense_water_initialization, only : dense_water_initialize_topography
-
-use netcdf
 
 implicit none ; private
 

@@ -14,9 +14,6 @@ use time_manager_mod, only : days_in_month, month_name
 use time_manager_mod, only : set_calendar_type, get_calendar_type
 use time_manager_mod, only : JULIAN, NOLEAP, THIRTY_DAY_MONTHS, GREGORIAN
 use time_manager_mod, only : NO_CALENDAR
-use time_interp_external_mod, only : init_external_field, time_interp_external, time_interp_external_init
-use time_interp_external_mod, only : get_external_field_size
-use time_interp_external_mod, only : get_external_field_axes, get_external_field_missing
 
 implicit none ; private
 
@@ -29,24 +26,18 @@ public :: operator(==), operator(/=), operator(//)
 public :: get_date, set_date, increment_date, month_name, days_in_month
 public :: JULIAN, NOLEAP, THIRTY_DAY_MONTHS, GREGORIAN, NO_CALENDAR
 public :: set_calendar_type, get_calendar_type
-public :: init_external_field
-public :: time_interp_external
-public :: time_interp_external_init
-public :: get_external_field_size
-public :: get_external_field_axes
-public :: get_external_field_missing
 
 contains
 
-!> This is an alternate implementation of the FMS function real_to_time_type that is accurate over
-!! a larger range of input values.  With 32 bit signed integers, this version should work over the
-!! entire valid range (2^31 days or ~5.8835 million years) of time_types, whereas the standard
-!! version in the FMS time_manager stops working for conversions of times greater than 2^31 seconds,
-!! or ~68.1 years.
-function real_to_time(x, err_msg)
-  type(time_type)  :: real_to_time !< The output time as a time_type
-  real, intent(in) :: x            !< The input time in real seconds.
-  character(len=*), intent(out), optional :: err_msg !< An optional returned error message.
+!> Returns a time_type version of a real time in seconds, using an alternate implementation to the
+!! FMS function real_to_time_type that is accurate over a larger range of input values.  With 32 bit
+!! signed integers, this version should work over the entire valid range (2^31 days or ~5.8835
+!! million years) of time_types, whereas the standard version in the FMS time_manager stops working
+!! for conversions of times greater than 2^31 seconds, or ~68.1 years.
+type(time_type) function real_to_time(x, err_msg)
+!  type(time_type)  :: real_to_time !< The output time as a time_type
+  real,                       intent(in)  :: x       !< The input time in real seconds.
+  character(len=*), optional, intent(out) :: err_msg !< An optional returned error message.
 
   ! Local variables
   integer          :: seconds, days, ticks
@@ -59,6 +50,5 @@ function real_to_time(x, err_msg)
 
   real_to_time = set_time(seconds=seconds, days=days, ticks=ticks, err_msg=err_msg)
 end function real_to_time
-
 
 end module MOM_time_manager

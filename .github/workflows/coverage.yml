@@ -1,0 +1,24 @@
+name: Code coverage
+
+on: [push, pull_request]
+
+jobs:
+  build-test-nans:
+
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .testing
+
+    env:
+      REPORT_COVERAGE: true
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - uses: ./.github/actions/testing-setup
+
+    - name: Run and post coverage
+      run: make run.symmetric -k -s

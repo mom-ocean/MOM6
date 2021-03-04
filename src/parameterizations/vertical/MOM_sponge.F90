@@ -88,18 +88,18 @@ contains
 subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, GV, &
                              Iresttime_i_mean, int_height_i_mean)
   type(ocean_grid_type),   intent(in) :: G          !< The ocean's grid structure
+  type(verticalGrid_type), intent(in) :: GV         !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G)), &
                            intent(in) :: Iresttime  !< The inverse of the restoring time [T-1 ~> s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(in) :: int_height !< The interface heights to damp back toward [Z ~> m].
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters
   type(sponge_CS),         pointer    :: CS         !< A pointer that is set to point to the control
                                                     !! structure for this module
-  type(verticalGrid_type), intent(in) :: GV         !< The ocean's vertical grid structure
   real, dimension(SZJ_(G)), &
                  optional, intent(in) :: Iresttime_i_mean !< The inverse of the restoring time for
                                                           !! the zonal mean properties [T-1 ~> s-1].
-  real, dimension(SZJ_(G),SZK_(G)+1), &
+  real, dimension(SZJ_(G),SZK_(GV)+1), &
                  optional, intent(in) :: int_height_i_mean !< The interface heights toward which to
                                                            !! damp the zonal mean heights [Z ~> m].
 
@@ -133,7 +133,7 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, GV, &
 
   CS%do_i_mean_sponge = present(Iresttime_i_mean)
 
-  CS%nz = G%ke
+  CS%nz = GV%ke
 !  CS%isc = G%isc ; CS%iec = G%iec ; CS%jsc = G%jsc ; CS%jec = G%jec
 !  CS%isd = G%isd ; CS%ied = G%ied ; CS%jsd = G%jsd ; CS%jed = G%jed
   ! CS%bulkmixedlayer may be set later via a call to set_up_sponge_ML_density.
@@ -169,7 +169,7 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, GV, &
 
   if (CS%do_i_mean_sponge) then
     allocate(CS%Iresttime_im(G%jsd:G%jed)) ; CS%Iresttime_im(:) = 0.0
-    allocate(CS%Ref_eta_im(G%jsd:G%jed,G%ke+1)) ; CS%Ref_eta_im(:,:) = 0.0
+    allocate(CS%Ref_eta_im(G%jsd:G%jed,GV%ke+1)) ; CS%Ref_eta_im(:,:) = 0.0
 
     do j=G%jsc,G%jec
       CS%Iresttime_im(j) = Iresttime_i_mean(j)
@@ -210,16 +210,17 @@ end subroutine init_sponge_diags
 !> This subroutine stores the reference profile for the variable
 !! whose address is given by f_ptr. nlay is the number of layers in
 !! this variable.
-subroutine set_up_sponge_field(sp_val, f_ptr, G, nlay, CS, sp_val_i_mean)
-  type(ocean_grid_type), intent(in) :: G      !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                         intent(in) :: sp_val !< The reference profiles of the quantity being registered.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                 target, intent(in) :: f_ptr  !< a pointer to the field which will be damped
-  integer,               intent(in) :: nlay   !< the number of layers in this quantity
-  type(sponge_CS),       pointer    :: CS     !< A pointer to the control structure for this module that
-                                              !! is set by a previous call to initialize_sponge.
-  real, dimension(SZJ_(G),SZK_(G)),&
+subroutine set_up_sponge_field(sp_val, f_ptr, G, GV, nlay, CS, sp_val_i_mean)
+  type(ocean_grid_type),   intent(in) :: G      !< The ocean's grid structure
+  type(verticalGrid_type), intent(in) :: GV     !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in) :: sp_val !< The reference profiles of the quantity being registered.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                   target, intent(in) :: f_ptr  !< a pointer to the field which will be damped
+  integer,                 intent(in) :: nlay   !< the number of layers in this quantity
+  type(sponge_CS),         pointer    :: CS     !< A pointer to the control structure for this module that
+                                                !! is set by a previous call to initialize_sponge.
+  real, dimension(SZJ_(G),SZK_(GV)),&
                optional, intent(in) :: sp_val_i_mean !< The i-mean reference value for
                                               !! this field with i-mean sponges.
 
@@ -324,14 +325,14 @@ subroutine apply_sponge(h, dt, G, GV, US, ea, eb, CS, Rcv_ml)
   type(ocean_grid_type),   intent(inout) :: G   !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV  !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: h   !< Layer thicknesses [H ~> m or kg m-2]
   real,                    intent(in)    :: dt  !< The amount of time covered by this call [T ~> s].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: ea  !< An array to which the amount of fluid entrained
                                                 !! from the layer above during this call will be
                                                 !! added [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: eb  !< An array to which the amount of fluid entrained
                                                 !! from the layer below during this call will be
                                                 !! added [H ~> m or kg m-2].
@@ -345,7 +346,7 @@ subroutine apply_sponge(h, dt, G, GV, US, ea, eb, CS, Rcv_ml)
 ! there is damping.
 
   ! Local variables
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: &
     w_int, &       ! Water moved upward across an interface within a timestep,
                    ! [H ~> m or kg m-2].
     e_D            ! Interface heights that are dilated to have a value of 0
@@ -355,18 +356,18 @@ subroutine apply_sponge(h, dt, G, GV, US, ea, eb, CS, Rcv_ml)
                    ! target value [Z ~> m].
     fld_anom       ! Anomalies in a tracer concentration, relative to the
                    ! i-mean target value.
-  real, dimension(SZJ_(G), SZK_(G)+1) :: &
+  real, dimension(SZJ_(G), SZK_(GV)+1) :: &
     eta_mean_anom  ! The i-mean interface height anomalies [Z ~> m].
   real, allocatable, dimension(:,:,:) :: &
     fld_mean_anom  ! THe i-mean tracer concentration anomalies.
-  real, dimension(SZI_(G), SZK_(G)+1) :: &
+  real, dimension(SZI_(G), SZK_(GV)+1) :: &
     h_above, &     ! The total thickness above an interface [H ~> m or kg m-2].
     h_below        ! The total thickness below an interface [H ~> m or kg m-2].
   real, dimension(SZI_(G)) :: &
     dilate         ! A nondimensional factor by which to dilate layers to
                    ! give 0 at the surface [nondim].
 
-  real :: e(SZK_(G)+1)  ! The interface heights [Z ~> m], usually negative.
+  real :: e(SZK_(GV)+1)  ! The interface heights [Z ~> m], usually negative.
   real :: e0       ! The height of the free surface [Z ~> m].
   real :: e_str    ! A nondimensional amount by which the reference
                    ! profile must be stretched for the free surfaces
@@ -382,7 +383,7 @@ subroutine apply_sponge(h, dt, G, GV, US, ea, eb, CS, Rcv_ml)
   real :: damp_1pdamp ! damp_1pdamp is damp/(1 + damp). [nondim]
   real :: Idt      ! 1.0/dt times a height unit conversion factor [m H-1 T-1 ~> s-1 or m3 kg-1 s-1].
   integer :: c, m, nkmb, i, j, k, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.associated(CS)) return
   if (CS%bulkmixedlayer) nkmb = GV%nk_rho_varies
@@ -477,8 +478,6 @@ subroutine apply_sponge(h, dt, G, GV, US, ea, eb, CS, Rcv_ml)
   endif
 
   do c=1,CS%num_col
-! c is an index for the next 3 lines but a multiplier for the rest of the loop
-! Therefore we use c as per C code and increment the index where necessary.
     i = CS%col_i(c) ; j = CS%col_j(c)
     damp = dt * CS%Iresttime_col(c)
 

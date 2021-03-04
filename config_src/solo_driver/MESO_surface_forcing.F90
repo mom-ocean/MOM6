@@ -274,7 +274,7 @@ subroutine MESO_surface_forcing_init(Time, G, US, param_file, diag, CS)
     call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, default=".")
     CS%inputdir = slasher(CS%inputdir)
 
-   endif
+  endif
 
 end subroutine MESO_surface_forcing_init
 

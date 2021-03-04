@@ -13,9 +13,8 @@
 
 module MOM_array_transform
 
-implicit none
+implicit none ; private
 
-private
 public rotate_array
 public rotate_array_pair
 public rotate_vector

@@ -145,30 +145,34 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   type(ocean_grid_type),                intent(inout) :: G      !< Grid type
   type(verticalGrid_type),              intent(in)    :: GV     !< ocean vertical grid structure
   type(unit_scale_type),                intent(in)    :: US     !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                         intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G)),    intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points [L2 ~> m2]
   real, dimension(SZI_(G),SZJB_(G)),    intent(in)    :: Coef_y !< dt * Kh * dx / dy at v-points [L2 ~> m2]
   real,                                 intent(in)    :: dt     !< Tracer time step * I_numitts
-                                                                !! (I_numitts in tracer_hordiff)
+                                                                !! (I_numitts in tracer_hordiff) [T ~> s]
   type(tracer_registry_type),           pointer       :: Reg    !< Tracer registry
   type(lbd_CS),                         pointer       :: CS     !< Control structure for this module
 
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G))          :: hbl         !< bnd. layer depth [H ~> m or kg m-2]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: uFlx        !< Zonal flux of tracer [conc m^3]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vFlx        !< Meridional flux of tracer [conc m^3]
-  real, dimension(SZIB_(G),SZJ_(G))         :: uwork_2d    !< Layer summed u-flux transport
-  real, dimension(SZI_(G),SZJB_(G))         :: vwork_2d    !< Layer summed v-flux transport
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: tendency    !< tendency array for diagnostic
-  real, dimension(SZI_(G),SZJ_(G))          :: tendency_2d !< depth integrated content tendency for diagn
-  type(tracer_type), pointer                :: tracer => NULL() !< Pointer to the current tracer
-  real, dimension(SZK_(GV)) :: tracer_1d                   !< 1d-array used to remap tracer change to native grid
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: tracer_old  !< local copy of the initial tracer concentration,
-                                                           !! only used to compute tendencies.
-  real, dimension(SZI_(G),SZJ_(G))          :: tracer_int, tracer_end
-                                                           !< integrated tracer in the native grid, before and after
-                                                           ! LBD is applied.
+  real, dimension(SZI_(G),SZJ_(G))           :: hbl         !< Boundary layer depth [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: uFlx        !< Zonal flux of tracer [conc H L2 ~> conc kg or conc m^3]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: vFlx        !< Meridional flux of tracer
+                                                            !! [conc H L2 ~> conc kg or conc m^3]
+  real, dimension(SZIB_(G),SZJ_(G))          :: uwork_2d    !< Layer summed u-flux transport
+                                                            !! [conc H L2 ~> conc kg or conc m^3]
+  real, dimension(SZI_(G),SZJB_(G))          :: vwork_2d    !< Layer summed v-flux transport
+                                                            !! [conc H L2 ~> conc kg or conc m^3]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: tendency    !< tendency array for diagnostic [conc T-1 ~> conc s-1]
+  real, dimension(SZI_(G),SZJ_(G))           :: tendency_2d !< depth integrated content tendency for diagn
+  type(tracer_type), pointer                 :: tracer => NULL() !< Pointer to the current tracer
+  real, dimension(SZK_(GV)) :: tracer_1d                    !< 1d-array used to remap tracer change to native grid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: tracer_old  !< local copy of the initial tracer concentration,
+                                                            !! only used to compute tendencies.
+  real, dimension(SZI_(G),SZJ_(G))           :: tracer_int  !< integrated tracer before LBD is applied
+                                                            !! [conc H L2 ~> conc m3 or conc kg]
+  real, dimension(SZI_(G),SZJ_(G))           :: tracer_end  !< integrated tracer after LBD is applied.
+                                                            !! [conc H L2 ~> conc m3 or conc kg]
   integer :: i, j, k, m   !< indices to loop over
   real    :: Idt          !< inverse of the time step [s-1]
   real    :: tmp1, tmp2 !< temporary variables
@@ -223,6 +227,8 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
         tracer%t(i,j,k) = tracer%t(i,j,k) + (( (uFlx(I-1,j,k)-uFlx(I,j,k)) ) + ( (vFlx(i,J-1,k)-vFlx(i,J,k) ) ))* &
                           G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff )
         if (tracer%id_lbdxy_conc > 0  .or. tracer%id_lbdxy_cont > 0 .or. tracer%id_lbdxy_cont_2d > 0 ) then
+          !### Probably this needs to be multiplied by (h(i,j,k) + GV%H_subroundoff) for consistency
+          !    the way it is used later in this routine.
           tendency(i,j,k) = (tracer%t(i,j,k)-tracer_old(i,j,k)) * Idt
         endif
       endif
@@ -249,8 +255,8 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     endif
 
     ! Post the tracer diagnostics
-    if (tracer%id_lbd_dfx>0)      call post_data(tracer%id_lbd_dfx, uFlx*Idt, CS%diag)
-    if (tracer%id_lbd_dfy>0)      call post_data(tracer%id_lbd_dfy, vFlx*Idt, CS%diag)
+    if (tracer%id_lbd_dfx>0)      call post_data(tracer%id_lbd_dfx, uFlx(:,:,:)*Idt, CS%diag)
+    if (tracer%id_lbd_dfy>0)      call post_data(tracer%id_lbd_dfy, vFlx(:,:,:)*Idt, CS%diag)
     if (tracer%id_lbd_dfx_2d>0) then
       uwork_2d(:,:) = 0.
       do k=1,GV%ke ; do j=G%jsc,G%jec ; do I=G%isc-1,G%iec
@@ -268,6 +274,7 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     endif
 
     ! post tendency of tracer content
+    !### This seems to be dimensionally inconsistent with the calculation of tendency above.
     if (tracer%id_lbdxy_cont > 0) then
       call post_data(tracer%id_lbdxy_cont, tendency, CS%diag)
     endif
@@ -286,6 +293,7 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     ! post tendency of tracer concentration; this step must be
     ! done after posting tracer content tendency, since we alter
     ! the tendency array and its units.
+    !### This seems to be dimensionally inconsistent with the calculation of tendency above.
     if (tracer%id_lbdxy_conc > 0) then
       do k=1,GV%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
         tendency(i,j,k) =  tendency(i,j,k) / ( h(i,j,k) + CS%H_subroundoff )
@@ -314,13 +322,14 @@ end function harmonic_mean
 !> Returns the location of the minimum value in a 1D array
 !! between indices s and e.
 integer function  find_minimum(x, s, e)
-  integer,                intent(in) :: s, e     !< start and end indices
-  real,    dimension(e),  intent(in) :: x        !< 1D array to be checked
+  integer, intent(in) :: s              !< start index
+  integer, intent(in) :: e              !< end index
+  real, dimension(e), intent(in) :: x   !< 1D array to be checked
 
   ! local variables
-  real                               :: minimum
-  integer                            :: location
-  integer                            :: i
+  real :: minimum
+  integer :: location
+  integer :: i
 
   minimum  = x(s)   ! assume the first is the min
   location = s      ! record its position
@@ -335,13 +344,15 @@ end function  find_minimum
 
 !> Swaps the values of its two formal arguments.
 subroutine swap(a, b)
-  real, intent(inout) :: a, b !< values to be swaped
+  real, intent(inout) :: a  !< First value to be swaped
+  real, intent(inout) :: b  !< Second value to be swaped
 
   ! local variables
-  real                :: tmp
+  real :: tmp
+
   tmp = a
-  a    = b
-  b    = tmp
+  a = b
+  b = tmp
 end subroutine swap
 
 !> Receives a 1D array x and sorts it into ascending order.
@@ -461,11 +472,13 @@ end subroutine merge_interfaces
 !> Calculates the maximum flux that can leave a cell and uses that to apply a
 !! limiter to F_layer.
 subroutine flux_limiter(F_layer, area_L, area_R, phi_L, phi_R, h_L, h_R)
-  real,  intent(inout) :: F_layer        !< Tracer flux to be checked          [H L2 conc ~> m3 conc]
-  real,  intent(in   ) :: area_L, area_R !< Area of left and right cells       [L2 ~> m2]
-  real,  intent(in   ) :: h_L, h_R       !< Thickness of left and right cells  [H ~> m or kg m-2]
-  real,  intent(in   ) :: phi_L, phi_R   !< Tracer concentration in the left and right cells
-                                         !!                                    [conc]
+  real, intent(inout) :: F_layer !< Tracer flux to be checked [H L2 conc ~> m3 conc]
+  real, intent(in) :: area_L     !< Area of left cell [L2 ~> m2]
+  real, intent(in) :: area_R     !< Area of right cell [L2 ~> m2]
+  real, intent(in) :: h_L        !< Thickness of left cell [H ~> m or kg m-2]
+  real, intent(in) :: h_R        !< Thickness of right cell [H ~> m or kg m-2]
+  real, intent(in) :: phi_L      !< Tracer concentration in the left cell [conc]
+  real, intent(in) :: phi_R      !< Tracer concentration in the right cell [conc]
 
   ! local variables
   real :: F_max !< maximum flux allowed

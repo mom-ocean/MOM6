@@ -47,7 +47,7 @@ subroutine lock_exchange_initialize_thickness(h, G, GV, US, param_file, just_rea
   character(len=40)  :: mdl = "lock_exchange_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
