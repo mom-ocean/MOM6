@@ -1858,7 +1858,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   CS%id_h_du_dt_visc = register_diag_field('ocean_model', 'h_du_dt_visc', diag%axesCuL, Time, &
       'Thickness Multiplied Zonal Acceleration from Horizontal Viscosity', 'm2 s-2', &
       conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if ((CS%id_intz_diffu_2d > 0) .and. (present(ADp))) then
+  if (CS%id_intz_diffu_2d > 0) then
     call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
   endif
@@ -1866,7 +1866,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   CS%id_h_dv_dt_visc = register_diag_field('ocean_model', 'h_dv_dt_visc', diag%axesCvL, Time, &
       'Thickness Multiplied Meridional Acceleration from Horizontal Viscosity', 'm2 s-2', &
       conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if ((CS%id_h_dv_dt_visc > 0) .and. (present(ADp))) then
+  if (CS%id_h_dv_dt_visc > 0) then
     call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
     call safe_alloc_ptr(ADp%diag_hv,isd,ied,JsdB,JedB,nz)
   endif
