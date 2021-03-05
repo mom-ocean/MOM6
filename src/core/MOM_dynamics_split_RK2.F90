@@ -160,14 +160,17 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   integer :: id_PFu    = -1, id_PFv    = -1
   integer :: id_CAu    = -1, id_CAv    = -1
   ! integer :: id_hf_PFu    = -1, id_hf_PFv    = -1
+  integer :: id_h_PFu    = -1, id_h_PFv    = -1
   integer :: id_hf_PFu_2d = -1, id_hf_PFv_2d = -1
   ! integer :: id_hf_CAu    = -1, id_hf_CAv    = -1
+  integer :: id_h_CAu    = -1, id_h_CAv    = -1
   integer :: id_hf_CAu_2d = -1, id_hf_CAv_2d = -1
 
   ! Split scheme only.
   integer :: id_uav        = -1, id_vav        = -1
   integer :: id_u_BT_accel = -1, id_v_BT_accel = -1
   ! integer :: id_hf_u_BT_accel    = -1, id_hf_v_BT_accel    = -1
+  integer :: id_h_u_BT_accel    = -1, id_h_v_BT_accel    = -1
   integer :: id_hf_u_BT_accel_2d = -1, id_hf_v_BT_accel_2d = -1
   !>@}
 
@@ -335,6 +338,11 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     hf_PFu_2d, hf_PFv_2d, & ! Depth integeral of hf_PFu, hf_PFv [L T-2 ~> m s-2].
     hf_CAu_2d, hf_CAv_2d, & ! Depth integeral of hf_CAu, hf_CAv [L T-2 ~> m s-2].
     hf_u_BT_accel_2d, hf_v_BT_accel_2d ! Depth integeral of hf_u_BT_accel, hf_v_BT_accel
+
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: &
+    h_PFu, h_CAu, h_u_BT_accel ! [L2 T-2 ~> m2 s-2].
+  real, dimension(SZI_(G),SZJB_(G)),SZK_(GV) :: &
+    h_PFv, h_CAv, h_v_BT_accel ! [L2 T-2 ~> m2 s-2].
 
   real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping [T ~> s].
 
@@ -916,6 +924,21 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     deallocate(hf_PFv_2d)
   endif
 
+  if (CS%id_h_PFu > 0) then
+    h_PFu(:,:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      h_PFu(I,j,k) = CS%PFu(I,j,k) * CS%ADp%diag_hu(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_h_PFu, h_PFu, CS%diag)
+  endif
+  if (CS%id_h_PFv > 0) then
+    h_PFv(:,:,:) = 0.0
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      h_PFv(i,J,k) = CS%PFv(i,J,k) * CS%ADp%diag_hv(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_h_PFv, h_PFv, CS%diag)
+  endif
+
   !if (CS%id_hf_CAu > 0) then
   !  allocate(hf_CAu(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
   !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
@@ -949,6 +972,21 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     deallocate(hf_CAv_2d)
   endif
 
+  if (CS%id_h_CAu > 0) then
+    h_CAu(:,:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      h_CAu(I,j,k) = CS%CAu(I,j,k) * CS%ADp%diag_hu(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_h_CAu, h_CAu, CS%diag)
+  endif
+  if (CS%id_h_CAv > 0) then
+    h_CAv(:,:,:) = 0.0
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      h_CAv(i,J,k) = CS%CAv(i,J,k) * CS%ADp%diag_hv(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_h_CAv, h_CAv, CS%diag)
+  endif
+
   !if (CS%id_hf_u_BT_accel > 0) then
   !  allocate(hf_u_BT_accel(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
   !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
@@ -980,6 +1018,21 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     enddo ; enddo ; enddo
     call post_data(CS%id_hf_v_BT_accel_2d, hf_v_BT_accel_2d, CS%diag)
     deallocate(hf_v_BT_accel_2d)
+  endif
+
+  if (CS%id_h_u_BT_accel > 0) then
+    h_u_BT_accel(:,:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      h_u_BT_accel(I,j,k) = CS%u_accel_bt(I,j,k) * CS%ADp%diag_hu(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_h_u_BT_accel, h_u_BT_accel, CS%diag)
+  endif
+  if (CS%id_h_v_BT_accel > 0) then
+    h_v_BT_accel(:,:,:) = 0.0
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      h_v_BT_accel(i,J,k) = CS%v_accel_bt(i,J,k) * CS%ADp%diag_hv(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_h_v_BT_accel, h_v_BT_accel, CS%diag)
   endif
 
   if (CS%debug) then
