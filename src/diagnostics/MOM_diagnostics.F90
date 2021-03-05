@@ -116,6 +116,7 @@ type, public :: diagnostics_CS ; private
   integer :: id_e              = -1, id_e_D            = -1
   integer :: id_du_dt          = -1, id_dv_dt          = -1
   ! integer :: id_hf_du_dt       = -1, id_hf_dv_dt       = -1
+  integer :: id_h_du_dt       = -1, id_h_dv_dt       = -1
   integer :: id_hf_du_dt_2d    = -1, id_hf_dv_dt_2d    = -1
   integer :: id_col_ht         = -1, id_dh_dt          = -1
   integer :: id_KE             = -1, id_dKEdt          = -1
@@ -248,6 +249,9 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   real, allocatable, dimension(:,:) :: &
     hf_du_dt_2d, hf_dv_dt_2d ! z integeral of hf_du_dt, hf_dv_dt [L T-2 ~> m s-2].
 
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: h_du_dt ! h x dudt  [L2 T-2 ~> m2 s-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: h_dv_dt ! h x dvdt [L2 T-2 ~> m2 s-2]
+
   ! tmp array for surface properties
   real :: surface_field(SZI_(G),SZJ_(G))
   real :: pressure_1d(SZI_(G)) ! Temporary array for pressure when calling EOS [R L2 T-2 ~> Pa]
@@ -323,6 +327,21 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       enddo ; enddo ; enddo
       call post_data(CS%id_hf_dv_dt_2d, hf_dv_dt_2d, CS%diag)
       deallocate(hf_dv_dt_2d)
+    endif
+
+    if (CS%id_h_du_dt > 0) then
+      h_du_dt(:,:,:) = 0.0
+      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+        h_du_dt(I,j,k) = CS%du_dt(I,j,k) * ADp%diag_hu(I,j,k)
+      enddo ; enddo ; enddo
+      call post_data(CS%id_h_du_dt, h_du_dt, CS%diag)
+    endif
+    if (CS%id_h_dv_dt > 0) then
+      h_dv_dt(:,:,:) = 0.0
+      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+        h_dv_dt(i,J,k) = CS%dv_dt(i,J,k) * ADp%diag_hv(i,J,k)
+      enddo ; enddo ; enddo
+      call post_data(CS%id_h_dv_dt, h_dv_dt, CS%diag)
     endif
 
     call diag_restore_grids(CS%diag)
@@ -1767,7 +1786,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   !    call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
   !    call register_time_deriv(lbound(MIS%v), MIS%v, CS%dv_dt, CS)
   !  endif
-  !  call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+  !  call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
   !endif
 
   CS%id_hf_du_dt_2d = register_diag_field('ocean_model', 'hf_dudt_2d', diag%axesCu1, Time, &
@@ -1787,7 +1806,27 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
       call register_time_deriv(lbound(MIS%v), MIS%v, CS%dv_dt, CS)
     endif
-    call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+    call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+  endif
+
+  CS%id_h_du_dt = register_diag_field('ocean_model', 'h_du_dt', diag%axesCuL, Time, &
+      'Thickness Multiplied Zonal Acceleration', 'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if (CS%id_h_du_dt > 0) then
+    if (.not.associated(CS%du_dt)) then
+      call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
+      call register_time_deriv(lbound(MIS%u), MIS%u, CS%du_dt, CS)
+    endif
+    call safe_alloc_ptr(ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
+  endif
+
+  CS%id_h_dv_dt = register_diag_field('ocean_model', 'h_dv_dt', diag%axesCvL, Time, &
+      'Thickness Multiplied Meridional Acceleration', 'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if (CS%id_h_dv_dt > 0) then
+    if (.not.associated(CS%dv_dt)) then
+      call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
+      call register_time_deriv(lbound(MIS%v), MIS%v, CS%dv_dt, CS)
+    endif
+    call safe_alloc_ptr(ADp%diag_hv,isd,ied,JsdB,JedB,nz)
   endif
 
   ! layer thickness variables
