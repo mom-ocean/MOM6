@@ -1230,7 +1230,7 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
   !   'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   !if (CS%id_hf_gKEv > 0) then
   !  call safe_alloc_ptr(AD%gradKEv,isd,ied,JsdB,JedB,nz)
-  !  call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+  !  call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
   !endif
 
   CS%id_hf_gKEu_2d = register_diag_field('ocean_model', 'hf_gKEu_2d', diag%axesCu1, Time, &
@@ -1246,7 +1246,7 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
      'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_gKEv_2d > 0) then
     call safe_alloc_ptr(AD%gradKEv,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+    call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
   endif
 
   CS%id_intz_gKEu_2d = register_diag_field('ocean_model', 'intz_gKEu_2d', diag%axesCu1, Time, &
@@ -1262,7 +1262,7 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if (CS%id_intz_gKEv_2d > 0) then
     call safe_alloc_ptr(AD%gradKEv,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(AD%diag_hv,isd,ied,Jsd,JedB,nz)
+    call safe_alloc_ptr(AD%diag_hv,isd,ied,JsdB,JedB,nz)
   endif
 
   !CS%id_hf_rvxu = register_diag_field('ocean_model', 'hf_rvxu', diag%axesCvL, Time, &
@@ -1270,7 +1270,7 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
   !   'm-1 s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   !if (CS%id_hf_rvxu > 0) then
   !  call safe_alloc_ptr(AD%rv_x_u,isd,ied,JsdB,JedB,nz)
-  !  call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+  !  call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
   !endif
 
   !CS%id_hf_rvxv = register_diag_field('ocean_model', 'hf_rvxv', diag%axesCuL, Time, &
@@ -1286,7 +1286,7 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
      'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_rvxu_2d > 0) then
     call safe_alloc_ptr(AD%rv_x_u,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+    call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
   endif
 
   CS%id_hf_rvxv_2d = register_diag_field('ocean_model', 'hf_rvxv_2d', diag%axesCu1, Time, &
@@ -1302,7 +1302,7 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if (CS%id_intz_rvxu_2d > 0) then
     call safe_alloc_ptr(AD%rv_x_u,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(AD%diag_hv,isd,ied,Jsd,JedB,nz)
+    call safe_alloc_ptr(AD%diag_hv,isd,ied,JsdB,JedB,nz)
   endif
 
   CS%id_intz_rvxv_2d = register_diag_field('ocean_model', 'intz_rvxv_2d', diag%axesCu1, Time, &
