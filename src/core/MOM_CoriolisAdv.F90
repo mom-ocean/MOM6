@@ -1230,7 +1230,7 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
   !   'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   !if (CS%id_hf_gKEv > 0) then
   !  call safe_alloc_ptr(AD%gradKEv,isd,ied,JsdB,JedB,nz)
-  !  call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+  !  call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
   !endif
 
   CS%id_hf_gKEu_2d = register_diag_field('ocean_model', 'hf_gKEu_2d', diag%axesCu1, Time, &
