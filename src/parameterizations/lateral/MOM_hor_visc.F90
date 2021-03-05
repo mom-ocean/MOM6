@@ -187,6 +187,7 @@ type, public :: hor_visc_CS ; private
   integer :: id_grid_Re_Ah = -1, id_grid_Re_Kh   = -1
   integer :: id_diffu     = -1, id_diffv         = -1
   ! integer :: id_hf_diffu  = -1, id_hf_diffv      = -1
+  integer :: id_h_diffu  = -1, id_h_diffv      = -1
   integer :: id_hf_diffu_2d = -1, id_hf_diffv_2d = -1
   integer :: id_Ah_h      = -1, id_Ah_q          = -1
   integer :: id_Kh_h      = -1, id_Kh_q          = -1
@@ -278,6 +279,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
   real, allocatable, dimension(:,:) :: hf_diffu_2d ! Depth sum of hf_diffu [L T-2 ~> m s-2]
   real, allocatable, dimension(:,:) :: hf_diffv_2d ! Depth sum of hf_diffv [L T-2 ~> m s-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: h_diffu ! h x diffu [L2 T-2 ~> m2 s-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: h_diffv ! h x diffv [L2 T-2 ~> m2 s-2]
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     dvdx, dudy, & ! components in the shearing strain [T-1 ~> s-1]
@@ -1662,6 +1665,21 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     deallocate(hf_diffv_2d)
   endif
 
+  if (present(ADp) .and. (CS%id_h_diffu > 0)) then
+    h_diffu(:,:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      h_diffu(I,j,k) = diffu(I,j,k) * ADp%diag_hu(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_h_diffu, h_diffu, CS%diag)
+  endif
+  if (present(ADp) .and. (CS%id_h_diffv > 0)) then
+    h_diffv(:,:,:) = 0.0
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      h_diffv(i,J,k) = diffv(i,J,k) * ADp%diag_hv(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_h_diffv, h_diffv, CS%diag)
+  endif
+
 end subroutine horizontal_viscosity
 
 !> Allocates space for and calculates static variables used by horizontal_viscosity().
@@ -2376,6 +2394,20 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
       conversion=US%L_T2_to_m_s2)
   if ((CS%id_hf_diffv_2d > 0) .and. (present(ADp))) then
     call safe_alloc_ptr(ADp%diag_hfrac_v,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
+  endif
+
+  CS%id_h_diffu = register_diag_field('ocean_model', 'h_diffu', diag%axesCuL, Time, &
+      'Thickness Multiplied Zonal Acceleration from Horizontal Viscosity', 'm2 s-2', &
+      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if ((CS%id_h_diffu > 0) .and. (present(ADp))) then
+    call safe_alloc_ptr(ADp%diag_hu,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
+  endif
+
+  CS%id_h_diffv = register_diag_field('ocean_model', 'h_diffv', diag%axesCvL, Time, &
+      'Thickness Multiplied Meridional Acceleration from Horizontal Viscosity', 'm2 s-2', &
+      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if ((CS%id_h_diffv > 0) .and. (present(ADp))) then
+    call safe_alloc_ptr(ADp%diag_hv,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
   endif
 
   if (CS%biharmonic) then
