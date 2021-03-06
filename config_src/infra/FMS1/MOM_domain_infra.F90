@@ -1689,6 +1689,8 @@ subroutine clone_MD_to_d2D(MD_in, mpp_domain, min_halo, halo_size, symmetric, &
   if ((MD_in%io_layout(1) + MD_in%io_layout(2) > 0) .and. &
       (MD_in%layout(1)*MD_in%layout(2) > 1)) then
     call mpp_define_io_domain(mpp_domain, MD_in%io_layout)
+  else
+    call mpp_define_io_domain(mpp_domain, (/ 1, 1 /) )
   endif
 
 end subroutine clone_MD_to_d2D
