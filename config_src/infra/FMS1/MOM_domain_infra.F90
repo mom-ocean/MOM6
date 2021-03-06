@@ -4,7 +4,7 @@ module MOM_domain_infra
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_coms_infra,  only : PE_here, root_PE, num_PEs
-use MOM_cpu_clock,   only : cpu_clock_begin, cpu_clock_end
+use MOM_cpu_clock_infra, only : cpu_clock_begin, cpu_clock_end
 use MOM_error_infra, only : MOM_error=>MOM_err, NOTE, WARNING, FATAL
 
 use mpp_domains_mod, only : domain2D, domain1D
