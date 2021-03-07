@@ -846,18 +846,21 @@ function query_initialized_4d_name(f_ptr, name, CS) result(query_initialized)
 end function query_initialized_4d_name
 
 !> save_restart saves all registered variables to restart files.
-subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_rest_files)
+subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_rest_files, write_IC)
   character(len=*),        intent(in)    :: directory !< The directory where the restart files
                                                   !! are to be written
   type(time_type),         intent(in)    :: time  !< The current model time
   type(ocean_grid_type),   intent(inout) :: G     !< The ocean's grid structure
   type(MOM_restart_CS),    pointer       :: CS    !< The control structure returned by a previous
                                                   !! call to restart_init.
-  logical,          optional, intent(in) :: time_stamped !< If present and true, add time-stamp
+  logical,       optional, intent(in)    :: time_stamped !< If present and true, add time-stamp
                                                   !! to the restart file names.
   character(len=*), optional, intent(in) :: filename !< A filename that overrides the name in CS%restartfile.
-  type(verticalGrid_type), optional, intent(in) :: GV   !< The ocean's vertical grid structure
-  integer, optional, intent(out) :: num_rest_files      !< number of restart files written
+  type(verticalGrid_type), &
+                 optional, intent(in)    :: GV    !< The ocean's vertical grid structure
+  integer,       optional, intent(out)   :: num_rest_files !< number of restart files written
+  logical,       optional, intent(in)    :: write_IC !< If present and true, initial conditions
+                                                  !! are being written
 
   ! Local variables
   type(vardesc) :: vars(CS%max_fields)  ! Descriptions of the fields that
@@ -1489,6 +1492,137 @@ function open_restart_units(filename, directory, G, CS, IO_handles, file_paths, 
 
 end function open_restart_units
 
+!> get_num_restart_files determines the number of existing restart files and returns paths
+!! and whether the files are global or spatially decomposed.
+function get_num_restart_files(filename, directory, G, CS, file_paths) result(num_files)
+  character(len=*),      intent(in)  :: filename  !< The list of restart file names or a single
+                                                  !! character 'r' to read automatically named files.
+  character(len=*),      intent(in)  :: directory !< The directory in which to find restart files
+  type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
+  type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
+                                                  !! call to restart_init.
+  character(len=*), dimension(:), &
+               optional, intent(out) :: file_paths   !< The full paths to open files.
+  !logical, dimension(:), &
+  !             optional, intent(out) :: global_files !< True if a file is global.
+
+  integer :: num_files  !< The number of files (both automatically named restart
+                        !! files and others explicitly in filename) that have been opened.
+
+!    This subroutine reads the model state from previously
+!  generated files.  All restart variables are read from the first
+!  file in the input filename list in which they are found.
+
+  ! Local variables
+  character(len=256) :: filepath  ! The path (dir/file) to the file being opened.
+  character(len=256) :: fname     ! The name of the current file.
+  character(len=8)   :: suffix    ! A suffix (like "_2") that is added to any
+                                  ! additional restart files
+  integer :: num_restart     ! The number of restart files that have already
+                             ! been opened.
+  integer :: start_char      ! The location of the starting character in the
+                             ! current file name.
+  integer :: f, n, m, err, length, str_index
+  logical :: fexists
+  character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs
+  character(len=80) :: restartname
+  character(len=240) :: filepath_temp, filepath_temp2
+
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
+      "get_num_restart_files: Module must be initialized before it is used.")
+ ! Determine the file name
+  num_restart = 0 ; n=0; start_char = 1; str_index=0
+  if (present(file_paths)) file_paths(:) = ""
+  do while (start_char <= len_trim(filename) )
+    do m=start_char,len_trim(filename)
+      if (filename(m:m) == ' ') exit
+    enddo
+    fname = filename(start_char:m-1)
+    start_char = m
+    do while (start_char <= len_trim(filename))
+      if (filename(start_char:start_char) == ' ') then
+        start_char = start_char + 1
+      else
+        exit
+      endif
+    enddo
+
+    err = 0
+    if (num_restart > 0) err = 1 ! Avoid going through the file list twice.
+    do while (err == 0)
+      restartname = trim(CS%restartfile)
+      !  query fms_io if there is a filename_appendix (for ensemble runs)
+      ! TODO add support to fms2-io, or move to MOM6 framework
+      call get_filename_appendix(filename_appendix)
+      if (len_trim(filename_appendix) > 0 .and. trim(filename_appendix) .ne. " ") then
+        length = len_trim(restartname)
+        if (restartname(length-2:length) == '.nc') then
+          restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
+        else
+          restartname = restartname(1:length)  //'.'//trim(filename_appendix)
+        endif
+      endif
+      filepath = trim(directory) // trim(restartname)
+
+      if (num_restart < 10) then
+        write(suffix,'("_",I1)') num_restart
+      else
+        write(suffix,'("_",I2)') num_restart
+      endif
+      if (num_restart > 0) filepath = trim(filepath) // suffix
+
+      filepath_temp = trim(filepath)//".nc"
+      if (file_exists(trim(filepath_temp)) .or. file_exists(trim(filepath_temp)//".0000")) then
+        n = n+1
+        if (present(file_paths)) file_paths(n) = trim(filepath_temp)
+        num_restart = num_restart + 1
+        call MOM_error(NOTE, "MOM_restart:get_num_restart_files: Found restart file : "//trim(filepath))
+      endif
+      ! search for files with "res_#" in the name
+      str_index = index(filepath_temp,".res.nc")
+      if (str_index .gt. 0) then
+        f = 0
+        do while (f .le. n)
+          f=f+1
+          filepath_temp2=""
+          ! check for names with extra .res.nc added by fms2-io
+          if ( f .lt. 10) then
+            write(filepath_temp2,'(A,I1,A)') trim(filepath_temp(1:str_index-1))//".res_",f,".res.nc"
+          elseif (f .ge. 10 .and. f .lt. 100) then
+            write(filepath_temp2,'(A,I2,A)') trim(filepath_temp(1:str_index-1))//".res_",f,".res.nc"
+          endif
+          if (file_exists(trim(filepath_temp2)) .or. file_exists(trim(filepath_temp2)//".0000")) then
+            call MOM_error(NOTE, "MOM_restart:get_num_restart_files: Found restart file : "//trim(filepath_temp2))
+            num_restart=num_restart+1
+            n=n+1
+            if (present(file_paths)) file_paths(n) = trim(filepath_temp2)
+          else
+            ! check for fms-io-style name
+            filepath_temp2=""
+            if ( f .lt. 10) then
+              write(filepath_temp2,'(A,I1,A)') trim(filepath_temp(1:str_index-1))//".res_",f,".nc"
+            elseif (f .ge. 10 .and. f .lt. 100) then
+              write(filepath_temp2,'(A,I2,A)') trim(filepath_temp(1:str_index-1))//".res_",f,".nc"
+            endif
+            if (file_exists(trim(filepath_temp2)) .or. file_exists(trim(filepath_temp2)//".0000")) then
+              call MOM_error(NOTE, "MOM_restart:get_num_restart_files: Found restart file : "//trim(filepath_temp2))
+              num_restart=num_restart+1
+              n=n+1
+              if (present(file_paths)) file_paths(n) = trim(filepath_temp2)
+            else
+              exit
+            endif
+          endif
+        enddo ! while (f .le. n-1)
+      endif
+      err = 1 ; exit
+    enddo ! while (err == 0) loop
+  enddo ! while (start_char < strlen(filename)) loop
+  num_files = n
+
+end function get_num_restart_files
+
+
 !> Initialize this module and set up a restart control structure.
 subroutine restart_init(param_file, CS, restart_root)
   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
@@ -1641,5 +1775,41 @@ subroutine get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
   endif
 
 end subroutine get_checksum_loop_ranges
+
+!> get the size of a variable in bytes
+function get_variable_byte_size(hor_grid, z_grid, t_grid, G, num_zlevels) result(var_sz)
+  character(len=*), intent(in) :: hor_grid !< horizontal grid string
+  character(len=*), intent(in) :: z_grid !< vertical grid string
+  character(len=*), intent(in) :: t_grid !< time string
+  type(ocean_grid_type), intent(in) :: G !< The ocean's grid structure;
+  integer, intent(in) :: num_zlevels     !< number of vertical levels
+  ! local
+  integer(kind=8) :: var_sz !< The size in bytes of each variable
+  integer :: var_periods
+  character(len=8) :: t_grid_read=''
+
+  var_periods = 0
+
+  if (trim(hor_grid) == '1') then
+    var_sz = 8
+  else
+    var_sz = 8*(G%Domain%niglobal+1)*(G%Domain%njglobal+1)
+  endif
+
+  select case (trim(z_grid))
+    case ('L') ; var_sz = var_sz * num_zlevels
+    case ('i') ; var_sz = var_sz * (num_zlevels+1)
+  end select
+
+  if (adjustl(t_grid(1:1)) == 'p') then
+    if (len_trim(t_grid(2:8)) > 0) then
+      var_periods = -1
+      t_grid_read = adjustl(t_grid(2:8))
+      read(t_grid_read,*) var_periods
+      if (var_periods > 1) var_sz = var_sz * var_periods
+    endif
+  endif
+
+end function get_variable_byte_size
 
 end module MOM_restart
