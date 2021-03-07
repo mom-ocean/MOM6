@@ -3,13 +3,11 @@ module MOM_read_data_fms2
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 use MOM_axis,             only : MOM_register_variable_axes
-use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING
+use MOM_error_infra,      only : MOM_error=>MOM_err, NOTE, FATAL, WARNING
 use MOM_domain_infra,     only : MOM_domain_type, AGRID, BGRID_NE, CGRID_NE
-use MOM_domain_infra,     only : get_simple_array_i_ind, get_simple_array_j_ind
-use MOM_grid,             only : ocean_grid_type
-use MOM_dyn_horgrid,      only : dyn_horgrid_type
+use MOM_domain_infra,     only : domain2d, CENTER, CORNER, NORTH_FACE, EAST_FACE
+use MOM_domain_infra,     only : rescale_comp_data
 use MOM_string_functions, only : lowercase
-use MOM_verticalGrid,     only : verticalGrid_type
 use fms2_io_mod,          only : read_data, attribute_exists => variable_att_exists, variable_exists
 use fms2_io_mod,          only : register_field, register_variable_attribute, fms2_open_file => open_file
 use fms2_io_mod,          only : fms2_close_file => close_file, write_data, get_variable_dimension_names
@@ -18,10 +16,6 @@ use fms2_io_mod,          only : is_dimension_registered, register_axis, get_var
 use fms2_io_mod,          only : FmsNetcdfDomainFile_t, FmsNetcdfFile_t, unlimited, get_variable_names
 use fms2_io_mod,          only : get_variable_num_dimensions, get_variable_units, is_dimension_unlimited
 use fms2_io_mod,          only : get_num_variables
-use mpp_domains_mod,      only : domain2d
-use mpp_domains_mod,      only : CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
-use mpp_domains_mod,      only : mpp_get_domain_npes, mpp_define_io_domain, mpp_get_io_domain
-use mpp_domains_mod,      only : mpp_get_data_domain, mpp_get_compute_domain, mpp_get_global_domain
 
 implicit none ; private
 
@@ -61,16 +55,8 @@ type (file_variable_meta_DD), private :: file_var_meta_DD
 !> type to hold metadata for variables in a non-domain-decomposed file
 type (file_variable_meta_noDD), private :: file_var_meta_noDD
 
-!> index of the time_level value that is written to netCDF file bythe write_field routines.
-integer, private :: write_field_time_index
-
-!> interface to apply a scale factor to an array after reading in a field
-interface scale_data
-  module procedure scale_data_4d
-  module procedure scale_data_3d
-  module procedure scale_data_2d
-  module procedure scale_data_1d
-end interface
+! !> index of the time_level value that is written to netCDF file by the write_field routines.
+! integer, private :: write_field_time_index
 
 contains
 
@@ -109,11 +95,6 @@ subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, start_index, e
   if (present(leave_file_open)) close_the_file = .not.(leave_file_open)
   ! open the file
   if (.not.(check_if_open(fileobj_read_dd))) then
-    ! define the io domain for 1-pe jobs because it is required to read domain-decomposed files
-    if (mpp_get_domain_npes(domain%mpp_domain) .eq. 1 ) then
-      if (.not. associated(mpp_get_io_domain(domain%mpp_domain))) &
-        call mpp_define_io_domain(domain%mpp_domain, (/1,1/))
-    endif
     file_open_success = fms2_open_file(fileobj_read_dd, filename, "read", domain%mpp_domain, is_restart=.false.)
     file_var_meta_DD%nvars = get_num_variables(fileobj_read_dd)
     if (file_var_meta_DD%nvars .lt. 1) call MOM_error(FATAL, "nvars is less than 1 for file "// &
@@ -172,10 +153,6 @@ subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, start_index, e
   else
     call read_data(fileobj_read_dd, trim(variable_to_read), data, corner=start, edge_lengths=nread)
   endif
-  ! scale the data
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call scale_data(data, scale)
-  endif ; endif
   ! close the file
   if (close_the_file) then
     if (check_if_open(fileobj_read_dd)) call fms2_close_file(fileobj_read_dd)
@@ -183,6 +160,12 @@ subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, start_index, e
      file_var_meta_DD%nvars = 0
   endif
   if (allocated(dim_names)) deallocate(dim_names)
+
+  ! Rescale the data that was read if necessary.
+  if (present(scale)) then ; if (scale /= 1.0) then
+    data(:) = scale*data(:)
+  endif ; endif
+
 end subroutine MOM_read_data_1d_DD
 
 !> This routine calls the fms_io read_data subroutine to read 2-D domain-decomposed data field named "fieldname"
@@ -211,7 +194,6 @@ subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain,start_index, ed
   character(len=96) :: variable_to_read ! variable to read from the netcdf file
   integer :: xpos, ypos, pos ! x and y domain positions
   integer :: isc, iec, jsc, jec, isg, ieg, jsg, jeg
-  type(domain2D), pointer :: io_domain => NULL()
 
   xpos = CENTER
   ypos = CENTER
@@ -223,11 +205,6 @@ subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain,start_index, ed
 
   ! open the file
   if (.not.(check_if_open(fileobj_read_dd))) then
-    ! define the io domain for 1-pe jobs because it is required to read domain-decomposed files
-    if (mpp_get_domain_npes(domain%mpp_domain) .eq. 1 ) then
-      if (.not. associated(mpp_get_io_domain(domain%mpp_domain))) &
-        call mpp_define_io_domain(domain%mpp_domain, (/1,1/))
-    endif
     file_open_success = fms2_open_file(fileobj_read_dd, filename, "read", domain%mpp_domain, is_restart=.false.)
     file_var_meta_DD%nvars = get_num_variables(fileobj_read_dd)
     if (file_var_meta_DD%nvars .lt. 1) call MOM_error(FATAL, "nvars is less than 1 for file "// &
@@ -265,12 +242,6 @@ subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain,start_index, ed
   allocate(dim_names(num_var_dims))
   dim_names(:) = ""
   call get_variable_dimension_names(fileobj_read_dd, trim(variable_to_read), dim_names)
-  ! get the IO domain
-  !io_domain => mpp_get_io_domain(domain%mpp_domain)
-  ! Get the global indicies
-  !call mpp_get_global_domain(io_domain, xbegin=isg, xend=ieg, ybegin=jsg, yend=jeg, position=pos)
-  ! Get the compute indicies
-  !call mpp_get_compute_domain(io_domain, xbegin=isc, xend=iec, ybegin=jsc, yend=jec, position=pos)
   !last(1) = iec - isg + 1 ! get array indices for the axis data
   !last(2) = jec - jsg + 1
   !first(1) = isc - isg + 1
@@ -305,10 +276,6 @@ subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain,start_index, ed
   else
     call read_data(fileobj_read_dd, trim(variable_to_read), data, corner=start, edge_lengths=nread)
   endif
-  ! scale the data
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call scale_data(data, scale)
-  endif ; endif
   ! close the file
   if (close_the_file) then
     if (check_if_open(fileobj_read_dd)) call fms2_close_file(fileobj_read_dd)
@@ -316,7 +283,12 @@ subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain,start_index, ed
     file_var_meta_DD%nvars = 0
   endif
   if (allocated(dim_names)) deallocate(dim_names)
-  if (associated(io_domain)) nullify(io_domain)
+
+  ! Rescale the data that was read if necessary.
+  if (present(scale)) then ; if (scale /= 1.0) then
+    call rescale_comp_data(domain, data, scale)
+  endif ; endif
+
 end subroutine MOM_read_data_2d_DD
 
 !> This routine calls the fms_io read_data subroutine to read 3-D domain-decomposed data field named "fieldname"
@@ -345,7 +317,6 @@ subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, start_index, e
   character(len=96) :: variable_to_read ! variable to read from the netcdf file
   integer :: xpos, ypos, pos ! x and y domain positions
   integer :: isc, iec, jsc, jec, isg, ieg, jsg, jeg
-  type(domain2D), pointer :: io_domain => NULL()
 
   xpos = CENTER
   ypos = CENTER
@@ -356,11 +327,6 @@ subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, start_index, e
   if (present(leave_file_open)) close_the_file = .not.(leave_file_open)
   ! open the file
   if (.not.(check_if_open(fileobj_read_dd))) then
-    ! define the io domain for 1-pe jobs because it is required to read domain-decomposed files
-    if (mpp_get_domain_npes(domain%mpp_domain) .eq. 1 ) then
-      if (.not. associated(mpp_get_io_domain(domain%mpp_domain))) &
-        call mpp_define_io_domain(domain%mpp_domain, (/1,1/))
-    endif
     file_open_success = fms2_open_file(fileobj_read_dd, filename, "read", domain%mpp_domain, is_restart=.false.)
     file_var_meta_DD%nvars = get_num_variables(fileobj_read_dd)
     if (file_var_meta_DD%nvars .lt. 1) call MOM_error(FATAL, "nvars is less than 1 for file "// &
@@ -397,15 +363,6 @@ subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, start_index, e
   allocate(dim_names(num_var_dims))
   dim_names(:) = ""
   call get_variable_dimension_names(fileobj_read_dd, trim(variable_to_read), dim_names)
-  ! get the IO domain
-  io_domain => mpp_get_io_domain(domain%mpp_domain)
-  ! Get the global indicies
- ! call mpp_get_global_domain(io_domain, xbegin=isg, xend=ieg, ybegin=jsg, yend=jeg, position=pos)
- ! call mpp_get_compute_domain(io_domain, xbegin=isc, xend=iec, ybegin=jsc, yend=jec, position=pos)
-  !last(1) = iec - isg + 1 ! get array indices for the axis data
-  !last(2) = jec - jsg + 1
-  !first(1) = isc - isg + 1
-  !first(2) = jsc - jsg + 1
 
   start(:) = 1
   if (present(start_index)) then
@@ -440,10 +397,6 @@ subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, start_index, e
   else
     call read_data(fileobj_read_dd, trim(variable_to_read), data, corner=start, edge_lengths=nread)
   endif
-  ! scale the data
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call scale_data(data, scale)
-  endif ; endif
   ! close the file
   if (close_the_file) then
     if (check_if_open(fileobj_read_dd)) call fms2_close_file(fileobj_read_dd)
@@ -452,7 +405,12 @@ subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, start_index, e
   endif
 
   if (allocated(dim_names)) deallocate(dim_names)
-  if (associated(io_domain)) nullify(io_domain)
+
+  ! Rescale the data that was read if necessary.
+  if (present(scale)) then ; if (scale /= 1.0) then
+    call rescale_comp_data(domain, data, scale)
+  endif ; endif
+
 end subroutine MOM_read_data_3d_DD
 
 !> This routine calls the fms_io read_data subroutine to read 4-D domain-decomposed data field named "fieldname"
@@ -481,7 +439,6 @@ subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, start_index, e
   character(len=96) :: variable_to_read ! variable to read from the netcdf file
   integer :: xpos, ypos, pos ! x and y domain positions
   integer :: isc, iec, jsc, jec, isg, ieg, jsg, jeg
-  type(domain2D), pointer :: io_domain => NULL()
 
   xpos = CENTER
   ypos = CENTER
@@ -492,11 +449,6 @@ subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, start_index, e
   if (present(leave_file_open)) close_the_file = .not.(leave_file_open)
   ! open the file
   if (.not.(check_if_open(fileobj_read_dd))) then
-    ! define the io domain for 1-pe jobs because it is required to read domain-decomposed files
-    if (mpp_get_domain_npes(domain%mpp_domain) .eq. 1 ) then
-      if (.not. associated(mpp_get_io_domain(domain%mpp_domain))) &
-        call mpp_define_io_domain(domain%mpp_domain, (/1,1/))
-    endif
     file_open_success = fms2_open_file(fileobj_read_dd, filename, "read", domain%mpp_domain, is_restart=.false.)
     file_var_meta_DD%nvars = get_num_variables(fileobj_read_dd)
     if (file_var_meta_DD%nvars .lt. 1) call MOM_error(FATAL, "nvars is less than 1 for file "// &
@@ -534,14 +486,6 @@ subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, start_index, e
   allocate(dim_names(num_var_dims))
   dim_names(:) = ""
   call get_variable_dimension_names(fileobj_read_dd, trim(variable_to_read), dim_names)
-  ! get the IO domain
-  !io_domain => mpp_get_io_domain(domain%mpp_domain)
-  ! Get the global indicies
-  !call mpp_get_global_domain(domain%mpp_domain, xbegin=isg, xend=ieg, ybegin=jsg, yend=jeg, position=pos)
-  ! Get the compute indicies
- ! call mpp_get_compute_domain(domain%mpp_domain, xbegin=isc, xend=iec, ybegin=jsc, yend=jec, position=pos)
-  !last(1) = iec - isg + 1 ! get array indices for the axis data
-  !first(1) = isc - isg + 1
 
   start(:) = 1
   if (present(start_index)) then
@@ -580,26 +524,30 @@ subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, start_index, e
   else
     call read_data(fileobj_read_dd, trim(variable_to_read), data, corner=start, edge_lengths=nread)
   endif
-  ! scale the data
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call scale_data(data, scale)
-  endif ; endif
+
   ! close the file
   if (close_the_file) then
     if (check_if_open(fileobj_read_dd)) call fms2_close_file(fileobj_read_dd)
      if (allocated(file_var_meta_DD%var_names)) deallocate(file_var_meta_DD%var_names)
     file_var_meta_DD%nvars = 0
   endif
-  if (associated(io_domain)) nullify(io_domain)
   if (allocated(dim_names)) deallocate(dim_names)
+
+  ! Rescale the data that was read if necessary.
+  if (present(scale)) then ; if (scale /= 1.0) then
+    call rescale_comp_data(domain, data, scale)
+  endif ; endif
+
 end subroutine MOM_read_data_4d_DD
 
 !!> This routine calls the fms_io read_data subroutine to read a scalar (0-D) field named "fieldname"
 !! from file "filename".
-subroutine MOM_read_data_scalar(filename, fieldname, data, leave_file_open)
+subroutine MOM_read_data_scalar(filename, fieldname, data, scale, leave_file_open)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
   real, intent(inout) :: data !< data buffer to pass to read_data
+  real,   optional, intent(in) :: scale     !< A scaling factor that the scalar is multiplied
+                                            !! by before it is returned.
   logical, optional, intent(in) :: leave_file_open !< if .true., leave file open
   ! local
   integer :: i
@@ -640,6 +588,12 @@ subroutine MOM_read_data_scalar(filename, fieldname, data, leave_file_open)
     if (allocated(file_var_meta_noDD%var_names)) deallocate(file_var_meta_noDD%var_names)
     file_var_meta_noDD%nvars = 0
   endif
+
+  ! Rescale the data that was read if necessary.
+  if (present(scale)) then ; if (scale /= 1.0) then
+    data = scale*data
+  endif ; endif
+
 end subroutine MOM_read_data_scalar
 
 !> This routine calls the fms_io read_data subroutine to read 1-D non-domain-decomposed data field named "fieldname"
@@ -727,10 +681,6 @@ subroutine MOM_read_data_1d_noDD(filename, fieldname, data, start_index, &
   else
     call read_data(fileobj_read, trim(variable_to_read), data, corner=start, edge_lengths=nread)
   endif
-  ! scale the data
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call scale_data(data, scale)
-  endif ; endif
   ! close the file
   if (close_the_file) then
     if (check_if_open(fileobj_read)) call fms2_close_file(fileobj_read)
@@ -738,6 +688,12 @@ subroutine MOM_read_data_1d_noDD(filename, fieldname, data, start_index, &
     file_var_meta_noDD%nvars = 0
   endif
   if (allocated(dim_names)) deallocate(dim_names)
+
+  ! Rescale the data that was read if necessary.
+  if (present(scale)) then ; if (scale /= 1.0) then
+    data(:) = scale*data(:)
+  endif ; endif
+
 end subroutine MOM_read_data_1d_noDD
 
 !> This routine calls the fms_io read_data subroutine to read 2-D non-domain-decomposed data field named "fieldname"
@@ -819,10 +775,6 @@ subroutine MOM_read_data_2d_noDD(filename, fieldname, data, start_index, &
   else
     call read_data(fileobj_read, trim(variable_to_read), data, corner=start, edge_lengths=nread)
   endif
-  ! scale the data
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call scale_data(data, scale)
-  endif ; endif
   ! close the file
   if (close_the_file) then
     if (check_if_open(fileobj_read)) call fms2_close_file(fileobj_read)
@@ -830,6 +782,11 @@ subroutine MOM_read_data_2d_noDD(filename, fieldname, data, start_index, &
     file_var_meta_noDD%nvars = 0
   endif
   if(allocated(dim_names)) deallocate(dim_names)
+
+  ! Rescale the data that was read if necessary.
+  if (present(scale)) then ; if (scale /= 1.0) then
+    data(:,:) = scale*data(:,:)
+  endif ; endif
 
 end subroutine MOM_read_data_2d_noDD
 
@@ -912,10 +869,7 @@ subroutine MOM_read_data_3d_noDD(filename, fieldname, data, start_index, &
   else
     call read_data(fileobj_read, trim(variable_to_read), data, corner=start, edge_lengths=nread)
   endif
-  ! scale the data
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call scale_data(data, scale)
-  endif ; endif
+
   ! close the file
   if (close_the_file) then
     if (check_if_open(fileobj_read)) call fms2_close_file(fileobj_read)
@@ -923,6 +877,12 @@ subroutine MOM_read_data_3d_noDD(filename, fieldname, data, start_index, &
     file_var_meta_noDD%nvars = 0
   endif
   if (allocated(dim_names)) deallocate(dim_names)
+
+  ! Rescale the data that was read if necessary.
+  if (present(scale)) then ; if (scale /= 1.0) then
+    data(:,:,:) = scale*data(:,:,:)
+  endif ; endif
+
 end subroutine MOM_read_data_3d_noDD
 
 !> This routine calls the fms_io read_data subroutine to read 4-D non-domain-decomposed data field named "fieldname"
@@ -1008,10 +968,6 @@ subroutine MOM_read_data_4d_noDD(filename, fieldname, data, start_index, &
   else
     call read_data(fileobj_read, trim(variable_to_read), data, corner=start, edge_lengths=nread)
   endif
-  ! scale the data
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call scale_data(data, scale)
-  endif ; endif
  ! close the file
   if (close_the_file) then
     if (check_if_open(fileobj_read)) call fms2_close_file(fileobj_read)
@@ -1019,163 +975,13 @@ subroutine MOM_read_data_4d_noDD(filename, fieldname, data, start_index, &
     file_var_meta_noDD%nvars = 0
   endif
   if (allocated(dim_names)) deallocate(dim_names)
-end subroutine MOM_read_data_4d_noDD
 
-!> This routine calls the fms_io read_data subroutine to read 2-D domain-decomposed data field named "fieldname"
-!! from file "filename". The routine multiplies the data by "scale" if the optional argument is included in the call.
-!!The supergrid variable axis lengths are determined from compute domain lengths, and
-!! the domain indices are computed from the difference between the global and compute domain indices
-subroutine MOM_read_data_2d_supergrid(filename, fieldname, data, domain, is_supergrid, start_index, edge_lengths, &
-                              timelevel, scale, x_position, y_position, leave_file_open)
-  character(len=*), intent(in) :: filename  !< The name of the file to read
-  character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
-  real, dimension(:,:), intent(inout) :: data !< The 2-dimensional data array to pass to read_data
-  type(MOM_domain_type), intent(in) :: domain !< MOM domain attribute with the mpp_domain decomposition
-  logical, intent(in) :: is_supergrid !< flag indicating whether to use supergrid
-  integer, dimension(2), optional, intent(in) :: start_index !< starting indices of data buffer. Default is 1
-  integer, dimension(2), optional, intent(in) :: edge_lengths !< number of data values to read in.
-                                                              !! Default values are the variable dimension sizes
-  integer, optional, intent(in) :: timelevel !< time level to read
-  real, optional, intent(in):: scale !< A scaling factor that the field is multiplied by
-  integer, intent(in), optional :: x_position !< domain position of x-dimension; CENTER (default) or EAST_FACE
-  integer, intent(in), optional :: y_position !< domain position of y-dimension; CENTER (default) or NORTH_FACE
-  logical, optional, intent(in) :: leave_file_open !< if .true., leave file open
-  ! local
-  logical :: file_open_success !.true. if call to open_file is successful
-  logical :: variable_found ! .true. if lowercase(fieldname) matches one of the lowercase file variable names
-  logical :: close_the_file ! indicates whether to close the file after write_data is called; default is .true.
-  integer :: i, dim_unlim_size, npes, num_var_dims, first(2), last(2)
-  integer :: start(2), nread(2) ! indices for first data value and number of values to read
-  character(len=40), allocatable :: dim_names(:) ! variable dimension names
-  character(len=96) :: variable_to_read ! variable to read from the netcdf file
-  integer :: xpos, ypos, pos ! x and y domain positions
-  integer :: isc, iec, jsc, jec, isd, ied, jsd, jed, isg, ieg, jsg, jeg
-  integer :: xsize_c, ysize_c, xsize_d, ysize_d
-  real, allocatable :: array(:,:) ! dummy array to pass to read data
-  type(domain2D), pointer :: io_domain => NULL()
-
-  xpos = CENTER
-  ypos = CENTER
-  if (present(x_position)) xpos = x_position
-  if (present(y_position)) ypos = y_position
-
-  close_the_file = .true.
-  if (present(leave_file_open)) close_the_file = .not.(leave_file_open)
-  npes=-1; npes = mpp_get_domain_npes(domain%mpp_domain)
-  ! open the file
-  if (.not.(check_if_open(fileobj_read_dd))) then
-    ! define the io domain for 1-pe jobs because it is required to read domain-decomposed files
-    if (npes .eq. 1 ) then
-      if (.not. associated(mpp_get_io_domain(domain%mpp_domain))) &
-        call mpp_define_io_domain(domain%mpp_domain, (/1,1/))
-    endif
-    file_open_success = fms2_open_file(fileobj_read_dd, filename, "read", domain%mpp_domain, is_restart=.false.)
-    file_var_meta_DD%nvars = get_num_variables(fileobj_read_dd)
-    if (file_var_meta_DD%nvars .lt. 1) call MOM_error(FATAL, "nvars is less than 1 for file "// &
-                                                           trim(filename))
-    if (.not.(allocated(file_var_meta_DD%var_names))) &
-      allocate(file_var_meta_DD%var_names(file_var_meta_DD%nvars))
-    call get_variable_names(fileobj_read_dd, file_var_meta_DD%var_names)
-  endif
-  ! search for the variable in the file
-  variable_to_read = trim(fieldname)
-  variable_found = .false.
-  do i=1,file_var_meta_DD%nvars
-    if (trim(lowercase(file_var_meta_DD%var_names(i))) .eq. trim(lowercase(fieldname))) then
-      variable_found = .true.
-      variable_to_read = trim(file_var_meta_DD%var_names(i))
-      exit
-    endif
-  enddo
-  if (.not.(variable_found)) call MOM_error(WARNING, "MOM_read_data_fms2:MOM_read_data_2d_supergrid: "//&
-      trim(fieldname)//" not found in "//trim(filename))
-
-  pos = CENTER
-  if (xpos .eq. NORTH_FACE) then
-    if (ypos .eq. EAST_FACE) then
-      pos = CORNER
-    else
-      pos = xpos
-    endif
-  elseif (ypos .eq. EAST_FACE) then
-    pos = ypos
-  endif
-  ! set the start and nread values that will be passed as the read_data corner and edge_lengths argument
-  num_var_dims = get_variable_num_dimensions(fileobj_read_dd, trim(variable_to_read))
-  allocate(dim_names(num_var_dims))
-  dim_names(:) = ""
-  call get_variable_dimension_names(fileobj_read_dd, trim(variable_to_read), dim_names)
-  ! get the IO domain
-  io_domain => mpp_get_io_domain(domain%mpp_domain)
-  ! register the variable axes
-  !call MOM_register_variable_axes(fileobj_read, trim(variable_to_read), io_domain, xPosition=xpos, yPosition=ypos)
-  call mpp_get_data_domain(domain%mpp_domain,isd,ied,jsd,jed,xsize=xsize_d,ysize=ysize_d,position=pos)
-  call mpp_get_global_domain(domain%mpp_domain,isg,ieg,jsg,jeg,position=pos)
-  call mpp_get_compute_domain(domain%mpp_domain,isc,iec,jsc,jec,position=pos)
-  ! get the start indices
-  start(:) = 1
-  if (present(start_index)) then
-    start = start_index
-  else!if((size(data,1) .eq. xsize_d) .and. (size(data,2) .eq. ysize_d)) then ! on_data_domain
-    if (npes .gt. 1) then
-      start(1) = isc - isg + 1
-      start(2) = jsc - jsg + 1
-    else
-      if (iec-isc+1 .ne. ieg-isg+1) start(1) = isc - isg + 1
-      if (jec-jsc+1 .ne. jeg-jsg+1) start(2) = jsc - jsg + 1
-    endif
-  endif
-  ! get the values for the edge_lengths (nread)
-  nread = shape(data)
-  if (present(edge_lengths)) then
-    nread = edge_lengths
-  else!if((size(data,1) .eq. xsize_d) .and. (size(data,2) .eq. ysize_d)) then ! on_data_domain
-    if (npes .gt. 1) then
-      nread(1) = iec - isc + 1
-      nread(2) = jec - jsc + 1
-    else
-      if (iec-isc+1 .ne. ieg-isg+1) nread(1) = iec - isc + 1
-      if (jec-jsc+1 .ne. jeg-jsg+1) nread(2) = jec - jsc + 1
-    endif
-  endif
-  ! allocate the dummy array
-  if (.not. allocated(array)) allocate(array(size(data,1),size(data,2)))
-  ! read the data
-  dim_unlim_size=0
-  if (present(timelevel)) then
-    do i=1,num_var_dims
-      if (is_dimension_unlimited(fileobj_read_dd, dim_names(i))) then
-        call get_dimension_size(fileobj_read_dd, dim_names(i), dim_unlim_size)
-      endif
-    enddo
-    if (dim_unlim_size .gt. 0) then
-      call read_data(fileobj_read_dd, trim(variable_to_read), array, corner=start, edge_lengths=nread, &
-                     unlim_dim_level=timelevel)
-    else
-      call read_data(fileobj_read_dd, trim(variable_to_read), array, corner=start, edge_lengths=nread)
-    endif
-  else
-    call read_data(fileobj_read_dd, trim(variable_to_read), array, corner=start, edge_lengths=nread)
-  endif
-  if((size(array,1) .eq. xsize_d) .and. (size(array,2) .eq. ysize_d)) then ! on_data_domain
-    data(isc-isd+1:iec-isd+1,jsc-jsd+1:jec-jsd+1) = array(isc-isd+1:iec-isd+1,jsc-jsd+1:jec-jsd+1)
-  else
-    data = array
-  endif
-  ! scale the data
+  ! Rescale the data that was read if necessary.
   if (present(scale)) then ; if (scale /= 1.0) then
-    call scale_data(data, scale)
+    data(:,:,:,:) = scale*data(:,:,:,:)
   endif ; endif
-  ! close the file
-  if (close_the_file) then
-    if (check_if_open(fileobj_read_dd)) call fms2_close_file(fileobj_read_dd)
-    if (allocated(file_var_meta_DD%var_names)) deallocate(file_var_meta_DD%var_names)
-    file_var_meta_noDD%nvars = 0
-  endif
-  if (allocated(dim_names)) deallocate(dim_names)
-  if (associated(io_domain)) nullify(io_domain)
-  if (allocated(array)) deallocate(array)
-end subroutine MOM_read_data_2d_supergrid
+
+end subroutine MOM_read_data_4d_noDD
 
 
 !> This routine uses the fms2_io read_data interface to read a pair of distributed
@@ -1289,21 +1095,19 @@ subroutine MOM_read_vector_2d_fms2(filename, u_fieldname, v_fieldname, u_data, v
   if (close_the_file) then
     if (check_if_open(fileobj_read_dd)) call fms2_close_file(fileobj_read_dd)
   endif
-  ! scale the data
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call get_simple_array_i_ind(MOM_Domain, size(u_data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(u_data,2), js, je)
-    u_data(is:ie,js:je) = scale*u_data(is:ie,js:je)
-    call get_simple_array_i_ind(MOM_Domain, size(v_data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(v_data,2), js, je)
-    v_data(is:ie,js:je) = scale*v_data(is:ie,js:je)
-  endif ; endif
   if (allocated(dim_names_u)) deallocate(dim_names_u)
   if (allocated(dim_names_v)) deallocate(dim_names_v)
   if (allocated(dim_sizes_u)) deallocate(dim_sizes_u)
   if (allocated(dim_sizes_v)) deallocate(dim_sizes_v)
   if (allocated(units_u)) deallocate(units_u)
   if (allocated(units_v)) deallocate(units_v)
+
+  ! Rescale the data that was read if necessary.
+  if (present(scale)) then ; if (scale /= 1.0) then
+    call rescale_comp_data(MOM_Domain, u_data, scale)
+    call rescale_comp_data(MOM_Domain, v_data, scale)
+  endif ; endif
+
 end subroutine MOM_read_vector_2d_fms2
 
 !> This routine uses the fms2_io read_data interface to read a pair of distributed
@@ -1417,89 +1221,21 @@ subroutine MOM_read_vector_3d_fms2(filename, u_fieldname, v_fieldname, u_data, v
   if (close_the_file) then
     if (check_if_open(fileobj_read_dd)) call fms2_close_file(fileobj_read_dd)
   endif
-  ! scale the data
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call get_simple_array_i_ind(MOM_Domain, size(u_data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(u_data,2), js, je)
-    u_data(is:ie,js:je,:) = scale*u_data(is:ie,js:je,:)
-    call get_simple_array_i_ind(MOM_Domain, size(v_data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(v_data,2), js, je)
-    v_data(is:ie,js:je,:) = scale*v_data(is:ie,js:je,:)
-  endif ; endif
   if (allocated(dim_names_u)) deallocate(dim_names_u)
   if (allocated(dim_names_v)) deallocate(dim_names_v)
   if (allocated(dim_sizes_u)) deallocate(dim_sizes_u)
   if (allocated(dim_sizes_v)) deallocate(dim_sizes_v)
   if (allocated(units_u)) deallocate(units_u)
   if (allocated(units_v)) deallocate(units_v)
+
+  ! Rescale the data that was read if necessary.
+  if (present(scale)) then ; if (scale /= 1.0) then
+    call rescale_comp_data(MOM_Domain, u_data, scale)
+    call rescale_comp_data(MOM_Domain, v_data, scale)
+  endif ; endif
+
 end subroutine MOM_read_vector_3d_fms2
 
-!> apply a scale factor to a 1d array
-subroutine scale_data_1d(data, scale_factor)
-  real, dimension(:), intent(inout) :: data !< The 1-dimensional data array
-  real, intent(in) :: scale_factor !< Scale factor
-
-  if (scale_factor /= 1.0) then
-    data(:) = scale_factor*data(:)
-  endif
-end subroutine scale_data_1d
-
-!> apply a scale factor to a 2d array
-subroutine scale_data_2d(data, scale_factor, MOM_domain)
-  real, dimension(:,:), intent(inout) :: data !< The 2-dimensional data array
-  real, intent(in) :: scale_factor !< Scale factor
-  type(MOM_domain_type), optional, intent(in) :: MOM_Domain !< The domain that describes the decomposition
-  ! local
-  integer :: is, ie, js, je
-
-  if (scale_factor /= 1.0) then
-    if (present(MOM_domain)) then
-      call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
-      call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
-      data(is:ie,js:je) = scale_factor*data(is:ie,js:je)
-    else
-      data(:,:) = scale_factor*data(:,:)
-    endif
-  endif
-end subroutine scale_data_2d
-
-!> apply a scale factor to a 3d array
-subroutine scale_data_3d(data, scale_factor, MOM_domain)
-  real, dimension(:,:,:), intent(inout) :: data !< The 3-dimensional data array
-  real, intent(in) :: scale_factor !< Scale factor
-  type(MOM_domain_type), optional, intent(in) :: MOM_Domain !< The domain that describes the decomposition
-  ! local
-  integer :: is, ie, js, je
-
-  if (scale_factor /= 1.0) then
-    if (present(MOM_domain)) then
-      call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
-      call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
-      data(is:ie,js:je,:) = scale_factor*data(is:ie,js:je,:)
-    else
-      data(:,:,:) = scale_factor*data(:,:,:)
-    endif
-  endif
-end subroutine scale_data_3d
-
-!> apply a scale factor to a 4d array
-subroutine scale_data_4d(data, scale_factor, MOM_domain)
-  real, dimension(:,:,:,:), intent(inout) :: data !< The 4-dimensional data array
-  real, intent(in) :: scale_factor !< Scale factor
-  type(MOM_domain_type), optional, intent(in) :: MOM_Domain !< The domain that describes the decomposition
-  ! local
-  integer :: is, ie, js, je
-
-  if (scale_factor /= 1.0) then
-    if (present(MOM_domain)) then
-      call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
-      call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
-      data(is:ie,js:je,:,:) = scale_factor*data(is:ie,js:je,:,:)
-    else
-      data(:,:,:,:) = scale_factor*data(:,:,:,:)
-    endif
-  endif
-end subroutine scale_data_4d
 
 !> check that latitude or longitude units are valid CF-compliant values
 !! return true or false and x_or_y character value corresponding to the axis direction

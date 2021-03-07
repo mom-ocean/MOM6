@@ -6,18 +6,16 @@ module MOM_write_field_fms2
 use MOM_axis,             only : MOM_get_diagnostic_axis_data, MOM_register_diagnostic_axis
 use MOM_axis,             only : axis_data_type, get_time_index, get_var_dimension_metadata
 use MOM_axis,             only : get_time_units, convert_checksum_to_string
-use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING
+use MOM_coms_infra,       only : PE_here, root_PE, num_PEs
 use MOM_domain_infra,     only : MOM_domain_type
-use MOM_domain_infra,     only : get_simple_array_i_ind, get_simple_array_j_ind
+use MOM_domain_infra,     only : domain2d, CENTER, CORNER, NORTH_FACE, EAST_FACE
+use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING
 use MOM_grid,             only : ocean_grid_type
 use MOM_dyn_horgrid,      only : dyn_horgrid_type
 use MOM_string_functions, only : lowercase, append_substring
 use MOM_verticalGrid,     only : verticalGrid_type
-use mpp_mod,              only : mpp_pe, mpp_npes
-use mpp_domains_mod,      only : domain2d
-use mpp_domains_mod,      only : CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
-use mpp_domains_mod,      only : mpp_get_domain_npes, mpp_define_io_domain, mpp_get_io_domain
-use netcdf
+
+use netcdf,               only : nf90_max_name
 ! fms2_io
 use fms2_io_mod,          only : check_if_open, get_dimension_size
 use fms2_io_mod,          only : get_num_dimensions,  get_num_variables, get_variable_names
@@ -60,20 +58,12 @@ interface write_field
   module procedure write_field_1d_noDD
 end interface
 
-!> interface to apply a scale factor to an array after reading in a field
-interface scale_data
-  module procedure scale_data_4d
-  module procedure scale_data_3d
-  module procedure scale_data_2d
-  module procedure scale_data_1d
-end interface
-
 contains
 !> This function uses the fms_io function write_data to write a 1-D domain-decomposed data field named "fieldname"
 !! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
 !! file write procedure.
 subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, hor_grid, z_grid, &
-                             start_index, edge_lengths, time_level, time_units, scale, &
+                             start_index, edge_lengths, time_level, time_units, &
                              checksums, G, dG, GV, leave_file_open, units, longname)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
@@ -88,7 +78,6 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, hor_grid, 
   real, optional, intent(in) :: time_level !< time value to write
   real, optional, intent(in) :: time_units !< length of the units for time [s]. The
                                           !! default value is 86400.0, for 1 day.
-  real, optional, intent(in) :: scale !< A scaling factor that the fields are multiplied by before they are written.
   integer(kind=8), dimension(:,:), optional, intent(in) :: checksums  !< variable checksum
   type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
                                                      !! is required if the new file uses any
@@ -105,7 +94,6 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, hor_grid, 
   ! local
   logical :: file_open_success !.true. if call to open_file is successful
   logical :: close_the_file ! indicates whether to close the file after write_data is called; default is .true.
-  real, pointer, dimension(:) :: data_tmp => null() ! enables data to be passed to functions as intent(inout)
   integer :: num_dims, substring_index
   integer :: dim_unlim_size! size of the unlimited dimension
   integer, dimension(1) :: start, nwrite ! indices for first data value and number of values to write
@@ -159,21 +147,10 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, hor_grid, 
     nwrite(1) = max(dim_lengths(1),edge_lengths(1))
   endif
 
-  data_tmp => data
-  ! scale the data
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call scale_data(data_tmp,scale)
-  endif ; endif
-
   if (.not.(check_if_open(fileobj_write_field_dd))) then
     if ((lowercase(trim(mode)) .ne. "write") .and. (lowercase(trim(mode)) .ne. "append") .and. &
         (lowercase(trim(mode)) .ne. "overwrite")) &
       call MOM_error(FATAL,"MOM_write_field_fms2:write_1d_DD:mode argument must be write, overwrite, or append")
-    ! define the io domain for 1-pe jobs because it is required to write domain-decomposed files
-    if (mpp_get_domain_npes(domain%mpp_domain) .eq. 1 ) then
-      if (.not. associated(mpp_get_io_domain(domain%mpp_domain))) &
-        call mpp_define_io_domain(domain%mpp_domain, (/1,1/))
-    endif
     ! get the time_level index
     if (present(time_level)) write_field_time_index = get_time_index(trim(filename_temp), time_level)
     ! open the file in write or append mode
@@ -220,24 +197,24 @@ subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, hor_grid, 
   endif
   ! write the variable
   if (present(time_level)) then
-    call write_data(fileobj_write_field_dd, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
+    call write_data(fileobj_write_field_dd, trim(fieldname), data, corner=start, edge_lengths=nwrite, &
                     unlim_dim_level=write_field_time_index)
   else
-    call write_data(fileobj_write_field_dd, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
+    call write_data(fileobj_write_field_dd, trim(fieldname), data, corner=start, edge_lengths=nwrite)
   endif
   ! close the file
   if (close_the_file) then
     if (check_if_open(fileobj_write_field_dd)) call fms2_close_file(fileobj_write_field_dd)
     write_field_time_index = 0
   endif
-  nullify(data_tmp)
+
 end subroutine write_field_1d_DD
 
 !> This function uses the fms_io function write_data to write a 2-D domain-decomposed data field named "fieldname"
 !! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
 !! file write procedure.
 subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, hor_grid, z_grid, &
-                             start_index, edge_lengths, time_level, time_units, scale, &
+                             start_index, edge_lengths, time_level, time_units, &
                              checksums, G, dG, GV, leave_file_open, units, longname)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
@@ -252,7 +229,6 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, hor_grid, 
   real, optional, intent(in) :: time_level !< time value to write
   real, optional, intent(in) :: time_units !< length of the units for time [s]. The
                                           !! default value is 86400.0, for 1 day.
-  real, optional, intent(in) :: scale !< A scaling factor that the fields are multiplied by before they are written.
   integer(kind=8), dimension(:,:), optional, intent(in) :: checksums  !< variable checksum
   type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
                                                      !! is required if the new file uses any
@@ -269,7 +245,6 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, hor_grid, 
   ! local
   logical :: file_open_success !.true. if call to open_file is successful
   logical :: close_the_file ! indicates whether to close the file after write_data is called; default is .true.
-  real, pointer :: data_tmp(:,:) => null()
   integer :: i, is, ie, js, je, j, ndims, num_dims, substring_index
   integer, allocatable, dimension(:) :: x_inds, y_inds
   integer :: dim_unlim_size ! size of the unlimited dimension
@@ -331,21 +306,10 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, hor_grid, 
     enddo
   endif
 
-  data_tmp => data
-  ! scale the data
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call scale_data(data_tmp,scale)
-  endif ; endif
-
   if (.not.(check_if_open(fileobj_write_field_dd))) then
     if ((lowercase(trim(mode)) .ne. "write") .and. (lowercase(trim(mode)) .ne. "append") .and. &
         (lowercase(trim(mode)) .ne. "overwrite")) &
        call MOM_error(FATAL,"MOM_write_field_fms2:write_2d_DD:mode argument must be write, overwrite, or append")
-    ! define the io domain for 1-pe jobs because it is required to write domain-decomposed files
-    if (mpp_get_domain_npes(domain%mpp_domain) .eq. 1 ) then
-      if (.not. associated(mpp_get_io_domain(domain%mpp_domain))) &
-        call mpp_define_io_domain(domain%mpp_domain, (/1,1/))
-    endif
     ! get the time_level index
     if (present(time_level)) write_field_time_index = get_time_index(trim(filename_temp), time_level)
     ! open the file in write or append mode
@@ -400,10 +364,10 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, hor_grid, 
   endif
   ! write the variable
   if (present(time_level)) then
-    call write_data(fileobj_write_field_dd, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
+    call write_data(fileobj_write_field_dd, trim(fieldname), data, corner=start, edge_lengths=nwrite, &
                     unlim_dim_level=write_field_time_index)
   else
-    call write_data(fileobj_write_field_dd, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
+    call write_data(fileobj_write_field_dd, trim(fieldname), data, corner=start, edge_lengths=nwrite)
   endif
   ! close the file
   if (close_the_file) then
@@ -411,14 +375,14 @@ subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, hor_grid, 
     write_field_time_index=0
     if (allocated(file_dim_names)) deallocate(file_dim_names)
   endif
-  nullify(data_tmp)
+
 end subroutine write_field_2d_DD
 
 !> This function uses the fms_io function write_data to write a 3-D domain-decomposed data field named "fieldname"
 !! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
 !! file write procedure.
 subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, hor_grid, z_grid, &
-                             start_index, edge_lengths, time_level, time_units, scale, &
+                             start_index, edge_lengths, time_level, time_units, &
                              checksums, G, dG, GV, leave_file_open, units, longname)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
@@ -433,7 +397,6 @@ subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, hor_grid, 
   real, optional, intent(in) :: time_level !< time value to write
   real, optional, intent(in) :: time_units !< length of the units for time [s]. The
                                           !! default value is 86400.0, for 1 day.
-  real, optional, intent(in) :: scale !< A scaling factor that the fields are multiplied by before they are written.
   integer(kind=8), dimension(:,:), optional, intent(in) :: checksums  !< variable checksum
   type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
                                                      !! is required if the new file uses any
@@ -450,7 +413,6 @@ subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, hor_grid, 
   ! local
   logical :: file_open_success !.true. if call to open_file is successful
   logical :: close_the_file ! indicates whether to close the file after write_data is called; default is .true.
-  real, pointer, dimension(:,:,:) :: data_tmp => null() ! enables data to be passed to functions as intent(inout)
   integer :: i, is, ie, js, je, ndims, num_dims, substring_index
   integer :: dim_unlim_size ! size of the unlimited dimension
   integer, dimension(3) :: start, nwrite ! indices for first data value and number of values to write
@@ -509,21 +471,11 @@ subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, hor_grid, 
     enddo
   endif
 
-  data_tmp => data
-  ! scale the data
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call scale_data(data_tmp,scale)
-  endif ; endif
   ! open the file
   if (.not.(check_if_open(fileobj_write_field_dd))) then
     if ((lowercase(trim(mode)) .ne. "write") .and. (lowercase(trim(mode)) .ne. "append") .and. &
         (lowercase(trim(mode)) .ne. "overwrite")) &
       call MOM_error(FATAL,"MOM_write_field_fms2:write_3d_DD:mode argument must be write, overwrite, or append")
-    ! define the io domain for 1-pe jobs because it is required to write domain-decomposed files
-    if (mpp_get_domain_npes(domain%mpp_domain) .eq. 1 ) then
-      if (.not. associated(mpp_get_io_domain(domain%mpp_domain))) &
-        call mpp_define_io_domain(domain%mpp_domain, (/1,1/))
-    endif
     ! get the time_level index
     if (present(time_level)) write_field_time_index = get_time_index(trim(filename_temp), time_level)
     ! open the file in write or append mode
@@ -578,17 +530,17 @@ subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, hor_grid, 
   ! write the data
   if (present(time_level)) then
     call get_dimension_size(fileobj_write_field_dd, trim(dim_unlim_name), dim_unlim_size)
-    call write_data(fileobj_write_field_dd, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
+    call write_data(fileobj_write_field_dd, trim(fieldname), data, corner=start, edge_lengths=nwrite, &
                     unlim_dim_level=write_field_time_index)
   else
-    call write_data(fileobj_write_field_dd, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
+    call write_data(fileobj_write_field_dd, trim(fieldname), data, corner=start, edge_lengths=nwrite)
   endif
   ! close the file
   if (close_the_file) then
     if (check_if_open(fileobj_write_field_dd)) call fms2_close_file(fileobj_write_field_dd)
     write_field_time_index=0
   endif
-  nullify(data_tmp)
+
 
 end subroutine write_field_3d_DD
 
@@ -596,7 +548,7 @@ end subroutine write_field_3d_DD
 !! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
 !! file write procedure.
 subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, hor_grid, z_grid, t_grid, &
-                             start_index, edge_lengths, time_level, time_units, scale, &
+                             start_index, edge_lengths, time_level, time_units, &
                              checksums, G, dG, GV, leave_file_open, units, longname)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
@@ -612,8 +564,7 @@ subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, hor_grid, 
   real, optional, intent(in) :: time_level !< time value to write
   real, optional, intent(in) :: time_units !< length of the units for time [s]. The
                                           !! default value is 86400.0, for 1 day.
-  real, optional, intent(in) :: scale !< A scaling factor that the fields are multiplied by before they are written.
-   integer(kind=8), dimension(:,:), optional, intent(in) :: checksums  !< variable checksum
+  integer(kind=8), dimension(:,:), optional, intent(in) :: checksums  !< variable checksum
   type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
                                                      !! is required if the new file uses any
                                                      !! horizontal grid axes.
@@ -629,7 +580,6 @@ subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, hor_grid, 
   ! local
   logical :: file_open_success !.true. if call to open_file is successful
   logical :: close_the_file ! indicates whether to close the file after write_data is called; default is .true.
-  real, pointer, dimension(:,:,:,:) :: data_tmp => null() ! enables data to be passed to functions as intent(inout)
   real :: file_time ! most recent time currently written to file
   integer :: i, ndims, num_dims, substring_index
   integer :: dim_unlim_size ! size of the unlimited dimension
@@ -686,21 +636,11 @@ subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, hor_grid, 
     enddo
   endif
 
-  data_tmp => data
-  ! scale the data
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call scale_data(data_tmp,scale)
-  endif ; endif
   ! open the file
   if (.not.(check_if_open(fileobj_write_field_dd))) then
     if ((lowercase(trim(mode)) .ne. "write") .and. (lowercase(trim(mode)) .ne. "append") .and. &
         (lowercase(trim(mode)) .ne. "overwrite")) &
       call MOM_error(FATAL,"MOM_write_field_fms2:write_4d_DD:mode argument must be write, overwrite, or append")
-    ! define the io domain for 1-pe jobs because it is required to write domain-decomposed files
-    if (mpp_get_domain_npes(domain%mpp_domain) .eq. 1 ) then
-      if (.not. associated(mpp_get_io_domain(domain%mpp_domain))) &
-        call mpp_define_io_domain(domain%mpp_domain, (/1,1/))
-    endif
     ! get the index of the corresponding time_level the first time the file is opened
     if (present(time_level)) write_field_time_index = get_time_index(trim(filename_temp), time_level)
     ! open the file in write or append mode
@@ -755,17 +695,17 @@ subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, hor_grid, 
   ! write the data
   if (present(time_level)) then
     call get_dimension_size(fileobj_write_field_dd, trim(dim_unlim_name), dim_unlim_size)
-    call write_data(fileobj_write_field_dd, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
+    call write_data(fileobj_write_field_dd, trim(fieldname), data, corner=start, edge_lengths=nwrite, &
                     unlim_dim_level=write_field_time_index)
   else
-    call write_data(fileobj_write_field_dd, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
+    call write_data(fileobj_write_field_dd, trim(fieldname), data, corner=start, edge_lengths=nwrite)
   endif
   ! close the file
   if (close_the_file) then
     if (check_if_open(fileobj_write_field_dd)) call fms2_close_file(fileobj_write_field_dd)
     write_field_time_index=0
   endif
-  nullify(data_tmp)
+
 end subroutine write_field_4d_DD
 
 !> This routine uses the fms_io function write_data to write a scalar variable named "fieldname"
@@ -824,7 +764,7 @@ subroutine write_scalar(filename, fieldname, data, mode, time_level, time_units,
     !>\note this is required so that only pe(1) is identified as the root pe to create the file
     !! Otherwise, multiple pes may try to open the file in write (NC_NOCLOBBER) mode, leading to failure
     if (.not.(allocated(pelist))) then
-      allocate(pelist(mpp_npes()))
+      allocate(pelist(num_PEs()))
       pelist(:) = 0
       do i=1,size(pelist)
         pelist(i) = i-1
@@ -887,7 +827,7 @@ end subroutine write_scalar
 !! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
 !! file write procedure.
 subroutine write_field_1d_noDD(filename, fieldname, data, mode, hor_grid, z_grid, &
-                             start_index, edge_lengths, time_level, time_units, scale, &
+                             start_index, edge_lengths, time_level, time_units, &
                              checksums, G, dG, GV, leave_file_open, units, longname)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
@@ -901,7 +841,6 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
   real, optional, intent(in) :: time_level !< time value to write
   real, optional, intent(in) :: time_units !< length of the units for time [s]. The
                                           !! default value is 86400.0, for 1 day.
-  real, optional, intent(in) :: scale !< A scaling factor that the fields are multiplied by before they are written.
   integer(kind=8), dimension(:,:), optional, intent(in) :: checksums  !< variable checksum
   type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
                                                      !! is required if the new file uses any
@@ -917,7 +856,6 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
   character(len=*), optional, intent(in) :: longname !< long name variable attribute
   ! local
   logical :: file_open_success !.true. if call to open_file is successful
-  real, pointer, dimension(:) :: data_tmp => null() ! enables data to be passed to functions as intent(inout)
   integer :: i, ndims, num_dims, substring_index
   integer :: dim_unlim_size ! size of the unlimited dimension
   integer, dimension(1) :: start, nwrite ! indices for first data value and number of values to write
@@ -973,12 +911,6 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
     nwrite(1) = max(dim_lengths(1),edge_lengths(1))
   endif
 
-  data_tmp => data
-  ! scale the data
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call scale_data(data_tmp,scale)
-  endif ; endif
-
   if (.not.(check_if_open(fileobj_write_field))) then
     if ((lowercase(trim(mode)) .ne. "write") .and. (lowercase(trim(mode)) .ne. "append") .and. &
        (lowercase(trim(mode)) .ne. "overwrite")) &
@@ -989,7 +921,7 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
     !>\note this is required so that only pe(1) is identified as the root pe to create the file
     !! Otherwise, multiple pes may try to open the file in write (NC_NOCLOBBER) mode, leading to failure
     if (.not.(allocated(pelist))) then
-      allocate(pelist(mpp_npes()))
+      allocate(pelist(num_PEs()))
       pelist(:) = 0
       do i=1,size(pelist)
         pelist(i) = i-1
@@ -1042,10 +974,10 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
   endif
   ! write the variable to the file
   if (present(time_level)) then
-    call write_data(fileobj_write_field, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
+    call write_data(fileobj_write_field, trim(fieldname), data, corner=start, edge_lengths=nwrite, &
                     unlim_dim_level=write_field_time_index)
   else
-    call write_data(fileobj_write_field, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
+    call write_data(fileobj_write_field, trim(fieldname), data, corner=start, edge_lengths=nwrite)
   endif
   ! close the file
   if (close_the_file) then
@@ -1053,7 +985,7 @@ subroutine write_field_1d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
     if (allocated(pelist)) deallocate(pelist)
     write_field_time_index = 0
   endif
-  nullify(data_tmp)
+
 
 end subroutine write_field_1d_noDD
 
@@ -1061,7 +993,7 @@ end subroutine write_field_1d_noDD
 !! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
 !! file write procedure.
 subroutine write_field_2d_noDD(filename, fieldname, data, mode, hor_grid, z_grid, &
-                             start_index, edge_lengths, time_level, time_units, scale, &
+                             start_index, edge_lengths, time_level, time_units, &
                              checksums, G, dG, GV, leave_file_open, units, longname)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
@@ -1075,7 +1007,6 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
   real, optional, intent(in) :: time_level !< time value to write
   real, optional, intent(in) :: time_units !< length of the units for time [s]. The
                                           !! default value is 86400.0, for 1 day.
-  real, optional, intent(in) :: scale !< A scaling factor that the fields are multiplied by before they are written.
   integer(kind=8), dimension(:,:), optional, intent(in) :: checksums  !< variable checksum
   type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
                                                      !! is required if the new file uses any
@@ -1092,7 +1023,6 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
   ! local
   logical :: file_open_success ! .true. if call to open_file is successful
   logical :: close_the_file ! indicates whether to close the file after write_data is called; default is .true.
-  real, pointer, dimension (:,:) :: data_tmp => null() ! enables data to be passed to functions as intent(inout)
   integer :: i, ndims, num_dims, substring_index
   integer :: dim_unlim_size ! size of the unlimited dimension
   integer, dimension(2) :: start, nwrite ! indices for starting points and number of values to write
@@ -1154,12 +1084,6 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
     enddo
   endif
 
-  data_tmp => data
-  ! scale the data
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call scale_data(data_tmp,scale)
-  endif ; endif
-
   if (.not.(check_if_open(fileobj_write_field))) then
     if ((lowercase(trim(mode)) .ne. "write") .and. (lowercase(trim(mode)) .ne. "append") .and. &
         (lowercase(trim(mode)) .ne. "overwrite")) &
@@ -1170,7 +1094,7 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
     !>\note this is required so that only pe(1) is identified as the root pe to create the file
     !! Otherwise, multiple pes may try to open the file in write (NC_NOCLOBBER) mode, leading to failure
     if(.not.(allocated(pelist))) then
-      allocate(pelist(mpp_npes()))
+      allocate(pelist(num_PEs()))
       pelist(:) = 0
       do i=1,size(pelist)
         pelist(i) = i-1
@@ -1224,10 +1148,10 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
   endif
   ! write the variable to the file
   if (present(time_level)) then
-    call write_data(fileobj_write_field, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
+    call write_data(fileobj_write_field, trim(fieldname), data, corner=start, edge_lengths=nwrite, &
                     unlim_dim_level=write_field_time_index)
   else
-    call write_data(fileobj_write_field, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
+    call write_data(fileobj_write_field, trim(fieldname), data, corner=start, edge_lengths=nwrite)
   endif
   ! close the file
   if (close_the_file) then
@@ -1235,14 +1159,14 @@ subroutine write_field_2d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
     if (allocated(pelist)) deallocate(pelist)
     write_field_time_index=0
   endif
-  nullify(data_tmp)
+
 end subroutine write_field_2d_noDD
 
 !> This function uses the fms_io function write_data to write a 3-D non-domain-decomposed data field named "fieldname"
 !! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
 !! file write procedure.
 subroutine write_field_3d_noDD(filename, fieldname, data, mode, hor_grid, z_grid, &
-                             start_index, edge_lengths, time_level, time_units, scale, &
+                             start_index, edge_lengths, time_level, time_units, &
                              checksums, G, dG, GV, leave_file_open, units, longname)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
@@ -1256,7 +1180,6 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
   real, optional, intent(in) :: time_level !< time value to write
   real, optional, intent(in) :: time_units !< length of the units for time [s]. The
                                           !! default value is 86400.0, for 1 day.
-  real, optional, intent(in) :: scale !< A scaling factor that the fields are multiplied by before they are written.
   integer(kind=8), dimension(:,:), optional, intent(in) :: checksums  !< variable checksum
   type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
                                                      !! is required if the new file uses any
@@ -1273,7 +1196,6 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
   ! local
   logical :: file_open_success !.true. if call to open_file is successful
   logical :: close_the_file ! indicates whether to close the file after write_data is called; default is .true.
-  real, pointer, dimension(:,:,:) :: data_tmp => null() ! enables data to be passed to functions as intent(inout)
   integer :: i, ndims, num_dims, substring_index
   integer :: dim_unlim_size ! size of the unlimited dimension
   integer, dimension(3) :: start, nwrite ! indices for first data value and number of values to write
@@ -1332,11 +1254,6 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
     enddo
   endif
 
-  data_tmp => data
-  ! scale the data
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call scale_data(data_tmp,scale)
-  endif ; endif
   ! open the file
   if (.not.(check_if_open(fileobj_write_field))) then
     if ((lowercase(trim(mode)) .ne. "write") .and. (lowercase(trim(mode)) .ne. "append") .and. &
@@ -1348,7 +1265,7 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
     !>\note this is required so that only pe(1) is identified as the root pe to create the file
     !! Otherwise, multiple pes may try to open the file in write (NC_NOCLOBBER) mode, leading to failure
     if (.not.(allocated(pelist))) then
-      allocate(pelist(mpp_npes()))
+      allocate(pelist(num_PEs()))
       pelist(:) = 0
       do i=1,size(pelist)
         pelist(i) = i-1
@@ -1402,10 +1319,10 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
 
   if (present(time_level)) then
     call get_dimension_size(fileobj_write_field, trim(dim_unlim_name), dim_unlim_size)
-    call write_data(fileobj_write_field, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
+    call write_data(fileobj_write_field, trim(fieldname), data, corner=start, edge_lengths=nwrite, &
                     unlim_dim_level=write_field_time_index)
   else
-    call write_data(fileobj_write_field, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
+    call write_data(fileobj_write_field, trim(fieldname), data, corner=start, edge_lengths=nwrite)
   endif
   ! close the file
   if (close_the_file) then
@@ -1413,14 +1330,14 @@ subroutine write_field_3d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
     if (allocated(pelist)) deallocate(pelist)
     write_field_time_index=0
   endif
-  nullify(data_tmp)
+
 end subroutine write_field_3d_noDD
 
 !> This function uses the fms_io function write_data to write a 4-D non-domain-decomposed data field named "fieldname"
 !! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
 !! file write procedure.
 subroutine write_field_4d_noDD(filename, fieldname, data, mode, hor_grid, z_grid, t_grid, &
-                             start_index, edge_lengths, time_level, time_units, scale, &
+                             start_index, edge_lengths, time_level, time_units, &
                              checksums, G, dG, GV, leave_file_open, units, longname)
   character(len=*), intent(in) :: filename !< The name of the file to read
   character(len=*), intent(in) :: fieldname !< The variable name of the data in the file
@@ -1435,7 +1352,6 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
   real, optional, intent(in) :: time_level !< time value to write
   real, optional, intent(in) :: time_units !< length of the units for time [s]. The
                                           !! default value is 86400.0, for 1 day.
-  real, optional, intent(in) :: scale !< A scaling factor that the fields are multiplied by before they are written.
   integer(kind=8), dimension(:,:), optional, intent(in) :: checksums  !< variable checksum
   type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
                                                      !! is required if the new file uses any
@@ -1452,7 +1368,6 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
   ! local
   logical :: file_open_success !.true. if call to open_file is successful
   logical :: close_the_file ! indicates whether to close the file after write_data is called; default is .true.
-  real, pointer, dimension(:,:,:,:) :: data_tmp => null() ! enables data to be passed to functions as intent(inout)
   integer :: i, ndims, num_dims, substring_index
   integer :: dim_unlim_size ! size of the unlimited dimension
   integer, dimension(4) :: start, nwrite ! indices for first data value and number of values to write
@@ -1509,11 +1424,6 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
     enddo
   endif
 
-  data_tmp => data
-  ! scale the data
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call scale_data(data_tmp,scale)
-  endif ; endif
   ! open the file
   if (.not.(check_if_open(fileobj_write_field))) then
     if ((lowercase(trim(mode)) .ne. "write") .and. (lowercase(trim(mode)) .ne. "append") .and. &
@@ -1525,7 +1435,7 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
     !>\note this is required so that only pe(1) is identified as the root pe to create the file
     !! Otherwise, multiple pes may try to open the file in write (NC_NOCLOBBER) mode, leading to failure
     if (.not.(allocated(pelist))) then
-      allocate(pelist(mpp_npes()))
+      allocate(pelist(num_PEs()))
       pelist(:) = 0
       do i=1,size(pelist)
         pelist(i) = i-1
@@ -1577,10 +1487,10 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
   endif
   ! write the variable to the file
   if (present(time_level)) then
-    call write_data(fileobj_write_field, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite, &
+    call write_data(fileobj_write_field, trim(fieldname), data, corner=start, edge_lengths=nwrite, &
                     unlim_dim_level=write_field_time_index)
   else
-    call write_data(fileobj_write_field, trim(fieldname), data_tmp, corner=start, edge_lengths=nwrite)
+    call write_data(fileobj_write_field, trim(fieldname), data, corner=start, edge_lengths=nwrite)
   endif
   ! close the file
   if (close_the_file) then
@@ -1588,75 +1498,6 @@ subroutine write_field_4d_noDD(filename, fieldname, data, mode, hor_grid, z_grid
     deallocate(pelist)
     write_field_time_index=0
   endif
-  nullify(data_tmp)
 end subroutine write_field_4d_nodd
-
-!> apply a scale factor to a 1d array
-subroutine scale_data_1d(data, scale_factor)
-  real, dimension(:), intent(inout) :: data !< The 1-dimensional data array
-  real, intent(in) :: scale_factor !< Scale factor
-
-  if (scale_factor /= 1.0) then
-    data(:) = scale_factor*data(:)
-  endif
-end subroutine scale_data_1d
-
-!> apply a scale factor to a 2d array
-subroutine scale_data_2d(data, scale_factor, MOM_domain)
-  real, dimension(:,:), intent(inout) :: data !< The 2-dimensional data array
-  real, intent(in) :: scale_factor !< Scale factor
-  type(MOM_domain_type), optional, intent(in) :: MOM_Domain !< The domain that describes the decomposition
-  ! local
-  integer :: is, ie, js, je
-
-  if (scale_factor /= 1.0) then
-    if (present(MOM_domain)) then
-      call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
-      call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
-      data(is:ie,js:je) = scale_factor*data(is:ie,js:je)
-    else
-      data(:,:) = scale_factor*data(:,:)
-    endif
-  endif
-end subroutine scale_data_2d
-
-!> apply a scale factor to a 3d array
-subroutine scale_data_3d(data, scale_factor, MOM_domain)
-  real, dimension(:,:,:), intent(inout) :: data !< The 3-dimensional data array
-  real, intent(in) :: scale_factor !< Scale factor
-  type(MOM_domain_type), optional, intent(in) :: MOM_Domain !< The domain that describes the decomposition
-  ! local
-  integer :: is, ie, js, je
-
-  if (scale_factor /= 1.0) then
-    if (present(MOM_domain)) then
-      call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
-      call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
-      data(is:ie,js:je,:) = scale_factor*data(is:ie,js:je,:)
-    else
-      data(:,:,:) = scale_factor*data(:,:,:)
-    endif
-  endif
-end subroutine scale_data_3d
-
-!> apply a scale factor to a 4d array
-subroutine scale_data_4d(data, scale_factor, MOM_domain)
-  real, dimension(:,:,:,:), intent(inout) :: data !< The 4-dimensional data array
-  real, intent(in) :: scale_factor !< Scale factor
-  type(MOM_domain_type), optional, intent(in) :: MOM_Domain !< The domain that describes the decomposition
-  ! local
-  integer :: is, ie, js, je
-
-  if (scale_factor /= 1.0) then
-    if (present(MOM_domain)) then
-      call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
-      call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
-      data(is:ie,js:je,:,:) = scale_factor*data(is:ie,js:je,:,:)
-    else
-      data(:,:,:,:) = scale_factor*data(:,:,:,:)
-    endif
-  endif
-end subroutine scale_data_4d
-
 
 end module MOM_write_field_fms2
