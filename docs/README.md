@@ -53,15 +53,19 @@ The starting state of directories and files:
 ```
 SRC/
   config_src/
-    coupled_driver
-    dynamic
-    dynamic_symmetric
+    drivers/
+      FMS_cap
+      ice_solo_driver
+      mct_cap
+      nuopc_cap
+      solo_driver
+      unit_drivers
     external
-    ice_solo_driver
-    mct_driver
-    nuopc_driver
-    solo_driver
-    unit_drivers
+    infra/
+      FMS1
+    memory/
+      dynamic
+      dynamic_symmetric
   pkg/
     CVMix-src
     GSW-Fortran

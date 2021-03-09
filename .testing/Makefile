@@ -32,7 +32,6 @@
 #   MPIFC   MPI Fortran compiler
 #
 # Build configuration:
-#
 #   FCFLAGS_DEBUG       Testing ("debug") compiler flags
 #   FCFLAGS_REPRO       Production ("repro") compiler flags
 #   FCFLAGS_INIT        Variable initialization flags
@@ -76,7 +75,6 @@ FCFLAGS_REPRO ?= -g -O2
 FCFLAGS_INIT ?=
 FCFLAGS_COVERAGE ?=
 # Additional notes:
-#
 # - The default values are simple, minimalist flags, supported by nearly all
 #   compilers which are comparable to GFDL's canonical DEBUG and REPRO builds.
 #
@@ -87,12 +85,13 @@ FCFLAGS_COVERAGE ?=
 #   so FCFLAGS_INIT is used to provide additional MOM6 configuration.
 
 # Set to `true` to require identical results from DEBUG and REPRO builds
+# NOTE: Many compilers (Intel, GCC on ARM64) do not yet produce identical
+#   results across DEBUG and REPRO builds (as defined below), so we disable on
+#   default.
 DO_REPRO_TESTS ?=
 
+# Time measurement (configurable by the CI)
 TIME ?= time
-
-# Many compilers (Intel, GCC on ARM64) do not yet produce identical results
-# across DEBUG and REPRO builds (as defined below), so we disable on default.
 
 #---
 # Dependencies
@@ -154,10 +153,12 @@ SOURCE = \
   $(foreach ext,F90 inc c h,$(wildcard $(1)/*/*.$(ext) $(1)/*/*/*.$(ext)))
 
 MOM_SOURCE = $(call SOURCE,../src) \
-  $(wildcard ../config_src/solo_driver/*.F90) \
+  $(wildcard ../config_src/infra/FMS1/*.F90) \
+  $(wildcard ../config_src/drivers/solo_driver/*.F90) \
   $(wildcard ../config_src/ext*/*/*.F90)
 TARGET_SOURCE = $(call SOURCE,build/target_codebase/src) \
-  $(wildcard build/target_codebase/config_src/solo_driver/*.F90) \
+  $(wildcard build/target_codebase/config_src/infra/FMS1/*.F90) \
+  $(wildcard build/target_codebase/config_src/drivers/solo_driver/*.F90) \
   $(wildcard build/target_codebase/config_src/ext*/*.F90)
 FMS_SOURCE = $(call SOURCE,$(DEPS)/fms/src)
 
@@ -249,7 +250,7 @@ build/target/Makefile: | $(TARGET_CODEBASE)
 #   Ideally we would want to re-run both Makefile and mkmf, but our mkmf call
 #   is inside ./configure, so we must re-run ./configure as well.
 $(foreach b,$(filter-out target,$(BUILDS)),build/$(b)/Makefile): $(MOM_SOURCE)
-build/target/configure: $(TARGET_SOURCE)
+build/target_codebase/configure: $(TARGET_SOURCE)
 
 
 # Build MOM6
@@ -286,9 +287,6 @@ $(TARGET_CODEBASE)/ac/configure: $(TARGET_CODEBASE)
 $(TARGET_CODEBASE):
 	git clone --recursive $(MOM_TARGET_URL) $@
 	cd $@ && git checkout $(MOM_TARGET_BRANCH)
-	# Copy modern autoconf files to target?
-	mkdir -p $(TARGET_CODEBASE)/ac
-	cp -r ../ac/{configure.ac,Makefile.in,m4} $(TARGET_CODEBASE)/ac
 
 
 #---
