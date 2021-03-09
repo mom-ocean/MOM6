@@ -185,6 +185,8 @@ program Shelf_main
     endif
   endif
 
+  call Get_MOM_Input(param_file, dirs)
+
   ! Read ocean_solo restart, which can override settings from the namelist.
   if (file_exists(trim(dirs%restart_input_dir)//'ice_solo.res')) then
     call open_ASCII_file(unit, trim(dirs%restart_input_dir)//'ice_solo.res', action=READONLY_FILE)
@@ -215,7 +217,6 @@ program Shelf_main
     Start_time = real_to_time(0.0)
   endif
 
-  call Get_MOM_Input(param_file, dirs)
   ! Determining the internal unit scaling factors for this run.
   call unit_scaling_init(param_file, US)
 
