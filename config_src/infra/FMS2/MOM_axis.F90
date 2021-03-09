@@ -423,44 +423,33 @@ end function get_time_index
 !! a sub-domain (e.g., a supergrid).
 !> \note The user must specify units for variables with longitude/x-axis and/or latitude/y-axis axes to obtain
 !! the correct domain decomposition for the data buffer.
-subroutine MOM_register_variable_axes_subdomain(fileObj, variableName, io_domain, xPosition, yPosition)
+subroutine MOM_register_variable_axes_subdomain(fileObj, variableName, io_domain, position)
   type(FmsNetcdfFile_t), intent(inout) :: fileObj !< netCDF file object returned by call to open_file
-  character(len=*), intent(in) :: variableName !< name of the variable
-  type(domain2d), intent(in) :: io_domain !< type that contains the mpp io domain
-  integer, intent(in), optional :: xPosition !< domain position of the x-axis
-  integer, intent(in), optional :: yPosition !< domain position of the y-axi
-  ! local
+  character(len=*),  intent(in) :: variableName !< name of the variable
+  type(domain2d),    intent(in) :: io_domain !< type that contains the mpp io domain
+  integer, optional, intent(in) :: position  !< A flag indicating where this data is discretized
+
+  ! Local variables
   character(len=40) :: units ! units corresponding to a specific variable dimension
   character(len=40), allocatable, dimension(:) :: dim_names ! variable dimension names
   integer :: i, isg, ieg, isc, iec, jsg, jeg, jsc, jec, xlen, ylen
   integer :: ndims ! number of dimensions
-  integer :: xPos, yPos, pos ! domain positions for x and y axes. Default is CENTER
+  integer :: pos   ! Discrete variable position. Default is CENTER
   integer, allocatable, dimension(:) :: dimSizes ! variable dimension sizes
 
   if (.not. check_if_open(fileObj)) call MOM_error(FATAL,"MOM_axis:register_variable_axes_subdomain: The fileObj "// &
                                                   " has not been opened. Call fms2_open_file(fileObj,...) "// &
                                                   "before passing the fileObj argument to this function.")
-  xPos=CENTER
-  yPos=CENTER
-  if (present(xPosition)) xPos=xPosition
-  if (present(yPosition)) yPos=yPosition
+
   ! get variable dimension names and lengths
   ndims = get_variable_num_dimensions(fileObj, trim(variableName))
   allocate(dimSizes(ndims))
   allocate(dim_names(ndims))
   call get_variable_size(fileObj, trim(variableName), dimSizes, broadcast=.true.)
   call get_variable_dimension_names(fileObj, trim(variableName), dim_names)
-  ! determine the position to pass to the mpp domain calls
-  if (xPos .eq. EAST_FACE) then
-    if (yPos .eq. NORTH_FACE) then
-      pos = CORNER
-    else
-      pos = EAST_FACE
-    endif
-  elseif (yPos .eq. NORTH_FACE) then
-    pos = NORTH_FACE
-  endif
-  ! Get the lengths of the global indicies
+
+  ! Get the lengths of the global indicies, using the discrete position of this variable
+  pos = CORNER ; if (present(position)) pos = position
   call mpp_get_compute_domain(io_domain, xsize=xlen, ysize=ylen, position=pos)
   ! register the axes
   !>\note: This is not a comprehensive check for all possible supported horizontal axes associated with variables
@@ -520,12 +509,12 @@ end subroutine MOM_register_variable_axes_subdomain
 !> register axes associated with a variable from a domain-decomposed netCDF file
 !> @note The user must specify units for variables with longitude/x-axis and/or latitude/y-axis axes
 !!  to obtain the correct domain decomposition for the data buffer.
-subroutine MOM_register_variable_axes_full(fileObj, variableName, xPosition, yPosition)
+subroutine MOM_register_variable_axes_full(fileObj, variableName, position)
   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object returned by call to open_file
-  character(len=*), intent(in) :: variableName !< name of the variable
-  integer, intent(in), optional :: xPosition !< domain position of the x-axis
-  integer, intent(in), optional :: yPosition !< domain position of the y-axis
-  ! local
+  character(len=*),  intent(in) :: variableName !< name of the variable
+  integer, optional, intent(in) :: position  !< A flag indicating where this data is discretized
+
+  ! Local variables
   character(len=40) :: units ! units corresponding to a specific variable dimension
   character(len=40), allocatable, dimension(:) :: dim_names ! variable dimension names
   integer :: i
@@ -536,10 +525,12 @@ subroutine MOM_register_variable_axes_full(fileObj, variableName, xPosition, yPo
   if (.not. check_if_open(fileObj)) call MOM_error(FATAL,"MOM_axis:register_variable_axes: The fileObj has "// &
                                                   "not been opened. Call fms2_open_file(fileObj,...) before "// &
                                                   "passing the fileObj argument to this function.")
-  xPos=CENTER
-  yPos=CENTER
-  if (present(xPosition)) xPos=xPosition
-  if (present(yPosition)) yPos=yPosition
+  xpos = CENTER ; ypos = CENTER
+  if (present(position)) then
+    if ((position == CORNER) .or. (position == EAST_FACE)) xpos = EAST_FACE
+    if ((position == CORNER) .or. (position == NORTH_FACE)) ypos = NORTH_FACE
+  endif
+
   ! get variable dimension names and lengths
   ndims = get_variable_num_dimensions(fileObj, trim(variableName))
   allocate(dimSizes(ndims))
@@ -588,7 +579,7 @@ subroutine MOM_register_variable_axes_full(fileObj, variableName, xPosition, yPo
           call register_axis(fileObj, trim(dim_names(i)),"y", domain_position=yPos)
         case("yh")
           call register_axis(fileObj, trim(dim_names(i)),"y", domain_position=yPos)
-         case("j")
+        case("j")
           call register_axis(fileObj, trim(dim_names(i)),"y", domain_position=yPos)
         case default ! assumes that the axis is not domain-decomposed
           if (.not. is_dimension_unlimited(fileObj, trim(dim_names(i)))) &
