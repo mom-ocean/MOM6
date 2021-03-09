@@ -579,12 +579,11 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
       if (CS%id_taudx_shelf > 0) call post_data(CS%id_taudx_shelf, CS%taudx_shelf,CS%diag)
       if (CS%id_taudy_shelf > 0) call post_data(CS%id_taudy_shelf, CS%taudy_shelf,CS%diag)
       if (CS%id_visc_shelf > 0) call post_data(CS%id_visc_shelf, CS%ice_visc,CS%diag)
-    endif
-!!! OVS vertically integrated temperature
 !    CS%id_t_shelf = register_diag_field('ocean_model','t_shelf',CS%diag%axesT1, Time, &
 !       'T of ice', 'oC')
 !    CS%id_t_mask = register_diag_field('ocean_model','tmask',CS%diag%axesT1, Time, &
 !       'mask for T-nodes', 'none')
+    endif
   endif
 
 end subroutine initialize_ice_shelf_dyn
@@ -875,9 +874,7 @@ end subroutine ice_shelf_advect
   enddo
 
   call calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, CS%OD_av)
-  call pass_vector(taudx, taudy, G%domain, TO_ALL, BGRID_NE)  !OVS 02/01/21
-!  call pass_var(taudx, G%Domain)              !OVS 01/21/21
-!  call pass_var(taudy, G%Domain)              !OVS 01/21/21
+  call pass_vector(taudx, taudy, G%domain, TO_ALL, BGRID_NE)
   ! This is to determine which cells contain the grounding line, the criterion being that the cell
   ! is ice-covered, with some nodes floating and some grounded flotation condition is estimated by
   ! assuming topography is cellwise constant and H is bilinear in a cell; floating where
@@ -917,12 +914,10 @@ end subroutine ice_shelf_advect
     call bilinear_shape_fn_grid(G, i, j, Phi(:,:,i,j))
   enddo ; enddo
 
-  call calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)   !OVS 02/24/21
+  call calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
   call pass_var(CS%ice_visc, G%domain)
-!  call pass_vector(CS%ice_visc, G%domain, TO_ALL, BGRID_NE)  !OVS 02/11/21
   call calc_shelf_taub(CS, ISS, G, US, u_shlf, v_shlf)
   call pass_var(CS%basal_traction, G%domain)
-!  call pass_vector(CS%ice_visc,CS%basal_traction, G%domain, TO_ALL, BGRID_NE) !OVS 02/11/21
 
   ! This makes sure basal stress is only applied when it is supposed to be
   do j=G%jsd,G%jed ; do i=G%isd,G%ied
@@ -937,7 +932,7 @@ end subroutine ice_shelf_advect
   call CG_action(Au, Av, u_shlf, v_shlf, Phi, Phisub, CS%umask, CS%vmask, ISS%hmask, H_node, &
                  CS%ice_visc, float_cond, G%bathyT, CS%basal_traction, &
                  G, US, G%isc-1, G%iec+1, G%jsc-1, G%jec+1, rhoi_rhow)
-  call pass_vector(Au,Av,G%domain)  !OVS pass Au and Av
+  call pass_vector(Au,Av,G%domain)
   if (CS%nonlin_solve_err_mode == 1) then
     err_init = 0 ; err_tempu = 0 ; err_tempv = 0
     do J=G%IscB,G%JecB ; do I=G%IscB,G%IecB
@@ -971,7 +966,7 @@ end subroutine ice_shelf_advect
     write(mesg,*) "ice_shelf_solve_outer: linear solve done in ",iters," iterations"
     call MOM_mesg(mesg, 5)
 
-    call calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)   !OVS 02/24/21
+    call calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
     call pass_var(CS%ice_visc, G%domain)
     call calc_shelf_taub(CS, ISS, G, US, u_shlf, v_shlf)
     call pass_var(CS%basal_traction, G%domain)
@@ -1823,10 +1818,8 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
   S(:,:) = BASE(:,:) + ISS%h_shelf(:,:)
 
   ! check whether the ice is floating or grounded
-!  do j=jsc-1,jec+1                                !OVS 02/02/21
-!      do i=isc-1,iec+1                            !OVS 02/02/21
-  do j=jsc-G%domain%njhalo,jec+G%domain%njhalo     !OVS 02/02/21
-   do i=isc-G%domain%nihalo,iec+G%domain%nihalo    !OVS 02/02/21
+  do j=jsc-G%domain%njhalo,jec+G%domain%njhalo
+   do i=isc-G%domain%nihalo,iec+G%domain%nihalo
 
 !     if (ISS%h_shelf(i,j) < rhow/rho * G%bathyT(i,j)) then
      if (rhoi_rhow * ISS%h_shelf(i,j) - G%bathyT(i,j) <= 0) then
@@ -2160,7 +2153,7 @@ subroutine CG_action(uret, vret, u_shlf, v_shlf, Phi, Phisub, umask, vmask, hmas
              v_shlf(I-1,J) * Phi(6,2*(jq-1)+iq,i,j) + &
              v_shlf(I,J) * Phi(8,2*(jq-1)+iq,i,j)
 
-        do iphi=1,2 ; do jphi=1,2 ; Itgt = I-2+iphi ; ;Jtgt = J-2+jphi !Jtgt = J-2-jphi  !OVS fix index
+        do iphi=1,2 ; do jphi=1,2 ; Itgt = I-2+iphi ; ;Jtgt = J-2+jphi
           if (umask(Itgt,Jtgt) == 1) uret(Itgt,Jtgt) = uret(Itgt,Jtgt) + 0.25 * ice_visc(i,j) * &
                                ((4*ux+2*vy) * Phi(2*(2*(jphi-1)+iphi)-1,2*(jq-1)+iq,i,j) + &
                                     (uy+vx) * Phi(2*(2*(jphi-1)+iphi),2*(jq-1)+iq,i,j))
@@ -2338,7 +2331,7 @@ subroutine matrix_diagonal(CS, G, US, float_cond, H_node, ice_visc, basal_trac, 
     if (float_cond(i,j) == 1) then
       Hcell(:,:) = H_node(i-1:i,j-1:j)
       call CG_diagonal_subgrid_basal(Phisub, Hcell, G%bathyT(i,j), dens_ratio, sub_ground)
-      do iphi=1,2 ; do jphi=1,2 ; Itgt = I-2+iphi ; Jtgt = J-2+jphi !Jtgt = J-2-jphi !OVS fix index
+      do iphi=1,2 ; do jphi=1,2 ; Itgt = I-2+iphi ; Jtgt = J-2+jphi
         if (CS%umask(Itgt,Jtgt) == 1) then
           u_diagonal(Itgt,Jtgt) = u_diagonal(Itgt,Jtgt) + sub_ground(iphi,jphi) * basal_trac(i,j)
           v_diagonal(Itgt,Jtgt) = v_diagonal(Itgt,Jtgt) + sub_ground(iphi,jphi) * basal_trac(i,j)
@@ -2479,7 +2472,7 @@ subroutine apply_boundary_values(CS, ISS, G, US, time, Phisub, H_node, ice_visc,
              CS%v_bdry_val(I-1,J) * Phi(6,2*(jq-1)+iq) + &
              CS%v_bdry_val(I,J) * Phi(8,2*(jq-1)+iq)
 
-        do iphi=1,2 ; do jphi=1,2 ; Itgt = I-2+iphi ; Jtgt = J-2+jphi !Jtgt = J-2-jphi !OVS fix index
+        do iphi=1,2 ; do jphi=1,2 ; Itgt = I-2+iphi ; Jtgt = J-2+jphi
           ilq = 1 ; if (iq == iphi) ilq = 2
           jlq = 1 ; if (jq == jphi) jlq = 2
 
@@ -2590,14 +2583,14 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
 !      enddo
 !    call pass_vector(ux, uy, G%domain, TO_ALL, BGRID_NE)
 !    call pass_vector(vx, vy, G%domain, TO_ALL, BGRID_NE)
-        ux = ((u_shlf(I,J) + u_shlf(I,J-1) + u_shlf(I,J+1)) - &
-                (u_shlf(I-1,J) + u_shlf(I-1,J-1) + u_shlf(I-1,J+1))) / (3*G%dxT(i,j))
+        ux = ((u_shlf(I,J) + (u_shlf(I,J-1) + u_shlf(I,J+1))) - &
+                (u_shlf(I-1,J) + (u_shlf(I-1,J-1) + u_shlf(I-1,J+1)))) / (3*G%dxT(i,j))
         vx = ((v_shlf(I,J) + v_shlf(I,J-1) + v_shlf(I,J+1)) - &
-                (v_shlf(I-1,J) + v_shlf(I-1,J-1) + v_shlf(I-1,J+1))) / (3*G%dxT(i,j))
-        uy = ((u_shlf(I,J) + u_shlf(I-1,J) + u_shlf(I+1,J)) - &
-                (u_shlf(I,J-1) + u_shlf(I-1,J-1) + u_shlf(I+1,J-1))) / (3*G%dyT(i,j))
-        vy = ((v_shlf(I,J) + v_shlf(I-1,J)+ v_shlf(I+1,J)) - &
-                (v_shlf(I,J-1) + v_shlf(I-1,J-1)+ v_shlf(I+1,J-1))) / (3*G%dyT(i,j))
+                (v_shlf(I-1,J) + (v_shlf(I-1,J-1) + v_shlf(I-1,J+1)))) / (3*G%dxT(i,j))
+        uy = ((u_shlf(I,J) + (u_shlf(I-1,J) + u_shlf(I+1,J))) - &
+                (u_shlf(I,J-1) + (u_shlf(I-1,J-1) + u_shlf(I+1,J-1)))) / (3*G%dyT(i,j))
+        vy = ((v_shlf(I,J) + (v_shlf(I-1,J)+ v_shlf(I+1,J))) - &
+                (v_shlf(I,J-1) + (v_shlf(I-1,J-1)+ v_shlf(I+1,J-1)))) / (3*G%dyT(i,j))
 !        ux = ((u_shlf(I,J) + u_shlf(I,J-1)) - (u_shlf(I-1,J) + u_shlf(I-1,J-1))) / (2*G%dxT(i,j))
 !        vx = ((v_shlf(I,J) + v_shlf(I,J-1)) - (v_shlf(I-1,J) + v_shlf(I-1,J-1))) / (2*G%dxT(i,j))
 !        uy = ((u_shlf(I,J) + u_shlf(I-1,J)) - (u_shlf(I,J-1) + u_shlf(I-1,J-1))) / (2*G%dyT(i,j))
@@ -3020,21 +3013,6 @@ subroutine update_velocity_masks(CS, G, hmask, umask, vmask, u_face_mask, v_face
           end select
         enddo
 
-        !if (CS%u_face_mask_bdry(I-1,j) >= 0) then ! Western boundary
-        !  u_face_mask(I-1,j) = CS%u_face_mask_bdry(I-1,j)
-        !  umask(I-1,J-1:J) = 3.
-        !  vmask(I-1,J-1:J) = 0.
-        !endif
-
-        !if (j_off+j == gjsc+1) then ! SoutherN boundary
-        !  v_face_mask(i,J-1) = 0.
-        !  umask(I-1:I,J-1) = 0.
-        !  vmask(I-1:I,J-1) = 0.
-        !elseif (j_off+j == gjec) then ! Northern boundary
-        !  v_face_mask(i,J) = 0.
-        !  umask(I-1:I,J) = 0.
-        !  vmask(I-1:I,J) = 0.
-        !endif
 
         if (i < G%ied) then
           if ((hmask(i+1,j) == 0) .OR. (hmask(i+1,j) == 2)) then
