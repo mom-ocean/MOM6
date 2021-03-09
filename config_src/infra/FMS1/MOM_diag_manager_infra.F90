@@ -20,9 +20,9 @@ use diag_manager_mod, only : DIAG_FIELD_NOT_FOUND
 use diag_manager_mod, only : register_diag_field_fms => register_diag_field
 use diag_manager_mod, only : register_static_field_fms => register_static_field
 use diag_manager_mod, only : get_diag_field_id_fms => get_diag_field_id
-use time_manager_mod, only : time_type
+use MOM_time_manager, only : time_type
 use MOM_domain_infra, only : MOM_domain_type
-use MOM_error_handler, only : MOM_error, FATAL, WARNING
+use MOM_error_infra,  only : MOM_error => MOM_err, FATAL, WARNING
 
 implicit none ; private
 
