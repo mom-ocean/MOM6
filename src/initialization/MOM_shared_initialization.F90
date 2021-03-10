@@ -196,7 +196,7 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
   character(len=40)  :: mdl = "apply_topography_edits_from_file" ! This subroutine's name.
   integer :: i, j, n, ncid, n_edits, i_file, j_file, ndims, sizes(8)
   logical :: found
-  logical :: topog_edits_change_mask
+  logical :: topo_edits_change_mask
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
 
@@ -207,7 +207,7 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
   call get_param(param_file, mdl, "TOPO_EDITS_FILE", topo_edits_file, &
                  "The file from which to read a list of i,j,z topography overrides.", &
                  default="")
-  call get_param(param_file, mdl, "ALLOW_LANDMASK_CHANGES", topog_edits_change_mask, &
+  call get_param(param_file, mdl, "ALLOW_LANDMASK_CHANGES", topo_edits_change_mask, &
                  "If true, allow topography overrides to change land mask.", &
                  default=.false.)
 
@@ -254,7 +254,7 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
           'Ocean topography edit: ', n, ig(n), jg(n), D(i,j)/m_to_Z, '->', abs(new_depth(n)), i, j
         D(i,j) = abs(m_to_Z*new_depth(n)) ! Allows for height-file edits (i.e. converts negatives)
       else
-        if (topog_edits_change_mask) then
+        if (topo_edits_change_mask) then
           write(stdout,'(a,3i5,f8.2,a,f8.2,2i4)') &
             'Ocean topography edit: ',n,ig(n),jg(n),D(i,j)/m_to_Z,'->',abs(new_depth(n)),i,j
             D(i,j) = abs(m_to_Z*new_depth(n)) ! Allows for height-file edits (i.e. converts negatives)
