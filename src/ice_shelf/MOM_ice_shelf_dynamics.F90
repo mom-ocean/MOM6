@@ -424,7 +424,6 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
   ! previously allocated for registration for restarts.
 
   if (active_shelf_dynamics) then
-    ! DNG
     allocate( CS%u_bdry_val(Isdq:Iedq,Jsdq:Jedq) ) ; CS%u_bdry_val(:,:) = 0.0
     allocate( CS%v_bdry_val(Isdq:Iedq,Jsdq:Jedq) ) ; CS%v_bdry_val(:,:) = 0.0
     allocate( CS%t_bdry_val(isd:ied,jsd:jed) )   ; CS%t_bdry_val(:,:) = -15.0
@@ -572,7 +571,6 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
     if (new_sim) then
       call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: initialize ice velocity.")
       call update_OD_ffrac_uncoupled(CS, G, ISS%h_shelf(:,:))
-      !call ice_shelf_solve_outer(CS, ISS, G, US, CS%u_shelf, CS%v_shelf, iters, Time)
       call ice_shelf_solve_outer(CS, ISS, G, US, CS%u_shelf, CS%v_shelf,CS%taudx_shelf,CS%taudy_shelf, iters, Time)
       if (CS%id_u_shelf > 0) call post_data(CS%id_u_shelf, CS%u_shelf, CS%diag)
       if (CS%id_v_shelf > 0) call post_data(CS%id_v_shelf, CS%v_shelf,CS%diag)
@@ -692,7 +690,6 @@ subroutine update_ice_shelf(CS, ISS, G, US, time_step, Time, ocean_mass, coupled
 
 
   if (update_ice_vel) then
-!    call ice_shelf_solve_outer(CS, ISS, G, US, CS%u_shelf, CS%v_shelf, iters, Time)
     call ice_shelf_solve_outer(CS, ISS, G, US, CS%u_shelf, CS%v_shelf,CS%taudx_shelf,CS%taudy_shelf, iters, Time)
   endif
 
@@ -1801,9 +1798,9 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
   isd = G%isd ; jsd = G%jsd
   iegq = G%iegB ; jegq = G%jegB
 !  gisc = G%domain%nihalo+1 ; gjsc = G%domain%njhalo+1
-  gisc = 0*G%domain%nihalo+1 ; gjsc = 0*G%domain%njhalo+1
+  gisc = 1 ; gjsc = 1
 !  giec = G%domain%niglobal+G%domain%nihalo ; gjec = G%domain%njglobal+G%domain%njhalo
-  giec = G%domain%niglobal+0*G%domain%nihalo ; gjec = G%domain%njglobal+0*G%domain%njhalo
+  giec = G%domain%niglobal ; gjec = G%domain%njglobal
   is = iscq - 1; js = jscq - 1
   i_off = G%idg_offset ; j_off = G%jdg_offset
 
@@ -2519,7 +2516,7 @@ subroutine apply_boundary_values(CS, ISS, G, US, time, Phisub, H_node, ice_visc,
     endif
   endif ; enddo ; enddo
 
-   call pass_vector(u_bdry_contr, v_bdry_contr, G%domain, TO_ALL, BGRID_NE) !OVS 02/19/21
+   call pass_vector(u_bdry_contr, v_bdry_contr, G%domain, TO_ALL, BGRID_NE)
 
 end subroutine apply_boundary_values
 
@@ -2563,26 +2560,11 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
 
   n_g = CS%n_glen; eps_min = CS%eps_glen_min
 
-!  CS%ice_visc(:,:) = 0.0
-!  ux(:,:) = 0.0; uy(:,:) = 0.0; vx(:,:) =0.0; vy(:,:) =0.0
-!  eII(:,:) = (US%s_to_T**2 * (eps_min**2))
-  Visc_coef = US%kg_m2s_to_RZ_T*US%m_to_L*US%Z_to_L*(CS%A_glen_isothermal)**(-1./CS%n_glen) !OVS '-' in the exponent
-!    call pass_vector(u_shlf, v_shlf, G%domain, TO_ALL, BGRID_NE)
-    do j=jsc-0*1,jec+0*1
-    do i=isc-0*1,iec+0*1
-!  do j=jsd+1,jed-1     !OVS 02/01/21
-!    do i=isd+1,ied-1   !OVS 02/01/21
+  Visc_coef = US%kg_m2s_to_RZ_T*US%m_to_L*US%Z_to_L*(CS%A_glen_isothermal)**(-1./CS%n_glen)
+    do j=jsc,jec
+    do i=isc,iec
 
       if ((ISS%hmask(i,j) == 1) .OR. (ISS%hmask(i,j) == 3)) then
-!        ux(i,j) = ((u_shlf(I,J) + u_shlf(I,J-1)) - (u_shlf(I-1,J) + u_shlf(I-1,J-1))) / (2*G%dxT(i,j))
-!        vx(i,j) = ((v_shlf(I,J) + v_shlf(I,J-1)) - (v_shlf(I-1,J) + v_shlf(I-1,J-1))) / (2*G%dxT(i,j))
-!        uy(i,j) = ((u_shlf(I,J) + u_shlf(I-1,J)) - (u_shlf(I,J-1) + u_shlf(I-1,J-1))) / (2*G%dyT(i,j))
-!        vy(i,j) = ((v_shlf(I,J) + v_shlf(I-1,J)) - (v_shlf(I,J-1) + v_shlf(I-1,J-1))) / (2*G%dyT(i,j))
-!      endif
-!      enddo
-!      enddo
-!    call pass_vector(ux, uy, G%domain, TO_ALL, BGRID_NE)
-!    call pass_vector(vx, vy, G%domain, TO_ALL, BGRID_NE)
         ux = ((u_shlf(I,J) + (u_shlf(I,J-1) + u_shlf(I,J+1))) - &
                 (u_shlf(I-1,J) + (u_shlf(I-1,J-1) + u_shlf(I-1,J+1)))) / (3*G%dxT(i,j))
         vx = ((v_shlf(I,J) + v_shlf(I,J-1) + v_shlf(I,J+1)) - &
@@ -2591,17 +2573,8 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
                 (u_shlf(I,J-1) + (u_shlf(I-1,J-1) + u_shlf(I+1,J-1)))) / (3*G%dyT(i,j))
         vy = ((v_shlf(I,J) + (v_shlf(I-1,J)+ v_shlf(I+1,J))) - &
                 (v_shlf(I,J-1) + (v_shlf(I-1,J-1)+ v_shlf(I+1,J-1)))) / (3*G%dyT(i,j))
-!        ux = ((u_shlf(I,J) + u_shlf(I,J-1)) - (u_shlf(I-1,J) + u_shlf(I-1,J-1))) / (2*G%dxT(i,j))
-!        vx = ((v_shlf(I,J) + v_shlf(I,J-1)) - (v_shlf(I-1,J) + v_shlf(I-1,J-1))) / (2*G%dxT(i,j))
-!        uy = ((u_shlf(I,J) + u_shlf(I-1,J)) - (u_shlf(I,J-1) + u_shlf(I-1,J-1))) / (2*G%dyT(i,j))
-!        vy = ((v_shlf(I,J) + v_shlf(I-1,J)) - (v_shlf(I,J-1) + v_shlf(I-1,J-1))) / (2*G%dyT(i,j))
         CS%ice_visc(i,j) = 0.5 * Visc_coef * (G%areaT(i,j) * ISS%h_shelf(i,j)) * &
              (US%s_to_T**2 * (ux**2 + vy**2 + ux*vy + 0.25*(uy+vx)**2 + eps_min**2))**((1.-n_g)/(2.*n_g))
-!        CS%ice_visc(i,j) =1e14*(G%areaT(i,j) * ISS%h_shelf(i,j)) ! constant viscocity for debugging
-!        umid = ((u_shlf(I,J) + u_shlf(I-1,J-1)) + (u_shlf(I,J-1) + u_shlf(I-1,J))) * 0.25
-!        vmid = ((v_shlf(I,J) + v_shlf(I-1,J-1)) + (v_shlf(I,J-1) + v_shlf(I-1,J))) * 0.25
-!        unorm = sqrt(umid**2 + vmid**2 + eps_min**2*(G%dxT(i,j)**2 + G%dyT(i,j)**2))
-!        CS%basal_traction(i,j) = G%areaT(i,j) * CS%C_basal_friction * (US%L_T_to_m_s*unorm)**(CS%n_basal_fric-1)
       endif
     enddo
   enddo
@@ -2638,8 +2611,8 @@ subroutine calc_shelf_taub(CS, ISS, G, US, u_shlf, v_shlf)
   eps_min = CS%eps_glen_min
 
 
-  do j=jsd+1,jed!-1            OVS 02/01/21
-    do i=isd+1,ied!-1          OVS 02/01/21
+  do j=jsd+1,jed
+    do i=isd+1,ied
 
       if ((ISS%hmask(i,j) == 1) .OR. (ISS%hmask(i,j) == 3)) then
         umid = ((u_shlf(I,J) + u_shlf(I-1,J-1)) + (u_shlf(I,J-1) + u_shlf(I-1,J))) * 0.25
@@ -2949,7 +2922,6 @@ subroutine update_velocity_masks(CS, G, hmask, umask, vmask, u_face_mask, v_face
   endif
 
   do j=js,G%jed
-!  do j=js-1,G%jed                  !OVS change index
     do i=is,G%ied
 
       if (hmask(i,j) == 1) then
@@ -2966,10 +2938,6 @@ subroutine update_velocity_masks(CS, G, hmask, umask, vmask, u_face_mask, v_face
               umask(I-1+k,J)=3.
               !vmask(I-1+k,J)=0.
               vmask(I-1+k,J)=3.
-              !u_face_mask(I-1+k,j-1)=3.
-!              umask(I-1+k,J-1:J)=3.
-!              vmask(I-1+k,J-1:J)=0.
-!              u_face_mask(I-1+k,j)=3.
             case (2)
               u_face_mask(I-1+k,j)=2.
             case (4)
@@ -2977,9 +2945,9 @@ subroutine update_velocity_masks(CS, G, hmask, umask, vmask, u_face_mask, v_face
               vmask(I-1+k,J-1:J)=0.
               u_face_mask(I-1+k,j)=4.
             case (0)
-!              umask(I-1+k,J-1:J)=0.
-!              vmask(I-1+k,J-1:J)=0.
-!              u_face_mask(I-1+k,j)=0.
+              umask(I-1+k,J-1:J)=0.
+              vmask(I-1+k,J-1:J)=0.
+              u_face_mask(I-1+k,j)=0.
             case (1)  ! stress free x-boundary
               umask(I-1+k,J-1:J)=0.
             case default
@@ -2990,8 +2958,6 @@ subroutine update_velocity_masks(CS, G, hmask, umask, vmask, u_face_mask, v_face
 
           select case (int(CS%v_face_mask_bdry(i,J-1+k)))
             case (3)
-!              vmask(I-1:I,J-1+k)=3.
-!              umask(I-1:I,J-1+k)=0.
               vmask(I-1,J-1+k)=3.
               umask(I-1,J-1+k)=0.
               vmask(I,J-1+k)=3.
@@ -3004,9 +2970,9 @@ subroutine update_velocity_masks(CS, G, hmask, umask, vmask, u_face_mask, v_face
               vmask(I-1:I,J-1+k)=0.
               v_face_mask(i,J-1+k)=4.
             case (0)
-!              umask(I-1:I,J-1+k)=0.
-!              vmask(I-1:I,J-1+k)=0.
-!              v_face_mask(i,J-1+k)=0.
+              umask(I-1:I,J-1+k)=0.
+              vmask(I-1:I,J-1+k)=0.
+              v_face_mask(i,J-1+k)=0.
             case (1) ! stress free y-boundary
               vmask(I-1:I,J-1+k)=0.
             case default
@@ -3134,7 +3100,6 @@ subroutine ice_shelf_temp(CS, ISS, G, US, time_step, melt_rate, Time)
                           intent(in)    :: melt_rate !< basal melt rate [R Z T-1 ~> kg m-2 s-1]
   type(time_type),        intent(in)    :: Time !< The current model time
 
-! 5/23/12 OVS
 !    This subroutine takes the velocity (on the Bgrid) and timesteps
 !      (HT)_t = - div (uHT) + (adot Tsurf -bdot Tbot) once and then calculates T=HT/H
 !
@@ -3170,12 +3135,6 @@ subroutine ice_shelf_temp(CS, ISS, G, US, time_step, melt_rate, Time)
     TH(i,j) = CS%t_shelf(i,j)*ISS%h_shelf(i,j)
   enddo ; enddo
 
-!  call enable_averages(time_step, Time, CS%diag)
-!  call pass_var(h_after_uflux, G%domain)
-!  call pass_var(h_after_vflux, G%domain)
-!  if (CS%id_h_after_uflux > 0) call post_data(CS%id_h_after_uflux, h_after_uflux, CS%diag)
-!  if (CS%id_h_after_vflux > 0) call post_data(CS%id_h_after_vflux, h_after_vflux, CS%diag)
-!  call disable_averaging(CS%diag)
 
   call ice_shelf_advect_temp_x(CS, G, time_step, ISS%hmask, TH, th_after_uflux)
   call ice_shelf_advect_temp_y(CS, G, time_step, ISS%hmask, th_after_uflux, th_after_vflux)
