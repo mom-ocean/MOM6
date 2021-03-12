@@ -13,7 +13,7 @@ MKMF_COMMIT ?= master
 
 # FMS framework
 FMS_URL ?= https://github.com/NOAA-GFDL/FMS.git
-FMS_COMMIT ?= 2020.04
+FMS_COMMIT ?= 2019.01.03
 
 
 # List of source files to link this Makefile's dependencies to model Makefiles

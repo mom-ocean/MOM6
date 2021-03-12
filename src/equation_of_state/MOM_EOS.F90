@@ -1550,12 +1550,12 @@ subroutine convert_temp_salt_for_TEOS10(T, S, HI, kd, mask_z, EOS)
 
   do k=1,kd ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
     if (mask_z(i,j,k) >= 1.0) then
-     S(i,j,k) = gsw_sr_from_sp(S(i,j,k))
+      S(i,j,k) = gsw_sr_from_sp(S(i,j,k))
 !     Get absolute salinity from practical salinity, converting pressures from Pascal to dbar.
 !     If this option is activated, pressure will need to be added as an argument, and it should be
 !     moved out into module that is not shared between components, where the ocean_grid can be used.
 !     S(i,j,k) = gsw_sa_from_sp(S(i,j,k),pres(i,j,k)*1.0e-4,G%geoLonT(i,j),G%geoLatT(i,j))
-     T(i,j,k) = gsw_ct_from_pt(S(i,j,k), T(i,j,k))
+      T(i,j,k) = gsw_ct_from_pt(S(i,j,k), T(i,j,k))
     endif
   enddo ; enddo ; enddo
 end subroutine convert_temp_salt_for_TEOS10

@@ -4,22 +4,20 @@ module MOM_offline_aux
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use data_override_mod,    only : data_override_init, data_override
-use MOM_time_manager,     only : time_type, operator(-)
 use MOM_debugging,        only : check_column_integrals
 use MOM_domains,          only : pass_var, pass_vector, To_All
+use MOM_diag_mediator,    only : post_data
 use MOM_diag_vkernels,    only : reintegrate_column
 use MOM_error_handler,    only : callTree_enter, callTree_leave, MOM_error, FATAL, WARNING, is_root_pe
+use MOM_file_parser,      only : get_param, log_version, param_file_type
+use MOM_forcing_type,     only : forcing
 use MOM_grid,             only : ocean_grid_type
 use MOM_io,               only : MOM_read_data, MOM_read_vector, CENTER
-use MOM_verticalGrid,     only : verticalGrid_type
-use MOM_file_parser,      only : get_param, log_version, param_file_type
-use astronomy_mod,        only : orbital_time, diurnal_solar, daily_mean_solar
-use MOM_variables,        only : vertvisc_type
-use MOM_forcing_type,     only : forcing
 use MOM_opacity,          only : optics_type
-use MOM_diag_mediator,    only : post_data
-use MOM_forcing_type,     only : forcing
+use MOM_time_manager,     only : time_type, operator(-)
+use MOM_variables,        only : vertvisc_type
+use MOM_verticalGrid,     only : verticalGrid_type
+use astronomy_mod,        only : orbital_time, diurnal_solar, daily_mean_solar
 
 implicit none ; private
 
@@ -45,13 +43,13 @@ contains
 subroutine update_h_horizontal_flux(G, GV, uhtr, vhtr, h_pre, h_new)
   type(ocean_grid_type),   pointer       :: G     !< ocean grid structure
   type(verticalGrid_type), pointer       :: GV    !< ocean vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: uhtr  !< Accumulated mass flux through zonal face [kg]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(in)    :: vhtr  !< Accumulated mass flux through meridional face [kg]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h_pre !< Previous layer thicknesses [kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: h_new !< Updated layer thicknesses [kg m-2].
 
   ! Local variables
@@ -83,16 +81,16 @@ end subroutine update_h_horizontal_flux
 subroutine update_h_vertical_flux(G, GV, ea, eb, h_pre, h_new)
   type(ocean_grid_type),   pointer       :: G     !< ocean grid structure
   type(verticalGrid_type), pointer       :: GV    !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: ea    !< Mass of fluid entrained from the layer
                                                   !! above within this timestep [kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: eb    !< Mass of fluid entrained from the layer
                                                   !! below within this timestep [kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h_pre !< Layer thicknesses at the end of the previous
                                                   !! step [kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: h_new !< Updated layer thicknesses [kg m-2].
 
   ! Local variables
@@ -136,23 +134,23 @@ end subroutine update_h_vertical_flux
 subroutine limit_mass_flux_3d(G, GV, uh, vh, ea, eb, h_pre)
   type(ocean_grid_type),   pointer       :: G     !< ocean grid structure
   type(verticalGrid_type), pointer       :: GV    !< ocean vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: uh    !< Mass flux through zonal face [kg]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(inout) :: vh    !< Mass flux through meridional face [kg]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: ea    !< Mass of fluid entrained from the layer
                                                   !! above within this timestep [kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: eb    !< Mass of fluid entrained from the layer
                                                   !! below within this timestep [kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h_pre !< Layer thicknesses at the end of the previous
                                                   !! step [kg m-2].
 
   ! Local variables
   integer :: i, j, k, m, is, ie, js, je, nz
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: top_flux, bottom_flux
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: top_flux, bottom_flux
   real :: pos_flux, hvol, h_neglect, scale_factor, max_off_cfl
 
   max_off_cfl =0.5
@@ -239,15 +237,15 @@ end subroutine limit_mass_flux_3d
 subroutine distribute_residual_uh_barotropic(G, GV, hvol, uh)
   type(ocean_grid_type),   pointer       :: G    !< ocean grid structure
   type(verticalGrid_type), pointer       :: GV   !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in   ) :: hvol !< Mass of water in the cells at the end
                                                  !! of the previous timestep [kg]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: uh   !< Zonal mass transport within a timestep [kg]
 
-  real, dimension(SZIB_(G),SZK_(G))   :: uh2d
+  real, dimension(SZIB_(G),SZK_(GV))  :: uh2d
   real, dimension(SZIB_(G))           :: uh2d_sum
-  real, dimension(SZI_(G),SZK_(G))    :: h2d
+  real, dimension(SZI_(G),SZK_(GV))   :: h2d
   real, dimension(SZI_(G))            :: h2d_sum
 
   integer :: i, j, k, m, is, ie, js, je, nz
@@ -310,15 +308,15 @@ end subroutine distribute_residual_uh_barotropic
 subroutine distribute_residual_vh_barotropic(G, GV, hvol, vh)
   type(ocean_grid_type),   pointer       :: G    !< ocean grid structure
   type(verticalGrid_type), pointer       :: GV   !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in   ) :: hvol !< Mass of water in the cells at the end
                                                  !! of the previous timestep [kg]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(inout) :: vh   !< Meridional mass transport within a timestep [kg]
 
-  real, dimension(SZJB_(G),SZK_(G))   :: vh2d
+  real, dimension(SZJB_(G),SZK_(GV))  :: vh2d
   real, dimension(SZJB_(G))           :: vh2d_sum
-  real, dimension(SZJ_(G),SZK_(G))    :: h2d
+  real, dimension(SZJ_(G),SZK_(GV))   :: h2d
   real, dimension(SZJ_(G))            :: h2d_sum
 
   integer :: i, j, k, m, is, ie, js, je, nz
@@ -383,14 +381,14 @@ end subroutine distribute_residual_vh_barotropic
 subroutine distribute_residual_uh_upwards(G, GV, hvol, uh)
   type(ocean_grid_type),   pointer       :: G     !< ocean grid structure
   type(verticalGrid_type), pointer       :: GV    !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in   ) :: hvol  !< Mass of water in the cells at the end
                                                   !! of the previous timestep [kg]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: uh    !< Zonal mass transport within a timestep [kg]
 
-  real, dimension(SZIB_(G),SZK_(G))   :: uh2d
-  real, dimension(SZI_(G),SZK_(G))    :: h2d
+  real, dimension(SZIB_(G),SZK_(GV))  :: uh2d
+  real, dimension(SZI_(G),SZK_(GV))   :: h2d
 
   real  :: uh_neglect, uh_remain, uh_add, uh_sum, uh_col, uh_max
   real  :: hup, hdown, hlos, min_h
@@ -479,15 +477,15 @@ end subroutine distribute_residual_uh_upwards
 subroutine distribute_residual_vh_upwards(G, GV, hvol, vh)
   type(ocean_grid_type),   pointer       :: G     !< ocean grid structure
   type(verticalGrid_type), pointer       :: GV    !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in   ) :: hvol  !< Mass of water in the cells at the end
                                                   !! of the previous timestep [kg]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(inout) :: vh    !< Meridional mass transport within a timestep [kg]
 
-  real, dimension(SZJB_(G),SZK_(G))   :: vh2d
+  real, dimension(SZJB_(G),SZK_(GV))  :: vh2d
   real, dimension(SZJB_(G))           :: vh2d_sum
-  real, dimension(SZJ_(G),SZK_(G))    :: h2d
+  real, dimension(SZJ_(G),SZK_(GV))   :: h2d
   real, dimension(SZJ_(G))            :: h2d_sum
 
   real  :: vh_neglect, vh_remain, vh_col, vh_sum
@@ -635,19 +633,19 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
   character(len=*),        intent(in   ) :: sum_file  !< Name of file with summed fields
   character(len=*),        intent(in   ) :: snap_file !< Name of file with snapshot fields
   character(len=*),        intent(in   ) :: surf_file !< Name of file with surface fields
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: uhtr      !< Zonal mass fluxes [kg]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(inout) :: vhtr      !< Meridional mass fluxes [kg]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: h_end     !< End of timestep layer thickness
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: temp_mean !< Averaged temperature
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: salt_mean !< Averaged salinity
   real, dimension(SZI_(G),SZJ_(G)),          &
                            intent(inout) :: mld       !< Averaged mixed layer depth
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(inout) :: Kd        !< Diapycnal diffusivities at interfaces
   type(forcing),           intent(inout) :: fluxes    !< Fields with surface fluxes
   integer,                 intent(in   ) :: ridx_sum  !< Read index for sum, mean, and surf files
@@ -769,14 +767,14 @@ subroutine update_offline_from_arrays(G, GV, nk_input, ridx_sum, mean_file, sum_
   character(len=200),                        intent(in   ) :: mean_file !< Name of file with averages fields
   character(len=200),                        intent(in   ) :: sum_file  !< Name of file with summed fields
   character(len=200),                        intent(in   ) :: snap_file !< Name of file with snapshot fields
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr      !< Zonal mass fluxes [kg]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr      !< Meridional mass fluxes [kg]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hend      !< End of timestep layer thickness [kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: uhtr     !< Zonal mass fluxes [kg]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: vhtr     !< Meridional mass fluxes [kg]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: hend      !< End of timestep layer thickness [kg m-2]
   real, dimension(:,:,:,:), allocatable,     intent(inout) :: uhtr_all  !< Zonal mass fluxes [kg]
   real, dimension(:,:,:,:), allocatable,     intent(inout) :: vhtr_all  !< Meridional mass fluxes [kg]
   real, dimension(:,:,:,:), allocatable,     intent(inout) :: hend_all  !< End of timestep layer thickness [kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: temp      !< Temperature array
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: salt      !< Salinity array
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: temp      !< Temperature array
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: salt      !< Salinity array
   real, dimension(:,:,:,:), allocatable,     intent(inout) :: temp_all  !< Temperature array
   real, dimension(:,:,:,:), allocatable,     intent(inout) :: salt_all  !< Salinity array
 

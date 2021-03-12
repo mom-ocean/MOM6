@@ -4,15 +4,14 @@ module MOM_variables
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_array_transform, only : rotate_array, rotate_vector
-use MOM_domains, only : MOM_domain_type, get_domain_extent, group_pass_type
-use MOM_debugging, only : hchksum
+use MOM_coupler_types, only : coupler_1d_bc_type, coupler_2d_bc_type
+use MOM_coupler_types, only : coupler_type_spawn, coupler_type_destructor, coupler_type_initialized
+use MOM_debugging,     only : hchksum
+use MOM_domains,       only : MOM_domain_type, get_domain_extent, group_pass_type
+use MOM_EOS,           only : EOS_type
 use MOM_error_handler, only : MOM_error, FATAL
-use MOM_grid, only : ocean_grid_type
-use MOM_EOS, only : EOS_type
-
-use coupler_types_mod, only : coupler_1d_bc_type, coupler_2d_bc_type
-use coupler_types_mod, only : coupler_type_spawn, coupler_type_destructor
-use coupler_types_mod, only : coupler_type_initialized
+use MOM_grid,          only : ocean_grid_type
+use MOM_verticalGrid,  only : verticalGrid_type
 
 implicit none ; private
 
@@ -189,6 +188,9 @@ type, public :: accel_diag_ptrs
 
   real, pointer :: diag_hfrac_u(:,:,:) => NULL() !< Fractional layer thickness at u points
   real, pointer :: diag_hfrac_v(:,:,:) => NULL() !< Fractional layer thickness at v points
+  real, pointer :: diag_hu(:,:,:) => NULL() !< layer thickness at u points
+  real, pointer :: diag_hv(:,:,:) => NULL() !< layer thickness at v points
+
 end type accel_diag_ptrs
 
 !> Pointers to arrays with transports, which can later be used for derived diagnostics, like energy balances.
@@ -470,19 +472,19 @@ subroutine rotate_surface_state(sfc_state_in, G_in, sfc_state, G, turns)
 
   ! TODO: tracer field rotation
   if (coupler_type_initialized(sfc_state_in%tr_fields)) &
-    call MOM_error(FATAL, "Rotation of surface state tracers is not yet " &
-        // "implemented.")
+    call MOM_error(FATAL, "Rotation of surface state tracers is not yet implemented.")
 end subroutine rotate_surface_state
 
 !> Allocates the arrays contained within a BT_cont_type and initializes them to 0.
-subroutine alloc_BT_cont_type(BT_cont, G, alloc_faces)
-  type(BT_cont_type),    pointer    :: BT_cont !< The BT_cont_type whose elements will be allocated
-  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
-  logical,     optional, intent(in) :: alloc_faces !< If present and true, allocate
+subroutine alloc_BT_cont_type(BT_cont, G, GV, alloc_faces)
+  type(BT_cont_type),      pointer    :: BT_cont !< The BT_cont_type whose elements will be allocated
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
+  logical,       optional, intent(in) :: alloc_faces !< If present and true, allocate
                                             !! memory for effective face thicknesses.
 
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (associated(BT_cont)) call MOM_error(FATAL, &
@@ -504,8 +506,8 @@ subroutine alloc_BT_cont_type(BT_cont, G, alloc_faces)
   allocate(BT_cont%vBT_NN(isd:ied,JsdB:JedB))  ; BT_cont%vBT_NN(:,:) = 0.0
 
   if (present(alloc_faces)) then ; if (alloc_faces) then
-    allocate(BT_cont%h_u(IsdB:IedB,jsd:jed,1:G%ke)) ; BT_cont%h_u(:,:,:) = 0.0
-    allocate(BT_cont%h_v(isd:ied,JsdB:JedB,1:G%ke)) ; BT_cont%h_v(:,:,:) = 0.0
+    allocate(BT_cont%h_u(IsdB:IedB,jsd:jed,1:nz)) ; BT_cont%h_u(:,:,:) = 0.0
+    allocate(BT_cont%h_v(isd:ied,JsdB:JedB,1:nz)) ; BT_cont%h_v(:,:,:) = 0.0
   endif ; endif
 
 end subroutine alloc_BT_cont_type

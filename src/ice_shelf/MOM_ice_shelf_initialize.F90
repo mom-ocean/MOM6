@@ -59,28 +59,26 @@ subroutine initialize_ice_thickness(h_shelf, area_shelf_h, hmask, G, G_in, US, P
   if (PRESENT(rotate_index)) rotate=rotate_index
 
   if (rotate) then
-     allocate(tmp1_2d(G_in%isd:G_in%ied,G_in%jsd:G_in%jed));tmp1_2d(:,:)=0.0
-     allocate(tmp2_2d(G_in%isd:G_in%ied,G_in%jsd:G_in%jed));tmp2_2d(:,:)=0.0
-     allocate(tmp3_2d(G_in%isd:G_in%ied,G_in%jsd:G_in%jed));tmp3_2d(:,:)=0.0
-     select case ( trim(config) )
-     case ("CHANNEL"); call initialize_ice_thickness_channel (tmp1_2d, tmp2_2d, tmp3_2d, G_in, US, PF)
-     case ("FILE");  call initialize_ice_thickness_from_file (tmp1_2d, tmp2_2d, tmp3_2d, G_in, US, PF)
-     case ("USER");  call USER_init_ice_thickness (tmp1_2d, tmp2_2d, tmp3_2d, G_in, US, PF)
-     case default ;  call MOM_error(FATAL,"MOM_initialize: "// &
-          "Unrecognized ice profile setup "//trim(config))
-     end select
-     call rotate_array(tmp1_2d,turns, h_shelf)
-     call rotate_array(tmp2_2d,turns, area_shelf_h)
-     call rotate_array(tmp3_2d,turns, hmask)
-     deallocate(tmp1_2d,tmp2_2d,tmp3_2d)
+    allocate(tmp1_2d(G_in%isd:G_in%ied,G_in%jsd:G_in%jed)) ; tmp1_2d(:,:)=0.0
+    allocate(tmp2_2d(G_in%isd:G_in%ied,G_in%jsd:G_in%jed)) ; tmp2_2d(:,:)=0.0
+    allocate(tmp3_2d(G_in%isd:G_in%ied,G_in%jsd:G_in%jed)) ; tmp3_2d(:,:)=0.0
+    select case ( trim(config) )
+      case ("CHANNEL") ; call initialize_ice_thickness_channel (tmp1_2d, tmp2_2d, tmp3_2d, G_in, US, PF)
+      case ("FILE") ; call initialize_ice_thickness_from_file (tmp1_2d, tmp2_2d, tmp3_2d, G_in, US, PF)
+      case ("USER") ; call USER_init_ice_thickness (tmp1_2d, tmp2_2d, tmp3_2d, G_in, US, PF)
+      case default  ; call MOM_error(FATAL,"MOM_initialize: Unrecognized ice profile setup "//trim(config))
+    end select
+    call rotate_array(tmp1_2d,turns, h_shelf)
+    call rotate_array(tmp2_2d,turns, area_shelf_h)
+    call rotate_array(tmp3_2d,turns, hmask)
+    deallocate(tmp1_2d,tmp2_2d,tmp3_2d)
   else
-     select case ( trim(config) )
-     case ("CHANNEL"); call initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, US, PF)
-     case ("FILE");  call initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, G, US, PF)
-     case ("USER");  call USER_init_ice_thickness (h_shelf, area_shelf_h, hmask, G, US, PF)
-     case default ;  call MOM_error(FATAL,"MOM_initialize: "// &
-          "Unrecognized ice profile setup "//trim(config))
-     end select
+    select case ( trim(config) )
+      case ("CHANNEL") ; call initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, US, PF)
+      case ("FILE") ; call initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, G, US, PF)
+      case ("USER") ; call USER_init_ice_thickness (h_shelf, area_shelf_h, hmask, G, US, PF)
+      case default  ; call MOM_error(FATAL,"MOM_initialize: Unrecognized ice profile setup "//trim(config))
+    end select
   endif
 
 end subroutine initialize_ice_thickness

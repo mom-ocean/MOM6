@@ -2982,7 +2982,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
     CS%id_hf_dvdt_dia_2d = register_diag_field('ocean_model', 'hf_dvdt_dia_2d', diag%axesCv1, Time, &
         'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Diapycnal Mixing', &
         'm s-2', conversion=US%L_T2_to_m_s2)
-    if (CS%id_hf_dvdt_dia_2d > 0)  call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+    if (CS%id_hf_dvdt_dia_2d > 0)  call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
 
     if ((CS%id_dudt_dia > 0) .or. (CS%id_hf_dudt_dia_2d > 0)) &
       call safe_alloc_ptr(ADp%du_dt_dia,IsdB,IedB,jsd,jed,nz)
@@ -3352,7 +3352,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   endif
 
   ! Initialize the diagnostic grid storage
-  call diag_grid_storage_init(CS%diag_grids_prev, G, diag)
+  call diag_grid_storage_init(CS%diag_grids_prev, G, GV, diag)
 
 end subroutine diabatic_driver_init
 

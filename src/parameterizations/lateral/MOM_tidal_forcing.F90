@@ -536,7 +536,7 @@ subroutine find_in_files(filenames, varname, array, G)
 
   do nf=1,size(filenames)
     if (LEN_TRIM(filenames(nf)) == 0) cycle
-    if (field_exists(filenames(nf), varname, G%Domain%mpp_domain)) then
+    if (field_exists(filenames(nf), varname, MOM_domain=G%Domain)) then
       call MOM_read_data(filenames(nf), varname, array, G%Domain)
       return
     endif

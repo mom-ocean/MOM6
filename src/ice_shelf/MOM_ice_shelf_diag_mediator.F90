@@ -3,35 +3,29 @@ module MOM_IS_diag_mediator
 
 ! This file is a part of SIS2. See LICENSE.md for the license.
 
-use MOM_grid, only : ocean_grid_type
-
-use MOM_coms, only : PE_here
+use MOM_coms,          only : PE_here
+use MOM_diag_manager_infra,  only : MOM_diag_manager_init, send_data_infra, MOM_diag_axis_init
+use MOM_diag_manager_infra,  only : EAST, NORTH
+use MOM_diag_manager_infra,  only : register_static_field_infra
+use MOM_diag_manager_infra,  only : register_diag_field_infra
 use MOM_error_handler, only : MOM_error, FATAL, is_root_pe, assert
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_safe_alloc, only : safe_alloc_ptr, safe_alloc_alloc
+use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
+use MOM_grid,          only : ocean_grid_type
+use MOM_safe_alloc,    only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_string_functions, only : lowercase, uppercase, slasher
-use MOM_time_manager, only : time_type
-
-use diag_manager_mod, only : diag_manager_init
-use diag_manager_mod, only : send_data, diag_axis_init,EAST,NORTH
-use diag_manager_mod, only : register_diag_field_fms=>register_diag_field
-use diag_manager_mod, only : register_static_field_fms=>register_static_field
+use MOM_time_manager,  only : time_type
 
 implicit none ; private
 
-public diag_mediator_infrastructure_init
-public set_axes_info, post_data, register_MOM_IS_diag_field, time_type
+public MOM_IS_diag_mediator_infrastructure_init
+public set_IS_axes_info, post_IS_data, register_MOM_IS_diag_field, time_type
+public register_MOM_IS_static_field
 public safe_alloc_ptr, safe_alloc_alloc
 public enable_averaging, disable_averaging, query_averaging_enabled
 public enable_averages
-public diag_mediator_init, diag_mediator_end, set_diag_mediator_grid
-public diag_mediator_close_registration, get_diag_time_end
-public diag_axis_init, register_static_field
-
-!> Make a diagnostic available for averaging or output.
-!interface post_data
-!   module procedure post_data_2d
-!end interface post_data
+public MOM_IS_diag_mediator_init, MOM_IS_diag_mediator_end, set_IS_diag_mediator_grid
+public MOM_IS_diag_mediator_close_registration, get_diag_time_end
+public MOM_diag_axis_init, register_static_field_infra
 
 !> 2D/3D axes type to contain 1D axes handles and pointers to masks
 type, public :: axesType
@@ -102,7 +96,7 @@ end type diag_ctrl
 contains
 
 !> Set up the grid and axis information for use by the ice shelf model.
-subroutine set_axes_info(G, param_file, diag_cs, axes_set_name)
+subroutine set_IS_axes_info(G, param_file, diag_cs, axes_set_name)
   type(ocean_grid_type), intent(inout) :: G   !< The horizontal grid type
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl),     intent(inout) :: diag_cs !< A structure that is used to regulate diagnostic output
@@ -154,28 +148,22 @@ subroutine set_axes_info(G, param_file, diag_cs, axes_set_name)
   endif
 
   if (G%symmetric) then
-     id_xq = diag_axis_init('xB', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
-          'Boundary point nominal longitude',set_name=set_name, &
-          Domain2=G%Domain%mpp_domain, domain_position=EAST)
-     id_yq = diag_axis_init('yB', G%gridLatB(G%jsgB:G%jegB), G%y_axis_units, 'y', &
-          'Boundary point nominal latitude', set_name=set_name, &
-          Domain2=G%Domain%mpp_domain, domain_position=NORTH)
+    id_xq = MOM_diag_axis_init('xB', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
+          'Boundary point nominal longitude', G%Domain, position=EAST, set_name=set_name)
+    id_yq = MOM_diag_axis_init('yB', G%gridLatB(G%jsgB:G%jegB), G%y_axis_units, 'y', &
+          'Boundary point nominal latitude', G%Domain, position=NORTH, set_name=set_name)
 
   else
-     id_xq = diag_axis_init('xB', G%gridLonB(G%isg:G%ieg), G%x_axis_units, 'x', &
-          'Boundary point nominal longitude',set_name=set_name, &
-          Domain2=G%Domain%mpp_domain, domain_position=EAST)
-     id_yq = diag_axis_init('yB', G%gridLatB(G%jsg:G%jeg), G%y_axis_units, 'y', &
-          'Boundary point nominal latitude', set_name=set_name, &
-          Domain2=G%Domain%mpp_domain, domain_position=NORTH)
+    id_xq = MOM_diag_axis_init('xB', G%gridLonB(G%isg:G%ieg), G%x_axis_units, 'x', &
+          'Boundary point nominal longitude', G%Domain, position=EAST, set_name=set_name)
+    id_yq = MOM_diag_axis_init('yB', G%gridLatB(G%jsg:G%jeg), G%y_axis_units, 'y', &
+          'Boundary point nominal latitude', G%Domain, position=NORTH, set_name=set_name)
 
   endif
-  id_xh = diag_axis_init('xT', G%gridLonT(G%isg:G%ieg), G%x_axis_units, 'x', &
-          'T point nominal longitude', set_name=set_name, &
-          Domain2=G%Domain%mpp_domain)
-  id_yh = diag_axis_init('yT', G%gridLatT(G%jsg:G%jeg), G%y_axis_units, 'y', &
-          'T point nominal latitude', set_name=set_name, &
-          Domain2=G%Domain%mpp_domain)
+  id_xh = MOM_diag_axis_init('xT', G%gridLonT(G%isg:G%ieg), G%x_axis_units, 'x', &
+          'T point nominal longitude', G%Domain, set_name=set_name)
+  id_yh = MOM_diag_axis_init('yT', G%gridLatT(G%jsg:G%jeg), G%y_axis_units, 'y', &
+          'T point nominal latitude', G%Domain, set_name=set_name)
 
   ! Axis groupings for 2-D arrays.
   call defineAxes(diag_cs, [id_xh, id_yh], diag_cs%axesT1)
@@ -183,7 +171,7 @@ subroutine set_axes_info(G, param_file, diag_cs, axes_set_name)
   call defineAxes(diag_cs, [id_xq, id_yh], diag_cs%axesCu1)
   call defineAxes(diag_cs, [id_xh, id_yq], diag_cs%axesCv1)
 
-end subroutine set_axes_info
+end subroutine set_IS_axes_info
 
 !> Define an a group of axes from a list of handles
 subroutine defineAxes(diag_cs, handles, axes)
@@ -204,17 +192,17 @@ subroutine defineAxes(diag_cs, handles, axes)
 end subroutine defineAxes
 
 !> Set up the current grid for the diag mediator
-subroutine set_diag_mediator_grid(G, diag_cs)
+subroutine set_IS_diag_mediator_grid(G, diag_cs)
   type(ocean_grid_type), intent(inout) :: G   !< The horizontal grid type
   type(diag_ctrl),     intent(inout) :: diag_cs !< A structure that is used to regulate diagnostic output
 
   diag_cs%is = G%isc - (G%isd-1) ; diag_cs%ie = G%iec - (G%isd-1)
   diag_cs%js = G%jsc - (G%jsd-1) ; diag_cs%je = G%jec - (G%jsd-1)
   diag_cs%isd = G%isd ; diag_cs%ied = G%ied ; diag_cs%jsd = G%jsd ; diag_cs%jed = G%jed
-end subroutine set_diag_mediator_grid
+end subroutine set_IS_diag_mediator_grid
 
 !> Offer a 2d diagnostic field for output or averaging
-subroutine post_data(diag_field_id, field, diag_cs, is_static, mask)
+subroutine post_IS_data(diag_field_id, field, diag_cs, is_static, mask)
   integer,           intent(in) :: diag_field_id !< the id for an output variable returned by a
                                               !! previous call to register_diag_field.
   real,    target,   intent(in) :: field(:,:) !< The 2-d array being offered for output or averaging.
@@ -236,7 +224,7 @@ subroutine post_data(diag_field_id, field, diag_cs, is_static, mask)
 
   ! Get a pointer to the diag type for this id, and the FMS-level diag id.
   call assert(diag_field_id < diag_cs%next_free_diag_id, &
-              'post_data: Unregistered diagnostic id')
+              'post_IS_data: Unregistered diagnostic id')
   diag => diag_cs%diags(diag_field_id)
   fms_diag_id = diag%fms_diag_id
 
@@ -301,54 +289,54 @@ subroutine post_data(diag_field_id, field, diag_cs, is_static, mask)
 
   if (is_stat) then
     if (present(mask)) then
-      used = send_data(fms_diag_id, locfield, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, mask=mask)
+      used = send_data_infra(fms_diag_id, locfield, &
+                       is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, mask=mask)
     elseif(i_data .and. associated(diag%mask2d)) then
 !      used = send_data(fms_diag_id, locfield, &
-!           is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%mask2d)
-      used = send_data(fms_diag_id, locfield, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
+!           is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, rmask=diag%mask2d)
+      used = send_data_infra(fms_diag_id, locfield, &
+                       is_in=isv, ie_in=iev, js_in=jsv, je_in=jev)
     elseif((.not.i_data) .and. associated(diag%mask2d_comp)) then
 !      used = send_data(fms_diag_id, locfield, &
-!           is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%mask2d_comp)
-      used = send_data(fms_diag_id, locfield, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
+!           is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, rmask=diag%mask2d_comp)
+      used = send_data_infra(fms_diag_id, locfield, &
+                       is_in=isv, ie_in=iev, js_in=jsv, je_in=jev)
     else
-      used = send_data(fms_diag_id, locfield, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
+      used = send_data_infra(fms_diag_id, locfield, &
+                       is_in=isv, ie_in=iev, js_in=jsv, je_in=jev)
     endif
   elseif (diag_cs%ave_enabled) then
     if (present(mask)) then
-      used = send_data(fms_diag_id, locfield, diag_cs%time_end, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag_cs%time_int, mask=mask)
-!      used = send_data(fms_diag_id, locfield, diag_cs%time_end, &
-!                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-!                       weight=diag_cs%time_int)
+      used = send_data_infra(fms_diag_id, locfield, &
+                       is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, &
+                       time=diag_cs%time_end, weight=diag_cs%time_int, mask=mask)
+!      used = send_data(fms_diag_id, locfield, &
+!                       is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, &
+!                       time=diag_cs%time_end, weight=diag_cs%time_int)
     elseif(i_data .and. associated(diag%mask2d)) then
-!      used = send_data(fms_diag_id, locfield, diag_cs%time_end, &
-!                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-!                       weight=diag_cs%time_int, rmask=diag%mask2d)
-      used = send_data(fms_diag_id, locfield, diag_cs%time_end, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag_cs%time_int)
+!      used = send_data(fms_diag_id, locfield, &
+!                       is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, &
+!                       time=diag_cs%time_end, weight=diag_cs%time_int, rmask=diag%mask2d)
+      used = send_data_infra(fms_diag_id, locfield, &
+                       is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, &
+                       time=diag_cs%time_end, weight=diag_cs%time_int)
     elseif((.not.i_data) .and. associated(diag%mask2d_comp)) then
-!      used = send_data(fms_diag_id, locfield, diag_cs%time_end, &
-!                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-!                       weight=diag_cs%time_int, rmask=diag%mask2d_comp)
-      used = send_data(fms_diag_id, locfield, diag_cs%time_end, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag_cs%time_int)
+!      used = send_data(fms_diag_id, locfield, &
+!                       is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, &
+!                       time=diag_cs%time_end, weight=diag_cs%time_int, rmask=diag%mask2d_comp)
+      used = send_data_infra(fms_diag_id, locfield, &
+                       is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, &
+                       time=diag_cs%time_end, weight=diag_cs%time_int)
     else
-      used = send_data(fms_diag_id, locfield, diag_cs%time_end, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag_cs%time_int)
+      used = send_data_infra(fms_diag_id, locfield, &
+                       is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, &
+                       time=diag_cs%time_end, weight=diag_cs%time_int)
     endif
   endif
 
   if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.) ) deallocate( locfield )
 
-end subroutine post_data
+end subroutine post_IS_data
 
 
 !> Enable the accumulation of time averages over the specified time interval.
@@ -406,12 +394,12 @@ logical function query_averaging_enabled(diag_cs, time_int, time_end)
   query_averaging_enabled = diag_cs%ave_enabled
 end function query_averaging_enabled
 
-subroutine diag_mediator_infrastructure_init(err_msg)
+subroutine MOM_IS_diag_mediator_infrastructure_init(err_msg)
   ! This subroutine initializes the FMS diag_manager.
   character(len=*), optional, intent(out)   :: err_msg !< An error message
 
-  call diag_manager_init(err_msg=err_msg)
-end subroutine diag_mediator_infrastructure_init
+  call MOM_diag_manager_init(err_msg=err_msg)
+end subroutine MOM_IS_diag_mediator_infrastructure_init
 
 !> diag_mediator_init initializes the MOM diag_mediator and opens the available
 
@@ -428,8 +416,8 @@ end function get_diag_time_end
 
 !> Returns the "MOM_IS_diag_mediator" handle for a group of diagnostics derived from one field.
 function register_MOM_IS_diag_field(module_name, field_name, axes, init_time, &
-     long_name, units, missing_value, range, mask_variant, standard_name, &
-     verbose, do_not_log, err_msg, interp_method, tile_count, conversion) result (register_diag_field)
+            long_name, units, missing_value, range, mask_variant, standard_name, &
+            verbose, do_not_log, err_msg, interp_method, tile_count, conversion) result (register_diag_field)
   integer :: register_diag_field  !< The returned diagnostic handle
   character(len=*), intent(in) :: module_name !< Name of this module, usually "ice_model"
   character(len=*), intent(in) :: field_name !< Name of the diagnostic field
@@ -441,7 +429,7 @@ function register_MOM_IS_diag_field(module_name, field_name, axes, init_time, &
   real,             optional, intent(in) :: missing_value !< A value that indicates missing values.
   real,             optional, intent(in) :: range(2) !< Valid range of a variable (not used in MOM?)
   logical,          optional, intent(in) :: mask_variant !< If true a logical mask must be provided with
-                                                         !! post_data calls (not used in MOM?)
+                                                         !! post_IS_data calls (not used in MOM?)
   logical,          optional, intent(in) :: verbose !< If true, FMS is verbose (not used in MOM?)
   logical,          optional, intent(in) :: do_not_log !< If true, do not log something (not used in MOM?)
   character(len=*), optional, intent(out):: err_msg !< String into which an error message might be
@@ -465,7 +453,7 @@ function register_MOM_IS_diag_field(module_name, field_name, axes, init_time, &
   diag_cs => axes%diag_cs
   primary_id = -1
 
-  fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+  fms_id = register_diag_field_infra(module_name, field_name, axes%handles, &
          init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
          range=range, mask_variant=mask_variant, standard_name=standard_name, &
          verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -483,9 +471,9 @@ function register_MOM_IS_diag_field(module_name, field_name, axes, init_time, &
 
   if (is_root_pe() .and. diag_CS%doc_unit > 0) then
     if (primary_id > 0) then
-       mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Used]'
+      mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Used]'
     else
-       mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Unused]'
+      mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Unused]'
     endif
     write(diag_CS%doc_unit, '(a)') trim(mesg)
     if (present(long_name)) call describe_option("long_name", long_name, diag_CS)
@@ -523,9 +511,9 @@ function register_MOM_IS_diag_field(module_name, field_name, axes, init_time, &
 end function register_MOM_IS_diag_field
 
 !> Registers a static diagnostic, returning an integer handle
-function register_static_field(module_name, field_name, axes, &
-     long_name, units, missing_value, range, mask_variant, standard_name, &
-     do_not_log, interp_method, tile_count)
+integer function register_MOM_IS_static_field(module_name, field_name, axes, &
+            long_name, units, missing_value, range, mask_variant, standard_name, &
+            do_not_log, interp_method, tile_count)
   integer :: register_static_field !< The returned diagnostic handle
   character(len=*), intent(in) :: module_name !< Name of this module, usually "ice_model"
   character(len=*), intent(in) :: field_name !< Name of the diagnostic field
@@ -536,7 +524,7 @@ function register_static_field(module_name, field_name, axes, &
   real,             optional, intent(in) :: missing_value !< A value that indicates missing values.
   real,             optional, intent(in) :: range(2) !< Valid range of a variable (not used in MOM?)
   logical,          optional, intent(in) :: mask_variant !< If true a logical mask must be provided with
-                                                         !! post_data calls (not used in MOM?)
+                                                         !! post_IS_data calls (not used in MOM?)
   logical,          optional, intent(in) :: do_not_log !< If true, do not log something (not used in MOM?)
   character(len=*), optional, intent(in) :: interp_method !< If 'none' indicates the field should not
                                                          !! be interpolated as a scalar
@@ -554,7 +542,7 @@ function register_static_field(module_name, field_name, axes, &
   diag_cs => axes%diag_cs
   primary_id = -1
 
-  fms_id = register_static_field_fms(module_name, field_name, axes%handles, &
+  fms_id = register_static_field_infra(module_name, field_name, axes%handles, &
        long_name=long_name, units=units, missing_value=MOM_missing_value, &
        range=range, mask_variant=mask_variant, standard_name=standard_name, &
        do_not_log=do_not_log, &
@@ -566,7 +554,7 @@ function register_static_field(module_name, field_name, axes, &
 
   register_static_field = primary_id
 
-end function register_static_field
+end function register_MOM_IS_static_field
 
 !> Add a description of an option to the documentation file
 subroutine describe_option(opt_name, value, diag_CS)
@@ -599,14 +587,14 @@ function i2s(a, n_in)
 
   i2s = ''
   do i=1,n
-     write (i2s_temp, '(I4.4)') a(i)
-     i2s = trim(i2s) //'_'// trim(i2s_temp)
+    write (i2s_temp, '(I4.4)') a(i)
+    i2s = trim(i2s) //'_'// trim(i2s_temp)
   enddo
   i2s = adjustl(i2s)
 end function i2s
 
 !> Initialize the MOM_IS diag_mediator and opens the available diagnostics file.
-subroutine diag_mediator_init(G, param_file, diag_cs, component, err_msg, &
+subroutine MOM_IS_diag_mediator_init(G, param_file, diag_cs, component, err_msg, &
                                   doc_file_dir)
   type(ocean_grid_type),    intent(inout) :: G   !< The horizontal grid type
   type(param_file_type),      intent(in)    :: param_file !< A structure to parse for run-time parameters
@@ -627,7 +615,7 @@ subroutine diag_mediator_init(G, param_file, diag_cs, component, err_msg, &
   character(len=40)  :: doc_file_param
   character(len=40)  :: mdl = "MOM_IS_diag_mediator" ! This module's name.
 
-  call diag_manager_init(err_msg=err_msg)
+  call MOM_diag_manager_init(err_msg=err_msg)
 
   ! Allocate list of all diagnostics
   allocate(diag_cs%diags(DIAG_ALLOC_CHUNK_SIZE))
@@ -685,7 +673,7 @@ subroutine diag_mediator_init(G, param_file, diag_cs, component, err_msg, &
 
   call diag_masks_set(G, -1.0e34, diag_cs)
 
-end subroutine diag_mediator_init
+end subroutine MOM_IS_diag_mediator_init
 
 subroutine diag_masks_set(G, missing_value, diag_cs)
 ! Setup the 2d masks for diagnostics
@@ -713,24 +701,24 @@ subroutine diag_masks_set(G, missing_value, diag_cs)
 end subroutine diag_masks_set
 
 !> Prevent the registration of additional diagnostics, so that the creation of files can occur
-subroutine diag_mediator_close_registration(diag_CS)
+subroutine MOM_IS_diag_mediator_close_registration(diag_CS)
   type(diag_ctrl), intent(inout) :: diag_CS !< A structure that is used to regulate diagnostic output
 
   if (diag_CS%doc_unit > -1) then
     close(diag_CS%doc_unit) ; diag_CS%doc_unit = -2
   endif
 
-end subroutine diag_mediator_close_registration
+end subroutine MOM_IS_diag_mediator_close_registration
 
 !> Deallocate memory associated with the MOM_IS diag mediator
-subroutine diag_mediator_end(diag_CS)
+subroutine MOM_IS_diag_mediator_end(diag_CS)
   type(diag_ctrl), intent(inout) :: diag_CS !< A structure that is used to regulate diagnostic output
 
   if (diag_CS%doc_unit > -1) then
     close(diag_CS%doc_unit) ; diag_CS%doc_unit = -3
   endif
 
-end subroutine diag_mediator_end
+end subroutine MOM_IS_diag_mediator_end
 
 !> Allocate a new diagnostic id, noting that it may be necessary to expand the diagnostics array.
 function get_new_diag_id(diag_cs)
