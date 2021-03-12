@@ -7,6 +7,10 @@ use MOM_domain_infra,     only : MOM_domain_type, rescale_comp_data, AGRID, BGRI
 use MOM_domain_infra,     only : domain2d, domain1d, CENTER, CORNER, NORTH_FACE, EAST_FACE
 use MOM_error_infra,      only : MOM_error=>MOM_err, NOTE, FATAL, WARNING
 
+use MOM_read_data_fms2,   only : prepare_to_read_var
+use fms2_io_mod,          only : fms2_open_file => open_file, fms2_close_file => close_file
+use fms2_io_mod,          only : FmsNetcdfDomainFile_t, fms2_read_data => read_data, check_if_open
+
 use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
 use fms_io_mod,           only : file_exist, field_exist, field_size, read_data
 use fms_io_mod,           only : fms_io_exit, get_filename_appendix
@@ -46,7 +50,7 @@ interface file_exists
   module procedure MOM_file_exists
 end interface
 
-!> Open a file (or fileset) for parallel or single-file I/).
+!> Open a file (or fileset) for parallel or single-file I/O.
 interface open_file
   module procedure open_file_type, open_file_unit
 end interface open_file
@@ -99,6 +103,9 @@ type, public :: file_type ; private
   logical :: open_to_read  = .false. !< If true, this file or fileset can be read
   logical :: open_to_write = .false. !< If true, this file or fileset can be written to
 end type file_type
+
+!> For now, this is hard-coded to exercise the new FMS2 interfaces.
+logical :: FMS2_reads = .true.
 
 contains
 
@@ -425,7 +432,31 @@ subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale, MOM_Dom
   type(MOM_domain_type), &
                 optional, intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
 
-  if (present(MOM_Domain)) then
+  ! Local variables
+  type(FmsNetcdfDomainFile_t) :: fileobj ! A handle to a domain-decomposed file object
+  logical :: has_time_dim          ! True if the variable has an unlimited time axis.
+  character(len=96) :: var_to_read ! Name of variable to read from the netcdf file
+  logical :: success  ! True if the file was successfully opened
+
+  if (present(MOM_Domain) .and. FMS2_reads) then
+    ! Open the FMS2 file-set.
+    success = fms2_open_file(fileobj, filename, "read", MOM_domain%mpp_domain, is_restart=.false.)
+    if (.not.success) call MOM_error(FATAL, "Failed to open "//trim(filename))
+
+    ! Find the matching case-insensitive variable name in the file and prepare to read it.
+    call prepare_to_read_var(fileobj, fieldname, MOM_domain, "MOM_read_data_1d: ", filename, &
+                             var_to_read, has_time_dim, timelevel)
+
+    ! Read the data.
+    if (present(timelevel) .and. has_time_dim) then
+      call fms2_read_data(fileobj, var_to_read, data, unlim_dim_level=timelevel)
+    else
+      call fms2_read_data(fileobj, var_to_read, data)
+    endif
+
+    ! Close the file-set.
+    if (check_if_open(fileobj)) call fms2_close_file(fileobj)
+  elseif (present(MOM_Domain)) then ! Read the variable using the FMS-1 interface.
     call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, timelevel=timelevel)
   else
     call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
@@ -449,7 +480,31 @@ subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale, MOM_Dom
   type(MOM_domain_type), &
                 optional, intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
 
-  if (present(MOM_Domain)) then
+  ! Local variables
+  type(FmsNetcdfDomainFile_t) :: fileobj ! A handle to a domain-decomposed file object
+  logical :: has_time_dim          ! True if the variable has an unlimited time axis.
+  character(len=96) :: var_to_read ! Name of variable to read from the netcdf file
+  logical :: success  ! True if the file was successfully opened
+
+  if (present(MOM_Domain) .and. FMS2_reads) then
+    ! Open the FMS2 file-set.
+    success = fms2_open_file(fileobj, filename, "read", MOM_domain%mpp_domain, is_restart=.false.)
+    if (.not.success) call MOM_error(FATAL, "Failed to open "//trim(filename))
+
+    ! Find the matching case-insensitive variable name in the file and prepare to read it.
+    call prepare_to_read_var(fileobj, fieldname, MOM_domain, "MOM_read_data_1d: ", filename, &
+                             var_to_read, has_time_dim, timelevel)
+
+    ! Read the data.
+    if (present(timelevel) .and. has_time_dim) then
+      call fms2_read_data(fileobj, var_to_read, data, unlim_dim_level=timelevel)
+    else
+      call fms2_read_data(fileobj, var_to_read, data)
+    endif
+
+    ! Close the file-set.
+    if (check_if_open(fileobj)) call fms2_close_file(fileobj)
+  elseif (present(MOM_Domain)) then ! Read the variable using the FMS-1 interface.
     call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, timelevel=timelevel)
   else
     call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
@@ -476,8 +531,34 @@ subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
   real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
                                                      !! by before it is returned.
 
-  call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=position)
+  ! Local variables
+  type(FmsNetcdfDomainFile_t) :: fileobj ! A handle to a domain-decomposed file object
+  logical :: has_time_dim          ! True if the variable has an unlimited time axis.
+  character(len=96) :: var_to_read ! Name of variable to read from the netcdf file
+  logical :: success  ! True if the file was successfully opened
+
+  if (FMS2_reads) then
+    ! Open the FMS2 file-set.
+    success = fms2_open_file(fileobj, filename, "read", MOM_domain%mpp_domain, is_restart=.false.)
+    if (.not.success) call MOM_error(FATAL, "Failed to open "//trim(filename))
+
+    ! Find the matching case-insensitive variable name in the file and prepare to read it.
+    call prepare_to_read_var(fileobj, fieldname, MOM_domain, "MOM_read_data_2d: ", filename, &
+                             var_to_read, has_time_dim, timelevel, position)
+
+    ! Read the data.
+    if (present(timelevel) .and. has_time_dim) then
+      call fms2_read_data(fileobj, var_to_read, data, unlim_dim_level=timelevel)
+    else
+      call fms2_read_data(fileobj, var_to_read, data)
+    endif
+
+    ! Close the file-set.
+    if (check_if_open(fileobj)) call fms2_close_file(fileobj)
+  else ! Read the variable using the FMS-1 interface.
+    call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
+                   timelevel=timelevel, position=position)
+  endif
 
   if (present(scale)) then ; if (scale /= 1.0) then
     call rescale_comp_data(MOM_Domain, data, scale)
@@ -505,6 +586,8 @@ subroutine MOM_read_data_2d_region(filename, fieldname, data, start, nread, MOM_
                                                      !! use domain decomposion.
   real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
                                                      !! by before it is returned.
+
+  ! This subroutine does not have an FMS-2 variant yet.
 
   if (present(MOM_Domain)) then
     call read_data(filename, fieldname, data, start, nread, domain=MOM_Domain%mpp_domain, &
@@ -539,8 +622,34 @@ subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
   real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
                                                      !! by before it is returned.
 
-  call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=position)
+  ! Local variables
+  type(FmsNetcdfDomainFile_t) :: fileobj ! A handle to a domain-decomposed file object
+  logical :: has_time_dim          ! True if the variable has an unlimited time axis.
+  character(len=96) :: var_to_read ! Name of variable to read from the netcdf file
+  logical :: success  ! True if the file was successfully opened
+
+  if (FMS2_reads) then
+    ! Open the FMS2 file-set.
+    success = fms2_open_file(fileobj, filename, "read", MOM_domain%mpp_domain, is_restart=.false.)
+    if (.not.success) call MOM_error(FATAL, "Failed to open "//trim(filename))
+
+    ! Find the matching case-insensitive variable name in the file and prepare to read it.
+    call prepare_to_read_var(fileobj, fieldname, MOM_domain, "MOM_read_data_3d: ", filename, &
+                             var_to_read, has_time_dim, timelevel, position)
+
+    ! Read the data.
+    if (present(timelevel) .and. has_time_dim) then
+      call fms2_read_data(fileobj, var_to_read, data, unlim_dim_level=timelevel)
+    else
+      call fms2_read_data(fileobj, var_to_read, data)
+    endif
+
+    ! Close the file-set.
+    if (check_if_open(fileobj)) call fms2_close_file(fileobj)
+  else ! Read the variable using the FMS-1 interface.
+    call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
+                   timelevel=timelevel, position=position)
+  endif
 
   if (present(scale)) then ; if (scale /= 1.0) then
     call rescale_comp_data(MOM_Domain, data, scale)
@@ -563,8 +672,35 @@ subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
   real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
                                                      !! by before it is returned.
 
-  call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=position)
+
+  ! Local variables
+  type(FmsNetcdfDomainFile_t) :: fileobj ! A handle to a domain-decomposed file object
+  logical :: has_time_dim          ! True if the variable has an unlimited time axis.
+  character(len=96) :: var_to_read ! Name of variable to read from the netcdf file
+  logical :: success  ! True if the file was successfully opened
+
+  if (FMS2_reads) then
+    ! Open the FMS2 file-set.
+    success = fms2_open_file(fileobj, filename, "read", MOM_domain%mpp_domain, is_restart=.false.)
+    if (.not.success) call MOM_error(FATAL, "Failed to open "//trim(filename))
+
+    ! Find the matching case-insensitive variable name in the file and prepare to read it.
+    call prepare_to_read_var(fileobj, fieldname, MOM_domain, "MOM_read_data_4d: ", filename, &
+                             var_to_read, has_time_dim, timelevel, position)
+
+    ! Read the data.
+    if (present(timelevel) .and. has_time_dim) then
+      call fms2_read_data(fileobj, var_to_read, data, unlim_dim_level=timelevel)
+    else
+      call fms2_read_data(fileobj, var_to_read, data)
+    endif
+
+    ! Close the file-set.
+    if (check_if_open(fileobj)) call fms2_close_file(fileobj)
+  else ! Read the variable using the FMS-1 interface.
+    call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
+                   timelevel=timelevel, position=position)
+  endif
 
   if (present(scale)) then ; if (scale /= 1.0) then
     call rescale_comp_data(MOM_Domain, data, scale)
@@ -615,7 +751,12 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
   logical,      optional, intent(in)    :: scalar_pair !< If true, a pair of scalars are to be read
   real,         optional, intent(in)    :: scale     !< A scaling factor that the fields are multiplied
                                                      !! by before they are returned.
-  integer :: u_pos, v_pos
+  ! Local variables
+  type(FmsNetcdfDomainFile_t) :: fileobj ! A handle to a domain-decomposed file object
+  logical :: has_time_dim           ! True if the variables have an unlimited time axis.
+  character(len=96) :: u_var, v_var ! Name of u and v variables to read from the netcdf file
+  logical :: success                ! True if the file was successfully opened
+  integer :: u_pos, v_pos           ! Flags indicating the positions of the u- and v- components.
 
   u_pos = EAST_FACE ; v_pos = NORTH_FACE
   if (present(stagger)) then
@@ -624,10 +765,35 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
     elseif (stagger == AGRID) then ; u_pos = CENTER ; v_pos = CENTER ; endif
   endif
 
-  call read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=u_pos)
-  call read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=v_pos)
+  if (FMS2_reads) then
+    ! Open the FMS2 file-set.
+    success = fms2_open_file(fileobj, filename, "read", MOM_domain%mpp_domain, is_restart=.false.)
+    if (.not.success) call MOM_error(FATAL, "Failed to open "//trim(filename))
+
+    ! Find the matching case-insensitive u- and v-variable names in the file and prepare to read them.
+    call prepare_to_read_var(fileobj, u_fieldname, MOM_domain, "MOM_read_vector_2d: ", filename, &
+                             u_var, has_time_dim, timelevel, position=u_pos)
+    call prepare_to_read_var(fileobj, v_fieldname, MOM_domain, "MOM_read_vector_2d: ", filename, &
+                             v_var, has_time_dim, timelevel, position=v_pos)
+
+    ! Read the u-data and v-data. There would already been an error message for one
+    ! of the variables if they are inconsistent in having an unlimited dimension.
+    if (present(timelevel) .and. has_time_dim) then
+      call fms2_read_data(fileobj, u_var, u_data, unlim_dim_level=timelevel)
+      call fms2_read_data(fileobj, v_var, v_data, unlim_dim_level=timelevel)
+    else
+      call fms2_read_data(fileobj, u_var, u_data)
+      call fms2_read_data(fileobj, v_var, v_data)
+    endif
+
+    ! Close the file-set.
+    if (check_if_open(fileobj)) call fms2_close_file(fileobj)
+  else ! Read the variable using the FMS-1 interface.
+    call read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
+                   timelevel=timelevel, position=u_pos)
+    call read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
+                   timelevel=timelevel, position=v_pos)
+  endif
 
   if (present(scale)) then ; if (scale /= 1.0) then
     call rescale_comp_data(MOM_Domain, u_data, scale)
@@ -651,11 +817,16 @@ subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data
   type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
   integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
   integer,      optional, intent(in)    :: stagger   !< A flag indicating where this vector is discretized
-  logical,      optional, intent(in)    :: scalar_pair !< If true, a pair of scalars are to be read.cretized
+  logical,      optional, intent(in)    :: scalar_pair !< If true, a pair of scalars are to be read.
   real,         optional, intent(in)    :: scale     !< A scaling factor that the fields are multiplied
                                                      !! by before they are returned.
 
-  integer :: u_pos, v_pos
+  ! Local variables
+  type(FmsNetcdfDomainFile_t) :: fileobj ! A handle to a domain-decomposed file object
+  logical :: has_time_dim           ! True if the variables have an unlimited time axis.
+  character(len=96) :: u_var, v_var ! Name of u and v variables to read from the netcdf file
+  logical :: success                ! True if the file was successfully opened
+  integer :: u_pos, v_pos           ! Flags indicating the positions of the u- and v- components.
 
   u_pos = EAST_FACE ; v_pos = NORTH_FACE
   if (present(stagger)) then
@@ -664,10 +835,35 @@ subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data
     elseif (stagger == AGRID) then ; u_pos = CENTER ; v_pos = CENTER ; endif
   endif
 
-  call read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=u_pos)
-  call read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=v_pos)
+  if (FMS2_reads) then
+    ! Open the FMS2 file-set.
+    success = fms2_open_file(fileobj, filename, "read", MOM_domain%mpp_domain, is_restart=.false.)
+    if (.not.success) call MOM_error(FATAL, "Failed to open "//trim(filename))
+
+    ! Find the matching case-insensitive u- and v-variable names in the file and prepare to read them.
+    call prepare_to_read_var(fileobj, u_fieldname, MOM_domain, "MOM_read_vector_3d: ", filename, &
+                             u_var, has_time_dim, timelevel, position=u_pos)
+    call prepare_to_read_var(fileobj, v_fieldname, MOM_domain, "MOM_read_vector_3d: ", filename, &
+                             v_var, has_time_dim, timelevel, position=v_pos)
+
+    ! Read the u-data and v-data, dangerously assuming either both or neither have time dimensions.
+    ! There would already been an error message for one of the variables if they are inconsistent.
+    if (present(timelevel) .and. has_time_dim) then
+      call fms2_read_data(fileobj, u_var, u_data, unlim_dim_level=timelevel)
+      call fms2_read_data(fileobj, v_var, v_data, unlim_dim_level=timelevel)
+    else
+      call fms2_read_data(fileobj, u_var, u_data)
+      call fms2_read_data(fileobj, v_var, v_data)
+    endif
+
+    ! Close the file-set.
+    if (check_if_open(fileobj)) call fms2_close_file(fileobj)
+  else ! Read the variable using the FMS-1 interface.
+    call read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
+                   timelevel=timelevel, position=u_pos)
+    call read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
+                   timelevel=timelevel, position=v_pos)
+  endif
 
   if (present(scale)) then ; if (scale /= 1.0) then
     call rescale_comp_data(MOM_Domain, u_data, scale)
