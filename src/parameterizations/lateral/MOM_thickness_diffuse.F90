@@ -993,10 +993,14 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
       ! Solve an elliptic equation for the streamfunction following Ferrari et al., 2010.
       do I=is-1,ie
         if (G%mask2dCu(I,j)>0.) then
-          Sfn_unlim_u(I,:) = ( 1. + CS%FGNV_scale ) * Sfn_unlim_u(I,:)
+          do K=2,nz
+            Sfn_unlim_u(I,K) = (1. + CS%FGNV_scale) * Sfn_unlim_u(I,K)
+          enddo
           call streamfn_solver(nz, c2_h_u(I,:), hN2_u(I,:), Sfn_unlim_u(I,:))
         else
-          Sfn_unlim_u(I,:) = 0.
+          do K=2,nz
+            Sfn_unlim_u(I,K) = 0.
+          enddo
         endif
       enddo
     endif
@@ -1259,10 +1263,14 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
       ! Solve an elliptic equation for the streamfunction following Ferrari et al., 2010.
       do i=is,ie
         if (G%mask2dCv(i,J)>0.) then
-          Sfn_unlim_v(i,:) = ( 1. + CS%FGNV_scale ) * Sfn_unlim_v(i,:)
+          do K=2,nz
+            Sfn_unlim_v(i,K) = (1. + CS%FGNV_scale) * Sfn_unlim_v(i,K)
+          enddo
           call streamfn_solver(nz, c2_h_v(i,:), hN2_v(i,:), Sfn_unlim_v(i,:))
         else
-          Sfn_unlim_v(i,:) = 0.
+          do K=2,nz
+            Sfn_unlim_v(i,K) = 0.
+          enddo
         endif
       enddo
     endif
