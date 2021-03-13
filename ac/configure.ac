@@ -42,18 +42,18 @@ srcdir=$srcdir/..
 # Default to symmetric grid
 # NOTE: --enable is more properly used to add a feature, rather than to select
 #   a compile-time mode, so this is not exactly being used as intended.
-MEM_LAYOUT=${srcdir}/config_src/dynamic_symmetric
+MEM_LAYOUT=${srcdir}/config_src/memory/dynamic_symmetric
 AC_ARG_ENABLE([asymmetric],
   AS_HELP_STRING([--enable-asymmetric], [Use the asymmetric grid]))
 AS_IF([test "$enable_asymmetric" = yes],
-  [MEM_LAYOUT=${srcdir}/config_src/dynamic])
+  [MEM_LAYOUT=${srcdir}/config_src/memory/dynamic_nonsymmetric])
 
 # Default to solo_driver
-DRIVER_DIR=${srcdir}/config_src/solo_driver
+DRIVER_DIR=${srcdir}/config_src/drivers/solo_driver
 AC_ARG_WITH([driver],
   AS_HELP_STRING([--with-driver=coupled_driver|solo_driver], [Select directory for driver source code]))
 AS_IF([test "x$with_driver" != "x"],
-  [DRIVER_DIR=${srcdir}/config_src/${with_driver}])
+  [DRIVER_DIR=${srcdir}/config_src/drivers/${with_driver}])
 
 # TODO: Rather than point to a pre-configured header file, autoconf could be
 # used to configure a header based on a template.
@@ -216,6 +216,7 @@ AS_IF([test -z "$MKMF"], [
 AC_CONFIG_COMMANDS([path_names],
   [list_paths -l \
     ${srcdir}/src \
+    ${srcdir}/config_src/infra/FMS1 \
     ${srcdir}/config_src/ext* \
     ${DRIVER_DIR} \
     ${MEM_LAYOUT}
