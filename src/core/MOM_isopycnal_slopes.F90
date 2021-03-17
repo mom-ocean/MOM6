@@ -84,8 +84,8 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   real :: wtA, wtB, wtL, wtR  ! Unscaled weights, with various units.
   real :: drdx, drdy    ! Zonal and meridional density gradients [R L-1 ~> kg m-4].
   real :: drdz          ! Vertical density gradient [R Z-1 ~> kg m-4].
-  real :: Slope         ! The slope of density surfaces, calculated in a way
-                        ! that is always between -1 and 1.
+  real :: slope         ! The slope of density surfaces, calculated in a way
+                        ! that is always between -1 and 1. [Z L-1 ~> nondim]
   real :: mag_grad2     ! The squared magnitude of the 3-d density gradient [R2 Z-2 ~> kg2 m-8].
   real :: slope2_Ratio  ! The ratio of the slope squared to slope_max squared.
   real :: h_neglect     ! A thickness that is so small it is usually lost
@@ -184,7 +184,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
   !$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
   !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
-  !$OMP                                  drdx,mag_grad2,Slope,slope2_Ratio,l_seg)
+  !$OMP                                  drdx,mag_grad2,slope,slope2_Ratio,l_seg)
   do j=js,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
       drdiA = 0.0 ; drdiB = 0.0
@@ -250,21 +250,21 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
         ! to be between -1 and 1.
         mag_grad2 = (Z_to_L*drdx)**2 + drdz**2
         if (mag_grad2 > 0.0) then
-          slope_x(I,j,K) = drdx / sqrt(mag_grad2)
+          slope = drdx / sqrt(mag_grad2)
         else ! Just in case mag_grad2 = 0 ever.
-          slope_x(I,j,K) = 0.0
+          slope = 0.0
         endif
 
         if (present_N2_u) N2_u(I,j,k) = G_Rho0 * drdz * G%mask2dCu(I,j) ! Square of buoyancy freq. [L2 Z-2 T-2 ~> s-2]
 
       else ! With .not.use_EOS, the layers are constant density.
-        slope_x(I,j,K) = (e(i,j,K)-e(i+1,j,K)) * G%IdxCu(I,j)
+        slope = (e(i,j,K)-e(i+1,j,K)) * G%IdxCu(I,j)
       endif
       if (local_open_u_BC) then
         l_seg = OBC%segnum_u(I,j)
         if (l_seg /= OBC_NONE) then
           if (OBC%segment(l_seg)%open) then
-            slope_x(I,j,K) = 0.
+            slope = 0.
             ! This and/or the masking code below is to make slopes match inside
             ! land mask. Might not be necessary except for DEBUG output.
 !           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
@@ -274,8 +274,9 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
 !           endif
           endif
         endif
-        slope_x(I,j,K) = slope_x(I,j,k) * max(g%mask2dT(i,j),g%mask2dT(i+1,j))
+        slope = slope * max(g%mask2dT(i,j),g%mask2dT(i+1,j))
       endif
+      slope_x(I,j,K) = slope
 
     enddo ! I
   enddo ; enddo ! end of j-loop
@@ -290,7 +291,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   !$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
   !$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
   !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
-  !$OMP                                  drdy,mag_grad2,Slope,slope2_Ratio,l_seg)
+  !$OMP                                  drdy,mag_grad2,slope,slope2_Ratio,l_seg)
   do j=js-1,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
       drdjA = 0.0 ; drdjB = 0.0
@@ -353,21 +354,21 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
         ! to be between -1 and 1.
         mag_grad2 = (Z_to_L*drdy)**2 + drdz**2
         if (mag_grad2 > 0.0) then
-          slope_y(i,J,K) = drdy / sqrt(mag_grad2)
+          slope = drdy / sqrt(mag_grad2)
         else ! Just in case mag_grad2 = 0 ever.
-          slope_y(i,J,K) = 0.0
+          slope = 0.0
         endif
 
         if (present_N2_v) N2_v(i,J,k) = G_Rho0 * drdz * G%mask2dCv(i,J) ! Square of buoyancy freq. [L2 Z-2 T-2 ~> s-2]
 
       else ! With .not.use_EOS, the layers are constant density.
-        slope_y(i,J,K) = (e(i,j,K)-e(i,j+1,K)) * G%IdyCv(i,J)
+        slope = (e(i,j,K)-e(i,j+1,K)) * G%IdyCv(i,J)
       endif
       if (local_open_v_BC) then
         l_seg = OBC%segnum_v(i,J)
         if (l_seg /= OBC_NONE) then
           if (OBC%segment(l_seg)%open) then
-            slope_y(i,J,K) = 0.
+            slope = 0.
             ! This and/or the masking code below is to make slopes match inside
             ! land mask. Might not be necessary except for DEBUG output.
 !           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
@@ -377,8 +378,9 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
 !           endif
           endif
         endif
-        slope_y(i,J,K) = slope_y(i,J,k) * max(g%mask2dT(i,j),g%mask2dT(i,j+1))
+        slope = slope * max(g%mask2dT(i,j),g%mask2dT(i,j+1))
       endif
+      slope_y(i,J,K) = slope
 
     enddo ! i
   enddo ; enddo ! end of j-loop
