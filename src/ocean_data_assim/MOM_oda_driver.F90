@@ -209,7 +209,7 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
        "Use tripolar connectivity at the northern edge of the "//&
        "domain.  With TRIPOLAR_N, NIGLOBAL must be even.", &
        default=.false.)
-  call get_param(PF,"MOM", "USE_TEMP_SALT_BIAS_ADJUSTMENT", CS%do_bias_adjustment, &
+  call get_param(PF,"MOM", "APPLY_TRACER_TENDENCY_ADJUSTMENT", CS%do_bias_adjustment, &
        "If true, add a spatio-temporally varying climatological adjustment "//&
        "to temperature and salinity.", &
        default=.false.)
