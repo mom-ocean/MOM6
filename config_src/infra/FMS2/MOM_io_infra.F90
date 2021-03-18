@@ -8,8 +8,13 @@ use MOM_domain_infra,     only : domain2d, domain1d, CENTER, CORNER, NORTH_FACE,
 use MOM_error_infra,      only : MOM_error=>MOM_err, NOTE, FATAL, WARNING
 
 use MOM_read_data_fms2,   only : prepare_to_read_var
-use fms2_io_mod,          only : fms2_open_file => open_file, fms2_close_file => close_file
-use fms2_io_mod,          only : FmsNetcdfDomainFile_t, fms2_read_data => read_data, check_if_open
+use fms2_io_mod,          only : fms2_open_file => open_file, check_if_open, fms2_close_file => close_file
+use fms2_io_mod,          only : FmsNetcdfDomainFile_t, FmsNetcdfFile_t, fms2_read_data => read_data
+use fms2_io_mod,          only : get_unlimited_dimension_name, get_num_dimensions, get_num_variables
+use fms2_io_mod,          only : get_variable_names, variable_exists, get_variable_size
+use fms2_io_mod,          only : register_field, write_data, register_variable_attribute
+use fms2_io_mod,          only : variable_att_exists, get_variable_attribute, get_variable_num_dimensions
+use fms2_io_mod,          only : get_dimension_size, is_dimension_registered, register_axis, unlimited
 
 use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
 use fms_io_mod,           only : file_exist, field_exist, field_size, read_data
@@ -17,8 +22,8 @@ use fms_io_mod,           only : fms_io_exit, get_filename_appendix
 use mpp_io_mod,           only : mpp_open, mpp_close, mpp_flush
 use mpp_io_mod,           only : mpp_write_meta, mpp_write
 use mpp_io_mod,           only : mpp_get_atts, mpp_attribute_exist
-use mpp_io_mod,           only : mpp_get_axes, axistype, mpp_get_axis_data
-use mpp_io_mod,           only : mpp_get_fields, fieldtype
+use mpp_io_mod,           only : mpp_get_axes, mpp_axistype=>axistype, mpp_get_axis_data
+use mpp_io_mod,           only : mpp_get_fields, mpp_fieldtype=>fieldtype
 use mpp_io_mod,           only : mpp_get_info, mpp_get_times
 use mpp_io_mod,           only : mpp_io_init
 ! These are encoding constants.
@@ -38,7 +43,7 @@ public :: field_exists, get_field_atts, get_field_size, get_axis_data, read_fiel
 public :: io_infra_init, io_infra_end, MOM_namelist_file, check_namelist_error, write_version
 ! These types are inherited from underlying infrastructure code, to act as containers for
 ! information about fields and axes, respectively, and are opaque to this module.
-public :: fieldtype, axistype
+!  public :: file_type, fieldtype, axistype
 ! These are encoding constant parmeters.
 public :: ASCII_FILE, NETCDF_FILE, SINGLE_FILE, MULTIPLE
 public :: APPEND_FILE, READONLY_FILE, OVERWRITE_FILE, WRITEONLY_FILE
@@ -99,13 +104,37 @@ end interface flush_file
 !> Type for holding a handle to an open file and related information
 type, public :: file_type ; private
   integer :: unit = -1 !< The framework identfier or netCDF unit number of an output file
+  type(FmsNetcdfDomainFile_t), pointer :: fileobj => NULL() !< A domain-decomposed
+                       !! file object that is open for writing
   character(len=:), allocatable :: filename !< The path to this file, if it is open
   logical :: open_to_read  = .false. !< If true, this file or fileset can be read
   logical :: open_to_write = .false. !< If true, this file or fileset can be written to
+  integer :: num_times !< The number of time levels in this file
+  real    :: file_time !< The time of the latest entry in the file.
+  logical :: FMS2_file !< If true, this file-type is to be used with FMS2 interfaces.
 end type file_type
+
+!> This type is a container for information about a variable in a file.
+type, public :: fieldtype ; private
+  character(len=256)  :: name !< The name of this field in the files.
+  type(mpp_fieldtype) :: FT !< The FMS1 field-type that this type wraps
+  character(len=:), allocatable :: longname !< The long name for this field
+  character(len=:), allocatable :: units    !< The units for this field
+  integer(kind=int64) :: chksum_read !< A checksum that has been read from a file
+  logical :: valid_chksum !< If true, this field has a valid checksum value.
+  logical :: FMS2_field  !< If true, this field-type should be used with FMS2 interfaces.
+end type fieldtype
+
+!> This type is a container for information about an axis in a file.
+type, public :: axistype ; private
+  character(len=256) :: name !< The name of this axis in the files.
+  type(mpp_axistype) :: AT   !< The FMS1 axis-type that this type wraps
+  real, allocatable, dimension(:) :: ax_data !< The values of the data on the axis.
+end type axistype
 
 !> For now, this is hard-coded to exercise the new FMS2 interfaces.
 logical :: FMS2_reads = .true.
+logical :: FMS2_writes = .true.
 
 contains
 
@@ -115,17 +144,11 @@ subroutine read_field_chksum(field, chksum, valid_chksum)
   type(fieldtype),     intent(in)  :: field !< The field whose checksum attribute is to be read.
   integer(kind=int64), intent(out) :: chksum !< The checksum for the field.
   logical,             intent(out) :: valid_chksum  !< If true, chksum has been successfully read.
-  ! Local variables
-  integer(kind=int64), dimension(3) :: checksum_file
 
-  checksum_file(:) = -1
-  valid_chksum = mpp_attribute_exist(field, "checksum")
-  if (valid_chksum) then
-    call get_field_atts(field, checksum=checksum_file)
-    chksum = checksum_file(1)
-  else
-    chksum = -1
-  endif
+  chksum = -1
+  valid_chksum = field%valid_chksum
+  if (valid_chksum) chksum = field%chksum_read
+
 end subroutine read_field_chksum
 
 !> Returns true if the named file or its domain-decomposed variant exists.
@@ -156,7 +179,7 @@ end function FMS_file_exists
 logical function file_is_open(IO_handle)
   type(file_type), intent(in) :: IO_handle !< Handle to a file to inquire about
 
-  file_is_open = (IO_handle%unit >= 0)
+  file_is_open = ((IO_handle%unit >= 0) .or. associated(IO_handle%fileobj))
 end function file_is_open
 
 !> closes a file (or fileset).  If the file handle does not point to an open file,
@@ -164,9 +187,16 @@ end function file_is_open
 subroutine close_file_type(IO_handle)
   type(file_type), intent(inout) :: IO_handle   !< The I/O handle for the file to be closed
 
-  call mpp_close(IO_handle%unit)
+  if (associated(IO_handle%fileobj)) then
+    call fms2_close_file(IO_handle%fileobj)
+    deallocate(IO_handle%fileobj)
+  else
+    call mpp_close(IO_handle%unit)
+  endif
   if (allocated(IO_handle%filename)) deallocate(IO_handle%filename)
   IO_handle%open_to_read = .false. ; IO_handle%open_to_write = .false.
+  IO_handle%num_times = 0 ; IO_handle%file_time = 0.0
+  IO_handle%FMS2_file = .false.
 end subroutine close_file_type
 
 !> closes a file.  If the unit does not point to an open file,
@@ -178,10 +208,14 @@ subroutine close_file_unit(unit)
 end subroutine close_file_unit
 
 !> Ensure that the output stream associated with a file handle is fully sent to disk.
-subroutine flush_file_type(file)
-  type(file_type), intent(in) :: file    !< The I/O handle for the file to flush
+subroutine flush_file_type(IO_handle)
+  type(file_type), intent(in) :: IO_handle    !< The I/O handle for the file to flush
 
-  call mpp_flush(file%unit)
+  if (associated(IO_handle%fileobj)) then
+    ! There does not appear to be an fms2 flush call.
+  else
+    call mpp_flush(IO_handle%unit)
+  endif
 end subroutine flush_file_type
 
 !> Ensure that the output stream associated with a unit is fully sent to disk.
@@ -272,20 +306,70 @@ subroutine open_file_type(IO_handle, filename, action, MOM_domain, threading, fi
                                                     !! to threading=MULTIPLE write to the same file (SINGLE_FILE)
                                                     !! or to one file per PE (MULTIPLE, the default).
 
-  if (present(MOM_Domain)) then
-    call mpp_open(IO_handle%unit, filename, action=action, form=NETCDF_FILE, threading=threading, &
+  ! Local variables
+  type(FmsNetcdfDomainFile_t) :: fileobj_read ! A handle to a domain-decomposed file for obtaining information
+                                              ! about the exiting time axis entries in append mode.
+  logical :: success         ! If true, the file was opened successfully
+  integer :: file_mode       ! An integer that encodes whether the file is to be opened for
+                             ! reading, writing or appending
+  character(len=40)  :: mode ! A character string that encodes whether the file is to be opened for
+                             ! reading, writing or appending
+  character(len=256) :: dim_unlim_name ! name of the unlimited dimension in the file
+
+  if (IO_handle%open_to_write) then
+    call MOM_error(WARNING, "open_file_type called for file "//trim(filename)//&
+        " with an IO_handle that is already open to to write.")
+    return
+  endif
+  if (IO_handle%open_to_read) then
+    call MOM_error(FATAL, "open_file_type called for file "//trim(filename)//&
+        " with an IO_handle that is already open to to read.")
+  endif
+
+  file_mode = WRITEONLY_FILE ; if (present(action)) file_mode = action
+
+  if (FMS2_writes .and. present(MOM_Domain)) then
+    if (.not.associated(IO_handle%fileobj)) allocate (IO_handle%fileobj)
+
+    if (file_mode == WRITEONLY_FILE) then ; mode = "write"
+    elseif (file_mode == APPEND_FILE) then ; mode = "append"
+    elseif (file_mode == OVERWRITE_FILE) then ; mode = "overwrite"
+    elseif (file_mode == READONLY_FILE) then ; mode = "read"
+    else
+      call MOM_error(FATAL, "open_file_type called with unrecognized action.")
+    endif
+
+    IO_handle%num_times = 0
+    IO_handle%file_time = 0.0
+    if ((file_mode == APPEND_FILE) .and. file_exists(filename, MOM_Domain)) then
+      ! Determine the latest file time and number of records so far.
+      success = fms2_open_file(fileObj_read, trim(filename), "read", MOM_domain%mpp_domain)
+      call get_unlimited_dimension_name(fileObj_read, dim_unlim_name)
+      if (len_trim(dim_unlim_name) > 0) &
+        call get_dimension_size(fileObj_read, trim(dim_unlim_name), IO_handle%num_times)
+      if (IO_handle%num_times > 0) &
+        call fms2_read_data(fileObj_read, trim(dim_unlim_name), IO_handle%file_time, &
+                            unlim_dim_level=IO_handle%num_times)
+      call fms2_close_file(fileObj_read)
+    endif
+
+    success = fms2_open_file(IO_handle%fileobj, trim(filename), trim(mode), &
+                             MOM_domain%mpp_domain, is_restart=.false.)
+    if (.not.success) call MOM_error(FATAL, "Unable to open file "//trim(filename))
+    IO_handle%FMS2_file = .true.
+  elseif (present(MOM_Domain)) then
+    call mpp_open(IO_handle%unit, filename, action=file_mode, form=NETCDF_FILE, threading=threading, &
                   fileset=fileset, domain=MOM_Domain%mpp_domain)
+    IO_handle%FMS2_file = .false.
   else
-    call mpp_open(IO_handle%unit, filename, action=action, form=NETCDF_FILE, threading=threading, &
+    call mpp_open(IO_handle%unit, filename, action=file_mode, form=NETCDF_FILE, threading=threading, &
                   fileset=fileset)
+    IO_handle%FMS2_file = .false.
   endif
   IO_handle%filename = trim(filename)
-  if (present(action)) then
-    if (action == READONLY_FILE) then
-      IO_handle%open_to_read = .true. ; IO_handle%open_to_write = .false.
-    else
-      IO_handle%open_to_read = .false. ; IO_handle%open_to_write = .true.
-    endif
+
+  if (file_mode == READONLY_FILE) then
+    IO_handle%open_to_read = .true. ; IO_handle%open_to_write = .false.
   else
     IO_handle%open_to_read = .false. ; IO_handle%open_to_write = .true.
   endif
@@ -319,43 +403,59 @@ subroutine get_filename_suffix(suffix)
 end subroutine get_filename_suffix
 
 
-!> Get information about the number of dimensions, variables, global attributes and time levels
+!> Get information about the number of dimensions, variables and time levels
 !! in the file associated with an open file unit
-subroutine get_file_info(IO_handle, ndim, nvar, natt, ntime)
+subroutine get_file_info(IO_handle, ndim, nvar, ntime)
   type(file_type),    intent(in)  :: IO_handle !< Handle for a file that is open for I/O
   integer,  optional, intent(out) :: ndim  !< The number of dimensions in the file
   integer,  optional, intent(out) :: nvar  !< The number of variables in the file
-  integer,  optional, intent(out) :: natt  !< The number of global attributes in the file
   integer,  optional, intent(out) :: ntime !< The number of time levels in the file
 
   ! Local variables
+  character(len=256) :: dim_unlim_name ! name of the unlimited dimension in the file
   integer :: ndims, nvars, natts, ntimes
 
-  call mpp_get_info(IO_handle%unit, ndims, nvars, natts, ntimes )
+  if (IO_handle%FMS2_file) then
+    if (present(ndim)) ndim = get_num_dimensions(IO_handle%fileobj)
+    if (present(nvar)) nvar = get_num_variables(IO_handle%fileobj)
+    if (present(ntime)) then
+      ntime = 0
+      call get_unlimited_dimension_name(IO_handle%fileobj, dim_unlim_name)
+      if (len_trim(dim_unlim_name) > 0) &
+        call get_dimension_size(IO_handle%fileobj, trim(dim_unlim_name), ntime)
+    endif
+  else
+    call mpp_get_info(IO_handle%unit, ndims, nvars, natts, ntimes )
 
-  if (present(ndim)) ndim = ndims
-  if (present(nvar)) nvar = nvars
-  if (present(natt)) natt = natts
-  if (present(ntime)) ntime = ntimes
+    if (present(ndim)) ndim = ndims
+    if (present(nvar)) nvar = nvars
+    if (present(ntime)) ntime = ntimes
+  endif
 
 end subroutine get_file_info
 
 
 !> Get the times of records from a file
- !### Modify this to also convert to time_type, using information about the dimensions?
 subroutine get_file_times(IO_handle, time_values, ntime)
   type(file_type),                 intent(in)    :: IO_handle !< Handle for a file that is open for I/O
   real, allocatable, dimension(:), intent(inout) :: time_values !< The real times for the records in file.
   integer,               optional, intent(out)   :: ntime !< The number of time levels in the file
 
+  character(len=256) :: dim_unlim_name ! name of the unlimited dimension in the file
   integer :: ntimes
+  !### Modify this routine to optionally convert to time_type, using information about the dimensions?
 
   if (allocated(time_values)) deallocate(time_values)
   call get_file_info(IO_handle, ntime=ntimes)
   if (present(ntime)) ntime = ntimes
   if (ntimes > 0) then
     allocate(time_values(ntimes))
-    call mpp_get_times(IO_handle%unit, time_values)
+    if (IO_handle%FMS2_file) then
+      call get_unlimited_dimension_name(IO_handle%fileobj, dim_unlim_name)
+      call fms2_read_data(IO_handle%fileobj, trim(dim_unlim_name), time_values)
+    else
+      call mpp_get_times(IO_handle%unit, time_values)
+    endif
   endif
 end subroutine get_file_times
 
@@ -365,7 +465,45 @@ subroutine get_file_fields(IO_handle, fields)
   type(file_type),               intent(in)    :: IO_handle !< Handle for a file that is open for I/O
   type(fieldtype), dimension(:), intent(inout) :: fields !< Field-type descriptions of all of
                                                          !! the variables in a file.
-  call mpp_get_fields(IO_handle%unit, fields)
+  type(mpp_fieldtype), dimension(size(fields)) :: mpp_fields
+  character(len=256),  dimension(size(fields)) :: var_names
+  character(len=256)  :: units
+  character(len=2048) :: longname
+  integer(kind=int64), dimension(3) :: checksum_file
+  integer :: i, nvar
+
+  nvar = size(fields)
+  ! Local variables
+  if (IO_handle%FMS2_file) then
+    call get_variable_names(IO_handle%fileobj, var_names)
+    do i=1,nvar
+      fields(i)%name = trim(var_names(i))
+      longname = ""
+      call get_variable_attribute(IO_handle%fileobj, var_names(i), 'long_name', longname)
+      fields(i)%longname = trim(longname)
+      units = ""
+      call get_variable_attribute(IO_handle%fileobj, var_names(i), 'units', units)
+      fields(i)%units = trim(units)
+
+      fields(i)%valid_chksum = variable_att_exists(IO_handle%fileobj, var_names(i), "checksum")
+      if (fields(i)%valid_chksum) then
+        call get_variable_attribute(IO_handle%fileobj, var_names(i), 'checksum', checksum_file)
+        fields(i)%chksum_read = checksum_file(1)
+      endif
+    enddo
+  else
+    call mpp_get_fields(IO_handle%unit, mpp_fields)
+    do i=1,nvar
+      fields(i)%FT = mpp_fields(i)
+      call mpp_get_atts(fields(i)%FT, name=fields(i)%name, units=units, longname=longname, &
+                        checksum=checksum_file)
+      fields(i)%longname = trim(longname)
+      fields(i)%units = trim(units)
+      fields(i)%valid_chksum = mpp_attribute_exist(fields(i)%FT, "checksum")
+      if (fields(i)%valid_chksum) fields(i)%chksum_read = checksum_file(1)
+    enddo
+  endif
+
 end subroutine get_file_fields
 
 !> Extract information from a field type, as stored or as found in a file
@@ -376,7 +514,12 @@ subroutine get_field_atts(field, name, units, longname, checksum)
   character(len=*), optional, intent(out) :: longname  !< The long name of the variable
   integer(kind=int64),  dimension(:), &
                     optional, intent(out) :: checksum !< The checksums of the variable in a file
-  call mpp_get_atts(field, name=name, units=units, longname=longname, checksum=checksum)
+
+  if (present(name)) name = trim(field%name)
+  if (present(units)) units = trim(field%units)
+  if (present(longname)) longname = trim(field%longname)
+  if (present(checksum)) checksum = field%chksum_read
+
 end subroutine get_field_atts
 
 !> Field_exists returns true if the field indicated by field_name is present in the
@@ -389,7 +532,44 @@ function field_exists(filename, field_name, domain, no_domain, MOM_domain)
   type(MOM_domain_type),  optional, intent(in) :: MOM_Domain !< A MOM_Domain that describes the decomposition
   logical                                      :: field_exists !< True if filename exists and field_name is in filename
 
-  if (present(MOM_domain)) then
+  ! Local variables
+  type(FmsNetcdfDomainFile_t) :: fileObj_dd ! A handle to a domain-decomposed file for obtaining information
+                                            ! about the exiting time axis entries in append mode.
+  type(FmsNetcdfFile_t) :: fileObj_simple   ! A handle to a non-domain-decomposed file for obtaining information
+                                            ! about the exiting time axis entries in append mode.
+  logical :: success         ! If true, the file was opened successfully
+  logical :: domainless      ! If true, this file does not use a domain-decomposed file.
+
+  domainless = .not.(present(MOM_domain) .or. present(domain))
+  if (present(no_domain)) then
+    if (domainless .and. .not.no_domain) call MOM_error(FATAL, &
+        "field_exists: When no_domain is present and false, a domain must be supplied in query about "//&
+        trim(field_name)//" in file "//trim(filename))
+    domainless = no_domain
+  endif
+
+  if (FMS2_reads) then
+    field_exists = .false.
+    if (file_exists(filename)) then
+      if (domainless) then
+        success = fms2_open_file(fileObj_simple, trim(filename), "read")
+        if (success) then
+          field_exists = variable_exists(fileObj_simple, field_name)
+          call fms2_close_file(fileObj_simple)
+        endif
+      else
+        if (present(MOM_domain)) then
+          success = fms2_open_file(fileObj_dd, trim(filename), "read", MOM_domain%mpp_domain)
+        else
+          success = fms2_open_file(fileObj_dd, trim(filename), "read", domain)
+        endif
+        if (success) then
+          field_exists = variable_exists(fileobj_dd, field_name)
+          call fms2_close_file(fileObj_dd)
+        endif
+      endif
+    endif
+  elseif (present(MOM_domain)) then
     field_exists = field_exist(filename, field_name, domain=MOM_domain%mpp_domain, no_domain=no_domain)
   else
     field_exists = field_exist(filename, field_name, domain=domain, no_domain=no_domain)
@@ -408,7 +588,32 @@ subroutine get_field_size(filename, fieldname, sizes, field_found, no_domain)
   logical,     optional, intent(in)    :: no_domain !< If present and true, do not check for file
                                                     !! names with an appended tile number
 
-  call field_size(filename, fieldname, sizes, field_found=field_found, no_domain=no_domain)
+  ! Local variables
+  type(FmsNetcdfFile_t) :: fileobj_read ! A handle to a non-domain-decomposed file for obtaining information
+                                              ! about the exiting time axis entries in append mode.
+  logical :: success         ! If true, the file was opened successfully
+  logical :: field_exists    ! True if filename exists and field_name is in filename
+  integer :: i, ndims
+
+  if (FMS2_reads) then
+    field_exists = .false.
+    if (file_exists(filename)) then
+      success = fms2_open_file(fileObj_read, trim(filename), "read")
+      if (success) then
+        field_exists = variable_exists(fileobj_read, fieldname)
+        if (field_exists) then
+          ndims = get_variable_num_dimensions(fileobj_read, fieldname)
+          if (ndims > size(sizes)) call MOM_error(FATAL, &
+            "get_field_size called with too few sizes for "//trim(fieldname)//" in "//trim(filename))
+          call get_variable_size(fileobj_read, fieldname, sizes(1:ndims))
+          do i=ndims+1,size(sizes) ; sizes(i) = 0 ; enddo
+        endif
+      endif
+    endif
+    if (present(field_found)) field_found = field_exists
+  else
+    call field_size(filename, fieldname, sizes, field_found=field_found, no_domain=no_domain)
+  endif
 
 end subroutine get_field_size
 
@@ -417,7 +622,16 @@ subroutine get_axis_data( axis, dat )
   type(axistype),     intent(in)  :: axis !< An axis type
   real, dimension(:), intent(out) :: dat  !< The data in the axis variable
 
-  call mpp_get_axis_data( axis, dat )
+  integer :: i
+
+  if (allocated(axis%ax_data)) then
+    if (size(axis%ax_data) > size(dat)) call MOM_error(FATAL, &
+      "get_axis_data called with too small of an output data array for "//trim(axis%name))
+    do i=1,size(axis%ax_data) ; dat(i) = axis%ax_data(i) ; enddo
+  elseif (.not.FMS2_writes) then
+    call mpp_get_axis_data( axis%AT, dat )
+  endif
+
 end subroutine get_axis_data
 
 !> This routine uses the fms_io subroutine read_data to read a scalar named
@@ -587,7 +801,7 @@ subroutine MOM_read_data_2d_region(filename, fieldname, data, start, nread, MOM_
   real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
                                                      !! by before it is returned.
 
-  ! This subroutine does not have an FMS-2 variant yet.
+  !### This subroutine does not have an FMS-2 variant yet.
 
   if (present(MOM_Domain)) then
     call read_data(filename, fieldname, data, start, nread, domain=MOM_Domain%mpp_domain, &
@@ -716,6 +930,7 @@ subroutine MOM_read_data_0d_int(filename, fieldname, data, timelevel)
   integer,                intent(inout) :: data      !< The 1-dimensional array into which the data
   integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
 
+  !### This needs an FMS2 variant, eventually.
   call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
 
 end subroutine MOM_read_data_0d_int
@@ -728,6 +943,7 @@ subroutine MOM_read_data_1d_int(filename, fieldname, data, timelevel)
   integer, dimension(:),  intent(inout) :: data      !< The 1-dimensional array into which the data
   integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
 
+  !### This needs an FMS2 variant, eventually.
   call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
 
 end subroutine MOM_read_data_1d_int
@@ -875,7 +1091,7 @@ end subroutine MOM_read_vector_3d
 
 !> Write a 4d field to an output file.
 subroutine write_field_4d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, fill_value)
-  type(file_type),          intent(in)    :: IO_handle  !< Handle for a file that is open for writing
+  type(file_type),          intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),          intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),    intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
   real, dimension(:,:,:,:), intent(inout) :: field      !< Field to write
@@ -883,13 +1099,24 @@ subroutine write_field_4d(IO_handle, field_md, MOM_domain, field, tstamp, tile_c
   integer,        optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
   real,           optional, intent(in)    :: fill_value !< Missing data fill value
 
-  call mpp_write(IO_handle%unit, field_md, MOM_domain%mpp_domain, field, tstamp=tstamp, &
-                 tile_count=tile_count, default_data=fill_value)
+
+  ! Local variables
+  integer :: time_index
+
+  if (IO_handle%FMS2_file .and. present(tstamp)) then
+    time_index = write_time_if_later(IO_handle, tstamp)
+    call write_data(IO_handle%fileobj, trim(field_md%name), field, unlim_dim_level=time_index)
+  elseif (IO_handle%FMS2_file) then
+    call write_data(IO_handle%fileobj, trim(field_md%name), field)
+  else
+    call mpp_write(IO_handle%unit, field_md%FT, MOM_domain%mpp_domain, field, tstamp=tstamp, &
+                   tile_count=tile_count, default_data=fill_value)
+  endif
 end subroutine write_field_4d
 
 !> Write a 3d field to an output file.
 subroutine write_field_3d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, fill_value)
-  type(file_type),        intent(in)    :: IO_handle  !< Handle for a file that is open for writing
+  type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
   real, dimension(:,:,:), intent(inout) :: field      !< Field to write
@@ -897,13 +1124,23 @@ subroutine write_field_3d(IO_handle, field_md, MOM_domain, field, tstamp, tile_c
   integer,      optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
   real,         optional, intent(in)    :: fill_value !< Missing data fill value
 
-  call mpp_write(IO_handle%unit, field_md, MOM_domain%mpp_domain, field, tstamp=tstamp, &
+  ! Local variables
+  integer :: time_index
+
+  if (IO_handle%FMS2_file .and. present(tstamp)) then
+    time_index = write_time_if_later(IO_handle, tstamp)
+    call write_data(IO_handle%fileobj, trim(field_md%name), field, unlim_dim_level=time_index)
+  elseif (IO_handle%FMS2_file) then
+    call write_data(IO_handle%fileobj, trim(field_md%name), field)
+  else
+    call mpp_write(IO_handle%unit, field_md%FT, MOM_domain%mpp_domain, field, tstamp=tstamp, &
                    tile_count=tile_count, default_data=fill_value)
+  endif
 end subroutine write_field_3d
 
 !> Write a 2d field to an output file.
 subroutine write_field_2d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, fill_value)
-  type(file_type),        intent(in)    :: IO_handle  !< Handle for a file that is open for writing
+  type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
   real, dimension(:,:),   intent(inout) :: field      !< Field to write
@@ -911,36 +1148,92 @@ subroutine write_field_2d(IO_handle, field_md, MOM_domain, field, tstamp, tile_c
   integer,      optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
   real,         optional, intent(in)    :: fill_value !< Missing data fill value
 
-  call mpp_write(IO_handle%unit, field_md, MOM_domain%mpp_domain, field, tstamp=tstamp, &
+  ! Local variables
+  integer :: time_index
+
+  if (IO_handle%FMS2_file .and. present(tstamp)) then
+    time_index = write_time_if_later(IO_handle, tstamp)
+    call write_data(IO_handle%fileobj, trim(field_md%name), field, unlim_dim_level=time_index)
+  elseif (IO_handle%FMS2_file) then
+    call write_data(IO_handle%fileobj, trim(field_md%name), field)
+  else
+    call mpp_write(IO_handle%unit, field_md%FT, MOM_domain%mpp_domain, field, tstamp=tstamp, &
                    tile_count=tile_count, default_data=fill_value)
+  endif
 end subroutine write_field_2d
 
 !> Write a 1d field to an output file.
 subroutine write_field_1d(IO_handle, field_md, field, tstamp)
-  type(file_type),        intent(in)    :: IO_handle  !< Handle for a file that is open for writing
+  type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   real, dimension(:),     intent(in)    :: field      !< Field to write
   real,         optional, intent(in)    :: tstamp     !< Model time of this field
 
-  call mpp_write(IO_handle%unit, field_md, field, tstamp=tstamp)
+  ! Local variables
+  integer :: time_index
+
+  if (IO_handle%FMS2_file .and. present(tstamp)) then
+    time_index = write_time_if_later(IO_handle, tstamp)
+    call write_data(IO_handle%fileobj, trim(field_md%name), field, unlim_dim_level=time_index)
+  elseif (IO_handle%FMS2_file) then
+    call write_data(IO_handle%fileobj, trim(field_md%name), field)
+  else
+    call mpp_write(IO_handle%unit, field_md%FT, field, tstamp=tstamp)
+  endif
 end subroutine write_field_1d
 
 !> Write a 0d field to an output file.
 subroutine write_field_0d(IO_handle, field_md, field, tstamp)
-  type(file_type),        intent(in)    :: IO_handle  !< Handle for a file that is open for writing
+  type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   real,                   intent(in)    :: field      !< Field to write
   real,         optional, intent(in)    :: tstamp     !< Model time of this field
 
-  call mpp_write(IO_handle%unit, field_md, field, tstamp=tstamp)
+  ! Local variables
+  integer :: time_index
+
+  if (IO_handle%FMS2_file .and. present(tstamp)) then
+    time_index = write_time_if_later(IO_handle, tstamp)
+    call write_data(IO_handle%fileobj, trim(field_md%name), field, unlim_dim_level=time_index)
+  elseif (IO_handle%FMS2_file) then
+    call write_data(IO_handle%fileobj, trim(field_md%name), field)
+  else
+    call mpp_write(IO_handle%unit, field_md%FT, field, tstamp=tstamp)
+  endif
 end subroutine write_field_0d
+
+!> Returns the integer time index for a write in this file, also writing the time variable to
+!! the file if this time is later than what is already in the file.
+integer function write_time_if_later(IO_handle, field_time)
+  type(file_type), intent(inout) :: IO_handle  !< Handle for a file that is open for writing
+  real,            intent(in)    :: field_time !< Model time of this field
+
+  ! Local variables
+  character(len=256) :: dim_unlim_name ! name of the unlimited dimension in the file
+
+  if ((field_time > IO_handle%file_time) .or. (IO_handle%num_times == 0)) then
+    IO_handle%file_time = field_time
+    IO_handle%num_times = IO_handle%num_times + 1
+    if (IO_handle%FMS2_file) then
+      call get_unlimited_dimension_name(IO_handle%fileobj, dim_unlim_name)
+      call write_data(IO_handle%fileobj, trim(dim_unlim_name), (/field_time/), &
+                      corner=(/IO_handle%num_times/), edge_lengths=(/1/))
+    endif
+  endif
+
+  write_time_if_later = IO_handle%num_times
+end function write_time_if_later
 
 !> Write the data for an axis
 subroutine MOM_write_axis(IO_handle, axis)
   type(file_type), intent(in) :: IO_handle  !< Handle for a file that is open for writing
   type(axistype),  intent(in) :: axis       !< An axis type variable with information to write
 
-  call mpp_write(IO_handle%unit, axis)
+  if (IO_handle%FMS2_file) then
+    call write_data(IO_handle%fileobj, trim(axis%name), axis%ax_data)
+  else
+    call mpp_write(IO_handle%unit, axis%AT)
+  endif
 
 end subroutine MOM_write_axis
 
@@ -963,26 +1256,80 @@ subroutine write_metadata_axis(IO_handle, axis, name, units, longname, cartesian
   logical,          optional, intent(in)    :: edge_axis !< If true, this axis marks an edge of the tracer cells
   character(len=*), optional, intent(in)    :: calendar !< The name of the calendar used with a time axis
 
-  call mpp_write_meta(IO_handle%unit, axis, name, units, longname, cartesian=cartesian, sense=sense, &
-                      domain=domain, data=data, calendar=calendar)
+  character(len=:), allocatable :: cart ! A left-adjusted and trimmed copy of cartesian
+  logical :: is_x, is_y, is_t  ! If true, this is a domain-decomposed axis in one of the directions.
+  integer :: position    ! A flag indicating the axis staggering position.
+
+  if (IO_handle%FMS2_file) then
+    if (is_dimension_registered(IO_handle%fileobj, trim(name))) then
+      call MOM_error(FATAL, "write_metadata_axis was called more than once for axis "//trim(name)//&
+                            " in file "//trim(IO_handle%filename))
+      return
+    endif
+  endif
+
+  axis%name = trim(name)
+  if (present(data)) then
+    if (allocated(axis%ax_data)) call MOM_error(FATAL, &
+        "Data is already allocated in a call to write_metadata_axis for axis "//&
+        trim(name)//" in file "//trim(IO_handle%filename))
+    allocate(axis%ax_data(size(data))) ; axis%ax_data(:) = data(:)
+  endif
+
+  if (IO_handle%FMS2_file) then
+    is_x = .false. ; is_y = .false. ; is_t = .false.
+    position = CENTER
+    if (present(cartesian)) then
+      cart = trim(adjustl(cartesian))
+      if ((index(cart, "X") == 1) .or. (index(cart, "x") == 1)) is_x = .true.
+      if ((index(cart, "Y") == 1) .or. (index(cart, "y") == 1)) is_y = .true.
+      if ((index(cart, "T") == 1) .or. (index(cart, "t") == 1)) is_t = .true.
+    endif
+
+    if (is_x) then
+      if (present(edge_axis)) then ; if (edge_axis) position = EAST_FACE ; endif
+      call register_axis(IO_handle%fileobj, trim(name), 'x', domain_position=position)
+    elseif (is_y) then
+      if (present(edge_axis)) then ; if (edge_axis) position = NORTH_FACE ; endif
+      call register_axis(IO_handle%fileobj, trim(name), 'y', domain_position=position)
+    elseif (is_t .and. .not.present(data)) then
+      ! This is the unlimited (time) dimension.
+      call register_axis(IO_handle%fileobj, trim(name), unlimited)
+    else
+      if (.not.present(data)) call MOM_error(FATAL,"MOM_io:register_diagnostic_axis: "//&
+                        "An axis_length argument is required to register the axis "//trim(name))
+      call register_axis(IO_handle%fileobj, trim(name), size(data))
+    endif
+
+    ! Now create the variable that describes this axis.
+    call register_field(IO_handle%fileobj, trim(name), "double", dimensions=(/name/))
+    if (len_trim(units) > 0) &
+      call register_variable_attribute(IO_handle%fileobj, trim(name), 'units', &
+                                       trim(units), len_trim(units))
+    if (len_trim(longname) > 0) &
+      call register_variable_attribute(IO_handle%fileobj, trim(name), 'long_name', &
+                                       trim(longname), len_trim(longname))
+    if (present(cartesian)) &
+      call register_variable_attribute(IO_handle%fileobj, trim(name), 'cartesian_axis', &
+                                       trim(cartesian), len_trim(cartesian))
+    if (present(sense)) &
+      call register_variable_attribute(IO_handle%fileobj, trim(name), 'sense', sense)
+  else
+    call mpp_write_meta(IO_handle%unit, axis%AT, name, units, longname, cartesian=cartesian, sense=sense, &
+                        domain=domain, data=data, calendar=calendar)
+  endif
 end subroutine write_metadata_axis
 
 !> Store information about an output variable in a previously defined fieldtype and write this
 !! information to the file indicated by unit.
 subroutine write_metadata_field(IO_handle, field, axes, name, units, longname, &
-                                min, max, fill, scale, add, pack, standard_name, checksum)
+                                pack, standard_name, checksum)
   type(file_type),            intent(in)    :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),            intent(inout) :: field !< The fieldtype where this information is stored
   type(axistype), dimension(:), intent(in)  :: axes  !< Handles for the axis used for this variable
   character(len=*),           intent(in)    :: name  !< The name in the file of this variable
   character(len=*),           intent(in)    :: units !< The units of this variable
   character(len=*),           intent(in)    :: longname !< The long description of this variable
-  real,             optional, intent(in)    :: min   !< The minimum valid value for this variable
-  real,             optional, intent(in)    :: max   !< The maximum valid value for this variable
-  real,             optional, intent(in)    :: fill  !< Missing data fill value
-  real,             optional, intent(in)    :: scale !< An multiplicative factor by which to scale
-                                                     !! the variable before output
-  real,             optional, intent(in)    :: add   !< An offset to add to the variable before output
   integer,          optional, intent(in)    :: pack  !< A precision reduction factor with which the
                                                      !! variable.  The default, 1, has no reduction,
                                                      !! but 2 is not uncommon.
@@ -990,9 +1337,46 @@ subroutine write_metadata_field(IO_handle, field, axes, name, units, longname, &
   integer(kind=int64), dimension(:), &
                     optional, intent(in)    :: checksum !< Checksum values that can be used to verify reads.
 
+  ! Local variables
+  character(len=256), dimension(size(axes)) :: dim_names ! The names of the dimensions
+  type(mpp_axistype), dimension(size(axes)) :: mpp_axes  ! The array of mpp_axistypes for this variable
+  character(len=16) :: prec_string     ! A string specifying the precision with which to save this variable
+  character(len=64) :: checksum_string ! checksum character array created from checksum argument
+  integer :: i, ndims
 
-  call mpp_write_meta(IO_handle%unit, field, axes, name, units, longname, min=min, max=max, &
-            fill=fill, scale=scale, add=add, pack=pack, standard_name=standard_name, checksum=checksum)
+  ndims = size(axes)
+  if (IO_handle%FMS2_file) then
+    do i=1,ndims ; dim_names(i) = trim(axes(i)%name) ; enddo
+    prec_string = "double" ; if (present(pack)) then ; if (pack > 1) prec_string = "float" ; endif
+    call register_field(IO_handle%fileobj, trim(name), trim(prec_string), dimensions=dim_names)
+    if (len_trim(units) > 0) &
+      call register_variable_attribute(IO_handle%fileobj, trim(name), 'units', &
+                                       trim(units), len_trim(units))
+    if (len_trim(longname) > 0) &
+      call register_variable_attribute(IO_handle%fileobj, trim(name), 'long_name', &
+                                       trim(longname), len_trim(longname))
+    if (present(standard_name)) &
+      call register_variable_attribute(IO_handle%fileobj, trim(name), 'standard_name', &
+                                       trim(standard_name), len_trim(standard_name))
+    if (present(checksum)) then
+      write (checksum_string,'(Z16)') checksum(1) ! Z16 is the hexadecimal format code
+      call register_variable_attribute(IO_handle%fileobj, trim(name), "checksum", &
+                                       trim(checksum_string), len_trim(checksum_string))
+    endif
+    !### Add more attributes if they are present; remove attributes that are never used.
+  else
+    do i=1,ndims ; mpp_axes(i) = axes(i)%AT ; enddo
+    call mpp_write_meta(IO_handle%unit, field%FT, mpp_axes, name, units, longname, &
+                        pack=pack, standard_name=standard_name, checksum=checksum)
+    ! unused opt. args: min=min, max=max, fill=fill, scale=scale, add=add, &
+  endif
+
+  ! Store information in the field-type, regardless of which interfaces are used.
+  field%name = trim(name)
+  field%longname = trim(longname)
+  field%units = trim(units)
+  field%chksum_read = -1
+  field%valid_chksum = .false.
 
 end subroutine write_metadata_field
 
