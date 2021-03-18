@@ -879,7 +879,7 @@ subroutine write_field_4d(IO_handle, field_md, MOM_domain, field, tstamp, tile_c
   type(fieldtype),          intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),    intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
   real, dimension(:,:,:,:), intent(inout) :: field      !< Field to write
-  real,           optional, intent(in)    :: tstamp     !< Model timestamp
+  real,           optional, intent(in)    :: tstamp     !< Model time of this field
   integer,        optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
   real,           optional, intent(in)    :: fill_value !< Missing data fill value
 
@@ -893,7 +893,7 @@ subroutine write_field_3d(IO_handle, field_md, MOM_domain, field, tstamp, tile_c
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
   real, dimension(:,:,:), intent(inout) :: field      !< Field to write
-  real,         optional, intent(in)    :: tstamp     !< Model timestamp
+  real,         optional, intent(in)    :: tstamp     !< Model time of this field
   integer,      optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
   real,         optional, intent(in)    :: fill_value !< Missing data fill value
 
@@ -907,7 +907,7 @@ subroutine write_field_2d(IO_handle, field_md, MOM_domain, field, tstamp, tile_c
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
   real, dimension(:,:),   intent(inout) :: field      !< Field to write
-  real,         optional, intent(in)    :: tstamp     !< Model timestamp
+  real,         optional, intent(in)    :: tstamp     !< Model time of this field
   integer,      optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
   real,         optional, intent(in)    :: fill_value !< Missing data fill value
 
@@ -920,7 +920,7 @@ subroutine write_field_1d(IO_handle, field_md, field, tstamp)
   type(file_type),        intent(in)    :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   real, dimension(:),     intent(in)    :: field      !< Field to write
-  real,         optional, intent(in)    :: tstamp     !< Model timestamp
+  real,         optional, intent(in)    :: tstamp     !< Model time of this field
 
   call mpp_write(IO_handle%unit, field_md, field, tstamp=tstamp)
 end subroutine write_field_1d
@@ -930,7 +930,7 @@ subroutine write_field_0d(IO_handle, field_md, field, tstamp)
   type(file_type),        intent(in)    :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   real,                   intent(in)    :: field      !< Field to write
-  real,         optional, intent(in)    :: tstamp     !< Model timestamp
+  real,         optional, intent(in)    :: tstamp     !< Model time of this field
 
   call mpp_write(IO_handle%unit, field_md, field, tstamp=tstamp)
 end subroutine write_field_0d
@@ -946,7 +946,8 @@ end subroutine MOM_write_axis
 
 !> Store information about an axis in a previously defined axistype and write this
 !! information to the file indicated by unit.
-subroutine write_metadata_axis(IO_handle, axis, name, units, longname, cartesian, sense, domain, data, calendar)
+subroutine write_metadata_axis(IO_handle, axis, name, units, longname, cartesian, sense, domain, data, &
+                               edge_axis, calendar)
   type(file_type),            intent(in)    :: IO_handle  !< Handle for a file that is open for writing
   type(axistype),             intent(inout) :: axis  !< The axistype where this information is stored.
   character(len=*),           intent(in)    :: name  !< The name in the file of this axis
@@ -959,6 +960,7 @@ subroutine write_metadata_axis(IO_handle, axis, name, units, longname, cartesian
                                                      !! -1 if they increase downward.
   type(domain1D),   optional, intent(in)    :: domain !< The domain decomposion for this axis
   real, dimension(:), optional, intent(in)  :: data   !< The coordinate values of the points on this axis
+  logical,          optional, intent(in)    :: edge_axis !< If true, this axis marks an edge of the tracer cells
   character(len=*), optional, intent(in)    :: calendar !< The name of the calendar used with a time axis
 
   call mpp_write_meta(IO_handle%unit, axis, name, units, longname, cartesian=cartesian, sense=sense, &
