@@ -722,6 +722,17 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
     endif
   endif
 
+  ! Melting has been computed, now is time to update thickness and mass with dynamic ice shelf
+  if (CS%active_shelf_dynamics) then
+    call change_thickness_using_melt(ISS, G, US, US%s_to_T*time_step, fluxes, CS%density_ice, CS%debug)
+
+    if (CS%debug) then
+      call hchksum(ISS%h_shelf, "h_shelf after change thickness using melt", G%HI, haloshift=0, scale=US%Z_to_m)
+      call hchksum(ISS%mass_shelf, "mass_shelf after change thickness using melt", G%HI, haloshift=0, &
+                   scale=US%RZ_to_kg_m2)
+    endif
+  endif
+
   if (CS%debug) call MOM_forcing_chksum("Before add shelf flux", fluxes, G, CS%US, haloshift=0)
 
   call add_shelf_flux(G, US, CS, sfc_state, fluxes)
