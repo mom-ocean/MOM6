@@ -9,7 +9,8 @@ use MOM_coms, only : set_PElist, set_rootPE, Get_PElist, broadcast
 use MOM_domains, only : domain2d, global_field, get_domain_extent
 use MOM_domains, only : pass_var, redistribute_array, broadcast_domain
 use MOM_diag_mediator, only : register_diag_field, diag_axis_init, post_data
-use MOM_diag_mediator, only : enable_averaging
+use MOM_diag_mediator, only : enable_averaging, disable_averaging
+use MOM_diag_mediator, only : diag_update_remap_grids
 use MOM_ensemble_manager, only : get_ensemble_id, get_ensemble_size
 use MOM_ensemble_manager, only : get_ensemble_pelist, get_ensemble_filter_pelist
 use MOM_error_handler, only : stdout, stdlog, MOM_error
@@ -214,7 +215,7 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
        "to temperature and salinity.", &
        default=.false.)
   if (CS%do_bias_adjustment) then
-    call get_param(PF,"MOM", "BIAS_ADJUSTMENT_FACTOR", CS%bias_adjustment_multiplier, &
+    call get_param(PF,"MOM", "TRACER_ADJUSTMENT_FACTOR", CS%bias_adjustment_multiplier, &
        "A multiplicative scaling factor for the climatological tracer tendency adjustment ", &
        default=1.0)
   endif
@@ -222,6 +223,7 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
        "If true, add a basin mask to delineate weakly connected "//&
        "ocean basins for the purpose of data assimilation.", &
        default=.false.)
+
   call get_param(PF,"MOM", "NIGLOBAL", CS%ni, &
        "The total number of thickness grid points in the "//&
        "x-direction in the physical domain.")
@@ -347,6 +349,10 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
   call set_PElist(CS%ensemble_pelist(CS%ensemble_id,:))
 
   if (CS%do_bias_adjustment) then
+     call get_param(PF, "MOM", "TEMP_SALT_ADJUSTMENT_FILE", bias_correction_file,  &
+       "The name of the file containing temperature and salinity "//&
+       "tendency adjustments", default='temp_salt_adjustment.nc')
+
      inc_file = trim(inputdir) // trim(bias_correction_file)
      CS%INC_CS%T_id = init_extern_field(inc_file, "temp_increment", &
           correct_leap_year_inconsistency=.true.,verbose=.true.,domain=G%Domain%mpp_domain)
@@ -512,7 +518,9 @@ subroutine oda(Time, CS)
     call set_PElist(CS%filter_pelist)
     call cpu_clock_begin(id_clock_oda_filter)
     call get_profiles(Time, CS%Profiles, CS%CProfiles)
+#ifdef ENABLE_ECDA
     call ensemble_filter(CS%Ocean_prior, CS%Ocean_posterior, CS%CProfiles, CS%kdroot, CS%mpp_domain, CS%oda_grid)
+#endif
     call cpu_clock_end(id_clock_oda_filter)
     !if (CS%write_obs) call save_obs_diff(CS%CProfiles) ! not fully implemented
     !! switch back to ensemble member pelist
