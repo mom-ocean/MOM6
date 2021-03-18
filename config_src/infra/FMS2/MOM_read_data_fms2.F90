@@ -233,7 +233,7 @@ subroutine categorize_axes(fileObj, filename, ndims, dim_names, is_x, is_y, is_t
     endif ; enddo
   endif
 
-  if (.not.(x_found .and. y_found) .and. (ndims>2) .or. ((ndims==2) .and. .not.is_t(ndims))) then
+  if (.not.(x_found .and. y_found) .and. ((ndims>2) .or. ((ndims==2) .and. .not.is_t(ndims)))) then
     ! This is a case where one would expect to find x-and y-dimensions, but none have been found.
     if (is_root_pe()) then
       dim_list = trim(dim_names(1))//", "//trim(dim_names(2))
