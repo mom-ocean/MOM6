@@ -148,7 +148,7 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
   type(time_type), intent(in) :: Time !< The current model time.
   type(ocean_grid_type), pointer :: G !< domain and grid information for ocean model
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
-  type(unit_scale_type), pointer :: US
+  type(unit_scale_type), pointer :: US !< A pointer to a unit scaling type.
   type(diag_ctrl), target, intent(inout) :: diag_CS !< A pointer to a diagnostic control structure
   type(ODA_CS), pointer, intent(inout) :: CS  !< The DA control structure
 
@@ -730,7 +730,7 @@ end subroutine apply_oda_tracer_increments
 
   subroutine set_up_global_tgrid(T_grid, CS, G)
     type(grid_type), pointer :: T_grid !< global tracer grid
-    type(ODA_CS), pointer, intent(in) :: CS
+    type(ODA_CS), pointer, intent(in) :: CS !< A pointer to DA control structure.
     type(ocean_grid_type), pointer :: G !< domain and grid information for ocean model
 
     ! local variables
