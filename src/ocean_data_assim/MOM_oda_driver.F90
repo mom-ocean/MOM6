@@ -143,12 +143,11 @@ contains
 
 !> initialize First_guess (prior) and Analysis grid
 !! information for all ensemble members
-subroutine init_oda(Time, G, GV, US, diag_CS, CS)
+subroutine init_oda(Time, G, GV, diag_CS, CS)
 
   type(time_type), intent(in) :: Time !< The current model time.
   type(ocean_grid_type), pointer :: G !< domain and grid information for ocean model
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
-  type(unit_scale_type), pointer :: US !< A pointer to a unit scaling type.
   type(diag_ctrl), target, intent(inout) :: diag_CS !< A pointer to a diagnostic control structure
   type(ODA_CS), pointer, intent(inout) :: CS  !< The DA control structure
 
@@ -190,7 +189,6 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
 ! if it were desirable to have alternate parameters, e.g. for the grid
 ! for the analysis
   call get_MOM_input(PF,dirs,ensemble_num=0)
-  CS%US=>US
   call unit_scaling_init(PF, CS%US)
 
   call get_param(PF, "MOM", "ASSIM_METHOD", assim_method,  &
