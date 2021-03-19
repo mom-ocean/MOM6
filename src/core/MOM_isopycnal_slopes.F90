@@ -27,7 +27,7 @@ contains
 !> Calculate isopycnal slopes, and optionally return other stratification dependent functions such as N^2
 !! and dz*S^2*g-prime used, or calculable from factors used, during the calculation.
 subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
-                                  slope_x, slope_y, N2_u, N2_v, dzSx2N2, dzSy2N2, halo, OBC) !, eta_to_m)
+                                  slope_x, slope_y, N2_u, N2_v, dzu, dzv, dzSx2N2, dzSy2N2, halo, OBC) !, eta_to_m)
   type(ocean_grid_type),                       intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),                       intent(in)    :: US   !< A dimensional unit scaling type
@@ -46,6 +46,10 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), &
                                      optional, intent(inout) :: N2_v !< Brunt-Vaisala frequency squared at
                                                                      !! interfaces between v-points [L2 Z-2 T-2 ~> s-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), &
+                                     optional, intent(inout) :: dzu  !< Z-thickness at u-points [Z ~> m]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), &
+                                     optional, intent(inout) :: dzv  !< Z-thickness at v-points [Z ~> m]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), &
                                      optional, intent(inout) :: dzSx2N2 !< Z-thickness times zonal slope contribution
                                                                      !! to the square of Eady growth rate at u-points.
@@ -156,6 +160,18 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
       N2_v(i,J,nz+1) = 0.
     enddo ; enddo
   endif
+  if (present(dzu)) then
+    do j=js,je ; do I=is-1,ie
+      dzu(I,j,1) = 0.
+      dzu(I,j,nz+1) = 0.
+    enddo ; enddo
+  endif
+  if (present(dzv)) then
+    do J=js-1,je ; do i=is,ie
+      dzv(i,J,1) = 0.
+      dzv(i,J,nz+1) = 0.
+    enddo ; enddo
+  endif
   if (present(dzSx2N2)) then
     do j=js,je ; do I=is-1,ie
       dzSx2N2(I,j,1) = 0.
@@ -201,7 +217,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   !$OMP parallel do default(none) shared(nz,is,ie,js,je,IsdB,use_EOS,G,GV,US,pres,T,S,tv,h,e, &
   !$OMP                                  h_neglect,dz_neglect,Z_to_L,L_to_Z,H_to_Z,h_neglect2, &
   !$OMP                                  present_N2_u,G_Rho0,N2_u,slope_x,dzSx2N2,EOSdom_u,local_open_u_BC, &
-  !$OMP                                  OBC) &
+  !$OMP                                  dzu,OBC) &
   !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
   !$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
   !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
@@ -253,6 +269,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
         dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
         dzaR = 0.5*(e(i+1,j,K-1) - e(i+1,j,K+1)) + dz_neglect
       endif
+      if (present(dzu)) dzu(I,j,K) = 0.5*( dzaL + dzaR )
       ! Use the harmonic mean thicknesses to weight the horizontal gradients.
       ! These unnormalized weights have been rearranged to minimize divisions.
       wtA = hg2A*haB ; wtB = hg2B*haA
@@ -309,7 +326,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   !$OMP parallel do default(none) shared(nz,is,ie,js,je,IsdB,use_EOS,G,GV,US,pres,T,S,tv, &
   !$OMP                                  h,h_neglect,e,dz_neglect,Z_to_L,L_to_Z,H_to_Z, &
   !$OMP                                  h_neglect2,present_N2_v,G_Rho0,N2_v,slope_y,dzSy2N2,EOSdom_v, &
-  !$OMP                                  local_open_v_BC,OBC) &
+  !$OMP                                  dzv,local_open_v_BC,OBC) &
   !$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
   !$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
   !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
@@ -358,6 +375,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
         dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
         dzaR = 0.5*(e(i,j+1,K-1) - e(i,j+1,K+1)) + dz_neglect
       endif
+      if (present(dzv)) dzv(i,J,K) = 0.5*( dzaL + dzaR )
       ! Use the harmonic mean thicknesses to weight the horizontal gradients.
       ! These unnormalized weights have been rearranged to minimize divisions.
       wtA = hg2A*haB ; wtB = hg2B*haA

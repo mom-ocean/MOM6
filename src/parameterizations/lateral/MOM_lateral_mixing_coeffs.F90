@@ -137,7 +137,7 @@ type, public :: VarMix_CS
   !! Diagnostic identifier
   integer :: id_SN_u=-1, id_SN_v=-1, id_L2u=-1, id_L2v=-1, id_Res_fn = -1
   integer :: id_N2_u=-1, id_N2_v=-1, id_S2_u=-1, id_S2_v=-1
-  integer :: id_dzSx2N2=-1, id_dzSy2N2=-1
+  integer :: id_dzu=-1, id_dzv=-1, id_dzSx2N2=-1, id_dzSy2N2=-1
   integer :: id_Rd_dx=-1, id_KH_u_QG = -1, id_KH_v_QG = -1
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !! timing of diagnostic output.
@@ -448,6 +448,8 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS, OBC)
     e             ! The interface heights relative to mean sea level [Z ~> m].
   real, dimension(SZIB_(G), SZJ_(G),SZK_(GV)+1) :: N2_u ! Square of Brunt-Vaisala freq at u-points [L2 Z-2 T-2 ~> s-2]
   real, dimension(SZI_(G), SZJB_(G),SZK_(GV)+1) :: N2_v ! Square of Brunt-Vaisala freq at v-points [L2 Z-2 T-2 ~> s-2]
+  real, dimension(SZIB_(G), SZJ_(G),SZK_(GV)+1) :: dzu ! Z-thickness at u-points [Z ~> m]
+  real, dimension(SZI_(G), SZJB_(G),SZK_(GV)+1) :: dzv ! Z-thickness at v-points [Z ~> m]
   real, dimension(SZIB_(G), SZJ_(G),SZK_(GV)+1) :: dzSx2N2 ! Sx^2 N^2 times dz at u-points [Z T-2 ~> m s-2]
   real, dimension(SZI_(G), SZJB_(G),SZK_(GV)+1) :: dzSy2N2 ! Sy^2 N^2 times dz at v-points [Z T-2 ~> m s-2]
 
@@ -458,7 +460,7 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS, OBC)
     call find_eta(h, tv, G, GV, US, e, halo_size=2)
     if (CS%use_stored_slopes) then
       call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, &
-                                  CS%slope_x, CS%slope_y, N2_u, N2_v, dzSx2N2, dzSy2N2, 1, OBC=OBC)
+                                  CS%slope_x, CS%slope_y, N2_u, N2_v, dzu, dzv, dzSx2N2, dzSy2N2, 1, OBC=OBC)
       call calc_Visbeck_coeffs(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, US, CS, OBC=OBC)
 !     call calc_slope_functions_using_just_e(h, G, CS, e, .false.)
     else
@@ -475,6 +477,8 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS, OBC)
     if (CS%calculate_Eady_growth_rate .and. CS%use_stored_slopes) then
       if (CS%id_N2_u > 0) call post_data(CS%id_N2_u, N2_u, CS%diag)
       if (CS%id_N2_v > 0) call post_data(CS%id_N2_v, N2_v, CS%diag)
+      if (CS%id_dzu > 0) call post_data(CS%id_dzu, dzu, CS%diag)
+      if (CS%id_dzv > 0) call post_data(CS%id_dzv, dzv, CS%diag)
       if (CS%id_dzSx2N2 > 0) call post_data(CS%id_dzSx2N2, dzSx2N2, CS%diag)
       if (CS%id_dzSy2N2 > 0) call post_data(CS%id_dzSy2N2, dzSy2N2, CS%diag)
     endif
@@ -1134,6 +1138,12 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     CS%id_N2_v = register_diag_field('ocean_model', 'N2_v', diag%axesCvi, Time, &
          'Square of Brunt-Vaisala frequency, N^2, at v-points, as used in Visbeck et al.', &
          's-2', conversion=(US%L_to_Z*US%s_to_T)**2)
+    CS%id_dzu = register_diag_field('ocean_model', 'dzu_Visbeck', diag%axesCui, Time, &
+         'dz at u-points, used in calculating Eady growth rate in Visbeck et al..', &
+         'm', conversion=US%Z_to_m)
+    CS%id_dzv = register_diag_field('ocean_model', 'dzv_Visbeck', diag%axesCvi, Time, &
+         'dz at v-points, used in calculating Eady growth rate in Visbeck et al..', &
+         'm', conversion=US%Z_to_m)
     CS%id_dzSx2N2 = register_diag_field('ocean_model', 'dzSx2N2', diag%axesCui, Time, &
          'dz * slope_x^2 * N2, or Sx^2 * g-prime, used in calculating Eady growth rate in '//&
          'Visbeck et al..', 'm s-2', conversion=US%Z_to_m*US%s_to_T**2)
