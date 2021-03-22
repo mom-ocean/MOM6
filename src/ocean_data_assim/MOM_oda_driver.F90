@@ -157,7 +157,7 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   type(hor_index_type), pointer :: HI=> NULL()
   type(directories) :: dirs
 
-  type(grid_type), pointer :: T_grid !< global tracer grid
+  type(grid_type), pointer :: T_grid => NULL() !< global tracer grid
   real, dimension(:,:), allocatable :: global2D, global2D_old
   real, dimension(:), allocatable :: lon1D, lat1D, glon1D, glat1D
   type(param_file_type) :: PF
@@ -314,7 +314,7 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   allocate(CS%tv)
   allocate(CS%tv%T(isd:ied,jsd:jed,CS%GV%ke)); CS%tv%T(:,:,:)=0.0
   allocate(CS%tv%S(isd:ied,jsd:jed,CS%GV%ke)); CS%tv%S(:,:,:)=0.0
-  call set_axes_info(CS%Grid, CS%GV, CS%US, PF, CS%diag_cs, set_vertical=.true.) ! missing in Feiyu's fork
+!  call set_axes_info(CS%Grid, CS%GV, CS%US, PF, CS%diag_cs, set_vertical=.true.) ! missing in Feiyu's fork
   allocate(CS%oda_grid)
   CS%oda_grid%x => CS%Grid%geolonT
   CS%oda_grid%y => CS%Grid%geolatT
@@ -739,17 +739,19 @@ end subroutine apply_oda_tracer_increments
     if (associated(T_grid)) call MOM_error(FATAL,'MOM_oda_driver:set_up_global_tgrid called with associated T_grid')
 
     allocate(T_grid)
+    T_grid%ni = CS%ni
+    T_grid%nj = CS%nj
+    T_grid%nk = CS%nk
     allocate(T_grid%x(CS%ni,CS%nj))
     allocate(T_grid%y(CS%ni,CS%nj))
-    if (CS%do_bias_adjustment) then
-       allocate(T_grid%basin_mask(CS%ni,CS%nj))
-    endif
     allocate(T_grid%bathyT(CS%ni,CS%nj))
     call global_field(CS%mpp_domain, CS%Grid%geolonT, T_grid%x)
     call global_field(CS%mpp_domain, CS%Grid%geolatT, T_grid%y)
-    call global_field(CS%mpp_domain, CS%oda_grid%basin_mask, T_grid%basin_mask)
     call global_field(CS%domains(CS%ensemble_id)%mpp_domain, G%bathyT, T_grid%bathyT)
-
+    if (CS%use_basin_mask) then
+      allocate(T_grid%basin_mask(CS%ni,CS%nj))
+      call global_field(CS%mpp_domain, CS%oda_grid%basin_mask, T_grid%basin_mask)
+    endif
     allocate(T_grid%mask(CS%ni,CS%nj,CS%nk))
     allocate(T_grid%z(CS%ni,CS%nj,CS%nk))
     allocate(global2D(CS%ni,CS%nj))
