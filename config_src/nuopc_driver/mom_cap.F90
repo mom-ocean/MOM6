@@ -1498,7 +1498,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
         do i = ocean_grid%isc, ocean_grid%iec
            k = k + 1 ! Increment position within gindex
            mesh_areas(k) = dataPtr_mesh_areas(k)
-           model_areas(k) = ocean_grid%AreaT(i,j) * L2_to_rad2
+           model_areas(k) = ocean_grid%AreaT(i,j) / ocean_grid%Rad_Earth**2
            mod2med_areacor(k) = model_areas(k) / mesh_areas(k)
            med2mod_areacor(k) = mesh_areas(k) / model_areas(k)
         enddo
