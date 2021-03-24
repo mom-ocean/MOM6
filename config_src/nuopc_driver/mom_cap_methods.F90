@@ -186,7 +186,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   ! sensible heat flux (W/m2)
   !----
   call state_getimport(importState, 'mean_sensi_heat_flx', &
-       isc, iec, jsc, jec, ice_ocean_boundary%t_flux, areacor=mod2med_areacor, rc=rc)
+       isc, iec, jsc, jec, ice_ocean_boundary%t_flux, areacor=med2mod_areacor, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
        line=__LINE__, &
        file=__FILE__)) &
@@ -196,7 +196,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   ! evaporation flux (W/m2)
   !----
   call state_getimport(importState, 'mean_evap_rate', &
-       isc, iec, jsc, jec, ice_ocean_boundary%q_flux, areacor=mod2med_areacor, rc=rc)
+       isc, iec, jsc, jec, ice_ocean_boundary%q_flux, areacor=med2mod_areacor, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
        line=__LINE__, &
        file=__FILE__)) &
@@ -206,7 +206,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   ! liquid precipitation (rain)
   !----
   call state_getimport(importState, 'mean_prec_rate', &
-       isc, iec, jsc, jec, ice_ocean_boundary%lprec, areacor=mod2med_areacor, rc=rc)
+       isc, iec, jsc, jec, ice_ocean_boundary%lprec, areacor=med2mod_areacor, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
        line=__LINE__, &
        file=__FILE__)) &
@@ -216,7 +216,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   ! frozen precipitation (snow)
   !----
   call state_getimport(importState, 'mean_fprec_rate', &
-       isc, iec, jsc, jec, ice_ocean_boundary%fprec, areacor=mod2med_areacor, rc=rc)
+       isc, iec, jsc, jec, ice_ocean_boundary%fprec, areacor=med2mod_areacor, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
        line=__LINE__, &
        file=__FILE__)) &
@@ -231,7 +231,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   ! liquid runoff
   ice_ocean_boundary%lrunoff (:,:) = 0._ESMF_KIND_R8
   call state_getimport(importState, 'Foxx_rofl',  &
-       isc, iec, jsc, jec, ice_ocean_boundary%lrunoff, areacor=mod2med_areacor, rc=rc)
+       isc, iec, jsc, jec, ice_ocean_boundary%lrunoff, areacor=med2mod_areacor, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
        line=__LINE__, &
        file=__FILE__)) &
@@ -240,7 +240,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   ! ice runoff
   ice_ocean_boundary%frunoff (:,:) = 0._ESMF_KIND_R8
   call state_getimport(importState, 'Foxx_rofi',  &
-       isc, iec, jsc, jec, ice_ocean_boundary%frunoff, areacor=mod2med_areacor, rc=rc)
+       isc, iec, jsc, jec, ice_ocean_boundary%frunoff, areacor=med2mod_areacor, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
        line=__LINE__, &
        file=__FILE__)) &
@@ -249,7 +249,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   ! heat content of lrunoff
   ice_ocean_boundary%lrunoff_hflx(:,:) = 0._ESMF_KIND_R8
   call state_getimport(importState, 'mean_runoff_heat_flx',  &
-       isc, iec, jsc, jec, ice_ocean_boundary%lrunoff_hflx, areacor=mod2med_areacor, rc=rc)
+       isc, iec, jsc, jec, ice_ocean_boundary%lrunoff_hflx, areacor=med2mod_areacor, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
        line=__LINE__, &
        file=__FILE__)) &
@@ -258,7 +258,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   ! heat content of frunoff
   ice_ocean_boundary%frunoff_hflx(:,:) = 0._ESMF_KIND_R8
   call state_getimport(importState, 'mean_calving_heat_flx',  &
-       isc, iec, jsc, jec, ice_ocean_boundary%frunoff_hflx, areacor=mod2med_areacor, rc=rc)
+       isc, iec, jsc, jec, ice_ocean_boundary%frunoff_hflx, areacor=med2mod_areacor, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
        line=__LINE__, &
        file=__FILE__)) &
@@ -269,7 +269,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   !----
   ice_ocean_boundary%salt_flux(:,:) = 0._ESMF_KIND_R8
   call state_getimport(importState, 'mean_salt_rate',  &
-       isc, iec, jsc, jec, ice_ocean_boundary%salt_flux, areacor=mod2med_areacor, rc=rc)
+       isc, iec, jsc, jec, ice_ocean_boundary%salt_flux, areacor=med2mod_areacor, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
        line=__LINE__, &
        file=__FILE__)) &
@@ -280,7 +280,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   !----
   ice_ocean_boundary%seaice_melt_heat(:,:) = 0._ESMF_KIND_R8
   call state_getimport(importState, 'net_heat_flx_to_ocn',  &
-       isc, iec, jsc, jec, ice_ocean_boundary%seaice_melt_heat, areacor=mod2med_areacor, rc=rc)
+       isc, iec, jsc, jec, ice_ocean_boundary%seaice_melt_heat, areacor=med2mod_areacor, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
        line=__LINE__, &
        file=__FILE__)) &
@@ -291,7 +291,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   !----
   ice_ocean_boundary%seaice_melt(:,:) = 0._ESMF_KIND_R8
   call state_getimport(importState, 'mean_fresh_water_to_ocean_rate',  &
-       isc, iec, jsc, jec, ice_ocean_boundary%seaice_melt, areacor=mod2med_areacor, rc=rc)
+       isc, iec, jsc, jec, ice_ocean_boundary%seaice_melt, areacor=med2mod_areacor, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
        line=__LINE__, &
        file=__FILE__)) &
@@ -715,22 +715,23 @@ subroutine State_GetImport(state, fldname, isc, iec, jsc, jec, output, do_sum, a
         call state_getfldptr(state, trim(fldname), dataptr1d, rc)
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return  ! bail out
 
-        ! option to apply area correction
-        if (present(areacor)) then
-           do n = 1,size(dataPtr1d)
-              dataPtr1d(n) = dataPtr1d(n) * areacor(n)
-           end do
-        end if
-
-        ! determine output array
+        ! determine output array and apply area correction if present
         n = 0
         do j = jsc,jec
            do i = isc,iec
               n = n + 1
               if (present(do_sum)) then
-                 output(i,j)  = output(i,j) + dataPtr1d(n)
+                 if (present(areacor)) then
+                    output(i,j)  = output(i,j) + dataPtr1d(n) * areacor(n)
+                 else
+                    output(i,j)  = output(i,j) + dataPtr1d(n)
+                 end if
               else
-                 output(i,j)  = dataPtr1d(n)
+                 if (present(areacor)) then
+                    output(i,j)  = dataPtr1d(n) * areacor(n)
+                 else
+                    output(i,j)  = dataPtr1d(n)
+                 end if
               endif
            enddo
         enddo

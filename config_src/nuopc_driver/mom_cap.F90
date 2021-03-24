@@ -38,6 +38,7 @@ use MOM_cap_time,             only: AlarmInit
 use MOM_cap_methods,          only: mom_import, mom_export, mom_set_geomtype, mod2med_areacor, med2mod_areacor
 #ifdef CESMCOUPLED
 use shr_file_mod,             only: shr_file_setLogUnit, shr_file_getLogUnit
+use shr_mpi_mod,              only : shr_mpi_min, shr_mpi_max
 #endif
 use time_utils_mod,           only: esmf2fms_time
 
@@ -71,7 +72,7 @@ use ESMF,  only: ESMF_TimePrint, ESMF_AlarmSet, ESMF_FieldGet, ESMF_Array
 use ESMF,  only: ESMF_FieldRegridGetArea
 use ESMF,  only: ESMF_ArrayCreate
 use ESMF,  only: ESMF_RC_FILE_OPEN, ESMF_RC_FILE_READ, ESMF_RC_FILE_WRITE
-use ESMF,  only: ESMF_VMBroadcast
+use ESMF,  only: ESMF_VMBroadcast, ESMF_VMReduce, ESMF_REDUCE_MAX, ESMF_REDUCE_MIN
 use ESMF,  only: ESMF_AlarmCreate, ESMF_ClockGetAlarmList, ESMF_AlarmList_Flag
 use ESMF,  only: ESMF_AlarmGet, ESMF_AlarmIsCreated, ESMF_ALARMLIST_ALL, ESMF_AlarmIsEnabled
 use ESMF,  only: ESMF_STATEITEM_NOTFOUND, ESMF_FieldWrite
@@ -903,6 +904,14 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   real(ESMF_KIND_R8), allocatable            :: mesh_areas(:)
   real(ESMF_KIND_R8), allocatable            :: model_areas(:)
   real(ESMF_KIND_R8), pointer                :: dataPtr_mesh_areas(:)
+  real(ESMF_KIND_R8)                         :: max_mod2med_areacor
+  real(ESMF_KIND_R8)                         :: max_med2mod_areacor
+  real(ESMF_KIND_R8)                         :: min_mod2med_areacor
+  real(ESMF_KIND_R8)                         :: min_med2mod_areacor
+  real(ESMF_KIND_R8)                         :: max_mod2med_areacor_glob
+  real(ESMF_KIND_R8)                         :: max_med2mod_areacor_glob
+  real(ESMF_KIND_R8)                         :: min_mod2med_areacor_glob
+  real(ESMF_KIND_R8)                         :: min_med2mod_areacor_glob
   character(len=*), parameter                :: subname='(MOM_cap:InitializeRealize)'
   !--------------------------------
 
@@ -1458,7 +1467,6 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   !---------------------------------
   ! determine flux area correction factors - module variables in mom_cap_methods
   !---------------------------------
-
   ! Area correction factors are ONLY valid for meshes that are read in - so do not need them for
   ! grids that are calculated internally
 
@@ -1467,6 +1475,13 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
      ! Determine mesh areas for regridding
      call ESMF_MeshGet(Emesh, numOwnedElements=numOwnedElements, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
+
+     allocate (mod2med_areacor(numOwnedElements))
+     allocate (med2mod_areacor(numOwnedElements))
+     mod2med_areacor(:) = 1._ESMF_KIND_R8
+     med2mod_areacor(:) = 1._ESMF_KIND_R8
+
+#ifdef CESMCOUPLED 
      call ESMF_StateGet(exportState, itemName=trim(fldsFrOcn(2)%stdname), field=lfield, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
      call ESMF_FieldRegridGetArea(lfield, rc=rc)
@@ -1474,37 +1489,40 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
      call ESMF_FieldGet(lfield, farrayPtr=dataPtr_mesh_areas, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
      allocate(mesh_areas(numOwnedElements))
-     mesh_areas(:) = dataPtr_mesh_areas(:)
-
-     ! Determine model areas
      allocate(model_areas(numOwnedElements))
+
+     ! Determine model areas and flux correction factors (module variables in mom_)
      k = 0
      L2_to_rad2 = ocean_grid%US%L_to_m**2 / ocean_grid%Rad_Earth**2
      do j = ocean_grid%jsc, ocean_grid%jec
         do i = ocean_grid%isc, ocean_grid%iec
            k = k + 1 ! Increment position within gindex
+           mesh_areas(k) = dataPtr_mesh_areas(k)
            model_areas(k) = ocean_grid%AreaT(i,j) * L2_to_rad2
+           mod2med_areacor(k) = model_areas(k) / mesh_areas(k)
+           med2mod_areacor(k) = mesh_areas(k) / model_areas(k)
         enddo
      enddo
-
-     ! Determine flux correction factors (module variables in mom_)
-     allocate (mod2med_areacor(numOwnedElements))
-     allocate (med2mod_areacor(numOwnedElements))
-     do n = 1,numOwnedElements
-        if (model_areas(n) == mesh_areas(n)) then
-           mod2med_areacor(n) = 1._ESMF_KIND_R8
-           med2mod_areacor(n) = 1._ESMF_KIND_R8
-        else
-           mod2med_areacor(n) = model_areas(n) / mesh_areas(n)
-           med2mod_areacor(n) = mesh_areas(n) / model_areas(n)
-           if (abs(mod2med_areacor(n) - 1._ESMF_KIND_R8) > 1.e-13) then
-              write(6,'(a,i8,2x,d21.14,2x)')' AREACOR mom6: n, abs(mod2med_areacor(n)-1)', &
-                   n, abs(mod2med_areacor(n) - 1._ESMF_KIND_R8)
-           end if
-        end if
-     end do
-     deallocate(model_areas)
      deallocate(mesh_areas)
+     deallocate(model_areas)
+
+     ! Write diagnostic output for correction factors
+     min_mod2med_areacor = minval(mod2med_areacor)
+     max_mod2med_areacor = maxval(mod2med_areacor)
+     min_med2mod_areacor = minval(med2mod_areacor)
+     max_med2mod_areacor = maxval(med2mod_areacor)
+     call shr_mpi_max(max_mod2med_areacor, max_mod2med_areacor_glob, mpicom)
+     call shr_mpi_min(min_mod2med_areacor, min_mod2med_areacor_glob, mpicom)
+     call shr_mpi_max(max_med2mod_areacor, max_med2mod_areacor_glob, mpicom)
+     call shr_mpi_min(min_med2mod_areacor, min_med2mod_areacor_glob, mpicom)
+     if (localPet == 0) then
+        write(logunit,'(2A,2g23.15,A )') trim(subname),' :  min_mod2med_areacor, max_mod2med_areacor ',&
+             min_mod2med_areacor_glob, max_mod2med_areacor_glob, 'MOM6'
+        write(logunit,'(2A,2g23.15,A )') trim(subname),' :  min_med2mod_areacor, max_med2mod_areacor ',&
+             min_med2mod_areacor_glob, max_med2mod_areacor_glob, 'MOM6'
+     end if
+#endif
+
   end if
 
   !---------------------------------
