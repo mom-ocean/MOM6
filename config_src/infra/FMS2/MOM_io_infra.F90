@@ -20,6 +20,7 @@ use fms2_io_mod,          only : is_dimension_unlimited, register_axis, unlimite
 use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
 use fms_io_mod,           only : file_exist, field_exist, field_size, read_data
 use fms_io_mod,           only : fms_io_exit, get_filename_appendix
+use mpp_domains_mod,      only : mpp_get_compute_domain, mpp_get_global_domain
 use mpp_io_mod,           only : mpp_open, mpp_close, mpp_flush
 use mpp_io_mod,           only : mpp_write_meta, mpp_write
 use mpp_io_mod,           only : mpp_get_atts, mpp_attribute_exist
@@ -315,7 +316,9 @@ subroutine open_file_type(IO_handle, filename, action, MOM_domain, threading, fi
                              ! reading, writing or appending
   character(len=40)  :: mode ! A character string that encodes whether the file is to be opened for
                              ! reading, writing or appending
+  character(len=:), allocatable :: filename_tmp  ! A copy of filename with .nc appended if necessary.
   character(len=256) :: dim_unlim_name ! name of the unlimited dimension in the file
+  integer :: index_nc
 
   if (IO_handle%open_to_write) then
     call MOM_error(WARNING, "open_file_type called for file "//trim(filename)//&
@@ -332,6 +335,15 @@ subroutine open_file_type(IO_handle, filename, action, MOM_domain, threading, fi
   if (FMS2_writes .and. present(MOM_Domain)) then
     if (.not.associated(IO_handle%fileobj)) allocate (IO_handle%fileobj)
 
+    ! The FMS1 interface automatically appends .nc if necessary, but FMS2 interface does not.
+    index_nc = index(trim(filename), ".nc")
+    if (index_nc > 0) then
+      filename_tmp = trim(filename)
+    else
+      filename_tmp = trim(filename)//".nc"
+      if (is_root_PE()) call MOM_error(WARNING, "Open_file is appending .nc to the filename "//trim(filename))
+    endif
+
     if (file_mode == WRITEONLY_FILE) then ; mode = "write"
     elseif (file_mode == APPEND_FILE) then ; mode = "append"
     elseif (file_mode == OVERWRITE_FILE) then ; mode = "overwrite"
@@ -342,9 +354,9 @@ subroutine open_file_type(IO_handle, filename, action, MOM_domain, threading, fi
 
     IO_handle%num_times = 0
     IO_handle%file_time = 0.0
-    if ((file_mode == APPEND_FILE) .and. file_exists(filename, MOM_Domain)) then
+    if ((file_mode == APPEND_FILE) .and. file_exists(filename_tmp, MOM_Domain)) then
       ! Determine the latest file time and number of records so far.
-      success = fms2_open_file(fileObj_read, trim(filename), "read", MOM_domain%mpp_domain)
+      success = fms2_open_file(fileObj_read, trim(filename_tmp), "read", MOM_domain%mpp_domain)
       call get_unlimited_dimension_name(fileObj_read, dim_unlim_name)
       if (len_trim(dim_unlim_name) > 0) &
         call get_dimension_size(fileObj_read, trim(dim_unlim_name), IO_handle%num_times)
@@ -354,8 +366,8 @@ subroutine open_file_type(IO_handle, filename, action, MOM_domain, threading, fi
       call fms2_close_file(fileObj_read)
     endif
 
-    success = fms2_open_file(IO_handle%fileobj, trim(filename), trim(mode), MOM_domain%mpp_domain)
-    if (.not.success) call MOM_error(FATAL, "Unable to open file "//trim(filename))
+    success = fms2_open_file(IO_handle%fileobj, trim(filename_tmp), trim(mode), MOM_domain%mpp_domain)
+    if (.not.success) call MOM_error(FATAL, "Unable to open file "//trim(filename_tmp))
     IO_handle%FMS2_file = .true.
   elseif (present(MOM_Domain)) then
     call mpp_open(IO_handle%unit, filename, action=file_mode, form=NETCDF_FILE, threading=threading, &
@@ -626,6 +638,7 @@ subroutine get_axis_data( axis, dat )
 
   integer :: i
 
+  ! This routine might not be needed for MOM6.
   if (allocated(axis%ax_data)) then
     if (size(axis%ax_data) > size(dat)) call MOM_error(FATAL, &
       "get_axis_data called with too small of an output data array for "//trim(axis%name))
@@ -1010,6 +1023,7 @@ subroutine MOM_read_data_0d_int(filename, fieldname, data, timelevel)
   character(len=96) :: var_to_read ! Name of variable to read from the netcdf file
   logical :: success               ! If true, the file was opened successfully
 
+  ! This routine might not be needed for MOM6.
   if (FMS2_reads) then
     ! Open the FMS2 file-set.
     success = fms2_open_file(fileObj, trim(filename), "read")
@@ -1050,6 +1064,7 @@ subroutine MOM_read_data_1d_int(filename, fieldname, data, timelevel)
   character(len=96) :: var_to_read ! Name of variable to read from the netcdf file
   logical :: success               ! If true, the file was opened successfully
 
+  ! This routine might not be needed for MOM6.
   if (FMS2_reads) then
     ! Open the FMS2 file-set.
     success = fms2_open_file(fileObj, trim(filename), "read")
@@ -1741,6 +1756,7 @@ subroutine write_metadata_axis(IO_handle, axis, name, units, longname, cartesian
   character(len=:), allocatable :: cart ! A left-adjusted and trimmed copy of cartesian
   logical :: is_x, is_y, is_t  ! If true, this is a domain-decomposed axis in one of the directions.
   integer :: position    ! A flag indicating the axis staggering position.
+  integer :: i, isc, iec, global_size
 
   if (IO_handle%FMS2_file) then
     if (is_dimension_registered(IO_handle%fileobj, trim(name))) then
@@ -1751,12 +1767,9 @@ subroutine write_metadata_axis(IO_handle, axis, name, units, longname, cartesian
   endif
 
   axis%name = trim(name)
-  if (present(data)) then
-    if (allocated(axis%ax_data)) call MOM_error(FATAL, &
+ if (present(data) .and. allocated(axis%ax_data)) call MOM_error(FATAL, &
         "Data is already allocated in a call to write_metadata_axis for axis "//&
         trim(name)//" in file "//trim(IO_handle%filename))
-    allocate(axis%ax_data(size(data))) ; axis%ax_data(:) = data(:)
-  endif
 
   if (IO_handle%FMS2_file) then
     is_x = .false. ; is_y = .false. ; is_t = .false.
@@ -1783,20 +1796,50 @@ subroutine write_metadata_axis(IO_handle, axis, name, units, longname, cartesian
       call register_axis(IO_handle%fileobj, trim(name), size(data))
     endif
 
+    if (present(data)) then
+      ! With FMS2, the data for the axis labels has to match the computational domain on this PE.
+      if (present(domain)) then
+        ! The commented-out code on the next ~11 lines runs but there is missing data in the output file
+        ! call mpp_get_compute_domain(domain, isc, iec)
+        ! call mpp_get_global_domain(domain, size=global_size)
+        ! if (size(data) == global_size) then
+        !   allocate(axis%ax_data(iec+1-isc)) ; axis%ax_data(:) = data(isc:iec)
+        !   ! A simpler set of labels: do i=1,iec-isc ; axis%ax_data(i) = real(isc + i) - 1.0 ; enddo
+        ! elseif (size(data) == global_size+1) then
+        !   ! This is an edge axis.  Note the effective SW indexing convention here.
+        !   allocate(axis%ax_data(iec+2-isc)) ; axis%ax_data(:) = data(isc:iec+1)
+        !   ! A simpler set of labels: do i=1,iec+1-isc ; axis%ax_data(i) = real(isc + i) - 1.5 ; enddo
+        ! else
+        !   call MOM_error(FATAL, "Unexpected size of data for "//trim(name)//" in write_metadata_axis.")
+        ! endif
+
+        ! This works for a simple 1x1 IO layout, but gives errors for nontrivial IO layouts
+        allocate(axis%ax_data(size(data))) ; axis%ax_data(:) = data(:)
+
+      else  ! Store the entire array of axis labels.
+        allocate(axis%ax_data(size(data))) ; axis%ax_data(:) = data(:)
+      endif
+    endif
+
+
     ! Now create the variable that describes this axis.
     call register_field(IO_handle%fileobj, trim(name), "double", dimensions=(/name/))
-    if (len_trim(units) > 0) &
-      call register_variable_attribute(IO_handle%fileobj, trim(name), 'units', &
-                                       trim(units), len_trim(units))
     if (len_trim(longname) > 0) &
       call register_variable_attribute(IO_handle%fileobj, trim(name), 'long_name', &
                                        trim(longname), len_trim(longname))
+    if (len_trim(units) > 0) &
+      call register_variable_attribute(IO_handle%fileobj, trim(name), 'units', &
+                                       trim(units), len_trim(units))
     if (present(cartesian)) &
       call register_variable_attribute(IO_handle%fileobj, trim(name), 'cartesian_axis', &
                                        trim(cartesian), len_trim(cartesian))
     if (present(sense)) &
       call register_variable_attribute(IO_handle%fileobj, trim(name), 'sense', sense)
   else
+    if (present(data)) then
+      allocate(axis%ax_data(size(data))) ; axis%ax_data(:) = data(:)
+    endif
+
     call mpp_write_meta(IO_handle%unit, axis%AT, name, units, longname, cartesian=cartesian, sense=sense, &
                         domain=domain, data=data, calendar=calendar)
   endif
@@ -1831,12 +1874,12 @@ subroutine write_metadata_field(IO_handle, field, axes, name, units, longname, &
     do i=1,ndims ; dim_names(i) = trim(axes(i)%name) ; enddo
     prec_string = "double" ; if (present(pack)) then ; if (pack > 1) prec_string = "float" ; endif
     call register_field(IO_handle%fileobj, trim(name), trim(prec_string), dimensions=dim_names)
-    if (len_trim(units) > 0) &
-      call register_variable_attribute(IO_handle%fileobj, trim(name), 'units', &
-                                       trim(units), len_trim(units))
     if (len_trim(longname) > 0) &
       call register_variable_attribute(IO_handle%fileobj, trim(name), 'long_name', &
                                        trim(longname), len_trim(longname))
+    if (len_trim(units) > 0) &
+      call register_variable_attribute(IO_handle%fileobj, trim(name), 'units', &
+                                       trim(units), len_trim(units))
     if (present(standard_name)) &
       call register_variable_attribute(IO_handle%fileobj, trim(name), 'standard_name', &
                                        trim(standard_name), len_trim(standard_name))
