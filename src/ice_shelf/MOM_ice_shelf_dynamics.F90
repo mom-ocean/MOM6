@@ -538,6 +538,11 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
     call pass_var(CS%u_face_mask_bdry, G%domain)
     call pass_var(CS%v_face_mask_bdry, G%domain)
     !call init_boundary_values(CS, G, time, ISS%hmask, CS%input_flux, CS%input_thickness, new_sim)
+    call initialize_ice_flow_from_file(CS%u_shelf, CS%v_shelf,CS%ice_visc,CS%ground_frac, ISS%hmask,ISS%h_shelf, &
+            G, US, param_file)   !spacially variable viscosity from a file for debugging
+    call pass_var(CS%ice_visc, G%domain)
+    call pass_var(CS%u_shelf, G%domain)
+    call pass_var(CS%v_shelf, G%domain)
     call update_velocity_masks(CS, G, ISS%hmask, CS%umask, CS%vmask, CS%u_face_mask, CS%v_face_mask)
 
   ! Register diagnostics.
