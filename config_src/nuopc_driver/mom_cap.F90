@@ -1130,10 +1130,6 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
         end if
      end do
 
-     deallocate(ownedElemCoords)
-     deallocate(lonMesh , lon )
-     deallocate(latMesh , lat )
-     deallocate(maskMesh, mask)
      ! realize the import and export fields using the mesh
      call MOM_RealizeFields(importState, fldsToOcn_num, fldsToOcn, "Ocn import", mesh=Emesh, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -1146,6 +1142,69 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
          line=__LINE__, &
          file=__FILE__)) &
          return
+
+     !---------------------------------
+     ! determine flux area correction factors - module variables in mom_cap_methods
+     !---------------------------------
+     ! Area correction factors are ONLY valid for meshes that are read in - so do not need them for
+     ! grids that are calculated internally
+
+     ! Determine mesh areas for regridding
+     call ESMF_MeshGet(Emesh, numOwnedElements=numOwnedElements, spatialDim=spatialDim, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
+     
+     allocate (mod2med_areacor(numOwnedElements))
+     allocate (med2mod_areacor(numOwnedElements))
+     mod2med_areacor(:) = 1._ESMF_KIND_R8
+     med2mod_areacor(:) = 1._ESMF_KIND_R8
+
+#ifdef CESMCOUPLED
+     ! Determine model areas and flux correction factors (module variables in mom_)
+     call ESMF_StateGet(exportState, itemName=trim(fldsFrOcn(2)%stdname), field=lfield, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
+     call ESMF_FieldRegridGetArea(lfield, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
+     call ESMF_FieldGet(lfield, farrayPtr=dataPtr_mesh_areas, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
+
+     allocate(mesh_areas(numOwnedElements))
+     allocate(model_areas(numOwnedElements))
+     k = 0
+     do j = ocean_grid%jsc, ocean_grid%jec
+        do i = ocean_grid%isc, ocean_grid%iec
+           k = k + 1 ! Increment position within gindex
+           if (mask(k) /= 0) then
+              mesh_areas(k) = dataPtr_mesh_areas(k)
+              model_areas(k) = ocean_grid%AreaT(i,j) / ocean_grid%Rad_Earth**2
+              mod2med_areacor(k) = model_areas(k) / mesh_areas(k)
+              med2mod_areacor(k) = mesh_areas(k) / model_areas(k)
+           end if
+        end do
+     end do
+     deallocate(mesh_areas)
+     deallocate(model_areas)
+
+     ! Write diagnostic output for correction factors
+     min_mod2med_areacor = minval(mod2med_areacor)
+     max_mod2med_areacor = maxval(mod2med_areacor)
+     min_med2mod_areacor = minval(med2mod_areacor)
+     max_med2mod_areacor = maxval(med2mod_areacor)
+     call shr_mpi_max(max_mod2med_areacor, max_mod2med_areacor_glob, mpicom)
+     call shr_mpi_min(min_mod2med_areacor, min_mod2med_areacor_glob, mpicom)
+     call shr_mpi_max(max_med2mod_areacor, max_med2mod_areacor_glob, mpicom)
+     call shr_mpi_min(min_med2mod_areacor, min_med2mod_areacor_glob, mpicom)
+     if (localPet == 0) then
+        write(logunit,'(2A,2g23.15,A )') trim(subname),' :  min_mod2med_areacor, max_mod2med_areacor ',&
+             min_mod2med_areacor_glob, max_mod2med_areacor_glob, 'MOM6'
+        write(logunit,'(2A,2g23.15,A )') trim(subname),' :  min_med2mod_areacor, max_med2mod_areacor ',&
+             min_med2mod_areacor_glob, max_med2mod_areacor_glob, 'MOM6'
+     end if
+#endif
+
+     deallocate(ownedElemCoords)
+     deallocate(lonMesh , lon )
+     deallocate(latMesh , lat )
+     deallocate(maskMesh, mask)
 
   else if (geomtype == ESMF_GEOMTYPE_GRID) then
 
@@ -1463,67 +1522,6 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
          return
 
   endif
-
-  !---------------------------------
-  ! determine flux area correction factors - module variables in mom_cap_methods
-  !---------------------------------
-  ! Area correction factors are ONLY valid for meshes that are read in - so do not need them for
-  ! grids that are calculated internally
-
-  if (geomtype == ESMF_GEOMTYPE_MESH) then
-
-     ! Determine mesh areas for regridding
-     call ESMF_MeshGet(Emesh, numOwnedElements=numOwnedElements, rc=rc)
-     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
-
-     allocate (mod2med_areacor(numOwnedElements))
-     allocate (med2mod_areacor(numOwnedElements))
-     mod2med_areacor(:) = 1._ESMF_KIND_R8
-     med2mod_areacor(:) = 1._ESMF_KIND_R8
-
-#ifdef CESMCOUPLED 
-     call ESMF_StateGet(exportState, itemName=trim(fldsFrOcn(2)%stdname), field=lfield, rc=rc)
-     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
-     call ESMF_FieldRegridGetArea(lfield, rc=rc)
-     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
-     call ESMF_FieldGet(lfield, farrayPtr=dataPtr_mesh_areas, rc=rc)
-     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
-     allocate(mesh_areas(numOwnedElements))
-     allocate(model_areas(numOwnedElements))
-
-     ! Determine model areas and flux correction factors (module variables in mom_)
-     k = 0
-     L2_to_rad2 = ocean_grid%US%L_to_m**2 / ocean_grid%Rad_Earth**2
-     do j = ocean_grid%jsc, ocean_grid%jec
-        do i = ocean_grid%isc, ocean_grid%iec
-           k = k + 1 ! Increment position within gindex
-           mesh_areas(k) = dataPtr_mesh_areas(k)
-           model_areas(k) = ocean_grid%AreaT(i,j) / ocean_grid%Rad_Earth**2
-           mod2med_areacor(k) = model_areas(k) / mesh_areas(k)
-           med2mod_areacor(k) = mesh_areas(k) / model_areas(k)
-        enddo
-     enddo
-     deallocate(mesh_areas)
-     deallocate(model_areas)
-
-     ! Write diagnostic output for correction factors
-     min_mod2med_areacor = minval(mod2med_areacor)
-     max_mod2med_areacor = maxval(mod2med_areacor)
-     min_med2mod_areacor = minval(med2mod_areacor)
-     max_med2mod_areacor = maxval(med2mod_areacor)
-     call shr_mpi_max(max_mod2med_areacor, max_mod2med_areacor_glob, mpicom)
-     call shr_mpi_min(min_mod2med_areacor, min_mod2med_areacor_glob, mpicom)
-     call shr_mpi_max(max_med2mod_areacor, max_med2mod_areacor_glob, mpicom)
-     call shr_mpi_min(min_med2mod_areacor, min_med2mod_areacor_glob, mpicom)
-     if (localPet == 0) then
-        write(logunit,'(2A,2g23.15,A )') trim(subname),' :  min_mod2med_areacor, max_mod2med_areacor ',&
-             min_mod2med_areacor_glob, max_mod2med_areacor_glob, 'MOM6'
-        write(logunit,'(2A,2g23.15,A )') trim(subname),' :  min_med2mod_areacor, max_med2mod_areacor ',&
-             min_med2mod_areacor_glob, max_med2mod_areacor_glob, 'MOM6'
-     end if
-#endif
-
-  end if
 
   !---------------------------------
   ! Set module variable geomtype in MOM_cap_methods
