@@ -11,7 +11,7 @@ use MOM_domains,               only : sum_across_PEs, max_across_PEs
 use MOM_domains,               only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,               only : pass_vector
 use MOM_debugging,             only : hchksum, uvchksum
-use MOM_diabatic_driver,              only : diabatic_CS
+use MOM_diabatic_driver,       only : diabatic_CS
 use MOM_EOS,                   only : calculate_density, EOS_type, EOS_domain
 use MOM_error_handler,         only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_error_handler,         only : MOM_set_verbosity, callTree_showQuery
@@ -60,7 +60,7 @@ type, public :: tracer_hor_diff_CS ; private
   logical :: use_neutral_diffusion !< If true, use the neutral_diffusion module from within
                                    !! tracer_hor_diff.
   logical :: use_lateral_boundary_diffusion !< If true, use the lateral_boundary_diffusion module from within
-                                         !! tracer_hor_diff.
+                                   !! tracer_hor_diff.
   logical :: recalc_neutral_surf   !< If true, recalculate the neutral surfaces if CFL has been
                                    !! exceeded
   type(neutral_diffusion_CS), pointer :: neutral_diffusion_CSp => NULL() !< Control structure for neutral diffusion.
@@ -105,12 +105,12 @@ contains
 !! on the acceptable time increment.
 subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online_flag, read_khdt_x, read_khdt_y)
   type(ocean_grid_type),      intent(inout) :: G       !< Grid type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  type(verticalGrid_type),    intent(in)    :: GV      !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(in)    :: h       !< Layer thickness [H ~> m or kg m-2]
   real,                       intent(in)    :: dt      !< time step [T ~> s]
   type(MEKE_type),            pointer       :: MEKE    !< MEKE type
   type(VarMix_CS),            pointer       :: VarMix  !< Variable mixing type
-  type(verticalGrid_type),    intent(in)    :: GV      !< ocean vertical grid structure
   type(unit_scale_type),      intent(in)    :: US      !< A dimensional unit scaling type
   type(tracer_hor_diff_CS),   pointer       :: CS      !< module control structure
   type(tracer_registry_type), pointer       :: Reg     !< registered tracers
@@ -588,7 +588,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
                                     GV, US, CS, tv, num_itts)
   type(ocean_grid_type),                    intent(inout) :: G          !< ocean grid structure
   type(verticalGrid_type),                  intent(in)    :: GV         !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h          !< layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)   :: h          !< layer thickness [H ~> m or kg m-2]
   real,                                     intent(in)    :: dt         !< time step [T ~> s]
   type(tracer_type),                        intent(inout) :: Tr(:)      !< tracer array
   integer,                                  intent(in)    :: ntr        !< number of tracers
@@ -626,18 +626,18 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     k0b_Lv, k0a_Lv, &  ! The original k-indices of the layers that participate
     k0b_Rv, k0a_Rv     ! in each pair of mixing at v-faces.
 
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: &
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: &
     tr_flux_conv  ! The flux convergence of tracers [conc H L2 ~> conc m3 or conc kg]
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: Tr_flux_3d, Tr_adj_vert_L, Tr_adj_vert_R
+  real, dimension(SZI_(G), SZJ_(G),SZK_(GV)) :: Tr_flux_3d, Tr_adj_vert_L, Tr_adj_vert_R
 
-  real, dimension(SZI_(G), SZK_(G), SZJ_(G)) :: &
+  real, dimension(SZI_(G),SZK_(GV), SZJ_(G)) :: &
     rho_srt, & ! The density of each layer of the sorted columns [R ~> kg m-3].
     h_srt      ! The thickness of each layer of the sorted columns [H ~> m or kg m-2].
-  integer, dimension(SZI_(G), SZK_(G), SZJ_(G)) :: &
+  integer, dimension(SZI_(G),SZK_(GV), SZJ_(G)) :: &
     k0_srt     ! The original k-index that each layer of the sorted column
                ! corresponds to.
 
-  real, dimension(SZK_(G)) :: &
+  real, dimension(SZK_(GV)) :: &
     h_demand_L, & ! The thickness in the left (_L) or right (_R) column that
     h_demand_R, & ! is demanded to match the thickness in the counterpart [H ~> m or kg m-2].
     h_used_L, &   ! The summed thickness from the left or right columns that
@@ -676,10 +676,10 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 
   ! The total number of pairings is usually much less than twice the number of layers, but
   ! the memory in these 1-d columns of pairings can be allocated generously for safety.
-  integer, dimension(SZK_(G)*2) :: &
+  integer, dimension(SZK_(GV)*2) :: &
     kbs_Lp, &   ! The sorted indices of the Left and Right columns for
     kbs_Rp      ! each pairing.
-  logical, dimension(SZK_(G)*2) :: &
+  logical, dimension(SZK_(GV)*2) :: &
     left_set, &  ! If true, the left or right point determines the density of
     right_set    ! of the trio.  If densities are exactly equal, both are true.
 
@@ -776,7 +776,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   ! Sort each column by increasing density.  This should already be close,
   ! and the size of the arrays are small, so straight insertion is used.
   !$OMP do
-   do j=js-1,je+1; do i=is-1,ie+1
+  do j=js-1,je+1 ; do i=is-1,ie+1
     do k=2,num_srt(i,j) ; if (rho_srt(i,k,j) < rho_srt(i,k-1,j)) then
       ! The last segment needs to be shuffled earlier in the list.
       do k2 = k,2,-1 ; if (rho_srt(i,k2,j) >= rho_srt(i,k2-1,j)) exit
@@ -1508,13 +1508,13 @@ subroutine tracer_hor_diff_init(Time, G, GV, US, param_file, diag, EOS, diabatic
                  units="nondim", default=1.0)
   endif
 
-  CS%use_neutral_diffusion = neutral_diffusion_init(Time, G, US, param_file, diag, EOS, &
+  CS%use_neutral_diffusion = neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, &
                                                     diabatic_CSp, CS%neutral_diffusion_CSp )
   if (CS%use_neutral_diffusion .and. CS%Diffuse_ML_interior) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
        "USE_NEUTRAL_DIFFUSION and DIFFUSE_ML_TO_INTERIOR are mutually exclusive!")
   CS%use_lateral_boundary_diffusion = lateral_boundary_diffusion_init(Time, G, GV, param_file, diag, diabatic_CSp, &
                                                                 CS%lateral_boundary_diffusion_CSp)
-  if (CS%use_neutral_diffusion .and. CS%Diffuse_ML_interior) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
+  if (CS%use_lateral_boundary_diffusion .and. CS%Diffuse_ML_interior) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
        "USE_LATERAL_BOUNDARY_DIFFUSION and DIFFUSE_ML_TO_INTERIOR are mutually exclusive!")
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
@@ -1530,19 +1530,19 @@ subroutine tracer_hor_diff_init(Time, G, GV, US, param_file, diag, EOS, diabatic
   CS%id_CFL    = -1
 
   CS%id_KhTr_u = register_diag_field('ocean_model', 'KHTR_u', diag%axesCu1, Time, &
-     'Epipycnal tracer diffusivity at zonal faces of tracer cell', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
+      'Epipycnal tracer diffusivity at zonal faces of tracer cell', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
   CS%id_KhTr_v = register_diag_field('ocean_model', 'KHTR_v', diag%axesCv1, Time, &
-     'Epipycnal tracer diffusivity at meridional faces of tracer cell', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
+      'Epipycnal tracer diffusivity at meridional faces of tracer cell', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
   CS%id_KhTr_h = register_diag_field('ocean_model', 'KHTR_h', diag%axesT1, Time, &
-     'Epipycnal tracer diffusivity at tracer cell center', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T, &
-     cmor_field_name='diftrelo',                                                &
-     cmor_standard_name= 'ocean_tracer_epineutral_laplacian_diffusivity',       &
-     cmor_long_name = 'Ocean Tracer Epineutral Laplacian Diffusivity')
+      'Epipycnal tracer diffusivity at tracer cell center', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T, &
+      cmor_field_name='diftrelo',                                                &
+      cmor_standard_name= 'ocean_tracer_epineutral_laplacian_diffusivity',       &
+      cmor_long_name = 'Ocean Tracer Epineutral Laplacian Diffusivity')
 
   CS%id_khdt_x = register_diag_field('ocean_model', 'KHDT_x', diag%axesCu1, Time, &
-     'Epipycnal tracer diffusivity operator at zonal faces of tracer cell', 'm2', conversion=US%L_to_m**2)
+      'Epipycnal tracer diffusivity operator at zonal faces of tracer cell', 'm2', conversion=US%L_to_m**2)
   CS%id_khdt_y = register_diag_field('ocean_model', 'KHDT_y', diag%axesCv1, Time, &
-     'Epipycnal tracer diffusivity operator at meridional faces of tracer cell', 'm2', conversion=US%L_to_m**2)
+      'Epipycnal tracer diffusivity operator at meridional faces of tracer cell', 'm2', conversion=US%L_to_m**2)
   if (CS%check_diffusive_CFL) then
     CS%id_CFL = register_diag_field('ocean_model', 'CFL_lateral_diff', diag%axesT1, Time,&
        'Grid CFL number for lateral/neutral tracer diffusion', 'nondim')

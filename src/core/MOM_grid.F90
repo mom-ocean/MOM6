@@ -5,7 +5,7 @@ module MOM_grid
 
 use MOM_hor_index, only : hor_index_type, hor_index_init
 use MOM_domains, only : MOM_domain_type, get_domain_extent, compute_block_extent
-use MOM_domains, only : get_global_shape, get_domain_extent_dsamp2
+use MOM_domains, only : get_global_shape, deallocate_MOM_domain
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_unit_scaling, only : unit_scale_type
@@ -363,9 +363,9 @@ subroutine MOM_grid_init(G, param_file, US, HI, global_indexing, bathymetry_at_v
   if ( G%block(nblocks)%jed+G%block(nblocks)%jdg_offset > G%HI%jed + G%HI%jdg_offset ) &
         call MOM_error(FATAL, "MOM_grid_init: G%jed_bk > G%jed")
 
-  call get_domain_extent_dsamp2(G%Domain, G%HId2%isc, G%HId2%iec, G%HId2%jsc, G%HId2%jec,&
-                                          G%HId2%isd, G%HId2%ied, G%HId2%jsd, G%HId2%jed,&
-                                          G%HId2%isg, G%HId2%ieg, G%HId2%jsg, G%HId2%jeg)
+  call get_domain_extent(G%Domain, G%HId2%isc, G%HId2%iec, G%HId2%jsc, G%HId2%jec, &
+                         G%HId2%isd, G%HId2%ied, G%HId2%jsd, G%HId2%jed, &
+                         G%HId2%isg, G%HId2%ieg, G%HId2%jsg, G%HId2%jeg, coarsen=2)
 
   ! Set array sizes for fields that are discretized at tracer cell boundaries.
   G%HId2%IscB = G%HId2%isc ; G%HId2%JscB = G%HId2%jsc
@@ -630,8 +630,9 @@ subroutine MOM_grid_end(G)
   deallocate(G%gridLonT) ; deallocate(G%gridLatT)
   deallocate(G%gridLonB) ; deallocate(G%gridLatB)
 
-  deallocate(G%Domain%mpp_domain)
-  deallocate(G%Domain)
+  ! The cursory flag avoids doing any deallocation of memory in the underlying
+  ! infrastructure to avoid problems due to shared pointers.
+  call deallocate_MOM_domain(G%Domain, cursory=.true.)
 
 end subroutine MOM_grid_end
 

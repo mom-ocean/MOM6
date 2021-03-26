@@ -9,37 +9,28 @@ use MOM_checksums,        only : hchksum, uchksum, vchksum, Bchksum
 use MOM_coms,             only : PE_here
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_MODULE, CLOCK_ROUTINE
+use MOM_diag_manager_infra, only : MOM_diag_manager_init, MOM_diag_manager_end
+use MOM_diag_manager_infra, only : diag_axis_init=>MOM_diag_axis_init, get_MOM_diag_axis_name
+use MOM_diag_manager_infra, only : send_data_infra, MOM_diag_field_add_attribute, EAST, NORTH
+use MOM_diag_manager_infra, only : register_diag_field_infra, register_static_field_infra
+use MOM_diag_manager_infra, only : get_MOM_diag_field_id, DIAG_FIELD_NOT_FOUND
+use MOM_diag_remap,       only : diag_remap_ctrl, diag_remap_update, diag_remap_calc_hmask
+use MOM_diag_remap,       only : diag_remap_init, diag_remap_end, diag_remap_do_remap
+use MOM_diag_remap,       only : vertically_reintegrate_diag_field, vertically_interpolate_diag_field
+use MOM_diag_remap,       only : horizontally_average_diag_field, diag_remap_get_axes_info
+use MOM_diag_remap,       only : diag_remap_configure_axes, diag_remap_axes_configured
+use MOM_diag_remap,       only : diag_remap_diag_registration_closed, diag_remap_set_active
+use MOM_EOS,              only : EOS_type
 use MOM_error_handler,    only : MOM_error, FATAL, WARNING, is_root_pe, assert
 use MOM_file_parser,      only : get_param, log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
-use MOM_io,               only : slasher, vardesc, query_vardesc, mom_read_data
+use MOM_io,               only : slasher, vardesc, query_vardesc, MOM_read_data
 use MOM_io,               only : get_filename_appendix
 use MOM_safe_alloc,       only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_string_functions, only : lowercase
 use MOM_time_manager,     only : time_type
 use MOM_unit_scaling,     only : unit_scale_type
 use MOM_verticalGrid,     only : verticalGrid_type
-use MOM_EOS,              only : EOS_type
-use MOM_diag_remap,       only : diag_remap_ctrl
-use MOM_diag_remap,       only : diag_remap_update
-use MOM_diag_remap,       only : diag_remap_calc_hmask
-use MOM_diag_remap,       only : diag_remap_init, diag_remap_end, diag_remap_do_remap
-use MOM_diag_remap,       only : vertically_reintegrate_diag_field, vertically_interpolate_diag_field
-use MOM_diag_remap,       only : diag_remap_configure_axes, diag_remap_axes_configured
-use MOM_diag_remap,       only : diag_remap_get_axes_info, diag_remap_set_active
-use MOM_diag_remap,       only : diag_remap_diag_registration_closed
-use MOM_diag_remap,       only : horizontally_average_diag_field
-
-use diag_axis_mod, only : get_diag_axis_name
-use diag_data_mod, only : null_axis_id
-use diag_manager_mod, only : diag_manager_init, diag_manager_end
-use diag_manager_mod, only : send_data, diag_axis_init, EAST, NORTH, diag_field_add_attribute
-! The following module is needed for PGI since the following line does not compile with PGI 6.5.0
-! was: use diag_manager_mod, only : register_diag_field_fms=>register_diag_field
-use MOM_diag_manager_wrapper, only : register_diag_field_fms
-use diag_manager_mod, only : register_static_field_fms=>register_static_field
-use diag_manager_mod, only : get_diag_field_id_fms=>get_diag_field_id
-use diag_manager_mod, only : DIAG_FIELD_NOT_FOUND
 
 implicit none ; private
 
@@ -65,6 +56,7 @@ public diag_set_state_ptrs, diag_update_remap_grids
 public diag_grid_storage_init, diag_grid_storage_end
 public diag_copy_diag_to_storage, diag_copy_storage_to_diag
 public diag_save_grids, diag_restore_grids
+public found_in_diagtable
 
 !> Make a diagnostic available for averaging or output.
 interface post_data
@@ -73,23 +65,23 @@ end interface post_data
 
 !> Down sample a field
 interface downsample_field
-   module procedure downsample_field_2d, downsample_field_3d
+  module procedure downsample_field_2d, downsample_field_3d
 end interface downsample_field
 
 !> Down sample the mask of a field
 interface downsample_mask
-   module procedure downsample_mask_2d, downsample_mask_3d
+  module procedure downsample_mask_2d, downsample_mask_3d
 end interface downsample_mask
 
 !> Down sample a diagnostic field
 interface downsample_diag_field
-   module procedure downsample_diag_field_2d, downsample_diag_field_3d
+  module procedure downsample_diag_field_2d, downsample_diag_field_3d
 end interface downsample_diag_field
 
 !> Contained for down sampled masks
 type, private :: diag_dsamp
-   real, pointer, dimension(:,:)   :: mask2d => null() !< Mask for 2d (x-y) axes
-   real, pointer, dimension(:,:,:) :: mask3d => null() !< Mask for 3d axes
+  real, pointer, dimension(:,:)   :: mask2d => null() !< Mask for 2d (x-y) axes
+  real, pointer, dimension(:,:,:) :: mask3d => null() !< Mask for 3d axes
 end type diag_dsamp
 
 !> A group of 1D axes that comprise a 1D/2D/3D mesh
@@ -242,7 +234,7 @@ type, public :: diag_ctrl
                                           !! This file is open if available_diag_doc_unit is > 0.
   integer :: chksum_iounit = -1           !< The unit number of a diagnostic documentation file.
                                           !! This file is open if available_diag_doc_unit is > 0.
-  logical :: diag_as_chksum !< If true, log chksums in a text file instead of posting diagnostics
+  logical :: diag_as_chksum  !< If true, log chksums in a text file instead of posting diagnostics
   logical :: grid_space_axes !< If true, diagnostic horizontal coordinates axes are in grid space.
 ! The following fields are used for the output of the data.
   integer :: is  !< The start i-index of cell centers within the computational domain
@@ -354,7 +346,7 @@ subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
   logical,       optional, intent(in)    :: set_vertical !< If true or missing, set up
                                                        !! vertical axes
   ! Local variables
-  integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh
+  integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh, id_null
   integer :: id_zl_native, id_zi_native
   integer :: i, j, k, nz
   real :: zlev(GV%ke), zinter(GV%ke+1)
@@ -367,62 +359,61 @@ subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
 
 
   if (diag_cs%grid_space_axes) then
-     allocate(IaxB(G%IsgB:G%IegB))
-     do i=G%IsgB, G%IegB
-       Iaxb(i)=real(i)
-     enddo
-     allocate(iax(G%isg:G%ieg))
-     do i=G%isg, G%ieg
-       iax(i)=real(i)-0.5
-     enddo
-     allocate(JaxB(G%JsgB:G%JegB))
-     do j=G%JsgB, G%JegB
-       JaxB(j)=real(j)
-     enddo
-     allocate(jax(G%jsg:G%jeg))
-     do j=G%jsg, G%jeg
-       jax(j)=real(j)-0.5
-     enddo
+    allocate(IaxB(G%IsgB:G%IegB))
+    do i=G%IsgB, G%IegB
+      Iaxb(i)=real(i)
+    enddo
+    allocate(iax(G%isg:G%ieg))
+    do i=G%isg, G%ieg
+      iax(i)=real(i)-0.5
+    enddo
+    allocate(JaxB(G%JsgB:G%JegB))
+    do j=G%JsgB, G%JegB
+      JaxB(j)=real(j)
+    enddo
+    allocate(jax(G%jsg:G%jeg))
+    do j=G%jsg, G%jeg
+      jax(j)=real(j)-0.5
+    enddo
   endif
 
   ! Horizontal axes for the native grids
   if (G%symmetric) then
-     if (diag_cs%grid_space_axes) then
-        id_xq = diag_axis_init('iq', IaxB(G%isgB:G%iegB), 'none', 'x', &
-             'q point grid-space longitude', Domain2=G%Domain%mpp_domain, domain_position=EAST)
-        id_yq = diag_axis_init('jq', JaxB(G%jsgB:G%jegB), 'none', 'y', &
-         'q point grid space latitude', Domain2=G%Domain%mpp_domain, domain_position=NORTH)
-     else
-        id_xq = diag_axis_init('xq', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
-             'q point nominal longitude', Domain2=G%Domain%mpp_domain, domain_position=EAST)
-        id_yq = diag_axis_init('yq', G%gridLatB(G%jsgB:G%jegB), G%y_axis_units, 'y', &
-            'q point nominal latitude', Domain2=G%Domain%mpp_domain, domain_position=NORTH)
-     endif
+    if (diag_cs%grid_space_axes) then
+      id_xq = diag_axis_init('iq', IaxB(G%isgB:G%iegB), 'none', 'x', &
+          'q point grid-space longitude', G%Domain, position=EAST)
+      id_yq = diag_axis_init('jq', JaxB(G%jsgB:G%jegB), 'none', 'y', &
+          'q point grid space latitude', G%Domain, position=NORTH)
+    else
+      id_xq = diag_axis_init('xq', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
+          'q point nominal longitude', G%Domain, position=EAST)
+      id_yq = diag_axis_init('yq', G%gridLatB(G%jsgB:G%jegB), G%y_axis_units, 'y', &
+          'q point nominal latitude', G%Domain, position=NORTH)
+    endif
   else
-     if (diag_cs%grid_space_axes) then
-        id_xq = diag_axis_init('Iq', IaxB(G%isg:G%ieg), 'none', 'x', &
-             'q point grid-space longitude', Domain2=G%Domain%mpp_domain, domain_position=EAST)
-        id_yq = diag_axis_init('Jq', JaxB(G%jsg:G%jeg), 'none', 'y', &
-             'q point grid space latitude', Domain2=G%Domain%mpp_domain, domain_position=NORTH)
-     else
-        id_xq = diag_axis_init('xq', G%gridLonB(G%isg:G%ieg), G%x_axis_units, 'x', &
-             'q point nominal longitude', Domain2=G%Domain%mpp_domain, domain_position=EAST)
-        id_yq = diag_axis_init('yq', G%gridLatB(G%jsg:G%jeg), G%y_axis_units, 'y', &
-             'q point nominal latitude', Domain2=G%Domain%mpp_domain, domain_position=NORTH)
-     endif
+    if (diag_cs%grid_space_axes) then
+      id_xq = diag_axis_init('Iq', IaxB(G%isg:G%ieg), 'none', 'x', &
+          'q point grid-space longitude', G%Domain, position=EAST)
+      id_yq = diag_axis_init('Jq', JaxB(G%jsg:G%jeg), 'none', 'y', &
+          'q point grid space latitude', G%Domain, position=NORTH)
+    else
+      id_xq = diag_axis_init('xq', G%gridLonB(G%isg:G%ieg), G%x_axis_units, 'x', &
+          'q point nominal longitude', G%Domain, position=EAST)
+      id_yq = diag_axis_init('yq', G%gridLatB(G%jsg:G%jeg), G%y_axis_units, 'y', &
+          'q point nominal latitude', G%Domain, position=NORTH)
+    endif
   endif
 
-
   if (diag_cs%grid_space_axes) then
-     id_xh = diag_axis_init('ih', iax(G%isg:G%ieg), 'none', 'x', &
-          'h point grid-space longitude', Domain2=G%Domain%mpp_domain, domain_position=EAST)
-     id_yh = diag_axis_init('jh', jax(G%jsg:G%jeg), 'none', 'y', &
-         'h point grid space latitude', Domain2=G%Domain%mpp_domain, domain_position=NORTH)
+    id_xh = diag_axis_init('ih', iax(G%isg:G%ieg), 'none', 'x', &
+        'h point grid-space longitude', G%Domain, position=EAST)
+    id_yh = diag_axis_init('jh', jax(G%jsg:G%jeg), 'none', 'y', &
+        'h point grid space latitude', G%Domain, position=NORTH)
   else
-     id_xh = diag_axis_init('xh', G%gridLonT(G%isg:G%ieg), G%x_axis_units, 'x', &
-          'h point nominal longitude', Domain2=G%Domain%mpp_domain)
-     id_yh = diag_axis_init('yh', G%gridLatT(G%jsg:G%jeg), G%y_axis_units, 'y', &
-          'h point nominal latitude', Domain2=G%Domain%mpp_domain)
+    id_xh = diag_axis_init('xh', G%gridLonT(G%isg:G%ieg), G%x_axis_units, 'x', &
+        'h point nominal longitude', G%Domain)
+    id_yh = diag_axis_init('yh', G%gridLatT(G%jsg:G%jeg), G%y_axis_units, 'y', &
+        'h point nominal latitude', G%Domain)
   endif
 
   if (set_vert) then
@@ -430,11 +421,9 @@ subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
     zinter(1:nz+1) = GV%sInterface(1:nz+1)
     zlev(1:nz) = GV%sLayer(1:nz)
     id_zl = diag_axis_init('zl', zlev, trim(GV%zAxisUnits), 'z', &
-                           'Layer '//trim(GV%zAxisLongName),     &
-                           direction=GV%direction)
+                           'Layer '//trim(GV%zAxisLongName), direction=GV%direction)
     id_zi = diag_axis_init('zi', zinter, trim(GV%zAxisUnits), 'z', &
-                           'Interface '//trim(GV%zAxisLongName),   &
-                           direction=GV%direction)
+                           'Interface '//trim(GV%zAxisLongName), direction=GV%direction)
   else
     id_zl = -1 ; id_zi = -1
   endif
@@ -483,9 +472,9 @@ subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
   call define_axes_group(diag_cs, (/ id_xh, id_yq /), diag_cs%axesCv1, &
        x_cell_method='mean', y_cell_method='point', is_v_point=.true.)
 
-  ! Axis group for special null axis from diag manager
-  call define_axes_group(diag_cs, (/ null_axis_id /), diag_cs%axesNull)
-
+  ! Axis group for special null axis from diag manager.
+  id_null = diag_axis_init('scalar_axis', (/0./), 'none', 'N', 'none', null_axis=.true.)
+  call define_axes_group(diag_cs, (/ id_null /), diag_cs%axesNull)
 
   !Non-native Non-downsampled
   if (diag_cs%num_diag_coords>0) then
@@ -578,12 +567,12 @@ subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
   enddo
 
   if (diag_cs%grid_space_axes) then
-     deallocate(IaxB,iax,JaxB,jax)
+    deallocate(IaxB, iax, JaxB, jax)
   endif
   !Define the downsampled axes
   call set_axes_info_dsamp(G, GV, param_file, diag_cs, id_zl_native, id_zi_native)
 
-  call diag_grid_storage_init(diag_CS%diag_grid_temp, G, diag_CS)
+  call diag_grid_storage_init(diag_CS%diag_grid_temp, G, GV, diag_CS)
 
 end subroutine set_axes_info
 
@@ -606,153 +595,153 @@ subroutine set_axes_info_dsamp(G, GV, param_file, diag_cs, id_zl_native, id_zi_n
   id_zl = id_zl_native ; id_zi = id_zi_native
   !Axes group for native downsampled diagnostics
   do dl=2,MAX_DSAMP_LEV
-     if(dl .ne. 2) call MOM_error(FATAL, "set_axes_info_dsamp: Downsample level other than 2 is not supported yet!")
-     if (G%symmetric) then
-        allocate(gridLonB_dsamp(diag_cs%dsamp(dl)%isgB:diag_cs%dsamp(dl)%iegB))
-        allocate(gridLatB_dsamp(diag_cs%dsamp(dl)%jsgB:diag_cs%dsamp(dl)%jegB))
-        do i=diag_cs%dsamp(dl)%isgB,diag_cs%dsamp(dl)%iegB;  gridLonB_dsamp(i) = G%gridLonB(G%isgB+dl*i); enddo
-        do j=diag_cs%dsamp(dl)%jsgB,diag_cs%dsamp(dl)%jegB;  gridLatB_dsamp(j) = G%gridLatB(G%jsgB+dl*j); enddo
-        id_xq = diag_axis_init('xq', gridLonB_dsamp, G%x_axis_units, 'x', &
-                  'q point nominal longitude', Domain2=G%Domain%mpp_domain_d2)
-        id_yq = diag_axis_init('yq', gridLatB_dsamp, G%y_axis_units, 'y', &
-                  'q point nominal latitude', Domain2=G%Domain%mpp_domain_d2)
-        deallocate(gridLonB_dsamp,gridLatB_dsamp)
-     else
-        allocate(gridLonB_dsamp(diag_cs%dsamp(dl)%isg:diag_cs%dsamp(dl)%ieg))
-        allocate(gridLatB_dsamp(diag_cs%dsamp(dl)%jsg:diag_cs%dsamp(dl)%jeg))
-        do i=diag_cs%dsamp(dl)%isg,diag_cs%dsamp(dl)%ieg;  gridLonB_dsamp(i) = G%gridLonB(G%isg+dl*i-2); enddo
-        do j=diag_cs%dsamp(dl)%jsg,diag_cs%dsamp(dl)%jeg;  gridLatB_dsamp(j) = G%gridLatB(G%jsg+dl*j-2); enddo
-        id_xq = diag_axis_init('xq', gridLonB_dsamp, G%x_axis_units, 'x', &
-                  'q point nominal longitude', Domain2=G%Domain%mpp_domain_d2)
-        id_yq = diag_axis_init('yq', gridLatB_dsamp, G%y_axis_units, 'y', &
-                  'q point nominal latitude', Domain2=G%Domain%mpp_domain_d2)
-        deallocate(gridLonB_dsamp,gridLatB_dsamp)
-     endif
+    if (dl /= 2) call MOM_error(FATAL, "set_axes_info_dsamp: Downsample level other than 2 is not supported yet!")
+    if (G%symmetric) then
+      allocate(gridLonB_dsamp(diag_cs%dsamp(dl)%isgB:diag_cs%dsamp(dl)%iegB))
+      allocate(gridLatB_dsamp(diag_cs%dsamp(dl)%jsgB:diag_cs%dsamp(dl)%jegB))
+      do i=diag_cs%dsamp(dl)%isgB,diag_cs%dsamp(dl)%iegB;  gridLonB_dsamp(i) = G%gridLonB(G%isgB+dl*i); enddo
+      do j=diag_cs%dsamp(dl)%jsgB,diag_cs%dsamp(dl)%jegB;  gridLatB_dsamp(j) = G%gridLatB(G%jsgB+dl*j); enddo
+      id_xq = diag_axis_init('xq', gridLonB_dsamp, G%x_axis_units, 'x', &
+            'q point nominal longitude', G%Domain, coarsen=2)
+      id_yq = diag_axis_init('yq', gridLatB_dsamp, G%y_axis_units, 'y', &
+            'q point nominal latitude', G%Domain, coarsen=2)
+      deallocate(gridLonB_dsamp,gridLatB_dsamp)
+    else
+      allocate(gridLonB_dsamp(diag_cs%dsamp(dl)%isg:diag_cs%dsamp(dl)%ieg))
+      allocate(gridLatB_dsamp(diag_cs%dsamp(dl)%jsg:diag_cs%dsamp(dl)%jeg))
+      do i=diag_cs%dsamp(dl)%isg,diag_cs%dsamp(dl)%ieg;  gridLonB_dsamp(i) = G%gridLonB(G%isg+dl*i-2); enddo
+      do j=diag_cs%dsamp(dl)%jsg,diag_cs%dsamp(dl)%jeg;  gridLatB_dsamp(j) = G%gridLatB(G%jsg+dl*j-2); enddo
+      id_xq = diag_axis_init('xq', gridLonB_dsamp, G%x_axis_units, 'x', &
+            'q point nominal longitude', G%Domain, coarsen=2)
+      id_yq = diag_axis_init('yq', gridLatB_dsamp, G%y_axis_units, 'y', &
+            'q point nominal latitude', G%Domain, coarsen=2)
+      deallocate(gridLonB_dsamp,gridLatB_dsamp)
+    endif
 
-     allocate(gridLonT_dsamp(diag_cs%dsamp(dl)%isg:diag_cs%dsamp(dl)%ieg))
-     allocate(gridLatT_dsamp(diag_cs%dsamp(dl)%jsg:diag_cs%dsamp(dl)%jeg))
-     do i=diag_cs%dsamp(dl)%isg,diag_cs%dsamp(dl)%ieg;  gridLonT_dsamp(i) = G%gridLonT(G%isg+dl*i-2); enddo
-     do j=diag_cs%dsamp(dl)%jsg,diag_cs%dsamp(dl)%jeg;  gridLatT_dsamp(j) = G%gridLatT(G%jsg+dl*j-2); enddo
-     id_xh = diag_axis_init('xh', gridLonT_dsamp, G%x_axis_units, 'x', &
-          'h point nominal longitude', Domain2=G%Domain%mpp_domain_d2)
-     id_yh = diag_axis_init('yh', gridLatT_dsamp, G%y_axis_units, 'y', &
-          'h point nominal latitude', Domain2=G%Domain%mpp_domain_d2)
+    allocate(gridLonT_dsamp(diag_cs%dsamp(dl)%isg:diag_cs%dsamp(dl)%ieg))
+    allocate(gridLatT_dsamp(diag_cs%dsamp(dl)%jsg:diag_cs%dsamp(dl)%jeg))
+    do i=diag_cs%dsamp(dl)%isg,diag_cs%dsamp(dl)%ieg;  gridLonT_dsamp(i) = G%gridLonT(G%isg+dl*i-2); enddo
+    do j=diag_cs%dsamp(dl)%jsg,diag_cs%dsamp(dl)%jeg;  gridLatT_dsamp(j) = G%gridLatT(G%jsg+dl*j-2); enddo
+    id_xh = diag_axis_init('xh', gridLonT_dsamp, G%x_axis_units, 'x', &
+          'h point nominal longitude', G%Domain, coarsen=2)
+    id_yh = diag_axis_init('yh', gridLatT_dsamp, G%y_axis_units, 'y', &
+          'h point nominal latitude', G%Domain, coarsen=2)
 
-     deallocate(gridLonT_dsamp,gridLatT_dsamp)
+    deallocate(gridLonT_dsamp,gridLatT_dsamp)
 
-     ! Axis groupings for the model layers
-     call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%dsamp(dl)%axesTL, dl, &
-          x_cell_method='mean', y_cell_method='mean', v_cell_method='mean', &
-          is_h_point=.true., is_layer=.true., xyave_axes=diag_cs%axesZL)
-     call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yq, id_zL /), diag_cs%dsamp(dl)%axesBL, dl, &
-          x_cell_method='point', y_cell_method='point', v_cell_method='mean', &
-          is_q_point=.true., is_layer=.true.)
-     call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yh, id_zL /), diag_cs%dsamp(dl)%axesCuL, dl, &
-          x_cell_method='point', y_cell_method='mean', v_cell_method='mean', &
-          is_u_point=.true., is_layer=.true., xyave_axes=diag_cs%axesZL)
-     call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yq, id_zL /), diag_cs%dsamp(dl)%axesCvL, dl, &
-          x_cell_method='mean', y_cell_method='point', v_cell_method='mean', &
-          is_v_point=.true., is_layer=.true., xyave_axes=diag_cs%axesZL)
+    ! Axis groupings for the model layers
+    call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%dsamp(dl)%axesTL, dl, &
+            x_cell_method='mean', y_cell_method='mean', v_cell_method='mean', &
+            is_h_point=.true., is_layer=.true., xyave_axes=diag_cs%axesZL)
+    call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yq, id_zL /), diag_cs%dsamp(dl)%axesBL, dl, &
+            x_cell_method='point', y_cell_method='point', v_cell_method='mean', &
+            is_q_point=.true., is_layer=.true.)
+    call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yh, id_zL /), diag_cs%dsamp(dl)%axesCuL, dl, &
+            x_cell_method='point', y_cell_method='mean', v_cell_method='mean', &
+            is_u_point=.true., is_layer=.true., xyave_axes=diag_cs%axesZL)
+    call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yq, id_zL /), diag_cs%dsamp(dl)%axesCvL, dl, &
+            x_cell_method='mean', y_cell_method='point', v_cell_method='mean', &
+            is_v_point=.true., is_layer=.true., xyave_axes=diag_cs%axesZL)
 
-     ! Axis groupings for the model interfaces
-     call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%dsamp(dl)%axesTi, dl, &
-          x_cell_method='mean', y_cell_method='mean', v_cell_method='point', &
-          is_h_point=.true., is_interface=.true., xyave_axes=diag_cs%axesZi)
-     call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%dsamp(dl)%axesBi, dl, &
-          x_cell_method='point', y_cell_method='point', v_cell_method='point', &
-          is_q_point=.true., is_interface=.true.)
-     call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%dsamp(dl)%axesCui, dl, &
-          x_cell_method='point', y_cell_method='mean', v_cell_method='point', &
-          is_u_point=.true., is_interface=.true., xyave_axes=diag_cs%axesZi)
-     call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%dsamp(dl)%axesCvi, dl, &
-          x_cell_method='mean', y_cell_method='point', v_cell_method='point', &
-          is_v_point=.true., is_interface=.true., xyave_axes=diag_cs%axesZi)
+    ! Axis groupings for the model interfaces
+    call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%dsamp(dl)%axesTi, dl, &
+            x_cell_method='mean', y_cell_method='mean', v_cell_method='point', &
+            is_h_point=.true., is_interface=.true., xyave_axes=diag_cs%axesZi)
+    call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%dsamp(dl)%axesBi, dl, &
+            x_cell_method='point', y_cell_method='point', v_cell_method='point', &
+            is_q_point=.true., is_interface=.true.)
+    call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%dsamp(dl)%axesCui, dl, &
+            x_cell_method='point', y_cell_method='mean', v_cell_method='point', &
+            is_u_point=.true., is_interface=.true., xyave_axes=diag_cs%axesZi)
+    call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%dsamp(dl)%axesCvi, dl, &
+            x_cell_method='mean', y_cell_method='point', v_cell_method='point', &
+            is_v_point=.true., is_interface=.true., xyave_axes=diag_cs%axesZi)
 
-     ! Axis groupings for 2-D arrays
-     call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yh /), diag_cs%dsamp(dl)%axesT1, dl, &
-          x_cell_method='mean', y_cell_method='mean', is_h_point=.true.)
-     call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yq /), diag_cs%dsamp(dl)%axesB1, dl, &
-          x_cell_method='point', y_cell_method='point', is_q_point=.true.)
-     call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yh /), diag_cs%dsamp(dl)%axesCu1, dl, &
-          x_cell_method='point', y_cell_method='mean', is_u_point=.true.)
-     call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yq /), diag_cs%dsamp(dl)%axesCv1, dl, &
-          x_cell_method='mean', y_cell_method='point', is_v_point=.true.)
+    ! Axis groupings for 2-D arrays
+    call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yh /), diag_cs%dsamp(dl)%axesT1, dl, &
+            x_cell_method='mean', y_cell_method='mean', is_h_point=.true.)
+    call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yq /), diag_cs%dsamp(dl)%axesB1, dl, &
+            x_cell_method='point', y_cell_method='point', is_q_point=.true.)
+    call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yh /), diag_cs%dsamp(dl)%axesCu1, dl, &
+            x_cell_method='point', y_cell_method='mean', is_u_point=.true.)
+    call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yq /), diag_cs%dsamp(dl)%axesCv1, dl, &
+            x_cell_method='mean', y_cell_method='point', is_v_point=.true.)
 
-     !Non-native axes
-     if (diag_cs%num_diag_coords>0) then
-        allocate(diag_cs%dsamp(dl)%remap_axesTL(diag_cs%num_diag_coords))
-        allocate(diag_cs%dsamp(dl)%remap_axesBL(diag_cs%num_diag_coords))
-        allocate(diag_cs%dsamp(dl)%remap_axesCuL(diag_cs%num_diag_coords))
-        allocate(diag_cs%dsamp(dl)%remap_axesCvL(diag_cs%num_diag_coords))
-        allocate(diag_cs%dsamp(dl)%remap_axesTi(diag_cs%num_diag_coords))
-        allocate(diag_cs%dsamp(dl)%remap_axesBi(diag_cs%num_diag_coords))
-        allocate(diag_cs%dsamp(dl)%remap_axesCui(diag_cs%num_diag_coords))
-        allocate(diag_cs%dsamp(dl)%remap_axesCvi(diag_cs%num_diag_coords))
-     endif
+    !Non-native axes
+    if (diag_cs%num_diag_coords>0) then
+      allocate(diag_cs%dsamp(dl)%remap_axesTL(diag_cs%num_diag_coords))
+      allocate(diag_cs%dsamp(dl)%remap_axesBL(diag_cs%num_diag_coords))
+      allocate(diag_cs%dsamp(dl)%remap_axesCuL(diag_cs%num_diag_coords))
+      allocate(diag_cs%dsamp(dl)%remap_axesCvL(diag_cs%num_diag_coords))
+      allocate(diag_cs%dsamp(dl)%remap_axesTi(diag_cs%num_diag_coords))
+      allocate(diag_cs%dsamp(dl)%remap_axesBi(diag_cs%num_diag_coords))
+      allocate(diag_cs%dsamp(dl)%remap_axesCui(diag_cs%num_diag_coords))
+      allocate(diag_cs%dsamp(dl)%remap_axesCvi(diag_cs%num_diag_coords))
+    endif
 
-     do i=1, diag_cs%num_diag_coords
-        ! For each possible diagnostic coordinate
-        !call diag_remap_configure_axes(diag_cs%diag_remap_cs(i), GV, param_file)
+    do i=1, diag_cs%num_diag_coords
+      ! For each possible diagnostic coordinate
+      !call diag_remap_configure_axes(diag_cs%diag_remap_cs(i), GV, param_file)
 
-        ! This vertical coordinate has been configured so can be used.
-        if (diag_remap_axes_configured(diag_cs%diag_remap_cs(i))) then
+      ! This vertical coordinate has been configured so can be used.
+      if (diag_remap_axes_configured(diag_cs%diag_remap_cs(i))) then
 
-           ! This fetches the 1D-axis id for layers and interfaces and overwrite
-           ! id_zl and id_zi from above. It also returns the number of layers.
-           call diag_remap_get_axes_info(diag_cs%diag_remap_cs(i), nz, id_zL, id_zi)
+        ! This fetches the 1D-axis id for layers and interfaces and overwrite
+        ! id_zl and id_zi from above. It also returns the number of layers.
+        call diag_remap_get_axes_info(diag_cs%diag_remap_cs(i), nz, id_zL, id_zi)
 
-           ! Axes for z layers
-           call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%dsamp(dl)%remap_axesTL(i), dl, &
+        ! Axes for z layers
+        call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%dsamp(dl)%remap_axesTL(i), dl, &
                 nz=nz, vertical_coordinate_number=i, &
                 x_cell_method='mean', y_cell_method='mean', v_cell_method='mean', &
                 is_h_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true., &
                 xyave_axes=diag_cs%remap_axesZL(i))
 
-           !! \note Remapping for B points is not yet implemented so needs_remapping is not
-           !! provided for remap_axesBL
-           call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yq, id_zL /), diag_cs%dsamp(dl)%remap_axesBL(i), dl, &
+        !! \note Remapping for B points is not yet implemented so needs_remapping is not
+        !! provided for remap_axesBL
+        call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yq, id_zL /), diag_cs%dsamp(dl)%remap_axesBL(i), dl, &
                 nz=nz, vertical_coordinate_number=i, &
                 x_cell_method='point', y_cell_method='point', v_cell_method='mean', &
                 is_q_point=.true., is_layer=.true., is_native=.false.)
 
-           call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yh, id_zL /), diag_cs%dsamp(dl)%remap_axesCuL(i), dl, &
+        call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yh, id_zL /), diag_cs%dsamp(dl)%remap_axesCuL(i), dl, &
                 nz=nz, vertical_coordinate_number=i, &
                 x_cell_method='point', y_cell_method='mean', v_cell_method='mean', &
                 is_u_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true., &
                 xyave_axes=diag_cs%remap_axesZL(i))
 
-           call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yq, id_zL /), diag_cs%dsamp(dl)%remap_axesCvL(i), dl, &
+        call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yq, id_zL /), diag_cs%dsamp(dl)%remap_axesCvL(i), dl, &
                 nz=nz, vertical_coordinate_number=i, &
                 x_cell_method='mean', y_cell_method='point', v_cell_method='mean', &
                 is_v_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true., &
                 xyave_axes=diag_cs%remap_axesZL(i))
 
-           ! Axes for z interfaces
-           call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%dsamp(dl)%remap_axesTi(i), dl, &
+        ! Axes for z interfaces
+        call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%dsamp(dl)%remap_axesTi(i), dl, &
                 nz=nz, vertical_coordinate_number=i, &
                 x_cell_method='mean', y_cell_method='mean', v_cell_method='point', &
                 is_h_point=.true., is_interface=.true., is_native=.false., needs_interpolating=.true., &
                 xyave_axes=diag_cs%remap_axesZi(i))
 
-           !! \note Remapping for B points is not yet implemented so needs_remapping is not provided for remap_axesBi
-           call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%dsamp(dl)%remap_axesBi(i), dl, &
+        !! \note Remapping for B points is not yet implemented so needs_remapping is not provided for remap_axesBi
+        call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%dsamp(dl)%remap_axesBi(i), dl, &
                 nz=nz, vertical_coordinate_number=i, &
                 x_cell_method='point', y_cell_method='point', v_cell_method='point', &
                 is_q_point=.true., is_interface=.true., is_native=.false.)
 
-           call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%dsamp(dl)%remap_axesCui(i), dl, &
+        call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%dsamp(dl)%remap_axesCui(i), dl, &
                 nz=nz, vertical_coordinate_number=i, &
                 x_cell_method='point', y_cell_method='mean', v_cell_method='point', &
                 is_u_point=.true., is_interface=.true., is_native=.false., &
                 needs_interpolating=.true., xyave_axes=diag_cs%remap_axesZi(i))
 
-           call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%dsamp(dl)%remap_axesCvi(i), dl, &
+        call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%dsamp(dl)%remap_axesCvi(i), dl, &
                 nz=nz, vertical_coordinate_number=i, &
                 x_cell_method='mean', y_cell_method='point', v_cell_method='point', &
                 is_v_point=.true., is_interface=.true., is_native=.false., &
                 needs_interpolating=.true., xyave_axes=diag_cs%remap_axesZi(i))
-        endif
-     enddo
+      endif
+    enddo
   enddo
 
 end subroutine set_axes_info_dsamp
@@ -871,49 +860,49 @@ subroutine set_masks_for_axes_dsamp(G, diag_cs)
   !The downsampled mask is needed for sending out the diagnostics output via diag_manager
   !The non-downsampled mask is needed for downsampling the diagnostics field
   do dl=2,MAX_DSAMP_LEV
-     if(dl .ne. 2) call MOM_error(FATAL, "set_masks_for_axes_dsamp: Downsample level other than 2 is not supported!")
-     do c=1, diag_cs%num_diag_coords
-        ! Level/layer h-points in diagnostic coordinate
-        axes => diag_cs%remap_axesTL(c)
-        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesTL(c)%dsamp(dl)%mask3d, dl,G%isc, G%jsc,  &
-          G%HId2%isc, G%HId2%iec, G%HId2%jsc, G%HId2%jec, G%HId2%isd, G%HId2%ied, G%HId2%jsd, G%HId2%jed)
-        diag_cs%dsamp(dl)%remap_axesTL(c)%mask3d => axes%mask3d !set non-downsampled mask
-        ! Level/layer u-points in diagnostic coordinate
-        axes => diag_cs%remap_axesCuL(c)
-        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCuL(c)%dsamp(dl)%mask3d, dl,G%IscB,G%JscB, &
-          G%HId2%IscB,G%HId2%IecB,G%HId2%jsc, G%HId2%jec,G%HId2%IsdB,G%HId2%IedB,G%HId2%jsd, G%HId2%jed)
-        diag_cs%dsamp(dl)%remap_axesCul(c)%mask3d => axes%mask3d !set non-downsampled mask
-        ! Level/layer v-points in diagnostic coordinate
-        axes => diag_cs%remap_axesCvL(c)
-        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCvL(c)%dsamp(dl)%mask3d, dl,G%isc ,G%JscB, &
-          G%HId2%isc ,G%HId2%iec, G%HId2%JscB,G%HId2%JecB,G%HId2%isd ,G%HId2%ied, G%HId2%JsdB,G%HId2%JedB)
-        diag_cs%dsamp(dl)%remap_axesCvL(c)%mask3d => axes%mask3d !set non-downsampled mask
-        ! Level/layer q-points in diagnostic coordinate
-        axes => diag_cs%remap_axesBL(c)
-        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesBL(c)%dsamp(dl)%mask3d, dl,G%IscB,G%JscB, &
-          G%HId2%IscB,G%HId2%IecB,G%HId2%JscB,G%HId2%JecB,G%HId2%IsdB,G%HId2%IedB,G%HId2%JsdB,G%HId2%JedB)
-        diag_cs%dsamp(dl)%remap_axesBL(c)%mask3d => axes%mask3d !set non-downsampled mask
-        ! Interface h-points in diagnostic coordinate (w-point)
-        axes => diag_cs%remap_axesTi(c)
-        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesTi(c)%dsamp(dl)%mask3d, dl,G%isc, G%jsc,  &
-          G%HId2%isc, G%HId2%iec, G%HId2%jsc, G%HId2%jec, G%HId2%isd, G%HId2%ied, G%HId2%jsd, G%HId2%jed)
-        diag_cs%dsamp(dl)%remap_axesTi(c)%mask3d => axes%mask3d !set non-downsampled mask
-        ! Interface u-points in diagnostic coordinate
-        axes => diag_cs%remap_axesCui(c)
-        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCui(c)%dsamp(dl)%mask3d, dl,G%IscB,G%JscB, &
-          G%HId2%IscB,G%HId2%IecB,G%HId2%jsc, G%HId2%jec,G%HId2%IsdB,G%HId2%IedB,G%HId2%jsd, G%HId2%jed)
-        diag_cs%dsamp(dl)%remap_axesCui(c)%mask3d => axes%mask3d !set non-downsampled mask
-        ! Interface v-points in diagnostic coordinate
-        axes => diag_cs%remap_axesCvi(c)
-        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCvi(c)%dsamp(dl)%mask3d, dl,G%isc ,G%JscB, &
-          G%HId2%isc ,G%HId2%iec, G%HId2%JscB,G%HId2%JecB,G%HId2%isd ,G%HId2%ied, G%HId2%JsdB,G%HId2%JedB)
-        diag_cs%dsamp(dl)%remap_axesCvi(c)%mask3d => axes%mask3d !set non-downsampled mask
-        ! Interface q-points in diagnostic coordinate
-        axes => diag_cs%remap_axesBi(c)
-        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesBi(c)%dsamp(dl)%mask3d, dl,G%IscB,G%JscB, &
-          G%HId2%IscB,G%HId2%IecB,G%HId2%JscB,G%HId2%JecB,G%HId2%IsdB,G%HId2%IedB,G%HId2%JsdB,G%HId2%JedB)
-        diag_cs%dsamp(dl)%remap_axesBi(c)%mask3d => axes%mask3d !set non-downsampled mask
-     enddo
+    if (dl /= 2) call MOM_error(FATAL, "set_masks_for_axes_dsamp: Downsample level other than 2 is not supported!")
+    do c=1, diag_cs%num_diag_coords
+      ! Level/layer h-points in diagnostic coordinate
+      axes => diag_cs%remap_axesTL(c)
+      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesTL(c)%dsamp(dl)%mask3d, dl,G%isc, G%jsc,  &
+              G%HId2%isc, G%HId2%iec, G%HId2%jsc, G%HId2%jec, G%HId2%isd, G%HId2%ied, G%HId2%jsd, G%HId2%jed)
+      diag_cs%dsamp(dl)%remap_axesTL(c)%mask3d => axes%mask3d !set non-downsampled mask
+      ! Level/layer u-points in diagnostic coordinate
+      axes => diag_cs%remap_axesCuL(c)
+      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCuL(c)%dsamp(dl)%mask3d, dl,G%IscB,G%JscB, &
+               G%HId2%IscB,G%HId2%IecB,G%HId2%jsc, G%HId2%jec,G%HId2%IsdB,G%HId2%IedB,G%HId2%jsd, G%HId2%jed)
+      diag_cs%dsamp(dl)%remap_axesCul(c)%mask3d => axes%mask3d !set non-downsampled mask
+      ! Level/layer v-points in diagnostic coordinate
+      axes => diag_cs%remap_axesCvL(c)
+      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCvL(c)%dsamp(dl)%mask3d, dl,G%isc ,G%JscB, &
+              G%HId2%isc ,G%HId2%iec, G%HId2%JscB,G%HId2%JecB,G%HId2%isd ,G%HId2%ied, G%HId2%JsdB,G%HId2%JedB)
+      diag_cs%dsamp(dl)%remap_axesCvL(c)%mask3d => axes%mask3d !set non-downsampled mask
+      ! Level/layer q-points in diagnostic coordinate
+      axes => diag_cs%remap_axesBL(c)
+      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesBL(c)%dsamp(dl)%mask3d, dl,G%IscB,G%JscB, &
+              G%HId2%IscB,G%HId2%IecB,G%HId2%JscB,G%HId2%JecB,G%HId2%IsdB,G%HId2%IedB,G%HId2%JsdB,G%HId2%JedB)
+      diag_cs%dsamp(dl)%remap_axesBL(c)%mask3d => axes%mask3d !set non-downsampled mask
+      ! Interface h-points in diagnostic coordinate (w-point)
+      axes => diag_cs%remap_axesTi(c)
+      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesTi(c)%dsamp(dl)%mask3d, dl,G%isc, G%jsc,  &
+              G%HId2%isc, G%HId2%iec, G%HId2%jsc, G%HId2%jec, G%HId2%isd, G%HId2%ied, G%HId2%jsd, G%HId2%jed)
+      diag_cs%dsamp(dl)%remap_axesTi(c)%mask3d => axes%mask3d !set non-downsampled mask
+      ! Interface u-points in diagnostic coordinate
+      axes => diag_cs%remap_axesCui(c)
+      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCui(c)%dsamp(dl)%mask3d, dl,G%IscB,G%JscB, &
+              G%HId2%IscB,G%HId2%IecB,G%HId2%jsc, G%HId2%jec,G%HId2%IsdB,G%HId2%IedB,G%HId2%jsd, G%HId2%jed)
+      diag_cs%dsamp(dl)%remap_axesCui(c)%mask3d => axes%mask3d !set non-downsampled mask
+      ! Interface v-points in diagnostic coordinate
+      axes => diag_cs%remap_axesCvi(c)
+      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCvi(c)%dsamp(dl)%mask3d, dl,G%isc ,G%JscB, &
+              G%HId2%isc ,G%HId2%iec, G%HId2%JscB,G%HId2%JecB,G%HId2%isd ,G%HId2%ied, G%HId2%JsdB,G%HId2%JedB)
+      diag_cs%dsamp(dl)%remap_axesCvi(c)%mask3d => axes%mask3d !set non-downsampled mask
+      ! Interface q-points in diagnostic coordinate
+      axes => diag_cs%remap_axesBi(c)
+      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesBi(c)%dsamp(dl)%mask3d, dl,G%IscB,G%JscB, &
+              G%HId2%IscB,G%HId2%IecB,G%HId2%JscB,G%HId2%JecB,G%HId2%IsdB,G%HId2%IedB,G%HId2%JsdB,G%HId2%JedB)
+      diag_cs%dsamp(dl)%remap_axesBi(c)%mask3d => axes%mask3d !set non-downsampled mask
+    enddo
   enddo
 end subroutine set_masks_for_axes_dsamp
 
@@ -1281,10 +1270,10 @@ subroutine post_data_0d(diag_field_id, field, diag_cs, is_static)
 
     if (diag_cs%diag_as_chksum) then
       call chksum0(locfield, diag%debug_str, logunit=diag_cs%chksum_iounit)
-    else if (is_stat) then
-      used = send_data(diag%fms_diag_id, locfield)
+    elseif (is_stat) then
+      used = send_data_infra(diag%fms_diag_id, locfield)
     elseif (diag_cs%ave_enabled) then
-      used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end)
+      used = send_data_infra(diag%fms_diag_id, locfield, diag_cs%time_end)
     endif
     diag => diag%next
   enddo
@@ -1333,10 +1322,10 @@ subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
 
     if (diag_cs%diag_as_chksum) then
       call zchksum(locfield, diag%debug_str, logunit=diag_cs%chksum_iounit)
-    else if (is_stat) then
-      used = send_data(diag%fms_diag_id, locfield)
+    elseif (is_stat) then
+      used = send_data_infra(diag%fms_diag_id, locfield)
     elseif (diag_cs%ave_enabled) then
-      used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, weight=diag_cs%time_int)
+      used = send_data_infra(diag%fms_diag_id, locfield, time=diag_cs%time_end, weight=diag_cs%time_int)
     endif
     if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) deallocate( locfield )
 
@@ -1448,38 +1437,38 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   endif
 
   if (present(mask)) then
-     locmask => mask
-  elseif(.NOT. is_stat) then
-     if(associated(diag%axes%mask2d)) locmask => diag%axes%mask2d
+    locmask => mask
+  elseif (.NOT. is_stat) then
+    if (associated(diag%axes%mask2d)) locmask => diag%axes%mask2d
   endif
 
   dl=1
-  if(.NOT. is_stat) dl = diag%axes%downsample_level !static field downsample i not supported yet
+  if (.NOT. is_stat) dl = diag%axes%downsample_level !static field downsample i not supported yet
   !Downsample the diag field and mask (if present)
   if (dl > 1) then
-     isv_o=isv ; jsv_o=jsv
-     call downsample_diag_field(locfield, locfield_dsamp, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
-     if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) deallocate( locfield )
-     locfield => locfield_dsamp
-     if (present(mask)) then
-        call downsample_field_2d(locmask, locmask_dsamp, dl, MSK, locmask, diag_cs,diag,isv_o,jsv_o,isv,iev,jsv,jev)
-        locmask => locmask_dsamp
-     elseif(associated(diag%axes%dsamp(dl)%mask2d)) then
-        locmask => diag%axes%dsamp(dl)%mask2d
-     endif
+    isv_o = isv ; jsv_o = jsv
+    call downsample_diag_field(locfield, locfield_dsamp, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
+    if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) deallocate( locfield )
+    locfield => locfield_dsamp
+    if (present(mask)) then
+      call downsample_field_2d(locmask, locmask_dsamp, dl, MSK, locmask, diag_cs,diag,isv_o,jsv_o,isv,iev,jsv,jev)
+      locmask => locmask_dsamp
+    elseif (associated(diag%axes%dsamp(dl)%mask2d)) then
+      locmask => diag%axes%dsamp(dl)%mask2d
+    endif
   endif
 
   if (diag_cs%diag_as_chksum) then
     if (diag%axes%is_h_point) then
       call hchksum(locfield, diag%debug_str, diag_cs%G%HI, &
                    logunit=diag_cs%chksum_iounit)
-    else if (diag%axes%is_u_point) then
+    elseif (diag%axes%is_u_point) then
       call uchksum(locfield, diag%debug_str, diag_cs%G%HI, &
                    logunit=diag_cs%chksum_iounit)
-    else if (diag%axes%is_v_point) then
+    elseif (diag%axes%is_v_point) then
       call vchksum(locfield, diag%debug_str, diag_cs%G%HI, &
                    logunit=diag_cs%chksum_iounit)
-    else if (diag%axes%is_q_point) then
+    elseif (diag%axes%is_q_point) then
       call Bchksum(locfield, diag%debug_str, diag_cs%G%HI, &
                    logunit=diag_cs%chksum_iounit)
     else
@@ -1490,26 +1479,26 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
       if (present(mask)) then
         call assert(size(locfield) == size(locmask), &
             'post_data_2d_low is_stat: mask size mismatch: '//diag%debug_str)
-        used = send_data(diag%fms_diag_id, locfield, &
-                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=locmask)
+        used = send_data_infra(diag%fms_diag_id, locfield, &
+                         is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, rmask=locmask)
      !elseif (associated(diag%axes%mask2d)) then
      !  used = send_data(diag%fms_diag_id, locfield, &
-     !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%axes%mask2d)
+     !                   is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, rmask=diag%axes%mask2d)
       else
-        used = send_data(diag%fms_diag_id, locfield, &
-                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
+        used = send_data_infra(diag%fms_diag_id, locfield, &
+                         is_in=isv, ie_in=iev, js_in=jsv, je_in=jev)
       endif
     elseif (diag_cs%ave_enabled) then
       if (associated(locmask)) then
         call assert(size(locfield) == size(locmask), &
             'post_data_2d_low: mask size mismatch: '//diag%debug_str)
-        used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
-                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                         weight=diag_cs%time_int, rmask=locmask)
+        used = send_data_infra(diag%fms_diag_id, locfield, &
+                         is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, &
+                         time=diag_cs%time_end, weight=diag_cs%time_int, rmask=locmask)
       else
-        used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
-                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                         weight=diag_cs%time_int)
+        used = send_data_infra(diag%fms_diag_id, locfield, &
+                         is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, &
+                         time=diag_cs%time_end, weight=diag_cs%time_int)
       endif
     endif
   endif
@@ -1735,25 +1724,25 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   endif
 
   if (present(mask)) then
-     locmask => mask
-  elseif(associated(diag%axes%mask3d)) then
-     locmask => diag%axes%mask3d
+    locmask => mask
+  elseif (associated(diag%axes%mask3d)) then
+    locmask => diag%axes%mask3d
   endif
 
   dl=1
-  if(.NOT. is_stat) dl = diag%axes%downsample_level !static field downsample i not supported yet
+  if (.NOT. is_stat) dl = diag%axes%downsample_level !static field downsample i not supported yet
   !Downsample the diag field and mask (if present)
   if (dl > 1) then
-     isv_o=isv ; jsv_o=jsv
-     call downsample_diag_field(locfield, locfield_dsamp, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
-     if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) deallocate( locfield )
-     locfield => locfield_dsamp
-     if (present(mask)) then
-        call downsample_field_3d(locmask, locmask_dsamp, dl, MSK, locmask, diag_cs,diag,isv_o,jsv_o,isv,iev,jsv,jev)
-        locmask => locmask_dsamp
-      elseif(associated(diag%axes%dsamp(dl)%mask3d)) then
-        locmask => diag%axes%dsamp(dl)%mask3d
-     endif
+    isv_o = isv ; jsv_o = jsv
+    call downsample_diag_field(locfield, locfield_dsamp, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
+    if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) deallocate( locfield )
+    locfield => locfield_dsamp
+    if (present(mask)) then
+      call downsample_field_3d(locmask, locmask_dsamp, dl, MSK, locmask, diag_cs,diag,isv_o,jsv_o,isv,iev,jsv,jev)
+      locmask => locmask_dsamp
+    elseif (associated(diag%axes%dsamp(dl)%mask3d)) then
+      locmask => diag%axes%dsamp(dl)%mask3d
+    endif
   endif
 
   if (diag%fms_diag_id>0) then
@@ -1761,13 +1750,13 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
       if (diag%axes%is_h_point) then
         call hchksum(locfield, diag%debug_str, diag_cs%G%HI, &
                      logunit=diag_cs%chksum_iounit)
-      else if (diag%axes%is_u_point) then
+      elseif (diag%axes%is_u_point) then
         call uchksum(locfield, diag%debug_str, diag_cs%G%HI, &
                      logunit=diag_cs%chksum_iounit)
-      else if (diag%axes%is_v_point) then
+      elseif (diag%axes%is_v_point) then
         call vchksum(locfield, diag%debug_str, diag_cs%G%HI, &
                      logunit=diag_cs%chksum_iounit)
-      else if (diag%axes%is_q_point) then
+      elseif (diag%axes%is_q_point) then
         call Bchksum(locfield, diag%debug_str, diag_cs%G%HI, &
                      logunit=diag_cs%chksum_iounit)
       else
@@ -1778,26 +1767,26 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
         if (present(mask)) then
           call assert(size(locfield) == size(locmask), &
               'post_data_3d_low is_stat: mask size mismatch: '//diag%debug_str)
-          used = send_data(diag%fms_diag_id, locfield, &
-                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=locmask)
+          used = send_data_infra(diag%fms_diag_id, locfield, &
+                         is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, rmask=locmask)
        !elseif (associated(diag%axes%mask2d)) then
        !  used = send_data(diag%fms_diag_id, locfield, &
-       !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%axes%mask2d)
+       !                   is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, rmask=diag%axes%mask2d)
         else
-          used = send_data(diag%fms_diag_id, locfield, &
-                           is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
+          used = send_data_infra(diag%fms_diag_id, locfield, &
+                           is_in=isv, ie_in=iev, js_in=jsv, je_in=jev)
         endif
       elseif (diag_cs%ave_enabled) then
         if (associated(locmask)) then
           call assert(size(locfield) == size(locmask), &
               'post_data_3d_low: mask size mismatch: '//diag%debug_str)
-          used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
-                           is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                           weight=diag_cs%time_int, rmask=locmask)
+          used = send_data_infra(diag%fms_diag_id, locfield, &
+                           is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, &
+                           time=diag_cs%time_end, weight=diag_cs%time_int, rmask=locmask)
         else
-          used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
-                           is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                           weight=diag_cs%time_int)
+          used = send_data_infra(diag%fms_diag_id, locfield, &
+                           is_in=isv, ie_in=iev, js_in=jsv, je_in=jev, &
+                           time=diag_cs%time_end, weight=diag_cs%time_int)
         endif
       endif
     endif
@@ -1853,16 +1842,15 @@ subroutine post_xy_average(diag_cs, diag, field)
                                          diag_cs%diag_remap_cs(coord)%h, &
                                          staggered_in_x, staggered_in_y, &
                                          diag%axes%is_layer, diag%v_extensive, &
-                                         field, &
-                                         averaged_field, averaged_mask)
+                                         field, averaged_field, averaged_mask)
   endif
 
   if (diag_cs%diag_as_chksum) then
     call zchksum(averaged_field, trim(diag%debug_str)//'_xyave', &
                  logunit=diag_CS%chksum_iounit)
   else
-    used = send_data(diag%fms_xyave_diag_id, averaged_field, diag_cs%time_end, &
-                     weight=diag_cs%time_int, mask=averaged_mask)
+    used = send_data_infra(diag%fms_xyave_diag_id, averaged_field, &
+                           time=diag_cs%time_end, weight=diag_cs%time_int, mask=averaged_mask)
   endif
 end subroutine post_xy_average
 
@@ -1937,16 +1925,16 @@ end function get_diag_time_end
 !> Returns the "diag_mediator" handle for a group (native, CMOR, z-coord, ...) of diagnostics
 !! derived from one field.
 integer function register_diag_field(module_name, field_name, axes_in, init_time, &
-     long_name, units, missing_value, range, mask_variant, standard_name,      &
-     verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
-     cmor_long_name, cmor_units, cmor_standard_name, cell_methods, &
-     x_cell_method, y_cell_method, v_cell_method, conversion, v_extensive)
-  character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model"
-                                              !! or "ice_shelf_model"
-  character(len=*), intent(in) :: field_name !< Name of the diagnostic field
-  type(axes_grp), target, intent(in) :: axes_in !< Container w/ up to 3 integer handles that
-                                             !! indicates axes for this field
-  type(time_type),  intent(in) :: init_time !< Time at which a field is first available?
+            long_name, units, missing_value, range, mask_variant, standard_name,      &
+            verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
+            cmor_long_name, cmor_units, cmor_standard_name, cell_methods, &
+            x_cell_method, y_cell_method, v_cell_method, conversion, v_extensive)
+  character(len=*),           intent(in) :: module_name !< Name of this module, usually "ocean_model"
+                                                        !! or "ice_shelf_model"
+  character(len=*),           intent(in) :: field_name !< Name of the diagnostic field
+  type(axes_grp),     target, intent(in) :: axes_in   !< Container w/ up to 3 integer handles that
+                                                      !! indicates axes for this field
+  type(time_type),            intent(in) :: init_time !< Time at which a field is first available?
   character(len=*), optional, intent(in) :: long_name !< Long name of a field.
   character(len=*), optional, intent(in) :: units !< Units of a field.
   character(len=*), optional, intent(in) :: standard_name !< Standardized name associated with a field
@@ -1984,7 +1972,10 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
   type(axes_grp), pointer :: remap_axes => null()
   type(axes_grp), pointer :: axes => null()
   integer :: dm_id, i, dl
+  character(len=256) :: msg, cm_string
   character(len=256) :: new_module_name
+  character(len=480) :: module_list, var_list
+  integer :: num_modnm, num_varnm
   logical :: active
 
   axes => axes_in
@@ -1995,22 +1986,25 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
   dm_id = -1
 
   if (axes_in%id == diag_cs%axesTL%id) then
-     axes => diag_cs%axesTL
+    axes => diag_cs%axesTL
   elseif (axes_in%id == diag_cs%axesBL%id) then
-     axes => diag_cs%axesBL
+    axes => diag_cs%axesBL
   elseif (axes_in%id == diag_cs%axesCuL%id ) then
-     axes => diag_cs%axesCuL
+    axes => diag_cs%axesCuL
   elseif (axes_in%id == diag_cs%axesCvL%id) then
-     axes => diag_cs%axesCvL
+    axes => diag_cs%axesCvL
   elseif (axes_in%id == diag_cs%axesTi%id) then
-     axes => diag_cs%axesTi
+    axes => diag_cs%axesTi
   elseif (axes_in%id == diag_cs%axesBi%id) then
-     axes => diag_cs%axesBi
+    axes => diag_cs%axesBi
   elseif (axes_in%id == diag_cs%axesCui%id ) then
-     axes => diag_cs%axesCui
+    axes => diag_cs%axesCui
   elseif (axes_in%id == diag_cs%axesCvi%id) then
-     axes => diag_cs%axesCvi
+    axes => diag_cs%axesCvi
   endif
+
+  module_list = "{"//trim(module_name)
+  num_modnm = 1
 
   ! Register the native diagnostic
   active = register_diag_field_expand_cmor(dm_id, module_name, field_name, axes, &
@@ -2023,6 +2017,21 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
              cell_methods=cell_methods, x_cell_method=x_cell_method, &
              y_cell_method=y_cell_method, v_cell_method=v_cell_method, &
              conversion=conversion, v_extensive=v_extensive)
+  if (associated(axes%xyave_axes)) then
+    num_varnm = 2 ; var_list = "{"//trim(field_name)//","//trim(field_name)//"_xyave"
+  else
+    num_varnm = 1 ; var_list = "{"//trim(field_name)
+  endif
+  if (present(cmor_field_name)) then
+    if (associated(axes%xyave_axes)) then
+      num_varnm = num_varnm + 2
+      var_list = trim(var_list)//","//trim(cmor_field_name)//","//trim(cmor_field_name)//"_xyave"
+    else
+      num_varnm = num_varnm + 1
+      var_list = trim(var_list)//","//trim(cmor_field_name)
+    endif
+  endif
+  var_list = trim(var_list)//"}"
 
   ! For each diagnostic coordinate register the diagnostic again under a different module name
   do i=1,diag_cs%num_diag_coords
@@ -2032,21 +2041,21 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
     if (axes_in%rank == 3) then
       remap_axes => null()
       if ((axes_in%id == diag_cs%axesTL%id)) then
-          remap_axes => diag_cs%remap_axesTL(i)
+        remap_axes => diag_cs%remap_axesTL(i)
       elseif (axes_in%id == diag_cs%axesBL%id) then
-          remap_axes => diag_cs%remap_axesBL(i)
+        remap_axes => diag_cs%remap_axesBL(i)
       elseif (axes_in%id == diag_cs%axesCuL%id ) then
-          remap_axes => diag_cs%remap_axesCuL(i)
+        remap_axes => diag_cs%remap_axesCuL(i)
       elseif (axes_in%id == diag_cs%axesCvL%id) then
-          remap_axes => diag_cs%remap_axesCvL(i)
+        remap_axes => diag_cs%remap_axesCvL(i)
       elseif (axes_in%id == diag_cs%axesTi%id) then
-          remap_axes => diag_cs%remap_axesTi(i)
+        remap_axes => diag_cs%remap_axesTi(i)
       elseif (axes_in%id == diag_cs%axesBi%id) then
-          remap_axes => diag_cs%remap_axesBi(i)
+        remap_axes => diag_cs%remap_axesBi(i)
       elseif (axes_in%id == diag_cs%axesCui%id ) then
-          remap_axes => diag_cs%remap_axesCui(i)
+        remap_axes => diag_cs%remap_axesCui(i)
       elseif (axes_in%id == diag_cs%axesCvi%id) then
-          remap_axes => diag_cs%remap_axesCvi(i)
+        remap_axes => diag_cs%remap_axesCvi(i)
       endif
       ! When the MOM_diag_to_Z module has been obsoleted we can assume remap_axes will
       ! always exist but in the mean-time we have to do this check:
@@ -2066,6 +2075,8 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
           if (active) then
             call diag_remap_set_active(diag_cs%diag_remap_cs(i))
           endif
+          module_list = trim(module_list)//","//trim(new_module_name)
+          num_modnm = num_modnm + 1
         endif ! remap_axes%needs_remapping
       endif ! associated(remap_axes)
     endif ! axes%rank == 3
@@ -2073,46 +2084,46 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
 
   !Register downsampled diagnostics
   do dl=2,MAX_DSAMP_LEV
-     ! Do not attempt to checksum the downsampled diagnostics
-     if (diag_cs%diag_as_chksum) cycle
+    ! Do not attempt to checksum the downsampled diagnostics
+    if (diag_cs%diag_as_chksum) cycle
 
-     new_module_name = trim(module_name)//'_d2'
+    new_module_name = trim(module_name)//'_d2'
 
-     if (axes_in%rank == 3 .or. axes_in%rank == 2 ) then
-        axes => null()
-        if (axes_in%id == diag_cs%axesTL%id) then
-           axes => diag_cs%dsamp(dl)%axesTL
-        elseif (axes_in%id == diag_cs%axesBL%id) then
-           axes => diag_cs%dsamp(dl)%axesBL
-        elseif (axes_in%id == diag_cs%axesCuL%id ) then
-           axes => diag_cs%dsamp(dl)%axesCuL
-        elseif (axes_in%id == diag_cs%axesCvL%id) then
-           axes => diag_cs%dsamp(dl)%axesCvL
-        elseif (axes_in%id == diag_cs%axesTi%id) then
-           axes => diag_cs%dsamp(dl)%axesTi
-        elseif (axes_in%id == diag_cs%axesBi%id) then
-           axes => diag_cs%dsamp(dl)%axesBi
-        elseif (axes_in%id == diag_cs%axesCui%id ) then
-           axes => diag_cs%dsamp(dl)%axesCui
-        elseif (axes_in%id == diag_cs%axesCvi%id) then
-           axes => diag_cs%dsamp(dl)%axesCvi
-        elseif (axes_in%id == diag_cs%axesT1%id) then
-           axes => diag_cs%dsamp(dl)%axesT1
-        elseif (axes_in%id == diag_cs%axesB1%id) then
-           axes => diag_cs%dsamp(dl)%axesB1
-        elseif (axes_in%id == diag_cs%axesCu1%id ) then
-           axes => diag_cs%dsamp(dl)%axesCu1
-        elseif (axes_in%id == diag_cs%axesCv1%id) then
-           axes => diag_cs%dsamp(dl)%axesCv1
-        else
-           !Niki: Should we worry about these, e.g., diag_to_Z_CS?
-           call MOM_error(WARNING,"register_diag_field: Could not find a proper axes for " &
-                //trim( new_module_name)//"-"//trim(field_name))
-        endif
-     endif
-     ! Register the native diagnostic
-     if (associated(axes)) then
-     active = register_diag_field_expand_cmor(dm_id, new_module_name, field_name, axes, &
+    if (axes_in%rank == 3 .or. axes_in%rank == 2 ) then
+      axes => null()
+      if (axes_in%id == diag_cs%axesTL%id) then
+        axes => diag_cs%dsamp(dl)%axesTL
+      elseif (axes_in%id == diag_cs%axesBL%id) then
+        axes => diag_cs%dsamp(dl)%axesBL
+      elseif (axes_in%id == diag_cs%axesCuL%id ) then
+        axes => diag_cs%dsamp(dl)%axesCuL
+      elseif (axes_in%id == diag_cs%axesCvL%id) then
+        axes => diag_cs%dsamp(dl)%axesCvL
+      elseif (axes_in%id == diag_cs%axesTi%id) then
+        axes => diag_cs%dsamp(dl)%axesTi
+      elseif (axes_in%id == diag_cs%axesBi%id) then
+        axes => diag_cs%dsamp(dl)%axesBi
+      elseif (axes_in%id == diag_cs%axesCui%id ) then
+        axes => diag_cs%dsamp(dl)%axesCui
+      elseif (axes_in%id == diag_cs%axesCvi%id) then
+        axes => diag_cs%dsamp(dl)%axesCvi
+      elseif (axes_in%id == diag_cs%axesT1%id) then
+        axes => diag_cs%dsamp(dl)%axesT1
+      elseif (axes_in%id == diag_cs%axesB1%id) then
+        axes => diag_cs%dsamp(dl)%axesB1
+      elseif (axes_in%id == diag_cs%axesCu1%id ) then
+        axes => diag_cs%dsamp(dl)%axesCu1
+      elseif (axes_in%id == diag_cs%axesCv1%id) then
+        axes => diag_cs%dsamp(dl)%axesCv1
+      else
+        !Niki: Should we worry about these, e.g., diag_to_Z_CS?
+        call MOM_error(WARNING,"register_diag_field: Could not find a proper axes for " &
+              //trim(new_module_name)//"-"//trim(field_name))
+      endif
+    endif
+    ! Register the native diagnostic
+    if (associated(axes)) then
+       active = register_diag_field_expand_cmor(dm_id, new_module_name, field_name, axes, &
                 init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
                 range=range, mask_variant=mask_variant, standard_name=standard_name, &
                 verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -2122,56 +2133,74 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
                 cell_methods=cell_methods, x_cell_method=x_cell_method, &
                 y_cell_method=y_cell_method, v_cell_method=v_cell_method, &
                 conversion=conversion, v_extensive=v_extensive)
-     endif
+      module_list = trim(module_list)//","//trim(new_module_name)
+      num_modnm = num_modnm + 1
+    endif
 
-     ! For each diagnostic coordinate register the diagnostic again under a different module name
-     do i=1,diag_cs%num_diag_coords
-        new_module_name = trim(module_name)//'_'//trim(diag_cs%diag_remap_cs(i)%diag_module_suffix)//'_d2'
+    ! For each diagnostic coordinate register the diagnostic again under a different module name
+    do i=1,diag_cs%num_diag_coords
+      new_module_name = trim(module_name)//'_'//trim(diag_cs%diag_remap_cs(i)%diag_module_suffix)//'_d2'
 
-        ! Register diagnostics remapped to z vertical coordinate
-        if (axes_in%rank == 3) then
-           remap_axes => null()
-           if ((axes_in%id == diag_cs%axesTL%id)) then
-              remap_axes => diag_cs%dsamp(dl)%remap_axesTL(i)
-           elseif (axes_in%id == diag_cs%axesBL%id) then
-              remap_axes => diag_cs%dsamp(dl)%remap_axesBL(i)
-           elseif (axes_in%id == diag_cs%axesCuL%id ) then
-              remap_axes => diag_cs%dsamp(dl)%remap_axesCuL(i)
-           elseif (axes_in%id == diag_cs%axesCvL%id) then
-              remap_axes => diag_cs%dsamp(dl)%remap_axesCvL(i)
-           elseif (axes_in%id == diag_cs%axesTi%id) then
-              remap_axes => diag_cs%dsamp(dl)%remap_axesTi(i)
-           elseif (axes_in%id == diag_cs%axesBi%id) then
-              remap_axes => diag_cs%dsamp(dl)%remap_axesBi(i)
-           elseif (axes_in%id == diag_cs%axesCui%id ) then
-              remap_axes => diag_cs%dsamp(dl)%remap_axesCui(i)
-           elseif (axes_in%id == diag_cs%axesCvi%id) then
-              remap_axes => diag_cs%dsamp(dl)%remap_axesCvi(i)
-           endif
+      ! Register diagnostics remapped to z vertical coordinate
+      if (axes_in%rank == 3) then
+        remap_axes => null()
+        if ((axes_in%id == diag_cs%axesTL%id)) then
+          remap_axes => diag_cs%dsamp(dl)%remap_axesTL(i)
+        elseif (axes_in%id == diag_cs%axesBL%id) then
+          remap_axes => diag_cs%dsamp(dl)%remap_axesBL(i)
+        elseif (axes_in%id == diag_cs%axesCuL%id ) then
+          remap_axes => diag_cs%dsamp(dl)%remap_axesCuL(i)
+        elseif (axes_in%id == diag_cs%axesCvL%id) then
+          remap_axes => diag_cs%dsamp(dl)%remap_axesCvL(i)
+        elseif (axes_in%id == diag_cs%axesTi%id) then
+          remap_axes => diag_cs%dsamp(dl)%remap_axesTi(i)
+        elseif (axes_in%id == diag_cs%axesBi%id) then
+          remap_axes => diag_cs%dsamp(dl)%remap_axesBi(i)
+        elseif (axes_in%id == diag_cs%axesCui%id ) then
+          remap_axes => diag_cs%dsamp(dl)%remap_axesCui(i)
+        elseif (axes_in%id == diag_cs%axesCvi%id) then
+          remap_axes => diag_cs%dsamp(dl)%remap_axesCvi(i)
+        endif
 
-           ! When the MOM_diag_to_Z module has been obsoleted we can assume remap_axes will
-           ! always exist but in the mean-time we have to do this check:
-           ! call assert(associated(remap_axes), 'register_diag_field: remap_axes not set')
-           if (associated(remap_axes)) then
-              if (remap_axes%needs_remapping .or. remap_axes%needs_interpolating) then
-                 active = register_diag_field_expand_cmor(dm_id, new_module_name, field_name, remap_axes, &
-                      init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
-                      range=range, mask_variant=mask_variant, standard_name=standard_name, &
-                      verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
-                      interp_method=interp_method, tile_count=tile_count, &
-                      cmor_field_name=cmor_field_name, cmor_long_name=cmor_long_name, &
-                      cmor_units=cmor_units, cmor_standard_name=cmor_standard_name, &
-                      cell_methods=cell_methods, x_cell_method=x_cell_method, &
-                      y_cell_method=y_cell_method, v_cell_method=v_cell_method, &
-                      conversion=conversion, v_extensive=v_extensive)
-                 if (active) then
-                    call diag_remap_set_active(diag_cs%diag_remap_cs(i))
-                 endif
-              endif ! remap_axes%needs_remapping
-           endif ! associated(remap_axes)
-        endif ! axes%rank == 3
-     enddo ! i
+        ! When the MOM_diag_to_Z module has been obsoleted we can assume remap_axes will
+        ! always exist but in the mean-time we have to do this check:
+        ! call assert(associated(remap_axes), 'register_diag_field: remap_axes not set')
+        if (associated(remap_axes)) then
+          if (remap_axes%needs_remapping .or. remap_axes%needs_interpolating) then
+            active = register_diag_field_expand_cmor(dm_id, new_module_name, field_name, remap_axes, &
+                    init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
+                    range=range, mask_variant=mask_variant, standard_name=standard_name, &
+                    verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+                    interp_method=interp_method, tile_count=tile_count, &
+                    cmor_field_name=cmor_field_name, cmor_long_name=cmor_long_name, &
+                    cmor_units=cmor_units, cmor_standard_name=cmor_standard_name, &
+                    cell_methods=cell_methods, x_cell_method=x_cell_method, &
+                    y_cell_method=y_cell_method, v_cell_method=v_cell_method, &
+                    conversion=conversion, v_extensive=v_extensive)
+            if (active) then
+              call diag_remap_set_active(diag_cs%diag_remap_cs(i))
+            endif
+            module_list = trim(module_list)//","//trim(new_module_name)
+            num_modnm = num_modnm + 1
+          endif ! remap_axes%needs_remapping
+        endif ! associated(remap_axes)
+      endif ! axes%rank == 3
+    enddo ! i
   enddo
+
+  if (is_root_pe() .and. (diag_CS%available_diag_doc_unit > 0)) then
+    msg = ''
+    if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'"'
+    call attach_cell_methods(-1, axes, cm_string, cell_methods, &
+                             x_cell_method, y_cell_method, v_cell_method, &
+                             v_extensive=v_extensive)
+    module_list = trim(module_list)//"}"
+    if (num_modnm <= 1) module_list = module_name
+    if (num_varnm <= 1) var_list = ""
+
+    call log_available_diag(dm_id>0, module_list, field_name, cm_string, msg, diag_CS, &
+                            long_name, units, standard_name, variants=var_list)
+  endif
 
   register_diag_field = dm_id
 
@@ -2180,10 +2209,10 @@ end function register_diag_field
 !> Returns True if either the native or CMOr version of the diagnostic were registered. Updates 'dm_id'
 !! after calling register_diag_field_expand_axes() for both native and CMOR variants of the field.
 logical function register_diag_field_expand_cmor(dm_id, module_name, field_name, axes, init_time, &
-     long_name, units, missing_value, range, mask_variant, standard_name,      &
-     verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
-     cmor_long_name, cmor_units, cmor_standard_name, cell_methods, &
-     x_cell_method, y_cell_method, v_cell_method, conversion, v_extensive)
+            long_name, units, missing_value, range, mask_variant, standard_name,      &
+            verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
+            cmor_long_name, cmor_units, cmor_standard_name, cell_methods, &
+            x_cell_method, y_cell_method, v_cell_method, conversion, v_extensive)
   integer,          intent(inout) :: dm_id !< The diag_mediator ID for this diagnostic group
   character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model" or "ice_shelf_model"
   character(len=*), intent(in) :: field_name !< Name of the diagnostic field
@@ -2244,12 +2273,6 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
     call attach_cell_methods(fms_id, axes, cm_string, cell_methods, &
                              x_cell_method, y_cell_method, v_cell_method, &
                              v_extensive=v_extensive)
-  if (is_root_pe() .and. diag_CS%available_diag_doc_unit > 0) then
-    msg = ''
-    if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'"'
-    call log_available_diag(fms_id>0, module_name, field_name, cm_string, &
-                            msg, diag_CS, long_name, units, standard_name)
-  endif
   ! Associated horizontally area-averaged diagnostic
   fms_xyave_id = DIAG_FIELD_NOT_FOUND
   if (associated(axes%xyave_axes)) then
@@ -2262,12 +2285,6 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
     if (.not. diag_cs%diag_as_chksum) &
       call attach_cell_methods(fms_xyave_id, axes%xyave_axes, cm_string, &
                                cell_methods, v_cell_method, v_extensive=v_extensive)
-    if (is_root_pe() .and. diag_CS%available_diag_doc_unit > 0) then
-      msg = ''
-      if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'_xyave"'
-      call log_available_diag(fms_xyave_id>0, module_name, trim(field_name)//'_xyave', cm_string, &
-                              msg, diag_CS, long_name, units, standard_name)
-    endif
   endif
   this_diag => null()
   if (fms_id /= DIAG_FIELD_NOT_FOUND .or. fms_xyave_id /= DIAG_FIELD_NOT_FOUND) then
@@ -2306,12 +2323,6 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
     call attach_cell_methods(fms_id, axes, cm_string, &
                              cell_methods, x_cell_method, y_cell_method, v_cell_method, &
                              v_extensive=v_extensive)
-    if (is_root_pe() .and. diag_CS%available_diag_doc_unit > 0) then
-      msg = 'native name is "'//trim(field_name)//'"'
-      call log_available_diag(fms_id>0, module_name, cmor_field_name, cm_string, &
-                              msg, diag_CS, posted_cmor_long_name, posted_cmor_units, &
-                              posted_cmor_standard_name)
-    endif
     ! Associated horizontally area-averaged diagnostic
     fms_xyave_id = DIAG_FIELD_NOT_FOUND
     if (associated(axes%xyave_axes)) then
@@ -2323,12 +2334,6 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
                err_msg=err_msg, interp_method=interp_method, tile_count=tile_count)
       call attach_cell_methods(fms_xyave_id, axes%xyave_axes, cm_string, &
                                cell_methods, v_cell_method, v_extensive=v_extensive)
-      if (is_root_pe() .and. diag_CS%available_diag_doc_unit > 0) then
-        msg = 'native name is "'//trim(field_name)//'_xyave"'
-        call log_available_diag(fms_xyave_id>0, module_name, trim(cmor_field_name)//'_xyave', &
-                                cm_string, msg, diag_CS, posted_cmor_long_name, posted_cmor_units, &
-                                posted_cmor_standard_name)
-      endif
     endif
     this_diag => null()
     if (fms_id /= DIAG_FIELD_NOT_FOUND .or. fms_xyave_id /= DIAG_FIELD_NOT_FOUND) then
@@ -2347,8 +2352,8 @@ end function register_diag_field_expand_cmor
 !> Returns an FMS id from register_diag_field_fms (the diag_manager routine) after expanding axes
 !! (axes-group) into handles and conditionally adding an FMS area_id for cell_measures.
 integer function register_diag_field_expand_axes(module_name, field_name, axes, init_time, &
-     long_name, units, missing_value, range, mask_variant, standard_name,  &
-     verbose, do_not_log, err_msg, interp_method, tile_count)
+            long_name, units, missing_value, range, mask_variant, standard_name,  &
+            verbose, do_not_log, err_msg, interp_method, tile_count)
   character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model"
                                               !! or "ice_shelf_model"
   character(len=*), intent(in) :: field_name !< Name of the diagnostic field
@@ -2381,17 +2386,17 @@ integer function register_diag_field_expand_axes(module_name, field_name, axes, 
   if (axes%diag_cs%diag_as_chksum) then
     fms_id = axes%diag_cs%num_chksum_diags + 1
     axes%diag_cs%num_chksum_diags = fms_id
-  else if (present(interp_method) .or. axes%is_h_point) then
+  elseif (present(interp_method) .or. axes%is_h_point) then
     ! If interp_method is provided we must use it
     if (area_id>0) then
       if (volume_id>0) then
-        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_infra(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
                  interp_method=interp_method, tile_count=tile_count, area=area_id, volume=volume_id)
       else
-        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_infra(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -2399,13 +2404,13 @@ integer function register_diag_field_expand_axes(module_name, field_name, axes, 
       endif
     else
       if (volume_id>0) then
-        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_infra(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
                  interp_method=interp_method, tile_count=tile_count, volume=volume_id)
       else
-        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_infra(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -2416,13 +2421,13 @@ integer function register_diag_field_expand_axes(module_name, field_name, axes, 
     ! If interp_method is not provided and the field is not at an h-point then interp_method='none'
     if (area_id>0) then
       if (volume_id>0) then
-        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_infra(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
                  interp_method='none', tile_count=tile_count, area=area_id, volume=volume_id)
       else
-        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_infra(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -2430,13 +2435,13 @@ integer function register_diag_field_expand_axes(module_name, field_name, axes, 
       endif
     else
       if (volume_id>0) then
-        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_infra(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
                  interp_method='none', tile_count=tile_count, volume=volume_id)
       else
-        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+        fms_id = register_diag_field_infra(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -2502,36 +2507,36 @@ subroutine add_xyz_method(diag, axes, x_cell_method, y_cell_method, v_cell_metho
 
   mstr = diag%axes%v_cell_method
   if (present(v_extensive)) then
-     if (present(v_cell_method)) call MOM_error(FATAL, "attach_cell_methods: " // &
-          'Vertical cell method was specified along with the vertically extensive flag.')
-     if(v_extensive) then
-        mstr='sum'
-     else
-        mstr='mean'
-     endif
+    if (present(v_cell_method)) call MOM_error(FATAL, "attach_cell_methods: " // &
+       'Vertical cell method was specified along with the vertically extensive flag.')
+    if (v_extensive) then
+      mstr='sum'
+    else
+      mstr='mean'
+    endif
   elseif (present(v_cell_method)) then
-     mstr = v_cell_method
+    mstr = v_cell_method
   endif
   if (trim(mstr)=='sum') then
-     xyz_method = xyz_method + 1
+    xyz_method = xyz_method + 1
   elseif (trim(mstr)=='mean') then
-     xyz_method = xyz_method + 2
+    xyz_method = xyz_method + 2
   endif
 
   mstr = diag%axes%y_cell_method
   if (present(y_cell_method)) mstr = y_cell_method
   if (trim(mstr)=='sum') then
-     xyz_method = xyz_method + 10
+    xyz_method = xyz_method + 10
   elseif (trim(mstr)=='mean') then
-     xyz_method = xyz_method + 20
+    xyz_method = xyz_method + 20
   endif
 
   mstr = diag%axes%x_cell_method
   if (present(x_cell_method)) mstr = x_cell_method
   if (trim(mstr)=='sum') then
-     xyz_method = xyz_method + 100
+    xyz_method = xyz_method + 100
   elseif (trim(mstr)=='mean') then
-     xyz_method = xyz_method + 200
+    xyz_method = xyz_method + 200
   endif
 
   diag%xyz_method = xyz_method
@@ -2573,22 +2578,22 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
            'Individual direction cell method was specified along with a "cell_methods" string.')
     endif
     if (len(trim(cell_methods))>0) then
-      call diag_field_add_attribute(id, 'cell_methods', trim(cell_methods))
+      call MOM_diag_field_add_attribute(id, 'cell_methods', trim(cell_methods))
       ostring = trim(cell_methods)
     endif
   else
     if (present(x_cell_method)) then
       if (len(trim(x_cell_method))>0) then
-        call get_diag_axis_name(axes%handles(1), axis_name)
-        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
+        call get_MOM_diag_axis_name(axes%handles(1), axis_name)
+        call MOM_diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(x_cell_method)
         if (trim(x_cell_method)=='mean') x_mean=.true.
         if (trim(x_cell_method)=='sum') x_sum=.true.
       endif
     else
       if (len(trim(axes%x_cell_method))>0) then
-        call get_diag_axis_name(axes%handles(1), axis_name)
-        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(axes%x_cell_method))
+        call get_MOM_diag_axis_name(axes%handles(1), axis_name)
+        call MOM_diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(axes%x_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(axes%x_cell_method)
         if (trim(axes%x_cell_method)=='mean') x_mean=.true.
         if (trim(axes%x_cell_method)=='sum') x_sum=.true.
@@ -2596,16 +2601,16 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
     endif
     if (present(y_cell_method)) then
       if (len(trim(y_cell_method))>0) then
-        call get_diag_axis_name(axes%handles(2), axis_name)
-        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(y_cell_method))
+        call get_MOM_diag_axis_name(axes%handles(2), axis_name)
+        call MOM_diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(y_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(y_cell_method)
         if (trim(y_cell_method)=='mean') y_mean=.true.
         if (trim(y_cell_method)=='sum') y_sum=.true.
       endif
     else
       if (len(trim(axes%y_cell_method))>0) then
-        call get_diag_axis_name(axes%handles(2), axis_name)
-        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(axes%y_cell_method))
+        call get_MOM_diag_axis_name(axes%handles(2), axis_name)
+        call MOM_diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(axes%y_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(axes%y_cell_method)
         if (trim(axes%y_cell_method)=='mean') y_mean=.true.
         if (trim(axes%y_cell_method)=='sum') y_sum=.true.
@@ -2616,39 +2621,39 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
            'Vertical cell method was specified along with the vertically extensive flag.')
       if (len(trim(v_cell_method))>0) then
         if (axes%rank==1) then
-          call get_diag_axis_name(axes%handles(1), axis_name)
+          call get_MOM_diag_axis_name(axes%handles(1), axis_name)
         elseif (axes%rank==3) then
-          call get_diag_axis_name(axes%handles(3), axis_name)
+          call get_MOM_diag_axis_name(axes%handles(3), axis_name)
         endif
-        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(v_cell_method))
+        call MOM_diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(v_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(v_cell_method)
       endif
     elseif (present(v_extensive)) then
-     if(v_extensive) then
-      if (axes%rank==1) then
-        call get_diag_axis_name(axes%handles(1), axis_name)
-      elseif (axes%rank==3) then
-        call get_diag_axis_name(axes%handles(3), axis_name)
+      if (v_extensive) then
+        if (axes%rank==1) then
+          call get_MOM_diag_axis_name(axes%handles(1), axis_name)
+        elseif (axes%rank==3) then
+          call get_MOM_diag_axis_name(axes%handles(3), axis_name)
+        endif
+        call MOM_diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':sum')
+        ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':sum'
       endif
-      call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':sum')
-      ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':sum'
-     endif
     else
       if (len(trim(axes%v_cell_method))>0) then
         if (axes%rank==1) then
-          call get_diag_axis_name(axes%handles(1), axis_name)
+          call get_MOM_diag_axis_name(axes%handles(1), axis_name)
         elseif (axes%rank==3) then
-          call get_diag_axis_name(axes%handles(3), axis_name)
+          call get_MOM_diag_axis_name(axes%handles(3), axis_name)
         endif
-        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(axes%v_cell_method))
+        call MOM_diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(axes%v_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(axes%v_cell_method)
       endif
     endif
     if (x_mean .and. y_mean) then
-      call diag_field_add_attribute(id, 'cell_methods', 'area:mean')
+      call MOM_diag_field_add_attribute(id, 'cell_methods', 'area:mean')
       ostring = trim(adjustl(ostring))//' area:mean'
     elseif (x_sum .and. y_sum) then
-      call diag_field_add_attribute(id, 'cell_methods', 'area:sum')
+      call MOM_diag_field_add_attribute(id, 'cell_methods', 'area:sum')
       ostring = trim(adjustl(ostring))//' area:sum'
     endif
   endif
@@ -2656,9 +2661,9 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
 end subroutine attach_cell_methods
 
 function register_scalar_field(module_name, field_name, init_time, diag_cs, &
-     long_name, units, missing_value, range, standard_name, &
-     do_not_log, err_msg, interp_method, cmor_field_name, &
-     cmor_long_name, cmor_units, cmor_standard_name)
+            long_name, units, missing_value, range, standard_name, &
+            do_not_log, err_msg, interp_method, cmor_field_name, &
+            cmor_long_name, cmor_units, cmor_standard_name)
   integer :: register_scalar_field !< An integer handle for a diagnostic array.
   character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model"
                                               !! or "ice_shelf_model"
@@ -2697,10 +2702,10 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
     fms_id = diag_cs%num_chksum_diags + 1
     diag_cs%num_chksum_diags = fms_id
   else
-    fms_id = register_diag_field_fms(module_name, field_name, init_time, &
-        long_name=long_name, units=units, missing_value=MOM_missing_value, &
-        range=range, standard_name=standard_name, do_not_log=do_not_log, &
-        err_msg=err_msg)
+    fms_id = register_diag_field_infra(module_name, field_name, init_time, &
+                long_name=long_name, units=units, missing_value=MOM_missing_value, &
+                range=range, standard_name=standard_name, do_not_log=do_not_log, &
+                err_msg=err_msg)
   endif
 
   if (fms_id /= DIAG_FIELD_NOT_FOUND) then
@@ -2728,10 +2733,10 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
     if (present(cmor_standard_name)) posted_cmor_standard_name = cmor_standard_name
     if (present(cmor_long_name)) posted_cmor_long_name = cmor_long_name
 
-    fms_id = register_diag_field_fms(module_name, cmor_field_name, init_time, &
-       long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units), &
-       missing_value=MOM_missing_value, range=range, &
-       standard_name=trim(posted_cmor_standard_name), do_not_log=do_not_log, err_msg=err_msg)
+    fms_id = register_diag_field_infra(module_name, cmor_field_name, init_time, &
+           long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units), &
+           missing_value=MOM_missing_value, range=range, &
+           standard_name=trim(posted_cmor_standard_name), do_not_log=do_not_log, err_msg=err_msg)
     if (fms_id /= DIAG_FIELD_NOT_FOUND) then
       if (dm_id == -1) then
         dm_id = get_new_diag_id(diag_cs)
@@ -2744,12 +2749,13 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
 
   ! Document diagnostics in list of available diagnostics
   if (is_root_pe() .and. diag_CS%available_diag_doc_unit > 0) then
-    call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
-                            long_name, units, standard_name)
     if (present(cmor_field_name)) then
-      call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, &
-                              '', '', diag_CS, posted_cmor_long_name, posted_cmor_units, &
-                              posted_cmor_standard_name)
+      call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
+                              long_name, units, standard_name, &
+                              variants="{"//trim(field_name)//","//trim(cmor_field_name)//"}")
+    else
+      call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
+                              long_name, units, standard_name)
     endif
   endif
 
@@ -2759,10 +2765,10 @@ end function register_scalar_field
 
 !> Registers a static diagnostic, returning an integer handle
 function register_static_field(module_name, field_name, axes, &
-     long_name, units, missing_value, range, mask_variant, standard_name, &
-     do_not_log, interp_method, tile_count, &
-     cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name, area, &
-     x_cell_method, y_cell_method, area_cell_method, conversion)
+            long_name, units, missing_value, range, mask_variant, standard_name, &
+            do_not_log, interp_method, tile_count, &
+            cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name, area, &
+            x_cell_method, y_cell_method, area_cell_method, conversion)
   integer :: register_static_field !< An integer handle for a diagnostic array.
   character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model"
                                               !! or "ice_shelf_model"
@@ -2810,7 +2816,7 @@ function register_static_field(module_name, field_name, axes, &
     fms_id = diag_cs%num_chksum_diags + 1
     diag_cs%num_chksum_diags = fms_id
   else
-    fms_id = register_static_field_fms(module_name, field_name, axes%handles, &
+    fms_id = register_static_field_infra(module_name, field_name, axes%handles, &
            long_name=long_name, units=units, missing_value=MOM_missing_value, &
            range=range, mask_variant=mask_variant, standard_name=standard_name, &
            do_not_log=do_not_log, &
@@ -2829,17 +2835,17 @@ function register_static_field(module_name, field_name, axes, &
       diag%axes => axes
     else
       if (present(x_cell_method)) then
-        call get_diag_axis_name(axes%handles(1), axis_name)
-        call diag_field_add_attribute(fms_id, 'cell_methods', &
+        call get_MOM_diag_axis_name(axes%handles(1), axis_name)
+        call MOM_diag_field_add_attribute(fms_id, 'cell_methods', &
             trim(axis_name)//':'//trim(x_cell_method))
       endif
       if (present(y_cell_method)) then
-        call get_diag_axis_name(axes%handles(2), axis_name)
-        call diag_field_add_attribute(fms_id, 'cell_methods', &
+        call get_MOM_diag_axis_name(axes%handles(2), axis_name)
+        call MOM_diag_field_add_attribute(fms_id, 'cell_methods', &
             trim(axis_name)//':'//trim(y_cell_method))
       endif
       if (present(area_cell_method)) then
-        call diag_field_add_attribute(fms_id, 'cell_methods', &
+        call MOM_diag_field_add_attribute(fms_id, 'cell_methods', &
             'area:'//trim(area_cell_method))
       endif
     endif
@@ -2862,11 +2868,11 @@ function register_static_field(module_name, field_name, axes, &
     if (present(cmor_standard_name)) posted_cmor_standard_name = cmor_standard_name
     if (present(cmor_long_name)) posted_cmor_long_name = cmor_long_name
 
-    fms_id = register_static_field_fms(module_name, cmor_field_name, &
-      axes%handles, long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units), &
-      missing_value=MOM_missing_value, range=range, mask_variant=mask_variant,            &
-      standard_name=trim(posted_cmor_standard_name), do_not_log=do_not_log,               &
-      interp_method=interp_method, tile_count=tile_count, area=area)
+    fms_id = register_static_field_infra(module_name, cmor_field_name, axes%handles, &
+                long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units), &
+                missing_value=MOM_missing_value, range=range, mask_variant=mask_variant, &
+                standard_name=trim(posted_cmor_standard_name), do_not_log=do_not_log, &
+                interp_method=interp_method, tile_count=tile_count, area=area)
     if (fms_id /= DIAG_FIELD_NOT_FOUND) then
       if (dm_id == -1) then
         dm_id = get_new_diag_id(diag_cs)
@@ -2876,27 +2882,28 @@ function register_static_field(module_name, field_name, axes, &
       cmor_diag%debug_str = trim(module_name)//"-"//trim(cmor_field_name)
       if (present(conversion)) cmor_diag%conversion_factor = conversion
       if (present(x_cell_method)) then
-        call get_diag_axis_name(axes%handles(1), axis_name)
-        call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
+        call get_MOM_diag_axis_name(axes%handles(1), axis_name)
+        call MOM_diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
       endif
       if (present(y_cell_method)) then
-        call get_diag_axis_name(axes%handles(2), axis_name)
-        call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(y_cell_method))
+        call get_MOM_diag_axis_name(axes%handles(2), axis_name)
+        call MOM_diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(y_cell_method))
       endif
       if (present(area_cell_method)) then
-        call diag_field_add_attribute(fms_id, 'cell_methods', 'area:'//trim(area_cell_method))
+        call MOM_diag_field_add_attribute(fms_id, 'cell_methods', 'area:'//trim(area_cell_method))
       endif
     endif
   endif
 
   ! Document diagnostics in list of available diagnostics
   if (is_root_pe() .and. diag_CS%available_diag_doc_unit > 0) then
-    call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
-                            long_name, units, standard_name)
     if (present(cmor_field_name)) then
-      call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, &
-                              '', '', diag_CS, posted_cmor_long_name, posted_cmor_units, &
-                              posted_cmor_standard_name)
+      call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
+                              long_name, units, standard_name, &
+                              variants="{"//trim(field_name)//","//trim(cmor_field_name)//"}")
+    else
+      call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
+                              long_name, units, standard_name)
     endif
   endif
 
@@ -2910,7 +2917,7 @@ subroutine describe_option(opt_name, value, diag_CS)
   character(len=*), intent(in) :: value   !< A character string with the setting of the option.
   type(diag_ctrl),  intent(in) :: diag_CS !< Structure used to regulate diagnostic output
 
-  character(len=240) :: mesg
+  character(len=480) :: mesg
   integer :: len_ind
 
   len_ind = len_trim(value)  ! Add error handling for long values?
@@ -2944,75 +2951,46 @@ function ocean_register_diag(var_desc, G, diag_CS, day)
 
     case ("L")
       select case (hor_grid)
-        case ("q")
-          axes => diag_cs%axesBL
-        case ("h")
-          axes => diag_cs%axesTL
-        case ("u")
-          axes => diag_cs%axesCuL
-        case ("v")
-          axes => diag_cs%axesCvL
-        case ("Bu")
-          axes => diag_cs%axesBL
-        case ("T")
-          axes => diag_cs%axesTL
-        case ("Cu")
-          axes => diag_cs%axesCuL
-        case ("Cv")
-          axes => diag_cs%axesCvL
-        case ("z")
-          axes => diag_cs%axeszL
-        case default
-          call MOM_error(FATAL, "ocean_register_diag: " // &
-              "unknown hor_grid component "//trim(hor_grid))
+        case ("q")  ; axes => diag_cs%axesBL
+        case ("h")  ; axes => diag_cs%axesTL
+        case ("u")  ; axes => diag_cs%axesCuL
+        case ("v")  ; axes => diag_cs%axesCvL
+        case ("Bu") ; axes => diag_cs%axesBL
+        case ("T")  ; axes => diag_cs%axesTL
+        case ("Cu") ; axes => diag_cs%axesCuL
+        case ("Cv") ; axes => diag_cs%axesCvL
+        case ("z")  ; axes => diag_cs%axeszL
+        case default ; call MOM_error(FATAL, "ocean_register_diag: " // &
+                                      "unknown hor_grid component "//trim(hor_grid))
       end select
 
     case ("i")
       select case (hor_grid)
-        case ("q")
-          axes => diag_cs%axesBi
-        case ("h")
-          axes => diag_cs%axesTi
-        case ("u")
-          axes => diag_cs%axesCui
-        case ("v")
-          axes => diag_cs%axesCvi
-        case ("Bu")
-          axes => diag_cs%axesBi
-        case ("T")
-          axes => diag_cs%axesTi
-        case ("Cu")
-          axes => diag_cs%axesCui
-        case ("Cv")
-          axes => diag_cs%axesCvi
-        case ("z")
-          axes => diag_cs%axeszi
-        case default
-          call MOM_error(FATAL, "ocean_register_diag: " // &
-            "unknown hor_grid component "//trim(hor_grid))
+        case ("q")  ; axes => diag_cs%axesBi
+        case ("h")  ; axes => diag_cs%axesTi
+        case ("u")  ; axes => diag_cs%axesCui
+        case ("v")  ; axes => diag_cs%axesCvi
+        case ("Bu") ; axes => diag_cs%axesBi
+        case ("T")  ; axes => diag_cs%axesTi
+        case ("Cu") ; axes => diag_cs%axesCui
+        case ("Cv") ; axes => diag_cs%axesCvi
+        case ("z")  ; axes => diag_cs%axeszi
+        case default ; call MOM_error(FATAL, "ocean_register_diag: " // &
+                                      "unknown hor_grid component "//trim(hor_grid))
       end select
 
     case ("1")
       select case (hor_grid)
-        case ("q")
-          axes => diag_cs%axesB1
-        case ("h")
-          axes => diag_cs%axesT1
-        case ("u")
-          axes => diag_cs%axesCu1
-        case ("v")
-          axes => diag_cs%axesCv1
-        case ("Bu")
-          axes => diag_cs%axesB1
-        case ("T")
-          axes => diag_cs%axesT1
-        case ("Cu")
-          axes => diag_cs%axesCu1
-        case ("Cv")
-          axes => diag_cs%axesCv1
-        case default
-          call MOM_error(FATAL, "ocean_register_diag: " // &
-            "unknown hor_grid component "//trim(hor_grid))
+        case ("q")  ; axes => diag_cs%axesB1
+        case ("h")  ; axes => diag_cs%axesT1
+        case ("u")  ; axes => diag_cs%axesCu1
+        case ("v")  ; axes => diag_cs%axesCv1
+        case ("Bu") ; axes => diag_cs%axesB1
+        case ("T")  ; axes => diag_cs%axesT1
+        case ("Cu") ; axes => diag_cs%axesCu1
+        case ("Cv") ; axes => diag_cs%axesCv1
+        case default ; call MOM_error(FATAL, "ocean_register_diag: " // &
+                                      "unknown hor_grid component "//trim(hor_grid))
       end select
 
     case default
@@ -3029,7 +3007,7 @@ subroutine diag_mediator_infrastructure_init(err_msg)
   ! This subroutine initializes the FMS diag_manager.
   character(len=*), optional, intent(out)   :: err_msg !< An error message
 
-  call diag_manager_init(err_msg=err_msg)
+  call MOM_diag_manager_init(err_msg=err_msg)
 end subroutine diag_mediator_infrastructure_init
 
 !> diag_mediator_init initializes the MOM diag_mediator and opens the available
@@ -3311,8 +3289,8 @@ subroutine diag_update_remap_grids(diag_cs, alt_h, alt_T, alt_S, update_intensiv
   if (id_clock_diag_grid_updates>0) call cpu_clock_begin(id_clock_diag_grid_updates)
 
   if (diag_cs%diag_grid_overridden) then
-     call MOM_error(FATAL, "diag_update_remap_grids was called, but current grids in "// &
-                           "diagnostic structure have been overridden")
+    call MOM_error(FATAL, "diag_update_remap_grids was called, but current grids in "// &
+                          "diagnostic structure have been overridden")
   endif
 
   if (update_intensive_local) then
@@ -3428,18 +3406,18 @@ subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
   deallocate(diag_cs%mask3dCui)
   deallocate(diag_cs%mask3dCvi)
   do i=2,MAX_DSAMP_LEV
-     deallocate(diag_cs%dsamp(i)%mask2dT)
-     deallocate(diag_cs%dsamp(i)%mask2dBu)
-     deallocate(diag_cs%dsamp(i)%mask2dCu)
-     deallocate(diag_cs%dsamp(i)%mask2dCv)
-     deallocate(diag_cs%dsamp(i)%mask3dTL)
-     deallocate(diag_cs%dsamp(i)%mask3dBL)
-     deallocate(diag_cs%dsamp(i)%mask3dCuL)
-     deallocate(diag_cs%dsamp(i)%mask3dCvL)
-     deallocate(diag_cs%dsamp(i)%mask3dTi)
-     deallocate(diag_cs%dsamp(i)%mask3dBi)
-     deallocate(diag_cs%dsamp(i)%mask3dCui)
-     deallocate(diag_cs%dsamp(i)%mask3dCvi)
+    deallocate(diag_cs%dsamp(i)%mask2dT)
+    deallocate(diag_cs%dsamp(i)%mask2dBu)
+    deallocate(diag_cs%dsamp(i)%mask2dCu)
+    deallocate(diag_cs%dsamp(i)%mask2dCv)
+    deallocate(diag_cs%dsamp(i)%mask3dTL)
+    deallocate(diag_cs%dsamp(i)%mask3dBL)
+    deallocate(diag_cs%dsamp(i)%mask3dCuL)
+    deallocate(diag_cs%dsamp(i)%mask3dCvL)
+    deallocate(diag_cs%dsamp(i)%mask3dTi)
+    deallocate(diag_cs%dsamp(i)%mask3dBi)
+    deallocate(diag_cs%dsamp(i)%mask3dCui)
+    deallocate(diag_cs%dsamp(i)%mask3dCvi)
   enddo
 
 #if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
@@ -3447,7 +3425,7 @@ subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
 #endif
 
   if (present(end_diag_manager)) then
-    if (end_diag_manager) call diag_manager_end(time)
+    if (end_diag_manager) call MOM_diag_manager_end(time)
   endif
 
 end subroutine diag_mediator_end
@@ -3540,7 +3518,7 @@ end subroutine alloc_diag_with_id
 
 !> Log a diagnostic to the available diagnostics file.
 subroutine log_available_diag(used, module_name, field_name, cell_methods_string, comment, &
-                              diag_CS, long_name, units, standard_name)
+                              diag_CS, long_name, units, standard_name, variants)
   logical,          intent(in) :: used !< Whether this diagnostic was in the diag_table or not
   character(len=*), intent(in) :: module_name !< Name of the diagnostic module
   character(len=*), intent(in) :: field_name !< Name of this diagnostic field
@@ -3550,26 +3528,31 @@ subroutine log_available_diag(used, module_name, field_name, cell_methods_string
   character(len=*), optional, intent(in) :: long_name !< CF long name of diagnostic
   character(len=*), optional, intent(in) :: units !< Units for diagnostic
   character(len=*), optional, intent(in) :: standard_name !< CF standardized name of diagnostic
+  character(len=*), optional, intent(in) :: variants !< Alternate modules and variable names for
+                                                     !! this diagnostic and derived diagnostics
   ! Local variables
   character(len=240) :: mesg
 
   if (used) then
-    mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Used]'
+    mesg = '"'//trim(field_name)//'"  [Used]'
   else
-    mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Unused]'
+    mesg = '"'//trim(field_name)//'"  [Unused]'
   endif
   if (len(trim((comment)))>0) then
     write(diag_CS%available_diag_doc_unit, '(a,x,"(",a,")")') trim(mesg),trim(comment)
   else
     write(diag_CS%available_diag_doc_unit, '(a)') trim(mesg)
   endif
+  call describe_option("modules", module_name, diag_CS)
   if (present(long_name)) call describe_option("long_name", long_name, diag_CS)
   if (present(units)) call describe_option("units", units, diag_CS)
   if (present(standard_name)) &
     call describe_option("standard_name", standard_name, diag_CS)
   if (len(trim((cell_methods_string)))>0) &
     call describe_option("cell_methods", trim(cell_methods_string), diag_CS)
-
+  if (present(variants)) then ; if (len(trim(variants)) > 0) then
+    call describe_option("variants", variants, diag_CS)
+  endif ; endif
 end subroutine log_available_diag
 
 !> Log the diagnostic chksum to the chksum diag file
@@ -3584,9 +3567,10 @@ subroutine log_chksum_diag(docunit, description, chksum)
 end subroutine log_chksum_diag
 
 !> Allocates fields necessary to store diagnostic remapping fields
-subroutine diag_grid_storage_init(grid_storage, G, diag)
+subroutine diag_grid_storage_init(grid_storage, G, GV, diag)
   type(diag_grid_storage), intent(inout) :: grid_storage !< Structure containing a snapshot of the target grids
   type(ocean_grid_type),   intent(in)    :: G           !< Horizontal grid
+  type(verticalGrid_type), intent(in)    :: GV          !< ocean vertical grid structure
   type(diag_ctrl),         intent(in)    :: diag        !< Diagnostic control structure used as the contructor
                                                         !! template for this routine
 
@@ -3597,7 +3581,7 @@ subroutine diag_grid_storage_init(grid_storage, G, diag)
   if (grid_storage%num_diag_coords < 1) return
 
   ! Allocate memory for the native space
-  allocate(grid_storage%h_state(G%isd:G%ied,G%jsd:G%jed, G%ke))
+  allocate( grid_storage%h_state(G%isd:G%ied, G%jsd:G%jed, GV%ke))
   ! Allocate diagnostic remapping structures
   allocate(grid_storage%diag_grids(diag%num_diag_coords))
   ! Loop through and allocate memory for the grid on each target coordinate
@@ -3722,37 +3706,37 @@ subroutine downsample_diag_masks_set(G, nz, diag_cs)
 ! coarse   d extents            1          28           1          28
 
   do dl=2,MAX_DSAMP_LEV
-     ! 2d mask
-     call downsample_mask(G%mask2dT, diag_cs%dsamp(dl)%mask2dT,  dl,G%isc, G%jsc,  &
-          G%HId2%isc, G%HId2%iec, G%HId2%jsc, G%HId2%jec, G%HId2%isd, G%HId2%ied, G%HId2%jsd, G%HId2%jed)
-     call downsample_mask(G%mask2dBu,diag_cs%dsamp(dl)%mask2dBu, dl,G%IscB,G%JscB, &
-          G%HId2%IscB,G%HId2%IecB,G%HId2%JscB,G%HId2%JecB,G%HId2%IsdB,G%HId2%IedB,G%HId2%JsdB,G%HId2%JedB)
-     call downsample_mask(G%mask2dCu,diag_cs%dsamp(dl)%mask2dCu, dl,G%IscB,G%JscB, &
-          G%HId2%IscB,G%HId2%IecB,G%HId2%jsc, G%HId2%jec,G%HId2%IsdB,G%HId2%IedB,G%HId2%jsd, G%HId2%jed)
-     call downsample_mask(G%mask2dCv,diag_cs%dsamp(dl)%mask2dCv, dl,G%isc ,G%JscB, &
-          G%HId2%isc ,G%HId2%iec, G%HId2%JscB,G%HId2%JecB,G%HId2%isd ,G%HId2%ied, G%HId2%JsdB,G%HId2%JedB)
-     ! 3d native masks are needed by diag_manager but the native variables
-     ! can only be masked 2d - for ocean points, all layers exists.
-     allocate(diag_cs%dsamp(dl)%mask3dTL(G%HId2%isd:G%HId2%ied,G%HId2%jsd:G%HId2%jed,1:nz))
-     allocate(diag_cs%dsamp(dl)%mask3dBL(G%HId2%IsdB:G%HId2%IedB,G%HId2%JsdB:G%HId2%JedB,1:nz))
-     allocate(diag_cs%dsamp(dl)%mask3dCuL(G%HId2%IsdB:G%HId2%IedB,G%HId2%jsd:G%HId2%jed,1:nz))
-     allocate(diag_cs%dsamp(dl)%mask3dCvL(G%HId2%isd:G%HId2%ied,G%HId2%JsdB:G%HId2%JedB,1:nz))
-     do k=1,nz
-        diag_cs%dsamp(dl)%mask3dTL(:,:,k) = diag_cs%dsamp(dl)%mask2dT(:,:)
-        diag_cs%dsamp(dl)%mask3dBL(:,:,k) = diag_cs%dsamp(dl)%mask2dBu(:,:)
-        diag_cs%dsamp(dl)%mask3dCuL(:,:,k) = diag_cs%dsamp(dl)%mask2dCu(:,:)
-        diag_cs%dsamp(dl)%mask3dCvL(:,:,k) = diag_cs%dsamp(dl)%mask2dCv(:,:)
-     enddo
-     allocate(diag_cs%dsamp(dl)%mask3dTi(G%HId2%isd:G%HId2%ied,G%HId2%jsd:G%HId2%jed,1:nz+1))
-     allocate(diag_cs%dsamp(dl)%mask3dBi(G%HId2%IsdB:G%HId2%IedB,G%HId2%JsdB:G%HId2%JedB,1:nz+1))
-     allocate(diag_cs%dsamp(dl)%mask3dCui(G%HId2%IsdB:G%HId2%IedB,G%HId2%jsd:G%HId2%jed,1:nz+1))
-     allocate(diag_cs%dsamp(dl)%mask3dCvi(G%HId2%isd:G%HId2%ied,G%HId2%JsdB:G%HId2%JedB,1:nz+1))
-     do k=1,nz+1
-        diag_cs%dsamp(dl)%mask3dTi(:,:,k) = diag_cs%dsamp(dl)%mask2dT(:,:)
-        diag_cs%dsamp(dl)%mask3dBi(:,:,k) = diag_cs%dsamp(dl)%mask2dBu(:,:)
-        diag_cs%dsamp(dl)%mask3dCui(:,:,k) = diag_cs%dsamp(dl)%mask2dCu(:,:)
-        diag_cs%dsamp(dl)%mask3dCvi(:,:,k) = diag_cs%dsamp(dl)%mask2dCv(:,:)
-     enddo
+    ! 2d mask
+    call downsample_mask(G%mask2dT, diag_cs%dsamp(dl)%mask2dT,  dl,G%isc, G%jsc,  &
+            G%HId2%isc, G%HId2%iec, G%HId2%jsc, G%HId2%jec, G%HId2%isd, G%HId2%ied, G%HId2%jsd, G%HId2%jed)
+    call downsample_mask(G%mask2dBu,diag_cs%dsamp(dl)%mask2dBu, dl,G%IscB,G%JscB, &
+            G%HId2%IscB,G%HId2%IecB,G%HId2%JscB,G%HId2%JecB,G%HId2%IsdB,G%HId2%IedB,G%HId2%JsdB,G%HId2%JedB)
+    call downsample_mask(G%mask2dCu,diag_cs%dsamp(dl)%mask2dCu, dl,G%IscB,G%JscB, &
+            G%HId2%IscB,G%HId2%IecB,G%HId2%jsc, G%HId2%jec,G%HId2%IsdB,G%HId2%IedB,G%HId2%jsd, G%HId2%jed)
+    call downsample_mask(G%mask2dCv,diag_cs%dsamp(dl)%mask2dCv, dl,G%isc ,G%JscB, &
+            G%HId2%isc ,G%HId2%iec, G%HId2%JscB,G%HId2%JecB,G%HId2%isd ,G%HId2%ied, G%HId2%JsdB,G%HId2%JedB)
+    ! 3d native masks are needed by diag_manager but the native variables
+    ! can only be masked 2d - for ocean points, all layers exists.
+    allocate(diag_cs%dsamp(dl)%mask3dTL(G%HId2%isd:G%HId2%ied,G%HId2%jsd:G%HId2%jed,1:nz))
+    allocate(diag_cs%dsamp(dl)%mask3dBL(G%HId2%IsdB:G%HId2%IedB,G%HId2%JsdB:G%HId2%JedB,1:nz))
+    allocate(diag_cs%dsamp(dl)%mask3dCuL(G%HId2%IsdB:G%HId2%IedB,G%HId2%jsd:G%HId2%jed,1:nz))
+    allocate(diag_cs%dsamp(dl)%mask3dCvL(G%HId2%isd:G%HId2%ied,G%HId2%JsdB:G%HId2%JedB,1:nz))
+    do k=1,nz
+      diag_cs%dsamp(dl)%mask3dTL(:,:,k) = diag_cs%dsamp(dl)%mask2dT(:,:)
+      diag_cs%dsamp(dl)%mask3dBL(:,:,k) = diag_cs%dsamp(dl)%mask2dBu(:,:)
+      diag_cs%dsamp(dl)%mask3dCuL(:,:,k) = diag_cs%dsamp(dl)%mask2dCu(:,:)
+      diag_cs%dsamp(dl)%mask3dCvL(:,:,k) = diag_cs%dsamp(dl)%mask2dCv(:,:)
+    enddo
+    allocate(diag_cs%dsamp(dl)%mask3dTi(G%HId2%isd:G%HId2%ied,G%HId2%jsd:G%HId2%jed,1:nz+1))
+    allocate(diag_cs%dsamp(dl)%mask3dBi(G%HId2%IsdB:G%HId2%IedB,G%HId2%JsdB:G%HId2%JedB,1:nz+1))
+    allocate(diag_cs%dsamp(dl)%mask3dCui(G%HId2%IsdB:G%HId2%IedB,G%HId2%jsd:G%HId2%jed,1:nz+1))
+    allocate(diag_cs%dsamp(dl)%mask3dCvi(G%HId2%isd:G%HId2%ied,G%HId2%JsdB:G%HId2%JedB,1:nz+1))
+    do k=1,nz+1
+      diag_cs%dsamp(dl)%mask3dTi(:,:,k) = diag_cs%dsamp(dl)%mask2dT(:,:)
+      diag_cs%dsamp(dl)%mask3dBi(:,:,k) = diag_cs%dsamp(dl)%mask2dBu(:,:)
+      diag_cs%dsamp(dl)%mask3dCui(:,:,k) = diag_cs%dsamp(dl)%mask2dCu(:,:)
+      diag_cs%dsamp(dl)%mask3dCvi(:,:,k) = diag_cs%dsamp(dl)%mask2dCv(:,:)
+    enddo
   enddo
 end subroutine downsample_diag_masks_set
 
@@ -3778,14 +3762,14 @@ subroutine downsample_diag_indices_get(fo1, fo2, dl, diag_cs, isv, iev, jsv, jev
   !We assume that the compute domain can be subdivided to dl*dl cells, hence avoiding the need of halo updates.
   !We want this check to error out only if there was a downsampled diagnostics requested and about to post that is
   !why the check is here and not in the init routines. This check need to be done only once, hence the outer if.
-  if(first_check) then
-     if(mod(diag_cs%ie-diag_cs%is+1, dl) .ne. 0 .OR. mod(diag_cs%je-diag_cs%js+1, dl) .ne. 0) then
-        write (mesg,*) "Non-commensurate downsampled domain is not supported. "//&
+  if (first_check) then
+    if (mod(diag_cs%ie-diag_cs%is+1, dl) /= 0 .OR. mod(diag_cs%je-diag_cs%js+1, dl) /= 0) then
+      write (mesg,*) "Non-commensurate downsampled domain is not supported. "//&
              "Please choose a layout such that NIGLOBAL/Layout_X and NJGLOBAL/Layout_Y are both divisible by dl=",dl,&
              " Current domain extents: ", diag_cs%is,diag_cs%ie, diag_cs%js,diag_cs%je
-        call MOM_error(FATAL,"downsample_diag_indices_get: "//trim(mesg))
-     endif
-     first_check = .false.
+      call MOM_error(FATAL,"downsample_diag_indices_get: "//trim(mesg))
+    endif
+    first_check = .false.
   endif
 
   cszi = diag_cs%dsamp(dl)%iec-diag_cs%dsamp(dl)%isc +1 ; dszi = diag_cs%dsamp(dl)%ied-diag_cs%dsamp(dl)%isd +1
@@ -3796,35 +3780,35 @@ subroutine downsample_diag_indices_get(fo1, fo2, dl, diag_cs, isv, iev, jsv, jev
   f2 = fo2/dl
   !Correction for the symmetric case
   if (diag_cs%G%symmetric) then
-     f1 = f1 + mod(fo1,dl)
-     f2 = f2 + mod(fo2,dl)
+    f1 = f1 + mod(fo1,dl)
+    f2 = f2 + mod(fo2,dl)
   endif
   if ( f1 == dszi ) then
-     isv = diag_cs%dsamp(dl)%isc ; iev = diag_cs%dsamp(dl)%iec    ! field on Data domain, take compute domain indcies
+    isv = diag_cs%dsamp(dl)%isc ; iev = diag_cs%dsamp(dl)%iec   ! field on Data domain, take compute domain indcies
   !The rest is not taken with the full MOM6 diag_table
   elseif ( f1 == dszi + 1 ) then
-     isv = diag_cs%dsamp(dl)%isc ; iev = diag_cs%dsamp(dl)%iec+1   ! Symmetric data domain
+    isv = diag_cs%dsamp(dl)%isc ; iev = diag_cs%dsamp(dl)%iec+1   ! Symmetric data domain
   elseif ( f1 == cszi) then
-     isv = 1 ; iev = (diag_cs%dsamp(dl)%iec-diag_cs%dsamp(dl)%isc) +1  ! Computational domain
+    isv = 1 ; iev = (diag_cs%dsamp(dl)%iec-diag_cs%dsamp(dl)%isc) +1  ! Computational domain
   elseif ( f1 == cszi + 1 ) then
-     isv = 1 ; iev = (diag_cs%dsamp(dl)%iec-diag_cs%dsamp(dl)%isc) +2  ! Symmetric computational domain
+    isv = 1 ; iev = (diag_cs%dsamp(dl)%iec-diag_cs%dsamp(dl)%isc) +2  ! Symmetric computational domain
   else
-     write (mesg,*) " peculiar size ",f1," in i-direction\n"//&
+    write (mesg,*) " peculiar size ",f1," in i-direction\n"//&
           "does not match one of ", cszi, cszi+1, dszi, dszi+1
-     call MOM_error(FATAL,"downsample_diag_indices_get: "//trim(mesg))
+    call MOM_error(FATAL,"downsample_diag_indices_get: "//trim(mesg))
   endif
   if ( f2 == dszj ) then
-     jsv = diag_cs%dsamp(dl)%jsc ; jev = diag_cs%dsamp(dl)%jec     ! Data domain
+    jsv = diag_cs%dsamp(dl)%jsc ; jev = diag_cs%dsamp(dl)%jec     ! Data domain
   elseif ( f2 == dszj + 1 ) then
-     jsv = diag_cs%dsamp(dl)%jsc ; jev = diag_cs%dsamp(dl)%jec+1   ! Symmetric data domain
+    jsv = diag_cs%dsamp(dl)%jsc ; jev = diag_cs%dsamp(dl)%jec+1   ! Symmetric data domain
   elseif ( f2 == cszj) then
-     jsv = 1 ; jev = (diag_cs%dsamp(dl)%jec-diag_cs%dsamp(dl)%jsc) +1  ! Computational domain
+    jsv = 1 ; jev = (diag_cs%dsamp(dl)%jec-diag_cs%dsamp(dl)%jsc) +1  ! Computational domain
   elseif ( f2 == cszj + 1 ) then
-     jsv = 1 ; jev = (diag_cs%dsamp(dl)%jec-diag_cs%dsamp(dl)%jsc) +2  ! Symmetric computational domain
+    jsv = 1 ; jev = (diag_cs%dsamp(dl)%jec-diag_cs%dsamp(dl)%jsc) +2  ! Symmetric computational domain
   else
-     write (mesg,*) " peculiar size ",f2," in j-direction\n"//&
+    write (mesg,*) " peculiar size ",f2," in j-direction\n"//&
           "does not match one of ", cszj, cszj+1, dszj, dszj+1
-     call MOM_error(FATAL,"downsample_diag_indices_get: "//trim(mesg))
+    call MOM_error(FATAL,"downsample_diag_indices_get: "//trim(mesg))
   endif
 end subroutine downsample_diag_indices_get
 
@@ -3849,23 +3833,23 @@ subroutine downsample_diag_field_3d(locfield, locfield_dsamp, dl, diag_cs, diag,
   locmask => NULL()
   !Get the correct indices corresponding to input field
   !Shape of the input diag field
-  f1=size(locfield,1)
-  f2=size(locfield,2)
+  f1 = size(locfield, 1)
+  f2 = size(locfield, 2)
   !Save the extents of the original (fine) domain
-  isv_o=isv;jsv_o=jsv
+  isv_o = isv ; jsv_o = jsv
   !Get the shape of the downsampled field and overwrite isv,iev,jsv,jev with them
-  call downsample_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
+  call downsample_diag_indices_get(f1, f2, dl, diag_cs, isv, iev, jsv, jev)
   !Set the non-downsampled mask, it must be associated and initialized
   if (present(mask)) then
-     locmask => mask
+    locmask => mask
   elseif (associated(diag%axes%mask3d)) then
-     locmask => diag%axes%mask3d
+    locmask => diag%axes%mask3d
   else
-     call MOM_error(FATAL, "downsample_diag_field_3d: Cannot downsample without a mask!!! ")
+    call MOM_error(FATAL, "downsample_diag_field_3d: Cannot downsample without a mask!!! ")
   endif
 
   call downsample_field(locfield, locfield_dsamp, dl, diag%xyz_method, locmask, diag_cs, diag, &
-                      isv_o,jsv_o,isv,iev,jsv,jev)
+                        isv_o, jsv_o, isv, iev, jsv, jev)
 
 end subroutine downsample_diag_field_3d
 
@@ -3890,19 +3874,19 @@ subroutine downsample_diag_field_2d(locfield, locfield_dsamp, dl, diag_cs, diag,
   locmask => NULL()
   !Get the correct indices corresponding to input field
   !Shape of the input diag field
-  f1=size(locfield,1)
-  f2=size(locfield,2)
+  f1 = size(locfield,1)
+  f2 = size(locfield,2)
   !Save the extents of the original (fine) domain
-  isv_o=isv;jsv_o=jsv
+  isv_o = isv ; jsv_o = jsv
   !Get the shape of the downsampled field and overwrite isv,iev,jsv,jev with them
   call downsample_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
   !Set the non-downsampled mask, it must be associated and initialized
   if (present(mask)) then
-     locmask => mask
+    locmask => mask
   elseif (associated(diag%axes%mask2d)) then
-     locmask => diag%axes%mask2d
+    locmask => diag%axes%mask2d
   else
-     call MOM_error(FATAL, "downsample_diag_field_2d: Cannot downsample without a mask!!! ")
+    call MOM_error(FATAL, "downsample_diag_field_2d: Cannot downsample without a mask!!! ")
   endif
 
   call downsample_field(locfield, locfield_dsamp, dl, diag%xyz_method, locmask, diag_cs,diag, &
@@ -3984,117 +3968,117 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
   f2 = f_in2/dl
   !Correction for the symmetric case
   if (diag_cs%G%symmetric) then
-     f1 = f1 + mod(f_in1,dl)
-     f2 = f2 + mod(f_in2,dl)
+    f1 = f1 + mod(f_in1,dl)
+    f2 = f2 + mod(f_in2,dl)
   endif
   allocate(field_out(1:f1,1:f2,ks:ke))
 
   ! Fill the down sampled field on the down sampled diagnostics (almost always compuate) domain
   if (method == MMM) then
-     do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
-        i0 = isv_o+dl*(i-isv_d)
-        j0 = jsv_o+dl*(j-jsv_d)
-        ave = 0.0
-        total_weight = 0.0
-        do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
-!        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 !This seems to be faster!!!!
-           weight = mask(ii,jj,k) * diag_cs%G%areaT(ii,jj) * diag_cs%h(ii,jj,k)
-           total_weight = total_weight + weight
-           ave = ave+field_in(ii,jj,k) * weight
-        enddo; enddo
-        field_out(i,j,k)  = ave/(total_weight + eps_vol)  !Avoid zero mask at all aggregating cells where ave=0.0
-     enddo; enddo; enddo
-  elseif (method == SSS) then    !e.g., volcello
-     do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
-        i0 = isv_o+dl*(i-isv_d)
-        j0 = jsv_o+dl*(j-jsv_d)
-        ave = 0.0
-        do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
-           weight = mask(ii,jj,k)
-           ave = ave+field_in(ii,jj,k)*weight
-        enddo; enddo
-        field_out(i,j,k)  = ave !Masked Sum (total_weight=1)
-     enddo; enddo; enddo
-  elseif(method == MMP .or. method == MMS) then    !e.g., T_advection_xy
-     do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
-        i0 = isv_o+dl*(i-isv_d)
-        j0 = jsv_o+dl*(j-jsv_d)
-        ave = 0.0
-        total_weight = 0.0
-        do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
-!        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
-           weight = mask(ii,jj,k) * diag_cs%G%areaT(ii,jj)
-           total_weight = total_weight + weight
-           ave = ave+field_in(ii,jj,k)*weight
-        enddo; enddo
-        field_out(i,j,k)  = ave / (total_weight+eps_area)  !Avoid zero mask at all aggregating cells where ave=0.0
-     enddo; enddo; enddo
-  elseif(method == PMM) then
-     do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
-        i0 = isv_o+dl*(i-isv_d)
-        j0 = jsv_o+dl*(j-jsv_d)
-        ave = 0.0
-        total_weight = 0.0
-        ii=i0
-        do jj=j0,j0+dl-1
-           weight =mask(ii,jj,k) * diag_cs%G%dyCu(ii,jj) * diag_cs%h(ii,jj,k)
-           total_weight = total_weight +weight
-           ave=ave+field_in(ii,jj,k)*weight
-        enddo
-        field_out(i,j,k)  = ave/(total_weight+eps_face)  !Avoid zero mask at all aggregating cells where ave=0.0
-     enddo; enddo; enddo
-  elseif(method == PSS) then    !e.g. umo
-     do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
-        i0 = isv_o+dl*(i-isv_d)
-        j0 = jsv_o+dl*(j-jsv_d)
-        ave = 0.0
-        ii=i0
-        do jj=j0,j0+dl-1
-           weight =mask(ii,jj,k)
-           ave=ave+field_in(ii,jj,k)*weight
-        enddo
-        field_out(i,j,k)  = ave  !Masked Sum (total_weight=1)
-     enddo; enddo; enddo
-  elseif(method == SPS) then    !e.g. vmo
-     do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
-        i0 = isv_o+dl*(i-isv_d)
-        j0 = jsv_o+dl*(j-jsv_d)
-        ave = 0.0
-        jj=j0
-        do ii=i0,i0+dl-1
-           weight =mask(ii,jj,k)
-           ave=ave+field_in(ii,jj,k)*weight
-        enddo
-        field_out(i,j,k)  = ave  !Masked Sum (total_weight=1)
-     enddo; enddo; enddo
-  elseif(method == MPM) then
-     do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
-        i0 = isv_o+dl*(i-isv_d)
-        j0 = jsv_o+dl*(j-jsv_d)
-        ave = 0.0
-        total_weight = 0.0
-        jj=j0
-        do ii=i0,i0+dl-1
-           weight = mask(ii,jj,k) * diag_cs%G%dxCv(ii,jj) * diag_cs%h(ii,jj,k)
-           total_weight = total_weight + weight
-           ave=ave+field_in(ii,jj,k)*weight
-        enddo
-        field_out(i,j,k)  = ave/(total_weight+eps_face)  !Avoid zero mask at all aggregating cells where ave=0.0
-     enddo; enddo; enddo
-  elseif(method == MSK) then !The input field is a mask, subsample
-     field_out(:,:,:) = 0.0
-     do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
-        i0 = isv_o+dl*(i-isv_d)
-        j0 = jsv_o+dl*(j-jsv_d)
-        ave = 0.0
-        do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
-           ave=ave+field_in(ii,jj,k)
-        enddo; enddo
-        if(ave > 0.0) field_out(i,j,k)=1.0
-     enddo; enddo; enddo
+    do k=ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
+      i0 = isv_o+dl*(i-isv_d)
+      j0 = jsv_o+dl*(j-jsv_d)
+      ave = 0.0
+      total_weight = 0.0
+      do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
+!     do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 !This seems to be faster!!!!
+        weight = mask(ii,jj,k) * diag_cs%G%areaT(ii,jj) * diag_cs%h(ii,jj,k)
+        total_weight = total_weight + weight
+        ave = ave+field_in(ii,jj,k) * weight
+      enddo ; enddo
+      field_out(i,j,k)  = ave/(total_weight + eps_vol)  !Avoid zero mask at all aggregating cells where ave=0.0
+    enddo ; enddo ; enddo
+  elseif (method == SSS) then   !e.g., volcello
+    do k=ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
+      i0 = isv_o+dl*(i-isv_d)
+      j0 = jsv_o+dl*(j-jsv_d)
+      ave = 0.0
+      do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
+        weight = mask(ii,jj,k)
+        ave = ave+field_in(ii,jj,k)*weight
+      enddo ; enddo
+      field_out(i,j,k)  = ave !Masked Sum (total_weight=1)
+    enddo ; enddo ; enddo
+  elseif (method == MMP .or. method == MMS) then   !e.g., T_advection_xy
+    do k=ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
+      i0 = isv_o+dl*(i-isv_d)
+      j0 = jsv_o+dl*(j-jsv_d)
+      ave = 0.0
+      total_weight = 0.0
+      do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
+!     do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
+        weight = mask(ii,jj,k) * diag_cs%G%areaT(ii,jj)
+        total_weight = total_weight + weight
+        ave = ave+field_in(ii,jj,k)*weight
+      enddo ; enddo
+      field_out(i,j,k)  = ave / (total_weight+eps_area)  !Avoid zero mask at all aggregating cells where ave=0.0
+    enddo ; enddo ; enddo
+  elseif (method == PMM) then
+    do k=ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
+      i0 = isv_o+dl*(i-isv_d)
+      j0 = jsv_o+dl*(j-jsv_d)
+      ave = 0.0
+      total_weight = 0.0
+      ii=i0
+      do jj=j0,j0+dl-1
+        weight = mask(ii,jj,k) * diag_cs%G%dyCu(ii,jj) * diag_cs%h(ii,jj,k)
+        total_weight = total_weight +weight
+        ave = ave+field_in(ii,jj,k)*weight
+      enddo
+      field_out(i,j,k)  = ave/(total_weight+eps_face)  !Avoid zero mask at all aggregating cells where ave=0.0
+    enddo ; enddo ; enddo
+  elseif (method == PSS) then    !e.g. umo
+    do k=ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
+      i0 = isv_o+dl*(i-isv_d)
+      j0 = jsv_o+dl*(j-jsv_d)
+      ave = 0.0
+      ii=i0
+      do jj=j0,j0+dl-1
+        weight = mask(ii,jj,k)
+        ave = ave+field_in(ii,jj,k)*weight
+      enddo
+      field_out(i,j,k)  = ave  !Masked Sum (total_weight=1)
+    enddo ; enddo ; enddo
+  elseif (method == SPS) then   !e.g. vmo
+    do k=ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
+      i0 = isv_o+dl*(i-isv_d)
+      j0 = jsv_o+dl*(j-jsv_d)
+      ave = 0.0
+      jj=j0
+      do ii=i0,i0+dl-1
+        weight = mask(ii,jj,k)
+        ave = ave+field_in(ii,jj,k)*weight
+      enddo
+      field_out(i,j,k)  = ave  !Masked Sum (total_weight=1)
+    enddo ; enddo ; enddo
+  elseif (method == MPM) then
+    do k=ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
+      i0 = isv_o+dl*(i-isv_d)
+      j0 = jsv_o+dl*(j-jsv_d)
+      ave = 0.0
+      total_weight = 0.0
+      jj=j0
+      do ii=i0,i0+dl-1
+        weight = mask(ii,jj,k) * diag_cs%G%dxCv(ii,jj) * diag_cs%h(ii,jj,k)
+        total_weight = total_weight + weight
+        ave = ave+field_in(ii,jj,k)*weight
+      enddo
+      field_out(i,j,k)  = ave/(total_weight+eps_face)  !Avoid zero mask at all aggregating cells where ave=0.0
+    enddo ; enddo ; enddo
+  elseif (method == MSK) then !The input field is a mask, subsample
+    field_out(:,:,:) = 0.0
+    do k=ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
+      i0 = isv_o+dl*(i-isv_d)
+      j0 = jsv_o+dl*(j-jsv_d)
+      ave = 0.0
+      do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
+        ave = ave+field_in(ii,jj,k)
+      enddo ; enddo
+      if (ave > 0.0) field_out(i,j,k)=1.0
+    enddo ; enddo ; enddo
   else
-     write (mesg,*) " unknown sampling method: ",method
-     call MOM_error(FATAL, "downsample_field_3d: "//trim(mesg)//" "//trim(diag%debug_str))
+    write (mesg,*) " unknown sampling method: ",method
+    call MOM_error(FATAL, "downsample_field_3d: "//trim(mesg)//" "//trim(diag%debug_str))
   endif
 
 end subroutine downsample_field_3d
@@ -4138,109 +4122,109 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs, d
   f2 = f_in2/dl
   ! Correction for the symmetric case
   if (diag_cs%G%symmetric) then
-     f1 = f1 + mod(f_in1,dl)
-     f2 = f2 + mod(f_in2,dl)
+    f1 = f1 + mod(f_in1,dl)
+    f2 = f2 + mod(f_in2,dl)
   endif
   allocate(field_out(1:f1,1:f2))
 
   if (method == MMP) then
-     do j=jsv_d,jev_d ; do i=isv_d,iev_d
-        i0 = isv_o+dl*(i-isv_d)
-        j0 = jsv_o+dl*(j-jsv_d)
-        ave = 0.0
-        total_weight = 0.0
-        do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
-!        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
-           weight = mask(ii,jj)*diag_cs%G%areaT(ii,jj)
-           total_weight = total_weight + weight
-           ave = ave+field_in(ii,jj)*weight
-        enddo; enddo
-        field_out(i,j)  = ave/(total_weight + eps_area)  !Avoid zero mask at all aggregating cells where ave=0.0
-     enddo; enddo
-  elseif(method == SSP) then    ! e.g., T_dfxy_cont_tendency_2d
-     do j=jsv_d,jev_d ; do i=isv_d,iev_d
-        i0 = isv_o+dl*(i-isv_d)
-        j0 = jsv_o+dl*(j-jsv_d)
-        ave = 0.0
-        total_weight = 0.0
-        do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
-!        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
-           weight = mask(ii,jj)
-           total_weight = total_weight + weight
-           ave=ave+field_in(ii,jj)*weight
-        enddo; enddo
-        field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
-     enddo; enddo
-  elseif(method == PSP) then    ! e.g., umo_2d
-     do j=jsv_d,jev_d ; do i=isv_d,iev_d
-        i0 = isv_o+dl*(i-isv_d)
-        j0 = jsv_o+dl*(j-jsv_d)
-        ave = 0.0
-        total_weight = 0.0
-        ii=i0
-        do jj=j0,j0+dl-1
-           weight = mask(ii,jj)
-           total_weight = total_weight +weight
-           ave=ave+field_in(ii,jj)*weight
-        enddo
-        field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
-     enddo; enddo
-  elseif(method == SPP) then    ! e.g., vmo_2d
-     do j=jsv_d,jev_d ; do i=isv_d,iev_d
-        i0 = isv_o+dl*(i-isv_d)
-        j0 = jsv_o+dl*(j-jsv_d)
-        ave = 0.0
-        total_weight = 0.0
-        jj=j0
-        do ii=i0,i0+dl-1
-           weight = mask(ii,jj)
-           total_weight = total_weight +weight
-           ave=ave+field_in(ii,jj)*weight
-        enddo
-        field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
-     enddo; enddo
-  elseif(method == PMP) then
-     do j=jsv_d,jev_d ; do i=isv_d,iev_d
-        i0 = isv_o+dl*(i-isv_d)
-        j0 = jsv_o+dl*(j-jsv_d)
-        ave = 0.0
-        total_weight = 0.0
-        ii=i0
-        do jj=j0,j0+dl-1
-           weight = mask(ii,jj) * diag_cs%G%dyCu(ii,jj)!*diag_cs%h(ii,jj,1) !Niki?
-           total_weight = total_weight +weight
-           ave=ave+field_in(ii,jj)*weight
-        enddo
-        field_out(i,j)  = ave/(total_weight+eps_len)  !Avoid zero mask at all aggregating cells where ave=0.0
-     enddo; enddo
-  elseif(method == MPP) then
-     do j=jsv_d,jev_d ; do i=isv_d,iev_d
-        i0 = isv_o+dl*(i-isv_d)
-        j0 = jsv_o+dl*(j-jsv_d)
-        ave = 0.0
-        total_weight = 0.0
-        jj=j0
-        do ii=i0,i0+dl-1
-           weight = mask(ii,jj)* diag_cs%G%dxCv(ii,jj)!*diag_cs%h(ii,jj,1) !Niki?
-           total_weight = total_weight +weight
-           ave=ave+field_in(ii,jj)*weight
-        enddo
-        field_out(i,j)  = ave/(total_weight+eps_len)  !Avoid zero mask at all aggregating cells where ave=0.0
-     enddo; enddo
-  elseif(method == MSK) then !The input field is a mask, subsample
-     field_out(:,:) = 0.0
-     do j=jsv_d,jev_d ; do i=isv_d,iev_d
-        i0 = isv_o+dl*(i-isv_d)
-        j0 = jsv_o+dl*(j-jsv_d)
-        ave = 0.0
-        do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
-           ave=ave+field_in(ii,jj)
-        enddo; enddo
-        if(ave > 0.0) field_out(i,j)=1.0
-     enddo; enddo
+    do j=jsv_d,jev_d ; do i=isv_d,iev_d
+      i0 = isv_o+dl*(i-isv_d)
+      j0 = jsv_o+dl*(j-jsv_d)
+      ave = 0.0
+      total_weight = 0.0
+      do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
+!      do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
+        weight = mask(ii,jj)*diag_cs%G%areaT(ii,jj)
+        total_weight = total_weight + weight
+        ave = ave+field_in(ii,jj)*weight
+      enddo ; enddo
+      field_out(i,j) = ave/(total_weight + eps_area)  !Avoid zero mask at all aggregating cells where ave=0.0
+    enddo ; enddo
+  elseif (method == SSP) then    ! e.g., T_dfxy_cont_tendency_2d
+    do j=jsv_d,jev_d ; do i=isv_d,iev_d
+      i0 = isv_o+dl*(i-isv_d)
+      j0 = jsv_o+dl*(j-jsv_d)
+      ave = 0.0
+      total_weight = 0.0
+      do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
+!      do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
+        weight = mask(ii,jj)
+        total_weight = total_weight + weight
+        ave = ave+field_in(ii,jj)*weight
+      enddo ; enddo
+      field_out(i,j) = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+    enddo ; enddo
+  elseif (method == PSP) then   ! e.g., umo_2d
+    do j=jsv_d,jev_d ; do i=isv_d,iev_d
+      i0 = isv_o+dl*(i-isv_d)
+      j0 = jsv_o+dl*(j-jsv_d)
+      ave = 0.0
+      total_weight = 0.0
+      ii=i0
+      do jj=j0,j0+dl-1
+        weight = mask(ii,jj)
+        total_weight = total_weight +weight
+        ave = ave+field_in(ii,jj)*weight
+      enddo
+      field_out(i,j) = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+    enddo ; enddo
+  elseif (method == SPP) then   ! e.g., vmo_2d
+    do j=jsv_d,jev_d ; do i=isv_d,iev_d
+      i0 = isv_o+dl*(i-isv_d)
+      j0 = jsv_o+dl*(j-jsv_d)
+      ave = 0.0
+      total_weight = 0.0
+      jj=j0
+      do ii=i0,i0+dl-1
+        weight = mask(ii,jj)
+        total_weight = total_weight +weight
+        ave = ave+field_in(ii,jj)*weight
+      enddo
+      field_out(i,j) = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+    enddo ; enddo
+  elseif (method == PMP) then
+    do j=jsv_d,jev_d ; do i=isv_d,iev_d
+      i0 = isv_o+dl*(i-isv_d)
+      j0 = jsv_o+dl*(j-jsv_d)
+      ave = 0.0
+      total_weight = 0.0
+      ii=i0
+      do jj=j0,j0+dl-1
+        weight = mask(ii,jj) * diag_cs%G%dyCu(ii,jj)!*diag_cs%h(ii,jj,1) !Niki?
+        total_weight = total_weight +weight
+        ave = ave+field_in(ii,jj)*weight
+      enddo
+      field_out(i,j) = ave/(total_weight+eps_len)  !Avoid zero mask at all aggregating cells where ave=0.0
+    enddo ; enddo
+  elseif (method == MPP) then
+    do j=jsv_d,jev_d ; do i=isv_d,iev_d
+      i0 = isv_o+dl*(i-isv_d)
+      j0 = jsv_o+dl*(j-jsv_d)
+      ave = 0.0
+      total_weight = 0.0
+      jj=j0
+      do ii=i0,i0+dl-1
+        weight = mask(ii,jj)* diag_cs%G%dxCv(ii,jj)!*diag_cs%h(ii,jj,1) !Niki?
+        total_weight = total_weight +weight
+        ave = ave+field_in(ii,jj)*weight
+      enddo
+      field_out(i,j) = ave/(total_weight+eps_len)  !Avoid zero mask at all aggregating cells where ave=0.0
+    enddo ; enddo
+  elseif (method == MSK) then !The input field is a mask, subsample
+    field_out(:,:) = 0.0
+    do j=jsv_d,jev_d ; do i=isv_d,iev_d
+      i0 = isv_o+dl*(i-isv_d)
+      j0 = jsv_o+dl*(j-jsv_d)
+      ave = 0.0
+      do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
+        ave = ave+field_in(ii,jj)
+      enddo ; enddo
+      if (ave > 0.0) field_out(i,j)=1.0
+    enddo ; enddo
   else
-     write (mesg,*) " unknown sampling method: ",method
-     call MOM_error(FATAL, "downsample_field_2d: "//trim(mesg)//" "//trim(diag%debug_str))
+    write (mesg,*) " unknown sampling method: ",method
+    call MOM_error(FATAL, "downsample_field_2d: "//trim(mesg)//" "//trim(diag%debug_str))
   endif
 
 end subroutine downsample_field_2d
@@ -4270,14 +4254,14 @@ subroutine downsample_mask_2d(field_in, field_out, dl, isc_o, jsc_o, isc_d, iec_
   allocate(field_out(isd_d:ied_d,jsd_d:jed_d))
   field_out(:,:) = 0.0
   do j=jsc_d,jec_d ; do i=isc_d,iec_d
-     i0 = isc_o+dl*(i-isc_d)
-     j0 = jsc_o+dl*(j-jsc_d)
-     tot_non_zero = 0.0
-     do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
-        tot_non_zero = tot_non_zero + field_in(ii,jj)
-     enddo;enddo
-     if(tot_non_zero > 0.0) field_out(i,j)=1.0
-  enddo; enddo
+    i0 = isc_o+dl*(i-isc_d)
+    j0 = jsc_o+dl*(j-jsc_d)
+    tot_non_zero = 0.0
+    do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
+      tot_non_zero = tot_non_zero + field_in(ii,jj)
+    enddo ; enddo
+    if (tot_non_zero > 0.0) field_out(i,j)=1.0
+  enddo ; enddo
 end subroutine downsample_mask_2d
 
 !> Allocate and compute the 3d down sampled mask
@@ -4305,15 +4289,31 @@ subroutine downsample_mask_3d(field_in, field_out, dl, isc_o, jsc_o, isc_d, iec_
   ks = lbound(field_in,3) ; ke = ubound(field_in,3)
   allocate(field_out(isd_d:ied_d,jsd_d:jed_d,ks:ke))
   field_out(:,:,:) = 0.0
-  do k= ks,ke ; do j=jsc_d,jec_d ; do i=isc_d,iec_d
-     i0 = isc_o+dl*(i-isc_d)
-     j0 = jsc_o+dl*(j-jsc_d)
-     tot_non_zero = 0.0
-     do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
-        tot_non_zero = tot_non_zero + field_in(ii,jj,k)
-     enddo;enddo
-     if(tot_non_zero > 0.0) field_out(i,j,k)=1.0
-  enddo; enddo; enddo
+  do k=ks,ke ; do j=jsc_d,jec_d ; do i=isc_d,iec_d
+    i0 = isc_o+dl*(i-isc_d)
+    j0 = jsc_o+dl*(j-jsc_d)
+    tot_non_zero = 0.0
+    do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
+      tot_non_zero = tot_non_zero + field_in(ii,jj,k)
+    enddo ; enddo
+    if (tot_non_zero > 0.0) field_out(i,j,k)=1.0
+  enddo ; enddo ; enddo
 end subroutine downsample_mask_3d
+
+!> Fakes a register of a diagnostic to find out if an obsolete
+!! parameter appears in the diag_table.
+logical function found_in_diagtable(diag, varName)
+  type(diag_ctrl),            intent(in) :: diag       !< A structure used to control diagnostics.
+  character(len=*),           intent(in) :: varName    !< The obsolete diagnostic name
+  ! Local
+  integer :: handle ! Integer handle returned from diag_manager
+
+  ! We use register_static_field_fms() instead of register_static_field() so
+  ! that the diagnostic does not appear in the available diagnostics list.
+  handle = register_static_field_infra('ocean_model', varName, diag%axesT1%handles)
+
+  found_in_diagtable = (handle>0)
+
+end function found_in_diagtable
 
 end module MOM_diag_mediator

@@ -1,0 +1,57 @@
+/*! \page CVMix_KPP The K-Profile Parameterization
+
+ The K-Profile Parameterization (KPP) of \cite large1994 is
+ implemented via the Community Vertical Mixing package, [CVMix](http://cvmix.github.io/),
+ which is called directly by this module.
+
+ The formulation and implementation of KPP is described in great detail in the
+ [CVMix manual](https://github.com/CVMix/CVMix-description/raw/master/cvmix.pdf) (written by our own Steve Griffies).
+
+ \section section_KPP_nutshell KPP in a nutshell
+
+ Large et al., \cite large1994, decompose the parameterized boundary layer turbulent flux of a scalar, \f$ s \f$, as
+ \f[ \overline{w^\prime s^\prime} = -K \partial_z s + K \gamma_s(\sigma), \f]
+ where \f$ \sigma = -z/h \f$ is a non-dimensional coordinate within the boundary layer of depth \f$ h \f$.
+ \f$ K \f$ is the eddy diffusivity and is a function of position within the boundary layer as well as a
+ function of the surface forcing:
+ \f[ K = h w_s(\sigma) G(\sigma) . \f]
+ Here, \f$ w_s \f$ is the vertical velocity scale of the boundary layer turbulence and \f$ G(\sigma) \f$ is
+ a "shape function" which is described later.
+ The last term is the "non-local transport" which involves a function \f$ \gamma_s(\sigma) \f$ that is matched
+ to the forcing but is not actually needed in the final implementation.
+ Instead, the entire non-local transport term can be equivalently written
+ \f[ K \gamma_s(\sigma) = C_s G(\sigma) Q_s \f]
+ where \f$ Q_s \f$ is the surface flux of \f$ s \f$ and \f$ C_s \f$ is a constant.
+ The vertical structure of the redistribution (non-local) term is solely due  to the shape function,
+ \f$ G(\sigma) \f$.
+ In our implementation of KPP, we allow the shape functions used for \f$ K \f$ and for the non-local transport
+ to be chosen independently.
+
+ [google_thread_NLT]: https://groups.google.com/forum/#!msg/CVMix-dev/i6rF-eHOtKI/Ti8BeyksrhAJ
+ "Extreme values of non-local transport"
+
+ The particular shape function most widely used in the atmospheric community is
+ \f[ G(\sigma) = \sigma (1-\sigma)^2 \f]
+ which satisfies the boundary conditions
+  \f$ G(0) = 0 \f$,
+  \f$ G(1) = 0 \f$,
+  \f$ G^\prime(0) = 1 \f$, and
+  \f$ G^\prime(1) = 0 \f$.
+ Large et al, 1994, alter the function so as to match interior diffusivities but we have found that this leads
+ to inconsistencies within the formulation (see google groups thread
+ [Extreme values of non-local transport][google_thread_NLT]).
+ Instead, we use either the above form, or even simpler forms that use alternative upper boundary conditions.
+
+ The KPP boundary layer depth is a function of the bulk Richardson number, Rib.
+ But to compute Rib, we need the boundary layer depth.  To address this circular
+ logic, we compute Rib for each vertical cell in a column, assuming the BL depth
+ equals to the depth of the given grid cell.  Once we have a vertical array of Rib(k),
+ we then call the OBLdepth routine from CVMix to compute the actual
+ OBLdepth. We optionally then "correct" the OBLdepth by cycling through once more,
+ this time knowing the OBLdepth from the first pass. This "correction" step is not
+ used by NCAR. It has been found in idealized MOM6 tests to not be necessary.
+
+\sa
+kpp_calculate(), kpp_applynonlocaltransport()
+
+*/

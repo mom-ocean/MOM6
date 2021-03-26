@@ -281,7 +281,7 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
   chl_data(:,:) = 0.0
   if (present(chl_3d)) then
     do j=js,je ; do i=is,ie ; chl_data(i,j) = chl_3d(i,j,1) ; enddo ; enddo
-    do k=1,nz; do j=js,je ; do i=is,ie
+    do k=1,nz ; do j=js,je ; do i=is,ie
       if ((G%mask2dT(i,j) > 0.5) .and. (chl_3d(i,j,k) < 0.0)) then
         write(mesg,'(" Negative chl_3d of ",(1pe12.4)," found at i,j,k = ", &
                   & 3(1x,i3), " lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
@@ -402,7 +402,7 @@ function opacity_morel(chl_data)
   ! appropriate when using an interactive ecosystem model that predicts
   ! three-dimensional chl-a values.
   real, dimension(6), parameter :: &
-       Z2_coef=(/7.925, -6.644, 3.662, -1.815, -0.218,  0.502/)
+    Z2_coef = (/7.925, -6.644, 3.662, -1.815, -0.218,  0.502/)
   real :: Chl, Chl2 ! The log10 of chl_data (in mg m-3), and Chl^2.
 
   Chl = log10(min(max(chl_data,0.02),60.0)) ; Chl2 = Chl*Chl
@@ -423,7 +423,7 @@ function SW_pen_frac_morel(chl_data)
   ! three-dimensional chl-a values.
   real :: Chl, Chl2         ! The log10 of chl_data in mg m-3, and Chl^2.
   real, dimension(6), parameter :: &
-       V1_coef=(/0.321,  0.008, 0.132,  0.038, -0.017, -0.007/)
+    V1_coef = (/0.321,  0.008, 0.132,  0.038, -0.017, -0.007/)
 
   Chl = log10(min(max(chl_data,0.02),60.0)) ; Chl2 = Chl*Chl
   SW_pen_frac_morel = 1.0 - ( (V1_coef(1) + V1_coef(2)*Chl) + Chl2 * &
@@ -460,7 +460,7 @@ subroutine extract_optics_slice(optics, j, G, GV, opacity, opacity_scale, penSW_
   ! Local variables
   real :: scale_opacity, scale_penSW ! Rescaling factors
   integer :: i, is, ie, k, nz, n
-  is = G%isc ; ie = G%iec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; nz = GV%ke
 
   scale_opacity = 1.0 ; if (present(opacity_scale)) scale_opacity = opacity_scale
   scale_penSW = 1.0 ; if (present(penSW_scale)) scale_penSW = penSW_scale
@@ -611,7 +611,7 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
   I_Habs = optics%PenSW_absorb_Invlen
 
   h_min_heat = 2.0*GV%Angstrom_H + GV%H_subroundoff
-  is = G%isc ; ie = G%iec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; nz = GV%ke
   C1_6 = 1.0 / 6.0 ; C1_60 = 1.0 / 60.0
 
   TKE_calc = (present(TKE) .and. present(dSV_dT))
@@ -835,7 +835,7 @@ subroutine sumSWoverBands(G, GV, US, h, nsw, optics, j, dt, &
   I_Habs = 1e3*GV%H_to_m ! optics%PenSW_absorb_Invlen
 
   h_min_heat = 2.0*GV%Angstrom_H + GV%H_subroundoff
-  is = G%isc ; ie = G%iec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; nz = GV%ke
 
   pen_SW_bnd(:,:) = iPen_SW_bnd(:,:)
   do i=is,ie ; h_heat(i) = 0.0 ; enddo
@@ -943,7 +943,7 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
   logical :: default_2018_answers
   logical :: use_scheme
   integer :: isd, ied, jsd, jed, nz, n
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
 
   if (associated(CS)) then
     call MOM_error(WARNING, "opacity_init called with an associated"// &

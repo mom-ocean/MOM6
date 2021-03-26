@@ -3,23 +3,20 @@ module MOM_coord_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_debugging, only : chksum
-use MOM_EOS, only : calculate_density, EOS_type
-use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
-use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
-use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
-use MOM_file_parser, only : log_version
-use MOM_io, only : close_file, create_file, fieldtype, file_exists
-use MOM_io, only : open_file, MOM_read_data, read_axis_data, SINGLE_FILE, MULTIPLE
-use MOM_io, only : slasher, vardesc, write_field, var_desc
-use MOM_string_functions, only : uppercase
-use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : thermo_var_ptrs
-use MOM_verticalGrid, only : verticalGrid_type, setVerticalGridAxes
-use user_initialization, only : user_set_coord
-use BFB_initialization, only : BFB_set_coord
-
-use netcdf
+use MOM_debugging,        only : chksum
+use MOM_EOS,              only : calculate_density, EOS_type
+use MOM_error_handler,    only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
+use MOM_error_handler,    only : callTree_enter, callTree_leave, callTree_waypoint
+use MOM_file_parser,      only : get_param, read_param, log_param, param_file_type, log_version
+use MOM_io,               only : close_file, create_file, file_type, fieldtype, file_exists
+use MOM_io,               only : MOM_read_data, MOM_write_field, vardesc, var_desc
+use MOM_io,               only : SINGLE_FILE, MULTIPLE
+use MOM_string_functions, only : slasher, uppercase
+use MOM_unit_scaling,     only : unit_scale_type
+use MOM_variables,        only : thermo_var_ptrs
+use MOM_verticalGrid,     only : verticalGrid_type, setVerticalGridAxes
+use user_initialization,  only : user_set_coord
+use BFB_initialization,   only : BFB_set_coord
 
 implicit none ; private
 
@@ -286,8 +283,8 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, eqn_of_s
   filename = trim(slasher(inputdir))//trim(coord_file)
   call log_param(param_file, mdl, "INPUTDIR/COORD_FILE", filename)
 
-  call MOM_read_data(filename,"PTEMP",T0(:))
-  call MOM_read_data(filename,"SALT",S0(:))
+  call MOM_read_data(filename, "PTEMP", T0(:))
+  call MOM_read_data(filename, "SALT", S0(:))
 
   if (.not.file_exists(filename)) call MOM_error(FATAL, &
       " set_coord_from_TS_profile: Unable to open " //trim(filename))
@@ -420,7 +417,7 @@ subroutine set_coord_from_file(Rlay, g_prime, GV, US, param_file)
   if (.not.file_exists(filename)) call MOM_error(FATAL, &
       " set_coord_from_file: Unable to open "//trim(filename))
 
-  call read_axis_data(filename, coord_var, Rlay)
+  call MOM_read_data(filename, coord_var, Rlay)
   do k=1,nz ; Rlay(k) = US%kg_m3_to_R*Rlay(k) ; enddo
   g_prime(1) = g_fs
   do k=2,nz ; g_prime(k) = (GV%g_Earth/(GV%Rho0)) * (Rlay(k) - Rlay(k-1)) ; enddo
@@ -521,19 +518,19 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
   character(len=240) :: filepath
   type(vardesc) :: vars(2)
   type(fieldtype) :: fields(2)
-  integer :: unit
+  type(file_type) :: IO_handle ! The I/O handle of the fileset
 
   filepath = trim(directory) // trim("Vertical_coordinate")
 
   vars(1) = var_desc("R","kilogram meter-3","Target Potential Density",'1','L','1')
   vars(2) = var_desc("g","meter second-2","Reduced gravity",'1','L','1')
 
-  call create_file(unit, trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
+  call create_file(IO_handle, trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
 
-  call write_field(unit, fields(1), US%R_to_kg_m3*GV%Rlay(:))
-  call write_field(unit, fields(2), US%L_T_to_m_s**2*US%m_to_Z*GV%g_prime(:))
+  call MOM_write_field(IO_handle, fields(1), GV%Rlay, scale=US%R_to_kg_m3)
+  call MOM_write_field(IO_handle, fields(2), GV%g_prime, scale=US%L_T_to_m_s**2*US%m_to_Z)
 
-  call close_file(unit)
+  call close_file(IO_handle)
 
 end subroutine write_vertgrid_file
 

@@ -4,27 +4,17 @@ module MOM_tracer_initialization_from_Z
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_debugging, only : hchksum
-use MOM_coms, only : max_across_PEs, min_across_PEs
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
-use MOM_cpu_clock, only :  CLOCK_ROUTINE, CLOCK_LOOP
-use MOM_density_integrals, only : int_specific_vol_dp
-use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
-use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE, AGRID
-use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
+use MOM_cpu_clock, only : CLOCK_ROUTINE, CLOCK_LOOP
+use MOM_domains, only : pass_var
+use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
-use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
-use MOM_file_parser, only : log_version
-use MOM_get_input, only : directories
-use MOM_grid, only : ocean_grid_type, isPointInCell
+use MOM_file_parser, only : get_param, param_file_type, log_version
+use MOM_grid, only : ocean_grid_type
 use MOM_horizontal_regridding, only : myStats, horiz_interp_and_extrap_tracer
-use MOM_regridding, only : regridding_CS
 use MOM_remapping, only : remapping_CS, initialize_remapping
-use MOM_remapping, only : remapping_core_h
-use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : thermo_var_ptrs
-use MOM_verticalGrid, only : verticalGrid_type, setVerticalGridAxes
-use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_ALE, only : ALE_remap_scalar
 
 implicit none ; private
@@ -42,14 +32,14 @@ character(len=40)  :: mdl = "MOM_tracer_initialization_from_Z" !< This module's 
 
 contains
 
-!> Initializes a tracer from a z-space data file.
+!> Initializes a tracer from a z-space data file, including any lateral regridding that is needed.
 subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_nam, &
                           src_var_unit_conversion, src_var_record, homogenize, &
                           useALEremapping, remappingScheme, src_var_gridspec )
   type(ocean_grid_type),      intent(inout) :: G   !< Ocean grid structure.
   type(verticalGrid_type),    intent(in)    :: GV  !< Ocean vertical grid structure.
   type(unit_scale_type),      intent(in)    :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(in)    :: h   !< Layer thickness [H ~> m or kg m-2].
   real, dimension(:,:,:),     pointer       :: tr  !< Pointer to array to be initialized
   type(param_file_type),      intent(in)    :: PF  !< parameter file
@@ -98,7 +88,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
 
   call cpu_clock_begin(id_clock_routine)
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   call callTree_enter(trim(mdl)//"(), MOM_state_initialization.F90")

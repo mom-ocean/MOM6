@@ -101,9 +101,9 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, US, param_file, just_read_p
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
 
-  real :: e0(SZK_(G)+1)   ! The resting interface heights [Z ~> m], usually
+  real :: e0(SZK_(GV)+1)  ! The resting interface heights [Z ~> m], usually
                           ! negative because it is positive upward.
-  real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface
+  real :: eta1D(SZK_(GV)+1) ! Interface height relative to the sea surface
                           ! positive upward [Z ~> m].
   real :: min_thickness   ! The minimum layer thicknesses [Z ~> m].
   real :: S_surf, S_range, S_ref, S_light, S_dense ! Various salinities [ppt].
@@ -114,7 +114,7 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, US, param_file, just_read_p
   logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -211,9 +211,9 @@ subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, param_file
                                                   eqn_of_state, just_read_params)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
   type(verticalGrid_type),                   intent(in) :: GV !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity [ppt]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Potential temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -228,7 +228,7 @@ subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, param_file
   logical :: dbrotate     ! If true, rotate the domain.
   character(len=20) :: verticalCoordinate, density_profile
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -366,7 +366,7 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, 
       enddo
     enddo ; enddo
 
-    call initialize_ALE_sponge(Idamp, G, param_file, ACSp, h, nz)
+    call initialize_ALE_sponge(Idamp, G, GV, param_file, ACSp, h, nz)
 
     ! construct temperature and salinity for the sponge
     ! start with initial condition
@@ -393,7 +393,7 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, 
     enddo ; enddo
   endif
 
-  if (associated(tv%S)) call set_up_ALE_sponge_field(S, G, tv%S, ACSp)
+  if (associated(tv%S)) call set_up_ALE_sponge_field(S, G, GV, tv%S, ACSp)
 
 end subroutine dumbbell_initialize_sponges
 
