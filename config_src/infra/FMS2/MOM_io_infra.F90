@@ -16,6 +16,7 @@ use fms2_io_mod,          only : register_field, write_data, register_variable_a
 use fms2_io_mod,          only : variable_att_exists, get_variable_attribute, get_variable_num_dimensions
 use fms2_io_mod,          only : get_variable_dimension_names, is_dimension_registered, get_dimension_size
 use fms2_io_mod,          only : is_dimension_unlimited, register_axis, unlimited
+use fms2_io_mod,          only : get_global_io_domain_indices
 
 use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
 use fms_io_mod,           only : file_exist, field_exist, field_size, read_data
@@ -132,6 +133,7 @@ type :: axistype ; private
   character(len=256) :: name !< The name of this axis in the files.
   type(mpp_axistype) :: AT   !< The FMS1 axis-type that this type wraps
   real, allocatable, dimension(:) :: ax_data !< The values of the data on the axis.
+  logical :: domain_decomposed = .false.  !< True if axis is domain-decomposed
 end type axistype
 
 !> For now, these module-variables are hard-coded to exercise the new FMS2 interfaces.
@@ -1726,8 +1728,16 @@ subroutine MOM_write_axis(IO_handle, axis)
   type(file_type), intent(in) :: IO_handle  !< Handle for a file that is open for writing
   type(axistype),  intent(in) :: axis       !< An axis type variable with information to write
 
+  integer :: is, ie
+
   if (IO_handle%FMS2_file) then
-    call write_data(IO_handle%fileobj, trim(axis%name), axis%ax_data)
+    if (axis%domain_decomposed) then
+      ! FMS2 does not domain-decompose 1d arrays, so we explicitly slice it
+      call get_global_io_domain_indices(IO_handle%fileobj, trim(axis%name), is, ie)
+      call write_data(IO_handle%fileobj, trim(axis%name), axis%ax_data(is:ie))
+    else
+      call write_data(IO_handle%fileobj, trim(axis%name), axis%ax_data)
+    endif
   else
     call mpp_write(IO_handle%unit, axis%AT)
   endif
@@ -1780,6 +1790,10 @@ subroutine write_metadata_axis(IO_handle, axis, name, units, longname, cartesian
       if ((index(cart, "Y") == 1) .or. (index(cart, "y") == 1)) is_y = .true.
       if ((index(cart, "T") == 1) .or. (index(cart, "t") == 1)) is_t = .true.
     endif
+
+    ! For now, we assume that all horizontal axes are domain-decomposed.
+    if (is_x .or. is_y) &
+      axis%domain_decomposed = .true.
 
     if (is_x) then
       if (present(edge_axis)) then ; if (edge_axis) position = EAST_FACE ; endif
