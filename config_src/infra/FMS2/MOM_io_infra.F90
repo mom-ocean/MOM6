@@ -484,6 +484,7 @@ subroutine get_file_fields(IO_handle, fields)
   character(len=256),  dimension(size(fields)) :: var_names ! The names of all variables
   character(len=256)  :: units    ! The units of a variable as recorded in the file
   character(len=2048) :: longname ! The long-name of a variable as recorded in the file
+  character(len=64)   :: checksum_char ! The hexadecimal checksum read from the file
   integer(kind=int64), dimension(3) :: checksum_file ! The checksums for a variable in the file
   integer :: nvar  ! The number of variables in the file
   integer :: i
@@ -503,8 +504,9 @@ subroutine get_file_fields(IO_handle, fields)
 
       fields(i)%valid_chksum = variable_att_exists(IO_handle%fileobj, var_names(i), "checksum")
       if (fields(i)%valid_chksum) then
-        call get_variable_attribute(IO_handle%fileobj, var_names(i), 'checksum', checksum_file)
-        fields(i)%chksum_read = checksum_file(1)
+        call get_variable_attribute(IO_handle%fileobj, var_names(i), 'checksum', checksum_char)
+        ! If there are problems, there might need to be code added to handle commas.
+        read (checksum_char(1:16), '(Z16)') fields(i)%chksum_read
       endif
     enddo
   else
