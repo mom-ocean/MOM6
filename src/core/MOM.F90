@@ -2843,9 +2843,9 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
     call find_eta(CS%h, CS%tv, G, GV, US, z_interface, eta_to_m=1.0)
     call register_restart_field(z_interface, "eta", .true., restart_CSp_tmp, &
                                 "Interface heights", "meter", z_grid='i')
-
+    ! NOTE: write_ic=.true. routes routine to fms2 IO write_initial_conditions interface
     call save_restart(dirs%output_directory, Time, CS%G_in, &
-                      restart_CSp_tmp, filename=CS%IC_file, GV=GV)
+                      restart_CSp_tmp, filename=CS%IC_file, GV=GV, write_ic=.true.)
     deallocate(z_interface)
     deallocate(restart_CSp_tmp)
   endif

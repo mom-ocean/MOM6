@@ -3,7 +3,7 @@ module MOM_surface_forcing_nuopc
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_coms,             only : reproducing_sum
+use MOM_coms,             only : reproducing_sum, field_chksum
 use MOM_constants,        only : hlv, hlf
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_SUBCOMPONENT
@@ -22,6 +22,7 @@ use MOM_forcing_type,     only : allocate_mech_forcing, deallocate_mech_forcing
 use MOM_get_input,        only : Get_MOM_Input, directories
 use MOM_grid,             only : ocean_grid_type
 use MOM_io,               only : slasher, write_version_number, MOM_read_data
+use MOM_io,               only : stdout
 use MOM_restart,          only : register_restart_field, restart_init, MOM_restart_CS
 use MOM_restart,          only : restart_init_end, save_restart, restore_state
 use MOM_string_functions, only : uppercase
@@ -35,10 +36,10 @@ use coupler_types_mod,    only : coupler_2d_bc_type, coupler_type_write_chksums
 use coupler_types_mod,    only : coupler_type_initialized, coupler_type_spawn
 use coupler_types_mod,    only : coupler_type_copy_data
 use data_override_mod,    only : data_override_init, data_override
-use fms_mod,              only : stdout
 use mpp_mod,              only : mpp_chksum
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
+use iso_fortran_env,          only : int64
 
 implicit none ; private
 
@@ -497,15 +498,17 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
          fluxes%seaice_melt(i,j) = kg_m2_s_conversion * G%mask2dT(i,j) * IOB%seaice_melt(i-i0,j-j0)
 
     fluxes%latent(i,j) = 0.0
+    ! notice minus sign since fprec is positive into the ocean
     if (associated(IOB%fprec)) then
-       fluxes%latent(i,j)            = fluxes%latent(i,j) + &
+       fluxes%latent(i,j)            = fluxes%latent(i,j) - &
            IOB%fprec(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
-       fluxes%latent_fprec_diag(i,j) = G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
+       fluxes%latent_fprec_diag(i,j) = - G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
     endif
+    ! notice minus sign since frunoff is positive into the ocean
     if (associated(IOB%frunoff)) then
-       fluxes%latent(i,j)              = fluxes%latent(i,j) + &
+       fluxes%latent(i,j)              = fluxes%latent(i,j) - &
            IOB%frunoff(i-i0,j-j0) * US%W_m2_to_QRZ_T * CS%latent_heat_fusion
-       fluxes%latent_frunoff_diag(i,j) = G%mask2dT(i,j) * &
+       fluxes%latent_frunoff_diag(i,j) = - G%mask2dT(i,j) * &
            IOB%frunoff(i-i0,j-j0) * US%W_m2_to_QRZ_T * CS%latent_heat_fusion
     endif
     if (associated(IOB%q_flux)) then
@@ -794,7 +797,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
       endif
       forces%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0*tau_mag)
     enddo ; enddo
-
+    call pass_vector(forces%taux, forces%tauy, G%Domain, halo=1)
   elseif (wind_stagger == AGRID) then
     call pass_vector(taux_at_h, tauy_at_h, G%Domain, To_All+Omit_Corners, stagger=AGRID, halo=1)
 
@@ -820,7 +823,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
       forces%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * G%mask2dT(i,j) * &
                                sqrt(taux_at_h(i,j)**2 + tauy_at_h(i,j)**2))
     enddo ; enddo
-
+    call pass_vector(forces%taux, forces%tauy, G%Domain, halo=1)
   else ! C-grid wind stresses.
     if (G%symmetric) &
       call fill_symmetric_edges(forces%taux, forces%tauy, G%Domain)
@@ -1400,34 +1403,41 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
                                          !! ocean in a coupled model whose checksums are reported
 
   ! local variables
-  integer ::   n,m, outunit
+  ! Local variables
+  integer(kind=int64) :: chks ! A checksum for the field
+  logical :: root    ! True only on the root PE
+  integer :: outunit ! The output unit to write to
 
-  outunit = stdout()
+  outunit = stdout
+  root = is_root_pe()
 
-  write(outunit,*) "BEGIN CHECKSUM(ice_ocean_boundary_type):: ", id, timestep
-  write(outunit,100) 'iobt%u_flux         '   , mpp_chksum( iobt%u_flux         )
-  write(outunit,100) 'iobt%v_flux         '   , mpp_chksum( iobt%v_flux         )
-  write(outunit,100) 'iobt%t_flux         '   , mpp_chksum( iobt%t_flux         )
-  write(outunit,100) 'iobt%q_flux         '   , mpp_chksum( iobt%q_flux         )
-  write(outunit,100) 'iobt%salt_flux      '   , mpp_chksum( iobt%salt_flux      )
-  write(outunit,100) 'iobt%seaice_melt_heat'  , mpp_chksum( iobt%seaice_melt_heat)
-  write(outunit,100) 'iobt%seaice_melt    '   , mpp_chksum( iobt%seaice_melt    )
-  write(outunit,100) 'iobt%lw_flux        '   , mpp_chksum( iobt%lw_flux        )
-  write(outunit,100) 'iobt%sw_flux_vis_dir'   , mpp_chksum( iobt%sw_flux_vis_dir)
-  write(outunit,100) 'iobt%sw_flux_vis_dif'   , mpp_chksum( iobt%sw_flux_vis_dif)
-  write(outunit,100) 'iobt%sw_flux_nir_dir'   , mpp_chksum( iobt%sw_flux_nir_dir)
-  write(outunit,100) 'iobt%sw_flux_nir_dif'   , mpp_chksum( iobt%sw_flux_nir_dif)
-  write(outunit,100) 'iobt%lprec          '   , mpp_chksum( iobt%lprec          )
-  write(outunit,100) 'iobt%fprec          '   , mpp_chksum( iobt%fprec          )
-  write(outunit,100) 'iobt%lrunoff        '   , mpp_chksum( iobt%lrunoff        )
-  write(outunit,100) 'iobt%frunoff        '   , mpp_chksum( iobt%frunoff        )
-  write(outunit,100) 'iobt%p              '   , mpp_chksum( iobt%p              )
-  if (associated(iobt%ustar_berg)) &
-    write(outunit,100) 'iobt%ustar_berg     ' , mpp_chksum( iobt%ustar_berg )
-  if (associated(iobt%area_berg)) &
-    write(outunit,100) 'iobt%area_berg      ' , mpp_chksum( iobt%area_berg  )
-  if (associated(iobt%mass_berg)) &
-    write(outunit,100) 'iobt%mass_berg      ' , mpp_chksum( iobt%mass_berg  )
+  if (root) write(outunit,*) "BEGIN CHECKSUM(ice_ocean_boundary_type):: ", id, timestep
+  chks = field_chksum( iobt%u_flux         ) ; if (root) write(outunit,100) 'iobt%u_flux          ', chks
+  chks = field_chksum( iobt%v_flux         ) ; if (root) write(outunit,100) 'iobt%v_flux          ', chks
+  chks = field_chksum( iobt%t_flux         ) ; if (root) write(outunit,100) 'iobt%t_flux          ', chks
+  chks = field_chksum( iobt%q_flux         ) ; if (root) write(outunit,100) 'iobt%q_flux          ', chks
+  chks = field_chksum( iobt%seaice_melt_heat); if (root) write(outunit,100) 'iobt%seaice_melt_heat', chks
+  chks = field_chksum( iobt%seaice_melt)     ; if (root) write(outunit,100) 'iobt%seaice_melt    ', chks
+  chks = field_chksum( iobt%salt_flux      ) ; if (root) write(outunit,100) 'iobt%salt_flux      ', chks
+  chks = field_chksum( iobt%lw_flux        ) ; if (root) write(outunit,100) 'iobt%lw_flux        ', chks
+  chks = field_chksum( iobt%sw_flux_vis_dir) ; if (root) write(outunit,100) 'iobt%sw_flux_vis_dir', chks
+  chks = field_chksum( iobt%sw_flux_vis_dif) ; if (root) write(outunit,100) 'iobt%sw_flux_vis_dif', chks
+  chks = field_chksum( iobt%sw_flux_nir_dir) ; if (root) write(outunit,100) 'iobt%sw_flux_nir_dir', chks
+  chks = field_chksum( iobt%sw_flux_nir_dif) ; if (root) write(outunit,100) 'iobt%sw_flux_nir_dif', chks
+  chks = field_chksum( iobt%lprec          ) ; if (root) write(outunit,100) 'iobt%lprec          ', chks
+  chks = field_chksum( iobt%fprec          ) ; if (root) write(outunit,100) 'iobt%fprec          ', chks
+  chks = field_chksum( iobt%lrunoff        ) ; if (root) write(outunit,100) 'iobt%lrunoff        ', chks
+  chks = field_chksum( iobt%frunoff        ) ; if (root) write(outunit,100) 'iobt%frunoff        ', chks
+  chks = field_chksum( iobt%p              ) ; if (root) write(outunit,100) 'iobt%p              ', chks
+  if (associated(iobt%ustar_berg)) then
+    chks = field_chksum( iobt%ustar_berg ) ; if (root) write(outunit,100) 'iobt%ustar_berg     ', chks
+  endif
+  if (associated(iobt%area_berg)) then
+    chks = field_chksum( iobt%area_berg  ) ; if (root) write(outunit,100) 'iobt%area_berg      ', chks
+  endif
+  if (associated(iobt%mass_berg)) then
+    chks = field_chksum( iobt%mass_berg  ) ; if (root) write(outunit,100) 'iobt%mass_berg      ', chks
+  endif
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 
   call coupler_type_write_chksums(iobt%fluxes, outunit, 'iobt%')

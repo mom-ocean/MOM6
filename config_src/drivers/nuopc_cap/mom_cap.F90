@@ -75,6 +75,7 @@ use ESMF,  only: ESMF_VMBroadcast
 use ESMF,  only: ESMF_AlarmCreate, ESMF_ClockGetAlarmList, ESMF_AlarmList_Flag
 use ESMF,  only: ESMF_AlarmGet, ESMF_AlarmIsCreated, ESMF_ALARMLIST_ALL, ESMF_AlarmIsEnabled
 use ESMF,  only: ESMF_STATEITEM_NOTFOUND, ESMF_FieldWrite
+use ESMF,  only: ESMF_END_ABORT, ESMF_Finalize
 use ESMF,  only: operator(==), operator(/=), operator(+), operator(-)
 
 ! TODO ESMF_GridCompGetInternalState does not have an explicit Fortran interface.
@@ -135,6 +136,7 @@ integer              :: logunit  !< stdout logging unit number
 logical              :: profile_memory = .true.
 logical              :: grid_attach_area = .false.
 logical              :: use_coldstart = .true.
+logical              :: use_mommesh = .false.
 character(len=128)   :: scalar_field_name = ''
 integer              :: scalar_field_count = 0
 integer              :: scalar_field_idx_grid_nx = 0
@@ -147,7 +149,7 @@ logical :: cesm_coupled = .true.
 type(ESMF_GeomType_Flag) :: geomtype = ESMF_GEOMTYPE_MESH
 #else
 logical :: cesm_coupled = .false.
-type(ESMF_GeomType_Flag) :: geomtype = ESMF_GEOMTYPE_GRID
+type(ESMF_GeomType_Flag) :: geomtype
 #endif
 character(len=8) :: restart_mode = 'alarms'
 
@@ -346,6 +348,25 @@ subroutine InitializeP0(gcomp, importState, exportState, clock, rc)
   if (isPresent .and. isSet) use_coldstart=(trim(value)=="true")
   write(logmsg,*) use_coldstart
   call ESMF_LogWrite('MOM_cap:use_coldstart = '//trim(logmsg), ESMF_LOGMSG_INFO)
+
+  use_mommesh = .false.
+  call NUOPC_CompAttributeGet(gcomp, name="use_mommesh", value=value, &
+       isPresent=isPresent, isSet=isSet, rc=rc)
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (isPresent .and. isSet) use_mommesh=(trim(value)=="true")
+  write(logmsg,*) use_mommesh
+  call ESMF_LogWrite('MOM_cap:use_mommesh = '//trim(logmsg), ESMF_LOGMSG_INFO)
+
+  if(use_mommesh)then
+    geomtype = ESMF_GEOMTYPE_MESH
+    call NUOPC_CompAttributeGet(gcomp, name='mesh_ocn', isPresent=isPresent, isSet=isSet, rc=rc)
+      if (.not. isPresent .and. .not. isSet) then
+        call ESMF_LogWrite('geomtype set to mesh but mesh_ocn is not specified', ESMF_LOGMSG_INFO)
+        call ESMF_Finalize(endflag=ESMF_END_ABORT)
+     endif
+  else
+    geomtype = ESMF_GEOMTYPE_GRID
+  endif
 
 end subroutine
 

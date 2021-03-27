@@ -1652,8 +1652,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   elseif (.not.new_sim) then
     ! This line calls a subroutine that reads the initial conditions from a restart file.
     call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: Restoring ice shelf from file.")
-    call restore_state(dirs%input_filename, dirs%restart_input_dir, Time, &
-                       G, CS%restart_CSp)
+    call restore_state(dirs%input_filename, dirs%restart_input_dir, Time, G, CS%restart_CSp)
 
     if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= US%m_to_Z)) then
       Z_rescale = US%m_to_Z / US%m_to_Z_restart
@@ -1763,16 +1762,15 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   call fix_restart_unit_scaling(US)
 
   call get_param(param_file, mdl, "SAVE_INITIAL_CONDS", save_IC, &
-                 "If true, save the ice shelf initial conditions.", &
-                 default=.false.)
+                 "If true, save the ice shelf initial conditions.", default=.false.)
   if (save_IC) call get_param(param_file, mdl, "SHELF_IC_OUTPUT_FILE", IC_file,&
-                 "The name-root of the output file for the ice shelf "//&
-                 "initial conditions.", default="MOM_Shelf_IC")
+                 "The name-root of the output file for the ice shelf initial conditions.", &
+                 default="MOM_Shelf_IC")
 
   if (save_IC .and. .not.((dirs%input_filename(1:1) == 'r') .and. &
                           (LEN_TRIM(dirs%input_filename) == 1))) then
-    call save_restart(dirs%output_directory, CS%Time, CS%Grid_in, &
-                      CS%restart_CSp, filename=IC_file)
+    call save_restart(dirs%output_directory, CS%Time, CS%Grid_in, CS%restart_CSp, &
+                      filename=IC_file, write_ic=.true.)
   endif
 
 
