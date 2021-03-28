@@ -1167,6 +1167,8 @@ subroutine ocean_model_get_UV_surf(OS, Ocean, name, array2D, isc, jsc)
 
   sfc_state => OS%sfc_state
 
+  call pass_vector(sfc_state%u, sfc_state%v, G%Domain)
+
   select case(name)
   case('ua')
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
