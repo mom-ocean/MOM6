@@ -417,7 +417,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   ! parameterization of Kd.
 
   !$OMP parallel do default(shared) private(dRho_int,N2_lay,Kd_lay_2d,Kd_int_2d,Kv_bkgnd,N2_int,&
-  !$OMP                                     N2_bot,KT_extra,KS_extra,TKE_to_Kd,maxTKE,dissip,kb)
+  !$OMP                                     N2_bot,KT_extra,KS_extra,TKE_to_Kd,maxTKE,dissip,kb)&
+  !$OMP                             if(.not. CS%use_CVMix_ddiff)
   do j=js,je
 
     ! Set up variables related to the stratification.
