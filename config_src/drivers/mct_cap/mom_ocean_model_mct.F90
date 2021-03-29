@@ -15,6 +15,7 @@ use MOM,                      only : initialize_MOM, step_MOM, MOM_control_struc
 use MOM,                      only : extract_surface_state, allocate_surface_state, finish_MOM_initialization
 use MOM,                      only : get_MOM_state_elements, MOM_state_is_synchronized
 use MOM,                      only : get_ocean_stocks, step_offline
+use MOM_coms,                 only : field_chksum
 use MOM_constants,            only : CELSIUS_KELVIN_OFFSET, hlf
 use MOM_diag_mediator,        only : diag_ctrl, enable_averaging, disable_averaging
 use MOM_diag_mediator,        only : diag_mediator_close_registration, diag_mediator_end
@@ -65,6 +66,7 @@ use time_interp_external_mod, only : time_interp_external_init
 
 ! MCT specfic routines
 use MOM_domains,             only : MOM_infra_end
+use iso_fortran_env,         only : int64
 
 #include <MOM_memory.h>
 
@@ -1042,24 +1044,26 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
 
 end subroutine Ocean_stock_pe
 
-!> Write out FMS-format checsums on fields from the ocean surface state
+!> Write out checksums for fields from the ocean surface state
 subroutine ocean_public_type_chksum(id, timestep, ocn)
 
   character(len=*),        intent(in) :: id  !< An identifying string for this call
   integer,                 intent(in) :: timestep !< The number of elapsed timesteps
   type(ocean_public_type), intent(in) :: ocn !< A structure containing various publicly
                                              !! visible ocean surface fields.
-  integer :: n, m
+  ! Local variables
+  integer(kind=int64) :: chks ! A checksum for the field
+  logical :: root    ! True only on the root PE
+  integer :: outunit ! The output unit to write to
 
-  write(stdout,*) "BEGIN CHECKSUM(ocean_type):: ", id, timestep
-  write(stdout,100) 'ocean%t_surf   ',mpp_chksum(ocn%t_surf )
-  write(stdout,100) 'ocean%s_surf   ',mpp_chksum(ocn%s_surf )
-  write(stdout,100) 'ocean%u_surf   ',mpp_chksum(ocn%u_surf )
-  write(stdout,100) 'ocean%v_surf   ',mpp_chksum(ocn%v_surf )
-  write(stdout,100) 'ocean%sea_lev  ',mpp_chksum(ocn%sea_lev)
-  write(stdout,100) 'ocean%frazil   ',mpp_chksum(ocn%frazil )
-  write(stdout,100) 'ocean%melt_potential  ',mpp_chksum(ocn%melt_potential)
-
+  if (root) write(outunit,*) "BEGIN CHECKSUM(ocean_type):: ", id, timestep
+  chks = field_chksum(ocn%t_surf ) ; if (root) write(outunit,100) 'ocean%t_surf   ', chks
+  chks = field_chksum(ocn%s_surf ) ; if (root) write(outunit,100) 'ocean%s_surf   ', chks
+  chks = field_chksum(ocn%u_surf ) ; if (root) write(outunit,100) 'ocean%u_surf   ', chks
+  chks = field_chksum(ocn%v_surf ) ; if (root) write(outunit,100) 'ocean%v_surf   ', chks
+  chks = field_chksum(ocn%sea_lev) ; if (root) write(outunit,100) 'ocean%sea_lev  ', chks
+  chks = field_chksum(ocn%frazil ) ; if (root) write(outunit,100) 'ocean%frazil   ', chks
+  chks = field_chksum(ocn%melt_potential) ; if (root) write(outunit,100) 'ocean%melt_potential   ', chks
   call coupler_type_write_chksums(ocn%fields, stdout, 'ocean%')
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 
