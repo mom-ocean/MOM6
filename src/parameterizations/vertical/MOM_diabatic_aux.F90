@@ -15,15 +15,14 @@ use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,  only : forcing, extractFluxes1d, forcing_SinglePointPrint
 use MOM_grid,          only : ocean_grid_type
+use MOM_interpolate,   only : init_external_field, time_interp_external, time_interp_external_init
 use MOM_io,            only : slasher
 use MOM_opacity,       only : set_opacity, opacity_CS, extract_optics_slice, extract_optics_fields
 use MOM_opacity,       only : optics_type, optics_nbands, absorbRemainingSW, sumSWoverBands
 use MOM_tracer_flow_control, only : get_chl_from_model, tracer_flow_control_CS
 use MOM_unit_scaling,  only : unit_scale_type
-use MOM_variables,     only : thermo_var_ptrs ! , vertvisc_type, accel_diag_ptrs
+use MOM_variables,     only : thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
-use time_interp_external_mod, only : init_external_field, time_interp_external
-use time_interp_external_mod, only : time_interp_external_init
 
 implicit none ; private
 
@@ -103,7 +102,7 @@ contains
 subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
   type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(inout) :: tv !< Structure containing pointers to any available
                                                !! thermodynamic fields.
@@ -119,7 +118,7 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
     fraz_col, & ! The accumulated heat requirement due to frazil [Q R Z ~> J m-2].
     T_freeze, & ! The freezing potential temperature at the current salinity [degC].
     ps          ! Surface pressure [R L2 T-2 ~> Pa]
-  real, dimension(SZI_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZK_(GV)) :: &
     pressure    ! The pressure at the middle of each layer [R L2 T-2 ~> Pa].
   real :: H_to_RL2_T2  ! A conversion factor from thicknesses in H to pressure [R L2 T-2 H-1 ~> Pa m-1 or Pa m2 kg-1]
   real :: hc    ! A layer's heat capacity [Q R Z degC-1 ~> J m-2 degC-1].
@@ -127,7 +126,7 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
                        ! row of points.
   integer :: i, j, k, is, ie, js, je, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   if (present(halo)) then
     is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   endif
@@ -226,17 +225,17 @@ end subroutine make_frazil
 subroutine differential_diffuse_T_S(h, T, S, Kd_T, Kd_S, dt, G, GV)
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: T    !< Potential temperature [degC].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: S    !< Salinity [PSU] or [gSalt/kg], generically [ppt].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(inout)    :: Kd_T !< The extra diffusivity of temperature due to
                                                  !! double diffusion relative to the diffusivity of
                                                  !! diffusivity of density [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(in)    :: Kd_S !< The extra diffusivity of salinity due to
                                                  !! double diffusion relative to the diffusivity of
                                                  !! diffusivity of density [Z2 T-1 ~> m2 s-1].
@@ -246,9 +245,9 @@ subroutine differential_diffuse_T_S(h, T, S, Kd_T, Kd_S, dt, G, GV)
   real, dimension(SZI_(G)) :: &
     b1_T, b1_S, &  !  Variables used by the tridiagonal solvers of T & S [H ~> m or kg m-2].
     d1_T, d1_S     !  Variables used by the tridiagonal solvers [nondim].
-  real, dimension(SZI_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZK_(GV)) :: &
     c1_T, c1_S     !  Variables used by the tridiagonal solvers [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZK_(G)+1) :: &
+  real, dimension(SZI_(G),SZK_(GV)+1) :: &
     mix_T, mix_S   !  Mixing distances in both directions across each interface [H ~> m or kg m-2].
   real :: h_tr         ! h_tr is h at tracer points with a tiny thickness
                        ! added to ensure positive definiteness [H ~> m or kg m-2].
@@ -260,7 +259,7 @@ subroutine differential_diffuse_T_S(h, T, S, Kd_T, Kd_S, dt, G, GV)
   real :: b_denom_S    ! for b1_T and b1_S, both [H ~> m or kg m-2].
   integer :: i, j, k, is, ie, js, je, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   h_neglect = GV%H_subroundoff
 
   !$OMP parallel do default(private) shared(is,ie,js,je,h,h_neglect,dt,Kd_T,Kd_S,G,GV,T,S,nz)
@@ -322,7 +321,7 @@ end subroutine differential_diffuse_T_S
 subroutine adjust_salt(h, tv, G, GV, CS, halo)
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(inout) :: tv   !< Structure containing pointers to any
                                                  !! available thermodynamic fields.
@@ -336,7 +335,7 @@ subroutine adjust_salt(h, tv, G, GV, CS, halo)
   real :: mc         !< A layer's mass [R Z ~> kg m-2].
   integer :: i, j, k, is, ie, js, je, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   if (present(halo)) then
     is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   endif
@@ -379,25 +378,25 @@ end subroutine adjust_salt
 !> This is a simple tri-diagonal solver for T and S.
 !! "Simple" means it only uses arrays hold, ea and eb.
 subroutine triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, T, S)
-  type(ocean_grid_type),                    intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
-  integer,                                  intent(in)    :: is   !< The start i-index to work on.
-  integer,                                  intent(in)    :: ie   !< The end i-index to work on.
-  integer,                                  intent(in)    :: js   !< The start j-index to work on.
-  integer,                                  intent(in)    :: je   !< The end j-index to work on.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: hold !< The layer thicknesses before entrainment,
-                                                                  !! [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: ea !< The amount of fluid entrained from the layer
-                                                                !! above within this time step [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: eb !< The amount of fluid entrained from the layer
-                                                                !! below within this time step [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: T  !< Layer potential temperatures [degC].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: S  !< Layer salinities [ppt].
+  type(ocean_grid_type),                     intent(in)    :: G  !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV !< The ocean's vertical grid structure
+  integer,                                   intent(in)    :: is !< The start i-index to work on.
+  integer,                                   intent(in)    :: ie !< The end i-index to work on.
+  integer,                                   intent(in)    :: js !< The start j-index to work on.
+  integer,                                   intent(in)    :: je !< The end j-index to work on.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: hold !< The layer thicknesses before entrainment,
+                                                                 !! [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: ea !< The amount of fluid entrained from the layer
+                                                                 !! above within this time step [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: eb !< The amount of fluid entrained from the layer
+                                                                 !! below within this time step [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: T  !< Layer potential temperatures [degC].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: S  !< Layer salinities [ppt].
 
   ! Local variables
   real :: b1(SZIB_(G))          ! A variable used by the tridiagonal solver [H-1 ~> m-2 or m2 kg-1].
   real :: d1(SZIB_(G))          ! A variable used by the tridiagonal solver [nondim].
-  real :: c1(SZIB_(G),SZK_(G))  ! A variable used by the tridiagonal solver [nondim].
+  real :: c1(SZIB_(G),SZK_(GV)) ! A variable used by the tridiagonal solver [nondim].
   real :: h_tr, b_denom_1       ! Two temporary thicknesses [H ~> m or kg m-2].
   integer :: i, j, k
 
@@ -410,7 +409,7 @@ subroutine triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, T, S)
       T(i,j,1) = (b1(i)*h_tr)*T(i,j,1)
       S(i,j,1) = (b1(i)*h_tr)*S(i,j,1)
     enddo
-    do k=2,G%ke ; do i=is,ie
+    do k=2,GV%ke ; do i=is,ie
       c1(i,k) = eb(i,j,k-1) * b1(i)
       h_tr = hold(i,j,k) + GV%H_subroundoff
       b_denom_1 = h_tr + d1(i)*ea(i,j,k)
@@ -419,7 +418,7 @@ subroutine triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, T, S)
       T(i,j,k) = b1(i) * (h_tr*T(i,j,k) + ea(i,j,k)*T(i,j,k-1))
       S(i,j,k) = b1(i) * (h_tr*S(i,j,k) + ea(i,j,k)*S(i,j,k-1))
     enddo ; enddo
-    do k=G%ke-1,1,-1 ; do i=is,ie
+    do k=GV%ke-1,1,-1 ; do i=is,ie
       T(i,j,k) = T(i,j,k) + c1(i,k+1)*T(i,j,k+1)
       S(i,j,k) = S(i,j,k) + c1(i,k+1)*S(i,j,k+1)
     enddo ; enddo
@@ -429,23 +428,23 @@ end subroutine triDiagTS
 !> This is a simple tri-diagonal solver for T and S, with mixing across interfaces but no net
 !! transfer of mass.
 subroutine triDiagTS_Eulerian(G, GV, is, ie, js, je, hold, ent, T, S)
-  type(ocean_grid_type),                    intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
-  integer,                                  intent(in)    :: is   !< The start i-index to work on.
-  integer,                                  intent(in)    :: ie   !< The end i-index to work on.
-  integer,                                  intent(in)    :: js   !< The start j-index to work on.
-  integer,                                  intent(in)    :: je   !< The end j-index to work on.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: hold !< The layer thicknesses before entrainment,
-                                                                  !! [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)  :: ent  !< The amount of fluid mixed across an interface
-                                                                  !! within this time step [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: T    !< Layer potential temperatures [degC].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: S    !< Layer salinities [ppt].
+  type(ocean_grid_type),                     intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
+  integer,                                   intent(in)    :: is   !< The start i-index to work on.
+  integer,                                   intent(in)    :: ie   !< The end i-index to work on.
+  integer,                                   intent(in)    :: js   !< The start j-index to work on.
+  integer,                                   intent(in)    :: je   !< The end j-index to work on.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: hold !< The layer thicknesses before entrainment,
+                                                                   !! [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)  :: ent  !< The amount of fluid mixed across an interface
+                                                                   !! within this time step [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: T    !< Layer potential temperatures [degC].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: S    !< Layer salinities [ppt].
 
   ! Local variables
   real :: b1(SZIB_(G))          ! A variable used by the tridiagonal solver [H-1 ~> m-2 or m2 kg-1].
   real :: d1(SZIB_(G))          ! A variable used by the tridiagonal solver [nondim].
-  real :: c1(SZIB_(G),SZK_(G))  ! A variable used by the tridiagonal solver [nondim].
+  real :: c1(SZIB_(G),SZK_(GV)) ! A variable used by the tridiagonal solver [nondim].
   real :: h_tr, b_denom_1       ! Two temporary thicknesses [H ~> m or kg m-2].
   integer :: i, j, k
 
@@ -458,7 +457,7 @@ subroutine triDiagTS_Eulerian(G, GV, is, ie, js, je, hold, ent, T, S)
       T(i,j,1) = (b1(i)*h_tr)*T(i,j,1)
       S(i,j,1) = (b1(i)*h_tr)*S(i,j,1)
     enddo
-    do k=2,G%ke ; do i=is,ie
+    do k=2,GV%ke ; do i=is,ie
       c1(i,k) = ent(i,j,K) * b1(i)
       h_tr = hold(i,j,k) + GV%H_subroundoff
       b_denom_1 = h_tr + d1(i)*ent(i,j,K)
@@ -467,7 +466,7 @@ subroutine triDiagTS_Eulerian(G, GV, is, ie, js, je, hold, ent, T, S)
       T(i,j,k) = b1(i) * (h_tr*T(i,j,k) + ent(i,j,K)*T(i,j,k-1))
       S(i,j,k) = b1(i) * (h_tr*S(i,j,k) + ent(i,j,K)*S(i,j,k-1))
     enddo ; enddo
-    do k=G%ke-1,1,-1 ; do i=is,ie
+    do k=GV%ke-1,1,-1 ; do i=is,ie
       T(i,j,k) = T(i,j,k) + c1(i,k+1)*T(i,j,k+1)
       S(i,j,k) = S(i,j,k) + c1(i,k+1)*S(i,j,k+1)
     enddo ; enddo
@@ -481,21 +480,21 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb, zero_mix)
   type(ocean_grid_type),     intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),   intent(in)  :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),     intent(in)  :: US   !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                              intent(in)  :: u    !< The zonal velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                              intent(in)  :: v    !< The meridional velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                              intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                              intent(out)   :: u_h !< Zonal velocity interpolated to h points [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                              intent(out)   :: v_h !< Meridional velocity interpolated to h points [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                      optional, intent(in)  :: ea !< The amount of fluid entrained from the layer
                                                  !! above within this time step [H ~> m or kg m-2].
                                                  !! Omitting ea is the same as setting it to 0.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                      optional, intent(in)  :: eb !< The amount of fluid entrained from the layer
                                                  !! below within this time step [H ~> m or kg m-2].
                                                  !! Omitting eb is the same as setting it to 0.
@@ -507,7 +506,9 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb, zero_mix)
   real :: b_denom_1    ! The first term in the denominator of b1 [H ~> m or kg m-2].
   real :: h_neglect    ! A thickness that is so small it is usually lost
                        ! in roundoff and can be neglected [H ~> m or kg m-2].
-  real :: b1(SZI_(G)), d1(SZI_(G)), c1(SZI_(G),SZK_(G))
+  real :: b1(SZI_(G))  ! A thickness used in the tridiagonal solver  [H ~> m or kg m-2]
+  real :: c1(SZI_(G),SZK_(GV)) ! A variable used in the tridiagonal solver [nondim]
+  real :: d1(SZI_(G))  ! The complement of c1 [nondim]
   real :: a_n(SZI_(G)), a_s(SZI_(G))  ! Fractional weights of the neighboring
   real :: a_e(SZI_(G)), a_w(SZI_(G))  ! velocity points, ~1/2 in the open
                                       ! ocean, nondimensional.
@@ -637,7 +638,7 @@ subroutine set_pen_shortwave(optics, fluxes, G, GV, US, CS, opacity_CSp, tracer_
       if (.not.associated(tracer_flow_CSp)) call MOM_error(FATAL, &
         "The tracer flow control structure must be associated when the model sets "//&
         "the chlorophyll internally in set_pen_shortwave.")
-      call get_chl_from_model(chl_3d, G, tracer_flow_CSp)
+      call get_chl_from_model(chl_3d, G, GV, tracer_flow_CSp)
 
       if (CS%id_chl > 0) call post_data(CS%id_chl, chl_3d(:,:,1), CS%diag)
 
@@ -660,7 +661,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   type(verticalGrid_type), intent(in) :: GV          !< ocean vertical grid structure
   type(unit_scale_type),   intent(in) :: US          !< A dimensional unit scaling type
   integer,                 intent(in) :: id_MLD      !< Handle (ID) of MLD diagnostic
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: h           !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(in) :: tv          !< Structure containing pointers to any
                                                      !! available thermodynamic fields.
@@ -699,7 +700,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   gE_rho0 = US%L_to_Z**2*GV%g_Earth / (GV%Rho0)
   dH_subML = 50.*GV%m_to_H  ; if (present(dz_subML)) dH_subML = GV%Z_to_H*dz_subML
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   pRef_MLD(:) = 0.0
   EOSdom(:) = EOS_domain(G%HI)
@@ -812,7 +813,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
   type(verticalGrid_type), intent(in) :: GV          !< ocean vertical grid structure
   type(unit_scale_type),   intent(in) :: US          !< A dimensional unit scaling type
   real, dimension(3),      intent(in) :: Mixing_Energy !< Energy values for up to 3 MLDs
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: h           !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(in) :: tv          !< Structure containing pointers to any
                                                      !! available thermodynamic fields.
@@ -820,7 +821,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
 
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G),3) :: MLD     ! Diagnosed mixed layer depth [Z ~> m].
-  real, dimension(SZK_(G)) :: Z_L, Z_U, dZ, Rho_c, pRef_MLD
+  real, dimension(SZK_(GV)) :: Z_L, Z_U, dZ, Rho_c, pRef_MLD
   real, dimension(3) :: PE_threshold
 
   real :: ig, E_g
@@ -835,7 +836,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
   integer :: IT, iM
   integer :: i, j, is, ie, js, je, k, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   pRef_MLD(:) = 0.0
   mld(:,:,:) = 0.0
@@ -845,7 +846,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
     PE_threshold(iM) = Mixing_Energy(iM)/GV%g_earth
   enddo
 
-  do j=js,je; do i=is,ie
+  do j=js,je ; do i=is,ie
     if (G%mask2dT(i,j) > 0.0) then
 
       call calculate_density(tv%T(i,j,:), tv%S(i,j,:), pRef_MLD, rho_c, 1, nz, &
@@ -1004,7 +1005,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   type(optics_type),       pointer       :: optics !< Optical properties container
   integer,                 intent(in)    :: nsw !< The number of frequency bands of penetrating
                                                 !! shortwave radiation
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(inout) :: tv !< Structure containing pointers to any
                                                !! available thermodynamic fields.
@@ -1013,13 +1014,13 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                                                !! can be evaporated in one time-step [nondim].
   real,                    intent(in)    :: minimum_forcing_depth !< The smallest depth over which
                                                !! heat and freshwater fluxes is applied [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(out)   :: cTKE !< Turbulent kinetic energy requirement to mix
                                                !! forcing through each layer [R Z3 T-2 ~> J m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(out)   :: dSV_dT !< Partial derivative of specific volume with
                                                !! potential temperature [R-1 degC-1 ~> m3 kg-1 degC-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(out)   :: dSV_dS !< Partial derivative of specific volume with
                                                !! salinity [R-1 ppt-1 ~> m3 kg-1 ppt-1].
   real, dimension(SZI_(G),SZJ_(G)), &
@@ -1055,7 +1056,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     netsalt_rate, &  ! netsalt but for dt=1 (e.g. returns a rate)
                      ! [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
     netMassInOut_rate! netmassinout but for dt=1 [H T-1 ~> m s-1 or kg m-2 s-1]
-  real, dimension(SZI_(G), SZK_(G)) :: &
+  real, dimension(SZI_(G), SZK_(GV)) :: &
     h2d, &           ! A 2-d copy of the thicknesses [H ~> m or kg m-2]
     T2d, &           ! A 2-d copy of the layer temperatures [degC]
     pen_TKE_2d, &    ! The TKE required to homogenize the heating by shortwave radiation within
@@ -1069,7 +1070,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                      ! [degC H ~> degC m or degC kg m-2]
     Pen_SW_bnd_rate  ! The penetrative shortwave heating rate by band
                      ! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
-  real, dimension(max(nsw,1),SZI_(G),SZK_(G)) :: &
+  real, dimension(max(nsw,1),SZI_(G),SZK_(GV)) :: &
     opacityBand      ! The opacity (inverse of the exponential absorption length) of each frequency
                      ! band of shortwave radation in each layer [H-1 ~> m-1 or m2 kg-1]
   real, dimension(maxGroundings) :: hGrounding ! Thickness added by each grounding event [H ~> m or kg m-2]
@@ -1084,7 +1085,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   integer :: i, j, is, ie, js, je, k, nz, n, nb
   character(len=45) :: mesg
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   Idt = 1.0 / dt
 
@@ -1220,7 +1221,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                   H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
                   h2d, T2d, netMassInOut, netMassOut, netHeat, netSalt,                   &
                   Pen_SW_bnd, tv, aggregate_FW_forcing, nonpenSW=nonpenSW)
-   endif
+    endif
     ! ea is for passive tracers
     do i=is,ie
     !  ea(i,j,1) = netMassInOut(i)
@@ -1569,7 +1570,7 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
   character(len=32)  :: chl_varname ! Name of chl_a variable in chl_file.
   logical :: use_temperature     ! True if thermodynamics are enabled.
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, nbands
-  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = G%ke
+  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (associated(CS)) then
@@ -1578,7 +1579,7 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
     return
   else
     allocate(CS)
-   endif
+  endif
 
   CS%diag => diag
   CS%Time => Time
@@ -1692,7 +1693,7 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
         call log_param(param_file, mdl, "INPUTDIR/CHL_FILE", chl_filename)
         call get_param(param_file, mdl, "CHL_VARNAME", chl_varname, &
                    "Name of CHL_A variable in CHL_FILE.", default='CHL_A')
-        CS%sbc_chl = init_external_field(chl_filename, trim(chl_varname), domain=G%Domain%mpp_domain)
+        CS%sbc_chl = init_external_field(chl_filename, trim(chl_varname), MOM_domain=G%Domain)
       endif
 
       CS%id_chl = register_diag_field('ocean_model', 'Chl_opac', diag%axesT1, Time, &

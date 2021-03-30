@@ -1,0 +1,33 @@
+name: API for coupled drivers
+
+on: [push, pull_request]
+
+jobs:
+  test-top-api:
+
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .testing
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - uses: ./.github/actions/testing-setup
+      with:
+        build_symmetric: 'false'
+        install_python: 'false'
+
+    - name: Compile MOM6 for the GFDL coupled driver
+      shell: bash
+      run: make check_mom6_api_coupled -j
+
+    - name: Compile MOM6 for the NUOPC driver
+      shell: bash
+      run: make check_mom6_api_nuopc -j
+
+    - name: Compile MOM6 for the MCT driver
+      shell: bash
+      run: make check_mom6_api_mct -j

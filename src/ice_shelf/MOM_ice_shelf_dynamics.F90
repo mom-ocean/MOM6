@@ -6,8 +6,9 @@ module MOM_ice_shelf_dynamics
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_COMPONENT, CLOCK_ROUTINE
-use MOM_IS_diag_mediator, only : post_data, register_diag_field=>register_MOM_IS_diag_field, safe_alloc_ptr
-use MOM_IS_diag_mediator, only : diag_mediator_init, set_diag_mediator_grid
+use MOM_IS_diag_mediator, only : post_data=>post_IS_data
+use MOM_IS_diag_mediator, only : register_diag_field=>register_MOM_IS_diag_field, safe_alloc_ptr
+!use MOM_IS_diag_mediator, only : MOM_IS_diag_mediator_init, set_IS_diag_mediator_grid
 use MOM_IS_diag_mediator, only : diag_ctrl, time_type, enable_averages, disable_averaging
 use MOM_domains, only : MOM_domains_init, clone_MOM_domain
 use MOM_domains, only : pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE, CORNER
@@ -85,6 +86,10 @@ type, public :: ice_shelf_dyn_CS ; private
   real, pointer, dimension(:,:) :: h_bdry_val => NULL() !< The ice thickness at inflowing boundaries [m].
   real, pointer, dimension(:,:) :: t_bdry_val => NULL() !< The ice temperature at inflowing boundaries [degC].
 
+  real, pointer, dimension(:,:) :: bed_elev => NULL() !< The bed elevation used for ice dynamics [Z ~> m].
+                                                       !! the same as bathyT, when below sea-level.
+                                                       !!Sign convention: positive below sea-level, negative above.
+
   real, pointer, dimension(:,:) :: basal_traction => NULL() !< The area integrated nonlinear part of "linearized"
                                                             !! basal stress [R Z L2 T-1 ~> kg s-1].
                 !!  The exact form depends on basal law exponent and/or whether flow is "hybridized" a la Goldberg 2011
@@ -155,7 +160,7 @@ type, public :: ice_shelf_dyn_CS ; private
 
   !>@{ Diagnostic handles
   integer :: id_u_shelf = -1, id_v_shelf = -1, id_t_shelf = -1, &
-             id_taudx_shelf = -1, id_taudy_shelf = -1, &
+             id_taudx_shelf = -1, id_taudy_shelf = -1, id_bed_elev = -1, &
              id_ground_frac = -1, id_col_thick = -1, id_OD_av = -1, &
              id_u_mask = -1, id_v_mask = -1, id_t_mask = -1
   !>@}
@@ -257,6 +262,7 @@ subroutine register_ice_shelf_dyn_restarts(G, param_file, CS, restart_CS)
     allocate( CS%ground_frac(isd:ied,jsd:jed) )  ; CS%ground_frac(:,:) = 0.0
     allocate( CS%taudx_shelf(Isd:Ied,Jsd:Jed) ) ; CS%taudx_shelf(:,:) = 0.0
     allocate( CS%taudy_shelf(Isd:Ied,Jsd:Jed) ) ; CS%taudy_shelf(:,:) = 0.0
+    allocate( CS%bed_elev(isd:ied,jsd:jed) )    ; CS%bed_elev(:,:)=G%bathyT(:,:)!CS%bed_elev(:,:) = 0.0
     ! additional restarts for ice shelf state
     call register_restart_field(CS%u_shelf, "u_shelf", .false., restart_CS, &
                                 "ice sheet/shelf u-velocity", "m s-1", hor_grid='Bu')
@@ -524,7 +530,17 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
       enddo ; enddo
       call pass_var(CS%calve_mask,G%domain)
     endif
+!    call MOM_mesg("  MOM_ice_shelf.F90, initialize_ice_shelf: reading bed elevation")
 
+!    call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
+!    inputdir = slasher(inputdir)
+!    call get_param(param_file, mdl, "TOPO_FILE", IC_file, &
+!                   "The file from which the bed topography is read.", &
+!                   default="ice_shelf_h.nc")
+!    call get_param(param_file, mdl, "BED_TOPO_VARNAME", var_name, &
+!                   "The variable to use for the bed topography.", &
+!                   default="depth")
+!    call MOM_read_data(filename,trim(var_name),CS%bed_elev,G%Domain, scale=US%m_to_Z)
     call initialize_ice_shelf_boundary_channel(CS%u_face_mask_bdry, CS%v_face_mask_bdry, &
                 CS%u_flux_bdry_val, CS%v_flux_bdry_val, CS%u_bdry_val, CS%v_bdry_val, CS%u_shelf, CS%v_shelf,&
                 CS%h_bdry_val, &
@@ -537,12 +553,15 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
     call pass_var(CS%v_bdry_val, G%domain)
     call pass_var(CS%u_face_mask_bdry, G%domain)
     call pass_var(CS%v_face_mask_bdry, G%domain)
+    call pass_var(CS%bed_elev, G%domain)
     !call init_boundary_values(CS, G, time, ISS%hmask, CS%input_flux, CS%input_thickness, new_sim)
-    call initialize_ice_flow_from_file(CS%u_shelf, CS%v_shelf,CS%ice_visc,CS%ground_frac, ISS%hmask,ISS%h_shelf, &
+    call initialize_ice_flow_from_file(CS%bed_elev,CS%u_shelf, CS%v_shelf,CS%ice_visc,CS%ground_frac, ISS%hmask,ISS%h_shelf, &
             G, US, param_file)   !spacially variable viscosity from a file for debugging
     call pass_var(CS%ice_visc, G%domain)
     call pass_var(CS%u_shelf, G%domain)
     call pass_var(CS%v_shelf, G%domain)
+    call pass_var(CS%bed_elev, G%domain)
+    call pass_var(CS%ice_visc, G%domain)
     call update_velocity_masks(CS, G, ISS%hmask, CS%umask, CS%vmask, CS%u_face_mask, CS%v_face_mask)
 
   ! Register diagnostics.
@@ -1816,7 +1835,8 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
   ! prelim - go through and calculate S
 
   ! or is this faster?
-  BASE(:,:) = -G%bathyT(:,:) + OD(:,:)
+  !BASE(:,:) = -G%bathyT(:,:) + OD(:,:)
+  BASE(:,:) = -CS%bed_elev(:,:) + OD(:,:)
   S(:,:) = BASE(:,:) + ISS%h_shelf(:,:)
 
   ! check whether the ice is floating or grounded
@@ -2921,9 +2941,9 @@ subroutine update_velocity_masks(CS, G, hmask, umask, vmask, u_face_mask, v_face
   u_face_mask(:,:) = 0 ; v_face_mask(:,:) = 0
 
   if (G%symmetric) then
-   is = isd ; js = jsd
+    is = isd ; js = jsd
   else
-   is = isd+1 ; js = jsd+1
+    is = isd+1 ; js = jsd+1
   endif
 
   do j=js,G%jed

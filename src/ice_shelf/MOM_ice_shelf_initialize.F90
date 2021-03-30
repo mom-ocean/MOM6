@@ -59,28 +59,26 @@ subroutine initialize_ice_thickness(h_shelf, area_shelf_h, hmask, G, G_in, US, P
   if (PRESENT(rotate_index)) rotate=rotate_index
 
   if (rotate) then
-     allocate(tmp1_2d(G_in%isd:G_in%ied,G_in%jsd:G_in%jed));tmp1_2d(:,:)=0.0
-     allocate(tmp2_2d(G_in%isd:G_in%ied,G_in%jsd:G_in%jed));tmp2_2d(:,:)=0.0
-     allocate(tmp3_2d(G_in%isd:G_in%ied,G_in%jsd:G_in%jed));tmp3_2d(:,:)=0.0
-     select case ( trim(config) )
-     case ("CHANNEL"); call initialize_ice_thickness_channel (tmp1_2d, tmp2_2d, tmp3_2d, G_in, US, PF)
-     case ("FILE");  call initialize_ice_thickness_from_file (tmp1_2d, tmp2_2d, tmp3_2d, G_in, US, PF)
-     case ("USER");  call USER_init_ice_thickness (tmp1_2d, tmp2_2d, tmp3_2d, G_in, US, PF)
-     case default ;  call MOM_error(FATAL,"MOM_initialize: "// &
-          "Unrecognized ice profile setup "//trim(config))
-     end select
-     call rotate_array(tmp1_2d,turns, h_shelf)
-     call rotate_array(tmp2_2d,turns, area_shelf_h)
-     call rotate_array(tmp3_2d,turns, hmask)
-     deallocate(tmp1_2d,tmp2_2d,tmp3_2d)
+    allocate(tmp1_2d(G_in%isd:G_in%ied,G_in%jsd:G_in%jed)) ; tmp1_2d(:,:)=0.0
+    allocate(tmp2_2d(G_in%isd:G_in%ied,G_in%jsd:G_in%jed)) ; tmp2_2d(:,:)=0.0
+    allocate(tmp3_2d(G_in%isd:G_in%ied,G_in%jsd:G_in%jed)) ; tmp3_2d(:,:)=0.0
+    select case ( trim(config) )
+      case ("CHANNEL") ; call initialize_ice_thickness_channel (tmp1_2d, tmp2_2d, tmp3_2d, G_in, US, PF)
+      case ("FILE") ; call initialize_ice_thickness_from_file (tmp1_2d, tmp2_2d, tmp3_2d, G_in, US, PF)
+      case ("USER") ; call USER_init_ice_thickness (tmp1_2d, tmp2_2d, tmp3_2d, G_in, US, PF)
+      case default  ; call MOM_error(FATAL,"MOM_initialize: Unrecognized ice profile setup "//trim(config))
+    end select
+    call rotate_array(tmp1_2d,turns, h_shelf)
+    call rotate_array(tmp2_2d,turns, area_shelf_h)
+    call rotate_array(tmp3_2d,turns, hmask)
+    deallocate(tmp1_2d,tmp2_2d,tmp3_2d)
   else
-     select case ( trim(config) )
-     case ("CHANNEL"); call initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, US, PF)
-     case ("FILE");  call initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, G, US, PF)
-     case ("USER");  call USER_init_ice_thickness (h_shelf, area_shelf_h, hmask, G, US, PF)
-     case default ;  call MOM_error(FATAL,"MOM_initialize: "// &
-          "Unrecognized ice profile setup "//trim(config))
-     end select
+    select case ( trim(config) )
+      case ("CHANNEL") ; call initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, US, PF)
+      case ("FILE") ; call initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, G, US, PF)
+      case ("USER") ; call USER_init_ice_thickness (h_shelf, area_shelf_h, hmask, G, US, PF)
+      case default  ; call MOM_error(FATAL,"MOM_initialize: Unrecognized ice profile setup "//trim(config))
+    end select
   endif
 
 end subroutine initialize_ice_thickness
@@ -377,9 +375,11 @@ end subroutine initialize_ice_shelf_boundary_channel
 
 
 !> Initialize ice shelf flow from file
-subroutine initialize_ice_flow_from_file(u_shelf, v_shelf,ice_visc,float_cond,&
+subroutine initialize_ice_flow_from_file(bed_elev,u_shelf, v_shelf,ice_visc,float_cond,&
                                          hmask,h_shelf, G, US, PF)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                         intent(inout) :: bed_elev !< The ice shelf u velocity  [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: u_shelf !< The ice shelf u velocity  [Z ~> m T ~>s].
   real, dimension(SZDI_(G),SZDJ_(G)), &
@@ -400,8 +400,9 @@ subroutine initialize_ice_flow_from_file(u_shelf, v_shelf,ice_visc,float_cond,&
 
   !  This subroutine reads ice thickness and area from a file and puts it into
   !  h_shelf [Z ~> m] and area_shelf_h [L2 ~> m2] (and dimensionless) and updates hmask
-  character(len=200) :: filename,vel_file,inputdir ! Strings for file/path
-  character(len=200) :: ushelf_varname, vshelf_varname, ice_visc_varname, floatfr_varname  ! Variable name in file
+  character(len=200) :: filename,vel_file,inputdir,bed_topo_file ! Strings for file/path
+  character(len=200) :: ushelf_varname, vshelf_varname, &
+                        ice_visc_varname, floatfr_varname, bed_varname  ! Variable name in file
   character(len=40)  :: mdl = "initialize_ice_velocity_from_file" ! This subroutine's name.
   integer :: i, j, isc, jsc, iec, jec
   real :: len_sidestress, mask, udh
@@ -428,7 +429,12 @@ subroutine initialize_ice_flow_from_file(u_shelf, v_shelf,ice_visc,float_cond,&
   call get_param(PF, mdl, "ICE_VISC_VARNAME", ice_visc_varname, &
                  "The name of the thickness variable in ICE_VELOCITY_FILE.", &
                  default="viscosity")
-
+  call get_param(PF, mdl, "BED_TOPO_FILE", bed_topo_file, &
+                 "The file from which the velocity is read.", &
+                 default="ice_shelf_vel.nc")
+  call get_param(PF, mdl, "BED_TOPO_VARNAME", bed_varname, &
+                 "The name of the thickness variable in ICE_VELOCITY_FILE.", &
+                 default="depth")
   if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
        " initialize_ice_shelf_velocity_from_file: Unable to open "//trim(filename))
 
@@ -439,6 +445,8 @@ subroutine initialize_ice_flow_from_file(u_shelf, v_shelf,ice_visc,float_cond,&
  call MOM_read_data(filename,trim(ice_visc_varname), ice_visc, G%Domain, scale=1.0)
  call MOM_read_data(filename,trim(floatfr_varname), float_cond, G%Domain, scale=1.)
 
+ filename = trim(inputdir)//trim(bed_topo_file)
+ call MOM_read_data(filename,trim(bed_varname), bed_elev, G%Domain, scale=1.)
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
 
   do j=jsc,jec

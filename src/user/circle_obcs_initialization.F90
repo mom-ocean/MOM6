@@ -31,7 +31,7 @@ contains
 subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G   !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
@@ -50,7 +50,7 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
   character(len=40)  :: mdl = "circle_obcs_initialization"   ! This module's name.
   integer :: i, j, k, is, ie, js, je, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 

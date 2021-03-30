@@ -11,7 +11,6 @@ use MOM_file_parser, only : get_param, param_file_type, log_version
 use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_forcing_type, only : allocate_forcing_type, allocate_mech_forcing
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data
 use MOM_time_manager, only : time_type, operator(+), operator(/)
 use MOM_tracer_flow_control, only : call_tracer_set_forcing
 use MOM_tracer_flow_control, only : tracer_flow_control_CS
@@ -89,7 +88,7 @@ subroutine USER_wind_forcing(sfc_state, forces, day, G, US, CS)
   !  is always positive.
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
-   forces%ustar(i,j) = G%mask2dT(i,j) * sqrt((CS%gust_const + &
+    forces%ustar(i,j) = G%mask2dT(i,j) * sqrt((CS%gust_const + &
             sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
                  0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))) * (US%L_to_Z/CS%Rho0))
   enddo ; enddo ; endif

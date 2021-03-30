@@ -73,24 +73,24 @@ contains
 
 !> Sets the model-state dependent internal tide energy sources.
 subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
-  type(ocean_grid_type),                     intent(in)    :: G  !< The ocean's grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV !< The ocean's vertical grid structure
-  type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u  !< The zonal velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v  !< The meridional velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
-  type(thermo_var_ptrs),                     intent(in)    :: tv !< A structure containing pointers to the
-                                                                 !! thermodynamic fields
-  type(forcing),                             intent(in)    :: fluxes !< A structure of thermodynamic surface fluxes
-  type(int_tide_input_type),                 intent(inout) :: itide !< A structure containing fields related
-                                                                 !! to the internal tide sources.
-  real,                                      intent(in)    :: dt !< The time increment [T ~> s].
-  type(int_tide_input_CS),                   pointer       :: CS !< This module's control structure.
+  type(ocean_grid_type),                      intent(in)    :: G  !< The ocean's grid structure
+  type(verticalGrid_type),                    intent(in)    :: GV !< The ocean's vertical grid structure
+  type(unit_scale_type),                      intent(in)    :: US !< A dimensional unit scaling type
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)    :: u  !< The zonal velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)    :: v  !< The meridional velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
+  type(thermo_var_ptrs),                      intent(in)    :: tv !< A structure containing pointers to the
+                                                                  !! thermodynamic fields
+  type(forcing),                              intent(in)    :: fluxes !< A structure of thermodynamic surface fluxes
+  type(int_tide_input_type),                  intent(inout) :: itide !< A structure containing fields related
+                                                                  !! to the internal tide sources.
+  real,                                       intent(in)    :: dt !< The time increment [T ~> s].
+  type(int_tide_input_CS),                    pointer       :: CS !< This module's control structure.
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     N2_bot        ! The bottom squared buoyancy frequency [T-2 ~> s-2].
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     T_f, S_f      ! The temperature and salinity in [degC] and [ppt] with the values in
                   ! the massless layers filled vertically by diffusion.
   logical :: use_EOS    ! If true, density is calculated from T & S using an
@@ -100,7 +100,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
 
   integer :: i, j, k, is, ie, js, je, nz, isd, ied, jsd, jed
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   if (.not.associated(CS)) call MOM_error(FATAL,"set_diffusivity: "//&
@@ -154,23 +154,23 @@ end subroutine set_int_tide_input
 
 !> Estimates the near-bottom buoyancy frequency (N^2).
 subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
-  type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                  intent(in)  :: GV   !< The ocean's vertical grid structure
-  type(unit_scale_type),                    intent(in)  :: US   !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
-  type(thermo_var_ptrs),                    intent(in)  :: tv   !< A structure containing pointers to the
-                                                                !! thermodynamic fields
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_f  !< Temperature after vertical filtering to
-                                                                !! smooth out the values in thin layers [degC].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_f  !< Salinity after vertical filtering to
-                                                                !! smooth out the values in thin layers [ppt].
-  real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: h2   !< Bottom topographic roughness [Z2 ~> m2].
-  type(forcing),                            intent(in)  :: fluxes !< A structure of thermodynamic surface fluxes
-  type(int_tide_input_CS),                  pointer     :: CS    !<  This module's control structure.
-  real, dimension(SZI_(G),SZJ_(G)),         intent(out) :: N2_bot !< The squared buoyancy freqency at the
+  type(ocean_grid_type),                     intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),                     intent(in)  :: US   !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  type(thermo_var_ptrs),                     intent(in)  :: tv   !< A structure containing pointers to the
+                                                                 !! thermodynamic fields
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: T_f  !< Temperature after vertical filtering to
+                                                                 !! smooth out the values in thin layers [degC].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: S_f  !< Salinity after vertical filtering to
+                                                                 !! smooth out the values in thin layers [ppt].
+  real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: h2   !< Bottom topographic roughness [Z2 ~> m2].
+  type(forcing),                             intent(in)  :: fluxes !< A structure of thermodynamic surface fluxes
+  type(int_tide_input_CS),                   pointer     :: CS   !<  This module's control structure.
+  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: N2_bot !< The squared buoyancy freqency at the
                                                                  !! ocean bottom [T-2 ~> s-2].
   ! Local variables
-  real, dimension(SZI_(G),SZK_(G)+1) :: &
+  real, dimension(SZI_(G),SZK_(GV)+1) :: &
     dRho_int      ! The unfiltered density differences across interfaces [R ~> kg m-3].
   real, dimension(SZI_(G)) :: &
     pres, &       ! The pressure at each interface [R L2 T-2 ~> Pa].
@@ -190,7 +190,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   G_Rho0 = (US%L_to_Z**2*GV%g_Earth) / GV%Rho0
   EOSdom(:) = EOS_domain(G%HI)
 

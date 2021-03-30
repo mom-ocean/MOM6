@@ -155,7 +155,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   type(ocean_grid_type),            intent(inout) :: G  !< The ocean's grid structure.
   type(verticalGrid_type),          intent(in)    :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),            intent(in)    :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),            intent(in)    :: tv !< Pointer to thermodynamic variables
                                                         !! (needed for wave structure).
@@ -2392,7 +2392,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   endif
   call pass_var(ridge_temp,G%domain)
   allocate(CS%refl_dbl(isd:ied,jsd:jed)) ; CS%refl_dbl(:,:) = .false.
-  do i=isd,ied; do j=jsd,jed
+  do i=isd,ied ; do j=jsd,jed
     if (ridge_temp(i,j) == 1) then; CS%refl_dbl(i,j) = .true.
     else ; CS%refl_dbl(i,j) = .false. ; endif
   enddo ; enddo
@@ -2548,7 +2548,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   enddo ; enddo
 
   ! Initialize wave_structure (not sure if this should be here - BDM)
-  call wave_structure_init(Time, G, param_file, diag, CS%wave_structure_CSp)
+  call wave_structure_init(Time, G, GV, param_file, diag, CS%wave_structure_CSp)
 
 end subroutine internal_tides_init
 
