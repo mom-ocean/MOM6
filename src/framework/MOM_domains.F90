@@ -8,7 +8,7 @@ use MOM_coms_infra,       only : PE_here, root_PE, num_PEs, broadcast
 use MOM_coms_infra,       only : sum_across_PEs, min_across_PEs, max_across_PEs
 use MOM_domain_infra,     only : MOM_domain_type, domain2D, domain1D, group_pass_type
 use MOM_domain_infra,     only : create_MOM_domain, clone_MOM_domain, deallocate_MOM_domain
-use MOM_domain_infra,     only : get_domain_extent, get_domain_components
+use MOM_domain_infra,     only : get_domain_extent, get_domain_components, same_domain
 use MOM_domain_infra,     only : compute_block_extent, get_global_shape
 use MOM_domain_infra,     only : pass_var, pass_vector, fill_symmetric_edges, global_field_sum
 use MOM_domain_infra,     only : pass_var_start, pass_var_complete
@@ -33,8 +33,10 @@ public :: MOM_domain_type, domain2D, domain1D
 public :: MOM_domains_init, create_MOM_domain, clone_MOM_domain, deallocate_MOM_domain
 public :: MOM_thread_affinity_set, set_MOM_thread_affinity
 !  Domain query routines
-public :: get_domain_extent, get_domain_components, compute_block_extent, get_global_shape
+public :: get_domain_extent, get_domain_components, get_global_shape, same_domain
 public :: PE_here, root_PE, num_PEs
+!  Blocks are not actively used in MOM6, so this routine could be deprecated.
+public :: compute_block_extent
 !  Single call communication routines
 public :: pass_var, pass_vector, fill_symmetric_edges, broadcast
 !  Non-blocking communication routines
