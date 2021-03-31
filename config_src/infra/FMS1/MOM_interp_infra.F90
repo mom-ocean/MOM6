@@ -4,9 +4,9 @@ module MOM_interp_infra
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_domain_infra,    only : MOM_domain_type, domain2d
-use MOM_io_infra,        only : axistype
 use MOM_time_manager,    only : time_type
 use horiz_interp_mod,    only : horiz_interp_new, horiz_interp, horiz_interp_init, horiz_interp_type
+use mpp_io_mod,          only : axistype, mpp_get_axis_data
 use time_interp_external_mod, only : time_interp_external
 use time_interp_external_mod, only : init_external_field, time_interp_external_init
 use time_interp_external_mod, only : get_external_field_size
@@ -16,7 +16,7 @@ implicit none ; private
 
 public :: horiz_interp_type, horiz_interp_init
 public :: time_interp_extern, init_extern_field, time_interp_external_init
-public :: get_external_field_info
+public :: get_external_field_info, axistype, get_axis_data
 public :: run_horiz_interp, build_horiz_interp_weights
 
 !> Read a field based on model time, and rotate to the model domain.
@@ -112,6 +112,15 @@ subroutine build_horiz_interp_weights_2d_to_2d(Interp, lon_in, lat_in, lon_out, 
                         is_latlon_in, is_latlon_out)
 
 end subroutine build_horiz_interp_weights_2d_to_2d
+
+
+!> Extracts and returns the axis data stored in an axistype.
+subroutine get_axis_data( axis, dat )
+  type(axistype),     intent(in)  :: axis !< An axis type
+  real, dimension(:), intent(out) :: dat  !< The data in the axis variable
+
+  call mpp_get_axis_data( axis, dat )
+end subroutine get_axis_data
 
 
 !> get size of an external field from field index
